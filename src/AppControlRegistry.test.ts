@@ -638,4 +638,25 @@ describe('AppControlRegistry', () => {
       expect(registry.autoSaveManager).toBe(registry.playback.autoSaveManager);
     });
   });
+
+  // -------------------------------------------------------------------------
+  // #92: logoError event listener is wired
+  // -------------------------------------------------------------------------
+  describe('logoError wiring (#92)', () => {
+    it('ACR-023: logoError event triggers console.warn', () => {
+      const deps = createMockDeps();
+      const registry = new AppControlRegistry(deps);
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        // Emit logoError on the real slateEditor instance
+        registry.slateEditor.emit('logoError', new Error('test upload failure'));
+        expect(warnSpy).toHaveBeenCalledTimes(1);
+        expect(warnSpy.mock.calls[0]![0]).toContain('[SlateEditor]');
+        expect(warnSpy.mock.calls[0]![1]).toBe('test upload failure');
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+  });
 });

@@ -2255,6 +2255,102 @@ This file tracks findings from exploratory review and targeted validation runs.
   - If the browser rejects fullscreen, the control can feel unresponsive rather than explicitly failing.
   - Users get no guidance about whether fullscreen is unsupported, blocked, or just temporarily unavailable.
 
+### 183. DCC `syncColor` advertises LUT sync, but the app silently ignores it
+
+- Severity: Medium
+- Area: DCC integration / color sync
+- Evidence:
+  - The DCC protocol exposes `lutPath` on inbound `syncColor` messages in [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L53).
+  - Production wiring in [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L128) only forwards `exposure`, `gamma`, `temperature`, and `tint`.
+  - No runtime consumer of `msg.lutPath` exists in the shipped DCC wiring path.
+- Impact:
+  - A DCC tool can send a syntactically valid color-sync message that looks supported by the protocol but still loses its LUT intent on arrival.
+  - The integration behaves as partial color sync while presenting itself as a fuller transport.
+
+### 184. DCC bridge defines outbound `annotationAdded`, but production never emits it
+
+- Severity: Medium
+- Area: DCC integration / review sync
+- Evidence:
+  - `DCCBridge` exposes `sendAnnotationAdded(...)` and documents `annotationAdded` as an outbound event in [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L12) and [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L308).
+  - The shipped wiring in [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L77) only connects frame sync and color sync.
+  - Production search finds no runtime caller of `sendAnnotationAdded(...)` outside tests and the bridge class itself.
+- Impact:
+  - External DCC clients cannot rely on live annotation notifications even though the integration API claims they exist.
+  - The bridge surface overstates what the real app actually sends.
+
+### 185. DCC `loadMedia` failures are never reported back to the requesting tool
+
+- Severity: Medium
+- Area: DCC integration / error handling
+- Evidence:
+  - Inbound `loadMedia` requests are handled in [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L96).
+  - When media loading fails, the app only logs `Failed to load video from DCC` or `Failed to load image from DCC` in [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L110) and [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L121).
+  - The DCC protocol already has an outbound `error` message type in [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L104), but this failure path never sends one.
+- Impact:
+  - A remote DCC client can issue `loadMedia` and receive no structured failure response when the app cannot open the media.
+  - That makes automation and host-side UX harder because the request can fail silently from the sender’s point of view.
+
+### 186. Network session join only requests host media when the guest starts completely empty
+
+- Severity: Medium
+- Area: Collaboration / session transfer
+- Evidence:
+  - The join flow decides whether to request media sync via `shouldRequestMediaSync(...)` in [src/AppNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppNetworkBridge.ts#L842).
+  - That method returns `true` only when `session.sourceCount === 0` in [src/AppNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppNetworkBridge.ts#L843).
+  - When media sync is skipped, the received session state is applied onto whatever local sources already exist in [src/AppNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppNetworkBridge.ts#L284) and [src/AppNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppNetworkBridge.ts#L1088).
+- Impact:
+  - Joining a collaborative review from a non-empty session can map the host’s frame/source/A-B state onto unrelated local media instead of bringing over the correct media.
+  - The collaboration flow only behaves correctly for “empty guest” cases, not for realistic mid-session joins.
+
+### 187. Network media-transfer decline or failure still applies the host’s pending session state
+
+- Severity: Medium
+- Area: Collaboration / session transfer
+- Evidence:
+  - When host state arrives and media sync is requested, the guest stores `pendingStateByTransferId` but also immediately applies the shared state in [src/AppNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppNetworkBridge.ts#L274) and [src/AppNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppNetworkBridge.ts#L278).
+  - If the guest declines the media transfer, the pending state is still applied in [src/AppNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppNetworkBridge.ts#L330).
+  - If media import later fails, the same pending state is still applied after the error in [src/AppNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppNetworkBridge.ts#L399) and [src/AppNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppNetworkBridge.ts#L408).
+- Impact:
+  - A guest can end up with the host’s frame/view/compare state layered onto missing or incompatible local media even after refusing the transfer or hitting an import error.
+  - The recovery path preserves the wrong part of the sync and loses the part that would have made it meaningful.
+
+### 188. DCC bridge connection and protocol errors have no app-level surface
+
+- Severity: Medium
+- Area: DCC integration / diagnostics
+- Evidence:
+  - `DCCBridge` emits `error` for connection failures, parse failures, send failures, and reconnect exhaustion in [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L126), [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L357), and [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L465).
+  - The production bootstrap only constructs the bridge, wires frame/color/media sync, and calls `connect()` in [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L591).
+  - Production search finds no runtime subscriber for `dccBridge.on('error', ...)` outside tests.
+- Impact:
+  - A broken `?dcc=` integration can fail without any app-level toast, modal, or status indication for the user.
+  - Debugging DCC connectivity becomes unnecessarily opaque because the bridge has error signals, but the shipped app drops them.
+
+### 189. Audio playback setup errors are detected internally but never surfaced through the app
+
+- Severity: Medium
+- Area: Audio playback / diagnostics
+- Evidence:
+  - `AudioPlaybackManager` emits structured `error` events in [src/audio/AudioPlaybackManager.ts](/Users/lifeart/Repos/openrv-web/src/audio/AudioPlaybackManager.ts#L16) and [src/audio/AudioPlaybackManager.ts](/Users/lifeart/Repos/openrv-web/src/audio/AudioPlaybackManager.ts#L733).
+  - `AudioCoordinator` only exposes path-change and scrub-availability callbacks in [src/audio/AudioCoordinator.ts](/Users/lifeart/Repos/openrv-web/src/audio/AudioCoordinator.ts#L27), not playback errors.
+  - `SessionPlayback` only wires those two callbacks in [src/core/session/SessionPlayback.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionPlayback.ts#L569), and production search finds no runtime subscriber to `audioPlaybackManager.on('error', ...)`.
+- Impact:
+  - Audio initialization or decode failures can leave playback/scrub audio unavailable with no app-level explanation.
+  - The app has the failure signal, but users only get silent degradation or console-only diagnostics.
+
+### 190. Timeline waveform extraction failures are reduced to a missing waveform with no UI explanation
+
+- Severity: Low
+- Area: Timeline / audio UX
+- Evidence:
+  - On every `sourceLoaded`, the timeline calls `loadWaveform().catch((err) => console.warn(...))` in [src/ui/components/Timeline.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Timeline.ts#L247).
+  - `loadWaveform()` sets `waveformLoaded = false` and only redraws on success in [src/ui/components/Timeline.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Timeline.ts#L340).
+  - `WaveformRenderer` stores an internal error string via `getError()` in [src/audio/WaveformRenderer.ts](/Users/lifeart/Repos/openrv-web/src/audio/WaveformRenderer.ts#L623) and [src/audio/WaveformRenderer.ts](/Users/lifeart/Repos/openrv-web/src/audio/WaveformRenderer.ts#L668), but production search finds no runtime consumer of that error state.
+- Impact:
+  - When waveform extraction fails, the timeline simply loses the waveform instead of telling the user why.
+  - Troubleshooting falls back to the console even though the waveform subsystem already captures the failure reason.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

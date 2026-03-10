@@ -18,6 +18,9 @@ export interface WipeControlEvents extends EventMap {
  * @deprecated Prefer using {@link ComparisonManager} directly for new code.
  * WipeControl is a legacy UI widget that now delegates wipe state to ComparisonManager.
  * It is kept for backward compatibility with existing consumers.
+ *
+ * TODO(#118): Remove this class when all consumers have migrated to ComparisonManager.
+ * Currently only tests reference it; there is no production mount path.
  */
 export class WipeControl extends EventEmitter<WipeControlEvents> {
   private container: HTMLElement;

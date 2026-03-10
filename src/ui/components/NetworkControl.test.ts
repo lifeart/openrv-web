@@ -670,4 +670,62 @@ describe('NetworkControl', () => {
       expect(roomCodeDisplay.textContent).toContain('WXYZ-5678');
     });
   });
+
+  describe('issue #109 regression: copy link shows Copying... before async completion', () => {
+    it('NCC-109a: copy button shows Copying... immediately after click, not Copied!', () => {
+      control.setConnectionState('connected');
+      control.setRoomInfo({
+        roomId: 'room-1',
+        roomCode: 'TEST-CODE',
+        hostId: 'u1',
+        users: [],
+        createdAt: Date.now(),
+        maxUsers: 10,
+      });
+      control.openPanel();
+
+      const copyBtn = document.querySelector('[data-testid="network-copy-link-button"]') as HTMLButtonElement;
+      copyBtn.click();
+
+      expect(copyBtn.textContent).toBe('Copying...');
+    });
+
+    it('NCC-109b: setCopyResult(true) changes button to Copied!', () => {
+      control.setConnectionState('connected');
+      control.setRoomInfo({
+        roomId: 'room-1',
+        roomCode: 'TEST-CODE',
+        hostId: 'u1',
+        users: [],
+        createdAt: Date.now(),
+        maxUsers: 10,
+      });
+      control.openPanel();
+
+      const copyBtn = document.querySelector('[data-testid="network-copy-link-button"]') as HTMLButtonElement;
+      copyBtn.click();
+      control.setCopyResult(true);
+
+      expect(copyBtn.textContent).toBe('Copied!');
+    });
+
+    it('NCC-109c: setCopyResult(false) changes button to Copy failed', () => {
+      control.setConnectionState('connected');
+      control.setRoomInfo({
+        roomId: 'room-1',
+        roomCode: 'TEST-CODE',
+        hostId: 'u1',
+        users: [],
+        createdAt: Date.now(),
+        maxUsers: 10,
+      });
+      control.openPanel();
+
+      const copyBtn = document.querySelector('[data-testid="network-copy-link-button"]') as HTMLButtonElement;
+      copyBtn.click();
+      control.setCopyResult(false);
+
+      expect(copyBtn.textContent).toBe('Copy failed');
+    });
+  });
 });

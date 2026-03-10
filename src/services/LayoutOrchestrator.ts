@@ -72,6 +72,7 @@ export interface LayoutLayoutManager {
   getTopSection(): HTMLElement;
   getViewerSlot(): HTMLElement;
   getBottomSlot(): HTMLElement;
+  getPanelWrapper(panelId: 'left' | 'right'): HTMLElement;
   addPanelTab(panelId: 'left' | 'right', label: string, element: HTMLElement): void;
   on(event: string, handler: (...args: unknown[]) => void): (() => void) | void;
 }
@@ -178,6 +179,9 @@ export class LayoutOrchestrator {
 
   // Image mode transition timer
   private _imageTransitionTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // Saved display values for client mode restricted elements
+  private _clientModeOriginalDisplay = new Map<HTMLElement, string>();
 
   // Event handlers tracked for cleanup
   private _sessionHandlers: Array<{ event: string; handler: (...args: unknown[]) => void }> = [];
@@ -336,6 +340,28 @@ export class LayoutOrchestrator {
       container: viewerEl,
       getItems: () => [viewerEl],
       orientation: 'horizontal',
+    } as FocusZone);
+    this._focusManager.addZone({
+      name: 'leftPanel',
+      container: layoutManager.getPanelWrapper('left'),
+      getItems: () =>
+        Array.from(
+          layoutManager.getPanelWrapper('left').querySelectorAll<HTMLElement>(
+            'button:not([disabled]), input, [tabindex="0"]',
+          ),
+        ).filter((el) => isVisible(el, layoutManager.getPanelWrapper('left'))),
+      orientation: 'vertical',
+    } as FocusZone);
+    this._focusManager.addZone({
+      name: 'rightPanel',
+      container: layoutManager.getPanelWrapper('right'),
+      getItems: () =>
+        Array.from(
+          layoutManager.getPanelWrapper('right').querySelectorAll<HTMLElement>(
+            'button:not([disabled]), input, [tabindex="0"]',
+          ),
+        ).filter((el) => isVisible(el, layoutManager.getPanelWrapper('right'))),
+      orientation: 'vertical',
     } as FocusZone);
     this._focusManager.addZone({
       name: 'timeline',
@@ -591,6 +617,8 @@ export class LayoutOrchestrator {
       const s = state as { enabled: boolean };
       if (s.enabled) {
         this.applyClientModeRestrictions();
+      } else {
+        this.restoreClientModeRestrictions();
       }
     });
     if (unsubClientModeState) this._unsubscribers.push(unsubClientModeState);
@@ -616,12 +644,39 @@ export class LayoutOrchestrator {
   applyClientModeRestrictions(): void {
     const { container, clientMode } = this.deps;
     const selectors = clientMode.getRestrictedElements();
+    const unmatchedSelectors: string[] = [];
+
     for (const selector of selectors) {
       const els = container.querySelectorAll<HTMLElement>(selector);
+      if (els.length === 0) {
+        unmatchedSelectors.push(selector);
+      }
       els.forEach((el) => {
+        // Store original display value before hiding (only if not already tracked)
+        if (!this._clientModeOriginalDisplay.has(el)) {
+          this._clientModeOriginalDisplay.set(el, el.style.display);
+        }
         el.style.display = 'none';
       });
     }
+
+    // TODO(#52): Once production DOM elements have the correct data-panel / data-toolbar
+    // attributes, this warning should no longer fire. Until then it surfaces the broken
+    // state so developers know client mode is not actually hiding anything.
+    if (unmatchedSelectors.length > 0) {
+      console.warn(
+        `[ClientMode] ${unmatchedSelectors.length} restriction selector(s) matched zero elements. ` +
+          `Client mode may not be hiding the intended UI. Unmatched selectors:\n` +
+          unmatchedSelectors.map((s) => `  - ${s}`).join('\n'),
+      );
+    }
+  }
+
+  restoreClientModeRestrictions(): void {
+    for (const [el, originalDisplay] of this._clientModeOriginalDisplay) {
+      el.style.display = originalDisplay;
+    }
+    this._clientModeOriginalDisplay.clear();
   }
 
   // -------------------------------------------------------------------------

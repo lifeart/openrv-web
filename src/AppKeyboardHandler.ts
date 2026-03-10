@@ -113,8 +113,15 @@ export class AppKeyboardHandler {
 
   /**
    * Show the keyboard shortcuts reference dialog.
+   *
+   * TODO(#58): This hardcoded modal duplicates the ShortcutCheatSheet overlay
+   * (toggled via `?`). Consolidate into a single shortcut-reference UI.
    */
   showShortcutsDialog(): void {
+    // eslint-disable-next-line no-console
+    console.info(
+      '[AppKeyboardHandler] showShortcutsDialog: This modal duplicates the ShortcutCheatSheet overlay (Issue #58). Consider unifying into a single shortcut-reference UI.',
+    );
     const content = document.createElement('div');
     content.style.cssText = `
       max-height: 70vh;
@@ -474,8 +481,16 @@ export class AppKeyboardHandler {
   /**
    * Show the custom key bindings management dialog.
    * Renders the list of actions with their current key bindings inline.
+   *
+   * TODO(#57): This inline rebind table doesn't expose the full ShortcutEditor
+   * capabilities (Export, Import, Reset All with grouping). Route Help menu
+   * "Custom Key Bindings" to the ShortcutEditor component instead.
    */
   showCustomBindingsDialog(): void {
+    // eslint-disable-next-line no-console
+    console.info(
+      '[AppKeyboardHandler] showCustomBindingsDialog: This simple rebind dialog lacks the full ShortcutEditor features (import/export). See Issue #57.',
+    );
     const content = document.createElement('div');
     content.style.cssText = `
       max-height: 70vh;

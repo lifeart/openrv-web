@@ -250,10 +250,11 @@ describe('LeftPanelContent', () => {
       expect(btn!.textContent).toContain('All Controls');
     });
 
-    it('LP-015: clicking button toggles ColorControls', () => {
+    it('LP-015: clicking button opens ColorControls (one-way show)', () => {
       const btn = panel.getElement().querySelector('[data-testid="open-all-controls"]') as HTMLButtonElement;
       btn.click();
-      expect(mockColorControls.toggle).toHaveBeenCalled();
+      expect(mockColorControls.show).toHaveBeenCalled();
+      expect(mockColorControls.toggle).not.toHaveBeenCalled();
     });
 
     it('LP-032: button click stops propagation to prevent document handler closing panel', () => {
@@ -271,7 +272,7 @@ describe('LeftPanelContent', () => {
       // Simulate the real scenario: ColorControls has a document click handler
       // that closes the panel when clicking outside its container
       let isExpanded = false;
-      mockColorControls.toggle = vi.fn(() => {
+      mockColorControls.show = vi.fn(() => {
         isExpanded = true;
       });
 
@@ -293,14 +294,22 @@ describe('LeftPanelContent', () => {
       try {
         const btn = panel.getElement().querySelector('[data-testid="open-all-controls"]') as HTMLButtonElement;
         btn.click();
-        // toggle should have been called
-        expect(mockColorControls.toggle).toHaveBeenCalled();
+        // show should have been called
+        expect(mockColorControls.show).toHaveBeenCalled();
         // Panel should still be "expanded" because stopPropagation prevented
         // the document handler from seeing this click
         expect(isExpanded).toBe(true);
       } finally {
         document.removeEventListener('click', documentHandler);
       }
+    });
+    it('LP-034: clicking button multiple times calls show each time, never toggle (regression #60)', () => {
+      const btn = panel.getElement().querySelector('[data-testid="open-all-controls"]') as HTMLButtonElement;
+      btn.click();
+      btn.click();
+      btn.click();
+      expect(mockColorControls.show).toHaveBeenCalledTimes(3);
+      expect(mockColorControls.toggle).not.toHaveBeenCalled();
     });
   });
 

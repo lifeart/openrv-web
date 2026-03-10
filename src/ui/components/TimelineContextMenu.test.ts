@@ -276,7 +276,8 @@ describe('TimelineContextMenu', () => {
     it('TCM-023: shortcut hints are displayed for items with shortcuts', () => {
       menu.show(makeOptions());
       const el = document.querySelector('.timeline-main-context-menu') as HTMLElement;
-      expect(el.textContent).toContain('Ctrl+C');
+      // Note: Ctrl+C was removed from Copy Timecode (issue #97) since it's bound to frame copy
+      expect(el.textContent).not.toContain('Ctrl+C');
       expect(el.textContent).toContain('I');
       expect(el.textContent).toContain('O');
       expect(el.textContent).toContain('M');

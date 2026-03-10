@@ -21,6 +21,7 @@ const {
   mockDialogOnFn,
   mockDownloadAnnotationsJSON,
   mockExportAnnotationsPDF,
+  mockExportSequence,
 } = vi.hoisted(() => ({
   mockEncodeFn: vi.fn(),
   mockCancelFn: vi.fn(),
@@ -32,6 +33,7 @@ const {
   mockDialogOnFn: vi.fn().mockReturnValue(() => {}),
   mockDownloadAnnotationsJSON: vi.fn(),
   mockExportAnnotationsPDF: vi.fn().mockResolvedValue(undefined),
+  mockExportSequence: vi.fn(),
 }));
 
 vi.mock('./export/VideoExporter', () => {
@@ -68,6 +70,10 @@ vi.mock('./ui/components/ExportProgress', () => ({
     updateProgress = mockDialogUpdateProgress;
     on = mockDialogOnFn;
   },
+}));
+
+vi.mock('./utils/export/SequenceExporter', () => ({
+  exportSequence: mockExportSequence,
 }));
 
 vi.mock('./utils/export/AnnotationJSONExporter', () => ({
@@ -815,5 +821,178 @@ describe('wirePlaybackControls — video export', () => {
     const canvas = await frameProvider(10);
     expect(canvas).toBeInstanceOf(HTMLCanvasElement);
     expect(viewer.renderFrameToCanvas).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Sequence export tests
+// ---------------------------------------------------------------------------
+
+describe('wirePlaybackControls — sequence export', () => {
+  let session: ReturnType<typeof createMockSession>;
+  let viewer: ReturnType<typeof createMockViewer>;
+  let headerBar: ReturnType<typeof createMockHeaderBar>;
+  let controls: ReturnType<typeof createMockControls>;
+  let deps: PlaybackWiringDeps;
+  let persistenceManager: ReturnType<typeof createMockPersistenceManager>;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    session = createMockSession();
+    session.currentSource = { name: 'test-clip.exr' };
+    session.frameCount = 50;
+    session.inPoint = 5;
+    session.outPoint = 15;
+    session.fps = 24;
+
+    viewer = createMockViewer();
+    const mockCanvas = document.createElement('canvas');
+    mockCanvas.width = 320;
+    mockCanvas.height = 240;
+    viewer.renderFrameToCanvas.mockResolvedValue(mockCanvas);
+
+    headerBar = createMockHeaderBar();
+    controls = createMockControls();
+    deps = createMockDeps();
+    persistenceManager = createMockPersistenceManager();
+
+    mockDialogOnFn.mockReturnValue(() => {});
+
+    // Default: exportSequence resolves successfully
+    mockExportSequence.mockResolvedValue({
+      success: true,
+      exportedFrames: 11,
+    });
+
+    const ctx = {
+      session,
+      viewer,
+      headerBar,
+      controls,
+      persistenceManager,
+      paintEngine: {},
+      tabBar: {},
+      sessionBridge: {},
+    } as unknown as AppWiringContext;
+
+    wirePlaybackControls(ctx, deps);
+  });
+
+  function emitSequenceExport(useInOutRange: boolean): void {
+    const exportControl = headerBar.getExportControl();
+    exportControl.emit('sequenceExportRequested', {
+      format: 'png',
+      includeAnnotations: false,
+      quality: 0.9,
+      useInOutRange,
+    });
+  }
+
+  it('PW-SE01: sequence export uses ExportProgressDialog, not inline div', async () => {
+    emitSequenceExport(true);
+
+    await vi.waitFor(() => {
+      expect(mockDialogShow).toHaveBeenCalled();
+    });
+
+    await vi.waitFor(() => {
+      expect(mockExportSequence).toHaveBeenCalled();
+    });
+  });
+
+  it('PW-SE02: sequence export shows progress updates via dialog', async () => {
+    // Make exportSequence call the onProgress callback
+    mockExportSequence.mockImplementation(
+      async (
+        _options: unknown,
+        _renderFrame: unknown,
+        onProgress?: (progress: { currentFrame: number; totalFrames: number; percent: number; cancelled: boolean }) => void,
+      ) => {
+        if (onProgress) {
+          onProgress({ currentFrame: 7, totalFrames: 11, percent: 27, cancelled: false });
+          onProgress({ currentFrame: 10, totalFrames: 11, percent: 55, cancelled: false });
+        }
+        return { success: true, exportedFrames: 11 };
+      },
+    );
+
+    emitSequenceExport(true);
+
+    await vi.waitFor(() => {
+      expect(mockDialogUpdateProgress).toHaveBeenCalled();
+    });
+
+    // Verify progress was forwarded to ExportProgressDialog.updateProgress
+    const calls = mockDialogUpdateProgress.mock.calls as Array<[{ percentage: number; status: string }]>;
+    // Find a call with percentage 27
+    const call27 = calls.find((c) => c[0].percentage === 27);
+    expect(call27).toBeDefined();
+    expect(call27![0]).toMatchObject({
+      percentage: 27,
+      status: 'encoding',
+    });
+
+    const call55 = calls.find((c) => c[0].percentage === 55);
+    expect(call55).toBeDefined();
+  });
+
+  it('PW-SE03: cancel via dialog sets cancellation token', async () => {
+    let capturedCancelToken: { cancelled: boolean } | undefined;
+
+    mockExportSequence.mockImplementation(
+      async (
+        _options: unknown,
+        _renderFrame: unknown,
+        _onProgress: unknown,
+        cancellationToken?: { cancelled: boolean },
+      ) => {
+        capturedCancelToken = cancellationToken;
+        // Simulate waiting so cancel can fire
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        return { success: false, exportedFrames: 0, error: 'Export cancelled by user' };
+      },
+    );
+
+    // Make the dialog's on('cancel') capture the handler and call it
+    let cancelHandler: (() => void) | undefined;
+    mockDialogOnFn.mockImplementation((event: string, handler: () => void) => {
+      if (event === 'cancel') {
+        cancelHandler = handler;
+      }
+      return () => {};
+    });
+
+    emitSequenceExport(true);
+
+    await vi.waitFor(() => {
+      expect(cancelHandler).toBeDefined();
+    });
+
+    // Trigger cancel
+    cancelHandler!();
+
+    expect(capturedCancelToken!.cancelled).toBe(true);
+  });
+
+  it('PW-SE04: dialog is hidden and disposed after export completes', async () => {
+    emitSequenceExport(true);
+
+    await vi.waitFor(() => {
+      expect(mockDialogHide).toHaveBeenCalled();
+    });
+
+    expect(mockDialogDispose).toHaveBeenCalled();
+  });
+
+  it('PW-SE05: dialog is hidden and disposed even when export throws', async () => {
+    mockExportSequence.mockRejectedValue(new Error('render failure'));
+
+    emitSequenceExport(true);
+
+    await vi.waitFor(() => {
+      expect(mockDialogHide).toHaveBeenCalled();
+    });
+
+    expect(mockDialogDispose).toHaveBeenCalled();
   });
 });

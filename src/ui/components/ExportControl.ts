@@ -58,8 +58,8 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
     // Create export button
     this.exportButton = document.createElement('button');
     this.exportButton.innerHTML = `${getIconSvg('download', 'sm')}<span style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;">Export</span>`;
-    this.exportButton.setAttribute('aria-label', 'Export current frame (Ctrl+S)');
-    this.exportButton.title = 'Export current frame (Ctrl+S)';
+    this.exportButton.setAttribute('aria-label', 'Export options (Ctrl+S)');
+    this.exportButton.title = 'Export options (Ctrl+S)';
     this.exportButton.setAttribute('aria-haspopup', 'menu');
     this.exportButton.setAttribute('aria-expanded', 'false');
     this.exportButton.style.cssText = `

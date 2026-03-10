@@ -212,6 +212,17 @@ export function buildTextLines(fields: FrameburnField[], context: FrameburnConte
   return lines;
 }
 
+// TODO(#93): The multi-field frameburn config/context path (compositeFrameburn, buildTextLines)
+// is fully implemented but no production UI authors FrameburnConfig or FrameburnContext values.
+// Only the simpler compositeTimecodeFrameburn path is wired via ViewerExport.
+/** @internal Mutable state for the one-time console.info log */
+export const _frameburnGapState = { logged: false };
+
+/** @internal Reset the one-time log flag (for testing) */
+export function _resetFrameburnGapFlag(): void {
+  _frameburnGapState.logged = false;
+}
+
 /**
  * Composite multi-field frameburn overlay onto an export canvas.
  */
@@ -223,6 +234,15 @@ export function compositeFrameburn(
   context: FrameburnContext,
 ): void {
   if (!config.enabled || config.fields.length === 0) return;
+
+  // TODO(#93): Log once that multi-field frameburn is in use but has no production UI entry point
+  if (!_frameburnGapState.logged) {
+    _frameburnGapState.logged = true;
+    console.info(
+      '[FrameburnCompositor] The advanced multi-field frameburn overlay is implemented but ' +
+        'no production UI currently authors FrameburnConfig/FrameburnContext values. See issue #93.',
+    );
+  }
 
   const lines = buildTextLines(config.fields, context);
   if (lines.length === 0) return;

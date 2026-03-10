@@ -472,4 +472,84 @@ describe('MultiSourceLayoutControl', () => {
       document.body.removeChild(el);
     });
   });
+
+  describe('keyboard navigation (#80)', () => {
+    it('MSL-U060: ArrowDown moves focus between dropdown items', () => {
+      const el = control.render();
+      document.body.appendChild(el);
+
+      const button = el.querySelector('[data-testid="layout-control-button"]') as HTMLButtonElement;
+      button.click();
+
+      const dropdown = document.querySelector('[data-testid="layout-control-dropdown"]') as HTMLElement;
+      const focusable = Array.from(
+        dropdown.querySelectorAll<HTMLElement>('button, select, input, [tabindex="0"]'),
+      ).filter((el) => !(el as HTMLButtonElement).disabled);
+      expect(focusable.length).toBeGreaterThan(1);
+
+      focusable[0]!.focus();
+      expect(document.activeElement).toBe(focusable[0]);
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      expect(document.activeElement).toBe(focusable[1]);
+
+      document.body.removeChild(el);
+    });
+
+    it('MSL-U061: ArrowUp moves focus to previous item', () => {
+      const el = control.render();
+      document.body.appendChild(el);
+
+      const button = el.querySelector('[data-testid="layout-control-button"]') as HTMLButtonElement;
+      button.click();
+
+      const dropdown = document.querySelector('[data-testid="layout-control-dropdown"]') as HTMLElement;
+      const focusable = Array.from(
+        dropdown.querySelectorAll<HTMLElement>('button, select, input, [tabindex="0"]'),
+      ).filter((el) => !(el as HTMLButtonElement).disabled);
+
+      focusable[1]!.focus();
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+      expect(document.activeElement).toBe(focusable[0]);
+
+      document.body.removeChild(el);
+    });
+
+    it('MSL-U062: Home and End navigate to first and last items', () => {
+      const el = control.render();
+      document.body.appendChild(el);
+
+      const button = el.querySelector('[data-testid="layout-control-button"]') as HTMLButtonElement;
+      button.click();
+
+      const dropdown = document.querySelector('[data-testid="layout-control-dropdown"]') as HTMLElement;
+      const focusable = Array.from(
+        dropdown.querySelectorAll<HTMLElement>('button, select, input, [tabindex="0"]'),
+      ).filter((el) => !(el as HTMLButtonElement).disabled);
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }));
+      expect(document.activeElement).toBe(focusable[focusable.length - 1]);
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
+      expect(document.activeElement).toBe(focusable[0]);
+
+      document.body.removeChild(el);
+    });
+
+    it('MSL-U063: Escape closes the dropdown', () => {
+      const el = control.render();
+      document.body.appendChild(el);
+
+      const button = el.querySelector('[data-testid="layout-control-button"]') as HTMLButtonElement;
+      button.click();
+
+      const dropdown = document.querySelector('[data-testid="layout-control-dropdown"]') as HTMLElement;
+      expect(dropdown.style.display).toBe('flex');
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      expect(dropdown.style.display).toBe('none');
+
+      document.body.removeChild(el);
+    });
+  });
 });

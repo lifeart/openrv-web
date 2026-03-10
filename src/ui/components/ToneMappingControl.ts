@@ -702,6 +702,16 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
   setEnabled(enabled: boolean): void {
     if (this.state.enabled === enabled) return;
     this.state.enabled = enabled;
+    // When enabling and operator is 'off', auto-select a default operator
+    // so that checking the enable checkbox has a visible effect (fix #114).
+    if (enabled && this.state.operator === 'off') {
+      const fallback = TONE_MAPPING_OPERATORS.find((op) => op.key !== 'off');
+      if (fallback) {
+        this.state.operator = fallback.key;
+        this.updateOperatorButtons();
+        this.updateParameterVisibility();
+      }
+    }
     this.updateButtonState();
     this.updateEnableCheckbox();
     this.emit('stateChanged', { ...this.state });

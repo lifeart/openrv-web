@@ -59,6 +59,14 @@ describe('ExportControl', () => {
       const button = el.querySelector('button') as HTMLButtonElement;
       expect(button.title).toContain('Ctrl+S');
     });
+
+    it('EXPORT-U016: export button label describes menu-trigger behavior, not direct export (#62)', () => {
+      const el = control.render();
+      const button = el.querySelector('button') as HTMLButtonElement;
+      expect(button.title).toBe('Export options (Ctrl+S)');
+      expect(button.getAttribute('aria-label')).toBe('Export options (Ctrl+S)');
+      expect(button.title).not.toContain('Export current frame');
+    });
   });
 
   describe('quickExport', () => {

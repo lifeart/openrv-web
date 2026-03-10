@@ -54,8 +54,14 @@ export const DEFAULT_BUG_OVERLAY_STATE: BugOverlayState = {
 // BugOverlay
 // ---------------------------------------------------------------------------
 
+/**
+ * TODO(#86): BugOverlay is fully implemented with image loading, corner
+ * placement, size, opacity, and margin controls, but has no production UI
+ * entry point. A panel or menu item should be added to expose this feature.
+ */
 export class BugOverlay extends CanvasOverlay<BugOverlayEvents> {
   private state: BugOverlayState = { ...DEFAULT_BUG_OVERLAY_STATE };
+  private hasLoggedCustomizationHint = false;
   private bugImage: HTMLImageElement | null = null;
   private imageWidth = 0;
   private imageHeight = 0;
@@ -231,6 +237,15 @@ export class BugOverlay extends CanvasOverlay<BugOverlayEvents> {
 
   enable(): void {
     this.setState({ enabled: true });
+
+    // TODO(#86): Log customization hint on first enable
+    if (!this.hasLoggedCustomizationHint) {
+      this.hasLoggedCustomizationHint = true;
+      console.info(
+        '[BugOverlay] Corner placement, size, opacity, and margin are configurable ' +
+          'via the API but have no production UI entry point. See issue #86.',
+      );
+    }
   }
 
   disable(): void {

@@ -834,6 +834,7 @@ export class App {
     const startFrame = getCurrentSourceStartFrame(this.session.currentSource);
     this.gotoFrameOverlay.setStartFrame(startFrame);
     this.headerBar.getTimecodeDisplay().setStartFrame(startFrame);
+    this.viewer.getTimecodeOverlay().setStartFrame(startFrame);
   }
 
   /**

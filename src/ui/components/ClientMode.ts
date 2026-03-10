@@ -80,6 +80,25 @@ const DEFAULT_RESTRICTED_CATEGORIES: string[] = [
  * CSS selectors / element identifiers for UI elements that should be
  * hidden or disabled in client mode. External code uses these to apply
  * visibility changes.
+ *
+ * TODO(#52): These selectors use `data-panel` and `data-toolbar` attributes that
+ * no production DOM elements currently have. To make client mode actually hide
+ * editing UI, production components need to add matching `data-panel` / `data-toolbar`
+ * attributes. The affected components are:
+ *   - Color panel → needs `data-panel="color"`
+ *   - Effects panel → needs `data-panel="effects"`
+ *   - Transform panel → needs `data-panel="transform"`
+ *   - Annotate panel → needs `data-panel="annotate"`
+ *   - Export panel → needs `data-panel="export"`
+ *   - Paint panel → needs `data-panel="paint"`
+ *   - Channel panel → needs `data-panel="channel"`
+ *   - Stereo panel → needs `data-panel="stereo"`
+ *   - Notes panel → needs `data-panel="notes"`
+ *   - Snapshots panel → needs `data-panel="snapshots"`
+ *   - Network panel → needs `data-panel="network"`
+ *   - Editing toolbar → needs `data-toolbar="editing"`
+ *   - Annotation toolbar → needs `data-toolbar="annotation"`
+ *   - Paint toolbar → needs `data-toolbar="paint"`
  */
 const DEFAULT_RESTRICTED_ELEMENTS: string[] = [
   '[data-panel="color"]',

@@ -307,6 +307,15 @@ describe('HeaderBar', () => {
       expect(session.loopMode).toBe('loop');
     });
 
+    it('HDR-U052: loop button tooltip shows Ctrl+L shortcut', () => {
+      const el = headerBar.render();
+      const buttons = el.querySelectorAll('button');
+      const loopBtn = Array.from(buttons).find((btn) => btn.title?.includes('loop mode')) as HTMLButtonElement;
+
+      expect(loopBtn.title).toBe('Cycle loop mode (Ctrl+L)');
+      expect(loopBtn.title).not.toContain('(L)');
+    });
+
     it('HDR-U051: loop button shows current mode via aria-label', () => {
       const el = headerBar.render();
       const buttons = el.querySelectorAll('button');
@@ -1601,10 +1610,10 @@ describe('HeaderBar', () => {
       document.body.removeChild(el);
     });
 
-    it('SPD-M22a-haspopup: speed button should have aria-haspopup="menu"', () => {
+    it('SPD-M22a-haspopup: speed button should NOT have aria-haspopup="menu" (primary activation cycles speed)', () => {
       const el = headerBar.render();
       const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLButtonElement;
-      expect(speedBtn.getAttribute('aria-haspopup')).toBe('menu');
+      expect(speedBtn.getAttribute('aria-haspopup')).toBeNull();
     });
 
     it('SPD-M22b: Speed menu container should have role="menu"', () => {
@@ -1843,6 +1852,167 @@ describe('HeaderBar', () => {
       const el = headerBar.render();
       const button = el.querySelector('[data-testid="save-button"]');
       expect(button).toBeInstanceOf(HTMLButtonElement);
+    });
+  });
+
+  describe('aria-expanded on popup buttons (#73)', () => {
+    it('HDR-U210: sources button has aria-expanded="false" initially', () => {
+      const el = headerBar.render();
+      const sourcesBtn = Array.from(el.querySelectorAll('button')).find(
+        (b) => b.textContent?.includes('Sources'),
+      );
+      expect(sourcesBtn).toBeTruthy();
+      expect(sourcesBtn!.getAttribute('aria-expanded')).toBe('false');
+    });
+
+    it('HDR-U211: help button has aria-expanded="false" initially', () => {
+      const el = headerBar.render();
+      const helpBtn = el.querySelector('[data-testid="help-menu-button"]') as HTMLElement;
+      expect(helpBtn).toBeTruthy();
+      expect(helpBtn.getAttribute('aria-expanded')).toBe('false');
+    });
+
+    it('HDR-U212: speed button has aria-expanded="false" initially', () => {
+      const el = headerBar.render();
+      const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLElement;
+      expect(speedBtn).toBeTruthy();
+      expect(speedBtn.getAttribute('aria-expanded')).toBe('false');
+    });
+
+    it('HDR-U213: help button sets aria-expanded="true" when menu opens', () => {
+      const el = headerBar.render();
+      const helpBtn = el.querySelector('[data-testid="help-menu-button"]') as HTMLButtonElement;
+
+      helpBtn.click();
+
+      expect(helpBtn.getAttribute('aria-expanded')).toBe('true');
+      // Verify menu exists
+      expect(document.getElementById('help-menu')).not.toBeNull();
+    });
+
+    it('HDR-U214: speed button sets aria-expanded="true" when menu opens', () => {
+      const el = headerBar.render();
+      const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLButtonElement;
+
+      // Right-click opens the speed menu
+      speedBtn.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+
+      expect(speedBtn.getAttribute('aria-expanded')).toBe('true');
+      expect(document.getElementById('speed-preset-menu')).not.toBeNull();
+    });
+  });
+
+  describe('Issue #71: speed button ARIA semantics', () => {
+    it('HDR-U220: speed button does NOT have aria-haspopup="menu"', () => {
+      const el = headerBar.render();
+      const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLElement;
+      expect(speedBtn.getAttribute('aria-haspopup')).toBeNull();
+    });
+
+    it('HDR-U221: speed button has aria-description mentioning menu access method', () => {
+      const el = headerBar.render();
+      const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLElement;
+      const desc = speedBtn.getAttribute('aria-description');
+      expect(desc).toBeTruthy();
+      expect(desc).toContain('Right-click');
+      expect(desc).toContain('Shift+Enter');
+    });
+  });
+
+  describe('Issue #74: Tab key in menus does not trap focus', () => {
+    it('HDR-U230: Tab in speed menu closes menu without preventDefault', () => {
+      const el = headerBar.render();
+      document.body.appendChild(el);
+      const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLButtonElement;
+
+      // Open speed menu via right-click
+      speedBtn.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+      const menu = document.getElementById('speed-preset-menu');
+      expect(menu).not.toBeNull();
+
+      // Dispatch Tab key on the menu
+      const tabEvent = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+      menu!.dispatchEvent(tabEvent);
+
+      // Menu should be closed
+      expect(document.getElementById('speed-preset-menu')).toBeNull();
+      // preventDefault should NOT have been called
+      expect(tabEvent.defaultPrevented).toBe(false);
+
+      document.body.removeChild(el);
+    });
+
+    it('HDR-U231: Tab in help menu closes menu without preventDefault', () => {
+      const el = headerBar.render();
+      document.body.appendChild(el);
+      const helpBtn = el.querySelector('[data-testid="help-menu-button"]') as HTMLButtonElement;
+
+      // Open help menu
+      helpBtn.click();
+      const menu = document.getElementById('help-menu');
+      expect(menu).not.toBeNull();
+
+      // Dispatch Tab key on the menu
+      const tabEvent = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+      menu!.dispatchEvent(tabEvent);
+
+      // Menu should be closed
+      expect(document.getElementById('help-menu')).toBeNull();
+      // preventDefault should NOT have been called
+      expect(tabEvent.defaultPrevented).toBe(false);
+
+      document.body.removeChild(el);
+    });
+
+    it('HDR-U232: Tab in layout menu closes menu without preventDefault', () => {
+      const presets: Pick<LayoutPreset, 'id' | 'label'>[] = [
+        { id: 'default', label: 'Default' },
+        { id: 'color', label: 'Color' },
+      ];
+      headerBar.setLayoutPresets(presets, vi.fn());
+      headerBar.setActiveLayoutPreset('default');
+
+      const el = headerBar.render();
+      document.body.appendChild(el);
+      const layoutBtn = el.querySelector('[data-testid="layout-menu-button"]') as HTMLButtonElement;
+
+      // Open layout menu
+      layoutBtn.click();
+      const menu = document.getElementById('layout-preset-menu');
+      expect(menu).not.toBeNull();
+
+      // Dispatch Tab key on the menu
+      const tabEvent = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+      menu!.dispatchEvent(tabEvent);
+
+      // Menu should be closed
+      expect(document.getElementById('layout-preset-menu')).toBeNull();
+      // preventDefault should NOT have been called
+      expect(tabEvent.defaultPrevented).toBe(false);
+
+      document.body.removeChild(el);
+    });
+
+    it('HDR-U233: Escape in menu still calls preventDefault and focuses anchor', () => {
+      const el = headerBar.render();
+      document.body.appendChild(el);
+      const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLButtonElement;
+
+      // Open speed menu via right-click
+      speedBtn.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+      const menu = document.getElementById('speed-preset-menu');
+      expect(menu).not.toBeNull();
+
+      // Dispatch Escape key on the menu
+      const escEvent = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+      menu!.dispatchEvent(escEvent);
+
+      // Menu should be closed
+      expect(document.getElementById('speed-preset-menu')).toBeNull();
+      // preventDefault SHOULD have been called for Escape
+      expect(escEvent.defaultPrevented).toBe(true);
+
+      document.body.removeChild(el);
     });
   });
 });

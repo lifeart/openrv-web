@@ -851,13 +851,9 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
       this.setShareLink(link);
       this.emit('copyLink', link);
 
-      // Visual feedback
-      this.copyLinkButton.textContent = 'Copied!';
-      this.copyLinkButton.style.color = 'var(--success)';
-      setTimeout(() => {
-        this.copyLinkButton.style.color = 'var(--text-primary)';
-        this.updateShareLinkUI();
-      }, 2000);
+      // Show intermediate state while async clipboard write is in progress
+      this.copyLinkButton.textContent = 'Copying...';
+      this.copyLinkButton.style.color = 'var(--text-muted)';
     });
     actionsSection.appendChild(this.copyLinkButton);
 
@@ -1348,6 +1344,26 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
 
   private generateDefaultPinCode(): string {
     return String(Math.floor(100000 + Math.random() * 900000));
+  }
+
+  /**
+   * Update the copy-link button after the async clipboard write completes.
+   * Callers should invoke this from the copyLink event handler once the
+   * clipboard promise settles.
+   */
+  setCopyResult(success: boolean): void {
+    if (!this.copyLinkButton) return;
+    if (success) {
+      this.copyLinkButton.textContent = 'Copied!';
+      this.copyLinkButton.style.color = 'var(--success)';
+    } else {
+      this.copyLinkButton.textContent = 'Copy failed';
+      this.copyLinkButton.style.color = 'var(--error)';
+    }
+    setTimeout(() => {
+      this.copyLinkButton.style.color = 'var(--text-primary)';
+      this.updateShareLinkUI();
+    }, 2000);
   }
 
   render(): HTMLElement {

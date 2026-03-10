@@ -42,6 +42,13 @@ describe('MultiSourceLayoutControl', () => {
     expect(button.getAttribute('aria-expanded')).toBe('false');
   });
 
+  it('button tooltip does not advertise nonexistent keyboard shortcuts', () => {
+    const el = control.render();
+    const button = el.querySelector('[data-testid="layout-control-button"]') as HTMLElement;
+    expect(button.title).toBe('Layout modes');
+    expect(button.title).not.toMatch(/\([A-Z]\)/);
+  });
+
   it('returns the manager via getManager', () => {
     expect(control.getManager()).toBe(manager);
   });

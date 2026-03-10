@@ -260,6 +260,72 @@ describe('TabBar', () => {
     });
   });
 
+  describe('arrow-key navigation', () => {
+    function pressKey(el: HTMLElement, key: string) {
+      el.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+    }
+
+    it('TAB-U080: ArrowRight moves to next tab', () => {
+      const el = tabBar.render();
+      // Start on view (index 0)
+      pressKey(el, 'ArrowRight');
+      expect(tabBar.activeTab).toBe('color');
+    });
+
+    it('TAB-U081: ArrowRight wraps from last to first tab', () => {
+      const el = tabBar.render();
+      tabBar.setActiveTab('qc'); // last tab
+      pressKey(el, 'ArrowRight');
+      expect(tabBar.activeTab).toBe('view');
+    });
+
+    it('TAB-U082: ArrowLeft moves to previous tab', () => {
+      const el = tabBar.render();
+      tabBar.setActiveTab('color');
+      pressKey(el, 'ArrowLeft');
+      expect(tabBar.activeTab).toBe('view');
+    });
+
+    it('TAB-U083: ArrowLeft wraps from first to last tab', () => {
+      const el = tabBar.render();
+      // Start on view (index 0)
+      pressKey(el, 'ArrowLeft');
+      expect(tabBar.activeTab).toBe('qc');
+    });
+
+    it('TAB-U084: Home moves to first tab', () => {
+      const el = tabBar.render();
+      tabBar.setActiveTab('effects');
+      pressKey(el, 'Home');
+      expect(tabBar.activeTab).toBe('view');
+    });
+
+    it('TAB-U085: End moves to last tab', () => {
+      const el = tabBar.render();
+      pressKey(el, 'End');
+      expect(tabBar.activeTab).toBe('qc');
+    });
+
+    it('TAB-U086: ArrowRight focuses the new active tab button', () => {
+      const el = tabBar.render();
+      document.body.appendChild(el);
+      const viewBtn = el.querySelector('[data-tab-id="view"]') as HTMLButtonElement;
+      viewBtn.focus();
+      pressKey(el, 'ArrowRight');
+      const colorBtn = el.querySelector('[data-tab-id="color"]') as HTMLButtonElement;
+      expect(document.activeElement).toBe(colorBtn);
+      document.body.removeChild(el);
+    });
+
+    it('TAB-U087: arrow keys emit tabChanged event', () => {
+      const el = tabBar.render();
+      const callback = vi.fn();
+      tabBar.on('tabChanged', callback);
+      pressKey(el, 'ArrowRight');
+      expect(callback).toHaveBeenCalledWith('color');
+    });
+  });
+
   describe('indicator', () => {
     it('TAB-U080: has indicator element', () => {
       const el = tabBar.render();

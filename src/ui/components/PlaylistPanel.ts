@@ -6,7 +6,9 @@
  * - In/out point editing per clip
  * - Total duration display
  * - Add from current source button
- * - EDL import/export
+ * - EDL/OTIO export
+ *
+ * TODO(#108): Add EDL/OTIO import support.
  */
 
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
@@ -740,6 +742,10 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
           durationLabel.textContent = `${validated.durationFrames}f (${secs}s)`;
         } else {
           // Can't apply transition, revert to cut
+          console.warn(
+            `[PlaylistPanel] Transition "${selectedType}" rejected at gap ${gapIndex}. ` +
+              `Reverting to cut. Clips may be too short or from the same source.`,
+          );
           typeSelect.value = 'cut';
           tm.setTransition(gapIndex, null);
         }

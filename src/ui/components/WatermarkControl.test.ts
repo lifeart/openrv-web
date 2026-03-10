@@ -236,4 +236,32 @@ describe('WatermarkControl', () => {
       }).not.toThrow();
     });
   });
+
+  describe('configuration hint (#82)', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('WMC-U090: logs configuration info on first image load', () => {
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      const overlay = control.getOverlay();
+
+      // Simulate image loaded event from the overlay
+      overlay.emit('imageLoaded', { width: 100, height: 50 });
+
+      expect(infoSpy).toHaveBeenCalledTimes(1);
+      expect(infoSpy.mock.calls[0]![0]).toContain('[WatermarkControl]');
+      expect(infoSpy.mock.calls[0]![0]).toContain('#82');
+    });
+
+    it('WMC-U091: logs configuration info only once across multiple loads', () => {
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      const overlay = control.getOverlay();
+
+      overlay.emit('imageLoaded', { width: 100, height: 50 });
+      overlay.emit('imageLoaded', { width: 200, height: 100 });
+
+      expect(infoSpy).toHaveBeenCalledTimes(1);
+    });
+  });
 });

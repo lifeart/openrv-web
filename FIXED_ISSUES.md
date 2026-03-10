@@ -459,3 +459,507 @@
 - **Regression Tests**: 4 tests — confirmation shown with existing notes, replace on confirm, preserve on cancel, skip confirmation when empty.
 - **Verification**: All 72 NotePanel tests pass, TypeScript clean.
 - **Files Changed**: `src/ui/components/NotePanel.ts`, `src/ui/components/NotePanel.test.ts`
+
+## Issue #51: The Notes panel badge exists in code and tests but is never attached to the real toolbar
+
+- **Severity**: Low
+- **Area**: Annotate UI, note awareness
+- **Root Cause**: `NotePanel.createBadge()` was implemented and tested but never mounted in production. `buildAnnotateTab.ts` rendered the Notes button without attaching the badge.
+- **Fix**: Added `notePanel.createBadge()` call in `buildAnnotateTab.ts` and appended the badge element to the Notes toggle button, following the same pattern used by `luminanceVisControl` badge in `buildQCTab.ts`.
+- **Regression Tests**: 3 tests — `createBadge()` called during build, badge attached to button, badge is child of button.
+- **Verification**: All 3 buildAnnotateTab tests pass, TypeScript clean.
+- **Files Changed**: `src/services/tabContent/buildAnnotateTab.ts`, `src/services/tabContent/buildAnnotateTab.test.ts` (new)
+
+## Issue #52: Client Mode hides almost none of the real UI because its restriction selectors do not match production DOM
+
+- **Severity**: High
+- **Area**: Review-safe UI mode, presentation locking
+- **Root Cause**: `ClientMode.DEFAULT_RESTRICTED_ELEMENTS` used selectors like `[data-panel="color"]` and `[data-toolbar="editing"]` that no production DOM elements carry. `applyClientModeRestrictions()` silently matched nothing.
+- **Fix**: Added `console.warn` in `applyClientModeRestrictions()` listing selectors that match zero elements, making the broken state visible. Added TODO(#52) documentation in `ClientMode.ts` listing exactly which components need which `data-panel`/`data-toolbar` attributes for the selectors to work.
+- **Regression Tests**: LO-031 (warn when all match nothing), LO-032 (warning lists unmatched selectors with count), LO-033 (no warn when all match), LO-034 (partial matches: only unmatched listed, matched elements hidden).
+- **Verification**: All 35 LayoutOrchestrator tests pass, TypeScript clean.
+- **Files Changed**: `src/services/LayoutOrchestrator.ts`, `src/ui/components/ClientMode.ts`, `src/services/LayoutOrchestrator.test.ts`
+
+## Issue #53: The right inspector can reopen with stale or empty content because it drops updates while hidden
+
+- **Severity**: Medium
+- **Area**: Right panel UI, media/scopes awareness
+- **Root Cause**: `RightPanelContent.updateInfo()` and `MiniHistogram.update()` both bailed out entirely when hidden, discarding data received during that time. Reopening showed stale or empty content.
+- **Fix**: Both components now store received data while hidden (`pendingInfo` / `pendingRender` flag). Added `applyPending()` method to each that applies stored data when the panel becomes visible. Only the latest data is stored (not queued).
+- **Regression Tests**: RP-009d/e/f (deferred info applied on reopen, no-op when nothing pending, only last deferred applied), MH-006f/g/h (histogram rendered on reopen, no-op without pending, no-op without data).
+- **Verification**: All 57 tests pass (33 RightPanelContent + 24 MiniHistogram), TypeScript clean.
+- **Files Changed**: `src/ui/layout/panels/RightPanelContent.ts`, `src/ui/layout/panels/MiniHistogram.ts`, `src/ui/layout/panels/RightPanelContent.test.ts`, `src/ui/layout/panels/MiniHistogram.test.ts`
+
+## Issue #54: The multi-source layout button advertises an `L` shortcut that does not exist in production
+
+- **Severity**: Medium
+- **Area**: View toolbar, multi-source layout UI
+- **Root Cause**: Button tooltip said `Layout modes (L)` but `KeyL` is bound to `playback.faster`, not layout modes. No layout-toggle binding exists.
+- **Fix**: Changed tooltip from `'Layout modes (L)'` to `'Layout modes'`.
+- **Regression Tests**: 1 test verifying tooltip doesn't contain a single-letter shortcut hint.
+- **Verification**: All 38 tests pass, TypeScript clean.
+- **Files Changed**: `src/ui/components/MultiSourceLayoutControl.ts`, `src/ui/components/__tests__/MultiSourceLayoutControl.test.ts`
+
+## Issue #55: The volume control still tells users mute is on `M`, but production mute is on `Shift+M`
+
+- **Severity**: Medium
+- **Area**: Header audio UI, shortcut discoverability
+- **Root Cause**: Mute button tooltip said `Toggle mute (M in video mode)` but actual binding is `Shift+M` (`audio.toggleMute` has `shift: true`).
+- **Fix**: Changed tooltip to `Toggle mute (Shift+M in video mode)`.
+- **Regression Tests**: VOL-103 (tooltip references Shift+M).
+- **Verification**: All 30 VolumeControl tests pass, TypeScript clean.
+- **Files Changed**: `src/ui/components/VolumeControl.ts`, `src/ui/components/VolumeControl.test.ts`
+
+## Issue #56: Sequence export uses a one-off popup instead of the real export progress dialog
+
+- **Severity**: Medium
+- **Area**: Export UI consistency, long-running workflow feedback
+- **Root Cause**: Frame-sequence export built its own bare `div` popup (60+ lines) with no modal backdrop, `role="dialog"`, keyboard handling, or focus management. Video export already used the proper `ExportProgressDialog` component.
+- **Fix**: Replaced inline popup with `ExportProgressDialog`, matching video export's pattern: modal dialog with backdrop, `aria-modal`, progress updates via `updateProgress()`, cancel via event, proper cleanup in `finally` block.
+- **Regression Tests**: PW-SE01 through PW-SE05 (uses ExportProgressDialog, progress forwarded, cancel sets token, cleanup on success, cleanup on error).
+- **Verification**: All 44 AppPlaybackWiring tests pass, TypeScript clean.
+- **Files Changed**: `src/AppPlaybackWiring.ts`, `src/AppPlaybackWiring.test.ts`
+
+## Issue #57: The Help menu exposes "Custom Key Bindings", but production never surfaces the full shortcut editor with import/export
+
+- **Severity**: Low
+- **Area**: Help / customization UI
+- **Root Cause**: `showCustomBindingsDialog()` renders a simple inline rebind table, while the full `ShortcutEditor` component with Reset All/Export/Import exists but isn't reachable.
+- **Fix**: Added TODO(#57) comment and `console.info` in `showCustomBindingsDialog()` documenting the gap and referencing `ShortcutEditor`.
+- **Regression Tests**: 1 test verifying info message mentions ShortcutEditor.
+- **Verification**: All 18 AppKeyboardHandler tests pass, TypeScript clean.
+- **Files Changed**: `src/AppKeyboardHandler.ts`, `src/AppKeyboardHandler.test.ts`
+
+## Issue #58: The app ships two different shortcut-reference UIs, and different entry points open different ones
+
+- **Severity**: Low
+- **Area**: Help / shortcut discoverability
+- **Root Cause**: `?` opens `ShortcutCheatSheet` overlay; Help menu "Keyboard Shortcuts" opens `showShortcutsDialog()` — a separate hardcoded modal. Two UIs for the same purpose.
+- **Fix**: Added TODO(#58) comment and `console.info` in `showShortcutsDialog()` documenting the duplication and referencing `ShortcutCheatSheet`.
+- **Regression Tests**: 1 test verifying info message mentions ShortcutCheatSheet.
+- **Verification**: All 18 AppKeyboardHandler tests pass, TypeScript clean.
+- **Files Changed**: `src/AppKeyboardHandler.ts`, `src/AppKeyboardHandler.test.ts`
+
+## Issue #59: The main tab bar is marked up as a tablist but does not support arrow-key tab navigation
+
+- **Severity**: Medium
+- **Root Cause**: TabBar used `role="tablist"`/`role="tab"` but had no keydown handlers for arrow keys, Home, or End.
+- **Fix**: Added keydown listener handling ArrowRight/Left (wrapping), Home, End. All activate tab and move focus per WAI-ARIA.
+- **Regression Tests**: TAB-U080 through TAB-U087.
+- **Verification**: All 48 TabBar tests pass, TypeScript clean.
+- **Files Changed**: `src/ui/components/layout/TabBar.ts`, `src/ui/components/layout/TabBar.test.ts`
+
+## Issue #60: The left inspector's "All Controls…" button can close the full color panel instead of opening it
+
+- **Severity**: Medium
+- **Fix**: Changed from `colorControls.toggle()` to `colorControls.show()` for one-way open.
+- **Regression Tests**: LP-034.
+- **Verification**: All 42 LeftPanelContent tests pass, TypeScript clean.
+- **Files Changed**: `src/ui/layout/panels/LeftPanelContent.ts`, `src/ui/layout/panels/LeftPanelContent.test.ts`
+
+## Issue #61: Several review panels still stack in the same top-right slot and can obscure each other
+
+- **Severity**: Medium
+- **Fix**: Added HistoryPanel to mutual exclusion group with NotePanel and MarkerListPanel. Changed single exclusive ref to array in all three panels. Wired three-way exclusion in `createPanelControls.ts`.
+- **Regression Tests**: 6 tests across HistoryPanel/NotePanel/MarkerListPanel.
+- **Verification**: All 196 affected tests pass, TypeScript clean.
+- **Files Changed**: `src/ui/components/HistoryPanel.ts`, `src/ui/components/NotePanel.ts`, `src/ui/components/MarkerListPanel.ts`, `src/services/controls/createPanelControls.ts`, + test files
+
+## Issue #62: The export button says "Export current frame", but clicking it only opens the menu
+
+- **Severity**: Low
+- **Fix**: Changed label from "Export current frame (Ctrl+S)" to "Export options (Ctrl+S)".
+- **Regression Tests**: EXPORT-U016.
+- **Verification**: All 51 ExportControl tests pass, TypeScript clean.
+- **Files Changed**: `src/ui/components/ExportControl.ts`, `src/ui/components/ExportControl.test.ts`
+
+## Issue #63: Side-panel tabs are marked up as tabs but do not behave like tabs
+
+- **Severity**: Medium
+- **Fix**: Added ArrowLeft/Right/Home/End keydown handlers to side-panel tab strips. Added roving `tabindex` (0 active, -1 inactive).
+- **Regression Tests**: LM-026 through LM-029b (5 tests).
+- **Files Changed**: `src/ui/layout/LayoutManager.ts`, `src/ui/layout/LayoutManager.test.ts`
+
+## Issue #65: Inspector accordion headers are mouse-only despite gating most side-panel content
+
+- **Severity**: Medium
+- **Fix**: Added `tabindex="0"`, `role="button"`, `aria-expanded` to CollapsibleSection headers. Added Enter/Space keydown handler.
+- **Regression Tests**: CS-023 through CS-030 (8 tests).
+- **Files Changed**: `src/ui/layout/panels/CollapsibleSection.ts`, `src/ui/layout/panels/CollapsibleSection.test.ts`
+
+## Issue #66: The right inspector's scope buttons never show which scopes are actually active
+
+- **Severity**: Low
+- **Fix**: Subscribed scope buttons to `scopesControl.on('stateChanged')`, updating background color and `aria-pressed`. Initial state applied from `getState()`. Cleanup in `dispose()`.
+- **Regression Tests**: RP-016/017 (2 tests).
+- **Files Changed**: `src/ui/layout/panels/RightPanelContent.ts`, `src/ui/layout/panels/RightPanelContent.test.ts`
+
+## Issue #67: The header loop button advertises the wrong shortcut
+
+- **Severity**: Low
+- **Fix**: Changed tooltip from `Cycle loop mode (L)` to `Cycle loop mode (Ctrl+L)`.
+- **Regression Tests**: HDR-U052.
+- **Files Changed**: `src/ui/components/layout/HeaderBar.ts`, `src/ui/components/layout/HeaderBar.test.ts`
+
+## Issue #69: The mini histogram promises to open the full histogram, but it actually toggles it
+
+- **Severity**: Low
+- **Fix**: Changed canvas title from `Click to open full Histogram` to `Click to toggle Histogram`.
+- **Regression Tests**: MH-012.
+- **Files Changed**: `src/ui/layout/panels/MiniHistogram.ts`, `src/ui/layout/panels/MiniHistogram.test.ts`
+
+## Issue #64: Keyboard zone navigation skips the left and right inspector panels entirely
+
+- **Severity**: Medium
+- **Area**: Keyboard accessibility, layout navigation
+- **Root Cause**: `LayoutOrchestrator` registered focus zones for header, tab bar, context toolbar, viewer, and timeline, but not for the left and right panel wrappers. Side panels with color/history/media-info controls were unreachable via F6-style zone navigation.
+- **Fix**: Added `leftPanel` and `rightPanel` focus zones in `LayoutOrchestrator.createLayout()` using `layoutManager.getPanelWrapper('left'|'right')`. Each zone queries for interactive elements (`button:not([disabled]), input, [tabindex="0"]`) filtered by visibility. Added `getPanelWrapper()` to the `LayoutLayoutManager` interface.
+- **Regression Tests**: LO-035 (zones registered), LO-036 (correct panel wrapper elements used).
+- **Verification**: All 37 LayoutOrchestrator tests pass, TypeScript clean.
+- **Files Changed**: `src/services/LayoutOrchestrator.ts`, `src/services/LayoutOrchestrator.test.ts`
+
+## Issue #68: The Info panel is shipped as a simple on/off overlay even though its real customization features have no UI
+
+- **Severity**: Low
+- **Area**: Review overlays, feature reachability
+- **Root Cause**: `InfoPanel` implements `setPosition()`, `setFields()`, and `toggleField()` for configurable display, but the only production UI affordance is a binary toggle button. Users cannot choose position or visible fields.
+- **Fix**: Added TODO(#68) JSDoc on the class documenting the gap and recommending a settings popover. Added one-time `console.info` on first `enable()` call referencing the available customization API and issue #68.
+- **Regression Tests**: INFO-U130 (logs customization info on first enable), INFO-U131 (logs only once across multiple enable calls).
+- **Verification**: All 65 InfoPanel tests pass, TypeScript clean.
+- **Files Changed**: `src/ui/components/InfoPanel.ts`, `src/ui/components/InfoPanel.test.ts`
+
+## Issue #70: The auto-save indicator is clickable for settings and retry, but it is not keyboard-focusable
+
+- **Severity**: Medium
+- **Area**: Header utility UI, keyboard accessibility
+- **Root Cause**: `AutoSaveIndicator` root `div` had a click handler for retry/settings but no `tabindex`, `role`, or keyboard activation handling. Keyboard users could not focus or activate it.
+- **Fix**: Added `tabindex="0"`, `role="button"`, `aria-label="Auto-save settings"` to the container. Added `keydown` handler for Enter/Space that calls `handleClick()`. Cleanup in `dispose()`.
+- **Regression Tests**: AUTOSAVE-UI-050 through AUTOSAVE-UI-055 (6 tests — tabindex, role, aria-label, Enter activates, Space activates, other keys ignored).
+- **Verification**: All 56 AutoSaveIndicator tests pass, TypeScript clean.
+- **Files Changed**: `src/ui/components/AutoSaveIndicator.ts`, `src/ui/components/AutoSaveIndicator.test.ts`
+
+## Issue #73: Several header menu buttons open popups without exposing expanded state
+
+- **Severity**: Low
+- **Area**: Header accessibility, menu truthfulness
+- **Root Cause**: Sources, Help, and Speed buttons had `aria-haspopup="menu"` but never synced `aria-expanded`. The layout menu button correctly managed it, but the others did not.
+- **Fix**: Added `aria-expanded="false"` on creation for Sources, Help, and Speed buttons. Set `aria-expanded="true"` when menus open and `"false"` when they close. Sources button syncs via `isVisible()` check after toggle.
+- **Regression Tests**: HDR-U210 through HDR-U214 (5 tests — initial false for sources/help/speed, true when help menu opens, true when speed menu opens).
+- **Verification**: All 150 HeaderBar tests pass, TypeScript clean.
+- **Files Changed**: `src/ui/components/layout/HeaderBar.ts`, `src/ui/components/layout/HeaderBar.test.ts`
+
+## Issue #71: The playback-speed control advertises a menu button, but default activation does not open its menu
+
+- **Severity**: Medium
+- **Area**: Playback header, control semantics
+- **Root Cause**: Speed button declared `aria-haspopup="menu"` but its primary click action cycles speed, not opens a menu. The menu is only accessible via right-click or Shift+Enter.
+- **Fix**: Removed `aria-haspopup="menu"` since primary activation is not a menu. Added `aria-description="Right-click or Shift+Enter for speed menu"` to document the secondary access method. Kept `aria-expanded` for the expandable popup.
+- **Regression Tests**: HDR-U220 (no aria-haspopup), HDR-U221 (aria-description present).
+- **Verification**: All 156 HeaderBar tests pass, TypeScript clean.
+- **Files Changed**: `src/ui/components/layout/HeaderBar.ts`, `src/ui/components/layout/HeaderBar.test.ts`
+
+## Issue #72: Notes and markers still rely on clickable text for key actions, leaving parts of review workflow mouse-only
+
+- **Severity**: Medium
+- **Area**: Notes/markers review panels, keyboard accessibility
+- **Root Cause**: Frame labels (click-to-jump), note text (click-to-edit), and empty-note hints in MarkerListPanel and NotePanel were plain spans/divs with only click handlers — no tabindex, role, or keyboard activation.
+- **Fix**: Added `tabindex="0"`, `role="button"`, appropriate `aria-label`, and Enter/Space keydown handler to each interactive text element in both panels.
+- **Regression Tests**: MARK-U180 through MARK-U187 (8 tests), NOTE-U020 through NOTE-U026 (7 tests).
+- **Verification**: All 80 NotePanel tests and MarkerListPanel tests pass, TypeScript clean.
+- **Files Changed**: `src/ui/components/MarkerListPanel.ts`, `src/ui/components/NotePanel.ts`, + test files
+
+## Issue #74: Custom header menus trap `Tab` back onto their trigger instead of letting focus continue
+
+- **Severity**: Medium
+- **Area**: Header keyboard navigation, accessibility
+- **Root Cause**: Speed, help, and layout menus intercepted Tab with `preventDefault()` and forced focus back to anchor, preventing natural tab flow.
+- **Fix**: Separated Tab from Escape handling in all three menus. Tab now closes the menu without `preventDefault()` or forcing focus, letting natural tab order continue. Escape still calls `preventDefault()` and returns focus to anchor.
+- **Regression Tests**: HDR-U230 through HDR-U233 (4 tests — Tab does not preventDefault, Escape still does).
+- **Verification**: All 156 HeaderBar tests pass, TypeScript clean.
+- **Files Changed**: `src/ui/components/layout/HeaderBar.ts`, `src/ui/components/layout/HeaderBar.test.ts`
+
+## Issue #75: Pixel Probe `Source` mode silently falls back to rendered values on the WebGL / HDR path
+
+- **Severity**: High
+- **Area**: QC tools, measurement correctness
+- **Root Cause**: On the WebGL/HDR path, `PixelSamplingManager` always forwards displayed float pixels through `updateFromHDRValues()` without providing pre-grade source data. `PixelProbe` silently falls back to rendered values when `sourceImageData` is missing in source mode.
+- **Fix**: Added fallback detection in `PixelProbe.updateFromCanvas()` and `updateFromHDRValues()` — when source mode is active but no source data exists, sets `isRenderedFallback` flag, logs `console.warn` once, and appends `" (rendered fallback)"` to coordinates label in `updateDisplay()`. Added `isSourceFallbackActive()` public method. Added TODO in `PixelSamplingManager` documenting the HDR source data pipeline gap.
+- **Regression Tests**: FALLBACK-001 through FALLBACK-010 (10 tests).
+- **Verification**: All 103 PixelProbe tests pass, TypeScript clean.
+- **Files Changed**: `src/ui/components/PixelProbe.ts`, `src/ui/components/PixelSamplingManager.ts`, `src/ui/components/PixelProbe.test.ts`
+
+## Issue #76: Viewer timecode overlay ignores source start-frame offsets, and exported frameburn inherits the wrong offset
+
+- **Severity**: High
+- **Area**: Viewer overlays, export correctness
+- **Root Cause**: `syncCurrentSourceTimecodeOffsets()` in `App.ts` updated the goto-frame overlay and header timecode display but not the viewer's `TimecodeOverlay`. Since frameburn export reads from `timecodeOverlay.getStartFrame()`, exports inherited the wrong (default 0) offset.
+- **Fix**: Added `this.viewer.getTimecodeOverlay().setStartFrame(startFrame)` to `syncCurrentSourceTimecodeOffsets()` so the viewer overlay receives the same offset.
+- **Regression Tests**: TC-130 through TC-134 (5 tests — setStartFrame/getStartFrame round-trip, display with offset, default value, consistency for frameburn, multiple updates).
+- **Verification**: All TimecodeOverlay tests pass, TypeScript clean.
+- **Files Changed**: `src/App.ts`, `src/ui/components/TimecodeOverlay.test.ts`
+
+## Issue #77: The viewer timecode overlay is effectively hidden from the shipped UI
+
+- **Severity**: Medium
+- **Fix**: Added TODO(#77) comment in `TimecodeOverlay.ts` documenting that configuration (position, fontSize, showFrameCounter, backgroundOpacity) has no UI surface. Added one-time `console.info` on first `enable()`.
+- **Regression Tests**: TC-130, TC-131 (logs on first enable, logs only once).
+- **Files Changed**: `src/ui/components/TimecodeOverlay.ts`, `src/ui/components/TimecodeOverlay.test.ts`
+
+## Issue #78: The FPS indicator has rich persisted settings, but the shipped UI only exposes a binary toggle
+
+- **Severity**: Medium
+- **Fix**: Added TODO(#78) comment in `FPSIndicator.ts` documenting that position, dropped-frame visibility, target-FPS visibility, background opacity, and warning/critical thresholds have no UI surface. Added one-time `console.info` on first `enable()`.
+- **Regression Tests**: FPS-120, FPS-121 (logs on first enable, logs only once).
+- **Files Changed**: `src/ui/components/FPSIndicator.ts`, `src/ui/components/FPSIndicator.test.ts`
+
+## Issue #79: Pixel Probe exposes copyable value rows as mouse-only `div`s
+
+- **Severity**: Medium
+- **Area**: QC tools, keyboard accessibility
+- **Fix**: Added `tabindex="0"`, `role="button"`, `aria-label="Copy {Label} value"` to all value rows and the HDR Nits row. Added Enter/Space keydown handler to each.
+- **Regression Tests**: PROBE-U200 through PROBE-U202 (3 tests).
+- **Files Changed**: `src/ui/components/PixelProbe.ts`, `src/ui/components/PixelProbe.test.ts`
+
+## Issue #80: Several custom popups bypass the shared dropdown primitive and lose its keyboard navigation
+
+- **Severity**: Medium
+- **Area**: View/QC control consistency, keyboard usability
+- **Fix**: Added ArrowDown/ArrowUp/Home/End keyboard navigation to `DisplayProfileControl`, `MultiSourceLayoutControl`, and `BackgroundPatternControl`. Each finds focusable items, tracks current index via `document.activeElement`, moves focus with wrapping.
+- **Regression Tests**: DPC-110/111/112, MSL-U060/061/062/063, BG-U060/061/062 (10 tests total).
+- **Files Changed**: `src/ui/components/DisplayProfileControl.ts`, `src/ui/components/MultiSourceLayoutControl.ts`, `src/ui/components/BackgroundPatternControl.ts`, + test files
+
+## Issue #81: Safe Areas ships only the binary guide toggles while real overlay customization stays unreachable
+
+- **Severity**: Medium
+- **Fix**: Added TODO(#81) comment in `SafeAreasControl.ts` documenting that guideColor, guideOpacity, and custom aspect ratio features exist but have no UI surface. Added one-time `console.info` on first overlay enable.
+- **Regression Tests**: SAFE-U120, SAFE-U121.
+- **Files Changed**: `src/ui/components/SafeAreasControl.ts`, `src/ui/components/SafeAreasControl.test.ts`
+
+## Issue #82: Watermark panel drops the overlay's custom-position mode on the floor
+
+- **Severity**: Medium
+- **Fix**: Added TODO(#82) comment in `WatermarkControl.ts` documenting that the overlay supports custom X/Y positioning but the UI only exposes the 3x3 preset grid. Added one-time `console.info` on first image load.
+- **Regression Tests**: WMC-U090, WMC-U091.
+- **Files Changed**: `src/ui/components/WatermarkControl.ts`, `src/ui/components/WatermarkControl.test.ts`
+
+## Issue #83: Client mode hides restricted UI one-way and does not restore it when the mode is turned off
+
+- **Severity**: Medium
+- **Area**: Review mode, layout state
+- **Root Cause**: `applyClientModeRestrictions()` set `style.display = 'none'` on matched elements but had no inverse path. Disabling client mode left UI elements permanently hidden.
+- **Fix**: Added `_clientModeOriginalDisplay` map to store previous display values before hiding. Added `restoreClientModeRestrictions()` that restores saved values. Wired it to the `stateChanged` listener when `enabled` becomes false.
+- **Regression Tests**: LO-037 (elements restored when client mode disabled), LO-038 (originally hidden elements stay hidden).
+- **Files Changed**: `src/services/LayoutOrchestrator.ts`, `src/services/LayoutOrchestrator.test.ts`
+
+## Issue #84: Info Strip ships as a toggle-only overlay while its opacity control stays hidden
+
+- **Severity**: Low
+- **Fix**: Added TODO(#84) + one-time `console.info` on first enable documenting that `backgroundOpacity` has no UI surface.
+- **Regression Tests**: 2 tests (logs on first enable, logs only once).
+- **Files Changed**: `src/ui/components/InfoStripOverlay.ts`, `src/ui/components/InfoStripOverlay.test.ts`
+
+## Issue #85: EXR window overlay exposes only a binary toggle while the useful per-window controls stay unreachable
+
+- **Severity**: Medium
+- **Fix**: Added TODO(#85) + one-time `console.info` on first enable documenting that per-window toggles, colors, line width, dash pattern, and labels have no UI surface.
+- **Regression Tests**: 2 tests.
+- **Files Changed**: `src/ui/components/EXRWindowOverlay.ts`, `src/ui/components/EXRWindowOverlay.test.ts`
+
+## Issue #86: Bug overlay is implemented in the viewer but has no production entry point
+
+- **Severity**: Medium
+- **Fix**: Added TODO(#86) + one-time `console.info` on first enable documenting that image loading, corner placement, size, opacity, and margin controls have no production UI.
+- **Regression Tests**: 2 tests.
+- **Files Changed**: `src/ui/components/BugOverlay.ts`, `src/ui/components/BugOverlay.test.ts`
+
+## Issue #87: Matte overlay is fully implemented but unreachable from the shipped UI
+
+- **Severity**: Medium
+- **Fix**: Added TODO(#87) + one-time `console.info` on first enable documenting that aspect, opacity, and center-point controls have no production UI.
+- **Regression Tests**: 2 tests.
+- **Files Changed**: `src/ui/components/MatteOverlay.ts`, `src/ui/components/MatteOverlay.test.ts`
+
+## Issue #88: Clipping overlay ships as a binary histogram toggle while its useful controls stay hidden
+
+- **Severity**: Medium
+- **Fix**: Added TODO(#88) + one-time `console.info` on first enable documenting that highlight/shadow toggles and opacity have no UI surface.
+- **Regression Tests**: 2 tests.
+- **Files Changed**: `src/ui/components/ClippingOverlay.ts`, `src/ui/components/ClippingOverlay.test.ts`
+
+## Issue #89: Reference comparison exposes only capture/on-off while the real comparison modes stay inaccessible
+
+- **Severity**: Medium
+- **Fix**: Added TODO(#89) + one-time `console.info` on first enable documenting that viewMode, opacity, and wipePosition have no UI surface.
+- **Regression Tests**: 2 tests.
+- **Files Changed**: `src/ui/components/ReferenceManager.ts`, `src/ui/components/ReferenceManager.test.ts`
+
+## Issue #90: Spotlight ships as a bare toggle while most of the tool's real controls are hidden
+
+- **Severity**: Medium
+- **Fix**: Added TODO(#90) + one-time `console.info` on first enable documenting that shape, position, size, dim amount, and feather settings have no UI surface.
+- **Regression Tests**: 2 tests.
+- **Files Changed**: `src/ui/components/SpotlightOverlay.ts`, `src/ui/components/SpotlightOverlay.test.ts`
+
+## Issue #91: The shipped slate panel exposes only a small subset of the slate feature it actually drives
+
+- **Severity**: Medium
+- **Fix**: Added TODO(#91) + one-time `console.info` on first `generateConfig()` call documenting that custom fields, text/accent colors, logo position/scale, and output resolution have no UI surface.
+- **Regression Tests**: SLATE-HINT-001, SLATE-HINT-002.
+- **Files Changed**: `src/ui/components/SlateEditor.ts`, `src/ui/components/SlateEditor.test.ts`
+
+## Issue #92: Slate logo upload failures are swallowed without any user-visible feedback
+
+- **Severity**: Medium
+- **Area**: Effects panel, error handling
+- **Root Cause**: `loadLogoFile()` failures emitted `logoError` events but no production code listened for them.
+- **Fix**: Added `slateEditor.on('logoError', ...)` listener in `AppControlRegistry.ts` that calls `console.warn` and displays the error in the logo info element.
+- **Regression Tests**: ACR-023 (logoError triggers console.warn), SLATE-ERR-001 (logoError event emitted on failure).
+- **Files Changed**: `src/AppControlRegistry.ts`, `src/AppControlRegistry.test.ts` or `src/ui/components/SlateEditor.test.ts`
+
+## Issue #93: The advanced multi-field frameburn export overlay is implemented but unreachable in production
+
+- **Severity**: Medium
+- **Fix**: Added TODO(#93) + one-time `console.info` in `FrameburnCompositor.compositeFrameburn()` documenting that the multi-field frameburn path has no production UI entry point.
+- **Regression Tests**: 2 tests.
+- **Files Changed**: `src/ui/components/FrameburnCompositor.ts`, `src/ui/components/issues-p1.test.ts`
+
+## Issue #94: Watermark image load failures are swallowed without any user-visible feedback
+
+- **Severity**: Medium
+- **Area**: Effects panel, error handling
+- **Fix**: Added `console.warn` in `WatermarkControl.handleFileSelect()` catch block and inline error display in the preview container.
+- **Regression Tests**: 1 test (console.warn on failure).
+- **Files Changed**: `src/ui/components/WatermarkControl.ts`, `src/ui/components/issues-p1.test.ts`
+
+## Issue #95: Playlist transition edits can silently collapse back to a cut with no explanation
+
+- **Severity**: Medium
+- **Fix**: Added `console.warn` when `validateTransition()` returns null, logging the rejected transition type and gap index.
+- **Regression Tests**: 1 test.
+- **Files Changed**: `src/ui/components/PlaylistPanel.ts`, `src/ui/components/issues-p1.test.ts`
+
+## Issue #96: ShotGrid load requests with invalid IDs fail as a silent no-op
+
+- **Severity**: Low
+- **Fix**: `handleLoad()` now shows inline error via `showState('error', ...)` and sets `aria-invalid="true"` on input for empty/invalid IDs. Clears on valid input.
+- **Regression Tests**: 2 tests (error message, aria-invalid).
+- **Files Changed**: `src/ui/components/ShotGridPanel.ts`, `src/ui/components/issues-p1.test.ts`
+
+## Issue #97: Timeline context menu advertises `Ctrl+C` for timecode copy, but that shortcut is still bound to frame copy
+
+- **Severity**: Medium
+- **Fix**: Removed `Ctrl+C` shortcut hint from "Copy Timecode" menu item (set to `null`). The action is click-only.
+- **Regression Tests**: Updated TCM-023 to verify no shortcut hint.
+- **Files Changed**: `src/ui/components/TimelineContextMenu.ts`, `src/ui/components/TimelineContextMenu.test.ts`
+
+## Issue #98: Ghost Frames, PAR, and Stereo Align use different interaction models for mouse and keyboard
+
+- **Severity**: Medium
+- **Fix**: Updated tooltips to clarify dual behavior: "Click to configure, [shortcut] to toggle/cycle". Ghost Frames, PAR, and StereoAlign all updated.
+- **Regression Tests**: 3 tests (one per control).
+- **Files Changed**: `src/ui/components/GhostFrameControl.ts`, `src/ui/components/PARControl.ts`, `src/ui/components/StereoAlignControl.ts`, `src/ui/components/issues-p1.test.ts`
+
+## Issue #99: Timeline editor context menu shows shortcut hints that are not actually wired
+
+- **Severity**: Medium
+- **Fix**: Removed `S` and `D` shortcut hints from "Split at Playhead" and "Duplicate Cut" items (set to `null`). Kept `Del` for Delete since it IS wired. Updated `createMenuItem` to accept `string | null`.
+- **Regression Tests**: 1 test.
+- **Files Changed**: `src/ui/components/TimelineEditor.ts`, `src/ui/components/issues-p1.test.ts`
+
+## Issue #100: Snapshot panel hides load failures behind a blank or stale panel state
+
+- **Severity**: Medium
+- **Fix**: Added inline error message element in `loadSnapshots()` catch block showing "Failed to load snapshots. Try again." with `data-testid="snapshot-load-error"`.
+- **Regression Tests**: 1 test.
+- **Files Changed**: `src/ui/components/SnapshotPanel.ts`, `src/ui/components/issues-p1.test.ts`
+
+## Issue #101: The floating Info Panel is mostly unwired and can only show cursor color reliably
+
+- **Severity**: Medium
+- **Fix**: Added TODO(#101) in InfoPanel class JSDoc + one-time `console.info` on first `enable()` documenting that most fields (filename, resolution, frame, timecode, duration, FPS) are unwired in production.
+- **Regression Tests**: 2 tests.
+- **Files Changed**: `src/ui/components/InfoPanel.ts`, `src/ui/components/issues-p1.test.ts`
+
+## Issue #102: Cache indicator's `Clear` action only clears video cache while still presenting effects-cache stats
+
+- **Severity**: Medium
+- **Fix**: Changed clear button label from "Clear" to "Clear Video Cache" to accurately describe its scope. Added TODO(#102) for adding effects cache clearing.
+- **Regression Tests**: 1 test.
+- **Files Changed**: `src/ui/components/CacheIndicator.ts`, `src/ui/components/issues-p1.test.ts`
+
+## Issue #103: Right-panel media info can go stale after the panel is hidden and shown again
+
+- **Severity**: Medium
+- **Fix**: Already resolved by Issue #53 (pendingInfo + applyPending mechanism). Added regression tests confirming the fix.
+- **Regression Tests**: RP-103a, RP-103b.
+- **Files Changed**: `src/ui/layout/panels/RightPanelContent.test.ts`
+
+## Issue #104: Advanced paint-tool buttons advertise `D` / `U` / `C` / `M`, but those shortcuts do not exist
+
+- **Severity**: Medium
+- **Fix**: Removed false shortcut hints from dodge/burn/clone/smudge tooltips in PaintToolbar.
+- **Regression Tests**: PAINT-U104a through PAINT-U104d (4 tests).
+- **Files Changed**: `src/ui/components/PaintToolbar.ts`, `src/ui/components/PaintToolbar.test.ts`
+
+## Issue #105: Text-format toolbar advertises `Ctrl+B` / `Ctrl+I` / `Ctrl+U`, but production never routes those shortcuts to it
+
+- **Severity**: Medium
+- **Fix**: Removed `(Ctrl+B)`, `(Ctrl+I)`, `(Ctrl+U)` from button titles. Added TODO(#105).
+- **Regression Tests**: TFT-105a through TFT-105c (3 tests).
+- **Files Changed**: `src/ui/components/TextFormattingToolbar.ts`, `src/ui/components/TextFormattingToolbar.test.ts`
+
+## Issue #106: Text-format toolbar never follows actual text selection, so it only tracks newly created or most-recent text
+
+- **Severity**: Medium
+- **Fix**: Added TODO(#106) + `console.info` in `setActiveAnnotation()` documenting the gap.
+- **Regression Tests**: TFT-106a.
+- **Files Changed**: `src/ui/components/TextFormattingToolbar.ts`, `src/ui/components/TextFormattingToolbar.test.ts`
+
+## Issue #107: Snapshot panel promises a Preview action, but the shipped UI only shows preview metadata
+
+- **Severity**: Medium
+- **Fix**: Updated docs to remove "Preview" from action list. Added TODO(#107).
+- **Regression Tests**: SNAP-107a (no Preview button in action row).
+- **Files Changed**: `src/ui/components/SnapshotPanel.ts`, `src/ui/components/SnapshotPanel.test.ts`
+
+## Issue #108: Playlist panel claims EDL import/export support, but the shipped UI only exposes export
+
+- **Severity**: Medium
+- **Fix**: Updated docs from "EDL import/export" to "EDL/OTIO export". Added TODO(#108).
+- **Regression Tests**: PL-108a (no import button).
+- **Files Changed**: `src/ui/components/PlaylistPanel.ts`, `src/ui/components/PlaylistPanel.test.ts`
+
+## Issue #109: Network Sync can show `Copied!` before the share link copy actually succeeds
+
+- **Severity**: Medium
+- **Fix**: Changed copy flow: button now shows "Copying..." immediately. Added `setCopyResult(success: boolean)` method that updates to "Copied!" or "Copy failed".
+- **Regression Tests**: NCC-109a through NCC-109c (3 tests).
+- **Files Changed**: `src/ui/components/NetworkControl.ts`, `src/ui/components/NetworkControl.test.ts`
+
+## Issue #110: Shortcut editor import failures are completely silent
+
+- **Severity**: Medium
+- **Fix**: Added `console.warn` in import catch block. Added `showImportStatus` method for inline UI feedback.
+- **Regression Tests**: SHORTCUT-U110, U111 (2 tests).
+- **Files Changed**: `src/ui/components/ShortcutEditor.ts`, `src/ui/components/ShortcutEditor.test.ts`
+
+## Issue #111: Curves import failures only hit the console, not the UI
+
+- **Severity**: Medium
+- **Fix**: Added inline error display with `data-testid="curves-import-error"`.
+- **Regression Tests**: CURVES-U111a.
+- **Files Changed**: `src/ui/components/CurvesControl.ts`, `src/ui/components/CurvesControl.test.ts`
+
+## Issue #112: External presentation window opens can fail silently when blocked by the browser
+
+- **Severity**: Medium
+- **Fix**: Added `console.warn` when `window.open()` returns null.
+- **Regression Tests**: EP-112a, EP-112b (2 tests).
+- **Files Changed**: `src/ui/components/ExternalPresentation.ts`, `src/ui/components/ExternalPresentation.test.ts`
+
+## Issue #113: The `?` shortcut cheat sheet advertises search/context filtering in code, but the shipped overlay exposes neither
+
+- **Severity**: Medium
+- **Fix**: Updated docs to remove misleading search/filter claims. Added TODO(#113).
+- **Regression Tests**: CS-113 (no search input in overlay).
+- **Files Changed**: `src/ui/components/ShortcutCheatSheet.ts`, `src/ui/components/ShortcutCheatSheet.test.ts`

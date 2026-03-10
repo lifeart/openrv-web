@@ -1088,15 +1088,15 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
       min-width: 180px;
     `;
 
-    // Split at Playhead
-    const splitItem = this.createMenuItem('Split at Playhead', 'S', () => {
+    // Split at Playhead (no keyboard shortcut wired)
+    const splitItem = this.createMenuItem('Split at Playhead', null, () => {
       this.splitCutAtFrame(cutIndex, this.currentFrame);
       menu.remove();
     });
     menu.appendChild(splitItem);
 
-    // Duplicate Cut
-    const duplicateItem = this.createMenuItem('Duplicate Cut', 'D', () => {
+    // Duplicate Cut (no keyboard shortcut wired)
+    const duplicateItem = this.createMenuItem('Duplicate Cut', null, () => {
       const cut = this.cuts[cutIndex];
       if (cut) {
         this.insertCut(cut.endFrame + 1, cut.sourceIndex, cut.inPoint, cut.outPoint);
@@ -1132,7 +1132,7 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
     setTimeout(() => document.addEventListener('click', closeHandler), 0);
   }
 
-  private createMenuItem(label: string, shortcut: string, onClick: () => void): HTMLElement {
+  private createMenuItem(label: string, shortcut: string | null, onClick: () => void): HTMLElement {
     const item = document.createElement('div');
     item.style.cssText = `
       padding: 8px 12px;
@@ -1146,13 +1146,14 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
 
     const labelSpan = document.createElement('span');
     labelSpan.textContent = label;
-
-    const shortcutSpan = document.createElement('span');
-    shortcutSpan.textContent = shortcut;
-    shortcutSpan.style.cssText = 'color: var(--text-muted); font-size: 11px; margin-left: 16px;';
-
     item.appendChild(labelSpan);
-    item.appendChild(shortcutSpan);
+
+    if (shortcut) {
+      const shortcutSpan = document.createElement('span');
+      shortcutSpan.textContent = shortcut;
+      shortcutSpan.style.cssText = 'color: var(--text-muted); font-size: 11px; margin-left: 16px;';
+      item.appendChild(shortcutSpan);
+    }
 
     item.addEventListener('pointerenter', () => {
       item.style.background = 'var(--bg-hover)';

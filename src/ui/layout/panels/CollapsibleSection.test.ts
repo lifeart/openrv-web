@@ -184,6 +184,66 @@ describe('CollapsibleSection', () => {
     });
   });
 
+  describe('keyboard accessibility', () => {
+    it('CS-023: header has tabindex="0"', () => {
+      section = new CollapsibleSection('Test');
+      expect(section.getHeader().getAttribute('tabindex')).toBe('0');
+    });
+
+    it('CS-024: header has role="button"', () => {
+      section = new CollapsibleSection('Test');
+      expect(section.getHeader().getAttribute('role')).toBe('button');
+    });
+
+    it('CS-025: header has aria-expanded matching expanded state', () => {
+      section = new CollapsibleSection('Test', { expanded: true });
+      expect(section.getHeader().getAttribute('aria-expanded')).toBe('true');
+      section.toggle();
+      expect(section.getHeader().getAttribute('aria-expanded')).toBe('false');
+    });
+
+    it('CS-026: Enter key toggles section', () => {
+      section = new CollapsibleSection('Test', { expanded: true });
+      const header = section.getHeader();
+      expect(section.isExpanded()).toBe(true);
+
+      header.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      expect(section.isExpanded()).toBe(false);
+
+      header.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      expect(section.isExpanded()).toBe(true);
+    });
+
+    it('CS-027: Space key toggles section', () => {
+      section = new CollapsibleSection('Test', { expanded: true });
+      const header = section.getHeader();
+
+      header.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+      expect(section.isExpanded()).toBe(false);
+    });
+
+    it('CS-028: other keys do not toggle section', () => {
+      section = new CollapsibleSection('Test', { expanded: true });
+      const header = section.getHeader();
+
+      header.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+      expect(section.isExpanded()).toBe(true);
+    });
+
+    it('CS-029: aria-expanded updates on setExpanded', () => {
+      section = new CollapsibleSection('Test', { expanded: true });
+      section.setExpanded(false);
+      expect(section.getHeader().getAttribute('aria-expanded')).toBe('false');
+      section.setExpanded(true);
+      expect(section.getHeader().getAttribute('aria-expanded')).toBe('true');
+    });
+
+    it('CS-030: aria-expanded correct when initialized collapsed', () => {
+      section = new CollapsibleSection('Test', { expanded: false });
+      expect(section.getHeader().getAttribute('aria-expanded')).toBe('false');
+    });
+  });
+
   describe('dispose', () => {
     it('CS-012: removes element from DOM', () => {
       section = new CollapsibleSection('Test');

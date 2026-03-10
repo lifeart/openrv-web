@@ -454,4 +454,29 @@ describe('FPSIndicator', () => {
       expect(indicator.isVisible()).toBe(false);
     });
   });
+
+  describe('configuration hint (#78)', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('FPS-120: logs configuration info on first enable', () => {
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      // Disable first since default state is enabled
+      indicator.disable();
+      indicator.enable();
+      expect(infoSpy).toHaveBeenCalledTimes(1);
+      expect(infoSpy.mock.calls[0]![0]).toContain('[FPSIndicator]');
+      expect(infoSpy.mock.calls[0]![0]).toContain('#78');
+    });
+
+    it('FPS-121: logs configuration info only once across multiple enable calls', () => {
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      indicator.disable();
+      indicator.enable();
+      indicator.disable();
+      indicator.enable();
+      expect(infoSpy).toHaveBeenCalledTimes(1);
+    });
+  });
 });

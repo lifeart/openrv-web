@@ -10,7 +10,7 @@ import { CollapsibleSection } from './CollapsibleSection';
 import { MiniHistogram } from './MiniHistogram';
 import type { HistogramData } from '../../components/Histogram';
 import type { ScopesControl } from '../../components/ScopesControl';
-import type { ScopeType } from '../../../core/types/scopes';
+import type { ScopeType, ScopesState } from '../../../core/types/scopes';
 import type { LayoutPresetId } from '../LayoutStore';
 
 export interface MediaInfoData {
@@ -30,6 +30,10 @@ export class RightPanelContent {
   private infoSection: CollapsibleSection;
   private miniHistogram: MiniHistogram;
   private scopeButtons: Map<ScopeType, HTMLButtonElement> = new Map();
+  private _unsubScopeChanged: (() => void) | null = null;
+
+  // Pending data for when panel is hidden
+  private pendingInfo: MediaInfoData | null = null;
 
   // Info fields
   private filenameEl: HTMLElement;
@@ -98,6 +102,26 @@ export class RightPanelContent {
     }
 
     this.scopesSection.getContent().appendChild(scopeRow);
+
+    // Sync button active styling when scope visibility changes
+    this._unsubScopeChanged = scopesControl.on('stateChanged', (state: ScopesState) => {
+      for (const [type, btn] of this.scopeButtons) {
+        const active = state[type];
+        btn.style.background = active ? 'var(--accent-primary)' : 'transparent';
+        btn.style.color = active ? 'var(--bg-primary)' : 'var(--text-secondary)';
+        btn.setAttribute('aria-pressed', String(active));
+      }
+    });
+
+    // Apply initial state
+    const initialState = scopesControl.getState();
+    for (const [type, btn] of this.scopeButtons) {
+      const active = initialState[type];
+      btn.style.background = active ? 'var(--accent-primary)' : 'transparent';
+      btn.style.color = active ? 'var(--bg-primary)' : 'var(--text-secondary)';
+      btn.setAttribute('aria-pressed', String(active));
+    }
+
     this.element.appendChild(this.scopesSection.getElement());
 
     // --- Section 2: Media Info ---
@@ -168,8 +192,11 @@ export class RightPanelContent {
   }
 
   updateInfo(data: MediaInfoData): void {
-    // Visibility guard: skip when hidden via CSS display:none
-    if (this.element.style.display === 'none') return;
+    // Visibility guard: store data for later when hidden via CSS display:none
+    if (this.element.style.display === 'none') {
+      this.pendingInfo = data;
+      return;
+    }
 
     const hasData = data.filename || data.width || data.currentFrame !== undefined;
     if (hasData) {
@@ -200,6 +227,16 @@ export class RightPanelContent {
       this.infoPlaceholder.style.display = '';
       this.infoContent.style.display = 'none';
     }
+  }
+
+  /** Apply any pending info/histogram updates after the panel becomes visible again. */
+  applyPending(): void {
+    if (this.pendingInfo) {
+      const data = this.pendingInfo;
+      this.pendingInfo = null;
+      this.updateInfo(data);
+    }
+    this.miniHistogram.applyPending();
   }
 
   updateHistogram(data: HistogramData): void {
@@ -237,6 +274,8 @@ export class RightPanelContent {
   }
 
   dispose(): void {
+    this._unsubScopeChanged?.();
+    this._unsubScopeChanged = null;
     this.miniHistogram.dispose();
     this.scopesSection.dispose();
     this.infoSection.dispose();

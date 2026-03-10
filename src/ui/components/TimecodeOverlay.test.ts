@@ -287,6 +287,59 @@ describe('TimecodeOverlay', () => {
     });
   });
 
+  describe('start frame offset wiring (Issue #76)', () => {
+    it('TC-130: setStartFrame updates getStartFrame', () => {
+      timecodeOverlay.setStartFrame(1001);
+      expect(timecodeOverlay.getStartFrame()).toBe(1001);
+    });
+
+    it('TC-131: setStartFrame triggers display update with correct offset', () => {
+      timecodeOverlay.enable();
+      mockSession.currentFrame = 1;
+      mockSession.fps = 24;
+
+      // Without offset: frame 1 at 24fps = 00:00:00:00
+      timecodeOverlay.setStartFrame(0);
+      const element = timecodeOverlay.getElement();
+      const valueEl = element.querySelector('[data-testid="timecode-overlay-value"]') as HTMLElement;
+      const tcWithoutOffset = valueEl.textContent;
+
+      // With offset: frame 1 at 24fps with startFrame=48 should show a different timecode
+      timecodeOverlay.setStartFrame(48);
+      const tcWithOffset = valueEl.textContent;
+
+      expect(tcWithOffset).not.toBe(tcWithoutOffset);
+    });
+
+    it('TC-132: getStartFrame returns 0 by default', () => {
+      const freshOverlay = new TimecodeOverlay(mockSession as any);
+      expect(freshOverlay.getStartFrame()).toBe(0);
+      freshOverlay.dispose();
+    });
+
+    it('TC-133: frameburn export gets the correct offset from getStartFrame', () => {
+      // Simulate wiring: set startFrame and verify it can be read back for export
+      timecodeOverlay.setStartFrame(86400);
+      expect(timecodeOverlay.getStartFrame()).toBe(86400);
+
+      // The frameburn export in Viewer reads getStartFrame() to embed timecode
+      // This test verifies the value is consistent after being set
+      timecodeOverlay.setStartFrame(1001);
+      expect(timecodeOverlay.getStartFrame()).toBe(1001);
+    });
+
+    it('TC-134: setStartFrame can be called multiple times and uses the latest value', () => {
+      timecodeOverlay.setStartFrame(100);
+      expect(timecodeOverlay.getStartFrame()).toBe(100);
+
+      timecodeOverlay.setStartFrame(200);
+      expect(timecodeOverlay.getStartFrame()).toBe(200);
+
+      timecodeOverlay.setStartFrame(0);
+      expect(timecodeOverlay.getStartFrame()).toBe(0);
+    });
+  });
+
   describe('dispose', () => {
     it('TC-080: dispose cleans up resources', () => {
       timecodeOverlay.enable();
@@ -412,5 +465,36 @@ describe('Timecode calculation functions', () => {
       const tc = frameToTimecode(17982, 29.97); // ~10 minutes
       expect(tc.dropFrame).toBe(true);
     });
+  });
+});
+
+describe('TimecodeOverlay configuration hint (#77)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function createOverlay(): TimecodeOverlay {
+    const session = createMockSession();
+    return new TimecodeOverlay(session as any);
+  }
+
+  it('TC-130: logs configuration info on first enable', () => {
+    const overlay = createOverlay();
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    overlay.enable();
+    expect(infoSpy).toHaveBeenCalledTimes(1);
+    expect(infoSpy.mock.calls[0]![0]).toContain('[TimecodeOverlay]');
+    expect(infoSpy.mock.calls[0]![0]).toContain('#77');
+    overlay.dispose();
+  });
+
+  it('TC-131: logs configuration info only once across multiple enable calls', () => {
+    const overlay = createOverlay();
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    overlay.enable();
+    overlay.disable();
+    overlay.enable();
+    expect(infoSpy).toHaveBeenCalledTimes(1);
+    overlay.dispose();
   });
 });

@@ -47,7 +47,7 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
   private editingFrame: number | null = null;
   private lastHighlightedFrame: number | null = null;
   private focusedMarkerIndex = -1;
-  private exclusivePanel: ExclusivePanelRef | null = null;
+  private exclusivePanels: ExclusivePanelRef[] = [];
 
   // Bound event handlers for cleanup
   private boundOnMarksChanged: () => void;
@@ -224,18 +224,20 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
     return this.container;
   }
 
-  /** Register another panel for mutual exclusion - opening this panel will close the other */
+  /** Register another panel for mutual exclusion - opening this panel will close the other(s) */
   setExclusiveWith(panel: ExclusivePanelRef): void {
-    this.exclusivePanel = panel;
+    this.exclusivePanels.push(panel);
   }
 
   /**
    * Show the panel
    */
   show(): void {
-    // Close exclusive panel if it is open
-    if (this.exclusivePanel?.isVisible()) {
-      this.exclusivePanel.hide();
+    // Close exclusive panels if they are open
+    for (const ep of this.exclusivePanels) {
+      if (ep.isVisible()) {
+        ep.hide();
+      }
     }
     this.visible = true;
     this.container.style.display = 'flex';
@@ -553,7 +555,16 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
       color: ${isCurrentFrame ? 'var(--accent-primary)' : 'var(--text-primary)'};
       font-weight: ${isCurrentFrame ? '600' : '400'};
     `;
+    frameInfo.setAttribute('tabindex', '0');
+    frameInfo.setAttribute('role', 'button');
+    frameInfo.setAttribute('aria-label', `Go to frame ${marker.frame}`);
     frameInfo.addEventListener('click', () => this.goToMarker(marker.frame));
+    frameInfo.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        this.goToMarker(marker.frame);
+      }
+    });
 
     // Edit note button
     const editBtn = document.createElement('button');
@@ -738,7 +749,16 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
         word-break: break-word;
         cursor: pointer;
       `;
+      noteText.setAttribute('tabindex', '0');
+      noteText.setAttribute('role', 'button');
+      noteText.setAttribute('aria-label', 'Edit marker note');
       noteText.addEventListener('click', () => this.startEditingNote(marker.frame));
+      noteText.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          this.startEditingNote(marker.frame);
+        }
+      });
       noteRow.appendChild(noteText);
     } else {
       // Empty note hint
@@ -750,7 +770,16 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
         font-style: italic;
         cursor: pointer;
       `;
+      hintText.setAttribute('tabindex', '0');
+      hintText.setAttribute('role', 'button');
+      hintText.setAttribute('aria-label', 'Add a note to this marker');
       hintText.addEventListener('click', () => this.startEditingNote(marker.frame));
+      hintText.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          this.startEditingNote(marker.frame);
+        }
+      });
       noteRow.appendChild(hintText);
     }
 

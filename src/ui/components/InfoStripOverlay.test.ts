@@ -507,4 +507,38 @@ describe('InfoStripOverlay', () => {
       expect(overlay.getState().showFullPath).toBe(false);
     });
   });
+
+  // -------------------------------------------------------------------------
+  // #84: console.info on first enable
+  // -------------------------------------------------------------------------
+  describe('customization hint (#84)', () => {
+    it('IS-140: logs console.info on first enable', () => {
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      try {
+        overlay.enable();
+        expect(infoSpy).toHaveBeenCalledTimes(1);
+        expect(infoSpy.mock.calls[0]![0]).toContain('[InfoStripOverlay]');
+        expect(infoSpy.mock.calls[0]![0]).toContain('#84');
+      } finally {
+        infoSpy.mockRestore();
+      }
+    });
+
+    it('IS-141: logs only once across multiple enable calls', () => {
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      try {
+        // Create a fresh overlay to ensure clean state
+        const freshOverlay = new InfoStripOverlay(mockSession as any);
+        freshOverlay.enable();
+        freshOverlay.disable();
+        freshOverlay.enable();
+        freshOverlay.disable();
+        freshOverlay.enable();
+        expect(infoSpy).toHaveBeenCalledTimes(1);
+        freshOverlay.dispose();
+      } finally {
+        infoSpy.mockRestore();
+      }
+    });
+  });
 });

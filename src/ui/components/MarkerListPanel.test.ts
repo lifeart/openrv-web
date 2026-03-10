@@ -923,5 +923,112 @@ describe('MarkerListPanel', () => {
 
       expect(mockExclusive.hide).not.toHaveBeenCalled();
     });
+
+    it('MARK-U172: show() closes multiple exclusive panels', () => {
+      const mockA = {
+        isVisible: vi.fn().mockReturnValue(true),
+        hide: vi.fn(),
+      };
+      const mockB = {
+        isVisible: vi.fn().mockReturnValue(true),
+        hide: vi.fn(),
+      };
+      panel.setExclusiveWith(mockA);
+      panel.setExclusiveWith(mockB);
+
+      panel.show();
+
+      expect(mockA.hide).toHaveBeenCalledTimes(1);
+      expect(mockB.hide).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('Issue #72: keyboard accessibility for clickable text elements', () => {
+    it('MARK-U180: frame label has tabindex="0" and role="button"', () => {
+      session.setMarker(10, 'Test', MARKER_COLORS[0]);
+      panel.show();
+      const entry = panel.getElement().querySelector('[data-testid="marker-entry-10"]');
+      const frameInfo = entry?.querySelector('span[role="button"]');
+      expect(frameInfo).not.toBeNull();
+      expect(frameInfo?.getAttribute('tabindex')).toBe('0');
+      expect(frameInfo?.getAttribute('role')).toBe('button');
+    });
+
+    it('MARK-U181: frame label has aria-label for go-to-frame', () => {
+      session.setMarker(10, 'Test', MARKER_COLORS[0]);
+      panel.show();
+      const entry = panel.getElement().querySelector('[data-testid="marker-entry-10"]');
+      const frameInfo = entry?.querySelector('span[role="button"]');
+      expect(frameInfo?.getAttribute('aria-label')).toContain('frame 10');
+    });
+
+    it('MARK-U182: Enter key on frame label navigates to marker', () => {
+      session.setMarker(50, 'Test', MARKER_COLORS[0]);
+      panel.show();
+      session.currentFrame = 1;
+
+      const entry = panel.getElement().querySelector('[data-testid="marker-entry-50"]');
+      const frameInfo = entry?.querySelector('span[role="button"]') as HTMLElement;
+
+      frameInfo.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      expect(session.currentFrame).toBe(50);
+    });
+
+    it('MARK-U183: Space key on frame label navigates to marker', () => {
+      session.setMarker(50, 'Test', MARKER_COLORS[0]);
+      panel.show();
+      session.currentFrame = 1;
+
+      const entry = panel.getElement().querySelector('[data-testid="marker-entry-50"]');
+      const frameInfo = entry?.querySelector('span[role="button"]') as HTMLElement;
+
+      frameInfo.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+      expect(session.currentFrame).toBe(50);
+    });
+
+    it('MARK-U184: note text has tabindex="0" and role="button"', () => {
+      session.setMarker(10, 'Some note', MARKER_COLORS[0]);
+      panel.show();
+      const noteText = panel.getElement().querySelector('[data-testid="marker-note-10"]');
+      expect(noteText).not.toBeNull();
+      expect(noteText?.getAttribute('tabindex')).toBe('0');
+      expect(noteText?.getAttribute('role')).toBe('button');
+    });
+
+    it('MARK-U185: Enter key on note text starts editing', () => {
+      session.setMarker(10, 'Some note', MARKER_COLORS[0]);
+      panel.show();
+      const noteText = panel.getElement().querySelector('[data-testid="marker-note-10"]') as HTMLElement;
+
+      noteText.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+      // Should now be in editing mode
+      const textarea = panel.getElement().querySelector('[data-testid="marker-note-input-10"]');
+      expect(textarea).not.toBeNull();
+    });
+
+    it('MARK-U186: empty note hint has tabindex="0" and role="button"', () => {
+      session.setMarker(10, '', MARKER_COLORS[0]);
+      panel.show();
+      const entry = panel.getElement().querySelector('[data-testid="marker-entry-10"]');
+      // Find the hint div (it says "Click edit to add a note")
+      const hint = entry?.querySelector('div[role="button"]');
+      expect(hint).not.toBeNull();
+      expect(hint?.getAttribute('tabindex')).toBe('0');
+      expect(hint?.textContent).toContain('Click edit to add a note');
+    });
+
+    it('MARK-U187: Enter key on empty note hint starts editing', () => {
+      session.setMarker(10, '', MARKER_COLORS[0]);
+      panel.show();
+      const entry = panel.getElement().querySelector('[data-testid="marker-entry-10"]');
+      const hint = entry?.querySelector('div[role="button"]') as HTMLElement;
+
+      hint.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+      // Should now be in editing mode
+      const textarea = panel.getElement().querySelector('[data-testid="marker-note-input-10"]');
+      expect(textarea).not.toBeNull();
+    });
   });
 });

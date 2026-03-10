@@ -524,4 +524,26 @@ describe('SafeAreasControl', () => {
       expect(el.style.position).toBe('relative');
     });
   });
+
+  describe('configuration hint (#81)', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('SAFE-U120: logs configuration info on first enable', () => {
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      overlay.toggle(); // enable
+      expect(infoSpy).toHaveBeenCalledTimes(1);
+      expect(infoSpy.mock.calls[0]![0]).toContain('[SafeAreasControl]');
+      expect(infoSpy.mock.calls[0]![0]).toContain('#81');
+    });
+
+    it('SAFE-U121: logs configuration info only once across multiple enables', () => {
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      overlay.toggle(); // enable
+      overlay.toggle(); // disable
+      overlay.toggle(); // enable
+      expect(infoSpy).toHaveBeenCalledTimes(1);
+    });
+  });
 });

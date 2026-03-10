@@ -275,6 +275,13 @@ export class PixelSamplingManager {
   /**
    * Process pixel probe data from either sync or async readback.
    * Used by both the sync and async (worker) paths.
+   *
+   * TODO(#75): The HDR/WebGL path always forwards rendered (post-grade) float
+   * values via updateFromHDRValues(). When the user selects "Source" mode in
+   * PixelProbe, there is no pre-grade source data pipeline for HDR content.
+   * A future refactor should add a source-data readback path (e.g. reading
+   * from the original IPImage float data before the shader pipeline) so that
+   * PixelProbe can display true source values on the HDR path.
    */
   handlePixelProbeData(
     pixels: Float32Array | null,

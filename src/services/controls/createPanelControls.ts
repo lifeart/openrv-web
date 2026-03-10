@@ -56,9 +56,13 @@ export function createPanelControls(deps: PanelControlDeps): PanelControlGroupIn
   const markerListPanel = new MarkerListPanel(session);
   const notePanel = new NotePanel(session);
 
-  // Mutual exclusion: NotePanel and MarkerListPanel overlap in the same position
+  // Mutual exclusion: HistoryPanel, NotePanel, and MarkerListPanel overlap in the same position
   notePanel.setExclusiveWith(markerListPanel);
+  notePanel.setExclusiveWith(historyPanel);
   markerListPanel.setExclusiveWith(notePanel);
+  markerListPanel.setExclusiveWith(historyPanel);
+  historyPanel.setExclusiveWith(notePanel);
+  historyPanel.setExclusiveWith(markerListPanel);
 
   // --- Layout panel content ---
   const rightPanelContent = new RightPanelContent(scopesControl);

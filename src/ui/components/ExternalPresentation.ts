@@ -408,6 +408,10 @@ export class ExternalPresentation extends EventEmitter<ExternalPresentationEvent
 
     if (!windowRef) {
       // Popup blocker may have prevented the window from opening
+      console.warn(
+        '[ExternalPresentation] window.open() returned null — the browser likely blocked the popup. ' +
+          'Check popup blocker settings.',
+      );
       return null;
     }
 

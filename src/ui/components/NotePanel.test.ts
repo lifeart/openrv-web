@@ -1068,5 +1068,93 @@ describe('NotePanel', () => {
 
       expect(mockExclusive.hide).not.toHaveBeenCalled();
     });
+
+    it('show() closes multiple exclusive panels', () => {
+      const mockA = {
+        isVisible: vi.fn().mockReturnValue(true),
+        hide: vi.fn(),
+      };
+      const mockB = {
+        isVisible: vi.fn().mockReturnValue(true),
+        hide: vi.fn(),
+      };
+      panel.setExclusiveWith(mockA);
+      panel.setExclusiveWith(mockB);
+
+      panel.show();
+
+      expect(mockA.hide).toHaveBeenCalledTimes(1);
+      expect(mockB.hide).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('Issue #72: keyboard accessibility for clickable text elements', () => {
+    it('NOTE-U020: frame span has tabindex="0" and role="button"', () => {
+      session.noteManager.addNote(0, 10, 10, 'Test note', 'Alice');
+      panel.show();
+      const entry = panel.getElement().querySelector('.note-entry');
+      const frameSpan = entry?.querySelector('span[role="button"]');
+      expect(frameSpan).not.toBeNull();
+      expect(frameSpan?.getAttribute('tabindex')).toBe('0');
+    });
+
+    it('NOTE-U021: frame span has aria-label for go-to-frame', () => {
+      session.noteManager.addNote(0, 25, 25, 'Test note', 'Alice');
+      panel.show();
+      const entry = panel.getElement().querySelector('.note-entry');
+      const frameSpan = entry?.querySelector('span[role="button"]');
+      expect(frameSpan?.getAttribute('aria-label')).toContain('frame 25');
+    });
+
+    it('NOTE-U022: Enter key on frame span navigates to note frame', () => {
+      const goToFrameSpy = vi.spyOn(session, 'goToFrame');
+      session.noteManager.addNote(0, 42, 42, 'Test note', 'Alice');
+      panel.show();
+
+      const entry = panel.getElement().querySelector('.note-entry');
+      const frameSpan = entry?.querySelector('span[role="button"]') as HTMLElement;
+
+      frameSpan.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      expect(goToFrameSpy).toHaveBeenCalledWith(42);
+    });
+
+    it('NOTE-U023: Space key on frame span navigates to note frame', () => {
+      const goToFrameSpy = vi.spyOn(session, 'goToFrame');
+      session.noteManager.addNote(0, 42, 42, 'Test note', 'Alice');
+      panel.show();
+
+      const entry = panel.getElement().querySelector('.note-entry');
+      const frameSpan = entry?.querySelector('span[role="button"]') as HTMLElement;
+
+      frameSpan.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+      expect(goToFrameSpy).toHaveBeenCalledWith(42);
+    });
+
+    it('NOTE-U024: note card has tabindex="0" for keyboard focus', () => {
+      session.noteManager.addNote(0, 10, 10, 'Test note', 'Alice');
+      panel.show();
+      const entry = panel.getElement().querySelector('.note-entry') as HTMLElement;
+      expect(entry.getAttribute('tabindex')).toBe('0');
+    });
+
+    it('NOTE-U025: Enter key on note card navigates to note frame', () => {
+      const goToFrameSpy = vi.spyOn(session, 'goToFrame');
+      const note = session.noteManager.addNote(0, 30, 30, 'Test note', 'Alice');
+      panel.show();
+
+      const entry = panel.getElement().querySelector(`[data-testid="note-entry-${note.id}"]`) as HTMLElement;
+      entry.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      expect(goToFrameSpy).toHaveBeenCalledWith(30);
+    });
+
+    it('NOTE-U026: Space key on note card navigates to note frame', () => {
+      const goToFrameSpy = vi.spyOn(session, 'goToFrame');
+      const note = session.noteManager.addNote(0, 30, 30, 'Test note', 'Alice');
+      panel.show();
+
+      const entry = panel.getElement().querySelector(`[data-testid="note-entry-${note.id}"]`) as HTMLElement;
+      entry.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+      expect(goToFrameSpy).toHaveBeenCalledWith(30);
+    });
   });
 });

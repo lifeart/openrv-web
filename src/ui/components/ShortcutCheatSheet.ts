@@ -3,10 +3,15 @@
  *
  * Read-only overlay that displays all available keyboard shortcuts,
  * grouped by category. Toggle with the `?` key (handled externally
- * by KeyboardManager). Supports context filtering and text search.
+ * by KeyboardManager).
  *
  * Reuses `buildActionGroups` / `describeKeyCombo` from the existing
  * shortcut infrastructure so display logic is never duplicated.
+ *
+ * TODO(#113): Add a search input and context-filter dropdown to the
+ * overlay so users can narrow the shortcut list interactively.
+ * The programmatic `filter()` / `setContext()` APIs exist but are
+ * not exposed through the UI yet.
  */
 
 import { buildActionGroups, type ShortcutEditorManager } from './ShortcutEditor';

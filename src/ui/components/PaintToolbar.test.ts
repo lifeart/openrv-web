@@ -484,4 +484,34 @@ describe('PaintToolbar', () => {
       expect(btn.title).toContain('T');
     });
   });
+
+  describe('issue #104 regression: advanced tool tooltips should not advertise unverified shortcuts', () => {
+    it('PAINT-U104a: dodge tool tooltip has no single-letter shortcut hint', () => {
+      const el = toolbar.render();
+      const btn = el.querySelector('[data-testid="paint-tool-dodge"]') as HTMLButtonElement;
+      expect(btn.title).toContain('Dodge tool');
+      expect(btn.title).not.toMatch(/\(D\)/);
+    });
+
+    it('PAINT-U104b: burn tool tooltip has no single-letter shortcut hint', () => {
+      const el = toolbar.render();
+      const btn = el.querySelector('[data-testid="paint-tool-burn"]') as HTMLButtonElement;
+      expect(btn.title).toContain('Burn tool');
+      expect(btn.title).not.toMatch(/\(U\)/);
+    });
+
+    it('PAINT-U104c: clone stamp tooltip has no single-letter shortcut hint', () => {
+      const el = toolbar.render();
+      const btn = el.querySelector('[data-testid="paint-tool-clone"]') as HTMLButtonElement;
+      expect(btn.title).toContain('Clone stamp');
+      expect(btn.title).not.toMatch(/\(C\)/);
+    });
+
+    it('PAINT-U104d: smudge tool tooltip has no single-letter shortcut hint', () => {
+      const el = toolbar.render();
+      const btn = el.querySelector('[data-testid="paint-tool-smudge"]') as HTMLButtonElement;
+      expect(btn.title).toContain('Smudge tool');
+      expect(btn.title).not.toMatch(/\(M\)/);
+    });
+  });
 });

@@ -261,11 +261,15 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     ]);
     const sourcesButton = this.createCompactButton(
       'Sources',
-      () => this._sourcesMenu!.toggle(sourcesButton),
+      () => {
+        this._sourcesMenu!.toggle(sourcesButton);
+        sourcesButton.setAttribute('aria-expanded', String(this._sourcesMenu!.isVisible()));
+      },
       'Load procedural test pattern',
       'image',
     );
     sourcesButton.setAttribute('aria-haspopup', 'menu');
+    sourcesButton.setAttribute('aria-expanded', 'false');
     fileGroup.appendChild(sourcesButton);
 
     this.container.appendChild(fileGroup);
@@ -315,7 +319,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     );
 
     // Loop mode button
-    this.loopButton = this.createCompactButton('', () => this.cycleLoopMode(), 'Cycle loop mode (L)');
+    this.loopButton = this.createCompactButton('', () => this.cycleLoopMode(), 'Cycle loop mode (Ctrl+L)');
     this.loopButton.style.minWidth = '28px';
     this.loopButton.style.marginLeft = '8px';
     playbackGroup.appendChild(this.loopButton);
@@ -430,6 +434,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     );
     this.helpButton.dataset.testid = 'help-menu-button';
     this.helpButton.setAttribute('aria-haspopup', 'menu');
+    this.helpButton.setAttribute('aria-expanded', 'false');
     this.helpButton.style.marginLeft = '8px';
     utilityGroup.appendChild(this.helpButton);
 
@@ -619,7 +624,8 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     button.dataset.testid = 'playback-speed-button';
     button.title =
       'Playback speed: Click to cycle forward, Shift+Click to cycle backward, Right-click or Shift+Enter for menu (J/K/L keys)';
-    button.setAttribute('aria-haspopup', 'menu');
+    button.setAttribute('aria-description', 'Right-click or Shift+Enter for speed menu');
+    button.setAttribute('aria-expanded', 'false');
     button.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
@@ -765,6 +771,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   private showSpeedMenu(anchor: HTMLElement): void {
     // Close any other open header menus
     this.closeAllHeaderMenus();
+    anchor.setAttribute('aria-expanded', 'true');
     const existingMenu = document.getElementById('speed-preset-menu');
     if (existingMenu) {
       existingMenu.remove();
@@ -928,9 +935,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
           break;
         }
         case 'Tab': {
-          e.preventDefault();
           removeMenu();
-          anchor.focus();
           break;
         }
       }
@@ -954,6 +959,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       menu.remove();
       document.removeEventListener('click', closeMenu);
       this._activeSpeedMenuCleanup = null;
+      anchor.setAttribute('aria-expanded', 'false');
       anchor.focus();
     };
 
@@ -972,6 +978,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   private showHelpMenu(anchor: HTMLElement): void {
     // Close any other open header menus
     this.closeAllHeaderMenus();
+    anchor.setAttribute('aria-expanded', 'true');
 
     const menu = document.createElement('div');
     menu.id = 'help-menu';
@@ -1062,11 +1069,14 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
           menuItems[prevIndex]?.focus();
           break;
         }
-        case 'Escape':
-        case 'Tab': {
+        case 'Escape': {
           e.preventDefault();
           removeMenu();
           anchor.focus();
+          break;
+        }
+        case 'Tab': {
+          removeMenu();
           break;
         }
       }
@@ -1090,6 +1100,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       menu.remove();
       document.removeEventListener('click', closeMenu);
       this._activeHelpMenuCleanup = null;
+      anchor.setAttribute('aria-expanded', 'false');
       anchor.focus();
     };
 
@@ -1205,11 +1216,14 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
           items[prevIndex]?.focus();
           break;
         }
-        case 'Escape':
-        case 'Tab': {
+        case 'Escape': {
           e.preventDefault();
           removeMenu();
           anchor.focus();
+          break;
+        }
+        case 'Tab': {
+          removeMenu();
           break;
         }
       }

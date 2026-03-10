@@ -487,6 +487,30 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
   private handleDocumentKeydown = (e: KeyboardEvent): void => {
     if (e.key === 'Escape') {
       this.closeDropdown();
+      return;
+    }
+
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Home' || e.key === 'End') {
+      e.preventDefault();
+      const focusable = Array.from(
+        this.dropdown.querySelectorAll<HTMLElement>('button, input, [tabindex="0"]'),
+      ).filter((el) => !el.hidden && (el as HTMLButtonElement).disabled !== true);
+      if (focusable.length === 0) return;
+
+      const currentIndex = focusable.indexOf(document.activeElement as HTMLElement);
+      let nextIndex: number;
+
+      if (e.key === 'Home') {
+        nextIndex = 0;
+      } else if (e.key === 'End') {
+        nextIndex = focusable.length - 1;
+      } else if (e.key === 'ArrowDown') {
+        nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % focusable.length;
+      } else {
+        nextIndex = currentIndex <= 0 ? focusable.length - 1 : currentIndex - 1;
+      }
+
+      focusable[nextIndex]?.focus();
     }
   };
 }

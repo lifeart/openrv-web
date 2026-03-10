@@ -48,7 +48,7 @@ export class VolumeControl extends EventEmitter<VolumeControlEvents> {
     this.muteButton = document.createElement('button');
     this.updateMuteButton();
     this.muteButton.dataset.testid = 'mute-button';
-    this.muteButton.title = 'Toggle mute (M in video mode)';
+    this.muteButton.title = 'Toggle mute (Shift+M in video mode)';
     this.muteButton.setAttribute('aria-label', 'Toggle mute');
     this.muteButton.style.cssText = `
       background: transparent;
@@ -65,6 +65,10 @@ export class VolumeControl extends EventEmitter<VolumeControlEvents> {
       outline: none;
     `;
 
+    // TODO(#116): The mute button click both toggles mute AND expands/collapses
+    // the volume slider. This means users must toggle their mute state just to
+    // reach the slider on mobile/keyboard. Ideally, disclosure should be separated
+    // from the mute action (e.g., hover/focus expands, click only mutes).
     this.muteButton.addEventListener('click', () => {
       this.toggleMute();
       this.toggleSliderExpanded();

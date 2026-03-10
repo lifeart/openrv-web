@@ -45,7 +45,13 @@ const VALID_VIEW_MODES: ReadonlySet<string> = new Set<ReferenceViewMode>([
   'toggle',
 ]);
 
+/**
+ * TODO(#89): ReferenceManager has viewMode, opacity, and wipePosition controls,
+ * but the production UI only exposes capture + toggle. A settings popover should
+ * be added to let users configure comparison modes.
+ */
 export class ReferenceManager extends EventEmitter<ReferenceManagerEvents> {
+  private hasLoggedCustomizationHint = false;
   private state: ReferenceState = {
     enabled: false,
     referenceImage: null,
@@ -124,6 +130,15 @@ export class ReferenceManager extends EventEmitter<ReferenceManagerEvents> {
     if (this.state.enabled) return;
     this.state.enabled = true;
     this.emit('stateChanged', this.getState());
+
+    // TODO(#89): Log customization hint on first enable
+    if (!this.hasLoggedCustomizationHint) {
+      this.hasLoggedCustomizationHint = true;
+      console.info(
+        '[ReferenceManager] viewMode, opacity, and wipePosition are configurable ' +
+          'via the API but are not yet exposed in the UI. See issue #89.',
+      );
+    }
   }
 
   disable(): void {

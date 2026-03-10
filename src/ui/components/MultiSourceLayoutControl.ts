@@ -39,6 +39,7 @@ export class MultiSourceLayoutControl extends EventEmitter<MultiSourceLayoutCont
   private isOpen = false;
   private boundHandleOutsideClick: (e: MouseEvent) => void;
   private boundHandleReposition: () => void;
+  private boundHandleKeydown: (e: KeyboardEvent) => void;
   private managerUnsubs: (() => void)[] = [];
   private _currentSourceIndex = 0;
   private _sourceCount = 1;
@@ -73,6 +74,7 @@ export class MultiSourceLayoutControl extends EventEmitter<MultiSourceLayoutCont
 
     this.boundHandleOutsideClick = (e: MouseEvent) => this.handleOutsideClick(e);
     this.boundHandleReposition = () => this.positionDropdown();
+    this.boundHandleKeydown = (e: KeyboardEvent) => this.handleDropdownKeydown(e);
 
     this.container = document.createElement('div');
     this.container.className = 'layout-control';
@@ -82,7 +84,7 @@ export class MultiSourceLayoutControl extends EventEmitter<MultiSourceLayoutCont
     // Create button
     this.button = document.createElement('button');
     this.button.dataset.testid = 'layout-control-button';
-    this.button.title = 'Layout modes (L)';
+    this.button.title = 'Layout modes';
     this.button.setAttribute('aria-haspopup', 'dialog');
     this.button.setAttribute('aria-expanded', 'false');
     this.button.style.cssText = `
@@ -370,6 +372,7 @@ export class MultiSourceLayoutControl extends EventEmitter<MultiSourceLayoutCont
     this.button.style.background = 'var(--bg-hover)';
     this.button.style.borderColor = 'var(--border-primary)';
     document.addEventListener('click', this.boundHandleOutsideClick);
+    document.addEventListener('keydown', this.boundHandleKeydown);
     window.addEventListener('scroll', this.boundHandleReposition, true);
     window.addEventListener('resize', this.boundHandleReposition);
   }
@@ -380,6 +383,7 @@ export class MultiSourceLayoutControl extends EventEmitter<MultiSourceLayoutCont
     this.button.setAttribute('aria-expanded', 'false');
     this.updateButtonLabel();
     document.removeEventListener('click', this.boundHandleOutsideClick);
+    document.removeEventListener('keydown', this.boundHandleKeydown);
     window.removeEventListener('scroll', this.boundHandleReposition, true);
     window.removeEventListener('resize', this.boundHandleReposition);
   }
@@ -394,6 +398,36 @@ export class MultiSourceLayoutControl extends EventEmitter<MultiSourceLayoutCont
   private handleOutsideClick(e: MouseEvent): void {
     if (!this.button.contains(e.target as Node) && !this.dropdown.contains(e.target as Node)) {
       this.closeDropdown();
+    }
+  }
+
+  private handleDropdownKeydown(e: KeyboardEvent): void {
+    if (e.key === 'Escape') {
+      this.closeDropdown();
+      return;
+    }
+
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Home' || e.key === 'End') {
+      e.preventDefault();
+      const focusable = Array.from(
+        this.dropdown.querySelectorAll<HTMLElement>('button, select, input, [tabindex="0"]'),
+      ).filter((el) => !el.hidden && (el as HTMLButtonElement).disabled !== true);
+      if (focusable.length === 0) return;
+
+      const currentIndex = focusable.indexOf(document.activeElement as HTMLElement);
+      let nextIndex: number;
+
+      if (e.key === 'Home') {
+        nextIndex = 0;
+      } else if (e.key === 'End') {
+        nextIndex = focusable.length - 1;
+      } else if (e.key === 'ArrowDown') {
+        nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % focusable.length;
+      } else {
+        nextIndex = currentIndex <= 0 ? focusable.length - 1 : currentIndex - 1;
+      }
+
+      focusable[nextIndex]?.focus();
     }
   }
 

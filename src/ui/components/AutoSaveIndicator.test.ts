@@ -541,4 +541,51 @@ describe('AutoSaveIndicator', () => {
       expect(document.body.querySelector('[data-testid="autosave-settings-popover"]')).toBeNull();
     });
   });
+
+  describe('keyboard accessibility (#70)', () => {
+    it('AUTOSAVE-UI-050: container has tabindex="0" for keyboard focus', () => {
+      const element = indicator.render();
+      expect(element.getAttribute('tabindex')).toBe('0');
+    });
+
+    it('AUTOSAVE-UI-051: container has role="button"', () => {
+      const element = indicator.render();
+      expect(element.getAttribute('role')).toBe('button');
+    });
+
+    it('AUTOSAVE-UI-052: container has aria-label', () => {
+      const element = indicator.render();
+      expect(element.getAttribute('aria-label')).toBe('Auto-save settings');
+    });
+
+    it('AUTOSAVE-UI-053: Enter key triggers handleClick', () => {
+      const callback = vi.fn();
+      indicator.setRetryCallback(callback);
+      indicator.setStatus('error');
+      const element = indicator.render();
+
+      element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      expect(callback).toHaveBeenCalledTimes(1);
+    });
+
+    it('AUTOSAVE-UI-054: Space key triggers handleClick', () => {
+      const callback = vi.fn();
+      indicator.setRetryCallback(callback);
+      indicator.setStatus('error');
+      const element = indicator.render();
+
+      element.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+      expect(callback).toHaveBeenCalledTimes(1);
+    });
+
+    it('AUTOSAVE-UI-055: other keys do not trigger handleClick', () => {
+      const callback = vi.fn();
+      indicator.setRetryCallback(callback);
+      indicator.setStatus('error');
+      const element = indicator.render();
+
+      element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+      expect(callback).not.toHaveBeenCalled();
+    });
+  });
 });

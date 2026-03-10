@@ -159,9 +159,37 @@ describe('RightPanelContent', () => {
       panel.getElement().style.display = 'none';
       panel.updateInfo({ filename: 'hidden.exr', width: 100, height: 100 });
       // Should not have updated since element was hidden
-      // Re-show and check: placeholder should still be visible (no update happened)
+      // Re-show and check: placeholder should still be visible (no update applied yet)
       panel.getElement().style.display = '';
       expect(panel.getElement().textContent).toContain('No media loaded');
+    });
+
+    it('RP-009d: data received while hidden is applied on applyPending', () => {
+      panel.getElement().style.display = 'none';
+      panel.updateInfo({ filename: 'deferred.exr', width: 1920, height: 1080 });
+      // Still hidden, placeholder visible
+      panel.getElement().style.display = '';
+      expect(panel.getElement().textContent).toContain('No media loaded');
+      // Now apply pending
+      panel.applyPending();
+      expect(panel.getElement().textContent).toContain('deferred.exr');
+      expect(panel.getElement().textContent).toContain('1920');
+    });
+
+    it('RP-009e: applyPending is a no-op when no data was deferred', () => {
+      panel.updateInfo({ filename: 'visible.exr', width: 100, height: 100 });
+      panel.applyPending();
+      expect(panel.getElement().textContent).toContain('visible.exr');
+    });
+
+    it('RP-009f: only last deferred info is applied on applyPending', () => {
+      panel.getElement().style.display = 'none';
+      panel.updateInfo({ filename: 'first.exr', width: 100, height: 100 });
+      panel.updateInfo({ filename: 'second.exr', width: 200, height: 200 });
+      panel.getElement().style.display = '';
+      panel.applyPending();
+      expect(panel.getElement().textContent).toContain('second.exr');
+      expect(panel.getElement().textContent).not.toContain('first.exr');
     });
   });
 
@@ -256,6 +284,31 @@ describe('RightPanelContent', () => {
       btn.click();
       expect(mockScopes.toggleScope).toHaveBeenCalledWith('gamutDiagram');
     });
+
+    it('RP-016: scope buttons update styling when stateChanged fires', () => {
+      // Get the stateChanged callback that was registered
+      const stateChangedCall = mockScopes.on.mock.calls.find(
+        (call: any[]) => call[0] === 'stateChanged',
+      );
+      expect(stateChangedCall).not.toBeUndefined();
+      const callback = stateChangedCall![1];
+
+      // Simulate histogram becoming active
+      callback({ histogram: true, waveform: false, vectorscope: false, gamutDiagram: false });
+
+      const histBtn = panel.getElement().querySelector('[data-testid="scope-btn-histogram"]') as HTMLButtonElement;
+      const waveBtn = panel.getElement().querySelector('[data-testid="scope-btn-waveform"]') as HTMLButtonElement;
+
+      expect(histBtn.style.background).toBe('var(--accent-primary)');
+      expect(histBtn.getAttribute('aria-pressed')).toBe('true');
+      expect(waveBtn.style.background).toBe('transparent');
+      expect(waveBtn.getAttribute('aria-pressed')).toBe('false');
+    });
+
+    it('RP-017: scope buttons have aria-pressed attribute initially', () => {
+      const histBtn = panel.getElement().querySelector('[data-testid="scope-btn-histogram"]') as HTMLButtonElement;
+      expect(histBtn.getAttribute('aria-pressed')).toBe('false');
+    });
   });
 
   describe('dispose', () => {
@@ -263,6 +316,41 @@ describe('RightPanelContent', () => {
       expect(document.body.contains(panel.getElement())).toBe(true);
       panel.dispose();
       expect(document.body.contains(panel.getElement())).toBe(false);
+    });
+  });
+
+  describe('issue #103 regression: stale info after hide/show cycle', () => {
+    it('RP-103a: data sent while hidden is applied when panel is shown and applyPending called', () => {
+      // Simulate initial data while visible
+      panel.updateInfo({ filename: 'old.exr', width: 1920, height: 1080 });
+      expect(panel.getElement().textContent).toContain('old.exr');
+
+      // Hide the panel
+      panel.getElement().style.display = 'none';
+
+      // Update with new data while hidden
+      panel.updateInfo({ filename: 'new.exr', width: 3840, height: 2160 });
+
+      // Info should still show old data (not updated while hidden)
+      panel.getElement().style.display = '';
+      expect(panel.getElement().textContent).toContain('old.exr');
+
+      // Calling applyPending simulates what happens when the panel reopens
+      panel.applyPending();
+      expect(panel.getElement().textContent).toContain('new.exr');
+      expect(panel.getElement().textContent).toContain('3840');
+    });
+
+    it('RP-103b: multiple updates while hidden only keeps the last one', () => {
+      panel.getElement().style.display = 'none';
+      panel.updateInfo({ filename: 'a.exr', width: 100, height: 100 });
+      panel.updateInfo({ filename: 'b.exr', width: 200, height: 200 });
+      panel.updateInfo({ filename: 'c.exr', width: 300, height: 300 });
+      panel.getElement().style.display = '';
+      panel.applyPending();
+      expect(panel.getElement().textContent).toContain('c.exr');
+      expect(panel.getElement().textContent).not.toContain('a.exr');
+      expect(panel.getElement().textContent).not.toContain('b.exr');
     });
   });
 });

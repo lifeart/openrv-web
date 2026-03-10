@@ -27,6 +27,8 @@ import type { NoiseReductionControl } from './ui/components/NoiseReductionContro
 import type { WatermarkControl } from './ui/components/WatermarkControl';
 import type { CompareControl } from './ui/components/CompareControl';
 import type { StackControl } from './ui/components/StackControl';
+import type { PARControl } from './ui/components/PARControl';
+import type { BackgroundPatternControl } from './ui/components/BackgroundPatternControl';
 import type { PlaylistManager } from './core/session/PlaylistManager';
 import type { MediaCacheManager } from './cache/MediaCacheManager';
 import { showAlert, showConfirm } from './ui/components/shared/Modal';
@@ -53,6 +55,8 @@ export interface PersistenceManagerContext {
   watermarkControl?: WatermarkControl;
   compareControl?: CompareControl;
   stackControl?: StackControl;
+  parControl?: PARControl;
+  backgroundPatternControl?: BackgroundPatternControl;
   playlistManager?: PlaylistManager;
   cacheManager?: MediaCacheManager;
 }
@@ -250,6 +254,20 @@ export class AppPersistenceManager {
         },
         'project',
       );
+
+      // Surface serialization gaps to the user (fix #119).
+      // SessionSerializer.toJSON() logs active gaps to the console, but the user
+      // never sees them. Match the load path which already surfaces warnings.
+      const gaps = SessionSerializer.getSerializationGaps(viewer);
+      const activeGaps = gaps.filter((g) => g.isActive);
+      if (activeGaps.length > 0) {
+        const details = activeGaps.map((g) => `• ${g.name}: ${g.impact}`).join('\n');
+        showAlert(
+          `The following active states are NOT saved in the project file and will revert to defaults on reload:\n\n${details}`,
+          { type: 'warning', title: 'Save Warning' },
+        );
+      }
+
       await SessionSerializer.saveToFile(state, 'project.orvproject');
     } catch (err) {
       showAlert(`Failed to save project: ${err}`, { type: 'error', title: 'Save Error' });
@@ -450,6 +468,8 @@ export class AppPersistenceManager {
     watermark?: any;
     wipe?: any;
     stack?: any;
+    par?: any;
+    backgroundPattern?: any;
   }): void {
     const {
       colorControls,
@@ -462,6 +482,8 @@ export class AppPersistenceManager {
       watermarkControl,
       compareControl,
       stackControl,
+      parControl,
+      backgroundPatternControl,
     } = this.ctx;
 
     // Color / grading controls
@@ -487,6 +509,16 @@ export class AppPersistenceManager {
       } else {
         stackControl.clearLayers();
       }
+    }
+
+    // PAR control (fix #120)
+    if (state.par && parControl) {
+      parControl.setState(state.par);
+    }
+
+    // Background pattern control (fix #120)
+    if (state.backgroundPattern && backgroundPatternControl) {
+      backgroundPatternControl.setState(state.backgroundPattern);
     }
   }
 

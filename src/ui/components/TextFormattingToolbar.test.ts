@@ -250,4 +250,45 @@ describe('TextFormattingToolbar', () => {
       expect(boldBtn.style.color).toBe('var(--accent-primary)');
     });
   });
+
+  describe('issue #105 regression: no Ctrl+shortcut hints in button titles', () => {
+    it('TFT-105a: bold button title should not contain Ctrl+B', () => {
+      const element = toolbar.render();
+      const boldBtn = element.querySelector('[data-testid="text-format-bold"]') as HTMLButtonElement;
+      expect(boldBtn.title).toBe('Bold');
+      expect(boldBtn.title).not.toContain('Ctrl');
+    });
+
+    it('TFT-105b: italic button title should not contain Ctrl+I', () => {
+      const element = toolbar.render();
+      const italicBtn = element.querySelector('[data-testid="text-format-italic"]') as HTMLButtonElement;
+      expect(italicBtn.title).toBe('Italic');
+      expect(italicBtn.title).not.toContain('Ctrl');
+    });
+
+    it('TFT-105c: underline button title should not contain Ctrl+U', () => {
+      const element = toolbar.render();
+      const underlineBtn = element.querySelector('[data-testid="text-format-underline"]') as HTMLButtonElement;
+      expect(underlineBtn.title).toBe('Underline');
+      expect(underlineBtn.title).not.toContain('Ctrl');
+    });
+  });
+
+  describe('issue #106 regression: setActiveAnnotation exists but is not wired', () => {
+    it('TFT-106a: setActiveAnnotation logs console.info when called', () => {
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      toolbar.render();
+      paintEngine.tool = 'text';
+      paintEngine.addText(0, { x: 0.5, y: 0.5 }, 'Test');
+      const annotations = paintEngine.getAnnotationsForFrame(0);
+      const textAnn = annotations.find((a) => a.type === 'text');
+      if (textAnn) {
+        toolbar.setActiveAnnotation(textAnn.id, 0);
+        expect(infoSpy).toHaveBeenCalledWith(
+          expect.stringContaining('setActiveAnnotation called externally'),
+        );
+      }
+      infoSpy.mockRestore();
+    });
+  });
 });

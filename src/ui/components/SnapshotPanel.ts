@@ -3,9 +3,11 @@
  *
  * Features:
  * - List view with timestamps, names, descriptions
- * - Actions: Preview, Restore, Export, Delete, Rename
+ * - Actions: Restore, Export, Delete, Rename
  * - Filter/search functionality
  * - Distinct styling for auto-checkpoints vs manual snapshots
+ *
+ * TODO(#107): Add a Preview action that shows snapshot state without restoring.
  */
 
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
@@ -254,6 +256,19 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
       this.renderList();
     } catch (err) {
       console.error('Failed to load snapshots:', err);
+
+      // Show inline error message in the panel
+      this.listContainer.innerHTML = '';
+      const errorDiv = document.createElement('div');
+      errorDiv.dataset.testid = 'snapshot-load-error';
+      errorDiv.style.cssText = `
+        text-align: center;
+        padding: 24px 16px;
+        color: var(--text-danger, #ef4444);
+        font-size: 12px;
+      `;
+      errorDiv.textContent = 'Failed to load snapshots. Try again.';
+      this.listContainer.appendChild(errorDiv);
     }
   }
 

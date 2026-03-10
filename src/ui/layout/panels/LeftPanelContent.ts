@@ -130,7 +130,7 @@ export class LeftPanelContent {
     `;
     allControlsBtn.addEventListener('click', (e) => {
       e.stopPropagation(); // Prevent document click from immediately closing the panel
-      colorControls.toggle();
+      colorControls.show();
     });
 
     slidersContainer.appendChild(allControlsBtn);

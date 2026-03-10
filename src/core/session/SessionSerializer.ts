@@ -361,6 +361,9 @@ export class SessionSerializer {
     // Version migration if needed
     const migrated = this.migrate(state);
 
+    // Clear existing media before loading new project to replace the session (fix #121).
+    session.clearSources();
+
     // Load media (track successes)
     let loadedMedia = 0;
     for (const ref of migrated.media) {

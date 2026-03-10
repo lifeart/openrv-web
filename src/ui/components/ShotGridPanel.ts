@@ -335,8 +335,22 @@ export class ShotGridPanel extends EventEmitter<ShotGridPanelEvents> {
   }
 
   private handleLoad(): void {
-    const id = parseInt(this.queryInput.value.trim(), 10);
-    if (!Number.isFinite(id) || id < 1) return;
+    const raw = this.queryInput.value.trim();
+    const id = parseInt(raw, 10);
+    if (!Number.isFinite(id) || id < 1) {
+      // Show inline validation error
+      this.queryInput.setAttribute('aria-invalid', 'true');
+      this.queryInput.style.borderColor = 'var(--text-danger, #ef4444)';
+
+      const label = this.queryMode === 'playlist' ? 'Playlist' : 'Shot';
+      this.showState('error', raw === '' ? `${label} ID is required` : `Invalid ${label} ID: "${raw}"`);
+      return;
+    }
+
+    // Clear any previous validation error
+    this.queryInput.removeAttribute('aria-invalid');
+    this.queryInput.style.borderColor = 'var(--border-primary)';
+    this.showState(null);
 
     if (this.queryMode === 'playlist') {
       this.emit('loadPlaylist', { playlistId: id });

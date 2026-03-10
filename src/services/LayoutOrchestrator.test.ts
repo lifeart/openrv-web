@@ -119,17 +119,24 @@ function createMockLayoutManager() {
   const topEl = createMockElement();
   const viewerSlot = createMockElement();
   const bottomSlot = createMockElement();
+  const leftPanelWrapper = createMockElement();
+  const rightPanelWrapper = createMockElement();
   return {
     ...et,
     getElement: vi.fn().mockReturnValue(rootEl),
     getTopSection: vi.fn().mockReturnValue(topEl),
     getViewerSlot: vi.fn().mockReturnValue(viewerSlot),
     getBottomSlot: vi.fn().mockReturnValue(bottomSlot),
+    getPanelWrapper: vi.fn().mockImplementation((panelId: 'left' | 'right') =>
+      panelId === 'left' ? leftPanelWrapper : rightPanelWrapper,
+    ),
     addPanelTab: vi.fn(),
     _rootEl: rootEl,
     _topEl: topEl,
     _viewerSlot: viewerSlot,
     _bottomSlot: bottomSlot,
+    _leftPanelWrapper: leftPanelWrapper,
+    _rightPanelWrapper: rightPanelWrapper,
   };
 }
 
@@ -672,5 +679,142 @@ describe('LayoutOrchestrator', () => {
 
     expect(timelineEl.style.display).toBe('none');
     expect(d.mocks.headerBar.setImageMode).toHaveBeenCalledWith(true);
+  });
+
+  // -------------------------------------------------------------------------
+  // LO-031: Client mode warns when selectors match zero elements (#52)
+  // -------------------------------------------------------------------------
+  it('LO-031: warns when restriction selectors match zero elements', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    d.mocks.clientMode.isEnabled.mockReturnValue(true);
+
+    // No elements with data-panel or data-toolbar in the container
+    orchestrator.createLayout();
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy.mock.calls[0]![0]).toContain('[ClientMode]');
+    expect(warnSpy.mock.calls[0]![0]).toContain('matched zero elements');
+  });
+
+  it('LO-032: warning lists the unmatched selectors', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    d.mocks.clientMode.isEnabled.mockReturnValue(true);
+    d.mocks.clientMode.getRestrictedElements.mockReturnValue([
+      '[data-panel="color"]',
+      '[data-toolbar="editing"]',
+    ]);
+
+    orchestrator.createLayout();
+
+    const message = warnSpy.mock.calls[0]![0] as string;
+    expect(message).toContain('[data-panel="color"]');
+    expect(message).toContain('[data-toolbar="editing"]');
+    expect(message).toContain('2 restriction selector(s)');
+  });
+
+  it('LO-033: no warning when all selectors match elements', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    d.mocks.clientMode.isEnabled.mockReturnValue(true);
+    d.mocks.clientMode.getRestrictedElements.mockReturnValue(['[data-panel="color"]']);
+
+    // Add a matching element
+    const el = document.createElement('div');
+    el.setAttribute('data-panel', 'color');
+    d.mocks.container.appendChild(el);
+
+    orchestrator.createLayout();
+
+    expect(warnSpy).not.toHaveBeenCalled();
+    expect(el.style.display).toBe('none');
+  });
+
+  it('LO-034: warns only about unmatched selectors when some match', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    d.mocks.clientMode.isEnabled.mockReturnValue(true);
+    d.mocks.clientMode.getRestrictedElements.mockReturnValue([
+      '[data-panel="color"]',
+      '[data-toolbar="editing"]',
+    ]);
+
+    // Only add an element matching the first selector
+    const el = document.createElement('div');
+    el.setAttribute('data-panel', 'color');
+    d.mocks.container.appendChild(el);
+
+    orchestrator.createLayout();
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    const message = warnSpy.mock.calls[0]![0] as string;
+    expect(message).toContain('[data-toolbar="editing"]');
+    expect(message).not.toContain('[data-panel="color"]');
+    expect(message).toContain('1 restriction selector(s)');
+    // The matched element should still be hidden
+    expect(el.style.display).toBe('none');
+  });
+
+  // -------------------------------------------------------------------------
+  // LO-035: Focus zones include left and right panels (#64)
+  // -------------------------------------------------------------------------
+  it('LO-035: registers leftPanel and rightPanel focus zones', () => {
+    orchestrator.createLayout();
+
+    const fm = orchestrator.focusManager!;
+    const zones = (fm as unknown as { zones: { name: string }[] }).zones;
+    const zoneNames = zones.map((z) => z.name);
+    expect(zoneNames).toContain('leftPanel');
+    expect(zoneNames).toContain('rightPanel');
+  });
+
+  it('LO-036: leftPanel and rightPanel zones use correct panel wrapper elements', () => {
+    orchestrator.createLayout();
+
+    expect(d.mocks.layoutManager.getPanelWrapper).toHaveBeenCalledWith('left');
+    expect(d.mocks.layoutManager.getPanelWrapper).toHaveBeenCalledWith('right');
+  });
+
+  // -------------------------------------------------------------------------
+  // LO-037/038: Client mode restore (#83)
+  // -------------------------------------------------------------------------
+  it('LO-037: restores hidden elements when client mode is disabled', () => {
+    orchestrator.createLayout();
+
+    // Add restricted elements
+    const el1 = document.createElement('div');
+    el1.setAttribute('data-panel', 'color');
+    el1.style.display = 'flex';
+    d.mocks.container.appendChild(el1);
+
+    const el2 = document.createElement('div');
+    el2.setAttribute('data-panel', 'effects');
+    el2.style.display = 'block';
+    d.mocks.container.appendChild(el2);
+
+    // Enable client mode
+    d.mocks.clientMode._emit('stateChanged', { enabled: true });
+    expect(el1.style.display).toBe('none');
+    expect(el2.style.display).toBe('none');
+
+    // Disable client mode
+    d.mocks.clientMode._emit('stateChanged', { enabled: false });
+    expect(el1.style.display).toBe('flex');
+    expect(el2.style.display).toBe('block');
+  });
+
+  it('LO-038: elements that were originally hidden stay hidden after restore', () => {
+    orchestrator.createLayout();
+
+    // Add an element that is already hidden
+    const el = document.createElement('div');
+    el.setAttribute('data-panel', 'color');
+    el.style.display = 'none';
+    d.mocks.container.appendChild(el);
+
+    // Enable then disable client mode
+    d.mocks.clientMode._emit('stateChanged', { enabled: true });
+    expect(el.style.display).toBe('none');
+
+    d.mocks.clientMode._emit('stateChanged', { enabled: false });
+    // Should restore the original 'none' display
+    expect(el.style.display).toBe('none');
   });
 });

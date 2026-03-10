@@ -144,7 +144,9 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
 
     this.clearButton = document.createElement('button');
     this.clearButton.dataset.testid = 'cache-indicator-clear';
-    this.clearButton.textContent = 'Clear';
+    // TODO(#102): Clear only clears video cache but effects cache stats are also shown.
+    // Add effects cache clearing or split into separate clear actions.
+    this.clearButton.textContent = 'Clear Video Cache';
     this.clearButton.style.cssText = `
       background: transparent;
       border: 1px solid var(--border-secondary);

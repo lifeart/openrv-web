@@ -95,7 +95,7 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
     // Create toggle button
     this.toggleButton = document.createElement('button');
     this.toggleButton.innerHTML = `${getIconSvg('palette', 'sm')}<span style="margin-left: 6px;">OCIO</span>`;
-    this.toggleButton.title = 'Toggle OCIO color management panel (Shift+O)';
+    this.toggleButton.title = 'Toggle OCIO color management panel (O)';
     this.toggleButton.dataset.testid = 'ocio-panel-button';
     this.toggleButton.style.cssText = `
       background: transparent;

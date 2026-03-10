@@ -15,6 +15,7 @@ import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptio
 import { getIconSvg } from './shared/Icons';
 import { showConfirm } from './shared/Modal';
 import { OPACITY } from './shared/theme';
+import type { ExclusivePanelRef } from './NotePanel';
 
 export interface HistoryPanelEvents extends EventMap {
   visibilityChanged: boolean;
@@ -32,6 +33,7 @@ export class HistoryPanel extends EventEmitter<HistoryPanelEvents> {
   private renderedEntryIds: number[] = [];
   /** Tracks the currentIndex that was last rendered. */
   private renderedCurrentIndex = -1;
+  private exclusivePanels: ExclusivePanelRef[] = [];
 
   constructor(historyManager: HistoryManager) {
     super();
@@ -143,10 +145,21 @@ export class HistoryPanel extends EventEmitter<HistoryPanelEvents> {
     return this.container;
   }
 
+  /** Register another panel for mutual exclusion - opening this panel will close the other(s) */
+  setExclusiveWith(panel: ExclusivePanelRef): void {
+    this.exclusivePanels.push(panel);
+  }
+
   /**
    * Show the panel
    */
   show(): void {
+    // Close exclusive panels if they are open
+    for (const ep of this.exclusivePanels) {
+      if (ep.isVisible()) {
+        ep.hide();
+      }
+    }
     this.visible = true;
     this.container.style.display = 'flex';
     this.render();

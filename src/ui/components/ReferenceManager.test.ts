@@ -479,4 +479,36 @@ describe('ReferenceManager', () => {
     mgr.setWipePosition(5); // clamps to 1, same as current
     expect(spy).not.toHaveBeenCalled();
   });
+
+  // -------------------------------------------------------------------------
+  // #89: console.info on first enable
+  // -------------------------------------------------------------------------
+  it('REF-HINT-001: logs console.info on first enable', () => {
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    try {
+      mgr.enable();
+      expect(infoSpy).toHaveBeenCalledTimes(1);
+      expect(infoSpy.mock.calls[0]![0]).toContain('[ReferenceManager]');
+      expect(infoSpy.mock.calls[0]![0]).toContain('#89');
+    } finally {
+      infoSpy.mockRestore();
+    }
+  });
+
+  it('REF-HINT-002: logs only once across multiple enable calls', () => {
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    try {
+      // Use a fresh instance to ensure clean hint state
+      const freshMgr = new ReferenceManager();
+      freshMgr.enable();
+      freshMgr.disable();
+      freshMgr.enable();
+      freshMgr.disable();
+      freshMgr.enable();
+      expect(infoSpy).toHaveBeenCalledTimes(1);
+      freshMgr.dispose();
+    } finally {
+      infoSpy.mockRestore();
+    }
+  });
 });

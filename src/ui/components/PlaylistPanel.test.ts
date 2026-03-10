@@ -309,4 +309,27 @@ describe('PlaylistPanel', () => {
       expect(() => panel.setSourceUrlResolver(resolver)).not.toThrow();
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // Issue #108 regression: no import button
+  // ---------------------------------------------------------------------------
+  describe('issue #108 regression: only export buttons exist, no import', () => {
+    it('PL-108a: footer contains EDL export button but no import button', () => {
+      const el = panel.render();
+      const buttons = el.querySelectorAll('button');
+      const buttonTexts = Array.from(buttons).map((btn) => btn.textContent?.trim() ?? '');
+
+      // Should have EDL and OTIO export buttons
+      expect(buttonTexts.some((t) => t.includes('EDL'))).toBe(true);
+      expect(buttonTexts.some((t) => t.includes('OTIO'))).toBe(true);
+
+      // Should NOT have any import button
+      const importBtn = Array.from(buttons).find(
+        (btn) =>
+          btn.title?.toLowerCase().includes('import') ||
+          btn.textContent?.toLowerCase().includes('import'),
+      );
+      expect(importBtn).toBeUndefined();
+    });
+  });
 });

@@ -649,6 +649,28 @@ describe('SnapshotPanel', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // Issue #107 regression: no Preview button in action row
+  // ---------------------------------------------------------------------------
+  describe('issue #107 regression: no Preview action button', () => {
+    it('SNAP-107a: snapshot action row does not contain a Preview button', async () => {
+      const snapshots = [createMockSnapshot({ id: 'snap-1', name: 'Test' })];
+      manager.listSnapshots.mockResolvedValue(snapshots);
+      document.body.appendChild(panel.render());
+      panel.show();
+
+      await vi.waitFor(() => {
+        const buttons = panel.render().querySelectorAll('button');
+        const previewBtn = Array.from(buttons).find(
+          (btn) => btn.title === 'Preview' || btn.textContent?.trim() === 'Preview',
+        );
+        expect(previewBtn).toBeUndefined();
+      });
+
+      document.body.removeChild(panel.render());
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // Mutual exclusion (L-48)
   // ---------------------------------------------------------------------------
   describe('mutual exclusion', () => {

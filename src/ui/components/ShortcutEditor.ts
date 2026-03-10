@@ -410,13 +410,29 @@ export class ShortcutEditor {
         try {
           importBindings(this.manager, reader.result as string);
           this.render();
-        } catch {
-          // Import failed silently
+          this.showImportStatus('Import successful', false);
+        } catch (err) {
+          console.warn('[ShortcutEditor] Import failed:', err);
+          this.showImportStatus('Import failed: invalid file format', true);
         }
       };
       reader.readAsText(file);
     });
     input.click();
+  }
+
+  private showImportStatus(message: string, isError: boolean): void {
+    // Remove any existing status
+    const existing = this.toolbar.querySelector('.shortcut-import-status');
+    if (existing) existing.remove();
+
+    const status = document.createElement('span');
+    status.className = 'shortcut-import-status';
+    status.textContent = message;
+    status.style.cssText = `font-size: 12px; margin-left: 8px; color: ${isError ? 'var(--text-danger, red)' : 'var(--text-success, green)'};`;
+    this.toolbar.appendChild(status);
+
+    setTimeout(() => status.remove(), 4000);
   }
 
   dispose(): void {

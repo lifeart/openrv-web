@@ -6,6 +6,11 @@
  * - Select guide types (title safe, action safe, rule of thirds, etc.)
  * - Aspect ratio guide selection
  * - Guide color and opacity controls
+ *
+ * TODO(#81): SafeAreasOverlay supports guideColor, guideOpacity, and custom
+ * aspect ratio features, but these are not exposed in the control UI.
+ * Only binary guide toggles are available. A settings section should be
+ * added to the dropdown for color, opacity, and custom aspect ratio.
  */
 
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
@@ -29,6 +34,7 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
   // Bound handlers for cleanup
   private boundHandleOutsideClick: (e: MouseEvent) => void;
   private boundHandleReposition: () => void;
+  private hasLoggedConfigHint = false;
 
   constructor(overlay: SafeAreasOverlay) {
     super();
@@ -102,6 +108,15 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
         this.updateButtonLabel();
         this.updateDropdownState();
         this.emit('stateChanged', state);
+
+        // TODO(#81): Log configuration hint on first enable
+        if (state.enabled && !this.hasLoggedConfigHint) {
+          this.hasLoggedConfigHint = true;
+          console.info(
+            '[SafeAreasControl] Overlay features (guideColor, guideOpacity, custom aspect ratio) ' +
+              'are available via API but not yet exposed in the UI. See issue #81.',
+          );
+        }
       }),
     );
   }

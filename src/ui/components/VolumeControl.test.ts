@@ -382,5 +382,11 @@ describe('VolumeControl', () => {
       const el = volumeControl.render();
       expect(el.dataset.testid).toBe('volume-control');
     });
+
+    it('VOL-103: mute button tooltip references Shift+M shortcut', () => {
+      const el = volumeControl.render();
+      const muteBtn = el.querySelector('[data-testid="mute-button"]') as HTMLButtonElement;
+      expect(muteBtn.title).toBe('Toggle mute (Shift+M in video mode)');
+    });
   });
 });

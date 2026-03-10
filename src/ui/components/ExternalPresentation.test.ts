@@ -802,6 +802,34 @@ describe('ExternalPresentation', () => {
     });
   });
 
+  describe('issue #112 regression: console.warn when window.open is blocked', () => {
+    it('EP-112a: logs warning when window.open returns null', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      presenter.initialize();
+      presenter.setWindowOpenFn(() => null);
+
+      const result = presenter.openWindow();
+
+      expect(result).toBeNull();
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('window.open() returned null'),
+      );
+      warnSpy.mockRestore();
+    });
+
+    it('EP-112b: no warning when window.open succeeds', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      presenter.initialize();
+      presenter.setWindowOpenFn(() => createMockWindow());
+
+      const result = presenter.openWindow();
+
+      expect(result).not.toBeNull();
+      expect(warnSpy).not.toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+  });
+
   describe('generated HTML behavior (syncFrame vs updateInfoDisplay)', () => {
     it('EP-HTML-BEH-001: syncFrame sets textContent directly without playback/color info', () => {
       const html = generatePresentationHTML('win-1', 'test-channel', 'sess-1');

@@ -47,7 +47,7 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
   private lastHighlightedFrame: number | null = null;
   private focusedNoteIndex = -1;
   private filterContainer: HTMLElement;
-  private exclusivePanel: ExclusivePanelRef | null = null;
+  private exclusivePanels: ExclusivePanelRef[] = [];
   private announcer: AriaAnnouncer;
   private noteCountEl!: HTMLElement;
   private badgeElement: HTMLElement | null = null;
@@ -247,15 +247,17 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
     return this.container;
   }
 
-  /** Register another panel for mutual exclusion - opening this panel will close the other */
+  /** Register another panel for mutual exclusion - opening this panel will close the other(s) */
   setExclusiveWith(panel: ExclusivePanelRef): void {
-    this.exclusivePanel = panel;
+    this.exclusivePanels.push(panel);
   }
 
   show(): void {
-    // Close exclusive panel if it is open
-    if (this.exclusivePanel?.isVisible()) {
-      this.exclusivePanel.hide();
+    // Close exclusive panels if they are open
+    for (const ep of this.exclusivePanels) {
+      if (ep.isVisible()) {
+        ep.hide();
+      }
     }
     this.visible = true;
     this.container.style.display = 'flex';
@@ -537,9 +539,19 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
     frameInfo.style.cssText = 'font-size: 11px; color: var(--text-muted); flex-shrink: 0;';
     frameInfo.textContent =
       note.frameStart === note.frameEnd ? `F${note.frameStart}` : `F${note.frameStart}-${note.frameEnd}`;
+    frameInfo.setAttribute('tabindex', '0');
+    frameInfo.setAttribute('role', 'button');
+    frameInfo.setAttribute('aria-label', `Go to frame ${note.frameStart}`);
     frameInfo.addEventListener('click', (e) => {
       e.stopPropagation();
       this.goToNote(note);
+    });
+    frameInfo.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        e.stopPropagation();
+        this.goToNote(note);
+      }
     });
     topRow.appendChild(frameInfo);
 
@@ -715,8 +727,15 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
     timestamp.textContent = this.formatTimestamp(note.createdAt);
     el.appendChild(timestamp);
 
-    // Click to navigate
+    // Click/keyboard to navigate
+    el.setAttribute('tabindex', '0');
     el.addEventListener('click', () => this.goToNote(note));
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        this.goToNote(note);
+      }
+    });
 
     // Hover effects
     el.addEventListener('pointerenter', () => {

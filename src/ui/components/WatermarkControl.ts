@@ -2,6 +2,10 @@
  * WatermarkControl - UI panel for watermark/logo overlay settings
  *
  * Provides controls for loading image, position presets, scale, opacity, and margin.
+ *
+ * TODO(#82): WatermarkOverlay supports custom X/Y positioning (customX, customY)
+ * but the control UI only exposes the 3x3 preset position grid. A custom
+ * position mode with coordinate inputs should be added.
  */
 
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
@@ -31,6 +35,7 @@ const POSITION_LABELS: Record<WatermarkPosition, string> = {
 export class WatermarkControl extends EventEmitter<WatermarkControlEvents> {
   private container: HTMLElement;
   private overlay: WatermarkOverlay;
+  private hasLoggedConfigHint = false;
   private fileInput!: HTMLInputElement;
   private loadButton!: HTMLButtonElement;
   private removeButton!: HTMLButtonElement;
@@ -336,6 +341,15 @@ export class WatermarkControl extends EventEmitter<WatermarkControlEvents> {
     this.overlay.on('imageLoaded', (dimensions) => {
       this.updateUI();
       this.emit('imageLoaded', dimensions);
+
+      // TODO(#82): Log configuration hint on first image load
+      if (!this.hasLoggedConfigHint) {
+        this.hasLoggedConfigHint = true;
+        console.info(
+          '[WatermarkControl] The overlay supports custom X/Y positioning (customX, customY) ' +
+            'but only the 3x3 preset grid is exposed in the UI. See issue #82.',
+        );
+      }
     });
 
     this.overlay.on('imageRemoved', () => {
@@ -354,9 +368,18 @@ export class WatermarkControl extends EventEmitter<WatermarkControlEvents> {
 
     try {
       await this.overlay.loadImage(file);
-    } catch (_err) {
-      // Error is already emitted by the overlay via 'error' event
-      // which we forward in setupOverlayListeners
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(`[WatermarkControl] Failed to load watermark image: ${message}`);
+
+      // Show error feedback in the preview area
+      this.previewContainer.style.display = 'flex';
+      this.previewContainer.innerHTML = '';
+      const errorSpan = document.createElement('span');
+      errorSpan.dataset.testid = 'watermark-load-error';
+      errorSpan.style.cssText = 'font-size: 10px; color: var(--text-danger, #ef4444);';
+      errorSpan.textContent = `Failed to load image: ${message}`;
+      this.previewContainer.appendChild(errorSpan);
     }
 
     // Clear input for future selections

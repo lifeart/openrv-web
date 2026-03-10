@@ -1167,6 +1167,14 @@ export class Session extends EventEmitter<SessionEvents> {
     this._media.clearVideoCache();
   }
 
+  /**
+   * Clear all loaded media sources, releasing associated resources.
+   * Used before loading a new project to replace the session (fix #121).
+   */
+  clearSources(): void {
+    this._media.clearSources();
+  }
+
   setCurrentSource(index: number): void {
     this._media.setCurrentSource(index);
   }
@@ -1332,6 +1340,11 @@ export class Session extends EventEmitter<SessionEvents> {
     if (state.currentFrame !== undefined) this.currentFrame = state.currentFrame;
     if (state.marks) {
       this._annotations.markerManager.setFromArray(state.marks);
+    }
+    // Restore current source selection (fix #122).
+    // Must be done after media is loaded, so this is applied last.
+    if (state.currentSourceIndex !== undefined && state.currentSourceIndex >= 0) {
+      this.setCurrentSource(state.currentSourceIndex);
     }
   }
 

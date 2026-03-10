@@ -1269,3 +1269,226 @@ describe('PixelProbe theme changes', () => {
     expect(overlay.style.cssText).not.toContain('rgba(30, 30, 30');
   });
 });
+
+describe('PixelProbe rendered fallback indicator (Issue #75)', () => {
+  let pixelProbe: PixelProbe;
+
+  beforeEach(() => {
+    pixelProbe = new PixelProbe();
+  });
+
+  afterEach(() => {
+    pixelProbe.dispose();
+  });
+
+  it('FALLBACK-001: shows "(rendered fallback)" when source mode is active but sourceImageData is missing', () => {
+    pixelProbe.enable();
+    pixelProbe.show();
+    pixelProbe.setSourceMode('source');
+
+    const renderedData = createTestImageData(10, 10, { r: 200, g: 100, b: 50, a: 255 });
+    pixelProbe.setSourceImageData(null);
+    pixelProbe.updateFromCanvas(5, 5, renderedData, 10, 10);
+
+    const coordsEl = document.querySelector('[data-testid="pixel-probe-coords"]') as HTMLElement;
+    expect(coordsEl.textContent).toContain('(rendered fallback)');
+  });
+
+  it('FALLBACK-002: does not show fallback indicator when sourceImageData is available', () => {
+    pixelProbe.enable();
+    pixelProbe.show();
+    pixelProbe.setSourceMode('source');
+
+    const renderedData = createTestImageData(10, 10, { r: 200, g: 100, b: 50, a: 255 });
+    const sourceData = createTestImageData(10, 10, { r: 0, g: 255, b: 0, a: 255 });
+    pixelProbe.setSourceImageData(sourceData);
+    pixelProbe.updateFromCanvas(5, 5, renderedData, 10, 10);
+
+    const coordsEl = document.querySelector('[data-testid="pixel-probe-coords"]') as HTMLElement;
+    expect(coordsEl.textContent).not.toContain('(rendered fallback)');
+  });
+
+  it('FALLBACK-003: does not show fallback indicator in rendered mode', () => {
+    pixelProbe.enable();
+    pixelProbe.show();
+    pixelProbe.setSourceMode('rendered');
+
+    const renderedData = createTestImageData(10, 10, { r: 200, g: 100, b: 50, a: 255 });
+    pixelProbe.setSourceImageData(null);
+    pixelProbe.updateFromCanvas(5, 5, renderedData, 10, 10);
+
+    const coordsEl = document.querySelector('[data-testid="pixel-probe-coords"]') as HTMLElement;
+    expect(coordsEl.textContent).not.toContain('(rendered fallback)');
+  });
+
+  it('FALLBACK-004: logs console.warn on first fallback occurrence', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    pixelProbe.enable();
+    pixelProbe.setSourceMode('source');
+
+    const renderedData = createTestImageData(10, 10, { r: 200, g: 100, b: 50, a: 255 });
+    pixelProbe.setSourceImageData(null);
+    pixelProbe.updateFromCanvas(5, 5, renderedData, 10, 10);
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Source mode active but no source image data available'),
+    );
+
+    warnSpy.mockRestore();
+  });
+
+  it('FALLBACK-005: logs console.warn only once for repeated fallbacks', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    pixelProbe.enable();
+    pixelProbe.setSourceMode('source');
+
+    const renderedData = createTestImageData(10, 10, { r: 200, g: 100, b: 50, a: 255 });
+    pixelProbe.setSourceImageData(null);
+
+    // Call multiple times
+    pixelProbe.updateFromCanvas(5, 5, renderedData, 10, 10);
+    pixelProbe.updateFromCanvas(3, 3, renderedData, 10, 10);
+    pixelProbe.updateFromCanvas(7, 7, renderedData, 10, 10);
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+
+    warnSpy.mockRestore();
+  });
+
+  it('FALLBACK-006: isSourceFallbackActive() returns true when fallback is active', () => {
+    pixelProbe.enable();
+    pixelProbe.setSourceMode('source');
+
+    const renderedData = createTestImageData(10, 10, { r: 200, g: 100, b: 50, a: 255 });
+    pixelProbe.setSourceImageData(null);
+    pixelProbe.updateFromCanvas(5, 5, renderedData, 10, 10);
+
+    expect(pixelProbe.isSourceFallbackActive()).toBe(true);
+  });
+
+  it('FALLBACK-007: isSourceFallbackActive() returns false in rendered mode', () => {
+    pixelProbe.enable();
+    pixelProbe.setSourceMode('rendered');
+
+    const renderedData = createTestImageData(10, 10, { r: 200, g: 100, b: 50, a: 255 });
+    pixelProbe.updateFromCanvas(5, 5, renderedData, 10, 10);
+
+    expect(pixelProbe.isSourceFallbackActive()).toBe(false);
+  });
+
+  it('FALLBACK-008: switching back to rendered mode clears fallback state', () => {
+    pixelProbe.enable();
+    pixelProbe.setSourceMode('source');
+
+    const renderedData = createTestImageData(10, 10, { r: 200, g: 100, b: 50, a: 255 });
+    pixelProbe.setSourceImageData(null);
+    pixelProbe.updateFromCanvas(5, 5, renderedData, 10, 10);
+    expect(pixelProbe.isSourceFallbackActive()).toBe(true);
+
+    pixelProbe.setSourceMode('rendered');
+    expect(pixelProbe.isSourceFallbackActive()).toBe(false);
+  });
+
+  it('FALLBACK-009: HDR path shows fallback indicator when source mode is active', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    pixelProbe.enable();
+    pixelProbe.show();
+    pixelProbe.setSourceMode('source');
+
+    // HDR path uses updateFromHDRValues which never has source data
+    pixelProbe.updateFromHDRValues(5, 5, 0.5, 0.3, 0.1, 1.0, 100, 100);
+
+    expect(pixelProbe.isSourceFallbackActive()).toBe(true);
+
+    const coordsEl = document.querySelector('[data-testid="pixel-probe-coords"]') as HTMLElement;
+    expect(coordsEl.textContent).toContain('(rendered fallback)');
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Source mode active but no source image data available on HDR path'),
+    );
+
+    warnSpy.mockRestore();
+  });
+
+  it('FALLBACK-010: HDR path does not show fallback when rendered mode is selected', () => {
+    pixelProbe.enable();
+    pixelProbe.show();
+    pixelProbe.setSourceMode('rendered');
+
+    pixelProbe.updateFromHDRValues(5, 5, 0.5, 0.3, 0.1, 1.0, 100, 100);
+
+    expect(pixelProbe.isSourceFallbackActive()).toBe(false);
+
+    const coordsEl = document.querySelector('[data-testid="pixel-probe-coords"]') as HTMLElement;
+    expect(coordsEl.textContent).not.toContain('(rendered fallback)');
+  });
+
+  describe('keyboard accessibility (#79)', () => {
+    beforeEach(() => {
+      pixelProbe.enable();
+      pixelProbe.show();
+    });
+
+    it('PROBE-U200: value rows have tabindex, role, and aria-label', () => {
+      const overlay = document.querySelector('[data-testid="pixel-probe-overlay"]') as HTMLElement;
+      const rows = overlay.querySelectorAll('[role="button"]');
+      expect(rows.length).toBeGreaterThanOrEqual(7); // rgb, rgb01, alpha, hsl, hex, ire, colorspace + nits
+
+      for (const row of rows) {
+        expect(row.getAttribute('tabindex')).toBe('0');
+        expect(row.getAttribute('role')).toBe('button');
+        expect(row.getAttribute('aria-label')).toMatch(/^Copy .+ value$/);
+      }
+    });
+
+    it('PROBE-U201: Enter key triggers copy on value row', async () => {
+      const overlay = document.querySelector('[data-testid="pixel-probe-overlay"]') as HTMLElement;
+      const firstRow = overlay.querySelector('[role="button"]') as HTMLElement;
+      expect(firstRow).not.toBeNull();
+
+      const copySpy = vi.fn();
+      pixelProbe.on('valueCopied', copySpy);
+
+      // Mock clipboard
+      const writeTextMock = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { writeText: writeTextMock },
+        writable: true,
+        configurable: true,
+      });
+
+      const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true });
+      firstRow.dispatchEvent(event);
+
+      // Wait for async clipboard operation
+      await vi.waitFor(() => {
+        expect(writeTextMock).toHaveBeenCalled();
+      });
+    });
+
+    it('PROBE-U202: Space key triggers copy on value row', async () => {
+      const overlay = document.querySelector('[data-testid="pixel-probe-overlay"]') as HTMLElement;
+      const firstRow = overlay.querySelector('[role="button"]') as HTMLElement;
+      expect(firstRow).not.toBeNull();
+
+      const writeTextMock = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { writeText: writeTextMock },
+        writable: true,
+        configurable: true,
+      });
+
+      const event = new KeyboardEvent('keydown', { key: ' ', bubbles: true });
+      firstRow.dispatchEvent(event);
+
+      await vi.waitFor(() => {
+        expect(writeTextMock).toHaveBeenCalled();
+      });
+    });
+  });
+});

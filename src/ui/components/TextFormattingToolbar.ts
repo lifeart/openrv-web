@@ -61,22 +61,26 @@ export class TextFormattingToolbar extends EventEmitter<TextFormattingToolbarEve
   }
 
   private createButtons(): void {
+    // TODO(#105): Ctrl+B/I/U shortcuts are handled by handleKeyboard() but
+    // production wiring never routes keyboard events to it. Shortcut hints
+    // removed from titles until proper wiring is in place.
+
     // Bold button
-    this.boldButton = this.createToggleButton('bold', 'Bold (Ctrl+B)', () => {
+    this.boldButton = this.createToggleButton('bold', 'Bold', () => {
       this.toggleBold();
     });
     this.boldButton.dataset.testid = 'text-format-bold';
     this.container.appendChild(this.boldButton);
 
     // Italic button
-    this.italicButton = this.createToggleButton('italic', 'Italic (Ctrl+I)', () => {
+    this.italicButton = this.createToggleButton('italic', 'Italic', () => {
       this.toggleItalic();
     });
     this.italicButton.dataset.testid = 'text-format-italic';
     this.container.appendChild(this.italicButton);
 
     // Underline button
-    this.underlineButton = this.createToggleButton('underline', 'Underline (Ctrl+U)', () => {
+    this.underlineButton = this.createToggleButton('underline', 'Underline', () => {
       this.toggleUnderline();
     });
     this.underlineButton.dataset.testid = 'text-format-underline';
@@ -236,9 +240,15 @@ export class TextFormattingToolbar extends EventEmitter<TextFormattingToolbarEve
   }
 
   /**
-   * Set the active text annotation externally
+   * Set the active text annotation externally.
+   *
+   * TODO(#106): This method is never called from production wiring.
+   * Text selection changes in the canvas should call this so the toolbar
+   * tracks the user-selected annotation, not just the most recently created one.
    */
   setActiveAnnotation(id: string, frame: number): void {
+    // TODO(#106): Wire this from canvas text selection events
+    console.info('[TextFormattingToolbar] setActiveAnnotation called externally — not yet wired from production');
     const annotations = this.paintEngine.getAnnotationsForFrame(frame);
     const annotation = annotations.find((a) => a.id === id && a.type === 'text') as TextAnnotation | undefined;
 

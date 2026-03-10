@@ -194,6 +194,33 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
     this._currentSourceIndex = 0;
   }
 
+  /**
+   * Clear all loaded media sources, releasing associated resources.
+   * Used before loading a new project to avoid importing on top of the current session (fix #121).
+   */
+  clearSources(): void {
+    for (const source of this._sources) {
+      if (source.url?.startsWith('blob:')) {
+        URL.revokeObjectURL(source.url);
+      }
+      if (source.fileSourceNode) {
+        source.fileSourceNode.dispose();
+      }
+      if (source.proceduralSourceNode) {
+        source.proceduralSourceNode.dispose();
+      }
+      if (source.element instanceof HTMLVideoElement) {
+        source.element.pause();
+        source.element.removeAttribute('src');
+        source.element.load();
+      }
+      this.disposeSequenceSource(source);
+      this.disposeVideoSource(source);
+    }
+    this._sources = [];
+    this._currentSourceIndex = 0;
+  }
+
   get hdrResizeTier(): HDRResizeTier {
     return this._hdrResizeTier;
   }

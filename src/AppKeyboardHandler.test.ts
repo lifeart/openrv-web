@@ -2,7 +2,7 @@
  * AppKeyboardHandler - Shortcuts dialog search/filter tests (M-25)
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { KeyboardHandlerContext } from './AppKeyboardHandler';
 import { AppKeyboardHandler } from './AppKeyboardHandler';
 import { KeyboardManager } from './utils/input/KeyboardManager';
@@ -300,5 +300,50 @@ describe('Shortcuts dialog search/filter (M-25)', () => {
     const descriptions = rows.map((row) => row.getAttribute('data-shortcut-desc'));
 
     expect(descriptions).toContain('toggle lut pipeline panel');
+  });
+});
+
+describe('Transparency info messages (Issues #57, #58)', () => {
+  let handler: AppKeyboardHandler;
+
+  beforeEach(() => {
+    localStorageMock.clear();
+    handler = createHandler();
+  });
+
+  afterEach(() => {
+    closeModal();
+  });
+
+  it('#58: showShortcutsDialog logs info about ShortcutCheatSheet duplication', () => {
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    try {
+      handler.showShortcutsDialog();
+
+      expect(infoSpy).toHaveBeenCalledWith(
+        expect.stringContaining('showShortcutsDialog'),
+      );
+      expect(infoSpy).toHaveBeenCalledWith(
+        expect.stringContaining('ShortcutCheatSheet'),
+      );
+    } finally {
+      infoSpy.mockRestore();
+    }
+  });
+
+  it('#57: showCustomBindingsDialog logs info about missing ShortcutEditor features', () => {
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    try {
+      handler.showCustomBindingsDialog();
+
+      expect(infoSpy).toHaveBeenCalledWith(
+        expect.stringContaining('showCustomBindingsDialog'),
+      );
+      expect(infoSpy).toHaveBeenCalledWith(
+        expect.stringContaining('ShortcutEditor'),
+      );
+    } finally {
+      infoSpy.mockRestore();
+    }
   });
 });

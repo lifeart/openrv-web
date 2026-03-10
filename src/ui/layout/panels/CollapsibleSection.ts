@@ -67,7 +67,16 @@ export class CollapsibleSection {
 
     this.header.appendChild(this.chevron);
     this.header.appendChild(titleEl);
+    this.header.setAttribute('tabindex', '0');
+    this.header.setAttribute('role', 'button');
+    this.header.setAttribute('aria-expanded', String(this._expanded));
     this.header.addEventListener('click', () => this.toggle());
+    this.header.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        this.toggle();
+      }
+    });
 
     // Content wrapper (handles height animation)
     this.contentWrapper = document.createElement('div');
@@ -91,6 +100,7 @@ export class CollapsibleSection {
   }
 
   private applyState(): void {
+    this.header.setAttribute('aria-expanded', String(this._expanded));
     if (this._expanded) {
       this.chevron.style.transform = 'rotate(90deg)';
       this.contentWrapper.style.maxHeight = 'none';

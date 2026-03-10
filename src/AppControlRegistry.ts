@@ -724,6 +724,14 @@ export class AppControlRegistry {
       logoRemoveButton.style.display = 'none';
     });
 
+    // Wire logoError to surface failures visibly (#92)
+    this.slateEditor.on('logoError', (error) => {
+      console.warn('[SlateEditor] Logo upload failed:', error.message);
+      logoInfo.textContent = `Error: ${error.message}`;
+      logoInfo.style.display = 'block';
+      logoInfo.style.color = 'var(--error, #ff4444)';
+    });
+
     // Preview container
     const previewContainer = document.createElement('div');
     previewContainer.dataset.testid = 'slate-preview-container';

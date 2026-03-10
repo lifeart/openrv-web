@@ -95,8 +95,8 @@ export class TimelineContextMenu {
     // Separator after info
     menu.appendChild(this.createSeparator());
 
-    // Copy Timecode
-    const copyItem = this.createMenuItem('Copy Timecode', 'Ctrl+C', () => {
+    // Copy Timecode (click-only; Ctrl+C is bound to frame copy, not timecode copy)
+    const copyItem = this.createMenuItem('Copy Timecode', null, () => {
       options.onCopyTimecode(options.timecode);
       this.hide();
     });

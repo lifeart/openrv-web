@@ -56,8 +56,15 @@ export const DEFAULT_EXR_WINDOW_OVERLAY_STATE: EXRWindowOverlayState = {
 // EXRWindowOverlay
 // ---------------------------------------------------------------------------
 
+/**
+ * TODO(#85): EXRWindowOverlay has per-window toggles, colors, line width, dash
+ * pattern, and label controls, but the production UI only exposes a single
+ * on/off toggle. A settings popover should be added to let users configure
+ * these options.
+ */
 export class EXRWindowOverlay extends CanvasOverlay<EXRWindowOverlayEvents> {
   private state: EXRWindowOverlayState = { ...DEFAULT_EXR_WINDOW_OVERLAY_STATE };
+  private hasLoggedCustomizationHint = false;
   private dataWindow: EXRBox2i | null = null;
   private displayWindow: EXRBox2i | null = null;
 
@@ -136,6 +143,15 @@ export class EXRWindowOverlay extends CanvasOverlay<EXRWindowOverlayEvents> {
 
   enable(): void {
     this.setState({ enabled: true });
+
+    // TODO(#85): Log customization hint on first enable
+    if (!this.hasLoggedCustomizationHint) {
+      this.hasLoggedCustomizationHint = true;
+      console.info(
+        '[EXRWindowOverlay] Per-window toggles, colors, line width, and label options are configurable ' +
+          'via setState() but are not yet exposed in the UI. See issue #85.',
+      );
+    }
   }
 
   disable(): void {

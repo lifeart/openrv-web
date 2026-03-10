@@ -484,4 +484,37 @@ describe('Compositing: display:none for inactive overlay', () => {
     expect(overlay.getElement().style.display).toBe('none');
     overlay.dispose();
   });
+
+  // -------------------------------------------------------------------------
+  // #86: console.info on first enable
+  // -------------------------------------------------------------------------
+  it('BUG-HINT-001: logs console.info on first enable', () => {
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    try {
+      const overlay = new BugOverlay();
+      overlay.enable();
+      expect(infoSpy).toHaveBeenCalledTimes(1);
+      expect(infoSpy.mock.calls[0]![0]).toContain('[BugOverlay]');
+      expect(infoSpy.mock.calls[0]![0]).toContain('#86');
+      overlay.dispose();
+    } finally {
+      infoSpy.mockRestore();
+    }
+  });
+
+  it('BUG-HINT-002: logs only once across multiple enable calls', () => {
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    try {
+      const overlay = new BugOverlay();
+      overlay.enable();
+      overlay.disable();
+      overlay.enable();
+      overlay.disable();
+      overlay.enable();
+      expect(infoSpy).toHaveBeenCalledTimes(1);
+      overlay.dispose();
+    } finally {
+      infoSpy.mockRestore();
+    }
+  });
 });

@@ -84,10 +84,17 @@ export const DEFAULT_SLATE_EDITOR_STATE: SlateEditorState = {
 // SlateEditor Component
 // ---------------------------------------------------------------------------
 
+/**
+ * TODO(#91): SlateEditor has custom fields, text/accent colors, logo
+ * position/scale, and output resolution controls, but the shipped panel
+ * only exposes a small subset. The panel should be extended to expose
+ * these options.
+ */
 export class SlateEditor extends EventEmitter<SlateEditorEvents> {
   private state: SlateEditorState = deepCopy(DEFAULT_SLATE_EDITOR_STATE);
   private logoImage: HTMLImageElement | null = null;
   private pendingLogoAbort: (() => void) | null = null;
+  private hasLoggedCustomizationHint = false;
 
   constructor(initialState?: Partial<SlateEditorState>) {
     super();
@@ -471,6 +478,15 @@ export class SlateEditor extends EventEmitter<SlateEditorEvents> {
    * Includes the loaded logo image if available.
    */
   generateConfig(): SlateConfig {
+    // TODO(#91): Log customization hint on first slate generation
+    if (!this.hasLoggedCustomizationHint) {
+      this.hasLoggedCustomizationHint = true;
+      console.info(
+        '[SlateEditor] Custom fields, text/accent colors, logo position/scale, and output resolution ' +
+          'are configurable via the API but are not fully exposed in the panel UI. See issue #91.',
+      );
+    }
+
     const config: SlateConfig = {
       width: this.state.width,
       height: this.state.height,

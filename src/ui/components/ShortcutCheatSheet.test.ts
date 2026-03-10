@@ -351,4 +351,12 @@ describe('ShortcutCheatSheet', () => {
     expect(() => sheet.toggle()).not.toThrow();
     expect(sheet.isVisible()).toBe(false);
   });
+
+  it('CS-113: issue #113 regression - overlay has no search input', () => {
+    sheet.show();
+
+    const overlay = container.querySelector('.cheatsheet-overlay') as HTMLElement;
+    const searchInput = overlay.querySelector('input[type="text"], input[type="search"]');
+    expect(searchInput).toBeNull();
+  });
 });

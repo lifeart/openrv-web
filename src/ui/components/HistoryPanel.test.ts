@@ -423,4 +423,66 @@ describe('HistoryPanel', () => {
       expect(actionAEntry.querySelector('[data-role="current-indicator"]')).not.toBeNull();
     });
   });
+
+  describe('mutual exclusion', () => {
+    it('show() closes exclusive panel if open', () => {
+      const mockExclusive = {
+        isVisible: vi.fn().mockReturnValue(true),
+        hide: vi.fn(),
+      };
+      panel.setExclusiveWith(mockExclusive);
+
+      panel.show();
+
+      expect(mockExclusive.hide).toHaveBeenCalledTimes(1);
+    });
+
+    it('show() does not close exclusive panel if already closed', () => {
+      const mockExclusive = {
+        isVisible: vi.fn().mockReturnValue(false),
+        hide: vi.fn(),
+      };
+      panel.setExclusiveWith(mockExclusive);
+
+      panel.show();
+
+      expect(mockExclusive.hide).not.toHaveBeenCalled();
+    });
+
+    it('show() closes multiple exclusive panels', () => {
+      const mockA = {
+        isVisible: vi.fn().mockReturnValue(true),
+        hide: vi.fn(),
+      };
+      const mockB = {
+        isVisible: vi.fn().mockReturnValue(true),
+        hide: vi.fn(),
+      };
+      panel.setExclusiveWith(mockA);
+      panel.setExclusiveWith(mockB);
+
+      panel.show();
+
+      expect(mockA.hide).toHaveBeenCalledTimes(1);
+      expect(mockB.hide).toHaveBeenCalledTimes(1);
+    });
+
+    it('show() only closes visible exclusive panels when multiple registered', () => {
+      const mockVisible = {
+        isVisible: vi.fn().mockReturnValue(true),
+        hide: vi.fn(),
+      };
+      const mockHidden = {
+        isVisible: vi.fn().mockReturnValue(false),
+        hide: vi.fn(),
+      };
+      panel.setExclusiveWith(mockVisible);
+      panel.setExclusiveWith(mockHidden);
+
+      panel.show();
+
+      expect(mockVisible.hide).toHaveBeenCalledTimes(1);
+      expect(mockHidden.hide).not.toHaveBeenCalled();
+    });
+  });
 });
