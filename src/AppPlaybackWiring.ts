@@ -132,7 +132,12 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
   // Wire up fullscreen and presentation toggle from HeaderBar
   subs.add(
     headerBar.on('fullscreenToggle', () => {
-      deps.getFullscreenManager()?.toggle();
+      deps.getFullscreenManager()?.toggle().catch(() => {
+        showAlert('Fullscreen is not available. Your browser may be blocking it.', {
+          type: 'warning',
+          title: 'Fullscreen Unavailable',
+        });
+      });
     }),
   );
   subs.add(
@@ -285,7 +290,10 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
           return canvas;
         },
         { title: session.metadata?.displayName || 'Annotation Report' },
-      );
+      ).catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err);
+        showAlert(`PDF export failed. Your browser may be blocking popups. Please allow popups for this site and try again.\n\nDetails: ${message}`, { type: 'error', title: 'PDF Export Error' });
+      });
     }),
   );
   subs.add(

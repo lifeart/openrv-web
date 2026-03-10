@@ -24,6 +24,7 @@ interface WebkitDocument {
 
 export interface FullscreenEvents extends EventMap {
   fullscreenChanged: boolean;
+  fullscreenError: { action: 'enter' | 'exit'; error: unknown };
 }
 
 export class FullscreenManager extends EventEmitter<FullscreenEvents> {
@@ -69,6 +70,8 @@ export class FullscreenManager extends EventEmitter<FullscreenEvents> {
       }
     } catch (err) {
       console.warn('Failed to enter fullscreen:', err);
+      this.emit('fullscreenError', { action: 'enter', error: err });
+      throw err;
     }
   }
 
@@ -85,6 +88,8 @@ export class FullscreenManager extends EventEmitter<FullscreenEvents> {
       }
     } catch (err) {
       console.warn('Failed to exit fullscreen:', err);
+      this.emit('fullscreenError', { action: 'exit', error: err });
+      throw err;
     }
   }
 

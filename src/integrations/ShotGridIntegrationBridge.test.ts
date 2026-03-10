@@ -21,6 +21,7 @@ function createMockSession() {
     noteManager: {
       getNotesForSource: vi.fn().mockReturnValue([]),
       addNote: vi.fn().mockReturnValue({ id: 'local-note-1' }),
+      findNoteByExternalId: vi.fn().mockReturnValue(undefined),
     },
     statusManager: {
       setStatus: vi.fn(),
@@ -508,7 +509,7 @@ describe('ShotGridIntegrationBridge', () => {
       1052,
       'Check frames 1045-1052',
       'Reviewer',
-      { createdAt: '2024-04-10T09:00:00Z' },
+      { createdAt: '2024-04-10T09:00:00Z', externalId: '800' },
     );
   });
 
@@ -556,7 +557,7 @@ describe('ShotGridIntegrationBridge', () => {
       200,
       'Check range',
       'Reviewer',
-      { createdAt: '2024-04-10T10:00:00Z' },
+      { createdAt: '2024-04-10T10:00:00Z', externalId: '801' },
     );
   });
 
@@ -604,7 +605,7 @@ describe('ShotGridIntegrationBridge', () => {
       1,
       'General feedback',
       'Reviewer',
-      { createdAt: '2024-04-10T11:00:00Z' },
+      { createdAt: '2024-04-10T11:00:00Z', externalId: '802' },
     );
   });
 
@@ -648,7 +649,7 @@ describe('ShotGridIntegrationBridge', () => {
 
     // Verify created_at is passed through in options
     const callArgs = session.noteManager.addNote.mock.calls[0]!;
-    expect(callArgs[5]).toEqual({ createdAt: '2023-06-15T08:30:00Z' });
+    expect(callArgs[5]).toEqual({ createdAt: '2023-06-15T08:30:00Z', externalId: '803' });
   });
 
   it('SG-INT-019: pullNotes passes undefined createdAt when created_at is empty', async () => {
@@ -691,7 +692,196 @@ describe('ShotGridIntegrationBridge', () => {
 
     // Empty string is falsy, so createdAt should be undefined (falls back to now in NoteManager)
     const callArgs = session.noteManager.addNote.mock.calls[0]!;
-    expect(callArgs[5]).toEqual({ createdAt: undefined });
+    expect(callArgs[5]).toEqual({ createdAt: undefined, externalId: '804' });
+  });
+
+  it('SG-INT-020: pullNotes deduplicates via noteManager after disconnect/reconnect', async () => {
+    // Connect
+    configUI.emit('connect', {
+      serverUrl: 'https://studio.shotgrid.autodesk.com',
+      scriptName: 'test',
+      apiKey: 'key',
+      projectId: 42,
+    });
+
+    await vi.waitFor(() => {
+      expect(configUI.setState).toHaveBeenCalledWith('connected');
+    });
+
+    const sgNotes: ShotGridNote[] = [
+      {
+        id: 900,
+        subject: 'Persistent note',
+        content: 'Should not duplicate',
+        note_links: [{ type: 'Version', id: 101 }],
+        created_at: '2024-05-01T12:00:00Z',
+        user: { type: 'HumanUser', id: 5, name: 'Reviewer' },
+        sg_first_frame: null,
+        sg_last_frame: null,
+        frame_range: null,
+      },
+    ];
+
+    const { ShotGridBridge: MockBridge } = await import('./ShotGridBridge');
+    const mockBridgeInstance = (MockBridge as any).mock.results.at(-1)?.value;
+    if (mockBridgeInstance) {
+      mockBridgeInstance.getNotesForVersion.mockResolvedValue(sgNotes);
+    }
+
+    // First pull - note gets added
+    panel.emit('pullNotes', { versionId: 101, sourceIndex: 0 });
+
+    await vi.waitFor(() => {
+      expect(session.noteManager.addNote).toHaveBeenCalledTimes(1);
+    });
+
+    // Disconnect (clears the in-memory sgNoteIdMap)
+    configUI.emit('disconnect', undefined);
+
+    // Reconnect
+    configUI.emit('connect', {
+      serverUrl: 'https://studio.shotgrid.autodesk.com',
+      scriptName: 'test',
+      apiKey: 'key',
+      projectId: 42,
+    });
+
+    await vi.waitFor(() => {
+      expect(configUI.setState).toHaveBeenCalledWith('connected');
+    });
+
+    // Update mock bridge instance for new connection
+    const newMockBridgeInstance = (MockBridge as any).mock.results.at(-1)?.value;
+    if (newMockBridgeInstance) {
+      newMockBridgeInstance.getNotesForVersion.mockResolvedValue(sgNotes);
+    }
+
+    // Simulate that the note already exists in the noteManager with externalId
+    session.noteManager.findNoteByExternalId.mockReturnValue({
+      id: 'local-note-1',
+      externalId: '900',
+    });
+
+    // Second pull after reconnect - should be deduped via noteManager fallback
+    panel.emit('pullNotes', { versionId: 101, sourceIndex: 0 });
+
+    await vi.waitFor(() => {
+      expect(session.noteManager.findNoteByExternalId).toHaveBeenCalledWith('900');
+    });
+
+    // addNote should still only have been called once (from the first pull)
+    expect(session.noteManager.addNote).toHaveBeenCalledTimes(1);
+  });
+
+  it('SG-INT-021: pullNotes adds new notes while deduplicating existing ones after reconnect', async () => {
+    // Connect
+    configUI.emit('connect', {
+      serverUrl: 'https://studio.shotgrid.autodesk.com',
+      scriptName: 'test',
+      apiKey: 'key',
+      projectId: 42,
+    });
+
+    await vi.waitFor(() => {
+      expect(configUI.setState).toHaveBeenCalledWith('connected');
+    });
+
+    const sgNotes: ShotGridNote[] = [
+      {
+        id: 901,
+        subject: 'Existing note',
+        content: 'Already pulled',
+        note_links: [{ type: 'Version', id: 101 }],
+        created_at: '2024-05-01T12:00:00Z',
+        user: { type: 'HumanUser', id: 5, name: 'Reviewer' },
+        sg_first_frame: null,
+        sg_last_frame: null,
+        frame_range: null,
+      },
+      {
+        id: 902,
+        subject: 'New note',
+        content: 'Brand new feedback',
+        note_links: [{ type: 'Version', id: 101 }],
+        created_at: '2024-05-02T12:00:00Z',
+        user: { type: 'HumanUser', id: 6, name: 'Supervisor' },
+        sg_first_frame: 10,
+        sg_last_frame: 20,
+        frame_range: '10-20',
+      },
+    ];
+
+    const { ShotGridBridge: MockBridge } = await import('./ShotGridBridge');
+    const mockBridgeInstance = (MockBridge as any).mock.results.at(-1)?.value;
+    if (mockBridgeInstance) {
+      mockBridgeInstance.getNotesForVersion.mockResolvedValue(sgNotes);
+    }
+
+    // Simulate note 901 already exists in noteManager (persisted from before disconnect)
+    session.noteManager.findNoteByExternalId.mockImplementation((extId: string) => {
+      if (extId === '901') return { id: 'local-existing', externalId: '901' };
+      return undefined;
+    });
+
+    // Pull notes - 901 should be deduped, 902 should be added
+    panel.emit('pullNotes', { versionId: 101, sourceIndex: 0 });
+
+    await vi.waitFor(() => {
+      expect(session.noteManager.addNote).toHaveBeenCalledTimes(1);
+    });
+
+    // Only note 902 should have been added
+    expect(session.noteManager.addNote).toHaveBeenCalledWith(
+      0,
+      10,
+      20,
+      'Brand new feedback',
+      'Supervisor',
+      { createdAt: '2024-05-02T12:00:00Z', externalId: '902' },
+    );
+  });
+
+  it('SG-INT-022: pullNotes passes externalId as string to addNote', async () => {
+    configUI.emit('connect', {
+      serverUrl: 'https://studio.shotgrid.autodesk.com',
+      scriptName: 'test',
+      apiKey: 'key',
+      projectId: 42,
+    });
+
+    await vi.waitFor(() => {
+      expect(configUI.setState).toHaveBeenCalledWith('connected');
+    });
+
+    const sgNotes: ShotGridNote[] = [
+      {
+        id: 999,
+        subject: 'Test',
+        content: 'Test note',
+        note_links: [{ type: 'Version', id: 101 }],
+        created_at: '2024-06-01T12:00:00Z',
+        user: { type: 'HumanUser', id: 5, name: 'Reviewer' },
+        sg_first_frame: null,
+        sg_last_frame: null,
+        frame_range: null,
+      },
+    ];
+
+    const { ShotGridBridge: MockBridge } = await import('./ShotGridBridge');
+    const mockBridgeInstance = (MockBridge as any).mock.results.at(-1)?.value;
+    if (mockBridgeInstance) {
+      mockBridgeInstance.getNotesForVersion.mockResolvedValue(sgNotes);
+    }
+
+    panel.emit('pullNotes', { versionId: 101, sourceIndex: 0 });
+
+    await vi.waitFor(() => {
+      expect(session.noteManager.addNote).toHaveBeenCalledTimes(1);
+    });
+
+    // Verify externalId is passed as a string version of the SG numeric ID
+    const callArgs = session.noteManager.addNote.mock.calls[0]!;
+    expect(callArgs[5]).toMatchObject({ externalId: '999' });
   });
 
   it('SG-INT-014: loadVersion does not log frame-sequence info for movie URLs', async () => {

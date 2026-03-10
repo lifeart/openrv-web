@@ -27,6 +27,7 @@ describe('NoteManager', () => {
       expect(note.status).toBe('open');
       expect(note.parentId).toBeNull();
       expect(note.color).toBe('#fbbf24');
+      expect(note.externalId).toBeNull();
       expect(note.createdAt).toBeTruthy();
       expect(note.modifiedAt).toBeTruthy();
     });
@@ -234,6 +235,7 @@ describe('NoteManager', () => {
           status: 'open',
           parentId: null,
           color: '#fbbf24',
+          externalId: null,
         },
       ];
       onNotesChanged.mockClear();
@@ -321,6 +323,55 @@ describe('NoteManager', () => {
     });
   });
 
+  describe('externalId', () => {
+    it('addNote stores externalId when provided', () => {
+      const note = manager.addNote(0, 1, 1, 'SG note', 'Alice', { externalId: 'sg-123' });
+      expect(note.externalId).toBe('sg-123');
+    });
+
+    it('addNote defaults externalId to null when not provided', () => {
+      const note = manager.addNote(0, 1, 1, 'Local note', 'Alice');
+      expect(note.externalId).toBeNull();
+    });
+
+    it('findNoteByExternalId returns matching note', () => {
+      manager.addNote(0, 1, 1, 'SG note', 'Alice', { externalId: 'sg-456' });
+      const found = manager.findNoteByExternalId('sg-456');
+      expect(found).toBeDefined();
+      expect(found!.text).toBe('SG note');
+      expect(found!.externalId).toBe('sg-456');
+    });
+
+    it('findNoteByExternalId returns undefined when no match', () => {
+      manager.addNote(0, 1, 1, 'Local note', 'Alice');
+      expect(manager.findNoteByExternalId('sg-999')).toBeUndefined();
+    });
+
+    it('findNoteByExternalId returns a copy, not internal reference', () => {
+      manager.addNote(0, 1, 1, 'SG note', 'Alice', { externalId: 'sg-789' });
+      const found = manager.findNoteByExternalId('sg-789')!;
+      found.text = 'mutated';
+      expect(manager.findNoteByExternalId('sg-789')!.text).toBe('SG note');
+    });
+
+    it('externalId survives serialize/deserialize round-trip', () => {
+      manager.addNote(0, 1, 1, 'SG note', 'Alice', { externalId: 'sg-100' });
+      const serialized = manager.toSerializable();
+      const manager2 = new NoteManager();
+      manager2.fromSerializable(serialized);
+      const found = manager2.findNoteByExternalId('sg-100');
+      expect(found).toBeDefined();
+      expect(found!.externalId).toBe('sg-100');
+      manager2.dispose();
+    });
+
+    it('fromSerializable defaults externalId to null when missing', () => {
+      const partial = { frameStart: 1, frameEnd: 5, text: 'Test', id: 'ext-1' };
+      manager.fromSerializable([partial as unknown as Note]);
+      expect(manager.getNote('ext-1')!.externalId).toBeNull();
+    });
+  });
+
   describe('edge cases', () => {
     it('getNote returns undefined for non-existent ID', () => {
       expect(manager.getNote('non-existent')).toBeUndefined();
@@ -378,6 +429,7 @@ describe('NoteManager', () => {
       status: 'open',
       parentId: null,
       color: '#fbbf24',
+      externalId: null,
     };
 
     it('imports valid notes correctly and returns import count', () => {

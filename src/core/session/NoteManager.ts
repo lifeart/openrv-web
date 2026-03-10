@@ -20,6 +20,7 @@ export interface Note {
   status: NoteStatus;
   parentId: string | null; // null = top-level, string = reply
   color: string; // Hex color (default '#fbbf24')
+  externalId: string | null; // Remote system ID (e.g. ShotGrid note ID) for deduplication
 }
 
 /**
@@ -74,7 +75,7 @@ export class NoteManager {
     frameEnd: number,
     text: string,
     author: string,
-    options?: { parentId?: string; color?: string; createdAt?: string; status?: NoteStatus },
+    options?: { parentId?: string; color?: string; createdAt?: string; status?: NoteStatus; externalId?: string },
   ): Note {
     const now = new Date().toISOString();
     const createdAt = options?.createdAt ?? now;
@@ -90,6 +91,7 @@ export class NoteManager {
       status: options?.status ?? 'open',
       parentId: options?.parentId ?? null,
       color: options?.color ?? '#fbbf24',
+      externalId: options?.externalId ?? null,
     };
     this._notes.set(note.id, note);
     this.notifyChange();
@@ -203,6 +205,19 @@ export class NoteManager {
     return result;
   }
 
+  /**
+   * Find a note by its external (remote system) ID.
+   * Returns the note copy if found, or undefined.
+   */
+  findNoteByExternalId(externalId: string): Note | undefined {
+    for (const note of this._notes.values()) {
+      if (note.externalId === externalId) {
+        return { ...note };
+      }
+    }
+    return undefined;
+  }
+
   // ---- Navigation ----
 
   /**
@@ -275,6 +290,7 @@ export class NoteManager {
     const modifiedAt = typeof raw.modifiedAt === 'string' && raw.modifiedAt.length > 0 ? raw.modifiedAt : now;
     const parentId = typeof raw.parentId === 'string' ? raw.parentId : null;
     const color = typeof raw.color === 'string' && raw.color.length > 0 ? raw.color : '#fbbf24';
+    const externalId = typeof raw.externalId === 'string' ? raw.externalId : null;
 
     return {
       id,
@@ -288,6 +304,7 @@ export class NoteManager {
       status,
       parentId,
       color,
+      externalId,
     };
   }
 

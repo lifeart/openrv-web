@@ -3989,6 +3989,156 @@ This file tracks findings from exploratory review and targeted validation runs.
   - ShotGrid can surface and load multiple versions of the same shot, but those versions remain isolated inside the ShotGrid panel instead of becoming first-class OpenRV Web version groups.
   - That means report/export/version-navigation features built around `VersionManager` never benefit from the versions users actually loaded through the production tracking integration.
 
+### 323. ShotGrid playlist loading is not real playlist sync; it only fills the browser panel
+
+- Severity: Medium
+- Area: ShotGrid integration / playlist workflow
+- Evidence:
+  - The integration guide says “ShotGrid playlists can be imported into OpenRV Web as review playlists, maintaining clip order and metadata” in [docs/advanced/dcc-integration.md](/Users/lifeart/Repos/openrv-web/docs/advanced/dcc-integration.md#L104) through [docs/advanced/dcc-integration.md#L109).
+  - The actual `loadPlaylist` flow only fetches versions and calls `panel.setVersions(versions)` in [src/integrations/ShotGridIntegrationBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/ShotGridIntegrationBridge.ts#L115) through [src/integrations/ShotGridIntegrationBridge.ts#L131).
+  - A production-code search finds no ShotGrid path that calls `playlistManager`, `replaceClips(...)`, `addClip(...)`, or similar playlist runtime APIs.
+- Impact:
+  - Entering a ShotGrid playlist ID does not build an OpenRV Web review playlist; it just populates the ShotGrid side panel with version rows.
+  - Users still have to load versions manually one by one, so clip order and review-playlist semantics are not actually imported.
+
+### 324. The ShotGrid panel does not support the advertised “paste a version URL” workflow
+
+- Severity: Medium
+- Area: ShotGrid integration / UX contract
+- Evidence:
+  - The integration guide says users can load versions “by pasting a version URL or using the ShotGrid panel” in [docs/advanced/dcc-integration.md](/Users/lifeart/Repos/openrv-web/docs/advanced/dcc-integration.md#L102) through [docs/advanced/dcc-integration.md#L106).
+  - The shipped `ShotGridPanel` only supports two query modes, `playlist` and `shot`, toggled in [src/ui/components/ShotGridPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ShotGridPanel.ts#L331) through [src/ui/components/ShotGridPanel.ts#L335).
+  - Its load handler parses the input strictly as a positive integer ID and rejects anything else as invalid in [src/ui/components/ShotGridPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ShotGridPanel.ts#L337) through [src/ui/components/ShotGridPanel.ts#L359).
+- Impact:
+  - A real ShotGrid version URL cannot be pasted into the shipped panel even though that is presented as a supported workflow.
+  - Users have to manually extract numeric IDs and also cannot query versions directly, only playlists or shots.
+
+### 325. ShotGrid note publishing sends only plain note text, not annotations or thumbnails
+
+- Severity: Medium
+- Area: ShotGrid integration / note publishing
+- Evidence:
+  - The integration guide describes “Publish review notes and annotations ... with frame references and thumbnails” in [docs/advanced/dcc-integration.md](/Users/lifeart/Repos/openrv-web/docs/advanced/dcc-integration.md#L104) through [docs/advanced/dcc-integration.md#L107).
+  - The production `pushNotes` flow iterates `session.noteManager.getNotesForSource(sourceIndex)` and calls `bridge.pushNote(...)` with only `text` and an optional `frameRange` in [src/integrations/ShotGridIntegrationBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/ShotGridIntegrationBridge.ts#L192) through [src/integrations/ShotGridIntegrationBridge.ts#L224).
+  - `ShotGridBridge.pushNote(...)` only serializes `subject`, `content`, and `frame_range` into the REST payload in [src/integrations/ShotGridBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/ShotGridBridge.ts#L266) through [src/integrations/ShotGridBridge.ts#L299).
+  - The path never reads from the annotation store, never renders thumbnails, and never uploads attachments.
+- Impact:
+  - Users who rely on annotated frames or visual context cannot actually publish that review artifact back to ShotGrid from the shipped app.
+  - The current integration behaves like plain text note posting, which is much less useful than the advertised review-to-tracking workflow.
+
+### 326. The published DCC inbound command set overstates what the bridge actually understands
+
+- Severity: Medium
+- Area: DCC integration / protocol contract
+- Evidence:
+  - The DCC integration guide documents inbound commands `load`, `seek`, `setFrameRange`, `setMetadata`, `setColorSpace`, and `ping` in [docs/advanced/dcc-integration.md](/Users/lifeart/Repos/openrv-web/docs/advanced/dcc-integration.md#L68) through [docs/advanced/dcc-integration.md](/Users/lifeart/Repos/openrv-web/docs/advanced/dcc-integration.md#L80).
+  - The actual bridge protocol only defines inbound message types `loadMedia`, `syncFrame`, `syncColor`, and `ping` in [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L11) through [src/integrations/DCCBridge.ts#L26).
+  - Runtime dispatch in `DCCBridge.handleMessage(...)` only routes those four message types and rejects everything else as `UNKNOWN_TYPE` in [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L395) through [src/integrations/DCCBridge.ts#L418).
+  - `AppDCCWiring` likewise only subscribes to `loadMedia`, `syncFrame`, and `syncColor` in [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L84) through [src/AppDCCWiring.ts#L141).
+- Impact:
+  - Real DCC clients following the published contract for frame-range, metadata, or color-space commands will hit unsupported-message errors instead of getting the documented behavior.
+  - That blocks several advertised roundtrip workflows such as pushing shot context, frame ranges, or input color metadata from Maya/Nuke/Houdini into the viewer.
+
+### 327. DCC status roundtrip is documented, but the shipped bridge has no `statusChanged` message path
+
+- Severity: Medium
+- Area: DCC integration / status sync
+- Evidence:
+  - The DCC integration guide documents outbound `statusChanged` messages from the viewer in [docs/advanced/dcc-integration.md](/Users/lifeart/Repos/openrv-web/docs/advanced/dcc-integration.md#L85) through [docs/advanced/dcc-integration.md](/Users/lifeart/Repos/openrv-web/docs/advanced/dcc-integration.md#L96).
+  - The actual outbound protocol only defines `frameChanged`, `colorChanged`, `annotationAdded`, `pong`, and `error` in [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L22) through [src/integrations/DCCBridge.ts#L27) and [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L75) through [src/integrations/DCCBridge.ts#L117).
+  - `AppDCCWiring` only forwards `session.frameChanged` and `colorControls.adjustmentsChanged` in [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L143) through [src/AppDCCWiring.ts#L162); it never subscribes to `session.statusChanged`.
+- Impact:
+  - A DCC tool cannot rely on OpenRV Web to push review-status changes back over the live bridge, even though that workflow is presented as supported.
+  - Any pipeline expecting browser-driven approval or needs-revision updates to flow back into a DCC-side review context will silently get nothing.
+
+### 328. The shipped note workflow only exports JSON, despite the UI/docs presenting HTML and CSV note exports
+
+- Severity: Medium
+- Area: Notes / export workflow
+- Evidence:
+  - The review-workflow guide says notes can be exported as HTML, CSV, and JSON in [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L83) through [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L89).
+  - The actual `NotePanel` only exposes `Export` / `Import` buttons for JSON and its export implementation is explicitly “Export all notes to a JSON file download” in [src/ui/components/NotePanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NotePanel.ts#L159) through [src/ui/components/NotePanel.ts#L177) and [src/ui/components/NotePanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NotePanel.ts#L841) through [src/ui/components/NotePanel.ts#L862).
+  - The main Export menu’s CSV/HTML options are dailies reports, not note exports, in [src/ui/components/ExportControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ExportControl.ts#L213) through [src/ui/components/ExportControl.ts#L216).
+- Impact:
+  - Users looking for note export in spreadsheet/report formats will only find JSON in the actual note workflow.
+  - HTML/CSV exports are currently a different report feature with different scope and structure, so the note-export contract is misleading in production.
+
+### 329. Dailies reports include only the current version label, not the version history they advertise
+
+- Severity: Medium
+- Area: Reports / version data
+- Evidence:
+  - The report docs describe “Version info | Version number and history” in [docs/export/edl-otio.md](/Users/lifeart/Repos/openrv-web/docs/export/edl-otio.md#L86) through [docs/export/edl-otio.md](/Users/lifeart/Repos/openrv-web/docs/export/edl-otio.md#L96).
+  - `buildReportRows(...)` looks up the version group for a source, then only extracts the single `label` for the current source’s matching entry in [src/export/ReportExporter.ts](/Users/lifeart/Repos/openrv-web/src/export/ReportExporter.ts#L120) through [src/export/ReportExporter.ts#L129).
+  - Neither the CSV nor HTML output adds any other version-group entries or history fields in [src/export/ReportExporter.ts](/Users/lifeart/Repos/openrv-web/src/export/ReportExporter.ts#L196) through [src/export/ReportExporter.ts#L210) and [src/export/ReportExporter.ts](/Users/lifeart/Repos/openrv-web/src/export/ReportExporter.ts#L252) through [src/export/ReportExporter.ts#L269).
+- Impact:
+  - Review reports cannot show a shot’s version lineage or alternative versions, only the one label attached to the exported source row.
+  - That makes the report less useful for production review trails where version progression itself matters.
+
+### 330. ShotGrid note sync flattens local note threads and statuses into plain top-level comments
+
+- Severity: Medium
+- Area: ShotGrid integration / note round-trip fidelity
+- Evidence:
+  - Local notes support threaded replies via `parentId` and review state via `status: 'open' | 'resolved' | 'wontfix'` in [src/core/session/NoteManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/NoteManager.ts#L11) through [src/core/session/NoteManager.ts#L23).
+  - ShotGrid push iterates every local note for a source and sends only `text` plus optional `frameRange` in [src/integrations/ShotGridIntegrationBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/ShotGridIntegrationBridge.ts#L197) through [src/integrations/ShotGridIntegrationBridge.ts#L215) and [src/integrations/ShotGridBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/ShotGridBridge.ts#L266) through [src/integrations/ShotGridBridge.ts#L291).
+  - ShotGrid pull reconstructs local notes with `addNote(...)` using source/frame/text/author only, with no reply linkage or restored note status in [src/integrations/ShotGridIntegrationBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/ShotGridIntegrationBridge.ts#L276) through [src/integrations/ShotGridIntegrationBridge.ts#L308).
+- Impact:
+  - A threaded review conversation or resolved/won’t-fix state in OpenRV Web cannot survive a ShotGrid sync round-trip as equivalent structured review data.
+  - The integration reduces richer local note workflows to a flat list of plain comments, which weakens production review traceability.
+
+### 331. The shipped note UI cannot create or edit frame-range notes even though the note system supports them
+
+- Severity: Medium
+- Area: Notes / review workflow
+- Evidence:
+  - The review-workflow guide says “Notes with frame ranges can be created by setting a start and end frame” in [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L62) through [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L69).
+  - The note model itself supports `frameStart` and `frameEnd` in [src/core/session/NoteManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/NoteManager.ts#L11) through [src/core/session/NoteManager.ts#L23).
+  - The shipped `NotePanel` add flow always creates notes with `frameStart === frameEnd === currentFrame` in [src/ui/components/NotePanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NotePanel.ts#L332) through [src/ui/components/NotePanel.ts#L348).
+  - `NoteManager.updateNote(...)` only edits `text`, `status`, or `color`, and the panel never exposes any UI for changing a note’s frame start/end after creation in [src/core/session/NoteManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/NoteManager.ts#L98) through [src/core/session/NoteManager.ts#L120) and [src/ui/components/NotePanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NotePanel.ts#L808) through [src/ui/components/NotePanel.ts#L818).
+- Impact:
+  - Users cannot author the frame-range notes that the review workflow describes from the shipped UI.
+  - Range support currently exists only in imported data or programmatic paths, which makes multi-frame feedback much less practical in real review sessions.
+
+### 332. Compare overlays never show real version/source labels, even though the review workflow says they do
+
+- Severity: Medium
+- Area: Compare UI / review workflow clarity
+- Evidence:
+  - The review workflow docs explicitly say that when comparing versions, "The version labels appear in the comparison overlay" in [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L42) through [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L44).
+  - The split-screen overlay hardcodes its on-canvas labels to plain `A` and `B` in [src/ui/components/ViewerSplitScreen.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerSplitScreen.ts#L72) through [src/ui/components/ViewerSplitScreen.ts#L97).
+  - The wipe overlay hardcodes its labels to `Original` and `Graded` in [src/ui/components/ViewerWipe.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerWipe.ts#L8) through [src/ui/components/ViewerWipe.ts#L10) and [src/ui/components/ViewerWipe.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerWipe.ts#L37) through [src/ui/components/ViewerWipe.ts#L59).
+  - Production compare wiring only forwards wipe mode/position and A/B source selection into the viewer in [src/AppViewWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppViewWiring.ts#L87) through [src/AppViewWiring.ts#L110), while the viewer's explicit `setWipeLabels(...)` API exists but is not part of that runtime wiring in [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L2664) through [src/ui/components/Viewer.ts#L2669).
+- Impact:
+  - Users comparing two shot versions in wipe or split-screen mode cannot tell from the on-image overlay which actual version/source is on each side.
+  - That makes the shipped compare HUD materially less useful in review sessions than the documentation promises, especially when filenames or version numbers matter more than abstract `A/B` labels.
+
+### 333. Reference `toggle` mode is documented as a switch between live and reference, but the renderer only replaces the frame
+
+- Severity: Medium
+- Area: Reference comparison / API semantics
+- Evidence:
+  - The advanced compare docs describe reference `Toggle` mode as "Press to switch between reference and live" in [docs/compare/advanced-compare.md](/Users/lifeart/Repos/openrv-web/docs/compare/advanced-compare.md#L21) through [docs/compare/advanced-compare.md](/Users/lifeart/Repos/openrv-web/docs/compare/advanced-compare.md#L29).
+  - `ReferenceManager` treats `toggle` as a first-class view mode alongside `split-h`, `split-v`, `overlay`, and `side-by-side` in [src/ui/components/ReferenceManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ReferenceManager.ts#L13) through [src/ui/components/ReferenceManager.ts#L18) and [src/ui/components/ReferenceManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ReferenceManager.ts#L40) through [src/ui/components/ReferenceManager.ts#L46).
+  - The shipped View tab still only exposes capture and a binary enable/disable button for reference comparison in [src/services/tabContent/buildViewTab.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildViewTab.ts#L85) through [src/services/tabContent/buildViewTab.ts#L117).
+  - In the renderer, `viewMode === 'toggle'` just draws the reference image over the full frame once, the same way a static replacement would, in [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L3920) through [src/ui/components/Viewer.ts#L3925); there is no additional input path there that alternates between live and reference imagery.
+- Impact:
+  - Anyone using the documented/API-level `toggle` reference mode gets a latched full-frame reference display, not a real switch-back-and-forth comparison mode.
+  - That makes one of the advertised reference comparison modes semantically misleading and less useful for quick before/after review.
+
+### 334. Comparison annotations are tied to the `A/B` slot, not to the underlying source they were drawn on
+
+- Severity: Medium
+- Area: Paint / compare review data fidelity
+- Evidence:
+  - The advanced compare docs say comparison annotations are "tied to the source they were drawn on" so switching between A and B preserves each source's annotation layer independently in [docs/compare/advanced-compare.md](/Users/lifeart/Repos/openrv-web/docs/compare/advanced-compare.md#L61) through [docs/compare/advanced-compare.md#L63).
+  - The actual paint annotation model has no source identity field; it only stores `version?: 'A' | 'B' | 'all'` on annotations in [src/paint/types.ts](/Users/lifeart/Repos/openrv-web/src/paint/types.ts#L58) through [src/paint/types.ts](/Users/lifeart/Repos/openrv-web/src/paint/types.ts#L69) and [src/paint/types.ts](/Users/lifeart/Repos/openrv-web/src/paint/types.ts#L83) through [src/paint/types.ts](/Users/lifeart/Repos/openrv-web/src/paint/types.ts#L89).
+  - When new paint data is created, `PaintEngine` writes only the current annotation version slot into the annotation payload in [src/paint/PaintEngine.ts](/Users/lifeart/Repos/openrv-web/src/paint/PaintEngine.ts#L237) through [src/paint/PaintEngine.ts](/Users/lifeart/Repos/openrv-web/src/paint/PaintEngine.ts#L254) and [src/paint/PaintEngine.ts](/Users/lifeart/Repos/openrv-web/src/paint/PaintEngine.ts#L291) through [src/paint/PaintEngine.ts](/Users/lifeart/Repos/openrv-web/src/paint/PaintEngine.ts#L299).
+  - Display filtering also keys entirely off that `A/B` version tag, not a source index or media identifier, in [src/paint/PaintEngine.ts](/Users/lifeart/Repos/openrv-web/src/paint/PaintEngine.ts#L633) through [src/paint/PaintEngine.ts](/Users/lifeart/Repos/openrv-web/src/paint/PaintEngine.ts#L703).
+- Impact:
+  - If users redraw A/B assignments to different sources, the annotation layer follows the `A` or `B` slot rather than staying attached to the original media source.
+  - That makes the shipped comparison-annotation workflow less reliable than documented for real version review, because annotation meaning can drift when compare assignments change.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

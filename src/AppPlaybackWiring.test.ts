@@ -235,7 +235,7 @@ function createMockDeps(): PlaybackWiringDeps {
       showCustomBindingsDialog: vi.fn(),
     })) as unknown as PlaybackWiringDeps['getKeyboardHandler'],
     getFullscreenManager: vi.fn(() => ({
-      toggle: vi.fn(),
+      toggle: vi.fn().mockResolvedValue(undefined),
     })) as unknown as PlaybackWiringDeps['getFullscreenManager'],
   };
 }
@@ -366,6 +366,31 @@ describe('wirePlaybackControls', () => {
     headerBar.emit('fullscreenToggle', undefined);
     const manager = (deps.getFullscreenManager as ReturnType<typeof vi.fn>).mock.results[0]!.value;
     expect(manager.toggle).toHaveBeenCalled();
+  });
+
+  it('PW-008b: fullscreenToggle failure shows user alert (#182)', async () => {
+    const mockManager = {
+      toggle: vi.fn().mockRejectedValue(new Error('blocked by browser')),
+    };
+    (deps.getFullscreenManager as ReturnType<typeof vi.fn>).mockReturnValue(mockManager);
+    showAlertSpy.mockClear();
+
+    headerBar.emit('fullscreenToggle', undefined);
+    // Wait for the rejected promise to be caught and showAlert to fire
+    await vi.waitFor(() => {
+      expect(showAlertSpy).toHaveBeenCalledWith(
+        'Fullscreen is not available. Your browser may be blocking it.',
+        expect.objectContaining({ type: 'warning', title: 'Fullscreen Unavailable' }),
+      );
+    });
+  });
+
+  it('PW-008c: successful fullscreenToggle does not show error alert (#182)', async () => {
+    showAlertSpy.mockClear();
+    headerBar.emit('fullscreenToggle', undefined);
+    // Give async chain time to settle
+    await new Promise((r) => setTimeout(r, 0));
+    expect(showAlertSpy).not.toHaveBeenCalled();
   });
 
   it('PW-009: clipSelected jumps to mapped local frame and clip range', () => {
@@ -524,6 +549,38 @@ describe('wirePlaybackControls', () => {
       expect.any(Function), // renderFrame callback
       expect.objectContaining({ title: 'Test Session' }),
     );
+  });
+
+  it('PW-015b: annotationsPDFExportRequested shows alert when popup is blocked', async () => {
+    mockExportAnnotationsPDF.mockRejectedValueOnce(new Error('Failed to open print window. Please allow popups for this site.'));
+    const exportControl = headerBar.getExportControl();
+    exportControl.emit('annotationsPDFExportRequested', undefined);
+    // Allow the microtask (.catch handler) to run
+    await new Promise((r) => setTimeout(r, 0));
+    expect(showAlertSpy).toHaveBeenCalledWith(
+      expect.stringContaining('PDF export failed'),
+      expect.objectContaining({ type: 'error', title: 'PDF Export Error' }),
+    );
+  });
+
+  it('PW-015c: annotationsPDFExportRequested shows alert on other export errors', async () => {
+    mockExportAnnotationsPDF.mockRejectedValueOnce(new Error('Some unexpected error'));
+    const exportControl = headerBar.getExportControl();
+    exportControl.emit('annotationsPDFExportRequested', undefined);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(showAlertSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Some unexpected error'),
+      expect.objectContaining({ type: 'error', title: 'PDF Export Error' }),
+    );
+  });
+
+  it('PW-015d: annotationsPDFExportRequested does not show alert on success', async () => {
+    mockExportAnnotationsPDF.mockResolvedValueOnce(undefined);
+    showAlertSpy.mockClear();
+    const exportControl = headerBar.getExportControl();
+    exportControl.emit('annotationsPDFExportRequested', undefined);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(showAlertSpy).not.toHaveBeenCalled();
   });
 
   it('PW-018: annotationsJSONImportRequested opens file picker', () => {

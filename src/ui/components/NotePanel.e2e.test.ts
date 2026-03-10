@@ -338,6 +338,7 @@ describe('NotePanel E2E Integration', () => {
           status: 'open',
           parentId: null,
           color: '#fbbf24',
+          externalId: null,
         },
         {
           id: 'batch-2',
@@ -351,6 +352,7 @@ describe('NotePanel E2E Integration', () => {
           status: 'open',
           parentId: null,
           color: '#fbbf24',
+          externalId: null,
         },
       ];
       session.noteManager.fromSerializable(notes);

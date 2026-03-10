@@ -1527,3 +1527,33 @@
 - **Regression Tests**: 9 tests — frame range from sg_first_frame/sg_last_frame, fallback to frame_range string, fallback to 1-1, created_at preserved, created_at fallback, addNote createdAt/status overrides, API request fields.
 - **Verification**: All 22,630 tests pass, TypeScript clean.
 - **Files Changed**: `src/integrations/ShotGridBridge.ts`, `src/integrations/ShotGridBridge.test.ts`, `src/integrations/ShotGridIntegrationBridge.ts`, `src/integrations/ShotGridIntegrationBridge.test.ts`, `src/core/session/NoteManager.ts`, `src/core/session/NoteManager.test.ts`
+
+## Issue #180: ShotGrid note deduplication resets on disconnect, so re-pulls can duplicate everything
+
+- **Severity**: Medium
+- **Area**: ShotGrid integration / notes workflow
+- **Root Cause**: Deduplication relied on in-memory `sgNoteIdMap` cleared on disconnect. Pulled notes didn't persist the ShotGrid note ID, so re-pulling after reconnect duplicated everything.
+- **Fix**: Added `externalId` field to `Note` interface for persisting remote IDs. `addNotesFromShotGrid()` stores ShotGrid note ID as `externalId`. Deduplication falls back to `noteManager.findNoteByExternalId()` after in-memory cache miss. Re-populates cache on match for fast-path future lookups.
+- **Regression Tests**: 10 tests — externalId persistence, findNoteByExternalId, dedup after disconnect/reconnect, mixed new+existing, externalId propagation.
+- **Verification**: All 22,640 tests pass, TypeScript clean.
+- **Files Changed**: `src/core/session/NoteManager.ts`, `src/core/session/NoteManager.test.ts`, `src/integrations/ShotGridIntegrationBridge.ts`, `src/integrations/ShotGridIntegrationBridge.test.ts`, `src/core/session/GTOGraphLoader.ts`, `src/ui/components/NotePanel.e2e.test.ts`
+
+## Issue #181: Annotation PDF export can fail with no user-visible feedback when popups are blocked
+
+- **Severity**: Medium
+- **Area**: Export workflow / annotations
+- **Root Cause**: `exportAnnotationsPDF(...)` was called with `void` (no catch), so popup-blocked throws were swallowed with no user feedback.
+- **Fix**: Added `.catch()` handler around the export call that shows a user-visible alert with the error message and popup-allow guidance.
+- **Regression Tests**: PW-015b (popup-blocked shows alert), PW-015c (other errors surface), PW-015d (successful export no error).
+- **Verification**: All 22,643 tests pass, TypeScript clean.
+- **Files Changed**: `src/AppPlaybackWiring.ts`, `src/AppPlaybackWiring.test.ts`
+
+## Issue #182: Fullscreen failures are reduced to console warnings, leaving the UI looking dead
+
+- **Severity**: Low
+- **Area**: Window management / browser integration
+- **Root Cause**: `FullscreenManager.enter()`/`exit()` swallowed browser API failures with `console.warn()`. No user-visible feedback.
+- **Fix**: `FullscreenManager` now emits `fullscreenError` events and re-throws errors. `AppPlaybackWiring` catches failures and shows a warning alert: "Fullscreen is not available. Your browser may be blocking it."
+- **Regression Tests**: FS-U022/U023 (error events emitted), FS-U024/U025 (no error on success), PW-008b (failure shows alert), PW-008c (success no error).
+- **Verification**: All 22,649 tests pass, TypeScript clean.
+- **Files Changed**: `src/utils/ui/FullscreenManager.ts`, `src/utils/ui/FullscreenManager.test.ts`, `src/AppPlaybackWiring.ts`, `src/AppPlaybackWiring.test.ts`

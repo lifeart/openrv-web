@@ -275,8 +275,19 @@ export class ShotGridIntegrationBridge {
 
   private addNotesFromShotGrid(sgNotes: ShotGridNote[], sourceIndex: number): void {
     for (const sgNote of sgNotes) {
-      // Dedup: skip if already pulled
+      const sgExternalId = String(sgNote.id);
+
+      // Fast-path dedup: check in-memory map first
       if (this.sgNoteIdMap.has(sgNote.id)) continue;
+
+      // Fallback dedup: check persisted externalId in note manager
+      // (survives disconnect/reconnect since notes are stored on the manager)
+      const existing = this.session.noteManager.findNoteByExternalId(sgExternalId);
+      if (existing) {
+        // Re-populate the in-memory cache so future checks are fast
+        this.sgNoteIdMap.set(sgNote.id, existing.id);
+        continue;
+      }
 
       // Extract frame range from ShotGrid note, falling back to 1-1
       let frameStart = 1;
@@ -301,6 +312,7 @@ export class ShotGridIntegrationBridge {
         sgNote.user.name,
         {
           createdAt: sgNote.created_at || undefined,
+          externalId: sgExternalId,
         },
       );
 

@@ -475,6 +475,7 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
               status: status === 'open' || status === 'resolved' || status === 'wontfix' ? status : 'open',
               parentId: typeof parentId === 'string' && parentId.length > 0 ? parentId : null,
               color: typeof color === 'string' ? color : '#fbbf24',
+              externalId: null,
             });
           }
         }
