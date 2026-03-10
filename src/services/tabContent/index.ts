@@ -4,4 +4,4 @@ export { buildColorTab } from './buildColorTab';
 export { buildEffectsTab } from './buildEffectsTab';
 export { buildTransformTab } from './buildTransformTab';
 export { buildAnnotateTab } from './buildAnnotateTab';
-export { buildPanelToggles } from './buildPanelToggles';
+export { buildPanelToggles, type PanelTogglesResult } from './buildPanelToggles';

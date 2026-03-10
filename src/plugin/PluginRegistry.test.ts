@@ -802,8 +802,8 @@ describe('PluginRegistry', () => {
   // UI panel registration warnings and signal (Issue #15)
   // -------------------------------------------------------------------------
 
-  describe('registerUIPanel warnings and signal', () => {
-    it('PREG-047: registerUIPanel emits console.warn about panels not being displayed', async () => {
+  describe('registerUIPanel signal', () => {
+    it('PREG-047: registerUIPanel does not emit console.warn (panels are now wired)', async () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const panel: UIPanelContribution = { id: 'warn-panel', label: 'W', location: 'left', render: vi.fn() };
       const plugin = createPlugin({
@@ -813,14 +813,14 @@ describe('PluginRegistry', () => {
       });
       registry.register(plugin);
       await registry.activate('test.plugin');
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('UI panel "warn-panel" registered but plugin panels are not yet displayed'),
+      const panelWarnings = warnSpy.mock.calls.filter(
+        (args) => typeof args[0] === 'string' && args[0].includes('not yet displayed'),
       );
+      expect(panelWarnings).toHaveLength(0);
       warnSpy.mockRestore();
     });
 
     it('PREG-048: registerUIPanel emits uiPanelRegistered signal with panel and pluginId', async () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const panel: UIPanelContribution = { id: 'sig-panel', label: 'S', location: 'right', render: vi.fn() };
       const signalData: Array<{ pluginId: string; panel: UIPanelContribution }> = [];
       registry.uiPanelRegistered.connect((data) => {
@@ -836,7 +836,26 @@ describe('PluginRegistry', () => {
       expect(signalData).toHaveLength(1);
       expect(signalData[0]!.pluginId).toBe('test.plugin');
       expect(signalData[0]!.panel).toBe(panel);
-      warnSpy.mockRestore();
+    });
+
+    it('PREG-049: deactivation emits uiPanelUnregistered signal for each panel', async () => {
+      const panel: UIPanelContribution = { id: 'unreg-panel', label: 'U', location: 'right', render: vi.fn(), destroy: vi.fn() };
+      const signalData: Array<{ pluginId: string; panelId: string }> = [];
+      registry.uiPanelUnregistered.connect((data) => {
+        signalData.push(data);
+      });
+      const plugin = createPlugin({
+        activate: (ctx: PluginContext) => {
+          ctx.registerUIPanel(panel);
+        },
+      });
+      registry.register(plugin);
+      await registry.activate('test.plugin');
+      await registry.deactivate('test.plugin');
+      expect(signalData).toHaveLength(1);
+      expect(signalData[0]!.pluginId).toBe('test.plugin');
+      expect(signalData[0]!.panelId).toBe('unreg-panel');
+      expect(panel.destroy).toHaveBeenCalled();
     });
   });
 

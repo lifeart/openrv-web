@@ -689,6 +689,9 @@ export class App {
     });
     this.layoutOrchestrator.createLayout();
 
+    // Wire plugin-contributed UI panels into the panel toggles area
+    this.wirePluginPanels();
+
     // Mount goto-frame overlay into the viewer slot (position: relative parent)
     this.layoutManager.getViewerSlot().appendChild(this.gotoFrameOverlay.getElement());
 
@@ -780,6 +783,50 @@ export class App {
         this.sessionBridge.updateVectorscope();
       }
     }
+  }
+
+  /**
+   * Wire plugin-contributed UI panels so they appear in the panel toggles area
+   * and are mountable via toggle buttons.
+   */
+  private wirePluginPanels(): void {
+    const panelToggles = this.controls.panelTogglesResult;
+    if (!panelToggles) return;
+
+    const viewerContainer = this.viewer.getContainer();
+    const pluginPanelContainers = new Map<string, HTMLElement>();
+
+    // Mount a single plugin panel
+    const mountPanel = (panelId: string, panel: import('./plugin/types').UIPanelContribution) => {
+      const { button, container } = panelToggles.addPluginPanel(panelId, panel.label, panel.icon);
+      // Create a context stub for render (plugin panels receive PluginContext during registration,
+      // but the render call from layout just needs the container)
+      panel.render(container, undefined as unknown as import('./plugin/types').PluginContext);
+      viewerContainer.appendChild(container);
+      pluginPanelContainers.set(panelId, container);
+      // Position the container relative to the button
+      button.style.position = 'relative';
+    };
+
+    // Mount any panels already registered
+    for (const [panelId, panel] of pluginRegistry.getUIPanels()) {
+      mountPanel(panelId, panel);
+    }
+
+    // Listen for new panels
+    pluginRegistry.uiPanelRegistered.connect(({ panel }) => {
+      mountPanel(panel.id, panel);
+    });
+
+    // Listen for panel removal
+    pluginRegistry.uiPanelUnregistered.connect(({ panelId }) => {
+      panelToggles.removePluginPanel(panelId);
+      const container = pluginPanelContainers.get(panelId);
+      if (container) {
+        container.remove();
+        pluginPanelContainers.delete(panelId);
+      }
+    });
   }
 
   private bindEvents(): void {

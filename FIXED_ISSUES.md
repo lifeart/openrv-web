@@ -1,5 +1,18 @@
 # Fixed Issues
 
+## Issue #238: Mu compat `frameStart()` is a hardcoded local default, which distorts range predicates built on it
+
+- **Severity**: Medium
+- **Area**: Mu compatibility / timeline-range scripting
+- **Root Cause**: `MuCommands._frameStart` was a hardcoded private field initialized to `1` with no setter or synchronization path to real session/source state. `frameStart()` returned this constant regardless of the actual media. Downstream predicates `isNarrowed()` and `isPlayable()` in `MuExtraCommands` produced results based on this synthetic value rather than the true session frame range.
+- **Fix**: Added `getStartFrame()` to `MediaAPI`, reusing the existing `getCurrentSourceStartFrame()` utility which correctly derives the start frame from active representation or sequence metadata (with `|| 1` fallback for RV's 1-based convention). Wired `MuCommands.frameStart()` to `openrv.media.getStartFrame()`. Removed `_frameStart` field. `isNarrowed()`/`isPlayable()` automatically benefit with no code changes needed.
+- **Regression Tests**: Added tests across two files:
+  - MuCommands: `frameStart()` delegates to real API, no local caching (mock changes between calls), VFX start frame 1001
+  - MuExtraCommands: `isNarrowed()` with frameStart=1001 (matching/non-matching in-point), `isPlayable()` with non-default start
+  - OpenRVAPI: `getStartFrame()` default, sequence info path, active representation priority, null source
+- **Verification**: TypeScript clean, all 123 MuCommands tests pass, all 282 OpenRVAPI tests pass.
+- **Files Changed**: `src/api/MediaAPI.ts`, `src/compat/MuCommands.ts`, `src/compat/__tests__/MuCommands.test.ts`, `src/api/OpenRVAPI.test.ts`
+
 ## Issue #237: Mu compat playback direction is only local bookkeeping and does not control real reverse playback
 
 - **Severity**: Medium
