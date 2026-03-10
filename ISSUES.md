@@ -2624,6 +2624,54 @@ This file tracks findings from exploratory review and targeted validation runs.
   - On platforms where the mediabunny HDR extraction path is partially available but `VideoSampleSink` creation fails, real HDR video is silently treated as SDR content.
   - Users get incorrect color/output behavior without any app-level indication that HDR handling fell back to a lower-fidelity path.
 
+### 214. Deep tiled EXR files are rejected even though EXR is broadly advertised as supported
+
+- Severity: Medium
+- Area: Format support / EXR decoding
+- Evidence:
+  - The EXR decoder explicitly throws for single-part `deeptile` files with `Deep tiled images (deeptile) are not yet supported` in [src/formats/EXRDecoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/EXRDecoder.ts#L2066).
+  - The same hard rejection exists for multi-part EXRs when the selected part has type `deeptile` in [src/formats/EXRDecoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/EXRDecoder.ts#L2174).
+  - The test suite locks this in as expected behavior in `EXR-MP031` and `EXR-DEEP010` in [src/formats/EXRDecoder.test.ts](/Users/lifeart/Repos/openrv-web/src/formats/EXRDecoder.test.ts#L2542) and [src/formats/EXRDecoder.test.ts](/Users/lifeart/Repos/openrv-web/src/formats/EXRDecoder.test.ts#L4878).
+- Impact:
+  - Users can reasonably treat “EXR supported” as covering deep EXR workflows, but deep tiled EXR files fail at decode time.
+  - This creates a real format-compatibility gap for VFX/rendering pipelines that emit `deeptile` data.
+
+### 215. Tiled EXR files with mipmap or ripmap levels are rejected; only `ONE_LEVEL` tiles work
+
+- Severity: Medium
+- Area: Format support / EXR decoding
+- Evidence:
+  - For single-part tiled EXRs, the decoder throws unless `header.tileDesc.levelMode === EXRLevelMode.ONE_LEVEL` in [src/formats/EXRDecoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/EXRDecoder.ts#L2097).
+  - The multi-part path applies the same restriction to tiled parts and throws a descriptive error for any other level mode in [src/formats/EXRDecoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/EXRDecoder.ts#L2184).
+  - The thrown message is explicit: `Only ONE_LEVEL tiled images are supported.` in both code paths above.
+- Impact:
+  - Valid EXR files that use mipmapped or ripmapped tiled storage decode as hard failures instead of degrading or selecting a usable level.
+  - Texture-oriented or preview-optimized EXR assets can therefore fail even though ordinary tiled EXRs load.
+
+### 216. EXR decode hard-fails on `UINT` channels instead of tolerating common data/AOV layers
+
+- Severity: Medium
+- Area: Format support / EXR decoding
+- Evidence:
+  - While parsing channel definitions, the decoder explicitly throws on `EXRPixelType.UINT` with `Unsupported pixel type UINT ... Only HALF and FLOAT are supported` in [src/formats/EXRDecoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/EXRDecoder.ts#L695).
+  - The comment above the throw acknowledges that `UINT` is a spec-defined EXR pixel type, not malformed input, in [src/formats/EXRDecoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/EXRDecoder.ts#L697).
+  - The test suite also locks this in as expected behavior in [src/formats/EXRDecoder.test.ts](/Users/lifeart/Repos/openrv-web/src/formats/EXRDecoder.test.ts#L730).
+- Impact:
+  - EXR files that carry valid `UINT` auxiliary channels can fail completely instead of loading the float/half image data that is actually viewable.
+  - That makes the decoder brittle on production EXRs with IDs, masks, or other integer data layers mixed into otherwise normal renders.
+
+### 217. Float TIFF support rejects valid non-RGB channel layouts
+
+- Severity: Medium
+- Area: Format support / TIFF decoding
+- Evidence:
+  - `decodeTIFFFloat(...)` throws whenever `samplesPerPixel` is less than 3 or greater than 4 in [src/formats/TIFFFloatDecoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/TIFFFloatDecoder.ts#L635).
+  - The thrown error is explicit: `Only 3 (RGB) or 4 (RGBA) are supported.` in [src/formats/TIFFFloatDecoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/TIFFFloatDecoder.ts#L636).
+  - The test suite locks this behavior in for 1-channel and 5-channel float TIFFs in [src/formats/TIFFFloatDecoder.test.ts](/Users/lifeart/Repos/openrv-web/src/formats/TIFFFloatDecoder.test.ts#L541).
+- Impact:
+  - Valid float TIFFs with grayscale, luminance+alpha, or broader scientific/multi-channel layouts fail completely instead of loading a usable subset.
+  - The app therefore supports only a narrow RGB/RGBA slice of float TIFF workflows while the format family is broader in practice.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

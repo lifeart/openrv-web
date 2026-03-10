@@ -678,12 +678,12 @@ describe('ToneMappingControl', () => {
       expect(control.isEnabled()).toBe(false);
     });
 
-    it('TONE-U091: isEnabled returns false when enabled but operator is off', () => {
-      // When setEnabled(true) is called with operator='off', isEnabled still returns false
-      // because isEnabled checks both enabled state AND operator !== 'off'
+    it('TONE-U091: isEnabled returns true when setEnabled(true) auto-selects non-off operator', () => {
+      // Fix #114: setEnabled(true) now auto-selects a non-off operator when operator is 'off',
+      // so isEnabled() returns true because both enabled=true AND operator!='off'.
       control.setEnabled(true);
-      // operator is still 'off', so isEnabled should be false
-      expect(control.isEnabled()).toBe(false);
+      expect(control.isEnabled()).toBe(true);
+      expect(control.getState().operator).not.toBe('off');
     });
 
     it('TONE-U092: isEnabled returns true when enabled with valid operator', () => {

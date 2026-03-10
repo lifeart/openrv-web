@@ -96,6 +96,17 @@ function createMockContext(overrides?: Partial<PersistenceManagerContext>): Pers
       getPerspectiveParams: () => ({ enabled: false, topLeft: { x: 0, y: 0 }, topRight: { x: 1, y: 0 }, bottomRight: { x: 1, y: 1 }, bottomLeft: { x: 0, y: 1 }, quality: 'bilinear' }),
       getStabilizationParams: () => ({ enabled: false }),
       isUncropActive: () => false,
+      getLUTPipeline: () => ({
+        getActiveSourceId: () => 'default',
+        getSourceConfig: () => ({
+          fileLUT: { lutData: null, enabled: false, intensity: 1 },
+          lookLUT: { lutData: null, enabled: false, intensity: 1 },
+          preCacheLUT: { lutData: null, enabled: false, intensity: 1 },
+        }),
+        getState: () => ({
+          displayLUT: { lutData: null, enabled: false, intensity: 1 },
+        }),
+      }),
       setColorAdjustments: vi.fn(),
       setCDL: vi.fn(),
       setFilterSettings: vi.fn(),
@@ -315,6 +326,24 @@ describe('SessionSerializer.fromJSON - issue #121: clears session before import'
       getPerspectiveParams: () => ({ enabled: false, topLeft: { x: 0, y: 0 }, topRight: { x: 1, y: 0 }, bottomRight: { x: 1, y: 1 }, bottomLeft: { x: 0, y: 1 }, quality: 'bilinear' }),
       getStabilizationParams: () => ({ enabled: false }),
       isUncropActive: () => false,
+      getLUTPipeline: () => ({
+        getActiveSourceId: () => 'default',
+        getSourceConfig: () => ({
+          fileLUT: { lutData: null, enabled: false, intensity: 1 },
+          lookLUT: { lutData: null, enabled: false, intensity: 1 },
+          preCacheLUT: { lutData: null, enabled: false, intensity: 1 },
+        }),
+        getState: () => ({
+          displayLUT: { lutData: null, enabled: false, intensity: 1 },
+        }),
+      }),
+      resetToneMappingState: vi.fn(),
+      resetGhostFrameState: vi.fn(),
+      resetStereoState: vi.fn(),
+      resetStereoEyeTransforms: vi.fn(),
+      resetStereoAlignMode: vi.fn(),
+      resetChannelMode: vi.fn(),
+      resetDifferenceMatteState: vi.fn(),
     } as any;
 
     const paintEngine = { loadFromAnnotations: vi.fn() } as any;
@@ -393,6 +422,24 @@ describe('Session.setPlaybackState - issue #122: restores currentSourceIndex', (
       getPerspectiveParams: () => ({ enabled: false, topLeft: { x: 0, y: 0 }, topRight: { x: 1, y: 0 }, bottomRight: { x: 1, y: 1 }, bottomLeft: { x: 0, y: 1 }, quality: 'bilinear' }),
       getStabilizationParams: () => ({ enabled: false }),
       isUncropActive: () => false,
+      getLUTPipeline: () => ({
+        getActiveSourceId: () => 'default',
+        getSourceConfig: () => ({
+          fileLUT: { lutData: null, enabled: false, intensity: 1 },
+          lookLUT: { lutData: null, enabled: false, intensity: 1 },
+          preCacheLUT: { lutData: null, enabled: false, intensity: 1 },
+        }),
+        getState: () => ({
+          displayLUT: { lutData: null, enabled: false, intensity: 1 },
+        }),
+      }),
+      resetToneMappingState: vi.fn(),
+      resetGhostFrameState: vi.fn(),
+      resetStereoState: vi.fn(),
+      resetStereoEyeTransforms: vi.fn(),
+      resetStereoAlignMode: vi.fn(),
+      resetChannelMode: vi.fn(),
+      resetDifferenceMatteState: vi.fn(),
     } as any;
 
     const paintEngine = { loadFromAnnotations: vi.fn() } as any;

@@ -86,6 +86,17 @@ function createMockContext(overrides: Partial<PersistenceManagerContext> = {}): 
       getPerspectiveParams: () => ({ enabled: false, topLeft: { x: 0, y: 0 }, topRight: { x: 1, y: 0 }, bottomRight: { x: 1, y: 1 }, bottomLeft: { x: 0, y: 1 }, quality: 'bilinear' }),
       getStabilizationParams: () => ({ enabled: false }),
       isUncropActive: () => false,
+      getLUTPipeline: () => ({
+        getActiveSourceId: () => 'default',
+        getSourceConfig: () => ({
+          fileLUT: { lutData: null, enabled: false, intensity: 1 },
+          lookLUT: { lutData: null, enabled: false, intensity: 1 },
+          preCacheLUT: { lutData: null, enabled: false, intensity: 1 },
+        }),
+        getState: () => ({
+          displayLUT: { lutData: null, enabled: false, intensity: 1 },
+        }),
+      }),
       setColorAdjustments: vi.fn(),
       setCDL: vi.fn(),
       setFilterSettings: vi.fn(),
