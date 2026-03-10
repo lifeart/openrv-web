@@ -698,10 +698,6 @@ describe('MuEventBridge mode-scoped bindings', () => {
     bridge = new MuEventBridge();
   });
 
-  function makeEvent(name: string): MuEvent {
-    return { name, sender: '', contents: '', returnContents: '', reject: false };
-  }
-
   it('handler bound to a mode does NOT fire when that mode is not active', () => {
     const handler = vi.fn();
     bridge.defineMinorMode('modeA', 0, [], []);
@@ -908,6 +904,44 @@ describe('ModeManager mode-scoped bindings', () => {
     manager.dispatchEvent(makeEvent('ev'));
     expect(overrideHandler).toHaveBeenCalledOnce();
     expect(scopedHandler).not.toHaveBeenCalled();
+  });
+
+  it('getBindingDocumentation returns mode-scoped doc when table exists on stack with different event', () => {
+    // Place a binding for 'otherEv' on the always-active event table stack
+    manager.bind('table', 'otherEv', vi.fn(), 'Stack doc');
+
+    // Place a mode-scoped binding for 'ev' under the same table name
+    manager.defineMinorMode('m', 0, [], []);
+    manager.activateMode('m');
+    manager.bind('table', 'ev', vi.fn(), 'Mode-scoped doc', undefined, 'm');
+
+    // Without the fix, getBindingDocumentation early-returns '' because
+    // 'table' is found on the stack even though 'ev' isn't bound there.
+    expect(manager.getBindingDocumentation('table', 'ev')).toBe('Mode-scoped doc');
+  });
+
+  it('getBindingDocumentation returns empty string for inactive mode-scoped binding', () => {
+    manager.defineMinorMode('m', 0, [], []);
+    // Bind to mode but do NOT activate it
+    manager.bind('table', 'ev', vi.fn(), 'Mode-scoped doc', undefined, 'm');
+
+    expect(manager.getBindingDocumentation('table', 'ev')).toBe('');
+  });
+
+  it('getBindingDocumentation reflects mode activation and deactivation', () => {
+    manager.defineMinorMode('m', 0, [], []);
+    manager.bind('table', 'ev', vi.fn(), 'Mode-scoped doc', undefined, 'm');
+
+    // Not active yet
+    expect(manager.getBindingDocumentation('table', 'ev')).toBe('');
+
+    // Activate — doc should be returned
+    manager.activateMode('m');
+    expect(manager.getBindingDocumentation('table', 'ev')).toBe('Mode-scoped doc');
+
+    // Deactivate — doc should disappear
+    manager.deactivateMode('m');
+    expect(manager.getBindingDocumentation('table', 'ev')).toBe('');
   });
 });
 

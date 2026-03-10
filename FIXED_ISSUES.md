@@ -995,16 +995,27 @@
 ## Issue #86: Bug overlay is implemented in the viewer but has no production entry point
 
 - **Severity**: Medium
-- **Fix**: Added TODO(#86) + one-time `console.info` on first enable documenting that image loading, corner placement, size, opacity, and margin controls have no production UI.
-- **Regression Tests**: 2 tests.
-- **Files Changed**: `src/ui/components/BugOverlay.ts`, `src/ui/components/BugOverlay.test.ts`
+- **Area**: Branding overlays, review watermarking
+- **TODO(#86) Resolved**: Added a production entry point for `BugOverlay` in the View tab. The new bug-overlay toolbar button opens a settings menu until an image is loaded, then toggles the overlay on click and reopens settings on right-click. The new menu exposes image load/remove actions plus position, size, opacity, and margin controls. `BugOverlay` no longer carries the stale TODO comment, one-time `console.info`, or `hasLoggedCustomizationHint` state.
+- **Regression Tests**:
+  - `BugOverlaySettingsMenu.test.ts`: added coverage for menu rendering, file-input wiring, image loading, position/slider updates, remove action, and dismissal behavior
+  - `buildViewTab.test.ts`: added bug-overlay button coverage for click-to-configure when empty, toggle behavior when an image exists, and right-click menu opening
+  - `BugOverlay.test.ts`: removed obsolete logging-path tests and added numeric clamping coverage for `setState()`
+  - `BugOverlay.e2e.test.ts`: updated the integration notes to reflect that production UI wiring now exists separately from the overlay API
+- **Verification**: `BugOverlay.test.ts` (56 tests), `BugOverlaySettingsMenu.test.ts` (6 tests), `buildViewTab.test.ts` (16 tests), and `BugOverlay.e2e.test.ts` (23 tests) pass. TypeScript clean.
+- **Files Changed**: `src/ui/components/BugOverlay.ts`, `src/ui/components/BugOverlay.test.ts`, `src/ui/components/BugOverlaySettingsMenu.ts`, `src/ui/components/BugOverlaySettingsMenu.test.ts`, `src/services/tabContent/buildViewTab.ts`, `src/services/tabContent/buildViewTab.test.ts`, `src/__e2e__/BugOverlay.e2e.test.ts`
 
 ## Issue #87: Matte overlay is fully implemented but unreachable from the shipped UI
 
 - **Severity**: Medium
-- **Fix**: Added TODO(#87) + one-time `console.info` on first enable documenting that aspect, opacity, and center-point controls have no production UI.
-- **Regression Tests**: 2 tests.
-- **Files Changed**: `src/ui/components/MatteOverlay.ts`, `src/ui/components/MatteOverlay.test.ts`
+- **Area**: Framing overlays, presentation matte
+- **TODO(#87) Resolved**: Added a production matte entry point in the View tab. The new matte-overlay toolbar button toggles the overlay, and right-click opens a settings menu exposing target aspect ratio, opacity, and center-point offsets. `MatteOverlay` no longer carries the stale TODO comment, one-time `console.info`, or `hasLoggedCustomizationHint` state.
+- **Regression Tests**:
+  - `MatteOverlaySettingsMenu.test.ts`: added coverage for menu rendering, aspect input updates, opacity updates, center-point updates, and dismissal behavior
+  - `buildViewTab.test.ts`: added matte-overlay button coverage for toggle behavior and right-click settings-menu opening
+  - `MatteOverlay.test.ts`: removed the obsolete logging-path tests while preserving the existing render and API coverage
+- **Verification**: `MatteOverlay.test.ts` (58 tests), `MatteOverlaySettingsMenu.test.ts` (5 tests), and `buildViewTab.test.ts` (18 tests) pass. TypeScript clean.
+- **Files Changed**: `src/ui/components/MatteOverlay.ts`, `src/ui/components/MatteOverlay.test.ts`, `src/ui/components/MatteOverlaySettingsMenu.ts`, `src/ui/components/MatteOverlaySettingsMenu.test.ts`, `src/services/tabContent/buildViewTab.ts`, `src/services/tabContent/buildViewTab.test.ts`
 
 ## Issue #88: Clipping overlay ships as a binary histogram toggle while its useful controls stay hidden
 
@@ -2248,3 +2259,13 @@
 - **Regression Tests**: 19 new tests covering: match/no-match, multi-pattern selection, unbindRegex removal, exact > regex priority, override/table/global precedence, reject-and-pass-through, case-insensitive flags, stateful `g`/`y` flag handling (consecutive dispatches), and 5-iteration loop stability.
 - **Verification**: All 485 compat tests pass (8 files), TypeScript clean.
 - **Files Changed**: `src/compat/ModeManager.ts`, `src/compat/MuEventBridge.ts`, `src/compat/types.ts`, `src/compat/__tests__/MuEventBridge.test.ts`
+
+## Issue #242: Mu compat `bind()` and `unbind()` ignore `modeName`, so mode-scoped handlers become always-active table bindings
+
+- **Severity**: Medium
+- **Area**: Mu compatibility / mode system
+- **Root Cause**: `MuEventBridge.bind()` and `unbind()` ignored the `modeName` argument entirely, forwarding only `tableName` to `ModeManager.bind()`/`unbind()`. `ModeManager` stored all bindings in the always-active event table stack regardless of mode. The dispatch path walked event tables independently of mode activation, making all handlers always-active as soon as bound.
+- **Fix**: (A) `MuEventBridge.bind()`, `unbind()`, `bindRegex()`, and `unbindRegex()` now forward `modeName` to `ModeManager`. (B) Added `modeScopedTables` storage (`Map<modeName, Map<tableName, EventTable>>`) in `ModeManager` with `resolveTable()` helper that routes bindings to mode-scoped or always-active tables based on `modeName`. (C) Updated `dispatchEvent()` to check mode-scoped tables only for active modes (between event-table-stack and global tables in priority). (D) `getBindings()` and `getBindingDocumentation()` consistently filter by active modes. (E) Empty or `"default"` modeName preserves always-active behavior for backward compatibility. (F) `dispose()` cleans up mode-scoped tables.
+- **Regression Tests**: 19 new tests covering: mode-gated dispatch (active fires, inactive doesn't), activate/deactivate lifecycle, multi-mode isolation, backward compat for empty/default modeName, scoped unbind, regex mode scoping, precedence (override > stack > mode-scoped > global), getBindingDocumentation mode filtering, and introspection.
+- **Verification**: All 504 compat tests pass (8 files), TypeScript clean.
+- **Files Changed**: `src/compat/ModeManager.ts`, `src/compat/MuEventBridge.ts`, `src/compat/__tests__/MuEventBridge.test.ts`

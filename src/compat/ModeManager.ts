@@ -339,11 +339,14 @@ export class ModeManager {
     // Check event table stack
     const table = this.eventTableStack.find((t) => t.name === tableName);
     if (table) {
-      return table.bindings.get(eventName)?.documentation ?? '';
+      const doc = table.bindings.get(eventName)?.documentation;
+      if (doc !== undefined) return doc;
     }
 
-    // Check mode-scoped tables
-    for (const modeTablesMap of this.modeScopedTables.values()) {
+    // Check mode-scoped tables (only for active modes)
+    for (const modeName of this.activeModes) {
+      const modeTablesMap = this.modeScopedTables.get(modeName);
+      if (!modeTablesMap) continue;
       const scopedTable = modeTablesMap.get(tableName);
       if (scopedTable) {
         const doc = scopedTable.bindings.get(eventName)?.documentation;
