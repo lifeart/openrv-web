@@ -81,6 +81,69 @@ describe('Session.loadSourceFromUrl', () => {
       await session.loadSourceFromUrl('https://cdn.example.com/clip.mp4');
       expect(loadVideoSpy).toHaveBeenCalled();
     });
+
+    it('detects .mov with signed token query string', async () => {
+      await session.loadSourceFromUrl('https://cdn.example.com/shot.mov?token=abc123');
+      expect(loadVideoSpy).toHaveBeenCalledWith('shot.mov', 'https://cdn.example.com/shot.mov?token=abc123');
+      expect(loadImageSpy).not.toHaveBeenCalled();
+    });
+
+    it('detects .exr with multiple query params', async () => {
+      await session.loadSourceFromUrl('https://cdn.example.com/image.exr?v=2&sig=xyz');
+      expect(loadImageSpy).toHaveBeenCalledWith('image.exr', 'https://cdn.example.com/image.exr?v=2&sig=xyz');
+      expect(loadVideoSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('URL with hash fragment', () => {
+    it('detects .mp4 with hash fragment', async () => {
+      await session.loadSourceFromUrl('https://cdn.example.com/clip.mp4#signed');
+      expect(loadVideoSpy).toHaveBeenCalledWith('clip.mp4', 'https://cdn.example.com/clip.mp4#signed');
+      expect(loadImageSpy).not.toHaveBeenCalled();
+    });
+
+    it('detects .mov with hash fragment', async () => {
+      await session.loadSourceFromUrl('https://cdn.example.com/shot.mov#t=5');
+      expect(loadVideoSpy).toHaveBeenCalledWith('shot.mov', 'https://cdn.example.com/shot.mov#t=5');
+      expect(loadImageSpy).not.toHaveBeenCalled();
+    });
+
+    it('detects image extension with hash fragment', async () => {
+      await session.loadSourceFromUrl('https://cdn.example.com/photo.png#section');
+      expect(loadImageSpy).toHaveBeenCalledWith('photo.png', 'https://cdn.example.com/photo.png#section');
+      expect(loadVideoSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('URL with both query and hash', () => {
+    it('detects video with query and hash combined', async () => {
+      await session.loadSourceFromUrl('https://cdn.example.com/clip.mp4?token=abc#t=5');
+      expect(loadVideoSpy).toHaveBeenCalledWith('clip.mp4', 'https://cdn.example.com/clip.mp4?token=abc#t=5');
+      expect(loadImageSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('display name is clean', () => {
+    it('display name does not contain query params', async () => {
+      await session.loadSourceFromUrl('https://cdn.example.com/shot.mov?token=abc');
+      expect(loadVideoSpy).toHaveBeenCalledWith('shot.mov', expect.any(String));
+      // Verify name does NOT contain '?'
+      const calledName = loadVideoSpy.mock.calls[0]![0];
+      expect(calledName).not.toContain('?');
+      expect(calledName).not.toContain('token');
+    });
+
+    it('display name does not contain hash fragment', async () => {
+      await session.loadSourceFromUrl('https://cdn.example.com/clip.mp4#signed');
+      const calledName = loadVideoSpy.mock.calls[0]![0];
+      expect(calledName).not.toContain('#');
+      expect(calledName).not.toContain('signed');
+    });
+
+    it('decodes percent-encoded characters in display name', async () => {
+      await session.loadSourceFromUrl('https://cdn.example.com/my%20shot.mov?token=abc');
+      expect(loadVideoSpy).toHaveBeenCalledWith('my shot.mov', expect.any(String));
+    });
   });
 
   describe('URL with no extension', () => {

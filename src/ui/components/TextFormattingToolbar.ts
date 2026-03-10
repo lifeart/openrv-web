@@ -61,26 +61,22 @@ export class TextFormattingToolbar extends EventEmitter<TextFormattingToolbarEve
   }
 
   private createButtons(): void {
-    // TODO(#105): Ctrl+B/I/U shortcuts are handled by handleKeyboard() but
-    // production wiring never routes keyboard events to it. Shortcut hints
-    // removed from titles until proper wiring is in place.
-
     // Bold button
-    this.boldButton = this.createToggleButton('bold', 'Bold', () => {
+    this.boldButton = this.createToggleButton('bold', 'Bold (Ctrl+B)', () => {
       this.toggleBold();
     });
     this.boldButton.dataset.testid = 'text-format-bold';
     this.container.appendChild(this.boldButton);
 
     // Italic button
-    this.italicButton = this.createToggleButton('italic', 'Italic', () => {
+    this.italicButton = this.createToggleButton('italic', 'Italic (Ctrl+I)', () => {
       this.toggleItalic();
     });
     this.italicButton.dataset.testid = 'text-format-italic';
     this.container.appendChild(this.italicButton);
 
     // Underline button
-    this.underlineButton = this.createToggleButton('underline', 'Underline', () => {
+    this.underlineButton = this.createToggleButton('underline', 'Underline (Ctrl+U)', () => {
       this.toggleUnderline();
     });
     this.underlineButton.dataset.testid = 'text-format-underline';

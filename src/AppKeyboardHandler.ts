@@ -35,6 +35,9 @@ export class AppKeyboardHandler {
     'paint.line', // L key - handled by playback.faster
     'paint.rectangle', // R key - handled by timeline.resetInOut
     'paint.ellipse', // O key - handled by timeline.setOutPoint
+    'paint.textBold', // Ctrl+B - paint context only; avoid global registration
+    'paint.textItalic', // Ctrl+I - paint context only; conflicts with color.toggleInversion globally
+    'paint.textUnderline', // Ctrl+U - paint context only; avoid global registration
     'navigation.gotoFrame', // G key - handled with paint/panel context variants
     'paint.toggleGhost', // G key - handled with global/panel context variants
     'panel.gamutDiagram', // G key - handled with global/paint context variants
@@ -242,6 +245,9 @@ export class AppKeyboardHandler {
         'paint.toggleBrush',
         'paint.toggleGhost',
         'paint.toggleHold',
+        'paint.textBold',
+        'paint.textItalic',
+        'paint.textUnderline',
         'edit.undo',
         'edit.redo',
       ],

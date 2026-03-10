@@ -23,7 +23,7 @@ import { AppNetworkBridge } from './AppNetworkBridge';
 import { AppPersistenceManager } from './AppPersistenceManager';
 import { wirePlaybackControls } from './AppPlaybackWiring';
 import { AppSessionBridge } from './AppSessionBridge';
-import { detectDisplayCapabilities, type DisplayCapabilities } from './color/DisplayCapabilities';
+import { detectDisplayCapabilities, watchDisplayChanges, type DisplayCapabilities } from './color/DisplayCapabilities';
 import { Session } from './core/session/Session';
 import { Viewer } from './ui/components/Viewer';
 import { Timeline } from './ui/components/Timeline';
@@ -125,6 +125,16 @@ export class App {
   constructor() {
     // Detect display capabilities at startup (P3, HDR, WebGPU)
     this.displayCapabilities = detectDisplayCapabilities();
+
+    // Watch for display changes (window moved between SDR/HDR monitors)
+    this.wiringSubscriptions.add(
+      watchDisplayChanges(this.displayCapabilities, () => {
+        // Propagate updated capabilities to Viewer (triggers HDR headroom re-query + render)
+        this.viewer.updateDisplayCapabilities(this.displayCapabilities);
+        // Update session HDR resize tier (display-dependent)
+        this.session.setHDRResizeTier(this.displayCapabilities.canvasHDRResizeTier);
+      }),
+    );
 
     // Bind event handlers for proper cleanup
     this.boundHandleResize = () => this.viewer.resize();

@@ -145,6 +145,7 @@ function createMockControls() {
       hidePanel: vi.fn(),
     },
     stereoAlignControl: { handleKeyboard: vi.fn() },
+    textFormattingToolbar: { handleKeyboard: vi.fn().mockReturnValue(true) },
     safeAreasControl: { getOverlay: vi.fn().mockReturnValue({ toggle: vi.fn() }) },
     lutPipelinePanel: {
       toggle: vi.fn(),
@@ -721,6 +722,23 @@ describe('buildActionHandlers', () => {
   it('paint.eraser delegates to paintToolbar with e', () => {
     handlers['paint.eraser']!();
     expect(deps.controls.paintToolbar.handleKeyboard).toHaveBeenCalledWith('e');
+  });
+
+  // -- Text formatting (Ctrl+B/I/U) (#105) ----------------------------
+
+  it('KAM-105a: paint.textBold calls textFormattingToolbar.handleKeyboard with b, true', () => {
+    handlers['paint.textBold']!();
+    expect(deps.controls.textFormattingToolbar!.handleKeyboard).toHaveBeenCalledWith('b', true);
+  });
+
+  it('KAM-105b: paint.textItalic calls textFormattingToolbar.handleKeyboard with i, true', () => {
+    handlers['paint.textItalic']!();
+    expect(deps.controls.textFormattingToolbar!.handleKeyboard).toHaveBeenCalledWith('i', true);
+  });
+
+  it('KAM-105c: paint.textUnderline calls textFormattingToolbar.handleKeyboard with u, true', () => {
+    handlers['paint.textUnderline']!();
+    expect(deps.controls.textFormattingToolbar!.handleKeyboard).toHaveBeenCalledWith('u', true);
   });
 
   // =================================================================

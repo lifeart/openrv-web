@@ -145,6 +145,7 @@ export interface ActionControls {
     hidePanel(): void;
   };
   stereoAlignControl: { handleKeyboard(key: string, toggle: boolean): void };
+  textFormattingToolbar?: { handleKeyboard(key: string, ctrlKey: boolean): boolean };
   safeAreasControl: { getOverlay(): { toggle(): void } };
   lutPipelinePanel: {
     toggle(): void;
@@ -604,6 +605,9 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
     'paint.toggleBrush': () => controls.paintToolbar.handleKeyboard('b'),
     'paint.toggleGhost': () => controls.paintToolbar.handleKeyboard('g'),
     'paint.toggleHold': () => controls.paintToolbar.handleKeyboard('x'),
+    'paint.textBold': () => { controls.textFormattingToolbar?.handleKeyboard('b', true); },
+    'paint.textItalic': () => { controls.textFormattingToolbar?.handleKeyboard('i', true); },
+    'paint.textUnderline': () => { controls.textFormattingToolbar?.handleKeyboard('u', true); },
 
     // -- Navigation -------------------------------------------------------
     'navigation.gotoFrame': () => controls.gotoFrameOverlay.show(),

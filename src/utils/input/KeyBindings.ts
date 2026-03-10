@@ -392,6 +392,24 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     code: 'KeyX',
     description: 'Toggle hold mode',
   },
+  'paint.textBold': {
+    code: 'KeyB',
+    ctrl: true,
+    context: 'paint',
+    description: 'Toggle bold on text annotation',
+  },
+  'paint.textItalic': {
+    code: 'KeyI',
+    ctrl: true,
+    context: 'paint',
+    description: 'Toggle italic on text annotation',
+  },
+  'paint.textUnderline': {
+    code: 'KeyU',
+    ctrl: true,
+    context: 'paint',
+    description: 'Toggle underline on text annotation',
+  },
 
   // Channel selection (handled by ChannelSelect component)
   'channel.red': {

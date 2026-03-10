@@ -10,12 +10,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   type DisplayCapabilities,
   DEFAULT_CAPABILITIES,
+  DISPLAY_MEDIA_QUERIES,
   detectDisplayCapabilities,
   detectWebGPUHDR,
   isHDROutputAvailable,
   isHDROutputAvailableWithLog,
   queryHDRHeadroom,
   resolveActiveColorSpace,
+  watchDisplayChanges,
 } from './DisplayCapabilities';
 
 describe('DisplayCapabilities', () => {
@@ -587,6 +589,304 @@ describe('DisplayCapabilities', () => {
       };
       isHDROutputAvailableWithLog(caps);
       expect(console.log).toHaveBeenCalledWith('[HDR Display] Capable via display HDR + wide gamut + WebGPU');
+    });
+  });
+
+  // ====================================================================
+  // watchDisplayChanges
+  // ====================================================================
+  describe('watchDisplayChanges', () => {
+    let originalMatchMedia: typeof globalThis.matchMedia;
+
+    beforeEach(() => {
+      originalMatchMedia = globalThis.matchMedia;
+    });
+
+    afterEach(() => {
+      globalThis.matchMedia = originalMatchMedia;
+      vi.restoreAllMocks();
+    });
+
+    it('DC-WATCH-001: registers change listeners for all media queries', () => {
+      const addEventListenerCalls: string[] = [];
+      globalThis.matchMedia = vi.fn((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn((_event: string) => {
+          addEventListenerCalls.push(query);
+        }),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }));
+
+      const caps: DisplayCapabilities = { ...DEFAULT_CAPABILITIES };
+      const cleanup = watchDisplayChanges(caps, vi.fn());
+
+      // Should register listeners for all 3 media queries
+      expect(addEventListenerCalls).toHaveLength(DISPLAY_MEDIA_QUERIES.length);
+      for (const query of DISPLAY_MEDIA_QUERIES) {
+        expect(addEventListenerCalls).toContain(query);
+      }
+
+      cleanup();
+    });
+
+    it('DC-WATCH-002: updates caps when display changes from SDR to HDR', () => {
+      // Track registered listeners so we can fire them
+      const registeredListeners: Map<string, (() => void)[]> = new Map();
+      let hdrMatches = false;
+
+      globalThis.matchMedia = vi.fn((query: string) => ({
+        matches: query === '(dynamic-range: high)' ? hdrMatches : false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn((_event: string, listener: () => void) => {
+          const existing = registeredListeners.get(query) ?? [];
+          existing.push(listener);
+          registeredListeners.set(query, existing);
+        }),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }));
+
+      const caps: DisplayCapabilities = { ...DEFAULT_CAPABILITIES };
+      const onChange = vi.fn();
+      const cleanup = watchDisplayChanges(caps, onChange);
+
+      expect(caps.displayHDR).toBe(false);
+
+      // Simulate display change: HDR becomes available
+      hdrMatches = true;
+      const hdrListeners = registeredListeners.get('(dynamic-range: high)') ?? [];
+      expect(hdrListeners.length).toBeGreaterThan(0);
+      hdrListeners[0]!();
+
+      expect(caps.displayHDR).toBe(true);
+      expect(onChange).toHaveBeenCalledWith(caps);
+
+      cleanup();
+    });
+
+    it('DC-WATCH-003: updates caps when display gamut changes to p3', () => {
+      const registeredListeners: Map<string, (() => void)[]> = new Map();
+      let p3Matches = false;
+
+      globalThis.matchMedia = vi.fn((query: string) => ({
+        matches: query === '(color-gamut: p3)' ? p3Matches : false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn((_event: string, listener: () => void) => {
+          const existing = registeredListeners.get(query) ?? [];
+          existing.push(listener);
+          registeredListeners.set(query, existing);
+        }),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }));
+
+      const caps: DisplayCapabilities = { ...DEFAULT_CAPABILITIES };
+      const onChange = vi.fn();
+      const cleanup = watchDisplayChanges(caps, onChange);
+
+      expect(caps.displayGamut).toBe('srgb');
+
+      // Simulate gamut change
+      p3Matches = true;
+      const gamutListeners = registeredListeners.get('(color-gamut: p3)') ?? [];
+      gamutListeners[0]!();
+
+      expect(caps.displayGamut).toBe('p3');
+      expect(onChange).toHaveBeenCalledWith(caps);
+
+      cleanup();
+    });
+
+    it('DC-WATCH-004: re-derives activeColorSpace when gamut changes', () => {
+      const registeredListeners: Map<string, (() => void)[]> = new Map();
+      let p3Matches = false;
+
+      globalThis.matchMedia = vi.fn((query: string) => ({
+        matches: query === '(color-gamut: p3)' ? p3Matches : false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn((_event: string, listener: () => void) => {
+          const existing = registeredListeners.get(query) ?? [];
+          existing.push(listener);
+          registeredListeners.set(query, existing);
+        }),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }));
+
+      const caps: DisplayCapabilities = { ...DEFAULT_CAPABILITIES, webglP3: true };
+      const cleanup = watchDisplayChanges(caps, vi.fn());
+
+      expect(caps.activeColorSpace).toBe('srgb');
+
+      // Simulate gamut change to p3
+      p3Matches = true;
+      const gamutListeners = registeredListeners.get('(color-gamut: p3)') ?? [];
+      gamutListeners[0]!();
+
+      expect(caps.activeColorSpace).toBe('display-p3');
+
+      cleanup();
+    });
+
+    it('DC-WATCH-005: re-derives activeHDRMode to extended when HDR + storage + extended available', () => {
+      const registeredListeners: Map<string, (() => void)[]> = new Map();
+      let hdrMatches = false;
+
+      globalThis.matchMedia = vi.fn((query: string) => ({
+        matches: query === '(dynamic-range: high)' ? hdrMatches : false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn((_event: string, listener: () => void) => {
+          const existing = registeredListeners.get(query) ?? [];
+          existing.push(listener);
+          registeredListeners.set(query, existing);
+        }),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }));
+
+      const caps: DisplayCapabilities = {
+        ...DEFAULT_CAPABILITIES,
+        webglDrawingBufferStorage: true,
+        canvasExtendedHDR: true,
+      };
+      const cleanup = watchDisplayChanges(caps, vi.fn());
+
+      expect(caps.activeHDRMode).toBe('sdr');
+
+      // Simulate HDR becoming available
+      hdrMatches = true;
+      const hdrListeners = registeredListeners.get('(dynamic-range: high)') ?? [];
+      hdrListeners[0]!();
+
+      expect(caps.activeHDRMode).toBe('extended');
+
+      cleanup();
+    });
+
+    it('DC-WATCH-006: does not call onChange when nothing changed', () => {
+      const registeredListeners: Map<string, (() => void)[]> = new Map();
+
+      globalThis.matchMedia = vi.fn((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn((_event: string, listener: () => void) => {
+          const existing = registeredListeners.get(query) ?? [];
+          existing.push(listener);
+          registeredListeners.set(query, existing);
+        }),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }));
+
+      const caps: DisplayCapabilities = { ...DEFAULT_CAPABILITIES };
+      const onChange = vi.fn();
+      const cleanup = watchDisplayChanges(caps, onChange);
+
+      // Fire listener without changing matches state
+      const hdrListeners = registeredListeners.get('(dynamic-range: high)') ?? [];
+      hdrListeners[0]!();
+
+      expect(onChange).not.toHaveBeenCalled();
+
+      cleanup();
+    });
+
+    it('DC-WATCH-007: cleanup removes all listeners', () => {
+      const removeEventListenerCalls: string[] = [];
+
+      globalThis.matchMedia = vi.fn((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn((_event: string) => {
+          removeEventListenerCalls.push(query);
+        }),
+        dispatchEvent: vi.fn(),
+      }));
+
+      const caps: DisplayCapabilities = { ...DEFAULT_CAPABILITIES };
+      const cleanup = watchDisplayChanges(caps, vi.fn());
+      cleanup();
+
+      expect(removeEventListenerCalls).toHaveLength(DISPLAY_MEDIA_QUERIES.length);
+      for (const query of DISPLAY_MEDIA_QUERIES) {
+        expect(removeEventListenerCalls).toContain(query);
+      }
+    });
+
+    it('DC-WATCH-008: returns no-op cleanup when matchMedia is unavailable', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (globalThis as any).matchMedia = undefined;
+
+      const caps: DisplayCapabilities = { ...DEFAULT_CAPABILITIES };
+      const cleanup = watchDisplayChanges(caps, vi.fn());
+
+      // Should not throw
+      expect(() => cleanup()).not.toThrow();
+    });
+
+    it('DC-WATCH-009: HDR going away resets activeHDRMode to sdr', () => {
+      const registeredListeners: Map<string, (() => void)[]> = new Map();
+      let hdrMatches = true;
+
+      globalThis.matchMedia = vi.fn((query: string) => ({
+        matches: query === '(dynamic-range: high)' ? hdrMatches : false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn((_event: string, listener: () => void) => {
+          const existing = registeredListeners.get(query) ?? [];
+          existing.push(listener);
+          registeredListeners.set(query, existing);
+        }),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }));
+
+      const caps: DisplayCapabilities = {
+        ...DEFAULT_CAPABILITIES,
+        displayHDR: true,
+        webglDrawingBufferStorage: true,
+        canvasExtendedHDR: true,
+        activeHDRMode: 'extended',
+      };
+      const onChange = vi.fn();
+      const cleanup = watchDisplayChanges(caps, onChange);
+
+      // Simulate moving to SDR display
+      hdrMatches = false;
+      const hdrListeners = registeredListeners.get('(dynamic-range: high)') ?? [];
+      hdrListeners[0]!();
+
+      expect(caps.displayHDR).toBe(false);
+      expect(caps.activeHDRMode).toBe('sdr');
+      expect(onChange).toHaveBeenCalled();
+
+      cleanup();
     });
   });
 });

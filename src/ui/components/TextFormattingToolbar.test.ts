@@ -251,26 +251,23 @@ describe('TextFormattingToolbar', () => {
     });
   });
 
-  describe('issue #105 regression: no Ctrl+shortcut hints in button titles', () => {
-    it('TFT-105a: bold button title should not contain Ctrl+B', () => {
+  describe('issue #105: Ctrl+shortcut hints in button titles', () => {
+    it('TFT-105a: bold button title should contain Ctrl+B', () => {
       const element = toolbar.render();
       const boldBtn = element.querySelector('[data-testid="text-format-bold"]') as HTMLButtonElement;
-      expect(boldBtn.title).toBe('Bold');
-      expect(boldBtn.title).not.toContain('Ctrl');
+      expect(boldBtn.title).toBe('Bold (Ctrl+B)');
     });
 
-    it('TFT-105b: italic button title should not contain Ctrl+I', () => {
+    it('TFT-105b: italic button title should contain Ctrl+I', () => {
       const element = toolbar.render();
       const italicBtn = element.querySelector('[data-testid="text-format-italic"]') as HTMLButtonElement;
-      expect(italicBtn.title).toBe('Italic');
-      expect(italicBtn.title).not.toContain('Ctrl');
+      expect(italicBtn.title).toBe('Italic (Ctrl+I)');
     });
 
-    it('TFT-105c: underline button title should not contain Ctrl+U', () => {
+    it('TFT-105c: underline button title should contain Ctrl+U', () => {
       const element = toolbar.render();
       const underlineBtn = element.querySelector('[data-testid="text-format-underline"]') as HTMLButtonElement;
-      expect(underlineBtn.title).toBe('Underline');
-      expect(underlineBtn.title).not.toContain('Ctrl');
+      expect(underlineBtn.title).toBe('Underline (Ctrl+U)');
     });
   });
 

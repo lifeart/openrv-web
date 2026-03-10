@@ -3704,6 +3704,18 @@ export class Viewer {
   }
 
   /**
+   * Update the display capabilities reference after a display change
+   * (e.g., window moved from SDR to HDR monitor). The capabilities object
+   * is already mutated in-place by watchDisplayChanges(); this method
+   * triggers a re-evaluation of HDR headroom and a render update.
+   */
+  updateDisplayCapabilities(caps: DisplayCapabilities): void {
+    this.capabilities = caps;
+    this.syncHDRHeadroomFromSystem();
+    this.scheduleRender();
+  }
+
+  /**
    * Get source ImageData before color pipeline (for pixel probe "source" mode)
    * Returns ImageData of the original source scaled to display dimensions
    * Uses a cached canvas to avoid creating new canvases on every mouse move

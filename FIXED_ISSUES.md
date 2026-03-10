@@ -1,5 +1,21 @@
 # Fixed Issues
 
+## Issue #228: Share-link media auto-load misclassifies signed or query-string video URLs as images
+
+- **Severity**: Medium
+- **Area**: Share links / URL media loading
+- **Root Cause**: `Session.loadSourceFromUrl(...)` extracted the filename and extension without stripping query (`?...`) or hash (`#...`) parts. A URL like `shot.mov?token=abc` could yield an unrecognized extension. Additionally, percent-encoded characters in filenames were not decoded for display names.
+- **Fix**: Confirmed the method already used `new URL(url).pathname` which correctly strips query/hash. Added `decodeURIComponent()` to the extracted filename so display names are clean (e.g., `my%20shot.mov` → `my shot.mov`). Added comprehensive regression tests to lock down correct behavior.
+- **Regression Tests**: Added 9 new tests in `Session.loadSourceFromUrl.test.ts`:
+  - `.mov?token=abc123` correctly identified as video
+  - `.exr?v=2&sig=xyz` correctly identified as image
+  - `.mp4#signed` and `.mov#t=5` correctly identified as video (hash fragments)
+  - `.mp4?token=abc#t=5` with both query and hash
+  - Display name does not contain query params or hash fragments
+  - Percent-encoded characters decoded in display name
+- **Verification**: TypeScript clean, all 21 loadSourceFromUrl tests pass, all 2519 session-related tests pass.
+- **Files Changed**: `src/core/session/Session.ts`, `src/core/session/Session.loadSourceFromUrl.test.ts`
+
 ## Issue #227: Per-source OCIO assignments are keyed by display name, so same-named media can inherit each other's color space
 
 - **Severity**: Medium
@@ -919,8 +935,9 @@
 
 - **Severity**: Medium
 - **Fix**: Removed `(Ctrl+B)`, `(Ctrl+I)`, `(Ctrl+U)` from button titles. Added TODO(#105).
-- **Regression Tests**: TFT-105a through TFT-105c (3 tests).
-- **Files Changed**: `src/ui/components/TextFormattingToolbar.ts`, `src/ui/components/TextFormattingToolbar.test.ts`
+- **TODO(#105) Resolved**: Wired Ctrl+B/I/U keyboard shortcuts to TextFormattingToolbar via the standard keyboard action system. Added `paint.textBold`, `paint.textItalic`, `paint.textUnderline` key bindings scoped to `context: 'paint'` (so Ctrl+I doesn't conflict with global `color.toggleInversion`). Handlers in `KeyboardActionMap` delegate to `textFormattingToolbar.handleKeyboard()`. Restored shortcut hints in button titles. Actions added to `CONTEXTUAL_DEFAULTS` for proper context-scoped dispatch.
+- **Regression Tests**: TFT-105a through TFT-105c (updated to expect shortcut hints), KAM-105a through KAM-105c (3 new handler tests).
+- **Files Changed**: `src/utils/input/KeyBindings.ts`, `src/services/KeyboardActionMap.ts`, `src/AppKeyboardHandler.ts`, `src/ui/components/TextFormattingToolbar.ts`, `src/ui/components/TextFormattingToolbar.test.ts`, `src/services/KeyboardActionMap.test.ts`
 
 ## Issue #106: Text-format toolbar never follows actual text selection, so it only tracks newly created or most-recent text
 
@@ -975,7 +992,8 @@
 
 - **Severity**: Medium
 - **Fix**: Updated docs to remove misleading search/filter claims. Added TODO(#113).
-- **Regression Tests**: CS-113 (no search input in overlay).
+- **TODO(#113) Resolved**: Added search input and context-filter dropdown to the ShortcutCheatSheet overlay. Toolbar (`cheatsheet-toolbar`) is created once and preserved across re-renders; content area cleared separately. Search input fires `filter()` on each keystroke, context dropdown fires `setContext()` on change. Both controls have `keydown` stopPropagation to prevent shortcut interception. Search input auto-focuses on `show()`. Escape in search blurs input. Dropdown options populated dynamically from `buildActionGroups()`.
+- **Regression Tests**: CS-113 (updated: search input exists), CS-113a through CS-113j (10 new tests: input filtering, context filtering, clear restores all, All Categories restore, search+context compose, focus on show, keydown isolation, programmatic sync, dropdown population).
 - **Files Changed**: `src/ui/components/ShortcutCheatSheet.ts`, `src/ui/components/ShortcutCheatSheet.test.ts`
 
 ## Issue #114: Tone Mapping can be "enabled" in the dropdown while still being functionally off

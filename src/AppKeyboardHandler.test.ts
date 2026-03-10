@@ -158,7 +158,7 @@ describe('Shortcuts dialog search/filter (M-25)', () => {
   it('SK-M25g: conflicting shortcuts reappear once the user sets a custom binding', () => {
     const km = new KeyboardManager();
     const ckm = new CustomKeyBindingsManager();
-    ckm.setCustomBinding('panel.waveform', { code: 'KeyU', ctrl: true });
+    ckm.setCustomBinding('panel.waveform', { code: 'KeyU', ctrl: true, alt: true });
 
     const customHandler = new AppKeyboardHandler(km, ckm, {
       getActionHandlers: () => ({}),

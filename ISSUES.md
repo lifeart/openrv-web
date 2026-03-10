@@ -1427,33 +1427,18 @@ This file tracks findings from exploratory review and targeted validation runs.
   - After project load, snapshot restore, or auto-recovery, the viewer can be showing PAR correction or a background pattern while the visible controls still show their pre-load state.
   - That makes the UI untrustworthy exactly when users are checking whether a restored session came back correctly.
 
-### 121. Opening a project imports its media on top of the current session instead of replacing the session
+### 121. `openProject()` still treats `.rv` / `.gto` session files as additive loads instead of true session replacement
 
 - Severity: High
-- Area: Persistence / project open / recovery
+- Area: RV/GTO open / session replacement
 - Evidence:
-  - `HeaderBar` exposes this flow as `Open project` rather than an import/append action in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L238).
-  - `AppPersistenceManager.openProject()` calls `SessionSerializer.fromJSON(...)` without clearing the existing session first in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L282).
-  - `SessionSerializer.fromJSON(...)` simply loops the saved media and calls `session.loadImage(...)`, `session.loadVideo(...)`, or `session.loadFile(...)` in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L364).
-  - The runtime media service appends every loaded source via `_sources.push(source)` in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L210).
-  - The only “reset” helper in `SessionMedia` is `resetSourcesInternal(...)`, and it is explicitly test-only in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L190).
+  - `.orvproject` restore now goes through `SessionSerializer.fromJSON(...)`, which clears sources up front in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L447).
+  - The separate `.rv` / `.gto` branch in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L385) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L418) only checkpoints and then calls `session.loadFromGTO(content, availableFiles)`; it never calls `session.clearSources()` or any equivalent full reset first.
+  - `Session.loadFromGTO(...)` is a straight delegate into [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L933) through [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L934) and [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L267) through [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L428).
+  - The graph import path eventually adds each resolved source through `SessionMedia.loadVideoSourcesFromGraph(...)` and `this.addSource(source)` in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L721) through [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L795).
 - Impact:
-  - Loading a project, restoring a snapshot, or recovering an auto-save can leave the previous session’s media still present alongside the restored session’s media.
-  - That corrupts source indexing, compare setups, playlist assumptions, and any per-source notes/status workflows that depend on the restored session being a clean replacement.
-
-### 122. Saved current-source selection is serialized but never restored
-
-- Severity: Medium
-- Area: Persistence / playback restore
-- Evidence:
-  - Project save serializes `currentSourceIndex` as part of playback state in [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L1270).
-  - The project state schema also defines `currentSourceIndex` as a persisted field in [src/core/session/SessionState.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionState.ts#L63).
-  - `SessionSerializer.fromJSON(...)` restores playback by calling `session.setPlaybackState(migrated.playback)` in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L433).
-  - `Session.setPlaybackState(...)` applies fps, loop mode, playback mode, volume, mute, in/out, frame, and marks, but it never applies `currentSourceIndex` despite accepting it in the type in [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L1303).
-  - Meanwhile the media loader makes the most recently loaded source current by default in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L216).
-- Impact:
-  - Multi-source projects do not reopen on the source the user was actually reviewing when they saved.
-  - In practice the active source drifts to the last file loaded during restore, which is an especially bad failure mode for compare/QC notes tied to a specific source.
+  - Opening an RV/GTO session on top of an existing review session can leave old media in the runtime session instead of replacing it.
+  - That contaminates source indexing and any source-linked state, even before the separate stale-metadata issues show up.
 
 ### 123. Loading empty notes, version groups, or statuses does not clear the old session data
 
@@ -1466,19 +1451,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Opening a clean project after a reviewed session can leave old notes, version groups, or shot statuses attached to the new session.
   - That is data contamination, not just stale UI, because the underlying managers keep reporting metadata that the newly loaded project does not contain.
-
-### 124. State-only or failed-media project loads skip playback-state restore entirely
-
-- Severity: Medium
-- Area: Persistence / load with missing media
-- Evidence:
-  - `SessionSerializer.fromJSON(...)` only calls `session.setPlaybackState(...)` when `loadedMedia > 0` in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L433).
-  - The same load flow can legitimately produce `loadedMedia === 0` for state-only projects, skipped blob reloads, sequence placeholders, or failed media loads in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L366).
-  - The project schema still persists playback settings like loop mode, playback mode, volume, mute, and audio scrub in [src/core/session/SessionState.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionState.ts#L63).
-  - The serializer tests even document that playback restoration currently depends on loading at least one source: “Must include a source so that `loadedMedia > 0` and `setPlaybackState` is called” in [src/core/session/SessionSerializer.test.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.test.ts#L1048).
-- Impact:
-  - If a project reopens without media, or the user skips reloading local files, the app silently drops persisted playback settings instead of restoring the parts that are still meaningful.
-  - That makes project recovery much less reliable for exactly the cases where users most need the saved state to survive partial media failure.
 
 ### 125. RV/GTO session import keeps old review metadata when the imported file contains none
 
@@ -1506,19 +1478,18 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Saving a project from a graph-based session drops the session topology outright instead of round-tripping it through `.orvproject`.
   - That makes project save/load materially weaker than the repo’s own schema and graph-management code imply, especially for stack/layout/sequence workflows that depend on graph structure rather than flat source lists.
 
-### 127. Session renaming in the header is not honored by project save/load
+### 127. `.orvproject` save/load does not round-trip session metadata, and restore ignores saved `state.name`
 
 - Severity: Medium
 - Area: Project metadata / file workflow
 - Evidence:
-  - The shipped header exposes a rename-session flow through `session.setDisplayName(...)` in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L565).
-  - Project save ignores that session metadata and hardcodes the serialized project name to `'project'` in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L243).
-  - The same flow also hardcodes the download filename to `project.orvproject` in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L253).
-  - `SessionSerializer.toJSON(...)` only records the caller-provided `projectName` as `state.name` in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L226).
-  - `SessionSerializer.fromJSON(...)` does not apply `state.name` back onto session metadata or the header name display anywhere in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L354).
+  - Project save now does use `session.metadata.displayName` for the exported filename and `projectName` in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L281) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L310).
+  - But the `.orvproject` schema only carries a top-level `name` plus media/view/playback state; it has no serialized session metadata block for `displayName`, `comment`, `origin`, `creationContext`, or related fields in [src/core/session/SessionState.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionState.ts#L95) through [src/core/session/SessionState.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionState.ts#L153).
+  - `SessionSerializer.toJSON(...)` never serializes `session.metadata`; it only writes the caller-provided `projectName` into `state.name` in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L304) through [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L377).
+  - `SessionSerializer.fromJSON(...)` never applies `state.name` back onto `session.setDisplayName(...)` / `updateMetadata(...)`, and never restores any session comment or other metadata fields in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L437) through [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L640).
 - Impact:
-  - The app presents session naming as a first-class UI concept, but manual project save/load discards it and normalizes everything to `project`.
-  - That makes saved project files harder to distinguish and breaks the expectation that a named review session will round-trip with its own identity.
+  - A renamed or commented session does not round-trip through `.orvproject`, even though save now uses the current name as the download filename.
+  - On restore, the running session identity can reopen blank or stale because the saved `state.name` is treated as file metadata, not live session metadata.
 
 ### 128. RV/GTO marker notes and marker colors are exported and parsed, but import drops them
 
@@ -1531,18 +1502,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Marker placement survives RV/GTO round-trips, but marker annotations and color coding do not.
   - That weakens the app’s review-session interchange because the imported marker list no longer carries the meaning the exporter wrote out.
-
-### 129. RV/GTO audio-scrub state is exported and parsed, but never restored
-
-- Severity: Medium
-- Area: RV/GTO round-trip / playback settings
-- Evidence:
-  - GTO export writes `audioScrubEnabled` from playback state in [src/core/session/SessionGTOExporter.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGTOExporter.ts#L1495).
-  - The GTO loader parses that property into `sessionInfo.audioScrubEnabled` in [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L357).
-  - `SessionGraph.loadFromGTO(...)` applies fps, frame, in/out, marks, frame increment, notes, statuses, and playback mode, but there is no step that applies `audioScrubEnabled` to the live session in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L282).
-- Impact:
-  - RV/GTO round-trips silently forget whether scrub audio was enabled in the original session.
-  - That creates another “exported but not actually restorable” playback setting in the session interchange path.
 
 ### 130. Several shipped Effects-tab controls are fully wired, but `.orvproject` persistence ignores them entirely and does not warn
 
@@ -1598,19 +1557,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - RV/GTO round-trips silently reopen in realtime mode even when the source session was explicitly saved in play-all-frames mode.
   - This is a pure export/import contradiction: the exporter writes the sentinel value that the importer-side application logic expects, but the parser strips it first.
 
-### 134. `.orvproject` serializes media representations, but project load never rebuilds or reselects them
-
-- Severity: Medium
-- Area: Project persistence / media representations
-- Evidence:
-  - `SessionSerializer.serializeMedia(...)` writes per-source `representations` and `activeRepresentationId` into the saved project in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L335).
-  - The project schema explicitly includes those fields on `MediaReference` in [src/core/session/SessionState.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionState.ts#L33).
-  - But `SessionSerializer.fromJSON(...)` only reloads the base media paths via `session.loadImage(...)`, `session.loadVideo(...)`, or `session.loadFile(...)` and never applies `ref.representations` or `ref.activeRepresentationId` anywhere in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L364).
-  - The runtime session does have real APIs for adding and switching representations in [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L1178) and [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L1195).
-- Impact:
-  - Projects can save representation ladders and active-representation selection that never come back on reload.
-  - That makes representation-aware review workflows look project-safe in the file format while actually restoring only the default source stream.
-
 ### 135. RV/GTO round-trips collapse duration markers into point markers
 
 - Severity: Medium
@@ -1664,18 +1610,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - These features read like full-fidelity “save my session / recover my session” tools, but they silently inherit the same persistence gaps as manual project save/load.
   - Users can trust snapshots or crash recovery as safety nets for active review state that those mechanisms do not actually preserve.
-
-### 139. Snapshot restore appends the snapshot onto the current session instead of replacing it
-
-- Severity: High
-- Area: Snapshot restore semantics
-- Evidence:
-  - `restoreSnapshot(...)` restores directly into the live session via `SessionSerializer.fromJSON(...)` without clearing or resetting the current session first in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L202).
-  - `SessionSerializer.fromJSON(...)` restores media by calling `session.loadImage(...)`, `session.loadVideo(...)`, and `session.loadFile(...)` in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L364).
-  - `SessionMedia.addSource(...)` appends every restored source with `_sources.push(source)` and makes the newly appended one current in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L210).
-- Impact:
-  - Restoring a snapshot during an active review session merges the snapshot media into the current session instead of rolling the app back to the snapshot’s own state.
-  - That breaks the normal expectation of a snapshot restore and can quietly accumulate extra sources, A/B assignments, and stale session state across repeated restores.
 
 ### 140. Snapshot restore ignores partial-load warnings and always reports success
 
@@ -4946,6 +4880,91 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Editing/reapplying the playlist through the timeline can snap clip start frames back to cut-style sequential positions even when transitions still exist.
   - That makes transition-enabled timelines drift after edit operations: transition configs remain, but the clip layout they are supposed to overlap is rebuilt incorrectly.
+
+### 410. Partial project/snapshot restore never remaps `currentSourceIndex`, so the active source can land on the wrong media after skipped loads
+
+- Severity: High
+- Area: Persistence / partial restore / active-source correctness
+- Evidence:
+  - `SessionSerializer.fromJSON(...)` builds a `mediaIndexMap` while loading media refs so it can track which serialized sources actually became live sources in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L450) through [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L525).
+  - That remap table is only used for representation restore in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L527) through [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L563).
+  - Playback restore still applies the saved `currentSourceIndex` verbatim via `session.setPlaybackState(migrated.playback)` in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L566) through [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L568).
+  - `Session.setPlaybackState(...)` then applies that raw index directly with `setCurrentSource(state.currentSourceIndex)` in [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L1394) through [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L1398).
+- Impact:
+  - If some media are skipped, fail, or require manual reload during restore, the reopened session can focus the wrong surviving source or no source at all.
+  - That makes partial recovery especially misleading in multi-source sessions, because the app restores “an active source” without ensuring it is the same logical source the user saved.
+
+### 411. Partial project/snapshot restore replays source-indexed review state without remapping it to surviving sources
+
+- Severity: High
+- Area: Persistence / partial restore / source-linked data integrity
+- Evidence:
+  - Several serialized subsystems store raw source indices: playback in [src/core/session/SessionState.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionState.ts#L63) through [src/core/session/SessionState.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionState.ts#L77), playlist clips in [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L18) through [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L40), notes in [src/core/session/NoteManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/NoteManager.ts#L11) through [src/core/session/NoteManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/NoteManager.ts#L24), version groups in [src/core/session/VersionManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/VersionManager.ts#L11) through [src/core/session/VersionManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/VersionManager.ts#L27), and statuses in [src/core/session/StatusManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/StatusManager.ts#L16) through [src/core/session/StatusManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/StatusManager.ts#L21).
+  - `SessionSerializer.fromJSON(...)` computes `mediaIndexMap`, but only uses it for representations, not for any of those source-indexed subsystems, in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L450) through [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L563).
+  - The restore path feeds saved source-indexed state straight back into runtime managers with `playlistManager.setState(migrated.playlist)`, `noteManager.fromSerializable(migrated.notes)`, `versionManager.fromSerializable(migrated.versionGroups)`, and `statusManager.fromSerializable(migrated.statuses)` in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L570) through [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L620).
+- Impact:
+  - If a restore comes back with missing or skipped media, playlists, notes, version groups, and statuses can end up attached to the wrong surviving source indices.
+  - That turns partial recovery into data reassociation, not just data loss: review context can move to the wrong shot without any warning that indices drifted.
+
+### 412. Auto-save, snapshot, and checkpoint labels are derived from the current source name instead of the session name
+
+- Severity: Medium
+- Area: Persistence UX / recovery labeling
+- Evidence:
+  - The auto-save dirty path names saved state with `session.currentSource?.name || 'Untitled'` in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L121) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L133).
+  - Manual retry, quick snapshot creation, and auto-checkpoint creation reuse that same source-name fallback in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L139) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L185) and [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L194) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L208).
+  - Recovery UI then presents those stored names back to the user, for example `A previous session "${mostRecent.name}" was found...` in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L461) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L470).
+- Impact:
+  - Recovery entries are labeled by whichever source happened to be current, not by the actual session title the user sees in the header.
+  - In multi-source or manually renamed sessions, that makes snapshots and crash-recovery prompts materially harder to identify and trust.
+
+### 413. RV/GTO export filenames are derived from the current source, not the session identity being saved
+
+- Severity: Medium
+- Area: RV/GTO export / session naming
+- Evidence:
+  - `saveRvSession(...)` picks `session.currentSource?.name` as the filename base and falls back to literal `session` in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L319) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L330).
+  - That export path ignores `session.metadata.displayName`, even though the app exposes editable session naming in the header and the GTO exporter itself writes `metadata.displayName` into the embedded RV session root name in [src/core/session/SessionGTOExporter.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGTOExporter.ts#L1502) through [src/core/session/SessionGTOExporter.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGTOExporter.ts#L1505).
+- Impact:
+  - A renamed review session can export under a different current-source filename than the session name stored inside the file.
+  - In multi-source sessions, users get export filenames that reflect whichever source happened to be active rather than the session they think they are saving.
+
+### 414. RV/GTO companion-file resolution silently collapses duplicate basenames
+
+- Severity: Medium
+- Area: RV/GTO import / companion-file resolution
+- Evidence:
+  - `openProject(...)` builds `availableFiles` as a `Map<string, File>` keyed only by `f.name` in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L396) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L403).
+  - The RV/GTO loader then resolves referenced movie/CDL sidecars purely by basename with `movie.split(/[/\\\\]/).pop()` and `file.split(/[/\\\\]/).pop()` in [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L710) through [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L716) and [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L2009) through [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L2013).
+  - When two companion files share the same basename, the later `Map.set(f.name, f)` silently overwrites the earlier one before import even starts.
+- Impact:
+  - Session bundles that include same-named media or same-named CDL files from different directories can resolve to the wrong companion file with no warning.
+  - That makes basename-based RV/GTO recovery brittle for real production packages, where duplicate filenames across shots or plates are common.
+
+### 415. RV/GTO import cannot explicitly restore the “all scopes off” state
+
+- Severity: Medium
+- Area: RV/GTO import / scope visibility restore
+- Evidence:
+  - `parseScopes(...)` builds a full `ScopesState`, but returns it only when at least one scope is `true`; if all four scopes are off, it returns `null` in [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L667) through [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L699).
+  - `parseInitialSettings(...)` only includes `settings.scopes` when `parseScopes(dto)` returned a value in [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L65) through [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L68).
+  - The live `settingsLoaded` handler only hides/shows scopes when `settings.scopes` exists in [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L134) through [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L171).
+- Impact:
+  - Importing an RV/GTO session with no scopes enabled cannot actively close scopes that were already open in the current app session.
+  - That leaves QC scope visibility dependent on prior local state instead of the imported session’s state.
+
+### 416. RV/GTO settings parsing extracts `linearize`, `outOfRange`, and `channelSwizzle`, but production never applies them
+
+- Severity: High
+- Area: RV/GTO import / color-state restore
+- Evidence:
+  - `GTOViewSettings` explicitly includes `linearize`, `outOfRange`, and `channelSwizzle` in [src/core/session/SessionTypes.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionTypes.ts#L54) through [src/core/session/SessionTypes.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionTypes.ts#L70).
+  - `parseInitialSettings(...)` really parses and emits those fields in [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L70) through [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L92).
+  - The only live `settingsLoaded` consumer is `handleSettingsLoaded(...)` in [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L63) through [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L175), and it has no branches for `linearize`, `outOfRange`, or `channelSwizzle`.
+  - A production-code search finds no other non-test `settingsLoaded` consumer that would apply those fields.
+- Impact:
+  - RV/GTO sessions can carry parsed linearization, out-of-range, and channel-swizzle color settings that never reach the live viewer.
+  - That makes imported color output incomplete even when the parser successfully recovered the settings from the session file.
 
 ## Validation Notes
 

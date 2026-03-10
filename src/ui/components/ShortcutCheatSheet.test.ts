@@ -352,11 +352,130 @@ describe('ShortcutCheatSheet', () => {
     expect(sheet.isVisible()).toBe(false);
   });
 
-  it('CS-113: issue #113 regression - overlay has no search input', () => {
+  it('CS-113: issue #113 - overlay has search input', () => {
     sheet.show();
 
     const overlay = container.querySelector('.cheatsheet-overlay') as HTMLElement;
-    const searchInput = overlay.querySelector('input[type="text"], input[type="search"]');
-    expect(searchInput).toBeNull();
+    const searchInput = overlay.querySelector('input[type="search"]');
+    expect(searchInput).not.toBeNull();
+  });
+
+  it('CS-113a: search filters on input event', () => {
+    sheet.show();
+
+    const searchInput = container.querySelector('.cheatsheet-search') as HTMLInputElement;
+    searchInput.value = 'undo';
+    searchInput.dispatchEvent(new Event('input'));
+
+    const rows = container.querySelectorAll('.cheatsheet-row');
+    expect(rows.length).toBe(1);
+    expect((rows[0] as HTMLElement).dataset.action).toBe('edit.undo');
+  });
+
+  it('CS-113b: context dropdown filters by category', () => {
+    sheet.show();
+
+    const select = container.querySelector('.cheatsheet-context-select') as HTMLSelectElement;
+    select.value = 'playback';
+    select.dispatchEvent(new Event('change'));
+
+    const groups = container.querySelectorAll('.cheatsheet-group');
+    expect(groups.length).toBe(1);
+    expect((groups[0] as HTMLElement).dataset.category).toBe('playback');
+  });
+
+  it('CS-113c: clearing search restores all', () => {
+    sheet.show();
+
+    const searchInput = container.querySelector('.cheatsheet-search') as HTMLInputElement;
+    searchInput.value = 'undo';
+    searchInput.dispatchEvent(new Event('input'));
+    expect(container.querySelectorAll('.cheatsheet-row').length).toBe(1);
+
+    searchInput.value = '';
+    searchInput.dispatchEvent(new Event('input'));
+    expect(container.querySelectorAll('.cheatsheet-row').length).toBe(6);
+  });
+
+  it('CS-113d: "All Categories" restores all groups', () => {
+    sheet.show();
+
+    const select = container.querySelector('.cheatsheet-context-select') as HTMLSelectElement;
+    select.value = 'view';
+    select.dispatchEvent(new Event('change'));
+    expect(container.querySelectorAll('.cheatsheet-group').length).toBe(1);
+
+    select.value = '';
+    select.dispatchEvent(new Event('change'));
+    expect(container.querySelectorAll('.cheatsheet-group').length).toBe(4);
+  });
+
+  it('CS-113e: search + context compose', () => {
+    sheet.show();
+
+    const select = container.querySelector('.cheatsheet-context-select') as HTMLSelectElement;
+    select.value = 'view';
+    select.dispatchEvent(new Event('change'));
+
+    const searchInput = container.querySelector('.cheatsheet-search') as HTMLInputElement;
+    searchInput.value = 'full';
+    searchInput.dispatchEvent(new Event('input'));
+
+    const rows = container.querySelectorAll('.cheatsheet-row');
+    expect(rows.length).toBe(1);
+    expect((rows[0] as HTMLElement).dataset.action).toBe('view.toggleFullscreen');
+  });
+
+  it('CS-113f: search input gets focus on show()', () => {
+    sheet.show();
+
+    const searchInput = container.querySelector('.cheatsheet-search') as HTMLInputElement;
+    expect(document.activeElement).toBe(searchInput);
+  });
+
+  it('CS-113g: keydown in search does not propagate', () => {
+    sheet.show();
+
+    const searchInput = container.querySelector('.cheatsheet-search') as HTMLInputElement;
+    const parentHandler = vi.fn();
+    container.addEventListener('keydown', parentHandler);
+
+    const event = new KeyboardEvent('keydown', { key: 'a', bubbles: true });
+    searchInput.dispatchEvent(event);
+
+    expect(parentHandler).not.toHaveBeenCalled();
+    container.removeEventListener('keydown', parentHandler);
+  });
+
+  it('CS-113h: programmatic filter() syncs input value', () => {
+    sheet.show();
+
+    sheet.filter('play');
+
+    const searchInput = container.querySelector('.cheatsheet-search') as HTMLInputElement;
+    expect(searchInput.value).toBe('play');
+  });
+
+  it('CS-113i: programmatic setContext() syncs dropdown', () => {
+    sheet.show();
+
+    sheet.setContext('edit');
+
+    const select = container.querySelector('.cheatsheet-context-select') as HTMLSelectElement;
+    expect(select.value).toBe('edit');
+  });
+
+  it('CS-113j: dropdown populated with categories', () => {
+    sheet.show();
+
+    const select = container.querySelector('.cheatsheet-context-select') as HTMLSelectElement;
+    const options = [...select.options].map((o) => o.value);
+
+    expect(options).toContain('');
+    expect(options).toContain('playback');
+    expect(options).toContain('view');
+    expect(options).toContain('edit');
+    expect(options).toContain('panel');
+    expect(select.options[0]!.textContent).toBe('All Categories');
   });
 });

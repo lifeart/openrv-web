@@ -1129,7 +1129,8 @@ export class Session extends EventEmitter<SessionEvents> {
     }
 
     const pathname = new URL(url).pathname;
-    const name = pathname.split('/').pop() || pathname;
+    const rawName = pathname.split('/').pop() || pathname;
+    const name = decodeURIComponent(rawName);
     const ext = name.includes('.') ? name.split('.').pop()!.toLowerCase() : '';
     const videoExts = new Set(['mp4', 'm4v', '3gp', '3g2', 'mov', 'qt', 'mkv', 'mk3d', 'webm', 'ogg', 'ogv', 'ogm', 'ogx', 'avi']);
     if (videoExts.has(ext)) {
