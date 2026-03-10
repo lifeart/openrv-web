@@ -1,5 +1,24 @@
 # Fixed Issues
 
+## Issue #229: Display HDR / gamut capability is frozen at startup, so moving the app between displays leaves stale output assumptions
+
+- **Severity**: Medium
+- **Area**: Display capability detection / HDR output
+- **Root Cause**: `detectDisplayCapabilities()` was called once in the `App.ts` constructor. No `matchMedia` change listeners were registered for `(dynamic-range: high)` or `(color-gamut: ...)`, so moving the window between SDR/HDR or sRGB/P3 displays left stale capability data until a full app reload.
+- **Fix**: Added `watchDisplayChanges(caps, onChange)` in `DisplayCapabilities.ts` that registers `addEventListener('change', ...)` listeners on three media queries (`dynamic-range: high`, `color-gamut: p3`, `color-gamut: rec2020`). On change, re-probes `displayHDR`/`displayGamut`, re-derives `activeColorSpace`/`activeHDRMode`, and calls `onChange` only if something actually changed. Wired in `App.ts` constructor with cleanup via `wiringSubscriptions`. `Viewer.updateDisplayCapabilities()` re-queries HDR headroom and schedules a render on change. Safe no-op when `matchMedia` is unavailable.
+- **Regression Tests**: Added DC-WATCH-001 through DC-WATCH-009 in `DisplayCapabilities.test.ts`:
+  - DC-WATCH-001: Listeners registered for all media queries
+  - DC-WATCH-002: SDR-to-HDR transition updates `displayHDR`
+  - DC-WATCH-003: Gamut change updates `displayGamut`
+  - DC-WATCH-004: `activeColorSpace` re-derived on gamut change
+  - DC-WATCH-005: `activeHDRMode` re-derived to `extended` when HDR available
+  - DC-WATCH-006: No spurious `onChange` when nothing changed
+  - DC-WATCH-007: Cleanup removes all listeners
+  - DC-WATCH-008: No-op when `matchMedia` unavailable
+  - DC-WATCH-009: HDR-to-SDR transition resets `activeHDRMode` to `sdr`
+- **Verification**: TypeScript clean, all 59 DisplayCapabilities tests pass, all 140 Renderer tests pass, all 100 HDR acceptance tests pass.
+- **Files Changed**: `src/color/DisplayCapabilities.ts`, `src/color/DisplayCapabilities.test.ts`, `src/App.ts`, `src/ui/components/Viewer.ts`
+
 ## Issue #228: Share-link media auto-load misclassifies signed or query-string video URLs as images
 
 - **Severity**: Medium
@@ -907,8 +926,9 @@
 
 - **Severity**: Medium
 - **Fix**: Added TODO(#101) in InfoPanel class JSDoc + one-time `console.info` on first `enable()` documenting that most fields (filename, resolution, frame, timecode, duration, FPS) are unwired in production.
-- **Regression Tests**: 2 tests.
-- **Files Changed**: `src/ui/components/InfoPanel.ts`, `src/ui/components/issues-p1.test.ts`
+- **TODO(#101) Resolved**: The metadata wiring was already implemented via `infoPanelHandlers.ts` (`updateInfoPanel()` sends all fields) wired through `AppSessionBridge.bindSessionEvents()` on `frameChanged` and `sourceLoaded` events. Removed the stale TODO(#101) comment, `hasLoggedUnwiredFieldsHint` flag, and console.info warning. Updated INFO-U130/U131 test expectations.
+- **Regression Tests**: INFO-U130, INFO-U131 (updated to expect 1 console.info instead of 2).
+- **Files Changed**: `src/ui/components/InfoPanel.ts`, `src/ui/components/InfoPanel.test.ts`
 
 ## Issue #102: Cache indicator's `Clear` action only clears video cache while still presenting effects-cache stats
 

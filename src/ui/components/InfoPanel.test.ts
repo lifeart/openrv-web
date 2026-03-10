@@ -491,12 +491,9 @@ describe('InfoPanel', () => {
     it('INFO-U130: logs customization info on first enable', () => {
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
       panel.enable();
-      // Two info logs on first enable: one for #68 (customization) and one for #101 (unwired fields)
-      expect(infoSpy).toHaveBeenCalledTimes(2);
+      expect(infoSpy).toHaveBeenCalledTimes(1);
       expect(infoSpy.mock.calls[0]![0]).toContain('[InfoPanel]');
       expect(infoSpy.mock.calls[0]![0]).toContain('#68');
-      expect(infoSpy.mock.calls[1]![0]).toContain('[InfoPanel]');
-      expect(infoSpy.mock.calls[1]![0]).toContain('#101');
     });
 
     it('INFO-U131: logs customization info only once across multiple enable calls', () => {
@@ -504,8 +501,7 @@ describe('InfoPanel', () => {
       panel.enable();
       panel.disable();
       panel.enable();
-      // Both hints (#68 and #101) are logged once each, only on first enable
-      expect(infoSpy).toHaveBeenCalledTimes(2);
+      expect(infoSpy).toHaveBeenCalledTimes(1);
     });
   });
 });

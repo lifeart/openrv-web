@@ -65,16 +65,12 @@ const DEFAULT_FIELDS: InfoPanelFields = {
  * A settings popover or context menu should be added to let users configure position
  * and visible fields without requiring code changes.
  *
- * TODO(#101): Only cursor color is reliably wired to `infoPanel.update()`. Filename,
- * resolution, frame info, timecode, duration, and FPS fields are defined but not sent
- * from any production code path. The LayoutOrchestrator should wire these fields.
  */
 export class InfoPanel extends EventEmitter<InfoPanelEvents> {
   private container: HTMLElement;
   private contentElement: HTMLElement;
   private enabled = false;
   private hasLoggedCustomizationHint = false;
-  private hasLoggedUnwiredFieldsHint = false;
   private position: InfoPanelPosition = 'top-left';
   private fields: InfoPanelFields = { ...DEFAULT_FIELDS };
   private currentData: InfoPanelData = {};
@@ -138,14 +134,6 @@ export class InfoPanel extends EventEmitter<InfoPanelEvents> {
       );
     }
 
-    // TODO(#101): Log that most InfoPanel fields are unwired
-    if (!this.hasLoggedUnwiredFieldsHint) {
-      this.hasLoggedUnwiredFieldsHint = true;
-      console.info(
-        '[InfoPanel] Most fields (filename, resolution, frame info, timecode, duration, fps) ' +
-          'are not wired from production code. Only cursor color is reliably sent. See issue #101.',
-      );
-    }
   }
 
   /**

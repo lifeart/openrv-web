@@ -4966,6 +4966,31 @@ This file tracks findings from exploratory review and targeted validation runs.
   - RV/GTO sessions can carry parsed linearization, out-of-range, and channel-swizzle color settings that never reach the live viewer.
   - That makes imported color output incomplete even when the parser successfully recovered the settings from the session file.
 
+### 417. RV/GTO restore contract includes `filterSettings`, but the parser never populates them
+
+- Severity: Medium
+- Area: RV/GTO import / filter-state restore
+- Evidence:
+  - `GTOViewSettings` includes `filterSettings?: FilterSettings` in [src/core/session/SessionTypes.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionTypes.ts#L54) through [src/core/session/SessionTypes.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionTypes.ts#L67).
+  - The live `settingsLoaded` handler has a real `if (settings.filterSettings)` branch that pushes that state into the filter control in [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L82) through [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L83).
+  - But `parseInitialSettings(...)` has no `parseFilterSettings(...)` step at all; it parses color, CDL, transform, lens, crop, channel mode, stereo, scopes, linearize, noise reduction, uncrop, out-of-range, and channel swizzle only in [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L24) through [src/core/session/GTOSettingsParser.ts#L95).
+- Impact:
+  - The restore pipeline advertises filter-state restore, but RV/GTO import never supplies that state to the live handler.
+  - That leaves imported filter behavior dependent on other side effects instead of the documented settings-restore path.
+
+### 418. RV/GTO restore contract includes stereo eye transforms and stereo align mode, but the parser never populates them
+
+- Severity: Medium
+- Area: RV/GTO import / stereo-state restore
+- Evidence:
+  - `GTOViewSettings` includes both `stereoEyeTransform` and `stereoAlignMode` in [src/core/session/SessionTypes.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionTypes.ts#L61) through [src/core/session/SessionTypes.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionTypes.ts#L65).
+  - The live `settingsLoaded` handler has corresponding restore branches that call `context.getStereoEyeTransformControl().setState(...)` and `context.getStereoAlignControl().setMode(...)` in [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L128) through [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L132).
+  - But `parseInitialSettings(...)` never parses or assigns either field; the parser only handles `stereo` and then moves on to scopes and other settings in [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L60) through [src/core/session/GTOSettingsParser.ts#L92).
+  - A production-code search found no other non-test parser path that fills `settings.stereoEyeTransform` or `settings.stereoAlignMode`.
+- Impact:
+  - Even where the app has live restore plumbing for advanced stereo state, RV/GTO import never feeds it.
+  - That makes stereo session interchange less complete than the restore contract and handler structure suggest.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed
