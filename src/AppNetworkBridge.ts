@@ -74,7 +74,7 @@ export interface NetworkBridgeContext {
   networkControl: NetworkControl;
   headerBar: HeaderBar;
   getSessionURLState?: () => SessionURLState;
-  applySessionURLState?: (state: SessionURLState) => void;
+  applySessionURLState?: (state: SessionURLState) => void | Promise<void>;
 }
 
 export class AppNetworkBridge {
@@ -275,13 +275,13 @@ export class AppNetworkBridge {
           const transferId = networkSyncManager.requestMediaSync(payload.senderUserId);
           if (transferId) {
             this.pendingStateByTransferId.set(transferId, decoded);
-            this.applySharedSessionState(decoded);
+            await this.applySharedSessionState(decoded);
             this.applyReceivedAnnotationsAndNotes(payload.annotations, payload.notes);
             return;
           }
         }
 
-        this.applySharedSessionState(decoded);
+        await this.applySharedSessionState(decoded);
         this.applyReceivedAnnotationsAndNotes(payload.annotations, payload.notes);
       }),
     );
@@ -330,7 +330,7 @@ export class AppNetworkBridge {
         if (!accepted) {
           const pendingState = this.pendingStateByTransferId.get(transferId);
           if (pendingState) {
-            this.applySharedSessionState(pendingState);
+            await this.applySharedSessionState(pendingState);
             this.pendingStateByTransferId.delete(transferId);
           }
           return;
@@ -406,7 +406,7 @@ export class AppNetworkBridge {
         }
 
         if (pendingState) {
-          this.applySharedSessionState(pendingState);
+          await this.applySharedSessionState(pendingState);
         }
       }),
     );
@@ -831,12 +831,12 @@ export class AppNetworkBridge {
     }
   }
 
-  private applySharedSessionState(state: SessionURLState): void {
+  private async applySharedSessionState(state: SessionURLState): Promise<void> {
     if (this.ctx.applySessionURLState) {
-      this.ctx.applySessionURLState(state);
+      await this.ctx.applySessionURLState(state);
       return;
     }
-    this.applyCapturedSessionURLState(state);
+    await this.applyCapturedSessionURLState(state);
   }
 
   private shouldRequestMediaSync(state: SessionURLState): boolean {
@@ -1080,8 +1080,23 @@ export class AppNetworkBridge {
     };
   }
 
-  private applyCapturedSessionURLState(state: SessionURLState): void {
+  private async applyCapturedSessionURLState(state: SessionURLState): Promise<void> {
     const { session, viewer, networkSyncManager } = this.ctx;
+
+    // When the session has no media loaded and sourceUrl is available,
+    // attempt to load media from the shared URL before applying view state.
+    if (session.sourceCount === 0 && state.sourceUrl) {
+      try {
+        console.info(`[AppNetworkBridge] Loading media from share link: ${state.sourceUrl}`);
+        await session.loadImage(state.sourceUrl, state.sourceUrl);
+      } catch (err) {
+        console.warn(
+          '[AppNetworkBridge] Failed to load media from share link sourceUrl, continuing with view state:',
+          err,
+        );
+      }
+    }
+
     const sm = networkSyncManager.getSyncStateManager();
     sm.beginApplyRemote();
     try {

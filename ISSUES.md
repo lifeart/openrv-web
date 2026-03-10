@@ -2732,6 +2732,43 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Float TIFFs using other legal TIFF compression schemes fail completely instead of decoding or surfacing format-specific limitations earlier in the workflow.
   - That creates another compatibility boundary for production/scientific TIFF assets that are structurally valid but compressed differently.
 
+### 223. Auto-exposure and Drago tone mapping silently fall back to synthetic scene-luminance defaults on unsupported WebGL setups
+
+- Severity: Medium
+- Area: HDR analysis / viewer rendering
+- Evidence:
+  - `LuminanceAnalyzer` uses a fixed cached result of `{ avg: 0.18, linearAvg: 1.0 }` from construction in [src/render/LuminanceAnalyzer.ts](/Users/lifeart/Repos/openrv-web/src/render/LuminanceAnalyzer.ts#L49).
+  - If `EXT_color_buffer_float` is unavailable, initialization only warns and leaves the analyzer returning that cached default in [src/render/LuminanceAnalyzer.ts](/Users/lifeart/Repos/openrv-web/src/render/LuminanceAnalyzer.ts#L168).
+  - `ViewerGLRenderer` always feeds those luminance stats into auto-exposure and Drago whenever either feature is enabled in [src/ui/components/ViewerGLRenderer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerGLRenderer.ts#L295), [src/ui/components/ViewerGLRenderer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerGLRenderer.ts#L318), and [src/ui/components/ViewerGLRenderer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerGLRenderer.ts#L324).
+- Impact:
+  - On browsers/GPUs without float color-buffer support, “adaptive” exposure and Drago scene analysis degrade to fixed synthetic luminance assumptions instead of measured scene values.
+  - The features remain enabled in normal app flow, so users can trust output that is no longer actually scene-driven.
+
+### 224. HDR output mode UI can claim a mode change even when the renderer rejects it
+
+- Severity: Medium
+- Area: HDR output / UI state truthfulness
+- Evidence:
+  - `ToneMappingControl.setHDROutputMode(...)` updates its own state and emits `hdrModeChanged` immediately in [src/ui/components/ToneMappingControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ToneMappingControl.ts#L577).
+  - The app wiring forwards that event to `viewer.setHDROutputMode(mode)` without checking success in [src/AppViewWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppViewWiring.ts#L207).
+  - The viewer also ignores the renderer/backend boolean result in [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L3129).
+  - The renderer can legitimately reject a mode and return `false` when color-space assignment or half-float backbuffer setup fails in [src/render/Renderer.ts](/Users/lifeart/Repos/openrv-web/src/render/Renderer.ts#L1200) and [src/render/Renderer.ts](/Users/lifeart/Repos/openrv-web/src/render/Renderer.ts#L1218).
+- Impact:
+  - The HDR mode buttons can show `HLG`, `PQ`, or `Extended` as selected even though the active renderer stayed on the previous mode.
+  - Users get a misleading control state on exactly the browsers/GPUs where HDR capability boundaries matter most.
+
+### 225. Changing HDR output mode does not schedule a viewer redraw
+
+- Severity: Medium
+- Area: HDR output / viewer refresh
+- Evidence:
+  - Most viewer state setters immediately call `scheduleRender()`, including neighboring tone-mapping and PAR setters in [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L3110) and [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L3135).
+  - `Viewer.setHDROutputMode(...)` only forwards the request to the GL renderer and does not call `scheduleRender()` in [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L3129).
+  - The app wiring for `hdrModeChanged` likewise only calls `viewer.setHDROutputMode(mode)` in [src/AppViewWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppViewWiring.ts#L207).
+- Impact:
+  - Even when the backend accepts the new HDR mode, the viewer can keep showing the old frame until some unrelated state change triggers a render.
+  - That makes HDR mode changes feel unreliable or inert, especially on static images where no other redraw source is active.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

@@ -33,6 +33,8 @@ export interface URLSession {
   setSourceA(index: number): void;
   setSourceB(index: number): void;
   setCurrentAB(ab: 'A' | 'B'): void;
+  /** Load media from a URL. Used to reconstruct shared media on a clean session. */
+  loadSourceFromUrl?(url: string): Promise<void>;
 }
 
 /** Subset of Viewer used by URL state management. */
@@ -143,8 +145,23 @@ export class SessionURLService {
   }
 
   /** Apply a decoded session state to the session/viewer. */
-  applySessionURLState(state: SessionURLState): void {
+  async applySessionURLState(state: SessionURLState): Promise<void> {
     const { session, viewer, compareControl, ocioControl, networkSyncManager } = this.deps;
+
+    // When the session has no media loaded and sourceUrl is available,
+    // attempt to load media from the shared URL before applying view state.
+    if (session.sourceCount === 0 && state.sourceUrl && session.loadSourceFromUrl) {
+      try {
+        console.info(`[SessionURLService] Loading media from share link: ${state.sourceUrl}`);
+        await session.loadSourceFromUrl(state.sourceUrl);
+      } catch (err) {
+        console.warn(
+          '[SessionURLService] Failed to load media from share link sourceUrl, continuing with view state:',
+          err,
+        );
+      }
+    }
+
     const syncStateManager = networkSyncManager.getSyncStateManager();
     syncStateManager.beginApplyRemote();
     try {
@@ -263,7 +280,7 @@ export class SessionURLService {
 
     const sharedState = decodeSessionState(this.deps.getLocationHash());
     if (sharedState) {
-      this.applySessionURLState(sharedState);
+      await this.applySessionURLState(sharedState);
     }
   }
 
