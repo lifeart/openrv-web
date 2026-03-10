@@ -3,7 +3,7 @@
  *
  * Features:
  * - List view with timestamps, names, descriptions
- * - Actions: Restore, Export, Delete, Rename
+ * - Actions: Restore, Export, Import, Delete, Rename
  * - Filter/search functionality
  * - Distinct styling for auto-checkpoints vs manual snapshots
  *
@@ -217,6 +217,36 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
     });
     applyA11yFocus(createBtn);
     footer.appendChild(createBtn);
+
+    const importBtn = document.createElement('button');
+    importBtn.textContent = 'Import';
+    importBtn.dataset.testid = 'import-snapshot-btn';
+    importBtn.style.cssText = `
+      padding: 8px;
+      border: 1px solid var(--border-primary);
+      border-radius: 4px;
+      background: transparent;
+      color: var(--text-secondary);
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.12s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+    `;
+    importBtn.innerHTML = `${getIconSvg('upload', 'sm')}<span>Import</span>`;
+    importBtn.addEventListener('click', () => this.handleImport());
+    importBtn.addEventListener('pointerenter', () => {
+      importBtn.style.background = 'var(--bg-hover)';
+      importBtn.style.borderColor = 'var(--border-hover)';
+    });
+    importBtn.addEventListener('pointerleave', () => {
+      importBtn.style.background = 'transparent';
+      importBtn.style.borderColor = 'var(--border-primary)';
+    });
+    applyA11yFocus(importBtn);
+    footer.appendChild(importBtn);
 
     const clearAllBtn = document.createElement('button');
     clearAllBtn.textContent = 'Clear All';
@@ -602,6 +632,39 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
       console.error('Failed to export snapshot:', err);
       await showAlert('Failed to export snapshot', { type: 'error', title: 'Export Error' });
     }
+  }
+
+  private async handleImport(): Promise<void> {
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.json,application/json';
+    fileInput.style.display = 'none';
+    fileInput.dataset.testid = 'import-snapshot-file-input';
+    document.body.appendChild(fileInput);
+
+    fileInput.addEventListener('change', async () => {
+      try {
+        const file = fileInput.files?.[0];
+        if (!file) return;
+
+        const json = await file.text();
+        await this.snapshotManager.importSnapshot(json);
+        await this.loadSnapshots();
+      } catch (err) {
+        console.error('Failed to import snapshot:', err);
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        await showAlert(`Failed to import snapshot: ${message}`, { type: 'error', title: 'Import Error' });
+      } finally {
+        document.body.removeChild(fileInput);
+      }
+    });
+
+    // Handle case where user cancels the file picker
+    fileInput.addEventListener('cancel', () => {
+      document.body.removeChild(fileInput);
+    });
+
+    fileInput.click();
   }
 
   private async handleDelete(snapshot: Snapshot): Promise<void> {

@@ -32,10 +32,13 @@ export interface HeaderBarEvents extends EventMap {
   showCustomKeyBindings: void;
   fileLoaded: void;
   saveProject: void;
-  openProject: File;
+  openProject: File[];
   fullscreenToggle: void;
   presentationToggle: void;
   externalPresentation: void;
+  exportPreferences: void;
+  importPreferences: void;
+  resetPreferences: void;
 }
 
 export class HeaderBar extends EventEmitter<HeaderBarEvents> {
@@ -223,6 +226,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this.projectInput = document.createElement('input');
     this.projectInput.type = 'file';
     this.projectInput.accept = '.orvproject,.rv,.gto,.rvedl';
+    this.projectInput.multiple = true;
     this.projectInput.style.display = 'none';
     this.projectInput.addEventListener('change', (e) => this.handleProjectOpen(e));
     this.container.appendChild(this.projectInput);
@@ -995,13 +999,27 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       min-width: 180px;
     `;
 
-    const items: { icon: string; label: string; action: () => void }[] = [
+    const items: { icon: string; label: string; action: () => void; separator?: boolean }[] = [
       { icon: 'help', label: 'Keyboard Shortcuts', action: () => this.emit('showShortcuts', undefined) },
       { icon: 'keyboard', label: 'Custom Key Bindings', action: () => this.emit('showCustomKeyBindings', undefined) },
       { icon: 'book-open', label: 'Documentation', action: () => window.open('./docs/', '_blank') },
+      { icon: 'download', label: 'Export Preferences', action: () => this.emit('exportPreferences', undefined), separator: true },
+      { icon: 'upload', label: 'Import Preferences', action: () => this.emit('importPreferences', undefined) },
+      { icon: 'reset', label: 'Reset All Preferences', action: () => this.emit('resetPreferences', undefined) },
     ];
 
-    for (const { icon, label, action } of items) {
+    for (const { icon, label, action, separator } of items) {
+      if (separator) {
+        const sep = document.createElement('div');
+        sep.dataset.testid = 'help-menu-separator';
+        sep.setAttribute('role', 'separator');
+        sep.style.cssText = `
+          height: 1px;
+          background: var(--border-primary);
+          margin: 4px 0;
+        `;
+        menu.appendChild(sep);
+      }
       const item = document.createElement('button');
       item.setAttribute('role', 'menuitem');
       item.dataset.testid = `help-menu-${icon}`;
@@ -1484,9 +1502,9 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
 
   private handleProjectOpen(e: Event): void {
     const input = e.target as HTMLInputElement;
-    const file = input.files?.[0];
-    if (file) {
-      this.emit('openProject', file);
+    const files = input.files;
+    if (files && files.length > 0) {
+      this.emit('openProject', Array.from(files));
     }
     input.value = '';
   }

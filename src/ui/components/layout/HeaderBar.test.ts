@@ -485,6 +485,95 @@ describe('HeaderBar', () => {
       expect(callback).toHaveBeenCalled();
     });
 
+    it('HDR-U092b: help dropdown has preferences separator', () => {
+      const el = headerBar.render();
+      const helpBtn = el.querySelector('[data-testid="help-menu-button"]') as HTMLButtonElement;
+      helpBtn.click();
+
+      const dropdown = document.querySelector('[data-testid="help-menu-dropdown"]');
+      const separator = dropdown!.querySelector('[data-testid="help-menu-separator"]');
+      expect(separator).not.toBeNull();
+      expect(separator!.getAttribute('role')).toBe('separator');
+    });
+
+    it('HDR-U092c: help dropdown has Export Preferences option', () => {
+      const el = headerBar.render();
+      const helpBtn = el.querySelector('[data-testid="help-menu-button"]') as HTMLButtonElement;
+      helpBtn.click();
+
+      const dropdown = document.querySelector('[data-testid="help-menu-dropdown"]');
+      const item = dropdown!.querySelector('[data-testid="help-menu-download"]');
+      expect(item).not.toBeNull();
+      expect(item!.textContent).toContain('Export Preferences');
+    });
+
+    it('HDR-U092d: help dropdown has Import Preferences option', () => {
+      const el = headerBar.render();
+      const helpBtn = el.querySelector('[data-testid="help-menu-button"]') as HTMLButtonElement;
+      helpBtn.click();
+
+      const dropdown = document.querySelector('[data-testid="help-menu-dropdown"]');
+      const item = dropdown!.querySelector('[data-testid="help-menu-upload"]');
+      expect(item).not.toBeNull();
+      expect(item!.textContent).toContain('Import Preferences');
+    });
+
+    it('HDR-U092e: help dropdown has Reset All Preferences option', () => {
+      const el = headerBar.render();
+      const helpBtn = el.querySelector('[data-testid="help-menu-button"]') as HTMLButtonElement;
+      helpBtn.click();
+
+      const dropdown = document.querySelector('[data-testid="help-menu-dropdown"]');
+      const item = dropdown!.querySelector('[data-testid="help-menu-reset"]');
+      expect(item).not.toBeNull();
+      expect(item!.textContent).toContain('Reset All Preferences');
+    });
+
+    it('HDR-U092f: clicking Export Preferences emits exportPreferences event', () => {
+      const callback = vi.fn();
+      headerBar.on('exportPreferences', callback);
+
+      const el = headerBar.render();
+      const helpBtn = el.querySelector('[data-testid="help-menu-button"]') as HTMLButtonElement;
+      helpBtn.click();
+
+      const dropdown = document.querySelector('[data-testid="help-menu-dropdown"]');
+      const item = dropdown!.querySelector('[data-testid="help-menu-download"]') as HTMLButtonElement;
+      item.click();
+
+      expect(callback).toHaveBeenCalled();
+    });
+
+    it('HDR-U092g: clicking Import Preferences emits importPreferences event', () => {
+      const callback = vi.fn();
+      headerBar.on('importPreferences', callback);
+
+      const el = headerBar.render();
+      const helpBtn = el.querySelector('[data-testid="help-menu-button"]') as HTMLButtonElement;
+      helpBtn.click();
+
+      const dropdown = document.querySelector('[data-testid="help-menu-dropdown"]');
+      const item = dropdown!.querySelector('[data-testid="help-menu-upload"]') as HTMLButtonElement;
+      item.click();
+
+      expect(callback).toHaveBeenCalled();
+    });
+
+    it('HDR-U092h: clicking Reset All Preferences emits resetPreferences event', () => {
+      const callback = vi.fn();
+      headerBar.on('resetPreferences', callback);
+
+      const el = headerBar.render();
+      const helpBtn = el.querySelector('[data-testid="help-menu-button"]') as HTMLButtonElement;
+      helpBtn.click();
+
+      const dropdown = document.querySelector('[data-testid="help-menu-dropdown"]');
+      const item = dropdown!.querySelector('[data-testid="help-menu-reset"]') as HTMLButtonElement;
+      item.click();
+
+      expect(callback).toHaveBeenCalled();
+    });
+
     it('HDR-U094: layout menu button exists and is disabled without preset config', () => {
       const el = headerBar.render();
       const layoutBtn = el.querySelector('[data-testid="layout-menu-button"]') as HTMLButtonElement;
@@ -694,7 +783,7 @@ describe('HeaderBar', () => {
       Object.defineProperty(projectInput, 'files', { value: [file] });
       projectInput.dispatchEvent(new Event('change'));
 
-      expect(callback).toHaveBeenCalledWith(file);
+      expect(callback).toHaveBeenCalledWith([file]);
     });
   });
 

@@ -508,7 +508,7 @@ describe('AppPersistenceManager', () => {
 
       await manager.openProject(file);
 
-      expect(fullCtx.session.loadFromGTO).toHaveBeenCalledWith(expect.any(ArrayBuffer));
+      expect(fullCtx.session.loadFromGTO).toHaveBeenCalledWith(expect.any(ArrayBuffer), undefined);
       expect(SessionSerializer.loadFromFile).not.toHaveBeenCalled();
       expect(fullCtx.session.loadFile).not.toHaveBeenCalled();
     });
@@ -518,7 +518,7 @@ describe('AppPersistenceManager', () => {
 
       await manager.openProject(file);
 
-      expect(fullCtx.session.loadFromGTO).toHaveBeenCalledWith(expect.any(ArrayBuffer));
+      expect(fullCtx.session.loadFromGTO).toHaveBeenCalledWith(expect.any(ArrayBuffer), undefined);
       expect(fullCtx.session.loadFile).not.toHaveBeenCalled();
     });
 
@@ -527,7 +527,7 @@ describe('AppPersistenceManager', () => {
 
       await manager.openProject(file);
 
-      expect(fullCtx.session.loadFromGTO).toHaveBeenCalledWith(expect.any(ArrayBuffer));
+      expect(fullCtx.session.loadFromGTO).toHaveBeenCalledWith(expect.any(ArrayBuffer), undefined);
     });
 
     it('APM-090a: openProject loads .rvedl file via session.loadEDL', async () => {
@@ -552,6 +552,46 @@ describe('AppPersistenceManager', () => {
         expect.stringContaining('.xyz'),
         expect.objectContaining({ type: 'warning' }),
       );
+    });
+
+    it('APM-161a: openProject creates auto-checkpoint for .orvproject files', async () => {
+      const spy = vi.spyOn(manager, 'createAutoCheckpoint').mockResolvedValue();
+      const file = new File(['{}'], 'scene.orvproject');
+      await manager.openProject(file);
+
+      expect(spy).toHaveBeenCalledWith('Before Project Load');
+    });
+
+    it('APM-161b: openProject creates auto-checkpoint for .rv files', async () => {
+      const spy = vi.spyOn(manager, 'createAutoCheckpoint').mockResolvedValue();
+      const file = new File([new ArrayBuffer(8)], 'scene.rv');
+      await manager.openProject(file);
+
+      expect(spy).toHaveBeenCalledWith('Before Project Load');
+    });
+
+    it('APM-161c: openProject creates auto-checkpoint for .gto files', async () => {
+      const spy = vi.spyOn(manager, 'createAutoCheckpoint').mockResolvedValue();
+      const file = new File([new ArrayBuffer(8)], 'scene.gto');
+      await manager.openProject(file);
+
+      expect(spy).toHaveBeenCalledWith('Before Project Load');
+    });
+
+    it('APM-161d: openProject does NOT create auto-checkpoint for .rvedl import', async () => {
+      const spy = vi.spyOn(manager, 'createAutoCheckpoint').mockResolvedValue();
+      const file = new File(['EDL content'], 'timeline.rvedl');
+      await manager.openProject(file);
+
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    it('APM-161e: openProject does NOT create auto-checkpoint for unsupported file types', async () => {
+      const spy = vi.spyOn(manager, 'createAutoCheckpoint').mockResolvedValue();
+      const file = new File(['data'], 'image.png');
+      await manager.openProject(file);
+
+      expect(spy).not.toHaveBeenCalled();
     });
   });
 
@@ -640,6 +680,64 @@ describe('AppPersistenceManager', () => {
       // Should not throw even without compare/stack controls
       await expect(minManager.openProject(file)).resolves.not.toThrow();
       expect(fullCtx.session.loadFromGTO).toHaveBeenCalled();
+    });
+
+  });
+
+  // -----------------------------------------------------------------------
+  // Issue #162: openProject passes companion files for .rv/.gto
+  // -----------------------------------------------------------------------
+  describe('issue #162: openProject companion files for .rv/.gto', () => {
+    it('APM-162a: openProject .rv with companion files builds availableFiles map', async () => {
+      const sessionFile = new File(['rv-data'], 'session.rv');
+      const mediaFile1 = new File(['img1'], 'shot01.exr');
+      const mediaFile2 = new File(['cdl1'], 'grade.cdl');
+
+      await manager.openProject(sessionFile, [mediaFile1, mediaFile2]);
+
+      const expectedMap = new Map<string, File>();
+      expectedMap.set('shot01.exr', mediaFile1);
+      expectedMap.set('grade.cdl', mediaFile2);
+
+      expect(fullCtx.session.loadFromGTO).toHaveBeenCalledWith(expect.any(ArrayBuffer), expectedMap);
+    });
+
+    it('APM-162b: openProject .gto with companion files builds availableFiles map', async () => {
+      const sessionFile = new File(['gto-data'], 'session.gto');
+      const mediaFile = new File(['img'], 'plate.dpx');
+
+      await manager.openProject(sessionFile, [mediaFile]);
+
+      const expectedMap = new Map<string, File>();
+      expectedMap.set('plate.dpx', mediaFile);
+
+      expect(fullCtx.session.loadFromGTO).toHaveBeenCalledWith(expect.any(ArrayBuffer), expectedMap);
+    });
+
+    it('APM-162c: openProject .rv with no companion files passes undefined', async () => {
+      const sessionFile = new File(['rv-data'], 'session.rv');
+
+      await manager.openProject(sessionFile);
+
+      expect(fullCtx.session.loadFromGTO).toHaveBeenCalledWith(expect.any(ArrayBuffer), undefined);
+    });
+
+    it('APM-162d: openProject .rv with empty companion array passes undefined', async () => {
+      const sessionFile = new File(['rv-data'], 'session.rv');
+
+      await manager.openProject(sessionFile, []);
+
+      expect(fullCtx.session.loadFromGTO).toHaveBeenCalledWith(expect.any(ArrayBuffer), undefined);
+    });
+
+    it('APM-162e: openProject .orvproject ignores companion files', async () => {
+      const projectFile = new File(['{"version":1}'], 'test.orvproject', { type: 'application/json' });
+      const companionFile = new File(['media'], 'shot.exr');
+
+      await manager.openProject(projectFile, [companionFile]);
+
+      expect(SessionSerializer.loadFromFile).toHaveBeenCalledWith(projectFile);
+      expect(fullCtx.session.loadFromGTO).not.toHaveBeenCalled();
     });
   });
 

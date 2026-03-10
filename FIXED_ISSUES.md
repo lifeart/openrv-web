@@ -1337,3 +1337,113 @@
 - **Regression Tests**: APM-160a (wipe sync for .rv), APM-160b (wipe sync for .gto), APM-160c (color NOT re-synced — handled by settingsLoaded), APM-160d (comprehensive: only wipe/watermark/PAR/backgroundPattern synced, others NOT), APM-160e (graceful without optional controls).
 - **Verification**: All 56 AppPersistenceManager tests pass, TypeScript clean.
 - **Files Changed**: `src/AppPersistenceManager.ts`, `src/AppPersistenceManager.test.ts`
+
+## Issue #161: `openProject()` creates an auto-checkpoint before it knows whether anything will actually be loaded
+
+- **Severity**: Medium
+- **Area**: Project/session open workflow / recovery history quality
+- **Root Cause**: `openProject()` unconditionally called `createAutoCheckpoint('Before Project Load')` at the top of the method, before any extension/type branching. This meant unsupported files, `.rvedl` imports (which don't replace the session), and other non-replacing flows all created misleading recovery checkpoints.
+- **Fix**: Moved the `createAutoCheckpoint('Before Project Load')` call into only the two branches that actually replace session state: the `.orvproject` branch and the `.rv`/`.gto` branch. The `.rvedl` import branch and unsupported-file fallback no longer trigger checkpoints.
+- **Regression Tests**: Added APM-161a through APM-161e — verify checkpoint IS created for `.orvproject`, `.rv`, `.gto` loads, and is NOT created for `.rvedl` import or unsupported file types.
+- **Verification**: All 22,463 tests pass, TypeScript clean.
+- **Files Changed**: `src/AppPersistenceManager.ts`, `src/AppPersistenceManager.test.ts`
+
+## Issue #162: The project-open path for `.rv/.gto` can never provide companion files for session-side media resolution
+
+- **Severity**: Medium
+- **Area**: Project/session open workflow / RV-GTO interchange
+- **Root Cause**: `openProject()` accepted only a single `File` and the project file input was not multi-select. The `.rv`/`.gto` branch called `session.loadFromGTO(content)` without passing an `availableFiles` map, even though the GTO importer supports companion-file resolution for referenced media/CDL files.
+- **Fix**: Made the project file input multi-select. Changed `openProject(file: File)` to `openProject(file: File, companionFiles?: File[])`. In the `.rv`/`.gto` branch, builds a `Map<string, File>` from companion files and passes it to `session.loadFromGTO(content, availableFiles)`. Single-file selection remains backward compatible.
+- **Regression Tests**: Added APM-162a through APM-162e — verify companion files are passed through for `.rv`/`.gto`, single file still works, empty companions handled, `.orvproject` ignores companions.
+- **Verification**: All 22,468 tests pass, TypeScript clean.
+- **Files Changed**: `src/AppPersistenceManager.ts`, `src/AppPersistenceManager.test.ts`, `src/ui/components/layout/HeaderBar.ts`, `src/ui/components/layout/HeaderBar.test.ts`, `src/AppPlaybackWiring.ts`
+
+## Issue #163: RVEDL import parses and stores entries, but the timeline editor never consumes them
+
+- **Severity**: Medium
+- **Area**: EDL workflow / timeline visibility
+- **Root Cause**: `TimelineEditorService` did not subscribe to the `edlLoaded` event and `syncFromGraph()` never read `session.edlEntries`. RVEDL import succeeded but the timeline editor never displayed the imported cut structure.
+- **Fix**: Added `edlLoaded` event subscription to trigger resync. Added `buildEDLFromRVEDLEntries()` to convert RVEDL entries into timeline cuts by matching basenames against loaded sources. Added RVEDL branch in `syncFromGraph()` with priority: SequenceGroupNode > Playlist > RVEDL > Fallback.
+- **Regression Tests**: Added TLE-037 through TLE-046 — unit tests for EDL-to-cut conversion (basename matching, frame clamping, empty input) and integration tests for sync priority and event-driven resync.
+- **Verification**: All 22,478 tests pass, TypeScript clean.
+- **Files Changed**: `src/services/TimelineEditorService.ts`, `src/services/TimelineEditorService.test.ts`
+
+## Issue #164: Loaded RVEDL state is not saved into `.orvproject` at all
+
+- **Severity**: Medium
+- **Area**: EDL workflow / project persistence
+- **Root Cause**: `SessionState` had no `edlEntries` field, and `SessionSerializer` neither serialized nor restored RVEDL entries. Saving as `.orvproject` silently dropped the imported cut list.
+- **Fix**: Added `edlEntries?: RVEDLEntry[]` to `SessionState`. `toJSON()` serializes entries when non-empty. `fromJSON()` restores them via new `Session.setEdlEntries()` which fires `edlLoaded` so `TimelineEditorService` picks up restored EDL.
+- **Regression Tests**: Added SER-EDL-001 through SER-EDL-008 — toJSON includes/omits entries, fromJSON restores/skips, event firing, round-trip.
+- **Verification**: All 22,486 tests pass, TypeScript clean.
+- **Files Changed**: `src/core/session/SessionState.ts`, `src/core/session/SessionGraph.ts`, `src/core/session/Session.ts`, `src/core/session/SessionSerializer.ts`, `src/core/session/SessionSerializer.test.ts`
+
+## Issue #165: The viewer's persisted texture-filter preference is outside the app's real preferences backup/import path
+
+- **Severity**: Medium
+- **Area**: Viewer preferences / backup portability
+- **Root Cause**: The texture-filter mode was stored under a standalone localStorage key (`openrv.filterMode`) that wasn't part of `PreferencesManager`'s export/import/reset payload.
+- **Fix**: Added `filterMode` to `PreferencesManager` with get/set methods, export, import (with validation for 'nearest'/'linear'), and reset. Unified the localStorage key to `openrv-prefs-filter-mode`. ViewerIndicators updated to use the same key.
+- **Regression Tests**: Added CPRF-165-001 through CPRF-165-011 — export includes filterMode, import restores/clears, reset clears, round-trip, getter/setter edge cases.
+- **Verification**: All 22,497 tests pass, TypeScript clean.
+- **Files Changed**: `src/core/PreferencesManager.ts`, `src/core/PreferencesManager.test.ts`, `src/ui/components/ViewerIndicators.ts`, `src/ui/components/ViewerIndicators.test.ts`
+
+## Issue #166: Display profile state omitted from unified preferences export/import
+
+- **Severity**: Medium
+- **Area**: Display preferences / backup portability
+- **Root Cause**: The display profile was persisted under its own localStorage key but excluded from `PreferencesManager`'s export/import payload.
+- **Fix**: Added `displayProfile` to the unified preferences system — export, import (with `sanitizeDisplayProfile()` validation and value clamping), reset. `DisplayTransfer.ts` continues to work unchanged via existing key.
+- **Regression Tests**: 13 tests covering get/set, export, import, round-trip, reset, validation, clamping, corrupt data.
+- **Verification**: All 22,524 tests pass, TypeScript clean.
+- **Files Changed**: `src/core/PreferencesManager.ts`, `src/core/PreferencesManager.test.ts`
+
+## Issue #167: Timeline timecode-display mode omitted from unified preferences backup/import/reset
+
+- **Severity**: Medium
+- **Area**: Timeline preferences / backup portability
+- **Root Cause**: Timeline display mode used a standalone localStorage key `openrv.timeline.displayMode` not included in `PreferencesManager` or its reset flow.
+- **Fix**: Added `timelineDisplayMode` to `CORE_PREFERENCE_STORAGE_KEYS` with unified key. Updated `Timeline.ts` to reference the shared key. Added export, import (with mode validation), and reset support.
+- **Regression Tests**: 14 tests covering get/set, export, import, round-trip, reset, all four valid modes, invalid mode rejection.
+- **Verification**: All 22,524 tests pass, TypeScript clean.
+- **Files Changed**: `src/core/PreferencesManager.ts`, `src/core/PreferencesManager.test.ts`, `src/ui/components/Timeline.ts`, `src/ui/components/Timeline.test.ts`
+
+## Issue #168: Missing-frame overlay mode bypasses the app's real preferences portability/reset flow
+
+- **Severity**: Medium
+- **Area**: Viewer preferences / backup portability
+- **Root Cause**: Missing-frame mode was persisted under standalone key `openrv.missingFrameMode` not included in `PreferencesManager`'s export/import/reset.
+- **Fix**: Added `missingFrameMode` to `CORE_PREFERENCE_STORAGE_KEYS` with unified key. Viewer.ts reads unified key first with automatic migration from legacy key. Added export, import (with validation for 4 valid modes), and reset support.
+- **Regression Tests**: Added CPRF-168-001 through CPRF-168-014 — getter/setter, export, import, round-trip, reset, all four modes, invalid value handling.
+- **Verification**: All 22,538 tests pass, TypeScript clean.
+- **Files Changed**: `src/core/PreferencesManager.ts`, `src/core/PreferencesManager.test.ts`, `src/ui/components/Viewer.ts`, `src/ui/components/Viewer.render.test.ts`
+
+## Issue #169: Multi-source layout persistence exists in code and tests, but production never calls it
+
+- **Severity**: Medium
+- **Area**: Multi-source layout / persistence wiring
+- **Root Cause**: `MultiSourceLayoutStore` had `saveToStorage()`/`loadFromStorage()` methods that were never called in runtime wiring, so layout state wasn't persisted across reloads.
+- **Fix**: Constructor now calls `loadFromStorage()` on initialization. `emitLayoutChanged()` now triggers debounced (300ms) `saveToStorage()`. Added `flushSave()` for tests/shutdown.
+- **Regression Tests**: 6 tests — restore on construction, auto-save on change, debounce coalescing, no-op when unchanged, flush behavior.
+- **Verification**: All 22,544 tests pass, TypeScript clean.
+- **Files Changed**: `src/ui/multisource/MultiSourceLayoutStore.ts`, `src/ui/multisource/__tests__/MultiSourceLayoutStore.test.ts`
+
+## Issue #170: Playback FPS reporting can contradict the dropped-frame counter
+
+- **Severity**: Medium
+- **Area**: Playback metrics / viewer diagnostics
+- **Root Cause**: `trackFrameAdvance()` was called for skipped frames, inflating measured FPS while the dropped-frame counter correctly showed skips — contradictory diagnostics.
+- **Fix**: `advanceFrame()` now accepts `skipped: boolean = false`. When true, `trackFrameAdvance()` is skipped. Updated three call sites: absolute timeout skip, starvation timeout skip, and accumulator overflow intermediate frames.
+- **Regression Tests**: PE-165 (skipped frames don't inflate FPS), PE-166 (dropped-frame counter unaffected), PE-167 (normal playback unchanged).
+- **Verification**: All 22,547 tests pass, TypeScript clean.
+- **Files Changed**: `src/core/session/PlaybackEngine.ts`, `src/core/session/PlaybackEngine.test.ts`
+
+## Issue #171: Snapshot export is one-way in the shipped UI
+
+- **Severity**: Medium
+- **Area**: Snapshot workflow / interchange
+- **Root Cause**: `SnapshotManager.importSnapshot()` was fully implemented but never wired to any UI control. The panel had Export but no Import action.
+- **Fix**: Added an "Import" button to the SnapshotPanel footer with file picker (`.json`), calls `importSnapshot()`, refreshes the list on success, shows error alert on failure via `showAlert()`.
+- **Regression Tests**: 5 tests — import button exists, text content, file picker triggered, successful import refreshes list, failed import shows error.
+- **Verification**: All 22,552 tests pass, TypeScript clean.
+- **Files Changed**: `src/ui/components/SnapshotPanel.ts`, `src/ui/components/__tests__/SnapshotPanel.test.ts`

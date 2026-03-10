@@ -815,7 +815,7 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
               tc.resetStarvation(this._ts);
               this._pendingFetchFrame = null;
               tc.consumeFrame(this._ts, frameDuration);
-              this.advanceFrame(this._playDirection);
+              this.advanceFrame(this._playDirection, true);
               continue;
             } else {
               // Emit buffering event so UI shows a loading indicator
@@ -874,7 +874,7 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
           tc.resetStarvation(this._ts);
           this._pendingFetchFrame = null;
           tc.consumeFrame(this._ts, frameDuration);
-          this.advanceFrame(this._playDirection);
+          this.advanceFrame(this._playDirection, true);
           continue;
         }
 
@@ -966,7 +966,10 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
     }
 
     for (let i = 0; i < framesToAdvance; i++) {
-      this.advanceFrame(this._playDirection);
+      // Only the last frame in the batch is actually rendered;
+      // intermediate frames are skipped due to accumulator overflow.
+      const isSkipped = i < framesToAdvance - 1;
+      this.advanceFrame(this._playDirection, isSkipped);
     }
 
     this.emitSubFrameUpdate(frameDuration);
@@ -1009,16 +1012,14 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
     }
   }
 
-  advanceFrame(direction: number): void {
-    // Track effective FPS via timing controller.
-    // NOTE: Known limitation -- trackFrameAdvance() is called for every frame
-    // including skipped ones (both in the starvation skip path and the
-    // accumulator overflow path), which means skipped frames inflate the
-    // reported FPS measurement. The dropped frame counter and the displayed
-    // FPS can therefore be contradictory (e.g., FPS shows 24.0 green while
-    // there are dropped frames). See Plan 20, Risk #7 for context.
+  advanceFrame(direction: number, skipped: boolean = false): void {
+    // Only track rendered (non-skipped) frames for FPS measurement.
+    // Skipped frames (starvation timeouts, accumulator overflow) are tracked
+    // separately via trackDroppedFrame() and must not inflate the FPS counter.
     const prevFps = this._ts.effectiveFps;
-    this._timingController.trackFrameAdvance(this._ts);
+    if (!skipped) {
+      this._timingController.trackFrameAdvance(this._ts);
+    }
 
     // Emit fpsUpdated when the measurement changes (every ~500ms window)
     if (this._ts.effectiveFps !== prevFps && this._ts.effectiveFps > 0) {

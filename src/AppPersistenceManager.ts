@@ -326,17 +326,20 @@ export class AppPersistenceManager {
   }
 
   /**
-   * Open project from file
+   * Open project from file.
+   *
+   * For `.rv`/`.gto` sessions, optional `companionFiles` are built into an
+   * `availableFiles` map so that `loadFromGTO` can resolve referenced media
+   * and CDL files by basename.
    */
-  async openProject(file: File): Promise<void> {
+  async openProject(file: File, companionFiles?: File[]): Promise<void> {
     const { session, paintEngine, viewer } = this.ctx;
     const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
 
     try {
-      // Create auto-checkpoint before loading new project
-      await this.createAutoCheckpoint('Before Project Load');
-
       if (ext === 'orvproject') {
+        // Create auto-checkpoint before replacing session state
+        await this.createAutoCheckpoint('Before Project Load');
         const state = await SessionSerializer.loadFromFile(file);
         const result = await SessionSerializer.fromJSON(state, {
           session,
@@ -366,8 +369,21 @@ export class AppPersistenceManager {
           });
         }
       } else if (ext === 'rv' || ext === 'gto') {
+        // Create auto-checkpoint before replacing session state
+        await this.createAutoCheckpoint('Before Project Load');
         const content = await file.arrayBuffer();
-        await session.loadFromGTO(content);
+
+        // Build availableFiles map from companion files so loadFromGTO can
+        // resolve referenced media/CDL files by basename (fix #162).
+        let availableFiles: Map<string, File> | undefined;
+        if (companionFiles && companionFiles.length > 0) {
+          availableFiles = new Map<string, File>();
+          for (const f of companionFiles) {
+            availableFiles.set(f.name, f);
+          }
+        }
+
+        await session.loadFromGTO(content, availableFiles);
 
         // Sync UI controls that the settingsLoaded event handler does NOT cover (fix #160).
         // GTO loading fires settingsLoaded which already syncs color, CDL, filter,

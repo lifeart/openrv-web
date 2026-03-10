@@ -230,6 +230,17 @@ export class SessionGraph extends EventEmitter<SessionGraphEvents> {
   }
 
   /**
+   * Replace the stored EDL entries and emit `edlLoaded` when non-empty.
+   * Used by project restore to rehydrate previously-saved EDL state.
+   */
+  setEdlEntries(entries: RVEDLEntry[]): void {
+    this._edlEntries = entries;
+    if (entries.length > 0) {
+      this.emit('edlLoaded', entries);
+    }
+  }
+
+  /**
    * Parse an RVEDL (Edit Decision List) text, store the entries on the
    * session, and emit an `edlLoaded` event.
    *

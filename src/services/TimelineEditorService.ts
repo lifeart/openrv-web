@@ -33,6 +33,13 @@ export interface TimelineSourceInfo {
   readonly duration?: number;
 }
 
+/** Minimal EDL entry from RVEDL import (source path + in/out frames). */
+export interface TimelineRVEDLEntry {
+  readonly sourcePath: string;
+  readonly inFrame: number;
+  readonly outFrame: number;
+}
+
 /** Subset of Session the timeline editor service touches. */
 export interface TimelineEditorSession {
   readonly currentFrame: number;
@@ -41,6 +48,7 @@ export interface TimelineEditorSession {
   readonly sourceCount: number;
   readonly loopMode: string;
   readonly allSources: TimelineSourceInfo[];
+  readonly edlEntries: readonly TimelineRVEDLEntry[];
   readonly graph: { getAllNodes(): unknown[] } | null;
   goToFrame(frame: number): void;
   setCurrentSource(index: number): void;
@@ -154,6 +162,7 @@ export class TimelineEditorService {
       this.session.on('graphLoaded', () => this.syncFromGraph()),
       this.session.on('durationChanged', () => this.syncFromGraph()),
       this.session.on('sourceLoaded', () => this.syncFromGraph()),
+      this.session.on('edlLoaded', () => this.syncFromGraph()),
     );
 
     // Playlist clips changed — re-sync only when no SequenceGroupNode exists
@@ -205,6 +214,60 @@ export class TimelineEditorService {
       const targetFrame = Math.max(1, Math.min(entry.inPoint, this.session.frameCount));
       this.session.goToFrame(targetFrame);
     }
+  }
+
+  /**
+   * Convert RVEDL entries (source path + in/out frames) into timeline editor
+   * cuts by matching source paths against loaded session sources.
+   *
+   * Source resolution: the basename of `sourcePath` is matched against each
+   * loaded source name. When no match is found, the entry is assigned to
+   * source index 0 as a best-effort fallback (the source file may not have
+   * been loaded yet) so the cut structure is still visible.
+   */
+  buildEDLFromRVEDLEntries(
+    entries: readonly TimelineRVEDLEntry[],
+  ): { edl: TimelineEDLEntry[]; labels: string[] } {
+    const edl: TimelineEDLEntry[] = [];
+    const labels: string[] = [];
+    const sources = this.session.allSources;
+
+    let nextFrame = 1;
+    for (const entry of entries) {
+      // Extract the filename from the source path for matching
+      const basename = entry.sourcePath.replace(/^.*[\\/]/, '');
+
+      // Try to find a matching loaded source by name (basename match)
+      let sourceIndex = -1;
+      for (let i = 0; i < sources.length; i++) {
+        const srcName = sources[i]?.name ?? '';
+        // Match if source name equals the basename or ends with it
+        if (srcName === basename || srcName.endsWith('/' + basename) || srcName.endsWith('\\' + basename)) {
+          sourceIndex = i;
+          break;
+        }
+      }
+
+      // Fallback: use source 0 if no match found (file may not be loaded yet)
+      if (sourceIndex < 0) {
+        sourceIndex = 0;
+      }
+
+      const inPoint = Math.max(1, entry.inFrame);
+      const outPoint = Math.max(inPoint, entry.outFrame);
+      const duration = outPoint - inPoint + 1;
+
+      edl.push({
+        frame: nextFrame,
+        source: sourceIndex,
+        inPoint,
+        outPoint,
+      });
+      labels.push(basename);
+      nextFrame += duration;
+    }
+
+    return { edl, labels };
   }
 
   /** Build a fallback EDL from the session's loaded sources. */
@@ -280,6 +343,16 @@ export class TimelineEditorService {
         clips.map((clip) => clip.sourceName),
       );
       return;
+    }
+
+    // RVEDL import: convert parsed EDL entries into timeline cuts
+    const rvedlEntries = this.session.edlEntries;
+    if (rvedlEntries.length > 0) {
+      const result = this.buildEDLFromRVEDLEntries(rvedlEntries);
+      if (result.edl.length > 0) {
+        this.timelineEditor.loadFromEDL(result.edl, result.labels);
+        return;
+      }
     }
 
     const fallback = this.buildFallbackEDLFromSources();

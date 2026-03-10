@@ -65,7 +65,7 @@ describe('Timeline', () => {
 
     // Clear persisted timeline display mode so each test starts fresh
     try {
-      localStorage.removeItem('openrv.timeline.displayMode');
+      localStorage.removeItem('openrv-prefs-timeline-display-mode');
     } catch {
       /* noop */
     }

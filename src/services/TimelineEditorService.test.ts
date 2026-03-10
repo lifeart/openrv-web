@@ -6,6 +6,7 @@ import {
   type TimelineSequenceNode,
   type TimelinePlaylistClip,
   type TimelineSourceInfo,
+  type TimelineRVEDLEntry,
 } from './TimelineEditorService';
 
 // ---------------------------------------------------------------------------
@@ -56,6 +57,7 @@ function createMockSession() {
       { name: 'Source A', duration: 30 },
       { name: 'Source B', duration: 50 },
     ] as TimelineSourceInfo[],
+    edlEntries: [] as TimelineRVEDLEntry[],
     graph: null as { getAllNodes(): unknown[] } | null,
     goToFrame: vi.fn(),
     setCurrentSource: vi.fn(),
@@ -155,6 +157,7 @@ describe('TimelineEditorService', () => {
       expect(calls).toContain('graphLoaded');
       expect(calls).toContain('durationChanged');
       expect(calls).toContain('sourceLoaded');
+      expect(calls).toContain('edlLoaded');
     });
 
     it('TLE-003: subscribes to playlistManager clipsChanged event', () => {
@@ -528,6 +531,160 @@ describe('TimelineEditorService', () => {
   });
 
   // -----------------------------------------------------------------------
+  // buildEDLFromRVEDLEntries
+  // -----------------------------------------------------------------------
+
+  describe('buildEDLFromRVEDLEntries', () => {
+    it('TLE-037: converts RVEDL entries to timeline EDL with contiguous frames', () => {
+      deps.session.allSources = [{ name: 'clip1.exr', duration: 100 }, { name: 'clip2.mov', duration: 200 }];
+      const entries: TimelineRVEDLEntry[] = [
+        { sourcePath: '/path/to/clip1.exr', inFrame: 10, outFrame: 50 },
+        { sourcePath: '/path/to/clip2.mov', inFrame: 1, outFrame: 100 },
+      ];
+
+      const result = service.buildEDLFromRVEDLEntries(entries);
+
+      expect(result.edl).toEqual([
+        { frame: 1, source: 0, inPoint: 10, outPoint: 50 },
+        { frame: 42, source: 1, inPoint: 1, outPoint: 100 },
+      ]);
+      expect(result.labels).toEqual(['clip1.exr', 'clip2.mov']);
+    });
+
+    it('TLE-038: falls back to source 0 when no matching source found', () => {
+      deps.session.allSources = [{ name: 'other.exr', duration: 100 }];
+      const entries: TimelineRVEDLEntry[] = [
+        { sourcePath: '/path/to/unknown.exr', inFrame: 1, outFrame: 30 },
+      ];
+
+      const result = service.buildEDLFromRVEDLEntries(entries);
+
+      expect(result.edl[0]!.source).toBe(0);
+      expect(result.labels[0]).toBe('unknown.exr');
+    });
+
+    it('TLE-039: matches source by basename regardless of path prefix', () => {
+      deps.session.allSources = [{ name: 'a.exr', duration: 10 }, { name: 'b.dpx', duration: 20 }];
+      const entries: TimelineRVEDLEntry[] = [
+        { sourcePath: '/deep/nested/path/b.dpx', inFrame: 5, outFrame: 15 },
+      ];
+
+      const result = service.buildEDLFromRVEDLEntries(entries);
+
+      expect(result.edl[0]!.source).toBe(1);
+    });
+
+    it('TLE-040: clamps negative inFrame to 1', () => {
+      deps.session.allSources = [{ name: 'clip.exr', duration: 100 }];
+      const entries: TimelineRVEDLEntry[] = [
+        { sourcePath: '/path/clip.exr', inFrame: -5, outFrame: 30 },
+      ];
+
+      const result = service.buildEDLFromRVEDLEntries(entries);
+
+      expect(result.edl[0]!.inPoint).toBe(1);
+    });
+
+    it('TLE-041: ensures outPoint is at least inPoint', () => {
+      deps.session.allSources = [{ name: 'clip.exr', duration: 100 }];
+      const entries: TimelineRVEDLEntry[] = [
+        { sourcePath: '/path/clip.exr', inFrame: 50, outFrame: 10 },
+      ];
+
+      const result = service.buildEDLFromRVEDLEntries(entries);
+
+      expect(result.edl[0]!.outPoint).toBeGreaterThanOrEqual(result.edl[0]!.inPoint);
+    });
+
+    it('TLE-042: returns empty result for empty entries', () => {
+      const result = service.buildEDLFromRVEDLEntries([]);
+
+      expect(result.edl).toEqual([]);
+      expect(result.labels).toEqual([]);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // syncFromGraph - RVEDL entries integration (Issue #163)
+  // -----------------------------------------------------------------------
+
+  describe('syncFromGraph - RVEDL entries', () => {
+    it('TLE-043: loads from RVEDL entries when no SequenceGroupNode and no playlist clips', () => {
+      deps.session.allSources = [{ name: 'shot1.exr', duration: 100 }];
+      deps.session.edlEntries = [
+        { sourcePath: '/renders/shot1.exr', inFrame: 10, outFrame: 50 },
+        { sourcePath: '/renders/shot1.exr', inFrame: 60, outFrame: 90 },
+      ];
+
+      service.syncFromGraph();
+
+      expect(deps.timelineEditor.loadFromEDL).toHaveBeenCalledWith(
+        [
+          { frame: 1, source: 0, inPoint: 10, outPoint: 50 },
+          { frame: 42, source: 0, inPoint: 60, outPoint: 90 },
+        ],
+        ['shot1.exr', 'shot1.exr'],
+      );
+    });
+
+    it('TLE-044: RVEDL entries are lower priority than playlist clips', () => {
+      const clips = [
+        makePlaylistClip({ globalStartFrame: 1, sourceIndex: 0, inPoint: 1, outPoint: 30, sourceName: 'A' }),
+      ];
+      deps.playlistManager.getClips.mockReturnValue(clips);
+      deps.session.edlEntries = [
+        { sourcePath: '/path/shot.exr', inFrame: 1, outFrame: 100 },
+      ];
+
+      service.syncFromGraph();
+
+      // Should use playlist clips, not RVEDL entries
+      expect(deps.timelineEditor.loadFromEDL).toHaveBeenCalledWith(
+        [{ frame: 1, source: 0, inPoint: 1, outPoint: 30 }],
+        ['A'],
+      );
+    });
+
+    it('TLE-045: RVEDL entries are higher priority than fallback EDL', () => {
+      deps.session.allSources = [{ name: 'fallback.exr', duration: 50 }];
+      deps.session.edlEntries = [
+        { sourcePath: '/path/fallback.exr', inFrame: 10, outFrame: 20 },
+      ];
+
+      service.syncFromGraph();
+
+      // Should use RVEDL entries (inPoint=10), not fallback (inPoint=1)
+      const call = deps.timelineEditor.loadFromEDL.mock.calls[0];
+      expect(call![0][0].inPoint).toBe(10);
+    });
+
+    it('TLE-046: edlLoaded event triggers syncFromGraph', () => {
+      // Set up a handler capture so we can invoke the edlLoaded callback
+      const handlers: Record<string, (...args: unknown[]) => void> = {};
+      deps.session.on.mockImplementation((event: string, handler: (...args: unknown[]) => void) => {
+        handlers[event] = handler;
+        return vi.fn();
+      });
+
+      deps.session.edlEntries = [
+        { sourcePath: '/path/shot.exr', inFrame: 1, outFrame: 30 },
+      ];
+      deps.session.allSources = [{ name: 'shot.exr', duration: 100 }];
+
+      service.bindEvents();
+
+      // Simulate the edlLoaded event
+      expect(handlers['edlLoaded']).toBeDefined();
+      handlers['edlLoaded']!();
+
+      expect(deps.timelineEditor.loadFromEDL).toHaveBeenCalledWith(
+        [{ frame: 1, source: 0, inPoint: 1, outPoint: 30 }],
+        ['shot.exr'],
+      );
+    });
+  });
+
+  // -----------------------------------------------------------------------
   // dispose
   // -----------------------------------------------------------------------
 
@@ -541,7 +698,7 @@ describe('TimelineEditorService', () => {
       service.bindEvents();
       service.dispose();
 
-      // 6 timeline editor events + 3 session events + 1 playlist manager event = 10
+      // 6 timeline editor events + 4 session events + 1 playlist manager event = 11
       expect(unsub1).toHaveBeenCalled();
       expect(unsub2).toHaveBeenCalled();
     });

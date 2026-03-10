@@ -181,7 +181,9 @@ export interface ViewerConfig {
 }
 
 const log = new Logger('Viewer');
-const MISSING_FRAME_MODE_STORAGE_KEY = 'openrv.missingFrameMode';
+/** @deprecated Use the unified key below. Kept only for backward-compat migration. */
+const LEGACY_MISSING_FRAME_MODE_STORAGE_KEY = 'openrv.missingFrameMode';
+const MISSING_FRAME_MODE_STORAGE_KEY = 'openrv-prefs-missing-frame-mode';
 
 export type MissingFrameMode = 'off' | 'show-frame' | 'hold' | 'black';
 
@@ -1154,9 +1156,18 @@ export class Viewer {
 
   private loadMissingFrameModePreference(): MissingFrameMode {
     try {
+      // Try unified key first
       const stored = localStorage.getItem(MISSING_FRAME_MODE_STORAGE_KEY);
       if (stored === 'off' || stored === 'show-frame' || stored === 'hold' || stored === 'black') {
         return stored;
+      }
+      // Backward compat: migrate from legacy key
+      const legacy = localStorage.getItem(LEGACY_MISSING_FRAME_MODE_STORAGE_KEY);
+      if (legacy === 'off' || legacy === 'show-frame' || legacy === 'hold' || legacy === 'black') {
+        // Migrate: write to unified key and remove legacy key
+        localStorage.setItem(MISSING_FRAME_MODE_STORAGE_KEY, legacy);
+        localStorage.removeItem(LEGACY_MISSING_FRAME_MODE_STORAGE_KEY);
+        return legacy;
       }
     } catch {
       // Ignore storage errors (private mode, disabled storage, etc.)

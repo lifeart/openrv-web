@@ -85,6 +85,17 @@ vi.mock('./utils/export/AnnotationPDFExporter', () => ({
 }));
 
 const showAlertSpy = vi.spyOn(Modal, 'showAlert').mockReturnValue(Promise.resolve());
+const showConfirmSpy = vi.spyOn(Modal, 'showConfirm').mockResolvedValue(true);
+
+const mockPreferencesManager = {
+  exportAll: vi.fn(() => '{"version":1}'),
+  importAll: vi.fn(),
+  resetAll: vi.fn(),
+};
+
+vi.mock('./core/PreferencesManager', () => ({
+  getCorePreferencesManager: () => mockPreferencesManager,
+}));
 
 function createMockVolumeControl() {
   const emitter = new EventEmitter();
@@ -994,5 +1005,182 @@ describe('wirePlaybackControls — sequence export', () => {
     });
 
     expect(mockDialogDispose).toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Preferences management (export / import / reset)
+// ---------------------------------------------------------------------------
+
+describe('preferences management wiring', () => {
+  let session: ReturnType<typeof createMockSession>;
+  let viewer: ReturnType<typeof createMockViewer>;
+  let headerBar: ReturnType<typeof createMockHeaderBar>;
+  let controls: ReturnType<typeof createMockControls>;
+  let deps: PlaybackWiringDeps;
+  let persistenceManager: ReturnType<typeof createMockPersistenceManager>;
+
+  beforeEach(() => {
+    session = createMockSession();
+    viewer = createMockViewer();
+    headerBar = createMockHeaderBar();
+    controls = createMockControls();
+    deps = createMockDeps();
+    persistenceManager = createMockPersistenceManager();
+
+    const ctx = {
+      session,
+      viewer,
+      headerBar,
+      controls,
+      persistenceManager,
+      paintEngine: {},
+      tabBar: {},
+      sessionBridge: {},
+    } as unknown as AppWiringContext;
+
+    wirePlaybackControls(ctx, deps);
+
+    mockPreferencesManager.exportAll.mockClear();
+    mockPreferencesManager.importAll.mockClear();
+    mockPreferencesManager.resetAll.mockClear();
+    showAlertSpy.mockClear();
+    showConfirmSpy.mockClear();
+  });
+
+  it('PW-PREF01: exportPreferences triggers JSON download', () => {
+    const clickSpy = vi.fn();
+    const createElementOrig = document.createElement.bind(document);
+    const createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+      const el = createElementOrig(tag);
+      if (tag === 'a') {
+        el.click = clickSpy;
+      }
+      return el;
+    });
+    const revokeURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+
+    headerBar.emit('exportPreferences', undefined);
+
+    expect(mockPreferencesManager.exportAll).toHaveBeenCalled();
+    expect(clickSpy).toHaveBeenCalled();
+    expect(revokeURL).toHaveBeenCalled();
+
+    createElementSpy.mockRestore();
+    revokeURL.mockRestore();
+  });
+
+  it('PW-PREF02: importPreferences opens file picker', () => {
+    const clickSpy = vi.fn();
+    const createElementOrig = document.createElement.bind(document);
+    const createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+      const el = createElementOrig(tag);
+      if (tag === 'input') {
+        el.click = clickSpy;
+      }
+      return el;
+    });
+
+    headerBar.emit('importPreferences', undefined);
+
+    expect(clickSpy).toHaveBeenCalled();
+    createElementSpy.mockRestore();
+  });
+
+  it('PW-PREF03: importPreferences calls importAll on file read', async () => {
+    let changeHandler: (() => void) | null = null;
+    const createElementOrig = document.createElement.bind(document);
+    const createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+      const el = createElementOrig(tag);
+      if (tag === 'input') {
+        const origAddEventListener = el.addEventListener.bind(el);
+        el.addEventListener = ((type: string, handler: EventListenerOrEventListenerObject) => {
+          if (type === 'change') {
+            changeHandler = handler as () => void;
+          }
+          origAddEventListener(type, handler);
+        }) as typeof el.addEventListener;
+        Object.defineProperty(el, 'files', {
+          get: () => [new File(['{"version":1}'], 'prefs.json', { type: 'application/json' })],
+        });
+        el.click = vi.fn();
+      }
+      return el;
+    });
+
+    headerBar.emit('importPreferences', undefined);
+    expect(changeHandler).not.toBeNull();
+    changeHandler!();
+
+    // Wait for FileReader to complete
+    await vi.waitFor(() => {
+      expect(mockPreferencesManager.importAll).toHaveBeenCalledWith('{"version":1}');
+    });
+
+    createElementSpy.mockRestore();
+  });
+
+  it('PW-PREF04: importPreferences shows error on invalid JSON', async () => {
+    mockPreferencesManager.importAll.mockImplementation(() => {
+      throw new Error('Invalid preferences JSON payload');
+    });
+
+    let changeHandler: (() => void) | null = null;
+    const createElementOrig = document.createElement.bind(document);
+    const createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+      const el = createElementOrig(tag);
+      if (tag === 'input') {
+        const origAddEventListener = el.addEventListener.bind(el);
+        el.addEventListener = ((type: string, handler: EventListenerOrEventListenerObject) => {
+          if (type === 'change') {
+            changeHandler = handler as () => void;
+          }
+          origAddEventListener(type, handler);
+        }) as typeof el.addEventListener;
+        Object.defineProperty(el, 'files', {
+          get: () => [new File(['not-json'], 'prefs.json', { type: 'application/json' })],
+        });
+        el.click = vi.fn();
+      }
+      return el;
+    });
+
+    headerBar.emit('importPreferences', undefined);
+    changeHandler!();
+
+    await vi.waitFor(() => {
+      expect(showAlertSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to import preferences'),
+        expect.objectContaining({ title: 'Import Error' }),
+      );
+    });
+
+    createElementSpy.mockRestore();
+  });
+
+  it('PW-PREF05: resetPreferences shows confirmation before resetting', async () => {
+    showConfirmSpy.mockResolvedValue(true);
+
+    headerBar.emit('resetPreferences', undefined);
+
+    await vi.waitFor(() => {
+      expect(showConfirmSpy).toHaveBeenCalledWith(
+        expect.stringContaining('reset all preferences'),
+        expect.objectContaining({ title: 'Reset All Preferences', confirmText: 'Reset' }),
+      );
+      expect(mockPreferencesManager.resetAll).toHaveBeenCalled();
+    });
+  });
+
+  it('PW-PREF06: resetPreferences does not reset when user cancels', async () => {
+    showConfirmSpy.mockResolvedValue(false);
+
+    headerBar.emit('resetPreferences', undefined);
+
+    await vi.waitFor(() => {
+      expect(showConfirmSpy).toHaveBeenCalled();
+    });
+
+    expect(mockPreferencesManager.resetAll).not.toHaveBeenCalled();
   });
 });

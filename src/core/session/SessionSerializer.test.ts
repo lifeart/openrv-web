@@ -1131,6 +1131,112 @@ describe('SessionSerializer', () => {
       expect(lutGap!.isActive).toBe(false); // No LUT data in mock
     });
   });
+
+  // -----------------------------------------------------------------------
+  describe('issue #164: EDL entries persistence', () => {
+    it('SER-EDL-001: toJSON includes edlEntries when present', () => {
+      const components = createMockComponents();
+      const edlEntries = [
+        { sourcePath: '/path/to/clip1.mov', inFrame: 1, outFrame: 100 },
+        { sourcePath: '/path/to/clip2.mov', inFrame: 50, outFrame: 200 },
+      ];
+      (components.session as any).edlEntries = edlEntries;
+
+      const state = SessionSerializer.toJSON(components, 'EDLTest');
+
+      expect(state.edlEntries).toBeDefined();
+      expect(state.edlEntries).toHaveLength(2);
+      expect(state.edlEntries?.[0]?.sourcePath).toBe('/path/to/clip1.mov');
+      expect(state.edlEntries?.[1]?.inFrame).toBe(50);
+    });
+
+    it('SER-EDL-002: toJSON omits edlEntries when empty', () => {
+      const components = createMockComponents();
+      (components.session as any).edlEntries = [];
+
+      const state = SessionSerializer.toJSON(components, 'NoEDL');
+
+      expect(state.edlEntries).toBeUndefined();
+    });
+
+    it('SER-EDL-003: fromJSON restores edlEntries into the session', async () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty('EDLRestore');
+      state.edlEntries = [
+        { sourcePath: '/path/to/clip.mov', inFrame: 10, outFrame: 50 },
+      ];
+
+      await SessionSerializer.fromJSON(state, components);
+
+      expect((components.session as any).setEdlEntries).toHaveBeenCalledWith([
+        { sourcePath: '/path/to/clip.mov', inFrame: 10, outFrame: 50 },
+      ]);
+    });
+
+    it('SER-EDL-004: fromJSON does not call setEdlEntries when edlEntries is absent', async () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty('NoEDL');
+      // edlEntries is undefined by default
+
+      await SessionSerializer.fromJSON(state, components);
+
+      expect((components.session as any).setEdlEntries).not.toHaveBeenCalled();
+    });
+
+    it('SER-EDL-005: fromJSON does not call setEdlEntries when edlEntries is empty array', async () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty('EmptyEDL');
+      state.edlEntries = [];
+
+      await SessionSerializer.fromJSON(state, components);
+
+      expect((components.session as any).setEdlEntries).not.toHaveBeenCalled();
+    });
+
+    it('SER-EDL-006: setEdlEntries triggers edlLoaded event (via SessionGraph)', async () => {
+      // This tests the SessionGraph.setEdlEntries method directly
+      // to verify the edlLoaded event fires for TimelineEditorService
+      const { SessionGraph } = await import('./SessionGraph');
+      const graph = new SessionGraph();
+      const handler = vi.fn();
+      graph.on('edlLoaded', handler);
+
+      const entries = [{ sourcePath: '/clip.mov', inFrame: 1, outFrame: 100 }];
+      graph.setEdlEntries(entries);
+
+      expect(handler).toHaveBeenCalledWith(entries);
+      expect(graph.edlEntries).toEqual(entries);
+    });
+
+    it('SER-EDL-007: setEdlEntries does not fire edlLoaded for empty entries', async () => {
+      const { SessionGraph } = await import('./SessionGraph');
+      const graph = new SessionGraph();
+      const handler = vi.fn();
+      graph.on('edlLoaded', handler);
+
+      graph.setEdlEntries([]);
+
+      expect(handler).not.toHaveBeenCalled();
+      expect(graph.edlEntries).toEqual([]);
+    });
+
+    it('SER-EDL-008: edlEntries round-trips through toJSON/fromJSON', async () => {
+      const components = createMockComponents();
+      const edlEntries = [
+        { sourcePath: '/path/to/clip1.mov', inFrame: 1, outFrame: 100 },
+        { sourcePath: '/path/to/clip2.exr', inFrame: 10, outFrame: 250 },
+      ];
+      (components.session as any).edlEntries = edlEntries;
+
+      const state = SessionSerializer.toJSON(components, 'RoundTrip');
+
+      // Now restore
+      const restoreComponents = createMockComponents();
+      await SessionSerializer.fromJSON(state, restoreComponents);
+
+      expect((restoreComponents.session as any).setEdlEntries).toHaveBeenCalledWith(edlEntries);
+    });
+  });
 });
 
 /**
@@ -1172,6 +1278,8 @@ function createMockComponents(): SessionComponents {
         fromSerializable: vi.fn(),
         dispose: vi.fn(),
       },
+      edlEntries: [] as any[],
+      setEdlEntries: vi.fn(),
     },
     paintEngine,
     viewer: {

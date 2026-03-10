@@ -27,7 +27,8 @@ import {
 } from './export/VideoExporter';
 import { muxToMP4Blob } from './export/MP4Muxer';
 import { ExportProgressDialog } from './ui/components/ExportProgress';
-import { showAlert } from './ui/components/shared/Modal';
+import { showAlert, showConfirm } from './ui/components/shared/Modal';
+import { getCorePreferencesManager } from './core/PreferencesManager';
 import { generateSlateFrame } from './export/SlateRenderer';
 import { generateReport } from './export/ReportExporter';
 import { downloadAnnotationsJSON } from './utils/export/AnnotationJSONExporter';
@@ -57,7 +58,71 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
   subs.add(headerBar.on('showShortcuts', () => deps.getKeyboardHandler().showShortcutsDialog()));
   subs.add(headerBar.on('showCustomKeyBindings', () => deps.getKeyboardHandler().showCustomBindingsDialog()));
   subs.add(headerBar.on('saveProject', () => persistenceManager.saveProject()));
-  subs.add(headerBar.on('openProject', (file) => persistenceManager.openProject(file)));
+  subs.add(headerBar.on('openProject', (files) => persistenceManager.openProject(files[0]!, files.slice(1))));
+
+  // Preferences management (export / import / reset)
+  subs.add(
+    headerBar.on('exportPreferences', () => {
+      const prefs = getCorePreferencesManager();
+      const json = prefs.exportAll();
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'openrv-preferences.json';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }),
+  );
+  subs.add(
+    headerBar.on('importPreferences', () => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.json,application/json';
+      input.style.display = 'none';
+      input.addEventListener('change', () => {
+        const file = input.files?.[0];
+        if (!file) {
+          input.remove();
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => {
+          input.remove();
+          try {
+            const prefs = getCorePreferencesManager();
+            prefs.importAll(reader.result as string);
+            showAlert('Preferences imported successfully. Some changes may require a page reload.', { title: 'Import Preferences' });
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            showAlert(`Failed to import preferences: ${message}`, { title: 'Import Error' });
+          }
+        };
+        reader.onerror = () => {
+          input.remove();
+          showAlert('Failed to read file.', { title: 'Import Error' });
+        };
+        reader.readAsText(file);
+      });
+      document.body.appendChild(input);
+      input.click();
+    }),
+  );
+  subs.add(
+    headerBar.on('resetPreferences', async () => {
+      const confirmed = await showConfirm(
+        'This will reset all preferences to their default values. This action cannot be undone.',
+        { title: 'Reset All Preferences', confirmText: 'Reset', confirmVariant: 'danger' },
+      );
+      if (confirmed) {
+        const prefs = getCorePreferencesManager();
+        prefs.resetAll();
+        showAlert('All preferences have been reset. Some changes may require a page reload.', { title: 'Reset Preferences' });
+      }
+    }),
+  );
 
   // AutoSave Indicator
   controls.autoSaveIndicator.connect(controls.autoSaveManager);

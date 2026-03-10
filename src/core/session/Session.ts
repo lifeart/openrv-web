@@ -519,6 +519,14 @@ export class Session extends EventEmitter<SessionEvents> {
     return this._sessionGraph.edlEntries;
   }
 
+  /**
+   * Replace the stored EDL entries and emit `edlLoaded` when non-empty.
+   * Used by project restore to rehydrate previously-saved EDL state.
+   */
+  setEdlEntries(entries: RVEDLEntry[]): void {
+    this._sessionGraph.setEdlEntries(entries);
+  }
+
   /** Aggregated annotation services (markers, notes, versions, statuses, annotation store) */
   get annotations(): SessionAnnotations {
     return this._annotations;

@@ -1429,7 +1429,7 @@ describe('Viewer', () => {
       expect(drawnElements.includes(currentFrameImage)).toBe(true);
       expect(drawnElements.includes(firstFrame)).toBe(false);
       drawWithTransform.mockRestore();
-      localStorage.removeItem('openrv.missingFrameMode');
+      localStorage.removeItem('openrv-prefs-missing-frame-mode');
     });
   });
 });

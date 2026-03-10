@@ -25,6 +25,7 @@ import type { Note } from './NoteManager';
 import type { VersionGroup } from './VersionManager';
 import type { StatusEntry } from './StatusManager';
 import type { SerializedGraph } from './SessionManagerTypes';
+import type { RVEDLEntry } from '../../formats/RVEDLParser';
 
 /** Schema version for migration support */
 export const SESSION_STATE_VERSION = 2;
@@ -147,6 +148,8 @@ export interface SessionState {
   statuses?: StatusEntry[];
   /** Node graph topology (optional, absent in legacy v1 projects) */
   graph?: SerializedGraph;
+  /** EDL (Edit Decision List) entries (optional) */
+  edlEntries?: RVEDLEntry[];
 }
 
 /** Default values for empty state */

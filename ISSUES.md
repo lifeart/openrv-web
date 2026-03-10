@@ -3658,6 +3658,152 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Plugin code can subscribe to `context.events.onApp('app:stop', ...)` or `context.events.onApp('app:error', ...)` and never receive callbacks in production.
   - That makes the plugin-facing event bridge broader on paper than in live behavior, which is especially misleading for automation or monitoring plugins.
 
+### 296. The generated API reference leaks the dev-only `HotReloadManager` as if it were part of the shipped API surface
+
+- Severity: Medium
+- Area: Documentation / generated API reference
+- Evidence:
+  - The generated API reference publishes a `HotReloadManager` section with `trackURL`, `reload`, `getTrackedPlugins`, and `isTracked` methods in [docs/api/index.md](/Users/lifeart/Repos/openrv-web/docs/api/index.md#L158) through [docs/api/index.md#L170).
+  - The actual public API entrypoint in [src/api/index.ts](/Users/lifeart/Repos/openrv-web/src/api/index.ts#L1) exports the scripting API classes and plugin types, but not `HotReloadManager`.
+  - The implementation itself is explicitly development-only in [src/plugin/dev/HotReloadManager.ts](/Users/lifeart/Repos/openrv-web/src/plugin/dev/HotReloadManager.ts#L1) through [src/plugin/dev/HotReloadManager.ts#L6).
+- Impact:
+  - Readers of the published API reference can reasonably assume plugin hot-reload is part of the supported public API when it is not.
+  - That makes the generated docs a source of false capability discovery for plugin developers.
+
+### 297. The session guides claim `.orvproject` captures the complete viewer/session state, but the serializer explicitly omits multiple active states
+
+- Severity: Medium
+- Area: Documentation / session persistence contract
+- Evidence:
+  - The session-management guide says `.orvproject` “captures every aspect of the current viewer state” in [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L9) through [docs/advanced/session-management.md#L12).
+  - The compatibility guide likewise describes the native session format as containing the complete `SessionState` in [docs/guides/session-compatibility.md](/Users/lifeart/Repos/openrv-web/docs/guides/session-compatibility.md#L252) through [docs/guides/session-compatibility.md#L260).
+  - The real serializer tracks known active gaps and warns that viewer states are “NOT saved in the project file,” including LUT pipeline stages, difference matte/blend mode state, and other viewer-side settings in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L253) through [src/core/session/SessionSerializer.ts#L316).
+  - The app save path also surfaces that same omission list to users at save time in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L292) through [src/AppPersistenceManager.ts#L297).
+- Impact:
+  - The published session docs overpromise what a saved project actually round-trips.
+  - That can mislead users into treating `.orvproject` as a full-fidelity interchange or backup format when the app itself already knows that some live states will be lost.
+
+### 298. The session-compatibility guide claims schema v2 persists the node graph, but `.orvproject` save still leaves `graph` unwired
+
+- Severity: Medium
+- Area: Documentation / session graph persistence
+- Evidence:
+  - The compatibility guide says schema version 2 includes an optional `graph` field containing serialized node-graph topology and lists preserved nodes, connections, properties, and active output in [docs/guides/session-compatibility.md](/Users/lifeart/Repos/openrv-web/docs/guides/session-compatibility.md#L302) through [docs/guides/session-compatibility.md#L311).
+  - It also presents `graph` as part of the complete serializable `SessionState` table in [docs/guides/session-compatibility.md](/Users/lifeart/Repos/openrv-web/docs/guides/session-compatibility.md#L168) through [docs/guides/session-compatibility.md#L199).
+  - The actual serializer still carries an explicit TODO that the node-graph serializer exists but “is not wired into .orvproject save/load,” and the `graph` field remains commented out in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L367) through [src/core/session/SessionSerializer.ts#L371).
+- Impact:
+  - Readers of the compatibility guide can believe graph topology is already preserved in native project files when it is not.
+  - That makes the native-session documentation materially ahead of the implementation for node-graph workflows.
+
+### 299. `AutoSaveManager` emits a `recoveryAvailable` event, but production app code never subscribes to it
+
+- Severity: Low
+- Area: Auto-save / recovery event contract
+- Evidence:
+  - `AutoSaveManager` defines `recoveryAvailable` as part of its event interface and emits it during startup recovery detection in [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L51) through [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L64) and [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L114) through [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L120).
+  - A production-code search finds no `on('recoveryAvailable', ...)` subscriber outside tests.
+  - The actual app recovery flow in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L428) through [src/AppPersistenceManager.ts#L461](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L461) instead polls the boolean returned by `initialize()` and then manually lists auto-saves.
+- Impact:
+  - The emitted recovery event is not part of the live app flow even though the manager advertises it.
+  - That leaves recovery signaling split between an unused event path and a separate return-value path, which makes the API harder to rely on or extend cleanly.
+
+### 300. Save-project shortcut guidance is internally inconsistent, and there is no actual keyboard binding for project save
+
+- Severity: Medium
+- Area: UI / documentation / keyboard contract
+- Evidence:
+  - The session docs tell users to save a session with `Ctrl+S` in [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L43) through [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L45) and [docs/guides/session-compatibility.md](/Users/lifeart/Repos/openrv-web/docs/guides/session-compatibility.md#L245).
+  - The shipped shortcut reference assigns `Ctrl+S` to frame export and `Ctrl+Shift+S` to quick snapshot in [docs/reference/keyboard-shortcuts.md](/Users/lifeart/Repos/openrv-web/docs/reference/keyboard-shortcuts.md#L165) through [docs/reference/keyboard-shortcuts.md](/Users/lifeart/Repos/openrv-web/docs/reference/keyboard-shortcuts.md#L172).
+  - The header save button itself advertises `Save project (Ctrl+Shift+S)` in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L235).
+  - The actual keyboard map wires `Ctrl+S` to `export.quickExport` and `Ctrl+Shift+S` to `snapshot.create` in [src/utils/input/KeyBindings.ts](/Users/lifeart/Repos/openrv-web/src/utils/input/KeyBindings.ts#L266) and [src/utils/input/KeyBindings.ts](/Users/lifeart/Repos/openrv-web/src/utils/input/KeyBindings.ts#L570), while project save is only triggered from the header click wiring in [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L59).
+- Impact:
+  - Keyboard-focused users are told three different stories about how project save works and none of them matches a real save shortcut.
+  - That makes save behavior easy to mislearn and increases the chance of exporting a frame or creating a snapshot when the user intended to save the project.
+
+### 301. RV/GTO import diagnostics for skipped nodes and degraded modes are emitted internally but never surfaced to users
+
+- Severity: Medium
+- Area: Session import / diagnostic visibility
+- Evidence:
+  - `SessionGraph` emits `skippedNodes` and `degradedModes` when RV/GTO import drops nodes or downgrades composite modes in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L396) through [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L412).
+  - The production persistence handlers only subscribe to `annotationsLoaded`, `sessionLoaded`, `frameChanged`, `inOutChanged`, `marksChanged`, `fpsChanged`, `paintEffectsLoaded`, `matteChanged`, `metadataChanged`, and `settingsLoaded` in [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L14) through [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L65).
+  - The RV/GTO open path in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L371) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L398) loads the session and resyncs some controls, but shows no success/warning summary for skipped nodes or degraded modes.
+- Impact:
+  - Users can import an RV/GTO session with known dropped nodes or downgraded blend modes and receive no UI-level indication that the import was lossy.
+  - That makes session interchange failures harder to detect than they need to be, even though the loader already computes the exact diagnostics.
+
+### 302. Media representation failures and automatic fallbacks are emitted internally, but the app never surfaces them
+
+- Severity: Medium
+- Area: Media representations / degraded-runtime visibility
+- Evidence:
+  - `MediaRepresentationManager` emits `representationError` when a representation load/switch fails and `fallbackActivated` when it silently moves to another representation in [src/core/session/MediaRepresentationManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaRepresentationManager.ts#L212) through [src/core/session/MediaRepresentationManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaRepresentationManager.ts#L223) and [src/core/session/MediaRepresentationManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaRepresentationManager.ts#L252) through [src/core/session/MediaRepresentationManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaRepresentationManager.ts#L263).
+  - `SessionMedia` forwards both events onto the session in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L139) through [src/core/session/SessionMedia.ts#L146](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L146).
+  - Production code subscribes to `representationChanged`, but a search finds no non-test subscriber for `representationError` or `fallbackActivated`; the live app hooks only `representationChanged` in [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L124) and [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L185).
+- Impact:
+  - If a preferred representation fails and the app falls back to another one, users get no visible indication that playback quality or source selection degraded.
+  - That makes proxy/original/HDR representation problems harder to detect and diagnose than the underlying event model would allow.
+
+### 303. Network Sync ignores `roomLeft`, so disconnect-driven room exits can leave stale room info in the panel
+
+- Severity: Medium
+- Area: Network sync / UI state truthfulness
+- Evidence:
+  - `NetworkSyncManager` emits `roomLeft` both on normal room exit and when a guest-side serverless/WebRTC peer disconnect tears the room down in [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L438) through [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L447) and [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L1348) through [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L1355).
+  - `AppNetworkBridge` subscribes to `connectionStateChanged`, `roomCreated`, `roomJoined`, `usersChanged`, `error`, and `rttUpdated`, but not `roomLeft`, in [src/AppNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppNetworkBridge.ts#L414) through [src/AppNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppNetworkBridge.ts#L466).
+  - The only place that explicitly clears room info and users in the UI is the direct `leaveRoom` click handler in [src/AppNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppNetworkBridge.ts#L119) through [src/AppNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppNetworkBridge.ts#L129), while `NetworkControl.setConnectionState(...)` does not clear `roomInfo` or `users` in [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L985) through [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L999) and [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L1070) through [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L1085).
+- Impact:
+  - If the room ends because of a remote/serverless disconnect instead of the local `Leave` button, the Network Sync UI can stay populated with stale room code, users, and share-link state while showing a disconnected connection state.
+  - That makes collaboration teardown harder to understand and can mislead users into thinking they are still attached to the previous room context.
+
+### 304. Playback buffering and decode-timeout diagnostics are emitted internally, but the app never surfaces them
+
+- Severity: Medium
+- Area: Playback / degraded-runtime visibility
+- Evidence:
+  - `PlaybackEngine` emits `buffering` and `frameDecodeTimeout` during starvation handling, and the code explicitly comments that buffering is emitted “so UI shows a loading indicator” in [src/core/session/PlaybackEngine.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaybackEngine.ts#L813) through [src/core/session/PlaybackEngine.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaybackEngine.ts#L824).
+  - `SessionPlayback` forwards both events onto the session in [src/core/session/SessionPlayback.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionPlayback.ts#L603) through [src/core/session/SessionPlayback.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionPlayback.ts#L612).
+  - The main session-event bridge only wires `frameChanged`, `sourceLoaded`, `unsupportedCodec`, and `playbackChanged`-driven updates in [src/AppSessionBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppSessionBridge.ts#L124) through [src/AppSessionBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppSessionBridge.ts#L180), and a production-code search finds no non-test subscriber for `buffering` or `frameDecodeTimeout`.
+- Impact:
+  - When playback stalls waiting for frames or skips an undecodable frame after a timeout, the app has no built-in loading/timeout feedback even though the engine already computes that state.
+  - Users can experience frozen or degraded playback with no explanation beyond the image not advancing as expected.
+
+### 305. `NetworkSyncManager` emits toast-style collaboration feedback, but the production app never consumes it
+
+- Severity: Medium
+- Area: Network sync / user feedback
+- Evidence:
+  - `NetworkSyncManager` emits `toastMessage` for state-sync timeouts, reconnect progress/outcomes, peer join/leave activity, and other collaboration feedback in [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L632) through [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L635), [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L764) through [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L794), and [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L958) through [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L980).
+  - `AppNetworkBridge` only subscribes to `connectionStateChanged`, `roomCreated`, `roomJoined`, `usersChanged`, `error`, and `rttUpdated` in [src/AppNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppNetworkBridge.ts#L414) through [src/AppNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppNetworkBridge.ts#L466).
+  - A production-code search finds no non-test subscriber for `toastMessage`, `userJoined`, or `userLeft`.
+- Impact:
+  - The collaboration stack generates useful runtime feedback like “connection lost,” “reconnected,” and “user joined,” but the shipped app drops it.
+  - Users only see the low-level panel state mutate, with no transient explanation for reconnects, sync failures, or peer activity.
+
+### 306. Media-cache failures are emitted internally, but the shipped app never surfaces them
+
+- Severity: Medium
+- Area: Media cache / degraded-runtime visibility
+- Evidence:
+  - `MediaCacheManager` advertises evented cache lifecycle/error reporting and emits `error`, `entryAdded`, and `cleared` from initialization, write, and clear paths in [src/cache/MediaCacheManager.ts](/Users/lifeart/Repos/openrv-web/src/cache/MediaCacheManager.ts#L1) through [src/cache/MediaCacheManager.ts](/Users/lifeart/Repos/openrv-web/src/cache/MediaCacheManager.ts#L9), [src/cache/MediaCacheManager.ts](/Users/lifeart/Repos/openrv-web/src/cache/MediaCacheManager.ts#L118) through [src/cache/MediaCacheManager.ts](/Users/lifeart/Repos/openrv-web/src/cache/MediaCacheManager.ts#L121), [src/cache/MediaCacheManager.ts](/Users/lifeart/Repos/openrv-web/src/cache/MediaCacheManager.ts#L182) through [src/cache/MediaCacheManager.ts](/Users/lifeart/Repos/openrv-web/src/cache/MediaCacheManager.ts#L187), and [src/cache/MediaCacheManager.ts](/Users/lifeart/Repos/openrv-web/src/cache/MediaCacheManager.ts#L252) through [src/cache/MediaCacheManager.ts](/Users/lifeart/Repos/openrv-web/src/cache/MediaCacheManager.ts#L255).
+  - The app constructs the cache manager and only fire-and-forget initializes it with a debug log fallback in [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L710) through [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L713).
+  - A production-code search finds no `cacheManager.on(...)` subscriber, and the only fuller cache UI (`CacheManagementPanel`) is itself documented as not mounted in production in [src/ui/components/CacheManagementPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/CacheManagementPanel.ts#L1) through [src/ui/components/CacheManagementPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/CacheManagementPanel.ts#L12).
+- Impact:
+  - If OPFS caching fails during init, writes, or cache clearing, the shipped app provides no user-facing signal that the cache is unavailable or malfunctioning.
+  - That makes cache-backed reload/resilience behavior harder to trust or diagnose than the internal event model suggests.
+
+### 307. The adaptive `FrameCacheController` subsystem is fully implemented but never instantiated in production
+
+- Severity: Medium
+- Area: Playback cache architecture
+- Evidence:
+  - `FrameCacheController` is described as the central frame-caching coordinator with region/lookahead modes, memory-pressure management, and pre-roll warm-up in [src/cache/FrameCacheController.ts](/Users/lifeart/Repos/openrv-web/src/cache/FrameCacheController.ts#L1) through [src/cache/FrameCacheController.ts](/Users/lifeart/Repos/openrv-web/src/cache/FrameCacheController.ts#L15).
+  - Its companion config explicitly defines UI labels/tooltips and even a cache-mode cycle “for `Shift+C` keyboard shortcut” in [src/config/CacheConfig.ts](/Users/lifeart/Repos/openrv-web/src/config/CacheConfig.ts#L1) through [src/config/CacheConfig.ts](/Users/lifeart/Repos/openrv-web/src/config/CacheConfig.ts#L37) and [src/config/CacheConfig.ts](/Users/lifeart/Repos/openrv-web/src/config/CacheConfig.ts#L92) through [src/config/CacheConfig.ts](/Users/lifeart/Repos/openrv-web/src/config/CacheConfig.ts#L95).
+  - A production-code search finds no `new FrameCacheController(...)` outside tests, and the shipped controls only create the simpler passive `CacheIndicator` in [src/services/controls/createPanelControls.ts](/Users/lifeart/Repos/openrv-web/src/services/controls/createPanelControls.ts#L71) through [src/services/controls/createPanelControls.ts](/Users/lifeart/Repos/openrv-web/src/services/controls/createPanelControls.ts#L72), which itself just reflects session/viewer cache stats and a clear button in [src/ui/components/CacheIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/CacheIndicator.ts#L1) through [src/ui/components/CacheIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/CacheIndicator.ts#L9) and [src/ui/components/CacheIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/CacheIndicator.ts#L169) through [src/ui/components/CacheIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/CacheIndicator.ts#L192).
+- Impact:
+  - The app carries a substantial adaptive frame-cache design, but the shipped runtime never actually turns it on.
+  - That leaves cache modes, warm-up behavior, and memory-pressure coordination effectively test-only despite the surrounding config and UI-oriented metadata.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

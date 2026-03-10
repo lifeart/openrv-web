@@ -517,6 +517,112 @@ describe('MultiSourceLayoutStore', () => {
 
       vi.restoreAllMocks();
     });
+
+    it('restores persisted state on construction', () => {
+      const data = JSON.stringify({
+        mode: 'row',
+        spacing: 8,
+        columns: 2,
+        showLabels: false,
+        showBorders: false,
+        playbackSync: 'independent',
+      });
+      vi.spyOn(Storage.prototype, 'getItem').mockReturnValue(data);
+
+      const freshStore = new MultiSourceLayoutStore();
+      expect(freshStore.getMode()).toBe('row');
+      expect(freshStore.getSpacing()).toBe(8);
+      expect(freshStore.getColumns()).toBe(2);
+      expect(freshStore.getState().showLabels).toBe(false);
+      expect(freshStore.getState().showBorders).toBe(false);
+      expect(freshStore.getState().playbackSync).toBe('independent');
+
+      vi.restoreAllMocks();
+    });
+
+    it('auto-saves when layout state changes (debounced)', () => {
+      vi.useFakeTimers();
+      const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {});
+
+      store.setMode('column');
+      // Should not have saved yet (debounced)
+      expect(setItemSpy).not.toHaveBeenCalled();
+
+      // Advance past debounce timer
+      vi.advanceTimersByTime(350);
+      expect(setItemSpy).toHaveBeenCalledWith(
+        'openrv-multi-source-layout',
+        expect.stringContaining('"mode":"column"'),
+      );
+
+      setItemSpy.mockRestore();
+      vi.useRealTimers();
+    });
+
+    it('debounces multiple rapid changes into a single save', () => {
+      vi.useFakeTimers();
+      const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {});
+
+      store.setMode('row');
+      store.setSpacing(10);
+      store.setColumns(3);
+      store.setShowLabels(false);
+
+      // Still debouncing, no save yet
+      expect(setItemSpy).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(350);
+      // Only one save call
+      expect(setItemSpy).toHaveBeenCalledTimes(1);
+      const saved = JSON.parse(setItemSpy.mock.calls[0]![1] as string);
+      expect(saved.mode).toBe('row');
+      expect(saved.spacing).toBe(10);
+      expect(saved.columns).toBe(3);
+      expect(saved.showLabels).toBe(false);
+
+      setItemSpy.mockRestore();
+      vi.useRealTimers();
+    });
+
+    it('does not save when nothing changed', () => {
+      vi.useFakeTimers();
+      const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {});
+
+      // Set same values as defaults
+      store.setMode('packed');
+      store.setSpacing(4);
+      store.setEnabled(false);
+
+      vi.advanceTimersByTime(350);
+      // No state actually changed, so emitLayoutChanged was never called
+      expect(setItemSpy).not.toHaveBeenCalled();
+
+      setItemSpy.mockRestore();
+      vi.useRealTimers();
+    });
+
+    it('flushSave writes immediately', () => {
+      const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {});
+
+      store.setMode('manual');
+      store.flushSave();
+
+      expect(setItemSpy).toHaveBeenCalledWith(
+        'openrv-multi-source-layout',
+        expect.stringContaining('"mode":"manual"'),
+      );
+
+      setItemSpy.mockRestore();
+    });
+
+    it('flushSave is a no-op when no save is pending', () => {
+      const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {});
+
+      store.flushSave();
+      expect(setItemSpy).not.toHaveBeenCalled();
+
+      setItemSpy.mockRestore();
+    });
   });
 
   describe('state snapshot immutability', () => {

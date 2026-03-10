@@ -13,10 +13,15 @@ import {
   PREFERENCE_STORAGE_KEYS,
 } from '../utils/preferences/PreferencesManager';
 import { clamp } from '../utils/math';
+import type { TextureFilterMode } from './types/filter';
 import type { ThemeManager } from '../utils/ui/ThemeManager';
 import type { LayoutStore } from '../ui/layout/LayoutStore';
 import type { CustomKeyBindingsManager } from '../utils/input/CustomKeyBindingsManager';
 import type { OCIOStateManager } from '../ui/components/OCIOStateManager';
+import type { DisplayColorState } from '../color/DisplayTransfer';
+import type { TimecodeDisplayMode } from '../utils/media/Timecode';
+
+export type MissingFrameMode = 'off' | 'show-frame' | 'hold' | 'black';
 
 /**
  * Subsystem references that the PreferencesManager can delegate to.
@@ -92,6 +97,10 @@ export interface PreferencesExportPayload {
   exportDefaults: ExportDefaults;
   generalPrefs: GeneralPrefs;
   fpsIndicatorPrefs: FPSIndicatorPrefs;
+  filterMode: TextureFilterMode | null;
+  displayProfile: DisplayColorState | null;
+  timelineDisplayMode: TimecodeDisplayMode | null;
+  missingFrameMode: MissingFrameMode | null;
   pluginSettings?: Record<string, Record<string, unknown>>;
 }
 
@@ -100,6 +109,9 @@ export const CORE_PREFERENCE_STORAGE_KEYS = {
   export: 'openrv-prefs-export',
   general: 'openrv-prefs-general',
   fpsIndicator: 'openrv-prefs-fps-indicator',
+  filterMode: 'openrv-prefs-filter-mode',
+  timelineDisplayMode: 'openrv-prefs-timeline-display-mode',
+  missingFrameMode: 'openrv-prefs-missing-frame-mode',
 } as const;
 
 export const DEFAULT_COLOR_DEFAULTS: ColorDefaults = {
@@ -263,6 +275,44 @@ function sanitizeFPSIndicatorPrefs(value: unknown): FPSIndicatorPrefs {
   return out;
 }
 
+const VALID_TRANSFER_FUNCTIONS = new Set(['linear', 'srgb', 'rec709', 'gamma2.2', 'gamma2.4', 'custom']);
+const VALID_OUTPUT_GAMUTS = new Set(['auto', 'srgb', 'display-p3']);
+const VALID_TIMECODE_DISPLAY_MODES = new Set<string>(['frames', 'timecode', 'seconds', 'footage']);
+const VALID_MISSING_FRAME_MODES = new Set<string>(['off', 'show-frame', 'hold', 'black']);
+
+function isTimecodeDisplayMode(value: unknown): value is TimecodeDisplayMode {
+  return typeof value === 'string' && VALID_TIMECODE_DISPLAY_MODES.has(value);
+}
+
+function isMissingFrameMode(value: unknown): value is MissingFrameMode {
+  return typeof value === 'string' && VALID_MISSING_FRAME_MODES.has(value);
+}
+
+function sanitizeDisplayProfile(value: unknown): DisplayColorState | null {
+  if (!isRecord(value)) return null;
+  if (
+    !VALID_TRANSFER_FUNCTIONS.has(value.transferFunction as string) ||
+    typeof value.displayGamma !== 'number' ||
+    !Number.isFinite(value.displayGamma) ||
+    typeof value.displayBrightness !== 'number' ||
+    !Number.isFinite(value.displayBrightness) ||
+    typeof value.customGamma !== 'number' ||
+    !Number.isFinite(value.customGamma)
+  ) {
+    return null;
+  }
+  const result: DisplayColorState = {
+    transferFunction: value.transferFunction as DisplayColorState['transferFunction'],
+    displayGamma: clamp(value.displayGamma, 0.1, 4.0),
+    displayBrightness: clamp(value.displayBrightness, 0.0, 2.0),
+    customGamma: clamp(value.customGamma, 0.1, 10.0),
+  };
+  if (VALID_OUTPUT_GAMUTS.has(value.outputGamut as string)) {
+    result.outputGamut = value.outputGamut as DisplayColorState['outputGamut'];
+  }
+  return result;
+}
+
 function isThemeMode(value: unknown): value is ThemeMode {
   return value === 'dark' || value === 'light' || value === 'auto';
 }
@@ -396,6 +446,65 @@ export class PreferencesManager extends EventEmitter<CorePreferencesEvents> {
     this.emit('generalPrefsChanged', merged);
   }
 
+  getFilterMode(): TextureFilterMode | null {
+    const value = this.storage.getString(CORE_PREFERENCE_STORAGE_KEYS.filterMode);
+    if (value === 'nearest' || value === 'linear') return value;
+    return null;
+  }
+
+  setFilterMode(mode: TextureFilterMode | null): void {
+    if (mode === null) {
+      this.storage.remove(CORE_PREFERENCE_STORAGE_KEYS.filterMode);
+      return;
+    }
+    this.storage.setString(CORE_PREFERENCE_STORAGE_KEYS.filterMode, mode);
+  }
+
+  getDisplayProfile(): DisplayColorState | null {
+    return sanitizeDisplayProfile(this.storage.getJSON<unknown>(PREFERENCE_STORAGE_KEYS.displayProfile));
+  }
+
+  setDisplayProfile(state: DisplayColorState | null): void {
+    if (state === null) {
+      this.storage.remove(PREFERENCE_STORAGE_KEYS.displayProfile);
+      return;
+    }
+    const sanitized = sanitizeDisplayProfile(state);
+    if (sanitized) {
+      this.storage.setJSON(PREFERENCE_STORAGE_KEYS.displayProfile, sanitized);
+    }
+  }
+
+  getTimelineDisplayMode(): TimecodeDisplayMode | null {
+    const value = this.storage.getString(CORE_PREFERENCE_STORAGE_KEYS.timelineDisplayMode);
+    return isTimecodeDisplayMode(value) ? value : null;
+  }
+
+  setTimelineDisplayMode(mode: TimecodeDisplayMode | null): void {
+    if (mode === null) {
+      this.storage.remove(CORE_PREFERENCE_STORAGE_KEYS.timelineDisplayMode);
+      return;
+    }
+    if (isTimecodeDisplayMode(mode)) {
+      this.storage.setString(CORE_PREFERENCE_STORAGE_KEYS.timelineDisplayMode, mode);
+    }
+  }
+
+  getMissingFrameMode(): MissingFrameMode | null {
+    const value = this.storage.getString(CORE_PREFERENCE_STORAGE_KEYS.missingFrameMode);
+    return isMissingFrameMode(value) ? value : null;
+  }
+
+  setMissingFrameMode(mode: MissingFrameMode | null): void {
+    if (mode === null) {
+      this.storage.remove(CORE_PREFERENCE_STORAGE_KEYS.missingFrameMode);
+      return;
+    }
+    if (isMissingFrameMode(mode)) {
+      this.storage.setString(CORE_PREFERENCE_STORAGE_KEYS.missingFrameMode, mode);
+    }
+  }
+
   exportAll(): string {
     return JSON.stringify(this.buildExportPayload());
   }
@@ -484,6 +593,45 @@ export class PreferencesManager extends EventEmitter<CorePreferencesEvents> {
       }
     }
 
+    if (hasOwnKey(parsed, 'filterMode')) {
+      const value = parsed.filterMode;
+      if (value === 'nearest' || value === 'linear') {
+        this.setFilterMode(value);
+      } else {
+        this.setFilterMode(null);
+      }
+    }
+
+    if (hasOwnKey(parsed, 'displayProfile')) {
+      const value = parsed.displayProfile;
+      if (value === null) {
+        this.setDisplayProfile(null);
+      } else if (isRecord(value)) {
+        const sanitized = sanitizeDisplayProfile(value);
+        if (sanitized) {
+          this.setDisplayProfile(sanitized);
+        }
+      }
+    }
+
+    if (hasOwnKey(parsed, 'timelineDisplayMode')) {
+      const value = parsed.timelineDisplayMode;
+      if (isTimecodeDisplayMode(value)) {
+        this.setTimelineDisplayMode(value);
+      } else {
+        this.setTimelineDisplayMode(null);
+      }
+    }
+
+    if (hasOwnKey(parsed, 'missingFrameMode')) {
+      const value = parsed.missingFrameMode;
+      if (isMissingFrameMode(value)) {
+        this.setMissingFrameMode(value);
+      } else {
+        this.setMissingFrameMode(null);
+      }
+    }
+
     if (hasOwnKey(parsed, 'pluginSettings') && this._pluginSettingsProvider) {
       const value = parsed.pluginSettings;
       if (isRecord(value)) {
@@ -534,6 +682,10 @@ export class PreferencesManager extends EventEmitter<CorePreferencesEvents> {
       exportDefaults: this.getExportDefaults(),
       generalPrefs: this.getGeneralPrefs(),
       fpsIndicatorPrefs: this.getFPSIndicatorPrefs(),
+      filterMode: this.getFilterMode(),
+      displayProfile: this.getDisplayProfile(),
+      timelineDisplayMode: this.getTimelineDisplayMode(),
+      missingFrameMode: this.getMissingFrameMode(),
     };
     if (this._pluginSettingsProvider) {
       payload.pluginSettings = this._pluginSettingsProvider.exportAll();

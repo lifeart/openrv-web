@@ -372,6 +372,7 @@ export class SessionSerializer {
       notes: session.noteManager.toSerializable(),
       versionGroups: session.versionManager.toSerializable(),
       statuses: session.statusManager.toSerializable(),
+      ...(session.edlEntries && session.edlEntries.length > 0 ? { edlEntries: [...session.edlEntries] } : {}),
     };
   }
 
@@ -578,6 +579,11 @@ export class SessionSerializer {
     // Restore statuses (fix #123: always call, even for empty arrays, to clear old data)
     if (migrated.statuses) {
       session.statusManager.fromSerializable(migrated.statuses);
+    }
+
+    // Restore EDL entries (fix #164: persist RVEDL state in .orvproject)
+    if (migrated.edlEntries && migrated.edlEntries.length > 0) {
+      session.setEdlEntries(migrated.edlEntries);
     }
 
     // LUT must be loaded separately (file reference) — binary LUT data is not

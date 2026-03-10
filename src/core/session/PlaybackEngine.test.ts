@@ -898,5 +898,90 @@ describe('PlaybackEngine', () => {
       tc.trackDroppedFrame(ts);
       expect(engine.droppedFrameCount).toBe(4);
     });
+
+    it('PE-165: skipped frames do not inflate FPS measurement', () => {
+      const perfNowSpy = vi.spyOn(performance, 'now');
+      perfNowSpy.mockReturnValue(0);
+      engine.play();
+      engine.setInOutRange(1, 200);
+      engine.currentFrame = 1;
+
+      // Advance 6 rendered frames + 6 skipped frames over ~500ms
+      for (let i = 1; i <= 12; i++) {
+        const isSkipped = i % 2 === 0;
+        perfNowSpy.mockReturnValue(i * (500 / 12));
+        engine.advanceFrame(1, isSkipped);
+      }
+
+      // Cross the 500ms measurement window with a rendered frame
+      perfNowSpy.mockReturnValue(510);
+      engine.advanceFrame(1, false);
+
+      // FPS should reflect only the 7 rendered frames (6 in window + 1 crossing),
+      // not all 13 calls. With 7 frames over 510ms, FPS ~ 13.7.
+      // If skipped frames were counted, it would be ~25.5 (13 frames / 510ms).
+      expect(engine.effectiveFps).toBeLessThan(20);
+      expect(engine.effectiveFps).toBeGreaterThan(0);
+
+      perfNowSpy.mockRestore();
+    });
+
+    it('PE-166: dropped frame counter still works when frames are skipped', () => {
+      const perfNowSpy = vi.spyOn(performance, 'now');
+      perfNowSpy.mockReturnValue(0);
+      engine.play();
+      engine.setInOutRange(1, 200);
+      engine.currentFrame = 1;
+
+      const tc = (
+        engine as unknown as {
+          _timingController: { trackDroppedFrame: (state: { droppedFrameCount: number }, count?: number) => void };
+        }
+      )._timingController;
+      const ts = (engine as unknown as { _ts: { droppedFrameCount: number } })._ts;
+
+      // Track 3 dropped frames, then advance with skipped=true
+      tc.trackDroppedFrame(ts, 3);
+      perfNowSpy.mockReturnValue(10);
+      engine.advanceFrame(1, true);
+      perfNowSpy.mockReturnValue(20);
+      engine.advanceFrame(1, true);
+      perfNowSpy.mockReturnValue(30);
+      engine.advanceFrame(1, true);
+
+      // Dropped count should still be 3
+      expect(engine.droppedFrameCount).toBe(3);
+
+      // Add more dropped frames
+      tc.trackDroppedFrame(ts, 2);
+      expect(engine.droppedFrameCount).toBe(5);
+
+      perfNowSpy.mockRestore();
+    });
+
+    it('PE-167: normal playback FPS measurement unchanged (no skips)', () => {
+      const perfNowSpy = vi.spyOn(performance, 'now');
+      perfNowSpy.mockReturnValue(0);
+      engine.play();
+      engine.setInOutRange(1, 200);
+      engine.currentFrame = 1;
+
+      // Simulate 12 frames over 500ms (all rendered, no skips)
+      for (let i = 1; i <= 12; i++) {
+        perfNowSpy.mockReturnValue(i * (500 / 12));
+        engine.advanceFrame(1);
+      }
+
+      // Cross the 500ms measurement window
+      perfNowSpy.mockReturnValue(510);
+      engine.advanceFrame(1);
+
+      // With 13 frames over 510ms, FPS ~ 25.5
+      // This is the same behavior as before the fix (no skipped frames)
+      expect(engine.effectiveFps).toBeGreaterThan(20);
+      expect(engine.effectiveFps).toBeLessThan(30);
+
+      perfNowSpy.mockRestore();
+    });
   });
 });

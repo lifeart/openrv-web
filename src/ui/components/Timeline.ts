@@ -24,6 +24,7 @@ import {
 import type { NoteOverlay } from './NoteOverlay';
 import type { PlaylistManager } from '../../core/session/PlaylistManager';
 import type { TransitionManager } from '../../core/session/TransitionManager';
+import { CORE_PREFERENCE_STORAGE_KEYS } from '../../core/PreferencesManager';
 
 export class Timeline {
   /** Radius of the playhead drag handle circle in pixels */
@@ -40,7 +41,7 @@ export class Timeline {
   private waveformLoaded = false;
   private thumbnailManager: ThumbnailManager;
   private thumbnailsEnabled = true;
-  private static readonly DISPLAY_MODE_STORAGE_KEY = 'openrv.timeline.displayMode';
+  private static readonly DISPLAY_MODE_STORAGE_KEY = CORE_PREFERENCE_STORAGE_KEYS.timelineDisplayMode;
   private static readonly VALID_DISPLAY_MODES: readonly TimecodeDisplayMode[] = [
     'frames',
     'timecode',
