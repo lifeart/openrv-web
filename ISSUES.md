@@ -4910,6 +4910,43 @@ This file tracks findings from exploratory review and targeted validation runs.
   - A restored project/snapshot/auto-save can bring playlist mode back enabled without reopening at the saved global playlist position.
   - That makes playlist persistence incomplete in a user-visible way: the clip list comes back, but the review position within it does not reliably resume.
 
+### 407. Removing or replacing playlist clips can leave hidden stale transitions still shortening the playlist duration
+
+- Severity: High
+- Area: Playlist transitions / duration correctness
+- Evidence:
+  - `TransitionManager` has an explicit `resizeToClips()` helper to trim/pad transitions to `clipCount - 1`, but production source search finds no runtime caller outside tests in [src/core/session/TransitionManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/TransitionManager.ts#L237) through [src/core/session/TransitionManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/TransitionManager.ts#L253).
+  - Clip-changing paths such as `replaceClips(...)`, `removeClip(...)`, and `moveClip(...)` update playlist clips and recalculate clip frames, but they never clear or resize the linked `TransitionManager` in [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L156) through [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L195) and [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L202) through [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L233).
+  - Playlist duration still subtracts the total overlap from every non-cut transition entry in the separate manager, regardless of whether those entries still correspond to real clip gaps, in [src/core/session/TransitionManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/TransitionManager.ts#L183) through [src/core/session/TransitionManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/TransitionManager.ts#L195) and [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L430) through [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L434).
+  - The playlist UI only renders transition controls for visible adjacent clips in [src/ui/components/PlaylistPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PlaylistPanel.ts#L379), so stale extra transition entries can become invisible rather than obviously wrong.
+- Impact:
+  - After removing/replacing clips, playlist duration and overlap-aware playback can stay shortened by old transitions that no longer have a real gap in the UI.
+  - That creates a hidden state bug: the user can no longer see or edit the stale transition, but it still affects timing.
+
+### 408. Restored playlist transitions do not trigger a redraw, so the timeline/panel can open in a stale cut-only state
+
+- Severity: Medium
+- Area: Playlist persistence / UI sync
+- Evidence:
+  - `PlaylistManager.setState(...)` emits `clipsChanged` before it restores transitions through `transitionManager.setState(...)` in [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L547) through [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L573).
+  - `TransitionManager.setState(...)` replaces internal state silently and does not emit `transitionChanged` or `transitionsReset` in [src/core/session/TransitionManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/TransitionManager.ts#L265) through [src/core/session/TransitionManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/TransitionManager.ts#L267).
+  - The visible playlist panel redraws from `clipsChanged` and `transitionChanged` only in [src/ui/components/PlaylistPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PlaylistPanel.ts#L309) and [src/ui/components/PlaylistPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PlaylistPanel.ts#L868) through [src/ui/components/PlaylistPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PlaylistPanel.ts#L871), while the timeline redraws from `clipsChanged`, `enabledChanged`, `transitionChanged`, and `transitionsReset` in [src/ui/components/Timeline.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Timeline.ts#L338) through [src/ui/components/Timeline.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Timeline.ts#L341).
+- Impact:
+  - Loading a project/snapshot with saved transitions can initially show the playlist/timeline as if cuts have no transitions until some later user action forces a redraw.
+  - That makes restored transition state look unreliable even when it exists in memory.
+
+### 409. Timeline/EDL edits that rebuild the playlist ignore transition-adjusted clip start frames
+
+- Severity: High
+- Area: Playlist editing / transition correctness
+- Evidence:
+  - `PlaylistManager.replaceClips(...)` rebuilds clips with sequential `globalStartFrame` values and emits `clipsChanged`, but never calls `recalculateGlobalFrames()` afterward in [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L156) through [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L184).
+  - That method is the path that actually applies overlap-adjusted clip positions when a `TransitionManager` exists in [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L411) through [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L416).
+  - The main production caller is `TimelineEditorService.applyEditsToPlaylist(...)`, which uses `playlistManager.replaceClips(clips)` after timeline/EDL edits in [src/services/TimelineEditorService.ts](/Users/lifeart/Repos/openrv-web/src/services/TimelineEditorService.ts#L368) through [src/services/TimelineEditorService.ts](/Users/lifeart/Repos/openrv-web/src/services/TimelineEditorService.ts#L382).
+- Impact:
+  - Editing/reapplying the playlist through the timeline can snap clip start frames back to cut-style sequential positions even when transitions still exist.
+  - That makes transition-enabled timelines drift after edit operations: transition configs remain, but the clip layout they are supposed to overlap is rebuilt incorrectly.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

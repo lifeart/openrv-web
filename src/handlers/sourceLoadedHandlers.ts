@@ -175,7 +175,7 @@ export function handleSourceLoaded(
 
     // Per-source OCIO color space detection
     const processor = context.getOCIOControl().getProcessor();
-    const sourceId = source.name || `source_${session.currentSourceIndex}`;
+    const sourceId = source.url || source.name || `source_${session.currentSourceIndex}`;
 
     // Check if this source already has a persisted color space assignment
     // (loaded from localStorage on startup). If so, use it instead of

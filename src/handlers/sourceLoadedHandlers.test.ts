@@ -894,6 +894,125 @@ describe('handleSourceLoaded', () => {
     // Enable HDR scope mode even on SDR displays so scopes can analyze source HDR values
     expect(context.getHistogram().setHDRMode).toHaveBeenCalledWith(true, 4.0);
   });
+
+  it('SLH-U050: two sources with same name but different URLs get different OCIO source IDs', () => {
+    // First source: plate.exr from /shots/abc/
+    const context1 = createMockContext({
+      currentSource: { name: 'plate.exr', url: 'file:///shots/abc/plate.exr', width: 1920, height: 1080 },
+    });
+    const processor1 = context1.getOCIOControl().getProcessor();
+    (processor1.detectColorSpaceFromExtension as ReturnType<typeof vi.fn>).mockReturnValue('Linear sRGB');
+
+    handleSourceLoaded(
+      context1,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
+
+    // Should use URL as sourceId, not display name
+    expect(processor1.setActiveSource).toHaveBeenCalledWith('file:///shots/abc/plate.exr');
+    expect(processor1.setSourceInputColorSpace).toHaveBeenCalledWith('file:///shots/abc/plate.exr', 'Linear sRGB');
+
+    // Second source: plate.exr from /shots/def/
+    const context2 = createMockContext({
+      currentSource: { name: 'plate.exr', url: 'file:///shots/def/plate.exr', width: 1920, height: 1080 },
+    });
+    const processor2 = context2.getOCIOControl().getProcessor();
+    (processor2.detectColorSpaceFromExtension as ReturnType<typeof vi.fn>).mockReturnValue('Linear sRGB');
+
+    handleSourceLoaded(
+      context2,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
+
+    // Should use URL as sourceId — different from first source
+    expect(processor2.setActiveSource).toHaveBeenCalledWith('file:///shots/def/plate.exr');
+    expect(processor2.setSourceInputColorSpace).toHaveBeenCalledWith('file:///shots/def/plate.exr', 'Linear sRGB');
+  });
+
+  it('SLH-U051: changing OCIO assignment on one same-named source does not affect the other', () => {
+    // Use a real OCIOProcessor to verify isolation
+    const { OCIOProcessor } = require('../color/OCIOProcessor');
+    const realProcessor = new OCIOProcessor();
+
+    // Simulate two sources with the same display name but different URLs
+    const sourceIdA = 'blob:http://localhost/abc-123';
+    const sourceIdB = 'blob:http://localhost/def-456';
+
+    // Both auto-detected as Linear sRGB (from .exr extension)
+    realProcessor.setSourceInputColorSpace(sourceIdA, 'Linear sRGB');
+    realProcessor.setSourceInputColorSpace(sourceIdB, 'Linear sRGB');
+
+    // User overrides source A to ACEScg
+    realProcessor.setSourceInputColorSpace(sourceIdA, 'ACEScg');
+
+    // Source B should still be Linear sRGB
+    expect(realProcessor.getSourceInputColorSpace(sourceIdA)).toBe('ACEScg');
+    expect(realProcessor.getSourceInputColorSpace(sourceIdB)).toBe('Linear sRGB');
+
+    realProcessor.dispose();
+  });
+
+  it('SLH-U052: source with URL uses URL as OCIO key, source without URL falls back to name', () => {
+    // Source with URL
+    const context1 = createMockContext({
+      currentSource: { name: 'plate.exr', url: 'https://example.com/plate.exr', width: 100, height: 100 },
+    });
+    handleSourceLoaded(
+      context1,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
+    expect(context1.getOCIOControl().getProcessor().setActiveSource).toHaveBeenCalledWith(
+      'https://example.com/plate.exr',
+    );
+
+    // Source without URL (url is empty string)
+    const context2 = createMockContext({
+      currentSource: { name: 'plate.exr', url: '', width: 100, height: 100 },
+    });
+    handleSourceLoaded(
+      context2,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
+    // Empty url is falsy, falls back to name
+    expect(context2.getOCIOControl().getProcessor().setActiveSource).toHaveBeenCalledWith('plate.exr');
+  });
+
+  it('SLH-U053: source with no name and no URL uses index-based fallback key', () => {
+    const context = createMockContext({
+      currentSource: { name: '', url: '', width: 100, height: 100 },
+      currentSourceIndex: 3,
+    });
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
+    expect(context.getOCIOControl().getProcessor().setActiveSource).toHaveBeenCalledWith('source_3');
+  });
 });
 
 describe('updateStackControlSources', () => {
