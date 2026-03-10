@@ -4,13 +4,17 @@
  * Handles:
  * - Inbound syncFrame with loop-protection flag
  * - Inbound loadMedia (dispatches to session.loadImage or session.loadVideo)
- * - Inbound syncColor (applies exposure/gamma/temperature/tint)
+ * - Inbound syncColor (applies exposure/gamma/temperature/tint + LUT loading)
  * - Outbound frameChanged (suppressed during inbound sync)
  * - Outbound colorChanged (forwards color adjustments to DCC bridge)
  */
 
 import type { DCCBridge, SyncColorMessage } from './integrations/DCCBridge';
 import type { ColorAdjustments } from './core/types/color';
+import type { LUT3D } from './color/LUTLoader';
+import { isLUT3D } from './color/LUTLoader';
+import { parseLUT } from './color/LUTFormatDetect';
+import type { Annotation } from './paint/types';
 import { Logger } from './utils/Logger';
 import { DisposableSubscriptionManager } from './utils/DisposableSubscriptionManager';
 import { basename } from './utils/path';
@@ -34,12 +38,19 @@ export interface DCCWiringSession {
 /** Minimal viewer surface needed by DCC wiring. */
 export interface DCCWiringViewer {
   setColorAdjustments(adjustments: ColorAdjustments): void;
+  setLUT(lut: LUT3D | null): void;
 }
 
 /** Minimal colorControls surface needed by DCC wiring. */
 export interface DCCWiringColorControls {
   setAdjustments(adjustments: Partial<ColorAdjustments>): void;
   getAdjustments(): ColorAdjustments;
+  setLUT(lut: LUT3D | null): void;
+  on(event: string, handler: (...args: any[]) => void): any;
+}
+
+/** Minimal paintEngine surface needed by DCC wiring. */
+export interface DCCWiringPaintEngine {
   on(event: string, handler: (...args: any[]) => void): any;
 }
 
@@ -52,6 +63,10 @@ export interface DCCWiringDeps {
   session: DCCWiringSession;
   viewer: DCCWiringViewer;
   colorControls: DCCWiringColorControls;
+  /** Optional paint engine for forwarding annotation events to the DCC bridge. */
+  paintEngine?: DCCWiringPaintEngine;
+  /** Optional fetch implementation for loading LUT files (defaults to globalThis.fetch). */
+  fetchFn?: typeof globalThis.fetch;
 }
 
 /** Mutable state owned by the DCC wiring (exposed for loop-protection tests). */
@@ -67,6 +82,56 @@ export interface DCCWiringState {
 export const VIDEO_EXTENSIONS = ['mp4', 'webm', 'mov', 'avi', 'mkv', 'ogv'];
 
 // ---------------------------------------------------------------------------
+// LUT loading helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch a LUT file from a URL/path, parse it, and apply it to the viewer.
+ * Failures are logged as warnings and never propagate to break the sync handler.
+ */
+export async function fetchAndApplyLUT(
+  lutPath: string,
+  fetchFn: typeof globalThis.fetch,
+  colorControls: DCCWiringColorControls,
+  viewer: DCCWiringViewer,
+): Promise<void> {
+  try {
+    const response = await fetchFn(lutPath);
+    if (!response.ok) {
+      log.warn(`Failed to fetch LUT from "${lutPath}": HTTP ${response.status}`);
+      return;
+    }
+
+    const content = await response.text();
+    const filename = basename(lutPath);
+    const lut = parseLUT(filename, content);
+
+    if (!isLUT3D(lut)) {
+      log.warn(`LUT from "${lutPath}" is a 1D LUT; only 3D LUTs are supported via DCC sync.`);
+      return;
+    }
+
+    colorControls.setLUT(lut);
+    viewer.setLUT(lut);
+    log.info(`Applied LUT from DCC: "${lutPath}" (${lut.title}, ${lut.size}^3)`);
+  } catch (err) {
+    log.warn(`Failed to load LUT from "${lutPath}":`, err);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Annotation type mapping
+// ---------------------------------------------------------------------------
+
+/**
+ * Map an Annotation's `type` field to the DCC protocol annotation type.
+ * PaintEngine uses 'pen' | 'text' | 'shape'; the DCC protocol expects the same.
+ */
+export function mapAnnotationType(annotation: Annotation): 'pen' | 'text' | 'shape' {
+  return annotation.type;
+}
+
+// ---------------------------------------------------------------------------
 // Wiring function
 // ---------------------------------------------------------------------------
 
@@ -75,7 +140,8 @@ export const VIDEO_EXTENSIONS = ['mp4', 'webm', 'mov', 'avi', 'mkv', 'ogv'];
  * (App) can inspect or override the frame-sync suppression flag.
  */
 export function wireDCCBridge(deps: DCCWiringDeps): DCCWiringState {
-  const { dccBridge, session, viewer, colorControls } = deps;
+  const { dccBridge, session, viewer, colorControls, paintEngine } = deps;
+  const fetchFn = deps.fetchFn ?? globalThis.fetch.bind(globalThis);
 
   const subs = new DisposableSubscriptionManager();
 
@@ -109,6 +175,11 @@ export function wireDCCBridge(deps: DCCWiringDeps): DCCWiringState {
           })
           .catch((err) => {
             log.error('Failed to load video from DCC:', err);
+            dccBridge.sendError(
+              'LOAD_MEDIA_FAILED',
+              `Failed to load video "${path}": ${err instanceof Error ? err.message : String(err)}`,
+              msg.id,
+            );
           });
       } else {
         session
@@ -120,6 +191,11 @@ export function wireDCCBridge(deps: DCCWiringDeps): DCCWiringState {
           })
           .catch((err) => {
             log.error('Failed to load image from DCC:', err);
+            dccBridge.sendError(
+              'LOAD_MEDIA_FAILED',
+              `Failed to load image "${path}": ${err instanceof Error ? err.message : String(err)}`,
+              msg.id,
+            );
           });
       }
     }),
@@ -136,6 +212,11 @@ export function wireDCCBridge(deps: DCCWiringDeps): DCCWiringState {
       if (Object.keys(adjustments).length > 0) {
         colorControls.setAdjustments(adjustments);
         viewer.setColorAdjustments(colorControls.getAdjustments());
+      }
+
+      // Handle LUT path: fetch, parse, and apply
+      if (typeof msg.lutPath === 'string' && msg.lutPath.length > 0) {
+        fetchAndApplyLUT(msg.lutPath, fetchFn, colorControls, viewer);
       }
     }),
   );
@@ -160,6 +241,19 @@ export function wireDCCBridge(deps: DCCWiringDeps): DCCWiringState {
       });
     }),
   );
+
+  // Outbound: strokeAdded -> send annotationAdded to DCC bridge
+  if (paintEngine) {
+    subs.add(
+      paintEngine.on('strokeAdded', (annotation: Annotation) => {
+        dccBridge.sendAnnotationAdded(
+          annotation.frame,
+          mapAnnotationType(annotation),
+          annotation.id,
+        );
+      }),
+    );
+  }
 
   return state;
 }

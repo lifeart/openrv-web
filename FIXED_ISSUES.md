@@ -1557,3 +1557,23 @@
 - **Regression Tests**: FS-U022/U023 (error events emitted), FS-U024/U025 (no error on success), PW-008b (failure shows alert), PW-008c (success no error).
 - **Verification**: All 22,649 tests pass, TypeScript clean.
 - **Files Changed**: `src/utils/ui/FullscreenManager.ts`, `src/utils/ui/FullscreenManager.test.ts`, `src/AppPlaybackWiring.ts`, `src/AppPlaybackWiring.test.ts`
+
+## Issue #183: DCC `syncColor` advertises LUT sync, but the app silently ignores it
+
+- **Severity**: Medium
+- **Area**: DCC integration / color sync
+- **Root Cause**: Production wiring in `AppDCCWiring.ts` only forwarded exposure/gamma/temperature/tint from `syncColor`, ignoring the `lutPath` field defined in the protocol.
+- **Fix**: Added `fetchAndApplyLUT()` helper that fetches the LUT URL, parses it via the app's universal LUT parser (supports .cube, .3dl, .csp, .itx, .look, .lut, .nk, .mga), validates it's a 3D LUT, and applies it to both viewer and colorControls. Failures handled gracefully without breaking color sync.
+- **Regression Tests**: DCCFIX-030 (LUT fetched and applied), DCCFIX-031 (no lutPath no fetch), DCCFIX-032 (network error graceful), DCCFIX-033 (HTTP 404 graceful), DCCFIX-034 (empty string no fetch).
+- **Verification**: All 22,654 tests pass, TypeScript clean.
+- **Files Changed**: `src/AppDCCWiring.ts`, `src/AppWiringFixes.test.ts`
+
+## Issue #184: DCC bridge defines outbound `annotationAdded`, but production never emits it
+
+- **Severity**: Medium
+- **Area**: DCC integration / review sync
+- **Root Cause**: `sendAnnotationAdded()` was defined in the bridge but never called from production wiring. DCC clients got no annotation notifications.
+- **Fix**: Wired `paintEngine.on('strokeAdded')` to `dccBridge.sendAnnotationAdded(frame, type, id)` with `mapAnnotationType()` helper. Backward compatible when `paintEngine` is not provided. Subscription cleaned up on dispose.
+- **Regression Tests**: DCCFIX-040 (pen stroke emits), DCCFIX-041 (text emits), DCCFIX-042 (shape emits), DCCFIX-043 (no emission after dispose), DCCFIX-044 (backward compat without paintEngine).
+- **Verification**: All 22,659 tests pass, TypeScript clean.
+- **Files Changed**: `src/AppDCCWiring.ts`, `src/App.ts`, `src/AppWiringFixes.test.ts`

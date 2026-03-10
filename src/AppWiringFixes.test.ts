@@ -28,7 +28,14 @@ function createMockDCCBridge() {
   return Object.assign(emitter, {
     sendFrameChanged: vi.fn(),
     sendColorChanged: vi.fn(),
+    sendAnnotationAdded: vi.fn(),
+    sendError: vi.fn(),
   });
+}
+
+function createMockPaintEngine() {
+  const emitter = new EventEmitter();
+  return emitter;
 }
 
 function createMockDCCSession() {
@@ -45,6 +52,7 @@ function createMockDCCSession() {
 function createMockDCCViewer() {
   return {
     setColorAdjustments: vi.fn(),
+    setLUT: vi.fn(),
   };
 }
 
@@ -52,6 +60,7 @@ function createMockColorControls() {
   const emitter = new EventEmitter();
   return Object.assign(emitter, {
     setAdjustments: vi.fn(),
+    setLUT: vi.fn(),
     getAdjustments: vi.fn(() => ({
       exposure: 0,
       gamma: 1,
@@ -68,15 +77,17 @@ function createDCCDeps() {
   const session = createMockDCCSession();
   const viewer = createMockDCCViewer();
   const colorControls = createMockColorControls();
+  const paintEngine = createMockPaintEngine();
 
   const deps: DCCWiringDeps = {
     dccBridge: dccBridge as any,
     session: session as any,
     viewer: viewer as any,
     colorControls: colorControls as any,
+    paintEngine: paintEngine as any,
   };
 
-  return { deps, dccBridge, session, viewer, colorControls };
+  return { deps, dccBridge, session, viewer, colorControls, paintEngine };
 }
 
 // ---------------------------------------------------------------------------
@@ -200,6 +211,146 @@ describe('DCCBridge syncColor wiring fix', () => {
     expect(colorControls.setAdjustments).not.toHaveBeenCalled();
     expect(viewer.setColorAdjustments).not.toHaveBeenCalled();
   });
+
+  it('DCCFIX-030: syncColor with lutPath fetches and applies the LUT', async () => {
+    const cubeContent = [
+      'TITLE "TestLUT"',
+      'LUT_3D_SIZE 2',
+      ...Array.from({ length: 8 }, (_, i) => `${i / 7} ${i / 7} ${i / 7}`),
+    ].join('\n');
+
+    const mockFetchFn = vi.fn().mockResolvedValue({
+      ok: true,
+      text: () => Promise.resolve(cubeContent),
+    });
+
+    const { deps, dccBridge, colorControls, viewer } = createDCCDeps();
+    deps.fetchFn = mockFetchFn as any;
+    wireDCCBridge(deps);
+
+    dccBridge.emit('syncColor', {
+      type: 'syncColor',
+      lutPath: 'http://localhost:9000/luts/test.cube',
+    });
+
+    await vi.waitFor(() => {
+      expect(mockFetchFn).toHaveBeenCalledWith('http://localhost:9000/luts/test.cube');
+      expect(colorControls.setLUT).toHaveBeenCalledTimes(1);
+      expect(viewer.setLUT).toHaveBeenCalledTimes(1);
+    });
+
+    // Verify the LUT object was passed correctly
+    const appliedLUT = colorControls.setLUT.mock.calls[0]![0];
+    expect(appliedLUT).toBeDefined();
+    expect(appliedLUT.title).toBe('TestLUT');
+    expect(appliedLUT.size).toBe(2);
+  });
+
+  it('DCCFIX-031: syncColor without lutPath does not attempt to fetch (no regression)', () => {
+    const mockFetchFn = vi.fn();
+    const { deps, dccBridge, colorControls } = createDCCDeps();
+    deps.fetchFn = mockFetchFn as any;
+
+    colorControls.getAdjustments.mockReturnValue({
+      exposure: 1.5,
+      gamma: 1,
+      temperature: 0,
+      tint: 0,
+      saturation: 1,
+      contrast: 1,
+    });
+
+    wireDCCBridge(deps);
+
+    dccBridge.emit('syncColor', {
+      type: 'syncColor',
+      exposure: 1.5,
+    });
+
+    expect(colorControls.setAdjustments).toHaveBeenCalledWith({ exposure: 1.5 });
+    expect(mockFetchFn).not.toHaveBeenCalled();
+    expect(colorControls.setLUT).not.toHaveBeenCalled();
+  });
+
+  it('DCCFIX-032: LUT fetch failure does not break exposure/gamma/temp/tint sync', async () => {
+    const mockFetchFn = vi.fn().mockRejectedValue(new Error('Network error'));
+    const { deps, dccBridge, colorControls, viewer } = createDCCDeps();
+    deps.fetchFn = mockFetchFn as any;
+
+    colorControls.getAdjustments.mockReturnValue({
+      exposure: 2.0,
+      gamma: 1.1,
+      temperature: 50,
+      tint: -10,
+      saturation: 1,
+      contrast: 1,
+    });
+
+    wireDCCBridge(deps);
+
+    dccBridge.emit('syncColor', {
+      type: 'syncColor',
+      exposure: 2.0,
+      gamma: 1.1,
+      temperature: 50,
+      tint: -10,
+      lutPath: 'http://localhost:9000/missing.cube',
+    });
+
+    // Color adjustments should be applied synchronously regardless of LUT failure
+    expect(colorControls.setAdjustments).toHaveBeenCalledWith({
+      exposure: 2.0,
+      gamma: 1.1,
+      temperature: 50,
+      tint: -10,
+    });
+    expect(viewer.setColorAdjustments).toHaveBeenCalled();
+
+    // Wait for the fetch to fail
+    await vi.waitFor(() => {
+      expect(mockFetchFn).toHaveBeenCalledWith('http://localhost:9000/missing.cube');
+    });
+
+    // LUT was NOT applied (fetch failed)
+    expect(colorControls.setLUT).not.toHaveBeenCalled();
+    expect(viewer.setLUT).not.toHaveBeenCalled();
+  });
+
+  it('DCCFIX-033: LUT HTTP error does not break sync', async () => {
+    const mockFetchFn = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+    });
+    const { deps, dccBridge, colorControls, viewer } = createDCCDeps();
+    deps.fetchFn = mockFetchFn as any;
+    wireDCCBridge(deps);
+
+    dccBridge.emit('syncColor', {
+      type: 'syncColor',
+      lutPath: 'http://localhost:9000/notfound.cube',
+    });
+
+    await vi.waitFor(() => {
+      expect(mockFetchFn).toHaveBeenCalled();
+    });
+
+    expect(colorControls.setLUT).not.toHaveBeenCalled();
+    expect(viewer.setLUT).not.toHaveBeenCalled();
+  });
+
+  it('DCCFIX-034: syncColor with empty lutPath does not fetch', () => {
+    const mockFetchFn = vi.fn();
+    const { deps, dccBridge } = createDCCDeps();
+    deps.fetchFn = mockFetchFn as any;
+    wireDCCBridge(deps);
+
+    dccBridge.emit('syncColor', {
+      type: 'syncColor',
+      lutPath: '',
+    });
+
+    expect(mockFetchFn).not.toHaveBeenCalled();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -262,6 +413,183 @@ describe('DCCBridge outbound color change wiring', () => {
       gamma: 1.1,
       temperature: 50,
       tint: -10,
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// DCCBridge outbound annotationAdded wiring tests (via real wireDCCBridge)
+// ---------------------------------------------------------------------------
+
+describe('DCCBridge outbound annotationAdded wiring', () => {
+  it('DCCFIX-040: pen stroke triggers sendAnnotationAdded with correct data', () => {
+    const { deps, dccBridge, paintEngine } = createDCCDeps();
+    wireDCCBridge(deps);
+
+    paintEngine.emit('strokeAdded', {
+      type: 'pen',
+      id: '42',
+      frame: 10,
+      user: 'user',
+      color: [1, 0, 0, 1],
+      width: 3,
+      points: [{ x: 0.1, y: 0.2 }],
+    });
+
+    expect(dccBridge.sendAnnotationAdded).toHaveBeenCalledWith(10, 'pen', '42');
+  });
+
+  it('DCCFIX-041: text annotation triggers sendAnnotationAdded with type "text"', () => {
+    const { deps, dccBridge, paintEngine } = createDCCDeps();
+    wireDCCBridge(deps);
+
+    paintEngine.emit('strokeAdded', {
+      type: 'text',
+      id: '7',
+      frame: 5,
+      user: 'user',
+      text: 'Hello',
+      position: { x: 0.5, y: 0.5 },
+      color: [1, 1, 1, 1],
+      size: 24,
+    });
+
+    expect(dccBridge.sendAnnotationAdded).toHaveBeenCalledWith(5, 'text', '7');
+  });
+
+  it('DCCFIX-042: shape annotation triggers sendAnnotationAdded with type "shape"', () => {
+    const { deps, dccBridge, paintEngine } = createDCCDeps();
+    wireDCCBridge(deps);
+
+    paintEngine.emit('strokeAdded', {
+      type: 'shape',
+      id: '99',
+      frame: 20,
+      user: 'user',
+      shapeType: 'rectangle',
+      startPoint: { x: 0, y: 0 },
+      endPoint: { x: 1, y: 1 },
+    });
+
+    expect(dccBridge.sendAnnotationAdded).toHaveBeenCalledWith(20, 'shape', '99');
+  });
+
+  it('DCCFIX-043: no annotationAdded emission after dispose', () => {
+    const { deps, dccBridge, paintEngine } = createDCCDeps();
+    const state = wireDCCBridge(deps);
+    state.subscriptions.dispose();
+
+    paintEngine.emit('strokeAdded', {
+      type: 'pen',
+      id: '1',
+      frame: 1,
+      user: 'user',
+      color: [1, 0, 0, 1],
+      width: 3,
+      points: [{ x: 0.1, y: 0.2 }],
+    });
+
+    expect(dccBridge.sendAnnotationAdded).not.toHaveBeenCalled();
+  });
+
+  it('DCCFIX-044: wiring works without paintEngine (backward compatibility)', () => {
+    const dccBridge = createMockDCCBridge();
+    const session = createMockDCCSession();
+    const viewer = createMockDCCViewer();
+    const colorControls = createMockColorControls();
+
+    // No paintEngine provided
+    const deps: DCCWiringDeps = {
+      dccBridge: dccBridge as any,
+      session: session as any,
+      viewer: viewer as any,
+      colorControls: colorControls as any,
+    };
+
+    // Should not throw
+    expect(() => wireDCCBridge(deps)).not.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// DCCBridge loadMedia error reporting tests (Issue #185)
+// ---------------------------------------------------------------------------
+
+describe('DCCBridge loadMedia error reporting', () => {
+  it('DCCFIX-050: video load failure sends error back through the bridge', async () => {
+    const { deps, dccBridge, session } = createDCCDeps();
+    session.loadVideo.mockRejectedValue(new Error('Codec not supported'));
+    wireDCCBridge(deps);
+
+    dccBridge.emit('loadMedia', { type: 'loadMedia', path: '/mnt/shows/clip.mp4', id: 'req-1' });
+
+    await vi.waitFor(() => {
+      expect(dccBridge.sendError).toHaveBeenCalledWith(
+        'LOAD_MEDIA_FAILED',
+        expect.stringContaining('Codec not supported'),
+        'req-1',
+      );
+    });
+  });
+
+  it('DCCFIX-051: image load failure sends error back through the bridge', async () => {
+    const { deps, dccBridge, session } = createDCCDeps();
+    session.loadImage.mockRejectedValue(new Error('Unsupported format'));
+    wireDCCBridge(deps);
+
+    dccBridge.emit('loadMedia', { type: 'loadMedia', path: '/mnt/shows/shot.exr', id: 'req-2' });
+
+    await vi.waitFor(() => {
+      expect(dccBridge.sendError).toHaveBeenCalledWith(
+        'LOAD_MEDIA_FAILED',
+        expect.stringContaining('Unsupported format'),
+        'req-2',
+      );
+    });
+  });
+
+  it('DCCFIX-052: successful load does not send error', async () => {
+    const { deps, dccBridge, session } = createDCCDeps();
+    wireDCCBridge(deps);
+
+    dccBridge.emit('loadMedia', { type: 'loadMedia', path: '/mnt/shows/shot.exr' });
+
+    await vi.waitFor(() => {
+      expect(session.loadImage).toHaveBeenCalled();
+    });
+
+    expect(dccBridge.sendError).not.toHaveBeenCalled();
+  });
+
+  it('DCCFIX-053: video load failure error message includes the file path', async () => {
+    const { deps, dccBridge, session } = createDCCDeps();
+    session.loadVideo.mockRejectedValue(new Error('Network error'));
+    wireDCCBridge(deps);
+
+    dccBridge.emit('loadMedia', { type: 'loadMedia', path: '/mnt/shows/clip.mp4' });
+
+    await vi.waitFor(() => {
+      expect(dccBridge.sendError).toHaveBeenCalledWith(
+        'LOAD_MEDIA_FAILED',
+        expect.stringContaining('/mnt/shows/clip.mp4'),
+        undefined,
+      );
+    });
+  });
+
+  it('DCCFIX-054: image load failure error message includes the file path', async () => {
+    const { deps, dccBridge, session } = createDCCDeps();
+    session.loadImage.mockRejectedValue(new Error('File not found'));
+    wireDCCBridge(deps);
+
+    dccBridge.emit('loadMedia', { type: 'loadMedia', path: '/mnt/shows/shot.exr' });
+
+    await vi.waitFor(() => {
+      expect(dccBridge.sendError).toHaveBeenCalledWith(
+        'LOAD_MEDIA_FAILED',
+        expect.stringContaining('/mnt/shows/shot.exr'),
+        undefined,
+      );
     });
   });
 });

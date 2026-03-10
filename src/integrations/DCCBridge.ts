@@ -303,6 +303,18 @@ export class DCCBridge extends EventEmitter<DCCBridgeEvents> implements ManagerB
   }
 
   /**
+   * Send an error message back to the DCC tool.
+   */
+  sendError(code: string, message: string, id?: string): boolean {
+    return this.send({
+      type: 'error',
+      code,
+      message,
+      ...(id !== undefined ? { id } : {}),
+    });
+  }
+
+  /**
    * Send an annotation-added notification.
    */
   sendAnnotationAdded(frame: number, annotationType: 'pen' | 'text' | 'shape', annotationId: string): boolean {

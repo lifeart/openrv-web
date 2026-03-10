@@ -598,6 +598,7 @@ export class App {
         session: this.session,
         viewer: this.viewer,
         colorControls: this.controls.colorControls,
+        paintEngine: this.paintEngine,
       });
       this.wiringSubscriptions.add(() => dccState?.subscriptions?.dispose());
 
