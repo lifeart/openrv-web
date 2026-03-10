@@ -2708,6 +2708,30 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Large valid JP2 container files with extended-length boxes can fail before the codestream is even discovered.
   - The limitation is silent at the parser level rather than being represented as an explicit format-support boundary.
 
+### 221. Float TIFF decoding supports only 32-bit float samples
+
+- Severity: Medium
+- Area: Format support / TIFF decoding
+- Evidence:
+  - `decodeTIFFFloat(...)` throws unless `bitsPerSample === 32` in [src/formats/TIFFFloatDecoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/TIFFFloatDecoder.ts#L616).
+  - The thrown error is explicit: `Only 32-bit float is supported.` in [src/formats/TIFFFloatDecoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/TIFFFloatDecoder.ts#L617).
+  - The test suite already locks the rejection for 16-bit input in [src/formats/TIFFFloatDecoder.test.ts](/Users/lifeart/Repos/openrv-web/src/formats/TIFFFloatDecoder.test.ts#L538).
+- Impact:
+  - Valid float TIFF variants such as half-float or 64-bit float fail as hard decode errors instead of degrading or surfacing a narrower support boundary.
+  - This keeps the decoder limited to one specific float TIFF layout while the format family is broader in practice.
+
+### 222. Float TIFF decoding rejects common TIFF compression modes outside uncompressed, LZW, and Deflate
+
+- Severity: Medium
+- Area: Format support / TIFF decoding
+- Evidence:
+  - The decoder whitelists only `1`, `5`, `8`, and `32946` compression codes in [src/formats/TIFFFloatDecoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/TIFFFloatDecoder.ts#L620).
+  - It throws a hard error for anything else in [src/formats/TIFFFloatDecoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/TIFFFloatDecoder.ts#L621).
+  - The tests explicitly lock failures for JPEG (`7`) and PackBits (`32773`) in [src/formats/TIFFFloatDecoder.test.ts](/Users/lifeart/Repos/openrv-web/src/formats/TIFFFloatDecoder.test.ts#L392) and [src/formats/TIFFFloatDecoder.test.ts](/Users/lifeart/Repos/openrv-web/src/formats/TIFFFloatDecoder.test.ts#L644).
+- Impact:
+  - Float TIFFs using other legal TIFF compression schemes fail completely instead of decoding or surfacing format-specific limitations earlier in the workflow.
+  - That creates another compatibility boundary for production/scientific TIFF assets that are structurally valid but compressed differently.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed
