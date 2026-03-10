@@ -5,7 +5,7 @@
  * - 16-bit IEEE half-float, 32-bit float, and 64-bit double pixel data
  * - RGB and RGBA images
  * - Big-endian and little-endian byte order
- * - Uncompressed (1), LZW (5), and Deflate/ZIP (8, 32946) compression
+ * - Uncompressed (1), LZW (5), Deflate/ZIP (8, 32946), and PackBits (32773) compression
  * - Horizontal differencing predictor (2) and floating-point predictor (3)
  * - Strip-based image organization
  * - Tiled image organization (TileWidth, TileLength, TileOffsets, TileByteCounts)
@@ -49,7 +49,22 @@ const SAMPLE_FORMAT_FLOAT = 3;
 const COMPRESSION_NONE = 1;
 const COMPRESSION_LZW = 5;
 const COMPRESSION_DEFLATE = 8;
+const COMPRESSION_JPEG = 7;
 const COMPRESSION_ADOBE_DEFLATE = 32946;
+const COMPRESSION_PACKBITS = 32773;
+
+/** Human-readable names for known TIFF compression codes */
+const COMPRESSION_NAMES: Record<number, string> = {
+  [COMPRESSION_NONE]: 'Uncompressed',
+  2: 'CCITT Group 3',
+  3: 'CCITT T.4',
+  4: 'CCITT T.6',
+  [COMPRESSION_LZW]: 'LZW',
+  [COMPRESSION_JPEG]: 'JPEG',
+  [COMPRESSION_DEFLATE]: 'Deflate',
+  [COMPRESSION_PACKBITS]: 'PackBits',
+  [COMPRESSION_ADOBE_DEFLATE]: 'Adobe Deflate',
+};
 
 const TAG_PREDICTOR = 317;
 
@@ -417,6 +432,53 @@ async function decompressDeflate(compressed: Uint8Array): Promise<Uint8Array> {
 }
 
 /**
+ * Decompress PackBits (run-length encoding) compressed TIFF data.
+ *
+ * PackBits is a simple RLE scheme defined in the TIFF 6.0 spec:
+ * - If n is 0..127: copy next n+1 bytes literally
+ * - If n is -127..-1: repeat next byte (1-n) times
+ * - If n is -128: no-op (skip)
+ */
+function decompressPackBits(compressed: Uint8Array, expectedSize?: number): Uint8Array {
+  const output: number[] = [];
+  let pos = 0;
+
+  while (pos < compressed.length) {
+    // Read header byte as signed
+    let n = compressed[pos++]!;
+    if (n > 127) n -= 256; // Convert to signed
+
+    if (n >= 0 && n <= 127) {
+      // Literal run: copy next n+1 bytes
+      const count = n + 1;
+      for (let i = 0; i < count && pos < compressed.length; i++) {
+        output.push(compressed[pos++]!);
+      }
+    } else if (n >= -127 && n <= -1) {
+      // Repeated run: repeat next byte (1-n) times
+      if (pos >= compressed.length) break;
+      const value = compressed[pos++]!;
+      const count = 1 - n;
+      for (let i = 0; i < count; i++) {
+        output.push(value);
+      }
+    }
+    // n === -128: no-op
+  }
+
+  const result = new Uint8Array(output);
+
+  // If we know the expected size and got less, pad with zeros
+  if (expectedSize !== undefined && result.length < expectedSize) {
+    const padded = new Uint8Array(expectedSize);
+    padded.set(result);
+    return padded;
+  }
+
+  return result;
+}
+
+/**
  * Apply TIFF predictor reconstruction to decompressed strip data.
  *
  * Predictor 2 (horizontal differencing): Each byte after the first in a row
@@ -717,12 +779,20 @@ export async function decodeTIFFFloat(buffer: ArrayBuffer): Promise<TIFFDecodeRe
 
   const bytesPerSample = bitsPerSample / 8;
 
-  const supportedCompressions = [COMPRESSION_NONE, COMPRESSION_LZW, COMPRESSION_DEFLATE, COMPRESSION_ADOBE_DEFLATE];
+  const supportedCompressions = [
+    COMPRESSION_NONE,
+    COMPRESSION_LZW,
+    COMPRESSION_DEFLATE,
+    COMPRESSION_ADOBE_DEFLATE,
+    COMPRESSION_PACKBITS,
+  ];
   if (!supportedCompressions.includes(compression)) {
-    throw new DecoderError(
-      'TIFF',
-      `Unsupported TIFF compression: ${compression}. Supported: uncompressed (1), LZW (5), Deflate (8, 32946).`,
-    );
+    const compressionName = COMPRESSION_NAMES[compression] ?? 'unknown';
+    const msg =
+      `Unsupported TIFF compression: ${compression} (${compressionName}). ` +
+      `Supported modes: Uncompressed (1), LZW (5), Deflate (8, 32946), PackBits (32773).`;
+    console.warn(`TIFF: ${msg}`);
+    throw new DecoderError('TIFF', msg);
   }
 
   if (predictor !== PREDICTOR_NONE && predictor !== PREDICTOR_HORIZONTAL && predictor !== PREDICTOR_FLOATING_POINT) {
@@ -824,6 +894,8 @@ export async function decodeTIFFFloat(buffer: ArrayBuffer): Promise<TIFFDecodeRe
       let decompressed: Uint8Array;
       if (compression === COMPRESSION_LZW) {
         decompressed = decompressLZW(compressedBytes);
+      } else if (compression === COMPRESSION_PACKBITS) {
+        decompressed = decompressPackBits(compressedBytes, expectedStripBytes);
       } else {
         // Deflate or Adobe Deflate
         decompressed = await decompressDeflate(compressedBytes);
@@ -960,6 +1032,8 @@ async function decodeTiledTIFF(
         let decompressed: Uint8Array;
         if (compression === COMPRESSION_LZW) {
           decompressed = decompressLZW(compressedBytes);
+        } else if (compression === COMPRESSION_PACKBITS) {
+          decompressed = decompressPackBits(compressedBytes, expectedTileBytes);
         } else {
           // Deflate or Adobe Deflate
           decompressed = await decompressDeflate(compressedBytes);

@@ -450,7 +450,7 @@ describe('TIFFFloatDecoder', () => {
     it('should throw for JPEG compressed TIFF', async () => {
       // JPEG compression (7) is not supported
       const buffer = createTestFloatTIFF({ compression: 7, sampleFormat: 3 });
-      await expect(decodeTIFFFloat(buffer)).rejects.toThrow('Unsupported TIFF compression: 7');
+      await expect(decodeTIFFFloat(buffer)).rejects.toThrow('Unsupported TIFF compression: 7 (JPEG)');
     });
 
     it('should produce finite float values', async () => {

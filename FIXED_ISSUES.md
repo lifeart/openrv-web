@@ -1936,3 +1936,13 @@
 - **Regression Tests**: JP2-EXT-001 (normal boxes still parse), JP2-EXT-002 (extended box with hiLen=0 works), JP2-EXT-003 (extended box with hiLen>0 warns and stops).
 - **Verification**: All 59 JP2Decoder tests pass, TypeScript clean.
 - **Files Changed**: `src/formats/JP2Decoder.ts`, `src/formats/JP2Decoder.test.ts`
+
+## Issue #221: Float TIFF decoding supports only 32-bit float samples
+
+- **Severity**: Medium
+- **Area**: Format support / TIFF decoding
+- **Root Cause**: `decodeTIFFFloat()` only supported `bitsPerSample === 32`, throwing a hard error for valid 16-bit half-float and 64-bit double float TIFFs.
+- **Fix**: Added full 16-bit half-float support via `float16ToFloat32()` IEEE 754 conversion (handles sign, exponent, mantissa, subnormals, infinity, NaN). Added 64-bit double support via `DataView.getFloat64()` with implicit Float32Array truncation. Added `readFloatSample()` dispatcher by `bytesPerSample`. Updated `isFloatTIFF()` to recognize 16/64-bit. Threaded `bytesPerSample` through strip and tiled decode paths including predictor (horizontal differencing and floating-point planar). Error message for unsupported depths now lists all supported formats.
+- **Regression Tests**: 4 new tests — 16-bit half-float decode with pixel verification, 64-bit double decode with pixel verification, `isFloatTIFF` for 16-bit and 64-bit. 1 updated test — unsupported bit depth (24) error message quality.
+- **Verification**: All 86 TIFFFloatDecoder tests pass, TypeScript clean.
+- **Files Changed**: `src/formats/TIFFFloatDecoder.ts`, `src/formats/TIFFFloatDecoder.test.ts`

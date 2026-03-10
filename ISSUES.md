@@ -4723,6 +4723,45 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Users reading the docs can conclude RV/GTO export is unavailable and miss a shipped workflow that the UI still exposes.
   - That also makes the session-format story harder to trust because the docs and the export menu disagree on a basic capability boundary.
 
+### 383. The file-reload docs promise a real Cancel path, but production treats close and Escape the same as Skip
+
+- Severity: Medium
+- Area: Session restore / blob reload workflow
+- Evidence:
+  - The session export guide says the user can "select the original file, skip the reference, or cancel" in [docs/export/sessions.md](/Users/lifeart/Repos/openrv-web/docs/export/sessions.md#L39) through [docs/export/sessions.md](/Users/lifeart/Repos/openrv-web/docs/export/sessions.md#L45).
+  - The shipped file-reload dialog only renders `Browse`, `Load`, and `Skip` actions in [src/ui/components/shared/Modal.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/shared/Modal.ts#L724) through [src/ui/components/shared/Modal.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/shared/Modal.ts#L742).
+  - Closing the dialog or pressing `Escape` resolves `null` through the same code path as Skip in [src/ui/components/shared/Modal.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/shared/Modal.ts#L588) through [src/ui/components/shared/Modal.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/shared/Modal.ts#L595) and [src/ui/components/shared/Modal.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/shared/Modal.ts#L709) through [src/ui/components/shared/Modal.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/shared/Modal.ts#L715).
+  - `SessionSerializer.fromJSON()` treats any `null` result as a skipped reload and continues loading with a warning in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L475) through [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L489).
+- Impact:
+  - Users cannot actually cancel the whole restore/reload flow from that dialog even though the docs say they can.
+  - Dismissing the prompt can silently degrade the restored session instead of aborting the operation, which is materially different from a true cancel action.
+
+### 384. Reloading a saved local image sequence can collapse it into a single image
+
+- Severity: High
+- Area: Session restore / sequence media
+- Evidence:
+  - The session-management guide says that when locally loaded media needs reload after restart, the user re-selects the original files and "the session resumes with all ... playback state intact" in [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L174).
+  - Sequence media is serialized as `type: 'sequence'` with its pattern/range metadata in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L391) through [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L414).
+  - On reload, `requiresReload` media uses a single-file prompt with `accept = 'image/*'` for any non-video type, including sequences, in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L472) through [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L476).
+  - If the user supplies that file, the restore path calls `session.loadFile(file)` in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L479) through [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L484), but `loadFile(...)` only dispatches to image/video loaders and has no sequence inference path in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L379) through [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L393).
+- Impact:
+  - A saved local image sequence can come back from recovery or project load as a single still image instead of the original sequence.
+  - That breaks playback, frame-range semantics, and review continuity in one of the exact workflows the reload prompt is supposed to rescue.
+
+### 385. The restore-time file picker narrows non-video reloads to `image/*` instead of the app's full supported media set
+
+- Severity: Medium
+- Area: Session restore / media reload compatibility
+- Evidence:
+  - The app's normal media picker accepts the full supported extension list through `SUPPORTED_MEDIA_ACCEPT`, including pro image formats such as EXR, DPX, TIFF, and RAW extensions, in [src/utils/media/SupportedMediaFormats.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SupportedMediaFormats.ts#L10) through [src/utils/media/SupportedMediaFormats.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SupportedMediaFormats.ts#L42) and [src/utils/media/SupportedMediaFormats.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SupportedMediaFormats.ts#L117) through [src/utils/media/SupportedMediaFormats.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SupportedMediaFormats.ts#L124).
+  - The main header file input uses that broader accept string in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L219).
+  - But the session-restore path hardcodes `accept = 'image/*'` for every non-video reload prompt in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L472) through [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L476).
+  - This is an inference from the picker filter: many browser file pickers use `accept` to hide or de-prioritize files whose MIME types are not recognized as generic web images, even when the app itself supports those extensions.
+- Impact:
+  - Recovering supported local EXR/DPX/RAW-style media can become harder than loading the same files through the normal Open Media entry point.
+  - That makes the restore workflow less capable than the app's advertised format support, specifically in the crash/project-recovery path where users most need reliable file reattachment.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed
