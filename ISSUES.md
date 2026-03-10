@@ -5714,6 +5714,31 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The docs describe a richer clipping diagnostic than the shipped overlay can render.
   - Users can expect a special simultaneous-clipping signal, but production collapses that case into the ordinary highlight path.
 
+### 485. The overlays guide says overlay states are preserved in session files and snapshots, but the `.orvproject` serializer only persists watermark among the viewer overlays
+
+- Severity: Low
+- Area: Documentation / overlay persistence
+- Evidence:
+  - The overlays guide says “All overlay settings are saved with the session state” and that overlay states are preserved in `.orvproject` files and snapshots in [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L3) and [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L215).
+  - The serialized session schema only contains an explicit overlay field for `watermark` in [src/core/session/SessionState.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionState.ts#L131) through [src/core/session/SessionState.ts#L132).
+  - `SessionSerializer.toJSON()` saves `watermark`, but does not read `getTimecodeOverlay()`, `getSafeAreasOverlay()`, `getClippingOverlay()`, `getInfoStripOverlay()`, `getFPSIndicator()`, `getEXRWindowOverlay()`, `getSpotlightOverlay()`, or `getBugOverlay()` anywhere in the serialization path in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L338) through [src/core/session/SessionSerializer.ts#L368).
+  - Snapshots and auto-saves reuse the same lossy serializer through `AppPersistenceManager`, so this persistence gap is not limited to `.orvproject` files, as already established by issues `138` and `139`.
+- Impact:
+  - The overlays guide makes the session system sound much more complete for viewer overlays than the shipped persistence model actually is.
+  - Users can save a review session expecting overlay state to round-trip when most overlay toggles and settings are still omitted from the serialized payload.
+
+### 486. The overlays guide says bug overlays are burned into video export, but the shipped export flow never consults bug-overlay state
+
+- Severity: Low
+- Area: Documentation / export workflow
+- Evidence:
+  - The overlays guide says “The bug overlay is also used during video export to burn the logo into the output file” in [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L126).
+  - The only production bug-overlay wiring is viewer-side through `OverlayManager.getBugOverlay()` and `Viewer.getBugOverlay()` in [src/ui/components/OverlayManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/OverlayManager.ts#L246) through [src/ui/components/OverlayManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/OverlayManager.ts#L252) and [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L3858) through [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L3859).
+  - A production-code search finds no video-export path that reads bug-overlay state; the export-side logo handling that does exist belongs to slate rendering in [src/export/SlateRenderer.ts](/Users/lifeart/Repos/openrv-web/src/export/SlateRenderer.ts#L45) through [src/export/SlateRenderer.ts](/Users/lifeart/Repos/openrv-web/src/export/SlateRenderer.ts#L50) and [src/export/SlateRenderer.ts](/Users/lifeart/Repos/openrv-web/src/export/SlateRenderer.ts#L304) through [src/export/SlateRenderer.ts](/Users/lifeart/Repos/openrv-web/src/export/SlateRenderer.ts#L316).
+- Impact:
+  - The docs promise a broadcast-logo export workflow that is not connected to the shipped bug-overlay feature.
+  - Users can set up a viewer bug/logo expecting it to burn into exports, then discover that the export pipeline ignores it entirely.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

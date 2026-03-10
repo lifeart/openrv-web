@@ -6,7 +6,7 @@
  * without actually running in a Worker context.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { __test__ } from './renderWorker.worker';
 import { DATA_TYPE_CODES, TRANSFER_FUNCTION_CODES, COLOR_PRIMARIES_CODES } from '../render/renderWorker.messages';
 import type { RenderHDRMessage } from '../render/renderWorker.messages';
@@ -14,6 +14,10 @@ import type { RenderHDRMessage } from '../render/renderWorker.messages';
 const { reconstructIPImage, applySyncState } = __test__;
 
 describe('renderWorker', () => {
+  afterEach(() => {
+    __test__.setRenderer(null);
+  });
+
   // ==========================================================================
   // reconstructIPImage
   // ==========================================================================
@@ -256,6 +260,87 @@ describe('renderWorker', () => {
         }),
       ).not.toThrow();
     });
+
+    it('RW-028: syncState forwards look LUT payload to renderer.setLookLUT', () => {
+      const setLookLUT = vi.fn();
+      __test__.setRenderer({ setLookLUT } as any);
+
+      applySyncState({
+        type: 'syncState',
+        state: {
+          lookLUT: {
+            lutData: new Float32Array(64),
+            lutSize: 4,
+            intensity: 0.85,
+            domainMin: [-0.1, 0, 0.1],
+            domainMax: [1.1, 1.2, 1.3],
+          },
+        },
+      });
+
+      expect(setLookLUT).toHaveBeenCalledWith(
+        expect.any(Float32Array),
+        4,
+        0.85,
+        [-0.1, 0, 0.1],
+        [1.1, 1.2, 1.3],
+      );
+    });
+
+    it('RW-029: syncState forwards file LUT payload to renderer.setFileLUT', () => {
+      const setFileLUT = vi.fn();
+      __test__.setRenderer({ setFileLUT } as any);
+
+      applySyncState({
+        type: 'syncState',
+        state: {
+          fileLUT: {
+            lutData: new Float32Array(64),
+            lutSize: 4,
+            intensity: 0.5,
+            domainMin: [0, 0, 0],
+            domainMax: [1.5, 1.5, 1.5],
+          },
+        },
+      });
+
+      expect(setFileLUT).toHaveBeenCalledWith(expect.any(Float32Array), 4, 0.5, [0, 0, 0], [1.5, 1.5, 1.5]);
+    });
+
+    it('RW-030: syncState forwards display LUT payload to renderer.setDisplayLUT', () => {
+      const setDisplayLUT = vi.fn();
+      __test__.setRenderer({ setDisplayLUT } as any);
+
+      applySyncState({
+        type: 'syncState',
+        state: {
+          displayLUT: {
+            lutData: null,
+            lutSize: 0,
+            intensity: 0,
+          },
+        },
+      });
+
+      expect(setDisplayLUT).toHaveBeenCalledWith(null, 0, 0, undefined, undefined);
+    });
+
+    it('RW-031: syncState prefers lookLUT over legacy lut when both are present', () => {
+      const setLUT = vi.fn();
+      const setLookLUT = vi.fn();
+      __test__.setRenderer({ setLUT, setLookLUT } as any);
+
+      applySyncState({
+        type: 'syncState',
+        state: {
+          lut: { lutData: new Float32Array(64), lutSize: 4, intensity: 0.2 },
+          lookLUT: { lutData: new Float32Array(64), lutSize: 4, intensity: 0.9 },
+        },
+      });
+
+      expect(setLookLUT).toHaveBeenCalledOnce();
+      expect(setLUT).not.toHaveBeenCalled();
+    });
   });
 
   // ==========================================================================
@@ -343,6 +428,7 @@ describe('renderWorker', () => {
       expect(__test__.isContextLost).toBeDefined();
       expect(__test__.reconstructIPImage).toBeDefined();
       expect(__test__.applySyncState).toBeDefined();
+      expect(__test__.setRenderer).toBeDefined();
     });
 
     it('RW-020: reconstructIPImage preserves ArrayBuffer reference', () => {

@@ -204,6 +204,15 @@ export interface SetLUTMessage extends BaseWorkerMessage {
   intensity: number;
 }
 
+/** Serialized 3D LUT stage payload for syncState batching. */
+export interface RendererLUTSyncState {
+  lutData: Float32Array | null;
+  lutSize: number;
+  intensity: number;
+  domainMin?: [number, number, number];
+  domainMax?: [number, number, number];
+}
+
 /** Set display color management state (fire-and-forget). */
 export interface SetDisplayColorStateMessage extends BaseWorkerMessage {
   type: 'setDisplayColorState';
@@ -268,7 +277,10 @@ export interface RendererSyncState {
   channelMode: ChannelMode;
   falseColor: FalseColorState;
   zebraStripes: ZebraState;
-  lut: { lutData: Float32Array | null; lutSize: number; intensity: number };
+  lut: RendererLUTSyncState;
+  lookLUT: RendererLUTSyncState;
+  fileLUT: RendererLUTSyncState;
+  displayLUT: RendererLUTSyncState;
   displayColorState: { transferFunction: number; displayGamma: number; displayBrightness: number; customGamma: number };
   backgroundPattern: BackgroundPatternState;
   hdrOutputMode: { mode: 'sdr' | 'hlg' | 'pq' | 'extended'; capabilities: DisplayCapabilities };

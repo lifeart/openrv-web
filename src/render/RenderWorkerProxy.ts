@@ -36,7 +36,7 @@ import type { RendererBackend, TextureHandle } from './RendererBackend';
 import type { CDLValues } from '../color/CDL';
 import type { CurveLUTs } from '../color/ColorCurves';
 import type { RenderState } from './RenderState';
-import type { RenderWorkerMessage, RenderWorkerResult, RendererSyncState } from './renderWorker.messages';
+import type { RenderWorkerMessage, RenderWorkerResult, RendererLUTSyncState, RendererSyncState } from './renderWorker.messages';
 import {
   DATA_TYPE_CODES,
   TRANSFER_FUNCTION_CODES,
@@ -654,70 +654,50 @@ export class RenderWorkerProxy implements RendererBackend {
 
   setLUT(lutData: Float32Array | null, lutSize: number, intensity: number): void {
     this.dirtyState.lut = { lutData, lutSize, intensity };
+    delete this.dirtyState.lookLUT;
     this.hasDirtyState = true;
   }
 
   /**
    * Check whether the async worker renderer supports the multi-point LUT pipeline
-   * (file LUT, look LUT, display LUT). Currently it does not — only the single
-   * combined LUT (setLUT) is forwarded to the worker. See Issue #19.
+   * (file LUT, look LUT, display LUT).
    */
   supportsMultiPointLUT(): boolean {
-    return false;
+    return true;
   }
 
   setFileLUT(
-    _data: Float32Array | null,
-    _size: number,
-    _intensity: number,
-    _domainMin?: [number, number, number],
-    _domainMax?: [number, number, number],
+    data: Float32Array | null,
+    size: number,
+    intensity: number,
+    domainMin?: [number, number, number],
+    domainMax?: [number, number, number],
   ): void {
-    // TODO(#19): implement multi-point LUT pipeline for worker proxy.
-    // The worker sync protocol only carries a single `lut` field; file/look/display
-    // LUT stages are not yet forwarded to the OffscreenCanvas render worker.
-    if (_data !== null) {
-      console.warn(
-        'RenderWorkerProxy: setFileLUT is not supported in the async worker path. ' +
-        'The file LUT will be ignored. Use the main-thread renderer for multi-point LUT support.',
-      );
-    }
+    this.dirtyState.fileLUT = this.createLUTSyncState(data, size, intensity, domainMin, domainMax);
+    this.hasDirtyState = true;
   }
 
   setLookLUT(
-    _data: Float32Array | null,
-    _size: number,
-    _intensity: number,
-    _domainMin?: [number, number, number],
-    _domainMax?: [number, number, number],
+    data: Float32Array | null,
+    size: number,
+    intensity: number,
+    domainMin?: [number, number, number],
+    domainMax?: [number, number, number],
   ): void {
-    // TODO(#19): implement multi-point LUT pipeline for worker proxy.
-    // The worker sync protocol only carries a single `lut` field; file/look/display
-    // LUT stages are not yet forwarded to the OffscreenCanvas render worker.
-    if (_data !== null) {
-      console.warn(
-        'RenderWorkerProxy: setLookLUT is not supported in the async worker path. ' +
-        'The look LUT will be ignored. Use the main-thread renderer for multi-point LUT support.',
-      );
-    }
+    this.dirtyState.lookLUT = this.createLUTSyncState(data, size, intensity, domainMin, domainMax);
+    delete this.dirtyState.lut;
+    this.hasDirtyState = true;
   }
 
   setDisplayLUT(
-    _data: Float32Array | null,
-    _size: number,
-    _intensity: number,
-    _domainMin?: [number, number, number],
-    _domainMax?: [number, number, number],
+    data: Float32Array | null,
+    size: number,
+    intensity: number,
+    domainMin?: [number, number, number],
+    domainMax?: [number, number, number],
   ): void {
-    // TODO(#19): implement multi-point LUT pipeline for worker proxy.
-    // The worker sync protocol only carries a single `lut` field; file/look/display
-    // LUT stages are not yet forwarded to the OffscreenCanvas render worker.
-    if (_data !== null) {
-      console.warn(
-        'RenderWorkerProxy: setDisplayLUT is not supported in the async worker path. ' +
-        'The display LUT will be ignored. Use the main-thread renderer for multi-point LUT support.',
-      );
-    }
+    this.dirtyState.displayLUT = this.createLUTSyncState(data, size, intensity, domainMin, domainMax);
+    this.hasDirtyState = true;
   }
 
   setDisplayColorState(state: {
@@ -860,12 +840,10 @@ export class RenderWorkerProxy implements RendererBackend {
 
     // Collect transferables from dirty state
     const transferables: Transferable[] = [];
-    if (this.dirtyState.lut?.lutData) {
-      // Copy lut data for transfer since the original may be reused
-      const lutCopy = new Float32Array(this.dirtyState.lut.lutData);
-      this.dirtyState.lut = { ...this.dirtyState.lut, lutData: lutCopy };
-      transferables.push(lutCopy.buffer);
-    }
+    this.copyLUTStateForTransfer('lut', transferables);
+    this.copyLUTStateForTransfer('lookLUT', transferables);
+    this.copyLUTStateForTransfer('fileLUT', transferables);
+    this.copyLUTStateForTransfer('displayLUT', transferables);
 
     this.postMessage(
       { type: 'syncState', state: this.dirtyState },
@@ -893,6 +871,31 @@ export class RenderWorkerProxy implements RendererBackend {
     } catch (error) {
       log.warn('postMessage failed:', error);
     }
+  }
+
+  private createLUTSyncState(
+    lutData: Float32Array | null,
+    lutSize: number,
+    intensity: number,
+    domainMin?: [number, number, number],
+    domainMax?: [number, number, number],
+  ): RendererLUTSyncState {
+    return {
+      lutData,
+      lutSize,
+      intensity,
+      ...(domainMin ? { domainMin } : {}),
+      ...(domainMax ? { domainMax } : {}),
+    };
+  }
+
+  private copyLUTStateForTransfer(key: 'lut' | 'lookLUT' | 'fileLUT' | 'displayLUT', transferables: Transferable[]): void {
+    const stage = this.dirtyState[key];
+    if (!stage?.lutData) return;
+
+    const lutCopy = new Float32Array(stage.lutData);
+    this.dirtyState[key] = { ...stage, lutData: lutCopy };
+    transferables.push(lutCopy.buffer);
   }
 
   /**
