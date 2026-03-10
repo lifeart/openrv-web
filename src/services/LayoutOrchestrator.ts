@@ -712,9 +712,8 @@ export class LayoutOrchestrator {
       });
     }
 
-    // TODO(#52): Once production DOM elements have the correct data-panel / data-toolbar
-    // attributes, this warning should no longer fire. Until then it surfaces the broken
-    // state so developers know client mode is not actually hiding anything.
+    // Keep unmatched-selector warnings so future DOM changes don't silently
+    // break client mode restrictions again.
     if (unmatchedSelectors.length > 0) {
       console.warn(
         `[ClientMode] ${unmatchedSelectors.length} restriction selector(s) matched zero elements. ` +

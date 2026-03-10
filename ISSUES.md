@@ -5739,6 +5739,42 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The docs promise a broadcast-logo export workflow that is not connected to the shipped bug-overlay feature.
   - Users can set up a viewer bug/logo expecting it to burn into exports, then discover that the export pipeline ignores it entirely.
 
+### 487. The false-color docs advertise custom presets, but the shipped false-color system exposes no way to define them
+
+- Severity: Low
+- Area: Documentation / false-color workflow
+- Evidence:
+  - The false-color guide says “Custom false color presets allow defining specific color-to-exposure mappings” in [docs/scopes/false-color-zebra.md](/Users/lifeart/Repos/openrv-web/docs/scopes/false-color-zebra.md#L38) through [docs/scopes/false-color-zebra.md#L39).
+  - The runtime type does include a `custom` preset key in [src/ui/components/FalseColor.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/FalseColor.ts#L23), but it is just aliased to `STANDARD_PALETTE` in [src/ui/components/FalseColor.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/FalseColor.ts#L134) through [src/ui/components/FalseColor.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/FalseColor.ts#L138).
+  - The shipped preset UI only exposes `Standard`, `ARRI`, and `RED` in [src/ui/components/FalseColor.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/FalseColor.ts#L262) through [src/ui/components/FalseColor.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/FalseColor.ts#L268), and `FalseColorControl` simply renders that list in [src/ui/components/FalseColorControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/FalseColorControl.ts#L184) through [src/ui/components/FalseColorControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/FalseColorControl.ts#L212).
+- Impact:
+  - The docs promise a studio-customizable false-color workflow that the shipped app does not implement.
+  - Users can look for custom mapping controls or APIs that simply are not present in production.
+
+### 488. The false-color docs say ARRI skin tones appear green, but the shipped ARRI palette maps that range to grey/yellow instead
+
+- Severity: Low
+- Area: Documentation / false-color interpretation
+- Evidence:
+  - The guide says skin tones should appear green on the ARRI scale, approximately `40-50 IRE`, in [docs/scopes/false-color-zebra.md](/Users/lifeart/Repos/openrv-web/docs/scopes/false-color-zebra.md#L46) and [docs/scopes/false-color-zebra.md](/Users/lifeart/Repos/openrv-web/docs/scopes/false-color-zebra.md#L90).
+  - The shipped ARRI legend maps `78-102` to greenish low-mid tones, but `103-128` to grey and `129-153` to yellow in [src/ui/components/FalseColor.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/FalseColor.ts#L104) through [src/ui/components/FalseColor.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/FalseColor.ts#L116).
+  - The False Color control renders its legend directly from that palette in [src/ui/components/FalseColor.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/FalseColor.ts#L278) through [src/ui/components/FalseColor.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/FalseColor.ts#L285) and [src/ui/components/FalseColorControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/FalseColorControl.ts#L288) through [src/ui/components/FalseColorControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/FalseColorControl.ts#L324).
+- Impact:
+  - The guide teaches users to interpret ARRI false color differently from what the shipped palette actually displays.
+  - That can produce wrong exposure conclusions during dailies if reviewers trust the docs over the on-screen legend.
+
+### 489. The zebra docs recommend raising HDR thresholds above 100 IRE, but the shipped zebra controls hard-stop at 100
+
+- Severity: Low
+- Area: Documentation / zebra controls
+- Evidence:
+  - The false-color/zebra guide says that for HDR dailies users may need to “raise the high zebra threshold” because HDR signals intentionally carry values above `100 IRE` in [docs/scopes/false-color-zebra.md](/Users/lifeart/Repos/openrv-web/docs/scopes/false-color-zebra.md#L94).
+  - The shipped zebra state clamps `highThreshold` and `lowThreshold` to `0-100` in [src/ui/components/ZebraStripes.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ZebraStripes.ts#L65) through [src/ui/components/ZebraStripes.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ZebraStripes.ts#L78).
+  - The shipped Zebra control also caps the high-threshold slider at `100` in [src/ui/components/ZebraControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ZebraControl.ts#L116) through [src/ui/components/ZebraControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ZebraControl.ts#L123).
+- Impact:
+  - The docs recommend an HDR workflow the shipped control cannot actually perform.
+  - Users can be told to “raise” the threshold beyond the SDR ceiling while the real UI enforces 100 as the maximum.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

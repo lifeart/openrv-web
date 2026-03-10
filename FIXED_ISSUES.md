@@ -665,10 +665,16 @@
 - **Severity**: High
 - **Area**: Review-safe UI mode, presentation locking
 - **Root Cause**: `ClientMode.DEFAULT_RESTRICTED_ELEMENTS` used selectors like `[data-panel="color"]` and `[data-toolbar="editing"]` that no production DOM elements carry. `applyClientModeRestrictions()` silently matched nothing.
-- **Fix**: Added `console.warn` in `applyClientModeRestrictions()` listing selectors that match zero elements, making the broken state visible. Added TODO(#52) documentation in `ClientMode.ts` listing exactly which components need which `data-panel`/`data-toolbar` attributes for the selectors to work.
-- **Regression Tests**: LO-031 (warn when all match nothing), LO-032 (warning lists unmatched selectors with count), LO-033 (no warn when all match), LO-034 (partial matches: only unmatched listed, matched elements hidden).
-- **Verification**: All 35 LayoutOrchestrator tests pass, TypeScript clean.
-- **Files Changed**: `src/services/LayoutOrchestrator.ts`, `src/ui/components/ClientMode.ts`, `src/services/LayoutOrchestrator.test.ts`
+- **TODO(#52) Resolved**: `LayoutOrchestrator.createLayout()` now calls `tagClientModeElements()` before applying restrictions. That helper tags real production DOM with the selectors `ClientMode` already expects:
+  - Tab buttons for `color`, `effects`, `transform`, `annotate` get `data-panel`
+  - Context toolbar tab panels get matching `data-panel`
+  - Paint toolbar gets `data-toolbar="paint"`
+  - Notes, snapshots/history, and left-panel color tools get the expected `data-panel`
+  - Context toolbar and tab bar get `data-toolbar="editing"` / `data-toolbar="annotation"`
+  - The unmatched-selector `console.warn` remains as a regression guard instead of a temporary workaround
+- **Regression Tests**: LayoutOrchestrator LO-039 through LO-043 verify DOM tagging for tab buttons, tab panels, toolbars, paint toolbar, and that client mode now hides tagged production elements. Existing LO-031 through LO-034 warning-path tests remain. `ClientMode.test.ts` still verifies the default selector set, and `ClientMode.e2e.test.ts` covers end-to-end restriction behavior.
+- **Verification**: `LayoutOrchestrator.test.ts` (44 tests), `ClientMode.test.ts` (33 tests), and `ClientMode.e2e.test.ts` (39 tests) pass.
+- **Files Changed**: `src/services/LayoutOrchestrator.ts`, `src/services/LayoutOrchestrator.test.ts`, `src/ui/components/ClientMode.ts`, `src/ui/components/ClientMode.test.ts`, `src/__e2e__/ClientMode.e2e.test.ts`
 
 ## Issue #53: The right inspector can reopen with stale or empty content because it drops updates while hidden
 
