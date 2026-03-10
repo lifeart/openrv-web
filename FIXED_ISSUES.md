@@ -1507,3 +1507,23 @@
 - **Regression Tests**: 20 tests — valid imports, missing required fields, wrong types, NaN/Infinity rejection, non-object entries, optional defaults, mixed batches, ID generation, status preservation.
 - **Verification**: All 22,617 tests pass, TypeScript clean.
 - **Files Changed**: `src/core/session/NoteManager.ts`, `src/core/session/NoteManager.test.ts`, `src/ui/components/NotePanel.ts`, `src/AppNetworkBridge.test.ts`
+
+## Issue #178: Marker import silently drops invalid entries with no summary
+
+- **Severity**: Medium
+- **Area**: Marker workflow / data integrity
+- **Root Cause**: Invalid marker entries (failing field validation) were silently filtered during import with no user feedback. (Merge collision reporting was already fixed in #174.)
+- **Fix**: Import now tracks invalid entry count and shows a comprehensive summary alert: "X markers imported." + optional "Y invalid entries skipped." + optional "Z markers skipped due to frame collisions." Correct singular/plural grammar.
+- **Regression Tests**: MARK-U158 (invalid entries counted), MARK-U159 (no warning on clean import), MARK-U160A (mixed valid/invalid/collisions), MARK-U160B (singular grammar).
+- **Verification**: All 22,621 tests pass, TypeScript clean.
+- **Files Changed**: `src/ui/components/MarkerListPanel.ts`, `src/ui/components/MarkerListPanel.test.ts`
+
+## Issue #179: ShotGrid note pull flattens note timing and review metadata
+
+- **Severity**: Medium
+- **Area**: ShotGrid integration / notes workflow
+- **Root Cause**: ShotGrid API request didn't fetch frame fields. All pulled notes hardcoded to frame 1-1 with fresh local timestamps, losing original review context.
+- **Fix**: Added `sg_first_frame`, `sg_last_frame`, `frame_range` to API request. Notes use ShotGrid frame range (with fallback chain to frame_range string, then 1-1). Original `created_at` preserved via new `addNote()` `createdAt` option.
+- **Regression Tests**: 9 tests — frame range from sg_first_frame/sg_last_frame, fallback to frame_range string, fallback to 1-1, created_at preserved, created_at fallback, addNote createdAt/status overrides, API request fields.
+- **Verification**: All 22,630 tests pass, TypeScript clean.
+- **Files Changed**: `src/integrations/ShotGridBridge.ts`, `src/integrations/ShotGridBridge.test.ts`, `src/integrations/ShotGridIntegrationBridge.ts`, `src/integrations/ShotGridIntegrationBridge.test.ts`, `src/core/session/NoteManager.ts`, `src/core/session/NoteManager.test.ts`

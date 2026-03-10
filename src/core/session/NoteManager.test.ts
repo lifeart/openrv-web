@@ -47,6 +47,30 @@ describe('NoteManager', () => {
       expect(note.color).toBe('#ff0000');
     });
 
+    it('uses provided createdAt instead of generating a fresh timestamp', () => {
+      const note = manager.addNote(0, 1, 1, 'Old note', 'Alice', {
+        createdAt: '2023-06-15T08:30:00Z',
+      });
+      expect(note.createdAt).toBe('2023-06-15T08:30:00Z');
+      // modifiedAt should still be a fresh timestamp
+      expect(note.modifiedAt).not.toBe('2023-06-15T08:30:00Z');
+    });
+
+    it('falls back to current time when createdAt is not provided', () => {
+      const before = new Date().toISOString();
+      const note = manager.addNote(0, 1, 1, 'New note', 'Alice');
+      const after = new Date().toISOString();
+      expect(note.createdAt >= before).toBe(true);
+      expect(note.createdAt <= after).toBe(true);
+    });
+
+    it('uses provided status instead of defaulting to open', () => {
+      const note = manager.addNote(0, 1, 1, 'Resolved note', 'Alice', {
+        status: 'resolved',
+      });
+      expect(note.status).toBe('resolved');
+    });
+
     it('returns a copy, not internal reference', () => {
       const note = manager.addNote(0, 1, 1, 'Test', 'Alice');
       note.text = 'mutated';

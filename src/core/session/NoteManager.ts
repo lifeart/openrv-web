@@ -74,9 +74,10 @@ export class NoteManager {
     frameEnd: number,
     text: string,
     author: string,
-    options?: { parentId?: string; color?: string },
+    options?: { parentId?: string; color?: string; createdAt?: string; status?: NoteStatus },
   ): Note {
     const now = new Date().toISOString();
+    const createdAt = options?.createdAt ?? now;
     const note: Note = {
       id: crypto.randomUUID(),
       sourceIndex,
@@ -84,9 +85,9 @@ export class NoteManager {
       frameEnd,
       text,
       author,
-      createdAt: now,
+      createdAt,
       modifiedAt: now,
-      status: 'open',
+      status: options?.status ?? 'open',
       parentId: options?.parentId ?? null,
       color: options?.color ?? '#fbbf24',
     };

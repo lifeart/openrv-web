@@ -403,6 +403,17 @@ describe('ShotGridBridge', () => {
       expect(url).toContain('filter[project]=42');
     });
 
+    it('SG-NOTE-004: requests frame-related fields from ShotGrid', async () => {
+      mockFetch.mockResolvedValueOnce(authResponse()).mockResolvedValueOnce(jsonResponse({ data: [] }));
+
+      await bridge.getNotesForVersion(101);
+
+      const url = mockFetch.mock.calls[1]![0] as string;
+      expect(url).toContain('sg_first_frame');
+      expect(url).toContain('sg_last_frame');
+      expect(url).toContain('frame_range');
+    });
+
     it('SG-NOTE-003: returns empty array when no notes', async () => {
       mockFetch.mockResolvedValueOnce(authResponse()).mockResolvedValueOnce(jsonResponse({ data: [] }));
 

@@ -3864,6 +3864,131 @@ This file tracks findings from exploratory review and targeted validation runs.
   - If a user imports an RVEDL into a session that already has playlist clips, the timeline editor continues to show the old playlist structure instead of the newly imported edit list.
   - That makes RVEDL import feel ineffective or broken in exactly the scenarios where users are likely comparing or replacing an existing cut structure.
 
+### 313. Shot status tracking exists in session/export code, but the shipped app exposes no real status UI
+
+- Severity: Medium
+- Area: Review workflow / status tracking
+- Evidence:
+  - The session layer ships a real `StatusManager` with per-source status state, counts, colors, serialization, and change callbacks in [src/core/session/StatusManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/StatusManager.ts#L1) through [src/core/session/StatusManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/StatusManager.ts#L190).
+  - Production consumers are effectively limited to export and ShotGrid integration: `generateReport(...)` reads `session.statusManager` in [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L293), and ShotGrid push/pull maps statuses through [src/integrations/ShotGridIntegrationBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/ShotGridIntegrationBridge.ts#L182) through [src/integrations/ShotGridIntegrationBridge.ts#L247).
+  - A production-code search finds no real UI code using `session.statusManager`, `getStatus(...)`, or `setStatus(...)` in the shipped header, QC tab, or source panels, while the QC toolbar itself only mounts scopes/analysis/pixel-probe controls in [src/services/tabContent/buildQCTab.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildQCTab.ts#L17) through [src/services/tabContent/buildQCTab.ts#L130).
+  - The current docs and UI overview still describe shot-status controls as part of QC/review flow in [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L22) through [docs/advanced/review-workflow.md#L26) and [docs/getting-started/ui-overview.md](/Users/lifeart/Repos/openrv-web/docs/getting-started/ui-overview.md#L71).
+- Impact:
+  - Users can load, save, export, and even sync status data indirectly, but they cannot actually set or inspect shot status through the shipped app UI.
+  - That leaves a core review-workflow feature implemented underneath the app yet unavailable in the normal production workflow.
+
+### 314. Version management is implemented underneath the session layer, but the shipped app never wires it to UI or auto-detection
+
+- Severity: Medium
+- Area: Review workflow / version management
+- Evidence:
+  - `VersionManager` implements grouping, next/previous navigation, active-version switching, and filename-based auto-detection in [src/core/session/VersionManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/VersionManager.ts#L1) through [src/core/session/VersionManager.ts#L349).
+  - The auto-detection entry point `autoDetectGroups(...)` exists in [src/core/session/VersionManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/VersionManager.ts#L273) through [src/core/session/VersionManager.ts#L324), but a production-code search finds no caller outside the manager itself.
+  - The only live consumers of version groups are export/report serialization paths such as [src/export/ReportExporter.ts](/Users/lifeart/Repos/openrv-web/src/export/ReportExporter.ts#L120) through [src/export/ReportExporter.ts#L129) and session save/load in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L372) through [src/core/session/SessionSerializer.ts#L376) and [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L574) through [src/core/session/SessionSerializer.ts#L577).
+  - A production-code search finds no header/QC/source-panel UI that calls `getGroups()`, `getGroupForSource()`, `nextVersion()`, `previousVersion()`, or `setActiveVersion(...)`, even though the shipped docs still promise a header-bar version selector and version list in [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L36) through [docs/advanced/review-workflow.md#L40).
+- Impact:
+  - Version groups can exist in saved state and reports, but the production app never auto-detects them from filenames and never exposes navigation or selection controls.
+  - That makes version management effectively a persistence/export-only subsystem instead of a usable review feature.
+
+### 315. Project restore does not clear old RVEDL state when the new project has no EDL entries
+
+- Severity: Medium
+- Area: Project restore / RVEDL state
+- Evidence:
+  - `.orvproject` save only serializes `edlEntries` when the current session has at least one entry in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L372) through [src/core/session/SessionSerializer.ts#L375).
+  - Project load clears media with `session.clearSources()` in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L446) through [src/core/session/SessionSerializer.ts#L447), but `Session.clearSources()` only delegates to media clearing in [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L1208) through [src/core/session/Session.ts#L1214) and does not reset `edlEntries`.
+  - Restore only calls `session.setEdlEntries(...)` when `migrated.edlEntries.length > 0` in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L584) through [src/core/session/SessionSerializer.ts#L587).
+  - The underlying session graph explicitly stores RVEDL state separately in `_edlEntries` and only clears it when its own `clear()` path runs in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L202) through [src/core/session/SessionGraph.ts#L221).
+- Impact:
+  - Loading a project with no RVEDL data after a session that had imported EDL cuts can leave the old edit list hanging around in session state.
+  - That creates another stale-state path where the newly loaded project does not fully replace the previous editorial context.
+
+### 316. Review notes do not support priority or category, so the richer dailies workflow is impossible in the shipped app
+
+- Severity: Medium
+- Area: Notes / review workflow
+- Evidence:
+  - The shipped review-workflow guide describes notes with priority, category, and category-based report statistics in [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L64) through [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L68) and [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L106) through [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L111).
+  - The actual `Note` model only stores `text`, `author`, frame range, status, reply parent, and color in [src/core/session/NoteManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/NoteManager.ts#L8) through [src/core/session/NoteManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/NoteManager.ts#L23), and the CRUD surface only updates `text`, `status`, or `color` in [src/core/session/NoteManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/NoteManager.ts#L71) through [src/core/session/NoteManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/NoteManager.ts#L120).
+  - The shipped `NotePanel` only renders frame, status, author, text, and reply/edit/delete actions; there is no priority/category display or editor in [src/ui/components/NotePanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NotePanel.ts#L522) through [src/ui/components/NotePanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NotePanel.ts#L728).
+  - Report generation only pulls raw note text arrays per source in [src/export/ReportExporter.ts](/Users/lifeart/Repos/openrv-web/src/export/ReportExporter.ts#L137) through [src/export/ReportExporter.ts](/Users/lifeart/Repos/openrv-web/src/export/ReportExporter.ts#L164), so there is no data available for category rollups.
+- Impact:
+  - Reviewers cannot tag notes by department/severity, and supervisors cannot produce the category-based dailies summaries the workflow describes.
+  - The shipped note system is materially simpler than the advertised review process, which limits its usefulness in actual production review sessions.
+
+### 317. Review-status semantics are lossy: several documented production states collapse into unrelated local values
+
+- Severity: Medium
+- Area: Review workflow / status semantics
+- Evidence:
+  - The review-workflow guide defines six user-meaningful states: `Pending`, `In Review`, `Revisions Needed`, `Approved`, `Final`, and `On Hold` in [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L11) through [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L20).
+  - The actual session layer only supports five different local values: `pending`, `approved`, `needs-work`, `cbb`, and `omit` in [src/core/session/StatusManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/StatusManager.ts#L4) through [src/core/session/StatusManager.ts#L37).
+  - ShotGrid integration further collapses multiple upstream statuses into those local buckets in [src/integrations/ShotGridBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/ShotGridBridge.ts#L93) through [src/integrations/ShotGridBridge.ts#L103):
+    `fin -> approved`, `ip -> pending`, `hld -> pending`, `wtg -> pending`, and `vwd -> approved`.
+- Impact:
+  - Distinct production-review meanings like “final”, “in progress”, and “on hold” cannot survive a local OpenRV Web round-trip as distinct statuses.
+  - That makes status-based review/export/sync workflows semantically weaker than the app and docs suggest, even before the missing status UI is addressed.
+
+### 318. Dailies report export ignores playlist structure and always reports every loaded source
+
+- Severity: Medium
+- Area: Reports / playlist review workflow
+- Evidence:
+  - The documented dailies workflow says to load shots as a playlist, review them, then generate a report in [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L97) through [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L113).
+  - The production export path wires `reportExportRequested` straight to `generateReport(session, session.noteManager, session.statusManager, session.versionManager, ...)` with no playlist input in [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L292) through [src/AppPlaybackWiring.ts#L300).
+  - `buildReportRows(...)` then iterates `for (let i = 0; i < session.sourceCount; i++)` and builds one row per loaded source from `session.getSourceByIndex(i)` in [src/export/ReportExporter.ts](/Users/lifeart/Repos/openrv-web/src/export/ReportExporter.ts#L105) through [src/export/ReportExporter.ts#L167).
+- Impact:
+  - A dailies report cannot honor playlist order, omitted shots, repeated comparison clips, or a curated review subset; it just exports the whole loaded source set.
+  - That makes reports diverge from the actual session the reviewer just stepped through whenever playlist structure matters.
+
+### 319. Dailies reports omit core session metadata and the category-based summary the workflow promises
+
+- Severity: Medium
+- Area: Reports / review workflow
+- Evidence:
+  - The review-workflow guide says dailies reports include “Session date, supervisor name, and project identifier” plus “Statistics: total shots reviewed, approval rate, revision counts by category” in [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L106) through [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L111).
+  - The actual `ReportOptions` only carry `title` and optional `dateRange` in [src/export/ReportExporter.ts](/Users/lifeart/Repos/openrv-web/src/export/ReportExporter.ts#L30) through [src/export/ReportExporter.ts#L37), and the production call site passes only `format`, `include*` flags, and `title` in [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L292) through [src/AppPlaybackWiring.ts#L299).
+  - HTML generation only renders the title, optional `dateRange`, and a simple count-by-status summary in [src/export/ReportExporter.ts](/Users/lifeart/Repos/openrv-web/src/export/ReportExporter.ts#L239) through [src/export/ReportExporter.ts#L249) and [src/export/ReportExporter.ts](/Users/lifeart/Repos/openrv-web/src/export/ReportExporter.ts#L294) through [src/export/ReportExporter.ts#L296).
+- Impact:
+  - Exported dailies reports cannot capture who ran the session, what project it belonged to, or any category-based review statistics.
+  - That makes the generated reports much less useful for real production circulation than the workflow suggests.
+
+### 320. Dailies reports flatten notes to raw text and lose per-note frame/timecode context
+
+- Severity: Medium
+- Area: Reports / notes export
+- Evidence:
+  - The workflow describes note exports as formatted reports with “timecodes and note text” in [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L83) through [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L89).
+  - `buildReportRows(...)` only reads `noteManager.getNotesForSource(i).map((n) => n.text)` in [src/export/ReportExporter.ts](/Users/lifeart/Repos/openrv-web/src/export/ReportExporter.ts#L137) through [src/export/ReportExporter.ts#L139), so note frame ranges, authors, timestamps, and threading never enter the report model.
+  - CSV and HTML export then serialize those notes as a single joined text field per source in [src/export/ReportExporter.ts](/Users/lifeart/Repos/openrv-web/src/export/ReportExporter.ts#L196) through [src/export/ReportExporter.ts#L210) and [src/export/ReportExporter.ts](/Users/lifeart/Repos/openrv-web/src/export/ReportExporter.ts#L252) through [src/export/ReportExporter.ts#L269).
+- Impact:
+  - The exported report cannot tell artists which exact frame or timecode a specific note belongs to once multiple notes exist on the same source.
+  - That reduces the report from a timecoded review artifact to a per-shot text dump, which is much less actionable in production.
+
+### 321. Version-manager navigation is a no-op at runtime because active-version changes never switch the session source
+
+- Severity: Medium
+- Area: Version management / session behavior
+- Evidence:
+  - `VersionManager.nextVersion(...)`, `previousVersion(...)`, and `setActiveVersion(...)` all invoke the `onActiveVersionChanged(...)` callback after updating internal state in [src/core/session/VersionManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/VersionManager.ts#L191) through [src/core/session/VersionManager.ts#L232).
+  - `SessionAnnotations` wires that callback to an explicit no-op with the comment “Can be extended for source switching in future” in [src/core/session/SessionAnnotations.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionAnnotations.ts#L37) through [src/core/session/SessionAnnotations.ts#L42).
+  - The session only re-emits a generic `versionsChanged` event in [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L316) through [src/core/session/Session.ts#L329); there is no production caller that translates active-version changes into `session.setCurrentSource(...)`.
+- Impact:
+  - Even if version navigation were exposed through UI, scripting, or future automation, changing the active version group state would not actually change the displayed media.
+  - That leaves the version subsystem internally inconsistent: it can record an “active” version without the viewer ever following it.
+
+### 322. ShotGrid version loading never feeds the app’s own version-management system
+
+- Severity: Medium
+- Area: ShotGrid integration / version management
+- Evidence:
+  - When a ShotGrid version is loaded, the integration bridge only loads the media, records a panel-local `versionId -> sourceIndex` mapping, and applies status via `session.statusManager.setStatus(...)` in [src/integrations/ShotGridIntegrationBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/ShotGridIntegrationBridge.ts#L171) through [src/integrations/ShotGridIntegrationBridge.ts#L184).
+  - The `ShotGridPanel` stores those mappings only in its own `versionSourceMap` / `sourceVersionMap` in [src/ui/components/ShotGridPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ShotGridPanel.ts#L53) through [src/ui/components/ShotGridPanel.ts#L55) and [src/ui/components/ShotGridPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ShotGridPanel.ts#L256) through [src/ui/components/ShotGridPanel.ts#L266).
+  - A production-code search finds no call from the ShotGrid flow into `session.versionManager`, `createGroup(...)`, `addVersionToGroup(...)`, or `autoDetectGroups(...)`.
+- Impact:
+  - ShotGrid can surface and load multiple versions of the same shot, but those versions remain isolated inside the ShotGrid panel instead of becoming first-class OpenRV Web version groups.
+  - That means report/export/version-navigation features built around `VersionManager` never benefit from the versions users actually loaded through the production tracking integration.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

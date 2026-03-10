@@ -278,12 +278,30 @@ export class ShotGridIntegrationBridge {
       // Dedup: skip if already pulled
       if (this.sgNoteIdMap.has(sgNote.id)) continue;
 
+      // Extract frame range from ShotGrid note, falling back to 1-1
+      let frameStart = 1;
+      let frameEnd = 1;
+
+      if (sgNote.sg_first_frame != null && sgNote.sg_last_frame != null) {
+        frameStart = sgNote.sg_first_frame;
+        frameEnd = sgNote.sg_last_frame;
+      } else if (sgNote.frame_range) {
+        const match = sgNote.frame_range.match(/^(\d+)-(\d+)$/);
+        if (match) {
+          frameStart = parseInt(match[1]!, 10);
+          frameEnd = parseInt(match[2]!, 10);
+        }
+      }
+
       const localNote = this.session.noteManager.addNote(
         sourceIndex,
-        1, // default frame start
-        1, // default frame end
+        frameStart,
+        frameEnd,
         sgNote.content || sgNote.subject,
         sgNote.user.name,
+        {
+          createdAt: sgNote.created_at || undefined,
+        },
       );
 
       this.sgNoteIdMap.set(sgNote.id, localNote.id);

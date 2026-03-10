@@ -281,6 +281,9 @@ describe('ShotGridIntegrationBridge', () => {
         note_links: [{ type: 'Version', id: 101 }],
         created_at: '2024-03-01T12:00:00Z',
         user: { type: 'HumanUser', id: 5, name: 'Reviewer' },
+        sg_first_frame: null,
+        sg_last_frame: null,
+        frame_range: null,
       },
     ];
 
@@ -459,6 +462,236 @@ describe('ShotGridIntegrationBridge', () => {
     );
 
     consoleSpy.mockRestore();
+  });
+
+  it('SG-INT-015: pullNotes uses sg_first_frame/sg_last_frame when available', async () => {
+    configUI.emit('connect', {
+      serverUrl: 'https://studio.shotgrid.autodesk.com',
+      scriptName: 'test',
+      apiKey: 'key',
+      projectId: 42,
+    });
+
+    await vi.waitFor(() => {
+      expect(configUI.setState).toHaveBeenCalledWith('connected');
+    });
+
+    const sgNotes: ShotGridNote[] = [
+      {
+        id: 800,
+        subject: 'Frame note',
+        content: 'Check frames 1045-1052',
+        note_links: [{ type: 'Version', id: 101 }],
+        created_at: '2024-04-10T09:00:00Z',
+        user: { type: 'HumanUser', id: 5, name: 'Reviewer' },
+        sg_first_frame: 1045,
+        sg_last_frame: 1052,
+        frame_range: '1045-1052',
+      },
+    ];
+
+    const { ShotGridBridge: MockBridge } = await import('./ShotGridBridge');
+    const mockBridgeInstance = (MockBridge as any).mock.results.at(-1)?.value;
+    if (mockBridgeInstance) {
+      mockBridgeInstance.getNotesForVersion.mockResolvedValue(sgNotes);
+    }
+
+    panel.emit('pullNotes', { versionId: 101, sourceIndex: 0 });
+
+    await vi.waitFor(() => {
+      expect(session.noteManager.addNote).toHaveBeenCalledTimes(1);
+    });
+
+    expect(session.noteManager.addNote).toHaveBeenCalledWith(
+      0,
+      1045,
+      1052,
+      'Check frames 1045-1052',
+      'Reviewer',
+      { createdAt: '2024-04-10T09:00:00Z' },
+    );
+  });
+
+  it('SG-INT-016: pullNotes falls back to frame_range string when sg_first/last_frame are null', async () => {
+    configUI.emit('connect', {
+      serverUrl: 'https://studio.shotgrid.autodesk.com',
+      scriptName: 'test',
+      apiKey: 'key',
+      projectId: 42,
+    });
+
+    await vi.waitFor(() => {
+      expect(configUI.setState).toHaveBeenCalledWith('connected');
+    });
+
+    const sgNotes: ShotGridNote[] = [
+      {
+        id: 801,
+        subject: 'Range note',
+        content: 'Check range',
+        note_links: [{ type: 'Version', id: 101 }],
+        created_at: '2024-04-10T10:00:00Z',
+        user: { type: 'HumanUser', id: 5, name: 'Reviewer' },
+        sg_first_frame: null,
+        sg_last_frame: null,
+        frame_range: '100-200',
+      },
+    ];
+
+    const { ShotGridBridge: MockBridge } = await import('./ShotGridBridge');
+    const mockBridgeInstance = (MockBridge as any).mock.results.at(-1)?.value;
+    if (mockBridgeInstance) {
+      mockBridgeInstance.getNotesForVersion.mockResolvedValue(sgNotes);
+    }
+
+    panel.emit('pullNotes', { versionId: 101, sourceIndex: 0 });
+
+    await vi.waitFor(() => {
+      expect(session.noteManager.addNote).toHaveBeenCalledTimes(1);
+    });
+
+    expect(session.noteManager.addNote).toHaveBeenCalledWith(
+      0,
+      100,
+      200,
+      'Check range',
+      'Reviewer',
+      { createdAt: '2024-04-10T10:00:00Z' },
+    );
+  });
+
+  it('SG-INT-017: pullNotes falls back to 1-1 when no frame fields are available', async () => {
+    configUI.emit('connect', {
+      serverUrl: 'https://studio.shotgrid.autodesk.com',
+      scriptName: 'test',
+      apiKey: 'key',
+      projectId: 42,
+    });
+
+    await vi.waitFor(() => {
+      expect(configUI.setState).toHaveBeenCalledWith('connected');
+    });
+
+    const sgNotes: ShotGridNote[] = [
+      {
+        id: 802,
+        subject: 'No frames',
+        content: 'General feedback',
+        note_links: [{ type: 'Version', id: 101 }],
+        created_at: '2024-04-10T11:00:00Z',
+        user: { type: 'HumanUser', id: 5, name: 'Reviewer' },
+        sg_first_frame: null,
+        sg_last_frame: null,
+        frame_range: null,
+      },
+    ];
+
+    const { ShotGridBridge: MockBridge } = await import('./ShotGridBridge');
+    const mockBridgeInstance = (MockBridge as any).mock.results.at(-1)?.value;
+    if (mockBridgeInstance) {
+      mockBridgeInstance.getNotesForVersion.mockResolvedValue(sgNotes);
+    }
+
+    panel.emit('pullNotes', { versionId: 101, sourceIndex: 0 });
+
+    await vi.waitFor(() => {
+      expect(session.noteManager.addNote).toHaveBeenCalledTimes(1);
+    });
+
+    expect(session.noteManager.addNote).toHaveBeenCalledWith(
+      0,
+      1,
+      1,
+      'General feedback',
+      'Reviewer',
+      { createdAt: '2024-04-10T11:00:00Z' },
+    );
+  });
+
+  it('SG-INT-018: pullNotes preserves original created_at from ShotGrid', async () => {
+    configUI.emit('connect', {
+      serverUrl: 'https://studio.shotgrid.autodesk.com',
+      scriptName: 'test',
+      apiKey: 'key',
+      projectId: 42,
+    });
+
+    await vi.waitFor(() => {
+      expect(configUI.setState).toHaveBeenCalledWith('connected');
+    });
+
+    const sgNotes: ShotGridNote[] = [
+      {
+        id: 803,
+        subject: 'Old note',
+        content: 'Created long ago',
+        note_links: [{ type: 'Version', id: 101 }],
+        created_at: '2023-06-15T08:30:00Z',
+        user: { type: 'HumanUser', id: 5, name: 'Reviewer' },
+        sg_first_frame: null,
+        sg_last_frame: null,
+        frame_range: null,
+      },
+    ];
+
+    const { ShotGridBridge: MockBridge } = await import('./ShotGridBridge');
+    const mockBridgeInstance = (MockBridge as any).mock.results.at(-1)?.value;
+    if (mockBridgeInstance) {
+      mockBridgeInstance.getNotesForVersion.mockResolvedValue(sgNotes);
+    }
+
+    panel.emit('pullNotes', { versionId: 101, sourceIndex: 0 });
+
+    await vi.waitFor(() => {
+      expect(session.noteManager.addNote).toHaveBeenCalledTimes(1);
+    });
+
+    // Verify created_at is passed through in options
+    const callArgs = session.noteManager.addNote.mock.calls[0]!;
+    expect(callArgs[5]).toEqual({ createdAt: '2023-06-15T08:30:00Z' });
+  });
+
+  it('SG-INT-019: pullNotes passes undefined createdAt when created_at is empty', async () => {
+    configUI.emit('connect', {
+      serverUrl: 'https://studio.shotgrid.autodesk.com',
+      scriptName: 'test',
+      apiKey: 'key',
+      projectId: 42,
+    });
+
+    await vi.waitFor(() => {
+      expect(configUI.setState).toHaveBeenCalledWith('connected');
+    });
+
+    const sgNotes: ShotGridNote[] = [
+      {
+        id: 804,
+        subject: 'No date',
+        content: 'Missing date',
+        note_links: [{ type: 'Version', id: 101 }],
+        created_at: '',
+        user: { type: 'HumanUser', id: 5, name: 'Reviewer' },
+        sg_first_frame: null,
+        sg_last_frame: null,
+        frame_range: null,
+      },
+    ];
+
+    const { ShotGridBridge: MockBridge } = await import('./ShotGridBridge');
+    const mockBridgeInstance = (MockBridge as any).mock.results.at(-1)?.value;
+    if (mockBridgeInstance) {
+      mockBridgeInstance.getNotesForVersion.mockResolvedValue(sgNotes);
+    }
+
+    panel.emit('pullNotes', { versionId: 101, sourceIndex: 0 });
+
+    await vi.waitFor(() => {
+      expect(session.noteManager.addNote).toHaveBeenCalledTimes(1);
+    });
+
+    // Empty string is falsy, so createdAt should be undefined (falls back to now in NoteManager)
+    const callArgs = session.noteManager.addNote.mock.calls[0]!;
+    expect(callArgs[5]).toEqual({ createdAt: undefined });
   });
 
   it('SG-INT-014: loadVersion does not log frame-sequence info for movie URLs', async () => {

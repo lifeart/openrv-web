@@ -61,6 +61,12 @@ export interface ShotGridNote {
   note_links: Array<{ type: string; id: number }>;
   created_at: string;
   user: { type: 'HumanUser'; id: number; name: string };
+  /** First frame number (may be null if not set in ShotGrid) */
+  sg_first_frame: number | null;
+  /** Last frame number (may be null if not set in ShotGrid) */
+  sg_last_frame: number | null;
+  /** Frame range string, e.g. '1045-1052' (may be null) */
+  frame_range: string | null;
 }
 
 /** Options for pushNote */
@@ -249,7 +255,7 @@ export class ShotGridBridge {
       `${this.serverUrl}/api/v1/entity/notes` +
       `?filter[note_links]=[{"type":"Version","id":${versionId}}]` +
       `&filter[project]=${this.projectId}` +
-      `&fields=subject,content,note_links,created_at,user`;
+      `&fields=subject,content,note_links,created_at,user,sg_first_frame,sg_last_frame,frame_range`;
 
     return this.fetchAllPages<ShotGridNote>(url);
   }

@@ -409,7 +409,7 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
     const parts: string[] = [];
     parts.push(`${importedCount} marker${importedCount !== 1 ? 's' : ''} imported.`);
     if (invalidCount > 0) {
-      parts.push(`${invalidCount} invalid entry${invalidCount !== 1 ? 'ies' : 'y'} skipped.`);
+      parts.push(`${invalidCount} invalid ${invalidCount !== 1 ? 'entries' : 'entry'} skipped.`);
     }
     if (mode === 'merge' && collisionCount > 0) {
       parts.push(
