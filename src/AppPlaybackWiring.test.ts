@@ -231,12 +231,14 @@ function createMockControls() {
 function createMockDeps(): PlaybackWiringDeps {
   return {
     getKeyboardHandler: vi.fn(() => ({
-      showShortcutsDialog: vi.fn(),
       showCustomBindingsDialog: vi.fn(),
     })) as unknown as PlaybackWiringDeps['getKeyboardHandler'],
     getFullscreenManager: vi.fn(() => ({
       toggle: vi.fn().mockResolvedValue(undefined),
     })) as unknown as PlaybackWiringDeps['getFullscreenManager'],
+    getShortcutCheatSheet: vi.fn(() => ({
+      show: vi.fn(),
+    })),
   };
 }
 
@@ -426,10 +428,28 @@ describe('wirePlaybackControls', () => {
     expect(viewer.exportSourceFrame).toHaveBeenCalledWith('jpeg', 0.8);
   });
 
-  it('PW-007: showShortcuts calls keyboardHandler.showShortcutsDialog()', () => {
+  it('PW-007: showShortcuts calls shortcutCheatSheet.show()', () => {
     headerBar.emit('showShortcuts', undefined);
-    const handler = (deps.getKeyboardHandler as ReturnType<typeof vi.fn>).mock.results[0]!.value;
-    expect(handler.showShortcutsDialog).toHaveBeenCalled();
+    const cheatSheet = (deps.getShortcutCheatSheet as ReturnType<typeof vi.fn>).mock.results[0]!.value;
+    expect(cheatSheet.show).toHaveBeenCalled();
+  });
+
+  it('PW-007b: showShortcuts does not crash when getShortcutCheatSheet returns null', () => {
+    deps.getShortcutCheatSheet = vi.fn(() => null);
+    // Re-wire with updated deps
+    subs.subscriptions.dispose();
+    const ctx = {
+      session,
+      viewer,
+      headerBar,
+      controls,
+      persistenceManager,
+      paintEngine: { on: vi.fn().mockReturnValue(() => {}) } as any,
+      tabBar: { on: vi.fn().mockReturnValue(() => {}) } as any,
+      sessionBridge: {} as any,
+    } as any;
+    wirePlaybackControls(ctx, deps);
+    expect(() => headerBar.emit('showShortcuts', undefined)).not.toThrow();
   });
 
   it('PW-008: fullscreenToggle calls fullscreenManager.toggle()', () => {

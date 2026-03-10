@@ -4991,6 +4991,19 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Even where the app has live restore plumbing for advanced stereo state, RV/GTO import never feeds it.
   - That makes stereo session interchange less complete than the restore contract and handler structure suggest.
 
+### 419. RV/GTO import cannot explicitly clear CDL, transform, or lens state when those nodes are present but inactive
+
+- Severity: High
+- Area: RV/GTO import / stale state reset
+- Evidence:
+  - `parseCDL(...)` skips inactive CDL components with `active === 0` and returns `null` if it finds no active CDL payload in [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L347) through [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L367).
+  - `parseTransform(...)` returns `null` immediately when the transform node has `active === 0` in [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L373) through [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L418).
+  - `parseLens(...)` does the same for inactive lens-warp nodes in [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L424) through [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L545).
+  - The live restore path only applies those settings when the parsed fields exist, via `if (settings.cdl)`, `if (settings.transform)`, and `if (settings.lens)` in [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L89) through [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L100).
+- Impact:
+  - Importing an RV/GTO session that explicitly disables CDL, transform, or lens warp cannot actively restore those features to default/off if the current app session already had them enabled.
+  - That leaves image state dependent on prior local session history instead of the imported session file.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

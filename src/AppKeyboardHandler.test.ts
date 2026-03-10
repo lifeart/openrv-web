@@ -1,5 +1,5 @@
 /**
- * AppKeyboardHandler - Shortcuts dialog search/filter tests (M-25)
+ * AppKeyboardHandler - Keyboard registration and binding tests
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -38,162 +38,9 @@ function createHandler(): AppKeyboardHandler {
   return new AppKeyboardHandler(km, ckm, ctx);
 }
 
-/** Helper: dispatch a native `input` event on the given element */
-function fireInput(el: HTMLInputElement, value: string): void {
-  el.value = value;
-  el.dispatchEvent(new Event('input', { bubbles: true }));
-}
-
-describe('Shortcuts dialog search/filter (M-25)', () => {
-  let handler: AppKeyboardHandler;
-
+describe('Keyboard registration tests (M-25)', () => {
   beforeEach(() => {
     localStorageMock.clear();
-    handler = createHandler();
-  });
-
-  afterEach(() => {
-    closeModal();
-  });
-
-  it('SK-M25a: Shortcuts dialog should contain a search/filter input', () => {
-    handler.showShortcutsDialog();
-
-    const searchInput = document.querySelector<HTMLInputElement>('[data-testid="shortcuts-search"]');
-    expect(searchInput).not.toBeNull();
-    expect(searchInput!.tagName).toBe('INPUT');
-    expect(searchInput!.type).toBe('text');
-    expect(searchInput!.placeholder).toMatch(/search/i);
-  });
-
-  it('SK-M25b: Typing in the search input should filter displayed shortcuts by description', () => {
-    handler.showShortcutsDialog();
-
-    const searchInput = document.querySelector<HTMLInputElement>('[data-testid="shortcuts-search"]')!;
-    const allRows = document.querySelectorAll<HTMLElement>('[data-shortcut-row]');
-    expect(allRows.length).toBeGreaterThan(0);
-
-    // Search for "toggle play" which matches "Toggle play/pause"
-    fireInput(searchInput, 'toggle play');
-
-    const visibleRows = Array.from(document.querySelectorAll<HTMLElement>('[data-shortcut-row]')).filter(
-      (r) => r.style.display !== 'none',
-    );
-
-    // Should have at least one match and fewer than all rows
-    expect(visibleRows.length).toBeGreaterThan(0);
-    expect(visibleRows.length).toBeLessThan(allRows.length);
-
-    // Every visible row should contain "toggle play" in its description
-    for (const row of visibleRows) {
-      const desc = row.getAttribute('data-shortcut-desc') || '';
-      expect(desc).toContain('toggle play');
-    }
-  });
-
-  it('SK-M25c: Typing a key name (e.g., "Shift") should filter shortcuts containing that modifier', () => {
-    handler.showShortcutsDialog();
-
-    const searchInput = document.querySelector<HTMLInputElement>('[data-testid="shortcuts-search"]')!;
-    const allRows = document.querySelectorAll<HTMLElement>('[data-shortcut-row]');
-
-    fireInput(searchInput, 'shift');
-
-    const visibleRows = Array.from(document.querySelectorAll<HTMLElement>('[data-shortcut-row]')).filter(
-      (r) => r.style.display !== 'none',
-    );
-
-    expect(visibleRows.length).toBeGreaterThan(0);
-    expect(visibleRows.length).toBeLessThan(allRows.length);
-
-    // Every visible row should contain "shift" in key or description
-    for (const row of visibleRows) {
-      const key = row.getAttribute('data-shortcut-key') || '';
-      const desc = row.getAttribute('data-shortcut-desc') || '';
-      expect(key.includes('shift') || desc.includes('shift')).toBe(true);
-    }
-  });
-
-  it('SK-M25d: Clearing the search input should show all shortcuts', () => {
-    handler.showShortcutsDialog();
-
-    const searchInput = document.querySelector<HTMLInputElement>('[data-testid="shortcuts-search"]')!;
-    const allRowsBefore = document.querySelectorAll<HTMLElement>('[data-shortcut-row]');
-    const totalCount = allRowsBefore.length;
-
-    // First filter down
-    fireInput(searchInput, 'toggle play');
-    const visibleAfterFilter = Array.from(document.querySelectorAll<HTMLElement>('[data-shortcut-row]')).filter(
-      (r) => r.style.display !== 'none',
-    );
-    expect(visibleAfterFilter.length).toBeLessThan(totalCount);
-
-    // Clear the search input
-    fireInput(searchInput, '');
-
-    const visibleAfterClear = Array.from(document.querySelectorAll<HTMLElement>('[data-shortcut-row]')).filter(
-      (r) => r.style.display !== 'none',
-    );
-    expect(visibleAfterClear.length).toBe(totalCount);
-  });
-
-  it('SK-M25e: The search input should be auto-focused when the dialog opens', () => {
-    handler.showShortcutsDialog();
-
-    const searchInput = document.querySelector<HTMLInputElement>('[data-testid="shortcuts-search"]')!;
-    expect(document.activeElement).toBe(searchInput);
-  });
-
-  it('SK-M25f: conflicting default scope shortcuts are hidden when not actually registered', () => {
-    handler.showShortcutsDialog();
-
-    const rows = Array.from(document.querySelectorAll<HTMLElement>('[data-shortcut-row]'));
-    const descriptions = rows.map((row) => row.getAttribute('data-shortcut-desc'));
-
-    // waveform and histogram are now context-managed (like gamut diagram), not hidden
-    expect(descriptions).toContain('toggle waveform scope');
-    expect(descriptions).toContain('toggle histogram');
-  });
-
-  it('SK-M25g: conflicting shortcuts reappear once the user sets a custom binding', () => {
-    const km = new KeyboardManager();
-    const ckm = new CustomKeyBindingsManager();
-    ckm.setCustomBinding('panel.waveform', { code: 'KeyU', ctrl: true, alt: true });
-
-    const customHandler = new AppKeyboardHandler(km, ckm, {
-      getActionHandlers: () => ({}),
-      getContainer: () => document.body,
-    });
-
-    customHandler.showShortcutsDialog();
-
-    const rows = Array.from(document.querySelectorAll<HTMLElement>('[data-shortcut-row]'));
-    const waveformRow = rows.find((row) => row.getAttribute('data-shortcut-desc') === 'toggle waveform scope');
-
-    expect(waveformRow).toBeTruthy();
-    expect(waveformRow?.getAttribute('data-shortcut-key')).toContain('ctrl');
-    expect(waveformRow?.getAttribute('data-shortcut-key')).toContain('u');
-  });
-
-  it('SK-M25h: context-managed KeyG actions remain visible in the shortcut dialog', () => {
-    handler.showShortcutsDialog();
-
-    const rows = Array.from(document.querySelectorAll<HTMLElement>('[data-shortcut-row]'));
-    const descriptions = rows.map((row) => row.getAttribute('data-shortcut-desc'));
-
-    expect(descriptions).toContain('go to frame (open frame entry)');
-    expect(descriptions).toContain('toggle ghost mode');
-    expect(descriptions).toContain('toggle cie gamut diagram');
-  });
-
-  it('SK-M25i: newly added playback and transform shortcuts are listed', () => {
-    handler.showShortcutsDialog();
-
-    const rows = Array.from(document.querySelectorAll<HTMLElement>('[data-shortcut-row]'));
-    const descriptions = rows.map((row) => row.getAttribute('data-shortcut-desc'));
-
-    expect(descriptions).toContain('toggle between realtime and play all frames');
-    expect(descriptions).toContain('reset rotation to 0');
   });
 
   it('SK-M25j: context-managed KeyG actions are skipped from direct keyboard registration', () => {
@@ -292,18 +139,9 @@ describe('Shortcuts dialog search/filter (M-25)', () => {
     expect(lutBinding!.shift).toBe(true);
     expect(lutBinding!.context).toBe('global');
   });
-
-  it('SK-M25p: lut.togglePanel appears in the shortcuts dialog under COLOR category', () => {
-    handler.showShortcutsDialog();
-
-    const rows = Array.from(document.querySelectorAll<HTMLElement>('[data-shortcut-row]'));
-    const descriptions = rows.map((row) => row.getAttribute('data-shortcut-desc'));
-
-    expect(descriptions).toContain('toggle lut pipeline panel');
-  });
 });
 
-describe('Transparency info messages (Issues #57, #58)', () => {
+describe('Transparency info messages (Issue #57)', () => {
   let handler: AppKeyboardHandler;
 
   beforeEach(() => {
@@ -313,22 +151,6 @@ describe('Transparency info messages (Issues #57, #58)', () => {
 
   afterEach(() => {
     closeModal();
-  });
-
-  it('#58: showShortcutsDialog logs info about ShortcutCheatSheet duplication', () => {
-    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
-    try {
-      handler.showShortcutsDialog();
-
-      expect(infoSpy).toHaveBeenCalledWith(
-        expect.stringContaining('showShortcutsDialog'),
-      );
-      expect(infoSpy).toHaveBeenCalledWith(
-        expect.stringContaining('ShortcutCheatSheet'),
-      );
-    } finally {
-      infoSpy.mockRestore();
-    }
   });
 
   it('#57: showCustomBindingsDialog logs info about missing ShortcutEditor features', () => {

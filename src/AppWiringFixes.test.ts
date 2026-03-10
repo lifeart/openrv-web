@@ -863,7 +863,6 @@ describe('AudioMixer volume wiring fix', () => {
 
     const deps: PlaybackWiringDeps = {
       getKeyboardHandler: vi.fn(() => ({
-        showShortcutsDialog: vi.fn(),
         showCustomBindingsDialog: vi.fn(),
       })) as any,
       getFullscreenManager: vi.fn(() => ({
@@ -900,7 +899,6 @@ describe('AudioMixer volume wiring fix', () => {
 
     const deps: PlaybackWiringDeps = {
       getKeyboardHandler: vi.fn(() => ({
-        showShortcutsDialog: vi.fn(),
         showCustomBindingsDialog: vi.fn(),
       })) as any,
       getFullscreenManager: vi.fn(() => ({
@@ -937,7 +935,6 @@ describe('AudioMixer volume wiring fix', () => {
 
     const deps: PlaybackWiringDeps = {
       getKeyboardHandler: vi.fn(() => ({
-        showShortcutsDialog: vi.fn(),
         showCustomBindingsDialog: vi.fn(),
       })) as any,
       getFullscreenManager: vi.fn(() => ({
@@ -973,7 +970,6 @@ describe('AudioMixer volume wiring fix', () => {
 
     const deps: PlaybackWiringDeps = {
       getKeyboardHandler: vi.fn(() => ({
-        showShortcutsDialog: vi.fn(),
         showCustomBindingsDialog: vi.fn(),
       })) as any,
       getFullscreenManager: vi.fn(() => ({
@@ -1008,7 +1004,6 @@ describe('AudioMixer volume wiring fix', () => {
 
     const deps: PlaybackWiringDeps = {
       getKeyboardHandler: vi.fn(() => ({
-        showShortcutsDialog: vi.fn(),
         showCustomBindingsDialog: vi.fn(),
       })) as any,
       getFullscreenManager: vi.fn(() => ({

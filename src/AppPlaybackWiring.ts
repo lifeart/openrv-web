@@ -44,6 +44,7 @@ export interface PlaybackWiringDeps {
   getKeyboardHandler: () => AppKeyboardHandler;
   getFullscreenManager: () => FullscreenManager | undefined;
   getAudioMixer?: () => AudioMixer;
+  getShortcutCheatSheet?: () => { show(): void } | null;
 }
 
 /**
@@ -55,7 +56,7 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
   let videoExportInProgress = false;
 
   // HeaderBar events
-  subs.add(headerBar.on('showShortcuts', () => deps.getKeyboardHandler().showShortcutsDialog()));
+  subs.add(headerBar.on('showShortcuts', () => deps.getShortcutCheatSheet?.()?.show()));
   subs.add(headerBar.on('showCustomKeyBindings', () => deps.getKeyboardHandler().showCustomBindingsDialog()));
   subs.add(headerBar.on('saveProject', () => persistenceManager.saveProject()));
   subs.add(headerBar.on('openProject', (files) => persistenceManager.openProject(files[0]!, files.slice(1))));

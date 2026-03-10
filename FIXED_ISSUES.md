@@ -1,5 +1,20 @@
 # Fixed Issues
 
+## Issue #230: `openrv.media.getFPS()` reports mutable session playback FPS, not the current source FPS it claims to return
+
+- **Severity**: Medium
+- **Area**: Public API / media metadata consistency
+- **Root Cause**: `MediaAPI.getFPS()` was documented to return "the frames per second of the current source" but implemented as `return this.session.fps`, which returns the mutable session playback rate. Session FPS can be overridden independently (e.g., via shared URL state), causing contradictory values like `getCurrentSource().fps === 24` while `getFPS() === 48`.
+- **Fix**: Changed `getFPS()` to return `this.session.currentSource?.fps ?? this.session.fps` — returns the source's FPS when loaded, falls back to session FPS when no source exists. Added `getPlaybackFPS()` for callers needing the session playback rate. Also updated `MuCommands.fps()` to use `getPlaybackFPS()` to preserve Mu compat semantics (original RV's `fps()` returns effective playback rate).
+- **Regression Tests**: Added 4 new tests in `OpenRVAPI.test.ts` + 1 in `MuCommands.test.ts`:
+  - API-U209: `getFPS()` returns source FPS (24) even when session FPS is overridden (48)
+  - API-U210: `getFPS()` falls back to session FPS when no source loaded
+  - API-U211: `getPlaybackFPS()` returns session playback FPS
+  - API-U212: `getPlaybackFPS()` throws after dispose
+  - MuCommands: `fps()` returns playback FPS (not source FPS) when no override
+- **Verification**: TypeScript clean, all 262 API tests pass, all 104 MuCommands tests pass.
+- **Files Changed**: `src/api/MediaAPI.ts`, `src/api/OpenRVAPI.test.ts`, `src/compat/MuCommands.ts`, `src/compat/__tests__/MuCommands.test.ts`
+
 ## Issue #229: Display HDR / gamut capability is frozen at startup, so moving the app between displays leaves stale output assumptions
 
 - **Severity**: Medium

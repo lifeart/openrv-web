@@ -638,6 +638,7 @@ export class App {
         getKeyboardHandler: () => this.keyboardHandler,
         getFullscreenManager: () => this.fullscreenManager ?? undefined,
         getAudioMixer: () => this.audioOrchestrator.getAudioMixer(),
+        getShortcutCheatSheet: () => this.shortcutCheatSheet,
       }),
       wireStackControls(wiringCtx),
     ];

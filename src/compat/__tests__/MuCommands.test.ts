@@ -41,6 +41,7 @@ function createMockOpenRV() {
     },
     media: {
       getFPS: vi.fn((): number => 24),
+      getPlaybackFPS: vi.fn((): number => 24),
       getResolution: vi.fn((): { width: number; height: number } => ({ width: 1920, height: 1080 })),
       hasMedia: vi.fn((): boolean => true),
       getCurrentSource: vi.fn(() => null),
@@ -196,6 +197,12 @@ describe('MuCommands', () => {
       expect(cmd.fps()).toBe(24); // default from media
       cmd.setFPS(30);
       expect(cmd.fps()).toBe(30); // override
+    });
+
+    it('fps() returns playback FPS (not source FPS) when no override', () => {
+      mockOpenRV.media.getPlaybackFPS.mockReturnValue(48);
+      mockOpenRV.media.getFPS.mockReturnValue(24);
+      expect(cmd.fps()).toBe(48);
     });
 
     it('setFPS() throws on invalid input', () => {

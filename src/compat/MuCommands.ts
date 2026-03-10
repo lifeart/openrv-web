@@ -34,6 +34,7 @@ function getOpenRV(): {
   };
   media: {
     getFPS(): number;
+    getPlaybackFPS(): number;
     getResolution(): { width: number; height: number };
     hasMedia(): boolean;
   };
@@ -227,7 +228,7 @@ export class MuCommands {
   /** Get effective FPS. (Mu #9) */
   fps(): number {
     if (this._overrideFPS !== null) return this._overrideFPS;
-    return getOpenRV().media.getFPS();
+    return getOpenRV().media.getPlaybackFPS();
   }
 
   /** Get measured (real) playback FPS. (Mu #10) */
