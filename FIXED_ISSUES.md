@@ -259,3 +259,13 @@
 - **Regression Tests**: AO-020 through AO-034 — `isSessionAudioActive` default/boolean/function modes, `setSessionAudioActive` runtime updates, decode skip when session audio active, normal decode when inactive, dual-pipeline warning fires once, dynamic function transitions, deprecation markers, volume/mute interface contract, decode resume after deactivation, negative warning path, empty URL edge case, playback handler independence.
 - **Verification**: All 35 AudioOrchestrator tests pass, TypeScript clean.
 - **Files Changed**: `src/services/AudioOrchestrator.ts`, `src/App.ts`, `src/services/AudioOrchestrator.test.ts`
+
+## Issue #31: Network "View (Pan/Zoom)" sync is only half wired and does not send local view changes
+
+- **Severity**: High
+- **Area**: Network sync, collaboration, view state
+- **Root Cause**: (1) `sendViewSync()` had no production caller — outgoing view changes were never transmitted. (2) The receive side only applied `viewer.setZoom(payload.zoom)`, ignoring `panX`, `panY`, and `channelMode`.
+- **Fix**: Added `notifyViewChanged()` callback to `TransformManager`, wired to all pan/zoom setters (`panX`, `panY`, `zoom`, `setPan`, `setZoom`, `smoothZoomTo`). `Viewer` exposes `setOnViewChanged()`. `AppNetworkBridge` outgoing: wires callback → `sendViewSync()` with 100ms throttle and `isApplyingRemoteState` feedback loop guard. Incoming: extends `syncView` to apply pan (`setPan`), zoom (`setZoom`), and channelMode (`setChannelMode`). Domain expert review caught missing `notifyViewChanged()` in `zoom` setter — fixed.
+- **Regression Tests**: ANB-130 through ANB-141 (incoming full payload, remote apply guard, outgoing trigger, feedback loop protection, not-connected guard, dispose cleanup, throttle behavior, dispose cancels throttle), ANB-136 through ANB-138 (partial payload, zero values, error resilience), TM onViewChanged tests (zoom/panX/panY/setPan/setZoom setters fire callback, null callback, dispose clears, smoothZoomTo, fitToWindow exclusion).
+- **Verification**: All 113 tests pass (59 TransformManager + 54 AppNetworkBridge), TypeScript clean.
+- **Files Changed**: `src/ui/components/TransformManager.ts`, `src/ui/components/Viewer.ts`, `src/AppNetworkBridge.ts`, `src/AppNetworkBridge.test.ts`, `src/ui/components/TransformManager.test.ts`

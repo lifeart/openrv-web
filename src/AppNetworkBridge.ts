@@ -215,18 +215,30 @@ export class AppNetworkBridge {
               annotations,
               notes,
             });
-            return;
           } catch (error) {
             networkControl.showError(
               `Failed to encrypt session state for transfer: ${error instanceof Error ? error.message : 'unknown error'}`,
             );
+            return;
           }
+        } else {
+          networkSyncManager.sendSessionStateResponse(requestId, requesterUserId, {
+            sessionState: encodedState,
+            annotations,
+            notes,
+          });
         }
 
-        networkSyncManager.sendSessionStateResponse(requestId, requesterUserId, {
-          sessionState: encodedState,
-          annotations,
-          notes,
+        // Send current color adjustments so the joiner inherits the host's color state
+        const colorAdj = viewer.getColorAdjustments();
+        networkSyncManager.sendColorSync({
+          exposure: colorAdj.exposure,
+          gamma: colorAdj.gamma,
+          saturation: colorAdj.saturation,
+          contrast: colorAdj.contrast,
+          temperature: colorAdj.temperature,
+          tint: colorAdj.tint,
+          brightness: colorAdj.brightness,
         });
       }),
     );

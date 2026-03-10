@@ -1515,6 +1515,70 @@ This file tracks findings from exploratory review and targeted validation runs.
   - If a project reopens without media, or the user skips reloading local files, the app silently drops persisted playback settings instead of restoring the parts that are still meaningful.
   - That makes project recovery much less reliable for exactly the cases where users most need the saved state to survive partial media failure.
 
+### 125. RV/GTO session import keeps old review metadata when the imported file contains none
+
+- Severity: High
+- Area: RV/GTO import / session metadata restore
+- Evidence:
+  - `SessionGraph.loadFromGTO(...)` only applies imported marks, notes, version groups, and statuses when the parsed arrays have `length > 0` in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L294).
+  - The GTO parser also omits those fields from `sessionInfo` when the imported file contains zero entries in [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L291), [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L475), [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L527), and [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L629).
+  - The underlying managers are replace-style loaders that would clear old state if they were called, in [src/core/session/NoteManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/NoteManager.ts#L247), [src/core/session/VersionManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/VersionManager.ts#L338), and [src/core/session/StatusManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/StatusManager.ts#L178).
+- Impact:
+  - Importing an RV/GTO session with no notes, no marks, or no version/status metadata can leave the previous session’s review metadata still active.
+  - That makes format import non-idempotent: “empty” in the imported session does not mean empty in the running app.
+
+### 126. `.orvproject` save/load never persists the node graph, even though the project schema and graph serializer exist
+
+- Severity: High
+- Area: Persistence / node graph / session topology
+- Evidence:
+  - The `.orvproject` schema explicitly reserves `graph?: SerializedGraph` in [src/core/session/SessionState.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionState.ts#L148).
+  - The app also has a dedicated graph serializer/deserializer for project persistence in [src/core/session/SessionManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionManager.ts#L328).
+  - But `SessionSerializer.toJSON(...)` never writes any `graph` field into the saved project object in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L257).
+  - `SessionSerializer.fromJSON(...)` likewise never reads `state.graph` or calls `SessionManager.fromSerializedGraph(...)` anywhere in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L354).
+  - The runtime session does carry graph state when loaded from GTO/RV, exposed via `session.graph`, in [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L416).
+- Impact:
+  - Saving a project from a graph-based session drops the session topology outright instead of round-tripping it through `.orvproject`.
+  - That makes project save/load materially weaker than the repo’s own schema and graph-management code imply, especially for stack/layout/sequence workflows that depend on graph structure rather than flat source lists.
+
+### 127. Session renaming in the header is not honored by project save/load
+
+- Severity: Medium
+- Area: Project metadata / file workflow
+- Evidence:
+  - The shipped header exposes a rename-session flow through `session.setDisplayName(...)` in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L565).
+  - Project save ignores that session metadata and hardcodes the serialized project name to `'project'` in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L243).
+  - The same flow also hardcodes the download filename to `project.orvproject` in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L253).
+  - `SessionSerializer.toJSON(...)` only records the caller-provided `projectName` as `state.name` in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L226).
+  - `SessionSerializer.fromJSON(...)` does not apply `state.name` back onto session metadata or the header name display anywhere in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L354).
+- Impact:
+  - The app presents session naming as a first-class UI concept, but manual project save/load discards it and normalizes everything to `project`.
+  - That makes saved project files harder to distinguish and breaks the expectation that a named review session will round-trip with its own identity.
+
+### 128. RV/GTO marker notes and marker colors are exported and parsed, but import drops them
+
+- Severity: Medium
+- Area: RV/GTO round-trip / review metadata
+- Evidence:
+  - GTO export writes marker frame numbers, marker notes, and marker colors as parallel arrays in [src/core/session/SessionGTOExporter.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGTOExporter.ts#L1478).
+  - GTO import parses `markerNotes` and `markerColors` back into `sessionInfo` in [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L299).
+  - But `SessionGraph.loadFromGTO(...)` restores markers with `markerManager.setFromFrameNumbers(...)`, which explicitly assigns empty notes and default colors in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L294) and [src/core/session/MarkerManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MarkerManager.ts#L253).
+- Impact:
+  - Marker placement survives RV/GTO round-trips, but marker annotations and color coding do not.
+  - That weakens the app’s review-session interchange because the imported marker list no longer carries the meaning the exporter wrote out.
+
+### 129. RV/GTO audio-scrub state is exported and parsed, but never restored
+
+- Severity: Medium
+- Area: RV/GTO round-trip / playback settings
+- Evidence:
+  - GTO export writes `audioScrubEnabled` from playback state in [src/core/session/SessionGTOExporter.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGTOExporter.ts#L1495).
+  - The GTO loader parses that property into `sessionInfo.audioScrubEnabled` in [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L357).
+  - `SessionGraph.loadFromGTO(...)` applies fps, frame, in/out, marks, frame increment, notes, statuses, and playback mode, but there is no step that applies `audioScrubEnabled` to the live session in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L282).
+- Impact:
+  - RV/GTO round-trips silently forget whether scrub audio was enabled in the original session.
+  - That creates another “exported but not actually restorable” playback setting in the session interchange path.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

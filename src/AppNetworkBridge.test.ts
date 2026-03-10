@@ -1377,6 +1377,98 @@ describe('AppNetworkBridge', () => {
   });
 
   // -----------------------------------------------------------------------
+  // Color adjustments in initial state transfer
+  // -----------------------------------------------------------------------
+  describe('color adjustments in initial state transfer', () => {
+    it('ANB-126: sessionStateRequested sends color adjustments via sendColorSync', async () => {
+      bridge.setup();
+      ctx._networkSyncManager.isHost = true;
+
+      ctx._networkSyncManager.emit('sessionStateRequested', {
+        requestId: 'req-1',
+        requesterUserId: 'user-2',
+      });
+
+      await vi.waitFor(() => {
+        expect(ctx._networkSyncManager.sendSessionStateResponse).toHaveBeenCalled();
+      });
+
+      expect(ctx._networkSyncManager.sendColorSync).toHaveBeenCalledTimes(1);
+      expect(ctx._networkSyncManager.sendColorSync).toHaveBeenCalledWith({
+        exposure: 0,
+        gamma: 1,
+        saturation: 1,
+        contrast: 1,
+        temperature: 0,
+        tint: 0,
+        brightness: 0,
+      });
+    });
+
+    it('ANB-127: sessionStateRequested sends current viewer color state, not defaults', async () => {
+      bridge.setup();
+      ctx._networkSyncManager.isHost = true;
+
+      // Simulate the host having non-default color adjustments
+      ctx._viewer.getColorAdjustments.mockReturnValue({
+        exposure: 1.5,
+        gamma: 2.2,
+        saturation: 0.8,
+        vibrance: 0,
+        vibranceSkinProtection: false,
+        contrast: 1.3,
+        clarity: 0,
+        hueRotation: 0,
+        temperature: -500,
+        tint: 10,
+        brightness: 0.2,
+        highlights: 0,
+        shadows: 0,
+        whites: 0,
+        blacks: 0,
+      });
+
+      ctx._networkSyncManager.emit('sessionStateRequested', {
+        requestId: 'req-2',
+        requesterUserId: 'user-3',
+      });
+
+      await vi.waitFor(() => {
+        expect(ctx._networkSyncManager.sendSessionStateResponse).toHaveBeenCalled();
+      });
+
+      expect(ctx._networkSyncManager.sendColorSync).toHaveBeenCalledTimes(1);
+      expect(ctx._networkSyncManager.sendColorSync).toHaveBeenCalledWith({
+        exposure: 1.5,
+        gamma: 2.2,
+        saturation: 0.8,
+        contrast: 1.3,
+        temperature: -500,
+        tint: 10,
+        brightness: 0.2,
+      });
+    });
+
+    it('ANB-128: sessionStateRequested sends color even when no adjustments have changed', async () => {
+      bridge.setup();
+      ctx._networkSyncManager.isHost = true;
+
+      // No adjustmentsChanged events fired — just the initial state request
+      ctx._networkSyncManager.emit('sessionStateRequested', {
+        requestId: 'req-3',
+        requesterUserId: 'user-4',
+      });
+
+      await vi.waitFor(() => {
+        expect(ctx._networkSyncManager.sendSessionStateResponse).toHaveBeenCalled();
+      });
+
+      // Color sync should still be sent even though no adjustments event occurred
+      expect(ctx._networkSyncManager.sendColorSync).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // -----------------------------------------------------------------------
   // View sync
   // -----------------------------------------------------------------------
   describe('view sync', () => {
@@ -1457,6 +1549,61 @@ describe('AppNetworkBridge', () => {
       expect(ctx._networkSyncManager.sendViewSync).not.toHaveBeenCalled();
 
       ctx._networkSyncManager.isConnected = true;
+    });
+
+    it('ANB-136: incoming syncView without channelMode skips setChannelMode', () => {
+      bridge.setup();
+
+      ctx._networkSyncManager.emit('syncView', {
+        panX: 50,
+        panY: -25,
+        zoom: 1.5,
+        // channelMode intentionally omitted
+      });
+
+      expect(ctx._viewer.setZoom).toHaveBeenCalledWith(1.5);
+      expect(ctx._viewer.setPan).toHaveBeenCalledWith(50, -25);
+      expect(ctx._viewer.setChannelMode).not.toHaveBeenCalled();
+    });
+
+    it('ANB-137: incoming syncView with zero pan/zoom values applies correctly', () => {
+      bridge.setup();
+
+      ctx._networkSyncManager.emit('syncView', {
+        panX: 0,
+        panY: 0,
+        zoom: 0,
+        channelMode: 'rgb',
+      });
+
+      expect(ctx._viewer.setZoom).toHaveBeenCalledWith(0);
+      expect(ctx._viewer.setPan).toHaveBeenCalledWith(0, 0);
+      expect(ctx._viewer.setChannelMode).toHaveBeenCalledWith('rgb');
+    });
+
+    it('ANB-138: incoming syncView calls endApplyRemote even if setZoom throws', () => {
+      bridge.setup();
+
+      const sm = ctx._networkSyncManager.getSyncStateManager();
+      ctx._viewer.setZoom.mockImplementationOnce(() => {
+        throw new Error('zoom error');
+      });
+
+      // The EventEmitter may swallow the error, but endApplyRemote
+      // must still be called thanks to the try/finally block.
+      try {
+        ctx._networkSyncManager.emit('syncView', {
+          panX: 0,
+          panY: 0,
+          zoom: 1,
+          channelMode: 'rgb',
+        });
+      } catch {
+        // Error may or may not propagate depending on EventEmitter implementation
+      }
+
+      // endApplyRemote must still be called (try/finally)
+      expect(sm.endApplyRemote).toHaveBeenCalled();
     });
 
     it('ANB-135: dispose clears the view changed callback', () => {
