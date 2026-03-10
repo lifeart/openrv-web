@@ -761,11 +761,13 @@ describe('MuExtraCommands', () => {
         expect(spy).toHaveBeenCalledWith('[RV Feedback] first');
         expect(spy).toHaveBeenCalledTimes(1);
 
-        // After 1s first expires → mid-zero shown and immediately cleared → last shown
+        // After 1s first expires → mid-zero shown
         vi.advanceTimersByTime(1000);
         expect(spy).toHaveBeenCalledWith('[RV Feedback] mid-zero');
-        // setTimeout(..., 0) fires on next tick
-        vi.advanceTimersByTime(0);
+        expect(spy).toHaveBeenCalledTimes(2);
+
+        // Flush the setTimeout(cb, 0) for mid-zero → last shown
+        vi.advanceTimersByTime(1);
         expect(spy).toHaveBeenCalledWith('[RV Feedback] last');
         expect(spy).toHaveBeenCalledTimes(3);
 
@@ -786,8 +788,8 @@ describe('MuExtraCommands', () => {
         expect(spy).toHaveBeenCalledWith('[RV Feedback] zero-first');
         expect(spy).toHaveBeenCalledTimes(1);
 
-        // setTimeout(..., 0) fires → zero-first cleared → normal-second shown
-        vi.advanceTimersByTime(0);
+        // Flush the setTimeout(cb, 0) → zero-first cleared → normal-second shown
+        vi.advanceTimersByTime(1);
         expect(spy).toHaveBeenCalledWith('[RV Feedback] normal-second');
         expect(spy).toHaveBeenCalledTimes(2);
 
@@ -805,7 +807,8 @@ describe('MuExtraCommands', () => {
 
         expect(spy).toHaveBeenCalledWith('[RV Feedback] only-zero');
 
-        vi.advanceTimersByTime(0);
+        // Flush the setTimeout(cb, 0) → cleared
+        vi.advanceTimersByTime(1);
         const current = (extra as unknown as { _currentFeedback: string | null })._currentFeedback;
         expect(current).toBeNull();
 
