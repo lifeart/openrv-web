@@ -19,7 +19,7 @@ import { getThemeManager } from '../../utils/ui/ThemeManager';
 import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
 import { getCorePreferencesManager } from '../../core/PreferencesManager';
 import { AriaAnnouncer } from '../a11y/AriaAnnouncer';
-import { showAlert } from './shared/Modal';
+import { showAlert, showConfirm } from './shared/Modal';
 
 export interface NotePanelEvents extends EventMap {
   visibilityChanged: boolean;
@@ -858,6 +858,15 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
           if (!data || !Array.isArray(data.notes)) {
             await showAlert('Invalid notes file. Expected { version, notes: [...] } format.');
             return;
+          }
+          const existingCount = this.session.noteManager.getNotes().length;
+          if (existingCount > 0) {
+            const importCount = data.notes.length;
+            const confirmed = await showConfirm(
+              `Importing will replace your ${existingCount} existing note(s) with ${importCount} imported note(s). This cannot be undone.`,
+              { title: 'Replace existing notes?', confirmText: 'Replace', confirmVariant: 'danger' },
+            );
+            if (!confirmed) return;
           }
           this.session.noteManager.fromSerializable(data.notes);
         } catch {

@@ -2183,6 +2183,78 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Users can uncheck `Include annotations` and still get annotations copied to the clipboard.
   - That makes the export menu internally inconsistent and undermines trust in the option’s meaning.
 
+### 177. Notes import performs almost no schema validation and can inject malformed notes into live UI state
+
+- Severity: Medium
+- Area: Notes workflow / data integrity
+- Evidence:
+  - The Notes panel import path only checks for `data.notes` being an array before calling `noteManager.fromSerializable(...)` in [src/ui/components/NotePanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NotePanel.ts#L845).
+  - `NoteManager.fromSerializable(...)` clears existing notes and inserts each imported object verbatim with no field validation in [src/core/session/NoteManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/NoteManager.ts#L247).
+  - The live Notes UI immediately assumes imported notes have valid `createdAt`, `frameStart`, `frameEnd`, `author`, `status`, and `text` fields when sorting/rendering in [src/ui/components/NotePanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NotePanel.ts#L441) and [src/ui/components/NotePanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NotePanel.ts#L538).
+- Impact:
+  - An externally edited or incompatible notes JSON file can replace the current note set with malformed entries instead of being rejected cleanly.
+  - That can lead to broken note rendering or partially corrupted note state right after import, with no compatibility warning up front.
+
+### 178. Marker import silently drops invalid entries and merge collisions with no summary
+
+- Severity: Medium
+- Area: Marker workflow / data integrity
+- Evidence:
+  - After only top-level shape validation, the marker import path filters entries down to `validMarkers` in [src/ui/components/MarkerListPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/MarkerListPanel.ts#L355).
+  - Entries that fail field checks are simply removed by that filter, with no user-visible warning or count in [src/ui/components/MarkerListPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/MarkerListPanel.ts#L360).
+  - In merge mode, frame collisions are also silently skipped via `continue` in [src/ui/components/MarkerListPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/MarkerListPanel.ts#L373).
+- Impact:
+  - A marker import can appear to “work” while quietly losing part of the file.
+  - Users get no indication whether markers were skipped because they were malformed or because the target frames were already occupied.
+
+### 179. ShotGrid note pull flattens note timing and review metadata
+
+- Severity: Medium
+- Area: ShotGrid integration / notes workflow
+- Evidence:
+  - `ShotGridBridge.getNotesForVersion(...)` only requests `subject,content,note_links,created_at,user` and does not fetch any frame-range field in [src/integrations/ShotGridBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/ShotGridBridge.ts#L247).
+  - `ShotGridIntegrationBridge.addNotesFromShotGrid(...)` then creates every pulled note at hardcoded frame `1-1` in [src/integrations/ShotGridIntegrationBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/ShotGridIntegrationBridge.ts#L281).
+  - `NoteManager.addNote(...)` always stamps pulled notes with a fresh local `createdAt`, `modifiedAt`, and default `open` status in [src/core/session/NoteManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/NoteManager.ts#L69).
+- Impact:
+  - ShotGrid notes lose their real review timing context when pulled into the app.
+  - Re-imported notes all look like new local notes on frame 1 instead of preserving the original review metadata users expect to sync.
+
+### 180. ShotGrid note deduplication resets on disconnect, so re-pulls can duplicate everything
+
+- Severity: Medium
+- Area: ShotGrid integration / notes workflow
+- Evidence:
+  - Deduplication is based only on the in-memory `sgNoteIdMap` in [src/integrations/ShotGridIntegrationBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/ShotGridIntegrationBridge.ts#L48).
+  - That map is cleared on disconnect and disposal in [src/integrations/ShotGridIntegrationBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/ShotGridIntegrationBridge.ts#L105) and [src/integrations/ShotGridIntegrationBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/ShotGridIntegrationBridge.ts#L259).
+  - Pulled notes themselves do not persist the remote ShotGrid note ID anywhere in local note data, because `addNotesFromShotGrid(...)` only calls `noteManager.addNote(...)` with local fields in [src/integrations/ShotGridIntegrationBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/ShotGridIntegrationBridge.ts#L281).
+- Impact:
+  - Pulling the same ShotGrid notes again after reconnecting or restarting can create duplicate local notes instead of recognizing them as already synced.
+  - The sync flow behaves like one-time session memory, not a durable integration.
+
+### 181. Annotation PDF export can fail with no user-visible feedback when popups are blocked
+
+- Severity: Medium
+- Area: Export workflow / annotations
+- Evidence:
+  - The shipped export wiring fires `void exportAnnotationsPDF(...)` with no `catch` or alert path in [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L173).
+  - `exportAnnotationsPDF(...)` explicitly throws when `window.open(...)` fails in [src/utils/export/AnnotationPDFExporter.ts](/Users/lifeart/Repos/openrv-web/src/utils/export/AnnotationPDFExporter.ts#L461).
+  - The exporter only catches thumbnail-render errors; it does not convert popup/open failures into app UI feedback in [src/utils/export/AnnotationPDFExporter.ts](/Users/lifeart/Repos/openrv-web/src/utils/export/AnnotationPDFExporter.ts#L437).
+- Impact:
+  - In normal popup-blocked browser setups, `Export Annotations (PDF)` can appear to do nothing useful from the user’s perspective.
+  - The export path has a real failure mode, but the app does not surface it through the UI.
+
+### 182. Fullscreen failures are reduced to console warnings, leaving the UI looking dead
+
+- Severity: Low
+- Area: Window management / browser integration
+- Evidence:
+  - Header-bar fullscreen requests call `fullscreenManager.toggle()` directly in [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L68).
+  - `FullscreenManager.enter()` and `exit()` swallow browser API failures and only `console.warn(...)` in [src/utils/ui/FullscreenManager.ts](/Users/lifeart/Repos/openrv-web/src/utils/ui/FullscreenManager.ts#L62) and [src/utils/ui/FullscreenManager.ts](/Users/lifeart/Repos/openrv-web/src/utils/ui/FullscreenManager.ts#L78).
+  - No higher-level alert, status indicator, or recovery path is wired on failure.
+- Impact:
+  - If the browser rejects fullscreen, the control can feel unresponsive rather than explicitly failing.
+  - Users get no guidance about whether fullscreen is unsupported, blocked, or just temporarily unavailable.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

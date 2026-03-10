@@ -449,3 +449,13 @@
 - **Regression Tests**: CONFORM-015 through CONFORM-020 (Browse/Folder warn on click, DOM events still dispatched, tooltips present).
 - **Verification**: All 41 ConformPanel tests pass, TypeScript clean.
 - **Files Changed**: `src/ui/components/ConformPanel.ts`, `src/ui/components/ConformPanel.test.ts`
+
+## Issue #50: Notes import silently replaces the entire local note set
+
+- **Severity**: Medium
+- **Area**: Notes UI, import safety
+- **Root Cause**: `NotePanel` import action called `noteManager.fromSerializable()` directly, which clears all existing notes before inserting imported ones. No confirmation or warning.
+- **Fix**: Added `showConfirm()` dialog before import when existing notes are present, stating how many notes will be replaced and how many will be imported. Uses `confirmVariant: 'danger'` with "Replace" button. Skips confirmation when no existing notes. Cancel aborts import.
+- **Regression Tests**: 4 tests — confirmation shown with existing notes, replace on confirm, preserve on cancel, skip confirmation when empty.
+- **Verification**: All 72 NotePanel tests pass, TypeScript clean.
+- **Files Changed**: `src/ui/components/NotePanel.ts`, `src/ui/components/NotePanel.test.ts`

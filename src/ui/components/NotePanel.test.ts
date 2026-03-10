@@ -17,6 +17,14 @@ vi.mock('../../core/PreferencesManager', () => ({
   }),
 }));
 
+// Mock Modal so we can control showConfirm/showAlert
+vi.mock('./shared/Modal', () => ({
+  showAlert: vi.fn().mockResolvedValue(undefined),
+  showConfirm: vi.fn().mockResolvedValue(true),
+}));
+import { showConfirm } from './shared/Modal';
+const mockShowConfirm = vi.mocked(showConfirm);
+
 describe('NotePanel', () => {
   let panel: NotePanel;
   let session: Session;
@@ -597,6 +605,152 @@ describe('NotePanel', () => {
       expect(imported[0]?.text).toBe('Round trip note');
       expect(imported[0]?.author).toBe('Alice');
       expect(imported[0]?.id).toBe(note.id);
+    });
+  });
+
+  describe('import confirmation', () => {
+    function simulateImport(notesData: any[]): void {
+      panel.show();
+      const importBtn = panel.getElement().querySelector('[data-testid="note-import-btn"]') as HTMLElement;
+
+      // Mock file input creation
+      const mockInput = document.createElement('input');
+      const createElementSpy = vi.spyOn(document, 'createElement');
+      const originalCreateElement = createElementSpy.getMockImplementation() ?? document.createElement.bind(document);
+      createElementSpy.mockImplementation((tag: string) => {
+        if (tag === 'input') return mockInput;
+        return (originalCreateElement as any)(tag);
+      });
+
+      importBtn.click();
+
+      // Simulate file selection and reading
+      const exportData = { version: 1, notes: notesData };
+      const file = new File([JSON.stringify(exportData)], 'notes.json', { type: 'application/json' });
+      Object.defineProperty(mockInput, 'files', { value: [file], configurable: true });
+
+      // Trigger change event
+      mockInput.dispatchEvent(new Event('change'));
+
+      createElementSpy.mockRestore();
+    }
+
+    beforeEach(() => {
+      mockShowConfirm.mockClear();
+    });
+
+    it('shows confirmation when existing notes will be replaced', async () => {
+      session.noteManager.addNote(0, 1, 10, 'Existing note', 'Bob');
+      mockShowConfirm.mockResolvedValue(true);
+
+      const importedNote = {
+        id: 'imported-1',
+        sourceIndex: 0,
+        frameStart: 5,
+        frameEnd: 15,
+        text: 'Imported',
+        author: 'Alice',
+        createdAt: new Date().toISOString(),
+        modifiedAt: new Date().toISOString(),
+        status: 'open' as const,
+        parentId: null,
+        color: '#fbbf24',
+      };
+      simulateImport([importedNote]);
+
+      // Wait for FileReader + async confirm
+      await vi.waitFor(() => {
+        expect(mockShowConfirm).toHaveBeenCalledTimes(1);
+      });
+      expect(mockShowConfirm).toHaveBeenCalledWith(
+        expect.stringContaining('1 existing note(s)'),
+        expect.objectContaining({ title: 'Replace existing notes?' }),
+      );
+    });
+
+    it('replaces notes when user confirms', async () => {
+      session.noteManager.addNote(0, 1, 10, 'Old note', 'Bob');
+      mockShowConfirm.mockResolvedValue(true);
+
+      const importedNote = {
+        id: 'imported-1',
+        sourceIndex: 0,
+        frameStart: 5,
+        frameEnd: 15,
+        text: 'New imported note',
+        author: 'Alice',
+        createdAt: new Date().toISOString(),
+        modifiedAt: new Date().toISOString(),
+        status: 'open' as const,
+        parentId: null,
+        color: '#fbbf24',
+      };
+      simulateImport([importedNote]);
+
+      await vi.waitFor(() => {
+        const notes = session.noteManager.getNotes();
+        expect(notes.length).toBe(1);
+        expect(notes[0]?.text).toBe('New imported note');
+      });
+    });
+
+    it('preserves existing notes when user cancels', async () => {
+      session.noteManager.addNote(0, 1, 10, 'Keep me', 'Bob');
+      mockShowConfirm.mockResolvedValue(false);
+
+      const importedNote = {
+        id: 'imported-1',
+        sourceIndex: 0,
+        frameStart: 5,
+        frameEnd: 15,
+        text: 'Should not appear',
+        author: 'Alice',
+        createdAt: new Date().toISOString(),
+        modifiedAt: new Date().toISOString(),
+        status: 'open' as const,
+        parentId: null,
+        color: '#fbbf24',
+      };
+      simulateImport([importedNote]);
+
+      await vi.waitFor(() => {
+        expect(mockShowConfirm).toHaveBeenCalledTimes(1);
+      });
+
+      // Give time for the import to (not) proceed
+      await new Promise((r) => setTimeout(r, 50));
+
+      const notes = session.noteManager.getNotes();
+      expect(notes.length).toBe(1);
+      expect(notes[0]?.text).toBe('Keep me');
+    });
+
+    it('skips confirmation when no existing notes', async () => {
+      expect(session.noteManager.getNotes().length).toBe(0);
+      mockShowConfirm.mockResolvedValue(true);
+
+      const importedNote = {
+        id: 'imported-1',
+        sourceIndex: 0,
+        frameStart: 5,
+        frameEnd: 15,
+        text: 'First note',
+        author: 'Alice',
+        createdAt: new Date().toISOString(),
+        modifiedAt: new Date().toISOString(),
+        status: 'open' as const,
+        parentId: null,
+        color: '#fbbf24',
+      };
+      simulateImport([importedNote]);
+
+      await vi.waitFor(() => {
+        const notes = session.noteManager.getNotes();
+        expect(notes.length).toBe(1);
+        expect(notes[0]?.text).toBe('First note');
+      });
+
+      expect(mockShowConfirm).not.toHaveBeenCalled();
     });
   });
 
