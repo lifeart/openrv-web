@@ -56,15 +56,8 @@ export const DEFAULT_EXR_WINDOW_OVERLAY_STATE: EXRWindowOverlayState = {
 // EXRWindowOverlay
 // ---------------------------------------------------------------------------
 
-/**
- * TODO(#85): EXRWindowOverlay has per-window toggles, colors, line width, dash
- * pattern, and label controls, but the production UI only exposes a single
- * on/off toggle. A settings popover should be added to let users configure
- * these options.
- */
 export class EXRWindowOverlay extends CanvasOverlay<EXRWindowOverlayEvents> {
   private state: EXRWindowOverlayState = { ...DEFAULT_EXR_WINDOW_OVERLAY_STATE };
-  private hasLoggedCustomizationHint = false;
   private dataWindow: EXRBox2i | null = null;
   private displayWindow: EXRBox2i | null = null;
 
@@ -127,7 +120,18 @@ export class EXRWindowOverlay extends CanvasOverlay<EXRWindowOverlayEvents> {
   }
 
   setState(partial: Partial<EXRWindowOverlayState>): void {
-    this.state = { ...this.state, ...partial };
+    const nextState = { ...partial };
+    if (typeof nextState.lineWidth === 'number') {
+      nextState.lineWidth = Math.max(1, Math.min(12, nextState.lineWidth));
+    }
+    if (nextState.dashPattern) {
+      nextState.dashPattern = [
+        Math.max(1, Math.min(32, nextState.dashPattern[0])),
+        Math.max(0, Math.min(32, nextState.dashPattern[1])),
+      ];
+    }
+
+    this.state = { ...this.state, ...nextState };
     this.updateCanvasDisplay();
     this.render();
     this.emit('stateChanged', { ...this.state });
@@ -143,15 +147,6 @@ export class EXRWindowOverlay extends CanvasOverlay<EXRWindowOverlayEvents> {
 
   enable(): void {
     this.setState({ enabled: true });
-
-    // TODO(#85): Log customization hint on first enable
-    if (!this.hasLoggedCustomizationHint) {
-      this.hasLoggedCustomizationHint = true;
-      console.info(
-        '[EXRWindowOverlay] Per-window toggles, colors, line width, and label options are configurable ' +
-          'via setState() but are not yet exposed in the UI. See issue #85.',
-      );
-    }
   }
 
   disable(): void {
@@ -180,6 +175,18 @@ export class EXRWindowOverlay extends CanvasOverlay<EXRWindowOverlayEvents> {
 
   setDisplayWindowColor(color: string): void {
     this.setState({ displayWindowColor: color });
+  }
+
+  setLineWidth(lineWidth: number): void {
+    this.setState({ lineWidth });
+  }
+
+  setDashPattern(dashPattern: [number, number]): void {
+    this.setState({ dashPattern });
+  }
+
+  setShowLabels(show: boolean): void {
+    this.setState({ showLabels: show });
   }
 
   // -------------------------------------------------------------------------

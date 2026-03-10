@@ -271,6 +271,24 @@ describe('EXRWindowOverlay', () => {
       overlay.setDisplayWindowColor('#0000ff');
       expect(handler).toHaveBeenCalledWith(expect.objectContaining({ displayWindowColor: '#0000ff' }));
     });
+
+    it('EXR-064: setLineWidth clamps to the supported range', () => {
+      overlay.setLineWidth(20);
+      expect(overlay.getState().lineWidth).toBe(12);
+
+      overlay.setLineWidth(0);
+      expect(overlay.getState().lineWidth).toBe(1);
+    });
+
+    it('EXR-065: setDashPattern clamps dash and gap values', () => {
+      overlay.setDashPattern([40, -5]);
+      expect(overlay.getState().dashPattern).toEqual([32, 0]);
+    });
+
+    it('EXR-066: setShowLabels updates label visibility', () => {
+      overlay.setShowLabels(false);
+      expect(overlay.getState().showLabels).toBe(false);
+    });
   });
 
   // ---------------------------------------------------------------------------
@@ -459,38 +477,5 @@ describe('Compositing: display:none for inactive overlay', () => {
     overlay.disable();
     expect(overlay.getElement().style.display).toBe('none');
     overlay.dispose();
-  });
-
-  // -------------------------------------------------------------------------
-  // #85: console.info on first enable
-  // -------------------------------------------------------------------------
-  it('EXR-HINT-001: logs console.info on first enable', () => {
-    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
-    try {
-      const overlay = new EXRWindowOverlay();
-      overlay.enable();
-      expect(infoSpy).toHaveBeenCalledTimes(1);
-      expect(infoSpy.mock.calls[0]![0]).toContain('[EXRWindowOverlay]');
-      expect(infoSpy.mock.calls[0]![0]).toContain('#85');
-      overlay.dispose();
-    } finally {
-      infoSpy.mockRestore();
-    }
-  });
-
-  it('EXR-HINT-002: logs only once across multiple enable calls', () => {
-    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
-    try {
-      const overlay = new EXRWindowOverlay();
-      overlay.enable();
-      overlay.disable();
-      overlay.enable();
-      overlay.disable();
-      overlay.enable();
-      expect(infoSpy).toHaveBeenCalledTimes(1);
-      overlay.dispose();
-    } finally {
-      infoSpy.mockRestore();
-    }
   });
 });

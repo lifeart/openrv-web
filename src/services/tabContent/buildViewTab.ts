@@ -11,6 +11,8 @@ import type { AppControlRegistry } from '../../AppControlRegistry';
 import type { Viewer } from '../../ui/components/Viewer';
 import { TimecodeOverlaySettingsMenu } from '../../ui/components/TimecodeOverlaySettingsMenu';
 import { FPSIndicatorSettingsMenu } from '../../ui/components/FPSIndicatorSettingsMenu';
+import { InfoStripSettingsMenu } from '../../ui/components/InfoStripSettingsMenu';
+import { EXRWindowOverlaySettingsMenu } from '../../ui/components/EXRWindowOverlaySettingsMenu';
 
 export interface BuildViewTabDeps {
   registry: AppControlRegistry;
@@ -27,6 +29,8 @@ export interface BuildViewTabResult {
 
 export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
   const { registry, viewer, timelineEditorPanel, addUnsubscriber } = deps;
+  const exrWindowOverlay = viewer.getEXRWindowOverlay();
+  const infoStripOverlay = viewer.getInfoStripOverlay();
   const timecodeOverlay = viewer.getTimecodeOverlay();
   const fpsIndicator = viewer.getFPSIndicator();
 
@@ -397,15 +401,22 @@ export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
   const exrWindowButton = ContextToolbar.createIconButton(
     'grid',
     () => {
-      viewer.getEXRWindowOverlay().toggle();
+      exrWindowOverlay.toggle();
     },
-    { title: 'Toggle EXR window overlay' },
+    { title: 'Toggle EXR window overlay — Right-click for settings' },
   );
   exrWindowButton.dataset.testid = 'exr-window-overlay-toggle-btn';
   viewContent.appendChild(exrWindowButton);
 
+  const exrWindowSettingsMenu = new EXRWindowOverlaySettingsMenu(exrWindowOverlay);
+  exrWindowButton.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    exrWindowSettingsMenu.show(e.clientX, e.clientY);
+  });
+  addUnsubscriber(() => exrWindowSettingsMenu.dispose());
+
   addUnsubscriber(
-    viewer.getEXRWindowOverlay().on('stateChanged', (state) => {
+    exrWindowOverlay.on('stateChanged', (state) => {
       setButtonActive(exrWindowButton, state.enabled, 'icon');
     }),
   );
@@ -414,15 +425,22 @@ export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
   const infoStripButton = ContextToolbar.createIconButton(
     'info',
     () => {
-      viewer.getInfoStripOverlay().toggle();
+      infoStripOverlay.toggle();
     },
-    { title: 'Toggle info strip overlay (F7)' },
+    { title: 'Toggle info strip overlay (F7) — Right-click for settings' },
   );
   infoStripButton.dataset.testid = 'info-strip-toggle-btn';
   viewContent.appendChild(infoStripButton);
 
+  const infoStripSettingsMenu = new InfoStripSettingsMenu(infoStripOverlay);
+  infoStripButton.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    infoStripSettingsMenu.show(e.clientX, e.clientY);
+  });
+  addUnsubscriber(() => infoStripSettingsMenu.dispose());
+
   addUnsubscriber(
-    viewer.getInfoStripOverlay().on('stateChanged', (state) => {
+    infoStripOverlay.on('stateChanged', (state) => {
       setButtonActive(infoStripButton, state.enabled, 'icon');
     }),
   );

@@ -13,6 +13,14 @@ function createToggleOverlay() {
   const emitter = new EventEmitter();
   let state = {
     enabled: false,
+    showFullPath: false,
+    showDataWindow: true,
+    showDisplayWindow: true,
+    dataWindowColor: '#00ff00',
+    displayWindowColor: '#00ccff',
+    lineWidth: 2,
+    dashPattern: [6, 4] as [number, number],
+    showLabels: true,
     position: 'top-left',
     fontSize: 'medium',
     showFrameCounter: true,
@@ -25,6 +33,30 @@ function createToggleOverlay() {
   return Object.assign(emitter, {
     toggle: vi.fn(),
     getState: vi.fn(() => ({ ...state })),
+    setShowFullPath: vi.fn((showFullPath) => {
+      state = { ...state, showFullPath };
+    }),
+    setShowDataWindow: vi.fn((showDataWindow) => {
+      state = { ...state, showDataWindow };
+    }),
+    setShowDisplayWindow: vi.fn((showDisplayWindow) => {
+      state = { ...state, showDisplayWindow };
+    }),
+    setShowLabels: vi.fn((showLabels) => {
+      state = { ...state, showLabels };
+    }),
+    setDataWindowColor: vi.fn((dataWindowColor) => {
+      state = { ...state, dataWindowColor };
+    }),
+    setDisplayWindowColor: vi.fn((displayWindowColor) => {
+      state = { ...state, displayWindowColor };
+    }),
+    setLineWidth: vi.fn((lineWidth) => {
+      state = { ...state, lineWidth };
+    }),
+    setDashPattern: vi.fn((dashPattern) => {
+      state = { ...state, dashPattern };
+    }),
     setPosition: vi.fn((position) => {
       state = { ...state, position };
     }),
@@ -143,6 +175,32 @@ describe('buildViewTab', () => {
 
     button!.click();
     expect(deps.infoStripOverlay.toggle).toHaveBeenCalledOnce();
+  });
+
+  it('opens the EXR window settings menu on right-click', () => {
+    const deps = createTestDeps();
+
+    const result = buildViewTab(deps);
+    const button = result.element.querySelector<HTMLButtonElement>('[data-testid="exr-window-overlay-toggle-btn"]')!;
+
+    button.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 8, clientY: 16 }));
+
+    const menu = document.querySelector('.exr-window-overlay-settings-menu');
+    expect(menu).not.toBeNull();
+    expect(menu?.getAttribute('aria-label')).toBe('EXR Window Overlay settings');
+  });
+
+  it('opens the info strip settings menu on right-click', () => {
+    const deps = createTestDeps();
+
+    const result = buildViewTab(deps);
+    const button = result.element.querySelector<HTMLButtonElement>('[data-testid="info-strip-toggle-btn"]')!;
+
+    button.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 12, clientY: 24 }));
+
+    const menu = document.querySelector('.info-strip-settings-menu');
+    expect(menu).not.toBeNull();
+    expect(menu?.getAttribute('aria-label')).toBe('Info Strip settings');
   });
 
   it('adds a timecode overlay toggle button wired to the overlay', () => {

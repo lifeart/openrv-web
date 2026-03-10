@@ -971,16 +971,26 @@
 ## Issue #84: Info Strip ships as a toggle-only overlay while its opacity control stays hidden
 
 - **Severity**: Low
-- **Fix**: Added TODO(#84) + one-time `console.info` on first enable documenting that `backgroundOpacity` has no UI surface.
-- **Regression Tests**: 2 tests (logs on first enable, logs only once).
-- **Files Changed**: `src/ui/components/InfoStripOverlay.ts`, `src/ui/components/InfoStripOverlay.test.ts`
+- **Area**: QC overlays, source metadata
+- **TODO(#84) Resolved**: Added a right-click settings menu for the View tab's info-strip button so the overlay's existing configuration is now reachable from the UI. The new menu exposes basename vs full-path display mode plus a background-opacity slider, both wired to the overlay API. `InfoStripOverlay` now has a dedicated `setBackgroundOpacity()` method, clamps `backgroundOpacity` updates in `setState()`, and no longer carries the stale TODO comment, one-time `console.info`, or `hasLoggedCustomizationHint` state.
+- **Regression Tests**:
+  - `InfoStripSettingsMenu.test.ts`: added coverage for menu rendering, display-mode updates, opacity updates, and dismissal behavior
+  - `buildViewTab.test.ts`: added right-click coverage for opening the info-strip settings menu from the View tab button
+  - `InfoStripOverlay.test.ts`: removed obsolete logging-path tests and added clamping coverage for `setBackgroundOpacity()` / `setState()`
+- **Verification**: `InfoStripOverlay.test.ts` (53 tests), `InfoStripSettingsMenu.test.ts` (5 tests), and `buildViewTab.test.ts` (12 tests) pass. TypeScript clean.
+- **Files Changed**: `src/ui/components/InfoStripOverlay.ts`, `src/ui/components/InfoStripOverlay.test.ts`, `src/ui/components/InfoStripSettingsMenu.ts`, `src/ui/components/InfoStripSettingsMenu.test.ts`, `src/services/tabContent/buildViewTab.ts`, `src/services/tabContent/buildViewTab.test.ts`
 
 ## Issue #85: EXR window overlay exposes only a binary toggle while the useful per-window controls stay unreachable
 
 - **Severity**: Medium
-- **Fix**: Added TODO(#85) + one-time `console.info` on first enable documenting that per-window toggles, colors, line width, dash pattern, and labels have no UI surface.
-- **Regression Tests**: 2 tests.
-- **Files Changed**: `src/ui/components/EXRWindowOverlay.ts`, `src/ui/components/EXRWindowOverlay.test.ts`
+- **Area**: QC overlays, EXR framing diagnostics
+- **TODO(#85) Resolved**: Added a right-click settings menu for the View tab's EXR window overlay button so the overlay's full state surface is reachable in production. The new menu exposes data-window/display-window visibility, label visibility, per-window colors, line width, and dash/gap length controls. `EXRWindowOverlay` now has dedicated setters for line width, dash pattern, and label visibility, clamps style values inside `setState()`, and no longer carries the stale TODO comment, one-time `console.info`, or `hasLoggedCustomizationHint` state.
+- **Regression Tests**:
+  - `EXRWindowOverlaySettingsMenu.test.ts`: added coverage for menu rendering, visibility toggles, color updates, style slider updates, and dismissal behavior
+  - `buildViewTab.test.ts`: added right-click coverage for opening the EXR window settings menu from the View tab button
+  - `EXRWindowOverlay.test.ts`: removed obsolete logging-path tests and added coverage for line-width, dash-pattern, and label setter behavior
+- **Verification**: `EXRWindowOverlay.test.ts` (59 tests), `EXRWindowOverlaySettingsMenu.test.ts` (5 tests), and `buildViewTab.test.ts` (13 tests) pass. TypeScript clean.
+- **Files Changed**: `src/ui/components/EXRWindowOverlay.ts`, `src/ui/components/EXRWindowOverlay.test.ts`, `src/ui/components/EXRWindowOverlaySettingsMenu.ts`, `src/ui/components/EXRWindowOverlaySettingsMenu.test.ts`, `src/services/tabContent/buildViewTab.ts`, `src/services/tabContent/buildViewTab.test.ts`
 
 ## Issue #86: Bug overlay is implemented in the viewer but has no production entry point
 

@@ -5875,6 +5875,32 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The docs make the mobile experience sound more intentionally touch-adapted than the shipped UI actually is.
   - Users evaluating tablet/mobile review workflows can expect a more polished touch-first control model than production currently provides.
 
+### 498. The file-format guide promises magic-number-first file detection, but the shipped file-loading path still rejects misnamed or extensionless files before any decoder sniffing runs
+
+- Severity: Low
+- Area: Documentation / file loading
+- Evidence:
+  - The file-format guide says format detection uses a “magic-number-first” strategy and “handles misnamed or extensionless files correctly” in [docs/guides/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/guides/file-formats.md#L11).
+  - The real session file-loading entrypoint first calls `detectMediaTypeFromFile(file)` and immediately rejects `unknown` files before any decoder-registry inspection in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L382) through [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L393).
+  - `detectMediaTypeFromFile(...)` is MIME/extension-based only: it checks `video/*`, `image/*`, and known extension sets, then returns `unknown` with no binary sniffing path in [src/utils/media/SupportedMediaFormats.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SupportedMediaFormats.ts#L76) through [src/utils/media/SupportedMediaFormats.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SupportedMediaFormats.ts#L98).
+  - The same guide later admits browser-native formats bypass `DecoderRegistry` entirely and are handled at `Session.loadImage()` level in [docs/guides/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/guides/file-formats.md#L199).
+- Impact:
+  - The docs describe a more robust file-identification path than the shipped open-file flow actually provides.
+  - Misnamed or extensionless local media can still be rejected up front even if the decoder layer would have recognized the bytes.
+
+### 499. The format docs overstate GIF and animated WebP support as if the app treated them like real animated media, but the shipped loader still models them as single-frame image sources
+
+- Severity: Low
+- Area: Documentation / animated browser-native image formats
+- Evidence:
+  - The top-level format reference explicitly advertises `GIF` with “Animated GIF support” in [docs/reference/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/reference/file-formats.md#L12).
+  - The deeper file-format guide also describes browser-native `WebP` and `GIF` as supporting “animation” in [docs/guides/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/guides/file-formats.md#L190) through [docs/guides/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/guides/file-formats.md#L193).
+  - The shipped media-type layer still classifies both `.gif` and `.webp` as plain image formats, not video/timeline media, in [src/utils/media/SupportedMediaFormats.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SupportedMediaFormats.ts#L8) through [src/utils/media/SupportedMediaFormats.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SupportedMediaFormats.ts#L31).
+  - Both `loadImage(...)` and `loadImageFile(...)` create `MediaSource` entries with `type: 'image'` and hardcoded `duration: 1` in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L409) through [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L417) and [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L449) through [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L456).
+- Impact:
+  - The docs make animated GIF/WebP sound like proper reviewable moving-image formats, but the shipped session/timeline model still treats them as single-frame stills.
+  - Users can expect timeline duration, frame stepping, and normal playback semantics that production does not actually wire for those formats.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

@@ -53,11 +53,6 @@ export function extractBasename(urlOrPath: string): string {
   return urlOrPath;
 }
 
-/**
- * TODO(#84): InfoStripOverlay has a `backgroundOpacity` property that can be
- * configured via `setState({ backgroundOpacity })`, but no UI control is
- * exposed for users to adjust it. A settings popover or slider should be added.
- */
 export class InfoStripOverlay extends EventEmitter<InfoStripOverlayEvents> {
   private container: HTMLElement;
   private textElement: HTMLElement;
@@ -65,7 +60,6 @@ export class InfoStripOverlay extends EventEmitter<InfoStripOverlayEvents> {
   private session: Session;
   private state: InfoStripOverlayState = { ...DEFAULT_INFO_STRIP_OVERLAY_STATE };
   private unsubscribers: (() => void)[] = [];
-  private hasLoggedCustomizationHint = false;
 
   constructor(session: Session) {
     super();
@@ -218,15 +212,6 @@ export class InfoStripOverlay extends EventEmitter<InfoStripOverlayEvents> {
    */
   enable(): void {
     this.setState({ enabled: true });
-
-    // TODO(#84): Log customization hint on first enable
-    if (!this.hasLoggedCustomizationHint) {
-      this.hasLoggedCustomizationHint = true;
-      console.info(
-        '[InfoStripOverlay] backgroundOpacity is configurable via setState({ backgroundOpacity }) ' +
-          'but is not yet exposed in the UI. See issue #84.',
-      );
-    }
   }
 
   /**
@@ -258,10 +243,22 @@ export class InfoStripOverlay extends EventEmitter<InfoStripOverlayEvents> {
   }
 
   /**
+   * Set background opacity (0-1)
+   */
+  setBackgroundOpacity(opacity: number): void {
+    this.setState({ backgroundOpacity: Math.max(0, Math.min(1, opacity)) });
+  }
+
+  /**
    * Set the complete state (partial update).
    */
   setState(state: Partial<InfoStripOverlayState>): void {
-    this.state = { ...this.state, ...state };
+    const nextState = { ...state };
+    if (typeof nextState.backgroundOpacity === 'number') {
+      nextState.backgroundOpacity = Math.max(0, Math.min(1, nextState.backgroundOpacity));
+    }
+
+    this.state = { ...this.state, ...nextState };
     this.updateStyles();
     this.update();
     this.emit('stateChanged', { ...this.state });

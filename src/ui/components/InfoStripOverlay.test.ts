@@ -496,6 +496,19 @@ describe('InfoStripOverlay', () => {
       overlay.setState({ backgroundOpacity: 0.7 });
       expect(overlay.getElement().style.background).toContain('0.7');
     });
+
+    it('IS-124: setBackgroundOpacity clamps values to the valid range', () => {
+      overlay.setBackgroundOpacity(1.5);
+      expect(overlay.getState().backgroundOpacity).toBe(1);
+
+      overlay.setBackgroundOpacity(-0.2);
+      expect(overlay.getState().backgroundOpacity).toBe(0);
+    });
+
+    it('IS-125: setState clamps background opacity values', () => {
+      overlay.setState({ backgroundOpacity: 1.2 });
+      expect(overlay.getState().backgroundOpacity).toBe(1);
+    });
   });
 
   describe('togglePathMode', () => {
@@ -508,37 +521,4 @@ describe('InfoStripOverlay', () => {
     });
   });
 
-  // -------------------------------------------------------------------------
-  // #84: console.info on first enable
-  // -------------------------------------------------------------------------
-  describe('customization hint (#84)', () => {
-    it('IS-140: logs console.info on first enable', () => {
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
-      try {
-        overlay.enable();
-        expect(infoSpy).toHaveBeenCalledTimes(1);
-        expect(infoSpy.mock.calls[0]![0]).toContain('[InfoStripOverlay]');
-        expect(infoSpy.mock.calls[0]![0]).toContain('#84');
-      } finally {
-        infoSpy.mockRestore();
-      }
-    });
-
-    it('IS-141: logs only once across multiple enable calls', () => {
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
-      try {
-        // Create a fresh overlay to ensure clean state
-        const freshOverlay = new InfoStripOverlay(mockSession as any);
-        freshOverlay.enable();
-        freshOverlay.disable();
-        freshOverlay.enable();
-        freshOverlay.disable();
-        freshOverlay.enable();
-        expect(infoSpy).toHaveBeenCalledTimes(1);
-        freshOverlay.dispose();
-      } finally {
-        infoSpy.mockRestore();
-      }
-    });
-  });
 });
