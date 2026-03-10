@@ -6,7 +6,7 @@
  */
 
 import type { KeyboardManager, KeyCombination } from './utils/input/KeyboardManager';
-import { DEFAULT_KEY_BINDINGS, describeKeyCombo } from './utils/input/KeyBindings';
+import { DEFAULT_KEY_BINDINGS } from './utils/input/KeyBindings';
 import type { CustomKeyBindingsManager } from './utils/input/CustomKeyBindingsManager';
 import { showModal } from './ui/components/shared/Modal';
 import { ShortcutEditor } from './ui/components/ShortcutEditor';

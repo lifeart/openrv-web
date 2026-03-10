@@ -1,5 +1,22 @@
 # Fixed Issues
 
+## Issue #233: MXF parsing hard-fails on indefinite BER lengths instead of degrading or surfacing narrower support
+
+- **Severity**: Medium
+- **Area**: Format support / MXF parsing
+- **Root Cause**: `parseKLV()` threw a `DecoderError` on BER byte `0x80` (indefinite length). Since both `parseMXFHeader()` and `demuxMXF()` caught this error and broke out of their parsing loops, a single indefinite-BER KLV would abort all further parsing of the entire MXF file.
+- **Fix**: Changed `parseKLV()` to return `length = -1` sentinel instead of throwing. Added `scanForNextUL()` helper that scans forward for the next SMPTE Universal Label prefix (`06 0E 2B 34`) to recover parsing position. Updated both `parseMXFHeader()` and `demuxMXF()` to detect `length === -1`, log a `console.warn` with offset, scan forward to the next KLV, and continue parsing. Includes `next <= offset` guard to prevent infinite loops.
+- **Regression Tests**: Added 7 new tests + updated 2 existing tests in `MXFDemuxer.test.ts`:
+  - `parseKLV` returns `length = -1` for `0x80` BER (instead of throwing)
+  - `parseMXFHeader` skips indefinite BER and finds subsequent CDCI descriptor
+  - Warning logged on indefinite BER encounter
+  - Graceful stop when no next UL found after indefinite BER
+  - `scanForNextUL` finds SMPTE prefix / returns -1 when not found
+  - `demuxMXF` skips indefinite BER and finds essence elements
+  - Definite-length BER parsing unaffected (non-regression)
+- **Verification**: TypeScript clean, all 67 MXFDemuxer tests pass.
+- **Files Changed**: `src/formats/MXFDemuxer.ts`, `src/formats/MXFDemuxer.test.ts`
+
 ## Issue #232: Display gamma and brightness controls are neutralized on HDR output paths, so the sliders stop having any effect there
 
 - **Severity**: Medium
@@ -620,8 +637,8 @@
 - **Area**: Help / customization UI
 - **Root Cause**: `showCustomBindingsDialog()` renders a simple inline rebind table, while the full `ShortcutEditor` component with Reset All/Export/Import exists but isn't reachable.
 - **Fix**: Added TODO(#57) comment and `console.info` in `showCustomBindingsDialog()` documenting the gap and referencing `ShortcutEditor`.
-- **Regression Tests**: 1 test verifying info message mentions ShortcutEditor.
-- **Verification**: All 18 AppKeyboardHandler tests pass, TypeScript clean.
+- **TODO(#57) Resolved**: Replaced the inline rebind table with the full `ShortcutEditor` component in `showCustomBindingsDialog()`. Modal now renders `ShortcutEditor` with Reset All, Export, and Import features. Deleted ~300 lines of dead code (`renderCustomBindingsContent`, `promptForKeyBinding`, `formatKeyCombo`). Editor is properly disposed on modal close.
+- **Regression Tests**: 1 test verifying ShortcutEditor renders in modal (replaced old console.info test).
 - **Files Changed**: `src/AppKeyboardHandler.ts`, `src/AppKeyboardHandler.test.ts`
 
 ## Issue #58: The app ships two different shortcut-reference UIs, and different entry points open different ones

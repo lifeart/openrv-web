@@ -5107,6 +5107,45 @@ This file tracks findings from exploratory review and targeted validation runs.
   - In multi-source RV/GTO sessions with differing source sizes or aspect ratios, crop restore is normalized against the first source while paint annotations are normalized against the last one.
   - That makes imported geometry depend on source ordering rather than the authored session state.
 
+### 428. Share-link compare state cannot explicitly clear an unassigned B source
+
+- Severity: Medium
+- Area: URL sharing / A-B compare restore
+- Evidence:
+  - Share-link capture omits `sourceBIndex` whenever the session has no B assignment by serializing it only when `session.sourceBIndex >= 0` in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L122) through [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L145).
+  - URL-state encoding also strips absent `sourceBIndex` entirely in [src/core/session/SessionURLManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionURLManager.ts#L128) through [src/core/session/SessionURLManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionURLManager.ts#L155).
+  - But share-link apply only calls `session.setSourceB(...)` when `state.sourceBIndex` is present and never calls `session.clearSourceB()` when it is absent in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L184) through [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L220).
+  - The live playback/session stack does have an explicit clear path for B assignments via `clearSourceB()` in [src/core/session/SessionPlayback.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionPlayback.ts#L352) through [src/core/session/SessionPlayback.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionPlayback.ts#L357) and [src/core/session/ABCompareManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/ABCompareManager.ts#L141) through [src/core/session/ABCompareManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/ABCompareManager.ts#L151).
+- Impact:
+  - If the sender has no B source assigned, the recipient can keep a stale local B assignment after opening the share link.
+  - That makes share-link compare state depend on the receiver's prior local compare setup instead of the sender's actual state.
+
+### 429. Share links claim to share comparison state, but clean recipients can only reconstruct one media source
+
+- Severity: Medium
+- Area: URL sharing / compare-state interoperability
+- Evidence:
+  - The share-link subsystem explicitly describes URL sharing as including “comparison state” in [src/core/session/SessionURLManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionURLManager.ts#L1) through [src/core/session/SessionURLManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionURLManager.ts#L6).
+  - But `SessionURLState` carries only a single `sourceUrl`, not a source list, in [src/core/session/SessionURLManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionURLManager.ts#L16) through [src/core/session/SessionURLManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionURLManager.ts#L39).
+  - Capture fills that field from only `session.currentSource?.url` in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L120) through [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L145).
+  - On a clean recipient, apply will load at most that one URL before restoring compare state in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L152) through [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L189).
+  - A/B compare only becomes available when a valid B source exists, as enforced by [src/core/session/ABCompareManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/ABCompareManager.ts#L76) through [src/core/session/ABCompareManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/ABCompareManager.ts#L79) and [src/core/session/SessionPlayback.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionPlayback.ts#L379) through [src/core/session/SessionPlayback.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionPlayback.ts#L382).
+- Impact:
+  - A share link from a multi-source A/B review can carry compare indices and wipe state but still fail to reconstruct the compared media on a clean recipient.
+  - The receiver ends up with partial compare state and only one loaded source, which undermines the feature's stated “comparison state” promise.
+
+### 430. Share-link media load failures are silent to users
+
+- Severity: Medium
+- Area: URL sharing / error handling
+- Evidence:
+  - When a share link contains `sourceUrl`, `applySessionURLState(...)` attempts `session.loadSourceFromUrl(...)` only inside a local `try/catch` in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L152) through [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L164).
+  - On failure, that path only emits `console.warn(...)` and then continues applying view state in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L158) through [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L164).
+  - The startup bootstrap path does surface user-facing messages for malformed WebRTC links through `networkControl.showInfo(...)` in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L265) through [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L302), but there is no equivalent user-facing branch for `sourceUrl` load failures.
+- Impact:
+  - Expired signed URLs, blocked network media, or unsupported remote media can open as a blank or stale viewer with no actionable explanation.
+  - The failure mode is effectively “open the app and log to console,” which is not usable for ordinary recipients of a share link.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

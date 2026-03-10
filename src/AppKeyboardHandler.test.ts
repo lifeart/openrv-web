@@ -2,7 +2,7 @@
  * AppKeyboardHandler - Keyboard registration and binding tests
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { KeyboardHandlerContext } from './AppKeyboardHandler';
 import { AppKeyboardHandler } from './AppKeyboardHandler';
 import { KeyboardManager } from './utils/input/KeyboardManager';
@@ -141,7 +141,7 @@ describe('Keyboard registration tests (M-25)', () => {
   });
 });
 
-describe('Transparency info messages (Issue #57)', () => {
+describe('ShortcutEditor integration (Issue #57)', () => {
   let handler: AppKeyboardHandler;
 
   beforeEach(() => {
@@ -153,19 +153,11 @@ describe('Transparency info messages (Issue #57)', () => {
     closeModal();
   });
 
-  it('#57: showCustomBindingsDialog logs info about missing ShortcutEditor features', () => {
-    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
-    try {
-      handler.showCustomBindingsDialog();
+  it('#57: showCustomBindingsDialog creates a ShortcutEditor in a modal', () => {
+    handler.showCustomBindingsDialog();
 
-      expect(infoSpy).toHaveBeenCalledWith(
-        expect.stringContaining('showCustomBindingsDialog'),
-      );
-      expect(infoSpy).toHaveBeenCalledWith(
-        expect.stringContaining('ShortcutEditor'),
-      );
-    } finally {
-      infoSpy.mockRestore();
-    }
+    // ShortcutEditor renders a toolbar with class "shortcut-toolbar"
+    const toolbar = document.querySelector('.shortcut-toolbar');
+    expect(toolbar).not.toBeNull();
   });
 });

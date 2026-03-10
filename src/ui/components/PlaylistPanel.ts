@@ -6,9 +6,7 @@
  * - In/out point editing per clip
  * - Total duration display
  * - Add from current source button
- * - EDL/OTIO export
- *
- * TODO(#108): Add EDL/OTIO import support.
+ * - EDL/OTIO import/export
  */
 
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
@@ -30,6 +28,8 @@ export interface PlaylistPanelEvents extends EventMap {
   visibilityChanged: { open: boolean };
   /** Emitted when panel is closed */
   closed: void;
+  /** Emitted after a playlist is imported */
+  imported: { format: string; importedCount: number; unresolvedCount: number };
 }
 
 /** Interface for panels that support mutual exclusion */
@@ -61,6 +61,7 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
   private activeClipId: string | null = null;
   private fps = 24;
   private sourceUrlResolver: ((sourceIndex: number) => string | null) | null = null;
+  private sourceNameResolver: ((name: string, url?: string) => { index: number; frameCount: number } | null) | null = null;
 
   constructor(playlistManager: PlaylistManager) {
     super();
@@ -296,8 +297,23 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
     });
     applyA11yFocus(otioBtn);
 
+    const importBtn = document.createElement('button');
+    importBtn.dataset.testid = 'playlist-import-btn';
+    importBtn.innerHTML = `${getIconSvg('upload', 'sm')} Import`;
+    importBtn.title = 'Import playlist (EDL, OTIO, RVEDL)';
+    importBtn.style.cssText = exportBtn.style.cssText;
+    importBtn.addEventListener('click', () => this.handleImport());
+    importBtn.addEventListener('pointerenter', () => {
+      importBtn.style.background = 'var(--bg-hover)';
+    });
+    importBtn.addEventListener('pointerleave', () => {
+      importBtn.style.background = 'transparent';
+    });
+    applyA11yFocus(importBtn);
+
     const btnGroup = document.createElement('div');
     btnGroup.style.cssText = 'display: flex; gap: 4px;';
+    btnGroup.appendChild(importBtn);
     btnGroup.appendChild(exportBtn);
     btnGroup.appendChild(otioBtn);
     footer.appendChild(btnGroup);
@@ -773,6 +789,68 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
     return row;
   }
 
+  private handleImport(): void {
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.edl,.otio,.json,.rvedl';
+    fileInput.style.display = 'none';
+    fileInput.dataset.testid = 'import-playlist-file-input';
+    document.body.appendChild(fileInput);
+
+    fileInput.addEventListener('change', () => {
+      try {
+        const file = fileInput.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            const text = reader.result as string;
+            const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+
+            // Clear existing playlist before import
+            this.playlistManager.clear();
+
+            let importedCount = 0;
+            let unresolvedCount = 0;
+            let format = ext;
+
+            const resolver = this.sourceNameResolver ?? (() => null);
+
+            if (ext === 'otio' || ext === 'json') {
+              format = 'otio';
+              importedCount = this.playlistManager.fromOTIO(text, resolver);
+              unresolvedCount = this.playlistManager.unresolvedClips?.length ?? 0;
+            } else if (ext === 'edl') {
+              format = 'edl';
+              importedCount = this.playlistManager.fromEDL(text, resolver);
+            } else if (ext === 'rvedl') {
+              format = 'rvedl';
+              // RVEDL is treated as EDL format
+              importedCount = this.playlistManager.fromEDL(text, resolver);
+            }
+
+            this.renderList();
+            this.updateFooterInfo();
+
+            this.emit('imported', { format, importedCount, unresolvedCount });
+          } catch (err) {
+            console.error('[PlaylistPanel] Failed to parse import file:', err);
+          }
+        };
+        reader.readAsText(file);
+      } finally {
+        document.body.removeChild(fileInput);
+      }
+    });
+
+    fileInput.addEventListener('cancel', () => {
+      document.body.removeChild(fileInput);
+    });
+
+    fileInput.click();
+  }
+
   private exportEDL(): void {
     const clips = this.playlistManager.getClips();
     // When transitions exist, use overlap-adjusted frames for accurate record timecodes
@@ -855,6 +933,11 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
   /** Set a resolver that maps source indices to their media URLs for OTIO export */
   setSourceUrlResolver(resolver: (sourceIndex: number) => string | null): void {
     this.sourceUrlResolver = resolver;
+  }
+
+  /** Set a resolver that maps source names to their indices for EDL/OTIO import */
+  setSourceNameResolver(resolver: (name: string, url?: string) => { index: number; frameCount: number } | null): void {
+    this.sourceNameResolver = resolver;
   }
 
   /** Set the frames-per-second used for EDL/OTIO export timecodes */

@@ -202,7 +202,7 @@ export interface KLVTriplet {
  * - Key: 16 bytes (SMPTE Universal Label)
  * - Length: BER-encoded (1-9 bytes)
  *   - If first byte < 0x80: short form, length = that byte
- *   - If first byte = 0x80: indefinite length (not supported)
+ *   - If first byte = 0x80: indefinite length (returned with length = -1)
  *   - If first byte = 0x80 + N (N=1..8): long form, next N bytes are the length (big-endian)
  * - Value: `length` bytes of payload
  *
@@ -234,8 +234,10 @@ export function parseKLV(view: DataView, offset: number): KLVTriplet {
     length = firstByte;
     valueOffset = berStart + 1;
   } else if (firstByte === 0x80) {
-    // Indefinite length -- not supported in MXF
-    throw new DecoderError('MXF', `Indefinite BER length at offset ${berStart} is not supported`);
+    // Indefinite length -- we cannot determine the value size, so return
+    // a triplet with length = -1 to signal callers to skip this KLV and
+    // scan forward for the next recognisable key.
+    return { key: new Uint8Array(key), length: -1, valueOffset: berStart + 1 };
   } else {
     // Long form: lower 7 bits = number of following length bytes
     const numBytes = firstByte & 0x7f;
@@ -260,6 +262,28 @@ export function parseKLV(view: DataView, offset: number): KLVTriplet {
   }
 
   return { key: new Uint8Array(key), length, valueOffset };
+}
+
+/**
+ * Scan forward from `start` to find the next SMPTE Universal Label prefix
+ * (06 0E 2B 34). Returns the offset of the next UL, or -1 if none found.
+ *
+ * Used to recover from indefinite-BER KLV triplets where the value length
+ * is unknown -- we skip ahead to the next recognisable key.
+ */
+export function scanForNextUL(view: DataView, start: number): number {
+  const end = view.byteLength - 3;
+  for (let i = start; i < end; i++) {
+    if (
+      view.getUint8(i) === 0x06 &&
+      view.getUint8(i + 1) === 0x0e &&
+      view.getUint8(i + 2) === 0x2b &&
+      view.getUint8(i + 3) === 0x34
+    ) {
+      return i;
+    }
+  }
+  return -1;
 }
 
 // ---------------------------------------------------------------------------
@@ -740,6 +764,15 @@ export function parseMXFHeader(buffer: ArrayBuffer): MXFMetadata {
       break; // can't parse further
     }
 
+    // Indefinite BER length -- skip forward to the next recognisable key
+    if (klv.length === -1) {
+      console.warn(`MXF: Skipping KLV with indefinite BER length at offset ${offset}`);
+      const next = scanForNextUL(view, klv.valueOffset);
+      if (next === -1 || next <= offset) break;
+      offset = next;
+      continue;
+    }
+
     const klvEnd = klv.valueOffset + klv.length;
 
     // Parse the header partition pack
@@ -956,6 +989,15 @@ export function demuxMXF(buffer: ArrayBuffer): MXFDemuxResult {
       klv = parseKLV(view, offset);
     } catch {
       break;
+    }
+
+    // Indefinite BER length -- skip forward to the next recognisable key
+    if (klv.length === -1) {
+      console.warn(`MXF: Skipping KLV with indefinite BER length at offset ${offset}`);
+      const next = scanForNextUL(view, klv.valueOffset);
+      if (next === -1 || next <= offset) break;
+      offset = next;
+      continue;
     }
 
     // Check if this is an essence element
