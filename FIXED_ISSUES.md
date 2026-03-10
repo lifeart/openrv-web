@@ -1,5 +1,22 @@
 # Fixed Issues
 
+## Issue #237: Mu compat playback direction is only local bookkeeping and does not control real reverse playback
+
+- **Severity**: Medium
+- **Area**: Mu compatibility / transport scripting
+- **Root Cause**: `MuCommands.setInc()` stored direction in a private `_inc` field without forwarding to the real playback engine. `inc()` read from this local field. `MuExtraCommands.isPlayingBackwards()` and `toggleForwardsBackwards()` used the same local state. The actual viewer continued forward playback regardless.
+- **Fix**: Added `playDirection` setter to `PlaybackEngine` (normalizes to ±1, delegates to `togglePlayDirection()` with guard), forwarded through `SessionPlayback` and `Session`. Added `setPlayDirection()`/`getPlayDirection()` to `PlaybackAPI` with input validation. Wired `MuCommands.setInc()`/`inc()` to real API, removed `_inc` field. `isPlayingBackwards()`/`toggleForwardsBackwards()` now reflect real playback state.
+- **Regression Tests**: Updated and added tests in `MuCommands.test.ts`:
+  - `setInc()` delegates to real `setPlayDirection()` API
+  - `inc()` reads from real `getPlayDirection()` API
+  - Raw values forwarded correctly (positive/negative)
+  - NaN validation
+  - No local state leakage (key regression: set +1, mock API returns -1, verify -1 returned)
+  - `isPlayingBackwards()` reflects real playback state
+  - `toggleForwardsBackwards()` calls real API
+- **Verification**: TypeScript clean, all 118 MuCommands tests pass, 42 PlaybackAPI tests pass, 120 PlaybackEngine tests pass.
+- **Files Changed**: `src/core/session/PlaybackEngine.ts`, `src/core/session/SessionPlayback.ts`, `src/core/session/Session.ts`, `src/api/PlaybackAPI.ts`, `src/compat/MuCommands.ts`, `src/compat/__tests__/MuCommands.test.ts`
+
 ## Issue #236: Mu compat `viewSize()` and `setViewSize()` target the first DOM canvas instead of the real viewer surface
 
 - **Severity**: Medium

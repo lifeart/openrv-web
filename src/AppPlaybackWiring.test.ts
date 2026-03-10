@@ -1485,3 +1485,150 @@ describe('preferences management wiring', () => {
     expect(mockPreferencesManager.resetAll).not.toHaveBeenCalled();
   });
 });
+
+describe('wirePlaybackControls plugin export wiring (#18)', () => {
+  let session: ReturnType<typeof createMockSession>;
+  let viewer: ReturnType<typeof createMockViewer>;
+  let headerBar: ReturnType<typeof createMockHeaderBar>;
+  let controls: ReturnType<typeof createMockControls>;
+  let deps: PlaybackWiringDeps;
+  let persistenceManager: ReturnType<typeof createMockPersistenceManager>;
+  let exportControl: ReturnType<typeof createMockExportControl>;
+  let mockPluginRegistry: {
+    getExporters: ReturnType<typeof vi.fn>;
+    getExporter: ReturnType<typeof vi.fn>;
+    exporterRegistered: { connect: ReturnType<typeof vi.fn> };
+    exporterUnregistered: { connect: ReturnType<typeof vi.fn> };
+  };
+  let registeredCb: ((data: { pluginId: string; name: string; exporter: { kind: string; label: string; extensions: string[]; export: ReturnType<typeof vi.fn> } }) => void) | null;
+  let unregisteredCb: ((data: { pluginId: string; name: string }) => void) | null;
+
+  beforeEach(() => {
+    session = createMockSession();
+    viewer = createMockViewer();
+    headerBar = createMockHeaderBar();
+    controls = createMockControls();
+    persistenceManager = createMockPersistenceManager();
+    exportControl = headerBar.getExportControl();
+
+    registeredCb = null;
+    unregisteredCb = null;
+
+    mockPluginRegistry = {
+      getExporters: vi.fn(() => new Map()),
+      getExporter: vi.fn(),
+      exporterRegistered: {
+        connect: vi.fn((cb: typeof registeredCb) => {
+          registeredCb = cb;
+          return () => { registeredCb = null; };
+        }),
+      },
+      exporterUnregistered: {
+        connect: vi.fn((cb: typeof unregisteredCb) => {
+          unregisteredCb = cb;
+          return () => { unregisteredCb = null; };
+        }),
+      },
+    };
+
+    deps = {
+      ...createMockDeps(),
+      getPluginRegistry: () => mockPluginRegistry as any,
+    };
+
+    const ctx = {
+      session,
+      viewer,
+      headerBar,
+      controls,
+      persistenceManager,
+      paintEngine: {},
+      tabBar: {},
+      sessionBridge: {},
+    } as unknown as AppWiringContext;
+
+    wirePlaybackControls(ctx, deps);
+  });
+
+  it('PW-PLG01: subscribes to exporterRegistered and exporterUnregistered signals', () => {
+    expect(mockPluginRegistry.exporterRegistered.connect).toHaveBeenCalled();
+    expect(mockPluginRegistry.exporterUnregistered.connect).toHaveBeenCalled();
+  });
+
+  it('PW-PLG02: pluginExportRequested calls exporter.export() for blob exporters', async () => {
+    const mockExport = vi.fn().mockResolvedValue(new Blob(['data'], { type: 'application/octet-stream' }));
+    mockPluginRegistry.getExporter.mockReturnValue({
+      kind: 'blob',
+      label: 'Test Export',
+      extensions: ['bin'],
+      export: mockExport,
+    });
+
+    session.currentSource = { name: 'test.exr' };
+    viewer.renderFrameToCanvas.mockResolvedValue(
+      Object.assign(document.createElement('canvas'), {
+        width: 10,
+        height: 10,
+        getContext: () => ({ getImageData: () => new ImageData(10, 10) }),
+      }),
+    );
+
+    exportControl.emit('pluginExportRequested', { pluginId: 'com.test', name: 'my-export' });
+
+    await vi.waitFor(() => {
+      expect(mockPluginRegistry.getExporter).toHaveBeenCalledWith('my-export');
+      expect(mockExport).toHaveBeenCalled();
+    });
+  });
+
+  it('PW-PLG03: pluginExportRequested shows warning when exporter is not found', async () => {
+    showAlertSpy.mockClear();
+    mockPluginRegistry.getExporter.mockReturnValue(undefined);
+
+    exportControl.emit('pluginExportRequested', { pluginId: 'com.test', name: 'missing' });
+
+    await vi.waitFor(() => {
+      expect(showAlertSpy).toHaveBeenCalledWith(
+        expect.stringContaining('no longer available'),
+        expect.objectContaining({ type: 'warning' }),
+      );
+    });
+  });
+
+  it('PW-PLG04: pluginExportRequested shows error on export failure', async () => {
+    showAlertSpy.mockClear();
+    mockPluginRegistry.getExporter.mockReturnValue({
+      kind: 'blob',
+      label: 'Broken Export',
+      extensions: ['bin'],
+      export: vi.fn().mockRejectedValue(new Error('Export broke')),
+    });
+
+    exportControl.emit('pluginExportRequested', { pluginId: 'com.test', name: 'broken' });
+
+    await vi.waitFor(() => {
+      expect(showAlertSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Export broke'),
+        expect.objectContaining({ type: 'error' }),
+      );
+    });
+  });
+
+  it('PW-PLG05: pluginExportRequested handles text exporters', async () => {
+    const mockExport = vi.fn().mockResolvedValue('csv,data,here');
+    mockPluginRegistry.getExporter.mockReturnValue({
+      kind: 'text',
+      label: 'CSV Export',
+      extensions: ['csv'],
+      export: mockExport,
+    });
+
+    session.currentSource = { name: 'test.exr' };
+
+    exportControl.emit('pluginExportRequested', { pluginId: 'com.test', name: 'csv-export' });
+
+    await vi.waitFor(() => {
+      expect(mockExport).toHaveBeenCalled();
+    });
+  });
+});

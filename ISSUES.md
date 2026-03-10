@@ -1727,44 +1727,31 @@ This file tracks findings from exploratory review and targeted validation runs.
   - On browsers/GPUs where `texImage2D(VideoFrame)` fails, HDR video and HDR VideoFrame-backed image formats can turn into blank output instead of degrading to SDR or surfacing a clear unsupported-path error.
   - This is a user-visible render failure, not just a performance downgrade.
 
-### 149. Share links serialize `sourceUrl` but never use it, so a clean recipient cannot reconstruct the shared media
+### 149. Share links serialize local blob URLs for media that other sessions cannot reopen
 
 - Severity: High
-- Area: URL sharing / review-link reproducibility
+- Area: URL sharing / local-media portability
 - Evidence:
-  - `SessionURLService.captureSessionURLState()` explicitly serializes the current source URL into `sourceUrl` in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L124).
+  - `SessionURLService.captureSessionURLState()` serializes the current source URL into `sourceUrl` in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L122) through [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L145).
   - The URL-state schema describes that field as `Source URL (for reference / re-loading)` in [src/core/session/SessionURLManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionURLManager.ts#L27).
-  - The encoder persists that field as compact key `su` in [src/core/session/SessionURLManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionURLManager.ts#L135), and decoding restores it in [src/core/session/SessionURLManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionURLManager.ts#L200).
-  - But `SessionURLService.applySessionURLState()` never reads `state.sourceUrl` at all in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L146).
-  - The parallel network-share path captures the same `sourceUrl` field in [src/AppNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppNetworkBridge.ts#L1073), but its apply path also never consumes it in [src/AppNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppNetworkBridge.ts#L1083).
+  - Local-file media paths commonly become object URLs, for example in `loadEXRFile(...)` in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L481) through [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L515) and `loadVideoFile(...)` in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L569) through [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L616).
+  - The restore path used by share links only accepts `http:` and `https:` source URLs in [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L1123) through [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L1133), so serialized `blob:` media URLs from local sessions cannot be reopened elsewhere.
 - Impact:
-  - The app advertises shareable review links with encoded source identity, but opening that link in a clean session cannot reload the shared shot from the serialized URL.
-  - In practice, the link only replays partial view state onto whatever media is already open locally, which makes the shared hash non-reproducible for the most important case: a fresh recipient opening the link.
+  - A share link generated from locally opened media can still look like a portable review link while embedding a session-local `blob:` URL that no recipient can dereference.
+  - That makes local-file sharing appear more reproducible than it really is.
 
-### 150. Share-link URL state cannot explicitly reset defaults, so recipients keep stale local transform / wipe / OCIO / A-B state
-
-- Severity: High
-- Area: URL sharing / state application semantics
-- Evidence:
-  - The compact URL encoder intentionally omits default/off values: current A/B stays omitted when it is `A`, wipe mode is omitted when it is `off`, default transforms are omitted, and OCIO is omitted when disabled in [src/core/session/SessionURLManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionURLManager.ts#L140), [src/core/session/SessionURLManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionURLManager.ts#L142), [src/core/session/SessionURLManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionURLManager.ts#L146), and [src/core/session/SessionURLManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionURLManager.ts#L151).
-  - The tests explicitly codify that omission behavior, for example `currentAB` omitted when default, `wipeMode` omitted when `"off"`, and disabled OCIO omitted in [src/core/session/SessionURLManager.test.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionURLManager.test.ts#L220), [src/core/session/SessionURLManager.test.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionURLManager.test.ts#L225), and [src/core/session/SessionURLManager.test.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionURLManager.test.ts#L235).
-  - `SessionURLService.applySessionURLState()` applies only fields that are present and never resets omitted state back to defaults in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L166), [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L180), [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L184), and [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L191).
-- Impact:
-  - A sender with default/off state cannot reliably share that state to a recipient who already has non-default settings.
-  - Links from a neutral view can still open with stale pan/zoom, wipe, OCIO enabled, or B-side compare state on the receiver, which breaks the promise that the URL reproduces the shared review state.
-
-### 152. Large parts of the unified preferences model are storage-only and never affect runtime behavior
+### 152. Several persisted preference fields are still storage-only even though the broader preferences system is now partially wired
 
 - Severity: Medium
 - Area: Preferences / dead user configuration
 - Evidence:
-  - The core preferences model defines persisted `ColorDefaults`, `ExportDefaults`, and `GeneralPrefs` fields including `defaultInputColorSpace`, `defaultExposure`, `frameburnEnabled`, `frameburnConfig`, `defaultFps`, `autoPlayOnLoad`, and `showWelcome` in [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L35), [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L42), and [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L50).
-  - Those values are exported/imported as first-class preference payload fields in [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L65) and [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L400).
-  - But outside `PreferencesManager` itself, the only production read of `getGeneralPrefs()` is the note-author fallback in [src/ui/components/NotePanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NotePanel.ts#L949).
-  - Source-level search found no non-test production callers of `getColorDefaults()` or `getExportDefaults()`, and no production reads of the modeled fields like `autoPlayOnLoad`, `showWelcome`, `defaultInputColorSpace`, `defaultExposure`, or `frameburnEnabled`.
+  - `PreferencesManager` still documents `ColorDefaults` as storage-only with no production runtime consumer in [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L50) through [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L60).
+  - The export-default gap is now narrower, but `frameburnEnabled` / `frameburnConfig` are still called out as storage-only in [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L63) through [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L72).
+  - The manager also logs that `colorDefaults` and several `generalPrefs` fields such as `showWelcome` and `defaultFps` are still not consumed by production code in [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L332) through [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L339).
+  - By contrast, some preference categories are now live: `ExportControl` reads `getExportDefaults()` in [src/ui/components/ExportControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ExportControl.ts#L441) through [src/ui/components/ExportControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ExportControl.ts#L452), and app startup reads `autoPlayOnLoad` in [src/AppSessionBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppSessionBridge.ts#L141) through [src/AppSessionBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppSessionBridge.ts#L153).
 - Impact:
-  - The app persists and backs up several preference categories that users would reasonably expect to change startup, default color, or export behavior, but they currently do nothing in production.
-  - That creates misleading configuration surface area: exported preferences can look richer and more complete than the runtime behavior they actually control.
+  - Users can still import, export, and reset preference fields that do not affect runtime behavior, but the dead surface is narrower and more confusing now because adjacent preference categories do work.
+  - That makes the unified preferences payload look more complete than the live behavior it actually controls.
 
 ### 157. Unsupported dropped files are deliberately misclassified as images instead of being rejected up front
 
@@ -2555,18 +2542,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Two unrelated files named `plate.exr` can share the same persisted OCIO input assignment even when they come from different folders or URLs.
   - That breaks the promise that OCIO detection/overrides are per-source; switching to a different same-named shot can silently pick up the previous shot's color space.
-
-### 228. Share-link media auto-load misclassifies signed or query-string video URLs as images
-
-- Severity: Medium
-- Area: Share links / URL media loading
-- Evidence:
-  - `Session.loadSourceFromUrl(...)` extracts the extension from `url.split('/').pop()` and then `name.split('.').pop()`, without stripping query or hash parts, in [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L1099).
-  - The share-link restore path depends on that helper in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L153) and [src/AppNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppNetworkBridge.ts#L1091).
-  - Elsewhere in the UI, the repo already treats `?token=...` URLs as normal asset URLs and strips query parameters when extracting a basename in [src/ui/components/InfoStripOverlay.test.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/InfoStripOverlay.test.ts#L278).
-- Impact:
-  - A shared media URL like `shot.mov?token=...` or `clip.mp4#signed` is classified as an image, so clean-session share-link restore can fail to reconstruct the media at all.
-  - This particularly hurts real-world CDN or signed review links, where query parameters are common rather than exceptional.
 
 ### 229. Display HDR / gamut capability is frozen at startup, so moving the app between displays leaves stale output assumptions
 

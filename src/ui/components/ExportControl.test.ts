@@ -852,3 +852,123 @@ describe('ExportControl respects persisted export defaults (#175)', () => {
     });
   });
 });
+
+describe('ExportControl plugin exporters (#18)', () => {
+  let control: ExportControl;
+
+  beforeEach(() => {
+    control = new ExportControl();
+    document.body.appendChild(control.render());
+  });
+
+  afterEach(() => {
+    control.dispose();
+    const el = control.render();
+    if (el.parentNode) el.parentNode.removeChild(el);
+  });
+
+  function openDropdown(): void {
+    const button = control.render().querySelector('button') as HTMLButtonElement;
+    button.click();
+  }
+
+  function getDropdown(): HTMLElement {
+    return document.querySelector('.export-dropdown') as HTMLElement;
+  }
+
+  it('EXPORT-PLG01: addPluginExporter adds a menu item to the dropdown', () => {
+    control.addPluginExporter('com.test', 'my-export', 'My Export');
+    openDropdown();
+    const dropdown = getDropdown();
+    const item = dropdown.querySelector('[data-testid="plugin-exporter-com.test:my-export"]');
+    expect(item).not.toBeNull();
+    expect(item?.textContent).toContain('My Export');
+  });
+
+  it('EXPORT-PLG02: addPluginExporter creates a "Plugin Exporters" section header', () => {
+    control.addPluginExporter('com.test', 'exp1', 'Export One');
+    openDropdown();
+    const dropdown = getDropdown();
+    const header = dropdown.querySelector('[data-testid="plugin-exporter-header"]');
+    expect(header).not.toBeNull();
+    expect(header?.textContent).toBe('Plugin Exporters');
+  });
+
+  it('EXPORT-PLG03: addPluginExporter creates a separator before the plugin section', () => {
+    control.addPluginExporter('com.test', 'exp1', 'Export One');
+    openDropdown();
+    const dropdown = getDropdown();
+    const sep = dropdown.querySelector('[data-testid="plugin-exporter-separator"]');
+    expect(sep).not.toBeNull();
+  });
+
+  it('EXPORT-PLG04: clicking a plugin exporter item emits pluginExportRequested', () => {
+    const cb = vi.fn();
+    control.on('pluginExportRequested', cb);
+    control.addPluginExporter('com.test', 'my-export', 'My Export');
+    openDropdown();
+    const dropdown = getDropdown();
+    const item = dropdown.querySelector('[data-testid="plugin-exporter-com.test:my-export"]') as HTMLButtonElement;
+    item.click();
+    expect(cb).toHaveBeenCalledWith({ pluginId: 'com.test', name: 'my-export' });
+  });
+
+  it('EXPORT-PLG05: removePluginExporter removes the menu item', () => {
+    control.addPluginExporter('com.test', 'my-export', 'My Export');
+    control.removePluginExporter('com.test', 'my-export');
+    openDropdown();
+    const dropdown = getDropdown();
+    const item = dropdown.querySelector('[data-testid="plugin-exporter-com.test:my-export"]');
+    expect(item).toBeNull();
+  });
+
+  it('EXPORT-PLG06: removing the last plugin exporter removes the section header and separator', () => {
+    control.addPluginExporter('com.test', 'exp1', 'Export One');
+    control.removePluginExporter('com.test', 'exp1');
+    openDropdown();
+    const dropdown = getDropdown();
+    expect(dropdown.querySelector('[data-testid="plugin-exporter-header"]')).toBeNull();
+    expect(dropdown.querySelector('[data-testid="plugin-exporter-separator"]')).toBeNull();
+  });
+
+  it('EXPORT-PLG07: adding the same exporter twice is idempotent', () => {
+    control.addPluginExporter('com.test', 'exp1', 'Export One');
+    control.addPluginExporter('com.test', 'exp1', 'Export One');
+    openDropdown();
+    const dropdown = getDropdown();
+    const items = dropdown.querySelectorAll('[data-testid="plugin-exporter-com.test:exp1"]');
+    expect(items.length).toBe(1);
+  });
+
+  it('EXPORT-PLG08: multiple plugin exporters appear in the dropdown', () => {
+    control.addPluginExporter('com.test', 'exp1', 'Export One');
+    control.addPluginExporter('com.other', 'exp2', 'Export Two');
+    openDropdown();
+    const dropdown = getDropdown();
+    expect(dropdown.querySelector('[data-testid="plugin-exporter-com.test:exp1"]')).not.toBeNull();
+    expect(dropdown.querySelector('[data-testid="plugin-exporter-com.other:exp2"]')).not.toBeNull();
+  });
+
+  it('EXPORT-PLG09: removing one plugin exporter keeps others and the section', () => {
+    control.addPluginExporter('com.test', 'exp1', 'Export One');
+    control.addPluginExporter('com.other', 'exp2', 'Export Two');
+    control.removePluginExporter('com.test', 'exp1');
+    openDropdown();
+    const dropdown = getDropdown();
+    expect(dropdown.querySelector('[data-testid="plugin-exporter-com.test:exp1"]')).toBeNull();
+    expect(dropdown.querySelector('[data-testid="plugin-exporter-com.other:exp2"]')).not.toBeNull();
+    expect(dropdown.querySelector('[data-testid="plugin-exporter-header"]')).not.toBeNull();
+  });
+
+  it('EXPORT-PLG10: removePluginExporter for non-existent exporter is a no-op', () => {
+    expect(() => control.removePluginExporter('com.test', 'nonexistent')).not.toThrow();
+  });
+
+  it('EXPORT-PLG11: plugin exporter items have role="menuitem" for keyboard navigation', () => {
+    control.addPluginExporter('com.test', 'exp1', 'Export One');
+    openDropdown();
+    const dropdown = getDropdown();
+    const item = dropdown.querySelector('[data-testid="plugin-exporter-com.test:exp1"]');
+    expect(item?.getAttribute('role')).toBe('menuitem');
+  });
+});
