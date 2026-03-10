@@ -4623,6 +4623,19 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Users cannot name or describe a snapshot at creation time even though the docs present that as the normal workflow.
   - That makes the snapshot list harder to curate for real review sessions, especially when multiple checkpoints are created close together.
 
+### 375. Auto-save settings expose only 1-50 saved versions even though the manager and docs support 1-100
+
+- Severity: Low
+- Area: Auto-save settings UI / documentation
+- Evidence:
+  - The session-management guide documents `Max versions` as `1--100` in [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L136) through [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L140).
+  - `AutoSaveManager` also clamps `maxVersions` to `1..100` in [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L552).
+  - But the shipped auto-save settings popover creates its `Max versions` range input with `max = '50'` in [src/ui/components/AutoSaveIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/AutoSaveIndicator.ts#L318) through [src/ui/components/AutoSaveIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/AutoSaveIndicator.ts#L327).
+  - The same component’s config import/storage path still accepts values up to `100` in [src/ui/components/AutoSaveIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/AutoSaveIndicator.ts#L463) through [src/ui/components/AutoSaveIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/AutoSaveIndicator.ts#L464), so the narrower limit is UI-only.
+- Impact:
+  - Users cannot set the documented upper half of the supported retention range from the shipped UI.
+  - That also means imported or persisted values above 50 are outside the control’s visible authored range, which makes the settings surface less trustworthy.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed
