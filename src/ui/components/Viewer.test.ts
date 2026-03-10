@@ -1793,7 +1793,7 @@ describe('Viewer', () => {
 
       const setHDRHeadroomSpy = vi.fn();
       t.glRendererManager.setHDRHeadroom = setHDRHeadroomSpy;
-      const scheduleRenderSpy = vi.spyOn(t, 'scheduleRender' as never);
+      const scheduleRenderSpy = vi.spyOn(t, 'scheduleRender');
 
       t.syncHDRHeadroomFromSystem();
 
@@ -1815,7 +1815,7 @@ describe('Viewer', () => {
 
       const setHDRHeadroomSpy = vi.fn();
       t.glRendererManager.setHDRHeadroom = setHDRHeadroomSpy;
-      const scheduleRenderSpy = vi.spyOn(t, 'scheduleRender' as never);
+      const scheduleRenderSpy = vi.spyOn(t, 'scheduleRender');
 
       t.syncHDRHeadroomFromSystem();
 
@@ -1834,7 +1834,7 @@ describe('Viewer', () => {
 
       const setHDRHeadroomSpy = vi.fn();
       t.glRendererManager.setHDRHeadroom = setHDRHeadroomSpy;
-      const scheduleRenderSpy = vi.spyOn(t, 'scheduleRender' as never);
+      const scheduleRenderSpy = vi.spyOn(t, 'scheduleRender');
 
       t.syncHDRHeadroomFromSystem();
 
@@ -1849,7 +1849,7 @@ describe('Viewer', () => {
       t.capabilities = undefined;
 
       mockedQueryHDRHeadroom.mockResolvedValue(3.0);
-      const scheduleRenderSpy = vi.spyOn(t, 'scheduleRender' as never);
+      const scheduleRenderSpy = vi.spyOn(t, 'scheduleRender');
 
       t.syncHDRHeadroomFromSystem();
 
@@ -1867,7 +1867,7 @@ describe('Viewer', () => {
 
       const setHDRHeadroomSpy = vi.fn();
       t.glRendererManager.setHDRHeadroom = setHDRHeadroomSpy;
-      const scheduleRenderSpy = vi.spyOn(t, 'scheduleRender' as never);
+      const scheduleRenderSpy = vi.spyOn(t, 'scheduleRender');
 
       t.syncHDRHeadroomFromSystem();
 
@@ -1884,7 +1884,7 @@ describe('Viewer', () => {
 
       const setHDRHeadroomSpy = vi.fn();
       t.glRendererManager.setHDRHeadroom = setHDRHeadroomSpy;
-      const scheduleRenderSpy = vi.spyOn(t, 'scheduleRender' as never);
+      const scheduleRenderSpy = vi.spyOn(t, 'scheduleRender');
 
       // First call with 2.0
       mockedQueryHDRHeadroom.mockResolvedValue(2.0);

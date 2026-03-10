@@ -4871,6 +4871,32 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Selecting or dropping an EDL together with the RV/GTO session it belongs to does not give the user both pieces of the workflow; the session file is silently skipped.
   - That makes mixed review-bundle imports less predictable and increases the chance that users think they opened a full session when they only imported cut metadata.
 
+### 404. Project/snapshot restore can leave stale playlist transitions active when the incoming state has none
+
+- Severity: Medium
+- Area: Playlist persistence / transition state restore
+- Evidence:
+  - `SessionSerializer.fromJSON(...)` restores playlist state via `playlistManager.setState(migrated.playlist)` when present, or clears only the playlist manager when absent in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L571) through [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L579).
+  - `PlaylistManager.setState(...)` only pushes transitions into the separate `TransitionManager` when `state.transitions` exists in [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L547) through [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L573).
+  - `PlaylistManager.clear()` removes clips but does not clear the linked `TransitionManager` in [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L523) through [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L527), and `TransitionManager` has its own independent state plus explicit `clear()` API in [src/core/session/TransitionManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/TransitionManager.ts#L229) through [src/core/session/TransitionManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/TransitionManager.ts#L234).
+  - Both playlist duration math and panel export/rendering read that separate transition state through [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L432) through [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L433) and [src/ui/components/PlaylistPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PlaylistPanel.ts#L779) through [src/ui/components/PlaylistPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PlaylistPanel.ts#L798).
+- Impact:
+  - Loading a project/snapshot with no playlist transitions can inherit overlap behavior from a previous session’s transitions.
+  - That makes restored playlist timing and later playlist edits/export less trustworthy because transition state is not actually replaced with the incoming state.
+
+### 405. Changing playlist transitions does not recalculate clip global start frames used by playback/navigation
+
+- Severity: High
+- Area: Playlist transitions / playback correctness
+- Evidence:
+  - `PlaylistManager` only stores the `TransitionManager` reference in `setTransitionManager(...)` and never subscribes to `transitionChanged` or `transitionsReset` in [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L117) through [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L119).
+  - Transition edits in the shipped UI mutate `TransitionManager` directly via `tm.setTransition(...)` in [src/ui/components/PlaylistPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PlaylistPanel.ts#L728) through [src/ui/components/PlaylistPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PlaylistPanel.ts#L750).
+  - `PlaylistManager` playback/navigation methods still rely on stored `clip.globalStartFrame` values in [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L240) through [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L289), while overlap-adjusted recalculation only happens inside `recalculateGlobalFrames()` when clips themselves change in [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L411) through [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L416).
+  - The runtime playback wiring also maps between source-local and playlist-global frames using those stored `globalStartFrame` values in [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L788) through [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L790), [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L870) through [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L871), and [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L973) through [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L974).
+- Impact:
+  - After adding or changing a crossfade/dissolve, the app can keep navigating and syncing playback against stale clip boundaries.
+  - That makes transition-enabled playlists internally inconsistent: duration/transition math sees overlaps, while several core playback paths still use pre-transition clip positions.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed
