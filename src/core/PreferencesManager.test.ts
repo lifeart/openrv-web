@@ -357,6 +357,7 @@ describe('PreferencesManager export/import', () => {
     expect(parsed).toHaveProperty('colorDefaults');
     expect(parsed).toHaveProperty('exportDefaults');
     expect(parsed).toHaveProperty('generalPrefs');
+    expect(parsed).toHaveProperty('fpsIndicatorPrefs');
   });
 
   it('CPRF-052: export then import is a round-trip', () => {
@@ -752,5 +753,69 @@ describe('FPS Indicator Preferences', () => {
     storage.setItem(CORE_PREFERENCE_STORAGE_KEYS.fpsIndicator, 'not-valid-json{{{');
     const prefs = manager.getFPSIndicatorPrefs();
     expect(prefs).toEqual(DEFAULT_FPS_INDICATOR_PREFS);
+  });
+
+  it('CPRF-FPS-011: buildExportPayload includes fpsIndicatorPrefs', () => {
+    const { manager } = createManager();
+    manager.setFPSIndicatorPrefs({ enabled: false, position: 'bottom-left' });
+    const parsed = JSON.parse(manager.exportAll()) as PreferencesExportPayload;
+    expect(parsed.fpsIndicatorPrefs).toBeDefined();
+    expect(parsed.fpsIndicatorPrefs.enabled).toBe(false);
+    expect(parsed.fpsIndicatorPrefs.position).toBe('bottom-left');
+  });
+
+  it('CPRF-FPS-012: importAll restores fpsIndicatorPrefs', () => {
+    const { manager } = createManager();
+    const payload = {
+      fpsIndicatorPrefs: { enabled: false, position: 'bottom-right', backgroundOpacity: 0.3 },
+    };
+    manager.importAll(JSON.stringify(payload));
+    const prefs = manager.getFPSIndicatorPrefs();
+    expect(prefs.enabled).toBe(false);
+    expect(prefs.position).toBe('bottom-right');
+    expect(prefs.backgroundOpacity).toBe(0.3);
+  });
+
+  it('CPRF-FPS-013: importAll with null fpsIndicatorPrefs resets to default', () => {
+    const { manager } = createManager();
+    manager.setFPSIndicatorPrefs({ enabled: false, position: 'bottom-left' });
+    manager.importAll(JSON.stringify({ fpsIndicatorPrefs: null }));
+    expect(manager.getFPSIndicatorPrefs()).toEqual(DEFAULT_FPS_INDICATOR_PREFS);
+  });
+
+  it('CPRF-FPS-014: resetAll emits fpsIndicatorPrefsChanged with defaults', () => {
+    const { manager } = createManager();
+    manager.setFPSIndicatorPrefs({ enabled: false, position: 'bottom-left' });
+    const handler = vi.fn();
+    manager.on('fpsIndicatorPrefsChanged', handler);
+    manager.resetAll();
+    expect(handler).toHaveBeenCalledWith(DEFAULT_FPS_INDICATOR_PREFS);
+  });
+
+  it('CPRF-FPS-015: export then import round-trips FPS indicator settings', () => {
+    const { manager: m1 } = createManager();
+    m1.setFPSIndicatorPrefs({
+      enabled: false,
+      position: 'bottom-left',
+      showDroppedFrames: false,
+      showTargetFps: false,
+      backgroundOpacity: 0.4,
+      warningThreshold: 0.9,
+      criticalThreshold: 0.7,
+    });
+
+    const json = m1.exportAll();
+
+    const { manager: m2 } = createManager();
+    m2.importAll(json);
+
+    const prefs = m2.getFPSIndicatorPrefs();
+    expect(prefs.enabled).toBe(false);
+    expect(prefs.position).toBe('bottom-left');
+    expect(prefs.showDroppedFrames).toBe(false);
+    expect(prefs.showTargetFps).toBe(false);
+    expect(prefs.backgroundOpacity).toBe(0.4);
+    expect(prefs.warningThreshold).toBe(0.9);
+    expect(prefs.criticalThreshold).toBe(0.7);
   });
 });

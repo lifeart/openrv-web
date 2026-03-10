@@ -2841,6 +2841,107 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Inference from the parser design: extension-listed RAW families that are not actually TIFF/IFD containers are advertised as supported but will still fall through or fail at load time.
   - That makes the RAW support surface look broader than the implementation really is, especially for users relying on extension-based expectations rather than the underlying container format.
 
+### 232. Display gamma and brightness controls are neutralized on HDR output paths, so the sliders stop having any effect there
+
+- Severity: Medium
+- Area: Display profile / HDR output behavior
+- Evidence:
+  - The shipped display-profile UI exposes both `Display Gamma` and `Display Brightness` as live controls in [src/ui/components/DisplayProfileControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/DisplayProfileControl.ts#L194) and [src/ui/components/DisplayProfileControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/DisplayProfileControl.ts#L225).
+  - Those values are carried into the renderer state from the active display profile in [src/ui/components/ViewerGLRenderer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerGLRenderer.ts#L548).
+  - But every HDR output path then calls `applyHDRDisplayOverrides(...)`, which forcibly rewrites `transferFunction: 0`, `displayGamma: 1`, and `displayBrightness: 1` in [src/ui/components/ViewerGLRenderer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerGLRenderer.ts#L288), [src/ui/components/ViewerGLRenderer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerGLRenderer.ts#L696), [src/ui/components/ViewerGLRenderer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerGLRenderer.ts#L865), and [src/ui/components/ViewerGLRenderer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerGLRenderer.ts#L970).
+  - The source comments explicitly call out that these user calibration knobs are being forced to neutral values, including a TODO that they “should be preserved” for some HDR paths in [src/ui/components/ViewerGLRenderer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerGLRenderer.ts#L693) and [src/ui/components/ViewerGLRenderer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerGLRenderer.ts#L860).
+- Impact:
+  - On HDR-capable output paths, users can move the display gamma/brightness sliders and see the UI state change while the actual HDR render path ignores those settings.
+  - That makes part of the display-profile panel misleading exactly on the higher-end output modes where calibration controls matter most.
+
+### 233. MXF parsing hard-fails on indefinite BER lengths instead of degrading or surfacing narrower support
+
+- Severity: Medium
+- Area: Format support / MXF parsing
+- Evidence:
+  - `parseKLV(...)` treats BER byte `0x80` as an immediate decoder error: `Indefinite BER length ... is not supported` in [src/formats/MXFDemuxer.ts](/Users/lifeart/Repos/openrv-web/src/formats/MXFDemuxer.ts#L235).
+  - That helper is the shared KLV reader for both header walking and essence walking in [src/formats/MXFDemuxer.ts](/Users/lifeart/Repos/openrv-web/src/formats/MXFDemuxer.ts#L733) and [src/formats/MXFDemuxer.ts](/Users/lifeart/Repos/openrv-web/src/formats/MXFDemuxer.ts#L947).
+  - The file-level parser comments explicitly document indefinite BER as “not supported” rather than a transient unhandled edge case in [src/formats/MXFDemuxer.ts](/Users/lifeart/Repos/openrv-web/src/formats/MXFDemuxer.ts#L204).
+- Impact:
+  - MXF files that legitimately use indefinite-length KLV encoding fail at the container-parser level instead of loading partially or surfacing a more specific unsupported-feature boundary.
+  - This is a distinct compatibility limit from the already-logged “dummy 1x1 MXF decoder” problem: the demuxer can reject some MXF files before even reaching the later fake-frame path.
+
+### 234. Mu compat `setFPS()` only changes compat readback state and does not affect real playback timing
+
+- Severity: Medium
+- Area: Mu compatibility / playback scripting
+- Evidence:
+  - The Mu command manifest marks `setFPS` as fully supported in [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L92).
+  - The implementation only stores the value in a private `_overrideFPS` field in [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L219).
+  - `fps()` then just returns that local override instead of the real app/session state in [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L226).
+  - The compat tests explicitly validate only that local readback behavior in [src/compat/__tests__/MuCommands.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuCommands.test.ts#L194).
+- Impact:
+  - Mu-compatible scripts can call `rv.commands.setFPS(30)` and then see `rv.commands.fps()` report `30` even though actual playback timing and session FPS remain unchanged.
+  - That creates a false sense that the compat command worked, which is worse than an explicit unsupported-path warning for automation or DCC integrations.
+
+### 235. Several Mu compat display commands are marked supported but only mutate bridge-local state, not the real viewer
+
+- Severity: Medium
+- Area: Mu compatibility / view-display scripting
+- Evidence:
+  - The support manifest marks `setFiltering`, `getFiltering`, `setBGMethod`, `bgMethod`, `setMargins`, and `margins` as supported in [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L112) through [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L117).
+  - Their implementations only update local bridge fields `_filterMode`, `_bgMethod`, and `_margins` in [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L136), [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L420), [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L433), and [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L446).
+  - There is no call from those methods into `window.openrv`, the viewer, the renderer, or layout services; the compat tests also only assert local readback in [src/compat/__tests__/MuCommands.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuCommands.test.ts#L370) through [src/compat/__tests__/MuCommands.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuCommands.test.ts#L399).
+- Impact:
+  - Mu-compatible tooling can be told that filtering, background method, or margins were changed successfully while the actual OpenRV Web viewer stays visually unchanged.
+  - This makes those commands operationally misleading in embeds and scripted review flows because they behave like in-memory echoes rather than real viewer controls.
+
+### 236. Mu compat `viewSize()` and `setViewSize()` target the first DOM canvas instead of the real viewer surface
+
+- Severity: Medium
+- Area: Mu compatibility / viewport scripting
+- Evidence:
+  - `MuCommands` only uses an explicitly assigned canvas if someone calls `setCanvas(...)`; otherwise `getCanvas()` falls back to `document.querySelector('canvas')` in [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L141).
+  - Production source search finds no runtime caller of `setCanvas(...)`; it exists only on the compat class itself in [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L145).
+  - The app renders multiple canvases in normal viewer flow, including at least the image canvas and paint canvas in [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L694) and [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L759).
+  - `viewSize()` and `setViewSize()` operate directly on whichever canvas `getCanvas()` returns in [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L362) and [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L374).
+- Impact:
+  - Mu-compatible scripts can read or mutate the wrong canvas when multiple canvases are present, which is normal in the shipped viewer.
+  - That makes viewport-size scripting depend on DOM order rather than the actual viewer abstraction, so results can be wrong or visually inert even though the commands are marked supported.
+
+### 237. Mu compat playback direction is only local bookkeeping and does not control real reverse playback
+
+- Severity: Medium
+- Area: Mu compatibility / transport scripting
+- Evidence:
+  - The compat command manifest marks `setInc` and `inc` as supported in [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L94).
+  - `setInc(...)` only normalizes and stores a private `_inc` field in [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L247), and no transport command in `MuCommands` forwards that value into `window.openrv.playback` or the session.
+  - `MuExtraCommands` then uses that same local flag for direction reporting and toggling in [src/compat/MuExtraCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuExtraCommands.ts#L148) and [src/compat/MuExtraCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuExtraCommands.ts#L166).
+  - The compat tests only assert that local state flips, not that playback direction changes in the real app, in [src/compat/__tests__/MuCommands.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuCommands.test.ts#L230) and [src/compat/__tests__/MuCommands.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuCommands.test.ts#L596).
+- Impact:
+  - Mu-compatible scripts can believe they switched to reverse playback because `inc()` and `isPlayingBackwards()` say so, while the actual viewer keeps using the normal forward transport.
+  - That makes direction-sensitive automation misleading rather than merely incomplete, because the compat layer reports a state transition that never reached playback.
+
+### 238. Mu compat `frameStart()` is a hardcoded local default, which distorts range predicates built on it
+
+- Severity: Medium
+- Area: Mu compatibility / timeline-range scripting
+- Evidence:
+  - `MuCommands` stores a private `_frameStart = 1` and `frameStart()` simply returns that field in [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L131) and [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L208).
+  - Production source search finds no setter or synchronization path that ever updates `_frameStart` from the real session/source state.
+  - `MuExtraCommands` uses `frameStart()` in higher-level predicates like `isNarrowed()` and `isPlayable()` in [src/compat/MuExtraCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuExtraCommands.ts#L133).
+  - The compat tests only assert the hardcoded default behavior (`frameStart() returns 1 by default`) in [src/compat/__tests__/MuCommands.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuCommands.test.ts#L185).
+- Impact:
+  - Mu-compatible scripts get a plausible frame-range start even when the real source/session start semantics differ, because the value is not coming from actual media state.
+  - That also means compat helpers built on `frameStart()`, such as `isNarrowed()` and `isPlayable()`, can return results based on a synthetic start frame rather than the true session range.
+
+### 239. Mu source-management commands mostly mutate a shadow source registry instead of the real OpenRV session
+
+- Severity: High
+- Area: Mu compatibility / source management
+- Evidence:
+  - The source bridge is documented as operating against `window.openrv.media.*` “where possible,” but its core mutators `addSource(...)`, `addSources(...)`, `addSourceVerbose(...)`, and `clearSession()` only call the private `_createSourceRecord(...)` or clear local maps in [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L205), [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L220), [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L237), and [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L555).
+  - `_createSourceRecord(...)` only creates an in-memory `SourceRecord` with placeholder dimensions/range and stores it in `_sources`; it never loads media into the app session in [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L773).
+  - Related mutators such as `setSourceMedia(...)`, `relocateSource(...)`, and `setActiveSourceMediaRep(...)` also only rewrite bridge-local records in [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L307), [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L319), and [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L602).
+- Impact:
+  - Mu-compatible source-management scripts can appear to succeed while the real viewer/session media stays unchanged.
+  - This is more severe than a missing feature flag because follow-up compat queries then read from the shadow registry and reinforce the false impression that the script really modified the live session.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

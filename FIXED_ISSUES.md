@@ -1228,3 +1228,23 @@
 - **Regression Tests**: SU-023 through SU-031 (sourceUrl consumed when empty, skipped when has media, load failure graceful, empty/undefined skipped, missing method handled, bootstrap integration, javascript: rejected, data: rejected), ANB-150 through ANB-154 (network bridge load, skip, failure, missing, callback delegation), plus 12 direct `Session.loadSourceFromUrl` tests (scheme validation for javascript/data/ftp/invalid, http/https accepted, video extensions routed correctly, query params handled, no-extension defaults to image).
 - **Verification**: All 107 tests pass (31 SessionURLService + 64 AppNetworkBridge + 12 Session.loadSourceFromUrl), TypeScript clean.
 - **Files Changed**: `src/services/SessionURLService.ts`, `src/AppNetworkBridge.ts`, `src/core/session/Session.ts`, `src/services/SessionURLService.test.ts`, `src/AppNetworkBridge.test.ts`, `src/core/session/Session.loadSourceFromUrl.test.ts` (new)
+
+## Issue #150: Share-link URL state cannot explicitly reset defaults, so recipients keep stale local transform / wipe / OCIO / A-B state
+
+- **Severity**: High
+- **Area**: URL sharing / state application semantics
+- **Root Cause**: The compact URL encoder intentionally omits default/off values (transform at identity, wipeMode='off', currentAB='A', OCIO disabled) to keep URLs short. But `applySessionURLState()` only applied fields present in the decoded state and never reset omitted fields to defaults. Recipients with non-default local state (e.g., wipe enabled, B-side compare, custom pan/zoom, OCIO active) kept their stale settings when opening a share link.
+- **Fix**: Added `else` branches in `applySessionURLState()` for all encoder-omitted fields: transform resets to `DEFAULT_TRANSFORM` (deep-copied to prevent mutation), wipeMode resets to `'off'`, wipePosition resets to `0.5`, currentAB resets to `'A'`, and OCIO resets to `enabled: false` (with idempotency guard to skip when already disabled). The encoder is unchanged — the fix is entirely in the apply path.
+- **Regression Tests**: SU-032 (absent transform resets to default), SU-033 (absent wipeMode resets to 'off'), SU-034 (absent currentAB resets to 'A'), SU-035 (absent OCIO resets to disabled when enabled), SU-036 (absent OCIO skips setState when already disabled), SU-037 (present non-default values still applied — no regression), SU-038 (full round-trip: encode default state → decode → apply → all fields at defaults), SU-039 (absent wipePosition resets to 0.5).
+- **Verification**: All 63 tests pass (39 SessionURLService + 24 SessionURLManager), TypeScript clean.
+- **Files Changed**: `src/services/SessionURLService.ts`, `src/services/SessionURLService.test.ts`
+
+## Issue #151: Unified preferences export/import/reset drops FPS indicator settings even though the shipped overlay persists them
+
+- **Severity**: Medium
+- **Area**: Preferences portability / overlay state persistence
+- **Root Cause**: `PreferencesManager` had `fpsIndicator` storage key with read/write methods, but `buildExportPayload()` never included it, `importAll()` never restored it, and `resetAll()` didn't emit `fpsIndicatorPrefsChanged`. Additionally, `FPSIndicator` never subscribed to the change event, so even if prefs were updated externally, the live UI wouldn't reflect it.
+- **Fix**: (1) Added `fpsIndicatorPrefs` to `PreferencesExportPayload` type and `buildExportPayload()`. Added restoration in `importAll()` (with null→defaults handling). Added `fpsIndicatorPrefsChanged` emission in `resetAll()`. (2) Added `fpsIndicatorPrefsChanged` subscription in `FPSIndicator` constructor that updates live state, styles, and render. Added `updatingPrefs` re-entrancy guard to prevent write-back loops between `setState()` persisting prefs and the incoming event handler.
+- **Regression Tests**: CPRF-FPS-011 (export includes prefs), CPRF-FPS-012 (import restores prefs), CPRF-FPS-013 (import null resets to defaults), CPRF-FPS-014 (resetAll emits event), CPRF-FPS-015 (full round-trip), FPS-130 (live state updates on event), FPS-131 (stateChanged emitted), FPS-132 (DOM styles updated), FPS-133 (subscription cleaned up on dispose).
+- **Verification**: All 130 tests pass (84 PreferencesManager + 46 FPSIndicator), TypeScript clean.
+- **Files Changed**: `src/core/PreferencesManager.ts`, `src/ui/components/FPSIndicator.ts`, `src/core/PreferencesManager.test.ts`, `src/ui/components/FPSIndicator.test.ts`

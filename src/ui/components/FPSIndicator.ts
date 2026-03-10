@@ -23,7 +23,7 @@ import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptio
 import { getCSSColor } from '../../utils/ui/getCSSColor';
 import type { OverlayPosition } from './TimecodeOverlay';
 import { getCorePreferencesManager } from '../../core/PreferencesManager';
-import type { PreferencesManager } from '../../core/PreferencesManager';
+import type { PreferencesManager, FPSIndicatorPrefs } from '../../core/PreferencesManager';
 
 export interface FPSIndicatorState {
   enabled: boolean;
@@ -82,6 +82,7 @@ export class FPSIndicator extends EventEmitter<FPSIndicatorEvents> {
   private hideTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private updateScheduled = false;
   private hasLoggedConfigHint = false;
+  private updatingPrefs = false;
 
   constructor(session: Session, preferences?: PreferencesManager) {
     super();
@@ -166,6 +167,11 @@ export class FPSIndicator extends EventEmitter<FPSIndicatorEvents> {
     this.subs.add(this.session.on('fpsUpdated', (measurement) => this.onFPSUpdated(measurement)));
     this.subs.add(this.session.on('playbackChanged', (playing) => this.onPlaybackChanged(playing)));
     this.subs.add(this.session.on('abSourceChanged', () => this.scheduleUpdate()));
+
+    // Subscribe to external preference changes (import/reset)
+    this.subs.add(
+      this.preferences.on('fpsIndicatorPrefsChanged', (prefs) => this.onPrefsChanged(prefs)),
+    );
   }
 
   /**
@@ -206,6 +212,23 @@ export class FPSIndicator extends EventEmitter<FPSIndicatorEvents> {
         this.container.style.display = 'none';
         this.hideTimeoutId = null;
       }, 2000);
+    }
+  }
+
+  /**
+   * Handle external preference changes (import/reset).
+   * Uses a guard flag to avoid re-entrant persistence writes from setState.
+   */
+  private onPrefsChanged(prefs: FPSIndicatorPrefs): void {
+    if (this.updatingPrefs) return;
+    this.updatingPrefs = true;
+    try {
+      this.state = { ...prefs };
+      this.updateStyles();
+      this.render();
+      this.emit('stateChanged', { ...this.state });
+    } finally {
+      this.updatingPrefs = false;
     }
   }
 
@@ -374,8 +397,14 @@ export class FPSIndicator extends EventEmitter<FPSIndicatorEvents> {
     this.render();
     this.emit('stateChanged', { ...this.state });
 
-    // Persist state changes to preferences
-    this.preferences.setFPSIndicatorPrefs({ ...this.state });
+    // Persist state changes to preferences (guarded to avoid re-entrant loop
+    // when triggered by an incoming fpsIndicatorPrefsChanged event)
+    this.updatingPrefs = true;
+    try {
+      this.preferences.setFPSIndicatorPrefs({ ...this.state });
+    } finally {
+      this.updatingPrefs = false;
+    }
   }
 
   /**

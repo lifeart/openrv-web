@@ -67,6 +67,7 @@ export interface PreferencesExportPayload {
   colorDefaults: ColorDefaults;
   exportDefaults: ExportDefaults;
   generalPrefs: GeneralPrefs;
+  fpsIndicatorPrefs: FPSIndicatorPrefs;
 }
 
 export const CORE_PREFERENCE_STORAGE_KEYS = {
@@ -427,6 +428,16 @@ export class PreferencesManager extends EventEmitter<CorePreferencesEvents> {
       }
     }
 
+    if (hasOwnKey(parsed, 'fpsIndicatorPrefs')) {
+      const value = parsed.fpsIndicatorPrefs;
+      if (value === null) {
+        this.storage.remove(CORE_PREFERENCE_STORAGE_KEYS.fpsIndicator);
+        this.emit('fpsIndicatorPrefsChanged', { ...DEFAULT_FPS_INDICATOR_PREFS });
+      } else if (isRecord(value)) {
+        this.setFPSIndicatorPrefs(value as Partial<FPSIndicatorPrefs>);
+      }
+    }
+
     this.emit('imported', this.buildExportPayload());
   }
 
@@ -440,6 +451,7 @@ export class PreferencesManager extends EventEmitter<CorePreferencesEvents> {
     this.emit('colorDefaultsChanged', { ...DEFAULT_COLOR_DEFAULTS });
     this.emit('exportDefaultsChanged', { ...DEFAULT_EXPORT_DEFAULTS });
     this.emit('generalPrefsChanged', { ...DEFAULT_GENERAL_PREFS });
+    this.emit('fpsIndicatorPrefsChanged', { ...DEFAULT_FPS_INDICATOR_PREFS });
     this.emit('reset', undefined);
   }
 
@@ -465,6 +477,7 @@ export class PreferencesManager extends EventEmitter<CorePreferencesEvents> {
       colorDefaults: this.getColorDefaults(),
       exportDefaults: this.getExportDefaults(),
       generalPrefs: this.getGeneralPrefs(),
+      fpsIndicatorPrefs: this.getFPSIndicatorPrefs(),
     };
   }
 }

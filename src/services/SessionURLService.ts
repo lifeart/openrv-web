@@ -9,6 +9,7 @@
 import { decodeSessionState, type SessionURLState } from '../core/session/SessionURLManager';
 import { decodeWebRTCURLSignal, WEBRTC_URL_SIGNAL_PARAM } from '../network/WebRTCURLSignaling';
 import type { Transform2D } from '../core/types/transform';
+import { DEFAULT_TRANSFORM } from '../core/types/transform';
 
 // ---------------------------------------------------------------------------
 // Dependency interfaces (structural typing)
@@ -196,13 +197,27 @@ export class SessionURLService {
 
       if (state.transform) {
         viewer.setTransform(state.transform);
+      } else {
+        // Reset transform to default when omitted (compact encoding strips defaults)
+        viewer.setTransform({ ...DEFAULT_TRANSFORM, scale: { ...DEFAULT_TRANSFORM.scale }, translate: { ...DEFAULT_TRANSFORM.translate } });
       }
 
       if (typeof state.wipeMode === 'string') {
         compareControl.setWipeMode(state.wipeMode);
+      } else {
+        // Reset wipe to 'off' when omitted (compact encoding strips 'off')
+        compareControl.setWipeMode('off');
       }
       if (typeof state.wipePosition === 'number') {
         compareControl.setWipePosition(state.wipePosition);
+      } else {
+        // Reset wipe position to center when omitted (compact encoding strips 0.5)
+        compareControl.setWipePosition(0.5);
+      }
+
+      if (state.currentAB == null) {
+        // Reset to 'A' when omitted (compact encoding strips 'A')
+        session.setCurrentAB('A');
       }
 
       if (state.ocio) {
@@ -215,6 +230,12 @@ export class SessionURLService {
           view: state.ocio.view ?? currentOcio.view,
           look: state.ocio.look ?? currentOcio.look,
         });
+      } else {
+        // Reset OCIO to disabled when omitted (compact encoding strips disabled OCIO)
+        const currentOcio = ocioControl.getState();
+        if (currentOcio.enabled) {
+          ocioControl.setState({ ...currentOcio, enabled: false });
+        }
       }
     } finally {
       syncStateManager.endApplyRemote();

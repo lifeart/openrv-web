@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SessionURLService, type SessionURLDeps } from './SessionURLService';
 import type { SessionURLState } from '../core/session/SessionURLManager';
-import { encodeSessionState } from '../core/session/SessionURLManager';
+import { encodeSessionState, decodeSessionState } from '../core/session/SessionURLManager';
 import { createMockSession, createMockViewer } from '../../test/mocks';
 
 // ---------------------------------------------------------------------------
@@ -409,7 +409,7 @@ describe('SessionURLService', () => {
   // -----------------------------------------------------------------------
 
   describe('edge cases', () => {
-    it('SU-019: applySessionURLState handles partial state (only required fields)', async () => {
+    it('SU-019: applySessionURLState resets omitted fields to defaults', async () => {
       const state: SessionURLState = {
         frame: 5,
         fps: 24,
@@ -419,13 +419,21 @@ describe('SessionURLService', () => {
       await service.applySessionURLState(state);
 
       expect(deps.session.goToFrame).toHaveBeenCalledWith(5);
-      expect(deps.viewer.setTransform).not.toHaveBeenCalled();
-      expect(deps.compareControl.setWipeMode).not.toHaveBeenCalled();
-      expect(deps.compareControl.setWipePosition).not.toHaveBeenCalled();
+      // Omitted fields should be reset to defaults
+      expect(deps.viewer.setTransform).toHaveBeenCalledWith({
+        rotation: 0,
+        flipH: false,
+        flipV: false,
+        scale: { x: 1, y: 1 },
+        translate: { x: 0, y: 0 },
+      });
+      expect(deps.compareControl.setWipeMode).toHaveBeenCalledWith('off');
+      expect(deps.compareControl.setWipePosition).toHaveBeenCalledWith(0.5);
+      expect(deps.session.setCurrentAB).toHaveBeenCalledWith('A');
+      // OCIO not reset when already disabled
       expect(deps.ocioControl.setState).not.toHaveBeenCalled();
       expect(deps.session.setSourceA).not.toHaveBeenCalled();
       expect(deps.session.setSourceB).not.toHaveBeenCalled();
-      expect(deps.session.setCurrentAB).not.toHaveBeenCalled();
     });
 
     it('SU-020: captureSessionURLState works with null currentSource', () => {
@@ -618,6 +626,240 @@ describe('SessionURLService', () => {
       await service.handleURLBootstrap();
 
       expect(loadSourceFromUrl).toHaveBeenCalledWith('https://example.com/review.png');
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Issue #150: Absent fields reset to defaults
+  // -----------------------------------------------------------------------
+
+  describe('issue #150: absent URL state fields reset to defaults', () => {
+    it('SU-032: absent transform resets to default (0,0,1)', async () => {
+      // Simulate recipient with non-default transform
+      deps.viewer.getTransform.mockReturnValue({
+        rotation: 90,
+        flipH: true,
+        flipV: false,
+        scale: { x: 2, y: 2 },
+        translate: { x: 100, y: -50 },
+      });
+
+      const state: SessionURLState = {
+        frame: 1,
+        fps: 24,
+        sourceIndex: 0,
+        // transform intentionally omitted
+      };
+
+      await service.applySessionURLState(state);
+
+      expect(deps.viewer.setTransform).toHaveBeenCalledWith({
+        rotation: 0,
+        flipH: false,
+        flipV: false,
+        scale: { x: 1, y: 1 },
+        translate: { x: 0, y: 0 },
+      });
+    });
+
+    it('SU-033: absent wipeMode resets to off', async () => {
+      deps.compareControl.getWipeMode.mockReturnValue('horizontal');
+
+      const state: SessionURLState = {
+        frame: 1,
+        fps: 24,
+        sourceIndex: 0,
+        // wipeMode intentionally omitted
+      };
+
+      await service.applySessionURLState(state);
+
+      expect(deps.compareControl.setWipeMode).toHaveBeenCalledWith('off');
+    });
+
+    it('SU-034: absent currentAB resets to A', async () => {
+      deps.session.currentAB = 'B';
+
+      const state: SessionURLState = {
+        frame: 1,
+        fps: 24,
+        sourceIndex: 0,
+        // currentAB intentionally omitted
+      };
+
+      await service.applySessionURLState(state);
+
+      expect(deps.session.setCurrentAB).toHaveBeenCalledWith('A');
+    });
+
+    it('SU-035: absent OCIO resets to disabled', async () => {
+      deps.ocioControl.getState.mockReturnValue({
+        enabled: true,
+        configName: 'aces_1.2',
+        inputColorSpace: 'ACEScg',
+        display: 'Rec.709',
+        view: 'Output - sRGB',
+        look: 'Neutral',
+      });
+
+      const state: SessionURLState = {
+        frame: 1,
+        fps: 24,
+        sourceIndex: 0,
+        // ocio intentionally omitted
+      };
+
+      await service.applySessionURLState(state);
+
+      expect(deps.ocioControl.setState).toHaveBeenCalledWith({
+        enabled: false,
+        configName: 'aces_1.2',
+        inputColorSpace: 'ACEScg',
+        display: 'Rec.709',
+        view: 'Output - sRGB',
+        look: 'Neutral',
+      });
+    });
+
+    it('SU-036: absent OCIO does not call setState when already disabled', async () => {
+      deps.ocioControl.getState.mockReturnValue({
+        enabled: false,
+        configName: 'default',
+        inputColorSpace: 'sRGB',
+        display: 'sRGB',
+        view: 'ACES 1.0',
+        look: 'None',
+      });
+
+      const state: SessionURLState = {
+        frame: 1,
+        fps: 24,
+        sourceIndex: 0,
+      };
+
+      await service.applySessionURLState(state);
+
+      expect(deps.ocioControl.setState).not.toHaveBeenCalled();
+    });
+
+    it('SU-037: present non-default values still applied correctly (no regression)', async () => {
+      const transform = {
+        rotation: 45,
+        flipH: true,
+        flipV: false,
+        scale: { x: 3, y: 3 },
+        translate: { x: 50, y: -25 },
+      };
+      const state: SessionURLState = {
+        frame: 10,
+        fps: 30,
+        sourceIndex: 1,
+        currentAB: 'B',
+        transform,
+        wipeMode: 'horizontal',
+        wipePosition: 0.3,
+        ocio: {
+          enabled: true,
+          configName: 'aces_1.2',
+          inputColorSpace: 'ACEScg',
+          display: 'Rec.709',
+          view: 'Output - sRGB',
+          look: 'Neutral',
+        },
+      };
+
+      await service.applySessionURLState(state);
+
+      expect(deps.viewer.setTransform).toHaveBeenCalledWith(transform);
+      expect(deps.compareControl.setWipeMode).toHaveBeenCalledWith('horizontal');
+      expect(deps.compareControl.setWipePosition).toHaveBeenCalledWith(0.3);
+      expect(deps.session.setCurrentAB).toHaveBeenCalledWith('B');
+      expect(deps.ocioControl.setState).toHaveBeenCalledWith({
+        enabled: true,
+        configName: 'aces_1.2',
+        inputColorSpace: 'ACEScg',
+        display: 'Rec.709',
+        view: 'Output - sRGB',
+        look: 'Neutral',
+      });
+    });
+
+    it('SU-038: full round-trip: encode default state → decode → apply resets all to defaults', async () => {
+      // Encode a state with all defaults
+      const defaultState: SessionURLState = {
+        frame: 1,
+        fps: 24,
+        sourceIndex: 0,
+        currentAB: 'A',
+        transform: {
+          rotation: 0,
+          flipH: false,
+          flipV: false,
+          scale: { x: 1, y: 1 },
+          translate: { x: 0, y: 0 },
+        },
+        wipeMode: 'off',
+        ocio: { enabled: false },
+      };
+
+      // Encode strips defaults, decode gives minimal state
+      const encoded = encodeSessionState(defaultState);
+      const decoded = decodeSessionState(encoded);
+      expect(decoded).not.toBeNull();
+
+      // Simulate recipient with non-default state
+      deps.viewer.getTransform.mockReturnValue({
+        rotation: 180,
+        flipH: true,
+        flipV: true,
+        scale: { x: 5, y: 5 },
+        translate: { x: 200, y: -200 },
+      });
+      deps.compareControl.getWipeMode.mockReturnValue('vertical');
+      deps.session.currentAB = 'B';
+      deps.ocioControl.getState.mockReturnValue({
+        enabled: true,
+        configName: 'aces_1.2',
+        inputColorSpace: 'ACEScg',
+        display: 'Rec.709',
+        view: 'Output - sRGB',
+        look: 'Neutral',
+      });
+
+      await service.applySessionURLState(decoded!);
+
+      // All should be reset to defaults
+      expect(deps.viewer.setTransform).toHaveBeenCalledWith({
+        rotation: 0,
+        flipH: false,
+        flipV: false,
+        scale: { x: 1, y: 1 },
+        translate: { x: 0, y: 0 },
+      });
+      expect(deps.compareControl.setWipeMode).toHaveBeenCalledWith('off');
+      expect(deps.compareControl.setWipePosition).toHaveBeenCalledWith(0.5);
+      expect(deps.session.setCurrentAB).toHaveBeenCalledWith('A');
+      expect(deps.ocioControl.setState).toHaveBeenCalledWith({
+        enabled: false,
+        configName: 'aces_1.2',
+        inputColorSpace: 'ACEScg',
+        display: 'Rec.709',
+        view: 'Output - sRGB',
+        look: 'Neutral',
+      });
+    });
+
+    it('SU-039: absent wipeMode and wipePosition resets wipePosition to 0.5', async () => {
+      const state: SessionURLState = {
+        frame: 1,
+        fps: 24,
+        sourceIndex: 0,
+      };
+
+      await service.applySessionURLState(state);
+
+      expect(deps.compareControl.setWipeMode).toHaveBeenCalledWith('off');
+      expect(deps.compareControl.setWipePosition).toHaveBeenCalledWith(0.5);
     });
   });
 
