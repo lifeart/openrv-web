@@ -6,11 +6,6 @@
  * - Select guide types (title safe, action safe, rule of thirds, etc.)
  * - Aspect ratio guide selection
  * - Guide color and opacity controls
- *
- * TODO(#81): SafeAreasOverlay supports guideColor, guideOpacity, and custom
- * aspect ratio features, but these are not exposed in the control UI.
- * Only binary guide toggles are available. A settings section should be
- * added to the dropdown for color, opacity, and custom aspect ratio.
  */
 
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
@@ -34,7 +29,6 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
   // Bound handlers for cleanup
   private boundHandleOutsideClick: (e: MouseEvent) => void;
   private boundHandleReposition: () => void;
-  private hasLoggedConfigHint = false;
 
   constructor(overlay: SafeAreasOverlay) {
     super();
@@ -108,15 +102,6 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
         this.updateButtonLabel();
         this.updateDropdownState();
         this.emit('stateChanged', state);
-
-        // TODO(#81): Log configuration hint on first enable
-        if (state.enabled && !this.hasLoggedConfigHint) {
-          this.hasLoggedConfigHint = true;
-          console.info(
-            '[SafeAreasControl] Overlay features (guideColor, guideOpacity, custom aspect ratio) ' +
-              'are available via API but not yet exposed in the UI. See issue #81.',
-          );
-        }
       }),
     );
   }
@@ -168,6 +153,14 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
     // Aspect ratio section
     dropdown.appendChild(this.createSectionLabel('Aspect Ratio'));
     dropdown.appendChild(this.createAspectRatioSelect());
+    dropdown.appendChild(this.createCustomAspectRatioInput());
+
+    dropdown.appendChild(this.createSeparator());
+
+    // Appearance section
+    dropdown.appendChild(this.createSectionLabel('Appearance'));
+    dropdown.appendChild(this.createGuideColorInput());
+    dropdown.appendChild(this.createGuideOpacitySlider());
 
     return dropdown;
   }
@@ -285,7 +278,6 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
 
     // Add aspect ratio options
     for (const [key, def] of Object.entries(ASPECT_RATIOS)) {
-      if (key === 'custom') continue; // Skip custom for now
       const option = document.createElement('option');
       option.value = key;
       option.textContent = def.label;
@@ -298,6 +290,147 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
     });
 
     container.appendChild(select);
+    return container;
+  }
+
+  private createCustomAspectRatioInput(): HTMLElement {
+    const container = document.createElement('div');
+    container.dataset.testid = 'safe-areas-custom-aspect-container';
+    container.style.cssText = `
+      padding: 4px 12px;
+      display: none;
+      flex-direction: column;
+      gap: 4px;
+    `;
+
+    const label = document.createElement('label');
+    label.textContent = 'Custom Ratio';
+    label.style.cssText = `
+      color: var(--text-muted);
+      font-size: 11px;
+    `;
+
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.min = '0.1';
+    input.max = '10';
+    input.step = '0.01';
+    input.value = this.overlay.getCustomAspectRatio().toFixed(2);
+    input.dataset.testid = 'safe-areas-custom-aspect';
+    input.style.cssText = `
+      width: 100%;
+      padding: 6px 8px;
+      background: var(--bg-hover);
+      border: 1px solid var(--border-primary);
+      border-radius: 4px;
+      color: var(--text-primary);
+      font-size: 12px;
+    `;
+    input.addEventListener('click', (e) => e.stopPropagation());
+    input.addEventListener('keydown', (e) => e.stopPropagation());
+    input.addEventListener('input', () => {
+      const next = Number.parseFloat(input.value);
+      if (!Number.isFinite(next) || next <= 0) return;
+      this.overlay.setCustomAspectRatio(next);
+    });
+
+    container.appendChild(label);
+    container.appendChild(input);
+    return container;
+  }
+
+  private createGuideColorInput(): HTMLElement {
+    const container = document.createElement('div');
+    container.style.cssText = `
+      padding: 4px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    `;
+
+    const label = document.createElement('label');
+    label.textContent = 'Guide Color';
+    label.style.cssText = `
+      color: var(--text-primary);
+      font-size: 12px;
+    `;
+
+    const input = document.createElement('input');
+    input.type = 'color';
+    input.value = this.overlay.getState().guideColor;
+    input.dataset.testid = 'safe-areas-guide-color';
+    input.style.cssText = `
+      width: 36px;
+      height: 24px;
+      background: transparent;
+      border: 1px solid var(--border-primary);
+      border-radius: 4px;
+      cursor: pointer;
+      padding: 0;
+    `;
+    input.addEventListener('click', (e) => e.stopPropagation());
+    input.addEventListener('input', () => {
+      this.overlay.setGuideColor(input.value);
+    });
+
+    container.appendChild(label);
+    container.appendChild(input);
+    return container;
+  }
+
+  private createGuideOpacitySlider(): HTMLElement {
+    const container = document.createElement('div');
+    container.style.cssText = `
+      padding: 4px 12px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    `;
+
+    const labelRow = document.createElement('div');
+    labelRow.style.cssText = `
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    `;
+
+    const label = document.createElement('span');
+    label.textContent = 'Guide Opacity';
+    label.style.cssText = `
+      color: var(--text-primary);
+      font-size: 12px;
+    `;
+
+    const value = document.createElement('span');
+    value.dataset.testid = 'safe-areas-guide-opacity-value';
+    value.style.cssText = `
+      color: var(--text-muted);
+      font-size: 11px;
+    `;
+
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = '0';
+    slider.max = '100';
+    slider.step = '5';
+    slider.dataset.testid = 'safe-areas-guide-opacity';
+    slider.style.cssText = `
+      width: 100%;
+      cursor: pointer;
+    `;
+    slider.addEventListener('click', (e) => e.stopPropagation());
+    slider.addEventListener('input', () => {
+      const next = Number(slider.value) / 100;
+      this.overlay.setGuideOpacity(next);
+      value.textContent = `${slider.value}%`;
+    });
+
+    labelRow.appendChild(label);
+    labelRow.appendChild(value);
+    container.appendChild(labelRow);
+    container.appendChild(slider);
     return container;
   }
 
@@ -367,6 +500,25 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
     const select = this.dropdown.querySelector('[data-testid="safe-areas-aspect-ratio"]') as HTMLSelectElement;
     if (select) {
       select.value = state.aspectRatio || '';
+    }
+
+    const customContainer = this.dropdown.querySelector('[data-testid="safe-areas-custom-aspect-container"]') as HTMLElement;
+    const customInput = this.dropdown.querySelector('[data-testid="safe-areas-custom-aspect"]') as HTMLInputElement;
+    if (customContainer && customInput) {
+      customContainer.style.display = state.aspectRatio === 'custom' ? 'flex' : 'none';
+      customInput.value = this.overlay.getCustomAspectRatio().toFixed(2);
+    }
+
+    const colorInput = this.dropdown.querySelector('[data-testid="safe-areas-guide-color"]') as HTMLInputElement;
+    if (colorInput) {
+      colorInput.value = state.guideColor;
+    }
+
+    const opacitySlider = this.dropdown.querySelector('[data-testid="safe-areas-guide-opacity"]') as HTMLInputElement;
+    const opacityValue = this.dropdown.querySelector('[data-testid="safe-areas-guide-opacity-value"]') as HTMLElement;
+    if (opacitySlider && opacityValue) {
+      opacitySlider.value = String(Math.round(state.guideOpacity * 100));
+      opacityValue.textContent = `${opacitySlider.value}%`;
     }
   }
 

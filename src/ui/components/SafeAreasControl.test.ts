@@ -207,6 +207,22 @@ describe('SafeAreasControl', () => {
       const aspectSelect = document.querySelector('[data-testid="safe-areas-aspect-ratio"]');
       expect(aspectSelect).not.toBeNull();
     });
+
+    it('SAFE-U048: dropdown has guide color input', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
+      button.click();
+
+      expect(document.querySelector('[data-testid="safe-areas-guide-color"]')).not.toBeNull();
+    });
+
+    it('SAFE-U049: dropdown has guide opacity slider', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
+      button.click();
+
+      expect(document.querySelector('[data-testid="safe-areas-guide-opacity"]')).not.toBeNull();
+    });
   });
 
   describe('checkbox interactions', () => {
@@ -308,6 +324,17 @@ describe('SafeAreasControl', () => {
       expect(option).not.toBeNull();
     });
 
+    it('SAFE-U062b: aspect ratio select has custom option', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
+      button.click();
+
+      const select = document.querySelector('[data-testid="safe-areas-aspect-ratio"]') as HTMLSelectElement;
+      const option = select.querySelector('option[value="custom"]');
+
+      expect(option).not.toBeNull();
+    });
+
     it('SAFE-U063: changing select updates overlay aspect ratio', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
@@ -334,6 +361,65 @@ describe('SafeAreasControl', () => {
       select.dispatchEvent(new Event('change'));
 
       expect(overlay.getState().aspectRatio).toBeNull();
+    });
+
+    it('SAFE-U065: selecting custom shows custom aspect ratio input', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
+      button.click();
+
+      const select = document.querySelector('[data-testid="safe-areas-aspect-ratio"]') as HTMLSelectElement;
+      const customContainer = document.querySelector('[data-testid="safe-areas-custom-aspect-container"]') as HTMLElement;
+
+      expect(customContainer.style.display).toBe('none');
+      select.value = 'custom';
+      select.dispatchEvent(new Event('change'));
+
+      expect(overlay.getState().aspectRatio).toBe('custom');
+      expect(customContainer.style.display).toBe('flex');
+    });
+
+    it('SAFE-U066: custom aspect ratio input updates overlay value', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
+      button.click();
+
+      const select = document.querySelector('[data-testid="safe-areas-aspect-ratio"]') as HTMLSelectElement;
+      select.value = 'custom';
+      select.dispatchEvent(new Event('change'));
+
+      const input = document.querySelector('[data-testid="safe-areas-custom-aspect"]') as HTMLInputElement;
+      input.value = '2.00';
+      input.dispatchEvent(new Event('input'));
+
+      expect(overlay.getCustomAspectRatio()).toBe(2);
+    });
+  });
+
+  describe('appearance controls', () => {
+    it('SAFE-U067: guide color input updates overlay color', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
+      button.click();
+
+      const input = document.querySelector('[data-testid="safe-areas-guide-color"]') as HTMLInputElement;
+      input.value = '#ff0000';
+      input.dispatchEvent(new Event('input'));
+
+      expect(overlay.getState().guideColor).toBe('#ff0000');
+    });
+
+    it('SAFE-U068: guide opacity slider updates overlay opacity', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
+      button.click();
+
+      const slider = document.querySelector('[data-testid="safe-areas-guide-opacity"]') as HTMLInputElement;
+      slider.value = '80';
+      slider.dispatchEvent(new Event('input'));
+
+      expect(overlay.getState().guideOpacity).toBe(0.8);
+      expect(document.querySelector('[data-testid="safe-areas-guide-opacity-value"]')?.textContent).toBe('80%');
     });
   });
 
@@ -525,25 +611,4 @@ describe('SafeAreasControl', () => {
     });
   });
 
-  describe('configuration hint (#81)', () => {
-    afterEach(() => {
-      vi.restoreAllMocks();
-    });
-
-    it('SAFE-U120: logs configuration info on first enable', () => {
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
-      overlay.toggle(); // enable
-      expect(infoSpy).toHaveBeenCalledTimes(1);
-      expect(infoSpy.mock.calls[0]![0]).toContain('[SafeAreasControl]');
-      expect(infoSpy.mock.calls[0]![0]).toContain('#81');
-    });
-
-    it('SAFE-U121: logs configuration info only once across multiple enables', () => {
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
-      overlay.toggle(); // enable
-      overlay.toggle(); // disable
-      overlay.toggle(); // enable
-      expect(infoSpy).toHaveBeenCalledTimes(1);
-    });
-  });
 });

@@ -63,12 +63,12 @@ describe('WatermarkControl', () => {
   });
 
   describe('position grid', () => {
-    it('WMC-U010: should have 9 position buttons', () => {
+    it('WMC-U010: should have preset buttons plus custom mode button', () => {
       const buttons = container.querySelectorAll('[data-position]');
-      expect(buttons.length).toBe(9);
+      expect(buttons.length).toBe(10);
     });
 
-    it('WMC-U011: each position preset has a button', () => {
+    it('WMC-U011: each position mode has a button', () => {
       const positions = [
         'top-left',
         'top-center',
@@ -79,6 +79,7 @@ describe('WatermarkControl', () => {
         'bottom-left',
         'bottom-center',
         'bottom-right',
+        'custom',
       ];
 
       for (const pos of positions) {
@@ -92,6 +93,78 @@ describe('WatermarkControl', () => {
       button.click();
 
       expect(control.getState().position).toBe('top-left');
+    });
+
+    it('WMC-U013: clicking custom mode button changes position to custom', () => {
+      const button = container.querySelector('[data-testid="watermark-position-custom"]') as HTMLElement;
+      button.click();
+
+      expect(control.getState().position).toBe('custom');
+    });
+  });
+
+  describe('custom position inputs', () => {
+    it('WMC-U014: should have custom position coordinate inputs', () => {
+      const xInput = container.querySelector('[data-testid="watermark-custom-x-input"]');
+      const yInput = container.querySelector('[data-testid="watermark-custom-y-input"]');
+
+      expect(xInput).not.toBeNull();
+      expect(yInput).not.toBeNull();
+    });
+
+    it('WMC-U015: custom coordinate inputs are shown when custom mode is active', () => {
+      control.setState({ position: 'custom' });
+
+      const customContainer = container.querySelector(
+        '[data-testid="watermark-custom-position-container"]',
+      ) as HTMLElement;
+
+      expect(customContainer.style.display).toBe('grid');
+    });
+
+    it('WMC-U016: custom X input updates custom position', () => {
+      const xInput = container.querySelector('[data-testid="watermark-custom-x-input"]') as HTMLInputElement;
+      xInput.value = '25';
+      xInput.dispatchEvent(new Event('input'));
+
+      const state = control.getState();
+      expect(state.position).toBe('custom');
+      expect(state.customX).toBe(0.25);
+      expect(state.customY).toBe(DEFAULT_WATERMARK_STATE.customY);
+    });
+
+    it('WMC-U017: custom Y input updates custom position', () => {
+      const yInput = container.querySelector('[data-testid="watermark-custom-y-input"]') as HTMLInputElement;
+      yInput.value = '60';
+      yInput.dispatchEvent(new Event('input'));
+
+      const state = control.getState();
+      expect(state.position).toBe('custom');
+      expect(state.customX).toBe(DEFAULT_WATERMARK_STATE.customX);
+      expect(state.customY).toBe(0.6);
+    });
+
+    it('WMC-U018: custom coordinate inputs reflect overlay state', () => {
+      control.setState({
+        position: 'custom',
+        customX: 0.33,
+        customY: 0.66,
+      });
+
+      const xInput = container.querySelector('[data-testid="watermark-custom-x-input"]') as HTMLInputElement;
+      const yInput = container.querySelector('[data-testid="watermark-custom-y-input"]') as HTMLInputElement;
+
+      expect(xInput.value).toBe('33');
+      expect(yInput.value).toBe('66');
+    });
+
+    it('WMC-U019: custom coordinate inputs clamp out-of-range values', () => {
+      const xInput = container.querySelector('[data-testid="watermark-custom-x-input"]') as HTMLInputElement;
+      xInput.value = '150';
+      xInput.dispatchEvent(new Event('input'));
+
+      expect(xInput.value).toBe('100');
+      expect(control.getState().customX).toBe(1);
     });
   });
 
@@ -210,6 +283,23 @@ describe('WatermarkControl', () => {
 
       expect(callback).toHaveBeenCalledWith(expect.objectContaining({ opacity: 0.8 }));
     });
+
+    it('WMC-U063: emits stateChanged when custom coordinates change', () => {
+      const callback = vi.fn();
+      control.on('stateChanged', callback);
+
+      const xInput = container.querySelector('[data-testid="watermark-custom-x-input"]') as HTMLInputElement;
+      xInput.value = '40';
+      xInput.dispatchEvent(new Event('input'));
+
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({
+          position: 'custom',
+          customX: 0.4,
+          customY: DEFAULT_WATERMARK_STATE.customY,
+        }),
+      );
+    });
   });
 
   describe('preview', () => {
@@ -234,34 +324,6 @@ describe('WatermarkControl', () => {
         control.dispose();
         control.dispose();
       }).not.toThrow();
-    });
-  });
-
-  describe('configuration hint (#82)', () => {
-    afterEach(() => {
-      vi.restoreAllMocks();
-    });
-
-    it('WMC-U090: logs configuration info on first image load', () => {
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
-      const overlay = control.getOverlay();
-
-      // Simulate image loaded event from the overlay
-      overlay.emit('imageLoaded', { width: 100, height: 50 });
-
-      expect(infoSpy).toHaveBeenCalledTimes(1);
-      expect(infoSpy.mock.calls[0]![0]).toContain('[WatermarkControl]');
-      expect(infoSpy.mock.calls[0]![0]).toContain('#82');
-    });
-
-    it('WMC-U091: logs configuration info only once across multiple loads', () => {
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
-      const overlay = control.getOverlay();
-
-      overlay.emit('imageLoaded', { width: 100, height: 50 });
-      overlay.emit('imageLoaded', { width: 200, height: 100 });
-
-      expect(infoSpy).toHaveBeenCalledTimes(1);
     });
   });
 });

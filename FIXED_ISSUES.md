@@ -935,6 +935,15 @@
 ## Issue #81: Safe Areas ships only the binary guide toggles while real overlay customization stays unreachable
 
 - **Severity**: Medium
+- **Area**: QC overlays, framing guides
+- **TODO(#81) Resolved**: Extended `SafeAreasControl`'s existing dropdown to expose the underlying `SafeAreasOverlay` customization API directly. The Aspect Ratio section now includes the `custom` preset plus a numeric custom-ratio input. A new Appearance section adds guide color and guide opacity controls. Removed the stale TODO comment, one-time `console.info`, and `hasLoggedConfigHint` field from `SafeAreasControl`. Added `getCustomAspectRatio()` to `SafeAreasOverlay` so the control can reflect current custom-ratio state.
+- **Regression Tests**:
+  - `SafeAreasControl.test.ts`: added SAFE-U048/049 for new controls, SAFE-U062b/065/066 for custom aspect-ratio workflow, and SAFE-U067/068 for color/opacity updates; removed the obsolete logging-path tests
+  - `SafeAreasOverlay.test.ts`: existing 50 overlay tests remain green with the new getter and unchanged rendering behavior
+- **Verification**: `SafeAreasControl.test.ts` (58 tests) and `SafeAreasOverlay.test.ts` (50 tests) pass. TypeScript clean.
+- **Files Changed**: `src/ui/components/SafeAreasControl.ts`, `src/ui/components/SafeAreasControl.test.ts`, `src/ui/components/SafeAreasOverlay.ts`
+
+- **Severity**: Medium
 - **Fix**: Added TODO(#81) comment in `SafeAreasControl.ts` documenting that guideColor, guideOpacity, and custom aspect ratio features exist but have no UI surface. Added one-time `console.info` on first overlay enable.
 - **Regression Tests**: SAFE-U120, SAFE-U121.
 - **Files Changed**: `src/ui/components/SafeAreasControl.ts`, `src/ui/components/SafeAreasControl.test.ts`

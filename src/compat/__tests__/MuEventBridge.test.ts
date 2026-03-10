@@ -597,6 +597,37 @@ describe('ModeManager regex dispatch', () => {
 
     expect(manager.dispatchEvent(makeEvent('completely-different'))).toBe(false);
   });
+
+  it('regex with /g flag matches on every dispatch, not just alternating ones', () => {
+    const handler = vi.fn();
+    manager.pushEventTable('t');
+    manager.bind('t', '__regex__key-down--.*', handler, 'doc', /key-down--.*/g);
+
+    expect(manager.dispatchEvent(makeEvent('key-down--a'))).toBe(true);
+    expect(manager.dispatchEvent(makeEvent('key-down--a'))).toBe(true);
+    expect(handler).toHaveBeenCalledTimes(2);
+  });
+
+  it('regex with /y flag matches on every dispatch, not just alternating ones', () => {
+    const handler = vi.fn();
+    manager.pushEventTable('t');
+    manager.bind('t', '__regex__key-down--.*', handler, 'doc', /key-down--.*/y);
+
+    expect(manager.dispatchEvent(makeEvent('key-down--a'))).toBe(true);
+    expect(manager.dispatchEvent(makeEvent('key-down--a'))).toBe(true);
+    expect(handler).toHaveBeenCalledTimes(2);
+  });
+
+  it('handler fires on every dispatch with stateful regex, not alternating', () => {
+    const handler = vi.fn();
+    manager.pushEventTable('t');
+    manager.bind('t', '__regex__ev--.*', handler, 'doc', /ev--.*/g);
+
+    for (let i = 0; i < 5; i++) {
+      expect(manager.dispatchEvent(makeEvent('ev--test'))).toBe(true);
+    }
+    expect(handler).toHaveBeenCalledTimes(5);
+  });
 });
 
 describe('MuEventBridge regex binding', () => {

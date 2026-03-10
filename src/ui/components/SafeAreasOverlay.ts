@@ -148,6 +148,10 @@ export class SafeAreasOverlay extends CanvasOverlay<SafeAreasEvents> {
     }
   }
 
+  getCustomAspectRatio(): number {
+    return this.customAspectRatio;
+  }
+
   /**
    * Set guide color
    */

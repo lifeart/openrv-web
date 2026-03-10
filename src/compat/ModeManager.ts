@@ -365,6 +365,9 @@ export class ModeManager {
     for (const [key, binding] of table.bindings) {
       if (!key.startsWith(REGEX_PREFIX)) continue;
 
+      if (binding.regex) {
+        binding.regex.lastIndex = 0;
+      }
       const matches = binding.regex
         ? binding.regex.test(event.name)
         : new RegExp(key.slice(REGEX_PREFIX.length)).test(event.name);
