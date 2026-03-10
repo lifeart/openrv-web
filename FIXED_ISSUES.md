@@ -951,8 +951,12 @@
 ## Issue #82: Watermark panel drops the overlay's custom-position mode on the floor
 
 - **Severity**: Medium
-- **Fix**: Added TODO(#82) comment in `WatermarkControl.ts` documenting that the overlay supports custom X/Y positioning but the UI only exposes the 3x3 preset grid. Added one-time `console.info` on first image load.
-- **Regression Tests**: WMC-U090, WMC-U091.
+- **Area**: QC overlays, watermark placement
+- **TODO(#82) Resolved**: Extended `WatermarkControl` to expose the overlay's existing custom-position mode instead of logging about it. The position section now includes a dedicated `Custom` mode button plus X/Y percentage inputs wired to `WatermarkOverlay.setCustomPosition()`. The control keeps those inputs synchronized with overlay state, clamps out-of-range values back into the valid 0-100% range, and no longer carries the stale TODO comment, one-time `console.info`, or `hasLoggedConfigHint` state.
+- **Regression Tests**:
+  - `WatermarkControl.test.ts`: updated WMC-U010/011 for the new custom button, added WMC-U013 through WMC-U019 for custom-mode activation/state sync/clamping, and added WMC-U063 for `stateChanged` emission from custom coordinate edits; removed the obsolete logging-path tests
+  - `WatermarkOverlay.test.ts`: existing 43 overlay tests remain green with no overlay behavior changes required
+- **Verification**: `WatermarkControl.test.ts` (36 tests) and `WatermarkOverlay.test.ts` (43 tests) pass. TypeScript clean.
 - **Files Changed**: `src/ui/components/WatermarkControl.ts`, `src/ui/components/WatermarkControl.test.ts`
 
 ## Issue #83: Client mode hides restricted UI one-way and does not restore it when the mode is turned off
@@ -2224,3 +2228,13 @@
 - **Regression Tests**: 8 new tests covering: multi-message queue drain in order, timeout-based sequencing, mid-drain additions, queue emptiness after completion, zero-duration messages (first/middle/sole position), and single `displayFeedback()` independence.
 - **Verification**: All 466 compat tests pass (8 files), TypeScript clean.
 - **Files Changed**: `src/compat/MuExtraCommands.ts`, `src/compat/__tests__/MuCommands.test.ts`
+
+## Issue #241: Mu compat `bindRegex()` is effectively dead because dispatch never evaluates regex bindings
+
+- **Severity**: Medium
+- **Area**: Mu compatibility / event binding
+- **Root Cause**: `bindRegex()` stored regex handlers under `__regex__` sentinel keys in the binding maps, but `ModeManager.dispatchEvent()` only performed exact `bindings.get(event.name)` lookups. It never iterated bindings to test regex patterns, so regex-bound handlers were silently dead. Additionally, `RegExp` objects with `g` or `y` flags are stateful — `test()` advances `lastIndex`, causing every other dispatch to fail.
+- **Fix**: (A) Added `regex?: RegExp` field to `EventTableBinding` and `regexCount` tracker to `EventTable` in `types.ts`. (B) Added `tryRegexBindings()` helper in `ModeManager` that iterates `__regex__`-prefixed entries and tests patterns against event names, with `lastIndex = 0` reset before each test to handle stateful flags. (C) Wired regex fallback into all three dispatch levels (override → event-table → global) with exact-match priority preserved — regex only fires when no exact match exists at the same level. (D) Simplified `MuEventBridge.bindRegex()` to pass the `RegExp` object directly to `ModeManager.bind()`. (E) `regexCount` fast-skip optimization avoids iteration when no regex bindings exist in a table.
+- **Regression Tests**: 19 new tests covering: match/no-match, multi-pattern selection, unbindRegex removal, exact > regex priority, override/table/global precedence, reject-and-pass-through, case-insensitive flags, stateful `g`/`y` flag handling (consecutive dispatches), and 5-iteration loop stability.
+- **Verification**: All 485 compat tests pass (8 files), TypeScript clean.
+- **Files Changed**: `src/compat/ModeManager.ts`, `src/compat/MuEventBridge.ts`, `src/compat/types.ts`, `src/compat/__tests__/MuEventBridge.test.ts`
