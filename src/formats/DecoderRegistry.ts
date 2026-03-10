@@ -648,8 +648,9 @@ const avifGainmapDecoder: FormatDecoder = {
 
 /**
  * RAW Preview format decoder adapter.
- * Extracts the largest embedded JPEG preview from camera RAW files
- * (CR2, NEF, ARW, DNG, etc.) without decoding RAW sensor data.
+ * Extracts the largest embedded JPEG preview from TIFF-based camera RAW files
+ * (CR2, NEF, ARW, DNG, ORF, PEF, SRW) without decoding RAW sensor data.
+ * Non-TIFF RAW containers (CR3, RAF, RW2) are not supported by this parser.
  * The returned image is the SDR JPEG preview decoded to float32.
  */
 const rawPreviewDecoder: FormatDecoder = {

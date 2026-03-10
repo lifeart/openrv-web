@@ -5004,6 +5004,20 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Importing an RV/GTO session that explicitly disables CDL, transform, or lens warp cannot actively restore those features to default/off if the current app session already had them enabled.
   - That leaves image state dependent on prior local session history instead of the imported session file.
 
+### 420. RV/GTO import ignores inactive RVColor and RVDisplayColor flags, so disabled grading can still be applied
+
+- Severity: High
+- Area: RV/GTO import / color-state restore
+- Evidence:
+  - The export/serialization contract treats `active` as meaningful for both RVColor and RVDisplayColor. `ColorSerializer.buildColorObject(...)` writes `color.active` from `settings.active !== false ? 1 : 0` in [src/core/session/serializers/ColorSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/serializers/ColorSerializer.ts#L926) through [src/core/session/serializers/ColorSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/serializers/ColorSerializer.ts#L953), and `ColorSerializer.buildDisplayColorObject(...)` does the same in [src/core/session/serializers/ColorSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/serializers/ColorSerializer.ts#L1000) through [src/core/session/serializers/ColorSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/serializers/ColorSerializer.ts#L1026).
+  - That contract is locked in by tests asserting `active=false` serializes to `0` for both node types in [src/core/session/serializers/ColorSerializer.test.ts](/Users/lifeart/Repos/openrv-web/src/core/session/serializers/ColorSerializer.test.ts#L1175) through [src/core/session/serializers/ColorSerializer.test.ts](/Users/lifeart/Repos/openrv-web/src/core/session/serializers/ColorSerializer.test.ts#L1178) and [src/core/session/serializers/ColorSerializer.test.ts](/Users/lifeart/Repos/openrv-web/src/core/session/serializers/ColorSerializer.test.ts#L1322) through [src/core/session/serializers/ColorSerializer.test.ts](/Users/lifeart/Repos/openrv-web/src/core/session/serializers/ColorSerializer.test.ts#L1325).
+  - But `parseColorAdjustments(...)` reads RVColor and RVDisplayColor values without checking `color.active` at all in [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L240) through [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L317).
+  - `parseOutOfRange(...)` likewise reads `RVDisplayColor.color.outOfRange` without honoring `color.active` in [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L748) through [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L760).
+  - The live restore path then applies any parsed color adjustments directly through `context.getColorControls().setAdjustments(...)` in [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L79) through [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L81).
+- Impact:
+  - An imported RV/GTO file can explicitly mark RVColor or RVDisplayColor inactive and still have its exposure, gamma, brightness, or out-of-range state applied on load.
+  - That makes disabled grading/display-color nodes behave as if they were enabled, which is the opposite of what the serialized `active=0` contract says.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

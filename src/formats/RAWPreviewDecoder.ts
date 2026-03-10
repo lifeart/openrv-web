@@ -1,11 +1,23 @@
 /**
  * RAW Image Preview Decoder
  *
- * Extracts embedded JPEG previews from camera RAW formats (CR2, NEF, ARW, DNG, etc.).
- * These formats use TIFF as their container, embedding full-resolution JPEG previews
- * in IFD entries. We extract the largest embedded JPEG without decoding RAW sensor data.
+ * Extracts embedded JPEG previews from camera RAW formats that use TIFF/IFD
+ * as their container. These formats embed full-resolution JPEG previews in
+ * IFD entries. We extract the largest embedded JPEG without decoding RAW sensor data.
  *
- * Supported formats: CR2, CR3, NEF, ARW, DNG, RAF, ORF, RW2, PEF, SRW
+ * Supported TIFF-based RAW formats:
+ *   CR2  — Canon (TIFF/IFD container)
+ *   NEF  — Nikon (TIFF/IFD container)
+ *   ARW  — Sony (TIFF/IFD container)
+ *   DNG  — Adobe Digital Negative (TIFF/IFD container)
+ *   ORF  — Olympus/OM System (TIFF/IFD container)
+ *   PEF  — Pentax (TIFF/IFD container)
+ *   SRW  — Samsung (TIFF/IFD container)
+ *
+ * NOT supported (non-TIFF containers):
+ *   CR3  — Canon (ISO BMFF/HEIF container, not TIFF)
+ *   RAF  — Fujifilm (proprietary header, not TIFF)
+ *   RW2  — Panasonic (proprietary header, not TIFF)
  */
 
 import { isTIFFFile, isFloatTIFF } from './TIFFFloatDecoder';
@@ -42,8 +54,10 @@ const JPEG_SOI = 0xffd8;
 // Maximum IFDs to visit (cycle/runaway guard)
 const MAX_IFDS = 100;
 
-// RAW file extensions
-const RAW_EXTENSIONS = new Set(['cr2', 'cr3', 'nef', 'arw', 'dng', 'raf', 'orf', 'rw2', 'pef', 'srw']);
+// RAW file extensions — only TIFF/IFD-based formats whose embedded JPEG previews
+// our TIFF parser can actually extract. Non-TIFF containers (CR3 = ISO BMFF,
+// RAF = Fuji proprietary, RW2 = Panasonic proprietary) are intentionally excluded.
+const RAW_EXTENSIONS = new Set(['cr2', 'nef', 'arw', 'dng', 'orf', 'pef', 'srw']);
 
 /**
  * EXIF metadata extracted from RAW file IFD0

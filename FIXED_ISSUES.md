@@ -600,9 +600,9 @@
 - **Area**: Help / shortcut discoverability
 - **Root Cause**: `?` opens `ShortcutCheatSheet` overlay; Help menu "Keyboard Shortcuts" opens `showShortcutsDialog()` — a separate hardcoded modal. Two UIs for the same purpose.
 - **Fix**: Added TODO(#58) comment and `console.info` in `showShortcutsDialog()` documenting the duplication and referencing `ShortcutCheatSheet`.
-- **Regression Tests**: 1 test verifying info message mentions ShortcutCheatSheet.
-- **Verification**: All 18 AppKeyboardHandler tests pass, TypeScript clean.
-- **Files Changed**: `src/AppKeyboardHandler.ts`, `src/AppKeyboardHandler.test.ts`
+- **TODO(#58) Resolved**: Deleted the entire `showShortcutsDialog()` method (~360 lines) and its `shouldShowShortcutAction()` helper from `AppKeyboardHandler`. Help menu "Keyboard Shortcuts" now opens `ShortcutCheatSheet.show()` instead, routed via `getShortcutCheatSheet` in `PlaybackWiringDeps`. Both `?` key and Help menu now use the same ShortcutCheatSheet overlay (which has search/filter from TODO(#113)).
+- **Regression Tests**: PW-007 (updated: verifies cheatSheet.show() called), PW-007b (new: null safety). Removed ~12 tests for deleted modal.
+- **Files Changed**: `src/AppPlaybackWiring.ts`, `src/App.ts`, `src/AppKeyboardHandler.ts`, `src/AppKeyboardHandler.test.ts`, `src/AppPlaybackWiring.test.ts`, `src/AppWiringFixes.test.ts`
 
 ## Issue #59: The main tab bar is marked up as a tablist but does not support arrow-key tab navigation
 

@@ -179,7 +179,7 @@ Camera RAW files are detected by their TIFF-based container structure, and the l
 
 **Color space**: sRGB (embedded preview).
 
-**Supported camera manufacturers**: Canon (CR2, CR3), Nikon (NEF, NRW), Sony (ARW, SR2), Adobe (DNG), Fujifilm (RAF), Olympus/OM System (ORF), Panasonic (RW2), Pentax (PEF), Leica (RWL), Phase One (IIQ), and other TIFF-based RAW formats. The `isRAWExtension()` function in `RAWPreviewDecoder.ts` maintains the full list of recognized extensions.
+**Supported camera manufacturers**: Canon (CR2), Nikon (NEF), Sony (ARW), Adobe (DNG), Olympus/OM System (ORF), Pentax (PEF), Samsung (SRW), and other TIFF-based RAW formats. Non-TIFF RAW containers (Canon CR3, Fujifilm RAF, Panasonic RW2) are not currently supported. The `isRAWExtension()` function in `RAWPreviewDecoder.ts` maintains the full list of recognized extensions.
 
 ### Browser-Native Formats
 
