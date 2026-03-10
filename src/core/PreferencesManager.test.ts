@@ -10,6 +10,7 @@ import {
   resetCorePreferencesManagerForTests,
   type ColorDefaults,
   type FPSIndicatorPrefs,
+  type PluginSettingsProvider,
   type PreferencesExportPayload,
 } from './PreferencesManager';
 import {
@@ -903,5 +904,156 @@ describe('Issue #152: storage-only preferences advisory', () => {
     expect(m2.getGeneralPrefs().autoPlayOnLoad).toBe(true);
     expect(m2.getGeneralPrefs().showWelcome).toBe(false);
     expect(m2.getGeneralPrefs().defaultFps).toBe(60);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #159 — Plugin settings in backup flow
+// ---------------------------------------------------------------------------
+
+function createMockPluginSettingsProvider(
+  data: Record<string, Record<string, unknown>> = {},
+): PluginSettingsProvider & { _data: Record<string, Record<string, unknown>>; importAllCalls: number; clearAllCalls: number } {
+  return {
+    _data: { ...data },
+    importAllCalls: 0,
+    clearAllCalls: 0,
+    exportAll() {
+      return { ...this._data };
+    },
+    importAll(incoming: Record<string, Record<string, unknown>>) {
+      this.importAllCalls++;
+      this._data = { ...incoming };
+    },
+    clearAll() {
+      this.clearAllCalls++;
+      this._data = {};
+    },
+  };
+}
+
+describe('Issue #159: plugin settings in preferences backup flow', () => {
+  afterEach(() => {
+    resetCorePreferencesManagerForTests();
+  });
+
+  it('CPRF-159-001: exportAll includes pluginSettings when provider is set', () => {
+    const { manager } = createManager();
+    const provider = createMockPluginSettingsProvider({
+      'my-plugin': { theme: 'dark', fontSize: 14 },
+    });
+    manager.setPluginSettingsProvider(provider);
+
+    const parsed = JSON.parse(manager.exportAll()) as PreferencesExportPayload;
+    expect(parsed.pluginSettings).toEqual({
+      'my-plugin': { theme: 'dark', fontSize: 14 },
+    });
+  });
+
+  it('CPRF-159-002: exportAll omits pluginSettings when provider is not set', () => {
+    const { manager } = createManager();
+    const parsed = JSON.parse(manager.exportAll()) as PreferencesExportPayload;
+    expect(parsed.pluginSettings).toBeUndefined();
+  });
+
+  it('CPRF-159-003: importAll restores plugin settings via provider', () => {
+    const { manager } = createManager();
+    const provider = createMockPluginSettingsProvider();
+    manager.setPluginSettingsProvider(provider);
+
+    const payload = {
+      pluginSettings: { 'my-plugin': { color: '#ff0000' } },
+    };
+    manager.importAll(JSON.stringify(payload));
+
+    expect(provider.importAllCalls).toBe(1);
+    expect(provider._data).toEqual({ 'my-plugin': { color: '#ff0000' } });
+  });
+
+  it('CPRF-159-004: importAll with no provider does not crash when pluginSettings present', () => {
+    const { manager } = createManager();
+    // No provider set — should not throw
+    const payload = {
+      pluginSettings: { 'my-plugin': { color: '#ff0000' } },
+    };
+    expect(() => manager.importAll(JSON.stringify(payload))).not.toThrow();
+  });
+
+  it('CPRF-159-005: importAll ignores pluginSettings when value is not an object', () => {
+    const { manager } = createManager();
+    const provider = createMockPluginSettingsProvider({ existing: { key: 'val' } });
+    manager.setPluginSettingsProvider(provider);
+
+    manager.importAll(JSON.stringify({ pluginSettings: 'invalid' }));
+    expect(provider.importAllCalls).toBe(0);
+    expect(provider._data).toEqual({ existing: { key: 'val' } });
+  });
+
+  it('CPRF-159-006: resetAll clears plugin settings via provider', () => {
+    const { manager } = createManager();
+    const provider = createMockPluginSettingsProvider({
+      'my-plugin': { theme: 'dark' },
+    });
+    manager.setPluginSettingsProvider(provider);
+
+    manager.resetAll();
+
+    expect(provider.clearAllCalls).toBe(1);
+    expect(provider._data).toEqual({});
+  });
+
+  it('CPRF-159-007: resetAll does not crash when provider is not set', () => {
+    const { manager } = createManager();
+    expect(() => manager.resetAll()).not.toThrow();
+  });
+
+  it('CPRF-159-008: setPluginSettingsProvider(null) removes provider', () => {
+    const { manager } = createManager();
+    const provider = createMockPluginSettingsProvider({
+      'my-plugin': { theme: 'dark' },
+    });
+    manager.setPluginSettingsProvider(provider);
+    manager.setPluginSettingsProvider(null);
+
+    const parsed = JSON.parse(manager.exportAll()) as PreferencesExportPayload;
+    expect(parsed.pluginSettings).toBeUndefined();
+  });
+
+  it('CPRF-159-009: export then import round-trips plugin settings', () => {
+    const pluginData = {
+      'plugin-a': { enabled: true, color: '#00ff00' },
+      'plugin-b': { volume: 0.8 },
+    };
+
+    const { manager: m1 } = createManager();
+    const provider1 = createMockPluginSettingsProvider(pluginData);
+    m1.setPluginSettingsProvider(provider1);
+
+    const json = m1.exportAll();
+
+    const { manager: m2 } = createManager();
+    const provider2 = createMockPluginSettingsProvider();
+    m2.setPluginSettingsProvider(provider2);
+    m2.importAll(json);
+
+    expect(provider2._data).toEqual(pluginData);
+  });
+
+  it('CPRF-159-010: imported event payload includes pluginSettings', () => {
+    const { manager } = createManager();
+    const provider = createMockPluginSettingsProvider({
+      'my-plugin': { key: 'value' },
+    });
+    manager.setPluginSettingsProvider(provider);
+
+    const cb = vi.fn();
+    manager.on('imported', cb);
+
+    manager.importAll(JSON.stringify({ pluginSettings: { 'other-plugin': { x: 1 } } }));
+
+    expect(cb).toHaveBeenCalledTimes(1);
+    const emittedPayload = cb.mock.calls[0]![0] as PreferencesExportPayload;
+    // After import, the provider now has the imported data, so buildExportPayload reflects it
+    expect(emittedPayload.pluginSettings).toEqual({ 'other-plugin': { x: 1 } });
   });
 });

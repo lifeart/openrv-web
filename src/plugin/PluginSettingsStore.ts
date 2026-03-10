@@ -242,6 +242,16 @@ export class PluginSettingsStore {
   }
 
   /**
+   * Reset all registered plugins to their schema defaults.
+   * Used by PreferencesManager.resetAll() to clear plugin settings during a full reset.
+   */
+  clearAll(): void {
+    for (const pluginId of this.schemas.keys()) {
+      this.resetSettings(pluginId);
+    }
+  }
+
+  /**
    * Create a scoped settings accessor for a plugin's PluginContext.
    */
   createAccessor(pluginId: PluginId): PluginSettingsAccessor {

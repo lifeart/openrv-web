@@ -3,6 +3,7 @@ import { exposeForTesting } from './test-helper';
 import { OpenRVAPI } from './api/OpenRVAPI';
 import { installGlobalErrorHandler } from './utils/globalErrorHandler';
 import { pluginRegistry } from './plugin/PluginRegistry';
+import { getCorePreferencesManager } from './core/PreferencesManager';
 
 // Register nodes with NodeFactory
 import './nodes/sources';
@@ -30,3 +31,6 @@ window.openrv = new OpenRVAPI(app.getAPIConfig());
 pluginRegistry.setAPI(window.openrv);
 pluginRegistry.setEventsAPI(window.openrv.events);
 pluginRegistry.setPaintEngine(app.getPaintEngine());
+
+// Wire plugin settings into the unified preferences backup flow
+getCorePreferencesManager().setPluginSettingsProvider(pluginRegistry.settingsStore);

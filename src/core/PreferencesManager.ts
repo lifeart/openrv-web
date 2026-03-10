@@ -30,6 +30,16 @@ export interface PreferencesSubsystems {
   ocio?: OCIOStateManager;
 }
 
+/**
+ * Provider interface for plugin settings backup/restore.
+ * Decouples PreferencesManager (core) from PluginSettingsStore (plugin layer).
+ */
+export interface PluginSettingsProvider {
+  exportAll(): Record<string, Record<string, unknown>>;
+  importAll(data: Record<string, Record<string, unknown>>): void;
+  clearAll(): void;
+}
+
 export type ThemeMode = 'dark' | 'light' | 'auto';
 
 /**
@@ -82,6 +92,7 @@ export interface PreferencesExportPayload {
   exportDefaults: ExportDefaults;
   generalPrefs: GeneralPrefs;
   fpsIndicatorPrefs: FPSIndicatorPrefs;
+  pluginSettings?: Record<string, Record<string, unknown>>;
 }
 
 export const CORE_PREFERENCE_STORAGE_KEYS = {
@@ -262,6 +273,7 @@ function hasOwnKey(obj: Record<string, unknown>, key: string): boolean {
 
 export class PreferencesManager extends EventEmitter<CorePreferencesEvents> {
   private _subsystems: PreferencesSubsystems = {};
+  private _pluginSettingsProvider: PluginSettingsProvider | null = null;
 
   /** @internal Ensures the storage-only advisory is logged at most once. */
   static _storageOnlyWarningEmitted = false;
@@ -285,6 +297,14 @@ export class PreferencesManager extends EventEmitter<CorePreferencesEvents> {
    */
   setSubsystems(subsystems: PreferencesSubsystems): void {
     this._subsystems = { ...subsystems };
+  }
+
+  /**
+   * Wire a plugin settings provider for backup/restore integration.
+   * When set, plugin settings are included in exportAll/importAll/resetAll.
+   */
+  setPluginSettingsProvider(provider: PluginSettingsProvider | null): void {
+    this._pluginSettingsProvider = provider;
   }
 
   /** Facade: ThemeManager (throws if not wired). */
@@ -464,6 +484,13 @@ export class PreferencesManager extends EventEmitter<CorePreferencesEvents> {
       }
     }
 
+    if (hasOwnKey(parsed, 'pluginSettings') && this._pluginSettingsProvider) {
+      const value = parsed.pluginSettings;
+      if (isRecord(value)) {
+        this._pluginSettingsProvider.importAll(value as Record<string, Record<string, unknown>>);
+      }
+    }
+
     this.emit('imported', this.buildExportPayload());
   }
 
@@ -473,6 +500,9 @@ export class PreferencesManager extends EventEmitter<CorePreferencesEvents> {
     }
     for (const key of Object.values(CORE_PREFERENCE_STORAGE_KEYS)) {
       this.storage.remove(key);
+    }
+    if (this._pluginSettingsProvider) {
+      this._pluginSettingsProvider.clearAll();
     }
     this.emit('colorDefaultsChanged', { ...DEFAULT_COLOR_DEFAULTS });
     this.emit('exportDefaultsChanged', { ...DEFAULT_EXPORT_DEFAULTS });
@@ -490,7 +520,7 @@ export class PreferencesManager extends EventEmitter<CorePreferencesEvents> {
   }
 
   private buildExportPayload(): PreferencesExportPayload {
-    return {
+    const payload: PreferencesExportPayload = {
       version: 1,
       themeMode: this.getThemeMode(),
       cursorAutoHide: this.storage.getBoolean(PREFERENCE_STORAGE_KEYS.cursorAutoHide),
@@ -505,6 +535,10 @@ export class PreferencesManager extends EventEmitter<CorePreferencesEvents> {
       generalPrefs: this.getGeneralPrefs(),
       fpsIndicatorPrefs: this.getFPSIndicatorPrefs(),
     };
+    if (this._pluginSettingsProvider) {
+      payload.pluginSettings = this._pluginSettingsProvider.exportAll();
+    }
+    return payload;
   }
 }
 

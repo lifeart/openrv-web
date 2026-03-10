@@ -3621,6 +3621,31 @@ This file tracks findings from exploratory review and targeted validation runs.
   - External scripts following the docs cannot actually subscribe to the playlist-end signal they were told exists.
   - That breaks automation around multi-clip review completion even though the underlying playlist manager already knows when playback has ended.
 
+### 293. `window.openrv.plugins.list()` includes disposed plugins, even though they are no longer activatable or truly registered
+
+- Severity: Medium
+- Area: Plugin public API / state reporting
+- Evidence:
+  - The public API describes `plugins.list()` as “List all registered plugin IDs” in [src/api/OpenRVAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.ts#L84) through [src/api/OpenRVAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.ts#L87).
+  - `PluginRegistry.dispose(...)` explicitly retains disposed plugins in the registry map instead of deleting them in [src/plugin/PluginRegistry.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginRegistry.ts#L281) through [src/plugin/PluginRegistry.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginRegistry.ts#L287).
+  - `getRegisteredIds()` just returns `Array.from(this.plugins.keys())` without filtering by state in [src/plugin/PluginRegistry.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginRegistry.ts#L316) through [src/plugin/PluginRegistry.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginRegistry.ts#L317).
+  - A disposed plugin cannot be activated again and must be separately unregistered first in [src/plugin/PluginRegistry.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginRegistry.ts#L190) through [src/plugin/PluginRegistry.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginRegistry.ts#L191) and [src/plugin/PluginRegistry.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginRegistry.ts#L291) through [src/plugin/PluginRegistry.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginRegistry.ts#L301).
+- Impact:
+  - Integrations that treat `plugins.list()` as the currently registered/usable plugin set can receive dead entries that cannot be reactivated.
+  - That makes the public plugin inventory API semantically misleading after disposal or hot-reload flows.
+
+### 294. `window.openrv.version` is hardcoded to `1.0.0` and drifts from the shipped package version
+
+- Severity: Medium
+- Area: Public scripting API / version contract
+- Evidence:
+  - The shipped package currently declares version `0.1.0` in [package.json](/Users/lifeart/Repos/openrv-web/package.json#L1).
+  - The public API exposes `readonly version: string = '1.0.0'` in [src/api/OpenRVAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.ts#L46) through [src/api/OpenRVAPI.ts#L48](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.ts#L48).
+  - The scripting docs present `window.openrv.version` as the API version string consumers should inspect in [docs/advanced/scripting-api.md](/Users/lifeart/Repos/openrv-web/docs/advanced/scripting-api.md#L22) through [docs/advanced/scripting-api.md#L37](/Users/lifeart/Repos/openrv-web/docs/advanced/scripting-api.md#L37).
+- Impact:
+  - External integrations can read a version string that does not match the actual shipped build/package they are running against.
+  - That weakens version-based debugging and future compatibility checks, especially alongside the already-unenforced plugin `engineVersion` metadata.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

@@ -1317,3 +1317,13 @@
 - **Regression Tests**: HDR-U024 updated to verify accept attribute contains all four extensions.
 - **Verification**: All 156 HeaderBar tests pass, TypeScript clean.
 - **Files Changed**: `src/ui/components/layout/HeaderBar.ts`, `src/ui/components/layout/HeaderBar.test.ts`
+
+## Issue #159: Plugin settings have backup/import APIs but are excluded from the app's real preferences backup flow
+
+- **Severity**: Medium
+- **Area**: Plugin persistence / backup portability
+- **Root Cause**: `PluginSettingsStore` had `exportAll()`/`importAll()` backup helpers, but `PreferencesManager`'s unified export/import payload had no plugin-settings field. No production code wired plugin settings into the backup flow.
+- **Fix**: Added `PluginSettingsProvider` callback interface to `PreferencesManager` with `exportAll()`, `importAll()`, `clearAll()` methods. `buildExportPayload()` includes plugin settings when provider is set. `importAll()` delegates to provider (with `isRecord` guard). `resetAll()` calls `provider.clearAll()`. Added `clearAll()` to `PluginSettingsStore` (resets all registered plugins to schema defaults). Wired in `main.ts` via `preferencesManager.setPluginSettingsProvider(pluginRegistry.settingsStore)`.
+- **Regression Tests**: CPRF-159-001 through CPRF-159-010 (export with/without provider, import with/without provider, import non-object skipped, reset with/without provider, null provider removal, round-trip, imported event payload).
+- **Verification**: All 144 tests pass (99 PreferencesManager + 45 PluginSettingsStore), TypeScript clean.
+- **Files Changed**: `src/core/PreferencesManager.ts`, `src/plugin/PluginSettingsStore.ts`, `src/main.ts`, `src/core/PreferencesManager.test.ts`
