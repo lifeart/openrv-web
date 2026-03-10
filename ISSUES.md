@@ -5677,6 +5677,43 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The docs promise a second visual cue in the timeline that the shipped app does not provide.
   - Sequence reviewers can search for a timeline indicator that simply is not implemented in production.
 
+### 482. The overlays guide publishes industry-safe percentages that do not match the shipped safe-areas overlay
+
+- Severity: Low
+- Area: Documentation / safe-areas behavior
+- Evidence:
+  - The overlays guide says Action Safe is `93%` and Title Safe is `90%` in [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L30) through [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L33).
+  - The shipped overlay implementation documents and draws Action Safe at `90%` and Title Safe at `80%` in [src/ui/components/SafeAreasOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SafeAreasOverlay.ts#L3) through [src/ui/components/SafeAreasOverlay.ts#L9) and [src/ui/components/SafeAreasOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SafeAreasOverlay.ts#L154) through [src/ui/components/SafeAreasOverlay.ts#L160).
+  - The shipped control labels also say `Action Safe (90%)` and `Title Safe (80%)` in [src/ui/components/SafeAreasControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SafeAreasControl.ts#L129) through [src/ui/components/SafeAreasControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SafeAreasControl.ts#L133).
+- Impact:
+  - The docs teach a different framing geometry than the actual overlay draws.
+  - Reviewers can rely on the written percentages and assume the on-screen guides follow them when production uses materially smaller safe boxes instead.
+
+### 483. The overlays guide describes custom per-zone safe areas and distinct colors, but the shipped safe-areas overlay only has fixed title/action boxes with one shared color
+
+- Severity: Low
+- Area: Documentation / safe-areas feature coverage
+- Evidence:
+  - The overlays guide says there is a `Custom` safe area where users can “specify any percentage” and that multiple safe zones each use “a distinct color for clarity” in [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L30) through [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L39).
+  - The shipped `SafeAreasState` has only two safe-zone toggles, `titleSafe` and `actionSafe`; there is no custom-percentage field in [src/ui/components/SafeAreasOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SafeAreasOverlay.ts#L16) through [src/ui/components/SafeAreasOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SafeAreasOverlay.ts#L24).
+  - The overlay also has a single `guideColor` applied to all guides in [src/ui/components/SafeAreasOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SafeAreasOverlay.ts#L22) through [src/ui/components/SafeAreasOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SafeAreasOverlay.ts#L24) and [src/ui/components/SafeAreasOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SafeAreasOverlay.ts#L148) through [src/ui/components/SafeAreasOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SafeAreasOverlay.ts#L160).
+  - The shipped control surface only exposes binary toggles for the fixed safe boxes plus composition guides in [src/ui/components/SafeAreasControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SafeAreasControl.ts#L127) through [src/ui/components/SafeAreasControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SafeAreasControl.ts#L151).
+- Impact:
+  - The docs promise a more flexible broadcast-safe workflow than the runtime actually supports.
+  - Users can look for user-defined percentages or color-coded zones that simply are not part of the shipped overlay model.
+
+### 484. The overlays guide says “both clipping” gets its own distinct highlight, but the shipped clipping overlay only chooses highlight-or-shadow coloring
+
+- Severity: Low
+- Area: Documentation / clipping overlay
+- Evidence:
+  - The overlays guide says pixels that clip in all channels simultaneously receive “a distinct highlight” in [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L48) through [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L52).
+  - The shipped `ClippingOverlay` only checks two branches: highlight-clipped pixels are blended with `highlightColor`, otherwise shadow-clipped pixels are blended with `shadowColor`, in [src/ui/components/ClippingOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ClippingOverlay.ts#L63) through [src/ui/components/ClippingOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ClippingOverlay.ts#L79).
+  - There is no third “both clipped” state or separate color in `ClippingOverlayState`, which only carries highlight and shadow colors in [src/ui/components/ClippingOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ClippingOverlay.ts#L12) through [src/ui/components/ClippingOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ClippingOverlay.ts#L29).
+- Impact:
+  - The docs describe a richer clipping diagnostic than the shipped overlay can render.
+  - Users can expect a special simultaneous-clipping signal, but production collapses that case into the ordinary highlight path.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed
