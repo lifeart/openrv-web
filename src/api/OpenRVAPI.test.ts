@@ -270,6 +270,7 @@ function createMockViewer() {
     viewer._backgroundPatternState = state;
   });
   viewer.getBackgroundPatternState = vi.fn(() => viewer._backgroundPatternState);
+  viewer.getViewportSize = vi.fn(() => ({ width: 1280, height: 720 }));
 
   return viewer;
 }

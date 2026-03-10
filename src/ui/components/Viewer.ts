@@ -3183,6 +3183,10 @@ export class Viewer {
     return { ...this.backgroundPatternState };
   }
 
+  getViewportSize(): { width: number; height: number } {
+    return { width: this.displayWidth, height: this.displayHeight };
+  }
+
   resetBackgroundPatternState(): void {
     this.backgroundPatternState = { ...DEFAULT_BACKGROUND_PATTERN_STATE };
     this.updateCSSBackground();

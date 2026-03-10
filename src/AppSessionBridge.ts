@@ -60,6 +60,7 @@ import { handlePlaybackChanged } from './handlers/playbackHandlers';
 import { bindPersistenceHandlers } from './handlers/persistenceHandlers';
 import { bindCompareHandlers } from './handlers/compareHandlers';
 import { showUnsupportedCodecModal } from './handlers/unsupportedCodecModal';
+import { getCorePreferencesManager } from './core/PreferencesManager';
 
 /**
  * Context interface for what AppSessionBridge needs from App.
@@ -137,6 +138,7 @@ export class AppSessionBridge {
     // --- Source loaded: update info panel, crop, OCIO, HDR auto-config, GTO, stack, prerender, EXR layers, scopes ---
 
     this.on(session, 'sourceLoaded', (loadedSource) => {
+      const autoPlay = getCorePreferencesManager().getGeneralPrefs().autoPlayOnLoad;
       handleSourceLoaded(
         this.context,
         () => this.updateInfoPanel(),
@@ -147,6 +149,7 @@ export class AppSessionBridge {
         () => this.updateVectorscope(),
         () => this.updateGamutDiagram(),
         loadedSource,
+        autoPlay,
       );
     });
 

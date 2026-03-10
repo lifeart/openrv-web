@@ -1,5 +1,21 @@
 # Fixed Issues
 
+## Issue #236: Mu compat `viewSize()` and `setViewSize()` target the first DOM canvas instead of the real viewer surface
+
+- **Severity**: Medium
+- **Area**: Mu compatibility / viewport scripting
+- **Root Cause**: `MuCommands.getCanvas()` fell back to `document.querySelector('canvas')`, returning whichever canvas is first in DOM order. The Viewer creates multiple canvases (image, GL, watermark, paint), so `viewSize()` and `setViewSize()` operated on an arbitrary canvas rather than the actual viewer viewport. No production code ever called `setCanvas()`.
+- **Fix**: Added `getViewportSize()` to `ViewerProvider` interface, `ViewAPI`, and `Viewer` (returns `displayWidth`/`displayHeight` — the real CSS-pixel viewport dimensions). Rewired `viewSize()` to read from `openrv.view.getViewportSize()`. Downgraded `setViewSize()` to `stub` (web viewport is CSS-managed, not imperatively resizable). Removed unused `_canvas` field, `setCanvas()`, and `getCanvas()` methods entirely.
+- **Regression Tests**: 6 new tests in `MuCommands.test.ts`:
+  - `viewSize()` reads from real ViewAPI, not DOM canvas
+  - `viewSize()` returns correct `[width, height]` tuple
+  - `viewSize()` does not call `document.querySelector('canvas')`
+  - `setViewSize()` marked as stub
+  - `setViewSize()` validates args but doesn't touch DOM
+  - `setViewSize()` does not call `document.querySelector('canvas')`
+- **Verification**: TypeScript clean, all 115 MuCommands tests pass, all 278 OpenRVAPI tests pass.
+- **Files Changed**: `src/compat/MuCommands.ts`, `src/compat/__tests__/MuCommands.test.ts`, `src/api/ViewAPI.ts`, `src/api/types.ts`, `src/api/OpenRVAPI.test.ts`, `src/ui/components/Viewer.ts`
+
 ## Issue #235: Several Mu compat display commands are marked supported but only mutate bridge-local state, not the real viewer
 
 - **Severity**: Medium
@@ -1401,9 +1417,9 @@
 - **Area**: Preferences / dead user configuration
 - **Root Cause**: `ColorDefaults`, `ExportDefaults`, and most `GeneralPrefs` fields (`defaultFps`, `autoPlayOnLoad`, `showWelcome`) are persisted, exported, and imported by `PreferencesManager`, but no production code reads `getColorDefaults()` or `getExportDefaults()`, and the unused `GeneralPrefs` fields have no runtime consumers. Only `userName` is actually used (by NotePanel and NetworkControl).
 - **Fix**: Added TODO(#152) JSDoc to `ColorDefaults` and `ExportDefaults` interfaces, and per-field annotations on unused `GeneralPrefs` fields, documenting each as storage-only with no production consumer. Added one-time `console.info` in constructor (gated by static flag) referencing TODO(#152). No API changes — fields preserved for future wiring.
-- **Regression Tests**: CPRF-152-001 (console.info emitted on first construction), CPRF-152-002 (emitted only once across instances), CPRF-152-003 (colorDefaults get/set/export/import still functional), CPRF-152-004 (exportDefaults still functional), CPRF-152-005 (unused generalPrefs fields still functional).
-- **Verification**: All 89 PreferencesManager tests pass, TypeScript clean.
-- **Files Changed**: `src/core/PreferencesManager.ts`, `src/core/PreferencesManager.test.ts`
+- **TODO(#152) Partial**: Wired `autoPlayOnLoad` preference. `handleSourceLoaded()` now accepts optional `autoPlayOnLoad` parameter; when true and source has >1 frame and not already playing, calls `session.play()`. `AppSessionBridge` reads the preference and passes it. Remaining unwired: `defaultFps`, `showWelcome`, `ColorDefaults`, `ExportDefaults.frameburnEnabled/frameburnConfig`.
+- **Regression Tests**: CPRF-152-001 through 005 (unchanged), SLH-U060 through SLH-U064 (5 new: auto-play on/off, still image guard, already-playing guard, undefined guard).
+- **Files Changed**: `src/core/PreferencesManager.ts`, `src/handlers/sourceLoadedHandlers.ts`, `src/AppSessionBridge.ts`, `src/handlers/sourceLoadedHandlers.test.ts`
 
 ## Issue #153: Drag-and-drop GTO/RV session loading loses sidecar file resolution that the file picker preserves
 

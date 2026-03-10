@@ -33,6 +33,7 @@ export interface ViewerProvider {
   getFilterMode(): TextureFilterMode;
   setBackgroundPatternState(state: BackgroundPatternState): void;
   getBackgroundPatternState(): BackgroundPatternState;
+  getViewportSize(): { width: number; height: number };
 }
 
 /**

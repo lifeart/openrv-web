@@ -267,4 +267,19 @@ export class ViewAPI extends DisposableAPI {
     this.assertNotDisposed();
     return this.viewer.getBackgroundPatternState();
   }
+
+  /**
+   * Get the current viewport size in CSS pixels.
+   *
+   * @returns An object with `width` and `height` representing the viewer's display dimensions.
+   *
+   * @example
+   * ```ts
+   * const { width, height } = openrv.view.getViewportSize();
+   * ```
+   */
+  getViewportSize(): { width: number; height: number } {
+    this.assertNotDisposed();
+    return this.viewer.getViewportSize();
+  }
 }

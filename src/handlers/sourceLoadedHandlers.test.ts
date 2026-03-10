@@ -21,6 +21,8 @@ function createMockContext(
     gtoData?: unknown;
     allSources?: Array<{ name: string }>;
     currentSourceIndex?: number;
+    frameCount?: number;
+    isPlaying?: boolean;
   } = {},
 ): SessionBridgeContext {
   const cropControl = { setSourceDimensions: vi.fn() };
@@ -76,6 +78,9 @@ function createMockContext(
     gtoData: overrides.gtoData ?? null,
     allSources: overrides.allSources ?? [],
     currentSourceIndex: overrides.currentSourceIndex ?? 0,
+    frameCount: overrides.frameCount ?? 1,
+    isPlaying: overrides.isPlaying ?? false,
+    play: vi.fn(),
   };
 
   return {
@@ -1043,6 +1048,109 @@ describe('handleSourceLoaded', () => {
       updateVectorscope,
     );
     expect(context.getOCIOControl().getProcessor().setActiveSource).toHaveBeenCalledWith('source_3');
+  });
+
+  it('SLH-U060: autoPlayOnLoad=true + frameCount>1 → play() called', () => {
+    const context = createMockContext({
+      currentSource: { name: 'seq.mov', width: 100, height: 100 },
+      frameCount: 48,
+    });
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+      undefined,
+      undefined,
+      true,
+    );
+
+    expect((context.getSession() as any).play).toHaveBeenCalled();
+  });
+
+  it('SLH-U061: autoPlayOnLoad=false → play() NOT called', () => {
+    const context = createMockContext({
+      currentSource: { name: 'seq.mov', width: 100, height: 100 },
+      frameCount: 48,
+    });
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+      undefined,
+      undefined,
+      false,
+    );
+
+    expect((context.getSession() as any).play).not.toHaveBeenCalled();
+  });
+
+  it('SLH-U062: autoPlayOnLoad=true + frameCount=1 (still image) → play() NOT called', () => {
+    const context = createMockContext({
+      currentSource: { name: 'still.exr', width: 100, height: 100 },
+      frameCount: 1,
+    });
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+      undefined,
+      undefined,
+      true,
+    );
+
+    expect((context.getSession() as any).play).not.toHaveBeenCalled();
+  });
+
+  it('SLH-U063: autoPlayOnLoad=true + already playing → play() NOT called', () => {
+    const context = createMockContext({
+      currentSource: { name: 'seq.mov', width: 100, height: 100 },
+      frameCount: 48,
+      isPlaying: true,
+    });
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+      undefined,
+      undefined,
+      true,
+    );
+
+    expect((context.getSession() as any).play).not.toHaveBeenCalled();
+  });
+
+  it('SLH-U064: autoPlayOnLoad undefined → play() NOT called', () => {
+    const context = createMockContext({
+      currentSource: { name: 'seq.mov', width: 100, height: 100 },
+      frameCount: 48,
+    });
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
+
+    expect((context.getSession() as any).play).not.toHaveBeenCalled();
   });
 });
 

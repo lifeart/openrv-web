@@ -1753,19 +1753,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - A sender with default/off state cannot reliably share that state to a recipient who already has non-default settings.
   - Links from a neutral view can still open with stale pan/zoom, wipe, OCIO enabled, or B-side compare state on the receiver, which breaks the promise that the URL reproduces the shared review state.
 
-### 151. Unified preferences export / import / reset drops FPS indicator settings even though the shipped overlay persists them
-
-- Severity: Medium
-- Area: Preferences portability / overlay state persistence
-- Evidence:
-  - `FPSIndicator` loads its live state from persisted `getFPSIndicatorPrefs()` on construction in [src/ui/components/FPSIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/FPSIndicator.ts#L80).
-  - The core preferences facade defines a dedicated `fpsIndicator` storage key in [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L72) and read/write methods in [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L330).
-  - But the exported preferences payload has no `fpsIndicatorPrefs` field at all in [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L57), and `buildExportPayload()` never includes it in [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L454).
-  - `importAll(...)` also never restores FPS indicator prefs in [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L356), and `resetAll()` does not emit an `fpsIndicatorPrefsChanged` reset event in [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L433).
-- Impact:
-  - The app treats FPS indicator configuration as persisted user state during normal use, but that state is silently lost when users rely on the unified preferences backup/restore path.
-  - A reset/import flow can leave the FPS overlay configuration diverging from the rest of the supposedly restored preferences set.
-
 ### 152. Large parts of the unified preferences model are storage-only and never affect runtime behavior
 
 - Severity: Medium
@@ -5219,6 +5206,41 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - During transport flaps or serialization failures, local sync changes can be treated as sent even though neither WebSocket nor serverless peer transport accepted the message.
   - From the user’s perspective, collaboration can drift silently instead of surfacing an actionable transport failure.
+
+### 437. The auto-save failure alert points users to a nonexistent `File > Save Project` path
+
+- Severity: Low
+- Area: Persistence UX / recovery messaging
+- Evidence:
+  - When auto-save initialization fails, the app shows the alert text `You can still save manually via File > Save Project.` in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L486) through [src/AppPersistenceManager.ts#L493).
+  - The shipped UI exposes save as an icon button and header event, not through any `File` menu, in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L237) and [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L60).
+- Impact:
+  - In one of the app’s higher-stress failure modes, the fallback guidance points users to UI that does not exist.
+  - That makes the recovery message less useful exactly when the user most needs a clear manual-save path.
+
+### 438. DCC `loadMedia` misroutes signed or query-string video URLs through the image path
+
+- Severity: Medium
+- Area: DCC integration / media loading
+- Evidence:
+  - Inbound DCC `loadMedia` routing derives the extension with `path.split('.').pop()?.toLowerCase()` in [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L184) through [src/AppDCCWiring.ts#L190).
+  - That check does not strip query strings or hash fragments, so a URL like `shot.mov?token=abc` yields `mov?token=abc`, which fails the `VIDEO_EXTENSIONS` test in [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L79) and [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L190).
+  - The DCC protocol explicitly allows `path` to be a file path or URL in [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L35).
+- Impact:
+  - DCC tools that send signed review URLs or CDN URLs can have video media routed into `loadImage(...)` instead of `loadVideo(...)`.
+  - That makes DCC media loading less reliable for the exact URL-based workflows the protocol claims to support.
+
+### 439. DCC LUT sync requests can apply out of order when multiple LUT URLs arrive quickly
+
+- Severity: Medium
+- Area: DCC integration / color sync ordering
+- Evidence:
+  - Each inbound `syncColor` with `lutPath` kicks off `fetchAndApplyLUT(...)` without awaiting or cancelling prior requests in [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L228) through [src/AppDCCWiring.ts#L242).
+  - `fetchAndApplyLUT(...)` is asynchronous and applies its result directly to `colorControls.setLUT(...)` and `viewer.setLUT(...)` when the fetch/parse completes in [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L95) through [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L119).
+  - There is no generation token, cancellation, or “latest request wins” check anywhere in the DCC LUT-sync path.
+- Impact:
+  - Inference: if a slower older LUT request resolves after a newer one, it can overwrite the newer DCC color state and leave the viewer on stale LUT content.
+  - That makes rapid DCC-driven look switching race-sensitive instead of deterministic.
 
 ## Validation Notes
 

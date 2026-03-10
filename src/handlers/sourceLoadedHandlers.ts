@@ -162,6 +162,7 @@ export function handleSourceLoaded(
   updateVectorscope: () => void,
   updateGamutDiagram?: () => void,
   loadedSource?: ReturnType<SessionBridgeContext['getSession']>['currentSource'],
+  autoPlayOnLoad?: boolean,
 ): void {
   const session = context.getSession();
   const hdrAutoState = getHDRAutoConfigState(context);
@@ -280,6 +281,14 @@ export function handleSourceLoaded(
     exrOverlay.setWindows(attrs.dataWindow, attrs.displayWindow);
   } else {
     exrOverlay.clearWindows();
+  }
+
+  // Auto-play sequences when the preference is enabled.
+  if (autoPlayOnLoad) {
+    const sess = context.getSession();
+    if (sess.frameCount > 1 && !sess.isPlaying) {
+      sess.play();
+    }
   }
 
   // Use double-RAF to update scopes after the viewer has rendered the new source.

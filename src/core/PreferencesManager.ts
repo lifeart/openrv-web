@@ -76,7 +76,7 @@ export interface GeneralPrefs {
   userName: string;
   /** TODO(#152): Storage-only — not yet consumed by any production code. */
   defaultFps: number;
-  /** TODO(#152): Storage-only — not yet consumed by any production code. */
+  /** When true, sequences (frameCount > 1) auto-play on source load. Wired in handleSourceLoaded. */
   autoPlayOnLoad: boolean;
   /** TODO(#152): Storage-only — not yet consumed by any production code. */
   showWelcome: boolean;
@@ -334,7 +334,7 @@ export class PreferencesManager extends EventEmitter<CorePreferencesEvents> {
       // TODO(#152): Remove this notice once these preference categories are wired to runtime behavior.
       console.info(
         '[PreferencesManager] Note: colorDefaults, exportDefaults, and several generalPrefs fields ' +
-          '(autoPlayOnLoad, showWelcome, defaultFps, etc.) are persisted but not yet consumed by ' +
+          '(showWelcome, defaultFps, etc.) are persisted but not yet consumed by ' +
           'production code. See TODO(#152).',
       );
     }

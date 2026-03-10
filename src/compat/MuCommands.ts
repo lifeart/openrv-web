@@ -62,6 +62,7 @@ function getOpenRV(): {
     getTextureFilterMode(): 'nearest' | 'linear';
     setBackgroundPattern(state: BackgroundPatternState): void;
     getBackgroundPattern(): BackgroundPatternState;
+    getViewportSize(): { width: number; height: number };
   };
   markers: {
     add(frame: number, note?: string, color?: string): void;
@@ -112,7 +113,7 @@ const SUPPORT_MAP: Record<string, true | false | 'partial' | 'stub'> = {
   // View & Display
   redraw: true,
   viewSize: true,
-  setViewSize: true,
+  setViewSize: 'stub',
   resizeFit: true,
   fullScreenMode: true,
   isFullScreen: true,
@@ -141,23 +142,6 @@ export class MuCommands {
   private _skippedFrames = 0;
   private _mbps = 0;
   private _margins: number[] = [0, 0, 0, 0];
-  private _canvas: HTMLCanvasElement | null = null;
-
-  /**
-   * Optionally provide a canvas reference for viewSize/setViewSize.
-   * If not provided, the first <canvas> in the document is used.
-   */
-  setCanvas(canvas: HTMLCanvasElement): void {
-    this._canvas = canvas;
-  }
-
-  private getCanvas(): HTMLCanvasElement | null {
-    if (this._canvas) return this._canvas;
-    if (typeof document !== 'undefined') {
-      return document.querySelector('canvas');
-    }
-    return null;
-  }
 
   // =====================================================================
   // Introspection
@@ -363,28 +347,24 @@ export class MuCommands {
     }
   }
 
-  /** Get canvas/viewport size as [width, height]. (Mu #31) */
+  /** Get viewer viewport size as [width, height]. (Mu #31) */
   viewSize(): [number, number] {
-    const canvas = this.getCanvas();
-    if (canvas) {
-      return [canvas.width, canvas.height];
-    }
-    if (typeof window !== 'undefined') {
-      return [window.innerWidth, window.innerHeight];
-    }
-    return [0, 0];
+    const { width, height } = getOpenRV().view.getViewportSize();
+    return [width, height];
   }
 
-  /** Set canvas/viewport size. (Mu #32) */
+  /**
+   * Set viewport size. (Mu #32)
+   *
+   * Stub — in the web app the viewport is sized by the layout container,
+   * not by explicit pixel dimensions. Validates arguments but performs no
+   * actual resize.
+   */
   setViewSize(width: number, height: number): void {
     if (typeof width !== 'number' || typeof height !== 'number' || isNaN(width) || isNaN(height)) {
       throw new TypeError('setViewSize() requires valid width and height numbers');
     }
-    const canvas = this.getCanvas();
-    if (canvas) {
-      canvas.width = Math.round(width);
-      canvas.height = Math.round(height);
-    }
+    // Stub: web viewport is managed by the layout, not settable directly.
   }
 
   /** Fit image to viewport. (Mu #33) */

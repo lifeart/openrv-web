@@ -80,6 +80,7 @@ function createMockOpenRV() {
       getTextureFilterMode: vi.fn((): string => 'linear'),
       setBackgroundPattern: vi.fn(),
       getBackgroundPattern: vi.fn(() => ({ pattern: 'black', checkerSize: 'medium', customColor: '#1a1a1a' })),
+      getViewportSize: vi.fn((): { width: number; height: number } => ({ width: 1280, height: 720 })),
     },
     markers: {
       add: vi.fn(),
@@ -388,12 +389,45 @@ describe('MuCommands', () => {
       expect(() => cmd.redraw()).not.toThrow();
     });
 
-    it('viewSize() returns [width, height]', () => {
+    it('viewSize() reads from openrv.view.getViewportSize(), not DOM canvas', () => {
+      mockOpenRV.view.getViewportSize.mockReturnValue({ width: 1920, height: 1080 });
+      const size = cmd.viewSize();
+      expect(size).toEqual([1920, 1080]);
+      expect(mockOpenRV.view.getViewportSize).toHaveBeenCalled();
+    });
+
+    it('viewSize() returns [width, height] from the real viewer API', () => {
+      mockOpenRV.view.getViewportSize.mockReturnValue({ width: 800, height: 600 });
       const size = cmd.viewSize();
       expect(Array.isArray(size)).toBe(true);
       expect(size).toHaveLength(2);
-      expect(typeof size[0]).toBe('number');
-      expect(typeof size[1]).toBe('number');
+      expect(size[0]).toBe(800);
+      expect(size[1]).toBe(600);
+    });
+
+    it('viewSize() does not query document.querySelector("canvas")', () => {
+      const spy = vi.spyOn(document, 'querySelector');
+      cmd.viewSize();
+      expect(spy).not.toHaveBeenCalled();
+      spy.mockRestore();
+    });
+
+    it('setViewSize() is marked as stub', () => {
+      expect(cmd.isSupported('setViewSize')).toBe('stub');
+    });
+
+    it('setViewSize() validates arguments but does not modify DOM', () => {
+      expect(() => cmd.setViewSize(NaN, 100)).toThrow(TypeError);
+      expect(() => cmd.setViewSize(100, NaN)).toThrow(TypeError);
+      // Valid call does not throw
+      expect(() => cmd.setViewSize(800, 600)).not.toThrow();
+    });
+
+    it('setViewSize() does not query document.querySelector("canvas")', () => {
+      const spy = vi.spyOn(document, 'querySelector');
+      cmd.setViewSize(800, 600);
+      expect(spy).not.toHaveBeenCalled();
+      spy.mockRestore();
     });
 
     it('resizeFit() delegates to view.fitToWindow()', () => {
