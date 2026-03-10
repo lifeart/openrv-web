@@ -391,8 +391,8 @@ describe('SessionSerializer', () => {
 
       // video + img loaded; sequence requires manual selection
       expect(result.loadedMedia).toBe(2);
-      // Warnings: 1 for sequence + 1 for serialization gaps
-      expect(result.warnings.length).toBe(2);
+      // Warnings: 1 for sequence (no gap warning since all defaults — fix #137)
+      expect(result.warnings.length).toBe(1);
       expect(result.warnings[0]).toContain('seq');
       expect(components.session.loadVideo).toHaveBeenCalledWith('video', 'video.mp4');
       expect(components.session.loadImage).toHaveBeenCalledWith('img', 'image.jpg');

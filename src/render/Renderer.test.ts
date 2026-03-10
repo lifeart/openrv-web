@@ -3304,27 +3304,26 @@ describe('GC Pressure: Pre-allocated offset/scale buffers', () => {
   // =========================================================================
   it('REN-VF-148: warns when VideoFrame texImage2D fails and frame will be blank', () => {
     const renderer = new Renderer();
-    // Initialize with mock GL that throws on VideoFrame texImage2D
     const gl = initRendererWithMockGL(renderer, { supportHLG: true });
-    const origTexImage = gl.texImage2D;
-    gl.texImage2D = vi.fn((...args: unknown[]) => {
-      // When called with a VideoFrame-like object (6 args, last is object with close)
-      if (args.length >= 6 && args[5] && typeof args[5] === 'object' && 'close' in (args[5] as object)) {
+
+    // Override texImage2D to throw when a VideoFrame-like source is passed
+    // (6-arg form: target, level, internalformat, format, type, source)
+    (gl as any).texImage2D = vi.fn(function (...args: unknown[]) {
+      if (args.length === 6 && args[5] && typeof args[5] === 'object' && 'close' in (args[5] as object)) {
         throw new Error('VideoFrame not supported');
       }
-      return (origTexImage as Function).apply(gl, args);
-    }) as any;
+    });
 
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-    // Create an image with a VideoFrame (simulated)
+    // Create an image with a mock VideoFrame — set managedVideoFrame directly
+    // so the getter `videoFrame` returns the mock frame.
+    const mockFrame = { close: vi.fn(), format: 'RGBA' };
     const img = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'uint8' });
-    img.textureNeedsUpdate = true;
-    // Set up a mock VideoFrame
-    (img as any).videoFrame = { close: vi.fn() };
-    (img as any).managedVideoFrame = { release: vi.fn() };
+    img.managedVideoFrame = { frame: mockFrame, release: vi.fn() } as any;
 
-    renderer.renderImage(img, 0, 0, 1, 1);
+    // Directly call the private updateTexture method to test the VideoFrame path
+    (renderer as any).updateTexture(img);
 
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining('VideoFrame GPU upload failed'),

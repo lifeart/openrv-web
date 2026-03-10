@@ -75,6 +75,7 @@ function createMockContext(): PersistenceManagerContext & {
       loadFile: vi.fn(async () => {}),
       loadFromGTO: vi.fn(async () => {}),
       loadEDL: vi.fn(() => []),
+      clearSources: vi.fn(),
     } as any,
     viewer: {
       getColorAdjustments: vi.fn(() => ({})),

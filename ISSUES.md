@@ -2512,6 +2512,118 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Scripts that wait for a distinct stop event never receive it, even when users trigger the app’s stop/pause behavior.
   - The public event contract suggests more playback-state granularity than the shipped implementation actually provides.
 
+### 205. `openrv.playback.step(n)` bypasses in/out-range and ping-pong rules for multi-frame steps
+
+- Severity: Medium
+- Area: Public API / playback navigation
+- Evidence:
+  - `PlaybackAPI.step(direction)` special-cases only `±1` to call `session.stepForward()` / `stepBackward()`, but for larger magnitudes it computes a target frame directly from `currentFrame`, `currentSource.duration`, and `session.loopMode` in [src/api/PlaybackAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/PlaybackAPI.ts#L106).
+  - That direct path ignores the session’s active `inPoint` / `outPoint`, and it only implements wrap semantics for `loop`, not `pingpong`, in [src/api/PlaybackAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/PlaybackAPI.ts#L118).
+  - The real playback engine’s stepping logic uses `_inPoint`, `_outPoint`, and explicit `pingpong` direction reversal in [src/core/session/PlaybackEngine.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaybackEngine.ts#L1012).
+- Impact:
+  - API consumers stepping by more than one frame can land outside the active playback range or get different boundary behavior than the normal viewer controls.
+  - The public API and the live playback engine disagree on frame-navigation semantics exactly when automation tries to do efficient larger jumps.
+
+### 206. `openrv.dispose()` marks the API as not ready, but most sub-APIs remain fully callable
+
+- Severity: Medium
+- Area: Public API / lifecycle contract
+- Evidence:
+  - `OpenRVAPI.dispose()` documents that “the API instance should not be used” after disposal and only guarantees `isReady()` becomes false in [src/api/OpenRVAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.ts#L119).
+  - The implementation only flips `_ready` and disposes the event bus in [src/api/OpenRVAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.ts#L128).
+  - The sub-APIs (`playback`, `media`, `audio`, `loop`, `view`, `color`, `markers`) are constructed once with direct `session` / `viewer` references in [src/api/OpenRVAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.ts#L93) and do not check `isReady()` before mutating state.
+- Impact:
+  - External code holding a disposed `window.openrv` reference can still keep driving playback, view, color, audio, and marker changes even though the API reports itself as not ready.
+  - That weakens the lifecycle contract and makes hot-reload or multi-instance scripting behavior harder to reason about.
+
+### 207. `registerMuCompat()` claims repeat calls are no-ops, but still allocates and returns fresh, non-installed command objects
+
+- Severity: Low
+- Area: Mu compatibility / registration contract
+- Evidence:
+  - The barrel docs say repeated calls are safe and “subsequent calls are no-ops” in [src/compat/index.ts](/Users/lifeart/Repos/openrv-web/src/compat/index.ts#L35).
+  - The implementation always constructs `new MuCommands()` and `new MuExtraCommands(commands)` before checking whether `globalThis.rv` already exists in [src/compat/index.ts](/Users/lifeart/Repos/openrv-web/src/compat/index.ts#L42).
+  - If `window.rv` is already present, the function preserves the existing global object but still returns the freshly allocated pair rather than the installed one in [src/compat/index.ts](/Users/lifeart/Repos/openrv-web/src/compat/index.ts#L46).
+  - The current tests only verify that an existing `window.rv` is not overwritten; they do not assert true no-op or instance reuse in [src/compat/__tests__/MuCommands.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuCommands.test.ts#L734).
+- Impact:
+  - Callers can receive command objects that are not the same objects reachable via `window.rv`, even though the API contract reads like an idempotent registration helper.
+  - Repeated bootstrap or tool-side setup code can silently diverge between “returned handle” and “installed global” state.
+
+### 208. `openrv.events` drops duration-marker `endFrame` data from `markerChange`
+
+- Severity: Medium
+- Area: Public API / events
+- Evidence:
+  - Session markers support duration ranges through an optional `endFrame` on the core `Marker` type in [src/core/session/MarkerManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MarkerManager.ts#L20).
+  - The public marker API preserves that field in `MarkerInfo`, `add()`, `get()`, and `getAll()` in [src/api/MarkersAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/MarkersAPI.ts#L13).
+  - The public event payload type for `markerChange` omits `endFrame` entirely in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L33).
+  - The bridge from `marksChanged` to `markerChange` only emits `frame`, `note`, and `color` in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L245).
+- Impact:
+  - External scripts listening to `openrv.events.on('markerChange', ...)` cannot distinguish range markers from point markers.
+  - The public marker query API and the public marker event API expose inconsistent marker semantics, so automation loses information exactly on change notification.
+
+### 209. The public plugin scripting API is one-way: it exposes no `dispose` or `unregister`, so plugin IDs cannot be fully reloaded from `window.openrv`
+
+- Severity: Medium
+- Area: Public API / plugins
+- Evidence:
+  - `window.openrv.plugins` only exposes `register`, `activate`, `deactivate`, `loadFromURL`, `getState`, and `list` in [src/api/OpenRVAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.ts#L75).
+  - The underlying registry has separate `dispose(id)` and `unregister(id)` lifecycle steps in [src/plugin/PluginRegistry.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginRegistry.ts#L259).
+  - `PluginRegistry.register()` rejects duplicate IDs even when a prior entry still exists in disposed state in [src/plugin/PluginRegistry.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginRegistry.ts#L127).
+  - `PluginRegistry.unregister()` is explicitly required to remove a disposed plugin so it can be re-registered with the same ID in [src/plugin/PluginRegistry.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginRegistry.ts#L290).
+- Impact:
+  - External scripting can load or register a plugin, but it cannot fully unload that plugin through the same public API.
+  - Public API consumers cannot do clean same-ID plugin reloads or hot-reload-style workflows from `window.openrv`, even though the underlying registry supports them.
+
+### 210. `window.openrv.plugins.loadFromURL()` is unrestricted by origin in production
+
+- Severity: Medium
+- Area: Public API / plugin loading
+- Evidence:
+  - `PluginRegistry.loadFromURL(url)` only enforces an origin allowlist if `allowedOrigins` has been populated in [src/plugin/PluginRegistry.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginRegistry.ts#L362).
+  - The registry starts with `allowedOrigins = new Set()` and the inline docs explicitly say an empty list means all origins are allowed in [src/plugin/PluginRegistry.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginRegistry.ts#L344).
+  - Production source search finds `setAllowedOrigins(...)` only in tests, not in the live app bootstrap or plugin initialization path.
+  - The unrestricted loader is exposed directly to external scripts as `window.openrv.plugins.loadFromURL(...)` in [src/api/OpenRVAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.ts#L82).
+- Impact:
+  - Any script with access to `window.openrv` can ask the app to import plugin code from arbitrary remote origins.
+  - The codebase has a trust-boundary hook for safer loading, but the shipped app never turns it on, so the public plugin loader runs in its least-restricted mode.
+
+### 211. Plugin settings writes can fail persistence while still looking successful at runtime
+
+- Severity: Low
+- Area: Plugin system / settings persistence
+- Evidence:
+  - `PluginSettingsStore.setSetting()` updates the in-memory cache before persisting and returns no status in [src/plugin/PluginSettingsStore.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginSettingsStore.ts#L127).
+  - `saveSettings()` catches all storage failures and only logs `Failed to persist settings to localStorage` in [src/plugin/PluginSettingsStore.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginSettingsStore.ts#L303).
+  - The plugin-facing accessor exposed through `PluginContext.settings.set(...)` is just a thin wrapper over that void-returning store API in [src/plugin/PluginSettingsStore.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginSettingsStore.ts#L247).
+- Impact:
+  - A plugin or its settings UI can appear to save a value successfully for the current session even when the write never reaches persistent storage.
+  - After reload/restart, settings can revert with no structured error path back to the plugin or host UI.
+
+### 212. Failed plugin hot reload removes the old plugin and forgets its tracked URL
+
+- Severity: Medium
+- Area: Plugin development / hot reload
+- Evidence:
+  - `HotReloadManager.reload()` disposes and unregisters the current plugin before attempting the cache-busted re-import in [src/plugin/dev/HotReloadManager.ts](/Users/lifeart/Repos/openrv-web/src/plugin/dev/HotReloadManager.ts#L67).
+  - If `loadFromURL()` then fails, the catch block deletes the tracked URL entry and rethrows in [src/plugin/dev/HotReloadManager.ts](/Users/lifeart/Repos/openrv-web/src/plugin/dev/HotReloadManager.ts#L75).
+  - The existing regression test `PHOT-019` asserts exactly this behavior: the old plugin is disposed/unregistered, activation never happens, and `manager.isTracked('test.plugin')` becomes false in [src/plugin/dev/HotReloadManager.test.ts](/Users/lifeart/Repos/openrv-web/src/plugin/dev/HotReloadManager.test.ts#L208).
+- Impact:
+  - A transient reload failure leaves the old plugin gone instead of keeping the last working version alive.
+  - The hot-reload manager also loses the source URL, so the developer cannot simply retry the reload without manually re-tracking the plugin.
+
+### 213. HDR video extraction silently downgrades to SDR when `VideoSampleSink` setup fails
+
+- Severity: Medium
+- Area: Media decoding / HDR video
+- Evidence:
+  - `MediabunnyFrameExtractor` correctly detects HDR and then tries to create a `VideoSampleSink` specifically for HDR frame extraction in [src/utils/media/MediabunnyFrameExtractor.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/MediabunnyFrameExtractor.ts#L310).
+  - If that setup throws, the code only logs `HDR frames will use SDR fallback` and then forcibly flips `isHDR = false` in [src/utils/media/MediabunnyFrameExtractor.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/MediabunnyFrameExtractor.ts#L313).
+  - `VideoSourceNode` consumes that downgraded metadata directly: `this.isHDRVideo = metadata.isHDR`, initializes HDR resizers only when true, and otherwise routes the source through the normal SDR preload path in [src/nodes/sources/VideoSourceNode.ts](/Users/lifeart/Repos/openrv-web/src/nodes/sources/VideoSourceNode.ts#L229).
+- Impact:
+  - On platforms where the mediabunny HDR extraction path is partially available but `VideoSampleSink` creation fails, real HDR video is silently treated as SDR content.
+  - Users get incorrect color/output behavior without any app-level indication that HDR handling fell back to a lower-fidelity path.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed
