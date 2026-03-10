@@ -382,9 +382,13 @@
 - **Area**: Rendering, async worker path, color pipeline
 - **Root Cause**: `RenderWorkerProxy.setFileLUT()`, `setLookLUT()`, `setDisplayLUT()` were silent no-ops — the worker sync protocol only carries a single `lut` field, so multi-point LUT pipeline stages were silently dropped.
 - **Fix**: Replaced silent no-ops with `console.warn` when non-null data is passed (silent on null/clear). Added `supportsMultiPointLUT()` returning `false` for capability checking. Added TODO(#19) comments documenting the worker serialization gap.
-- **Regression Tests**: RWP-LUT-001 through RWP-LUT-007 (capability check, warn on data for each method, no warn on clear for each method).
-- **Verification**: All 81 RenderWorkerProxy tests pass, TypeScript clean.
-- **Files Changed**: `src/render/RenderWorkerProxy.ts`, `src/render/RenderWorkerProxy.test.ts`
+- **TODO(#19) Resolved**: Extended `RendererSyncState` with batched `lookLUT`, `fileLUT`, and `displayLUT` payloads (including optional domain min/max), updated `RenderWorkerProxy` to serialize and transfer all four LUT stages, and taught `renderWorker.worker` to apply them via `Renderer.setLookLUT()`, `setFileLUT()`, and `setDisplayLUT()`. `supportsMultiPointLUT()` now returns `true`. Legacy `setLUT()` remains supported as the deprecated look-LUT alias.
+- **Regression Tests**: Added/updated tests across 3 files:
+  - `RenderWorkerProxy.test.ts`: RWP-LUT-001 through RWP-LUT-007 now verify capability reporting, sync payload contents for file/look/display LUTs, legacy look-LUT precedence, and clear/null payload behavior without warnings
+  - `renderWorker.worker.test.ts`: RW-028 through RW-031 verify sync-state application into renderer `setLookLUT()`/`setFileLUT()`/`setDisplayLUT()` and look-vs-legacy precedence
+  - `renderWorker.messages.test.ts`: updated full `RendererSyncState` fixture to include the new LUT stage fields
+- **Verification**: TypeScript clean. `RenderWorkerProxy.test.ts` (81 tests), `renderWorker.worker.test.ts` (31 tests), and `renderWorker.messages.test.ts` (32 tests) pass.
+- **Files Changed**: `src/render/RenderWorkerProxy.ts`, `src/render/RenderWorkerProxy.test.ts`, `src/render/renderWorker.messages.ts`, `src/render/renderWorker.messages.test.ts`, `src/workers/renderWorker.worker.ts`, `src/workers/renderWorker.worker.test.ts`
 
 ## Issue #27: Custom LUT persistence is effectively broken for project/snapshot/auto-save workflows
 
@@ -2187,3 +2191,13 @@
 - **Regression Tests**: 30 new tests across `MuSourceBridge.test.ts` and `OpenRVAPI.test.ts` covering: URL/movieproc/local-path routing, batch mode deferred loading, clearSession completeness (real + shadow), error resilience (API throws/unavailable), graceful degradation when `window.openrv` undefined, shadow state consistency after mutations, `addToSource` session propagation, MediaAPI delegation and post-dispose guards.
 - **Verification**: All 458 compat tests pass (8 files), all API tests pass. TypeScript clean.
 - **Files Changed**: `src/api/MediaAPI.ts`, `src/compat/MuSourceBridge.ts`, `src/compat/__tests__/MuSourceBridge.test.ts`, `src/api/OpenRVAPI.test.ts`
+
+## Issue #240: Mu compat `displayFeedbackQueue()` never drains queued messages after the first one
+
+- **Severity**: Medium
+- **Area**: Mu compatibility / HUD-feedback scripting
+- **Root Cause**: `displayFeedbackQueue()` pushed entries into `feedbackQueue` and displayed the first one immediately via `displayFeedback()`, but the timeout handler in `displayFeedback()` only set `_currentFeedback = null` without dequeuing or displaying the next message. No other code path consumed the queue after the first display. Additionally, messages with `duration <= 0` skipped the timer entirely, permanently stalling the drain chain.
+- **Fix**: (A) Added `drainFeedbackQueue()` method that shifts the next entry from `feedbackQueue` and calls `displayFeedback()` — creating a chain: display → timeout → drain → display next → ... until the queue is empty. The timeout handler in `displayFeedback()` now calls `drainFeedbackQueue()` after clearing `_currentFeedback`. (B) Changed the duration guard from `duration > 0` to `Math.max(0, duration * 1000)` so zero/negative durations get `setTimeout(..., 0)` instead of skipping the timer, keeping the drain chain alive.
+- **Regression Tests**: 8 new tests covering: multi-message queue drain in order, timeout-based sequencing, mid-drain additions, queue emptiness after completion, zero-duration messages (first/middle/sole position), and single `displayFeedback()` independence.
+- **Verification**: All 466 compat tests pass (8 files), TypeScript clean.
+- **Files Changed**: `src/compat/MuExtraCommands.ts`, `src/compat/__tests__/MuCommands.test.ts`
