@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { SessionMedia, type SessionMediaHost } from './SessionMedia';
 import type { MediaSource } from './Session';
+import type { MediaCacheManager } from '../../cache/MediaCacheManager';
 
 vi.mock('../../utils/media/SequenceLoader', () => ({
   createSequenceInfo: vi.fn(),
@@ -20,6 +21,10 @@ vi.mock('../../nodes/sources/FileSourceNode', () => ({
 
 vi.mock('../../utils/media/SupportedMediaFormats', () => ({
   detectMediaTypeFromFile: vi.fn().mockReturnValue('image'),
+}));
+
+vi.mock('../../cache/MediaCacheKey', () => ({
+  computeCacheKey: vi.fn().mockResolvedValue('mock-cache-key-abc123'),
 }));
 
 function createMockHost(): SessionMediaHost {
@@ -68,6 +73,20 @@ function makeVideoSource(overrides?: Partial<MediaSource>): MediaSource {
     fps: 24,
     ...overrides,
   };
+}
+
+function createMockCacheManager(): MediaCacheManager {
+  return {
+    put: vi.fn().mockResolvedValue(true),
+    get: vi.fn().mockResolvedValue(null),
+    isStable: vi.fn().mockReturnValue(true),
+    initialize: vi.fn().mockResolvedValue(true),
+    dispose: vi.fn(),
+    clearAll: vi.fn().mockResolvedValue(undefined),
+    getStats: vi.fn().mockResolvedValue({ totalSizeBytes: 0, entryCount: 0, maxSizeBytes: 2 * 1024 * 1024 * 1024 }),
+    evictLRU: vi.fn().mockResolvedValue(0),
+    cleanOrphans: vi.fn().mockResolvedValue(0),
+  } as unknown as MediaCacheManager;
 }
 
 function makeSequenceSource(overrides?: Partial<MediaSource>): MediaSource {
@@ -835,6 +854,114 @@ describe('SessionMedia', () => {
 
       expect(media.getVideoHDRIPImage(3)).toBe(mockIPImage);
       expect(videoSource.videoSourceNode!.getCachedHDRIPImage).toHaveBeenCalledWith(3);
+    });
+  });
+
+  describe('OPFS media cache integration', () => {
+    it('SM-078: setCacheManager stores the cache manager reference', () => {
+      const mockCache = createMockCacheManager();
+      media.setCacheManager(mockCache);
+
+      expect((media as any)._cacheManager).toBe(mockCache);
+    });
+
+    it('SM-079: dispose clears the cache manager reference', () => {
+      const mockCache = createMockCacheManager();
+      media.setCacheManager(mockCache);
+
+      media.dispose();
+
+      expect((media as any)._cacheManager).toBeNull();
+    });
+
+    it('SM-080: cacheFileInBackground calls computeCacheKey and cache.put', async () => {
+      const { computeCacheKey } = await import('../../cache/MediaCacheKey');
+      const mockCache = createMockCacheManager();
+      media.setCacheManager(mockCache);
+
+      const file = new File(['test-data'], 'test.exr', { type: 'image/x-exr', lastModified: 12345 });
+      const source = makeImageSource({ name: 'test.exr', width: 1920, height: 1080 });
+
+      // Call the private method directly
+      (media as any).cacheFileInBackground(file, source);
+
+      // Wait for the async chain to settle
+      await vi.waitFor(() => {
+        expect(computeCacheKey).toHaveBeenCalledWith(file);
+      });
+
+      await vi.waitFor(() => {
+        expect(mockCache.put).toHaveBeenCalledWith(
+          'mock-cache-key-abc123',
+          expect.any(ArrayBuffer),
+          expect.objectContaining({
+            fileName: 'test.exr',
+            fileSize: file.size,
+            lastModified: 12345,
+            width: 1920,
+            height: 1080,
+          }),
+        );
+      });
+
+      // Verify opfsCacheKey was set on the source
+      expect(source.opfsCacheKey).toBe('mock-cache-key-abc123');
+    });
+
+    it('SM-081: cacheFileInBackground is a no-op when no cache manager', async () => {
+      const { computeCacheKey } = await import('../../cache/MediaCacheKey');
+      (computeCacheKey as ReturnType<typeof vi.fn>).mockClear();
+
+      // Do not set cache manager
+      const file = new File(['test-data'], 'test.exr');
+      const source = makeImageSource();
+
+      (media as any).cacheFileInBackground(file, source);
+
+      // computeCacheKey should not be called
+      expect(computeCacheKey).not.toHaveBeenCalled();
+    });
+
+    it('SM-082: cacheFileInBackground handles errors gracefully', async () => {
+      const { computeCacheKey } = await import('../../cache/MediaCacheKey');
+      (computeCacheKey as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('hash failed'));
+
+      const mockCache = createMockCacheManager();
+      media.setCacheManager(mockCache);
+
+      const file = new File(['test-data'], 'fail.exr');
+      const source = makeImageSource();
+
+      // Should not throw
+      (media as any).cacheFileInBackground(file, source);
+
+      // Wait for the promise rejection to be handled
+      await vi.waitFor(() => {
+        expect(computeCacheKey).toHaveBeenCalled();
+      });
+
+      // cache.put should not be called since computeCacheKey failed
+      expect(mockCache.put).not.toHaveBeenCalled();
+    });
+
+    it('SM-083: cacheFileInBackground handles cache.put failure gracefully', async () => {
+      const mockCache = createMockCacheManager();
+      (mockCache.put as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('OPFS write failed'));
+      media.setCacheManager(mockCache);
+
+      const file = new File(['test-data'], 'fail-put.exr', { lastModified: 100 });
+      const source = makeImageSource();
+
+      // Should not throw
+      (media as any).cacheFileInBackground(file, source);
+
+      // Wait for the async chain to settle
+      await vi.waitFor(() => {
+        expect(mockCache.put).toHaveBeenCalled();
+      });
+
+      // opfsCacheKey should still have been set before put() failed
+      expect(source.opfsCacheKey).toBe('mock-cache-key-abc123');
     });
   });
 });

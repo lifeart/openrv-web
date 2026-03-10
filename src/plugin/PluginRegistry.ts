@@ -61,6 +61,28 @@ export class PluginRegistry {
   /** Emitted when a plugin changes state */
   readonly pluginStateChanged = new Signal<{ id: PluginId; state: PluginState }>();
 
+  /**
+   * Emitted when a plugin registers a UI panel.
+   * Consumers can listen to this signal to discover and mount plugin-contributed panels.
+   *
+   * TODO(#15): The app layout does not yet consume this signal. Plugin panels are stored
+   * in the registry but never mounted into the visible application. A future integration
+   * should listen to this signal (or query getUIPanels()) during initialization and
+   * mount plugin panels into the appropriate layout regions.
+   */
+  readonly uiPanelRegistered = new Signal<{ pluginId: PluginId; panel: UIPanelContribution }>();
+
+  /**
+   * Emitted when a plugin registers an exporter.
+   * Consumers can listen to this signal for reactive discovery of plugin-contributed exporters.
+   *
+   * TODO(#18): The export flow (ExportControl -> AppPlaybackWiring -> viewer) is wired
+   * directly to built-in handlers and never consults plugin-registered exporters. A future
+   * integration should listen to this signal (or query getExporters()) and present
+   * plugin exporters alongside the built-in export options.
+   */
+  readonly exporterRegistered = new Signal<{ pluginId: PluginId; name: string; exporter: ExporterContribution }>();
+
   /** Event bus for plugin event subscriptions */
   readonly eventBus = new PluginEventBus();
 
@@ -395,6 +417,17 @@ export class PluginRegistry {
       registerExporter: (name: string, exporter: ExporterContribution) => {
         ExporterRegistry.register(name, exporter);
         reg.exporters.push(name);
+        // TODO(#18): Plugin exporters are registered but the export flow
+        // (ExportControl -> AppPlaybackWiring -> viewer) never consults them.
+        // This warning will be removed once the export integration is implemented.
+        console.warn(
+          `[plugin:${manifest.id}] Exporter "${name}" registered but plugin exporters ` +
+          `are not yet consulted by the export flow. See issue #18.`,
+        );
+        registry.exporterRegistered.emit(
+          { pluginId: manifest.id, name, exporter },
+          { pluginId: manifest.id, name, exporter },
+        );
       },
       registerBlendMode: (name: string, contribution: BlendModeContribution) => {
         registry.blendModeRegistry.set(name, contribution);
@@ -403,6 +436,18 @@ export class PluginRegistry {
       registerUIPanel: (panel: UIPanelContribution) => {
         registry.uiPanelRegistry.set(panel.id, panel);
         reg.uiPanels.push(panel.id);
+        // TODO(#15): Plugin UI panels are registered but not yet consumed by the app
+        // layout system. This warning will be removed once the layout integration is
+        // implemented. Consumers can listen to registry.uiPanelRegistered for panel
+        // discovery.
+        console.warn(
+          `[plugin:${manifest.id}] UI panel "${panel.id}" registered but plugin panels ` +
+          `are not yet displayed in the application layout. See issue #15.`,
+        );
+        registry.uiPanelRegistered.emit(
+          { pluginId: manifest.id, panel },
+          { pluginId: manifest.id, panel },
+        );
       },
       get api() {
         if (!registry.apiRef) throw new Error('OpenRV API not yet initialized');

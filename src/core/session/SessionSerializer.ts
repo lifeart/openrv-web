@@ -27,6 +27,18 @@ import { DEFAULT_PAINT_EFFECTS } from '../../paint/types';
 import { showFileReloadPrompt } from '../../ui/components/shared/Modal';
 import type { MediaCacheManager } from '../../cache/MediaCacheManager';
 import { serializeRepresentation } from '../types/representation';
+import { DEFAULT_TONE_MAPPING_STATE } from '../types/effects';
+import { DEFAULT_GAMUT_MAPPING_STATE } from '../types/effects';
+import { DEFAULT_STEREO_STATE } from '../types/stereo';
+import { DEFAULT_GHOST_FRAME_STATE } from '../../ui/components/GhostFrameControl';
+import { DEFAULT_DISPLAY_COLOR_STATE } from '../../color/DisplayTransfer';
+import { DEFAULT_DIFFERENCE_MATTE_STATE } from '../../ui/components/DifferenceMatteControl';
+import { DEFAULT_BLEND_MODE_STATE } from '../../ui/components/ComparisonManager';
+import { isDefaultCurves } from '../../color/ColorCurves';
+import {
+  isDefaultStereoEyeTransformState,
+  DEFAULT_STEREO_ALIGN_MODE,
+} from '../../stereo/StereoRenderer';
 
 /** Components needed for serialization */
 export interface SessionComponents {
@@ -38,15 +50,193 @@ export interface SessionComponents {
 }
 
 /**
+ * Describes a viewer state that is not currently serialized.
+ * Each gap includes enough context for UI warnings and future implementation.
+ */
+export interface SerializationGap {
+  /** Human-readable name of the unserialized state */
+  name: string;
+  /** Which subsystem owns this state (color, view, compare) */
+  category: 'color' | 'view' | 'compare';
+  /** Whether the state is currently active / non-default */
+  isActive: boolean;
+  /** Brief explanation of impact when this state is not persisted */
+  impact: string;
+}
+
+/**
  * Session Serializer - handles save/load of .orvproject files
  */
 export class SessionSerializer {
+  // TODO: The following viewer states are NOT serialized and will be lost on
+  // save/load. Each is tracked by getSerializationGaps() so callers can warn
+  // users about data that won't survive a round-trip.
+  //
+  // Color pipeline gaps:
+  //   - OCIO configuration (config name, input/working/display color spaces, view, look)
+  //   - Display profile (transfer function, display gamma)
+  //   - Gamut mapping (mode, source/target gamut)
+  //   - Color inversion (enabled/disabled)
+  //   - Curves (per-channel curve adjustments)
+  //
+  // View/comparison gaps:
+  //   - Tone mapping (operator + parameters)
+  //   - Ghost frames (enabled, frame count, opacity, tint)
+  //   - Stereo mode (mode, eye swap, offset)
+  //   - Stereo eye transforms (per-eye flip, rotation, scale, translate)
+  //   - Stereo align mode (off, grid, crosshair, difference, edges)
+  //   - Compare state: difference matte (enabled, gain, heatmap)
+  //   - Compare state: blend mode (mode, opacity, flicker frame)
+  //   - Channel isolation mode (R/G/B/A/luminance)
+
+  /**
+   * Return the list of viewer states that are NOT currently serialized,
+   * annotated with whether each is active (non-default) on the given viewer.
+   *
+   * This allows callers to warn users before saving or after loading.
+   */
+  static getSerializationGaps(viewer: Viewer): SerializationGap[] {
+    const gaps: SerializationGap[] = [];
+
+    // --- Color pipeline gaps ---
+
+    gaps.push({
+      name: 'OCIO configuration',
+      category: 'color',
+      isActive: viewer.isOCIOEnabled(),
+      impact: 'OCIO color space transforms will revert to defaults on reload',
+    });
+
+    const displayColor = viewer.getDisplayColorState();
+    const displayColorActive =
+      displayColor.transferFunction !== DEFAULT_DISPLAY_COLOR_STATE.transferFunction ||
+      displayColor.displayGamma !== DEFAULT_DISPLAY_COLOR_STATE.displayGamma;
+    gaps.push({
+      name: 'Display profile',
+      category: 'color',
+      isActive: displayColorActive,
+      impact: 'Display transfer function and gamma will revert to defaults on reload',
+    });
+
+    const gamutMapping = viewer.getGamutMappingState();
+    const gamutMappingActive = gamutMapping.mode !== DEFAULT_GAMUT_MAPPING_STATE.mode;
+    gaps.push({
+      name: 'Gamut mapping',
+      category: 'color',
+      isActive: gamutMappingActive,
+      impact: 'Gamut mapping will be disabled on reload',
+    });
+
+    const colorInversion = viewer.getColorInversion();
+    gaps.push({
+      name: 'Color inversion',
+      category: 'color',
+      isActive: colorInversion,
+      impact: 'Color inversion will be disabled on reload',
+    });
+
+    const curves = viewer.getCurves();
+    gaps.push({
+      name: 'Curves',
+      category: 'color',
+      isActive: !isDefaultCurves(curves),
+      impact: 'Curve adjustments will revert to identity on reload',
+    });
+
+    // --- View gaps ---
+
+    const toneMapping = viewer.getToneMappingState();
+    const toneMappingActive = toneMapping.enabled || toneMapping.operator !== DEFAULT_TONE_MAPPING_STATE.operator;
+    gaps.push({
+      name: 'Tone mapping',
+      category: 'view',
+      isActive: toneMappingActive,
+      impact: 'Tone mapping operator and parameters will revert to defaults on reload',
+    });
+
+    const ghostFrame = viewer.getGhostFrameState();
+    const ghostFrameActive = ghostFrame.enabled !== DEFAULT_GHOST_FRAME_STATE.enabled;
+    gaps.push({
+      name: 'Ghost frames',
+      category: 'view',
+      isActive: ghostFrameActive,
+      impact: 'Ghost frame overlay will be disabled on reload',
+    });
+
+    const stereo = viewer.getStereoState();
+    const stereoActive = stereo.mode !== DEFAULT_STEREO_STATE.mode;
+    gaps.push({
+      name: 'Stereo mode',
+      category: 'view',
+      isActive: stereoActive,
+      impact: 'Stereo display mode will revert to off on reload',
+    });
+
+    const stereoEyeTransforms = viewer.getStereoEyeTransforms();
+    gaps.push({
+      name: 'Stereo eye transforms',
+      category: 'view',
+      isActive: !isDefaultStereoEyeTransformState(stereoEyeTransforms),
+      impact: 'Per-eye stereo transforms will revert to identity on reload',
+    });
+
+    const stereoAlignMode = viewer.getStereoAlignMode();
+    gaps.push({
+      name: 'Stereo align mode',
+      category: 'view',
+      isActive: stereoAlignMode !== DEFAULT_STEREO_ALIGN_MODE,
+      impact: 'Stereo alignment overlay will be disabled on reload',
+    });
+
+    const channelMode = viewer.getChannelMode();
+    const channelActive = channelMode !== 'rgb';
+    gaps.push({
+      name: 'Channel isolation',
+      category: 'view',
+      isActive: channelActive,
+      impact: 'Channel isolation will revert to RGB on reload',
+    });
+
+    // --- Compare gaps ---
+
+    const differenceMatte = viewer.getDifferenceMatteState();
+    const differenceMatteActive = differenceMatte.enabled !== DEFAULT_DIFFERENCE_MATTE_STATE.enabled;
+    gaps.push({
+      name: 'Difference matte',
+      category: 'compare',
+      isActive: differenceMatteActive,
+      impact: 'Difference matte comparison will be disabled on reload',
+    });
+
+    const blendMode = viewer.getBlendModeState();
+    const blendModeActive = blendMode.mode !== DEFAULT_BLEND_MODE_STATE.mode;
+    gaps.push({
+      name: 'Blend mode',
+      category: 'compare',
+      isActive: blendModeActive,
+      impact: 'Blend mode comparison will revert to off on reload',
+    });
+
+    return gaps;
+  }
+
   /**
    * Serialize all session state to JSON
    */
   static toJSON(components: SessionComponents, projectName: string = 'Untitled'): SessionState {
     const { session, paintEngine, viewer } = components;
     const now = new Date().toISOString();
+
+    // Warn about viewer states that won't be persisted
+    const gaps = this.getSerializationGaps(viewer);
+    const activeGaps = gaps.filter((g) => g.isActive);
+    if (activeGaps.length > 0) {
+      const names = activeGaps.map((g) => g.name).join(', ');
+      console.warn(
+        `[SessionSerializer] The following active viewer states are NOT saved in the project file: ${names}. ` +
+          `These will revert to defaults when the project is reloaded.`,
+      );
+    }
 
     // Get paint state
     const paintJSON = paintEngine.toJSON() as {
@@ -298,10 +488,27 @@ export class SessionSerializer {
       session.statusManager.fromSerializable(migrated.statuses);
     }
 
-    // LUT must be loaded separately (file reference)
+    // LUT must be loaded separately (file reference) — binary LUT data is not
+    // embedded in the project file, so the user needs to re-apply the LUT manually.
     if (migrated.lutPath) {
-      warnings.push(`LUT "${migrated.lutPath}" requires manual loading`);
+      const intensityNote =
+        migrated.lutIntensity !== undefined && migrated.lutIntensity !== 1.0
+          ? ` (intensity was ${migrated.lutIntensity})`
+          : '';
+      warnings.push(
+        `LUT "${migrated.lutPath}" needs to be reloaded manually${intensityNote}. ` +
+          `The LUT intensity setting has been preserved.`,
+      );
     }
+
+    // Append warnings about viewer states that are not persisted in the project
+    // file, so the caller can surface them to the user.
+    const gaps = this.getSerializationGaps(viewer);
+    const gapNames = gaps.map((g) => g.name);
+    warnings.push(
+      `The following viewer states are not saved in project files and use defaults: ${gapNames.join(', ')}. ` +
+        `Adjust them manually if needed after loading.`,
+    );
 
     return { loadedMedia, warnings };
   }

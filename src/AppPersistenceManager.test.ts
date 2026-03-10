@@ -110,6 +110,8 @@ function createMockContext(): PersistenceManagerContext & {
     lensControl: { setParams: vi.fn() } as any,
     noiseReductionControl: { setParams: vi.fn() } as any,
     watermarkControl: { setState: vi.fn() } as any,
+    compareControl: { setWipeMode: vi.fn(), setWipePosition: vi.fn() } as any,
+    stackControl: { setLayers: vi.fn(), clearLayers: vi.fn(), getLayers: vi.fn(() => []) } as any,
   };
 
   return {
@@ -410,6 +412,11 @@ describe('AppPersistenceManager', () => {
         lens: { distortion: 0.1 },
         noiseReduction: { strength: 0.5 },
         watermark: { text: 'test' },
+        wipe: { mode: 'horizontal', position: 0.3, showOriginal: 'left' },
+        stack: [
+          { id: 'layer_1', name: 'BG', visible: true, opacity: 1, blendMode: 'normal', sourceIndex: 0 },
+          { id: 'layer_2', name: 'FG', visible: true, opacity: 0.8, blendMode: 'multiply', sourceIndex: 1 },
+        ],
       };
       fullCtx._snapshotManager.getSnapshot.mockResolvedValue(mockState as any);
       fullCtx._snapshotManager.getSnapshotMetadata.mockResolvedValue({ name: 'My Snapshot' } as any);
@@ -424,6 +431,11 @@ describe('AppPersistenceManager', () => {
       expect(fullCtx.transformControl.setTransform).toHaveBeenCalledWith(mockState.transform);
       expect(fullCtx.cropControl.setState).toHaveBeenCalledWith(mockState.crop);
       expect(fullCtx.lensControl.setParams).toHaveBeenCalledWith(mockState.lens);
+      // Compare / wipe control sync
+      expect(fullCtx.compareControl!.setWipeMode).toHaveBeenCalledWith('horizontal');
+      expect(fullCtx.compareControl!.setWipePosition).toHaveBeenCalledWith(0.3);
+      // Stack control sync
+      expect(fullCtx.stackControl!.setLayers).toHaveBeenCalledWith(mockState.stack);
       expect(fullCtx.snapshotPanel.hide).toHaveBeenCalledTimes(1);
       expect(showAlert).toHaveBeenCalledWith(
         expect.stringContaining('My Snapshot'),
@@ -585,6 +597,122 @@ describe('AppPersistenceManager', () => {
       expect(SessionGTOExporter.saveToFile).toHaveBeenCalledWith(fullCtx.session, fullCtx.paintEngine, 'session.gto', {
         binary: true,
       });
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Control sync regression tests (Issue #26)
+  // -----------------------------------------------------------------------
+  describe('control sync on restore', () => {
+    const fullState = {
+      version: 1,
+      name: 'sync-test',
+      savedAt: new Date().toISOString(),
+      color: { exposure: 1.5 },
+      cdl: { slope: [1.1, 1, 1] },
+      filters: { sharpen: 2 },
+      transform: { rotation: 180 },
+      crop: { x: 10, y: 20 },
+      lens: { distortion: 0.5 },
+      noiseReduction: { strength: 0.8 },
+      watermark: { text: 'DRAFT' },
+      wipe: { mode: 'vertical', position: 0.7, showOriginal: 'right' },
+      stack: [
+        { id: 'layer_1', name: 'Base', visible: true, opacity: 1, blendMode: 'normal', sourceIndex: 0 },
+      ],
+    };
+
+    it('APM-100: openProject syncs compare control wipe state', async () => {
+      vi.mocked(SessionSerializer.loadFromFile).mockResolvedValue(fullState as any);
+      const file = new File(['{}'], 'test.orvproject', { type: 'application/json' });
+
+      await manager.openProject(file);
+
+      expect(fullCtx.compareControl!.setWipeMode).toHaveBeenCalledWith('vertical');
+      expect(fullCtx.compareControl!.setWipePosition).toHaveBeenCalledWith(0.7);
+    });
+
+    it('APM-101: openProject syncs stack control layers', async () => {
+      vi.mocked(SessionSerializer.loadFromFile).mockResolvedValue(fullState as any);
+      const file = new File(['{}'], 'test.orvproject', { type: 'application/json' });
+
+      await manager.openProject(file);
+
+      expect(fullCtx.stackControl!.setLayers).toHaveBeenCalledWith(fullState.stack);
+    });
+
+    it('APM-102: openProject clears stack control when state has empty stack', async () => {
+      const stateNoStack = { ...fullState, stack: [] };
+      vi.mocked(SessionSerializer.loadFromFile).mockResolvedValue(stateNoStack as any);
+      const file = new File(['{}'], 'test.orvproject', { type: 'application/json' });
+
+      await manager.openProject(file);
+
+      expect(fullCtx.stackControl!.clearLayers).toHaveBeenCalled();
+      expect(fullCtx.stackControl!.setLayers).not.toHaveBeenCalled();
+    });
+
+    it('APM-103: auto-save recovery syncs compare and stack controls', async () => {
+      // Set up auto-save with recovery data
+      fullCtx._autoSaveManager.initialize.mockResolvedValue(true);
+      fullCtx._autoSaveManager.listAutoSaves.mockResolvedValue([
+        { id: 'save-1', name: 'Session', savedAt: new Date().toISOString() } as any,
+      ]);
+      fullCtx._autoSaveManager.getAutoSave.mockResolvedValue(fullState as any);
+      vi.mocked(showConfirm).mockResolvedValue(true);
+
+      await manager.init();
+
+      expect(fullCtx.compareControl!.setWipeMode).toHaveBeenCalledWith('vertical');
+      expect(fullCtx.compareControl!.setWipePosition).toHaveBeenCalledWith(0.7);
+      expect(fullCtx.stackControl!.setLayers).toHaveBeenCalledWith(fullState.stack);
+    });
+
+    it('APM-104: snapshot restore syncs all controls including compare and stack', async () => {
+      fullCtx._snapshotManager.getSnapshot.mockResolvedValue(fullState as any);
+      fullCtx._snapshotManager.getSnapshotMetadata.mockResolvedValue({ name: 'Test' } as any);
+
+      await manager.restoreSnapshot('snap-1');
+
+      // Verify all controls are synced
+      expect(fullCtx.colorControls.setAdjustments).toHaveBeenCalledWith(fullState.color);
+      expect(fullCtx.cdlControl.setCDL).toHaveBeenCalledWith(fullState.cdl);
+      expect(fullCtx.filterControl.setSettings).toHaveBeenCalledWith(fullState.filters);
+      expect(fullCtx.transformControl.setTransform).toHaveBeenCalledWith(fullState.transform);
+      expect(fullCtx.cropControl.setState).toHaveBeenCalledWith(fullState.crop);
+      expect(fullCtx.lensControl.setParams).toHaveBeenCalledWith(fullState.lens);
+      expect(fullCtx.noiseReductionControl!.setParams).toHaveBeenCalledWith(fullState.noiseReduction);
+      expect(fullCtx.watermarkControl!.setState).toHaveBeenCalledWith(fullState.watermark);
+      expect(fullCtx.compareControl!.setWipeMode).toHaveBeenCalledWith('vertical');
+      expect(fullCtx.compareControl!.setWipePosition).toHaveBeenCalledWith(0.7);
+      expect(fullCtx.stackControl!.setLayers).toHaveBeenCalledWith(fullState.stack);
+    });
+
+    it('APM-105: restore works gracefully when compareControl is not provided', async () => {
+      // Create manager without compareControl or stackControl
+      const { _autoSaveManager: _a, _snapshotManager: _s, ...ctx } = fullCtx;
+      const minCtx = { ...ctx, compareControl: undefined, stackControl: undefined };
+      const minManager = new AppPersistenceManager(minCtx);
+
+      fullCtx._snapshotManager.getSnapshot.mockResolvedValue(fullState as any);
+      fullCtx._snapshotManager.getSnapshotMetadata.mockResolvedValue({ name: 'Test' } as any);
+
+      // Should not throw
+      await minManager.restoreSnapshot('snap-1');
+
+      // Other controls still synced
+      expect(fullCtx.colorControls.setAdjustments).toHaveBeenCalledWith(fullState.color);
+    });
+
+    it('APM-106: restore with no wipe state does not call compareControl', async () => {
+      const stateNoWipe = { ...fullState, wipe: undefined };
+      fullCtx._snapshotManager.getSnapshot.mockResolvedValue(stateNoWipe as any);
+      fullCtx._snapshotManager.getSnapshotMetadata.mockResolvedValue({ name: 'Test' } as any);
+
+      await manager.restoreSnapshot('snap-1');
+
+      expect(fullCtx.compareControl!.setWipeMode).not.toHaveBeenCalled();
+      expect(fullCtx.compareControl!.setWipePosition).not.toHaveBeenCalled();
     });
   });
 

@@ -780,6 +780,48 @@ describe('PluginRegistry', () => {
   // Exporter query delegation
   // -------------------------------------------------------------------------
 
+  // -------------------------------------------------------------------------
+  // UI panel registration warnings and signal (Issue #15)
+  // -------------------------------------------------------------------------
+
+  describe('registerUIPanel warnings and signal', () => {
+    it('PREG-047: registerUIPanel emits console.warn about panels not being displayed', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const panel: UIPanelContribution = { id: 'warn-panel', label: 'W', location: 'left', render: vi.fn() };
+      const plugin = createPlugin({
+        activate: (ctx: PluginContext) => {
+          ctx.registerUIPanel(panel);
+        },
+      });
+      registry.register(plugin);
+      await registry.activate('test.plugin');
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('UI panel "warn-panel" registered but plugin panels are not yet displayed'),
+      );
+      warnSpy.mockRestore();
+    });
+
+    it('PREG-048: registerUIPanel emits uiPanelRegistered signal with panel and pluginId', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const panel: UIPanelContribution = { id: 'sig-panel', label: 'S', location: 'right', render: vi.fn() };
+      const signalData: Array<{ pluginId: string; panel: UIPanelContribution }> = [];
+      registry.uiPanelRegistered.connect((data) => {
+        signalData.push(data);
+      });
+      const plugin = createPlugin({
+        activate: (ctx: PluginContext) => {
+          ctx.registerUIPanel(panel);
+        },
+      });
+      registry.register(plugin);
+      await registry.activate('test.plugin');
+      expect(signalData).toHaveLength(1);
+      expect(signalData[0]!.pluginId).toBe('test.plugin');
+      expect(signalData[0]!.panel).toBe(panel);
+      warnSpy.mockRestore();
+    });
+  });
+
   describe('getExporter / getExporters', () => {
     it('PREG-045: getExporter delegates to ExporterRegistry', async () => {
       cleanupExporters.push('query-exp');
@@ -821,6 +863,51 @@ describe('PluginRegistry', () => {
       const all = registry.getExporters();
       expect(all.get('exp-a')).toBe(expA);
       expect(all.get('exp-b')).toBe(expB);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Exporter registration warnings and signal (Issue #18)
+  // -------------------------------------------------------------------------
+
+  describe('registerExporter warnings and signal', () => {
+    it('PREG-049: registerExporter emits console.warn about exporters not being consulted', async () => {
+      cleanupExporters.push('warn-exp');
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const exporter: ExporterContribution = { kind: 'blob', label: 'W', extensions: ['w'], export: vi.fn() };
+      const plugin = createPlugin({
+        activate: (ctx: PluginContext) => {
+          ctx.registerExporter('warn-exp', exporter);
+        },
+      });
+      registry.register(plugin);
+      await registry.activate('test.plugin');
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Exporter "warn-exp" registered but plugin exporters are not yet consulted'),
+      );
+      warnSpy.mockRestore();
+    });
+
+    it('PREG-050: registerExporter emits exporterRegistered signal with name, exporter and pluginId', async () => {
+      cleanupExporters.push('sig-exp');
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const exporter: ExporterContribution = { kind: 'blob', label: 'S', extensions: ['s'], export: vi.fn() };
+      const signalData: Array<{ pluginId: string; name: string; exporter: ExporterContribution }> = [];
+      registry.exporterRegistered.connect((data) => {
+        signalData.push(data);
+      });
+      const plugin = createPlugin({
+        activate: (ctx: PluginContext) => {
+          ctx.registerExporter('sig-exp', exporter);
+        },
+      });
+      registry.register(plugin);
+      await registry.activate('test.plugin');
+      expect(signalData).toHaveLength(1);
+      expect(signalData[0]!.pluginId).toBe('test.plugin');
+      expect(signalData[0]!.name).toBe('sig-exp');
+      expect(signalData[0]!.exporter).toBe(exporter);
+      warnSpy.mockRestore();
     });
   });
 });

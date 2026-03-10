@@ -156,8 +156,9 @@ export class App {
     // Wire magnifier toggle button on main timeline
     this.timeline.setMagnifierToggle(() => this.timelineMagnifier.toggle());
 
-    // Create OPFS media cache manager
+    // Create OPFS media cache manager and wire to session media
     this.cacheManager = new MediaCacheManager();
+    this.session.media.setCacheManager(this.cacheManager);
 
     // Create all UI controls via the registry
     this.controls = new AppControlRegistry({

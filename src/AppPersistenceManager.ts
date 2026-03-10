@@ -25,6 +25,8 @@ import type { CropControl } from './ui/components/CropControl';
 import type { LensControl } from './ui/components/LensControl';
 import type { NoiseReductionControl } from './ui/components/NoiseReductionControl';
 import type { WatermarkControl } from './ui/components/WatermarkControl';
+import type { CompareControl } from './ui/components/CompareControl';
+import type { StackControl } from './ui/components/StackControl';
 import type { PlaylistManager } from './core/session/PlaylistManager';
 import type { MediaCacheManager } from './cache/MediaCacheManager';
 import { showAlert, showConfirm } from './ui/components/shared/Modal';
@@ -49,6 +51,8 @@ export interface PersistenceManagerContext {
   lensControl: LensControl;
   noiseReductionControl?: NoiseReductionControl;
   watermarkControl?: WatermarkControl;
+  compareControl?: CompareControl;
+  stackControl?: StackControl;
   playlistManager?: PlaylistManager;
   cacheManager?: MediaCacheManager;
 }
@@ -196,21 +200,7 @@ export class AppPersistenceManager {
    * Restore a snapshot by ID
    */
   async restoreSnapshot(id: string): Promise<void> {
-    const {
-      session,
-      paintEngine,
-      viewer,
-      snapshotManager,
-      snapshotPanel,
-      colorControls,
-      cdlControl,
-      filterControl,
-      transformControl,
-      cropControl,
-      lensControl,
-      noiseReductionControl,
-      watermarkControl,
-    } = this.ctx;
+    const { session, paintEngine, viewer, snapshotManager, snapshotPanel } = this.ctx;
     try {
       const state = await snapshotManager.getSnapshot(id);
       if (!state) {
@@ -230,15 +220,8 @@ export class AppPersistenceManager {
         cacheManager: this.ctx.cacheManager,
       });
 
-      // Update UI controls with restored state
-      if (state.color) colorControls.setAdjustments(state.color);
-      if (state.cdl) cdlControl.setCDL(state.cdl);
-      if (state.filters) filterControl.setSettings(state.filters);
-      if (state.transform) transformControl.setTransform(state.transform);
-      if (state.crop) cropControl.setState(state.crop);
-      if (state.lens) lensControl.setParams(state.lens);
-      if (state.noiseReduction && noiseReductionControl) noiseReductionControl.setParams(state.noiseReduction);
-      if (state.watermark && watermarkControl) watermarkControl.setState(state.watermark);
+      // Update all UI controls with restored state
+      this.syncControlsFromState(state);
 
       // Close the panel
       snapshotPanel.hide();
@@ -313,6 +296,9 @@ export class AppPersistenceManager {
           playlistManager: this.ctx.playlistManager,
           cacheManager: this.ctx.cacheManager,
         });
+
+        // Update all UI controls with restored state
+        this.syncControlsFromState(state);
 
         if (result.warnings.length > 0) {
           showAlert(`Project loaded with warnings:\n${result.warnings.join('\n')}`, {
@@ -408,20 +394,7 @@ export class AppPersistenceManager {
    * Recover session from auto-save
    */
   private async recoverAutoSave(id: string): Promise<void> {
-    const {
-      autoSaveManager,
-      session,
-      paintEngine,
-      viewer,
-      colorControls,
-      cdlControl,
-      filterControl,
-      transformControl,
-      cropControl,
-      lensControl,
-      noiseReductionControl,
-      watermarkControl,
-    } = this.ctx;
+    const { autoSaveManager, session, paintEngine, viewer } = this.ctx;
     try {
       const state = await autoSaveManager.getAutoSave(id);
       if (state) {
@@ -433,16 +406,8 @@ export class AppPersistenceManager {
           cacheManager: this.ctx.cacheManager,
         });
 
-        // Update UI controls with restored state
-        colorControls.setAdjustments(state.color);
-        cdlControl.setCDL(state.cdl);
-        filterControl.setSettings(state.filters);
-        transformControl.setTransform(state.transform);
-        cropControl.setState(state.crop);
-        lensControl.setParams(state.lens);
-        if (state.noiseReduction && noiseReductionControl) noiseReductionControl.setParams(state.noiseReduction);
-        if (state.watermark && watermarkControl) watermarkControl.setState(state.watermark);
-        // Note: wipe state is restored via viewer.setWipeState in SessionSerializer.fromJSON
+        // Update all UI controls with restored state
+        this.syncControlsFromState(state);
 
         if (warnings.length > 0) {
           showAlert(`Session recovered with ${warnings.length} warning(s):\n${warnings.join('\n')}`, {
@@ -464,6 +429,64 @@ export class AppPersistenceManager {
         title: 'Recovery Failed',
         type: 'error',
       });
+    }
+  }
+
+  /**
+   * Synchronize all UI controls with the given restored session state.
+   *
+   * SessionSerializer.fromJSON pushes state into the Viewer (the rendering backend),
+   * but UI controls (sliders, panels, dropdowns) maintain their own copies of state.
+   * This method bridges that gap so controls reflect the restored values.
+   */
+  private syncControlsFromState(state: {
+    color?: any;
+    cdl?: any;
+    filters?: any;
+    transform?: any;
+    crop?: any;
+    lens?: any;
+    noiseReduction?: any;
+    watermark?: any;
+    wipe?: any;
+    stack?: any;
+  }): void {
+    const {
+      colorControls,
+      cdlControl,
+      filterControl,
+      transformControl,
+      cropControl,
+      lensControl,
+      noiseReductionControl,
+      watermarkControl,
+      compareControl,
+      stackControl,
+    } = this.ctx;
+
+    // Color / grading controls
+    if (state.color) colorControls.setAdjustments(state.color);
+    if (state.cdl) cdlControl.setCDL(state.cdl);
+    if (state.filters) filterControl.setSettings(state.filters);
+    if (state.transform) transformControl.setTransform(state.transform);
+    if (state.crop) cropControl.setState(state.crop);
+    if (state.lens) lensControl.setParams(state.lens);
+    if (state.noiseReduction && noiseReductionControl) noiseReductionControl.setParams(state.noiseReduction);
+    if (state.watermark && watermarkControl) watermarkControl.setState(state.watermark);
+
+    // Compare / wipe controls
+    if (state.wipe && compareControl) {
+      compareControl.setWipeMode(state.wipe.mode);
+      compareControl.setWipePosition(state.wipe.position);
+    }
+
+    // Stack layer control
+    if (stackControl) {
+      if (state.stack && state.stack.length > 0) {
+        stackControl.setLayers(state.stack);
+      } else {
+        stackControl.clearLayers();
+      }
     }
   }
 

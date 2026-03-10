@@ -657,6 +657,15 @@ export class RenderWorkerProxy implements RendererBackend {
     this.hasDirtyState = true;
   }
 
+  /**
+   * Check whether the async worker renderer supports the multi-point LUT pipeline
+   * (file LUT, look LUT, display LUT). Currently it does not — only the single
+   * combined LUT (setLUT) is forwarded to the worker. See Issue #19.
+   */
+  supportsMultiPointLUT(): boolean {
+    return false;
+  }
+
   setFileLUT(
     _data: Float32Array | null,
     _size: number,
@@ -664,8 +673,15 @@ export class RenderWorkerProxy implements RendererBackend {
     _domainMin?: [number, number, number],
     _domainMax?: [number, number, number],
   ): void {
-    // TODO: implement multi-point LUT pipeline for worker proxy
-    this.hasDirtyState = true;
+    // TODO(#19): implement multi-point LUT pipeline for worker proxy.
+    // The worker sync protocol only carries a single `lut` field; file/look/display
+    // LUT stages are not yet forwarded to the OffscreenCanvas render worker.
+    if (_data !== null) {
+      console.warn(
+        'RenderWorkerProxy: setFileLUT is not supported in the async worker path. ' +
+        'The file LUT will be ignored. Use the main-thread renderer for multi-point LUT support.',
+      );
+    }
   }
 
   setLookLUT(
@@ -675,8 +691,15 @@ export class RenderWorkerProxy implements RendererBackend {
     _domainMin?: [number, number, number],
     _domainMax?: [number, number, number],
   ): void {
-    // TODO: implement multi-point LUT pipeline for worker proxy
-    this.hasDirtyState = true;
+    // TODO(#19): implement multi-point LUT pipeline for worker proxy.
+    // The worker sync protocol only carries a single `lut` field; file/look/display
+    // LUT stages are not yet forwarded to the OffscreenCanvas render worker.
+    if (_data !== null) {
+      console.warn(
+        'RenderWorkerProxy: setLookLUT is not supported in the async worker path. ' +
+        'The look LUT will be ignored. Use the main-thread renderer for multi-point LUT support.',
+      );
+    }
   }
 
   setDisplayLUT(
@@ -686,8 +709,15 @@ export class RenderWorkerProxy implements RendererBackend {
     _domainMin?: [number, number, number],
     _domainMax?: [number, number, number],
   ): void {
-    // TODO: implement multi-point LUT pipeline for worker proxy
-    this.hasDirtyState = true;
+    // TODO(#19): implement multi-point LUT pipeline for worker proxy.
+    // The worker sync protocol only carries a single `lut` field; file/look/display
+    // LUT stages are not yet forwarded to the OffscreenCanvas render worker.
+    if (_data !== null) {
+      console.warn(
+        'RenderWorkerProxy: setDisplayLUT is not supported in the async worker path. ' +
+        'The display LUT will be ignored. Use the main-thread renderer for multi-point LUT support.',
+      );
+    }
   }
 
   setDisplayColorState(state: {

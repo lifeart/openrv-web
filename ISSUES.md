@@ -1218,6 +1218,42 @@ This file tracks findings from exploratory review and targeted validation runs.
   - If snapshot storage is unavailable or listing fails, users get a panel that looks empty or out-of-date rather than a clear failure state.
   - That makes snapshot problems look like “no snapshots exist” instead of “the panel failed to load them.”
 
+### 101. The floating Info Panel is mostly unwired and can only show cursor color reliably
+
+- Severity: Medium
+- Area: Viewer overlays, info panel
+- Evidence:
+  - `InfoPanel` is implemented to render filename, resolution, frame info, timecode, duration, FPS, and cursor color in [src/ui/components/InfoPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/InfoPanel.ts#L1) and [src/ui/components/InfoPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/InfoPanel.ts#L301).
+  - In production wiring, the only `controls.infoPanel.update(...)` call is the cursor-color callback in [src/services/LayoutOrchestrator.ts](/Users/lifeart/Repos/openrv-web/src/services/LayoutOrchestrator.ts#L537).
+  - The normal metadata update path in the same file goes to `rightPanelContent.updateInfo(...)`, not the floating info panel, in [src/services/LayoutOrchestrator.ts](/Users/lifeart/Repos/openrv-web/src/services/LayoutOrchestrator.ts#L552).
+- Impact:
+  - The shipped Info Panel toggle suggests a viewer metadata overlay, but in practice it is largely limited to `RGB: ...` at cursor or `No data`.
+  - That makes the feature much less useful than its UI and implementation surface imply, especially for quick filename/frame/timecode reference in the viewer.
+
+### 102. Cache indicator’s `Clear` action only clears video cache while still presenting effects-cache stats
+
+- Severity: Medium
+- Area: Cache UI, viewer performance tools
+- Evidence:
+  - The cache indicator displays both normal cache stats and a separate `Effects: ...` prerender cache line in [src/ui/components/CacheIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/CacheIndicator.ts#L131) and [src/ui/components/CacheIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/CacheIndicator.ts#L353).
+  - Its only visible `Clear` button calls `this.session.clearVideoCache()` in [src/ui/components/CacheIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/CacheIndicator.ts#L167).
+  - `Session.clearVideoCache()` only delegates to media/video cache clearing in [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L1165), with no corresponding prerender/effects cache clear path here.
+- Impact:
+  - Users looking at both cache lines reasonably expect `Clear` to clear the caches being reported, but the effects cache can remain populated.
+  - That makes the cache UI misleading during troubleshooting, because the one visible purge action does not match the full state the indicator is showing.
+
+### 103. Right-panel media info can go stale after the panel is hidden and shown again
+
+- Severity: Medium
+- Area: Right inspector, media info
+- Evidence:
+  - `RightPanelContent.updateInfo(...)` explicitly skips all updates when its root element is hidden with `display: none` in [src/ui/layout/panels/RightPanelContent.ts](/Users/lifeart/Repos/openrv-web/src/ui/layout/panels/RightPanelContent.ts#L170).
+  - The layout system does hide panel content with `display: none` when side panels are collapsed or removed from the active layout in [src/ui/layout/LayoutManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/layout/LayoutManager.ts#L409).
+  - The normal metadata refresh path is only driven by `frameChanged` and `sourceLoaded` in [src/services/LayoutOrchestrator.ts](/Users/lifeart/Repos/openrv-web/src/services/LayoutOrchestrator.ts#L551), and reopening the panel itself does not force a refresh.
+- Impact:
+  - If the right inspector is hidden while playback/frame/source state changes, reopening it can show stale frame/timecode/media info until another frame or source event happens.
+  - That makes the inspector feel unreliable precisely when users reopen it to check current media state.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

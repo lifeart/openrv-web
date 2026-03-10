@@ -18,6 +18,8 @@ import type { GTOParseResult } from './GTOGraphLoader';
 import { Logger } from '../../utils/Logger';
 import { detectMediaTypeFromFile } from '../../utils/media/SupportedMediaFormats';
 import { MediaRepresentationManager } from './MediaRepresentationManager';
+import type { MediaCacheManager, CacheEntryMeta } from '../../cache/MediaCacheManager';
+import { computeCacheKey } from '../../cache/MediaCacheKey';
 import type {
   AddRepresentationConfig,
   MediaRepresentation,
@@ -93,6 +95,7 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
   private _currentSourceIndex = 0;
   private _hdrResizeTier: HDRResizeTier = 'none';
   private _proceduralCounter = 0;
+  private _cacheManager: MediaCacheManager | null = null;
 
   /** Representation manager for per-source media representation switching */
   private _representationManager = new MediaRepresentationManager();
@@ -142,6 +145,14 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
     this._representationManager.on('fallbackActivated', (data) => {
       this.emit('fallbackActivated', data);
     });
+  }
+
+  /**
+   * Set the OPFS media cache manager for background caching of loaded files.
+   * When set, file-loading methods will cache raw bytes in OPFS for fast reload.
+   */
+  setCacheManager(cacheManager: MediaCacheManager): void {
+    this._cacheManager = cacheManager;
   }
 
   // --- Source accessors ---
@@ -414,6 +425,9 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
 
       this.emit('sourceLoaded', source);
       this.emit('durationChanged', 1);
+
+      // Cache file in OPFS for fast reload across sessions
+      this.cacheFileInBackground(file, source);
     } catch (err) {
       log.warn(`FileSourceNode loading failed for ${file.name}, falling back to HTMLImageElement:`, err);
       const url = URL.createObjectURL(file);
@@ -454,6 +468,9 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
 
       this.emit('sourceLoaded', source);
       this.emit('durationChanged', 1);
+
+      // Cache file in OPFS for fast reload across sessions
+      this.cacheFileInBackground(file, source);
     } catch (err) {
       URL.revokeObjectURL(url);
       throw err;
@@ -578,6 +595,9 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
 
     this.emit('sourceLoaded', source);
     this.emit('durationChanged', duration);
+
+    // Cache file in OPFS for fast reload across sessions
+    this.cacheFileInBackground(file, source);
   }
 
   private async detectVideoFpsAndDuration(source: MediaSource, videoSourceNode: VideoSourceNode): Promise<void> {
@@ -1081,6 +1101,38 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
     log.info(`Applied representation shim: ${representation.label} (${representation.kind}) to source ${sourceIndex}`);
   }
 
+  // --- Background OPFS caching ---
+
+  /**
+   * Cache a loaded file's raw bytes in OPFS for fast reload across sessions.
+   * Runs in the background and never throws.
+   */
+  private cacheFileInBackground(file: File, source: MediaSource): void {
+    if (!this._cacheManager) return;
+
+    const cache = this._cacheManager;
+
+    computeCacheKey(file)
+      .then(async (cacheKey) => {
+        source.opfsCacheKey = cacheKey;
+
+        const buffer = await file.arrayBuffer();
+        const meta: CacheEntryMeta = {
+          fileName: file.name,
+          fileSize: file.size,
+          lastModified: file.lastModified,
+          mimeType: file.type || undefined,
+          width: source.width,
+          height: source.height,
+        };
+        await cache.put(cacheKey, buffer, meta);
+        log.debug(`Cached file in OPFS: ${file.name} (key=${cacheKey.slice(0, 8)}...)`);
+      })
+      .catch((err) => {
+        log.warn(`Background cache failed for ${file.name}:`, err);
+      });
+  }
+
   // --- Disposal ---
 
   disposeSequenceSource(source: MediaSource): void {
@@ -1121,6 +1173,7 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
     this._sources = [];
     this._currentSourceIndex = 0;
     this._representationManager.dispose();
+    this._cacheManager = null;
     this._host = null;
     this.removeAllListeners();
   }

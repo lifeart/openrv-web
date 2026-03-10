@@ -982,4 +982,62 @@ describe('RenderWorkerProxy', () => {
       await promise;
     });
   });
+
+  // =============================================================================
+  // Multi-point LUT pipeline limitation (Issue #19)
+  // =============================================================================
+
+  describe('Multi-point LUT pipeline limitation (#19)', () => {
+    it('RWP-LUT-001: supportsMultiPointLUT returns false', () => {
+      expect(proxy.supportsMultiPointLUT()).toBe(false);
+    });
+
+    it('RWP-LUT-002: setFileLUT emits warning when data is non-null', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      proxy.setFileLUT(new Float32Array(64), 4, 1.0);
+      expect(warnSpy).toHaveBeenCalledOnce();
+      expect(warnSpy.mock.calls[0]![0]).toContain('setFileLUT');
+      expect(warnSpy.mock.calls[0]![0]).toContain('not supported');
+      warnSpy.mockRestore();
+    });
+
+    it('RWP-LUT-003: setLookLUT emits warning when data is non-null', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      proxy.setLookLUT(new Float32Array(64), 4, 1.0);
+      expect(warnSpy).toHaveBeenCalledOnce();
+      expect(warnSpy.mock.calls[0]![0]).toContain('setLookLUT');
+      expect(warnSpy.mock.calls[0]![0]).toContain('not supported');
+      warnSpy.mockRestore();
+    });
+
+    it('RWP-LUT-004: setDisplayLUT emits warning when data is non-null', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      proxy.setDisplayLUT(new Float32Array(64), 4, 1.0);
+      expect(warnSpy).toHaveBeenCalledOnce();
+      expect(warnSpy.mock.calls[0]![0]).toContain('setDisplayLUT');
+      expect(warnSpy.mock.calls[0]![0]).toContain('not supported');
+      warnSpy.mockRestore();
+    });
+
+    it('RWP-LUT-005: setFileLUT does not warn when clearing (null data)', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      proxy.setFileLUT(null, 0, 0);
+      expect(warnSpy).not.toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+
+    it('RWP-LUT-006: setLookLUT does not warn when clearing (null data)', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      proxy.setLookLUT(null, 0, 0);
+      expect(warnSpy).not.toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+
+    it('RWP-LUT-007: setDisplayLUT does not warn when clearing (null data)', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      proxy.setDisplayLUT(null, 0, 0);
+      expect(warnSpy).not.toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+  });
 });

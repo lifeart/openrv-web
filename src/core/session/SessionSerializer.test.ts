@@ -7,6 +7,15 @@ import { SessionSerializer, type SessionComponents } from './SessionSerializer';
 import type { SessionState } from './SessionState';
 import { SESSION_STATE_VERSION } from './SessionState';
 import { PaintEngine } from '../../paint/PaintEngine';
+import { DEFAULT_TONE_MAPPING_STATE } from '../../core/types/effects';
+import { DEFAULT_GAMUT_MAPPING_STATE } from '../../core/types/effects';
+import { DEFAULT_STEREO_STATE } from '../../core/types/stereo';
+import { DEFAULT_GHOST_FRAME_STATE } from '../../ui/components/GhostFrameControl';
+import { DEFAULT_DISPLAY_COLOR_STATE } from '../../color/DisplayTransfer';
+import { DEFAULT_DIFFERENCE_MATTE_STATE } from '../../ui/components/DifferenceMatteControl';
+import { DEFAULT_BLEND_MODE_STATE } from '../../ui/components/ComparisonManager';
+import { createDefaultCurvesData } from '../../color/ColorCurves';
+import { DEFAULT_STEREO_EYE_TRANSFORM_STATE, DEFAULT_STEREO_ALIGN_MODE } from '../../stereo/StereoRenderer';
 
 // Mock the showFileReloadPrompt dialog
 vi.mock('../../ui/components/shared/Modal', () => ({
@@ -382,7 +391,8 @@ describe('SessionSerializer', () => {
 
       // video + img loaded; sequence requires manual selection
       expect(result.loadedMedia).toBe(2);
-      expect(result.warnings.length).toBe(1);
+      // Warnings: 1 for sequence + 1 for serialization gaps
+      expect(result.warnings.length).toBe(2);
       expect(result.warnings[0]).toContain('seq');
       expect(components.session.loadVideo).toHaveBeenCalledWith('video', 'video.mp4');
       expect(components.session.loadImage).toHaveBeenCalledWith('img', 'image.jpg');
@@ -567,9 +577,9 @@ describe('SessionSerializer', () => {
       expect(components.session.loadFile).toHaveBeenNthCalledWith(1, mockFile1);
       expect(components.session.loadFile).toHaveBeenNthCalledWith(2, mockFile3);
 
-      // Two files loaded, one skipped
+      // Two files loaded, one skipped + gap warning
       expect(result.loadedMedia).toBe(2);
-      expect(result.warnings).toHaveLength(1);
+      expect(result.warnings).toHaveLength(2);
       expect(result.warnings).toContain('Skipped reload: video1.mp4');
     });
 
@@ -587,13 +597,71 @@ describe('SessionSerializer', () => {
       expect(result.warnings[0]).toContain('Failed to load');
     });
 
-    it('SER-011: warns about LUT path', async () => {
+    it('SER-011: warns about LUT path with actionable message', async () => {
       const components = createMockComponents();
       const state = SessionSerializer.createEmpty();
       state.lutPath = 'my.cube';
 
       const result = await SessionSerializer.fromJSON(state, components);
-      expect(result.warnings).toContain('LUT "my.cube" requires manual loading');
+      // 1 LUT warning + 1 gap warning
+      expect(result.warnings).toHaveLength(2);
+      const warning = result.warnings[0]!;
+      expect(warning).toContain('my.cube');
+      expect(warning).toContain('reloaded manually');
+      expect(warning).toContain('intensity setting has been preserved');
+    });
+
+    it('SER-011-LUT-001: LUT title is preserved in serialization', () => {
+      const components = createMockComponents();
+      (components.viewer.getLUT as ReturnType<typeof vi.fn>).mockReturnValue({ title: 'FilmGrade.cube' });
+
+      const state = SessionSerializer.toJSON(components, 'LutTest');
+      expect(state.lutPath).toBe('FilmGrade.cube');
+    });
+
+    it('SER-011-LUT-002: no LUT warning emitted when no LUT was active', async () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty();
+      // lutPath is undefined by default
+
+      const result = await SessionSerializer.fromJSON(state, components);
+      const lutWarnings = result.warnings.filter((w) => w.toLowerCase().includes('lut'));
+      expect(lutWarnings).toHaveLength(0);
+    });
+
+    it('SER-011-LUT-003: LUT warning includes intensity when not default', async () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty();
+      state.lutPath = 'LogC.cube';
+      state.lutIntensity = 0.75;
+
+      const result = await SessionSerializer.fromJSON(state, components);
+      // 1 LUT warning + 1 gap warning
+      expect(result.warnings).toHaveLength(2);
+      const warning = result.warnings[0]!;
+      expect(warning).toContain('LogC.cube');
+      expect(warning).toContain('intensity was 0.75');
+    });
+
+    it('SER-011-LUT-004: LUT warning omits intensity note when intensity is 1.0', async () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty();
+      state.lutPath = 'Default.cube';
+      state.lutIntensity = 1.0;
+
+      const result = await SessionSerializer.fromJSON(state, components);
+      const warning = result.warnings[0]!;
+      expect(warning).not.toContain('intensity was');
+    });
+
+    it('SER-011-LUT-005: lutIntensity is still applied on restore even without LUT binary', async () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty();
+      state.lutPath = 'test.cube';
+      state.lutIntensity = 0.5;
+
+      await SessionSerializer.fromJSON(state, components);
+      expect(components.viewer.setLUTIntensity).toHaveBeenCalledWith(0.5);
     });
 
     it('SER-011a: restores noise reduction and watermark state', async () => {
@@ -673,6 +741,272 @@ describe('SessionSerializer', () => {
       expect(setEnabled).toHaveBeenCalledWith(false);
       expect(setLoopMode).toHaveBeenCalledWith('none');
       expect(setCurrentFrame).toHaveBeenCalledWith(1);
+    });
+  });
+
+  // =================================================================
+  // Serialization Gaps — transparency for unsaved viewer state
+  // =================================================================
+
+  describe('getSerializationGaps', () => {
+    it('SER-GAP-001: returns all known gap categories', () => {
+      const components = createMockComponents();
+      const gaps = SessionSerializer.getSerializationGaps(components.viewer as any);
+
+      expect(gaps.length).toBeGreaterThanOrEqual(13);
+
+      const names = gaps.map((g) => g.name);
+      expect(names).toContain('OCIO configuration');
+      expect(names).toContain('Display profile');
+      expect(names).toContain('Gamut mapping');
+      expect(names).toContain('Color inversion');
+      expect(names).toContain('Curves');
+      expect(names).toContain('Tone mapping');
+      expect(names).toContain('Ghost frames');
+      expect(names).toContain('Stereo mode');
+      expect(names).toContain('Stereo eye transforms');
+      expect(names).toContain('Stereo align mode');
+      expect(names).toContain('Channel isolation');
+      expect(names).toContain('Difference matte');
+      expect(names).toContain('Blend mode');
+    });
+
+    it('SER-GAP-002: all gaps report inactive when viewer is at defaults', () => {
+      const components = createMockComponents();
+      const gaps = SessionSerializer.getSerializationGaps(components.viewer as any);
+
+      for (const gap of gaps) {
+        expect(gap.isActive).toBe(false);
+      }
+    });
+
+    it('SER-GAP-003: detects active OCIO', () => {
+      const components = createMockComponents();
+      (components.viewer.isOCIOEnabled as ReturnType<typeof vi.fn>).mockReturnValue(true);
+
+      const gaps = SessionSerializer.getSerializationGaps(components.viewer as any);
+      const ocio = gaps.find((g) => g.name === 'OCIO configuration')!;
+      expect(ocio.isActive).toBe(true);
+      expect(ocio.category).toBe('color');
+    });
+
+    it('SER-GAP-004: detects active tone mapping', () => {
+      const components = createMockComponents();
+      (components.viewer.getToneMappingState as ReturnType<typeof vi.fn>).mockReturnValue({
+        ...DEFAULT_TONE_MAPPING_STATE,
+        enabled: true,
+        operator: 'aces',
+      });
+
+      const gaps = SessionSerializer.getSerializationGaps(components.viewer as any);
+      const tm = gaps.find((g) => g.name === 'Tone mapping')!;
+      expect(tm.isActive).toBe(true);
+      expect(tm.category).toBe('view');
+    });
+
+    it('SER-GAP-005: detects active stereo mode', () => {
+      const components = createMockComponents();
+      (components.viewer.getStereoState as ReturnType<typeof vi.fn>).mockReturnValue({
+        mode: 'anaglyph',
+        eyeSwap: false,
+        offset: 0,
+      });
+
+      const gaps = SessionSerializer.getSerializationGaps(components.viewer as any);
+      const stereo = gaps.find((g) => g.name === 'Stereo mode')!;
+      expect(stereo.isActive).toBe(true);
+    });
+
+    it('SER-GAP-006: detects active ghost frames', () => {
+      const components = createMockComponents();
+      (components.viewer.getGhostFrameState as ReturnType<typeof vi.fn>).mockReturnValue({
+        ...DEFAULT_GHOST_FRAME_STATE,
+        enabled: true,
+      });
+
+      const gaps = SessionSerializer.getSerializationGaps(components.viewer as any);
+      const ghost = gaps.find((g) => g.name === 'Ghost frames')!;
+      expect(ghost.isActive).toBe(true);
+    });
+
+    it('SER-GAP-007: detects active channel isolation', () => {
+      const components = createMockComponents();
+      (components.viewer.getChannelMode as ReturnType<typeof vi.fn>).mockReturnValue('red');
+
+      const gaps = SessionSerializer.getSerializationGaps(components.viewer as any);
+      const channel = gaps.find((g) => g.name === 'Channel isolation')!;
+      expect(channel.isActive).toBe(true);
+    });
+
+    it('SER-GAP-008: detects active difference matte', () => {
+      const components = createMockComponents();
+      (components.viewer.getDifferenceMatteState as ReturnType<typeof vi.fn>).mockReturnValue({
+        ...DEFAULT_DIFFERENCE_MATTE_STATE,
+        enabled: true,
+      });
+
+      const gaps = SessionSerializer.getSerializationGaps(components.viewer as any);
+      const dm = gaps.find((g) => g.name === 'Difference matte')!;
+      expect(dm.isActive).toBe(true);
+      expect(dm.category).toBe('compare');
+    });
+
+    it('SER-GAP-009: detects active blend mode', () => {
+      const components = createMockComponents();
+      (components.viewer.getBlendModeState as ReturnType<typeof vi.fn>).mockReturnValue({
+        ...DEFAULT_BLEND_MODE_STATE,
+        mode: 'multiply',
+        flickerFrame: 0,
+      });
+
+      const gaps = SessionSerializer.getSerializationGaps(components.viewer as any);
+      const bm = gaps.find((g) => g.name === 'Blend mode')!;
+      expect(bm.isActive).toBe(true);
+    });
+
+    it('SER-GAP-010: detects active display profile', () => {
+      const components = createMockComponents();
+      (components.viewer.getDisplayColorState as ReturnType<typeof vi.fn>).mockReturnValue({
+        ...DEFAULT_DISPLAY_COLOR_STATE,
+        displayGamma: 2.2,
+      });
+
+      const gaps = SessionSerializer.getSerializationGaps(components.viewer as any);
+      const dp = gaps.find((g) => g.name === 'Display profile')!;
+      expect(dp.isActive).toBe(true);
+    });
+
+    it('SER-GAP-011: detects active gamut mapping', () => {
+      const components = createMockComponents();
+      (components.viewer.getGamutMappingState as ReturnType<typeof vi.fn>).mockReturnValue({
+        ...DEFAULT_GAMUT_MAPPING_STATE,
+        mode: 'clip',
+      });
+
+      const gaps = SessionSerializer.getSerializationGaps(components.viewer as any);
+      const gm = gaps.find((g) => g.name === 'Gamut mapping')!;
+      expect(gm.isActive).toBe(true);
+    });
+
+    it('SER-GAP-013: detects active color inversion', () => {
+      const components = createMockComponents();
+      (components.viewer.getColorInversion as ReturnType<typeof vi.fn>).mockReturnValue(true);
+
+      const gaps = SessionSerializer.getSerializationGaps(components.viewer as any);
+      const ci = gaps.find((g) => g.name === 'Color inversion')!;
+      expect(ci.isActive).toBe(true);
+      expect(ci.category).toBe('color');
+    });
+
+    it('SER-GAP-014: detects active curves', () => {
+      const components = createMockComponents();
+      const nonDefaultCurves = createDefaultCurvesData();
+      nonDefaultCurves.master.points = [
+        { x: 0, y: 0 },
+        { x: 0.5, y: 0.7 },
+        { x: 1, y: 1 },
+      ];
+      (components.viewer.getCurves as ReturnType<typeof vi.fn>).mockReturnValue(nonDefaultCurves);
+
+      const gaps = SessionSerializer.getSerializationGaps(components.viewer as any);
+      const curves = gaps.find((g) => g.name === 'Curves')!;
+      expect(curves.isActive).toBe(true);
+      expect(curves.category).toBe('color');
+    });
+
+    it('SER-GAP-015: detects active stereo eye transforms', () => {
+      const components = createMockComponents();
+      (components.viewer.getStereoEyeTransforms as ReturnType<typeof vi.fn>).mockReturnValue({
+        left: { flipH: true, flipV: false, rotation: 0, scale: 1.0, translateX: 0, translateY: 0 },
+        right: { flipH: false, flipV: false, rotation: 0, scale: 1.0, translateX: 0, translateY: 0 },
+        linked: false,
+      });
+
+      const gaps = SessionSerializer.getSerializationGaps(components.viewer as any);
+      const set = gaps.find((g) => g.name === 'Stereo eye transforms')!;
+      expect(set.isActive).toBe(true);
+      expect(set.category).toBe('view');
+    });
+
+    it('SER-GAP-016: detects active stereo align mode', () => {
+      const components = createMockComponents();
+      (components.viewer.getStereoAlignMode as ReturnType<typeof vi.fn>).mockReturnValue('grid');
+
+      const gaps = SessionSerializer.getSerializationGaps(components.viewer as any);
+      const sam = gaps.find((g) => g.name === 'Stereo align mode')!;
+      expect(sam.isActive).toBe(true);
+      expect(sam.category).toBe('view');
+    });
+
+    it('SER-GAP-012: every gap has non-empty impact description', () => {
+      const components = createMockComponents();
+      const gaps = SessionSerializer.getSerializationGaps(components.viewer as any);
+
+      for (const gap of gaps) {
+        expect(gap.impact.length).toBeGreaterThan(0);
+      }
+    });
+  });
+
+  describe('toJSON gap warnings', () => {
+    it('SER-GAP-020: emits console.warn when active gaps exist during save', () => {
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const components = createMockComponents();
+      (components.viewer.isOCIOEnabled as ReturnType<typeof vi.fn>).mockReturnValue(true);
+      (components.viewer.getToneMappingState as ReturnType<typeof vi.fn>).mockReturnValue({
+        ...DEFAULT_TONE_MAPPING_STATE,
+        enabled: true,
+        operator: 'aces',
+      });
+
+      SessionSerializer.toJSON(components, 'TestGapWarn');
+
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('OCIO configuration'));
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Tone mapping'));
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('NOT saved'));
+
+      consoleSpy.mockRestore();
+    });
+
+    it('SER-GAP-021: no console.warn when all states are at defaults', () => {
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const components = createMockComponents();
+      SessionSerializer.toJSON(components, 'TestNoGapWarn');
+
+      // Should not have been called with the serialization gap message
+      const gapWarnings = consoleSpy.mock.calls.filter(
+        (args) => typeof args[0] === 'string' && args[0].includes('[SessionSerializer]'),
+      );
+      expect(gapWarnings).toHaveLength(0);
+
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('fromJSON gap warnings', () => {
+    it('SER-GAP-030: fromJSON result includes gap documentation warning', async () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty();
+
+      const result = await SessionSerializer.fromJSON(state, components);
+
+      const gapWarning = result.warnings.find((w) => w.includes('not saved in project files'));
+      expect(gapWarning).toBeDefined();
+      expect(gapWarning).toContain('OCIO configuration');
+      expect(gapWarning).toContain('Tone mapping');
+      expect(gapWarning).toContain('Stereo mode');
+      expect(gapWarning).toContain('Stereo eye transforms');
+      expect(gapWarning).toContain('Stereo align mode');
+      expect(gapWarning).toContain('Ghost frames');
+      expect(gapWarning).toContain('Channel isolation');
+      expect(gapWarning).toContain('Difference matte');
+      expect(gapWarning).toContain('Blend mode');
+      expect(gapWarning).toContain('Display profile');
+      expect(gapWarning).toContain('Gamut mapping');
+      expect(gapWarning).toContain('Color inversion');
+      expect(gapWarning).toContain('Curves');
     });
   });
 
@@ -796,6 +1130,20 @@ function createMockComponents(): SessionComponents {
       getBackgroundPatternState: vi
         .fn()
         .mockReturnValue({ pattern: 'black', checkerSize: 'medium', customColor: '#1a1a1a' }),
+      // Getters for serialization gap detection
+      isOCIOEnabled: vi.fn().mockReturnValue(false),
+      getDisplayColorState: vi.fn().mockReturnValue({ ...DEFAULT_DISPLAY_COLOR_STATE }),
+      getGamutMappingState: vi.fn().mockReturnValue({ ...DEFAULT_GAMUT_MAPPING_STATE }),
+      getToneMappingState: vi.fn().mockReturnValue({ ...DEFAULT_TONE_MAPPING_STATE }),
+      getGhostFrameState: vi.fn().mockReturnValue({ ...DEFAULT_GHOST_FRAME_STATE }),
+      getStereoState: vi.fn().mockReturnValue({ ...DEFAULT_STEREO_STATE }),
+      getChannelMode: vi.fn().mockReturnValue('rgb'),
+      getDifferenceMatteState: vi.fn().mockReturnValue({ ...DEFAULT_DIFFERENCE_MATTE_STATE }),
+      getBlendModeState: vi.fn().mockReturnValue({ ...DEFAULT_BLEND_MODE_STATE, flickerFrame: 0 }),
+      getColorInversion: vi.fn().mockReturnValue(false),
+      getCurves: vi.fn().mockReturnValue(createDefaultCurvesData()),
+      getStereoEyeTransforms: vi.fn().mockReturnValue({ ...DEFAULT_STEREO_EYE_TRANSFORM_STATE }),
+      getStereoAlignMode: vi.fn().mockReturnValue(DEFAULT_STEREO_ALIGN_MODE),
       setColorAdjustments: vi.fn(),
       setCDL: vi.fn(),
       setFilterSettings: vi.fn(),

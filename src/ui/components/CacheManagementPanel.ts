@@ -5,6 +5,11 @@
  * - Displays cache statistics (entry count, total size in human-readable format)
  * - "Clear All" button to purge the entire cache
  * - Follows the existing DOM-based component pattern (EventEmitter, getElement, dispose)
+ *
+ * TODO(#16): This component is fully implemented but not wired into the production
+ * layout. The only cache-related UI currently mounted is the passive cache indicator
+ * in LayoutOrchestrator. To make this panel accessible to users, it needs to be
+ * instantiated and mounted (e.g. toggled from the cache indicator click).
  */
 
 import { EventEmitter } from '../../utils/EventEmitter';
@@ -45,9 +50,16 @@ export class CacheManagementPanel extends EventEmitter<CacheManagementPanelEvent
   private cacheManager: MediaCacheManager;
   private visible = false;
 
+  /** Indicates this component is not yet wired into the production layout. */
+  static readonly NOT_WIRED_MESSAGE =
+    '[CacheManagementPanel] Component instantiated but not mounted in production layout (see TODO #16)';
+
   constructor(cacheManager: MediaCacheManager) {
     super();
     this.cacheManager = cacheManager;
+
+    // See file-level TODO(#16) — this panel has no mount path yet.
+    console.info(CacheManagementPanel.NOT_WIRED_MESSAGE);
 
     // Main container
     this.container = document.createElement('div');
