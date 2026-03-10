@@ -640,17 +640,17 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The View toolbar advertises a keyboard affordance that users cannot actually use.
   - Pressing `L` changes playback speed instead of opening or cycling layout modes, which is a misleading and easy-to-hit mismatch.
 
-### 55. The volume control still tells users mute is on `M`, but production mute is on `Shift+M`
+### 55. The volume tooltip still frames mute as a video-only action even though the shortcut is wired as a generic audio toggle
 
-- Severity: Medium
+- Severity: Low
 - Area: Header audio UI, shortcut discoverability
 - Evidence:
-  - The mounted mute button tooltip says `Toggle mute (M in video mode)` in [src/ui/components/VolumeControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/VolumeControl.ts#L49).
-  - The actual shortcut map binds audio mute to `Shift+M` in [src/utils/input/KeyBindings.ts](/Users/lifeart/Repos/openrv-web/src/utils/input/KeyBindings.ts#L753).
-  - The keyboard action map routes only `audio.toggleMute` to `session.toggleMute()` in [src/services/KeyboardActionMap.ts](/Users/lifeart/Repos/openrv-web/src/services/KeyboardActionMap.ts#L690).
+  - The mounted mute button tooltip says `Toggle mute (Shift+M in video mode)` in [src/ui/components/VolumeControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/VolumeControl.ts#L51).
+  - The actual shortcut map describes the binding generically as `Toggle audio mute` in [src/utils/input/KeyBindings.ts](/Users/lifeart/Repos/openrv-web/src/utils/input/KeyBindings.ts#L761) through [src/utils/input/KeyBindings.ts](/Users/lifeart/Repos/openrv-web/src/utils/input/KeyBindings.ts#L764).
+  - The keyboard action path routes `audio.toggleMute` straight to `session.toggleMute()` with no video-mode guard in [src/services/KeyboardActionMap.ts](/Users/lifeart/Repos/openrv-web/src/services/KeyboardActionMap.ts#L709).
 - Impact:
-  - Users following the visible tooltip will press `M` and get marker behavior instead of mute.
-  - That makes one of the few discoverable audio shortcuts actively misleading in review sessions.
+  - The visible tooltip makes the mute shortcut sound narrower than the actual behavior, so users can assume it only applies in a special “video mode.”
+  - That weakens one of the few discoverable audio hints in the shipped header UI.
 
 ### 56. Sequence export uses a one-off popup instead of the real export progress dialog
 
@@ -4596,6 +4596,32 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Metadata-tagged 360 content that is not close to 2:1 will not auto-enable spherical viewing even though the underlying detector supports that path.
   - Explicit non-spherical metadata also cannot suppress 2:1 false positives, because production never forwards the metadata to the detector.
+
+### 373. Plain media loads leave the header title at `Untitled` unless the user manually renames the session
+
+- Severity: Medium
+- Area: Header UI / session context
+- Evidence:
+  - Fresh session metadata starts with an empty `displayName` in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L60) through [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L66).
+  - The header’s main title renders `metadata.displayName || 'Untitled'` in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L590) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L597).
+  - The normal `sourceLoaded` handler updates info panels, crop dimensions, OCIO state, and HDR behavior, but it never assigns a display name from the loaded source in [src/handlers/sourceLoadedHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/sourceLoadedHandlers.ts#L166) through [src/handlers/sourceLoadedHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/sourceLoadedHandlers.ts#L190).
+  - A production-code search finds `setDisplayName(...)` only in the manual rename path and session-metadata internals, not in the standard file-load flow, as shown by [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L587).
+- Impact:
+  - After loading ordinary media from a clean session, the header’s primary label can still say `Untitled` instead of reflecting the file the user is reviewing.
+  - That removes a basic piece of glanceable context from the main chrome and makes docs that talk about header-adjacent source context feel more misleading than they need to.
+
+### 374. Snapshot creation is hardwired to anonymous quick-save behavior instead of the documented name-and-description flow
+
+- Severity: Medium
+- Area: Snapshot workflow / documentation
+- Evidence:
+  - The session-management guide says users should click `Create Snapshot` and then "Provide a name and optional description" in [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L94).
+  - The shipped Snapshot panel’s `Create Snapshot` button only emits a bare `createRequested` event with no prompt UI or metadata form in [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L198) through [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L211).
+  - Production wiring maps that event directly to `persistenceManager.createQuickSnapshot()` in [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L327) through [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L329).
+  - `createQuickSnapshot()` auto-generates a timestamp name like `Snapshot 10:42:13 PM` and never supplies a description to `snapshotManager.createSnapshot(...)` in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L165) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L181).
+- Impact:
+  - Users cannot name or describe a snapshot at creation time even though the docs present that as the normal workflow.
+  - That makes the snapshot list harder to curate for real review sessions, especially when multiple checkpoints are created close together.
 
 ## Validation Notes
 
