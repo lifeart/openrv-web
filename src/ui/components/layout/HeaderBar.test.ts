@@ -145,14 +145,14 @@ describe('HeaderBar', () => {
       expect(inputs.length).toBe(2);
     });
 
-    it('HDR-U024: project file input accepts .orvproject files', () => {
+    it('HDR-U024: project file input accepts all supported project formats', () => {
       const el = headerBar.render();
       const inputs = el.querySelectorAll('input[type="file"]');
       const projectInput = Array.from(inputs).find(
-        (input) => (input as HTMLInputElement).accept === '.orvproject',
+        (input) => (input as HTMLInputElement).accept.includes('.orvproject'),
       ) as HTMLInputElement;
       expect(projectInput).not.toBeNull();
-      expect(projectInput.accept).toBe('.orvproject');
+      expect(projectInput.accept).toBe('.orvproject,.rv,.gto,.rvedl');
     });
   });
 
@@ -686,7 +686,7 @@ describe('HeaderBar', () => {
       const el = headerBar.render();
       const inputs = el.querySelectorAll('input[type="file"]');
       const projectInput = Array.from(inputs).find(
-        (input) => (input as HTMLInputElement).accept === '.orvproject',
+        (input) => (input as HTMLInputElement).accept.includes('.orvproject'),
       ) as HTMLInputElement;
 
       // Create a mock file and dispatch change event

@@ -3584,6 +3584,43 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Even after fixing individual markdown pages, the docs toolchain can regenerate new public docs with invalid API examples.
   - That makes documentation drift a recurring pipeline problem rather than a one-off page bug.
 
+### 290. Plugin `engineVersion` is declared as a minimum host-version requirement, but plugin registration never enforces it
+
+- Severity: Medium
+- Area: Plugin runtime / compatibility contract
+- Evidence:
+  - The plugin manifest type declares `engineVersion?: SemVer` as the “Minimum OpenRV Web version required” in [src/plugin/types.ts](/Users/lifeart/Repos/openrv-web/src/plugin/types.ts#L36) through [src/plugin/types.ts](/Users/lifeart/Repos/openrv-web/src/plugin/types.ts#L37).
+  - `PluginRegistry.register(...)` validates `manifest.id`, `manifest.name`, `manifest.version`, and `manifest.contributes`, but does not read or validate `manifest.engineVersion` at all in [src/plugin/PluginRegistry.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginRegistry.ts#L127) through [src/plugin/PluginRegistry.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginRegistry.ts#L169).
+- Impact:
+  - Plugins can declare a minimum required host version and still be accepted unchanged by older or incompatible app builds.
+  - That turns version-gating metadata into a no-op and pushes compatibility failures to runtime behavior instead of install-time rejection.
+
+### 291. Plugin manifests advertise a `processor` contribution type, but the plugin context exposes no way to register one
+
+- Severity: Medium
+- Area: Plugin API / contribution model
+- Evidence:
+  - `PluginContributionType` includes `'processor'` in [src/plugin/types.ts](/Users/lifeart/Repos/openrv-web/src/plugin/types.ts#L46).
+  - The published scripting guide uses a plugin example with `contributes: ['processor']` in [docs/advanced/scripting-api.md](/Users/lifeart/Repos/openrv-web/docs/advanced/scripting-api.md#L484) through [docs/advanced/scripting-api.md](/Users/lifeart/Repos/openrv-web/docs/advanced/scripting-api.md#L495).
+  - The actual `PluginContext` only exposes `registerDecoder`, `registerNode`, `registerTool`, `registerExporter`, `registerBlendMode`, and `registerUIPanel` in [src/plugin/types.ts](/Users/lifeart/Repos/openrv-web/src/plugin/types.ts#L61) through [src/plugin/types.ts](/Users/lifeart/Repos/openrv-web/src/plugin/types.ts#L79).
+  - `PluginRegistry.createContext(...)` builds exactly those registration hooks and no `registerProcessor(...)` path in [src/plugin/PluginRegistry.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginRegistry.ts#L395) through [src/plugin/PluginRegistry.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginRegistry.ts#L456).
+- Impact:
+  - A plugin can truthfully declare itself as a `processor` plugin, but there is no host API for it to contribute any processor capability.
+  - That leaves one of the advertised plugin contribution types structurally dead, not just unwired in the UI.
+
+### 292. The docs advertise a `playlistEnded` event, but the public scripting event API never exposes it
+
+- Severity: Medium
+- Area: Playlist / public scripting API contract
+- Evidence:
+  - The playlist docs say no-loop mode emits a `playlistEnded` event in [docs/advanced/playlist.md](/Users/lifeart/Repos/openrv-web/docs/advanced/playlist.md#L68) through [docs/advanced/playlist.md](/Users/lifeart/Repos/openrv-web/docs/advanced/playlist.md#L70).
+  - The session-compatibility guide repeats that claim in [docs/guides/session-compatibility.md](/Users/lifeart/Repos/openrv-web/docs/guides/session-compatibility.md#L294) through [docs/guides/session-compatibility.md#L299](/Users/lifeart/Repos/openrv-web/docs/guides/session-compatibility.md#L299).
+  - Internally, `PlaylistManager` does emit `playlistEnded` in [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L76) and [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L296).
+  - The public `EventsAPI` event-name union and valid-event set omit `playlistEnded` entirely in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L15) through [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L64).
+- Impact:
+  - External scripts following the docs cannot actually subscribe to the playlist-end signal they were told exists.
+  - That breaks automation around multi-clip review completion even though the underlying playlist manager already knows when playback has ended.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

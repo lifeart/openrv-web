@@ -222,7 +222,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     // Hidden file input for project files
     this.projectInput = document.createElement('input');
     this.projectInput.type = 'file';
-    this.projectInput.accept = '.orvproject';
+    this.projectInput.accept = '.orvproject,.rv,.gto,.rvedl';
     this.projectInput.style.display = 'none';
     this.projectInput.addEventListener('change', (e) => this.handleProjectOpen(e));
     this.container.appendChild(this.projectInput);

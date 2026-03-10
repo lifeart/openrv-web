@@ -1307,3 +1307,13 @@
 - **Regression Tests**: 38 SupportedMediaFormats tests (known image/video extensions, MIME types, MIME priority, unrecognized extensions return 'unknown', no-extension returns 'unknown'), SM-084 through SM-086 (loadFile rejects unknown types, no source added, known types still work).
 - **Verification**: All 239 tests pass (38 SupportedMediaFormats + 89 SessionMedia + 112 MediaManager), TypeScript clean.
 - **Files Changed**: `src/utils/media/SupportedMediaFormats.ts`, `src/core/session/SessionMedia.ts`, `src/core/session/MediaManager.ts`, `src/core/session/MediaManager.test.ts`, `src/utils/media/SupportedMediaFormats.test.ts` (new), `src/core/session/SessionMedia.test.ts`
+
+## Issue #158: The dedicated `Open Project` button cannot actually pick most formats that its loader supports
+
+- **Severity**: Medium
+- **Area**: Project/session open workflow
+- **Root Cause**: The project file input's `accept` attribute was set to `'.orvproject'` only, but `openProject()` in `AppPersistenceManager` supports `.orvproject`, `.rv`, `.gto`, and `.rvedl`. The browser file picker filtered out the other three formats.
+- **Fix**: Changed the `accept` attribute from `'.orvproject'` to `'.orvproject,.rv,.gto,.rvedl'`, matching all formats that `openProject()` handles.
+- **Regression Tests**: HDR-U024 updated to verify accept attribute contains all four extensions.
+- **Verification**: All 156 HeaderBar tests pass, TypeScript clean.
+- **Files Changed**: `src/ui/components/layout/HeaderBar.ts`, `src/ui/components/layout/HeaderBar.test.ts`
