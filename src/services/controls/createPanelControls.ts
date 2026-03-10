@@ -71,6 +71,11 @@ export function createPanelControls(deps: PanelControlDeps): PanelControlGroupIn
   const snapshotPanel = new SnapshotPanel(snapshotManager);
   const playlistPanel = new PlaylistPanel(playlistManager);
   playlistPanel.setTransitionManager(transitionManager);
+  playlistPanel.setSourceUrlResolver((sourceIndex: number) => {
+    const sources = session.allSources;
+    if (sourceIndex < 0 || sourceIndex >= sources.length) return null;
+    return sources[sourceIndex]?.url || null;
+  });
 
   // Mutual exclusion: only one panel can be open at a time
   snapshotPanel.setExclusiveWith(playlistPanel);

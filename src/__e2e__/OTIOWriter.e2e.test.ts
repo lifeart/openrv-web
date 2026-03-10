@@ -23,18 +23,31 @@ import { PlaylistManager } from '../core/session/PlaylistManager';
 
 /**
  * Simulate what PlaylistPanel.exportOTIO does:
- * map PlaylistClip -> OTIOExportClip with empty sourceUrl.
+ * map PlaylistClip -> OTIOExportClip, optionally resolving source URLs.
  */
-function playlistClipsToOTIOClips(manager: PlaylistManager, fps = 24): OTIOExportClip[] {
-  return manager.getClips().map((clip) => ({
-    sourceName: clip.sourceName,
-    sourceUrl: '',
-    inPoint: clip.inPoint,
-    outPoint: clip.outPoint,
-    globalStartFrame: clip.globalStartFrame,
-    duration: clip.duration,
-    fps,
-  }));
+function playlistClipsToOTIOClips(
+  manager: PlaylistManager,
+  fps = 24,
+  sourceUrlResolver?: (sourceIndex: number) => string | null,
+): OTIOExportClip[] {
+  return manager.getClips().map((clip) => {
+    let sourceUrl = '';
+    if (sourceUrlResolver) {
+      const resolved = sourceUrlResolver(clip.sourceIndex);
+      sourceUrl = resolved ?? clip.sourceName;
+    } else {
+      sourceUrl = clip.sourceName;
+    }
+    return {
+      sourceName: clip.sourceName,
+      sourceUrl,
+      inPoint: clip.inPoint,
+      outPoint: clip.outPoint,
+      globalStartFrame: clip.globalStartFrame,
+      duration: clip.duration,
+      fps,
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -64,7 +77,8 @@ describe('OTIOWriter E2E', () => {
       expect(otioClips).toHaveLength(1);
       const clip = otioClips[0]!;
       expect(clip.sourceName).toBe('shot_A.exr');
-      expect(clip.sourceUrl).toBe('');
+      // Without a resolver, sourceUrl falls back to sourceName
+      expect(clip.sourceUrl).toBe('shot_A.exr');
       expect(clip.inPoint).toBe(1);
       expect(clip.outPoint).toBe(48);
       expect(clip.globalStartFrame).toBe(1);
@@ -85,15 +99,15 @@ describe('OTIOWriter E2E', () => {
       expect(otioClips[2]!.globalStartFrame).toBe(73);
     });
 
-    it('E2E-OTIO-003: empty sourceUrl is acceptable for export', () => {
+    it('E2E-OTIO-003: sourceUrl falls back to sourceName when no resolver', () => {
       manager.addClip(0, 'shot', 1, 24);
       const otioClips = playlistClipsToOTIOClips(manager, 24);
 
-      // Export with empty URL should still produce valid JSON
+      // Without resolver, sourceUrl = sourceName (not empty)
       const json = exportOTIO(otioClips, { fps: 24 });
       const parsed = JSON.parse(json);
       const clip = parsed.tracks.children[0].children[0];
-      expect(clip.media_reference.target_url).toBe('');
+      expect(clip.media_reference.target_url).toBe('shot');
       expect(clip.media_reference.OTIO_SCHEMA).toBe('ExternalReference.1');
     });
 
@@ -563,6 +577,109 @@ describe('OTIOWriter E2E', () => {
 
       expect(children[0].source_range.start_time.rate).toBe(24);
       expect(children[1].source_range.start_time.rate).toBe(30);
+    });
+  });
+
+  // =========================================================================
+  // Regression: source URL population (Issue #46)
+  // =========================================================================
+
+  describe('source URL population (Issue #46)', () => {
+    let manager: PlaylistManager;
+
+    beforeEach(() => {
+      manager = new PlaylistManager();
+    });
+
+    afterEach(() => {
+      manager.dispose();
+    });
+
+    it('E2E-OTIO-070: clips with resolver get source URLs in export', () => {
+      manager.addClip(0, 'shot_A.exr', 1, 48);
+      manager.addClip(1, 'shot_B.mov', 10, 33);
+
+      const resolver = (index: number): string | null => {
+        const urls: Record<number, string> = {
+          0: 'file:///media/shot_A.exr',
+          1: 'https://cdn.example.com/shot_B.mov',
+        };
+        return urls[index] ?? null;
+      };
+
+      const otioClips = playlistClipsToOTIOClips(manager, 24, resolver);
+      const json = exportOTIO(otioClips, { name: 'Test', fps: 24 });
+      const parsed = JSON.parse(json);
+      const children = parsed.tracks.children[0].children;
+
+      expect(children[0].media_reference.target_url).toBe('file:///media/shot_A.exr');
+      expect(children[1].media_reference.target_url).toBe('https://cdn.example.com/shot_B.mov');
+    });
+
+    it('E2E-OTIO-071: clips without resolver fall back to sourceName', () => {
+      manager.addClip(0, 'shot_A.exr', 1, 48);
+
+      const otioClips = playlistClipsToOTIOClips(manager, 24);
+      const json = exportOTIO(otioClips, { fps: 24 });
+      const parsed = JSON.parse(json);
+      const clip = parsed.tracks.children[0].children[0];
+
+      // Should use sourceName as fallback, not empty string
+      expect(clip.media_reference.target_url).toBe('shot_A.exr');
+      expect(clip.media_reference.target_url).not.toBe('');
+    });
+
+    it('E2E-OTIO-072: resolver returning null falls back to sourceName', () => {
+      manager.addClip(99, 'unknown_clip.dpx', 1, 24);
+
+      const resolver = (): string | null => null;
+      const otioClips = playlistClipsToOTIOClips(manager, 24, resolver);
+
+      expect(otioClips[0]!.sourceUrl).toBe('unknown_clip.dpx');
+
+      const json = exportOTIO(otioClips, { fps: 24 });
+      const parsed = JSON.parse(json);
+      const clip = parsed.tracks.children[0].children[0];
+      expect(clip.media_reference.target_url).toBe('unknown_clip.dpx');
+    });
+
+    it('E2E-OTIO-073: OTIO writer preserves source URL through serialization', () => {
+      const clips: OTIOExportClip[] = [
+        {
+          sourceName: 'my_shot',
+          sourceUrl: 'file:///path/to/my_shot.exr',
+          inPoint: 1,
+          outPoint: 100,
+          globalStartFrame: 1,
+          duration: 100,
+          fps: 24,
+        },
+      ];
+      const json = exportOTIO(clips, { fps: 24 });
+      const parsed = JSON.parse(json);
+      const clip = parsed.tracks.children[0].children[0];
+
+      expect(clip.media_reference.OTIO_SCHEMA).toBe('ExternalReference.1');
+      expect(clip.media_reference.target_url).toBe('file:///path/to/my_shot.exr');
+    });
+
+    it('E2E-OTIO-074: round-trip preserves source URLs', () => {
+      manager.addClip(0, 'shot_A', 1, 48);
+      manager.addClip(1, 'shot_B', 10, 33);
+
+      const resolver = (index: number): string | null => {
+        return index === 0 ? 'file:///shot_A.exr' : 'file:///shot_B.mov';
+      };
+
+      const otioClips = playlistClipsToOTIOClips(manager, 24, resolver);
+      const json = exportOTIO(otioClips, { name: 'Round Trip URL', fps: 24 });
+
+      // Parse back
+      const result = parseOTIO(json);
+      expect(result).not.toBeNull();
+      expect(result!.clips).toHaveLength(2);
+      expect(result!.clips[0]!.sourceUrl).toBe('file:///shot_A.exr');
+      expect(result!.clips[1]!.sourceUrl).toBe('file:///shot_B.mov');
     });
   });
 });

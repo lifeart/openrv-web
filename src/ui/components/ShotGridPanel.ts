@@ -302,6 +302,11 @@ export class ShotGridPanel extends EventEmitter<ShotGridPanelEvents> {
       return moviePath;
     }
 
+    // Fall back to frame-sequence path when no movie URL is available
+    if (version.sg_path_to_frames) {
+      return version.sg_path_to_frames;
+    }
+
     return null;
   }
 
@@ -455,10 +460,14 @@ export class ShotGridPanel extends EventEmitter<ShotGridPanelEvents> {
 
     // Media availability indicator
     const mediaUrl = this.resolveMediaUrl(version);
-    if (!mediaUrl && version.sg_path_to_frames) {
+    const isFrameSequence = !version.sg_uploaded_movie?.url &&
+      !(version.sg_path_to_movie && (version.sg_path_to_movie.startsWith('http://') || version.sg_path_to_movie.startsWith('https://'))) &&
+      !!version.sg_path_to_frames;
+    if (isFrameSequence) {
       const framesLabel = document.createElement('div');
+      framesLabel.dataset.testid = 'shotgrid-frame-sequence-label';
       framesLabel.style.cssText = 'font-size: 10px; color: var(--text-muted); margin-bottom: 6px;';
-      framesLabel.textContent = 'Frame sequence only';
+      framesLabel.textContent = 'Frame sequence';
       row.appendChild(framesLabel);
     } else if (!mediaUrl) {
       const noMediaLabel = document.createElement('div');

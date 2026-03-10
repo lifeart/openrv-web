@@ -159,6 +159,14 @@ export class ShotGridIntegrationBridge {
         const gen = this.generation;
 
         try {
+          const isFrameSequencePath = mediaUrl === version.sg_path_to_frames &&
+            !version.sg_uploaded_movie?.url &&
+            !(version.sg_path_to_movie && (version.sg_path_to_movie.startsWith('http://') || version.sg_path_to_movie.startsWith('https://')));
+
+          if (isFrameSequencePath) {
+            console.info(`[ShotGrid] Loading frame sequence path: ${mediaUrl}`);
+          }
+
           const isVideo = /\.(mp4|mov|webm|mkv)(\?|$)/i.test(mediaUrl);
           if (isVideo) {
             await this.session.loadVideo(version.code, mediaUrl);

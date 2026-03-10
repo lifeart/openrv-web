@@ -58,6 +58,7 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
   private exclusivePanel: ExclusivePanel | null = null;
   private activeClipId: string | null = null;
   private fps = 24;
+  private sourceUrlResolver: ((sourceIndex: number) => string | null) | null = null;
 
   constructor(playlistManager: PlaylistManager) {
     super();
@@ -801,15 +802,33 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
 
   private exportOTIO(): void {
     const clips = this.playlistManager.getClips();
-    const otioClips: OTIOExportClip[] = clips.map((clip) => ({
-      sourceName: clip.sourceName,
-      sourceUrl: '',
-      inPoint: clip.inPoint,
-      outPoint: clip.outPoint,
-      globalStartFrame: clip.globalStartFrame,
-      duration: clip.duration,
-      fps: this.fps,
-    }));
+    const otioClips: OTIOExportClip[] = clips.map((clip) => {
+      let sourceUrl = '';
+      if (this.sourceUrlResolver) {
+        const resolved = this.sourceUrlResolver(clip.sourceIndex);
+        if (resolved) {
+          sourceUrl = resolved;
+        } else {
+          // Fall back to sourceName if resolver returns null
+          sourceUrl = clip.sourceName;
+          console.warn(
+            `[PlaylistPanel] No source URL found for clip "${clip.sourceName}" (sourceIndex=${clip.sourceIndex}), using name as fallback`,
+          );
+        }
+      } else {
+        // No resolver configured — fall back to sourceName
+        sourceUrl = clip.sourceName;
+      }
+      return {
+        sourceName: clip.sourceName,
+        sourceUrl,
+        inPoint: clip.inPoint,
+        outPoint: clip.outPoint,
+        globalStartFrame: clip.globalStartFrame,
+        duration: clip.duration,
+        fps: this.fps,
+      };
+    });
     const json = exportOTIO(otioClips, { name: 'OpenRV Playlist', fps: this.fps });
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -826,6 +845,11 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
   }
 
   // Public methods
+
+  /** Set a resolver that maps source indices to their media URLs for OTIO export */
+  setSourceUrlResolver(resolver: (sourceIndex: number) => string | null): void {
+    this.sourceUrlResolver = resolver;
+  }
 
   /** Set the frames-per-second used for EDL/OTIO export timecodes */
   setFps(fps: number): void {

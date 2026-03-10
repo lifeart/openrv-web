@@ -185,10 +185,11 @@ describe('ShotGridPanel', () => {
     expect(panel.resolveMediaUrl(version)).toBe('https://storage.example.com/movie.mov');
   });
 
-  it('SG-PNL-012: resolveMediaUrl returns null for local paths', () => {
+  it('SG-PNL-012: resolveMediaUrl returns null for local movie path without frame path', () => {
     const version = makeVersion({
       sg_uploaded_movie: null,
       sg_path_to_movie: '/mnt/storage/movie.mov',
+      sg_path_to_frames: '',
     });
 
     expect(panel.resolveMediaUrl(version)).toBeNull();
@@ -277,5 +278,94 @@ describe('ShotGridPanel', () => {
     // Verify no 'status' key in the emitted object
     const emittedArg = onPushStatus.mock.calls[0]![0];
     expect(Object.keys(emittedArg)).toEqual(['versionId', 'sourceIndex']);
+  });
+
+  it('SG-PNL-020: resolveMediaUrl returns frame path when no movie URL exists', () => {
+    const version = makeVersion({
+      sg_uploaded_movie: null,
+      sg_path_to_movie: '/local/path.mov',
+      sg_path_to_frames: '/path/to/frames/shot.####.exr',
+    });
+
+    expect(panel.resolveMediaUrl(version)).toBe('/path/to/frames/shot.####.exr');
+  });
+
+  it('SG-PNL-021: Load button is enabled for frame-sequence-only versions', () => {
+    panel.setConnected(true);
+    panel.setVersions([
+      makeVersion({
+        sg_uploaded_movie: null,
+        sg_path_to_movie: '',
+        sg_path_to_frames: '/path/to/frames/shot.####.exr',
+      }),
+    ]);
+    panel.show();
+
+    const loadBtn = document.body.querySelector<HTMLButtonElement>('[data-testid="shotgrid-load-version"]')!;
+    expect(loadBtn.disabled).toBe(false);
+
+    const framesLabel = document.body.querySelector('[data-testid="shotgrid-frame-sequence-label"]');
+    expect(framesLabel).toBeTruthy();
+    expect(framesLabel!.textContent).toBe('Frame sequence');
+  });
+
+  it('SG-PNL-022: Load button emits mediaUrl for frame-sequence-only versions', () => {
+    panel.setConnected(true);
+    const version = makeVersion({
+      sg_uploaded_movie: null,
+      sg_path_to_movie: '',
+      sg_path_to_frames: '/path/to/frames/shot.####.exr',
+    });
+    panel.setVersions([version]);
+    panel.show();
+
+    const onLoad = vi.fn();
+    panel.on('loadVersion', onLoad);
+
+    const loadBtn = document.body.querySelector<HTMLButtonElement>('[data-testid="shotgrid-load-version"]')!;
+    loadBtn.click();
+
+    expect(onLoad).toHaveBeenCalledWith({
+      version,
+      mediaUrl: '/path/to/frames/shot.####.exr',
+    });
+  });
+
+  it('SG-PNL-023: versions with neither movie URL nor frame path remain disabled', () => {
+    panel.setConnected(true);
+    panel.setVersions([
+      makeVersion({
+        sg_uploaded_movie: null,
+        sg_path_to_movie: '',
+        sg_path_to_frames: '',
+      }),
+    ]);
+    panel.show();
+
+    const loadBtn = document.body.querySelector<HTMLButtonElement>('[data-testid="shotgrid-load-version"]')!;
+    expect(loadBtn.disabled).toBe(true);
+
+    const noMedia = document.body.querySelector('[data-testid="shotgrid-no-media"]');
+    expect(noMedia).toBeTruthy();
+    expect(noMedia!.textContent).toBe('No media');
+  });
+
+  it('SG-PNL-024: resolveMediaUrl still prioritizes uploaded movie over frame path', () => {
+    const version = makeVersion({
+      sg_uploaded_movie: { url: 'https://s3.example.com/movie.mp4' },
+      sg_path_to_frames: '/path/to/frames/shot.####.exr',
+    });
+
+    expect(panel.resolveMediaUrl(version)).toBe('https://s3.example.com/movie.mp4');
+  });
+
+  it('SG-PNL-025: resolveMediaUrl prioritizes HTTP movie path over frame path', () => {
+    const version = makeVersion({
+      sg_uploaded_movie: null,
+      sg_path_to_movie: 'https://storage.example.com/movie.mov',
+      sg_path_to_frames: '/path/to/frames/shot.####.exr',
+    });
+
+    expect(panel.resolveMediaUrl(version)).toBe('https://storage.example.com/movie.mov');
   });
 });

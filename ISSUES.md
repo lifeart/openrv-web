@@ -2045,6 +2045,144 @@ This file tracks findings from exploratory review and targeted validation runs.
   - A user’s nearest-neighbor/bilinear QC preference persists locally, but disappears when they rely on the app’s real preferences export/import path.
   - That makes viewer behavior less portable than the rest of the settings model implies.
 
+### 166. Display profile state is applied as a real persisted viewer preference, but unified preferences export/import omits it
+
+- Severity: Medium
+- Area: Display preferences / backup portability
+- Evidence:
+  - Display-profile persistence uses the formal preference key `openrv-display-profile` in [src/utils/preferences/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/utils/preferences/PreferencesManager.ts#L18).
+  - The control loads and saves that state through `loadDisplayProfile()` / `saveDisplayProfile()` in [src/color/DisplayTransfer.ts](/Users/lifeart/Repos/openrv-web/src/color/DisplayTransfer.ts#L207).
+  - The app applies the persisted display-profile state to the real viewer on startup in [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L707).
+  - But the unified preferences payload has no `displayProfile` field in [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L57), and `importAll()` likewise has no display-profile branch in [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L356).
+- Impact:
+  - Users can tune the display transfer/gamma/brightness and see that state persist locally across reloads, but it disappears when they use the app’s real preferences export/import flow.
+  - That makes display calibration one of the shipped viewer settings that is not actually portable with the rest of the saved preferences.
+
+### 167. Timeline timecode-display mode persists locally but is outside unified preferences backup/import/reset
+
+- Severity: Medium
+- Area: Timeline preferences / backup portability
+- Evidence:
+  - The timeline stores its chosen display mode under a standalone localStorage key `openrv.timeline.displayMode` in [src/ui/components/Timeline.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Timeline.ts#L43).
+  - It restores that mode on construction in [src/ui/components/Timeline.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Timeline.ts#L136) and saves changes whenever the user toggles display mode in [src/ui/components/Timeline.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Timeline.ts#L438).
+  - The unified preferences payload exported by `PreferencesManager` does not include any timeline display-mode field in [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L454).
+  - `resetAll()` only clears `PREFERENCE_STORAGE_KEYS` plus `CORE_PREFERENCE_STORAGE_KEYS` in [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L433), and `openrv.timeline.displayMode` is not one of those keys.
+- Impact:
+  - A user’s chosen Frames / Timecode / Seconds / Footage view survives page reloads on one machine, but it is neither exportable/importable nor reset by the app’s “all preferences” workflow.
+  - So timeline display behavior can unexpectedly survive a global reset or fail to travel with a preferences backup.
+
+### 168. Missing-frame overlay mode persists locally but bypasses the app’s real preferences portability/reset flow
+
+- Severity: Medium
+- Area: Viewer preferences / backup portability
+- Evidence:
+  - The shipped View tab exposes a real missing-frame mode selector that calls `viewer.setMissingFrameMode(...)` in [src/services/tabContent/buildViewTab.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildViewTab.ts#L184) and [src/services/tabContent/buildViewTab.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildViewTab.ts#L324).
+  - The viewer persists that mode under its own standalone key `openrv.missingFrameMode` in [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L184), restores it on startup in [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L1155), and writes it back on change in [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L1167).
+  - The unified preferences export/import payload in [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L454) has no field for that setting.
+  - `resetAll()` also does not clear `openrv.missingFrameMode`, because it only removes the registered preference-key sets in [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L433).
+- Impact:
+  - Missing-frame behavior is a real shipped viewer choice that survives reloads, but it does not survive preferences export/import and is not actually covered by “reset all preferences.”
+  - That leaves a user-visible viewer mode sticky in ways the rest of the settings model does not explain.
+
+### 169. Multi-source layout persistence exists in code and tests, but production never calls it
+
+- Severity: Medium
+- Area: Multi-source layout / persistence wiring
+- Evidence:
+  - `MultiSourceLayoutStore` implements explicit local persistence via `saveToStorage()` / `loadFromStorage()` using `openrv-multi-source-layout` in [src/ui/multisource/MultiSourceLayoutStore.ts](/Users/lifeart/Repos/openrv-web/src/ui/multisource/MultiSourceLayoutStore.ts#L27) and [src/ui/multisource/MultiSourceLayoutStore.ts](/Users/lifeart/Repos/openrv-web/src/ui/multisource/MultiSourceLayoutStore.ts#L313).
+  - The shipped UI creates the real control with a default `MultiSourceLayoutManager(new MultiSourceLayoutStore())` in [src/ui/components/MultiSourceLayoutControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/MultiSourceLayoutControl.ts#L69) and [src/services/controls/createViewControls.ts](/Users/lifeart/Repos/openrv-web/src/services/controls/createViewControls.ts#L39).
+  - A production source search only finds `saveToStorage()` / `loadFromStorage()` references in the store itself and tests, not in runtime wiring, as shown by [src/ui/multisource/MultiSourceLayoutStore.ts](/Users/lifeart/Repos/openrv-web/src/ui/multisource/MultiSourceLayoutStore.ts#L314).
+- Impact:
+  - Multi-source layout options look like a persisted feature on paper, but real users do not get reload persistence because the save/load methods are never invoked.
+  - The codebase and tests imply a remembered layout experience that the shipped app does not actually deliver.
+
+### 170. Playback FPS reporting can contradict the dropped-frame counter
+
+- Severity: Medium
+- Area: Playback metrics / viewer diagnostics
+- Evidence:
+  - `PlaybackEngine.advanceFrame()` explicitly documents that `trackFrameAdvance()` is called for skipped frames too, which inflates the measured FPS, in [src/core/session/PlaybackEngine.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaybackEngine.ts#L1012).
+  - The same emitted measurement object also carries the real dropped-frame count in [src/core/session/PlaybackEngine.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaybackEngine.ts#L1027).
+  - The FPS overlay renders both values side by side, showing green/yellow/red FPS plus a `N skipped` counter, in [src/ui/components/FPSIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/FPSIndicator.ts#L233) and [src/ui/components/FPSIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/FPSIndicator.ts#L257).
+- Impact:
+  - The diagnostics UI can show apparently healthy real-time FPS while simultaneously reporting skipped frames, which is exactly the opposite of what users rely on that indicator to judge.
+  - That weakens the QC value of the shipped FPS overlay during stressed playback.
+
+### 171. Snapshot export is one-way in the shipped UI
+
+- Severity: Medium
+- Area: Snapshot workflow / interchange
+- Evidence:
+  - `SnapshotManager` implements both `exportSnapshot(...)` and `importSnapshot(...)` in [src/core/session/SnapshotManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SnapshotManager.ts#L453) and [src/core/session/SnapshotManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SnapshotManager.ts#L508).
+  - The shipped `SnapshotPanel` advertises actions `Preview, Restore, Export, Delete, Rename` in its own header comment in [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L6).
+  - A production source search finds no runtime caller of `importSnapshot(...)` outside the manager itself.
+  - The panel implements an Export action in [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L428) and [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L569), but there is no corresponding import control or wiring.
+- Impact:
+  - Users can export snapshot JSON from the app, but they cannot bring that snapshot back through the shipped UI.
+  - That makes snapshot interchange effectively one-way despite the underlying manager already supporting both directions.
+
+### 172. The unified preferences export/import/reset system is effectively unreachable in production UI
+
+- Severity: Medium
+- Area: Preferences workflow / UI wiring
+- Evidence:
+  - The core preferences facade implements `exportAll()`, `importAll(...)`, and `resetAll()` in [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L352) and [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L433).
+  - The app only wires live subsystems into that facade via `setSubsystems(...)` in [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L430).
+  - A production source search finds no runtime caller of `PreferencesManager.exportAll()`, `importAll(...)`, or `resetAll()` outside the class itself and tests.
+- Impact:
+  - The app has a nominal “unified preferences” portability/reset system, but users cannot actually invoke it from the shipped UI.
+  - That makes all of the backup/import/reset logic much less useful in practice than the code structure suggests.
+
+### 173. Annotation JSON support is export-only in the shipped app
+
+- Severity: Medium
+- Area: Annotation workflow / interchange
+- Evidence:
+  - The export menu exposes `Export Annotations (JSON)` in [src/ui/components/ExportControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ExportControl.ts#L197).
+  - Playback wiring hooks that menu item to `downloadAnnotationsJSON(...)` in [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L167).
+  - The annotation utility layer also implements `parseAnnotationsJSON(...)` and `applyAnnotationsJSON(...)` in [src/utils/export/AnnotationJSONExporter.ts](/Users/lifeart/Repos/openrv-web/src/utils/export/AnnotationJSONExporter.ts#L179) and [src/utils/export/AnnotationJSONExporter.ts](/Users/lifeart/Repos/openrv-web/src/utils/export/AnnotationJSONExporter.ts#L218).
+  - A production source search finds no runtime caller of `parseAnnotationsJSON(...)` or `applyAnnotationsJSON(...)`.
+- Impact:
+  - Users can export annotations to JSON, but the shipped app provides no way to re-import that JSON.
+  - That makes the annotation JSON format effectively archival/export-only rather than a practical interchange workflow.
+
+### 174. Marker import is merge-only in the shipped UI and silently drops frame collisions
+
+- Severity: Medium
+- Area: Marker workflow / interchange
+- Evidence:
+  - The marker panel’s Import button always calls `importMarkers('merge')` in [src/ui/components/MarkerListPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/MarkerListPanel.ts#L173).
+  - The panel code supports both `replace` and `merge` modes in [src/ui/components/MarkerListPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/MarkerListPanel.ts#L325), but the shipped UI exposes only the merge path.
+  - In merge mode, imported markers that land on a frame that already has a marker are silently skipped in [src/ui/components/MarkerListPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/MarkerListPanel.ts#L373).
+- Impact:
+  - Users cannot faithfully restore a marker export over an existing session from the shipped UI unless they manually clear markers first.
+  - Even then, accidental frame collisions during import are silently lost instead of being surfaced or resolved.
+
+### 175. The shipped export UI ignores the app’s saved export-default preferences
+
+- Severity: Medium
+- Area: Export workflow / preferences
+- Evidence:
+  - The app defines persisted export defaults such as `defaultFormat`, `defaultQuality`, and `includeAnnotations` in [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L42) and exposes them through `getExportDefaults()` in [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L319).
+  - A production source search finds no runtime consumer of `getExportDefaults()` outside `PreferencesManager` itself.
+  - The shipped export UI hardcodes its emitted values instead: single-frame export uses `quality: 0.92` in [src/ui/components/ExportControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ExportControl.ts#L419), source export uses `0.92` in [src/ui/components/ExportControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ExportControl.ts#L431), and sequence export hardcodes `format: 'png'` plus `quality: 0.95` in [src/ui/components/ExportControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ExportControl.ts#L438).
+- Impact:
+  - Users can persist export defaults in the preferences model, but the real export menu never honors them.
+  - So exported files keep using hardcoded defaults instead of the user’s saved export behavior.
+
+### 176. The export menu’s `Include annotations` option does not apply to `Copy to Clipboard`
+
+- Severity: Medium
+- Area: Export UI / behavior consistency
+- Evidence:
+  - `ExportControl` presents a shared `Include annotations` checkbox for the export menu in [src/ui/components/ExportControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ExportControl.ts#L303).
+  - Single-frame and sequence exports read that checkbox through `getIncludeAnnotations()` / `annotationsCheckbox?.checked` in [src/ui/components/ExportControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ExportControl.ts#L415) and [src/ui/components/ExportControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ExportControl.ts#L438).
+  - But `Copy to Clipboard` emits only `copyRequested` with no annotation flag in [src/ui/components/ExportControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ExportControl.ts#L427).
+  - Playback wiring hardcodes that path to `viewer.copyFrameToClipboard(true)` in [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L140), and the keyboard action does the same in [src/services/KeyboardActionMap.ts](/Users/lifeart/Repos/openrv-web/src/services/KeyboardActionMap.ts#L543).
+- Impact:
+  - Users can uncheck `Include annotations` and still get annotations copied to the clipboard.
+  - That makes the export menu internally inconsistent and undermines trust in the option’s meaning.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

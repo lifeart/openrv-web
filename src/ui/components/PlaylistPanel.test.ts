@@ -298,4 +298,15 @@ describe('PlaylistPanel', () => {
       document.body.removeChild(panel.render());
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // Source URL resolver (Issue #46)
+  // ---------------------------------------------------------------------------
+
+  describe('setSourceUrlResolver', () => {
+    it('PL-080: accepts a source URL resolver function', () => {
+      const resolver = vi.fn().mockReturnValue('file:///test.exr');
+      expect(() => panel.setSourceUrlResolver(resolver)).not.toThrow();
+    });
+  });
 });

@@ -409,6 +409,78 @@ describe('ConformPanel', () => {
       expect(statusBar.getAttribute('role')).toBe('status');
     });
 
+    it('CONFORM-015: browse button emits console.warn about missing host integration', () => {
+      setup([makeClip({ id: 'clip-1' })], [makeSource()]);
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const browseBtn = container.querySelector('.conform-browse') as HTMLButtonElement;
+      browseBtn.click();
+
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(warnSpy.mock.calls[0]![0]).toContain('conform-browse');
+      expect(warnSpy.mock.calls[0]![0]).toContain('not yet connected');
+      warnSpy.mockRestore();
+    });
+
+    it('CONFORM-016: folder relink button emits console.warn about missing host integration', () => {
+      setup([makeClip()], []);
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const folderBtn = container.querySelector('.conform-folder-relink') as HTMLButtonElement;
+      folderBtn.click();
+
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(warnSpy.mock.calls[0]![0]).toContain('conform-browse-folder');
+      expect(warnSpy.mock.calls[0]![0]).toContain('not yet connected');
+      warnSpy.mockRestore();
+    });
+
+    it('CONFORM-017: browse button still dispatches DOM event after warning', () => {
+      setup([makeClip({ id: 'clip-1' })], [makeSource()]);
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const handler = vi.fn();
+      container.addEventListener('conform-browse', handler);
+
+      const browseBtn = container.querySelector('.conform-browse') as HTMLButtonElement;
+      browseBtn.click();
+
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(handler).toHaveBeenCalledTimes(1);
+      const detail = (handler.mock.calls[0]![0] as CustomEvent).detail;
+      expect(detail.clipId).toBe('clip-1');
+      warnSpy.mockRestore();
+    });
+
+    it('CONFORM-018: folder relink button still dispatches DOM event after warning', () => {
+      setup([makeClip()], []);
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const handler = vi.fn();
+      container.addEventListener('conform-browse-folder', handler);
+
+      const folderBtn = container.querySelector('.conform-folder-relink') as HTMLButtonElement;
+      folderBtn.click();
+
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(handler).toHaveBeenCalledTimes(1);
+      warnSpy.mockRestore();
+    });
+
+    it('CONFORM-019: browse button has tooltip indicating host integration required', () => {
+      setup([makeClip({ id: 'clip-1' })], [makeSource()]);
+
+      const browseBtn = container.querySelector('.conform-browse') as HTMLButtonElement;
+      expect(browseBtn.title).toContain('requires host integration');
+    });
+
+    it('CONFORM-020: folder relink button has tooltip indicating host integration required', () => {
+      setup([makeClip()], []);
+
+      const folderBtn = container.querySelector('.conform-folder-relink') as HTMLButtonElement;
+      expect(folderBtn.title).toContain('requires host integration');
+    });
+
     it('suggestions select has aria-label', () => {
       setup([makeClip({ id: 'clip-1', name: 'Shot 010' })], [makeSource({ index: 0, name: 'shot_010_comp_v02.exr' })]);
 

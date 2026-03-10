@@ -409,3 +409,43 @@
 - **Regression Tests**: HSL-U070 through HSL-U076 (toggle close deactivates, callback fires on toggle close, outside click deactivates, callback fires on outside click, button style reset, no spurious callback when inactive, dispose cleanup).
 - **Verification**: All 37 HSLQualifierControl tests pass, TypeScript clean.
 - **Files Changed**: `src/ui/components/HSLQualifierControl.ts`, `src/ui/components/HSLQualifierControl.test.ts`
+
+## Issue #46: Playlist OTIO export produces clips with empty media references
+
+- **Severity**: Medium
+- **Area**: Playlist UI, interchange/export usefulness
+- **Root Cause**: `exportOTIO()` mapped every clip to `sourceUrl: ''`. No mechanism to resolve clip source indices to actual URLs.
+- **Fix**: Added `sourceUrlResolver` callback to `PlaylistPanel` (settable via `setSourceUrlResolver()`). `exportOTIO()` now resolves each clip's `sourceIndex` to a URL, falls back to `clip.sourceName` if resolver returns null or is unconfigured, and emits `console.warn` when resolver returns null. Wired in `createPanelControls.ts` using `session.allSources` lookup.
+- **Regression Tests**: PL-080 (resolver API), E2E-OTIO-070 through E2E-OTIO-074 (resolver provides URLs, no resolver fallback, null resolver fallback, URL preservation through serialization, round-trip).
+- **Verification**: All 47 tests pass (21 PlaylistPanel + 26 OTIOWriter), TypeScript clean.
+- **Files Changed**: `src/ui/components/PlaylistPanel.ts`, `src/services/controls/createPanelControls.ts`, `src/ui/components/PlaylistPanel.test.ts`, `src/__e2e__/OTIOWriter.e2e.test.ts`
+
+## Issue #47: ShotGrid versions with frame-sequence paths are shown but cannot actually be loaded from the panel
+
+- **Severity**: Medium
+- **Area**: ShotGrid integration UI, media loading
+- **Root Cause**: `resolveMediaUrl()` only accepted uploaded movie URLs or HTTP movie paths. Versions with only `sg_path_to_frames` got `null` mediaUrl, disabling the Load button. The bridge silently ignored null URLs.
+- **Fix**: Extended `resolveMediaUrl()` to fall back to `version.sg_path_to_frames` when no movie URL exists. Load button now enabled for frame-sequence-only versions. Bridge detects frame-sequence paths and logs `console.info`. Priority order preserved: uploaded movie > HTTP movie path > frame path. Versions with nothing remain disabled.
+- **Regression Tests**: SG-PNL-020 through SG-PNL-025 (frame path resolution, Load button enabled, click emits URL, no-media disabled, priority order), SG-INT-013/014 (bridge frame path handling, no log for regular URLs).
+- **Verification**: All 39 tests pass (25 ShotGridPanel + 14 Bridge), TypeScript clean.
+- **Files Changed**: `src/ui/components/ShotGridPanel.ts`, `src/integrations/ShotGridIntegrationBridge.ts`, `src/ui/components/ShotGridPanel.test.ts`, `src/integrations/ShotGridIntegrationBridge.test.ts`
+
+## Issue #48: History can be cleared in one click with no confirmation, unlike other destructive review panels
+
+- **Severity**: Low
+- **Area**: History UI, destructive action safety
+- **Root Cause**: `clearHistory()` immediately called `historyManager.clear()` with no confirmation, unlike MarkerListPanel and SnapshotPanel which both use `showConfirm()`.
+- **Fix**: Made `clearHistory()` async, added `showConfirm()` dialog with entry count before clearing. Skips confirmation when history is already empty. Matches pattern used by MarkerListPanel and SnapshotPanel.
+- **Regression Tests**: HP-035 (updated: confirm shown), HP-036 (clear shows confirmation), HP-037 (cancel does not clear), HP-038 (no confirm when empty).
+- **Verification**: All 28 HistoryPanel tests pass, TypeScript clean.
+- **Files Changed**: `src/ui/components/HistoryPanel.ts`, `src/ui/components/HistoryPanel.test.ts`
+
+## Issue #49: Conform panel browse-based relinking is stubbed out in production
+
+- **Severity**: Medium
+- **Area**: Conform / Re-link UI, media recovery workflow
+- **Root Cause**: Browse and Re-link by Folder buttons dispatched custom DOM events but no production code listened for them. Buttons appeared functional but did nothing.
+- **Fix**: Added `console.warn` to both `browseForClip()` and `browseFolder()` explaining they require host integration listeners. Added tooltips to both buttons indicating host integration required. DOM events still dispatched after warning (preserving the integration contract).
+- **Regression Tests**: CONFORM-015 through CONFORM-020 (Browse/Folder warn on click, DOM events still dispatched, tooltips present).
+- **Verification**: All 41 ConformPanel tests pass, TypeScript clean.
+- **Files Changed**: `src/ui/components/ConformPanel.ts`, `src/ui/components/ConformPanel.test.ts`

@@ -309,6 +309,7 @@ export class ConformPanel {
       const browseBtn = document.createElement('button');
       browseBtn.className = 'conform-browse';
       browseBtn.textContent = 'Browse...';
+      browseBtn.title = 'Browse for source file (requires host integration)';
       browseBtn.addEventListener('click', () => this.browseForClip(entry.clip.id));
       row.appendChild(browseBtn);
 
@@ -331,6 +332,7 @@ export class ConformPanel {
     const folderBtn = document.createElement('button');
     folderBtn.className = 'conform-folder-relink';
     folderBtn.textContent = 'Re-link by Folder...';
+    folderBtn.title = 'Re-link clips from a folder (requires host integration)';
     folderBtn.addEventListener('click', () => this.browseFolder());
 
     toolbar.appendChild(autoBtn);
@@ -351,6 +353,11 @@ export class ConformPanel {
     const sources = this.manager.getAvailableSources();
     if (sources.length === 0) return;
 
+    console.warn(
+      `[ConformPanel] Browse for clip "${clipId}" is not yet connected to a file picker. ` +
+        'A host integration listener for the "conform-browse" event is required.',
+    );
+
     // In a real implementation this would open a file picker.
     // For testability, we dispatch a custom event that the host can handle.
     const event = new CustomEvent('conform-browse', {
@@ -361,6 +368,11 @@ export class ConformPanel {
   }
 
   private browseFolder(): void {
+    console.warn(
+      '[ConformPanel] Re-link by Folder is not yet connected to a folder picker. ' +
+        'A host integration listener for the "conform-browse-folder" event is required.',
+    );
+
     const event = new CustomEvent('conform-browse-folder', {
       bubbles: true,
     });

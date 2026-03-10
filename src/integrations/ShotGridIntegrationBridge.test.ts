@@ -424,4 +424,70 @@ describe('ShotGridIntegrationBridge', () => {
       expect(mockBridgeInstance.pushNote).toHaveBeenCalledTimes(1);
     }
   });
+
+  it('SG-INT-013: loadVersion handles frame-sequence path and logs info', async () => {
+    configUI.emit('connect', {
+      serverUrl: 'https://studio.shotgrid.autodesk.com',
+      scriptName: 'test',
+      apiKey: 'key',
+      projectId: 42,
+    });
+
+    await vi.waitFor(() => {
+      expect(configUI.setState).toHaveBeenCalledWith('connected');
+    });
+
+    const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+
+    const version = makeVersion({
+      sg_uploaded_movie: null,
+      sg_path_to_movie: '/local/path.mov',
+      sg_path_to_frames: '/path/to/frames/shot.####.exr',
+    });
+
+    panel.emit('loadVersion', {
+      version,
+      mediaUrl: '/path/to/frames/shot.####.exr',
+    });
+
+    await vi.waitFor(() => {
+      expect(session.loadImage).toHaveBeenCalledWith('shot010_comp_v003', '/path/to/frames/shot.####.exr');
+    });
+
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Loading frame sequence path'),
+    );
+
+    consoleSpy.mockRestore();
+  });
+
+  it('SG-INT-014: loadVersion does not log frame-sequence info for movie URLs', async () => {
+    configUI.emit('connect', {
+      serverUrl: 'https://studio.shotgrid.autodesk.com',
+      scriptName: 'test',
+      apiKey: 'key',
+      projectId: 42,
+    });
+
+    await vi.waitFor(() => {
+      expect(configUI.setState).toHaveBeenCalledWith('connected');
+    });
+
+    const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+
+    panel.emit('loadVersion', {
+      version: makeVersion({ sg_uploaded_movie: { url: 'https://s3.example.com/movie.mp4' } }),
+      mediaUrl: 'https://s3.example.com/movie.mp4',
+    });
+
+    await vi.waitFor(() => {
+      expect(session.loadVideo).toHaveBeenCalled();
+    });
+
+    expect(consoleSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining('Loading frame sequence path'),
+    );
+
+    consoleSpy.mockRestore();
+  });
 });

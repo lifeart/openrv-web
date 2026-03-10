@@ -13,6 +13,7 @@ import { HistoryManager, type HistoryEntry } from '../../utils/HistoryManager';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
 import { getIconSvg } from './shared/Icons';
+import { showConfirm } from './shared/Modal';
 import { OPACITY } from './shared/theme';
 
 export interface HistoryPanelEvents extends EventMap {
@@ -180,10 +181,19 @@ export class HistoryPanel extends EventEmitter<HistoryPanelEvents> {
   }
 
   /**
-   * Clear history
+   * Clear history with confirmation
    */
-  clearHistory(): void {
-    this.historyManager.clear();
+  async clearHistory(): Promise<void> {
+    const state = this.historyManager.getState();
+    const entryCount = state.entries.length;
+    if (entryCount === 0) return;
+
+    const confirmed = await showConfirm(
+      `Are you sure you want to clear all ${entryCount} history entr${entryCount > 1 ? 'ies' : 'y'}? This cannot be undone.`,
+    );
+    if (confirmed) {
+      this.historyManager.clear();
+    }
   }
 
   /**
