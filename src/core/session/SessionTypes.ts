@@ -110,7 +110,9 @@ export interface AudioPlaybackError {
 export interface SessionEvents extends EventMap {
   frameChanged: number;
   playbackChanged: boolean;
+  sourceLoadingStarted: { name: string };
   sourceLoaded: MediaSource;
+  sourceLoadFailed: { name: string };
   sessionLoaded: void;
   durationChanged: number;
   currentSourceChanged: number;

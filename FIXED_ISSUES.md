@@ -2274,3 +2274,13 @@
 - **Regression Tests**: 19 new tests covering: mode-gated dispatch (active fires, inactive doesn't), activate/deactivate lifecycle, multi-mode isolation, backward compat for empty/default modeName, scoped unbind, regex mode scoping, precedence (override > stack > mode-scoped > global), getBindingDocumentation mode filtering, and introspection.
 - **Verification**: All 504 compat tests pass (8 files), TypeScript clean.
 - **Files Changed**: `src/compat/ModeManager.ts`, `src/compat/MuEventBridge.ts`, `src/compat/__tests__/MuEventBridge.test.ts`
+
+## Issue #243: Mu compat progressive-loading state is disconnected from real media loading
+
+- **Severity**: Medium
+- **Area**: Mu compatibility / loading-progress scripting
+- **Root Cause**: `MuUtilsBridge` loading counters (`_loadTotal`, `_loadCount`, `_progressiveSourceLoading`) were private fields only mutated by `startPreloadingMedia()` and `setLoadCounters()`, neither of which had any production callers. No real media loading events were wired into the bridge, so scripts saw synthetic counters disconnected from actual activity.
+- **Fix**: (A) Added `sourceLoadingStarted` and `sourceLoadFailed` events to `SessionMedia`, emitted at the start of every loading method and in all error paths (9 loading methods wrapped with try/catch). Added suppress guard in `loadImageFile→loadImage` fallback to avoid double-counting, with `finally` reset to prevent flag leaks. (B) Wired both events through `Session.ts` forwarding and `EventsAPI.ts`. (C) Added `connectToEvents(events)` in `MuUtilsBridge` subscribing to `sourceLoadingStarted` (increments `_loadTotal`, sets `_progressiveSourceLoading = true`), `sourceLoaded` (increments `_loadCount`), and `sourceLoadFailed` (increments `_loadCount` — so failures don't stall the queue). (D) Added 30-second safety timeout to `waitForProgressiveLoading()`. (E) Added `_disposed` flag so `dispose()` cancels pending polling and resolves promises promptly. (F) Backward compat preserved for `setLoadCounters()` and `startPreloadingMedia()`.
+- **Regression Tests**: 17 new tests covering: event-driven counter updates, load failure counter increment, `waitForProgressiveLoading` resolution (normal/failure/timeout/already-complete), concurrent loads, dispose cancels polling, dispose removes all three event listeners, backward compat for manual counter APIs.
+- **Verification**: All 521 compat tests pass (8 files), TypeScript clean.
+- **Files Changed**: `src/core/session/SessionMedia.ts`, `src/core/session/SessionTypes.ts`, `src/core/session/Session.ts`, `src/api/EventsAPI.ts`, `src/compat/MuUtilsBridge.ts`, `src/compat/__tests__/MuUtilsBridge.test.ts`, `src/compat/index.ts`

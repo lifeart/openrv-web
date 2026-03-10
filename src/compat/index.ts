@@ -25,6 +25,7 @@ export { MuEvalBridge } from './MuEvalBridge';
 export { MuNetworkBridge } from './MuNetworkBridge';
 export { MuSettingsBridge } from './MuSettingsBridge';
 export { MuUtilsBridge } from './MuUtilsBridge';
+export type { LoadingEventSource } from './MuUtilsBridge';
 export * as stubs from './stubs';
 export * from './types';
 export * from './constants';

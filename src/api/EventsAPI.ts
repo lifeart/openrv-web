@@ -25,7 +25,9 @@ export type OpenRVEventName =
   | 'loopModeChange'
   | 'inOutChange'
   | 'markerChange'
+  | 'sourceLoadingStarted'
   | 'sourceLoaded'
+  | 'sourceLoadFailed'
   | 'error';
 
 /**
@@ -43,7 +45,9 @@ export interface OpenRVEventData {
   loopModeChange: { mode: string };
   inOutChange: { inPoint: number; outPoint: number };
   markerChange: { markers: Array<{ frame: number; note: string; color: string; endFrame?: number }> };
+  sourceLoadingStarted: { name: string };
   sourceLoaded: { name: string; type: string; width: number; height: number; duration: number; fps: number };
+  sourceLoadFailed: { name: string };
   error: { message: string; code?: string };
 }
 
@@ -61,7 +65,9 @@ const VALID_EVENTS: ReadonlySet<OpenRVEventName> = new Set([
   'loopModeChange',
   'inOutChange',
   'markerChange',
+  'sourceLoadingStarted',
   'sourceLoaded',
+  'sourceLoadFailed',
   'error',
 ]);
 
@@ -271,6 +277,12 @@ export class EventsAPI extends DisposableAPI {
     });
     this.internalUnsubscribers.push(unsubMarks);
 
+    // Source loading started
+    const unsubSourceStart = this.session.on('sourceLoadingStarted', (data) => {
+      this.emit('sourceLoadingStarted', { name: data.name });
+    });
+    this.internalUnsubscribers.push(unsubSourceStart);
+
     // Source loaded
     const unsubSource = this.session.on('sourceLoaded', (source) => {
       this.emit('sourceLoaded', {
@@ -283,6 +295,12 @@ export class EventsAPI extends DisposableAPI {
       });
     });
     this.internalUnsubscribers.push(unsubSource);
+
+    // Source load failed
+    const unsubSourceFail = this.session.on('sourceLoadFailed', (data) => {
+      this.emit('sourceLoadFailed', { name: data.name });
+    });
+    this.internalUnsubscribers.push(unsubSourceFail);
 
     // Error bridging — wire internal Session error events to the public error channel
 

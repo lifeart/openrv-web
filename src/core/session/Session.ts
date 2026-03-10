@@ -394,7 +394,9 @@ export class Session extends EventEmitter<SessionEvents> {
 
     // Forward SessionMedia events
     const mediaEvents = [
+      'sourceLoadingStarted',
       'sourceLoaded',
+      'sourceLoadFailed',
       'durationChanged',
       'currentSourceChanged',
       'unsupportedCodec',

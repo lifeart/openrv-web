@@ -28,7 +28,9 @@ import type {
 const log = new Logger('SessionMedia');
 
 export interface SessionMediaEvents extends EventMap {
+  sourceLoadingStarted: { name: string };
   sourceLoaded: MediaSource;
+  sourceLoadFailed: { name: string };
   durationChanged: number;
   currentSourceChanged: number;
   unsupportedCodec: UnsupportedCodecInfo;
@@ -98,6 +100,9 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
   private _proceduralCounter = 0;
   private _cacheManager: MediaCacheManager | null = null;
 
+  // Guard to suppress duplicate sourceLoadingStarted in fallback paths
+  private _suppressNextLoadingStarted = false;
+
   /** Representation manager for per-source media representation switching */
   private _representationManager = new MediaRepresentationManager();
 
@@ -154,6 +159,18 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
    */
   setCacheManager(cacheManager: MediaCacheManager): void {
     this._cacheManager = cacheManager;
+  }
+
+  /**
+   * Emit sourceLoadingStarted unless suppressed by a fallback guard.
+   * Used at the start of each loading method to signal that a load has begun.
+   */
+  private emitSourceLoadingStarted(name: string): void {
+    if (this._suppressNextLoadingStarted) {
+      this._suppressNextLoadingStarted = false;
+      return;
+    }
+    this.emit('sourceLoadingStarted', { name });
   }
 
   // --- Source accessors ---
@@ -302,43 +319,49 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
     },
   ): void {
     this._host!.clearGraphData();
+    this.emitSourceLoadingStarted(pattern);
 
-    const width = options?.width ?? 1920;
-    const height = options?.height ?? 1080;
-    const fps = options?.fps ?? this._host!.getFps();
-    const duration = options?.duration ?? 1;
+    try {
+      const width = options?.width ?? 1920;
+      const height = options?.height ?? 1080;
+      const fps = options?.fps ?? this._host!.getFps();
+      const duration = options?.duration ?? 1;
 
-    const node = new ProceduralSourceNode();
-    node.loadPattern(pattern, width, height, {
-      color: options?.color,
-      direction: options?.direction,
-      cellSize: options?.cellSize,
-      steps: options?.steps,
-      fps,
-      duration,
-    });
+      const node = new ProceduralSourceNode();
+      node.loadPattern(pattern, width, height, {
+        color: options?.color,
+        direction: options?.direction,
+        cellSize: options?.cellSize,
+        steps: options?.steps,
+        fps,
+        duration,
+      });
 
-    const metadata = node.getMetadata();
-    const sourceName = this.generateUniqueSourceName(pattern, metadata.width, metadata.height);
+      const metadata = node.getMetadata();
+      const sourceName = this.generateUniqueSourceName(pattern, metadata.width, metadata.height);
 
-    const source: MediaSource = {
-      type: 'image',
-      name: sourceName,
-      url: `movieproc://${pattern}`,
-      width: metadata.width,
-      height: metadata.height,
-      duration,
-      fps,
-      proceduralSourceNode: node,
-    };
+      const source: MediaSource = {
+        type: 'image',
+        name: sourceName,
+        url: `movieproc://${pattern}`,
+        width: metadata.width,
+        height: metadata.height,
+        duration,
+        fps,
+        proceduralSourceNode: node,
+      };
 
-    this.addSource(source);
-    this._host!.setInPoint(1);
-    this._host!.setOutPoint(duration);
-    this._host!.setCurrentFrame(1);
+      this.addSource(source);
+      this._host!.setInPoint(1);
+      this._host!.setOutPoint(duration);
+      this._host!.setCurrentFrame(1);
 
-    this.emit('sourceLoaded', source);
-    this.emit('durationChanged', duration);
+      this.emit('sourceLoaded', source);
+      this.emit('durationChanged', duration);
+    } catch (err) {
+      this.emit('sourceLoadFailed', { name: pattern });
+      throw err;
+    }
   }
 
   /**
@@ -346,32 +369,38 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
    */
   loadMovieProc(url: string): void {
     this._host!.clearGraphData();
+    this.emitSourceLoadingStarted(url);
 
-    const params = parseMovieProc(url);
-    const node = new ProceduralSourceNode();
-    node.loadFromMovieProc(url);
+    try {
+      const params = parseMovieProc(url);
+      const node = new ProceduralSourceNode();
+      node.loadFromMovieProc(url);
 
-    const metadata = node.getMetadata();
-    const sourceName = this.generateUniqueSourceName(params.pattern, metadata.width, metadata.height);
+      const metadata = node.getMetadata();
+      const sourceName = this.generateUniqueSourceName(params.pattern, metadata.width, metadata.height);
 
-    const source: MediaSource = {
-      type: 'image',
-      name: sourceName,
-      url,
-      width: metadata.width,
-      height: metadata.height,
-      duration: metadata.duration,
-      fps: metadata.fps,
-      proceduralSourceNode: node,
-    };
+      const source: MediaSource = {
+        type: 'image',
+        name: sourceName,
+        url,
+        width: metadata.width,
+        height: metadata.height,
+        duration: metadata.duration,
+        fps: metadata.fps,
+        proceduralSourceNode: node,
+      };
 
-    this.addSource(source);
-    this._host!.setInPoint(1);
-    this._host!.setOutPoint(metadata.duration);
-    this._host!.setCurrentFrame(1);
+      this.addSource(source);
+      this._host!.setInPoint(1);
+      this._host!.setOutPoint(metadata.duration);
+      this._host!.setCurrentFrame(1);
 
-    this.emit('sourceLoaded', source);
-    this.emit('durationChanged', metadata.duration);
+      this.emit('sourceLoaded', source);
+      this.emit('durationChanged', metadata.duration);
+    } catch (err) {
+      this.emit('sourceLoadFailed', { name: url });
+      throw err;
+    }
   }
 
   // --- Loading methods ---
@@ -399,6 +428,7 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
 
   async loadImage(name: string, url: string): Promise<void> {
     this._host!.clearGraphData();
+    this.emitSourceLoadingStarted(name);
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.crossOrigin = 'anonymous';
@@ -427,6 +457,7 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
       };
 
       img.onerror = () => {
+        this.emit('sourceLoadFailed', { name });
         reject(new Error(`Failed to load image: ${url}`));
       };
 
@@ -436,6 +467,7 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
 
   async loadImageFile(file: File): Promise<void> {
     this._host!.clearGraphData();
+    this.emitSourceLoadingStarted(file.name);
 
     try {
       const fileSourceNode = new FileSourceNode(file.name);
@@ -468,18 +500,30 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
       this.cacheFileInBackground(file, source);
     } catch (err) {
       log.warn(`FileSourceNode loading failed for ${file.name}, falling back to HTMLImageElement:`, err);
-      const url = URL.createObjectURL(file);
+      // Suppress the next loadingStarted from loadImage to avoid double-counting
+      this._suppressNextLoadingStarted = true;
+      let url: string | undefined;
       try {
+        url = URL.createObjectURL(file);
         await this.loadImage(file.name, url);
       } catch (fallbackErr) {
-        URL.revokeObjectURL(url);
+        if (url) {
+          URL.revokeObjectURL(url);
+        } else {
+          // createObjectURL failed — loadImage was never called
+          this.emit('sourceLoadFailed', { name: file.name });
+        }
+        // If url exists, loadImage already emitted sourceLoadFailed
         throw fallbackErr;
+      } finally {
+        this._suppressNextLoadingStarted = false;
       }
     }
   }
 
   async loadEXRFile(file: File): Promise<void> {
     this._host!.clearGraphData();
+    this.emitSourceLoadingStarted(file.name);
 
     const buffer = await file.arrayBuffer();
     const url = URL.createObjectURL(file);
@@ -511,12 +555,14 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
       this.cacheFileInBackground(file, source);
     } catch (err) {
       URL.revokeObjectURL(url);
+      this.emit('sourceLoadFailed', { name: file.name });
       throw err;
     }
   }
 
   async loadVideo(name: string, url: string): Promise<void> {
     this._host!.clearGraphData();
+    this.emitSourceLoadingStarted(name);
     return new Promise((resolve, reject) => {
       const video = document.createElement('video');
       video.crossOrigin = 'anonymous';
@@ -558,6 +604,7 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
 
       video.onerror = (e) => {
         log.error('Video load error:', e);
+        this.emit('sourceLoadFailed', { name });
         reject(new Error(`Failed to load video: ${url}`));
       };
 
@@ -568,78 +615,84 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
 
   async loadVideoFile(file: File): Promise<void> {
     this._host!.clearGraphData();
+    this.emitSourceLoadingStarted(file.name);
 
-    const videoSourceNode = new VideoSourceNode(file.name);
-    const loadResult = await videoSourceNode.loadFile(file, this._host!.getFps(), this._hdrResizeTier);
+    try {
+      const videoSourceNode = new VideoSourceNode(file.name);
+      const loadResult = await videoSourceNode.loadFile(file, this._host!.getFps(), this._hdrResizeTier);
 
-    if (loadResult.unsupportedCodecError) {
-      this.emit('unsupportedCodec', {
-        filename: file.name,
-        codec: loadResult.codec ?? null,
-        codecFamily: loadResult.codecFamily ?? 'unknown',
-        error: loadResult.unsupportedCodecError,
+      if (loadResult.unsupportedCodecError) {
+        this.emit('unsupportedCodec', {
+          filename: file.name,
+          codec: loadResult.codec ?? null,
+          codecFamily: loadResult.codecFamily ?? 'unknown',
+          error: loadResult.unsupportedCodecError,
+        });
+      }
+
+      if (loadResult.hdrDowngraded) {
+        this.emit('hdrDowngraded', { filename: file.name });
+      }
+
+      const metadata = videoSourceNode.getMetadata();
+      const duration = metadata.duration;
+
+      const url = URL.createObjectURL(file);
+      const video = document.createElement('video');
+      video.crossOrigin = 'anonymous';
+      video.preload = 'auto';
+      video.muted = this._host!.getMuted();
+      video.volume = this._host!.getEffectiveVolume();
+      video.loop = false;
+      video.playsInline = true;
+      this._host!.initVideoPreservesPitch(video);
+
+      await new Promise<void>((resolve, reject) => {
+        video.oncanplay = () => {
+          video.oncanplay = null;
+          resolve();
+        };
+        video.onerror = () => reject(new Error('Failed to load video element'));
+        video.src = url;
+        video.load();
       });
-    }
 
-    if (loadResult.hdrDowngraded) {
-      this.emit('hdrDowngraded', { filename: file.name });
-    }
-
-    const metadata = videoSourceNode.getMetadata();
-    const duration = metadata.duration;
-
-    const url = URL.createObjectURL(file);
-    const video = document.createElement('video');
-    video.crossOrigin = 'anonymous';
-    video.preload = 'auto';
-    video.muted = this._host!.getMuted();
-    video.volume = this._host!.getEffectiveVolume();
-    video.loop = false;
-    video.playsInline = true;
-    this._host!.initVideoPreservesPitch(video);
-
-    await new Promise<void>((resolve, reject) => {
-      video.oncanplay = () => {
-        video.oncanplay = null;
-        resolve();
+      const source: MediaSource = {
+        type: 'video',
+        name: file.name,
+        url,
+        width: metadata.width,
+        height: metadata.height,
+        duration,
+        fps: this._host!.getFps(),
+        element: video,
+        videoSourceNode,
       };
-      video.onerror = () => reject(new Error('Failed to load video element'));
-      video.src = url;
-      video.load();
-    });
 
-    const source: MediaSource = {
-      type: 'video',
-      name: file.name,
-      url,
-      width: metadata.width,
-      height: metadata.height,
-      duration,
-      fps: this._host!.getFps(),
-      element: video,
-      videoSourceNode,
-    };
+      this._host!.loadAudioFromVideo(video, this._host!.getEffectiveVolume(), this._host!.getMuted());
 
-    this._host!.loadAudioFromVideo(video, this._host!.getEffectiveVolume(), this._host!.getMuted());
+      this.addSource(source);
+      this._host!.setInPoint(1);
+      this._host!.setOutPoint(duration);
+      this._host!.setCurrentFrame(1);
 
-    this.addSource(source);
-    this._host!.setInPoint(1);
-    this._host!.setOutPoint(duration);
-    this._host!.setCurrentFrame(1);
+      if (videoSourceNode.isUsingMediabunny()) {
+        videoSourceNode.preloadFrames(1).catch((err) => {
+          log.warn('Initial frame preload error:', err);
+        });
 
-    if (videoSourceNode.isUsingMediabunny()) {
-      videoSourceNode.preloadFrames(1).catch((err) => {
-        log.warn('Initial frame preload error:', err);
-      });
+        this.detectVideoFpsAndDuration(source, videoSourceNode);
+      }
 
-      this.detectVideoFpsAndDuration(source, videoSourceNode);
+      this.emit('sourceLoaded', source);
+      this.emit('durationChanged', duration);
+
+      // Cache file in OPFS for fast reload across sessions
+      this.cacheFileInBackground(file, source);
+    } catch (err) {
+      this.emit('sourceLoadFailed', { name: file.name });
+      throw err;
     }
-
-    this.emit('sourceLoaded', source);
-    this.emit('durationChanged', duration);
-
-    // Cache file in OPFS for fast reload across sessions
-    this.cacheFileInBackground(file, source);
   }
 
   private async detectVideoFpsAndDuration(source: MediaSource, videoSourceNode: VideoSourceNode): Promise<void> {
@@ -683,35 +736,43 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
 
   async loadSequence(files: File[], fps?: number): Promise<void> {
     this._host!.clearGraphData();
-    const sequenceInfo = await createSequenceInfo(files, fps ?? this._host!.getFps());
-    if (!sequenceInfo) {
-      throw new Error('No valid image sequence found in the selected files');
+    const sequenceName = files[0]?.name ?? 'sequence';
+    this.emitSourceLoadingStarted(sequenceName);
+
+    try {
+      const sequenceInfo = await createSequenceInfo(files, fps ?? this._host!.getFps());
+      if (!sequenceInfo) {
+        throw new Error('No valid image sequence found in the selected files');
+      }
+
+      const source: MediaSource = {
+        type: 'sequence',
+        name: sequenceInfo.name,
+        url: '',
+        width: sequenceInfo.width,
+        height: sequenceInfo.height,
+        duration: sequenceInfo.frames.length,
+        fps: sequenceInfo.fps,
+        sequenceInfo,
+        sequenceFrames: sequenceInfo.frames,
+        element: sequenceInfo.frames[0]?.image,
+      };
+
+      this.addSource(source);
+      this._host!.setFps(sequenceInfo.fps);
+      this._host!.emitFpsChanged(sequenceInfo.fps);
+      this._host!.setInPoint(1);
+      this._host!.setOutPoint(sequenceInfo.frames.length);
+      this._host!.setCurrentFrame(1);
+
+      this.emit('sourceLoaded', source);
+      this.emit('durationChanged', sequenceInfo.frames.length);
+
+      preloadFrames(sequenceInfo.frames, 0, 10);
+    } catch (err) {
+      this.emit('sourceLoadFailed', { name: sequenceName });
+      throw err;
     }
-
-    const source: MediaSource = {
-      type: 'sequence',
-      name: sequenceInfo.name,
-      url: '',
-      width: sequenceInfo.width,
-      height: sequenceInfo.height,
-      duration: sequenceInfo.frames.length,
-      fps: sequenceInfo.fps,
-      sequenceInfo,
-      sequenceFrames: sequenceInfo.frames,
-      element: sequenceInfo.frames[0]?.image,
-    };
-
-    this.addSource(source);
-    this._host!.setFps(sequenceInfo.fps);
-    this._host!.emitFpsChanged(sequenceInfo.fps);
-    this._host!.setInPoint(1);
-    this._host!.setOutPoint(sequenceInfo.frames.length);
-    this._host!.setCurrentFrame(1);
-
-    this.emit('sourceLoaded', source);
-    this.emit('durationChanged', sequenceInfo.frames.length);
-
-    preloadFrames(sequenceInfo.frames, 0, 10);
   }
 
   /**
@@ -726,124 +787,136 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
 
         if (file) {
           log.debug(`Loading video source "${node.name}" from file: ${file.name}`);
-
-          await node.loadFile(file, this._host!.getFps());
-
-          const metadata = node.getMetadata();
-          const duration = metadata.duration;
-
-          const blobUrl = URL.createObjectURL(file);
-          const video = document.createElement('video');
-          video.crossOrigin = 'anonymous';
-          video.preload = 'auto';
-          video.muted = this._host!.getMuted();
-          video.volume = this._host!.getEffectiveVolume();
-          video.loop = false;
-          video.playsInline = true;
-          this._host!.initVideoPreservesPitch(video);
+          this.emitSourceLoadingStarted(node.name);
 
           try {
+            await node.loadFile(file, this._host!.getFps());
+
+            const metadata = node.getMetadata();
+            const duration = metadata.duration;
+
+            const blobUrl = URL.createObjectURL(file);
+            const video = document.createElement('video');
+            video.crossOrigin = 'anonymous';
+            video.preload = 'auto';
+            video.muted = this._host!.getMuted();
+            video.volume = this._host!.getEffectiveVolume();
+            video.loop = false;
+            video.playsInline = true;
+            this._host!.initVideoPreservesPitch(video);
+
+            try {
+              await new Promise<void>((resolve, reject) => {
+                video.oncanplay = () => {
+                  video.oncanplay = null;
+                  resolve();
+                };
+                video.onerror = () => reject(new Error('Failed to load video element'));
+                video.src = blobUrl;
+                video.load();
+              });
+            } catch (err) {
+              URL.revokeObjectURL(blobUrl);
+              throw err;
+            }
+
+            const source: MediaSource = {
+              type: 'video',
+              name: node.name,
+              url: blobUrl,
+              width: metadata.width,
+              height: metadata.height,
+              duration,
+              fps: this._host!.getFps(),
+              element: video,
+              videoSourceNode: node,
+            };
+
+            if (node.isUsingMediabunny()) {
+              node.preloadFrames(1).catch((err) => {
+                log.warn('Initial frame preload error:', err);
+              });
+            }
+
+            this._host!.loadAudioFromVideo(video, this._host!.getEffectiveVolume(), this._host!.getMuted());
+
+            this.addSource(source);
+
+            // Set in/out points for the first source or when we have valid duration.
+            // Skip if this is an additional source being added (currentFrame > 1 means
+            // we already have content loaded and shouldn't reset playback range).
+            const isFirstSource = this._host!.getCurrentFrame() <= 1;
+            if (isFirstSource || duration > 0) {
+              this._host!.setInPoint(1);
+              this._host!.setOutPoint(duration);
+            }
+
+            if (node.isUsingMediabunny()) {
+              this.detectVideoFpsAndDuration(source, node);
+            }
+
+            this.emit('sourceLoaded', source);
+            this.emit('durationChanged', duration);
+          } catch (err) {
+            this.emit('sourceLoadFailed', { name: node.name });
+            throw err;
+          }
+        } else if (url) {
+          log.debug(`Loading video source "${node.name}" from URL (no mediabunny): ${url}`);
+          this.emitSourceLoadingStarted(node.name);
+
+          try {
+            await node.load(url, node.name, this._host!.getFps());
+
+            const metadata = node.getMetadata();
+            const duration = metadata.duration;
+
+            const video = document.createElement('video');
+            video.crossOrigin = 'anonymous';
+            video.preload = 'auto';
+            video.muted = this._host!.getMuted();
+            video.volume = this._host!.getEffectiveVolume();
+            video.loop = false;
+            video.playsInline = true;
+            this._host!.initVideoPreservesPitch(video);
+
             await new Promise<void>((resolve, reject) => {
               video.oncanplay = () => {
                 video.oncanplay = null;
                 resolve();
               };
               video.onerror = () => reject(new Error('Failed to load video element'));
-              video.src = blobUrl;
+              video.src = url;
               video.load();
             });
+
+            const source: MediaSource = {
+              type: 'video',
+              name: node.name,
+              url,
+              width: metadata.width,
+              height: metadata.height,
+              duration,
+              fps: this._host!.getFps(),
+              element: video,
+              videoSourceNode: node,
+            };
+
+            this._host!.loadAudioFromVideo(video, this._host!.getEffectiveVolume(), this._host!.getMuted());
+
+            this.addSource(source);
+
+            if (duration > 0) {
+              this._host!.setInPoint(1);
+              this._host!.setOutPoint(duration);
+            }
+
+            this.emit('sourceLoaded', source);
+            this.emit('durationChanged', duration);
           } catch (err) {
-            URL.revokeObjectURL(blobUrl);
+            this.emit('sourceLoadFailed', { name: node.name });
             throw err;
           }
-
-          const source: MediaSource = {
-            type: 'video',
-            name: node.name,
-            url: blobUrl,
-            width: metadata.width,
-            height: metadata.height,
-            duration,
-            fps: this._host!.getFps(),
-            element: video,
-            videoSourceNode: node,
-          };
-
-          if (node.isUsingMediabunny()) {
-            node.preloadFrames(1).catch((err) => {
-              log.warn('Initial frame preload error:', err);
-            });
-          }
-
-          this._host!.loadAudioFromVideo(video, this._host!.getEffectiveVolume(), this._host!.getMuted());
-
-          this.addSource(source);
-
-          // Set in/out points for the first source or when we have valid duration.
-          // Skip if this is an additional source being added (currentFrame > 1 means
-          // we already have content loaded and shouldn't reset playback range).
-          const isFirstSource = this._host!.getCurrentFrame() <= 1;
-          if (isFirstSource || duration > 0) {
-            this._host!.setInPoint(1);
-            this._host!.setOutPoint(duration);
-          }
-
-          if (node.isUsingMediabunny()) {
-            this.detectVideoFpsAndDuration(source, node);
-          }
-
-          this.emit('sourceLoaded', source);
-          this.emit('durationChanged', duration);
-        } else if (url) {
-          log.debug(`Loading video source "${node.name}" from URL (no mediabunny): ${url}`);
-
-          await node.load(url, node.name, this._host!.getFps());
-
-          const metadata = node.getMetadata();
-          const duration = metadata.duration;
-
-          const video = document.createElement('video');
-          video.crossOrigin = 'anonymous';
-          video.preload = 'auto';
-          video.muted = this._host!.getMuted();
-          video.volume = this._host!.getEffectiveVolume();
-          video.loop = false;
-          video.playsInline = true;
-          this._host!.initVideoPreservesPitch(video);
-
-          await new Promise<void>((resolve, reject) => {
-            video.oncanplay = () => {
-              video.oncanplay = null;
-              resolve();
-            };
-            video.onerror = () => reject(new Error('Failed to load video element'));
-            video.src = url;
-            video.load();
-          });
-
-          const source: MediaSource = {
-            type: 'video',
-            name: node.name,
-            url,
-            width: metadata.width,
-            height: metadata.height,
-            duration,
-            fps: this._host!.getFps(),
-            element: video,
-            videoSourceNode: node,
-          };
-
-          this._host!.loadAudioFromVideo(video, this._host!.getEffectiveVolume(), this._host!.getMuted());
-
-          this.addSource(source);
-
-          if (duration > 0) {
-            this._host!.setInPoint(1);
-            this._host!.setOutPoint(duration);
-          }
-
-          this.emit('sourceLoaded', source);
-          this.emit('durationChanged', duration);
         }
       }
     }
