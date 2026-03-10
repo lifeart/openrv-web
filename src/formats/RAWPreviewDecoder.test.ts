@@ -242,17 +242,14 @@ function createTestRAWBuffer(
 
 describe('RAWPreviewDecoder', () => {
   describe('isRAWExtension', () => {
-    it('RAW-T001: returns true for RAW extensions', () => {
+    it('RAW-T001: returns true for TIFF-based RAW extensions', () => {
       expect(isRAWExtension('.cr2')).toBe(true);
       expect(isRAWExtension('.nef')).toBe(true);
       expect(isRAWExtension('.arw')).toBe(true);
       expect(isRAWExtension('.dng')).toBe(true);
       expect(isRAWExtension('cr2')).toBe(true);
       expect(isRAWExtension('CR2')).toBe(true);
-      expect(isRAWExtension('.CR3')).toBe(true);
-      expect(isRAWExtension('.raf')).toBe(true);
       expect(isRAWExtension('.orf')).toBe(true);
-      expect(isRAWExtension('.rw2')).toBe(true);
       expect(isRAWExtension('.pef')).toBe(true);
       expect(isRAWExtension('.srw')).toBe(true);
     });
@@ -264,6 +261,19 @@ describe('RAWPreviewDecoder', () => {
       expect(isRAWExtension('.png')).toBe(false);
       expect(isRAWExtension('.dpx')).toBe(false);
       expect(isRAWExtension('')).toBe(false);
+    });
+
+    it('RAW-T016: returns false for non-TIFF RAW formats (CR3, RAF, RW2)', () => {
+      // CR3 uses ISO BMFF container, not TIFF
+      expect(isRAWExtension('.cr3')).toBe(false);
+      expect(isRAWExtension('.CR3')).toBe(false);
+      expect(isRAWExtension('cr3')).toBe(false);
+      // RAF uses Fuji proprietary header, not TIFF
+      expect(isRAWExtension('.raf')).toBe(false);
+      expect(isRAWExtension('.RAF')).toBe(false);
+      // RW2 uses Panasonic proprietary header, not TIFF
+      expect(isRAWExtension('.rw2')).toBe(false);
+      expect(isRAWExtension('.RW2')).toBe(false);
     });
 
     it('RAW-T015: handles full filenames (not just bare extensions)', () => {
@@ -596,6 +606,43 @@ describe('RAWPreviewDecoder', () => {
       expect(result!.jpegBlob.size).toBe(150);
       expect(result!.previewWidth).toBe(1024);
       expect(result!.previewHeight).toBe(768);
+    });
+
+    it('RAW-T017: gracefully returns null for non-TIFF data (ISO BMFF / CR3-like)', () => {
+      // Simulate an ISO BMFF container (ftyp box) — not a TIFF header
+      const buffer = new ArrayBuffer(24);
+      const view = new DataView(buffer);
+      // ftyp box: size=20, type='ftyp', brand='crx '
+      view.setUint32(0, 20);
+      view.setUint8(4, 0x66); // 'f'
+      view.setUint8(5, 0x74); // 't'
+      view.setUint8(6, 0x79); // 'y'
+      view.setUint8(7, 0x70); // 'p'
+      view.setUint8(8, 0x63); // 'c'
+      view.setUint8(9, 0x72); // 'r'
+      view.setUint8(10, 0x78); // 'x'
+      view.setUint8(11, 0x20); // ' '
+      expect(extractRAWPreview(buffer)).toBeNull();
+    });
+
+    it('RAW-T018: gracefully returns null for Fuji RAF-like data', () => {
+      // RAF files start with "FUJIFILMCCD-RAW " (16 bytes)
+      const header = 'FUJIFILMCCD-RAW ';
+      const buffer = new ArrayBuffer(64);
+      const bytes = new Uint8Array(buffer);
+      for (let i = 0; i < header.length; i++) {
+        bytes[i] = header.charCodeAt(i);
+      }
+      expect(extractRAWPreview(buffer)).toBeNull();
+    });
+
+    it('RAW-T019: gracefully returns null for random binary data', () => {
+      const buffer = new ArrayBuffer(1024);
+      const bytes = new Uint8Array(buffer);
+      for (let i = 0; i < bytes.length; i++) {
+        bytes[i] = (i * 7 + 13) & 0xff;
+      }
+      expect(extractRAWPreview(buffer)).toBeNull();
     });
 
     it('returns default EXIF when no EXIF tags present', () => {
