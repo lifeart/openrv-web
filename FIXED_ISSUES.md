@@ -897,16 +897,24 @@
 ## Issue #77: The viewer timecode overlay is effectively hidden from the shipped UI
 
 - **Severity**: Medium
-- **Fix**: Added TODO(#77) comment in `TimecodeOverlay.ts` documenting that configuration (position, fontSize, showFrameCounter, backgroundOpacity) has no UI surface. Added one-time `console.info` on first `enable()`.
-- **Regression Tests**: TC-130, TC-131 (logs on first enable, logs only once).
-- **Files Changed**: `src/ui/components/TimecodeOverlay.ts`, `src/ui/components/TimecodeOverlay.test.ts`
+- **TODO(#77) Resolved**: Added a real View-tab timecode overlay button with `clock` icon and active-state sync. Right-clicking the button opens a new `TimecodeOverlaySettingsMenu` that exposes all previously API-only settings: position, font size, frame-counter visibility, and background opacity. Removed the stale TODO comment, one-time `console.info`, and `hasLoggedConfigHint` field from `TimecodeOverlay`.
+- **Regression Tests**:
+  - `TimecodeOverlaySettingsMenu.test.ts`: TOM-001 through TOM-007 cover menu rendering, position/font-size updates, frame-counter toggle, opacity slider, and dismissal behavior
+  - `buildViewTab.test.ts`: verifies the new toggle button calls `viewer.getTimecodeOverlay().toggle()` and right-click opens the settings menu
+  - `TimecodeOverlay.test.ts`: existing 50 overlay behavior tests remain green after removing the old logging path
+- **Verification**: `TimecodeOverlaySettingsMenu.test.ts` (7 tests), `buildViewTab.test.ts` (10 tests), and `TimecodeOverlay.test.ts` (50 tests) pass. TypeScript clean.
+- **Files Changed**: `src/services/tabContent/buildViewTab.ts`, `src/services/tabContent/buildViewTab.test.ts`, `src/ui/components/TimecodeOverlay.ts`, `src/ui/components/TimecodeOverlay.test.ts`, `src/ui/components/TimecodeOverlaySettingsMenu.ts`, `src/ui/components/TimecodeOverlaySettingsMenu.test.ts`
 
 ## Issue #78: The FPS indicator has rich persisted settings, but the shipped UI only exposes a binary toggle
 
 - **Severity**: Medium
-- **Fix**: Added TODO(#78) comment in `FPSIndicator.ts` documenting that position, dropped-frame visibility, target-FPS visibility, background opacity, and warning/critical thresholds have no UI surface. Added one-time `console.info` on first `enable()`.
-- **Regression Tests**: FPS-120, FPS-121 (logs on first enable, logs only once).
-- **Files Changed**: `src/ui/components/FPSIndicator.ts`, `src/ui/components/FPSIndicator.test.ts`
+- **TODO(#78) Resolved**: Added `FPSIndicatorSettingsMenu` and wired it to the existing View-tab FPS button via right-click. The menu now exposes all persisted FPS HUD settings: position, dropped-frame visibility, target-FPS visibility, background opacity, warning threshold, and critical threshold. Removed the stale TODO comment, one-time `console.info`, and `hasLoggedConfigHint` field from `FPSIndicator`.
+- **Regression Tests**:
+  - `FPSIndicatorSettingsMenu.test.ts`: FOM-001 through FOM-007 cover menu rendering, position updates, display toggles, background slider, threshold slider behavior, and dismissal
+  - `buildViewTab.test.ts`: verifies right-click on the FPS button opens the settings menu
+  - `FPSIndicator.test.ts`: existing 44 indicator tests remain green after removing the old logging path
+- **Verification**: `FPSIndicatorSettingsMenu.test.ts` (7 tests), `buildViewTab.test.ts` (11 tests), and `FPSIndicator.test.ts` (44 tests) pass. TypeScript clean.
+- **Files Changed**: `src/services/tabContent/buildViewTab.ts`, `src/services/tabContent/buildViewTab.test.ts`, `src/ui/components/FPSIndicator.ts`, `src/ui/components/FPSIndicator.test.ts`, `src/ui/components/FPSIndicatorSettingsMenu.ts`, `src/ui/components/FPSIndicatorSettingsMenu.test.ts`
 
 ## Issue #79: Pixel Probe exposes copyable value rows as mouse-only `div`s
 

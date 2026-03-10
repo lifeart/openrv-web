@@ -10,10 +10,6 @@
  * - Effective target display at non-1x playback speeds
  * - Auto-hides 2 seconds after pause
  *
- * TODO(#78): FPSIndicator has rich settings (position, showDroppedFrames,
- * showTargetFps, backgroundOpacity, warningThreshold, criticalThreshold)
- * but the shipped UI only exposes a binary toggle. A settings popover
- * should be added to the toolbar button.
  */
 
 import { type Session } from '../../core/session/Session';
@@ -81,7 +77,6 @@ export class FPSIndicator extends EventEmitter<FPSIndicatorEvents> {
   private lastMeasurement: FPSMeasurement | null = null;
   private hideTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private updateScheduled = false;
-  private hasLoggedConfigHint = false;
   private updatingPrefs = false;
 
   constructor(session: Session, preferences?: PreferencesManager) {
@@ -348,16 +343,6 @@ export class FPSIndicator extends EventEmitter<FPSIndicatorEvents> {
    */
   enable(): void {
     this.setState({ enabled: true });
-
-    // TODO(#78): Log configuration hint on first enable
-    if (!this.hasLoggedConfigHint) {
-      this.hasLoggedConfigHint = true;
-      console.info(
-        '[FPSIndicator] Configuration options (position, showDroppedFrames, showTargetFps, ' +
-          'backgroundOpacity, warningThreshold, criticalThreshold) are available via API but ' +
-          'not yet exposed in the UI. See issue #78.',
-      );
-    }
   }
 
   /**

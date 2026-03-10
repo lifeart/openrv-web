@@ -8,10 +8,6 @@
  * - Background opacity for readability
  * - Support for drop-frame timecode
  *
- * TODO(#77): TimecodeOverlay configuration (position, fontSize, showFrameCounter,
- * backgroundOpacity) has no UI surface. It is only accessible via the
- * keyboard shortcut `view.toggleTimecodeOverlay`. A View toolbar button
- * and settings popover should be added.
  */
 
 import { type Session } from '../../core/session/Session';
@@ -54,7 +50,6 @@ export class TimecodeOverlay extends EventEmitter<TimecodeOverlayEvents> {
   private state: TimecodeOverlayState = { ...DEFAULT_TIMECODE_OVERLAY_STATE };
   private startFrame = 0;
   private unsubscribers: (() => void)[] = [];
-  private hasLoggedConfigHint = false;
 
   constructor(session: Session) {
     super();
@@ -202,15 +197,6 @@ export class TimecodeOverlay extends EventEmitter<TimecodeOverlayEvents> {
    */
   enable(): void {
     this.setState({ enabled: true });
-
-    // TODO(#77): Log configuration hint on first enable
-    if (!this.hasLoggedConfigHint) {
-      this.hasLoggedConfigHint = true;
-      console.info(
-        '[TimecodeOverlay] Configuration options (position, fontSize, showFrameCounter, backgroundOpacity) ' +
-          'are available via API but not yet exposed in the UI. See issue #77.',
-      );
-    }
   }
 
   /**

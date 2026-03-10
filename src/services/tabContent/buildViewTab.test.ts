@@ -11,8 +11,35 @@ function createRenderable() {
 
 function createToggleOverlay() {
   const emitter = new EventEmitter();
+  let state = {
+    enabled: false,
+    position: 'top-left',
+    fontSize: 'medium',
+    showFrameCounter: true,
+    backgroundOpacity: 0.6,
+    showDroppedFrames: true,
+    showTargetFps: true,
+    warningThreshold: 0.97,
+    criticalThreshold: 0.85,
+  };
   return Object.assign(emitter, {
     toggle: vi.fn(),
+    getState: vi.fn(() => ({ ...state })),
+    setPosition: vi.fn((position) => {
+      state = { ...state, position };
+    }),
+    setFontSize: vi.fn((fontSize) => {
+      state = { ...state, fontSize };
+    }),
+    setShowFrameCounter: vi.fn((showFrameCounter) => {
+      state = { ...state, showFrameCounter };
+    }),
+    setBackgroundOpacity: vi.fn((backgroundOpacity) => {
+      state = { ...state, backgroundOpacity };
+    }),
+    setState: vi.fn((partial) => {
+      state = { ...state, ...partial };
+    }),
   });
 }
 
@@ -21,6 +48,7 @@ function createTestDeps() {
   const spotlightOverlay = createToggleOverlay();
   const exrWindowOverlay = createToggleOverlay();
   const fpsOverlay = createToggleOverlay();
+  const timecodeOverlay = createToggleOverlay();
 
   const registry = {
     zoomControl: createRenderable(),
@@ -90,6 +118,7 @@ function createTestDeps() {
     getSpotlightOverlay: vi.fn(() => spotlightOverlay),
     getEXRWindowOverlay: vi.fn(() => exrWindowOverlay),
     getInfoStripOverlay: vi.fn(() => infoStripOverlay),
+    getTimecodeOverlay: vi.fn(() => timecodeOverlay),
     getFPSIndicator: vi.fn(() => fpsOverlay),
   } as any;
 
@@ -100,7 +129,7 @@ function createTestDeps() {
     unsubscribers.push(unsub);
   };
 
-  return { registry, viewer, timelineEditorPanel, addUnsubscriber, unsubscribers, infoStripOverlay };
+  return { registry, viewer, timelineEditorPanel, addUnsubscriber, unsubscribers, infoStripOverlay, timecodeOverlay };
 }
 
 describe('buildViewTab', () => {
@@ -114,6 +143,44 @@ describe('buildViewTab', () => {
 
     button!.click();
     expect(deps.infoStripOverlay.toggle).toHaveBeenCalledOnce();
+  });
+
+  it('adds a timecode overlay toggle button wired to the overlay', () => {
+    const deps = createTestDeps();
+
+    const result = buildViewTab(deps);
+
+    const button = result.element.querySelector<HTMLButtonElement>('[data-testid="timecode-overlay-toggle-btn"]');
+    expect(button).not.toBeNull();
+
+    button!.click();
+    expect(deps.timecodeOverlay.toggle).toHaveBeenCalledOnce();
+  });
+
+  it('opens the timecode settings menu on right-click', () => {
+    const deps = createTestDeps();
+
+    const result = buildViewTab(deps);
+    const button = result.element.querySelector<HTMLButtonElement>('[data-testid="timecode-overlay-toggle-btn"]')!;
+
+    button.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 40, clientY: 50 }));
+
+    const menu = document.querySelector('.timecode-overlay-settings-menu');
+    expect(menu).not.toBeNull();
+    expect(menu?.getAttribute('aria-label')).toBe('Timecode Overlay settings');
+  });
+
+  it('opens the FPS settings menu on right-click', () => {
+    const deps = createTestDeps();
+
+    const result = buildViewTab(deps);
+    const button = result.element.querySelector<HTMLButtonElement>('[data-testid="fps-indicator-toggle-btn"]')!;
+
+    button.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 20, clientY: 30 }));
+
+    const menu = document.querySelector('.fps-indicator-settings-menu');
+    expect(menu).not.toBeNull();
+    expect(menu?.getAttribute('aria-label')).toBe('FPS Indicator settings');
   });
 
   describe('Timeline editor button active state sync', () => {

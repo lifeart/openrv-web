@@ -5775,6 +5775,93 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The docs recommend an HDR workflow the shipped control cannot actually perform.
   - Users can be told to “raise” the threshold beyond the SDR ceiling while the real UI enforces 100 as the maximum.
 
+### 490. The histogram docs still say pixel analysis runs on the GPU, but the shipped histogram always computes bins on the CPU
+
+- Severity: Low
+- Area: Documentation / histogram implementation
+- Evidence:
+  - The histogram guide says “Pixel analysis runs on the GPU” in [docs/scopes/histogram.md](/Users/lifeart/Repos/openrv-web/docs/scopes/histogram.md#L68).
+  - The shipped `Histogram.update()` path explicitly says histogram data is “always” calculated on the CPU, then only uses GPU acceleration for bar rendering in [src/ui/components/Histogram.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Histogram.ts#L291) through [src/ui/components/Histogram.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Histogram.ts#L306).
+  - The core histogram calculation itself is the CPU `calculateHistogram(imageData)` call in [src/ui/components/Histogram.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Histogram.ts#L281) through [src/ui/components/Histogram.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Histogram.ts#L284).
+- Impact:
+  - The docs overstate the shipped histogram pipeline and performance model.
+  - Users reading the guide can expect GPU-side analysis behavior that production does not implement.
+
+### 491. The waveform docs describe WebGL computation as the runtime model, but the shipped scope still has full CPU fallback paths
+
+- Severity: Low
+- Area: Documentation / waveform implementation
+- Evidence:
+  - The waveform guide says “The waveform is computed using WebGL” in [docs/scopes/waveform.md](/Users/lifeart/Repos/openrv-web/docs/scopes/waveform.md#L59).
+  - The shipped `Waveform.update()` only tries the GPU processor first, then falls back to CPU rendering with `this.draw(imageData)` when WebGL scopes are unavailable in [src/ui/components/Waveform.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Waveform.ts#L247) through [src/ui/components/Waveform.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Waveform.ts#L266).
+  - The HDR float path also has an explicit CPU fallback that converts float data back to `ImageData` and draws it on the CPU in [src/ui/components/Waveform.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Waveform.ts#L288) through [src/ui/components/Waveform.ts#L293).
+- Impact:
+  - The docs present the scope as WebGL-computed when the shipped implementation still depends on non-WebGL fallback behavior.
+  - That is misleading for users trying to understand degraded behavior on browsers or devices where GPU scopes are unavailable.
+
+### 492. The pixel-probe docs say probe state is exposed through the public view API, but the shipped API has no pixel-probe methods at all
+
+- Severity: Low
+- Area: Documentation / public scripting API
+- Evidence:
+  - The pixel-probe guide says “Pixel probe state is accessible through the view API” in [docs/scopes/pixel-probe.md](/Users/lifeart/Repos/openrv-web/docs/scopes/pixel-probe.md#L82).
+  - The same section contains only an empty placeholder snippet instead of an actual method example in [docs/scopes/pixel-probe.md](/Users/lifeart/Repos/openrv-web/docs/scopes/pixel-probe.md#L84) through [docs/scopes/pixel-probe.md](/Users/lifeart/Repos/openrv-web/docs/scopes/pixel-probe.md#L87).
+  - The shipped `ViewAPI` exposes zoom, fit, pan, channel, texture filtering, background pattern, and viewport-size methods, but nothing for pixel-probe enable/state/lock/readback in [src/api/ViewAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/ViewAPI.ts#L33) through [src/api/ViewAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/ViewAPI.ts#L284).
+  - The broader public scripting guide likewise documents `window.openrv.view` without any probe methods in [docs/advanced/scripting-api.md](/Users/lifeart/Repos/openrv-web/docs/advanced/scripting-api.md#L17) through [docs/advanced/scripting-api.md](/Users/lifeart/Repos/openrv-web/docs/advanced/scripting-api.md#L180).
+- Impact:
+  - The docs promise probe automation that plugin authors and pipeline users cannot actually call.
+  - Readers can spend time looking for a public probe API surface that is not shipped.
+
+### 493. The vectorscope docs describe WebGL rendering as the runtime model, but the shipped vectorscope still has a complete CPU fallback path
+
+- Severity: Low
+- Area: Documentation / vectorscope implementation
+- Evidence:
+  - The vectorscope guide says “The vectorscope is rendered using WebGL for real-time performance” in [docs/scopes/vectorscope.md](/Users/lifeart/Repos/openrv-web/docs/scopes/vectorscope.md#L39) through [docs/scopes/vectorscope.md](/Users/lifeart/Repos/openrv-web/docs/scopes/vectorscope.md#L41).
+  - The shipped `Vectorscope.update()` tries the shared GPU scopes processor first, but falls back to `drawCPU(imageData)` when GPU scopes are unavailable in [src/ui/components/Vectorscope.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Vectorscope.ts#L246) through [src/ui/components/Vectorscope.ts#L272).
+  - The HDR float path follows the same pattern and also converts float data back to `ImageData` for CPU rendering when the GPU scopes processor is unavailable in [src/ui/components/Vectorscope.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Vectorscope.ts#L278) through [src/ui/components/Vectorscope.ts#L314).
+- Impact:
+  - The docs overstate the runtime architecture of the shipped vectorscope.
+  - Users investigating performance or degraded behavior on non-WebGL scope paths are told the wrong implementation story.
+
+### 494. The gamut-diagram docs describe a target-gamut compliance tool, but the shipped diagram only overlays scatter against fixed input/working/display triangles
+
+- Severity: Low
+- Area: Documentation / gamut diagram behavior
+- Evidence:
+  - The gamut-diagram guide says pixels are shown relative to “a target color gamut,” and frames the scope around whether colors fall “within or outside a target color gamut” in [docs/scopes/gamut-diagram.md](/Users/lifeart/Repos/openrv-web/docs/scopes/gamut-diagram.md#L3) through [docs/scopes/gamut-diagram.md](/Users/lifeart/Repos/openrv-web/docs/scopes/gamut-diagram.md#L29).
+  - The shipped `GamutDiagram` has no target-gamut selection or compliance state. Its only gamut state is the trio `inputColorSpace`, `workingColorSpace`, and `displayColorSpace` in [src/ui/components/GamutDiagram.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/GamutDiagram.ts#L48) through [src/ui/components/GamutDiagram.ts#L50).
+  - The rendered overlay simply draws up to three gamut triangles and a neutral white scatter plot in [src/ui/components/GamutDiagram.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/GamutDiagram.ts#L307) through [src/ui/components/GamutDiagram.ts#L347) and [src/ui/components/GamutDiagram.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/GamutDiagram.ts#L349) through [src/ui/components/GamutDiagram.ts#L474).
+  - There is no production path that classifies samples as “inside/outside target gamut,” colors out-of-gamut points differently, or exposes the clip-vs-compress compliance workflow the docs describe.
+- Impact:
+  - The guide makes the gamut diagram sound like an explicit compliance checker when the shipped visualization is just an unclassified chromaticity scatter over multiple triangles.
+  - Users can expect target-gamut diagnostics and out-of-gamut identification that the runtime does not provide.
+
+### 495. The pixel-probe docs say HDR probe values can exceed 100 IRE, but the shipped HDR probe clamps IRE to the 0-100 range
+
+- Severity: Low
+- Area: Documentation / pixel probe HDR readout
+- Evidence:
+  - The pixel-probe guide explicitly says `> 100 IRE` represents “Super-white / HDR values” in [docs/scopes/pixel-probe.md](/Users/lifeart/Repos/openrv-web/docs/scopes/pixel-probe.md#L55) through [docs/scopes/pixel-probe.md#L60).
+  - The shipped probe state defines `ire` as `0-100` in [src/ui/components/PixelProbe.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PixelProbe.ts#L42).
+  - In the HDR path, `updateFromHDRValues(...)` computes float luminance and then clamps it to `0..100` before storing and displaying it in [src/ui/components/PixelProbe.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PixelProbe.ts#L768) through [src/ui/components/PixelProbe.ts#L780).
+- Impact:
+  - The docs promise a probe readout that can expose HDR luminance above reference white, but the shipped IRE field cannot show that.
+  - Users relying on the probe for HDR verification can be misled into thinking values top out at 100 IRE even when the underlying float data is higher.
+
+### 496. The pixel-probe docs say the coordinate readout is in source image space, but the shipped probe reports display-canvas coordinates
+
+- Severity: Low
+- Area: Documentation / pixel probe coordinates
+- Evidence:
+  - The pixel-probe guide says the Coordinates row shows pixel position “in source image space” in [docs/scopes/pixel-probe.md](/Users/lifeart/Repos/openrv-web/docs/scopes/pixel-probe.md#L17).
+  - The live sampling path derives coordinates from `getPixelCoordinates(...)`, which maps browser pointer position into `displayWidth` / `displayHeight` canvas pixels, not source dimensions, in [src/ui/components/ViewerInteraction.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInteraction.ts#L189) through [src/ui/components/ViewerInteraction.ts#L210).
+  - `PixelSamplingManager` passes those display-space coordinates directly into `PixelProbe.updateFromCanvas(...)` and `updateFromHDRValues(...)` in [src/ui/components/PixelSamplingManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PixelSamplingManager.ts#L121), [src/ui/components/PixelSamplingManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PixelSamplingManager.ts#L205), and [src/ui/components/PixelSamplingManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PixelSamplingManager.ts#L310).
+  - `PixelProbe` then stores and displays those same values after clamping against `displayWidth` / `displayHeight`, not source width / height, in [src/ui/components/PixelProbe.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PixelProbe.ts#L666) through [src/ui/components/PixelProbe.ts#L726) and [src/ui/components/PixelProbe.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PixelProbe.ts#L742) through [src/ui/components/PixelProbe.ts#L780).
+- Impact:
+  - The docs make the probe sound source-referenced, but the runtime reports viewport-sampled coordinates instead.
+  - That can mislead users comparing probe positions against source-frame metadata, EXR pixel locations, or external shot notes.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

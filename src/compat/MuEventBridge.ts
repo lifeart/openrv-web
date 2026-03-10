@@ -52,13 +52,8 @@ export class MuEventBridge {
     callback: MuEventCallback,
     documentation: string = '',
   ): void {
-    // Store with a sentinel key; dispatch handles regex matching
     const key = `__regex__${eventPattern.source}`;
-    this.modeManager.bind(tableName, key, (event: MuEvent) => {
-      if (eventPattern.test(event.name)) {
-        callback(event);
-      }
-    }, documentation);
+    this.modeManager.bind(tableName, key, callback, documentation, eventPattern);
   }
 
   /**

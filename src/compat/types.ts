@@ -47,12 +47,16 @@ export interface EventTableBinding {
   eventName: string;
   callback: MuEventCallback;
   documentation: string;
+  /** For regex bindings: the compiled pattern used for matching */
+  regex?: RegExp;
 }
 
 /** Event table: named collection of bindings */
 export interface EventTable {
   name: string;
   bindings: Map<string, EventTableBinding>;
+  /** Count of regex bindings in this table (for fast skip in dispatch) */
+  regexCount: number;
 }
 
 /** Minor mode definition */

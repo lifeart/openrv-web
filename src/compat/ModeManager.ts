@@ -15,6 +15,9 @@ import type {
   MuEventCallback,
 } from './types';
 
+/** Sentinel prefix for regex-bound event keys */
+const REGEX_PREFIX = '__regex__';
+
 export class ModeManager {
   /** Registered mode definitions (name -> definition) */
   private modes = new Map<string, MinorModeDefinition>();
@@ -118,6 +121,7 @@ export class ModeManager {
       this.eventTableStack.push({
         name,
         bindings: new Map(),
+        regexCount: 0,
       });
     }
   }
@@ -152,21 +156,33 @@ export class ModeManager {
 
   /**
    * Add a binding to a named event table (either on the stack or in a mode).
+   * If `regex` is provided, the binding is a regex binding and will be matched
+   * against event names during dispatch when no exact match is found.
    */
   bind(
     tableName: string,
     eventName: string,
     callback: MuEventCallback,
     documentation: string = '',
+    regex?: RegExp,
   ): void {
     // Try to find the table on the stack
     let table = this.eventTableStack.find((t) => t.name === tableName);
     if (!table) {
       // Create a new table on the stack
-      table = { name: tableName, bindings: new Map() };
+      table = { name: tableName, bindings: new Map(), regexCount: 0 };
       this.eventTableStack.push(table);
     }
-    table.bindings.set(eventName, { eventName, callback, documentation });
+    const isRegex = eventName.startsWith(REGEX_PREFIX);
+    if (isRegex && !table.bindings.has(eventName)) {
+      table.regexCount++;
+    }
+    table.bindings.set(eventName, {
+      eventName,
+      callback,
+      documentation,
+      ...(regex ? { regex } : {}),
+    });
   }
 
   /**
@@ -174,6 +190,9 @@ export class ModeManager {
    */
   unbind(tableName: string, eventName: string): void {
     const table = this.eventTableStack.find((t) => t.name === tableName);
+    if (table?.bindings.has(eventName) && eventName.startsWith(REGEX_PREFIX)) {
+      table.regexCount = Math.max(0, table.regexCount - 1);
+    }
     table?.bindings.delete(eventName);
   }
 
@@ -181,6 +200,10 @@ export class ModeManager {
    * Dispatch an event through the mode system.
    * Walks override tables first, then global tables, then the event table stack.
    * Returns true if the event was handled (not rejected).
+   *
+   * At each level, exact bindings are tried first. If no exact match is found,
+   * regex bindings (keys prefixed with `__regex__`) are tested against the
+   * event name as a lower-priority fallback.
    */
   dispatchEvent(event: MuEvent): boolean {
     // 1. Check override tables from active modes (highest order first)
@@ -194,6 +217,8 @@ export class ModeManager {
         binding.callback(event);
         if (!event.reject) return true;
         event.reject = false; // Reset for next handler
+      } else if (this.tryRegexBindings(mode.overrideBindings, event)) {
+        return true;
       }
     }
 
@@ -215,6 +240,8 @@ export class ModeManager {
         binding.callback(event);
         if (!event.reject) return true;
         event.reject = false;
+      } else if (this.tryRegexBindings(table, event)) {
+        return true;
       }
     }
 
@@ -229,6 +256,8 @@ export class ModeManager {
         binding.callback(event);
         if (!event.reject) return true;
         event.reject = false;
+      } else if (this.tryRegexBindings(mode.globalBindings, event)) {
+        return true;
       }
     }
 
@@ -307,14 +336,46 @@ export class ModeManager {
     name: string,
     bindings: Array<[string, MuEventCallback, string]>,
   ): EventTable {
-    const table: EventTable = { name, bindings: new Map() };
+    const table: EventTable = { name, bindings: new Map(), regexCount: 0 };
     for (const [eventName, callback, doc] of bindings) {
+      const isRegex = eventName.startsWith(REGEX_PREFIX);
+      const regex = isRegex
+        ? new RegExp(eventName.slice(REGEX_PREFIX.length))
+        : undefined;
       table.bindings.set(eventName, {
         eventName,
         callback,
         documentation: doc,
+        ...(regex ? { regex } : {}),
       });
+      if (isRegex) {
+        table.regexCount++;
+      }
     }
     return table;
+  }
+
+  /**
+   * Try regex bindings in a table against the event name.
+   * Returns true if a binding matched and was not rejected.
+   */
+  private tryRegexBindings(table: EventTable, event: MuEvent): boolean {
+    if (table.regexCount === 0) return false;
+
+    for (const [key, binding] of table.bindings) {
+      if (!key.startsWith(REGEX_PREFIX)) continue;
+
+      const matches = binding.regex
+        ? binding.regex.test(event.name)
+        : new RegExp(key.slice(REGEX_PREFIX.length)).test(event.name);
+
+      if (matches) {
+        binding.callback(event);
+        if (!event.reject) return true;
+        event.reject = false;
+      }
+    }
+
+    return false;
   }
 }

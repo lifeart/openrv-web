@@ -467,34 +467,3 @@ describe('Timecode calculation functions', () => {
     });
   });
 });
-
-describe('TimecodeOverlay configuration hint (#77)', () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  function createOverlay(): TimecodeOverlay {
-    const session = createMockSession();
-    return new TimecodeOverlay(session as any);
-  }
-
-  it('TC-130: logs configuration info on first enable', () => {
-    const overlay = createOverlay();
-    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
-    overlay.enable();
-    expect(infoSpy).toHaveBeenCalledTimes(1);
-    expect(infoSpy.mock.calls[0]![0]).toContain('[TimecodeOverlay]');
-    expect(infoSpy.mock.calls[0]![0]).toContain('#77');
-    overlay.dispose();
-  });
-
-  it('TC-131: logs configuration info only once across multiple enable calls', () => {
-    const overlay = createOverlay();
-    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
-    overlay.enable();
-    overlay.disable();
-    overlay.enable();
-    expect(infoSpy).toHaveBeenCalledTimes(1);
-    overlay.dispose();
-  });
-});

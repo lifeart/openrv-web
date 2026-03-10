@@ -436,6 +436,228 @@ describe('MuEventBridge', () => {
   });
 });
 
+// ── Regex Binding Dispatch Tests ──
+
+describe('ModeManager regex dispatch', () => {
+  let manager: ModeManager;
+
+  beforeEach(() => {
+    manager = new ModeManager();
+  });
+
+  function makeEvent(name: string): MuEvent {
+    return {
+      name,
+      sender: '',
+      contents: '',
+      returnContents: '',
+      reject: false,
+    };
+  }
+
+  it('regex-bound handler fires when event name matches the pattern', () => {
+    const handler = vi.fn();
+    manager.pushEventTable('t');
+    manager.bind('t', '__regex__key-down--.*', handler, 'doc', /key-down--.*/);
+
+    expect(manager.dispatchEvent(makeEvent('key-down--a'))).toBe(true);
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it('regex-bound handler does NOT fire when event name does not match', () => {
+    const handler = vi.fn();
+    manager.pushEventTable('t');
+    manager.bind('t', '__regex__key-down--.*', handler, 'doc', /key-down--.*/);
+
+    expect(manager.dispatchEvent(makeEvent('pointer--move'))).toBe(false);
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('multiple regex patterns — only the matching one fires', () => {
+    const keyHandler = vi.fn();
+    const pointerHandler = vi.fn();
+    manager.pushEventTable('t');
+    manager.bind('t', '__regex__key-down--.*', keyHandler, '', /key-down--.*/);
+    manager.bind('t', '__regex__pointer--.*', pointerHandler, '', /pointer--.*/);
+
+    manager.dispatchEvent(makeEvent('key-down--x'));
+
+    expect(keyHandler).toHaveBeenCalledOnce();
+    expect(pointerHandler).not.toHaveBeenCalled();
+  });
+
+  it('exact bindings take priority over regex bindings at the same table level', () => {
+    const exactHandler = vi.fn();
+    const regexHandler = vi.fn();
+    manager.pushEventTable('t');
+    manager.bind('t', 'key-down--a', exactHandler, 'exact');
+    manager.bind('t', '__regex__key-down--.*', regexHandler, 'regex', /key-down--.*/);
+
+    manager.dispatchEvent(makeEvent('key-down--a'));
+
+    expect(exactHandler).toHaveBeenCalledOnce();
+    expect(regexHandler).not.toHaveBeenCalled();
+  });
+
+  it('regex fires when there is no exact match but event matches regex', () => {
+    const exactHandler = vi.fn();
+    const regexHandler = vi.fn();
+    manager.pushEventTable('t');
+    manager.bind('t', 'key-down--a', exactHandler, 'exact');
+    manager.bind('t', '__regex__key-down--.*', regexHandler, 'regex', /key-down--.*/);
+
+    manager.dispatchEvent(makeEvent('key-down--b'));
+
+    expect(exactHandler).not.toHaveBeenCalled();
+    expect(regexHandler).toHaveBeenCalledOnce();
+  });
+
+  it('regex bindings work in override tables', () => {
+    const handler = vi.fn();
+    manager.defineMinorMode('m', 0, [], [
+      ['__regex__key-down--.*', handler, 'override regex'],
+    ]);
+    manager.activateMode('m');
+
+    expect(manager.dispatchEvent(makeEvent('key-down--z'))).toBe(true);
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it('regex bindings work in global tables', () => {
+    const handler = vi.fn();
+    manager.defineMinorMode('m', 0, [
+      ['__regex__pointer--.*', handler, 'global regex'],
+    ], []);
+    manager.activateMode('m');
+
+    expect(manager.dispatchEvent(makeEvent('pointer--move'))).toBe(true);
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it('override regex takes priority over event-table regex and global regex', () => {
+    const overrideHandler = vi.fn();
+    const tableHandler = vi.fn();
+    const globalHandler = vi.fn();
+
+    manager.defineMinorMode('m', 0,
+      [['__regex__ev--.*', globalHandler, 'global']],
+      [['__regex__ev--.*', overrideHandler, 'override']],
+    );
+    manager.activateMode('m');
+
+    manager.pushEventTable('t');
+    manager.bind('t', '__regex__ev--.*', tableHandler, 'table', /ev--.*/);
+
+    manager.dispatchEvent(makeEvent('ev--test'));
+
+    expect(overrideHandler).toHaveBeenCalledOnce();
+    expect(tableHandler).not.toHaveBeenCalled();
+    expect(globalHandler).not.toHaveBeenCalled();
+  });
+
+  it('event-table regex takes priority over global regex', () => {
+    const tableHandler = vi.fn();
+    const globalHandler = vi.fn();
+
+    manager.defineMinorMode('m', 0,
+      [['__regex__ev--.*', globalHandler, 'global']],
+      [],
+    );
+    manager.activateMode('m');
+
+    manager.pushEventTable('t');
+    manager.bind('t', '__regex__ev--.*', tableHandler, 'table', /ev--.*/);
+
+    manager.dispatchEvent(makeEvent('ev--test'));
+
+    expect(tableHandler).toHaveBeenCalledOnce();
+    expect(globalHandler).not.toHaveBeenCalled();
+  });
+
+  it('rejected regex binding passes to next handler', () => {
+    const rejectHandler = vi.fn((e: MuEvent) => { e.reject = true; });
+    const globalHandler = vi.fn();
+
+    manager.defineMinorMode('m', 0,
+      [['__regex__ev--.*', globalHandler, 'global']],
+      [['__regex__ev--.*', rejectHandler, 'override reject']],
+    );
+    manager.activateMode('m');
+
+    manager.dispatchEvent(makeEvent('ev--x'));
+
+    expect(rejectHandler).toHaveBeenCalledOnce();
+    // After override regex rejects, dispatch continues to event tables then global
+    expect(globalHandler).toHaveBeenCalledOnce();
+  });
+
+  it('returns false when no regex binding matches', () => {
+    manager.pushEventTable('t');
+    manager.bind('t', '__regex__key-down--.*', vi.fn(), '', /key-down--.*/);
+
+    expect(manager.dispatchEvent(makeEvent('completely-different'))).toBe(false);
+  });
+});
+
+describe('MuEventBridge regex binding', () => {
+  let bridge: MuEventBridge;
+
+  beforeEach(() => {
+    bridge = new MuEventBridge();
+  });
+
+  it('bindRegex registers and dispatches matching events', () => {
+    const handler = vi.fn();
+    bridge.bindRegex('mode', 'table', /key-down--.*/, handler, 'regex doc');
+
+    bridge.sendInternalEvent('key-down--a');
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it('bindRegex does not fire for non-matching events', () => {
+    const handler = vi.fn();
+    bridge.bindRegex('mode', 'table', /key-down--.*/, handler);
+
+    bridge.sendInternalEvent('pointer--move');
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('unbindRegex removes the binding and it stops firing', () => {
+    const handler = vi.fn();
+    const pattern = /key-down--.*/;
+    bridge.bindRegex('mode', 'table', pattern, handler);
+
+    bridge.sendInternalEvent('key-down--a');
+    expect(handler).toHaveBeenCalledOnce();
+
+    bridge.unbindRegex('mode', 'table', pattern);
+
+    bridge.sendInternalEvent('key-down--b');
+    expect(handler).toHaveBeenCalledOnce(); // not called again
+  });
+
+  it('exact bind takes priority over bindRegex at same table', () => {
+    const exactHandler = vi.fn();
+    const regexHandler = vi.fn();
+
+    bridge.bind('mode', 'table', 'key-down--a', exactHandler, 'exact');
+    bridge.bindRegex('mode', 'table', /key-down--.*/, regexHandler, 'regex');
+
+    bridge.sendInternalEvent('key-down--a');
+
+    expect(exactHandler).toHaveBeenCalledOnce();
+    expect(regexHandler).not.toHaveBeenCalled();
+  });
+
+  it('regex with flags works correctly', () => {
+    const handler = vi.fn();
+    bridge.bindRegex('mode', 'table', /KEY-DOWN--a/i, handler, 'case insensitive');
+
+    bridge.sendInternalEvent('key-down--a');
+    expect(handler).toHaveBeenCalledOnce();
+  });
+});
+
 // ── MuSettingsBridge Tests ──
 
 describe('MuSettingsBridge', () => {

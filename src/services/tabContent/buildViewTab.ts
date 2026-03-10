@@ -9,6 +9,8 @@ import { getIconSvg } from '../../ui/components/shared/Icons';
 import type { Panel } from '../../ui/components/shared/Panel';
 import type { AppControlRegistry } from '../../AppControlRegistry';
 import type { Viewer } from '../../ui/components/Viewer';
+import { TimecodeOverlaySettingsMenu } from '../../ui/components/TimecodeOverlaySettingsMenu';
+import { FPSIndicatorSettingsMenu } from '../../ui/components/FPSIndicatorSettingsMenu';
 
 export interface BuildViewTabDeps {
   registry: AppControlRegistry;
@@ -25,6 +27,8 @@ export interface BuildViewTabResult {
 
 export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
   const { registry, viewer, timelineEditorPanel, addUnsubscriber } = deps;
+  const timecodeOverlay = viewer.getTimecodeOverlay();
+  const fpsIndicator = viewer.getFPSIndicator();
 
   const viewContent = document.createElement('div');
   viewContent.style.cssText = 'display: flex; align-items: center; gap: 6px; flex-shrink: 0;';
@@ -423,19 +427,49 @@ export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
     }),
   );
 
+  const timecodeOverlayButton = ContextToolbar.createIconButton(
+    'clock',
+    () => {
+      timecodeOverlay.toggle();
+    },
+    { title: 'Toggle timecode overlay (Alt+Shift+T) — Right-click for settings' },
+  );
+  timecodeOverlayButton.dataset.testid = 'timecode-overlay-toggle-btn';
+  viewContent.appendChild(timecodeOverlayButton);
+
+  const timecodeOverlaySettingsMenu = new TimecodeOverlaySettingsMenu(timecodeOverlay);
+  timecodeOverlayButton.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    timecodeOverlaySettingsMenu.show(e.clientX, e.clientY);
+  });
+  addUnsubscriber(() => timecodeOverlaySettingsMenu.dispose());
+
+  addUnsubscriber(
+    timecodeOverlay.on('stateChanged', (state) => {
+      setButtonActive(timecodeOverlayButton, state.enabled, 'icon');
+    }),
+  );
+
   // FPS Indicator toggle button
   const fpsIndicatorButton = ContextToolbar.createIconButton(
     'activity',
     () => {
-      viewer.getFPSIndicator().toggle();
+      fpsIndicator.toggle();
     },
-    { title: 'Toggle FPS indicator (Ctrl+Shift+F)' },
+    { title: 'Toggle FPS indicator (Ctrl+Shift+F) — Right-click for settings' },
   );
   fpsIndicatorButton.dataset.testid = 'fps-indicator-toggle-btn';
   viewContent.appendChild(fpsIndicatorButton);
 
+  const fpsIndicatorSettingsMenu = new FPSIndicatorSettingsMenu(fpsIndicator);
+  fpsIndicatorButton.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    fpsIndicatorSettingsMenu.show(e.clientX, e.clientY);
+  });
+  addUnsubscriber(() => fpsIndicatorSettingsMenu.dispose());
+
   addUnsubscriber(
-    viewer.getFPSIndicator().on('stateChanged', (state) => {
+    fpsIndicator.on('stateChanged', (state) => {
       setButtonActive(fpsIndicatorButton, state.enabled, 'icon');
     }),
   );
