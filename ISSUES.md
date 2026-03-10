@@ -3416,6 +3416,85 @@ This file tracks findings from exploratory review and targeted validation runs.
   - A caller can use the official introspection path, conclude that `fullScreenMode` is awaitable, and then receive `undefined` instead of a promise.
   - That makes the async-command contract unreliable exactly where the docs tell callers to depend on it.
 
+### 277. Unified preferences import/reset writes storage but does not apply the live theme/layout/keybinding/OCIO subsystems
+
+- Severity: High
+- Area: Preferences / runtime state application
+- Evidence:
+  - Production wires live subsystem references into the unified facade in [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L430) through [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L436).
+  - `PreferencesManager` stores those subsystem references behind getters, but `importAll(...)` and `resetAll()` only write/remove storage keys and emit facade events; they never call `this.theme`, `this.layout`, `this.keyBindings`, or `this.ocio` in [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L290) through [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L320) and [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L383) through [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L481).
+  - The live subsystems all load persisted state only during their own construction or direct setters: `ThemeManager` reads storage in its constructor and applies changes only through `setMode(...)` in [src/utils/ui/ThemeManager.ts](/Users/lifeart/Repos/openrv-web/src/utils/ui/ThemeManager.ts#L128) through [src/utils/ui/ThemeManager.ts](/Users/lifeart/Repos/openrv-web/src/utils/ui/ThemeManager.ts#L165), `CustomKeyBindingsManager` loads storage only in its constructor in [src/utils/input/CustomKeyBindingsManager.ts](/Users/lifeart/Repos/openrv-web/src/utils/input/CustomKeyBindingsManager.ts#L25) through [src/utils/input/CustomKeyBindingsManager.ts](/Users/lifeart/Repos/openrv-web/src/utils/input/CustomKeyBindingsManager.ts#L29) and [src/utils/input/CustomKeyBindingsManager.ts](/Users/lifeart/Repos/openrv-web/src/utils/input/CustomKeyBindingsManager.ts#L153) through [src/utils/input/CustomKeyBindingsManager.ts](/Users/lifeart/Repos/openrv-web/src/utils/input/CustomKeyBindingsManager.ts#L189), `OCIOStateManager` loads persisted state only in its constructor in [src/ui/components/OCIOStateManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/OCIOStateManager.ts#L61) through [src/ui/components/OCIOStateManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/OCIOStateManager.ts#L79), and `LayoutStore` loads storage only in its constructor in [src/ui/layout/LayoutStore.ts](/Users/lifeart/Repos/openrv-web/src/ui/layout/LayoutStore.ts#L150) through [src/ui/layout/LayoutStore.ts](/Users/lifeart/Repos/openrv-web/src/ui/layout/LayoutStore.ts#L159).
+  - In the current tree, `fpsIndicatorPrefsChanged` is the only unified-preferences event with a clear production subscriber; the rest of the imported/reset state is left to storage.
+- Impact:
+  - Importing or resetting unified preferences can leave the live app showing the old theme, panel layout, keybindings, and OCIO state until a reload or manual subsystem-specific action.
+  - That makes the facade behave like an offline storage editor instead of a true runtime preferences system.
+
+### 278. `MediaCacheManager` claims graceful OPFS fallback, but browsers without `createWritable()` still initialize and then fail writes noisily
+
+- Severity: Medium
+- Area: Caching / storage fallback
+- Evidence:
+  - The class header says it is “Designed to degrade gracefully” and that when storage is unavailable “all public methods become safe no-ops” in [src/cache/MediaCacheManager.ts](/Users/lifeart/Repos/openrv-web/src/cache/MediaCacheManager.ts#L1) through [src/cache/MediaCacheManager.ts](/Users/lifeart/Repos/openrv-web/src/cache/MediaCacheManager.ts#L9).
+  - `initialize()` succeeds as long as `navigator.storage.getDirectory()` and IndexedDB work; it does not probe `createWritable()` support before marking the manager initialized in [src/cache/MediaCacheManager.ts](/Users/lifeart/Repos/openrv-web/src/cache/MediaCacheManager.ts#L94) through [src/cache/MediaCacheManager.ts](/Users/lifeart/Repos/openrv-web/src/cache/MediaCacheManager.ts#L117).
+  - Later, `put(...)` always calls `writeFile(...)`, and `writeFile(...)` throws `createWritable not supported` whenever the file handle lacks that method in [src/cache/MediaCacheManager.ts](/Users/lifeart/Repos/openrv-web/src/cache/MediaCacheManager.ts#L154) through [src/cache/MediaCacheManager.ts](/Users/lifeart/Repos/openrv-web/src/cache/MediaCacheManager.ts#L187) and [src/cache/MediaCacheManager.ts](/Users/lifeart/Repos/openrv-web/src/cache/MediaCacheManager.ts#L331) through [src/cache/MediaCacheManager.ts](/Users/lifeart/Repos/openrv-web/src/cache/MediaCacheManager.ts#L352).
+  - The code comment even calls this branch a “fallback,” but the implementation is a hard failure rather than a no-op path.
+- Impact:
+  - On partial-OPFS environments, media caching can look initialized and then fail on every background write instead of cleanly disabling itself.
+  - That creates repeated error churn and violates the cache layer’s advertised fallback contract.
+
+### 279. The main LUT load UI rejects 1D LUTs even though the app advertises them as supported formats
+
+- Severity: Medium
+- Area: Color pipeline / LUT UX
+- Evidence:
+  - The user-facing LUT docs say the color-controls Load button accepts “any supported format,” and the supported-format table explicitly includes multiple 1D LUT families such as Cube, 3DL, CSP, Houdini LUT, and RV Channel LUT in [docs/color/lut.md](/Users/lifeart/Repos/openrv-web/docs/color/lut.md#L23) through [docs/color/lut.md](/Users/lifeart/Repos/openrv-web/docs/color/lut.md#L45).
+  - The shipped `ColorControls` Load flow parses the file and then unconditionally rejects any non-3D LUT with the error “1D LUTs are not supported. Please load a 3D LUT file.” in [src/ui/components/ColorControls.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ColorControls.ts#L449) through [src/ui/components/ColorControls.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ColorControls.ts#L455).
+  - The underlying LUT pipeline still has explicit 1D support in `LUTStage`, which stores a generic `LUT` rather than only `LUT3D`, in [src/color/pipeline/LUTStage.ts](/Users/lifeart/Repos/openrv-web/src/color/pipeline/LUTStage.ts#L1) through [src/color/pipeline/LUTStage.ts](/Users/lifeart/Repos/openrv-web/src/color/pipeline/LUTStage.ts#L74).
+- Impact:
+  - Users following the shipped LUT documentation can select a documented 1D LUT and get a hard rejection from the primary LUT UI.
+  - That makes the advertised LUT support materially narrower in practice than the app and docs suggest.
+
+### 280. The published scripting docs expose `openrv.color` LUT methods that the real `ColorAPI` does not implement
+
+- Severity: Medium
+- Area: Public scripting API
+- Evidence:
+  - The LUT docs publish `window.openrv.color.loadLUT(...)`, `setLUTIntensity(...)`, `clearLUT()`, and `applyLUTPreset(...)` as part of the scripting API in [docs/color/lut.md](/Users/lifeart/Repos/openrv-web/docs/color/lut.md#L113) through [docs/color/lut.md](/Users/lifeart/Repos/openrv-web/docs/color/lut.md#L127).
+  - The real `ColorAPI` class exposes adjustments, CDL, and curves only; there are no LUT load/intensity/clear/preset methods anywhere in [src/api/ColorAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/ColorAPI.ts#L64) through [src/api/ColorAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/ColorAPI.ts#L343).
+  - `OpenRVAPI` mounts that `ColorAPI` instance directly at `window.openrv.color` in [src/api/OpenRVAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.ts#L88) through [src/api/OpenRVAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.ts#L96), so those documented methods are absent in the shipped public object.
+- Impact:
+  - External scripts following the published API docs will hit `undefined is not a function` style failures for basic LUT operations.
+  - That makes the scripting documentation unreliable for one of the app’s documented color workflows.
+
+### 281. MXF is still registered as a decoder even though the decode result is only a 1x1 placeholder and the registry admits consumers do not handle that mode
+
+- Severity: High
+- Area: Formats / decoder registry
+- Evidence:
+  - The MXF adapter is explicitly documented as metadata-only and says it “does NOT decode video frames” and instead returns a dummy `1x1` RGBA image in [src/formats/DecoderRegistry.ts](/Users/lifeart/Repos/openrv-web/src/formats/DecoderRegistry.ts#L770) through [src/formats/DecoderRegistry.ts](/Users/lifeart/Repos/openrv-web/src/formats/DecoderRegistry.ts#L783).
+  - The implementation keeps MXF registered as a normal decoder anyway in [src/formats/DecoderRegistry.ts](/Users/lifeart/Repos/openrv-web/src/formats/DecoderRegistry.ts#L785) through [src/formats/DecoderRegistry.ts](/Users/lifeart/Repos/openrv-web/src/formats/DecoderRegistry.ts#L815).
+  - The inline TODO states the core problem directly: the decoder returns dummy pixel data and “Consumers do not currently handle `metadataOnly`” in [src/formats/DecoderRegistry.ts](/Users/lifeart/Repos/openrv-web/src/formats/DecoderRegistry.ts#L789) through [src/formats/DecoderRegistry.ts](/Users/lifeart/Repos/openrv-web/src/formats/DecoderRegistry.ts#L790).
+- Impact:
+  - MXF can enter the normal decode path and produce something that looks like a decoded image object even though there are no real frames behind it.
+  - That is a runtime contract break inside the registry itself, not just a documentation caveat.
+
+### 282. Multiple shipped color scripting pages document `window.openrv.color` methods that do not exist in the real API
+
+- Severity: High
+- Area: Public scripting API / documentation contract
+- Evidence:
+  - The real `ColorAPI` surface stops at adjustments, CDL, and curves in [src/api/ColorAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/ColorAPI.ts#L64) through [src/api/ColorAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/ColorAPI.ts#L343), and `OpenRVAPI` mounts that object directly at `window.openrv.color` in [src/api/OpenRVAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.ts#L88) through [src/api/OpenRVAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.ts#L96).
+  - Separate shipped docs still publish additional color methods that are absent from that class:
+    - `resetCDL()` in [docs/color/cdl.md](/Users/lifeart/Repos/openrv-web/docs/color/cdl.md#L105) through [docs/color/cdl.md](/Users/lifeart/Repos/openrv-web/docs/color/cdl.md#L121)
+    - `setDisplayProfile()` and `getDisplayCapabilities()` in [docs/color/display-profiles.md](/Users/lifeart/Repos/openrv-web/docs/color/display-profiles.md#L134) through [docs/color/display-profiles.md](/Users/lifeart/Repos/openrv-web/docs/color/display-profiles.md#L149)
+    - `setOCIOState()`, `getOCIOState()`, and `getAvailableConfigs()` in [docs/color/ocio.md](/Users/lifeart/Repos/openrv-web/docs/color/ocio.md#L122) through [docs/color/ocio.md](/Users/lifeart/Repos/openrv-web/docs/color/ocio.md#L141)
+    - `setToneMapping()` in [docs/color/tone-mapping.md](/Users/lifeart/Repos/openrv-web/docs/color/tone-mapping.md#L122) through [docs/color/tone-mapping.md](/Users/lifeart/Repos/openrv-web/docs/color/tone-mapping.md#L140)
+    - `exportCurvesJSON()` and `importCurvesJSON()` in [docs/color/curves.md](/Users/lifeart/Repos/openrv-web/docs/color/curves.md#L78) through [docs/color/curves.md](/Users/lifeart/Repos/openrv-web/docs/color/curves.md#L84)
+  - Those methods do exist elsewhere in UI/control classes, but they are not exposed through the public API object the docs tell external scripts to call.
+- Impact:
+  - External scripting against the shipped documentation is materially unreliable across several major color workflows, not just LUT loading.
+  - The public API looks much broader in docs than it is in the actual runtime object.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

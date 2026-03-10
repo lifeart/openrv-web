@@ -1278,3 +1278,13 @@
 - **Regression Tests**: SEQ-INFER-001 (inference called with correct args), SEQ-INFER-002 (successful inference loads as sequence), SEQ-INFER-003 (null inference falls through to loadFile), SEQ-INFER-004 (multiple images still use existing getBestSequence — no regression), SEQ-INFER-005 (inference error falls through to loadFile).
 - **Verification**: All 53 ViewerInputHandler tests pass, TypeScript clean.
 - **Files Changed**: `src/ui/components/ViewerInputHandler.ts`, `src/ui/components/ViewerInputHandler.test.ts`
+
+## Issue #155: Drag-and-drop treats `.rvedl` as media and routes it into the wrong loader
+
+- **Severity**: Medium
+- **Area**: Session ingest / EDL workflow
+- **Root Cause**: The drag-and-drop handler only special-cased `.rv`/`.gto` extensions. `.rvedl` files fell through to `session.loadFile()` which dispatches to image/video loading, and unknown extensions default to `'image'`. The header file-picker had a dedicated RVEDL parse path via `session.loadEDL(text)`.
+- **Fix**: Added `.rvedl` detection in the `ViewerInputHandler.onDrop()` handler, placed before the `.rv`/`.gto` check (matching HeaderBar ordering). When detected, reads the file as text via `file.text()` and calls `session.loadEDL(text)`. Shows info alert on success with source summary, warning if no entries found, and error alert on failure — all matching HeaderBar's pattern.
+- **Regression Tests**: EDL-DROP-001 (`.rvedl` drop calls loadEDL with correct text), EDL-DROP-002 (not routed through loadFile/loadFromGTO/loadSequence), EDL-DROP-003 (error handled gracefully), EDL-DROP-004 (`.rv`/`.gto` still works — no regression), EDL-DROP-005 (case-insensitive `.RVEDL` recognized).
+- **Verification**: All 58 ViewerInputHandler tests pass, TypeScript clean.
+- **Files Changed**: `src/ui/components/ViewerInputHandler.ts`, `src/ui/components/ViewerInputHandler.test.ts`

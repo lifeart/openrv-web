@@ -706,6 +706,39 @@ export class ViewerInputHandler {
     const fileArray = Array.from(files);
     const session = this.ctx.getSession();
 
+    // Check for .rvedl file among dropped files (before session/sequence detection)
+    const edlFile = fileArray.find((f) => f.name.toLowerCase().endsWith('.rvedl'));
+    if (edlFile) {
+      try {
+        const text = await edlFile.text();
+        const entries = session.loadEDL(text);
+        if (entries.length > 0) {
+          const uniqueSources = new Set(
+            entries.map((e) => {
+              const parts = e.sourcePath.split('/');
+              return parts[parts.length - 1] || e.sourcePath;
+            }),
+          );
+          const sourceList = Array.from(uniqueSources).slice(0, 5).join(', ');
+          const moreCount = uniqueSources.size > 5 ? ` and ${uniqueSources.size - 5} more` : '';
+          showAlert(
+            `Loaded ${entries.length} EDL ${entries.length === 1 ? 'entry' : 'entries'} ` +
+              `from ${edlFile.name} referencing ${uniqueSources.size} ` +
+              `${uniqueSources.size === 1 ? 'source' : 'sources'}: ${sourceList}${moreCount}.\n\n` +
+              `Source paths are local filesystem references. ` +
+              `Load the corresponding media files to resolve them.`,
+            { type: 'info', title: 'EDL Loaded' },
+          );
+        } else {
+          showAlert(`No valid entries found in ${edlFile.name}.`, { type: 'warning', title: 'EDL Empty' });
+        }
+      } catch (err) {
+        console.error('Failed to load RVEDL file:', err);
+        showAlert(`Failed to load ${edlFile.name}: ${err}`, { type: 'error', title: 'Load Error' });
+      }
+      return;
+    }
+
     // Check for .rv or .gto session file among dropped files (before sequence detection)
     const sessionFile = fileArray.find(
       (f) => f.name.toLowerCase().endsWith('.rv') || f.name.toLowerCase().endsWith('.gto'),

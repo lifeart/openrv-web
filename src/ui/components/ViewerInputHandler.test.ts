@@ -90,6 +90,7 @@ function createMockContext(overrides: Partial<ViewerInputContext> = {}): ViewerI
     loadSequence: vi.fn(),
     loadFile: vi.fn(),
     loadFromGTO: vi.fn(),
+    loadEDL: vi.fn(() => []),
   } as unknown as Session;
 
   const mockTransformManager = {
@@ -1317,5 +1318,129 @@ describe('ViewerInputHandler – Single-file sequence inference on drop (Issue #
 
     expect(mockSession.loadFile).toHaveBeenCalledWith(singleFile);
     expect(mockSession.loadSequence).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Drag-and-drop .rvedl EDL file handling (Issue #155)
+// ---------------------------------------------------------------------------
+
+describe('ViewerInputHandler – RVEDL drop handling (Issue #155)', () => {
+  let ctx: ViewerInputContext;
+  let handler: ViewerInputHandler;
+  let dropOverlay: HTMLElement;
+
+  beforeEach(() => {
+    ctx = createMockContext();
+    dropOverlay = document.createElement('div');
+    handler = new ViewerInputHandler(ctx, dropOverlay);
+    handler.bindEvents();
+  });
+
+  afterEach(() => {
+    handler.unbindEvents();
+    const container = ctx.getContainer();
+    if (container.parentNode) {
+      container.parentNode.removeChild(container);
+    }
+  });
+
+  function dispatchDrop(container: HTMLElement, files: File[]): void {
+    const mockDataTransfer = { files };
+    const dropEvent = new Event('drop', { bubbles: true }) as any;
+    dropEvent.dataTransfer = mockDataTransfer;
+    dropEvent.preventDefault = vi.fn();
+    container.dispatchEvent(dropEvent);
+  }
+
+  it('EDL-DROP-001: .rvedl file dropped calls session.loadEDL with text content', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+    const edlContent = 'sourceA.exr 1 100\nsourceB.exr 101 200';
+    const edlFile = new File([edlContent], 'timeline.rvedl');
+
+    (mockSession.loadEDL as ReturnType<typeof vi.fn>).mockReturnValue([
+      { sourcePath: '/path/to/sourceA.exr', startFrame: 1, endFrame: 100 },
+      { sourcePath: '/path/to/sourceB.exr', startFrame: 101, endFrame: 200 },
+    ]);
+
+    dispatchDrop(container, [edlFile]);
+
+    await vi.waitFor(() => {
+      expect(mockSession.loadEDL).toHaveBeenCalledTimes(1);
+    });
+
+    expect(mockSession.loadEDL).toHaveBeenCalledWith(edlContent);
+  });
+
+  it('EDL-DROP-002: .rvedl file is NOT routed through loadFile', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+    const edlFile = new File(['edl-data'], 'timeline.rvedl');
+
+    (mockSession.loadEDL as ReturnType<typeof vi.fn>).mockReturnValue([]);
+
+    dispatchDrop(container, [edlFile]);
+
+    await vi.waitFor(() => {
+      expect(mockSession.loadEDL).toHaveBeenCalledTimes(1);
+    });
+
+    expect(mockSession.loadFile).not.toHaveBeenCalled();
+    expect(mockSession.loadFromGTO).not.toHaveBeenCalled();
+    expect(mockSession.loadSequence).not.toHaveBeenCalled();
+  });
+
+  it('EDL-DROP-003: error during .rvedl load is handled gracefully', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+    const edlFile = new File(['bad-data'], 'broken.rvedl');
+
+    (mockSession.loadEDL as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      throw new Error('Parse error');
+    });
+
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    dispatchDrop(container, [edlFile]);
+
+    await vi.waitFor(() => {
+      expect(consoleSpy).toHaveBeenCalledWith('Failed to load RVEDL file:', expect.any(Error));
+    });
+
+    expect(mockSession.loadFile).not.toHaveBeenCalled();
+
+    consoleSpy.mockRestore();
+  });
+
+  it('EDL-DROP-004: .rv/.gto handling still works (no regression)', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+    const gtoFile = new File(['gto-data'], 'scene.gto');
+
+    dispatchDrop(container, [gtoFile]);
+
+    await vi.waitFor(() => {
+      expect(mockSession.loadFromGTO).toHaveBeenCalledTimes(1);
+    });
+
+    expect(mockSession.loadEDL).not.toHaveBeenCalled();
+    expect(mockSession.loadFile).not.toHaveBeenCalled();
+  });
+
+  it('EDL-DROP-005: case-insensitive .RVEDL extension is recognized', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+    const edlFile = new File(['edl-data'], 'TIMELINE.RVEDL');
+
+    (mockSession.loadEDL as ReturnType<typeof vi.fn>).mockReturnValue([
+      { sourcePath: 'source.exr', startFrame: 1, endFrame: 50 },
+    ]);
+
+    dispatchDrop(container, [edlFile]);
+
+    await vi.waitFor(() => {
+      expect(mockSession.loadEDL).toHaveBeenCalledTimes(1);
+    });
   });
 });
