@@ -60,9 +60,8 @@ export interface ColorDefaults {
 }
 
 /**
- * TODO(#152): Storage-only — no production code reads `getExportDefaults()`.
- * These fields are persisted, exported, and imported, but not yet consumed
- * by any runtime behavior (e.g., snapshot export, frame burn-in).
+ * Export default preferences consumed by ExportControl (see #175).
+ * frameburnEnabled / frameburnConfig are still storage-only (TODO #152).
  */
 export interface ExportDefaults {
   defaultFormat: 'png' | 'jpeg' | 'webp';

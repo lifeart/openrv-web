@@ -31,7 +31,7 @@ import { showAlert, showConfirm } from './ui/components/shared/Modal';
 import { getCorePreferencesManager } from './core/PreferencesManager';
 import { generateSlateFrame } from './export/SlateRenderer';
 import { generateReport } from './export/ReportExporter';
-import { downloadAnnotationsJSON } from './utils/export/AnnotationJSONExporter';
+import { downloadAnnotationsJSON, parseAnnotationsJSON, applyAnnotationsJSON } from './utils/export/AnnotationJSONExporter';
 import { exportAnnotationsPDF } from './utils/export/AnnotationPDFExporter';
 import { DisposableSubscriptionManager } from './utils/DisposableSubscriptionManager';
 import { isAudioScrubAvailable } from './utils/media/SourceUIState';
@@ -232,6 +232,44 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
     exportControl.on('annotationsJSONExportRequested', () => {
       const sourceName = session.currentSource?.name?.replace(/\.[^/.]+$/, '') ?? 'annotations';
       downloadAnnotationsJSON(ctx.paintEngine, sourceName);
+    }),
+  );
+  subs.add(
+    exportControl.on('annotationsJSONImportRequested', () => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.json,application/json';
+      input.style.display = 'none';
+      input.addEventListener('change', () => {
+        const file = input.files?.[0];
+        if (!file) {
+          input.remove();
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => {
+          input.remove();
+          try {
+            const parsed = parseAnnotationsJSON(reader.result as string);
+            if (!parsed) {
+              showAlert('Invalid annotation JSON file. The file must be an OpenRV Web annotation export.', { title: 'Import Error' });
+              return;
+            }
+            const count = applyAnnotationsJSON(ctx.paintEngine, parsed, { mode: 'replace' });
+            showAlert(`Successfully imported ${count} annotation${count !== 1 ? 's' : ''}. Existing annotations were replaced.`, { type: 'success', title: 'Import Annotations' });
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            showAlert(`Failed to import annotations: ${message}`, { title: 'Import Error' });
+          }
+        };
+        reader.onerror = () => {
+          input.remove();
+          showAlert('Failed to read file.', { title: 'Import Error' });
+        };
+        reader.readAsText(file);
+      });
+      document.body.appendChild(input);
+      input.click();
     }),
   );
   subs.add(

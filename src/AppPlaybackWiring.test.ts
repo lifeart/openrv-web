@@ -20,6 +20,8 @@ const {
   mockDialogUpdateProgress,
   mockDialogOnFn,
   mockDownloadAnnotationsJSON,
+  mockParseAnnotationsJSON,
+  mockApplyAnnotationsJSON,
   mockExportAnnotationsPDF,
   mockExportSequence,
 } = vi.hoisted(() => ({
@@ -32,6 +34,8 @@ const {
   mockDialogUpdateProgress: vi.fn(),
   mockDialogOnFn: vi.fn().mockReturnValue(() => {}),
   mockDownloadAnnotationsJSON: vi.fn(),
+  mockParseAnnotationsJSON: vi.fn(),
+  mockApplyAnnotationsJSON: vi.fn(),
   mockExportAnnotationsPDF: vi.fn().mockResolvedValue(undefined),
   mockExportSequence: vi.fn(),
 }));
@@ -78,6 +82,8 @@ vi.mock('./utils/export/SequenceExporter', () => ({
 
 vi.mock('./utils/export/AnnotationJSONExporter', () => ({
   downloadAnnotationsJSON: mockDownloadAnnotationsJSON,
+  parseAnnotationsJSON: mockParseAnnotationsJSON,
+  applyAnnotationsJSON: mockApplyAnnotationsJSON,
 }));
 
 vi.mock('./utils/export/AnnotationPDFExporter', () => ({
@@ -512,6 +518,148 @@ describe('wirePlaybackControls', () => {
       expect.any(Function), // renderFrame callback
       expect.objectContaining({ title: 'Test Session' }),
     );
+  });
+
+  it('PW-018: annotationsJSONImportRequested opens file picker', () => {
+    const clickSpy = vi.fn();
+    const createElementOrig = document.createElement.bind(document);
+    const createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+      const el = createElementOrig(tag);
+      if (tag === 'input') {
+        el.click = clickSpy;
+      }
+      return el;
+    });
+
+    const exportControl = headerBar.getExportControl();
+    exportControl.emit('annotationsJSONImportRequested', undefined);
+
+    expect(clickSpy).toHaveBeenCalled();
+    createElementSpy.mockRestore();
+  });
+
+  it('PW-019: annotationsJSONImportRequested calls parseAnnotationsJSON and applyAnnotationsJSON on valid file', async () => {
+    const parsedData = { version: 1, source: 'openrv-web', frames: { '1': [] } };
+    mockParseAnnotationsJSON.mockReturnValue(parsedData);
+    mockApplyAnnotationsJSON.mockReturnValue(3);
+
+    let changeHandler: (() => void) | null = null;
+    const createElementOrig = document.createElement.bind(document);
+    const createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+      const el = createElementOrig(tag);
+      if (tag === 'input') {
+        const origAddEventListener = el.addEventListener.bind(el);
+        el.addEventListener = ((type: string, handler: EventListenerOrEventListenerObject) => {
+          if (type === 'change') {
+            changeHandler = handler as () => void;
+          }
+          origAddEventListener(type, handler);
+        }) as typeof el.addEventListener;
+        Object.defineProperty(el, 'files', {
+          get: () => [new File(['{"version":1}'], 'annotations.json', { type: 'application/json' })],
+        });
+        el.click = vi.fn();
+      }
+      return el;
+    });
+
+    const exportControl = headerBar.getExportControl();
+    exportControl.emit('annotationsJSONImportRequested', undefined);
+    expect(changeHandler).not.toBeNull();
+    changeHandler!();
+
+    await vi.waitFor(() => {
+      expect(mockParseAnnotationsJSON).toHaveBeenCalledWith('{"version":1}');
+    });
+    expect(mockApplyAnnotationsJSON).toHaveBeenCalledWith(
+      expect.anything(), // paintEngine
+      parsedData,
+      { mode: 'replace' },
+    );
+    expect(showAlertSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Successfully imported 3 annotations'),
+      expect.objectContaining({ type: 'success' }),
+    );
+
+    createElementSpy.mockRestore();
+  });
+
+  it('PW-020: annotationsJSONImportRequested shows error for invalid JSON', async () => {
+    mockParseAnnotationsJSON.mockReturnValue(null);
+
+    let changeHandler: (() => void) | null = null;
+    const createElementOrig = document.createElement.bind(document);
+    const createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+      const el = createElementOrig(tag);
+      if (tag === 'input') {
+        const origAddEventListener = el.addEventListener.bind(el);
+        el.addEventListener = ((type: string, handler: EventListenerOrEventListenerObject) => {
+          if (type === 'change') {
+            changeHandler = handler as () => void;
+          }
+          origAddEventListener(type, handler);
+        }) as typeof el.addEventListener;
+        Object.defineProperty(el, 'files', {
+          get: () => [new File(['not-valid'], 'bad.json', { type: 'application/json' })],
+        });
+        el.click = vi.fn();
+      }
+      return el;
+    });
+
+    const exportControl = headerBar.getExportControl();
+    exportControl.emit('annotationsJSONImportRequested', undefined);
+    changeHandler!();
+
+    await vi.waitFor(() => {
+      expect(showAlertSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Invalid annotation JSON file'),
+        expect.objectContaining({ title: 'Import Error' }),
+      );
+    });
+
+    createElementSpy.mockRestore();
+  });
+
+  it('PW-021: annotationsJSONImportRequested shows error when applyAnnotationsJSON throws', async () => {
+    const parsedData = { version: 1, source: 'openrv-web', frames: {} };
+    mockParseAnnotationsJSON.mockReturnValue(parsedData);
+    mockApplyAnnotationsJSON.mockImplementation(() => {
+      throw new Error('Paint engine exploded');
+    });
+
+    let changeHandler: (() => void) | null = null;
+    const createElementOrig = document.createElement.bind(document);
+    const createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+      const el = createElementOrig(tag);
+      if (tag === 'input') {
+        const origAddEventListener = el.addEventListener.bind(el);
+        el.addEventListener = ((type: string, handler: EventListenerOrEventListenerObject) => {
+          if (type === 'change') {
+            changeHandler = handler as () => void;
+          }
+          origAddEventListener(type, handler);
+        }) as typeof el.addEventListener;
+        Object.defineProperty(el, 'files', {
+          get: () => [new File(['{"version":1}'], 'annotations.json', { type: 'application/json' })],
+        });
+        el.click = vi.fn();
+      }
+      return el;
+    });
+
+    const exportControl = headerBar.getExportControl();
+    exportControl.emit('annotationsJSONImportRequested', undefined);
+    changeHandler!();
+
+    await vi.waitFor(() => {
+      expect(showAlertSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to import annotations: Paint engine exploded'),
+        expect.objectContaining({ title: 'Import Error' }),
+      );
+    });
+
+    createElementSpy.mockRestore();
   });
 
   it('PW-016: snapshotPanel createRequested calls persistenceManager.createQuickSnapshot()', () => {

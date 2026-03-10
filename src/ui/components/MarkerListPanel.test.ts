@@ -863,6 +863,153 @@ describe('MarkerListPanel', () => {
       await applyImport(panel, null);
       expect(alertMock).toHaveBeenCalledTimes(2);
     });
+
+    it('MARK-U151: import mode choice dialog is shown when existing markers present', async () => {
+      session.setMarker(10, 'Existing', MARKER_COLORS[0]);
+      panel.show();
+
+      const confirmMock = vi.mocked(Modal.showConfirm).mockResolvedValue(true);
+
+      // Call the private method that the Import button triggers
+      await (panel as any).importMarkersWithModeChoice();
+
+      expect(confirmMock).toHaveBeenCalledWith(
+        expect.stringContaining('Replace existing markers?'),
+        expect.objectContaining({
+          title: 'Import Markers',
+          confirmText: 'Replace',
+          cancelText: 'Merge',
+        }),
+      );
+    });
+
+    it('MARK-U152: import mode choice dialog is NOT shown when no existing markers', async () => {
+      panel.show();
+      expect(session.marks.size).toBe(0);
+
+      const confirmMock = vi.mocked(Modal.showConfirm).mockClear();
+
+      // Call the private method - it should skip the dialog
+      await (panel as any).importMarkersWithModeChoice();
+
+      expect(confirmMock).not.toHaveBeenCalled();
+    });
+
+    it('MARK-U153: replace mode clears existing markers before importing', async () => {
+      session.setMarker(10, 'Old A', MARKER_COLORS[0]);
+      session.setMarker(20, 'Old B', MARKER_COLORS[1]);
+      panel.show();
+
+      const importData: MarkerExportData = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        fps: 24,
+        markers: [{ frame: 50, note: 'New', color: '#ff4444' }],
+      };
+
+      await applyImport(panel, importData, 'replace');
+
+      expect(session.hasMarker(10)).toBe(false);
+      expect(session.hasMarker(20)).toBe(false);
+      expect(session.hasMarker(50)).toBe(true);
+      expect(session.marks.size).toBe(1);
+    });
+
+    it('MARK-U154: merge mode preserves existing markers and adds non-colliding ones', async () => {
+      session.setMarker(10, 'Keep me', MARKER_COLORS[0]);
+      session.setMarker(20, 'Keep me too', MARKER_COLORS[1]);
+      panel.show();
+
+      const importData: MarkerExportData = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        fps: 24,
+        markers: [
+          { frame: 30, note: 'New marker', color: '#4444ff' },
+        ],
+      };
+
+      await applyImport(panel, importData, 'merge');
+
+      expect(session.getMarker(10)?.note).toBe('Keep me');
+      expect(session.getMarker(20)?.note).toBe('Keep me too');
+      expect(session.getMarker(30)?.note).toBe('New marker');
+      expect(session.marks.size).toBe(3);
+    });
+
+    it('MARK-U155: merge mode reports collision count via alert', async () => {
+      session.setMarker(10, 'Existing A', MARKER_COLORS[0]);
+      session.setMarker(20, 'Existing B', MARKER_COLORS[1]);
+      panel.show();
+
+      const alertMock = vi.mocked(Modal.showAlert).mockClear();
+
+      const importData: MarkerExportData = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        fps: 24,
+        markers: [
+          { frame: 10, note: 'Collision 1', color: '#ff4444' },
+          { frame: 20, note: 'Collision 2', color: '#44ff44' },
+          { frame: 30, note: 'No collision', color: '#4444ff' },
+        ],
+      };
+
+      await applyImport(panel, importData, 'merge');
+
+      // Should report 2 collisions
+      expect(alertMock).toHaveBeenCalledWith(
+        expect.stringContaining('2 markers were skipped'),
+      );
+      // Existing markers unchanged
+      expect(session.getMarker(10)?.note).toBe('Existing A');
+      expect(session.getMarker(20)?.note).toBe('Existing B');
+      // Non-colliding marker added
+      expect(session.getMarker(30)?.note).toBe('No collision');
+    });
+
+    it('MARK-U156: merge mode reports single collision with correct grammar', async () => {
+      session.setMarker(10, 'Existing', MARKER_COLORS[0]);
+      panel.show();
+
+      const alertMock = vi.mocked(Modal.showAlert).mockClear();
+
+      const importData: MarkerExportData = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        fps: 24,
+        markers: [
+          { frame: 10, note: 'Collision', color: '#ff4444' },
+          { frame: 30, note: 'New', color: '#4444ff' },
+        ],
+      };
+
+      await applyImport(panel, importData, 'merge');
+
+      expect(alertMock).toHaveBeenCalledWith(
+        expect.stringContaining('1 marker was skipped'),
+      );
+    });
+
+    it('MARK-U157: merge mode does NOT show alert when there are no collisions', async () => {
+      session.setMarker(10, 'Existing', MARKER_COLORS[0]);
+      panel.show();
+
+      const alertMock = vi.mocked(Modal.showAlert).mockClear();
+
+      const importData: MarkerExportData = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        fps: 24,
+        markers: [
+          { frame: 30, note: 'No collision', color: '#4444ff' },
+        ],
+      };
+
+      await applyImport(panel, importData, 'merge');
+
+      expect(alertMock).not.toHaveBeenCalled();
+    });
   });
 
   describe('actions bar', () => {

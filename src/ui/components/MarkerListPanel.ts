@@ -172,10 +172,10 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
 
     const importBtn = document.createElement('button');
     importBtn.textContent = 'Import';
-    importBtn.title = 'Import markers from JSON file (merge)';
+    importBtn.title = 'Import markers from JSON file';
     importBtn.dataset.testid = 'marker-import-btn';
     importBtn.style.cssText = actionBtnStyle;
-    importBtn.addEventListener('click', () => this.importMarkers('merge'));
+    importBtn.addEventListener('click', () => this.importMarkersWithModeChoice());
 
     const clearBtn = document.createElement('button');
     clearBtn.textContent = 'Clear All';
@@ -324,6 +324,28 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
   }
 
   /**
+   * Prompt user for import mode then trigger file import
+   */
+  private async importMarkersWithModeChoice(): Promise<void> {
+    const hasExisting = this.session.marks.size > 0;
+    let mode: 'replace' | 'merge' = 'merge';
+
+    if (hasExisting) {
+      const replace = await showConfirm(
+        'Replace existing markers? Choose "OK" to replace all current markers, or "Cancel" to merge (keep existing markers and add new ones).',
+        {
+          title: 'Import Markers',
+          confirmText: 'Replace',
+          cancelText: 'Merge',
+        },
+      );
+      mode = replace ? 'replace' : 'merge';
+    }
+
+    this.importMarkers(mode);
+  }
+
+  /**
    * Import markers from a JSON file
    * @param mode 'merge' preserves existing markers, 'replace' clears them first
    */
@@ -339,7 +361,7 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
       reader.onload = async () => {
         try {
           const data = JSON.parse(reader.result as string);
-          this.applyImportedMarkers(data, mode);
+          await this.applyImportedMarkers(data, mode);
         } catch {
           await showAlert('Invalid JSON file. Could not parse marker data.');
         }
@@ -372,11 +394,19 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
       this.session.clearMarks();
     }
 
+    let skippedCount = 0;
     for (const m of validMarkers) {
       if (mode === 'merge' && this.session.hasMarker(m.frame)) {
+        skippedCount++;
         continue;
       }
       this.session.setMarker(m.frame, m.note, m.color, m.endFrame);
+    }
+
+    if (mode === 'merge' && skippedCount > 0) {
+      await showAlert(
+        `${skippedCount} marker${skippedCount > 1 ? 's were' : ' was'} skipped due to frame collisions with existing markers.`,
+      );
     }
   }
 

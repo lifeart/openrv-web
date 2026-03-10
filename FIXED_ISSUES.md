@@ -1447,3 +1447,33 @@
 - **Regression Tests**: 5 tests — import button exists, text content, file picker triggered, successful import refreshes list, failed import shows error.
 - **Verification**: All 22,552 tests pass, TypeScript clean.
 - **Files Changed**: `src/ui/components/SnapshotPanel.ts`, `src/ui/components/__tests__/SnapshotPanel.test.ts`
+
+## Issue #172: The unified preferences export/import/reset system is effectively unreachable in production UI
+
+- **Severity**: Medium
+- **Area**: Preferences workflow / UI wiring
+- **Root Cause**: `PreferencesManager` had `exportAll()`, `importAll()`, and `resetAll()` methods but no production UI invoked them.
+- **Fix**: Added three menu items to the Help dropdown: "Export Preferences" (downloads JSON), "Import Preferences" (file picker + importAll with error handling), "Reset All Preferences" (confirmation dialog + resetAll). Wired through `AppPlaybackWiring`.
+- **Regression Tests**: 14 tests — menu items exist with correct labels, emit correct events, export triggers download, import opens picker and calls importAll, failed import shows error, reset shows confirmation, reset skipped on cancel.
+- **Verification**: All 22,565 tests pass, TypeScript clean.
+- **Files Changed**: `src/ui/components/layout/HeaderBar.ts`, `src/ui/components/layout/HeaderBar.test.ts`, `src/AppPlaybackWiring.ts`, `src/AppPlaybackWiring.test.ts`
+
+## Issue #173: Annotation JSON support is export-only in the shipped app
+
+- **Severity**: Medium
+- **Area**: Annotation workflow / interchange
+- **Root Cause**: `parseAnnotationsJSON()` and `applyAnnotationsJSON()` were implemented but never wired to any UI control. The export menu had "Export Annotations (JSON)" but no import counterpart.
+- **Fix**: Added "Import Annotations (JSON)" menu item to ExportControl dropdown. Handler opens file picker (.json), validates via `parseAnnotationsJSON()`, applies in replace mode via `applyAnnotationsJSON()`, shows success count or error feedback.
+- **Regression Tests**: 7 tests — menu item exists, event emission, file picker opens, valid file triggers parse+apply+success, invalid JSON shows error, apply exception shows error.
+- **Verification**: All 22,572 tests pass, TypeScript clean.
+- **Files Changed**: `src/ui/components/ExportControl.ts`, `src/ui/components/ExportControl.test.ts`, `src/AppPlaybackWiring.ts`, `src/AppPlaybackWiring.test.ts`
+
+## Issue #174: Marker import is merge-only in the shipped UI and silently drops frame collisions
+
+- **Severity**: Medium
+- **Area**: Marker workflow / interchange
+- **Root Cause**: Import button hardcoded `importMarkers('merge')` with no user choice. Frame collisions in merge mode were silently skipped.
+- **Fix**: Import now prompts for merge/replace choice when existing markers are present (skips dialog when empty). Merge mode tracks and reports collision count via `showAlert()` with correct singular/plural grammar. Replace mode clears before importing.
+- **Regression Tests**: MARK-U151 through MARK-U157 — mode choice dialog shown/skipped, replace clears existing, merge preserves existing, collision count reported, single collision grammar, no alert on zero collisions.
+- **Verification**: All 22,579 tests pass, TypeScript clean.
+- **Files Changed**: `src/ui/components/MarkerListPanel.ts`, `src/ui/components/MarkerListPanel.test.ts`

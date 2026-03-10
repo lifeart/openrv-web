@@ -7,6 +7,11 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ExportControl } from './ExportControl';
+import {
+  PreferencesManager,
+  DEFAULT_EXPORT_DEFAULTS,
+  resetCorePreferencesManagerForTests,
+} from '../../core/PreferencesManager';
 
 describe('ExportControl', () => {
   let control: ExportControl;
@@ -572,11 +577,212 @@ describe('ExportControl keyboard accessibility', () => {
     expect(button.getAttribute('aria-expanded')).toBe('false');
   });
 
+  describe('import annotations menu item', () => {
+    it('EXP-IMP01: dropdown contains Import Annotations (JSON) menu item', () => {
+      openDropdown();
+      const dropdown = getDropdown();
+      const importItem = Array.from(dropdown.querySelectorAll('button')).find((btn) =>
+        btn.textContent?.includes('Import Annotations (JSON)'),
+      );
+      expect(importItem).toBeDefined();
+    });
+
+    it('EXP-IMP02: clicking Import Annotations (JSON) emits annotationsJSONImportRequested', () => {
+      const callback = vi.fn();
+      control.on('annotationsJSONImportRequested', callback);
+
+      openDropdown();
+      const dropdown = getDropdown();
+      const importItem = Array.from(dropdown.querySelectorAll('button')).find((btn) =>
+        btn.textContent?.includes('Import Annotations (JSON)'),
+      ) as HTMLButtonElement | undefined;
+
+      expect(importItem).toBeDefined();
+      importItem!.click();
+
+      expect(callback).toHaveBeenCalledTimes(1);
+    });
+
+    it('EXP-IMP03: annotationsJSONImportRequested listener can be registered and removed', () => {
+      const callback = vi.fn();
+      control.on('annotationsJSONImportRequested', callback);
+      expect(() => control.off('annotationsJSONImportRequested', callback)).not.toThrow();
+    });
+  });
+
   describe('test IDs', () => {
     it('EXPORT-U100: export button has data-testid="export-button"', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="export-button"]');
       expect(button).toBeInstanceOf(HTMLButtonElement);
+    });
+  });
+});
+
+describe('ExportControl respects persisted export defaults (#175)', () => {
+  let control: ExportControl;
+  let prefs: PreferencesManager;
+
+  beforeEach(() => {
+    resetCorePreferencesManagerForTests();
+    prefs = new PreferencesManager();
+  });
+
+  afterEach(() => {
+    control.dispose();
+    resetCorePreferencesManagerForTests();
+  });
+
+  describe('falls back to hardcoded defaults when no preferences are set', () => {
+    beforeEach(() => {
+      control = new ExportControl(prefs);
+    });
+
+    it('EXPORT-P175-01: single-frame export uses default quality when no prefs set', () => {
+      const cb = vi.fn();
+      control.on('exportRequested', cb);
+      control.quickExport('png');
+      expect(cb).toHaveBeenCalledWith(
+        expect.objectContaining({ quality: DEFAULT_EXPORT_DEFAULTS.defaultQuality }),
+      );
+    });
+
+    it('EXPORT-P175-02: source export uses default quality when no prefs set', () => {
+      const cb = vi.fn();
+      control.on('sourceExportRequested', cb);
+      (control as any).exportSourceAs('png');
+      expect(cb).toHaveBeenCalledWith(
+        expect.objectContaining({ quality: DEFAULT_EXPORT_DEFAULTS.defaultQuality }),
+      );
+    });
+
+    it('EXPORT-P175-03: sequence export uses default format and quality when no prefs set', () => {
+      const cb = vi.fn();
+      control.on('sequenceExportRequested', cb);
+      (control as any).exportSequence(false);
+      expect(cb).toHaveBeenCalledWith(
+        expect.objectContaining({
+          format: DEFAULT_EXPORT_DEFAULTS.defaultFormat,
+          quality: DEFAULT_EXPORT_DEFAULTS.defaultQuality,
+        }),
+      );
+    });
+
+    it('EXPORT-P175-04: includeAnnotations defaults to true when no prefs set', () => {
+      const cb = vi.fn();
+      control.on('exportRequested', cb);
+      control.quickExport('png');
+      expect(cb).toHaveBeenCalledWith(
+        expect.objectContaining({ includeAnnotations: DEFAULT_EXPORT_DEFAULTS.includeAnnotations }),
+      );
+    });
+  });
+
+  describe('uses persisted defaults when preferences are configured', () => {
+    it('EXPORT-P175-10: single-frame export uses persisted quality', () => {
+      prefs.setExportDefaults({ defaultQuality: 0.75 });
+      control = new ExportControl(prefs);
+      const cb = vi.fn();
+      control.on('exportRequested', cb);
+      control.quickExport('jpeg');
+      expect(cb).toHaveBeenCalledWith(expect.objectContaining({ quality: 0.75 }));
+    });
+
+    it('EXPORT-P175-11: source export uses persisted quality', () => {
+      prefs.setExportDefaults({ defaultQuality: 0.6 });
+      control = new ExportControl(prefs);
+      const cb = vi.fn();
+      control.on('sourceExportRequested', cb);
+      (control as any).exportSourceAs('webp');
+      expect(cb).toHaveBeenCalledWith(expect.objectContaining({ quality: 0.6 }));
+    });
+
+    it('EXPORT-P175-12: sequence export uses persisted format', () => {
+      prefs.setExportDefaults({ defaultFormat: 'jpeg' });
+      control = new ExportControl(prefs);
+      const cb = vi.fn();
+      control.on('sequenceExportRequested', cb);
+      (control as any).exportSequence(true);
+      expect(cb).toHaveBeenCalledWith(expect.objectContaining({ format: 'jpeg' }));
+    });
+
+    it('EXPORT-P175-13: sequence export uses persisted quality', () => {
+      prefs.setExportDefaults({ defaultQuality: 0.8 });
+      control = new ExportControl(prefs);
+      const cb = vi.fn();
+      control.on('sequenceExportRequested', cb);
+      (control as any).exportSequence(false);
+      expect(cb).toHaveBeenCalledWith(expect.objectContaining({ quality: 0.8 }));
+    });
+
+    it('EXPORT-P175-14: includeAnnotations respects persisted false value', () => {
+      prefs.setExportDefaults({ includeAnnotations: false });
+      control = new ExportControl(prefs);
+      const cb = vi.fn();
+      control.on('exportRequested', cb);
+      // The checkbox is not checked, so getIncludeAnnotations() should return false
+      control.quickExport('png');
+      expect(cb).toHaveBeenCalledWith(expect.objectContaining({ includeAnnotations: false }));
+    });
+
+    it('EXPORT-P175-15: video export uses persisted includeAnnotations', () => {
+      prefs.setExportDefaults({ includeAnnotations: false });
+      control = new ExportControl(prefs);
+      const cb = vi.fn();
+      control.on('videoExportRequested', cb);
+      (control as any).exportVideo(true);
+      expect(cb).toHaveBeenCalledWith(expect.objectContaining({ includeAnnotations: false }));
+    });
+
+    it('EXPORT-P175-16: sequence export with webp format from prefs', () => {
+      prefs.setExportDefaults({ defaultFormat: 'webp', defaultQuality: 0.5 });
+      control = new ExportControl(prefs);
+      const cb = vi.fn();
+      control.on('sequenceExportRequested', cb);
+      (control as any).exportSequence(false);
+      expect(cb).toHaveBeenCalledWith(
+        expect.objectContaining({ format: 'webp', quality: 0.5 }),
+      );
+    });
+  });
+
+  describe('each export type respects the relevant defaults', () => {
+    it('EXPORT-P175-20: all three export types read quality from same prefs source', () => {
+      prefs.setExportDefaults({ defaultQuality: 0.42 });
+      control = new ExportControl(prefs);
+
+      const frameCb = vi.fn();
+      const sourceCb = vi.fn();
+      const seqCb = vi.fn();
+      control.on('exportRequested', frameCb);
+      control.on('sourceExportRequested', sourceCb);
+      control.on('sequenceExportRequested', seqCb);
+
+      control.quickExport('png');
+      (control as any).exportSourceAs('jpeg');
+      (control as any).exportSequence(false);
+
+      expect(frameCb).toHaveBeenCalledWith(expect.objectContaining({ quality: 0.42 }));
+      expect(sourceCb).toHaveBeenCalledWith(expect.objectContaining({ quality: 0.42 }));
+      expect(seqCb).toHaveBeenCalledWith(expect.objectContaining({ quality: 0.42 }));
+    });
+
+    it('EXPORT-P175-21: changing prefs after construction is reflected in next export', () => {
+      prefs.setExportDefaults({ defaultQuality: 0.85 });
+      control = new ExportControl(prefs);
+      const cb = vi.fn();
+      control.on('exportRequested', cb);
+
+      // First export uses the initial persisted quality
+      control.quickExport('png');
+      expect(cb).toHaveBeenCalledWith(expect.objectContaining({ quality: 0.85 }));
+
+      // Change prefs at runtime
+      prefs.setExportDefaults({ defaultQuality: 0.33 });
+
+      // Next export picks up new prefs
+      control.quickExport('png');
+      expect(cb).toHaveBeenLastCalledWith(expect.objectContaining({ quality: 0.33 }));
     });
   });
 });

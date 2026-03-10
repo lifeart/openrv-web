@@ -2,6 +2,11 @@ import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { type ExportFormat } from '../../utils/export/FrameExporter';
 import { getIconSvg, type IconName } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
+import {
+  type PreferencesManager,
+  type ExportDefaults,
+  getCorePreferencesManager,
+} from '../../core/PreferencesManager';
 
 export interface ExportRequest {
   format: ExportFormat;
@@ -29,6 +34,7 @@ export interface ExportControlEvents extends EventMap {
   videoExportRequested: VideoExportRequest;
   rvSessionExportRequested: { format: 'rv' | 'gto' };
   annotationsJSONExportRequested: void;
+  annotationsJSONImportRequested: void;
   annotationsPDFExportRequested: void;
   reportExportRequested: { format: 'csv' | 'html' };
 }
@@ -41,9 +47,11 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
   private annotationsCheckbox: HTMLInputElement | null = null;
   private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
   private _cleanupA11yFocus: (() => void) | null = null;
+  private readonly preferencesManager: PreferencesManager;
 
-  constructor() {
+  constructor(preferencesManager?: PreferencesManager) {
     super();
+    this.preferencesManager = preferencesManager ?? getCorePreferencesManager();
 
     // Create container
     this.container = document.createElement('div');
@@ -197,6 +205,7 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
     // Annotations export section
     this.addSectionHeader('Annotations');
     this.addMenuItem('download', 'Export Annotations (JSON)', () => this.exportAnnotationsJSON());
+    this.addMenuItem('upload', 'Import Annotations (JSON)', () => this.importAnnotationsJSON());
     this.addMenuItem('download', 'Export Annotations (PDF)', () => this.exportAnnotationsPDF());
 
     this.addSeparator();
@@ -312,7 +321,7 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
     checkbox.id = 'export-annotations';
-    checkbox.checked = true;
+    checkbox.checked = this.getDefaults().includeAnnotations;
     checkbox.style.cssText = `
       width: 14px;
       height: 14px;
@@ -413,14 +422,20 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
   }
 
   private getIncludeAnnotations(): boolean {
-    return this.annotationsCheckbox?.checked ?? true;
+    return this.annotationsCheckbox?.checked ?? this.getDefaults().includeAnnotations;
+  }
+
+  /** Read persisted export defaults from PreferencesManager. */
+  private getDefaults(): ExportDefaults {
+    return this.preferencesManager.getExportDefaults();
   }
 
   private exportAs(format: ExportFormat): void {
+    const defaults = this.getDefaults();
     this.emit('exportRequested', {
       format,
       includeAnnotations: this.getIncludeAnnotations(),
-      quality: 0.92,
+      quality: defaults.defaultQuality,
     });
   }
 
@@ -429,17 +444,19 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
   }
 
   private exportSourceAs(format: ExportFormat): void {
+    const defaults = this.getDefaults();
     this.emit('sourceExportRequested', {
       format,
-      quality: 0.92,
+      quality: defaults.defaultQuality,
     });
   }
 
   private exportSequence(useInOutRange: boolean): void {
+    const defaults = this.getDefaults();
     this.emit('sequenceExportRequested', {
-      format: 'png',
-      includeAnnotations: this.annotationsCheckbox?.checked ?? true,
-      quality: 0.95,
+      format: defaults.defaultFormat,
+      includeAnnotations: this.getIncludeAnnotations(),
+      quality: defaults.defaultQuality,
       useInOutRange,
     });
   }
@@ -457,6 +474,10 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
 
   private exportAnnotationsJSON(): void {
     this.emit('annotationsJSONExportRequested', undefined);
+  }
+
+  private importAnnotationsJSON(): void {
+    this.emit('annotationsJSONImportRequested', undefined);
   }
 
   private exportAnnotationsPDF(): void {
