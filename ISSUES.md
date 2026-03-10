@@ -2672,6 +2672,42 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Valid float TIFFs with grayscale, luminance+alpha, or broader scientific/multi-channel layouts fail completely instead of loading a usable subset.
   - The app therefore supports only a narrow RGB/RGBA slice of float TIFF workflows while the format family is broader in practice.
 
+### 218. DPX files with non-RGB/A descriptors are silently reinterpreted as RGB
+
+- Severity: Medium
+- Area: Format support / DPX decoding
+- Evidence:
+  - `getDPXInfo()` recognizes only descriptors `50` (RGB), `51` (RGBA), and `52` (ABGR); any other descriptor falls through to `channels = 3` in [src/formats/DPXDecoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/DPXDecoder.ts#L107).
+  - The test suite explicitly locks that fallback in: an unknown descriptor is expected to report 3 channels in [src/formats/DPXDecoder.test.ts](/Users/lifeart/Repos/openrv-web/src/formats/DPXDecoder.test.ts#L548).
+  - `decodeDPX()` then decodes pixel data using that inferred channel count and converts it straight to RGBA in [src/formats/DPXDecoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/DPXDecoder.ts#L287) and [src/formats/DPXDecoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/DPXDecoder.ts#L320).
+- Impact:
+  - Valid DPX files that use other SMPTE descriptor layouts are not rejected or surfaced as unsupported; they are silently decoded as if they were RGB.
+  - That produces misinterpreted pixels and metadata instead of a clear compatibility failure.
+
+### 219. MXF start timecode falls back to 24fps when edit rate is missing or invalid
+
+- Severity: Medium
+- Area: Format metadata / MXF parsing
+- Evidence:
+  - When a Timecode Component is present, `parseMXFHeader()` converts frame counts to a string using `metadata.editRate` if available, but otherwise hardcodes `24` fps in [src/formats/MXFDemuxer.ts](/Users/lifeart/Repos/openrv-web/src/formats/MXFDemuxer.ts#L865).
+  - The same 24fps fallback is used when `metadata.editRate.den === 0` in [src/formats/MXFDemuxer.ts](/Users/lifeart/Repos/openrv-web/src/formats/MXFDemuxer.ts#L866).
+  - The produced `startTimecode` is then exposed as parsed metadata in [src/formats/MXFDemuxer.ts](/Users/lifeart/Repos/openrv-web/src/formats/MXFDemuxer.ts#L872).
+- Impact:
+  - MXF files with valid timecode counts but missing/bad edit-rate metadata can show the wrong start timecode instead of an “unknown” or unresolved value.
+  - That is especially misleading for non-24fps material because the parser manufactures a concrete timecode string that looks authoritative.
+
+### 220. JP2 parsing stops on valid extended boxes larger than 4 GB
+
+- Severity: Low
+- Area: Format support / JP2 parsing
+- Evidence:
+  - `findCodestreamOffset()` handles extended JP2 box lengths only when the high 32 bits are zero; otherwise it immediately `break`s out of parsing in [src/formats/JP2Decoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/JP2Decoder.ts#L171).
+  - The inline comment is explicit that `> 4 GB` extended boxes are “not supported in this parser” in [src/formats/JP2Decoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/JP2Decoder.ts#L176).
+  - That helper is the codestream locator for JP2 container parsing in [src/formats/JP2Decoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/JP2Decoder.ts#L156).
+- Impact:
+  - Large valid JP2 container files with extended-length boxes can fail before the codestream is even discovered.
+  - The limitation is silent at the parser level rather than being represented as an explicit format-support boundary.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

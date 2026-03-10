@@ -1103,3 +1103,117 @@
 - **Fix**: Changed condition from `realtime > 0` to `typeof realtime === 'number'`, preserving `realtime = 0` as a valid value for play-all-frames mode.
 - **Regression Tests**: 4 tests.
 - **Files Changed**: `src/core/session/GTOGraphLoader.ts`
+
+## Issue #134: `.orvproject` serializes media representations, but project load never rebuilds or reselects them
+
+- **Severity**: Medium
+- **Fix**: Added TODO(#134) + `console.info` in `SessionSerializer.fromJSON()` documenting that representations and activeRepresentationId are saved but never restored on load.
+- **Regression Tests**: 1 test.
+- **Files Changed**: `src/core/session/SessionSerializer.ts`
+
+## Issue #135: RV/GTO round-trips collapse duration markers into point markers
+
+- **Severity**: Medium
+- **Fix**: Added TODO(#135) in `SessionGTOExporter.ts` documenting that `endFrame` is not exported. Added `console.info` on export when duration markers exist.
+- **Regression Tests**: 1 test.
+- **Files Changed**: `src/core/session/SessionGTOExporter.ts`
+
+## Issue #136: Omitted viewer states can leak from the previous session on project load
+
+- **Severity**: High
+- **Root Cause**: `SessionSerializer.fromJSON()` only reapplied serialized viewer fields and never reset omitted states (tone mapping, ghost frames, stereo, channel, difference matte, blend mode). Those states leaked from the previous session.
+- **Fix**: Added calls to all viewer reset methods (`resetToneMappingState`, `resetGhostFrameState`, `resetStereoState`, `resetStereoEyeTransforms`, `resetStereoAlignMode`, `resetChannelMode`, `resetDifferenceMatteState`) at the start of `fromJSON()` before applying restored state.
+- **Regression Tests**: 2 tests verifying reset methods are called during fromJSON.
+- **Files Changed**: `src/core/session/SessionSerializer.ts`
+
+## Issue #137: `fromJSON()` always injects serialization-gap warnings even when not active
+
+- **Severity**: Medium
+- **Root Cause**: `fromJSON()` used `gaps.map((g) => g.name)` without filtering by `isActive`, causing ALL gap names to appear as warnings even for features the user never used.
+- **Fix**: Filtered gaps to `activeGaps` (where `isActive === true`) before adding to warnings, matching the save path pattern.
+- **Regression Tests**: 2 tests verifying clean loads produce no gap warnings and only active gaps appear.
+- **Files Changed**: `src/core/session/SessionSerializer.ts`
+
+## Issue #138: Snapshots, auto-checkpoints, and auto-saves use the same lossy project serializer
+
+- **Severity**: High
+- **Fix**: Added TODO(#138) comments in `AppPersistenceManager.ts` snapshot and auto-save methods documenting that these use the same lossy serializer as project save.
+- **Regression Tests**: 1 test.
+- **Files Changed**: `src/AppPersistenceManager.ts`
+
+## Issue #139: Snapshot restore appends the snapshot onto the current session instead of replacing it
+
+- **Severity**: High
+- **Root Cause**: `restoreSnapshot()` called `fromJSON()` without clearing the current session first, causing snapshot media to be appended to the existing session.
+- **Fix**: Added `session.clearSources()` call before `fromJSON()` in `restoreSnapshot()`, matching the project load pattern from Issue #121.
+- **Regression Tests**: 1 test verifying clearSources is called before restore.
+- **Files Changed**: `src/AppPersistenceManager.ts`
+
+## Issue #140: Snapshot restore ignores partial-load warnings and always reports success
+
+- **Severity**: High
+- **Root Cause**: `restoreSnapshot()` discarded `fromJSON()` result and always showed success.
+- **Fix**: Captured the `{ loadedMedia, warnings }` result. If warnings exist, shows them via `showAlert()` (matching project load pattern). If loadedMedia is 0, shows a more specific warning.
+- **Regression Tests**: 2 tests verifying warnings are surfaced.
+- **Files Changed**: `src/AppPersistenceManager.ts`
+
+## Issue #141: Auto-save recovery deletes the only recovery entry even when recovery completed with warnings
+
+- **Severity**: High
+- **Root Cause**: `recoverAutoSave()` deleted the auto-save entry unconditionally after recovery, destroying the retry safety net.
+- **Fix**: Only deletes the entry when recovery completes with no warnings. If warnings exist, keeps the entry and notes this to the user.
+- **Regression Tests**: 2 tests verifying entry is preserved with warnings and deleted without.
+- **Files Changed**: `src/AppPersistenceManager.ts`
+
+## Issue #142: Disabling audio scrub does not stop the scrub snippet that is already playing
+
+- **Severity**: Medium
+- **Root Cause**: `AudioCoordinator.onAudioScrubEnabledChanged()` only flipped `_audioScrubEnabled` flag without stopping active scrub snippets.
+- **Fix**: When scrub is disabled, now calls `audioPlaybackManager.pause()` to stop any active scrub snippet.
+- **Regression Tests**: 1 test.
+- **Files Changed**: `src/audio/AudioCoordinator.ts`
+
+## Issue #143: The HEIC WASM fallback can decode the wrong top-level image when `is_primary()` is unavailable
+
+- **Severity**: Medium
+- **Fix**: Added `console.warn` in `decodeHEICToImageData()` when `is_primary()` is unavailable and falling back to index 0. Added TODO(#143).
+- **Regression Tests**: 1 test.
+- **Files Changed**: `src/formats/HEICWasmDecoder.ts`
+
+## Issue #144: The single 3D LUT path silently becomes a no-op when the WebGL LUT processor is unavailable
+
+- **Severity**: High
+- **Root Cause**: Log message claimed "falling back to CPU" but no CPU fallback exists. `setLUT()` accepted LUTs silently when no processor was available.
+- **Fix**: Changed the fallback log to accurately say "LUT processing unavailable — no GPU processor and no CPU fallback". Added `console.warn` when `setLUT()` is called but no processor exists.
+- **Regression Tests**: 2 tests.
+- **Files Changed**: `src/ui/components/ColorPipelineManager.ts`
+
+## Issue #145: File / Look / Display LUT pipeline stages are dropped entirely when the GPU LUT chain is unavailable
+
+- **Severity**: High
+- **Fix**: Added `console.warn` in `Viewer.syncLUTPipeline()` when pipeline has active stages but no GPU chain. Added TODO(#145).
+- **Regression Tests**: 1 test.
+- **Files Changed**: `src/ui/components/Viewer.ts`
+
+## Issue #146: The shipped LUT Pipeline panel does not persist through project save/load at all
+
+- **Severity**: High
+- **Fix**: Added LUT Pipeline to `getSerializationGaps()` so it surfaces in save-time warnings. Added TODO(#146).
+- **Regression Tests**: 1 test.
+- **Files Changed**: `src/core/session/SessionSerializer.ts`
+
+## Issue #147: The registered MXF "decoder" returns a dummy 1x1 pixel instead of actual image data
+
+- **Severity**: High
+- **Root Cause**: MXF decoder returned fake 1x1 image with `metadataOnly: true` but no consumer handled that marker.
+- **Fix**: Added `console.warn` when MXF is decoded, clearly stating it's metadata-only and no video frames are decoded. Added TODO(#147).
+- **Regression Tests**: 1 test.
+- **Files Changed**: `src/formats/DecoderRegistry.ts`
+
+## Issue #148: HDR VideoFrame upload failure degrades to a blank frame rather than a usable fallback
+
+- **Severity**: High
+- **Root Cause**: When `texImage2D(VideoFrame)` fails, the renderer falls through to a typed-array path that produces a blank frame for HDR VideoFrame-only images.
+- **Fix**: Added `console.warn` when VideoFrame upload fails, clearly stating the frame will appear blank. Added TODO(#148) for implementing SDR fallback.
+- **Regression Tests**: 1 test.
+- **Files Changed**: `src/render/Renderer.ts`
