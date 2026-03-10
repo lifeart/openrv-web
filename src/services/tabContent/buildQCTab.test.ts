@@ -6,9 +6,10 @@ import type { BuildQCTabDeps } from './buildQCTab';
 // Mock ContextToolbar to avoid DOM dependencies
 vi.mock('../../ui/components/layout/ContextToolbar', () => ({
   ContextToolbar: {
-    createIconButton: (_icon: string, _cb: () => void, _opts?: object) => {
+    createIconButton: (_icon: string, cb: () => void, _opts?: object) => {
       const btn = document.createElement('button');
       btn.dataset.testid = 'mock-icon-button';
+      btn.addEventListener('click', cb);
       return btn;
     },
     createDivider: () => document.createElement('div'),
@@ -18,6 +19,7 @@ vi.mock('../../ui/components/layout/ContextToolbar', () => ({
 // Mock setButtonActive
 vi.mock('../../ui/components/shared/Button', () => ({
   setButtonActive: vi.fn(),
+  applyHoverEffect: vi.fn(),
 }));
 
 function createMockDeps() {
@@ -31,10 +33,22 @@ function createMockDeps() {
     pickColor: vi.fn(),
   };
 
-  const clippingOverlay = {
+  const clippingOverlay = Object.assign(new EventEmitter(), {
     enable: vi.fn(),
     disable: vi.fn(),
-  };
+    toggle: vi.fn(),
+    getState: vi.fn(() => ({
+      enabled: false,
+      showHighlights: true,
+      showShadows: true,
+      highlightColor: { r: 255, g: 0, b: 0 },
+      shadowColor: { r: 0, g: 100, b: 255 },
+      opacity: 0.7,
+    })),
+    setShowHighlights: vi.fn(),
+    setShowShadows: vi.fn(),
+    setOpacity: vi.fn(),
+  });
 
   const viewerContainer = document.createElement('div');
   const canvasContainer = document.createElement('div');
@@ -51,7 +65,9 @@ function createMockDeps() {
     refresh: vi.fn(),
   };
 
-  const histogram = Object.assign(new EventEmitter(), {});
+  const histogram = Object.assign(new EventEmitter(), {
+    setClippingOverlay: vi.fn(),
+  });
   const waveform = Object.assign(new EventEmitter(), {});
   const vectorscope = Object.assign(new EventEmitter(), {});
   const gamutDiagram = Object.assign(new EventEmitter(), {});
@@ -100,6 +116,8 @@ function createMockDeps() {
     viewer,
     hslQualifier,
     hslQualifierControl,
+    clippingOverlay,
+    histogram,
     getEyedropperCallback: () => eyedropperCallback,
   };
 }
@@ -108,16 +126,60 @@ describe('buildQCTab eyedropper coordinate conversion', () => {
   let deps: BuildQCTabDeps;
   let viewer: ReturnType<typeof createMockDeps>['viewer'];
   let hslQualifier: ReturnType<typeof createMockDeps>['hslQualifier'];
+  let clippingOverlay: ReturnType<typeof createMockDeps>['clippingOverlay'];
+  let histogram: ReturnType<typeof createMockDeps>['histogram'];
   let getEyedropperCallback: () => ((active: boolean) => void) | null;
+  let element: HTMLElement;
 
   beforeEach(() => {
     const mock = createMockDeps();
     deps = mock.deps;
     viewer = mock.viewer;
     hslQualifier = mock.hslQualifier;
+    clippingOverlay = mock.clippingOverlay;
+    histogram = mock.histogram;
     getEyedropperCallback = mock.getEyedropperCallback;
 
-    buildQCTab(deps);
+    element = buildQCTab(deps);
+  });
+
+  it('QC-CLIP-001: clipping overlay button toggles the overlay', () => {
+    const button = element.querySelector<HTMLButtonElement>('[data-testid="clipping-overlay-toggle"]');
+    expect(button).not.toBeNull();
+
+    button!.click();
+    expect(clippingOverlay.toggle).toHaveBeenCalledOnce();
+  });
+
+  it('QC-CLIP-002: clipping overlay settings menu opens on right-click', () => {
+    const button = element.querySelector<HTMLButtonElement>('[data-testid="clipping-overlay-toggle"]')!;
+
+    button.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 40, clientY: 60 }));
+
+    const menu = document.querySelector('.clipping-overlay-settings-menu');
+    expect(menu).not.toBeNull();
+    expect(menu?.getAttribute('aria-label')).toBe('Clipping Overlay settings');
+  });
+
+  it('QC-CLIP-003: histogram clipping toggle still enables and disables overlay', () => {
+    histogram.emit('clippingOverlayToggled', true);
+    histogram.emit('clippingOverlayToggled', false);
+
+    expect(clippingOverlay.enable).toHaveBeenCalledOnce();
+    expect(clippingOverlay.disable).toHaveBeenCalledOnce();
+  });
+
+  it('QC-CLIP-004: overlay state syncs back into histogram clipping state', () => {
+    clippingOverlay.emit('stateChanged', {
+      enabled: true,
+      showHighlights: true,
+      showShadows: true,
+      highlightColor: { r: 255, g: 0, b: 0 },
+      shadowColor: { r: 0, g: 100, b: 255 },
+      opacity: 0.7,
+    });
+
+    expect(histogram.setClippingOverlay).toHaveBeenCalledWith(true);
   });
 
   it('QC-EYE-001: uses viewer.getPixelCoordinatesFromClient for coordinate conversion', () => {

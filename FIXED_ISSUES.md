@@ -1020,9 +1020,14 @@
 ## Issue #88: Clipping overlay ships as a binary histogram toggle while its useful controls stay hidden
 
 - **Severity**: Medium
-- **Fix**: Added TODO(#88) + one-time `console.info` on first enable documenting that highlight/shadow toggles and opacity have no UI surface.
-- **Regression Tests**: 2 tests.
-- **Files Changed**: `src/ui/components/ClippingOverlay.ts`, `src/ui/components/ClippingOverlay.test.ts`
+- **Area**: QC overlays, exposure diagnostics
+- **TODO(#88) Resolved**: Added a dedicated clipping-overlay button to the QC tab plus a right-click settings menu exposing the underlying `ClippingOverlay` controls directly. The new menu lets users toggle highlight and shadow overlays independently and adjust overlay opacity. `buildQCTab` now also keeps the existing histogram clipping indicator synchronized with the overlay state so the old binary surface and the new settings surface stay coherent. `ClippingOverlay` no longer carries the stale TODO comment, one-time `console.info`, or `hasLoggedCustomizationHint` state.
+- **Regression Tests**:
+  - `ClippingOverlaySettingsMenu.test.ts`: added coverage for menu rendering, highlight/shadow toggles, opacity updates, and dismissal behavior
+  - `buildQCTab.test.ts`: added coverage for the new clipping button, right-click settings menu, existing histogram toggle wiring, and histogram state sync from overlay changes
+  - `ClippingOverlay.test.ts`: removed the obsolete logging-path tests while preserving existing overlay behavior coverage
+- **Verification**: `ClippingOverlay.test.ts` (34 tests), `ClippingOverlaySettingsMenu.test.ts` (4 tests), and `buildQCTab.test.ts` (10 tests) pass. TypeScript clean.
+- **Files Changed**: `src/ui/components/ClippingOverlay.ts`, `src/ui/components/ClippingOverlay.test.ts`, `src/ui/components/ClippingOverlaySettingsMenu.ts`, `src/ui/components/ClippingOverlaySettingsMenu.test.ts`, `src/services/tabContent/buildQCTab.ts`, `src/services/tabContent/buildQCTab.test.ts`
 
 ## Issue #89: Reference comparison exposes only capture/on-off while the real comparison modes stay inaccessible
 

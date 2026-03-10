@@ -531,37 +531,4 @@ describe('ClippingOverlay', () => {
     });
   });
 
-  // -------------------------------------------------------------------------
-  // #88: console.info on first enable
-  // -------------------------------------------------------------------------
-  describe('customization hint (#88)', () => {
-    it('CLIP-HINT-001: logs console.info on first enable', () => {
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
-      try {
-        clippingOverlay.enable();
-        expect(infoSpy).toHaveBeenCalledTimes(1);
-        expect(infoSpy.mock.calls[0]![0]).toContain('[ClippingOverlay]');
-        expect(infoSpy.mock.calls[0]![0]).toContain('#88');
-      } finally {
-        infoSpy.mockRestore();
-      }
-    });
-
-    it('CLIP-HINT-002: logs only once across multiple enable calls', () => {
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
-      try {
-        // Use a fresh instance to ensure clean hint state
-        const freshOverlay = new ClippingOverlay();
-        freshOverlay.enable();
-        freshOverlay.disable();
-        freshOverlay.enable();
-        freshOverlay.disable();
-        freshOverlay.enable();
-        expect(infoSpy).toHaveBeenCalledTimes(1);
-        freshOverlay.dispose();
-      } finally {
-        infoSpy.mockRestore();
-      }
-    });
-  });
 });

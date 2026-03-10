@@ -7,6 +7,7 @@ import { ContextToolbar } from '../../ui/components/layout/ContextToolbar';
 import { setButtonActive } from '../../ui/components/shared/Button';
 import type { AppControlRegistry } from '../../AppControlRegistry';
 import type { Viewer } from '../../ui/components/Viewer';
+import { ClippingOverlaySettingsMenu } from '../../ui/components/ClippingOverlaySettingsMenu';
 
 export interface BuildQCTabDeps {
   registry: AppControlRegistry;
@@ -16,6 +17,7 @@ export interface BuildQCTabDeps {
 
 export function buildQCTab(deps: BuildQCTabDeps): HTMLElement {
   const { registry, viewer, addUnsubscriber } = deps;
+  const clippingOverlay = viewer.getClippingOverlay();
 
   const qcContent = document.createElement('div');
   qcContent.style.cssText = 'display: flex; align-items: center; gap: 6px; flex-shrink: 0;';
@@ -30,6 +32,24 @@ export function buildQCTab(deps: BuildQCTabDeps): HTMLElement {
   qcContent.appendChild(registry.luminanceVisControl.render());
   qcContent.appendChild(registry.zebraControl.render());
   qcContent.appendChild(registry.hslQualifierControl.render());
+
+  const clippingButton = ContextToolbar.createIconButton(
+    'contrast',
+    () => {
+      clippingOverlay.toggle();
+    },
+    { title: 'Toggle clipping overlay — Right-click for settings' },
+  );
+  clippingButton.dataset.testid = 'clipping-overlay-toggle';
+  qcContent.appendChild(clippingButton);
+
+  const clippingSettingsMenu = new ClippingOverlaySettingsMenu(clippingOverlay);
+  clippingButton.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    clippingSettingsMenu.show(e.clientX, e.clientY);
+  });
+  addUnsubscriber(() => clippingSettingsMenu.dispose());
+
   qcContent.appendChild(ContextToolbar.createDivider());
 
   // --- GROUP 3: Tools (Pixel Probe) ---
@@ -120,9 +140,18 @@ export function buildQCTab(deps: BuildQCTabDeps): HTMLElement {
   addUnsubscriber(
     registry.histogram.on('clippingOverlayToggled', (enabled) => {
       if (enabled) {
-        viewer.getClippingOverlay().enable();
+        clippingOverlay.enable();
       } else {
-        viewer.getClippingOverlay().disable();
+        clippingOverlay.disable();
+      }
+    }),
+  );
+
+  addUnsubscriber(
+    clippingOverlay.on('stateChanged', (state) => {
+      setButtonActive(clippingButton, state.enabled, 'icon');
+      if (typeof registry.histogram.setClippingOverlay === 'function') {
+        registry.histogram.setClippingOverlay(state.enabled);
       }
     }),
   );

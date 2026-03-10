@@ -33,14 +33,8 @@ export interface ClippingOverlayEvents extends EventMap {
   stateChanged: ClippingOverlayState;
 }
 
-/**
- * TODO(#88): ClippingOverlay has highlight/shadow toggles and opacity controls,
- * but the production UI only exposes a binary on/off toggle. A settings popover
- * should be added to expose these options.
- */
 export class ClippingOverlay extends EventEmitter<ClippingOverlayEvents> {
   private state: ClippingOverlayState = { ...DEFAULT_CLIPPING_OVERLAY_STATE };
-  private hasLoggedCustomizationHint = false;
 
   constructor() {
     super();
@@ -98,15 +92,6 @@ export class ClippingOverlay extends EventEmitter<ClippingOverlayEvents> {
     if (this.state.enabled) return;
     this.state.enabled = true;
     this.emit('stateChanged', { ...this.state });
-
-    // TODO(#88): Log customization hint on first enable
-    if (!this.hasLoggedCustomizationHint) {
-      this.hasLoggedCustomizationHint = true;
-      console.info(
-        '[ClippingOverlay] Highlight/shadow toggles and opacity are configurable ' +
-          'via the API but are not yet exposed in the UI. See issue #88.',
-      );
-    }
   }
 
   /**
