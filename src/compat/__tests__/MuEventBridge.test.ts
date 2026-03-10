@@ -340,7 +340,7 @@ describe('MuEventBridge', () => {
 
   it('bind and dispatch through bridge', () => {
     const handler = vi.fn();
-    bridge.bind('mode', 'table', 'test-event', handler, 'test docs');
+    bridge.bind('', 'table', 'test-event', handler, 'test docs');
 
     bridge.sendInternalEvent('test-event', 'payload', 'sender');
     expect(handler).toHaveBeenCalledOnce();
@@ -350,8 +350,8 @@ describe('MuEventBridge', () => {
 
   it('unbind removes handler', () => {
     const handler = vi.fn();
-    bridge.bind('mode', 'table', 'ev', handler);
-    bridge.unbind('mode', 'table', 'ev');
+    bridge.bind('', 'table', 'ev', handler);
+    bridge.unbind('', 'table', 'ev');
 
     bridge.sendInternalEvent('ev');
     expect(handler).not.toHaveBeenCalled();
@@ -397,21 +397,21 @@ describe('MuEventBridge', () => {
   });
 
   it('bindings introspection', () => {
-    bridge.bind('mode', 'table', 'ev1', vi.fn(), 'Doc A');
-    bridge.bind('mode', 'table', 'ev2', vi.fn(), 'Doc B');
+    bridge.bind('', 'table', 'ev1', vi.fn(), 'Doc A');
+    bridge.bind('', 'table', 'ev2', vi.fn(), 'Doc B');
 
     const bindings = bridge.bindings();
     expect(bindings.length).toBeGreaterThanOrEqual(2);
   });
 
   it('bindingDocumentation', () => {
-    bridge.bind('mode', 'table', 'ev', vi.fn(), 'My docs');
+    bridge.bind('', 'table', 'ev', vi.fn(), 'My docs');
     expect(bridge.bindingDocumentation('table', 'ev')).toBe('My docs');
   });
 
   it('sendInternalEvent creates and dispatches MuEvent', () => {
     const handler = vi.fn();
-    bridge.bind('mode', 'table', 'custom', handler);
+    bridge.bind('', 'table', 'custom', handler);
 
     bridge.sendInternalEvent('custom', 'data', 'origin');
     expect(handler).toHaveBeenCalledWith(
@@ -639,7 +639,7 @@ describe('MuEventBridge regex binding', () => {
 
   it('bindRegex registers and dispatches matching events', () => {
     const handler = vi.fn();
-    bridge.bindRegex('mode', 'table', /key-down--.*/, handler, 'regex doc');
+    bridge.bindRegex('', 'table', /key-down--.*/, handler, 'regex doc');
 
     bridge.sendInternalEvent('key-down--a');
     expect(handler).toHaveBeenCalledOnce();
@@ -647,7 +647,7 @@ describe('MuEventBridge regex binding', () => {
 
   it('bindRegex does not fire for non-matching events', () => {
     const handler = vi.fn();
-    bridge.bindRegex('mode', 'table', /key-down--.*/, handler);
+    bridge.bindRegex('', 'table', /key-down--.*/, handler);
 
     bridge.sendInternalEvent('pointer--move');
     expect(handler).not.toHaveBeenCalled();
@@ -656,12 +656,12 @@ describe('MuEventBridge regex binding', () => {
   it('unbindRegex removes the binding and it stops firing', () => {
     const handler = vi.fn();
     const pattern = /key-down--.*/;
-    bridge.bindRegex('mode', 'table', pattern, handler);
+    bridge.bindRegex('', 'table', pattern, handler);
 
     bridge.sendInternalEvent('key-down--a');
     expect(handler).toHaveBeenCalledOnce();
 
-    bridge.unbindRegex('mode', 'table', pattern);
+    bridge.unbindRegex('', 'table', pattern);
 
     bridge.sendInternalEvent('key-down--b');
     expect(handler).toHaveBeenCalledOnce(); // not called again
@@ -671,8 +671,8 @@ describe('MuEventBridge regex binding', () => {
     const exactHandler = vi.fn();
     const regexHandler = vi.fn();
 
-    bridge.bind('mode', 'table', 'key-down--a', exactHandler, 'exact');
-    bridge.bindRegex('mode', 'table', /key-down--.*/, regexHandler, 'regex');
+    bridge.bind('', 'table', 'key-down--a', exactHandler, 'exact');
+    bridge.bindRegex('', 'table', /key-down--.*/, regexHandler, 'regex');
 
     bridge.sendInternalEvent('key-down--a');
 
@@ -682,14 +682,234 @@ describe('MuEventBridge regex binding', () => {
 
   it('regex with flags works correctly', () => {
     const handler = vi.fn();
-    bridge.bindRegex('mode', 'table', /KEY-DOWN--a/i, handler, 'case insensitive');
+    bridge.bindRegex('', 'table', /KEY-DOWN--a/i, handler, 'case insensitive');
 
     bridge.sendInternalEvent('key-down--a');
     expect(handler).toHaveBeenCalledOnce();
   });
 });
 
-// ── MuSettingsBridge Tests ──
+// ── Mode-scoped binding tests (Issue #242) ──
+
+describe('MuEventBridge mode-scoped bindings', () => {
+  let bridge: MuEventBridge;
+
+  beforeEach(() => {
+    bridge = new MuEventBridge();
+  });
+
+  function makeEvent(name: string): MuEvent {
+    return { name, sender: '', contents: '', returnContents: '', reject: false };
+  }
+
+  it('handler bound to a mode does NOT fire when that mode is not active', () => {
+    const handler = vi.fn();
+    bridge.defineMinorMode('modeA', 0, [], []);
+    bridge.bind('modeA', 'table', 'ev', handler);
+
+    bridge.sendInternalEvent('ev');
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('handler bound to a mode fires when that mode is active', () => {
+    const handler = vi.fn();
+    bridge.defineMinorMode('modeA', 0, [], []);
+    bridge.bind('modeA', 'table', 'ev', handler);
+
+    bridge.activateMode('modeA');
+    bridge.sendInternalEvent('ev');
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it('handler fires while mode active, stops when deactivated', () => {
+    const handler = vi.fn();
+    bridge.defineMinorMode('modeA', 0, [], []);
+    bridge.bind('modeA', 'table', 'ev', handler);
+
+    bridge.activateMode('modeA');
+    bridge.sendInternalEvent('ev');
+    expect(handler).toHaveBeenCalledOnce();
+
+    bridge.deactivateMode('modeA');
+    bridge.sendInternalEvent('ev');
+    expect(handler).toHaveBeenCalledOnce(); // not called again
+  });
+
+  it('multiple modes: only active mode handler fires', () => {
+    const handlerA = vi.fn();
+    const handlerB = vi.fn();
+    bridge.defineMinorMode('modeA', 0, [], []);
+    bridge.defineMinorMode('modeB', 1, [], []);
+    bridge.bind('modeA', 'tableA', 'ev', handlerA);
+    bridge.bind('modeB', 'tableB', 'ev', handlerB);
+
+    bridge.activateMode('modeA');
+    bridge.sendInternalEvent('ev');
+    expect(handlerA).toHaveBeenCalledOnce();
+    expect(handlerB).not.toHaveBeenCalled();
+  });
+
+  it('default modeName handlers always fire (backward compat)', () => {
+    const handler = vi.fn();
+    bridge.bind('default', 'table', 'ev', handler);
+
+    bridge.sendInternalEvent('ev');
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it('empty modeName handlers always fire (backward compat)', () => {
+    const handler = vi.fn();
+    bridge.bind('', 'table', 'ev', handler);
+
+    bridge.sendInternalEvent('ev');
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it('unbind with modeName removes only the mode-scoped binding', () => {
+    const modeHandler = vi.fn();
+    const globalHandler = vi.fn();
+    bridge.defineMinorMode('modeA', 0, [], []);
+    bridge.bind('modeA', 'table', 'ev', modeHandler);
+    bridge.bind('', 'table', 'ev', globalHandler);
+
+    bridge.activateMode('modeA');
+    bridge.unbind('modeA', 'table', 'ev');
+
+    bridge.sendInternalEvent('ev');
+    expect(modeHandler).not.toHaveBeenCalled();
+    expect(globalHandler).toHaveBeenCalledOnce();
+  });
+
+  it('always-active table binding takes precedence over mode-scoped binding', () => {
+    const tableHandler = vi.fn();
+    const modeHandler = vi.fn();
+    bridge.defineMinorMode('modeA', 0, [], []);
+    bridge.bind('', 'table', 'ev', tableHandler);
+    bridge.bind('modeA', 'scopedTable', 'ev', modeHandler);
+
+    bridge.activateMode('modeA');
+    bridge.sendInternalEvent('ev');
+
+    // Always-active table stack is checked before mode-scoped tables
+    expect(tableHandler).toHaveBeenCalledOnce();
+    expect(modeHandler).not.toHaveBeenCalled();
+  });
+
+  it('mode-scoped regex binding only fires when mode is active', () => {
+    const handler = vi.fn();
+    bridge.defineMinorMode('modeA', 0, [], []);
+    bridge.bindRegex('modeA', 'table', /key-down--.*/, handler);
+
+    bridge.sendInternalEvent('key-down--a');
+    expect(handler).not.toHaveBeenCalled();
+
+    bridge.activateMode('modeA');
+    bridge.sendInternalEvent('key-down--a');
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it('mode-scoped unbindRegex removes only mode-scoped regex binding', () => {
+    const modeHandler = vi.fn();
+    const globalHandler = vi.fn();
+    const pattern = /key-down--.*/;
+    bridge.defineMinorMode('modeA', 0, [], []);
+    bridge.bindRegex('modeA', 'table', pattern, modeHandler);
+    bridge.bindRegex('', 'table', pattern, globalHandler);
+
+    bridge.activateMode('modeA');
+    bridge.unbindRegex('modeA', 'table', pattern);
+
+    bridge.sendInternalEvent('key-down--x');
+    expect(modeHandler).not.toHaveBeenCalled();
+    expect(globalHandler).toHaveBeenCalledOnce();
+  });
+
+  it('reactivating a mode makes its bindings fire again', () => {
+    const handler = vi.fn();
+    bridge.defineMinorMode('modeA', 0, [], []);
+    bridge.bind('modeA', 'table', 'ev', handler);
+
+    bridge.activateMode('modeA');
+    bridge.sendInternalEvent('ev');
+    expect(handler).toHaveBeenCalledTimes(1);
+
+    bridge.deactivateMode('modeA');
+    bridge.sendInternalEvent('ev');
+    expect(handler).toHaveBeenCalledTimes(1);
+
+    bridge.activateMode('modeA');
+    bridge.sendInternalEvent('ev');
+    expect(handler).toHaveBeenCalledTimes(2);
+  });
+
+  it('getBindings includes mode-scoped bindings only when mode is active', () => {
+    bridge.defineMinorMode('modeA', 0, [], []);
+    bridge.bind('modeA', 'table', 'ev', vi.fn(), 'Mode doc');
+
+    expect(bridge.bindings()).toEqual([]);
+
+    bridge.activateMode('modeA');
+    const bindings = bridge.bindings();
+    expect(bindings).toContainEqual(['ev', 'Mode doc']);
+  });
+});
+
+describe('ModeManager mode-scoped bindings', () => {
+  let manager: ModeManager;
+
+  beforeEach(() => {
+    manager = new ModeManager();
+  });
+
+  function makeEvent(name: string): MuEvent {
+    return { name, sender: '', contents: '', returnContents: '', reject: false };
+  }
+
+  it('mode-scoped binding does not dispatch when mode is inactive', () => {
+    const handler = vi.fn();
+    manager.defineMinorMode('m', 0, [], []);
+    manager.bind('table', 'ev', handler, '', undefined, 'm');
+
+    expect(manager.dispatchEvent(makeEvent('ev'))).toBe(false);
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('mode-scoped binding dispatches when mode is active', () => {
+    const handler = vi.fn();
+    manager.defineMinorMode('m', 0, [], []);
+    manager.bind('table', 'ev', handler, '', undefined, 'm');
+
+    manager.activateMode('m');
+    expect(manager.dispatchEvent(makeEvent('ev'))).toBe(true);
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it('dispose clears mode-scoped tables', () => {
+    const handler = vi.fn();
+    manager.defineMinorMode('m', 0, [], []);
+    manager.bind('table', 'ev', handler, '', undefined, 'm');
+    manager.activateMode('m');
+
+    manager.dispose();
+    manager.defineMinorMode('m', 0, [], []);
+    manager.activateMode('m');
+
+    expect(manager.dispatchEvent(makeEvent('ev'))).toBe(false);
+  });
+
+  it('override tables still take priority over mode-scoped tables', () => {
+    const overrideHandler = vi.fn();
+    const scopedHandler = vi.fn();
+
+    manager.defineMinorMode('m', 0, [], [['ev', overrideHandler, 'override']]);
+    manager.bind('table', 'ev', scopedHandler, '', undefined, 'm');
+    manager.activateMode('m');
+
+    manager.dispatchEvent(makeEvent('ev'));
+    expect(overrideHandler).toHaveBeenCalledOnce();
+    expect(scopedHandler).not.toHaveBeenCalled();
+  });
+});
 
 describe('MuSettingsBridge', () => {
   let settings: MuSettingsBridge;

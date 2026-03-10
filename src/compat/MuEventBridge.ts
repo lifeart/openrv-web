@@ -31,44 +31,50 @@ export class MuEventBridge {
   /**
    * Bind an event handler in a named table.
    * Mu signature: bind(modeName, tableName, eventName, callback, documentation)
+   *
+   * If modeName is non-empty and not "default", the binding is scoped to
+   * the named mode and only dispatches when that mode is active.
    */
   bind(
-    _modeName: string,
+    modeName: string,
     tableName: string,
     eventName: string,
     callback: MuEventCallback,
     documentation: string = '',
   ): void {
-    this.modeManager.bind(tableName, eventName, callback, documentation);
+    this.modeManager.bind(tableName, eventName, callback, documentation, undefined, modeName);
   }
 
   /**
    * Bind with regex matching (stores pattern, matches at dispatch time).
    */
   bindRegex(
-    _modeName: string,
+    modeName: string,
     tableName: string,
     eventPattern: RegExp,
     callback: MuEventCallback,
     documentation: string = '',
   ): void {
     const key = `__regex__${eventPattern.source}`;
-    this.modeManager.bind(tableName, key, callback, documentation, eventPattern);
+    this.modeManager.bind(tableName, key, callback, documentation, eventPattern, modeName);
   }
 
   /**
    * Unbind an event handler from a table.
+   *
+   * If modeName is non-empty and not "default", the binding is removed
+   * from the mode-scoped table.
    */
-  unbind(_modeName: string, tableName: string, eventName: string): void {
-    this.modeManager.unbind(tableName, eventName);
+  unbind(modeName: string, tableName: string, eventName: string): void {
+    this.modeManager.unbind(tableName, eventName, modeName);
   }
 
   /**
    * Unbind a regex-bound handler.
    */
-  unbindRegex(_modeName: string, tableName: string, eventPattern: RegExp): void {
+  unbindRegex(modeName: string, tableName: string, eventPattern: RegExp): void {
     const key = `__regex__${eventPattern.source}`;
-    this.modeManager.unbind(tableName, key);
+    this.modeManager.unbind(tableName, key, modeName);
   }
 
   // ── Mu mode management ──
