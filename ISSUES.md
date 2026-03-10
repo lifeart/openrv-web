@@ -1326,6 +1326,54 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The panel can briefly report success and failure at the same time for the same copy attempt.
   - That makes the invite/share workflow less trustworthy, especially on browsers or environments with clipboard restrictions.
 
+### 110. Shortcut editor import failures are completely silent
+
+- Severity: Medium
+- Area: Custom key bindings UI
+- Evidence:
+  - The shortcut editor exposes an `Import` button in its toolbar in [src/ui/components/ShortcutEditor.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ShortcutEditor.ts#L320).
+  - Its file import path catches parse/validation errors and does nothing with them in [src/ui/components/ShortcutEditor.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ShortcutEditor.ts#L401).
+  - There is no error banner, modal, inline status, or retry guidance for malformed or incompatible keybinding files in that path.
+- Impact:
+  - Users can choose an invalid bindings file and see no visible result at all, with no explanation of what went wrong.
+  - That makes recovery and troubleshooting unnecessarily hard in one of the app’s more configuration-heavy workflows.
+
+### 111. Curves import failures only hit the console, not the UI
+
+- Severity: Medium
+- Area: Curves panel
+- Evidence:
+  - The curves panel exposes an `Import` button in [src/ui/components/CurvesControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/CurvesControl.ts#L132).
+  - Invalid imported data only triggers `console.error('Invalid curves JSON file')` in [src/ui/components/CurvesControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/CurvesControl.ts#L216).
+  - Read/parse failures likewise only log `Failed to import curves` in [src/ui/components/CurvesControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/CurvesControl.ts#L232), with no alert or inline error state.
+- Impact:
+  - From the user’s perspective, a bad curves file looks like a dead button or a no-op.
+  - That makes the import workflow fragile and much harder to use outside ideal files.
+
+### 112. External presentation window opens can fail silently when blocked by the browser
+
+- Severity: Medium
+- Area: Presentation / multi-window workflow
+- Evidence:
+  - The header exposes an `External Presentation (Ctrl+Shift+Alt+P)` action in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L389).
+  - That button is wired directly to `externalPresentation.openWindow()` in [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L528).
+  - `ExternalPresentation.openWindow()` explicitly returns `null` when `window.open(...)` is blocked, but surfaces no alert or status message in [src/ui/components/ExternalPresentation.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ExternalPresentation.ts#L392).
+- Impact:
+  - If the browser blocks popups, the user can click the presentation action and get no visible result or explanation.
+  - That makes a high-value review workflow fail like a dead control instead of a recoverable browser permission issue.
+
+### 113. The `?` shortcut cheat sheet advertises search/context filtering in code, but the shipped overlay exposes neither
+
+- Severity: Medium
+- Area: Help / shortcut discovery
+- Evidence:
+  - The cheat-sheet component documents support for `context filtering and text search` in [src/ui/components/ShortcutCheatSheet.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ShortcutCheatSheet.ts#L2).
+  - Its production mount path only instantiates the overlay in [src/services/LayoutOrchestrator.ts](/Users/lifeart/Repos/openrv-web/src/services/LayoutOrchestrator.ts#L352), and the keyboard action map only toggles visibility in [src/services/KeyboardActionMap.ts](/Users/lifeart/Repos/openrv-web/src/services/KeyboardActionMap.ts#L682).
+  - The rendered overlay itself is only a columns wrapper in [src/ui/components/ShortcutCheatSheet.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ShortcutCheatSheet.ts#L107), with no search input or visible context controls, unlike the separate help dialog in `AppKeyboardHandler`.
+- Impact:
+  - Users opening the `?` overlay get a static wall of shortcuts, not the searchable/context-aware cheat sheet the component surface suggests.
+  - That reduces the usefulness of the app’s fastest shortcut-discovery path and contributes to drift between the two help UIs.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

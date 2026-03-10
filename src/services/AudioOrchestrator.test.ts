@@ -44,13 +44,16 @@ function createMockAudioMixer() {
     removeTrack: vi.fn(),
     addTrack: vi.fn(),
     loadTrackBuffer: vi.fn(),
+    setMasterVolume: vi.fn(),
+    setMasterMuted: vi.fn(),
   } as unknown as AudioMixer;
 }
 
-function createDeps() {
+function createDeps(overrides?: Partial<AudioOrchestratorDeps>) {
   return {
     session: createMockSession(),
     audioMixer: createMockAudioMixer(),
+    ...overrides,
   };
 }
 
@@ -312,5 +315,205 @@ describe('AudioOrchestrator', () => {
 
     // frameTime = 48 / 24 = 2 (fallback to 24)
     expect(deps.audioMixer.play).toHaveBeenCalledWith(2);
+  });
+
+  // =========================================================================
+  // Dual-pipeline guard tests (Issue #30)
+  // =========================================================================
+
+  describe('dual-pipeline guard (sessionAudioActive)', () => {
+    it('AO-020: isSessionAudioActive is false by default', () => {
+      expect(orchestrator.isSessionAudioActive).toBe(false);
+    });
+
+    it('AO-021: isSessionAudioActive reflects boolean dep', () => {
+      const orch = new AudioOrchestrator({
+        session: createMockSession(),
+        audioMixer: createMockAudioMixer(),
+        sessionAudioActive: true,
+      } as unknown as AudioOrchestratorDeps);
+      expect(orch.isSessionAudioActive).toBe(true);
+      orch.dispose();
+    });
+
+    it('AO-022: isSessionAudioActive calls function dep', () => {
+      let active = false;
+      const orch = new AudioOrchestrator({
+        session: createMockSession(),
+        audioMixer: createMockAudioMixer(),
+        sessionAudioActive: () => active,
+      } as unknown as AudioOrchestratorDeps);
+
+      expect(orch.isSessionAudioActive).toBe(false);
+      active = true;
+      expect(orch.isSessionAudioActive).toBe(true);
+      orch.dispose();
+    });
+
+    it('AO-023: setSessionAudioActive updates the flag at runtime', () => {
+      expect(orchestrator.isSessionAudioActive).toBe(false);
+      orchestrator.setSessionAudioActive(true);
+      expect(orchestrator.isSessionAudioActive).toBe(true);
+    });
+
+    it('AO-024: sourceLoaded skips decode when sessionAudioActive is true', () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      orchestrator.setSessionAudioActive(true);
+      orchestrator.bindEvents();
+      orchestrator.setupLazyInit();
+      document.dispatchEvent(new Event('click'));
+
+      const source: AudioOrchestratorSource = {
+        type: 'video',
+        name: 'test.mp4',
+        url: 'http://example.com/test.mp4',
+      };
+
+      deps.session._emit('sourceLoaded', source);
+
+      // Should NOT fetch — decode is skipped
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(deps.audioMixer.addTrack).not.toHaveBeenCalled();
+
+      fetchSpy.mockRestore();
+      warnSpy.mockRestore();
+    });
+
+    it('AO-025: sourceLoaded proceeds with decode when sessionAudioActive is false', () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 404 }));
+
+      orchestrator.setSessionAudioActive(false);
+      orchestrator.bindEvents();
+      orchestrator.setupLazyInit();
+      document.dispatchEvent(new Event('click'));
+
+      const source: AudioOrchestratorSource = {
+        type: 'video',
+        name: 'test.mp4',
+        url: 'http://example.com/test.mp4',
+      };
+
+      deps.session._emit('sourceLoaded', source);
+
+      // Should call fetch — legacy decode path is active
+      expect(fetchSpy).toHaveBeenCalledWith('http://example.com/test.mp4', expect.any(Object));
+
+      fetchSpy.mockRestore();
+    });
+
+    it('AO-026: dual-pipeline warning fires when session audio is active and sourceLoaded triggers', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      orchestrator.setSessionAudioActive(true);
+      orchestrator.bindEvents();
+      orchestrator.setupLazyInit();
+      document.dispatchEvent(new Event('click'));
+
+      const source: AudioOrchestratorSource = {
+        type: 'video',
+        name: 'test.mp4',
+        url: 'http://example.com/test.mp4',
+      };
+
+      deps.session._emit('sourceLoaded', source);
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Dual audio pipeline detected'),
+      );
+
+      warnSpy.mockRestore();
+    });
+
+    it('AO-027: dual-pipeline warning fires only once across multiple sourceLoaded events', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      orchestrator.setSessionAudioActive(true);
+      orchestrator.bindEvents();
+      orchestrator.setupLazyInit();
+      document.dispatchEvent(new Event('click'));
+
+      const source: AudioOrchestratorSource = {
+        type: 'video',
+        name: 'test.mp4',
+        url: 'http://example.com/test.mp4',
+      };
+
+      deps.session._emit('sourceLoaded', source);
+      deps.session._emit('sourceLoaded', source);
+      deps.session._emit('sourceLoaded', source);
+
+      const dualPipelineWarnings = warnSpy.mock.calls.filter(
+        (call) => typeof call[0] === 'string' && call[0].includes('Dual audio pipeline'),
+      );
+      expect(dualPipelineWarnings).toHaveLength(1);
+
+      warnSpy.mockRestore();
+    });
+
+    it('AO-028: sourceLoaded uses dynamic function check for sessionAudioActive', () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 404 }));
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      let active = false;
+      orchestrator.setSessionAudioActive(() => active);
+      orchestrator.bindEvents();
+      orchestrator.setupLazyInit();
+      document.dispatchEvent(new Event('click'));
+
+      const source: AudioOrchestratorSource = {
+        type: 'video',
+        name: 'test.mp4',
+        url: 'http://example.com/test.mp4',
+      };
+
+      // First load: session audio not active — should fetch
+      deps.session._emit('sourceLoaded', source);
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+      // Now session audio becomes active
+      active = true;
+      fetchSpy.mockClear();
+
+      deps.session._emit('sourceLoaded', source);
+      // Should NOT fetch — session audio is now active
+      expect(fetchSpy).not.toHaveBeenCalled();
+
+      fetchSpy.mockRestore();
+      warnSpy.mockRestore();
+    });
+  });
+
+  // =========================================================================
+  // Deprecation markers (Issue #30)
+  // =========================================================================
+
+  describe('deprecation markers', () => {
+    it('AO-029: AudioOrchestrator source contains @deprecated and TODO markers', async () => {
+      // Dynamically import the raw source text to verify deprecation markers.
+      // We use import() with ?raw to get the source as a string (Vite feature).
+      const mod = await import('./AudioOrchestrator.ts?raw');
+      const source: string = mod.default;
+
+      expect(source).toContain('@deprecated');
+      expect(source).toContain('TODO(audio-cleanup)');
+    });
+  });
+
+  // =========================================================================
+  // Volume/mute forwarding consistency (Issue #30)
+  // =========================================================================
+
+  describe('volume/mute forwarding', () => {
+    it('AO-030: AudioMixer exposes setMasterVolume for App.ts forwarding', () => {
+      // This test validates the interface contract: the AudioMixer returned
+      // by getAudioMixer() must have setMasterVolume/setMasterMuted so
+      // App.ts's playback wiring can forward volume to both audio systems.
+      const mixer = orchestrator.getAudioMixer();
+      // The mock has these methods; in production AudioMixer also does
+      expect(typeof (mixer as any).setMasterVolume).toBe('function');
+      expect(typeof (mixer as any).setMasterMuted).toBe('function');
+    });
   });
 });

@@ -560,8 +560,13 @@ export class App {
       }),
     );
 
-    // Audio orchestrator (manages AudioMixer lifecycle and session wiring)
-    this.audioOrchestrator = new AudioOrchestrator({ session: this.session });
+    // Audio orchestrator (legacy — manages AudioMixer lifecycle and session wiring).
+    // The session's AudioCoordinator is the primary audio path; tell the
+    // orchestrator so it skips its own decode when the session path is active.
+    this.audioOrchestrator = new AudioOrchestrator({
+      session: this.session,
+      sessionAudioActive: () => this.session.audioPlaybackManager?.isUsingWebAudio ?? false,
+    });
     this.audioOrchestrator.bindEvents();
 
     // Frame navigation service (playlist/annotation navigation)
