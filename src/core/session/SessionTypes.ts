@@ -23,7 +23,8 @@ import type { LensDistortionParams } from '../../transform/LensDistortion';
 import type { StereoState } from '../types/stereo';
 import type { StereoEyeTransformState, StereoAlignMode } from '../../stereo/StereoEyeTransform';
 import type { LoopMode, MediaType, PlaybackMode } from '../types/session';
-import type { GTOParseResult } from './GTOGraphLoader';
+import type { GTOParseResult, SkippedNodeInfo } from './GTOGraphLoader';
+import type { DegradedModeInfo } from '../../composite/BlendModes';
 import type { SubFramePosition } from '../../utils/media/FrameInterpolator';
 import type { FPSMeasurement } from './PlaybackEngine';
 import type { Marker } from './MarkerManager';
@@ -126,6 +127,10 @@ export interface SessionEvents extends EventMap {
   volumeChanged: number;
   mutedChanged: boolean;
   graphLoaded: GTOParseResult;
+  /** Emitted when nodes are skipped during GTO import (lossy import warning) */
+  skippedNodes: SkippedNodeInfo[];
+  /** Emitted when composite modes are degraded during GTO import (lossy import warning) */
+  degradedModes: DegradedModeInfo[];
   fpsChanged: number;
   abSourceChanged: { current: 'A' | 'B'; sourceIndex: number };
   // New events for GTO session integration

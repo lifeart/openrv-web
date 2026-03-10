@@ -10,6 +10,7 @@ import {
   compositeMultipleLayers,
   type CompositeLayer,
   stackCompositeToBlendMode,
+  stackCompositeToBlendModeWithInfo,
   COMPOSITE_MODES,
   COMPOSITE_MODE_CODES,
   isGLBlendStateMode,
@@ -883,6 +884,71 @@ describe('BlendModes', () => {
 
     it('maps unknown custom types to normal', () => {
       expect(stackCompositeToBlendMode('custom-blend')).toBe('normal');
+    });
+
+    it('maps -difference to minus', () => {
+      expect(stackCompositeToBlendMode('-difference')).toBe('minus');
+    });
+  });
+
+  describe('stackCompositeToBlendModeWithInfo', () => {
+    it('dissolve maps to normal with degradation flag', () => {
+      const result = stackCompositeToBlendModeWithInfo('dissolve');
+      expect(result.mode).toBe('normal');
+      expect(result.degraded).toBe(true);
+      expect(result.originalMode).toBe('dissolve');
+    });
+
+    it('topmost maps to normal with degradation flag', () => {
+      const result = stackCompositeToBlendModeWithInfo('topmost');
+      expect(result.mode).toBe('normal');
+      expect(result.degraded).toBe(true);
+      expect(result.originalMode).toBe('topmost');
+    });
+
+    it('over maps without degradation', () => {
+      const result = stackCompositeToBlendModeWithInfo('over');
+      expect(result.mode).toBe('normal');
+      expect(result.degraded).toBe(false);
+      expect(result.originalMode).toBeUndefined();
+    });
+
+    it('add maps without degradation', () => {
+      const result = stackCompositeToBlendModeWithInfo('add');
+      expect(result.mode).toBe('add');
+      expect(result.degraded).toBe(false);
+      expect(result.originalMode).toBeUndefined();
+    });
+
+    it('multiply maps without degradation (via default to normal)', () => {
+      // 'multiply' is not a StackCompositeType, falls through to default
+      const result = stackCompositeToBlendModeWithInfo('multiply');
+      expect(result.mode).toBe('normal');
+      expect(result.degraded).toBe(false);
+    });
+
+    it('difference maps without degradation', () => {
+      const result = stackCompositeToBlendModeWithInfo('difference');
+      expect(result.mode).toBe('difference');
+      expect(result.degraded).toBe(false);
+    });
+
+    it('replace maps without degradation', () => {
+      const result = stackCompositeToBlendModeWithInfo('replace');
+      expect(result.mode).toBe('normal');
+      expect(result.degraded).toBe(false);
+    });
+
+    it('-difference maps without degradation', () => {
+      const result = stackCompositeToBlendModeWithInfo('-difference');
+      expect(result.mode).toBe('minus');
+      expect(result.degraded).toBe(false);
+    });
+
+    it('minus maps without degradation', () => {
+      const result = stackCompositeToBlendModeWithInfo('minus');
+      expect(result.mode).toBe('minus');
+      expect(result.degraded).toBe(false);
     });
   });
 });

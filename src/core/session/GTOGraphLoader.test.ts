@@ -6,8 +6,9 @@
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { loadGTOGraph, getGraphSummary } from './GTOGraphLoader';
-import type { GTOParseResult } from './GTOGraphLoader';
+import { loadGTOGraph, getGraphSummary, formatSkippedNodesWarning, formatDegradedModesWarning } from './GTOGraphLoader';
+import type { GTOParseResult, SkippedNodeInfo } from './GTOGraphLoader';
+import type { DegradedModeInfo } from '../../composite/BlendModes';
 import type { GTODTO } from 'gto-js';
 import { NodeFactory } from '../../nodes/base/NodeFactory';
 
@@ -1921,6 +1922,8 @@ describe('GTOGraphLoader', () => {
           ['node2', { name: 'Node 2', type: 'RVSequenceGroup', inputs: [{ name: 'Node 1' }] } as never],
         ]),
         rootNode: { name: 'Node 2' } as never,
+        skippedNodes: [],
+        degradedModes: [],
         sessionInfo: { name: 'TestSession' },
       };
 
@@ -1938,6 +1941,8 @@ describe('GTOGraphLoader', () => {
         graph: {} as never,
         nodes: new Map(),
         rootNode: null,
+        skippedNodes: [],
+        degradedModes: [],
         sessionInfo: { name: 'EmptySession' },
       };
 
@@ -2198,6 +2203,250 @@ describe('GTOGraphLoader', () => {
       const visibleCall = setValueCalls.find(([key]) => key === 'layerVisible');
       expect(visibleCall).toBeDefined();
       expect(visibleCall![1]).toEqual([true, false]);
+    });
+  });
+
+  describe('skippedNodes tracking (Issue #20)', () => {
+    it('GTO-SKIP-001: reports unregistered node types in skippedNodes', () => {
+      // RVColor is mapped in PROTOCOL_TO_NODE_TYPE but not registered in NodeFactory
+      vi.spyOn(NodeFactory, 'isRegistered').mockImplementation(
+        (type: string) => type === 'RVSequenceGroup',
+      );
+      vi.spyOn(NodeFactory, 'create').mockReturnValue({
+        type: 'RVSequenceGroup',
+        name: 'seq',
+        properties: { has: vi.fn().mockReturnValue(false), setValue: vi.fn() },
+        inputs: [],
+        outputs: [],
+      } as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'TestSession' }],
+        objects: [
+          { name: 'seq', protocol: 'RVSequenceGroup', components: { mode: { inputs: [] } } },
+          { name: 'color1', protocol: 'RVColor', components: { mode: { inputs: [] } } },
+          { name: 'color2', protocol: 'RVColor', components: { mode: { inputs: [] } } },
+          { name: 'xform1', protocol: 'RVTransform2D', components: { mode: { inputs: [] } } },
+        ],
+      });
+
+      const result = loadGTOGraph(dto as never);
+
+      // Should have 3 skipped nodes (2 RVColor + 1 RVTransform2D)
+      const unregistered = result.skippedNodes.filter((s) => s.reason === 'unregistered_type');
+      expect(unregistered).toHaveLength(3);
+      expect(unregistered.map((s) => s.protocol)).toContain('RVColor');
+      expect(unregistered.map((s) => s.protocol)).toContain('RVTransform2D');
+
+      // Should contain the node names
+      expect(unregistered.map((s) => s.name)).toContain('color1');
+      expect(unregistered.map((s) => s.name)).toContain('color2');
+      expect(unregistered.map((s) => s.name)).toContain('xform1');
+
+      // mappedType should be set
+      for (const s of unregistered) {
+        expect(s.mappedType).toBeTruthy();
+      }
+    });
+
+    it('GTO-SKIP-002: reports unmapped protocols in skippedNodes', () => {
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(false);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'TestSession' }],
+        objects: [
+          { name: 'custom1', protocol: 'SomeCustomPlugin', components: { mode: { inputs: [] } } },
+        ],
+      });
+
+      const result = loadGTOGraph(dto as never);
+
+      const unmapped = result.skippedNodes.filter((s) => s.reason === 'unmapped_protocol');
+      expect(unmapped).toHaveLength(1);
+      expect(unmapped[0]!.protocol).toBe('SomeCustomPlugin');
+      expect(unmapped[0]!.mappedType).toBeNull();
+    });
+
+    it('GTO-SKIP-003: returns empty skippedNodes when all nodes are supported', () => {
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue({
+        type: 'RVSequenceGroup',
+        name: 'seq',
+        properties: { has: vi.fn().mockReturnValue(false), setValue: vi.fn() },
+        inputs: [],
+        outputs: [],
+      } as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'TestSession' }],
+        objects: [
+          { name: 'seq', protocol: 'RVSequenceGroup', components: { mode: { inputs: [] } } },
+        ],
+      });
+
+      const result = loadGTOGraph(dto as never);
+
+      expect(result.skippedNodes).toEqual([]);
+    });
+
+    it('GTO-SKIP-004: console.warn is emitted for unregistered nodes', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      vi.spyOn(NodeFactory, 'isRegistered').mockImplementation(
+        (type: string) => type === 'RVSequenceGroup',
+      );
+      vi.spyOn(NodeFactory, 'create').mockReturnValue({
+        type: 'RVSequenceGroup',
+        name: 'seq',
+        properties: { has: vi.fn().mockReturnValue(false), setValue: vi.fn() },
+        inputs: [],
+        outputs: [],
+      } as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'TestSession' }],
+        objects: [
+          { name: 'seq', protocol: 'RVSequenceGroup', components: { mode: { inputs: [] } } },
+          { name: 'color1', protocol: 'RVColor', components: { mode: { inputs: [] } } },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Skipped 1 mapped-but-unimplemented node(s)'),
+      );
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('RVColor'));
+
+      warnSpy.mockRestore();
+    });
+
+    it('GTO-SKIP-005: no console.warn when all nodes are supported', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue({
+        type: 'RVSequenceGroup',
+        name: 'seq',
+        properties: { has: vi.fn().mockReturnValue(false), setValue: vi.fn() },
+        inputs: [],
+        outputs: [],
+      } as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'TestSession' }],
+        objects: [
+          { name: 'seq', protocol: 'RVSequenceGroup', components: { mode: { inputs: [] } } },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(warnSpy).not.toHaveBeenCalledWith(
+        expect.stringContaining('mapped-but-unimplemented'),
+      );
+
+      warnSpy.mockRestore();
+    });
+
+    it('GTO-SKIP-006: getGraphSummary includes skipped nodes section', () => {
+      const mockResult: GTOParseResult = {
+        graph: {} as never,
+        nodes: new Map(),
+        rootNode: null,
+        skippedNodes: [
+          { name: 'color1', protocol: 'RVColor', mappedType: 'RVColor', reason: 'unregistered_type' },
+          { name: 'xform1', protocol: 'RVTransform2D', mappedType: 'RVTransform2D', reason: 'unregistered_type' },
+        ],
+        degradedModes: [],
+        sessionInfo: { name: 'TestSession' },
+      };
+
+      const summary = getGraphSummary(mockResult);
+
+      expect(summary).toContain('Skipped: 2');
+      expect(summary).toContain('color1 (RVColor) - unregistered_type');
+      expect(summary).toContain('xform1 (RVTransform2D) - unregistered_type');
+    });
+  });
+
+  describe('formatSkippedNodesWarning', () => {
+    it('GTO-WARN-001: returns null when no meaningful nodes skipped', () => {
+      expect(formatSkippedNodesWarning([])).toBeNull();
+    });
+
+    it('GTO-WARN-002: returns null when only unmapped protocols skipped', () => {
+      const skipped: SkippedNodeInfo[] = [
+        { name: 'x', protocol: 'UnknownPlugin', mappedType: null, reason: 'unmapped_protocol' },
+      ];
+      expect(formatSkippedNodesWarning(skipped)).toBeNull();
+    });
+
+    it('GTO-WARN-003: returns summary for unregistered types', () => {
+      const skipped: SkippedNodeInfo[] = [
+        { name: 'c1', protocol: 'RVColor', mappedType: 'RVColor', reason: 'unregistered_type' },
+        { name: 'c2', protocol: 'RVColor', mappedType: 'RVColor', reason: 'unregistered_type' },
+        { name: 'x1', protocol: 'RVTransform2D', mappedType: 'RVTransform2D', reason: 'unregistered_type' },
+      ];
+      const msg = formatSkippedNodesWarning(skipped);
+      expect(msg).toBe('3 node(s) were skipped during import: 2 RVColor, 1 RVTransform2D');
+    });
+
+    it('GTO-WARN-004: includes creation_failed nodes in warning', () => {
+      const skipped: SkippedNodeInfo[] = [
+        { name: 'f1', protocol: 'RVColor', mappedType: 'RVColor', reason: 'creation_failed' },
+      ];
+      const msg = formatSkippedNodesWarning(skipped);
+      expect(msg).toContain('1 node(s) were skipped');
+      expect(msg).toContain('RVColor');
+    });
+  });
+
+  describe('formatDegradedModesWarning', () => {
+    it('GTO-DEGRADE-001: returns null when no modes degraded', () => {
+      expect(formatDegradedModesWarning([])).toBeNull();
+    });
+
+    it('GTO-DEGRADE-002: reports dissolve degradation', () => {
+      const degraded: DegradedModeInfo[] = [
+        { nodeName: 'stack_000', originalMode: 'dissolve', fallbackMode: 'normal' },
+      ];
+      const msg = formatDegradedModesWarning(degraded);
+      expect(msg).toContain('1 composite mode(s) were degraded');
+      expect(msg).toContain('"dissolve"');
+      expect(msg).toContain('"normal"');
+      expect(msg).toContain('Compositing may differ from OpenRV');
+    });
+
+    it('GTO-DEGRADE-003: reports topmost degradation', () => {
+      const degraded: DegradedModeInfo[] = [
+        { nodeName: 'stack_001', originalMode: 'topmost', fallbackMode: 'normal' },
+      ];
+      const msg = formatDegradedModesWarning(degraded);
+      expect(msg).toContain('1 composite mode(s) were degraded');
+      expect(msg).toContain('"topmost"');
+      expect(msg).toContain('"normal"');
+    });
+
+    it('GTO-DEGRADE-004: deduplicates identical degradation descriptions', () => {
+      const degraded: DegradedModeInfo[] = [
+        { nodeName: 'stack_000', originalMode: 'dissolve', fallbackMode: 'normal' },
+        { nodeName: 'stack_001', originalMode: 'dissolve', fallbackMode: 'normal' },
+      ];
+      const msg = formatDegradedModesWarning(degraded);
+      expect(msg).toContain('2 composite mode(s) were degraded');
+      // Should only list "dissolve" → "normal" once (deduplicated)
+      const matches = msg!.match(/"dissolve"/g);
+      expect(matches).toHaveLength(1);
+    });
+
+    it('GTO-DEGRADE-005: reports multiple different degraded modes', () => {
+      const degraded: DegradedModeInfo[] = [
+        { nodeName: 'stack_000', originalMode: 'dissolve', fallbackMode: 'normal' },
+        { nodeName: 'stack_001', originalMode: 'topmost', fallbackMode: 'normal' },
+      ];
+      const msg = formatDegradedModesWarning(degraded);
+      expect(msg).toContain('2 composite mode(s) were degraded');
+      expect(msg).toContain('"dissolve"');
+      expect(msg).toContain('"topmost"');
     });
   });
 });

@@ -355,7 +355,7 @@ export class Session extends EventEmitter<SessionEvents> {
     });
 
     // Forward SessionGraph events
-    const graphEvents = ['graphLoaded', 'settingsLoaded', 'sessionLoaded', 'edlLoaded', 'metadataChanged'] as const;
+    const graphEvents = ['graphLoaded', 'settingsLoaded', 'sessionLoaded', 'edlLoaded', 'metadataChanged', 'skippedNodes', 'degradedModes'] as const;
     for (const event of graphEvents) {
       this._sessionGraph.on(event as any, (data: any) => this.emit(event as any, data));
     }

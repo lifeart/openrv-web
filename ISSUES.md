@@ -1133,6 +1133,91 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The app ships a richer export frameburn system than users can actually reach from the production UI.
   - Export behavior is effectively limited to the on-viewer timecode overlay, while the more useful multi-field frameburn path remains dead code in real workflows.
 
+### 94. Watermark image load failures are swallowed without any user-visible feedback
+
+- Severity: Medium
+- Area: Effects panel, error handling
+- Evidence:
+  - `WatermarkOverlay` emits explicit `error` events when image loading fails in [src/ui/components/WatermarkOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/WatermarkOverlay.ts#L48), [src/ui/components/WatermarkOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/WatermarkOverlay.ts#L112), and [src/ui/components/WatermarkOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/WatermarkOverlay.ts#L165).
+  - `WatermarkControl` forwards those errors as its own `error` event in [src/ui/components/WatermarkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/WatermarkControl.ts#L346), but the production file-upload handler catches `loadImage()` failures and intentionally does not surface them in [src/ui/components/WatermarkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/WatermarkControl.ts#L351).
+  - I found no production listener that turns the watermark control’s `error` event into an alert, inline message, or panel status.
+- Impact:
+  - If a watermark file is corrupt or unsupported, the panel simply stays unchanged with no explanation.
+  - That makes a real export-facing feature feel unreliable, because users get no indication whether the image was rejected, is still loading, or failed for browser reasons.
+
+### 95. Playlist transition edits can silently collapse back to a cut with no explanation
+
+- Severity: Medium
+- Area: Playlist editor, transitions
+- Evidence:
+  - The transition row UI lets users pick a non-cut transition type and duration in [src/ui/components/PlaylistPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PlaylistPanel.ts#L720).
+  - If `TransitionManager.validateTransition(...)` rejects the requested transition, the panel silently rewrites the selector back to `cut` and clears the transition in [src/ui/components/PlaylistPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PlaylistPanel.ts#L734) through [src/ui/components/PlaylistPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PlaylistPanel.ts#L743).
+  - `TransitionManager.validateTransition()` can reject a transition for several real reasons, including clip duration limits and overlap with adjacent transitions, in [src/core/session/TransitionManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/TransitionManager.ts#L72).
+- Impact:
+  - Users can try to create a transition and watch it disappear back to a hard cut without any inline error or explanation.
+  - That makes the timeline editor feel unreliable when the real problem is just an invalid overlap or duration constraint.
+
+### 96. ShotGrid load requests with invalid IDs fail as a silent no-op
+
+- Severity: Low
+- Area: ShotGrid panel, query flow
+- Evidence:
+  - The ShotGrid panel always renders an enabled `Load` button in [src/ui/components/ShotGridPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ShotGridPanel.ts#L165).
+  - `handleLoad()` parses the input and simply returns when the ID is missing, non-numeric, or less than `1` in [src/ui/components/ShotGridPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ShotGridPanel.ts#L302).
+  - There is no matching error message, disabled-state logic, or validation hint for that failure path.
+- Impact:
+  - Users can click `Load` or press `Enter` and get no response at all if the query field is empty or malformed.
+  - The panel behaves like the action was ignored rather than telling the user what needs to be corrected.
+
+### 97. Timeline context menu advertises `Ctrl+C` for timecode copy, but that shortcut is still bound to frame copy
+
+- Severity: Medium
+- Area: Timeline context menu, shortcut truthfulness
+- Evidence:
+  - The timeline context menu renders `Copy Timecode` with a visible `Ctrl+C` hint in [src/ui/components/TimelineContextMenu.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/TimelineContextMenu.ts#L99) and [src/ui/components/TimelineContextMenu.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/TimelineContextMenu.ts#L268).
+  - The menu's keyboard handling only supports navigation keys, `Enter`, `Space`, and `Escape`; it never handles `Ctrl+C` in [src/ui/components/TimelineContextMenu.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/TimelineContextMenu.ts#L306).
+  - The global binding for `Ctrl+C` is still `export.copyFrame` in [src/utils/input/KeyBindings.ts](/Users/lifeart/Repos/openrv-web/src/utils/input/KeyBindings.ts#L271), and the action map routes that to `viewer.copyFrameToClipboard(true)` in [src/services/KeyboardActionMap.ts](/Users/lifeart/Repos/openrv-web/src/services/KeyboardActionMap.ts#L545).
+  - The actual timecode copy path is click-only through `navigator.clipboard.writeText(tc)` in [src/ui/components/Timeline.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Timeline.ts#L579).
+- Impact:
+  - The menu tells users one shortcut, but pressing it performs a different clipboard action.
+  - That makes the timeline context menu actively misleading during review work where copying a timecode quickly matters.
+
+### 98. Ghost Frames, PAR, and Stereo Align use different interaction models for mouse and keyboard
+
+- Severity: Medium
+- Area: View toolbar controls, state semantics
+- Evidence:
+  - The Ghost Frames button is titled as a feature shortcut in [src/ui/components/GhostFrameControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/GhostFrameControl.ts#L88), but clicking it only opens the dropdown in [src/ui/components/GhostFrameControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/GhostFrameControl.ts#L110), while the keyboard path flips the enabled state via `controls.ghostFrameControl.toggle()` in [src/services/KeyboardActionMap.ts](/Users/lifeart/Repos/openrv-web/src/services/KeyboardActionMap.ts#L384) and [src/ui/components/GhostFrameControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/GhostFrameControl.ts#L416).
+  - The PAR button follows the same pattern: its title advertises `Shift+P` in [src/ui/components/PARControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PARControl.ts#L47), clicking only opens the dropdown in [src/ui/components/PARControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PARControl.ts#L66), but the keyboard action toggles live PAR correction through [src/services/KeyboardActionMap.ts](/Users/lifeart/Repos/openrv-web/src/services/KeyboardActionMap.ts#L385) and [src/ui/components/PARControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PARControl.ts#L415).
+  - Stereo Align has the same mismatch: the button advertises `Shift+4` in [src/ui/components/StereoAlignControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/StereoAlignControl.ts#L55), clicking only opens the dropdown, but the shortcut cycles the active overlay mode through [src/services/KeyboardActionMap.ts](/Users/lifeart/Repos/openrv-web/src/services/KeyboardActionMap.ts#L612) and [src/ui/components/StereoAlignControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/StereoAlignControl.ts#L257).
+- Impact:
+  - These controls look and read like direct feature toggles or mode selectors, but mouse users and keyboard users get different behavior from the same named control.
+  - That inconsistency makes it harder to predict whether a toolbar click will change the image immediately or just open settings.
+
+### 99. Timeline editor context menu shows shortcut hints that are not actually wired
+
+- Severity: Medium
+- Area: Timeline editor, context menu
+- Evidence:
+  - The timeline editor context menu renders `Split at Playhead` with `S`, `Duplicate Cut` with `D`, and `Delete Cut` with `Del` in [src/ui/components/TimelineEditor.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/TimelineEditor.ts#L1092), [src/ui/components/TimelineEditor.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/TimelineEditor.ts#L1099), and [src/ui/components/TimelineEditor.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/TimelineEditor.ts#L1114).
+  - Those hints are only visual text added by `createMenuItem(...)` in [src/ui/components/TimelineEditor.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/TimelineEditor.ts#L1135); the context menu itself has no keyboard handler.
+  - The editor's real keyboard handling only implements `Delete` / `Backspace`, `Escape`, arrow nudging, and `Tab` selection in [src/ui/components/TimelineEditor.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/TimelineEditor.ts#L677), with no `S` or `D` path at all.
+- Impact:
+  - The context menu presents keyboard affordances for split and duplicate that users cannot actually trigger from the keyboard.
+  - That makes the visual timeline editor feel more capable than it is, then fails exactly when an editor tries to use it efficiently.
+
+### 100. Snapshot panel hides load failures behind a blank or stale panel state
+
+- Severity: Medium
+- Area: Snapshot panel, error handling
+- Evidence:
+  - Opening the panel in [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L605) only shows the container and starts `loadSnapshots()`.
+  - `loadSnapshots()` catches snapshot listing failures and only logs `Failed to load snapshots` to the console in [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L225), with no alert, inline error, or retry UI.
+  - The list is only re-rendered on successful load in [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L227), so a failed fetch can leave the panel blank on first open or showing stale results from an earlier successful load.
+- Impact:
+  - If snapshot storage is unavailable or listing fails, users get a panel that looks empty or out-of-date rather than a clear failure state.
+  - That makes snapshot problems look like “no snapshots exist” instead of “the panel failed to load them.”
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

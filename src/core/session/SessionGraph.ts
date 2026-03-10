@@ -4,7 +4,8 @@ import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { parseRVEDL, type RVEDLEntry } from '../../formats/RVEDLParser';
 import { type Graph } from '../graph/Graph';
 import { loadGTOGraph } from './GTOGraphLoader';
-import type { GTOParseResult } from './GTOGraphLoader';
+import type { GTOParseResult, SkippedNodeInfo } from './GTOGraphLoader';
+import type { DegradedModeInfo } from '../../composite/BlendModes';
 import { resolveProperty as _resolveProperty, resolveGTOByHash, resolveGTOByAt } from './PropertyResolver';
 import type { HashResolveResult, AtResolveResult, GTOHashResolveResult, GTOAtResolveResult } from './PropertyResolver';
 import { parseInitialSettings as _parseInitialSettings } from './GTOSettingsParser';
@@ -23,6 +24,10 @@ export interface SessionGraphEvents extends EventMap {
   sessionLoaded: void;
   edlLoaded: RVEDLEntry[];
   metadataChanged: SessionMetadata;
+  /** Emitted when nodes are skipped during GTO import (lossy import warning) */
+  skippedNodes: SkippedNodeInfo[];
+  /** Emitted when composite modes are degraded during GTO import (lossy import warning) */
+  degradedModes: DegradedModeInfo[];
 }
 
 export interface SessionGraphHost {
@@ -363,6 +368,23 @@ export class SessionGraph extends EventEmitter<SessionGraphEvents> {
       }
 
       this.emit('graphLoaded', result);
+
+      // Emit skipped nodes warning if any mapped-but-unimplemented nodes were dropped
+      if (result.skippedNodes.length > 0) {
+        const meaningful = result.skippedNodes.filter(
+          (s) => s.reason === 'unregistered_type' || s.reason === 'creation_failed',
+        );
+        if (meaningful.length > 0) {
+          log.warn('Import skipped nodes:', meaningful.map((s) => `${s.name} (${s.protocol})`).join(', '));
+          this.emit('skippedNodes', result.skippedNodes);
+        }
+      }
+
+      // Emit degraded modes warning if any composite modes were downgraded
+      if (result.degradedModes.length > 0) {
+        log.warn('Import degraded composite modes:', result.degradedModes.map((d) => `${d.originalMode} → ${d.fallbackMode}`).join(', '));
+        this.emit('degradedModes', result.degradedModes);
+      }
 
       // Load video sources from graph nodes that have file data
       await this._host!.loadVideoSourcesFromGraph(result);

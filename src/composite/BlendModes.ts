@@ -311,32 +311,65 @@ export function compositeMultipleLayers(
  *   Our 'minus' blend mode computes `clamp(base - top, 0, 1)` which matches
  *   the ReverseDifference behavior.
  */
+/**
+ * Information about a composite mode that was degraded during import.
+ */
+export interface DegradedModeInfo {
+  /** The GTO object name (stack node instance) */
+  nodeName: string;
+  /** The original composite type from the session file */
+  originalMode: string;
+  /** The blend mode it was downgraded to */
+  fallbackMode: string;
+}
+
+/**
+ * Result of mapping a StackCompositeType to a BlendMode.
+ * When a mode is not fully supported and falls back to a simpler mode,
+ * `degraded` is true and `originalMode` contains the original composite type.
+ */
+export interface BlendModeMapResult {
+  mode: BlendMode;
+  /** True if the original composite type was downgraded to a simpler blend mode */
+  degraded: boolean;
+  /** The original composite type that was downgraded (only set when degraded is true) */
+  originalMode?: string;
+}
+
 export function stackCompositeToBlendMode(composite: StackCompositeType): BlendMode {
+  return stackCompositeToBlendModeWithInfo(composite).mode;
+}
+
+/**
+ * Map a StackCompositeType to a BlendMode, returning degradation metadata.
+ * Use this variant when you need to detect and report lossy mode conversions.
+ */
+export function stackCompositeToBlendModeWithInfo(composite: StackCompositeType): BlendModeMapResult {
   switch (composite) {
     case 'replace':
-      return 'normal';
+      return { mode: 'normal', degraded: false };
     case 'over':
-      return 'normal';
+      return { mode: 'normal', degraded: false };
     case 'add':
-      return 'add';
+      return { mode: 'add', degraded: false };
     case 'difference':
-      return 'difference';
+      return { mode: 'difference', degraded: false };
     case '-difference':
       // OpenRV compatibility: ReverseDifference = clamp(dst - src, 0, 1)
-      return 'minus';
+      return { mode: 'minus', degraded: false };
     case 'minus':
       // OpenRV compatibility: maps to ReverseDifference (clamp(dst - src, 0, 1))
-      return 'minus';
+      return { mode: 'minus', degraded: false };
     case 'dissolve':
       // OpenRV: InlineDissolve2.glsl uses per-pixel noise to randomly pick input.
       // Falling back to normal until per-pixel noise dissolve is implemented.
-      return 'normal';
+      return { mode: 'normal', degraded: true, originalMode: 'dissolve' };
     case 'topmost':
       // OpenRV: StackIPNode evaluates only the first input when topmost is set.
       // Falling back to normal until topmost-only evaluation is implemented.
-      return 'normal';
+      return { mode: 'normal', degraded: true, originalMode: 'topmost' };
     default:
-      return 'normal';
+      return { mode: 'normal', degraded: false };
   }
 }
 

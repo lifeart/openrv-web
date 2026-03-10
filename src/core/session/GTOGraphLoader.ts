@@ -13,6 +13,8 @@ import type { VersionGroup, VersionEntry } from './VersionManager';
 import { VALID_STATUSES } from './StatusManager';
 import type { StatusEntry, ShotStatus } from './StatusManager';
 import type { IPNode } from '../../nodes/base/IPNode';
+import { stackCompositeToBlendModeWithInfo } from '../../composite/BlendModes';
+import type { DegradedModeInfo } from '../../composite/BlendModes';
 
 /**
  * Parsed node information from GTO
@@ -27,10 +29,28 @@ export interface GTONodeInfo {
 /**
  * Result of parsing a GTO file
  */
+/**
+ * A node type that was skipped during import because it is not yet implemented.
+ */
+export interface SkippedNodeInfo {
+  /** The GTO object name (instance name) */
+  name: string;
+  /** The RV protocol (e.g. 'RVColor', 'RVTransform2D') */
+  protocol: string;
+  /** The mapped node type from PROTOCOL_TO_NODE_TYPE (if any) */
+  mappedType: string | null;
+  /** Reason the node was skipped */
+  reason: 'unmapped_protocol' | 'unregistered_type' | 'creation_failed';
+}
+
 export interface GTOParseResult {
   graph: Graph;
   nodes: Map<string, IPNode>;
   rootNode: IPNode | null;
+  /** Nodes that were skipped during import (mapped but unimplemented, or unknown) */
+  skippedNodes: SkippedNodeInfo[];
+  /** Composite modes that were silently degraded to a simpler blend mode */
+  degradedModes: DegradedModeInfo[];
   sessionInfo: {
     name: string;
     viewNode?: string;
@@ -198,6 +218,8 @@ export function loadGTOGraph(dto: GTODTO, availableFiles?: Map<string, File>): G
 function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOParseResult {
   const graph = new Graph();
   const nodes = new Map<string, IPNode>();
+  const skippedNodes: SkippedNodeInfo[] = [];
+  const degradedModes: DegradedModeInfo[] = [];
   let rootNode: IPNode | null = null;
 
   // Session info
@@ -1281,7 +1303,18 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
         const composite = stackComp.property('composite').value() as string;
         const mode = stackComp.property('mode').value() as string;
 
-        if (composite) nodeInfo.properties.composite = composite;
+        if (composite) {
+          nodeInfo.properties.composite = composite;
+          // Check if this composite mode will be degraded
+          const mapResult = stackCompositeToBlendModeWithInfo(composite);
+          if (mapResult.degraded) {
+            degradedModes.push({
+              nodeName: name,
+              originalMode: mapResult.originalMode!,
+              fallbackMode: mapResult.mode,
+            });
+          }
+        }
         if (mode) nodeInfo.properties.mode = mode;
       }
 
@@ -2116,17 +2149,35 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
   for (const [name, info] of nodeInfos) {
     const nodeType = PROTOCOL_TO_NODE_TYPE[info.protocol];
     if (!nodeType) {
-      // Unknown protocol - skip silently (many RV internals aren't needed)
+      // Unknown protocol - skip (many RV internals aren't needed)
+      skippedNodes.push({
+        name,
+        protocol: info.protocol,
+        mappedType: null,
+        reason: 'unmapped_protocol',
+      });
       continue;
     }
 
     if (!NodeFactory.isRegistered(nodeType)) {
-      // Node type mapped but not implemented yet - skip silently
+      // Node type mapped but not implemented yet
+      skippedNodes.push({
+        name,
+        protocol: info.protocol,
+        mappedType: nodeType,
+        reason: 'unregistered_type',
+      });
       continue;
     }
 
     const node = NodeFactory.create(nodeType);
     if (!node) {
+      skippedNodes.push({
+        name,
+        protocol: info.protocol,
+        mappedType: nodeType,
+        reason: 'creation_failed',
+      });
       console.warn(`Failed to create node: ${nodeType}`);
       continue;
     }
@@ -2216,10 +2267,38 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
     graph.setOutputNode(rootNode);
   }
 
+  // Log warnings for skipped nodes that were mapped but unregistered (lossy import)
+  const unregistered = skippedNodes.filter((s) => s.reason === 'unregistered_type');
+  if (unregistered.length > 0) {
+    // Group by protocol for a concise summary
+    const counts = new Map<string, number>();
+    for (const s of unregistered) {
+      counts.set(s.protocol, (counts.get(s.protocol) ?? 0) + 1);
+    }
+    const parts = Array.from(counts.entries()).map(
+      ([proto, count]) => `${count} ${proto}`,
+    );
+    console.warn(
+      `[GTOGraphLoader] Skipped ${unregistered.length} mapped-but-unimplemented node(s) during import: ${parts.join(', ')}`,
+    );
+  }
+
+  // Log warnings for degraded composite modes (lossy import)
+  if (degradedModes.length > 0) {
+    const modeParts = degradedModes.map(
+      (d) => `"${d.originalMode}" → "${d.fallbackMode}" (${d.nodeName})`,
+    );
+    console.warn(
+      `[GTOGraphLoader] ${degradedModes.length} composite mode(s) degraded during import: ${modeParts.join(', ')}`,
+    );
+  }
+
   return {
     graph,
     nodes,
     rootNode,
+    skippedNodes,
+    degradedModes,
     sessionInfo,
   };
 }
@@ -2240,5 +2319,57 @@ export function getGraphSummary(result: GTOParseResult): string {
     lines.push(`  ${name} (${node.type}) <- [${inputs}]`);
   }
 
+  if (result.skippedNodes.length > 0) {
+    lines.push('');
+    lines.push(`Skipped: ${result.skippedNodes.length}`);
+    for (const s of result.skippedNodes) {
+      lines.push(`  ${s.name} (${s.protocol}) - ${s.reason}`);
+    }
+  }
+
+  if (result.degradedModes.length > 0) {
+    lines.push('');
+    lines.push(`Degraded modes: ${result.degradedModes.length}`);
+    for (const d of result.degradedModes) {
+      lines.push(`  ${d.nodeName}: "${d.originalMode}" → "${d.fallbackMode}"`);
+    }
+  }
+
   return lines.join('\n');
+}
+
+/**
+ * Format a user-facing warning message summarizing skipped nodes.
+ * Returns null if no meaningful nodes were skipped.
+ */
+export function formatSkippedNodesWarning(skipped: SkippedNodeInfo[]): string | null {
+  // Only warn about mapped-but-unregistered and creation-failed nodes
+  const meaningful = skipped.filter(
+    (s) => s.reason === 'unregistered_type' || s.reason === 'creation_failed',
+  );
+  if (meaningful.length === 0) return null;
+
+  const counts = new Map<string, number>();
+  for (const s of meaningful) {
+    counts.set(s.protocol, (counts.get(s.protocol) ?? 0) + 1);
+  }
+  const parts = Array.from(counts.entries()).map(
+    ([proto, count]) => `${count} ${proto}`,
+  );
+  return `${meaningful.length} node(s) were skipped during import: ${parts.join(', ')}`;
+}
+
+/**
+ * Format a user-facing warning message summarizing degraded composite modes.
+ * Returns null if no modes were degraded.
+ */
+export function formatDegradedModesWarning(degraded: DegradedModeInfo[]): string | null {
+  if (degraded.length === 0) return null;
+
+  const modeParts = degraded.map(
+    (d) => `"${d.originalMode}" → "${d.fallbackMode}"`,
+  );
+  // Deduplicate identical degradation descriptions
+  const unique = [...new Set(modeParts)];
+  return `${degraded.length} composite mode(s) were degraded during import: ${unique.join(', ')}. Compositing may differ from OpenRV.`;
 }

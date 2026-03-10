@@ -27,8 +27,8 @@ export type { SessionState, MediaReference, PlaybackState, ViewState, Serialized
 
 export { SESSION_STATE_VERSION, DEFAULT_VIEW_STATE, DEFAULT_PLAYBACK_STATE } from './SessionState';
 
-export { loadGTOGraph, getGraphSummary } from './GTOGraphLoader';
-export type { GTONodeInfo, GTOParseResult } from './GTOGraphLoader';
+export { loadGTOGraph, getGraphSummary, formatSkippedNodesWarning, formatDegradedModesWarning } from './GTOGraphLoader';
+export type { GTONodeInfo, GTOParseResult, SkippedNodeInfo } from './GTOGraphLoader';
 
 export {
   resolveByHash,
