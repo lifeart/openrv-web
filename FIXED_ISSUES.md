@@ -1956,3 +1956,23 @@
 - **Regression Tests**: 5 new PackBits tests (RGB decode, RGBA decode, pixel value preservation, repeated-byte runs, cross-validation vs LZW). 2 updated tests (JPEG error message quality, unknown compression code 99).
 - **Verification**: All 91 TIFFFloatDecoder tests pass, TypeScript clean.
 - **Files Changed**: `src/formats/TIFFFloatDecoder.ts`, `src/formats/TIFFFloatDecoder.test.ts`
+
+## Issue #223: Auto-exposure and Drago tone mapping silently fall back to synthetic scene-luminance defaults on unsupported WebGL setups
+
+- **Severity**: Medium
+- **Area**: HDR analysis / viewer rendering
+- **Root Cause**: `LuminanceAnalyzer` used fixed synthetic defaults (`avg: 0.18, linearAvg: 1.0`) when `EXT_color_buffer_float` was unavailable. `ViewerGLRenderer` always fed those stats into auto-exposure and Drago with no indication they were fallback values rather than measured scene data.
+- **Fix**: (A) Added `isAvailable()` method to `LuminanceAnalyzer` that returns false when GPU float color buffers are unavailable. (B) In `ViewerGLRenderer.applySceneLuminanceAnalysis()`, checks analyzer availability and emits a single `console.warn` naming which features (auto-exposure and/or Drago) are using fallback values and why. Features remain enabled — only the fallback is made visible.
+- **Regression Tests**: LA-014 (available when extension present), LA-015 (unavailable without extension), VGLR-223a through VGLR-223e (auto-exposure fallback warn, Drago fallback warn, fire-once dedup, no warn when available, both features named).
+- **Verification**: All 111 tests pass (16 LuminanceAnalyzer + 95 ViewerGLRenderer), TypeScript clean.
+- **Files Changed**: `src/render/LuminanceAnalyzer.ts`, `src/ui/components/ViewerGLRenderer.ts`, `src/render/LuminanceAnalyzer.test.ts`, `src/ui/components/ViewerGLRenderer.test.ts`
+
+## Issues #224 & #225: HDR output mode UI can claim a mode change even when the renderer rejects it; changing HDR mode does not schedule a viewer redraw
+
+- **Severity**: Medium (both)
+- **Area**: HDR output / UI state truthfulness / viewer refresh
+- **Root Cause**: (A) `Viewer.setHDROutputMode()` had `void` return type, ignoring the renderer's boolean result. `AppViewWiring` forwarded the event without checking success. The UI could show HLG/PQ/Extended as selected while the renderer stayed on the previous mode. (B) `setHDROutputMode()` did not call `scheduleRender()`, so even successful mode changes didn't trigger a redraw until something else caused one.
+- **Fix**: (A) Changed `Viewer.setHDROutputMode()` to return `boolean` from the renderer. Returns `false` when no renderer/capabilities. `AppViewWiring` now checks the result and emits `console.warn` on rejection. (B) Added `scheduleRender()` call after successful mode change only (not on rejection).
+- **Regression Tests**: VWR-HDR-001 through VWR-HDR-005 (returns true/false, no-renderer returns false, render on success, no render on reject), VW-011b/VW-011c (warn on reject, no warn on accept).
+- **Verification**: All 162 tests pass (Viewer + AppViewWiring), TypeScript clean.
+- **Files Changed**: `src/ui/components/Viewer.ts`, `src/AppViewWiring.ts`, `src/ui/components/Viewer.test.ts`, `src/AppViewWiring.test.ts`

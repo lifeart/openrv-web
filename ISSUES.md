@@ -1846,55 +1846,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The app persists and backs up several preference categories that users would reasonably expect to change startup, default color, or export behavior, but they currently do nothing in production.
   - That creates misleading configuration surface area: exported preferences can look richer and more complete than the runtime behavior they actually control.
 
-### 153. Drag-and-drop GTO/RV session loading loses sidecar file resolution that the file picker preserves
-
-- Severity: High
-- Area: Session ingest / drag-and-drop parity
-- Evidence:
-  - The header file-picker path builds an `availableFiles` map from the non-session files in the selection and passes it into `loadFromGTO(...)` in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1392).
-  - The viewer drag-and-drop path detects `.rv` / `.gto` files but calls `session.loadFromGTO(content)` without any `availableFiles` map in [src/ui/components/ViewerInputHandler.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInputHandler.ts#L728).
-  - GTO import actually uses `availableFiles` to resolve referenced media/CDL files by basename in [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L692) and [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L1991).
-- Impact:
-  - Importing an RV/GTO session together with its companion media works differently depending on whether users use the file picker or drag-and-drop.
-  - The drag path silently loses local sidecar resolution, so the same bundle can import more incompletely from the viewer than from the header.
-
-### 154. Drag-and-drop skips single-file sequence inference that the file picker supports
-
-- Severity: Medium
-- Area: Media ingest / sequence detection consistency
-- Evidence:
-  - The header file-picker path tries `inferSequenceFromSingleFile(singleFile, fileArray)` when exactly one image file is selected and will promote that single file into a detected sequence in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1436).
-  - The viewer drag-and-drop path only auto-detects sequences when more than one image file is dropped; otherwise it falls straight through to single-file loading in [src/ui/components/ViewerInputHandler.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInputHandler.ts#L709).
-- Impact:
-  - A numbered frame chosen through the file picker can open as a full sequence, while dropping the exact same file onto the viewer only loads a single still.
-  - That makes the app’s main ingest paths disagree on a core review workflow.
-
-### 155. Drag-and-drop treats `.rvedl` as media and routes it into the wrong loader
-
-- Severity: Medium
-- Area: Session ingest / EDL workflow
-- Evidence:
-  - The header file input explicitly accepts `.rvedl` and has a dedicated RVEDL parse path through `session.loadEDL(text)` in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L216) and [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1350).
-  - The viewer drag-and-drop path only special-cases `.rv` / `.gto`; everything else goes through `session.loadFile(file)` in [src/ui/components/ViewerInputHandler.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInputHandler.ts#L726).
-  - `SessionMedia.loadFile(...)` only dispatches to image/video loading in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L352).
-  - Unknown extensions default to `'image'` in `detectMediaTypeFromFile(...)` in [src/utils/media/SupportedMediaFormats.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SupportedMediaFormats.ts#L88).
-- Impact:
-  - A `.rvedl` that loads correctly from the header can fail or be misrouted when dropped onto the viewer.
-  - Users are given two different session-ingest surfaces, but only one of them actually supports the documented EDL path.
-
-### 156. Dropping a session bundle with multiple image files can ignore the session file completely
-
-- Severity: High
-- Area: Session ingest / drag-and-drop branch ordering
-- Evidence:
-  - The viewer drag-and-drop path checks `imageFiles.length > 1` before it looks for `.rv` / `.gto` files in [src/ui/components/ViewerInputHandler.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInputHandler.ts#L709).
-  - When that branch succeeds, it immediately calls `session.loadSequence(bestSequence)` and `return`s in [src/ui/components/ViewerInputHandler.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInputHandler.ts#L715).
-  - The `.rv` / `.gto` handling loop only runs afterward in [src/ui/components/ViewerInputHandler.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInputHandler.ts#L725).
-  - The header file-picker path does the opposite: it prioritizes the session file first and only falls back to sequence detection when no session file is present in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1387).
-- Impact:
-  - Dropping an RV/GTO session together with a frame sequence can open the sequence directly and skip the session instructions, nodes, and review state entirely.
-  - That makes “drop the whole session bundle” actively unsafe in the viewer, because the same file set is interpreted differently from the header import path.
-
 ### 157. Unsupported dropped files are deliberately misclassified as images instead of being rejected up front
 
 - Severity: Medium
@@ -1905,19 +1856,7 @@ This file tracks findings from exploratory review and targeted validation runs.
   - `SessionMedia.loadFile(...)` only branches into image/video loading based on that classification and has no unsupported-file path in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L352).
 - Impact:
   - Non-media files dropped onto the viewer are pushed through the image loader stack instead of getting an immediate “unsupported file type” rejection.
-  - That produces misleading downstream errors and is the underlying reason session-adjacent files like `.rvedl` get routed into the wrong loader when drag-and-dropped.
-
-### 158. The dedicated `Open Project` button cannot actually pick most formats that its loader supports
-
-- Severity: Medium
-- Area: Project/session open workflow
-- Evidence:
-  - The header’s dedicated project input only accepts `.orvproject` in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L223).
-  - But the `openProject(...)` handler explicitly supports `.orvproject`, `.rv`, `.gto`, and `.rvedl` in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L290) and [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L319).
-  - The unsupported-file warning in that same handler even tells users it expects `.orvproject, .rv, .gto, or .rvedl` in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L327).
-- Impact:
-  - The shipped `Open Project` UI suggests a broader project/session open path exists, but in normal use the browser picker only exposes `.orvproject`.
-  - That leaves the `.rv` / `.gto` / `.rvedl` branches effectively unreachable from the button that is supposed to invoke them.
+  - That produces misleading downstream errors instead of a clear up-front rejection for unsupported files.
 
 ### 159. Plugin settings have backup/import APIs but are excluded from the app’s real preferences backup flow
 
@@ -1933,18 +1872,18 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Plugin settings can persist locally during normal use but disappear from the app’s real preferences backup/transfer mechanism.
   - That makes plugin-backed workflows non-portable even though both sides of the codebase imply a complete settings backup story.
 
-### 160. `openProject()` only resyncs compare/stack UI for `.orvproject`, not for `.rv` / `.gto` loads
+### 160. `openProject()` still omits stack-layer UI resync after `.rv` / `.gto` loads
 
 - Severity: Medium
 - Area: Project/session open workflow / UI truthfulness
 - Evidence:
-  - `openProject()` calls `syncControlsFromState(state)` only in the `.orvproject` branch in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L290).
-  - The `.rv` / `.gto` branch only calls `session.loadFromGTO(content)` and returns in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L319).
-  - `syncControlsFromState(...)` is the helper that explicitly pushes loaded wipe state into `compareControl` and loaded stack state into `stackControl` in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L477).
-  - The tests for this helper are written only around the `.orvproject` path (`APM-100` / `APM-101` / `APM-102`) in [src/AppPersistenceManager.test.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.test.ts#L625).
+  - The `.rv` / `.gto` branch now does a partial control resync after `session.loadFromGTO(...)` in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L385) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L418).
+  - That branch’s own comment says it still needs to sync `wipe/compare, stack, PAR, backgroundPattern, and watermark` in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L408) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L411).
+  - But the actual payload passed into `syncControlsFromState(...)` contains `watermark`, `wipe`, `par`, and `backgroundPattern` only in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L412) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L417).
+  - `syncControlsFromState(...)` does have dedicated stack resync logic through `stackControl.setLayers(...)` / `clearLayers()` in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L600) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L604).
 - Impact:
-  - Loading RV/GTO sessions through the project-open path can leave compare/stack controls showing stale UI state even if the underlying session/viewer state changed.
-  - The app already has a dedicated post-load control sync step, but it is applied inconsistently across supported project/session formats.
+  - RV/GTO project loads can still leave the stack UI showing stale layers even though the viewer/session state changed underneath.
+  - The code comment implies the post-load truthfulness problem is fixed more completely than it actually is.
 
 ### 161. `openProject()` creates an auto-checkpoint before it knows whether anything will actually be loaded
 
@@ -2279,18 +2218,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - A broken `?dcc=` integration can fail without any app-level toast, modal, or status indication for the user.
   - Debugging DCC connectivity becomes unnecessarily opaque because the bridge has error signals, but the shipped app drops them.
 
-### 189. Audio playback setup errors are detected internally but never surfaced through the app
-
-- Severity: Medium
-- Area: Audio playback / diagnostics
-- Evidence:
-  - `AudioPlaybackManager` emits structured `error` events in [src/audio/AudioPlaybackManager.ts](/Users/lifeart/Repos/openrv-web/src/audio/AudioPlaybackManager.ts#L16) and [src/audio/AudioPlaybackManager.ts](/Users/lifeart/Repos/openrv-web/src/audio/AudioPlaybackManager.ts#L733).
-  - `AudioCoordinator` only exposes path-change and scrub-availability callbacks in [src/audio/AudioCoordinator.ts](/Users/lifeart/Repos/openrv-web/src/audio/AudioCoordinator.ts#L27), not playback errors.
-  - `SessionPlayback` only wires those two callbacks in [src/core/session/SessionPlayback.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionPlayback.ts#L569), and production search finds no runtime subscriber to `audioPlaybackManager.on('error', ...)`.
-- Impact:
-  - Audio initialization or decode failures can leave playback/scrub audio unavailable with no app-level explanation.
-  - The app has the failure signal, but users only get silent degradation or console-only diagnostics.
-
 ### 190. Timeline waveform extraction failures are reduced to a missing waveform with no UI explanation
 
 - Severity: Low
@@ -2302,30 +2229,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - When waveform extraction fails, the timeline simply loses the waveform instead of telling the user why.
   - Troubleshooting falls back to the console even though the waveform subsystem already captures the failure reason.
-
-### 191. Pre-restore and pre-load auto-checkpoints can fail silently while destructive operations still proceed
-
-- Severity: Medium
-- Area: Persistence / recovery safety
-- Evidence:
-  - `createAutoCheckpoint(...)` catches all failures and only `console.error(...)`s them in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L184).
-  - Snapshot restore still proceeds immediately after that call in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L215).
-  - Project load does the same before replacing the current session in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L304).
-- Impact:
-  - The app promises itself a rollback checkpoint before major state replacement, but users are not told when that protection was never created.
-  - A failed checkpoint can turn restore/load into a one-way action with no visible warning that the safety net is gone.
-
-### 192. Auto-save can fail to initialize while the header indicator still makes it look active
-
-- Severity: Medium
-- Area: Persistence / autosave UX
-- Evidence:
-  - The header auto-save indicator is connected and rendered during playback wiring in [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L62).
-  - App startup only initializes the actual IndexedDB-backed autosave system later in [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L716).
-  - If initialization fails, `AutoSaveManager.initialize()` returns `false` after only logging the error in [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L136), and `AppPersistenceManager.initAutoSave()` also only logs in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L406).
-- Impact:
-  - Users can see an autosave control in the header even when the autosave backend never came up.
-  - The failure mode is misleading: the feature looks present, but recovery and background saves may be unavailable with no explicit in-app notice.
 
 ### 193. Room share links without a PIN do not auto-join during URL bootstrap
 
@@ -4872,6 +4775,79 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Users can get different rollback safety and different post-load UI truthfulness for the same session file based solely on which affordance they clicked.
   - That makes session import behavior less predictable than it should be and increases the chance of subtle “works one way but not the other” reports.
+
+### 396. Discarding crash recovery wipes the entire auto-save history, not just the recovered entry
+
+- Severity: Medium
+- Area: Auto-save recovery / destructive actions
+- Evidence:
+  - Startup recovery only asks about the single most recent entry in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L462) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L478).
+  - If the user chooses `Discard`, the app immediately calls `autoSaveManager.clearAll()` in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L479) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L481).
+  - `clearAll()` removes the entire auto-save store, not just the one prompt-driving entry, in [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L479) through [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L495).
+- Impact:
+  - Declining one recovery prompt also erases older auto-save history that the user was never asked about individually.
+  - That makes the recovery discard path more destructive than the UI wording suggests and can destroy fallback restore points unexpectedly.
+
+### 397. Clean auto-save recovery has no success state when the recovered session contains no media
+
+- Severity: Low
+- Area: Auto-save recovery feedback
+- Evidence:
+  - `recoverAutoSave(...)` deletes the recovered entry after a clean restore in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L527) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L529).
+  - It only shows a success alert inside the `if (loadedMedia > 0)` branch in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L531) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L535), with no `else` branch for state-only recovery.
+  - The same persistence manager does provide explicit `state only` feedback for project load and snapshot restore in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L265) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L268) and [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L380) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L383).
+- Impact:
+  - A clean recovery of settings, annotations, or other state-only work can complete and delete the auto-save entry without telling the user it succeeded.
+  - That makes state-only recovery look like a no-op even though the app has already consumed the only recovery record.
+
+### 398. `SnapshotManager` advertises an `error` event, but production never emits it
+
+- Severity: Low
+- Area: Snapshot API contract
+- Evidence:
+  - `SnapshotManagerEvents` declares an `error` event in [src/core/session/SnapshotManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SnapshotManager.ts#L43) through [src/core/session/SnapshotManager.ts#L56](/Users/lifeart/Repos/openrv-web/src/core/session/SnapshotManager.ts#L56).
+  - A production-code search finds no `emit('error', ...)` call anywhere in `src` for `SnapshotManager`; the class only throws, rejects, or logs on failure.
+  - For example, initialization failures are rethrown from [src/core/session/SnapshotManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SnapshotManager.ts#L80) through [src/core/session/SnapshotManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SnapshotManager.ts#L87), and snapshot-list refresh failures are only logged in [src/core/session/SnapshotManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SnapshotManager.ts#L532) through [src/core/session/SnapshotManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SnapshotManager.ts#L536).
+- Impact:
+  - Runtime code written against the advertised snapshot-manager event surface cannot observe snapshot backend failures through the documented event channel.
+  - That makes the snapshot event contract less trustworthy than the create/delete/rename paths, which do emit their corresponding events.
+
+### 399. Startup recovery can degrade into a silent no-op if the chosen auto-save entry disappears before load
+
+- Severity: Low
+- Area: Auto-save recovery edge cases
+- Evidence:
+  - The startup recovery flow prompts against the most recent entry and then calls `recoverAutoSave(mostRecent.id)` in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L462) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L478).
+  - `AutoSaveManager.getAutoSave(...)` explicitly returns `null` when the entry is missing in [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L427) through [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L444).
+  - But `recoverAutoSave(...)` only handles the `if (state)` branch in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L503) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L537), with no `else` alert or retry path when the entry is gone.
+  - By contrast, snapshot restore does surface the same missing-record condition with `Snapshot not found` in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L222) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L224).
+- Impact:
+  - A user can accept crash recovery and see nothing happen if the selected auto-save entry vanished or became unreadable between listing and loading.
+  - That makes one of the most safety-critical recovery paths fail more quietly than the equivalent snapshot workflow.
+
+### 400. Selecting an `.rvedl` together with media files still loads only the EDL and ignores the accompanying media selection
+
+- Severity: Medium
+- Area: EDL import / file-open workflow
+- Evidence:
+  - The header file-picker path checks for `.rvedl` first and returns immediately after loading just that file in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1383) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1416).
+  - The viewer drag-and-drop path uses the same precedence and also returns immediately after EDL load in [src/ui/components/ViewerInputHandler.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInputHandler.ts#L710) through [src/ui/components/ViewerInputHandler.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInputHandler.ts#L739).
+  - Both flows explicitly tell the user to `Load the corresponding media files to resolve them` in the EDL success alert even when those media files were already part of the same selection in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1399) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1405) and [src/ui/components/ViewerInputHandler.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInputHandler.ts#L724) through [src/ui/components/ViewerInputHandler.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInputHandler.ts#L730).
+- Impact:
+  - Users cannot do a one-shot “EDL plus matching source files” import even when they select or drop everything together.
+  - That makes the EDL workflow less useful in the exact relinking scenario where bulk selection would be most helpful.
+
+### 401. Multi-select session import from `Open media file` only honors the first `.rv` / `.gto` file and silently demotes the rest to sidecars
+
+- Severity: Medium
+- Area: Session import / file-open workflow
+- Evidence:
+  - The shipped `Open media file` input explicitly enables multi-select in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L217) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L222).
+  - But the loader only picks a single session file via `fileArray.find(...)` in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1420) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1424), then drops every other selected file into the `availableFiles` sidecar map in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1425) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1435).
+  - The viewer drag-and-drop path uses the same first-match behavior in [src/ui/components/ViewerInputHandler.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInputHandler.ts#L743) through [src/ui/components/ViewerInputHandler.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInputHandler.ts#L758).
+- Impact:
+  - Selecting multiple RV/GTO sessions does not import multiple sessions or ask the user which one to open; only the first one wins.
+  - The remaining session files are silently treated like companion assets, which makes the multi-select affordance misleading and can hide user error during session import.
 
 ## Validation Notes
 

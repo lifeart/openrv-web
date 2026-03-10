@@ -388,6 +388,7 @@ export class Viewer {
   // Display capabilities for wide color gamut / HDR support
   private capabilities: DisplayCapabilities | undefined;
   private canvasColorSpace: 'display-p3' | undefined;
+  private lastSystemHDRHeadroom = 1.0;
 
   // WebGL/HDR rendering manager (owns GL canvas, Renderer, worker proxy)
   private glRendererManager!: ViewerGLRenderer;
@@ -1005,8 +1006,11 @@ export class Viewer {
         if (typeof headroom !== 'number' || !Number.isFinite(headroom) || headroom <= 0) {
           return;
         }
+        if (headroom === this.lastSystemHDRHeadroom) return;
+        this.lastSystemHDRHeadroom = headroom;
         this.glRendererManager.setHDRHeadroom(headroom);
         log.info(`System HDR headroom detected: ${headroom.toFixed(2)}x`);
+        this.scheduleRender();
       })
       .catch((err) => {
         log.debug('HDR headroom query unavailable:', err);
@@ -3137,10 +3141,15 @@ export class Viewer {
   }
 
   // HDR output mode (delegates to renderer when available)
-  setHDROutputMode(mode: 'sdr' | 'hlg' | 'pq' | 'extended'): void {
+  setHDROutputMode(mode: 'sdr' | 'hlg' | 'pq' | 'extended'): boolean {
     if (this.glRendererManager.glRenderer && this.glRendererManager.capabilities) {
-      this.glRendererManager.glRenderer.setHDROutputMode(mode, this.glRendererManager.capabilities);
+      const accepted = this.glRendererManager.glRenderer.setHDROutputMode(mode, this.glRendererManager.capabilities);
+      if (accepted) {
+        this.scheduleRender();
+      }
+      return accepted;
     }
+    return false;
   }
 
   // Pixel Aspect Ratio methods

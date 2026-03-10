@@ -31,6 +31,7 @@ class StubSnapshotManager extends EventEmitter<SnapshotManagerEvents> {
   renameSnapshot = vi.fn().mockResolvedValue(undefined);
   exportSnapshot = vi.fn().mockResolvedValue('{"metadata":{},"state":{}}');
   clearAll = vi.fn().mockResolvedValue(undefined);
+  getSnapshot = vi.fn().mockResolvedValue(null);
 }
 
 function createMockSnapshot(overrides: Partial<Snapshot> = {}): Snapshot {
@@ -649,10 +650,10 @@ describe('SnapshotPanel', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // Issue #107 regression: no Preview button in action row
+  // Issue #107: Preview action button
   // ---------------------------------------------------------------------------
-  describe('issue #107 regression: no Preview action button', () => {
-    it('SNAP-107a: snapshot action row does not contain a Preview button', async () => {
+  describe('issue #107: Preview action button', () => {
+    it('SNAP-107a: snapshot action row contains a Preview button', async () => {
       const snapshots = [createMockSnapshot({ id: 'snap-1', name: 'Test' })];
       manager.listSnapshots.mockResolvedValue(snapshots);
       document.body.appendChild(panel.render());
@@ -663,9 +664,202 @@ describe('SnapshotPanel', () => {
         const previewBtn = Array.from(buttons).find(
           (btn) => btn.title === 'Preview' || btn.textContent?.trim() === 'Preview',
         );
-        expect(previewBtn).toBeUndefined();
+        expect(previewBtn).toBeDefined();
       });
 
+      document.body.removeChild(panel.render());
+    });
+
+    it('SNAP-107b: Preview button emits previewRequested event', async () => {
+      const mockState = {
+        version: 2,
+        name: 'test',
+        createdAt: '',
+        modifiedAt: '',
+        media: [],
+        playback: { currentFrame: 1, inPoint: 1, outPoint: 100, fps: 24, loopMode: 'loop', volume: 0.7, muted: false, marks: [], currentSourceIndex: 0 },
+        paint: { nextId: 1, show: true, frames: {}, effects: {} },
+        view: { zoom: 1, panX: 0, panY: 0 },
+        color: { exposure: 0, brightness: 0, contrast: 0, saturation: 0, gamma: 1 },
+        cdl: {},
+        filters: {},
+        transform: {},
+        crop: {},
+        lens: {},
+        wipe: {},
+        stack: [],
+        lutIntensity: 1,
+      };
+      manager.getSnapshot.mockResolvedValue(mockState);
+      const snapshots = [createMockSnapshot({ id: 'snap-preview-evt', name: 'Preview Event' })];
+      manager.listSnapshots.mockResolvedValue(snapshots);
+      document.body.appendChild(panel.render());
+      panel.show();
+
+      const handler = vi.fn();
+      panel.on('previewRequested', handler);
+
+      await vi.waitFor(() => {
+        const previewBtn = panel.render().querySelector('button[title="Preview"]');
+        expect(previewBtn).not.toBeNull();
+        (previewBtn as HTMLButtonElement).click();
+      });
+
+      await vi.waitFor(() => {
+        expect(handler).toHaveBeenCalledWith({ id: 'snap-preview-evt' });
+      });
+
+      document.body.removeChild(panel.render());
+    });
+
+    it('SNAP-107c: Preview calls manager.getSnapshot with correct id', async () => {
+      manager.getSnapshot.mockResolvedValue(null);
+      const snapshots = [createMockSnapshot({ id: 'snap-get-check', name: 'Get Check' })];
+      manager.listSnapshots.mockResolvedValue(snapshots);
+      document.body.appendChild(panel.render());
+      panel.show();
+
+      await vi.waitFor(() => {
+        const previewBtn = panel.render().querySelector('button[title="Preview"]');
+        expect(previewBtn).not.toBeNull();
+        (previewBtn as HTMLButtonElement).click();
+      });
+
+      await vi.waitFor(() => {
+        expect(manager.getSnapshot).toHaveBeenCalledWith('snap-get-check');
+      });
+
+      document.body.removeChild(panel.render());
+    });
+
+    it('SNAP-107d: Preview shows detail view with state info', async () => {
+      const mockState = {
+        version: 2,
+        name: 'test',
+        createdAt: '',
+        modifiedAt: '',
+        media: [{ path: '/test.exr', name: 'test.exr', type: 'image', width: 1920, height: 1080, duration: 1, fps: 24 }],
+        playback: { currentFrame: 42, inPoint: 1, outPoint: 100, fps: 24, loopMode: 'loop', volume: 0.7, muted: false, marks: [], currentSourceIndex: 0 },
+        paint: { nextId: 1, show: true, frames: {}, effects: {} },
+        view: { zoom: 2, panX: 10, panY: 20 },
+        color: { exposure: 1.5, brightness: 0, contrast: 0, saturation: 0, gamma: 1 },
+        cdl: {},
+        filters: {},
+        transform: {},
+        crop: {},
+        lens: {},
+        wipe: {},
+        stack: [],
+        lutIntensity: 1,
+      };
+      manager.getSnapshot.mockResolvedValue(mockState);
+      const snapshots = [createMockSnapshot({ id: 'snap-detail', name: 'Detail View' })];
+      manager.listSnapshots.mockResolvedValue(snapshots);
+      document.body.appendChild(panel.render());
+      panel.show();
+
+      await vi.waitFor(() => {
+        const previewBtn = panel.render().querySelector('button[title="Preview"]');
+        expect(previewBtn).not.toBeNull();
+        (previewBtn as HTMLButtonElement).click();
+      });
+
+      await vi.waitFor(() => {
+        const detailEl = panel.render().querySelector('[data-testid="snapshot-preview-detail"]');
+        expect(detailEl).not.toBeNull();
+        const text = detailEl!.textContent || '';
+        expect(text).toContain('Detail View');
+        expect(text).toContain('test.exr');
+        expect(text).toContain('42');
+        expect(text).toContain('1 - 100');
+        expect(text).toContain('24');
+        expect(text).toContain('Exposure');
+        expect(text).toContain('1.5');
+        expect(text).toContain('Zoom');
+        expect(text).toContain('2');
+      });
+
+      document.body.removeChild(panel.render());
+    });
+
+    it('SNAP-107e: Back button returns to list view', async () => {
+      const mockState = {
+        version: 2,
+        name: 'test',
+        createdAt: '',
+        modifiedAt: '',
+        media: [],
+        playback: { currentFrame: 1, inPoint: 1, outPoint: 1, fps: 24, loopMode: 'loop', volume: 0.7, muted: false, marks: [], currentSourceIndex: 0 },
+        paint: { nextId: 1, show: true, frames: {}, effects: {} },
+        view: { zoom: 1, panX: 0, panY: 0 },
+        color: { exposure: 0, brightness: 0, contrast: 0, saturation: 0, gamma: 1 },
+        cdl: {},
+        filters: {},
+        transform: {},
+        crop: {},
+        lens: {},
+        wipe: {},
+        stack: [],
+        lutIntensity: 1,
+      };
+      manager.getSnapshot.mockResolvedValue(mockState);
+      const snapshots = [createMockSnapshot({ id: 'snap-back', name: 'Back Test' })];
+      manager.listSnapshots.mockResolvedValue(snapshots);
+      document.body.appendChild(panel.render());
+      panel.show();
+
+      // Click preview to go to detail view
+      await vi.waitFor(() => {
+        const previewBtn = panel.render().querySelector('button[title="Preview"]');
+        expect(previewBtn).not.toBeNull();
+        (previewBtn as HTMLButtonElement).click();
+      });
+
+      await vi.waitFor(() => {
+        expect(panel.render().querySelector('[data-testid="snapshot-preview-detail"]')).not.toBeNull();
+      });
+
+      // Click back to return to list
+      const backBtn = panel.render().querySelector('[data-testid="preview-back-btn"]') as HTMLButtonElement;
+      expect(backBtn).not.toBeNull();
+      backBtn.click();
+
+      // Should be back to list view with snapshot items
+      await vi.waitFor(() => {
+        expect(panel.render().querySelector('[data-testid="snapshot-preview-detail"]')).toBeNull();
+        expect(panel.render().textContent).toContain('Back Test');
+      });
+
+      document.body.removeChild(panel.render());
+    });
+
+    it('SNAP-107f: Preview handles getSnapshot returning null', async () => {
+      manager.getSnapshot.mockResolvedValue(null);
+      const snapshots = [createMockSnapshot({ id: 'snap-null', name: 'Null State' })];
+      manager.listSnapshots.mockResolvedValue(snapshots);
+      document.body.appendChild(panel.render());
+      panel.show();
+
+      const handler = vi.fn();
+      panel.on('previewRequested', handler);
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      await vi.waitFor(() => {
+        const previewBtn = panel.render().querySelector('button[title="Preview"]');
+        expect(previewBtn).not.toBeNull();
+        (previewBtn as HTMLButtonElement).click();
+      });
+
+      // Wait for async handlePreview to complete
+      await new Promise((r) => setTimeout(r, 10));
+
+      // Should not show detail view or emit event
+      expect(panel.render().querySelector('[data-testid="snapshot-preview-detail"]')).toBeNull();
+      expect(handler).not.toHaveBeenCalled();
+      expect(warnSpy).toHaveBeenCalled();
+
+      warnSpy.mockRestore();
       document.body.removeChild(panel.render());
     });
   });

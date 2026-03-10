@@ -122,6 +122,19 @@ export class IPImage {
     return this.cachedTypedArray;
   }
 
+  /**
+   * Replace pixel data for fallback scenarios (e.g., HDR-to-SDR degradation).
+   * Mutates readonly fields via type assertion — only intended for internal
+   * renderer fallback paths.
+   * @internal
+   */
+  overrideData(data: ArrayBuffer, dataType: DataType, channels: number): void {
+    (this as { data: ArrayBuffer }).data = data;
+    (this as { dataType: DataType }).dataType = dataType;
+    (this as { channels: number }).channels = channels;
+    this.cachedTypedArray = null;
+  }
+
   getPixel(x: number, y: number, out?: number[]): number[] {
     const arr = this.getTypedArray();
     const idx = (y * this.width + x) * this.channels;

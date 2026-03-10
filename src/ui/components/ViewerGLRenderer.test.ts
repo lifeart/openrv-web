@@ -1943,13 +1943,10 @@ describe('ViewerGLRenderer', () => {
     });
 
     function setupLuminanceFallbackTest(opts: { analyzerAvailable: boolean; autoExposure?: boolean; drago?: boolean }) {
-      const { glRenderer, capturedStates, mockRendererObj } = (() => {
-        const capturedStates: RenderState[] = [];
+      const { glRenderer } = (() => {
         const mockRendererObj = {
           getHDROutputMode: vi.fn(() => 'hlg'),
-          applyRenderState: vi.fn((state: RenderState) => {
-            capturedStates.push(JSON.parse(JSON.stringify(state)));
-          }),
+          applyRenderState: vi.fn(),
           resize: vi.fn(),
           clear: vi.fn(),
           renderImage: vi.fn(),
@@ -1972,7 +1969,7 @@ describe('ViewerGLRenderer', () => {
         internal._glCanvas = document.createElement('canvas');
         internal._glRenderer = mockRendererObj as unknown as Renderer;
 
-        return { glRenderer, capturedStates, mockRendererObj };
+        return { glRenderer };
       })();
 
       const internal = glRenderer as unknown as TestableViewerGLRenderer;
@@ -1991,7 +1988,7 @@ describe('ViewerGLRenderer', () => {
         glRenderer.setAutoExposure({ enabled: true, targetKey: 0.18, adaptationSpeed: 1, minExposure: -6, maxExposure: 6 });
       }
 
-      return { glRenderer, internal, capturedStates };
+      return { glRenderer };
     }
 
     it('VGLR-223a: warns when auto-exposure uses fallback values (analyzer unavailable)', () => {

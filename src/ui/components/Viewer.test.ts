@@ -1703,4 +1703,60 @@ describe('Viewer', () => {
       warnSpy.mockRestore();
     });
   });
+
+  describe('setHDROutputMode', () => {
+    function makeMockRenderer(acceptMode: boolean) {
+      return { setHDROutputMode: vi.fn(() => acceptMode), dispose: vi.fn() };
+    }
+
+    it('VWR-HDR-001: returns true when renderer accepts the mode', () => {
+      const t = testable(viewer);
+      const mockRenderer = makeMockRenderer(true);
+      const mockCapabilities = { webglP3: false };
+      t.glRendererManager._glRenderer = mockRenderer;
+      (t.glRendererManager as unknown as { _capabilities: unknown })._capabilities = mockCapabilities;
+      const result = viewer.setHDROutputMode('hlg');
+      expect(result).toBe(true);
+      expect(mockRenderer.setHDROutputMode).toHaveBeenCalledWith('hlg', mockCapabilities);
+    });
+
+    it('VWR-HDR-002: returns false when renderer rejects the mode', () => {
+      const t = testable(viewer);
+      const mockRenderer = makeMockRenderer(false);
+      const mockCapabilities = { webglP3: false };
+      t.glRendererManager._glRenderer = mockRenderer;
+      (t.glRendererManager as unknown as { _capabilities: unknown })._capabilities = mockCapabilities;
+      const result = viewer.setHDROutputMode('pq');
+      expect(result).toBe(false);
+    });
+
+    it('VWR-HDR-003: returns false when no renderer is available', () => {
+      const t = testable(viewer);
+      t.glRendererManager._glRenderer = null;
+      const result = viewer.setHDROutputMode('hlg');
+      expect(result).toBe(false);
+    });
+
+    it('VWR-HDR-004: schedules render on successful mode change', () => {
+      const t = testable(viewer);
+      const mockRenderer = makeMockRenderer(true);
+      const mockCapabilities = { webglP3: false };
+      t.glRendererManager._glRenderer = mockRenderer;
+      (t.glRendererManager as unknown as { _capabilities: unknown })._capabilities = mockCapabilities;
+      t.pendingRender = false;
+      viewer.setHDROutputMode('hlg');
+      expect(t.pendingRender).toBe(true);
+    });
+
+    it('VWR-HDR-005: does NOT schedule render when renderer rejects mode', () => {
+      const t = testable(viewer);
+      const mockRenderer = makeMockRenderer(false);
+      const mockCapabilities = { webglP3: false };
+      t.glRendererManager._glRenderer = mockRenderer;
+      (t.glRendererManager as unknown as { _capabilities: unknown })._capabilities = mockCapabilities;
+      t.pendingRender = false;
+      viewer.setHDROutputMode('pq');
+      expect(t.pendingRender).toBe(false);
+    });
+  });
 });

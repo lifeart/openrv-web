@@ -3,20 +3,21 @@
  *
  * Features:
  * - List view with timestamps, names, descriptions
- * - Actions: Restore, Export, Import, Delete, Rename
+ * - Actions: Preview, Restore, Export, Import, Delete, Rename
  * - Filter/search functionality
  * - Distinct styling for auto-checkpoints vs manual snapshots
- *
- * TODO(#107): Add a Preview action that shows snapshot state without restoring.
  */
 
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { type SnapshotManager, type Snapshot, type SnapshotPreview } from '../../core/session/SnapshotManager';
+import type { SessionState } from '../../core/session/SessionState';
 import { getIconSvg, type IconName } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { showPrompt, showConfirm, showAlert } from './shared/Modal';
 
 export interface SnapshotPanelEvents extends EventMap {
+  /** Emitted when user wants to preview a snapshot */
+  previewRequested: { id: string };
   /** Emitted when user wants to restore a snapshot */
   restoreRequested: { id: string };
   /** Emitted when user wants to create a new snapshot */
@@ -459,6 +460,11 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
       margin-top: 8px;
     `;
 
+    const previewBtn = this.createActionButton('Preview', 'eye', () => {
+      this.handlePreview(snapshot);
+    });
+    actions.appendChild(previewBtn);
+
     const restoreBtn = this.createActionButton('Restore', 'restore', () => {
       this.emit('restoreRequested', { id: snapshot.id });
     });
@@ -593,6 +599,161 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  private async handlePreview(snapshot: Snapshot): Promise<void> {
+    try {
+      const state = await this.snapshotManager.getSnapshot(snapshot.id);
+      if (!state) {
+        console.warn(`Preview failed: snapshot "${snapshot.id}" not found`);
+        return;
+      }
+      this.showPreviewDetail(snapshot, state);
+      this.emit('previewRequested', { id: snapshot.id });
+    } catch (err) {
+      console.warn('Preview failed:', err);
+    }
+  }
+
+  private showPreviewDetail(snapshot: Snapshot, state: SessionState): void {
+    this.listContainer.innerHTML = '';
+
+    const detail = document.createElement('div');
+    detail.dataset.testid = 'snapshot-preview-detail';
+    detail.style.cssText = 'padding: 8px;';
+
+    // Header with snapshot name
+    const header = document.createElement('div');
+    header.style.cssText = `
+      font-weight: 500;
+      font-size: 14px;
+      color: var(--text-primary);
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border-primary);
+    `;
+    header.textContent = snapshot.name;
+    detail.appendChild(header);
+
+    // Helper to add a section
+    const addSection = (title: string, items: Array<{ label: string; value: string }>) => {
+      if (items.length === 0) return;
+      const section = document.createElement('div');
+      section.style.cssText = 'margin-bottom: 12px;';
+
+      const sectionTitle = document.createElement('div');
+      sectionTitle.style.cssText = `
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        margin-bottom: 4px;
+      `;
+      sectionTitle.textContent = title;
+      section.appendChild(sectionTitle);
+
+      for (const { label, value } of items) {
+        const row = document.createElement('div');
+        row.style.cssText = `
+          display: flex;
+          justify-content: space-between;
+          font-size: 12px;
+          padding: 2px 0;
+          color: var(--text-secondary);
+        `;
+        const labelEl = document.createElement('span');
+        labelEl.textContent = label;
+        const valueEl = document.createElement('span');
+        valueEl.style.color = 'var(--text-primary)';
+        valueEl.textContent = value;
+        row.appendChild(labelEl);
+        row.appendChild(valueEl);
+        section.appendChild(row);
+      }
+
+      detail.appendChild(section);
+    };
+
+    // Media sources
+    const mediaItems: Array<{ label: string; value: string }> = [];
+    if (state.media) {
+      for (const m of state.media) {
+        mediaItems.push({ label: m.name, value: m.type });
+      }
+    }
+    addSection('Media Sources', mediaItems);
+
+    // Playback state
+    if (state.playback) {
+      const pb = state.playback;
+      addSection('Playback', [
+        { label: 'Frame', value: `${pb.currentFrame}` },
+        { label: 'In/Out', value: `${pb.inPoint} - ${pb.outPoint}` },
+        { label: 'FPS', value: `${pb.fps}` },
+        { label: 'Loop', value: `${pb.loopMode}` },
+      ]);
+    }
+
+    // Color adjustments
+    if (state.color) {
+      const c = state.color;
+      const colorItems: Array<{ label: string; value: string }> = [];
+      if (c.exposure !== 0) colorItems.push({ label: 'Exposure', value: `${c.exposure}` });
+      if (c.brightness !== 0) colorItems.push({ label: 'Brightness', value: `${c.brightness}` });
+      if (c.contrast !== 0) colorItems.push({ label: 'Contrast', value: `${c.contrast}` });
+      if (c.saturation !== 0) colorItems.push({ label: 'Saturation', value: `${c.saturation}` });
+      if (c.gamma !== 1) colorItems.push({ label: 'Gamma', value: `${c.gamma}` });
+      addSection('Color', colorItems);
+    }
+
+    // Annotations count
+    let annotationCount = 0;
+    if (state.paint?.frames) {
+      for (const frameAnnotations of Object.values(state.paint.frames)) {
+        annotationCount += frameAnnotations.length;
+      }
+    }
+    if (annotationCount > 0) {
+      addSection('Annotations', [{ label: 'Count', value: `${annotationCount}` }]);
+    }
+
+    // View state
+    if (state.view) {
+      addSection('View', [
+        { label: 'Zoom', value: `${state.view.zoom}` },
+        { label: 'Pan', value: `${state.view.panX}, ${state.view.panY}` },
+      ]);
+    }
+
+    // Back button
+    const backBtn = document.createElement('button');
+    backBtn.textContent = 'Back';
+    backBtn.dataset.testid = 'preview-back-btn';
+    backBtn.style.cssText = `
+      width: 100%;
+      padding: 8px;
+      margin-top: 8px;
+      border: 1px solid var(--border-primary);
+      border-radius: 4px;
+      background: transparent;
+      color: var(--text-secondary);
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.12s ease;
+    `;
+    backBtn.addEventListener('click', () => this.renderList());
+    backBtn.addEventListener('pointerenter', () => {
+      backBtn.style.background = 'var(--bg-hover)';
+      backBtn.style.borderColor = 'var(--border-hover)';
+    });
+    backBtn.addEventListener('pointerleave', () => {
+      backBtn.style.background = 'transparent';
+      backBtn.style.borderColor = 'var(--border-primary)';
+    });
+    applyA11yFocus(backBtn);
+    detail.appendChild(backBtn);
+
+    this.listContainer.appendChild(detail);
   }
 
   private async handleRename(snapshot: Snapshot): Promise<void> {

@@ -205,7 +205,10 @@ export function wireViewControls(ctx: AppWiringContext): WiringResult {
   );
   subs.add(
     controls.toneMappingControl.on('hdrModeChanged', (mode) => {
-      viewer.setHDROutputMode(mode);
+      const accepted = viewer.setHDROutputMode(mode);
+      if (!accepted) {
+        console.warn(`HDR output mode '${mode}' was rejected by the renderer`);
+      }
     }),
   );
 

@@ -275,8 +275,30 @@ describe('wireViewControls', () => {
 
   // VW-011
   it('VW-011: hdrModeChanged calls viewer.setHDROutputMode()', () => {
+    viewer.setHDROutputMode.mockReturnValue(true);
     (controls.toneMappingControl as EventEmitter).emit('hdrModeChanged', 'hlg');
     expect(viewer.setHDROutputMode).toHaveBeenCalledWith('hlg');
+  });
+
+  // VW-011b
+  it('VW-011b: hdrModeChanged emits console.warn when renderer rejects mode', () => {
+    viewer.setHDROutputMode.mockReturnValue(false);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    (controls.toneMappingControl as EventEmitter).emit('hdrModeChanged', 'pq');
+    expect(viewer.setHDROutputMode).toHaveBeenCalledWith('pq');
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('rejected by the renderer'),
+    );
+    warnSpy.mockRestore();
+  });
+
+  // VW-011c
+  it('VW-011c: hdrModeChanged does NOT warn when renderer accepts mode', () => {
+    viewer.setHDROutputMode.mockReturnValue(true);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    (controls.toneMappingControl as EventEmitter).emit('hdrModeChanged', 'hlg');
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
   });
 
   // VW-012
