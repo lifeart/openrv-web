@@ -4823,6 +4823,56 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The app can boot with a broken snapshot backend while still presenting snapshots as an available feature.
   - That delays failure until the user actually tries to rely on snapshots, which is worse than disabling or clearly marking the feature unavailable up front.
 
+### 392. Auto-save failure feedback self-clears after five seconds even when the failure is unresolved
+
+- Severity: Medium
+- Area: Auto-save status UI
+- Evidence:
+  - On `error`, the indicator switches to `Save failed` but immediately schedules an automatic reset back to `idle` after five seconds in [src/ui/components/AutoSaveIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/AutoSaveIndicator.ts#L159) through [src/ui/components/AutoSaveIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/AutoSaveIndicator.ts#L161).
+  - The visible error state itself is the retry affordance described by `Save failed` and `Auto-save failed - click to retry` in [src/ui/components/AutoSaveIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/AutoSaveIndicator.ts#L514) through [src/ui/components/AutoSaveIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/AutoSaveIndicator.ts#L520).
+  - After that reset, the same control falls back to the generic idle/unsaved messaging in [src/ui/components/AutoSaveIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/AutoSaveIndicator.ts#L532) through [src/ui/components/AutoSaveIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/AutoSaveIndicator.ts#L546), even though no successful save happened.
+  - The docs only describe `Save failed` as the error state and do not mention that it auto-dismisses on its own in [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L153) through [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L159).
+- Impact:
+  - A persistent auto-save failure can look transient and effectively disappear from the header without user action.
+  - That makes the indicator less trustworthy exactly when users need it to remain explicit about data-loss risk.
+
+### 393. The `Open media file` control is also a session and EDL importer, not just a media picker
+
+- Severity: Low
+- Area: Header file-open UI semantics
+- Evidence:
+  - The header button is titled `Open media file` in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L234) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L235).
+  - But its hidden input accepts not just supported media formats, but also `.rv`, `.gto`, and `.rvedl` in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L216) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L220).
+  - The same handler explicitly branches into RV/GTO session import and RVEDL import before ordinary media loading in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1382) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1439).
+- Impact:
+  - The shipped main file-open affordance does more than its label suggests, which makes session import paths harder to discover correctly and easier to misunderstand.
+  - That overlaps awkwardly with the separate `Open project` affordance, since both buttons can open non-media session-like files through different semantics.
+
+### 394. Locally loaded image sequences do not round-trip through project save/load with a real reload path
+
+- Severity: High
+- Area: Project persistence / image sequences
+- Evidence:
+  - Sequence sources are created with `url: ''` in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L691) through [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L700).
+  - `serializeMedia(...)` only marks media as `requiresReload` when `source.url` is a blob URL in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L388) through [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L407), so locally loaded sequences with an empty URL are saved without a reload prompt marker.
+  - On load, `fromJSON()` does not reconstruct sequences; it just warns `Sequence "<name>" requires manual file selection` in the `ref.type === 'sequence'` branch in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L509) through [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L512).
+  - The docs, however, say that media references which cannot be automatically reloaded trigger a file reload dialog and that locally loaded media can be re-selected so the session resumes intact in [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L57) and [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L174).
+- Impact:
+  - A locally loaded image sequence cannot come back through normal project load/recovery with the same guided reload experience as other local media.
+  - Instead the sequence effectively degrades into a warning-only manual reconstruction problem, which is a significant persistence gap for review sessions built around sequences.
+
+### 395. `.rv` / `.gto` imports behave differently depending on whether users choose `Open media file` or `Open project`
+
+- Severity: Medium
+- Area: Session import workflow consistency
+- Evidence:
+  - The `Open media file` path loads RV/GTO sessions directly via `session.loadFromGTO(...)` in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1419) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1436).
+  - The `Open project` path routes the same file types through `AppPersistenceManager.openProject(...)`, which first creates a safety checkpoint and then performs extra control resync after `loadFromGTO(...)` in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L385) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L413).
+  - So the same `.rv` / `.gto` payload goes through materially different runtime steps depending on which header button the user used.
+- Impact:
+  - Users can get different rollback safety and different post-load UI truthfulness for the same session file based solely on which affordance they clicked.
+  - That makes session import behavior less predictable than it should be and increases the chance of subtle “works one way but not the other” reports.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

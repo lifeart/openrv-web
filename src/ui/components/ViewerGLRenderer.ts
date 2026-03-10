@@ -168,6 +168,7 @@ export class ViewerGLRenderer {
   private _autoExposureController = new AutoExposureController();
   private _autoExposureState: AutoExposureState = { ...DEFAULT_AUTO_EXPOSURE_STATE };
   private _luminanceAnalyzer: LuminanceAnalyzer | null = null;
+  private _luminanceFallbackWarned = false;
   private _gamutMappingState: GamutMappingState = { ...DEFAULT_GAMUT_MAPPING_STATE };
 
   get glCanvas(): HTMLCanvasElement | null {
@@ -302,6 +303,22 @@ export class ViewerGLRenderer {
 
     if (!this._luminanceAnalyzer) {
       this._luminanceAnalyzer = new LuminanceAnalyzer(gl);
+    }
+
+    // When GPU float color buffers are unavailable, luminance analysis returns
+    // fixed synthetic defaults. Warn once so the user knows adaptive features
+    // are not truly scene-driven.
+    if (!this._luminanceAnalyzer.isAvailable()) {
+      if (!this._luminanceFallbackWarned) {
+        const features: string[] = [];
+        if (this._autoExposureState.enabled) features.push('auto-exposure');
+        if (state.toneMappingState.operator === 'drago') features.push('Drago tone mapping');
+        console.warn(
+          `ViewerGLRenderer: ${features.join(' and ')} using fallback luminance values ` +
+            '(GPU does not support EXT_color_buffer_float for scene analysis)',
+        );
+        this._luminanceFallbackWarned = true;
+      }
     }
 
     // Prefer explicit texture prep when available (sync Renderer), fallback to current binding.

@@ -2,7 +2,7 @@
  * ViewerGLRenderer Unit Tests
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ViewerGLRenderer, type GLRendererContext } from './ViewerGLRenderer';
 import type { Renderer } from '../../render/Renderer';
 import type { RenderWorkerProxy } from '../../render/RenderWorkerProxy';
@@ -49,7 +49,9 @@ interface TestableViewerGLRenderer {
   _logicalHeight: number;
   _luminanceAnalyzer: {
     computeLuminanceStats: (texture: WebGLTexture, inputTransfer: number) => { avg: number; linearAvg: number };
+    isAvailable: () => boolean;
   } | null;
+  _luminanceFallbackWarned: boolean;
 }
 
 function createMockContext(): GLRendererContext {
@@ -646,6 +648,7 @@ describe('ViewerGLRenderer', () => {
       const internal = glRenderer as unknown as TestableViewerGLRenderer;
       internal._luminanceAnalyzer = {
         computeLuminanceStats: vi.fn(() => ({ avg: 0.4, linearAvg: 0.7 })),
+        isAvailable: vi.fn(() => true),
       };
 
       (mockRendererObj as any).getContext = vi.fn(() => ({ TEXTURE_BINDING_2D: 0, getParameter: vi.fn(() => null) }));
@@ -1043,6 +1046,7 @@ describe('ViewerGLRenderer', () => {
       const internal = glRenderer as unknown as TestableViewerGLRenderer;
       internal._luminanceAnalyzer = {
         computeLuminanceStats: vi.fn(() => ({ avg: 0.5, linearAvg: 0.8 })),
+        isAvailable: vi.fn(() => true),
       };
 
       (mockRendererObj as any).getContext = vi.fn(() => ({ TEXTURE_BINDING_2D: 0, getParameter: vi.fn(() => null) }));
@@ -1383,6 +1387,7 @@ describe('ViewerGLRenderer', () => {
       const internal = glRenderer as unknown as TestableViewerGLRenderer;
       internal._luminanceAnalyzer = {
         computeLuminanceStats: vi.fn(() => ({ avg: 0.55, linearAvg: 0.9 })),
+        isAvailable: vi.fn(() => true),
       };
 
       (mockRendererObj as any).getContext = vi.fn(() => ({ TEXTURE_BINDING_2D: 0, getParameter: vi.fn(() => null) }));
@@ -1920,6 +1925,139 @@ describe('ViewerGLRenderer', () => {
       const r = new ViewerGLRenderer(ctx);
       const state = r.buildRenderState();
       expect(state.luminanceVis).toBeDefined();
+    });
+  });
+
+  // =========================================================================
+  // Luminance fallback warning (Issue #223)
+  // =========================================================================
+  describe('Luminance fallback warning', () => {
+    let warnSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      warnSpy.mockRestore();
+    });
+
+    function setupLuminanceFallbackTest(opts: { analyzerAvailable: boolean; autoExposure?: boolean; drago?: boolean }) {
+      const { glRenderer, capturedStates, mockRendererObj } = (() => {
+        const capturedStates: RenderState[] = [];
+        const mockRendererObj = {
+          getHDROutputMode: vi.fn(() => 'hlg'),
+          applyRenderState: vi.fn((state: RenderState) => {
+            capturedStates.push(JSON.parse(JSON.stringify(state)));
+          }),
+          resize: vi.fn(),
+          clear: vi.fn(),
+          renderImage: vi.fn(),
+          renderTiledImages: vi.fn(),
+          hasPendingStateChanges: vi.fn(() => true),
+          setColorPrimaries: vi.fn(),
+          isOCIOWasmActive: vi.fn(() => false),
+          dispose: vi.fn(),
+          getContext: vi.fn(() => ({ TEXTURE_BINDING_2D: 0, getParameter: vi.fn(() => null) })),
+          ensureImageTexture: vi.fn(() => ({}) as WebGLTexture),
+        };
+
+        const hdrCtx = createMockContext();
+        (hdrCtx.getTransformManager as ReturnType<typeof vi.fn>).mockReturnValue({
+          transform: { rotation: 0, flipH: false, flipV: false },
+        });
+
+        const glRenderer = new ViewerGLRenderer(hdrCtx);
+        const internal = glRenderer as unknown as TestableViewerGLRenderer;
+        internal._glCanvas = document.createElement('canvas');
+        internal._glRenderer = mockRendererObj as unknown as Renderer;
+
+        return { glRenderer, capturedStates, mockRendererObj };
+      })();
+
+      const internal = glRenderer as unknown as TestableViewerGLRenderer;
+      internal._luminanceAnalyzer = {
+        computeLuminanceStats: vi.fn(() => ({ avg: 0.18, linearAvg: 1.0 })),
+        isAvailable: vi.fn(() => opts.analyzerAvailable),
+      };
+
+      const state = createDefaultRenderState();
+      if (opts.drago) {
+        state.toneMappingState = { enabled: true, operator: 'drago' };
+      }
+      vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(state);
+
+      if (opts.autoExposure) {
+        glRenderer.setAutoExposure({ enabled: true, targetKey: 0.18, adaptationSpeed: 1, minExposure: -6, maxExposure: 6 });
+      }
+
+      return { glRenderer, internal, capturedStates };
+    }
+
+    it('VGLR-223a: warns when auto-exposure uses fallback values (analyzer unavailable)', () => {
+      const { glRenderer } = setupLuminanceFallbackTest({ analyzerAvailable: false, autoExposure: true });
+
+      const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'uint8' });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      const fallbackWarnings = warnSpy.mock.calls.filter(
+        (args: unknown[]) => typeof args[0] === 'string' && args[0].includes('fallback luminance values'),
+      );
+      expect(fallbackWarnings).toHaveLength(1);
+      expect(fallbackWarnings[0]![0]).toContain('auto-exposure');
+    });
+
+    it('VGLR-223b: warns when Drago uses fallback values (analyzer unavailable)', () => {
+      const { glRenderer } = setupLuminanceFallbackTest({ analyzerAvailable: false, drago: true });
+
+      const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'uint8' });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      const fallbackWarnings = warnSpy.mock.calls.filter(
+        (args: unknown[]) => typeof args[0] === 'string' && args[0].includes('fallback luminance values'),
+      );
+      expect(fallbackWarnings).toHaveLength(1);
+      expect(fallbackWarnings[0]![0]).toContain('Drago tone mapping');
+    });
+
+    it('VGLR-223c: warns only once across multiple frames (fallback warning deduplication)', () => {
+      const { glRenderer } = setupLuminanceFallbackTest({ analyzerAvailable: false, autoExposure: true });
+
+      const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'uint8' });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      const fallbackWarnings = warnSpy.mock.calls.filter(
+        (args: unknown[]) => typeof args[0] === 'string' && args[0].includes('fallback luminance values'),
+      );
+      expect(fallbackWarnings).toHaveLength(1);
+    });
+
+    it('VGLR-223d: no warning when analyzer is available (normal path)', () => {
+      const { glRenderer } = setupLuminanceFallbackTest({ analyzerAvailable: true, autoExposure: true });
+
+      const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'uint8' });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      const fallbackWarnings = warnSpy.mock.calls.filter(
+        (args: unknown[]) => typeof args[0] === 'string' && args[0].includes('fallback luminance values'),
+      );
+      expect(fallbackWarnings).toHaveLength(0);
+    });
+
+    it('VGLR-223e: mentions both features when auto-exposure and Drago are both active', () => {
+      const { glRenderer } = setupLuminanceFallbackTest({ analyzerAvailable: false, autoExposure: true, drago: true });
+
+      const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'uint8' });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      const fallbackWarnings = warnSpy.mock.calls.filter(
+        (args: unknown[]) => typeof args[0] === 'string' && args[0].includes('fallback luminance values'),
+      );
+      expect(fallbackWarnings).toHaveLength(1);
+      expect(fallbackWarnings[0]![0]).toContain('auto-exposure');
+      expect(fallbackWarnings[0]![0]).toContain('Drago tone mapping');
     });
   });
 });
