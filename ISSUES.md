@@ -1485,8 +1485,8 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Severity: High
 - Area: RV/GTO import / session metadata restore
 - Evidence:
-  - `SessionGraph.loadFromGTO(...)` only applies imported marks, notes, version groups, and statuses when the parsed arrays have `length > 0` in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L294).
-  - The GTO parser also omits those fields from `sessionInfo` when the imported file contains zero entries in [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L291), [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L475), [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L527), and [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L629).
+  - `SessionGraph.loadFromGTO(...)` only applies imported review data when the corresponding `sessionInfo` fields exist, through the guarded branches for `marks`, `notes`, `versionGroups`, and `statuses` in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L314) through [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L357).
+  - The GTO parser omits those fields entirely when the imported file contains zero entries: marks are only assigned when `marks.length > 0` in [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L289) through [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L295), notes only when `notes.length > 0` in [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L490) through [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L495), version groups only when `versionGroups.length > 0` in [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L545) through [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L547), and statuses only when `parsedStatuses.length > 0` in [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L645) through [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L649).
   - The underlying managers are replace-style loaders that would clear old state if they were called, in [src/core/session/NoteManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/NoteManager.ts#L247), [src/core/session/VersionManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/VersionManager.ts#L338), and [src/core/session/StatusManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/StatusManager.ts#L178).
 - Impact:
   - Importing an RV/GTO session with no notes, no marks, or no version/status metadata can leave the previous session’s review metadata still active.
@@ -4848,6 +4848,29 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Selecting multiple RV/GTO sessions does not import multiple sessions or ask the user which one to open; only the first one wins.
   - The remaining session files are silently treated like companion assets, which makes the multi-select affordance misleading and can hide user error during session import.
+
+### 402. GTO import can keep the previous session title/comment when the new file leaves them blank
+
+- Severity: Medium
+- Area: RV/GTO import / session metadata restore
+- Evidence:
+  - `SessionGraph.loadFromGTO(...)` does not reset `_metadata` before parsing a new GTO file in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L267) through [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L299).
+  - The GTO parser only assigns `sessionInfo.displayName` and `sessionInfo.comment` when the root values are non-empty strings in [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L408) through [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L418).
+  - Metadata is only reapplied when at least one parsed metadata field is truthy or explicitly defined in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L374) through [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L397).
+- Impact:
+  - Importing a second RV/GTO session that intentionally leaves the session name/comment blank can keep the previous session’s title/comment in the running app.
+  - That makes GTO session import non-idempotent for core session identity, not just for review data.
+
+### 403. Mixed `.rvedl` plus `.rv` or `.gto` selections always load only the EDL and silently ignore the session file
+
+- Severity: Medium
+- Area: Session import / file-open precedence
+- Evidence:
+  - Both main ingest paths check for `.rvedl` before they check for `.rv` / `.gto` and return immediately after the EDL branch in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1382) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1416) and [src/ui/components/ViewerInputHandler.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInputHandler.ts#L709) through [src/ui/components/ViewerInputHandler.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInputHandler.ts#L739).
+  - The `.rv` / `.gto` session-file branches only run afterward in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1420) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1443) and [src/ui/components/ViewerInputHandler.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInputHandler.ts#L743) through [src/ui/components/ViewerInputHandler.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInputHandler.ts#L763).
+- Impact:
+  - Selecting or dropping an EDL together with the RV/GTO session it belongs to does not give the user both pieces of the workflow; the session file is silently skipped.
+  - That makes mixed review-bundle imports less predictable and increases the chance that users think they opened a full session when they only imported cut metadata.
 
 ## Validation Notes
 

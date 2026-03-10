@@ -15,6 +15,15 @@ import type { StackLayer } from './StackControl';
 import type { MediaSource } from '../../core/session/Session';
 import type { CropRegion, CropState } from './CropControl';
 import type { PixelProbe } from './PixelProbe';
+import { queryHDRHeadroom } from '../../color/DisplayCapabilities';
+
+vi.mock('../../color/DisplayCapabilities', async (importOriginal) => {
+  const orig = await importOriginal<typeof import('../../color/DisplayCapabilities')>();
+  return {
+    ...orig,
+    queryHDRHeadroom: vi.fn().mockResolvedValue(null),
+  };
+});
 
 // Type-safe accessor for private Viewer internals used in tests.
 // This avoids `as any` casts while keeping tests readable.
@@ -117,6 +126,12 @@ interface TestableViewer {
   // Render scheduling internals (FPS regression tests)
   pendingRender: boolean;
 
+  // HDR headroom tracking
+  lastSystemHDRHeadroom: number;
+  capabilities: { displayHDR: boolean } | undefined;
+  syncHDRHeadroomFromSystem(): void;
+  scheduleRender(): void;
+
   // Ghost frame canvas pool
 
   // SDR WebGL rendering (Phase 1A + 1B) - via glRendererManager
@@ -131,6 +146,7 @@ interface TestableViewer {
     _glRenderer: unknown;
     hasGPUShaderEffectsActive(): boolean;
     hasCPUOnlyEffectsActive(): boolean;
+    setHDRHeadroom(headroom: number): void;
   };
   // Convenience aliases (delegated)
   hasGPUShaderEffectsActive(): boolean;
@@ -1757,6 +1773,144 @@ describe('Viewer', () => {
       t.pendingRender = false;
       viewer.setHDROutputMode('pq');
       expect(t.pendingRender).toBe(false);
+    });
+  });
+
+  describe('HDR headroom async redraw (issue #226)', () => {
+    const mockedQueryHDRHeadroom = vi.mocked(queryHDRHeadroom);
+
+    beforeEach(() => {
+      mockedQueryHDRHeadroom.mockReset();
+    });
+
+    it('VWR-HDRHROOM-001: scheduleRender is called after async headroom resolves with a new value', async () => {
+      const t = testable(viewer);
+      // Enable HDR capabilities so the guard passes
+      t.capabilities = { displayHDR: true };
+      t.pendingRender = false;
+
+      // Mock queryHDRHeadroom to resolve with a non-default value
+      mockedQueryHDRHeadroom.mockResolvedValue(3.5);
+
+      const setHDRHeadroomSpy = vi.fn();
+      t.glRendererManager.setHDRHeadroom = setHDRHeadroomSpy;
+
+      t.syncHDRHeadroomFromSystem();
+
+      // Wait for the promise to resolve
+      await vi.waitFor(() => {
+        expect(setHDRHeadroomSpy).toHaveBeenCalledWith(3.5);
+      });
+
+      expect(t.pendingRender).toBe(true);
+      expect(t.lastSystemHDRHeadroom).toBe(3.5);
+    });
+
+    it('VWR-HDRHROOM-002: does NOT scheduleRender when headroom is the same as last known value', async () => {
+      const t = testable(viewer);
+      t.capabilities = { displayHDR: true };
+      t.pendingRender = false;
+      t.lastSystemHDRHeadroom = 2.5;
+
+      mockedQueryHDRHeadroom.mockResolvedValue(2.5);
+
+      const setHDRHeadroomSpy = vi.fn();
+      t.glRendererManager.setHDRHeadroom = setHDRHeadroomSpy;
+
+      t.syncHDRHeadroomFromSystem();
+
+      // Let promise resolve
+      await new Promise((r) => setTimeout(r, 10));
+
+      expect(setHDRHeadroomSpy).not.toHaveBeenCalled();
+      expect(t.pendingRender).toBe(false);
+    });
+
+    it('VWR-HDRHROOM-003: does NOT scheduleRender when headroom query returns null', async () => {
+      const t = testable(viewer);
+      t.capabilities = { displayHDR: true };
+      t.pendingRender = false;
+
+      mockedQueryHDRHeadroom.mockResolvedValue(null);
+
+      const setHDRHeadroomSpy = vi.fn();
+      t.glRendererManager.setHDRHeadroom = setHDRHeadroomSpy;
+
+      t.syncHDRHeadroomFromSystem();
+
+      await new Promise((r) => setTimeout(r, 10));
+
+      expect(setHDRHeadroomSpy).not.toHaveBeenCalled();
+      expect(t.pendingRender).toBe(false);
+    });
+
+    it('VWR-HDRHROOM-004: does NOT scheduleRender when displayHDR capability is missing', async () => {
+      const t = testable(viewer);
+      t.capabilities = undefined;
+      t.pendingRender = false;
+
+      mockedQueryHDRHeadroom.mockResolvedValue(3.0);
+
+      t.syncHDRHeadroomFromSystem();
+
+      await new Promise((r) => setTimeout(r, 10));
+
+      expect(mockedQueryHDRHeadroom).not.toHaveBeenCalled();
+      expect(t.pendingRender).toBe(false);
+    });
+
+    it('VWR-HDRHROOM-005: does NOT scheduleRender when headroom query rejects', async () => {
+      const t = testable(viewer);
+      t.capabilities = { displayHDR: true };
+      t.pendingRender = false;
+
+      mockedQueryHDRHeadroom.mockRejectedValue(new Error('Permission denied'));
+
+      const setHDRHeadroomSpy = vi.fn();
+      t.glRendererManager.setHDRHeadroom = setHDRHeadroomSpy;
+
+      t.syncHDRHeadroomFromSystem();
+
+      await new Promise((r) => setTimeout(r, 10));
+
+      expect(setHDRHeadroomSpy).not.toHaveBeenCalled();
+      expect(t.pendingRender).toBe(false);
+    });
+
+    it('VWR-HDRHROOM-006: updates lastSystemHDRHeadroom and schedules render on changed headroom', async () => {
+      const t = testable(viewer);
+      t.capabilities = { displayHDR: true };
+      t.lastSystemHDRHeadroom = 1.0;
+
+      const setHDRHeadroomSpy = vi.fn();
+      t.glRendererManager.setHDRHeadroom = setHDRHeadroomSpy;
+
+      // First call with 2.0
+      mockedQueryHDRHeadroom.mockResolvedValue(2.0);
+      t.syncHDRHeadroomFromSystem();
+      await vi.waitFor(() => {
+        expect(setHDRHeadroomSpy).toHaveBeenCalledWith(2.0);
+      });
+      expect(t.lastSystemHDRHeadroom).toBe(2.0);
+
+      t.pendingRender = false;
+      setHDRHeadroomSpy.mockClear();
+
+      // Second call with same value - should not trigger
+      mockedQueryHDRHeadroom.mockResolvedValue(2.0);
+      t.syncHDRHeadroomFromSystem();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(setHDRHeadroomSpy).not.toHaveBeenCalled();
+      expect(t.pendingRender).toBe(false);
+
+      // Third call with new value - should trigger
+      mockedQueryHDRHeadroom.mockResolvedValue(4.0);
+      t.syncHDRHeadroomFromSystem();
+      await vi.waitFor(() => {
+        expect(setHDRHeadroomSpy).toHaveBeenCalledWith(4.0);
+      });
+      expect(t.pendingRender).toBe(true);
+      expect(t.lastSystemHDRHeadroom).toBe(4.0);
     });
   });
 });
