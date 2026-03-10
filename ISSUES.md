@@ -5640,6 +5640,43 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The docs describe one fixed missing-frame experience, but the real app exposes multiple viewer behaviors and defaults to a much less destructive overlay mode.
   - That can mislead users about what will happen during sequence review and what the current missing-frame setting actually controls.
 
+### 479. The overlays guide advertises timecode “format” modes, but the shipped overlay cannot switch to frame-only display
+
+- Severity: Low
+- Area: Documentation / timecode overlay
+- Evidence:
+  - The overlays guide says the timecode overlay supports “SMPTE timecode, frame number, or both” in [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L12) through [docs/advanced/overlays.md#L16).
+  - The shipped `TimecodeOverlayState` has no format enum; it only exposes `showFrameCounter` alongside the always-rendered timecode row in [src/ui/components/TimecodeOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/TimecodeOverlay.ts#L18) through [src/ui/components/TimecodeOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/TimecodeOverlay.ts#L33).
+  - `update()` always writes a formatted timecode string and only conditionally shows the extra frame-counter row in [src/ui/components/TimecodeOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/TimecodeOverlay.ts#L119) through [src/ui/components/TimecodeOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/TimecodeOverlay.ts#L129).
+- Impact:
+  - The docs promise a frame-only display mode that the shipped overlay does not actually support.
+  - Users can hide the frame counter, but they cannot replace timecode with frame numbers the way the page describes.
+
+### 480. The overlays guide says safe areas respect crop, but the shipped safe-areas overlay is still driven by uncropped display dimensions
+
+- Severity: Low
+- Area: Documentation / safe-areas behavior
+- Evidence:
+  - The overlays guide says that when crop is active, safe areas “are calculated relative to the cropped region rather than the full image” in [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L40) through [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L42).
+  - `SafeAreasOverlay` itself only draws against `offsetX`, `offsetY`, `displayWidth`, and `displayHeight`; it has no crop-state input or crop-rectangle logic in [src/ui/components/SafeAreasOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SafeAreasOverlay.ts#L137) through [src/ui/components/SafeAreasOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SafeAreasOverlay.ts#L239).
+  - `OverlayManager.updateDimensions(...)` always feeds the safe-areas overlay raw viewer width/height with zero offsets, not a cropped sub-rectangle, in [src/ui/components/OverlayManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/OverlayManager.ts#L127) through [src/ui/components/OverlayManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/OverlayManager.ts#L137).
+  - By contrast, crop is applied later in the viewer image pipeline via `cropManager.clearOutsideCropRegion(...)` in [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L2012) and [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L2213), not through overlay-dimension remapping.
+- Impact:
+  - The docs describe crop-aware framing guides, but the shipped safe-areas overlay is still positioned against the full display box.
+  - Reviewers relying on safe areas after cropping can trust the guides more than the runtime wiring actually justifies.
+
+### 481. The overlays guide says the timeline highlights missing-frame positions, but the shipped timeline has no missing-frame rendering path
+
+- Severity: Low
+- Area: Documentation / sequence review UX
+- Evidence:
+  - The overlays guide says the missing-frame indicator includes a timeline highlight for the missing-frame position in [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L64) through [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L70).
+  - A production-code search finds missing-frame handling in the viewer and overlay components, but no missing-frame rendering or highlight logic in `Timeline.ts`; the relevant matches are limited to [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L1521) through [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L1558) and [src/ui/components/MissingFrameOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/MissingFrameOverlay.ts#L1) through [src/ui/components/MissingFrameOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/MissingFrameOverlay.ts#L108).
+  - The timeline-related repo hits for “missing frame” are tests and the View-tab mode selector, not a shipped timeline highlight implementation, as shown by [src/services/tabContent/buildViewTab.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildViewTab.ts#L185) through [src/services/tabContent/buildViewTab.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildViewTab.ts#L357).
+- Impact:
+  - The docs promise a second visual cue in the timeline that the shipped app does not provide.
+  - Sequence reviewers can search for a timeline indicator that simply is not implemented in production.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed
