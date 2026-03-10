@@ -3173,6 +3173,58 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Mu-compatible scripts can query playback health and receive clean-looking values even while the real player is buffering, skipping frames, or experiencing decode issues.
   - That is more misleading than an unsupported-path warning because the API reports a valid state snapshot that never came from the actual playback engine.
 
+### 258. Mu compat media-representation node APIs return fabricated node names that are never created in a real graph
+
+- Severity: Medium
+- Area: Mu compatibility / source representations
+- Evidence:
+  - `addSourceMediaRep(...)` synthesizes `nodeName = \`${sourceName}_${repName}_source\`` and `switchNodeName = \`${sourceName}_switch\`` and stores them only inside the local representation record in [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L573) through [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L595).
+  - The method never creates corresponding nodes in a graph, never talks to `window.openrv`, and never wires representation switching into the live session.
+  - `sourceMediaRepsAndNodes(...)`, `sourceMediaRepSwitchNode(...)`, and `sourceMediaRepSourceNode(...)` simply read back those stored string fields in [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L635) through [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L660).
+  - The tests only assert that the returned strings contain the rep or switch names, not that those nodes actually exist anywhere in a graph or session in [src/compat/__tests__/MuSourceBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuSourceBridge.test.ts#L507) through [src/compat/__tests__/MuSourceBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuSourceBridge.test.ts#L615).
+- Impact:
+  - Mu-compatible scripts can receive plausible source-representation node names and then fail when they try to use them as real node identities.
+  - That is especially misleading because the API shape implies graph-backed media-rep wiring, but the returned node IDs are only local placeholders.
+
+### 259. Mu compat event-table BBox `tag` is accepted and stored but never participates in dispatch
+
+- Severity: Medium
+- Area: Mu compatibility / event dispatch
+- Evidence:
+  - `setEventTableBBox(tableName, tag, x, y, w, h)` stores the supplied `tag` alongside the bounding box in [src/compat/ModeManager.ts](/Users/lifeart/Repos/openrv-web/src/compat/ModeManager.ts#L142) through [src/compat/ModeManager.ts](/Users/lifeart/Repos/openrv-web/src/compat/ModeManager.ts#L150).
+  - `dispatchEvent(...)` only checks the numeric rectangle and never reads or compares `bbox.tag` in [src/compat/ModeManager.ts](/Users/lifeart/Repos/openrv-web/src/compat/ModeManager.ts#L204) through [src/compat/ModeManager.ts](/Users/lifeart/Repos/openrv-web/src/compat/ModeManager.ts#L210).
+  - `MuEventBridge.setEventTableBBox(...)` exposes that same `tag` parameter directly in [src/compat/MuEventBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEventBridge.ts#L158) through [src/compat/MuEventBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEventBridge.ts#L166).
+  - The tests only verify inside/outside rectangle filtering and never exercise tag semantics in [src/compat/__tests__/MuEventBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuEventBridge.test.ts#L273) through [src/compat/__tests__/MuEventBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuEventBridge.test.ts#L310).
+- Impact:
+  - Mu-compatible code can pass a tag expecting tag-scoped hit testing and get no behavioral difference at all.
+  - That makes the API misleading for any integration that relies on tagged regions rather than a single bare rectangle per event table.
+
+### 260. Mu compat `wireDOMEvents()` double-registers listeners if called more than once on the same target
+
+- Severity: Medium
+- Area: Mu compatibility / DOM event wiring
+- Evidence:
+  - Each `wireDOMEvents(target)` call unconditionally adds fresh `keydown`, `keyup`, `pointerdown`, `pointerup`, `pointermove`, and `wheel` listeners to the target in [src/compat/MuEventBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEventBridge.ts#L208) through [src/compat/MuEventBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEventBridge.ts#L219).
+  - The bridge keeps only cleanup callbacks in `domListenerCleanups`; it does not track which targets were already wired or deduplicate handlers in [src/compat/MuEventBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEventBridge.ts#L15) through [src/compat/MuEventBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEventBridge.ts#L16) and [src/compat/MuEventBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEventBridge.ts#L208) through [src/compat/MuEventBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEventBridge.ts#L220).
+  - That means a second call on the same target will dispatch each DOM event twice until `dispose()` runs.
+  - There is no compat test covering repeated `wireDOMEvents(...)` on the same element.
+- Impact:
+  - Mu-compatible integrations that reinitialize or rewire the same canvas/element can end up with duplicated key and pointer handling.
+  - Because the failure mode is repeated event dispatch rather than an explicit error, it can look like random double-triggering in interactive tools.
+
+### 261. Mu compat fullscreen helpers do not track the Safari/WebKit fullscreen path that the main app supports
+
+- Severity: Medium
+- Area: Mu compatibility / fullscreen control
+- Evidence:
+  - `MuCommands.fullScreenMode(...)` only calls the standard `requestFullscreen` / `exitFullscreen` methods and does not catch rejected fullscreen promises in [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L391) through [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L399).
+  - `MuCommands.isFullScreen()` checks only `document.fullscreenElement` in [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L401) through [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L405).
+  - `MuUtilsBridge.fullScreenMode(...)` at least catches promise rejection, but it also uses only the standard API and `MuUtilsBridge.isFullScreen()` likewise checks only `document.fullscreenElement` in [src/compat/MuUtilsBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuUtilsBridge.ts#L312) through [src/compat/MuUtilsBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuUtilsBridge.ts#L329).
+  - The shipped app’s real fullscreen manager explicitly supports the WebKit-prefixed path and state via `webkitRequestFullscreen`, `webkitExitFullscreen`, and `webkitFullscreenElement` in [src/utils/ui/FullscreenManager.ts](/Users/lifeart/Repos/openrv-web/src/utils/ui/FullscreenManager.ts#L62) through [src/utils/ui/FullscreenManager.ts](/Users/lifeart/Repos/openrv-web/src/utils/ui/FullscreenManager.ts#L110).
+- Impact:
+  - Mu-compatible scripts can fail to enter fullscreen, or incorrectly think fullscreen is off, in Safari-like environments where the main app itself still handles fullscreen correctly.
+  - On the `MuCommands` path, denied fullscreen can also surface as an unhandled promise rejection instead of a contained warning.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

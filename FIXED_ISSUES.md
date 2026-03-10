@@ -1258,3 +1258,13 @@
 - **Regression Tests**: CPRF-152-001 (console.info emitted on first construction), CPRF-152-002 (emitted only once across instances), CPRF-152-003 (colorDefaults get/set/export/import still functional), CPRF-152-004 (exportDefaults still functional), CPRF-152-005 (unused generalPrefs fields still functional).
 - **Verification**: All 89 PreferencesManager tests pass, TypeScript clean.
 - **Files Changed**: `src/core/PreferencesManager.ts`, `src/core/PreferencesManager.test.ts`
+
+## Issue #153: Drag-and-drop GTO/RV session loading loses sidecar file resolution that the file picker preserves
+
+- **Severity**: High
+- **Area**: Session ingest / drag-and-drop parity
+- **Root Cause**: The header file-picker path built an `availableFiles` map from companion files and passed it to `loadFromGTO()`, enabling sidecar media/CDL resolution by basename. The viewer drag-and-drop path called `session.loadFromGTO(content)` without any `availableFiles` map, silently losing sidecar resolution.
+- **Fix**: In `ViewerInputHandler.ts`, moved session file detection (`.gto`/`.rv`) before sequence detection to match HeaderBar's priority order. When a session file is found among dropped files, builds an `availableFiles` `Map<string, File>` from all other dropped files (keyed by `file.name` basename), and passes it as the second argument to `session.loadFromGTO(content, availableFiles)`. Non-session drops are unaffected.
+- **Regression Tests**: SIDECAR-001 (GTO + companions builds map), SIDECAR-002 (GTO alone passes empty map), SIDECAR-003 (.rv extension works), SIDECAR-004 (multiple companions with correct basenames), SIDECAR-005 (non-session files fall through to loadFile), SIDECAR-006 (session file excluded from map).
+- **Verification**: All 48 ViewerInputHandler tests pass, TypeScript clean.
+- **Files Changed**: `src/ui/components/ViewerInputHandler.ts`, `src/ui/components/ViewerInputHandler.test.ts`
