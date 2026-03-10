@@ -2516,6 +2516,21 @@ export class Viewer {
     const state = pipeline.getState();
 
     const gpuChain = this.colorPipeline.gpuLUTChain;
+    if (!gpuChain) {
+      // TODO(#145): File/Look/Display LUT pipeline stages are silently dropped
+      // when the GPU chain is unavailable. A CPU fallback or user warning in
+      // the UI should be implemented.
+      const hasActiveStages =
+        (sourceConfig?.fileLUT.lutData && sourceConfig.fileLUT.enabled) ||
+        (sourceConfig?.lookLUT.lutData && sourceConfig.lookLUT.enabled) ||
+        (state.displayLUT.lutData && state.displayLUT.enabled);
+      if (hasActiveStages) {
+        console.warn(
+          '[Viewer] LUT pipeline has active File/Look/Display stages but no GPU chain is available. ' +
+            'These stages will be silently dropped.',
+        );
+      }
+    }
     if (gpuChain) {
       const fileLUT = sourceConfig?.fileLUT.lutData;
       const lookLUT = sourceConfig?.lookLUT.lutData;

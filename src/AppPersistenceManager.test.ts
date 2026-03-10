@@ -732,4 +732,131 @@ describe('AppPersistenceManager', () => {
       }).not.toThrow();
     });
   });
+
+  // -----------------------------------------------------------------------
+  // Issue #138: snapshot/auto-save use lossy serializer
+  // -----------------------------------------------------------------------
+  describe('issue #138: lossy serializer documentation', () => {
+    it('APM-138: createQuickSnapshot uses SessionSerializer.toJSON (lossy)', async () => {
+      await manager.createQuickSnapshot();
+      expect(SessionSerializer.toJSON).toHaveBeenCalledTimes(1);
+      // The TODO(#138) comment documents that this is lossy
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Issue #139: snapshot restore clears session first
+  // -----------------------------------------------------------------------
+  describe('issue #139: snapshot restore clears session', () => {
+    it('APM-139: restoreSnapshot calls clearSources before fromJSON', async () => {
+      const mockState = { version: 1, name: 'test', color: {} };
+      fullCtx._snapshotManager.getSnapshot.mockResolvedValue(mockState as any);
+      fullCtx._snapshotManager.getSnapshotMetadata.mockResolvedValue({ name: 'Test' } as any);
+
+      // Add clearSources to the session mock
+      (fullCtx.session as any).clearSources = vi.fn();
+
+      // Re-create manager with updated context
+      const { _autoSaveManager: _a, _snapshotManager: _s, ...ctx } = fullCtx;
+      const mgr = new AppPersistenceManager(ctx);
+
+      await mgr.restoreSnapshot('snap-1');
+
+      expect((fullCtx.session as any).clearSources).toHaveBeenCalled();
+      expect(SessionSerializer.fromJSON).toHaveBeenCalled();
+
+      // Verify clearSources was called before fromJSON
+      const clearOrder = (fullCtx.session as any).clearSources.mock.invocationCallOrder[0];
+      const fromJSONOrder = vi.mocked(SessionSerializer.fromJSON).mock.invocationCallOrder[0];
+      expect(clearOrder).toBeLessThan(fromJSONOrder!);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Issue #140: snapshot restore surfaces warnings
+  // -----------------------------------------------------------------------
+  describe('issue #140: snapshot restore surfaces warnings', () => {
+    it('APM-140: restoreSnapshot shows warning alert when fromJSON returns warnings', async () => {
+      const mockState = { version: 1, name: 'test', color: {} };
+      fullCtx._snapshotManager.getSnapshot.mockResolvedValue(mockState as any);
+      fullCtx._snapshotManager.getSnapshotMetadata.mockResolvedValue({ name: 'Snap' } as any);
+      vi.mocked(SessionSerializer.fromJSON).mockResolvedValue({
+        loadedMedia: 1,
+        warnings: ['LUT "test" needs reload'],
+      });
+
+      await manager.restoreSnapshot('snap-1');
+
+      expect(showAlert).toHaveBeenCalledWith(
+        expect.stringContaining('warning'),
+        expect.objectContaining({ type: 'warning' }),
+      );
+    });
+
+    it('APM-140b: restoreSnapshot shows info when loadedMedia is 0', async () => {
+      const mockState = { version: 1, name: 'test', color: {} };
+      fullCtx._snapshotManager.getSnapshot.mockResolvedValue(mockState as any);
+      fullCtx._snapshotManager.getSnapshotMetadata.mockResolvedValue({ name: 'Snap' } as any);
+      vi.mocked(SessionSerializer.fromJSON).mockResolvedValue({
+        loadedMedia: 0,
+        warnings: [],
+      });
+
+      await manager.restoreSnapshot('snap-1');
+
+      expect(showAlert).toHaveBeenCalledWith(
+        expect.stringContaining('no media'),
+        expect.objectContaining({ type: 'info' }),
+      );
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Issue #141: auto-save recovery preserves entry on warnings
+  // -----------------------------------------------------------------------
+  describe('issue #141: auto-save recovery entry preservation', () => {
+    it('APM-141: recovery with warnings keeps auto-save entry', async () => {
+      fullCtx._autoSaveManager.initialize.mockResolvedValue(true);
+      fullCtx._autoSaveManager.listAutoSaves.mockResolvedValue([
+        { id: 'save-1', name: 'Session', savedAt: new Date().toISOString() } as any,
+      ]);
+      fullCtx._autoSaveManager.getAutoSave.mockResolvedValue({
+        version: 1, name: 'test', color: {},
+      } as any);
+      vi.mocked(showConfirm).mockResolvedValue(true);
+      vi.mocked(SessionSerializer.fromJSON).mockResolvedValue({
+        loadedMedia: 1,
+        warnings: ['Skipped reload: file.exr'],
+      });
+
+      await manager.init();
+
+      // Entry should NOT be deleted when there are warnings
+      expect(fullCtx._autoSaveManager.deleteAutoSave).not.toHaveBeenCalled();
+      expect(showAlert).toHaveBeenCalledWith(
+        expect.stringContaining('preserved'),
+        expect.objectContaining({ type: 'warning' }),
+      );
+    });
+
+    it('APM-141b: recovery without warnings deletes auto-save entry', async () => {
+      fullCtx._autoSaveManager.initialize.mockResolvedValue(true);
+      fullCtx._autoSaveManager.listAutoSaves.mockResolvedValue([
+        { id: 'save-1', name: 'Session', savedAt: new Date().toISOString() } as any,
+      ]);
+      fullCtx._autoSaveManager.getAutoSave.mockResolvedValue({
+        version: 1, name: 'test', color: {},
+      } as any);
+      vi.mocked(showConfirm).mockResolvedValue(true);
+      vi.mocked(SessionSerializer.fromJSON).mockResolvedValue({
+        loadedMedia: 1,
+        warnings: [],
+      });
+
+      await manager.init();
+
+      // Entry should be deleted when recovery is clean
+      expect(fullCtx._autoSaveManager.deleteAutoSave).toHaveBeenCalledWith('save-1');
+    });
+  });
 });

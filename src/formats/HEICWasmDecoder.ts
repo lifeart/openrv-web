@@ -79,7 +79,13 @@ export async function decodeHEICToImageData(
     const primaryIndex = images.findIndex((img) => img.is_primary());
     if (primaryIndex >= 0) targetIndex = primaryIndex;
   } catch {
-    // is_primary() not supported — fall back to index 0
+    // TODO(#143): Without is_primary() we fall back to index 0, which may not
+    // be the primary image in multi-image HEIC files. Consider using metadata
+    // hints or the pitm box to identify the primary item.
+    console.warn(
+      '[HEICWasmDecoder] is_primary() unavailable in this libheif-js build — ' +
+        'falling back to image index 0 which may not be the primary image.',
+    );
   }
 
   return decodeHEICItemAtIndex(images, targetIndex);

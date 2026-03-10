@@ -786,6 +786,12 @@ const mxfDecoder: FormatDecoder = {
   formatName: 'mxf',
   canDecode: isMXFFile,
   async decode(buffer: ArrayBuffer) {
+    // TODO(#147): Consider NOT registering MXF as a decoder since it returns
+    // dummy pixel data. Consumers do not currently handle `metadataOnly`.
+    console.warn(
+      '[DecoderRegistry] MXF decoder returns metadata only — no video frames are decoded. ' +
+        'The returned 1x1 pixel image is a placeholder.',
+    );
     const { parseMXFHeader } = await import('./MXFDemuxer');
     const meta = parseMXFHeader(buffer);
     const videoDesc = meta.essenceDescriptors.find((d) => d.type === 'video');

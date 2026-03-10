@@ -459,6 +459,28 @@ describe('AudioCoordinator', () => {
       }
     });
 
+    it('AC-109: disabling audio scrub stops active scrub snippet (fix #142)', async () => {
+      vi.useFakeTimers();
+      try {
+        await loadWebAudio();
+
+        // Trigger a scrub snippet
+        coordinator.onFrameChanged(25, 24, false);
+        vi.advanceTimersByTime(50);
+
+        // Scrub snippet should be active
+        expect(createdSourceNodes.length).toBeGreaterThan(0);
+
+        // Now disable audio scrub — should pause and stop active scrub
+        coordinator.onAudioScrubEnabledChanged(false);
+
+        // Manager should be paused (scrub snippet stopped)
+        expect(coordinator.manager.isPlaying).toBe(false);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('AC-108: scrub gating does not affect playback sync', async () => {
       await loadWebAudio();
 

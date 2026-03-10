@@ -511,4 +511,25 @@ describe('HEICWasmDecoder', () => {
       unmockLibheif();
     });
   });
+
+  // =========================================================================
+  // Issue #143: warn when is_primary() unavailable
+  // =========================================================================
+  describe('issue #143: is_primary fallback warning', () => {
+    it('HEIC-143: logs console.warn when is_primary() throws and falls back to index 0', async () => {
+      const img = createMockImage({ isPrimaryThrows: true });
+      mockLibheif([img]);
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const { decodeHEICToImageData } = await import('./HEICWasmDecoder');
+      await decodeHEICToImageData(new ArrayBuffer(16));
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('is_primary() unavailable'),
+      );
+      warnSpy.mockRestore();
+      unmockLibheif();
+    });
+  });
 });

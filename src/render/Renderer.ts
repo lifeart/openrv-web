@@ -881,9 +881,14 @@ export class Renderer implements RendererBackend {
         // VideoFrame texImage2D not supported — release only the VideoFrame to free VRAM.
         // The IPImage stays in cache but will skip the VideoFrame path on subsequent renders.
         // For HDR VideoFrame-only IPImages the data buffer is a 4-byte placeholder,
-        // so the typed-array fallback will produce a blank frame. This is acceptable
-        // degradation — the alternative is a VRAM leak.
+        // so the typed-array fallback will produce a blank frame.
+        // TODO(#148): Implement SDR fallback by re-decoding the frame through a
+        // 2D canvas to extract sRGB pixel data instead of showing a blank frame.
         log.warn('VideoFrame texImage2D failed, releasing VideoFrame:', e);
+        console.warn(
+          '[Renderer] VideoFrame GPU upload failed — the frame will appear blank. ' +
+            'HDR VideoFrame-only images have a placeholder data buffer that cannot produce a visible image.',
+        );
         if (image.managedVideoFrame) {
           image.managedVideoFrame.release();
           image.managedVideoFrame = null;

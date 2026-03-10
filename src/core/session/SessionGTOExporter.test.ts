@@ -4236,4 +4236,32 @@ describe('SessionGTOExporter Round-trip Export Tests', () => {
       expect(sessionComp.properties.bgColor.data).toEqual([[1.5, -0.1, 0.5, 2.0]]);
     });
   });
+
+  // -----------------------------------------------------------------------
+  // Issue #135: duration markers collapse on GTO export
+  // -----------------------------------------------------------------------
+  describe('issue #135: duration marker export warning', () => {
+    it('GTO-DUR-001: logs info when duration markers exist on export', () => {
+      session.setMetadataForTest({
+        displayName: 'test',
+        comment: '',
+        version: 1,
+        origin: 'openrv-web',
+        creationContext: 0,
+        clipboard: 0,
+        membershipContains: [],
+      });
+      // Add a duration marker (endFrame > frame)
+      session.setMarker(10, 'duration marker', '#ff0000', 20);
+
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+
+      SessionGTOExporter.buildSessionObject(session, paintEngine, 'test', 'defaultSequence');
+
+      expect(infoSpy).toHaveBeenCalledWith(
+        expect.stringContaining('duration marker(s) will be collapsed to point markers'),
+      );
+      infoSpy.mockRestore();
+    });
+  });
 });

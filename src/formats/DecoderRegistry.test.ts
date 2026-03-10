@@ -2,7 +2,7 @@
  * DecoderRegistry Unit Tests
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   DecoderRegistry,
   decoderRegistry,
@@ -736,6 +736,38 @@ describe('DecoderRegistry', () => {
       expect(result).not.toBeNull();
       expect(result!.formatName).toBe('typed-quality');
       expect(result!.metadata).toEqual({ appliedQuality: 95 });
+    });
+  });
+
+  // =========================================================================
+  // Issue #147: MXF decoder warning
+  // =========================================================================
+  describe('issue #147: MXF metadata-only warning', () => {
+    it('DR-MXF-001: MXF decode logs warning about metadata-only result', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      // Create an MXF magic number buffer
+      const buffer = new ArrayBuffer(64);
+      const bytes = new Uint8Array(buffer);
+      // SMPTE UL prefix for partition pack
+      bytes[0] = 0x06; bytes[1] = 0x0e; bytes[2] = 0x2b; bytes[3] = 0x34;
+      bytes[4] = 0x02; bytes[5] = 0x05; bytes[6] = 0x01; bytes[7] = 0x01;
+
+      const registry = new DecoderRegistry();
+      expect(registry.detectFormat(buffer)).toBe('mxf');
+
+      // Decode will fail because the MXF buffer is too small for parseMXFHeader,
+      // but the warning should fire before the parser is called
+      try {
+        await registry.detectAndDecode(buffer);
+      } catch {
+        // Expected: MXF parser will throw on minimal buffer
+      }
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('MXF decoder returns metadata only'),
+      );
+      warnSpy.mockRestore();
     });
   });
 });

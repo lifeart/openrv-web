@@ -1674,4 +1674,33 @@ describe('Viewer', () => {
       expect(t.paintHasContent).toBe(true);
     });
   });
+
+  // -----------------------------------------------------------------------
+  // Issue #145: LUT pipeline warns when no GPU chain
+  // -----------------------------------------------------------------------
+  describe('issue #145: LUT pipeline no GPU chain warning', () => {
+    it('VWR-145: syncLUTPipeline warns when active stages exist but no GPU chain', () => {
+      const t = testable(viewer);
+      // Ensure no GPU chain
+      t.colorPipeline['_gpuLUTChain'] = null;
+      // Register and configure a source with an active file LUT
+      const pipeline = t.colorPipeline.lutPipeline;
+      pipeline.registerSource('test');
+      pipeline.setActiveSource('test');
+      const config = pipeline.getSourceConfig('test');
+      if (config) {
+        config.fileLUT.lutData = { title: 'Test', size: 2, domainMin: [0, 0, 0], domainMax: [1, 1, 1], data: new Float32Array(24) } as any;
+        config.fileLUT.enabled = true;
+      }
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      viewer.syncLUTPipeline();
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('no GPU chain is available'),
+      );
+      warnSpy.mockRestore();
+    });
+  });
 });

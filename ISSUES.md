@@ -165,18 +165,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Tests are coupled to tooltip copy and incidental CSS structure instead of a stable UI contract.
   - Small text or icon changes can break tests without any behavioral regression.
 
-### 14. Plugin app-event subscriptions are inert because the registry never receives the Events API
-
-- Severity: High
-- Area: Plugin bootstrap, services
-- Evidence:
-  - The plugin registry exposes `setEventsAPI()` in [src/plugin/PluginRegistry.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginRegistry.ts#L84).
-  - The event bus refuses app-event subscriptions when `eventsAPI` is missing in [src/plugin/PluginEventBus.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginEventBus.ts#L216).
-  - Bootstrap in [src/main.ts](/Users/lifeart/Repos/openrv-web/src/main.ts#L27) only calls `pluginRegistry.setAPI(window.openrv)` and `pluginRegistry.setPaintEngine(...)`; there is no production call to `pluginRegistry.setEventsAPI(...)`.
-- Impact:
-  - Plugins can register and activate, but `context.events.onApp('app:...')` subscriptions will warn and no-op in the real app.
-  - The plugin event surface is partially dead in production even though the types and registry claim it exists.
-
 ### 15. Plugin-contributed UI panels are stored in the registry but never consumed by the app
 
 - Severity: Medium
@@ -2399,6 +2387,130 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Client mode can be enabled while restricted editing panels and toolbars remain visible because the hide selectors match nothing.
   - The feature’s core promise, a review-safe trimmed UI, is currently dependent on test-only markup rather than the shipped interface.
+
+### 195. Client mode's action allowlist is not enforced by the production app
+
+- Severity: High
+- Area: Review mode / action gating
+- Evidence:
+  - `ClientMode.isActionAllowed(...)` implements the actual allowlist/denylist decision in [src/ui/components/ClientMode.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ClientMode.ts#L223).
+  - Production source search finds runtime usage of `clientMode` limited to URL enablement, state toggling, and DOM hiding in [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L133) and [src/services/LayoutOrchestrator.ts](/Users/lifeart/Repos/openrv-web/src/services/LayoutOrchestrator.ts#L613).
+  - Production search finds no runtime caller of `isActionAllowed(...)` outside tests and the `ClientMode` class itself.
+- Impact:
+  - Restricted operations can still remain reachable through keyboard shortcuts, direct control APIs, or other non-hidden entry points even when client mode is enabled.
+  - The shipped implementation mostly behaves like cosmetic UI hiding instead of a true locked-down review mode.
+
+### 196. Several clipboard-copy actions fail silently outside the Network Sync UI
+
+- Severity: Medium
+- Area: Export / probe / timeline clipboard UX
+- Evidence:
+  - Export menu `Copy to Clipboard` emits `copyRequested`, but production wiring just calls `viewer.copyFrameToClipboard(true)` and ignores the returned `Promise<boolean>` in [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L140).
+  - The keyboard `export.copyFrame` action does the same in [src/services/KeyboardActionMap.ts](/Users/lifeart/Repos/openrv-web/src/services/KeyboardActionMap.ts#L545).
+  - `Viewer.copyFrameToClipboard(...)` delegates to `copyCanvasToClipboard(...)`, and that helper reduces clipboard failures to a console error plus `false` in [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L3350) and [src/utils/export/FrameExporter.ts](/Users/lifeart/Repos/openrv-web/src/utils/export/FrameExporter.ts#L152).
+  - Pixel Probe row copies also only `console.warn(...)` on clipboard failure in [src/ui/components/PixelProbe.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PixelProbe.ts#L943).
+  - Timeline timecode copy swallows clipboard failure entirely in [src/ui/components/Timeline.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Timeline.ts#L579).
+  - By contrast, Network Sync copy actions do surface clipboard errors via `showError(...)`, so the app already has a better pattern in [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L746).
+- Impact:
+  - On browsers with denied clipboard permissions or unsupported clipboard APIs, copy commands can appear to do nothing with no user-visible explanation.
+  - The app treats similar clipboard workflows inconsistently, which makes export/probe/timeline copy actions less trustworthy than the network-sharing UI.
+
+### 197. Malformed WebRTC share links are silently ignored during URL bootstrap
+
+- Severity: Medium
+- Area: Collaboration / URL bootstrap
+- Evidence:
+  - `SessionURLService.handleURLBootstrap()` only handles WebRTC URL signals when `decodeWebRTCURLSignal(...)` yields an `offer` or `answer`; any other decoded result falls through with no `showInfo(...)` or error path in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L226).
+  - For offer links, `NetworkSyncManager.joinServerlessRoomFromOfferToken(...)` also returns `null` on malformed tokens, wrong signal type, invalid room codes, or already-busy connection state without emitting a user-facing message in [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L280).
+  - App startup awaits `handleURLBootstrap()` directly in [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L721), so a bad `?webrtc=` link can complete bootstrap with no visible indication that link handling failed.
+- Impact:
+  - Users opening a malformed or partially-corrupted WebRTC invite/response URL can land in a normal-looking app state with no clue that the collaboration link was ignored.
+  - That makes shared-link failures hard to diagnose because the broken input disappears into startup logic instead of surfacing an actionable error.
+
+### 198. Mu compat `realFPS()` reports nominal FPS, not measured playback FPS
+
+- Severity: Medium
+- Area: Mu compatibility / playback scripting
+- Evidence:
+  - The shipped Mu command manifest marks `realFPS` as supported in [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L93).
+  - The implementation explicitly documents itself as a stub and returns `this.fps()` in [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L232).
+  - The compat tests lock that behavior in by asserting `realFPS()` always equals `fps()` in [src/compat/__tests__/MuCommands.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuCommands.test.ts#L206).
+- Impact:
+  - Mu scripts that expect measured playback throughput get the configured timeline FPS instead, even during dropped-frame or throttled playback.
+  - That makes performance-sensitive review tooling built on the compat API draw the wrong conclusions while still looking “supported”.
+
+### 199. Mu compat `sourcePixelValue()` returns black for normal GPU-backed sources
+
+- Severity: High
+- Area: Mu compatibility / source inspection
+- Evidence:
+  - `MuSourceBridge.sourcePixelValue(...)` is documented as the Mu equivalent of `commands.sourcePixelValue(sourceName, x, y)` in [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L423).
+  - The implementation also states that it currently returns `[0,0,0,0]` when GPU texture sampling is unavailable in [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L426).
+  - In the live code path, if there is no special in-memory `imageData` backing for that source, the method falls through to `return [0, 0, 0, 0]` in [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L453).
+  - The compat tests explicitly encode that zero-read behavior for a registered source with no in-memory image data in [src/compat/__tests__/MuSourceBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuSourceBridge.test.ts#L337).
+- Impact:
+  - Scripts using the Mu-compatible source-inspection API can receive bogus black pixels for perfectly valid sources on the normal GPU-backed path.
+  - That is a functional correctness issue, not just a missing optimization, because the API returns a plausible value instead of failing loudly.
+
+### 200. Mu compat `openUrl()` fails silently when the browser blocks popups
+
+- Severity: Medium
+- Area: Mu compatibility / utility commands
+- Evidence:
+  - `MuUtilsBridge.openUrl(url)` is exposed as the Mu-compatible URL opener in [src/compat/MuUtilsBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuUtilsBridge.ts#L148).
+  - The implementation just calls `window.open(url, '_blank', 'noopener,noreferrer')` and ignores the return value in [src/compat/MuUtilsBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuUtilsBridge.ts#L151).
+  - The broader app already has other popup-blocked failure paths where `window.open(...)` can return `null`, such as external presentation and annotation PDF export, and those are documented separately in issues `112` and `181`.
+- Impact:
+  - Mu-compatible scripts can request an external URL open and get no result or error when the browser blocks the popup.
+  - That makes automation built on the utility bridge harder to debug because a real runtime failure is reduced to a silent no-op.
+
+### 201. The Mu compatibility layer is not registered in production bootstrap
+
+- Severity: High
+- Area: Mu compatibility / app bootstrap
+- Evidence:
+  - The compat entrypoint requires an explicit `registerMuCompat()` call to create `window.rv.commands` / `window.rv.extra_commands` in [src/compat/index.ts](/Users/lifeart/Repos/openrv-web/src/compat/index.ts#L35).
+  - Production bootstrap in [src/main.ts](/Users/lifeart/Repos/openrv-web/src/main.ts#L22) only installs `window.openrv` and plugin dependencies; it never calls `registerMuCompat()`.
+  - Production source search finds `registerMuCompat()` only in the compat module itself and tests, not in the live app startup path.
+- Impact:
+  - Mu-style scripts that expect the documented `window.rv` namespace will find it missing in the shipped app.
+  - Large parts of the compat layer can appear implemented and tested in-repo while still being unavailable to real users unless something external registers it manually.
+
+### 202. The global error handler claims uncaught-error coverage, but only listens for unhandled rejections
+
+- Severity: Medium
+- Area: App bootstrap / diagnostics
+- Evidence:
+  - `installGlobalErrorHandler()` is documented as installing listeners for both uncaught errors and unhandled promise rejections in [src/utils/globalErrorHandler.ts](/Users/lifeart/Repos/openrv-web/src/utils/globalErrorHandler.ts#L8).
+  - The actual implementation only adds an `unhandledrejection` listener in [src/utils/globalErrorHandler.ts](/Users/lifeart/Repos/openrv-web/src/utils/globalErrorHandler.ts#L18).
+  - Production bootstrap relies on that helper in [src/main.ts](/Users/lifeart/Repos/openrv-web/src/main.ts#L12), so there is no separate app-level `error` listener compensating for the missing uncaught-error path.
+- Impact:
+  - Synchronous uncaught exceptions do not get the centralized logger treatment the app bootstrap promises.
+  - That weakens crash diagnostics in exactly the path meant to improve them, and it can mislead maintainers into thinking top-level error coverage is broader than it really is.
+
+### 203. The public `openrv.events` API advertises an `error` event that production never emits
+
+- Severity: Medium
+- Area: Public API / plugin automation
+- Evidence:
+  - `EventsAPI` exposes `error` as a valid public event name in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L15) and provides `emitError(...)` for internal producers in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L276).
+  - Production bootstrap wires that same `EventsAPI` instance into plugins through `pluginRegistry.setEventsAPI(window.openrv.events)` in [src/main.ts](/Users/lifeart/Repos/openrv-web/src/main.ts#L31).
+  - Production source search finds no runtime caller of `emitError(...)` outside `EventsAPI` itself and tests, even though multiple subsystems produce structured errors through their own event emitters.
+- Impact:
+  - Scripts and plugins can subscribe to `openrv.events.on('error', ...)` and receive nothing for real runtime failures.
+  - The API surface implies a centralized public error stream exists, but in the shipped app that channel is effectively inert.
+
+### 204. The public `openrv.events` API advertises `stop`, but production never emits it
+
+- Severity: Medium
+- Area: Public API / playback events
+- Evidence:
+  - `EventsAPI` declares `stop` as a valid public event name and payload type in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L15) and [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L37).
+  - The internal event wiring only translates `session.on('playbackChanged', ...)` into `play` or `pause` in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L199).
+  - Production source search finds no runtime `this.emit('stop', ...)` call in `EventsAPI` or elsewhere.
+- Impact:
+  - Scripts that wait for a distinct stop event never receive it, even when users trigger the app’s stop/pause behavior.
+  - The public event contract suggests more playback-state granularity than the shipped implementation actually provides.
 
 ## Validation Notes
 

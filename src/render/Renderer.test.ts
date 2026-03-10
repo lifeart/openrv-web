@@ -3298,4 +3298,37 @@ describe('GC Pressure: Pre-allocated offset/scale buffers', () => {
     expect(scaleBuf[0]).toBe(3.0);
     expect(scaleBuf[1]).toBe(4.0);
   });
+
+  // =========================================================================
+  // Issue #148: HDR VideoFrame upload failure warning
+  // =========================================================================
+  it('REN-VF-148: warns when VideoFrame texImage2D fails and frame will be blank', () => {
+    const renderer = new Renderer();
+    // Initialize with mock GL that throws on VideoFrame texImage2D
+    const gl = initRendererWithMockGL(renderer, { supportHLG: true });
+    const origTexImage = gl.texImage2D;
+    gl.texImage2D = vi.fn((...args: unknown[]) => {
+      // When called with a VideoFrame-like object (6 args, last is object with close)
+      if (args.length >= 6 && args[5] && typeof args[5] === 'object' && 'close' in (args[5] as object)) {
+        throw new Error('VideoFrame not supported');
+      }
+      return (origTexImage as Function).apply(gl, args);
+    }) as any;
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    // Create an image with a VideoFrame (simulated)
+    const img = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'uint8' });
+    img.textureNeedsUpdate = true;
+    // Set up a mock VideoFrame
+    (img as any).videoFrame = { close: vi.fn() };
+    (img as any).managedVideoFrame = { release: vi.fn() };
+
+    renderer.renderImage(img, 0, 0, 1, 1);
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('VideoFrame GPU upload failed'),
+    );
+    warnSpy.mockRestore();
+  });
 });

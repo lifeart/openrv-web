@@ -89,7 +89,7 @@ export class ColorPipelineManager {
     try {
       this._lutProcessor = new WebGLLUTProcessor();
     } catch (e) {
-      console.warn('WebGL LUT processor not available, falling back to CPU:', e);
+      console.warn('WebGL LUT processor not available — no CPU fallback exists, LUT processing will be unavailable:', e);
       this._lutProcessor = null;
     }
     return this._lutProcessor;
@@ -197,6 +197,11 @@ export class ColorPipelineManager {
     this._currentLUT = lut;
     if (this._lutProcessor) {
       this._lutProcessor.setLUT(lut);
+    } else if (lut !== null) {
+      // Warn when a LUT is set but no processor exists to apply it (fix #144).
+      console.warn(
+        '[ColorPipelineManager] LUT set but no GPU processor available — the LUT will have no effect.',
+      );
     }
   }
 
@@ -371,9 +376,13 @@ export class ColorPipelineManager {
     // Use WebGL processor if available for GPU acceleration
     if (this._lutProcessor && this._lutProcessor.hasLUT()) {
       this._lutProcessor.applyToCanvas(ctx, width, height, this._lutIntensity);
+    } else {
+      // No CPU fallback exists — LUT processing is unavailable without GPU (fix #144).
+      console.warn(
+        '[ColorPipelineManager] LUT processing unavailable — no GPU processor and no CPU fallback. ' +
+          'The LUT will have no effect on the rendered output.',
+      );
     }
-    // Fallback: No CPU fallback implemented for performance reasons
-    // The WebGL path handles all LUT processing
   }
 
   /**

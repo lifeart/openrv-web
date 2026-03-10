@@ -176,11 +176,13 @@ export class AudioCoordinator implements ManagerBase {
   onAudioScrubEnabledChanged(enabled: boolean): void {
     this._audioScrubEnabled = enabled;
     if (!enabled) {
-      // Stop any active scrub snippet
+      // Stop any active scrub snippet immediately (fix #142).
+      // Switching to 'discrete' mode triggers the manager's internal snippet
+      // stop, and calling dispose()/re-init would be too heavy. Instead we
+      // call pause() which stops all audio output (including scrub snippets)
+      // and then setScrubMode to reset state cleanly.
       this._manager.setScrubMode('discrete');
-      // The manager's stopScrubSnippet is private, but calling scrubToFrame
-      // on a non-existent frame would trigger the debounce. Instead, we rely
-      // on the gating in onFrameChanged to prevent future scrubs.
+      this._manager.pause();
     }
   }
 

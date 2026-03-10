@@ -2,7 +2,7 @@
  * ColorPipelineManager Unit Tests
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { ColorPipelineManager } from './ColorPipelineManager';
 import { DEFAULT_COLOR_ADJUSTMENTS, type ColorAdjustments } from './ColorControls';
 import {
@@ -764,6 +764,44 @@ describe('ColorPipelineManager', () => {
       const manager = new ColorPipelineManager();
       expect(manager.gpuLUTChain).toBeNull();
       expect(manager.getGPULUTChain()).toBeNull();
+    });
+  });
+
+  // ===========================================================================
+  // Issue #144: LUT processing unavailable without GPU
+  // ===========================================================================
+  describe('issue #144: LUT no-op warning', () => {
+    it('CPM-U144: applyLUTToCanvas warns when no GPU processor and LUT is set', () => {
+      const manager = new ColorPipelineManager();
+      // Don't init LUT processor — simulates no WebGL
+      manager.setLUT(createMockLUT());
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      // Create a fake canvas context
+      const canvas = document.createElement('canvas');
+      canvas.width = 2;
+      canvas.height = 2;
+      const ctx = canvas.getContext('2d')!;
+
+      manager.applyLUTToCanvas(ctx, 2, 2);
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('LUT processing unavailable'),
+      );
+      warnSpy.mockRestore();
+    });
+
+    it('CPM-U144b: setLUT warns when no processor exists and LUT is non-null', () => {
+      const manager = new ColorPipelineManager();
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      manager.setLUT(createMockLUT());
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('no GPU processor available'),
+      );
+      warnSpy.mockRestore();
     });
   });
 });

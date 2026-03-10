@@ -250,6 +250,26 @@ export class SessionSerializer {
       impact: 'Uncrop padding will be removed on reload',
     });
 
+    // --- LUT pipeline gap (fix #146) ---
+
+    // TODO(#146): The LUT Pipeline panel state (File/Look/Display LUT stages)
+    // is not persisted through project save/load. Only the single pre-cache LUT
+    // path is partially captured via lutPath/lutIntensity.
+    const lutPipeline = viewer.getLUTPipeline();
+    const lutSourceId = lutPipeline.getActiveSourceId() ?? 'default';
+    const lutSourceConfig = lutPipeline.getSourceConfig(lutSourceId);
+    const lutPipelineState = lutPipeline.getState();
+    const lutPipelineActive =
+      !!(lutSourceConfig?.fileLUT.lutData && lutSourceConfig.fileLUT.enabled) ||
+      !!(lutSourceConfig?.lookLUT.lutData && lutSourceConfig.lookLUT.enabled) ||
+      !!(lutPipelineState.displayLUT.lutData && lutPipelineState.displayLUT.enabled);
+    gaps.push({
+      name: 'LUT Pipeline',
+      category: 'color',
+      isActive: lutPipelineActive,
+      impact: 'File/Look/Display LUT stages will be lost on reload',
+    });
+
     // --- Compare gaps ---
 
     const differenceMatte = viewer.getDifferenceMatteState();

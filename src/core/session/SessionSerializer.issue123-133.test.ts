@@ -122,6 +122,26 @@ function createMockComponents(): SessionComponents {
       setBackgroundPatternState: vi.fn(),
       setZoom: vi.fn(),
       setPan: vi.fn(),
+      // Reset methods for omitted viewer states (fix #136)
+      resetToneMappingState: vi.fn(),
+      resetGhostFrameState: vi.fn(),
+      resetStereoState: vi.fn(),
+      resetStereoEyeTransforms: vi.fn(),
+      resetStereoAlignMode: vi.fn(),
+      resetChannelMode: vi.fn(),
+      resetDifferenceMatteState: vi.fn(),
+      // LUT pipeline (fix #146)
+      getLUTPipeline: vi.fn().mockReturnValue({
+        getActiveSourceId: vi.fn().mockReturnValue('default'),
+        getSourceConfig: vi.fn().mockReturnValue({
+          fileLUT: { lutData: null, enabled: false, intensity: 1 },
+          lookLUT: { lutData: null, enabled: false, intensity: 1 },
+          preCacheLUT: { lutData: null, enabled: false, intensity: 1 },
+        }),
+        getState: vi.fn().mockReturnValue({
+          displayLUT: { lutData: null, enabled: false, intensity: 1 },
+        }),
+      }),
     },
   } as any;
 }
