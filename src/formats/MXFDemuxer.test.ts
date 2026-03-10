@@ -1056,6 +1056,69 @@ describe('MXF Demuxer', () => {
 
       expect(metadata.startTimecode).toBe('00:00:00:00');
     });
+
+    it('MXF-TC-COMP-004: should not produce startTimecode when editRate is missing', () => {
+      // No Timeline Track KLV, so metadata.editRate is undefined
+      const partitionBytes = buildHeaderPartitionKLV(OP1A_UL, 2000);
+
+      const tcValue = buildLocalSetValue([
+        { tag: 0x1501, value: buildUint64(90000) },
+        { tag: 0x1502, value: [0x00] },
+      ]);
+      const tcKLV = buildKLV(TIMECODE_COMPONENT_UL, tcValue);
+
+      const allBytes = [...partitionBytes, ...tcKLV];
+      const buffer = bytesToBuffer(allBytes);
+      const metadata = parseMXFHeader(buffer);
+
+      expect(metadata.startTimecode).toBeUndefined();
+      expect(metadata.startTimecodeFrames).toBe(90000);
+    });
+
+    it('MXF-TC-COMP-005: should not produce startTimecode when editRate den is 0', () => {
+      const partitionBytes = buildHeaderPartitionKLV(OP1A_UL, 2000);
+
+      // Edit rate with denominator 0 (invalid)
+      const trackValue = buildLocalSetValue([
+        { tag: 0x4801, value: buildRational(25, 0) },
+      ]);
+      const trackKLV = buildKLV(TIMELINE_TRACK_UL, trackValue);
+
+      const tcValue = buildLocalSetValue([
+        { tag: 0x1501, value: buildUint64(48000) },
+        { tag: 0x1502, value: [0x00] },
+      ]);
+      const tcKLV = buildKLV(TIMECODE_COMPONENT_UL, tcValue);
+
+      const allBytes = [...partitionBytes, ...trackKLV, ...tcKLV];
+      const buffer = bytesToBuffer(allBytes);
+      const metadata = parseMXFHeader(buffer);
+
+      expect(metadata.startTimecode).toBeUndefined();
+      expect(metadata.startTimecodeFrames).toBe(48000);
+    });
+
+    it('MXF-TC-COMP-006: should set startTimecodeFrames alongside startTimecode when editRate is valid', () => {
+      const partitionBytes = buildHeaderPartitionKLV(OP1A_UL, 2000);
+
+      const trackValue = buildLocalSetValue([
+        { tag: 0x4801, value: buildRational(25, 1) },
+      ]);
+      const trackKLV = buildKLV(TIMELINE_TRACK_UL, trackValue);
+
+      const tcValue = buildLocalSetValue([
+        { tag: 0x1501, value: buildUint64(90000) },
+        { tag: 0x1502, value: [0x00] },
+      ]);
+      const tcKLV = buildKLV(TIMECODE_COMPONENT_UL, tcValue);
+
+      const allBytes = [...partitionBytes, ...trackKLV, ...tcKLV];
+      const buffer = bytesToBuffer(allBytes);
+      const metadata = parseMXFHeader(buffer);
+
+      expect(metadata.startTimecode).toBe('01:00:00:00');
+      expect(metadata.startTimecodeFrames).toBe(90000);
+    });
   });
 
   // =========================================================================

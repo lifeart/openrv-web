@@ -100,6 +100,7 @@ function createMockContext(): PersistenceManagerContext & {
     autoSaveIndicator: {
       markUnsaved: vi.fn(),
       markSaved: vi.fn(),
+      setStatus: vi.fn(),
     } as any,
     snapshotManager: snapshotManager as any,
     snapshotPanel: {

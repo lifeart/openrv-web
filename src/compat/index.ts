@@ -20,6 +20,7 @@ export { MuNodeBridge } from './MuNodeBridge';
 export { MuEventBridge } from './MuEventBridge';
 export { ModeManager } from './ModeManager';
 export { MuSourceBridge } from './MuSourceBridge';
+export type { PixelReadbackProvider } from './MuSourceBridge';
 export { MuEvalBridge } from './MuEvalBridge';
 export { MuNetworkBridge } from './MuNetworkBridge';
 export { MuSettingsBridge } from './MuSettingsBridge';
@@ -40,15 +41,19 @@ import { MuExtraCommands } from './MuExtraCommands';
  * @returns The MuCommands instance for programmatic access.
  */
 export function registerMuCompat(): { commands: MuCommands; extra_commands: MuExtraCommands } {
-  const commands = new MuCommands();
-  const extraCommands = new MuExtraCommands(commands);
-
   if (typeof globalThis !== 'undefined') {
     const g = globalThis as unknown as { rv?: { commands: MuCommands; extra_commands: MuExtraCommands } };
-    if (!g.rv) {
-      g.rv = { commands, extra_commands: extraCommands };
+    if (g.rv) {
+      return { commands: g.rv.commands, extra_commands: g.rv.extra_commands };
     }
+
+    const commands = new MuCommands();
+    const extraCommands = new MuExtraCommands(commands);
+    g.rv = { commands, extra_commands: extraCommands };
+    return { commands, extra_commands: extraCommands };
   }
 
+  const commands = new MuCommands();
+  const extraCommands = new MuExtraCommands(commands);
   return { commands, extra_commands: extraCommands };
 }

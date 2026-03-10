@@ -172,6 +172,7 @@ export interface MXFMetadata {
   duration?: number;
   editRate?: { num: number; den: number };
   startTimecode?: string;
+  startTimecodeFrames?: number;
   materialPackageInfo?: {
     name?: string;
     creationDate?: string;
@@ -862,16 +863,16 @@ export function parseMXFHeader(buffer: ArrayBuffer): MXFMetadata {
         }
       }
       if (startTC >= 0 && !metadata.startTimecode) {
-        // Convert frame count to timecode string (assuming 24fps as fallback)
-        const fps = metadata.editRate
-          ? metadata.editRate.den !== 0
-            ? metadata.editRate.num / metadata.editRate.den
-            : 24
-          : 24;
-        if (dropFrame) {
-          metadata.startTimecode = framesToTimecodeDF(startTC, fps);
-        } else {
-          metadata.startTimecode = framesToTimecode(startTC, fps);
+        metadata.startTimecodeFrames = startTC;
+        const hasValidEditRate =
+          metadata.editRate != null && metadata.editRate.den !== 0;
+        if (hasValidEditRate) {
+          const fps = metadata.editRate!.num / metadata.editRate!.den;
+          if (dropFrame) {
+            metadata.startTimecode = framesToTimecodeDF(startTC, fps);
+          } else {
+            metadata.startTimecode = framesToTimecode(startTC, fps);
+          }
         }
       }
     }

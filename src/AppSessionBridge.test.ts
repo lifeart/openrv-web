@@ -308,6 +308,19 @@ describe('AppSessionBridge', () => {
       expect(showUnsupportedCodecModal).toHaveBeenCalledWith(codecInfo);
     });
 
+    it('ASB-003b: hdrDowngraded logs a warning', () => {
+      bridge.bindSessionEvents();
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      ctx._session.emit('hdrDowngraded', { filename: 'hdr_video.mp4' });
+
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('hdr_video.mp4'),
+      );
+      warnSpy.mockRestore();
+    });
+
     it('ASB-004: playbackChanged triggers handlePlaybackChanged', () => {
       bridge.bindSessionEvents();
 

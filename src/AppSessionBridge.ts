@@ -156,6 +156,14 @@ export class AppSessionBridge {
       showUnsupportedCodecModal(info);
     });
 
+    // --- Handle HDR→SDR downgrade warnings ---
+
+    this.on(session, 'hdrDowngraded', (info) => {
+      console.warn(
+        `[OpenRV] HDR video "${info.filename}" was downgraded to SDR because VideoSampleSink setup failed on this platform.`,
+      );
+    });
+
     // --- Optimize scopes for playback ---
 
     this.on(session, 'playbackChanged', (isPlaying) => {

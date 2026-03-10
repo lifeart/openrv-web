@@ -828,6 +828,7 @@ export class App {
       externalPresentation: this.externalPresentation,
       headerBar: this.headerBar,
       frameNavigation: this.frameNavigation,
+      clientMode: this.clientMode,
     });
   }
 

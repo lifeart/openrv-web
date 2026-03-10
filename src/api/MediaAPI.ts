@@ -6,6 +6,7 @@
 
 import type { Session } from '../core/session/Session';
 import type { PatternName, GradientDirection } from '../nodes/sources/ProceduralSourceNode';
+import { DisposableAPI } from './Disposable';
 
 /**
  * Public source information returned by the API
@@ -19,10 +20,11 @@ export interface SourceInfo {
   fps: number;
 }
 
-export class MediaAPI {
+export class MediaAPI extends DisposableAPI {
   private session: Session;
 
   constructor(session: Session) {
+    super();
     this.session = session;
   }
 
@@ -39,6 +41,7 @@ export class MediaAPI {
    * ```
    */
   getCurrentSource(): SourceInfo | null {
+    this.assertNotDisposed();
     const source = this.session.currentSource;
     if (!source) return null;
 
@@ -63,6 +66,7 @@ export class MediaAPI {
    * ```
    */
   getDuration(): number {
+    this.assertNotDisposed();
     return this.session.currentSource?.duration ?? 0;
   }
 
@@ -77,6 +81,7 @@ export class MediaAPI {
    * ```
    */
   getFPS(): number {
+    this.assertNotDisposed();
     return this.session.fps;
   }
 
@@ -92,6 +97,7 @@ export class MediaAPI {
    * ```
    */
   getResolution(): { width: number; height: number } {
+    this.assertNotDisposed();
     const source = this.session.currentSource;
     return {
       width: source?.width ?? 0,
@@ -110,6 +116,7 @@ export class MediaAPI {
    * ```
    */
   hasMedia(): boolean {
+    this.assertNotDisposed();
     return this.session.currentSource !== null;
   }
 
@@ -124,6 +131,7 @@ export class MediaAPI {
    * ```
    */
   getSourceCount(): number {
+    this.assertNotDisposed();
     return this.session.sourceCount;
   }
 
@@ -143,6 +151,7 @@ export class MediaAPI {
   loadProceduralSource(
     pattern: PatternName,
     options?: {
+
       width?: number;
       height?: number;
       color?: [number, number, number, number];
@@ -153,6 +162,7 @@ export class MediaAPI {
       duration?: number;
     },
   ): void {
+    this.assertNotDisposed();
     this.session.loadProceduralSource(pattern, options);
   }
 
@@ -167,6 +177,7 @@ export class MediaAPI {
    * ```
    */
   loadMovieProc(url: string): void {
+    this.assertNotDisposed();
     this.session.loadMovieProc(url);
   }
 }

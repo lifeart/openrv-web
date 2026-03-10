@@ -8,6 +8,7 @@
 import type { Session } from '../core/session/Session';
 import type { ViewerProvider } from './types';
 import { ValidationError } from '../core/errors';
+import { DisposableAPI } from './Disposable';
 
 /**
  * Events that can be subscribed to via the public API
@@ -41,7 +42,7 @@ export interface OpenRVEventData {
   audioScrubEnabledChange: { enabled: boolean };
   loopModeChange: { mode: string };
   inOutChange: { inPoint: number; outPoint: number };
-  markerChange: { markers: Array<{ frame: number; note: string; color: string }> };
+  markerChange: { markers: Array<{ frame: number; note: string; color: string; endFrame?: number }> };
   sourceLoaded: { name: string; type: string; width: number; height: number; duration: number; fps: number };
   error: { message: string; code?: string };
 }
@@ -64,12 +65,13 @@ const VALID_EVENTS: ReadonlySet<OpenRVEventName> = new Set([
   'error',
 ]);
 
-export class EventsAPI {
+export class EventsAPI extends DisposableAPI {
   private listeners = new Map<OpenRVEventName, Set<EventCallback>>();
   private internalUnsubscribers: Array<() => void> = [];
   private session: Session;
 
   constructor(session: Session, _viewer: ViewerProvider) {
+    super();
     this.session = session;
     // Viewer parameter accepted for future extension (e.g., zoom/pan change events)
     this.wireInternalEvents();
@@ -90,6 +92,7 @@ export class EventsAPI {
    * ```
    */
   on<K extends OpenRVEventName>(event: K, callback: EventCallback<OpenRVEventData[K]>): () => void {
+    this.assertNotDisposed();
     this.validateEventName(event);
     this.validateCallback(callback);
 
@@ -120,6 +123,7 @@ export class EventsAPI {
    * ```
    */
   off<K extends OpenRVEventName>(event: K, callback: EventCallback<OpenRVEventData[K]>): void {
+    this.assertNotDisposed();
     this.listeners.get(event)?.delete(callback as EventCallback);
   }
 
@@ -137,6 +141,7 @@ export class EventsAPI {
    * ```
    */
   once<K extends OpenRVEventName>(event: K, callback: EventCallback<OpenRVEventData[K]>): () => void {
+    this.assertNotDisposed();
     this.validateEventName(event);
     this.validateCallback(callback);
 
@@ -158,6 +163,7 @@ export class EventsAPI {
    * ```
    */
   getEventNames(): OpenRVEventName[] {
+    this.assertNotDisposed();
     return Array.from(VALID_EVENTS);
   }
 
@@ -206,6 +212,12 @@ export class EventsAPI {
     });
     this.internalUnsubscribers.push(unsubPlayback);
 
+    // Stop (pause + return to start)
+    const unsubStop = this.session.on('playbackStopped', () => {
+      this.emit('stop', undefined as void);
+    });
+    this.internalUnsubscribers.push(unsubStop);
+
     // Speed changes
     const unsubSpeed = this.session.on('playbackSpeedChanged', (speed) => {
       this.emit('speedChange', { speed });
@@ -244,11 +256,17 @@ export class EventsAPI {
 
     // Marker changes
     const unsubMarks = this.session.on('marksChanged', (marks) => {
-      const markers = Array.from(marks.values()).map((m) => ({
-        frame: m.frame,
-        note: m.note,
-        color: m.color,
-      }));
+      const markers = Array.from(marks.values()).map((m) => {
+        const entry: { frame: number; note: string; color: string; endFrame?: number } = {
+          frame: m.frame,
+          note: m.note,
+          color: m.color,
+        };
+        if (m.endFrame !== undefined) {
+          entry.endFrame = m.endFrame;
+        }
+        return entry;
+      });
       this.emit('markerChange', { markers });
     });
     this.internalUnsubscribers.push(unsubMarks);
@@ -265,6 +283,42 @@ export class EventsAPI {
       });
     });
     this.internalUnsubscribers.push(unsubSource);
+
+    // Error bridging — wire internal Session error events to the public error channel
+
+    // Audio playback errors (autoplay blocked, decode failures, network issues)
+    const unsubAudioError = this.session.on('audioError', (err) => {
+      this.emitError(`Audio error: ${err.message}`, `AUDIO_${err.type.toUpperCase()}`);
+    });
+    this.internalUnsubscribers.push(unsubAudioError);
+
+    // Unsupported codec errors (media cannot be decoded)
+    const unsubCodec = this.session.on('unsupportedCodec', (info) => {
+      const codec = info.codec ?? 'unknown';
+      this.emitError(
+        `Unsupported codec "${codec}" in ${info.filename}`,
+        'UNSUPPORTED_CODEC',
+      );
+    });
+    this.internalUnsubscribers.push(unsubCodec);
+
+    // Media representation switch failures
+    const unsubRepError = this.session.on('representationError', (data) => {
+      this.emitError(
+        `Representation error for source ${data.sourceIndex}: ${data.error}`,
+        'REPRESENTATION_ERROR',
+      );
+    });
+    this.internalUnsubscribers.push(unsubRepError);
+
+    // Frame decode timeout in play-all-frames mode
+    const unsubDecodeTimeout = this.session.on('frameDecodeTimeout', (frame) => {
+      this.emitError(
+        `Frame ${frame} decode timed out`,
+        'FRAME_DECODE_TIMEOUT',
+      );
+    });
+    this.internalUnsubscribers.push(unsubDecodeTimeout);
   }
 
   /**
@@ -281,7 +335,8 @@ export class EventsAPI {
    * Clean up all listeners and internal subscriptions.
    * After calling this, the EventsAPI instance should not be used.
    */
-  dispose(): void {
+  override dispose(): void {
+    super.dispose();
     // Remove all internal subscriptions
     for (const unsub of this.internalUnsubscribers) {
       unsub();

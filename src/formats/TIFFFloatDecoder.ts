@@ -566,6 +566,51 @@ export function getTIFFInfo(buffer: ArrayBuffer): TIFFInfo | null {
  * @param buffer - The TIFF file data
  * @returns Decoded image data as RGBA Float32Array
  */
+
+/**
+ * Expand source pixel channels to RGBA output.
+ * - 1 channel (grayscale): replicate to R, G, B; alpha = 1.0 (pre-initialized)
+ * - 2 channels (luminance + alpha): replicate luminance to R, G, B; copy alpha
+ * - 3 channels (RGB): copy R, G, B; alpha = 1.0 (pre-initialized)
+ * - 4 channels (RGBA): copy all four
+ */
+function expandPixelToRGBA(
+  srcView: DataView,
+  srcByteOffset: number,
+  outputData: Float32Array,
+  outputIdx: number,
+  readChannels: number,
+  le: boolean,
+): void {
+  if (readChannels === 1) {
+    // Grayscale: replicate single value to R, G, B
+    const v = srcView.getFloat32(srcByteOffset, le);
+    outputData[outputIdx] = v;
+    outputData[outputIdx + 1] = v;
+    outputData[outputIdx + 2] = v;
+    // Alpha already initialized to 1.0
+  } else if (readChannels === 2) {
+    // Luminance + Alpha: replicate luminance to R, G, B; copy alpha
+    const lum = srcView.getFloat32(srcByteOffset, le);
+    const alpha = srcView.getFloat32(srcByteOffset + 4, le);
+    outputData[outputIdx] = lum;
+    outputData[outputIdx + 1] = lum;
+    outputData[outputIdx + 2] = lum;
+    outputData[outputIdx + 3] = alpha;
+  } else if (readChannels === 3) {
+    // RGB: copy R, G, B; alpha already initialized to 1.0
+    outputData[outputIdx] = srcView.getFloat32(srcByteOffset, le);
+    outputData[outputIdx + 1] = srcView.getFloat32(srcByteOffset + 4, le);
+    outputData[outputIdx + 2] = srcView.getFloat32(srcByteOffset + 8, le);
+  } else {
+    // RGBA (4 channels): copy all four
+    outputData[outputIdx] = srcView.getFloat32(srcByteOffset, le);
+    outputData[outputIdx + 1] = srcView.getFloat32(srcByteOffset + 4, le);
+    outputData[outputIdx + 2] = srcView.getFloat32(srcByteOffset + 8, le);
+    outputData[outputIdx + 3] = srcView.getFloat32(srcByteOffset + 12, le);
+  }
+}
+
 export async function decodeTIFFFloat(buffer: ArrayBuffer): Promise<TIFFDecodeResult> {
   const view = new DataView(buffer);
   const byteOrder = view.getUint16(0, false);
@@ -632,12 +677,15 @@ export async function decodeTIFFFloat(buffer: ArrayBuffer): Promise<TIFFDecodeRe
     );
   }
 
-  if (samplesPerPixel < 3 || samplesPerPixel > 4) {
+  if (samplesPerPixel < 1) {
     throw new DecoderError(
       'TIFF',
-      `Unsupported samples per pixel: ${samplesPerPixel}. Only 3 (RGB) or 4 (RGBA) are supported.`,
+      `Unsupported samples per pixel: ${samplesPerPixel}. At least 1 sample per pixel is required.`,
     );
   }
+
+  // For 5+ channels, we only read the first 4 (RGBA) and ignore extras
+  const readChannels = Math.min(samplesPerPixel, 4);
 
   // Detect tiled vs strip layout
   const tileWidth = getTagSingleValue(view, tags, TAG_TILE_WIDTH, le, 0);
@@ -678,8 +726,8 @@ export async function decodeTIFFFloat(buffer: ArrayBuffer): Promise<TIFFDecodeRe
   const totalPixels = width * height;
   const outputData = new Float32Array(totalPixels * 4); // Always RGBA
 
-  // Initialize alpha to 1.0 if RGB input
-  if (samplesPerPixel === 3) {
+  // Initialize alpha to 1.0 if input has no alpha channel (1, 2, or 3 channels)
+  if (readChannels < 4) {
     for (let i = 3; i < outputData.length; i += 4) {
       outputData[i] = 1.0;
     }
@@ -709,13 +757,7 @@ export async function decodeTIFFFloat(buffer: ArrayBuffer): Promise<TIFFDecodeRe
 
         if (srcByteOffset + bytesPerPixel > buffer.byteLength) break;
 
-        for (let c = 0; c < samplesPerPixel && c < 4; c++) {
-          outputData[outputIdx + c] = view.getFloat32(srcByteOffset + c * 4, le);
-        }
-
-        if (samplesPerPixel === 3) {
-          outputData[outputIdx + 3] = 1.0;
-        }
+        expandPixelToRGBA(view, srcByteOffset, outputData, outputIdx, readChannels, le);
       }
     } else {
       // Compressed path — validate buffer bounds
@@ -750,13 +792,7 @@ export async function decodeTIFFFloat(buffer: ArrayBuffer): Promise<TIFFDecodeRe
 
         if (srcByteOffset + bytesPerPixel > decompressed.length) break;
 
-        for (let c = 0; c < samplesPerPixel && c < 4; c++) {
-          outputData[outputIdx + c] = stripView.getFloat32(srcByteOffset + c * 4, le);
-        }
-
-        if (samplesPerPixel === 3) {
-          outputData[outputIdx + 3] = 1.0;
-        }
+        expandPixelToRGBA(stripView, srcByteOffset, outputData, outputIdx, readChannels, le);
       }
     }
 
@@ -806,9 +842,10 @@ async function decodeTiledTIFF(
   const totalPixels = width * height;
   const outputData = new Float32Array(totalPixels * 4); // Always RGBA
   const bytesPerPixel = samplesPerPixel * 4; // float32
+  const readChannels = Math.min(samplesPerPixel, 4);
 
-  // Initialize alpha to 1.0 if RGB input
-  if (samplesPerPixel === 3) {
+  // Initialize alpha to 1.0 if input has no alpha channel
+  if (readChannels < 4) {
     for (let i = 3; i < outputData.length; i += 4) {
       outputData[i] = 1.0;
     }
@@ -854,13 +891,7 @@ async function decodeTiledTIFF(
 
             if (srcByteOffset + bytesPerPixel > buffer.byteLength) continue;
 
-            for (let c = 0; c < samplesPerPixel && c < 4; c++) {
-              outputData[outputIdx + c] = view.getFloat32(srcByteOffset + c * 4, le);
-            }
-
-            if (samplesPerPixel === 3) {
-              outputData[outputIdx + 3] = 1.0;
-            }
+            expandPixelToRGBA(view, srcByteOffset, outputData, outputIdx, readChannels, le);
           }
         }
       } else {
@@ -898,13 +929,7 @@ async function decodeTiledTIFF(
 
             if (srcByteOffset + bytesPerPixel > decompressed.length) continue;
 
-            for (let c = 0; c < samplesPerPixel && c < 4; c++) {
-              outputData[outputIdx + c] = tileView.getFloat32(srcByteOffset + c * 4, le);
-            }
-
-            if (samplesPerPixel === 3) {
-              outputData[outputIdx + 3] = 1.0;
-            }
+            expandPixelToRGBA(tileView, srcByteOffset, outputData, outputIdx, readChannels, le);
           }
         }
       }

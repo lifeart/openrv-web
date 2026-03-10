@@ -509,17 +509,17 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The audio-scrub control is cramped or clipped inside the volume popout instead of being cleanly readable and clickable.
   - A real playback option is present in the DOM and in app wiring, but its header UI makes it unnecessarily hard to discover and use.
 
-### 44. Network Sync hardcodes participant names and never exposes the user name the rest of the app supports
+### 44. Network Sync has no real in-panel name entry and falls back to generic `Host` / `User` labels when no stored name exists
 
 - Severity: Medium
 - Area: Collaboration UI, session identity
 - Evidence:
   - `NetworkControl` defines `createRoom` / `joinRoom` events that carry a `userName` in [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L28).
-  - The actual UI emits hardcoded names instead of collecting or loading a real one: auto-join emits `User` in [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L421), manual join emits `User` in [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L972), and create emits `Host` from a truthy-object check in [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L454).
-  - The app already has a real user-name preference and uses it in other collaboration-facing UI such as notes in [src/ui/components/NotePanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NotePanel.ts#L949), but Network Sync never reads it and exposes no name input.
+  - The control now reads `generalPrefs.userName` through `getUserName(...)`, but if that preference is missing it still falls back to generic labels: auto-join/manual join use `User`, and create-room falls back to `Host` / `User`, in [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L421), [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L455), [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L960), and [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L980).
+  - The visible panel still exposes no direct per-room display-name input, so the collaboration identity shown to peers depends on an external stored preference rather than the join/create flow itself.
 - Impact:
-  - Every participant appears as a generic `User` or `Host`, which makes the connected-user list much less informative in real sessions.
-  - The collaboration stack supports user identity, but the UI strips that meaning away at the entry point.
+  - First-time or shared-browser users can still appear as generic `User` / `Host`, which makes the connected-user list less informative in real sessions.
+  - The collaboration stack supports user identity, but the shipped entry flow still does not let users set or confirm that identity where they actually create or join a room.
 
 ### 45. Closing HSL Qualifier can leave the eyedropper armed and the viewer in a hidden pick state
 
@@ -818,17 +818,17 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Clicking the mini histogram can close the full histogram when the user expected an “open” affordance.
   - That makes the right-panel scopes preview less predictable, especially when users bounce between the inspector and the QC toolbar.
 
-### 70. The auto-save indicator is clickable for settings and retry, but it is not keyboard-focusable
+### 70. The auto-save indicator keeps the same accessible label even when it changes from settings to retry
 
-- Severity: Medium
-- Area: Header utility UI, keyboard accessibility
+- Severity: Low
+- Area: Header utility UI, accessibility
 - Evidence:
-  - `AutoSaveIndicator` builds its interactive root as a plain `div` in [src/ui/components/AutoSaveIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/AutoSaveIndicator.ts#L42).
-  - That root gets a click handler for retry/settings behavior in [src/ui/components/AutoSaveIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/AutoSaveIndicator.ts#L89), but it is never given button semantics, `tabindex`, or keyboard activation handling.
-  - The component is mounted into the header utility area as a visible interactive status element through [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L65) and [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1569).
+  - `AutoSaveIndicator` is now keyboard-focusable and button-like, with `tabindex="0"`, `role="button"`, and Enter/Space activation in [src/ui/components/AutoSaveIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/AutoSaveIndicator.ts#L88) through [src/ui/components/AutoSaveIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/AutoSaveIndicator.ts#L104).
+  - Its accessible name is hardcoded once as `Auto-save settings` in [src/ui/components/AutoSaveIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/AutoSaveIndicator.ts#L89) through [src/ui/components/AutoSaveIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/AutoSaveIndicator.ts#L91).
+  - In the error state the same control becomes a retry surface, with visible text `Save failed`, tooltip `Auto-save failed - click to retry`, and click behavior that calls the retry callback in [src/ui/components/AutoSaveIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/AutoSaveIndicator.ts#L106) through [src/ui/components/AutoSaveIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/AutoSaveIndicator.ts#L113) and [src/ui/components/AutoSaveIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/AutoSaveIndicator.ts#L514) through [src/ui/components/AutoSaveIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/AutoSaveIndicator.ts#L520).
 - Impact:
-  - Mouse users can open auto-save settings or retry a failed save, but keyboard users cannot focus the same control.
-  - A header element that visibly behaves like an action surface is effectively inaccessible unless the user happens to click it.
+  - Screen-reader and keyboard users are told the control is for settings even when the live action has switched to retrying a failed auto-save.
+  - That makes the error-recovery affordance less understandable precisely when the user needs it most.
 
 ### 71. The playback-speed control advertises a menu button, but default activation does not open its menu
 
@@ -2098,18 +2098,18 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The app has a nominal “unified preferences” portability/reset system, but users cannot actually invoke it from the shipped UI.
   - That makes all of the backup/import/reset logic much less useful in practice than the code structure suggests.
 
-### 173. Annotation JSON support is export-only in the shipped app
+### 173. Annotation JSON import exists, but the shipped UI hardwires it to destructive replace mode
 
 - Severity: Medium
 - Area: Annotation workflow / interchange
 - Evidence:
-  - The export menu exposes `Export Annotations (JSON)` in [src/ui/components/ExportControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ExportControl.ts#L197).
-  - Playback wiring hooks that menu item to `downloadAnnotationsJSON(...)` in [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L167).
-  - The annotation utility layer also implements `parseAnnotationsJSON(...)` and `applyAnnotationsJSON(...)` in [src/utils/export/AnnotationJSONExporter.ts](/Users/lifeart/Repos/openrv-web/src/utils/export/AnnotationJSONExporter.ts#L179) and [src/utils/export/AnnotationJSONExporter.ts](/Users/lifeart/Repos/openrv-web/src/utils/export/AnnotationJSONExporter.ts#L218).
-  - A production source search finds no runtime caller of `parseAnnotationsJSON(...)` or `applyAnnotationsJSON(...)`.
+  - The shipped Export menu now exposes both `Export Annotations (JSON)` and `Import Annotations (JSON)` in [src/ui/components/ExportControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ExportControl.ts#L205) through [src/ui/components/ExportControl.ts#L208).
+  - Playback wiring does call `parseAnnotationsJSON(...)` and `applyAnnotationsJSON(...)`, but it always passes `{ mode: 'replace' }` in [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L253) through [src/AppPlaybackWiring.ts#L274).
+  - The lower-level annotation utility supports both `mode: 'merge'` and `frameOffset`, but those options are never surfaced in the shipped UI in [src/utils/export/AnnotationJSONExporter.ts](/Users/lifeart/Repos/openrv-web/src/utils/export/AnnotationJSONExporter.ts#L198) through [src/utils/export/AnnotationJSONExporter.ts#L224).
+  - The success alert explicitly tells the user that existing annotations were replaced in [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L273) through [src/AppPlaybackWiring.ts#L274).
 - Impact:
-  - Users can export annotations to JSON, but the shipped app provides no way to re-import that JSON.
-  - That makes the annotation JSON format effectively archival/export-only rather than a practical interchange workflow.
+  - Users can re-import annotation JSON, but only by wiping the current annotation set.
+  - That makes the built-in interchange workflow much less useful for review updates, retimed shots, or layered feedback where merge/offset behavior is the safer default.
 
 ### 174. Marker import is merge-only in the shipped UI and silently drops frame collisions
 
@@ -4474,6 +4474,128 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Users following the guide can look for an on-viewer status readout that never appears.
   - That makes profile cycling feel less observable than the docs imply, especially when using only the keyboard shortcut.
+
+### 363. The shortcut-cheat-sheet docs promise outside-click dismissal, but the shipped overlay has no such path
+
+- Severity: Low
+- Area: Documentation / shortcut help UI
+- Evidence:
+  - The keyboard-shortcuts guide says the shortcut cheat sheet "is dismissed by pressing `Escape` or clicking outside the panel" in [docs/reference/keyboard-shortcuts.md](/Users/lifeart/Repos/openrv-web/docs/reference/keyboard-shortcuts.md#L185) through [docs/reference/keyboard-shortcuts.md#L187).
+  - The shipped `ShortcutCheatSheet` component only exposes `show()`, `hide()`, `toggle()`, and `isVisible()` around a bare overlay element in [src/ui/components/ShortcutCheatSheet.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ShortcutCheatSheet.ts#L31) through [src/ui/components/ShortcutCheatSheet.ts#L70); it does not register any outside-click or backdrop-dismiss listener.
+  - Production dismissal is wired through the global `panel.close` Escape path, which explicitly hides the cheat sheet when visible in [src/services/KeyboardActionMap.ts](/Users/lifeart/Repos/openrv-web/src/services/KeyboardActionMap.ts#L462) through [src/services/KeyboardActionMap.ts#L466).
+- Impact:
+  - Users can follow the docs, click outside the `?` overlay, and get no dismissal even though the guide says that interaction should work.
+  - That makes the shortcut-help surface feel stuck or inconsistent unless the user already knows the keyboard-only exit path.
+
+### 364. The annotation-import docs promise merge and frame-offset workflows, but the shipped UI always replaces in place
+
+- Severity: Medium
+- Area: Documentation / annotation import workflow
+- Evidence:
+  - The annotation export/import guide says annotation import supports `Merge` and `Frame offset` workflows in [docs/annotations/export.md](/Users/lifeart/Repos/openrv-web/docs/annotations/export.md#L25) through [docs/annotations/export.md#L31).
+  - The shipped Export menu exposes only a single `Import Annotations (JSON)` action in [src/ui/components/ExportControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ExportControl.ts#L205) through [src/ui/components/ExportControl.ts#L209).
+  - Production import wiring always calls `applyAnnotationsJSON(...)` with `{ mode: 'replace' }` and tells the user "Existing annotations were replaced" in [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L253) through [src/AppPlaybackWiring.ts#L274).
+  - The lower-level utility still supports both `mode: 'merge'` and `frameOffset`, but the shipped UI never exposes either option in [src/utils/export/AnnotationJSONExporter.ts](/Users/lifeart/Repos/openrv-web/src/utils/export/AnnotationJSONExporter.ts#L199) through [src/utils/export/AnnotationJSONExporter.ts#L218).
+- Impact:
+  - Users following the docs can expect to merge imported annotations into an existing review or shift them for retimed media, but the live app only offers destructive replacement.
+  - That turns a documented interchange workflow into a lossy overwrite operation unless the user writes code against the utility layer.
+
+### 365. The session-management docs tell users to delete auto-save entries from the Snapshot Panel, but that panel does not manage auto-saves
+
+- Severity: Medium
+- Area: Documentation / session-storage cleanup
+- Evidence:
+  - The session-management guide says, "To free storage, delete old snapshots and auto-save entries from the Snapshot Panel" in [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L180) through [docs/advanced/session-management.md#L186).
+  - The shipped `SnapshotPanel` is a snapshot browser with `Create Snapshot`, `Import`, and per-snapshot restore/export/delete actions in [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L1) through [src/ui/components/SnapshotPanel.ts#L10) and [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L187) through [src/ui/components/SnapshotPanel.ts#L249).
+  - The underlying `SnapshotManager` models manual snapshots and auto-checkpoints, not `AutoSaveManager` entries, in [src/core/session/SnapshotManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SnapshotManager.ts#L5) through [src/core/session/SnapshotManager.ts#L24) and [src/core/session/SnapshotManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SnapshotManager.ts#L121) through [src/core/session/SnapshotManager.ts#L183).
+  - The same docs page separately describes a `History Panel` as the place for auto-save history and recovery in [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L190) through [docs/advanced/session-management.md#L199), which does not match the shipped history UI either.
+- Impact:
+  - Users trying to free storage via the documented panel cannot actually remove auto-save entries there, because that panel only manages snapshots and auto-checkpoints.
+  - That makes a concrete maintenance workflow in the docs impossible to complete from the named UI.
+
+### 366. The annotation-export docs say the export items appear only when annotations exist, but the shipped menu shows them all the time
+
+- Severity: Low
+- Area: Documentation / export menu behavior
+- Evidence:
+  - The annotation export page says "Both export options appear in the Export dropdown menu ... when annotations exist in the session" in [docs/annotations/export.md](/Users/lifeart/Repos/openrv-web/docs/annotations/export.md#L84) through [docs/annotations/export.md#L89).
+  - The shipped `ExportControl` builds `Export Annotations (JSON)` and `Export Annotations (PDF)` as unconditional menu items in [src/ui/components/ExportControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ExportControl.ts#L205) through [src/ui/components/ExportControl.ts#L209).
+  - There is no production visibility guard around those menu items based on current annotation count; the control builds the same menu structure up front.
+- Impact:
+  - Users can read the docs and expect the annotation export entries to appear only after creating annotations, but the shipped menu always contains them.
+  - That weakens the docs as a guide to real UI state and makes the menu behavior look inconsistent with the documented workflow.
+
+### 367. The FAQ still tells users plain `L` cycles loop mode, but the real shortcut is `Ctrl+L`
+
+- Severity: Low
+- Area: Documentation / playback shortcuts
+- Evidence:
+  - The FAQ says, "Press `L` to cycle between" loop modes in [docs/reference/faq.md](/Users/lifeart/Repos/openrv-web/docs/reference/faq.md#L67) through [docs/reference/faq.md#L69).
+  - The canonical keyboard shortcuts page documents `Ctrl+L` for loop-mode cycling in [docs/reference/keyboard-shortcuts.md](/Users/lifeart/Repos/openrv-web/docs/reference/keyboard-shortcuts.md#L52).
+  - The shipped header tooltip also advertises `Cycle loop mode (Ctrl+L)` in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L325) through [src/ui/components/layout/HeaderBar.ts#L326).
+- Impact:
+  - Users following the FAQ can press plain `L`, change playback speed instead of loop mode, and conclude the app ignored the documented shortcut.
+  - That creates avoidable confusion in a basic playback workflow that already has an overloaded key space.
+
+### 368. The review docs promise a shot-status badge in the header, but production has no such header status UI
+
+- Severity: Medium
+- Area: Documentation / review workflow UI
+- Evidence:
+  - The review workflow guide says, "The current shot status is displayed as a colored badge in the header bar next to the source name" and that it follows the visible clip during playlist playback in [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L26).
+  - A production UI search finds status badges only in note and ShotGrid-related surfaces, such as [src/ui/components/NotePanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NotePanel.ts#L522) and [src/ui/components/ShotGridPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ShotGridPanel.ts#L7), not in the main header bar.
+  - There is no corresponding header-bar component or wiring path that reads `StatusManager` and renders a source-adjacent status badge in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts).
+- Impact:
+  - Users following the review docs can look for a persistent header-level status readout that never appears in the shipped app.
+  - That makes shot-status tracking feel partially missing even before users hit the deeper limitation that there is no real production status-management UI.
+
+### 369. The network-sync docs say the header badge shows participant count, but production hides it for a one-person room
+
+- Severity: Low
+- Area: Documentation / collaboration header UI
+- Evidence:
+  - The network-sync guide says, "The network button badge displays the current participant count" in [docs/advanced/network-sync.md](/Users/lifeart/Repos/openrv-web/docs/advanced/network-sync.md#L45) through [docs/advanced/network-sync.md#L47).
+  - The shipped `NetworkControl` only shows the badge when `count > 1`; for a solo host or solo reconnect state it explicitly hides the badge in [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L1151) through [src/ui/components/NetworkControl.ts#L1158).
+- Impact:
+  - Users following the docs can expect a visible `1` badge after creating a room, but the shipped header shows no participant count until someone else joins.
+  - That makes the header control less informative than the docs imply during the common “host waiting for others” state.
+
+### 370. The network-sync docs say the host is labeled `You (Host)`, but production only shows a plain `Host` badge
+
+- Severity: Low
+- Area: Documentation / collaboration participant list
+- Evidence:
+  - The network-sync guide says the connection panel labels the host as `You (Host)` in [docs/advanced/network-sync.md](/Users/lifeart/Repos/openrv-web/docs/advanced/network-sync.md#L45).
+  - The shipped user-list renderer shows `user.name` and, when `user.isHost`, appends a badge whose text is just `Host` in [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L1303) through [src/ui/components/NetworkControl.ts#L1320).
+  - There is no production self/other distinction in that label path, so the host never gets a literal `You (Host)` treatment.
+- Impact:
+  - Users following the guide can expect a self-aware host label in the participant list and instead see only a generic host badge.
+  - That makes the participant list slightly less clear in collaborative sessions, especially when the stored display name is also generic.
+
+### 371. The playback docs describe a labeled loop-mode button, but production renders an icon-only compact control
+
+- Severity: Low
+- Area: Documentation / playback controls
+- Evidence:
+  - The loop-mode guide says the header button "shows an icon and label (e.g., `Loop`, `Ping`, `Once`) and has a minimum width of 70px" in [docs/playback/loop-modes-stepping.md](/Users/lifeart/Repos/openrv-web/docs/playback/loop-modes-stepping.md#L39).
+  - The UI overview likewise says the loop control "displays current mode (Loop, Ping, Once)" in [docs/getting-started/ui-overview.md](/Users/lifeart/Repos/openrv-web/docs/getting-started/ui-overview.md#L84).
+  - The shipped header creates the loop button with a `28px` minimum width in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L325) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L328).
+  - Runtime updates replace the button contents with SVG only and move the text label into `aria-label`, not visible UI, in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1346) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1360).
+- Impact:
+  - Users following the docs can look for visible `Loop` / `Ping` / `Once` text in the header and instead find only a compact icon.
+  - That makes the current mode less glanceable than the documentation implies, especially for users still learning the transport controls.
+
+### 372. Production 360 auto-detection throws away spherical metadata and falls back to aspect ratio only
+
+- Severity: Medium
+- Area: Viewer / spherical projection
+- Evidence:
+  - The viewer-navigation guide says 360 detection works via metadata or 2:1 aspect ratio in [docs/playback/viewer-navigation.md](/Users/lifeart/Repos/openrv-web/docs/playback/viewer-navigation.md#L90) through [docs/playback/viewer-navigation.md](/Users/lifeart/Repos/openrv-web/docs/playback/viewer-navigation.md#L97).
+  - The detection helper does support explicit `isSpherical` and `projectionType === 'equirectangular'` metadata in [src/render/SphericalProjection.ts](/Users/lifeart/Repos/openrv-web/src/render/SphericalProjection.ts#L320) through [src/render/SphericalProjection.ts](/Users/lifeart/Repos/openrv-web/src/render/SphericalProjection.ts#L333).
+  - But the production source-load path calls `detect360Content({}, width, height)` with an empty metadata object in [src/services/LayoutOrchestrator.ts](/Users/lifeart/Repos/openrv-web/src/services/LayoutOrchestrator.ts#L409) through [src/services/LayoutOrchestrator.ts](/Users/lifeart/Repos/openrv-web/src/services/LayoutOrchestrator.ts#L417).
+- Impact:
+  - Metadata-tagged 360 content that is not close to 2:1 will not auto-enable spherical viewing even though the underlying detector supports that path.
+  - Explicit non-spherical metadata also cannot suppress 2:1 false positives, because production never forwards the metadata to the detector.
 
 ## Validation Notes
 

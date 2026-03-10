@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { buildActionHandlers, type KeyboardActionDeps } from './KeyboardActionMap';
+import * as Modal from '../ui/components/shared/Modal';
 
 // ---------------------------------------------------------------------------
 // Mock getThemeManager (module-level singleton)
@@ -16,6 +17,8 @@ const mockPreferencesManager = {
 vi.mock('../core/PreferencesManager', () => ({
   getCorePreferencesManager: () => mockPreferencesManager,
 }));
+
+const showAlertSpy = vi.spyOn(Modal, 'showAlert').mockReturnValue(Promise.resolve());
 
 // ---------------------------------------------------------------------------
 // Helpers to build lightweight test doubles
@@ -588,6 +591,23 @@ describe('buildActionHandlers', () => {
     expect(deps.viewer.copyFrameToClipboard).toHaveBeenCalledWith(false);
   });
 
+  it('export.copyFrame shows alert when clipboard copy fails (#196)', async () => {
+    showAlertSpy.mockClear();
+    deps.viewer.copyFrameToClipboard.mockResolvedValue(false);
+    await handlers['export.copyFrame']!();
+    expect(showAlertSpy).toHaveBeenCalledWith(
+      'Failed to copy frame to clipboard. Your browser may have denied clipboard access.',
+      { type: 'warning', title: 'Clipboard Unavailable' },
+    );
+  });
+
+  it('export.copyFrame does not show alert when clipboard copy succeeds (#196)', async () => {
+    showAlertSpy.mockClear();
+    deps.viewer.copyFrameToClipboard.mockResolvedValue(true);
+    await handlers['export.copyFrame']!();
+    expect(showAlertSpy).not.toHaveBeenCalled();
+  });
+
   // -- Undo/Redo ---------------------------------------------------------
 
   it('edit.undo calls paintEngine.undo', () => {
@@ -831,5 +851,98 @@ describe('buildActionHandlers', () => {
   it('view.zoom1to8 calls viewer.smoothSetPixelRatio(0.125)', () => {
     handlers['view.zoom1to8']!();
     expect(deps.viewer.smoothSetPixelRatio).toHaveBeenCalledWith(0.125);
+  });
+
+  // =========================================================================
+  // Client mode action gating (#195)
+  // =========================================================================
+
+  describe('client mode action gating (#195)', () => {
+    it('without clientMode, all actions execute normally', () => {
+      // Default deps have no clientMode
+      handlers['edit.undo']!();
+      expect(deps.paintEngine.undo).toHaveBeenCalledOnce();
+    });
+
+    it('with clientMode, allowed actions execute normally', () => {
+      const clientMode = {
+        isActionAllowed: vi.fn().mockImplementation((action: string) => action.startsWith('playback.')),
+      };
+      deps.clientMode = clientMode;
+      const gatedHandlers = buildActionHandlers(deps);
+
+      gatedHandlers['playback.toggle']!();
+      expect(deps.session.togglePlayback).toHaveBeenCalledOnce();
+      expect(clientMode.isActionAllowed).toHaveBeenCalledWith('playback.toggle');
+    });
+
+    it('with clientMode, blocked actions are silently ignored', () => {
+      const clientMode = {
+        isActionAllowed: vi.fn().mockImplementation((action: string) => action.startsWith('playback.')),
+      };
+      deps.clientMode = clientMode;
+      const gatedHandlers = buildActionHandlers(deps);
+
+      // edit.undo is not a playback action, so it should be blocked
+      gatedHandlers['edit.undo']!();
+      expect(deps.paintEngine.undo).not.toHaveBeenCalled();
+      expect(clientMode.isActionAllowed).toHaveBeenCalledWith('edit.undo');
+    });
+
+    it('with clientMode, paint actions are blocked', () => {
+      const clientMode = {
+        isActionAllowed: vi.fn().mockReturnValue(false),
+      };
+      deps.clientMode = clientMode;
+      const gatedHandlers = buildActionHandlers(deps);
+
+      gatedHandlers['paint.pen']!();
+      expect(deps.controls.paintToolbar.handleKeyboard).not.toHaveBeenCalled();
+    });
+
+    it('with clientMode, view actions pass through when allowed', () => {
+      const clientMode = {
+        isActionAllowed: vi.fn().mockReturnValue(true),
+      };
+      deps.clientMode = clientMode;
+      const gatedHandlers = buildActionHandlers(deps);
+
+      gatedHandlers['view.fitToWindow']!();
+      expect(deps.viewer.smoothFitToWindow).toHaveBeenCalledOnce();
+    });
+
+    it('with clientMode=null, all actions execute normally', () => {
+      deps.clientMode = null;
+      const gatedHandlers = buildActionHandlers(deps);
+
+      gatedHandlers['edit.undo']!();
+      expect(deps.paintEngine.undo).toHaveBeenCalledOnce();
+    });
+
+    it('blocked handler does not throw (silent no-op)', () => {
+      const clientMode = {
+        isActionAllowed: vi.fn().mockReturnValue(false),
+      };
+      deps.clientMode = clientMode;
+      const gatedHandlers = buildActionHandlers(deps);
+
+      expect(() => gatedHandlers['edit.undo']!()).not.toThrow();
+      expect(() => gatedHandlers['paint.pen']!()).not.toThrow();
+      expect(() => gatedHandlers['color.toggleColorWheels']!()).not.toThrow();
+    });
+
+    it('normal mode (no client mode) is unaffected', () => {
+      // deps.clientMode is undefined by default
+      const normalHandlers = buildActionHandlers(deps);
+
+      normalHandlers['edit.undo']!();
+      expect(deps.paintEngine.undo).toHaveBeenCalledOnce();
+
+      normalHandlers['paint.pen']!();
+      expect(deps.controls.paintToolbar.handleKeyboard).toHaveBeenCalledWith('p');
+
+      normalHandlers['playback.toggle']!();
+      expect(deps.session.togglePlayback).toHaveBeenCalledOnce();
+    });
   });
 });

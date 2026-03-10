@@ -24,6 +24,7 @@ import { MarkersAPI } from './MarkersAPI';
 import { EventsAPI } from './EventsAPI';
 import { pluginRegistry } from '../plugin/PluginRegistry';
 import type { Plugin, PluginId, PluginState } from '../plugin/types';
+import { APIError } from '../core/errors';
 
 /**
  * Configuration passed to initialize the API.
@@ -74,20 +75,57 @@ export class OpenRVAPI {
   /** Plugin management */
   readonly plugins = {
     /** Register a plugin object */
-    register: (plugin: Plugin) => pluginRegistry.register(plugin),
+    register: (plugin: Plugin) => {
+      this.assertNotDisposed();
+      return pluginRegistry.register(plugin);
+    },
     /** Activate a registered plugin */
-    activate: (id: PluginId) => pluginRegistry.activate(id),
+    activate: (id: PluginId) => {
+      this.assertNotDisposed();
+      return pluginRegistry.activate(id);
+    },
     /** Deactivate an active plugin */
-    deactivate: (id: PluginId) => pluginRegistry.deactivate(id),
+    deactivate: (id: PluginId) => {
+      this.assertNotDisposed();
+      return pluginRegistry.deactivate(id);
+    },
     /** Load and register a plugin from a URL */
-    loadFromURL: (url: string) => pluginRegistry.loadFromURL(url),
+    loadFromURL: (url: string) => {
+      this.assertNotDisposed();
+      return pluginRegistry.loadFromURL(url);
+    },
     /** Get current state of a plugin */
-    getState: (id: PluginId): PluginState | undefined => pluginRegistry.getState(id),
+    getState: (id: PluginId): PluginState | undefined => {
+      this.assertNotDisposed();
+      return pluginRegistry.getState(id);
+    },
     /** List all registered plugin IDs */
-    list: () => pluginRegistry.getRegisteredIds(),
+    list: () => {
+      this.assertNotDisposed();
+      return pluginRegistry.getRegisteredIds();
+    },
+    /** Dispose a plugin (deactivate + run cleanup; must unregister before re-registering) */
+    dispose: (id: PluginId) => {
+      this.assertNotDisposed();
+      return pluginRegistry.dispose(id);
+    },
+    /** Unregister a disposed plugin, removing it entirely so it can be re-registered */
+    unregister: (id: PluginId) => {
+      this.assertNotDisposed();
+      return pluginRegistry.unregister(id);
+    },
   };
 
   private _ready = false;
+
+  /**
+   * Throw an `APIError` if the API has been disposed.
+   */
+  private assertNotDisposed(): void {
+    if (!this._ready) {
+      throw new APIError('Cannot use API after dispose() has been called');
+    }
+  }
 
   constructor(config: OpenRVAPIConfig) {
     this.playback = new PlaybackAPI(config.session);
@@ -127,6 +165,13 @@ export class OpenRVAPI {
    */
   dispose(): void {
     this._ready = false;
+    this.playback.dispose();
+    this.media.dispose();
+    this.audio.dispose();
+    this.loop.dispose();
+    this.view.dispose();
+    this.color.dispose();
+    this.markers.dispose();
     this.events.dispose();
   }
 }

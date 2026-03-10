@@ -37,6 +37,8 @@ export interface VideoLoadResult {
   codec?: string | null;
   codecFamily?: CodecFamily;
   unsupportedCodecError?: UnsupportedCodecError;
+  /** True if the video was detected as HDR but downgraded to SDR due to VideoSampleSink failure */
+  hdrDowngraded?: boolean;
 }
 
 @RegisterNode('RVVideoSource')
@@ -249,6 +251,7 @@ export class VideoSourceNode extends BaseSourceNode {
         useMediabunny: true,
         codec: metadata.codec,
         codecFamily: metadata.codecFamily,
+        hdrDowngraded: metadata.hdrDowngraded || undefined,
       };
     } catch (error) {
       // Check if this is an unsupported codec error

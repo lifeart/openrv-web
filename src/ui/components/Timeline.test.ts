@@ -4,10 +4,14 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Timeline } from './Timeline';
+import { TimelineContextMenu } from './TimelineContextMenu';
 import { Session } from '../../core/session/Session';
 import { PaintEngine } from '../../paint/PaintEngine';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 import type { Annotation } from '../../paint/types';
+import * as Modal from './shared/Modal';
+
+const showAlertSpy = vi.spyOn(Modal, 'showAlert').mockReturnValue(Promise.resolve());
 
 class TestTimeline extends Timeline {
   public drawCount = 0;
@@ -1579,6 +1583,83 @@ describe('Timeline', () => {
 
       addEventSpy.mockRestore();
       tl.dispose();
+    });
+  });
+
+  describe('clipboard error handling (#196)', () => {
+    it('TML-CLIP-001: onCopyTimecode shows alert when clipboard write fails', async () => {
+      showAlertSpy.mockClear();
+
+      // Spy on TimelineContextMenu.show to capture the onCopyTimecode callback
+      const showSpy = vi.spyOn(TimelineContextMenu.prototype, 'show');
+
+      // Trigger context menu
+      const canvas = timeline.render().querySelector('canvas') ?? timeline.render();
+      const contextEvent = new MouseEvent('contextmenu', {
+        clientX: 500,
+        clientY: 50,
+        bubbles: true,
+        cancelable: true,
+      });
+      canvas.dispatchEvent(contextEvent);
+
+      expect(showSpy).toHaveBeenCalled();
+      const options = showSpy.mock.calls[0]![0];
+
+      // Mock clipboard to fail
+      const writeTextMock = vi.fn().mockRejectedValue(new Error('Clipboard denied'));
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { writeText: writeTextMock },
+        writable: true,
+        configurable: true,
+      });
+
+      // Invoke the onCopyTimecode callback
+      options.onCopyTimecode('00:00:01:18');
+
+      await vi.waitFor(() => {
+        expect(showAlertSpy).toHaveBeenCalledWith(
+          'Failed to copy timecode to clipboard. Your browser may have denied clipboard access.',
+          { type: 'warning', title: 'Clipboard Unavailable' },
+        );
+      });
+
+      showSpy.mockRestore();
+    });
+
+    it('TML-CLIP-002: onCopyTimecode does not show alert when clipboard write succeeds', async () => {
+      showAlertSpy.mockClear();
+
+      const showSpy = vi.spyOn(TimelineContextMenu.prototype, 'show');
+
+      const canvas = timeline.render().querySelector('canvas') ?? timeline.render();
+      const contextEvent = new MouseEvent('contextmenu', {
+        clientX: 500,
+        clientY: 50,
+        bubbles: true,
+        cancelable: true,
+      });
+      canvas.dispatchEvent(contextEvent);
+
+      expect(showSpy).toHaveBeenCalled();
+      const options = showSpy.mock.calls[0]![0];
+
+      const writeTextMock = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { writeText: writeTextMock },
+        writable: true,
+        configurable: true,
+      });
+
+      options.onCopyTimecode('00:00:01:18');
+
+      // Wait for the promise to resolve
+      await vi.waitFor(() => {
+        expect(writeTextMock).toHaveBeenCalledWith('00:00:01:18');
+      });
+      expect(showAlertSpy).not.toHaveBeenCalled();
+
+      showSpy.mockRestore();
     });
   });
 });

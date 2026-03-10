@@ -32,6 +32,7 @@ export interface SessionMediaEvents extends EventMap {
   durationChanged: number;
   currentSourceChanged: number;
   unsupportedCodec: UnsupportedCodecInfo;
+  hdrDowngraded: { filename: string };
   representationChanged: {
     sourceIndex: number;
     previousRepId: string | null;
@@ -578,6 +579,10 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
         codecFamily: loadResult.codecFamily ?? 'unknown',
         error: loadResult.unsupportedCodecError,
       });
+    }
+
+    if (loadResult.hdrDowngraded) {
+      this.emit('hdrDowngraded', { filename: file.name });
     }
 
     const metadata = videoSourceNode.getMetadata();

@@ -7,11 +7,13 @@
 import type { Session } from '../core/session/Session';
 import type { PlaybackMode } from '../core/types/session';
 import { ValidationError } from '../core/errors';
+import { DisposableAPI } from './Disposable';
 
-export class PlaybackAPI {
+export class PlaybackAPI extends DisposableAPI {
   private session: Session;
 
   constructor(session: Session) {
+    super();
     this.session = session;
   }
 
@@ -24,6 +26,7 @@ export class PlaybackAPI {
    * ```
    */
   play(): void {
+    this.assertNotDisposed();
     this.session.play();
   }
 
@@ -36,6 +39,7 @@ export class PlaybackAPI {
    * ```
    */
   pause(): void {
+    this.assertNotDisposed();
     this.session.pause();
   }
 
@@ -48,6 +52,7 @@ export class PlaybackAPI {
    * ```
    */
   toggle(): void {
+    this.assertNotDisposed();
     this.session.togglePlayback();
   }
 
@@ -60,8 +65,8 @@ export class PlaybackAPI {
    * ```
    */
   stop(): void {
-    this.session.pause();
-    this.session.goToStart();
+    this.assertNotDisposed();
+    this.session.stop();
   }
 
   /**
@@ -76,6 +81,7 @@ export class PlaybackAPI {
    * ```
    */
   seek(frame: number): void {
+    this.assertNotDisposed();
     if (typeof frame !== 'number' || isNaN(frame)) {
       throw new ValidationError('seek() requires a valid frame number');
     }
@@ -97,6 +103,7 @@ export class PlaybackAPI {
    * ```
    */
   step(direction: number = 1): void {
+    this.assertNotDisposed();
     if (typeof direction !== 'number' || isNaN(direction)) {
       throw new ValidationError('step() requires a valid number');
     }
@@ -113,14 +120,33 @@ export class PlaybackAPI {
       const totalFrames = this.session.currentSource?.duration ?? 0;
       if (totalFrames <= 0) return;
 
+      // Use in/out points as the effective range, matching PlaybackEngine behavior
+      const rangeStart = this.session.inPoint;
+      const rangeEnd = this.session.outPoint;
+      const rangeLength = rangeEnd - rangeStart + 1;
+
+      if (rangeLength <= 0) return;
+
       let targetFrame = currentFrame + steps;
 
       if (this.session.loopMode === 'loop') {
-        // Wrap around using modular arithmetic
-        targetFrame = ((((targetFrame - 1) % totalFrames) + totalFrames) % totalFrames) + 1;
+        // Wrap around within in/out range using modular arithmetic
+        targetFrame =
+          ((((targetFrame - rangeStart) % rangeLength) + rangeLength) % rangeLength) + rangeStart;
+      } else if (this.session.loopMode === 'pingpong') {
+        // Reflect off boundaries like a bouncing ball
+        let offset = targetFrame - rangeStart;
+        const cycle = rangeLength > 1 ? rangeLength - 1 : 1;
+        // Normalize offset to positive range for reflection
+        offset = ((offset % (2 * cycle)) + 2 * cycle) % (2 * cycle);
+        if (offset <= cycle) {
+          targetFrame = rangeStart + offset;
+        } else {
+          targetFrame = rangeEnd - (offset - cycle);
+        }
       } else {
-        // Clamp to valid range [1, totalFrames]
-        targetFrame = Math.max(1, Math.min(totalFrames, targetFrame));
+        // 'once': Clamp to in/out range
+        targetFrame = Math.max(rangeStart, Math.min(rangeEnd, targetFrame));
       }
 
       this.session.goToFrame(targetFrame);
@@ -140,6 +166,7 @@ export class PlaybackAPI {
    * ```
    */
   setSpeed(speed: number): void {
+    this.assertNotDisposed();
     if (typeof speed !== 'number' || isNaN(speed)) {
       throw new ValidationError('setSpeed() requires a valid number');
     }
@@ -159,6 +186,7 @@ export class PlaybackAPI {
    * ```
    */
   getSpeed(): number {
+    this.assertNotDisposed();
     return this.session.playbackSpeed;
   }
 
@@ -173,6 +201,7 @@ export class PlaybackAPI {
    * ```
    */
   isPlaying(): boolean {
+    this.assertNotDisposed();
     return this.session.isPlaying;
   }
 
@@ -187,6 +216,7 @@ export class PlaybackAPI {
    * ```
    */
   getCurrentFrame(): number {
+    this.assertNotDisposed();
     return this.session.currentFrame;
   }
 
@@ -201,6 +231,7 @@ export class PlaybackAPI {
    * ```
    */
   getTotalFrames(): number {
+    this.assertNotDisposed();
     return this.session.currentSource?.duration ?? 0;
   }
 
@@ -217,6 +248,7 @@ export class PlaybackAPI {
    * ```
    */
   setPlaybackMode(mode: PlaybackMode): void {
+    this.assertNotDisposed();
     if (mode !== 'realtime' && mode !== 'playAllFrames') {
       throw new ValidationError("setPlaybackMode() requires 'realtime' or 'playAllFrames'");
     }
@@ -234,6 +266,26 @@ export class PlaybackAPI {
    * ```
    */
   getPlaybackMode(): PlaybackMode {
+    this.assertNotDisposed();
     return this.session.playbackMode;
+  }
+
+  /**
+   * Get the measured (actual) playback FPS.
+   *
+   * During active playback, this returns the real throughput measured by the
+   * playback engine (rolling average updated every ~500 ms). When playback is
+   * stopped, returns `0`.
+   *
+   * @returns The measured FPS as a number (0 when not playing).
+   *
+   * @example
+   * ```ts
+   * const real = openrv.playback.getMeasuredFPS(); // e.g. 23.4
+   * ```
+   */
+  getMeasuredFPS(): number {
+    this.assertNotDisposed();
+    return this.session.effectiveFps;
   }
 }

@@ -143,6 +143,8 @@ export interface SessionEvents extends EventMap {
   audioError: AudioPlaybackError;
   // Codec events
   unsupportedCodec: UnsupportedCodecInfo;
+  /** Emitted when HDR video is silently downgraded to SDR due to VideoSampleSink failure */
+  hdrDowngraded: { filename: string };
   // Buffering events
   buffering: boolean;
   // Sub-frame interpolation events
@@ -157,6 +159,8 @@ export interface SessionEvents extends EventMap {
   // Note/comment events
   notesChanged: void;
   versionsChanged: void;
+  // Playback stopped (pause + return to start)
+  playbackStopped: void;
   statusChanged: { sourceIndex: number; status: string; previous: string };
   statusesChanged: void;
   // Range shifting events

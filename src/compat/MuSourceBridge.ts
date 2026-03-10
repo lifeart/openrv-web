@@ -19,6 +19,25 @@
 import type { SourceMediaInfo } from './types';
 
 /**
+ * Provider interface for reading pixel data from GPU-backed sources.
+ *
+ * Implementations should read the rendered pixel at the given source-space
+ * coordinates and return [R, G, B, A] as float values, or `null` when
+ * readback is unavailable (e.g. no active GL context).
+ */
+export interface PixelReadbackProvider {
+  /**
+   * Read a single pixel from the named source at (x, y).
+   * Returns [R, G, B, A] floats, or null if readback is not possible.
+   */
+  readSourcePixel(
+    sourceName: string,
+    x: number,
+    y: number,
+  ): [number, number, number, number] | null;
+}
+
+/**
  * Lazily resolve the openrv API from the global scope.
  */
 function getOpenRV(): {
@@ -110,6 +129,9 @@ export class MuSourceBridge {
 
   /** In-memory image source pixel data */
   private _imageSources = new Map<string, ImageSourcePixels>();
+
+  /** Optional GPU pixel readback provider for non-in-memory sources */
+  private _pixelReadbackProvider: PixelReadbackProvider | null = null;
 
   // =====================================================================
   // Source Listing & Queries (commands 52, 67-68)
@@ -423,17 +445,21 @@ export class MuSourceBridge {
    * Read a pixel value from a source.
    * Equivalent to Mu's `commands.sourcePixelValue(sourceName, x, y)`. (Mu #65)
    *
-   * Returns [R, G, B, A] as float values. Currently returns [0,0,0,0]
-   * since pixel sampling from GPU textures is not yet implemented.
+   * Returns [R, G, B, A] as float values.
+   *
+   * Resolution order:
+   * 1. In-memory image source data (created via newImageSource)
+   * 2. GPU readback via the injected PixelReadbackProvider
+   * 3. Returns `null` when no pixel data is available
    */
-  sourcePixelValue(sourceName: string, x: number, y: number): [number, number, number, number] {
+  sourcePixelValue(sourceName: string, x: number, y: number): [number, number, number, number] | null {
     // Validate source exists
     this._getSource(sourceName);
     if (typeof x !== 'number' || typeof y !== 'number') {
       throw new TypeError('sourcePixelValue() requires valid x, y coordinates');
     }
 
-    // Check if there's in-memory pixel data
+    // 1. Check if there's in-memory pixel data
     const imageData = this._imageSources.get(sourceName);
     if (imageData) {
       const ix = Math.floor(x);
@@ -448,9 +474,17 @@ export class MuSourceBridge {
           channels > 3 ? (imageData.data[idx + 3] ?? 0) : 1,
         ];
       }
+      // Out-of-bounds on an in-memory source
+      return null;
     }
 
-    return [0, 0, 0, 0];
+    // 2. Try GPU readback provider
+    if (this._pixelReadbackProvider) {
+      return this._pixelReadbackProvider.readSourcePixel(sourceName, x, y);
+    }
+
+    // 3. No pixel data available
+    return null;
   }
 
   /**
@@ -739,6 +773,16 @@ export class MuSourceBridge {
     const source = this._getSource(sourceName);
     source.startFrame = startFrame;
     source.endFrame = endFrame;
+  }
+
+  /**
+   * Set the pixel readback provider for GPU-backed source pixel reads.
+   *
+   * When set, `sourcePixelValue()` will delegate to this provider for
+   * sources that do not have in-memory pixel data (i.e. GPU-rendered sources).
+   */
+  setPixelReadbackProvider(provider: PixelReadbackProvider | null): void {
+    this._pixelReadbackProvider = provider;
   }
 
   /**

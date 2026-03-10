@@ -10,6 +10,7 @@ import type { CDLValues } from '../color/CDL';
 import type { ColorCurvesData, CurveChannel, CurvePoint } from '../color/ColorCurves';
 import { createDefaultCurvesData } from '../color/ColorCurves';
 import { ValidationError } from '../core/errors';
+import { DisposableAPI } from './Disposable';
 
 /**
  * Subset of ColorAdjustments exposed via the public API
@@ -61,12 +62,13 @@ export interface PublicColorCurvesUpdate {
 
 const CURVE_CHANNELS: Array<keyof ColorCurvesData> = ['master', 'red', 'green', 'blue'];
 
-export class ColorAPI {
+export class ColorAPI extends DisposableAPI {
   private colorControls: ColorAdjustmentProvider;
   private cdlControl: CDLProvider;
   private curvesControl: CurvesProvider;
 
   constructor(colorControls: ColorAdjustmentProvider, cdlControl: CDLProvider, curvesControl: CurvesProvider) {
+    super();
     this.colorControls = colorControls;
     this.cdlControl = cdlControl;
     this.curvesControl = curvesControl;
@@ -89,6 +91,7 @@ export class ColorAPI {
    * ```
    */
   setAdjustments(adjustments: Partial<PublicColorAdjustments>): void {
+    this.assertNotDisposed();
     if (typeof adjustments !== 'object' || adjustments === null || Array.isArray(adjustments)) {
       throw new ValidationError('setAdjustments() requires an object');
     }
@@ -136,6 +139,7 @@ export class ColorAPI {
    * ```
    */
   getAdjustments(): PublicColorAdjustments {
+    this.assertNotDisposed();
     const adj = this.colorControls.getAdjustments();
     return {
       exposure: adj.exposure,
@@ -162,6 +166,7 @@ export class ColorAPI {
    * ```
    */
   reset(): void {
+    this.assertNotDisposed();
     this.colorControls.reset();
   }
 
@@ -201,6 +206,7 @@ export class ColorAPI {
    * ```
    */
   setCDL(cdl: Partial<CDLValues>): void {
+    this.assertNotDisposed();
     if (typeof cdl !== 'object' || cdl === null || Array.isArray(cdl)) {
       throw new ValidationError('setCDL() requires an object');
     }
@@ -242,6 +248,7 @@ export class ColorAPI {
    * ```
    */
   getCDL(): CDLValues {
+    this.assertNotDisposed();
     const cdl = this.cdlControl.getCDL();
     return {
       slope: { r: cdl.slope.r, g: cdl.slope.g, b: cdl.slope.b },
@@ -266,6 +273,7 @@ export class ColorAPI {
    * ```
    */
   setCurves(curves: PublicColorCurvesUpdate): void {
+    this.assertNotDisposed();
     if (typeof curves !== 'object' || curves === null || Array.isArray(curves)) {
       throw new ValidationError('setCurves() requires an object');
     }
@@ -294,6 +302,7 @@ export class ColorAPI {
    * Returns a defensive deep copy of master/red/green/blue channels.
    */
   getCurves(): PublicColorCurvesData {
+    this.assertNotDisposed();
     const curves = this.curvesControl.getCurves();
     return {
       master: this.copyCurveChannel(curves.master),
@@ -307,6 +316,7 @@ export class ColorAPI {
    * Reset all curves to the default identity state.
    */
   resetCurves(): void {
+    this.assertNotDisposed();
     this.curvesControl.setCurves(createDefaultCurvesData());
   }
 

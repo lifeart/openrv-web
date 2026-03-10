@@ -5,7 +5,7 @@
  * LoopAPI, ViewAPI, ColorAPI, MarkersAPI, EventsAPI
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from '../utils/EventEmitter';
 import { OpenRVAPI } from './OpenRVAPI';
 import { PlaybackAPI } from './PlaybackAPI';
@@ -17,6 +17,8 @@ import { ColorAPI } from './ColorAPI';
 import { MarkersAPI } from './MarkersAPI';
 import { EventsAPI } from './EventsAPI';
 import type { OpenRVAPIConfig } from './OpenRVAPI';
+import { pluginRegistry } from '../plugin/PluginRegistry';
+import type { Plugin } from '../plugin/types';
 
 // ============================================================
 // Mock Factories
@@ -128,6 +130,11 @@ function createMockSession() {
   });
   session.goToStart = vi.fn(() => {
     session.currentFrame = session._inPoint;
+  });
+  session.stop = vi.fn(() => {
+    session.pause();
+    session.goToStart();
+    session.emit('playbackStopped', undefined);
   });
   session.goToEnd = vi.fn(() => {
     session.currentFrame = session._outPoint;
@@ -1644,5 +1651,676 @@ describe('EventsAPI', () => {
 
     events.emitError('test error');
     expect(handler).toHaveBeenCalledWith({ message: 'test error', code: undefined });
+  });
+
+  it('API-U076: audioError session event emits public error event', () => {
+    const handler = vi.fn();
+    events.on('error', handler);
+
+    session.emit('audioError', {
+      type: 'decode',
+      message: 'Cannot decode audio stream',
+    });
+
+    expect(handler).toHaveBeenCalledWith({
+      message: 'Audio error: Cannot decode audio stream',
+      code: 'AUDIO_DECODE',
+    });
+  });
+
+  it('API-U077: unsupportedCodec session event emits public error event', () => {
+    const handler = vi.fn();
+    events.on('error', handler);
+
+    session.emit('unsupportedCodec', {
+      filename: 'clip.mov',
+      codec: 'prores',
+      codecFamily: 'prores',
+      error: new Error('ProRes not supported'),
+    });
+
+    expect(handler).toHaveBeenCalledWith({
+      message: 'Unsupported codec "prores" in clip.mov',
+      code: 'UNSUPPORTED_CODEC',
+    });
+  });
+
+  it('API-U078: unsupportedCodec with null codec emits "unknown"', () => {
+    const handler = vi.fn();
+    events.on('error', handler);
+
+    session.emit('unsupportedCodec', {
+      filename: 'mystery.mkv',
+      codec: null,
+      codecFamily: 'unknown',
+      error: new Error('Unknown codec'),
+    });
+
+    expect(handler).toHaveBeenCalledWith({
+      message: 'Unsupported codec "unknown" in mystery.mkv',
+      code: 'UNSUPPORTED_CODEC',
+    });
+  });
+
+  it('API-U079: representationError session event emits public error event', () => {
+    const handler = vi.fn();
+    events.on('error', handler);
+
+    session.emit('representationError', {
+      sourceIndex: 2,
+      repId: 'rep-hd',
+      error: 'Network timeout loading representation',
+      userInitiated: true,
+    });
+
+    expect(handler).toHaveBeenCalledWith({
+      message: 'Representation error for source 2: Network timeout loading representation',
+      code: 'REPRESENTATION_ERROR',
+    });
+  });
+
+  it('API-U080: frameDecodeTimeout session event emits public error event', () => {
+    const handler = vi.fn();
+    events.on('error', handler);
+
+    session.emit('frameDecodeTimeout', 42);
+
+    expect(handler).toHaveBeenCalledWith({
+      message: 'Frame 42 decode timed out',
+      code: 'FRAME_DECODE_TIMEOUT',
+    });
+  });
+
+  it('API-U081: multiple error events from different sources accumulate', () => {
+    const handler = vi.fn();
+    events.on('error', handler);
+
+    session.emit('audioError', { type: 'autoplay', message: 'Blocked by browser policy' });
+    session.emit('frameDecodeTimeout', 10);
+    session.emit('unsupportedCodec', {
+      filename: 'test.mp4',
+      codec: 'av1',
+      codecFamily: 'av1',
+      error: new Error('AV1 not supported'),
+    });
+
+    expect(handler).toHaveBeenCalledTimes(3);
+    expect(handler).toHaveBeenNthCalledWith(1, {
+      message: 'Audio error: Blocked by browser policy',
+      code: 'AUDIO_AUTOPLAY',
+    });
+    expect(handler).toHaveBeenNthCalledWith(2, {
+      message: 'Frame 10 decode timed out',
+      code: 'FRAME_DECODE_TIMEOUT',
+    });
+    expect(handler).toHaveBeenNthCalledWith(3, {
+      message: 'Unsupported codec "av1" in test.mp4',
+      code: 'UNSUPPORTED_CODEC',
+    });
+  });
+
+  it('API-U082: error events stop after dispose()', () => {
+    const handler = vi.fn();
+    events.on('error', handler);
+
+    session.emit('audioError', { type: 'network', message: 'Network error' });
+    expect(handler).toHaveBeenCalledTimes(1);
+
+    events.dispose();
+
+    session.emit('audioError', { type: 'network', message: 'Second error' });
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it('API-U083: stop event fires when session emits playbackStopped', () => {
+    const stopHandler = vi.fn();
+    events.on('stop', stopHandler);
+
+    session.emit('playbackStopped', undefined);
+    expect(stopHandler).toHaveBeenCalledTimes(1);
+  });
+
+  it('API-U084: stop event is distinct from pause event', () => {
+    const stopHandler = vi.fn();
+    const pauseHandler = vi.fn();
+    events.on('stop', stopHandler);
+    events.on('pause', pauseHandler);
+
+    // A normal pause should not trigger stop
+    session.emit('playbackChanged', false);
+    expect(pauseHandler).toHaveBeenCalledTimes(1);
+    expect(stopHandler).toHaveBeenCalledTimes(0);
+
+    // A stop should trigger stop (and also pause via playbackChanged)
+    session.emit('playbackStopped', undefined);
+    expect(stopHandler).toHaveBeenCalledTimes(1);
+  });
+
+  it('API-U085: stop event unsubscribe works', () => {
+    const handler = vi.fn();
+    const unsub = events.on('stop', handler);
+
+    session.emit('playbackStopped', undefined);
+    expect(handler).toHaveBeenCalledTimes(1);
+
+    unsub();
+    session.emit('playbackStopped', undefined);
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it('API-U086: stop event not forwarded after dispose()', () => {
+    const handler = vi.fn();
+    events.on('stop', handler);
+
+    events.dispose();
+
+    session.emit('playbackStopped', undefined);
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('API-U087: once() works for stop event', () => {
+    const handler = vi.fn();
+    events.once('stop', handler);
+
+    session.emit('playbackStopped', undefined);
+    session.emit('playbackStopped', undefined);
+
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  // -- Issue #208: markerChange must include endFrame for duration markers --
+
+  it('API-U208a: markerChange includes endFrame for duration markers', () => {
+    const handler = vi.fn();
+    events.on('markerChange', handler);
+
+    const marksMap = new Map();
+    marksMap.set(10, { frame: 10, note: 'range', color: '#00ff00', endFrame: 25 });
+    session.emit('marksChanged', marksMap);
+
+    expect(handler).toHaveBeenCalledWith({
+      markers: [{ frame: 10, note: 'range', color: '#00ff00', endFrame: 25 }],
+    });
+  });
+
+  it('API-U208b: markerChange omits endFrame for point markers', () => {
+    const handler = vi.fn();
+    events.on('markerChange', handler);
+
+    const marksMap = new Map();
+    marksMap.set(5, { frame: 5, note: 'point', color: '#ff0000' });
+    session.emit('marksChanged', marksMap);
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    const payload = handler.mock.calls[0]![0];
+    expect(payload.markers).toHaveLength(1);
+    expect(payload.markers[0]).toEqual({ frame: 5, note: 'point', color: '#ff0000' });
+    expect(payload.markers[0]).not.toHaveProperty('endFrame');
+  });
+
+  it('API-U208c: markerChange handles mix of point and duration markers', () => {
+    const handler = vi.fn();
+    events.on('markerChange', handler);
+
+    const marksMap = new Map();
+    marksMap.set(1, { frame: 1, note: 'point', color: '#ff0000' });
+    marksMap.set(10, { frame: 10, note: 'range', color: '#00ff00', endFrame: 20 });
+    marksMap.set(30, { frame: 30, note: '', color: '#0000ff' });
+    session.emit('marksChanged', marksMap);
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    const payload = handler.mock.calls[0]![0];
+    expect(payload.markers).toHaveLength(3);
+
+    const point1 = payload.markers.find((m: any) => m.frame === 1);
+    const range = payload.markers.find((m: any) => m.frame === 10);
+    const point2 = payload.markers.find((m: any) => m.frame === 30);
+
+    expect(point1).not.toHaveProperty('endFrame');
+    expect(range!.endFrame).toBe(20);
+    expect(point2).not.toHaveProperty('endFrame');
+  });
+});
+
+// ============================================================
+// Disposed Guard Tests (Issue #206)
+// ============================================================
+
+describe('Sub-API disposed guards', () => {
+  let api: OpenRVAPI;
+
+  beforeEach(() => {
+    const config = createAPIConfig();
+    api = new OpenRVAPI(config);
+    api.dispose();
+  });
+
+  const DISPOSED_MSG = 'Cannot use API after dispose() has been called';
+
+  // -- PlaybackAPI --
+  it('API-U088: playback.play() throws after dispose', () => {
+    expect(() => api.playback.play()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U089: playback.pause() throws after dispose', () => {
+    expect(() => api.playback.pause()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U090: playback.toggle() throws after dispose', () => {
+    expect(() => api.playback.toggle()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U091: playback.stop() throws after dispose', () => {
+    expect(() => api.playback.stop()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U092: playback.seek() throws after dispose', () => {
+    expect(() => api.playback.seek(10)).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U093: playback.step() throws after dispose', () => {
+    expect(() => api.playback.step()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U094: playback.setSpeed() throws after dispose', () => {
+    expect(() => api.playback.setSpeed(2)).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U095: playback.getSpeed() throws after dispose', () => {
+    expect(() => api.playback.getSpeed()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U096: playback.isPlaying() throws after dispose', () => {
+    expect(() => api.playback.isPlaying()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U097: playback.getCurrentFrame() throws after dispose', () => {
+    expect(() => api.playback.getCurrentFrame()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U098: playback.getTotalFrames() throws after dispose', () => {
+    expect(() => api.playback.getTotalFrames()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U099: playback.setPlaybackMode() throws after dispose', () => {
+    expect(() => api.playback.setPlaybackMode('realtime')).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U100: playback.getPlaybackMode() throws after dispose', () => {
+    expect(() => api.playback.getPlaybackMode()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U101: playback.getMeasuredFPS() throws after dispose', () => {
+    expect(() => api.playback.getMeasuredFPS()).toThrow(DISPOSED_MSG);
+  });
+
+  // -- MediaAPI --
+  it('API-U102: media.getCurrentSource() throws after dispose', () => {
+    expect(() => api.media.getCurrentSource()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U103: media.getDuration() throws after dispose', () => {
+    expect(() => api.media.getDuration()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U104: media.getFPS() throws after dispose', () => {
+    expect(() => api.media.getFPS()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U105: media.getResolution() throws after dispose', () => {
+    expect(() => api.media.getResolution()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U106: media.hasMedia() throws after dispose', () => {
+    expect(() => api.media.hasMedia()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U107: media.getSourceCount() throws after dispose', () => {
+    expect(() => api.media.getSourceCount()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U108: media.loadProceduralSource() throws after dispose', () => {
+    expect(() => api.media.loadProceduralSource('smpte_bars' as any)).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U109: media.loadMovieProc() throws after dispose', () => {
+    expect(() => api.media.loadMovieProc('test.movieproc')).toThrow(DISPOSED_MSG);
+  });
+
+  // -- AudioAPI --
+  it('API-U110: audio.setVolume() throws after dispose', () => {
+    expect(() => api.audio.setVolume(0.5)).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U111: audio.getVolume() throws after dispose', () => {
+    expect(() => api.audio.getVolume()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U112: audio.mute() throws after dispose', () => {
+    expect(() => api.audio.mute()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U113: audio.unmute() throws after dispose', () => {
+    expect(() => api.audio.unmute()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U114: audio.isMuted() throws after dispose', () => {
+    expect(() => api.audio.isMuted()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U115: audio.toggleMute() throws after dispose', () => {
+    expect(() => api.audio.toggleMute()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U116: audio.setPreservesPitch() throws after dispose', () => {
+    expect(() => api.audio.setPreservesPitch(true)).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U117: audio.getPreservesPitch() throws after dispose', () => {
+    expect(() => api.audio.getPreservesPitch()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U118: audio.enableAudioScrub() throws after dispose', () => {
+    expect(() => api.audio.enableAudioScrub()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U119: audio.disableAudioScrub() throws after dispose', () => {
+    expect(() => api.audio.disableAudioScrub()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U120: audio.isAudioScrubEnabled() throws after dispose', () => {
+    expect(() => api.audio.isAudioScrubEnabled()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U121: audio.setAudioScrubEnabled() throws after dispose', () => {
+    expect(() => api.audio.setAudioScrubEnabled(true)).toThrow(DISPOSED_MSG);
+  });
+
+  // -- LoopAPI --
+  it('API-U122: loop.setMode() throws after dispose', () => {
+    expect(() => api.loop.setMode('loop')).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U123: loop.getMode() throws after dispose', () => {
+    expect(() => api.loop.getMode()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U124: loop.setInPoint() throws after dispose', () => {
+    expect(() => api.loop.setInPoint(10)).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U125: loop.setOutPoint() throws after dispose', () => {
+    expect(() => api.loop.setOutPoint(90)).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U126: loop.getInPoint() throws after dispose', () => {
+    expect(() => api.loop.getInPoint()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U127: loop.getOutPoint() throws after dispose', () => {
+    expect(() => api.loop.getOutPoint()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U128: loop.clearInOut() throws after dispose', () => {
+    expect(() => api.loop.clearInOut()).toThrow(DISPOSED_MSG);
+  });
+
+  // -- ViewAPI --
+  it('API-U129: view.setZoom() throws after dispose', () => {
+    expect(() => api.view.setZoom(2)).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U130: view.getZoom() throws after dispose', () => {
+    expect(() => api.view.getZoom()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U131: view.fitToWindow() throws after dispose', () => {
+    expect(() => api.view.fitToWindow()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U132: view.fitToWidth() throws after dispose', () => {
+    expect(() => api.view.fitToWidth()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U133: view.fitToHeight() throws after dispose', () => {
+    expect(() => api.view.fitToHeight()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U134: view.getFitMode() throws after dispose', () => {
+    expect(() => api.view.getFitMode()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U135: view.setPan() throws after dispose', () => {
+    expect(() => api.view.setPan(10, 20)).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U136: view.getPan() throws after dispose', () => {
+    expect(() => api.view.getPan()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U137: view.setChannel() throws after dispose', () => {
+    expect(() => api.view.setChannel('red')).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U138: view.getChannel() throws after dispose', () => {
+    expect(() => api.view.getChannel()).toThrow(DISPOSED_MSG);
+  });
+
+  // -- ColorAPI --
+  it('API-U139: color.setAdjustments() throws after dispose', () => {
+    expect(() => api.color.setAdjustments({ exposure: 1 })).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U140: color.getAdjustments() throws after dispose', () => {
+    expect(() => api.color.getAdjustments()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U141: color.reset() throws after dispose', () => {
+    expect(() => api.color.reset()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U142: color.setCDL() throws after dispose', () => {
+    expect(() => api.color.setCDL({ saturation: 1.2 })).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U143: color.getCDL() throws after dispose', () => {
+    expect(() => api.color.getCDL()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U144: color.setCurves() throws after dispose', () => {
+    expect(() => api.color.setCurves({ master: { enabled: false } })).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U145: color.getCurves() throws after dispose', () => {
+    expect(() => api.color.getCurves()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U146: color.resetCurves() throws after dispose', () => {
+    expect(() => api.color.resetCurves()).toThrow(DISPOSED_MSG);
+  });
+
+  // -- MarkersAPI --
+  it('API-U147: markers.add() throws after dispose', () => {
+    expect(() => api.markers.add(10)).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U148: markers.remove() throws after dispose', () => {
+    expect(() => api.markers.remove(10)).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U149: markers.getAll() throws after dispose', () => {
+    expect(() => api.markers.getAll()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U150: markers.get() throws after dispose', () => {
+    expect(() => api.markers.get(10)).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U151: markers.clear() throws after dispose', () => {
+    expect(() => api.markers.clear()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U152: markers.goToNext() throws after dispose', () => {
+    expect(() => api.markers.goToNext()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U153: markers.goToPrevious() throws after dispose', () => {
+    expect(() => api.markers.goToPrevious()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U154: markers.count() throws after dispose', () => {
+    expect(() => api.markers.count()).toThrow(DISPOSED_MSG);
+  });
+
+  // -- EventsAPI --
+  it('API-U155: events.on() throws after dispose', () => {
+    expect(() => api.events.on('frameChange', () => {})).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U156: events.off() throws after dispose', () => {
+    expect(() => api.events.off('frameChange', () => {})).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U157: events.once() throws after dispose', () => {
+    expect(() => api.events.once('frameChange', () => {})).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U158: events.getEventNames() throws after dispose', () => {
+    expect(() => api.events.getEventNames()).toThrow(DISPOSED_MSG);
+  });
+
+  // -- Plugins --
+  it('API-U159: plugins.register() throws after dispose', () => {
+    expect(() => api.plugins.register({ id: 'test', name: 'Test', version: '1.0.0', activate: vi.fn(), deactivate: vi.fn() } as any)).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U160: plugins.activate() throws after dispose', () => {
+    expect(() => api.plugins.activate('test')).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U161: plugins.deactivate() throws after dispose', () => {
+    expect(() => api.plugins.deactivate('test')).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U162: plugins.getState() throws after dispose', () => {
+    expect(() => api.plugins.getState('test')).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U163: plugins.list() throws after dispose', () => {
+    expect(() => api.plugins.list()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U165: plugins.dispose() throws after dispose', () => {
+    expect(() => api.plugins.dispose('test')).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U166: plugins.unregister() throws after dispose', () => {
+    expect(() => api.plugins.unregister('test')).toThrow(DISPOSED_MSG);
+  });
+
+  // -- OpenRVAPI.isReady() returns false after dispose --
+  it('API-U164: isReady() returns false after dispose', () => {
+    expect(api.isReady()).toBe(false);
+  });
+});
+
+// ============================================================
+// Plugin dispose / unregister via public API (Issue #209)
+// ============================================================
+
+describe('plugins.dispose() and plugins.unregister() via public API', () => {
+  let api: OpenRVAPI;
+  const PLUGIN_ID = 'test-dispose-209';
+
+  function makePlugin(id: string = PLUGIN_ID): Plugin {
+    return {
+      manifest: {
+        id,
+        name: 'Test Plugin',
+        version: '1.0.0',
+        contributes: ['decoder'],
+      },
+      activate: vi.fn(),
+      deactivate: vi.fn(),
+      dispose: vi.fn(),
+    } as unknown as Plugin;
+  }
+
+  beforeEach(() => {
+    api = new OpenRVAPI(createAPIConfig());
+  });
+
+  afterEach(async () => {
+    // Clean up: ensure the plugin is fully removed from the singleton registry
+    const state = pluginRegistry.getState(PLUGIN_ID);
+    if (state && state !== 'disposed') {
+      await pluginRegistry.dispose(PLUGIN_ID);
+    }
+    if (pluginRegistry.getState(PLUGIN_ID) === 'disposed') {
+      pluginRegistry.unregister(PLUGIN_ID);
+    }
+    api.dispose();
+  });
+
+  it('API-U167: plugins.dispose() transitions a registered plugin to disposed state', async () => {
+    const plugin = makePlugin();
+    api.plugins.register(plugin);
+    expect(api.plugins.getState(PLUGIN_ID)).toBe('registered');
+
+    await api.plugins.dispose(PLUGIN_ID);
+    expect(api.plugins.getState(PLUGIN_ID)).toBe('disposed');
+  });
+
+  it('API-U168: plugins.dispose() transitions an active plugin to disposed state', async () => {
+    const plugin = makePlugin();
+    api.plugins.register(plugin);
+    await api.plugins.activate(PLUGIN_ID);
+    expect(api.plugins.getState(PLUGIN_ID)).toBe('active');
+
+    await api.plugins.dispose(PLUGIN_ID);
+    expect(api.plugins.getState(PLUGIN_ID)).toBe('disposed');
+  });
+
+  it('API-U169: plugins.unregister() removes a disposed plugin from the registry', async () => {
+    const plugin = makePlugin();
+    api.plugins.register(plugin);
+    await api.plugins.dispose(PLUGIN_ID);
+
+    api.plugins.unregister(PLUGIN_ID);
+    expect(api.plugins.getState(PLUGIN_ID)).toBeUndefined();
+    expect(api.plugins.list()).not.toContain(PLUGIN_ID);
+  });
+
+  it('API-U170: plugins.unregister() throws if plugin is not disposed', () => {
+    const plugin = makePlugin();
+    api.plugins.register(plugin);
+
+    expect(() => api.plugins.unregister(PLUGIN_ID)).toThrow('must be disposed before unregistering');
+  });
+
+  it('API-U171: re-registration succeeds after dispose + unregister', async () => {
+    const plugin1 = makePlugin();
+    api.plugins.register(plugin1);
+    await api.plugins.activate(PLUGIN_ID);
+    await api.plugins.dispose(PLUGIN_ID);
+    api.plugins.unregister(PLUGIN_ID);
+
+    // Re-register with the same ID
+    const plugin2 = makePlugin();
+    api.plugins.register(plugin2);
+    expect(api.plugins.getState(PLUGIN_ID)).toBe('registered');
+    expect(api.plugins.list()).toContain(PLUGIN_ID);
+
+    // Can activate the re-registered plugin
+    await api.plugins.activate(PLUGIN_ID);
+    expect(api.plugins.getState(PLUGIN_ID)).toBe('active');
+  });
+
+  it('API-U172: plugins.dispose() is idempotent (double dispose does not throw)', async () => {
+    const plugin = makePlugin();
+    api.plugins.register(plugin);
+    await api.plugins.dispose(PLUGIN_ID);
+    await expect(api.plugins.dispose(PLUGIN_ID)).resolves.toBeUndefined();
+    expect(api.plugins.getState(PLUGIN_ID)).toBe('disposed');
   });
 });

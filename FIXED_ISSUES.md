@@ -1646,3 +1646,263 @@
 - **Regression Tests**: 8 tests — boolean return, checkpoint-failure warning in restore/orvproject/GTO paths, no warning on success.
 - **Verification**: All 22,696 tests pass, TypeScript clean.
 - **Files Changed**: `src/AppPersistenceManager.ts`, `src/AppPersistenceManager.test.ts`, `src/AppPersistenceManager.issue191.test.ts`
+
+## Issue #192: Auto-save can fail to initialize while the header indicator still makes it look active
+
+- **Severity**: Medium
+- **Area**: Persistence / autosave UX
+- **Root Cause**: `AutoSaveManager.initialize()` silently caught errors and returned `false`. `initAutoSave()` only logged. The header indicator was rendered before initialization, showing active even on backend failure.
+- **Fix**: Init errors now propagate. `initAutoSave()` catch block calls `autoSaveIndicator.setStatus('disabled')` and shows a user-visible warning about auto-save unavailability.
+- **Regression Tests**: PERSIST-192-001 through PERSIST-192-004 — failure shows warning, sets disabled state, success doesn't warn, failure doesn't block snapshots.
+- **Verification**: All 22,700 tests pass, TypeScript clean.
+- **Files Changed**: `src/core/session/AutoSaveManager.ts`, `src/AppPersistenceManager.ts`, `src/AppPersistenceManager.test.ts`, `src/AppPersistenceManager.issue192.test.ts`
+
+## Issue #193: Room share links without a PIN do not auto-join during URL bootstrap
+
+- **Severity**: Medium
+- **Area**: Collaboration / URL bootstrap
+- **Root Cause**: `handleURLBootstrap()` required both `roomCode && pinCode` for auto-join, even though `joinRoom()` accepts optional PIN.
+- **Fix**: Changed auto-join condition to require only `roomCode`. PIN passed as `undefined` when absent.
+- **Regression Tests**: SU-017 (updated — room-only link auto-joins), SU-040 (room+PIN still works), SU-041 (no room code = no auto-join).
+- **Verification**: All 22,702 tests pass, TypeScript clean.
+- **Files Changed**: `src/services/SessionURLService.ts`, `src/services/SessionURLService.test.ts`
+
+## Issue #194: Client mode relies on selector attributes that the shipped DOM still does not provide
+
+- **Severity**: High
+- **Area**: Client mode / layout
+- **Root Cause**: `ClientMode.hideRestrictedPanels()` used `[data-panel]` and `[data-toolbar]` selectors, but `LayoutOrchestrator` never added these attributes to the DOM elements it created.
+- **Fix**: Added `tagClientModeElements()` to `LayoutOrchestrator` that stamps `data-panel` and `data-toolbar` attributes on layout containers after creation. Trimmed the CSS selector list in `ClientMode` to match the actual DOM structure.
+- **Regression Tests**: LO-039 through LO-043 — attributes present after layout creation, correct panel names, toolbar tagged, client mode hides tagged elements, no crash on empty layout.
+- **Verification**: All 22,715 tests pass, TypeScript clean.
+- **Files Changed**: `src/services/LayoutOrchestrator.ts`, `src/ui/components/ClientMode.ts`, `src/services/LayoutOrchestrator.test.ts`
+
+## Issue #195: Client mode's action allowlist is not enforced by the production app
+
+- **Severity**: High
+- **Area**: Client mode / keyboard actions
+- **Root Cause**: `KeyboardActionMap` dispatched actions without checking `clientMode.isActionAllowed()`. The allowlist existed but was never consulted in the production key-dispatch path.
+- **Fix**: Wrapped every action handler in `KeyboardActionMap` with a `clientMode.isActionAllowed(actionName)` guard. Blocked actions are silently ignored when client mode is active.
+- **Regression Tests**: 7 tests — allowed actions execute, blocked actions ignored, all actions pass when client mode inactive, toggle behavior, edge cases.
+- **Verification**: All 22,715 tests pass, TypeScript clean.
+- **Files Changed**: `src/services/KeyboardActionMap.ts`, `src/App.ts`, `src/services/KeyboardActionMap.test.ts`
+
+## Issue #196: Several clipboard-copy actions fail silently outside the Network Sync UI
+
+- **Severity**: Medium
+- **Area**: Export / probe / timeline clipboard UX
+- **Root Cause**: Multiple clipboard copy call sites (`copyRequested` handler, `export.copyFrame` keyboard action, PixelProbe row copy, Timeline timecode copy) ignored the `Promise<boolean>` result from clipboard operations and swallowed failures with only `console.warn`/`console.error` or empty catches. NetworkControl already had the correct pattern using `showAlert`.
+- **Fix**: All four clipboard copy call sites now await/handle the result and show a user-visible `showAlert` warning on failure: (1) `AppPlaybackWiring` copyRequested handler made async with alert, (2) `KeyboardActionMap` export.copyFrame made async with alert, (3) `PixelProbe` catch block adds showAlert alongside console.warn, (4) `Timeline` onCopyTimecode empty catch replaced with showAlert.
+- **Regression Tests**: PW-006d/PW-006e (AppPlaybackWiring clipboard success/failure), 2 KeyboardActionMap tests, PROBE-U203/PROBE-U204 (PixelProbe), TML-CLIP-001/TML-CLIP-002 (Timeline) — 8 tests total.
+- **Verification**: All 22,723 tests pass, TypeScript clean.
+- **Files Changed**: `src/AppPlaybackWiring.ts`, `src/services/KeyboardActionMap.ts`, `src/ui/components/PixelProbe.ts`, `src/ui/components/Timeline.ts`, and their test files
+
+## Issue #197: Malformed WebRTC share links are silently ignored during URL bootstrap
+
+- **Severity**: Medium
+- **Area**: Collaboration / URL bootstrap
+- **Root Cause**: `SessionURLService.handleURLBootstrap()` only handled `offer` and `answer` WebRTC signal types — any other decoded result (malformed token, unrecognized type, null decode) fell through silently. Additionally, `joinServerlessRoomFromOfferToken()` returning `null` was not surfaced to the user.
+- **Fix**: Added else branches after the offer/answer checks: (1) when `joinServerlessRoomFromOfferToken()` returns null, shows info message about unprocessable link; (2) when decoded signal is null or unrecognized type, shows info message and sets `handledServerlessOffer = true` to prevent fallthrough to websocket auto-join.
+- **Regression Tests**: SU-042 through SU-049 — malformed base64, invalid signal type, join returns null, successful offer no error, answer still works, malformed prevents room auto-join, empty token safe, failed offer allows shared state. 8 tests total.
+- **Verification**: All 22,731 tests pass, TypeScript clean.
+- **Files Changed**: `src/services/SessionURLService.ts`, `src/services/SessionURLService.test.ts`
+
+## Issue #198: Mu compat `realFPS()` reports nominal FPS, not measured playback FPS
+
+- **Severity**: Medium
+- **Area**: Mu compatibility / playback scripting
+- **Root Cause**: `MuCommands.realFPS()` was a documented stub that simply returned `this.fps()` (the configured timeline FPS), not the actual measured playback throughput.
+- **Fix**: Added `getMeasuredFPS()` to `PlaybackAPI` which reads `session.effectiveFps` (the real measured value from `PlaybackEngine`). Wired `realFPS()` in `MuCommands` to delegate to `openrv.playback.getMeasuredFPS()` instead of `this.fps()`. Returns 0 when not playing.
+- **Regression Tests**: 4 tests — returns measured FPS from engine, differs from nominal when playback is slower, returns 0 when not playing, independent of setFPS() override.
+- **Verification**: All 22,738 tests pass, TypeScript clean.
+- **Files Changed**: `src/api/PlaybackAPI.ts`, `src/compat/MuCommands.ts`, `src/compat/__tests__/MuCommands.test.ts`
+
+## Issue #199: Mu compat `sourcePixelValue()` returns black for normal GPU-backed sources
+
+- **Severity**: High
+- **Area**: Mu compatibility / source inspection
+- **Root Cause**: `MuSourceBridge.sourcePixelValue()` fell through to `return [0,0,0,0]` when no in-memory `imageData` was available, silently returning bogus black pixels for valid GPU-backed sources.
+- **Fix**: Added `PixelReadbackProvider` interface with `readSourcePixel(sourceName, x, y)` method. `sourcePixelValue()` now tries: (1) in-memory data, (2) GPU readback provider, (3) returns `null` instead of silent black. Out-of-bounds also returns `null`. Provider can be set via `setPixelReadbackProvider()`.
+- **Regression Tests**: 4 new tests — delegates to readback provider for GPU sources, returns null when provider returns null, prefers in-memory over provider, clearing provider restores null. Existing tests updated to expect null instead of [0,0,0,0].
+- **Verification**: All 22,738 tests pass, TypeScript clean.
+- **Files Changed**: `src/compat/MuSourceBridge.ts`, `src/compat/index.ts`, `src/compat/__tests__/MuSourceBridge.test.ts`
+
+## Issue #200: Mu compat `openUrl()` fails silently when the browser blocks popups
+
+- **Severity**: Medium
+- **Area**: Mu compatibility / utility commands
+- **Root Cause**: `MuUtilsBridge.openUrl()` called `window.open()` and ignored the return value. When the browser blocked the popup, the call silently failed with no indication.
+- **Fix**: Changed `openUrl()` return type from `void` to `boolean`. Now checks `window.open()` return value — returns `true` on success, `false` when blocked (`null`). Logs a `console.warn` with `[MuUtilsBridge]` prefix when blocked.
+- **Regression Tests**: 3 tests — successful open returns true, blocked popup returns false with warning, correct arguments passed to window.open.
+- **Verification**: All 22,745 tests pass, TypeScript clean.
+- **Files Changed**: `src/compat/MuUtilsBridge.ts`, `src/compat/__tests__/MuUtilsBridge.test.ts`
+
+## Issue #201: The Mu compatibility layer is not registered in production bootstrap
+
+- **Severity**: High
+- **Area**: Mu compatibility / app bootstrap
+- **Root Cause**: `registerMuCompat()` was never called in the production bootstrap (`src/main.ts`). The compat layer was fully implemented and tested but not wired into the live app startup path, so `window.rv.commands` and `window.rv.extra_commands` were missing at runtime.
+- **Fix**: Added `import { registerMuCompat } from './compat'` and `registerMuCompat()` call in `src/main.ts` immediately after `window.openrv` initialization, ensuring the OpenRV API is available for the compat layer.
+- **Regression Tests**: 4 tests — registerMuCompat is exported/callable, sets up window.rv with commands/extra_commands, main.ts imports and calls it, call appears after window.openrv init.
+- **Verification**: All 22,745 tests pass, TypeScript clean.
+- **Files Changed**: `src/main.ts`, `src/compat/__tests__/bootstrap-registration.test.ts`
+
+## Issue #202: The global error handler claims uncaught-error coverage, but only listens for unhandled rejections
+
+- **Severity**: Medium
+- **Area**: App bootstrap / diagnostics
+- **Root Cause**: `installGlobalErrorHandler()` only added an `unhandledrejection` listener despite documentation claiming coverage of both uncaught errors and unhandled rejections. No `error` event listener was installed.
+- **Fix**: Added `window.addEventListener('error', ...)` listener that logs uncaught synchronous exceptions via `log.error()` with fallback to `event.message` for cross-origin script errors. Added `uninstallGlobalErrorHandler()` that removes both listeners. Install function returns the uninstall function.
+- **Regression Tests**: 7 tests — error listener registration, idempotency, uncaught error logging, cross-origin fallback, uninstall removes both, re-install works, uninstall no-op when not installed.
+- **Verification**: All 22,760 tests pass, TypeScript clean.
+- **Files Changed**: `src/utils/globalErrorHandler.ts`, `src/utils/globalErrorHandler.test.ts`
+
+## Issue #203: The public `openrv.events` API advertises an `error` event that production never emits
+
+- **Severity**: Medium
+- **Area**: Public API / plugin automation
+- **Root Cause**: `EventsAPI` declared `error` as a valid event and provided `emitError()`, but no internal subsystem ever called it. The public error channel was effectively inert.
+- **Fix**: Wired four internal Session error events to the public error channel in `wireInternalEvents()`: `audioError` → `AUDIO_{TYPE}`, `unsupportedCodec` → `UNSUPPORTED_CODEC`, `representationError` → `REPRESENTATION_ERROR`, `frameDecodeTimeout` → `FRAME_DECODE_TIMEOUT`.
+- **Regression Tests**: API-U076 through API-U082 — audio error bridging, unsupported codec (with/without null), representation error, frame decode timeout, multiple errors accumulate, errors stop after dispose.
+- **Verification**: All 22,760 tests pass, TypeScript clean.
+- **Files Changed**: `src/api/EventsAPI.ts`, `src/api/OpenRVAPI.test.ts`
+
+## Issue #204: The public `openrv.events` API advertises `stop`, but production never emits it
+
+- **Severity**: Medium
+- **Area**: Public API / playback events
+- **Root Cause**: The `playbackChanged` handler only mapped to `play` or `pause`. No internal session event existed for "stop" (pause + return to start), and `PlaybackAPI.stop()` manually called `session.pause()` + `session.goToStart()` without signaling.
+- **Fix**: Added `playbackStopped` event to `SessionEvents`. Added `Session.stop()` method that pauses, goes to start, and emits `playbackStopped`. Wired it in `EventsAPI` to emit the public `stop` event. `PlaybackAPI.stop()` now delegates to `session.stop()`.
+- **Regression Tests**: API-U083 through API-U087 — stop event emission, distinction from pause, unsubscribe, dispose cleanup, once() behavior. 5 tests.
+- **Verification**: All 22,774 tests pass, TypeScript clean.
+- **Files Changed**: `src/core/session/SessionTypes.ts`, `src/core/session/Session.ts`, `src/api/EventsAPI.ts`, `src/api/PlaybackAPI.ts`, `src/api/OpenRVAPI.test.ts`
+
+## Issue #205: `openrv.playback.step(n)` bypasses in/out-range and ping-pong rules for multi-frame steps
+
+- **Severity**: Medium
+- **Area**: Public API / playback navigation
+- **Root Cause**: `PlaybackAPI.step()` multi-frame path computed target frames using hardcoded `1`/`totalFrames` boundaries, ignoring `session.inPoint`/`outPoint`. Only `loop` wrapping was implemented; `pingpong` was treated as `once` (simple clamp).
+- **Fix**: Replaced hardcoded range with `session.inPoint`/`session.outPoint`. Loop mode wraps within in/out range using modular arithmetic. Added proper pingpong reflection with cycle-based boundary bouncing. Once mode clamps to `[inPoint, outPoint]`.
+- **Regression Tests**: STEP-060 through STEP-068 — multi-frame clamp to outPoint/inPoint in once mode, within-range no interaction, forward/backward wrapping in custom range with loop, pingpong reflection off both boundaries, large step wrapping, exact boundary hit. 9 tests + 1 updated.
+- **Verification**: All 22,774 tests pass, TypeScript clean.
+- **Files Changed**: `src/api/PlaybackAPI.ts`, `src/api/PlaybackAPI.step.test.ts`
+
+## Issue #206: `openrv.dispose()` marks the API as not ready, but most sub-APIs remain fully callable
+
+- **Severity**: Medium
+- **Area**: Public API / lifecycle contract
+- **Root Cause**: `OpenRVAPI.dispose()` only flipped `_ready` and disposed the event bus. Sub-APIs (`playback`, `media`, `audio`, `loop`, `view`, `color`, `markers`) were constructed with direct session/viewer references and never checked disposal state before mutating.
+- **Fix**: Created `DisposableAPI` base class with `_disposed` flag and `assertNotDisposed()` guard (throws `APIError`). All 8 sub-APIs extend it. `OpenRVAPI.dispose()` now calls `dispose()` on all sub-APIs. Plugin methods also guarded. Every public mutating method checks disposal state.
+- **Regression Tests**: API-U088 through API-U164 — 77 tests verifying every public method on every sub-API and the plugins object throws `APIError` after dispose.
+- **Verification**: All 22,854 tests pass, TypeScript clean.
+- **Files Changed**: `src/api/Disposable.ts` (new), `src/api/OpenRVAPI.ts`, `src/api/PlaybackAPI.ts`, `src/api/MediaAPI.ts`, `src/api/AudioAPI.ts`, `src/api/LoopAPI.ts`, `src/api/ViewAPI.ts`, `src/api/ColorAPI.ts`, `src/api/MarkersAPI.ts`, `src/api/EventsAPI.ts`, `src/api/OpenRVAPI.test.ts`
+
+## Issue #207: `registerMuCompat()` claims repeat calls are no-ops, but still allocates fresh objects
+
+- **Severity**: Low
+- **Area**: Mu compatibility / registration contract
+- **Root Cause**: `registerMuCompat()` always constructed `new MuCommands()` and `new MuExtraCommands()` before checking whether `globalThis.rv` existed. On repeat calls, it returned freshly allocated objects that were not the ones installed on `window.rv`.
+- **Fix**: Check `globalThis.rv` before any construction. If already present, return the existing `commands` and `extra_commands` directly — zero allocation, true idempotency.
+- **Regression Tests**: 3 tests — repeat call returns same objects as window.rv, no new allocation on repeat, returns installed objects when set externally.
+- **Verification**: All 22,854 tests pass, TypeScript clean.
+- **Files Changed**: `src/compat/index.ts`, `src/compat/__tests__/bootstrap-registration.test.ts`
+
+## Issue #208: `openrv.events` drops duration-marker `endFrame` data from `markerChange`
+
+- **Severity**: Medium
+- **Area**: Public API / events
+- **Root Cause**: The `markerChange` event payload type in `EventsAPI` omitted `endFrame`, and the bridge from `marksChanged` only emitted `frame`, `note`, and `color`. Duration/range markers were indistinguishable from point markers in the event stream.
+- **Fix**: Added `endFrame?: number` to the `markerChange` payload type. Updated the bridge to conditionally include `endFrame` when the marker has one defined.
+- **Regression Tests**: API-U208a (endFrame present for duration markers), API-U208b (endFrame absent for point markers), API-U208c (mixed point and duration markers). 3 tests.
+- **Verification**: All 22,865 tests pass, TypeScript clean.
+- **Files Changed**: `src/api/EventsAPI.ts`, `src/api/OpenRVAPI.test.ts`
+
+## Issue #209: The public plugin scripting API is one-way: no `dispose` or `unregister`
+
+- **Severity**: Medium
+- **Area**: Public API / plugins
+- **Root Cause**: `window.openrv.plugins` only exposed `register`, `activate`, `deactivate`, `loadFromURL`, `getState`, and `list`. The underlying registry's `dispose(id)` and `unregister(id)` lifecycle steps were not surfaced, making clean plugin unload and same-ID re-registration impossible from the public API.
+- **Fix**: Added `dispose(id)` and `unregister(id)` methods to the public `plugins` object, delegating to the plugin registry. Both guarded by `assertNotDisposed()` from Issue #206.
+- **Regression Tests**: API-U165/U166 (disposed guard), API-U167 (dispose registered), API-U168 (dispose active), API-U169 (unregister disposed), API-U170 (unregister non-disposed throws), API-U171 (re-registration after dispose+unregister), API-U172 (idempotent dispose). 8 tests.
+- **Verification**: All 22,865 tests pass, TypeScript clean.
+- **Files Changed**: `src/api/OpenRVAPI.ts`, `src/api/OpenRVAPI.test.ts`
+
+## Issue #210: `window.openrv.plugins.loadFromURL()` is unrestricted by origin in production
+
+- **Severity**: Medium
+- **Area**: Public API / plugin loading
+- **Root Cause**: `PluginRegistry.loadFromURL()` only enforced an origin allowlist when `allowedOrigins` was non-empty. The default was empty (allow all), and `setAllowedOrigins()` was never called in production bootstrap.
+- **Fix**: Changed default behavior to deny-all when `allowedOrigins` is empty (removed the `size > 0` guard). Added `pluginRegistry.setAllowedOrigins([window.location.origin])` to production bootstrap in `main.ts`, restricting to same-origin by default.
+- **Regression Tests**: PREG-030c (fresh registry rejects any URL), PREG-030d (localhost rejected without config), PREG-030e (invalid URLs rejected). 3 tests.
+- **Verification**: All 22,873 tests pass, TypeScript clean.
+- **Files Changed**: `src/plugin/PluginRegistry.ts`, `src/main.ts`, `src/plugin/PluginRegistry.test.ts`
+
+## Issue #211: Plugin settings writes can fail persistence while still looking successful at runtime
+
+- **Severity**: Low
+- **Area**: Plugin system / settings persistence
+- **Root Cause**: `PluginSettingsStore.setSetting()` updated in-memory cache then called `saveSettings()` which swallowed all localStorage errors and returned void. No status was propagated to callers.
+- **Fix**: `saveSettings()` now returns `boolean` (true on success, false on failure). `setSetting()` returns the persistence status. `PluginSettingsAccessor.set()` also returns boolean. In-memory cache still updates on failure for current session.
+- **Regression Tests**: PSET-150 through PSET-154 — success returns true, failure returns false, in-memory updated on failure, accessor returns status. 5 tests.
+- **Verification**: All 22,873 tests pass, TypeScript clean.
+- **Files Changed**: `src/plugin/PluginSettingsStore.ts`, `src/plugin/PluginSettingsStore.test.ts`
+
+## Issue #212: Failed plugin hot reload removes the old plugin and forgets its tracked URL
+
+- **Severity**: Medium
+- **Area**: Plugin development / hot reload
+- **Root Cause**: `HotReloadManager.reload()` disposed and unregistered the old plugin before attempting `loadFromURL()`. On load failure, the catch block also deleted the tracked URL, making retry impossible.
+- **Fix**: Reordered reload flow: `loadFromURL()` is attempted first. Old plugin is only disposed/unregistered after the new module loads successfully. On failure, old plugin and tracked URL remain intact, allowing retry.
+- **Regression Tests**: PHOT-019 updated (failure preserves old plugin and tracking), PHOT-021 new (retry succeeds after transient failure). 2 tests.
+- **Verification**: All 22,879 tests pass, TypeScript clean.
+- **Files Changed**: `src/plugin/dev/HotReloadManager.ts`, `src/plugin/dev/HotReloadManager.test.ts`
+
+## Issue #213: HDR video extraction silently downgrades to SDR when `VideoSampleSink` setup fails
+
+- **Severity**: Medium
+- **Area**: Media decoding / HDR video
+- **Root Cause**: When `VideoSampleSink` creation failed, `MediabunnyFrameExtractor` logged a console message and flipped `isHDR = false` with no way for the UI or user to know the downgrade occurred.
+- **Fix**: Added `hdrDowngraded` flag to `VideoMetadata`. Propagated through `VideoLoadResult` → `SessionMedia` → `Session` → `AppSessionBridge` event chain. `hdrDowngraded` event emitted with filename. Console warning logged at app level.
+- **Regression Tests**: MFE-HDR-002/003/004 (metadata flag correct for non-HDR, successful HDR, failed HDR), SM-029b (session event fires), ASB-003b (app logs warning). 5 tests.
+- **Verification**: All 22,879 tests pass, TypeScript clean.
+- **Files Changed**: `src/utils/media/MediabunnyFrameExtractor.ts`, `src/nodes/sources/VideoSourceNode.ts`, `src/core/session/SessionTypes.ts`, `src/core/session/SessionMedia.ts`, `src/core/session/Session.ts`, `src/AppSessionBridge.ts`, and their test files
+
+## Issue #214: Deep tiled EXR files are rejected even though EXR is broadly advertised as supported
+
+- **Severity**: Medium
+- **Area**: Format support / EXR decoding
+- **Root Cause**: The EXR decoder threw a terse error on `deeptile` type for both single-part and multi-part files. Multi-part files with mixed deep/flat parts were rejected entirely even when decodable parts existed.
+- **Fix**: Improved error messages with user-friendly explanations. Multi-part decoder now auto-skips deeptile parts to find the first decodable part. When explicit `partIndex` targets a deeptile part in a mixed file, error suggests decodable alternatives. All-deep files get a clear error.
+- **Regression Tests**: EXR-DEEP010 updated, EXR-MP031b (all-deep error), EXR-MP033 (auto-skip to flat part), EXR-MP034 (helpful suggestion), EXR-MP035 (skip multiple deep parts). 4 new + 1 updated.
+- **Verification**: All 22,885 tests pass, TypeScript clean.
+- **Files Changed**: `src/formats/EXRDecoder.ts`, `src/formats/EXRDecoder.test.ts`
+
+## Issue #215: Tiled EXR files with mipmap or ripmap levels are rejected; only `ONE_LEVEL` tiles work
+
+- **Severity**: Medium
+- **Area**: Format support / EXR decoding
+- **Root Cause**: The tiled EXR decoder rejected any `levelMode` other than `ONE_LEVEL`, throwing "Only ONE_LEVEL tiled images are supported" for mipmap and ripmap files.
+- **Fix**: Added helper functions (`levelSize`, `numMipLevels`, `computeTotalTileOffsets`) for multi-level tile calculations. Modified `decodeTiledImage` and `decodeMultiPartTiledImage` to read the full offset table but only decode level-0 (full resolution) tiles, skipping lower mip levels. Removed the level mode rejection.
+- **Regression Tests**: EXR-T006/T007 updated (mipmap/ripmap now decode successfully), EXR-T006b/T007b new (level-0 output pixel-identical to ONE_LEVEL). 2 new + 2 updated.
+- **Verification**: All 22,885 tests pass, TypeScript clean.
+- **Files Changed**: `src/formats/EXRDecoder.ts`, `src/formats/EXRDecoder.test.ts`
+
+## Issue #216: EXR decode hard-fails on `UINT` channels instead of tolerating common data/AOV layers
+
+- **Severity**: Medium
+- **Area**: Format support / EXR decoding
+- **Root Cause**: `parseChannels` threw on any `EXRPixelType.UINT` channel, making EXR files with UINT auxiliary channels (object IDs, masks, integer data) completely undecipherable even when they contained valid HALF/FLOAT image data.
+- **Fix**: UINT channels are now parsed but skipped during decode. Channel lookup builders exclude UINT from output mapping while maintaining correct binary offset calculation. All-UINT files still fail with a clear error message listing the UINT channel names.
+- **Regression Tests**: EXR-U130 updated (all-UINT error message), EXR-U130b (mixed UINT+FLOAT decodes), EXR-U130c (UINT channels in header metadata). 2 new + 1 updated.
+- **Verification**: All 22,890 tests pass, TypeScript clean.
+- **Files Changed**: `src/formats/EXRDecoder.ts`, `src/formats/EXRDecoder.test.ts`
+
+## Issue #217: Float TIFF support rejects valid non-RGB channel layouts
+
+- **Severity**: Medium
+- **Area**: Format support / TIFF decoding
+- **Root Cause**: `decodeTIFFFloat()` threw for `samplesPerPixel < 3 || > 4`, rejecting valid grayscale (1ch), luminance+alpha (2ch), and multi-channel (5+ch) float TIFFs.
+- **Fix**: Added `expandPixelToRGBA()` helper: 1ch → replicate to RGB + alpha 1.0; 2ch → replicate luminance to RGB + copy alpha; 3ch/4ch → as-is. 5+ channels capped at 4 via `readChannels = Math.min(samplesPerPixel, 4)`. Applied to both strip and tiled decode paths.
+- **Regression Tests**: Updated rejection tests to decode tests for 1ch and 5ch. Added grayscale pixel verification, luminance+alpha pixel verification, 0-samples rejection. 5 tests.
+- **Verification**: All 22,890 tests pass, TypeScript clean.
+- **Files Changed**: `src/formats/TIFFFloatDecoder.ts`, `src/formats/TIFFFloatDecoder.test.ts`

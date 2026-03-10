@@ -368,6 +368,69 @@ describe('PluginSettingsStore', () => {
     });
   });
 
+  describe('persistence status', () => {
+    it('PSET-150: setSetting returns true when persistence succeeds', () => {
+      store.registerSchema('test.plugin', testSchema);
+      const result = store.setSetting('test.plugin', 'name', 'persisted');
+      expect(result).toBe(true);
+      expect(store.getSetting('test.plugin', 'name')).toBe('persisted');
+    });
+
+    it('PSET-151: setSetting returns false when persistence fails', () => {
+      store.registerSchema('test.plugin', testSchema);
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      // Simulate localStorage failure
+      const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+        throw new Error('QuotaExceededError');
+      });
+
+      const result = store.setSetting('test.plugin', 'name', 'fail-persist');
+      expect(result).toBe(false);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Failed to persist'));
+
+      setItemSpy.mockRestore();
+      warnSpy.mockRestore();
+    });
+
+    it('PSET-152: in-memory cache updates even when persistence fails', () => {
+      store.registerSchema('test.plugin', testSchema);
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+        throw new Error('QuotaExceededError');
+      });
+
+      store.setSetting('test.plugin', 'name', 'in-memory-only');
+      // Value is available in memory for the current session
+      expect(store.getSetting('test.plugin', 'name')).toBe('in-memory-only');
+
+      setItemSpy.mockRestore();
+      warnSpy.mockRestore();
+    });
+
+    it('PSET-153: accessor set returns true on successful persistence', () => {
+      store.registerSchema('test.plugin', testSchema);
+      const accessor = store.createAccessor('test.plugin');
+      const result = accessor.set('name', 'accessor-persist');
+      expect(result).toBe(true);
+    });
+
+    it('PSET-154: accessor set returns false on failed persistence', () => {
+      store.registerSchema('test.plugin', testSchema);
+      const accessor = store.createAccessor('test.plugin');
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+        throw new Error('QuotaExceededError');
+      });
+
+      const result = accessor.set('name', 'fail');
+      expect(result).toBe(false);
+      expect(accessor.get('name')).toBe('fail'); // still updated in memory
+
+      setItemSpy.mockRestore();
+      warnSpy.mockRestore();
+    });
+  });
+
   describe('re-register schema warning', () => {
     it('PSET-110: re-registering schema logs warning', () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});

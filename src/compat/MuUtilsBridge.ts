@@ -146,10 +146,17 @@ export class MuUtilsBridge {
 
   /**
    * Open a URL in a new browser tab.
-   * Mu signature: openUrl(void; string)
+   * Mu signature: openUrl(bool; string)
+   *
+   * Returns `true` if the popup was opened, `false` if the browser blocked it.
    */
-  openUrl(url: string): void {
-    window.open(url, '_blank', 'noopener,noreferrer');
+  openUrl(url: string): boolean {
+    const win = window.open(url, '_blank', 'noopener,noreferrer');
+    if (!win) {
+      console.warn('[MuUtilsBridge] Popup blocked for URL: %s', url);
+      return false;
+    }
+    return true;
   }
 
   /**

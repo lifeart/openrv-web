@@ -7,6 +7,7 @@
 import type { ViewerProvider } from './types';
 import type { ChannelMode } from '../core/types/color';
 import { ValidationError } from '../core/errors';
+import { DisposableAPI } from './Disposable';
 
 const VALID_CHANNELS: ReadonlySet<string> = new Set(['rgb', 'red', 'green', 'blue', 'alpha', 'luminance']);
 
@@ -26,10 +27,11 @@ const CHANNEL_ALIASES: Record<string, ChannelMode> = {
   l: 'luminance',
 };
 
-export class ViewAPI {
+export class ViewAPI extends DisposableAPI {
   private viewer: ViewerProvider;
 
   constructor(viewer: ViewerProvider) {
+    super();
     this.viewer = viewer;
   }
 
@@ -45,6 +47,7 @@ export class ViewAPI {
    * ```
    */
   setZoom(level: number): void {
+    this.assertNotDisposed();
     if (typeof level !== 'number' || isNaN(level) || level <= 0) {
       throw new ValidationError('setZoom() requires a positive number');
     }
@@ -62,6 +65,7 @@ export class ViewAPI {
    * ```
    */
   getZoom(): number {
+    this.assertNotDisposed();
     return this.viewer.getZoom();
   }
 
@@ -74,6 +78,7 @@ export class ViewAPI {
    * ```
    */
   fitToWindow(): void {
+    this.assertNotDisposed();
     this.viewer.fitToWindow();
   }
 
@@ -87,6 +92,7 @@ export class ViewAPI {
    * ```
    */
   fitToWidth(): void {
+    this.assertNotDisposed();
     this.viewer.fitToWidth();
   }
 
@@ -100,6 +106,7 @@ export class ViewAPI {
    * ```
    */
   fitToHeight(): void {
+    this.assertNotDisposed();
     this.viewer.fitToHeight();
   }
 
@@ -114,6 +121,7 @@ export class ViewAPI {
    * ```
    */
   getFitMode(): string | null {
+    this.assertNotDisposed();
     return this.viewer.getFitMode();
   }
 
@@ -130,6 +138,7 @@ export class ViewAPI {
    * ```
    */
   setPan(x: number, y: number): void {
+    this.assertNotDisposed();
     if (typeof x !== 'number' || typeof y !== 'number' || isNaN(x) || isNaN(y)) {
       throw new ValidationError('setPan() requires valid x and y coordinates');
     }
@@ -147,6 +156,7 @@ export class ViewAPI {
    * ```
    */
   getPan(): { x: number; y: number } {
+    this.assertNotDisposed();
     return this.viewer.getPan();
   }
 
@@ -164,6 +174,7 @@ export class ViewAPI {
    * ```
    */
   setChannel(mode: string): void {
+    this.assertNotDisposed();
     if (typeof mode !== 'string') {
       throw new ValidationError('setChannel() requires a string argument');
     }
@@ -187,6 +198,7 @@ export class ViewAPI {
    * ```
    */
   getChannel(): string {
+    this.assertNotDisposed();
     return this.viewer.getChannelMode();
   }
 }

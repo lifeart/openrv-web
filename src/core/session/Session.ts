@@ -398,6 +398,7 @@ export class Session extends EventEmitter<SessionEvents> {
       'durationChanged',
       'currentSourceChanged',
       'unsupportedCodec',
+      'hdrDowngraded',
       'representationChanged',
       'representationError',
       'fallbackActivated',
@@ -781,6 +782,17 @@ export class Session extends EventEmitter<SessionEvents> {
 
   pause(): void {
     this._playback.pause();
+  }
+
+  /**
+   * Stop playback: pause and return to the start (in point).
+   * Emits `playbackStopped` after the seek so listeners can distinguish
+   * a stop from a regular pause.
+   */
+  stop(): void {
+    this._playback.pause();
+    this._playback.goToStart();
+    this.emit('playbackStopped', undefined as void);
   }
 
   togglePlayback(): void {

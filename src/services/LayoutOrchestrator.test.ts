@@ -817,4 +817,81 @@ describe('LayoutOrchestrator', () => {
     // Should restore the original 'none' display
     expect(el.style.display).toBe('none');
   });
+
+  // -------------------------------------------------------------------------
+  // LO-039–043: tagClientModeElements regression tests (#194)
+  // -------------------------------------------------------------------------
+  it('LO-039: tagClientModeElements adds data-panel attrs to tab buttons', () => {
+    // Create a realistic tab bar element with tab buttons
+    const tabBarEl = d.mocks.tabBar._renderEl;
+    for (const tabId of ['color', 'effects', 'transform', 'annotate']) {
+      const btn = document.createElement('button');
+      btn.setAttribute('data-tab-id', tabId);
+      tabBarEl.appendChild(btn);
+    }
+
+    orchestrator.createLayout();
+
+    // Verify tab buttons got data-panel attributes
+    for (const tabId of ['color', 'effects', 'transform', 'annotate']) {
+      const btn = tabBarEl.querySelector(`[data-tab-id="${tabId}"]`);
+      expect(btn?.getAttribute('data-panel')).toBe(tabId);
+    }
+  });
+
+  it('LO-040: tagClientModeElements adds data-panel attrs to context toolbar tab panels', () => {
+    // Create realistic context toolbar with tab panels
+    const ctxEl = d.mocks.contextToolbar._renderEl;
+    for (const tabId of ['color', 'effects', 'transform', 'annotate']) {
+      const panel = document.createElement('div');
+      panel.id = `tabpanel-${tabId}`;
+      ctxEl.appendChild(panel);
+    }
+
+    orchestrator.createLayout();
+
+    for (const tabId of ['color', 'effects', 'transform', 'annotate']) {
+      const panel = ctxEl.querySelector(`#tabpanel-${tabId}`);
+      expect(panel?.getAttribute('data-panel')).toBe(tabId);
+    }
+  });
+
+  it('LO-041: tagClientModeElements tags toolbars', () => {
+    orchestrator.createLayout();
+
+    const tabBarEl = d.mocks.tabBar._renderEl;
+    const ctxEl = d.mocks.contextToolbar._renderEl;
+
+    expect(tabBarEl.getAttribute('data-toolbar')).toBe('annotation');
+    expect(ctxEl.getAttribute('data-toolbar')).toBe('editing');
+  });
+
+  it('LO-042: tagClientModeElements tags paint toolbar', () => {
+    orchestrator.createLayout();
+
+    const paintToolbarEl = d.mocks.controls._paintToolbarEl;
+    expect(paintToolbarEl.getAttribute('data-toolbar')).toBe('paint');
+  });
+
+  it('LO-043: client mode actually hides tagged elements when enabled', () => {
+    // Make the mock layout manager's topEl a child of rootEl, so that
+    // elements appended to topSection are discoverable via container.querySelectorAll
+    d.mocks.layoutManager._rootEl.appendChild(d.mocks.layoutManager._topEl);
+
+    // Setup realistic DOM with tab buttons that get tagged
+    const tabBarEl = d.mocks.tabBar._renderEl;
+    const colorBtn = document.createElement('button');
+    colorBtn.setAttribute('data-tab-id', 'color');
+    tabBarEl.appendChild(colorBtn);
+
+    // Use real restricted selectors
+    d.mocks.clientMode.getRestrictedElements.mockReturnValue(['[data-panel="color"]']);
+    d.mocks.clientMode.isEnabled.mockReturnValue(true);
+
+    orchestrator.createLayout();
+
+    // The color tab button should be tagged with data-panel="color" and hidden
+    expect(colorBtn.getAttribute('data-panel')).toBe('color');
+    expect(colorBtn.style.display).toBe('none');
+  });
 });

@@ -49,8 +49,8 @@ export interface PluginSettingsSchema {
 export interface PluginSettingsAccessor {
   /** Get a single setting value */
   get<T = unknown>(key: string): T;
-  /** Set a single setting value */
-  set(key: string, value: unknown): void;
+  /** Set a single setting value. Returns true if persisted to storage, false if only updated in-memory. */
+  set(key: string, value: unknown): boolean;
   /** Get all settings as a key-value map */
   getAll(): Record<string, unknown>;
   /** Subscribe to changes on a specific setting key */
@@ -123,8 +123,9 @@ export class PluginSettingsStore {
 
   /**
    * Set a single setting value (validates against schema).
+   * Returns true if persisted to storage, false if only updated in-memory.
    */
-  setSetting(pluginId: PluginId, key: string, value: unknown): void {
+  setSetting(pluginId: PluginId, key: string, value: unknown): boolean {
     const schema = this.schemas.get(pluginId);
     if (!schema) {
       throw new Error(`No settings schema registered for plugin "${pluginId}"`);
@@ -144,12 +145,14 @@ export class PluginSettingsStore {
     this.cache.set(pluginId, settings);
 
     // Persist
-    this.saveSettings(pluginId);
+    const persisted = this.saveSettings(pluginId);
 
     // Notify listeners
     if (oldValue !== value) {
       this.notifyChange(pluginId, key, value, oldValue);
     }
+
+    return persisted;
   }
 
   /**
@@ -260,8 +263,8 @@ export class PluginSettingsStore {
       get<T = unknown>(key: string): T {
         return store.getSetting(pluginId, key) as T;
       },
-      set(key: string, value: unknown): void {
-        store.setSetting(pluginId, key, value);
+      set(key: string, value: unknown): boolean {
+        return store.setSetting(pluginId, key, value);
       },
       getAll(): Record<string, unknown> {
         return store.getSettings(pluginId);
@@ -310,14 +313,16 @@ export class PluginSettingsStore {
     this.cache.set(pluginId, defaults);
   }
 
-  private saveSettings(pluginId: PluginId): void {
+  private saveSettings(pluginId: PluginId): boolean {
     const settings = this.cache.get(pluginId);
-    if (!settings) return;
+    if (!settings) return false;
     try {
       localStorage.setItem(storageKey(pluginId), JSON.stringify(settings));
+      return true;
     } catch {
       // localStorage may be full or unavailable
       console.warn(`[plugin:${pluginId}] Failed to persist settings to localStorage`);
+      return false;
     }
   }
 

@@ -30,6 +30,7 @@ function getOpenRV(): {
     setPlaybackMode(mode: 'realtime' | 'playAllFrames'): void;
     getPlaybackMode(): 'realtime' | 'playAllFrames';
     step(n?: number): void;
+    getMeasuredFPS(): number;
   };
   media: {
     getFPS(): number;
@@ -229,9 +230,9 @@ export class MuCommands {
     return getOpenRV().media.getFPS();
   }
 
-  /** Get measured (real) FPS. (Mu #10) -- stub returns nominal FPS */
+  /** Get measured (real) playback FPS. (Mu #10) */
   realFPS(): number {
-    return this.fps();
+    return getOpenRV().playback.getMeasuredFPS();
   }
 
   /** Set realtime mode. (Mu #11) */

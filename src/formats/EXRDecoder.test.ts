@@ -726,10 +726,35 @@ describe('EXRDecoder', () => {
   });
 
   describe('corner cases - UINT pixel type', () => {
-    it('EXR-U130: should reject UINT pixel type channel', async () => {
-      // UINT (type 0) is defined in EXR spec but not supported by this decoder
+    it('EXR-U130: should reject file with only UINT channels', async () => {
+      // A file where ALL channels are UINT should fail with a clear error
       const buffer = createTestEXRWithUINT();
-      await expect(decodeEXR(buffer)).rejects.toThrow(/Unsupported pixel type UINT/);
+      await expect(decodeEXR(buffer)).rejects.toThrow(/All channels are UINT pixel type/);
+    });
+
+    it('EXR-U130b: should decode file with mixed UINT and FLOAT channels', async () => {
+      // A file with some UINT and some FLOAT channels should decode the FLOAT channels
+      const buffer = createTestEXRWithMixedUINTAndFloat();
+      const result = await decodeEXR(buffer);
+      // Should succeed - FLOAT R,G,B channels decoded, UINT objectId channel skipped
+      expect(result.width).toBe(2);
+      expect(result.height).toBe(2);
+      expect(result.channels).toBe(4);
+      // Verify pixel data was decoded (R channel should have non-zero values)
+      expect(result.data[0]).toBeCloseTo(0, 1); // R at (0,0)
+      expect(result.data[1]).toBeCloseTo(0.5, 1); // G at (0,0)
+    });
+
+    it('EXR-U130c: should list UINT channels in header but not decode them', async () => {
+      // UINT channels should appear in header.channels (they're valid EXR) but not affect output
+      const buffer = createTestEXRWithMixedUINTAndFloat();
+      const result = await decodeEXR(buffer);
+      const channelNames = result.header.channels.map((ch) => ch.name);
+      // All channels (including UINT) should appear in header
+      expect(channelNames).toContain('objectId');
+      expect(channelNames).toContain('R');
+      expect(channelNames).toContain('G');
+      expect(channelNames).toContain('B');
     });
   });
 
@@ -1805,6 +1830,179 @@ function createTestEXRWithUINT(): ArrayBuffer {
 }
 
 /**
+ * Helper to create an EXR with mixed UINT and FLOAT channels.
+ * Has R, G, B as FLOAT and objectId as UINT.
+ */
+function createTestEXRWithMixedUINTAndFloat(): ArrayBuffer {
+  const width = 2;
+  const height = 2;
+  const parts: Uint8Array[] = [];
+  let offset = 0;
+
+  function writeUint32(value: number): void {
+    const buf = new Uint8Array(4);
+    const view = new DataView(buf.buffer);
+    view.setUint32(0, value, true);
+    parts.push(buf);
+    offset += 4;
+  }
+
+  function writeInt32(value: number): void {
+    const buf = new Uint8Array(4);
+    const view = new DataView(buf.buffer);
+    view.setInt32(0, value, true);
+    parts.push(buf);
+    offset += 4;
+  }
+
+  function writeUint8(value: number): void {
+    parts.push(new Uint8Array([value]));
+    offset += 1;
+  }
+
+  function writeString(str: string): void {
+    const encoder = new TextEncoder();
+    const bytes = encoder.encode(str);
+    parts.push(bytes);
+    parts.push(new Uint8Array([0]));
+    offset += bytes.length + 1;
+  }
+
+  function writeFloat32(value: number): void {
+    const buf = new Uint8Array(4);
+    const view = new DataView(buf.buffer);
+    view.setFloat32(0, value, true);
+    parts.push(buf);
+    offset += 4;
+  }
+
+  function writeUint64(value: bigint): void {
+    const buf = new Uint8Array(8);
+    const view = new DataView(buf.buffer);
+    view.setBigUint64(0, value, true);
+    parts.push(buf);
+    offset += 8;
+  }
+
+  // Magic number
+  writeUint32(EXR_MAGIC);
+  writeUint32(2);
+
+  // Channels: B (FLOAT), G (FLOAT), R (FLOAT), objectId (UINT)
+  // Sorted alphabetically: B, G, R, objectId
+  const channelDefs = [
+    { name: 'B', pixelType: EXRPixelType.FLOAT },
+    { name: 'G', pixelType: EXRPixelType.FLOAT },
+    { name: 'R', pixelType: EXRPixelType.FLOAT },
+    { name: 'objectId', pixelType: EXRPixelType.UINT },
+  ];
+
+  writeString('channels');
+  writeString('chlist');
+  let channelListSize = 1; // null terminator
+  for (const ch of channelDefs) {
+    channelListSize += ch.name.length + 1 + 4 + 1 + 3 + 4 + 4;
+  }
+  writeInt32(channelListSize);
+
+  for (const ch of channelDefs) {
+    writeString(ch.name);
+    writeInt32(ch.pixelType);
+    writeUint8(0); // pLinear
+    parts.push(new Uint8Array([0, 0, 0])); // reserved
+    offset += 3;
+    writeInt32(1); // xSampling
+    writeInt32(1); // ySampling
+  }
+  writeUint8(0); // End of channel list
+
+  // compression
+  writeString('compression');
+  writeString('compression');
+  writeInt32(1);
+  writeUint8(EXRCompression.NONE);
+
+  // dataWindow
+  writeString('dataWindow');
+  writeString('box2i');
+  writeInt32(16);
+  writeInt32(0);
+  writeInt32(0);
+  writeInt32(width - 1);
+  writeInt32(height - 1);
+
+  // displayWindow
+  writeString('displayWindow');
+  writeString('box2i');
+  writeInt32(16);
+  writeInt32(0);
+  writeInt32(0);
+  writeInt32(width - 1);
+  writeInt32(height - 1);
+
+  // lineOrder
+  writeString('lineOrder');
+  writeString('lineOrder');
+  writeInt32(1);
+  writeUint8(0);
+
+  // pixelAspectRatio
+  writeString('pixelAspectRatio');
+  writeString('float');
+  writeInt32(4);
+  writeFloat32(1.0);
+
+  // End of header
+  writeUint8(0);
+
+  // All channels are 4 bytes (FLOAT and UINT are both 4 bytes)
+  const bytesPerPixel = 4;
+  const scanlineSize = channelDefs.length * width * bytesPerPixel;
+
+  // Offset table
+  const headerEnd = offset;
+  const offsetTableSize = height * 8;
+  const scanlineDataStart = headerEnd + offsetTableSize;
+
+  for (let y = 0; y < height; y++) {
+    const blockStart = BigInt(scanlineDataStart + y * (8 + scanlineSize));
+    writeUint64(blockStart);
+  }
+
+  // Scanline data
+  for (let y = 0; y < height; y++) {
+    writeInt32(y); // Y coordinate
+    writeInt32(scanlineSize); // Packed size
+
+    // Write channel data in sorted order: B, G, R, objectId
+    for (const ch of channelDefs) {
+      for (let x = 0; x < width; x++) {
+        if (ch.pixelType === EXRPixelType.UINT) {
+          // Write UINT data (object ID = 42)
+          writeUint32(42);
+        } else {
+          // Write FLOAT data
+          let value = 0;
+          if (ch.name === 'R') value = (x + y * width) / (width * height);
+          else if (ch.name === 'G') value = 0.5;
+          else if (ch.name === 'B') value = 1.0 - (x + y * width) / (width * height);
+          writeFloat32(value);
+        }
+      }
+    }
+  }
+
+  const totalLength = parts.reduce((sum, p) => sum + p.length, 0);
+  const result = new Uint8Array(totalLength);
+  let pos = 0;
+  for (const part of parts) {
+    result.set(part, pos);
+    pos += part.length;
+  }
+  return result.buffer;
+}
+
+/**
  * Part definition for multi-part EXR test generation
  */
 interface TestPartDef {
@@ -2547,6 +2745,15 @@ describe('Multi-part EXR', () => {
       await expect(decodeEXR(buffer)).rejects.toThrow(/deep.*tiled|deeptile/i);
     });
 
+    it('EXR-MP031b: should mention all parts are unsupported when only deeptile parts exist', async () => {
+      const buffer = createMultiPartTestEXR([
+        { name: 'deep_tile_1', type: 'deeptile', channels: ['R', 'G', 'B', 'A'], width: 2, height: 2 },
+        { name: 'deep_tile_2', type: 'deeptile', channels: ['R', 'G', 'B', 'A'], width: 2, height: 2 },
+      ]);
+
+      await expect(decodeEXR(buffer)).rejects.toThrow(/all parts.*unsupported deep tile/i);
+    });
+
     it('EXR-MP032: should allow selecting a non-deep part when deep part exists', async () => {
       const buffer = createMultiPartTestEXR([
         { name: 'deep_part', type: 'deepscanline', channels: ['R', 'G', 'B', 'A'], width: 2, height: 2 },
@@ -2568,6 +2775,65 @@ describe('Multi-part EXR', () => {
       expect(result.width).toBe(2);
       expect(result.height).toBe(2);
       expect(result.decodedPartIndex).toBe(1);
+    });
+
+    it('EXR-MP033: should auto-skip deeptile part and decode first flat part when no partIndex specified', async () => {
+      const buffer = createMultiPartTestEXR([
+        { name: 'deep_tile', type: 'deeptile', channels: ['R', 'G', 'B', 'A'], width: 2, height: 2 },
+        {
+          name: 'flat_part',
+          type: 'scanlineimage',
+          channels: ['R', 'G', 'B', 'A'],
+          width: 2,
+          height: 2,
+          valueMultiplier: 0.5,
+        },
+      ]);
+
+      // Without explicit partIndex, should auto-skip deeptile and decode the flat part
+      const result = await decodeEXR(buffer);
+      expect(result.width).toBe(2);
+      expect(result.height).toBe(2);
+      expect(result.decodedPartIndex).toBe(1);
+      expect(result.data).toBeInstanceOf(Float32Array);
+    });
+
+    it('EXR-MP034: should give helpful error when explicitly selecting deeptile part in mixed file', async () => {
+      const buffer = createMultiPartTestEXR([
+        { name: 'deep_tile', type: 'deeptile', channels: ['R', 'G', 'B', 'A'], width: 2, height: 2 },
+        {
+          name: 'flat_part',
+          type: 'scanlineimage',
+          channels: ['R', 'G', 'B', 'A'],
+          width: 2,
+          height: 2,
+          valueMultiplier: 0.5,
+        },
+      ]);
+
+      // Explicitly selecting the deeptile part should fail with a suggestion
+      await expect(decodeEXR(buffer, { partIndex: 0 })).rejects.toThrow(/decodable parts/i);
+    });
+
+    it('EXR-MP035: should auto-skip deeptile when flat part is not at index 1', async () => {
+      const buffer = createMultiPartTestEXR([
+        { name: 'deep_tile_1', type: 'deeptile', channels: ['R', 'G', 'B', 'A'], width: 2, height: 2 },
+        { name: 'deep_tile_2', type: 'deeptile', channels: ['R', 'G', 'B', 'A'], width: 2, height: 2 },
+        {
+          name: 'flat_part',
+          type: 'scanlineimage',
+          channels: ['R', 'G', 'B', 'A'],
+          width: 2,
+          height: 2,
+          valueMultiplier: 0.3,
+        },
+      ]);
+
+      // Should skip both deeptile parts and find the flat part at index 2
+      const result = await decodeEXR(buffer);
+      expect(result.width).toBe(2);
+      expect(result.height).toBe(2);
+      expect(result.decodedPartIndex).toBe(2);
     });
   });
 
@@ -3441,28 +3707,106 @@ function createTiledTestEXR(
   writeUint8(0);
 
   // === OFFSET TABLE ===
-  const numXTiles = Math.ceil(dataWidth / tileXSize);
-  const numYTiles = Math.ceil(dataHeight / tileYSize);
-  const totalTiles = numXTiles * numYTiles;
-
   const bytesPerPixel = pixelType === EXRPixelType.HALF ? 2 : 4;
+
+  // Helper: compute mip level dimension
+  function mipLevelSize(fullSize: number, level: number): number {
+    if (level === 0) return fullSize;
+    let s = fullSize;
+    for (let i = 0; i < level; i++) {
+      if (roundingMode === EXRRoundingMode.ROUND_UP) {
+        s = Math.ceil(s / 2);
+      } else {
+        s = Math.max(1, Math.floor(s / 2));
+      }
+    }
+    return Math.max(1, s);
+  }
+
+  // Helper: compute number of mip levels for a dimension
+  function mipLevelCount(size: number): number {
+    let count = 1;
+    let s = size;
+    while (s > 1) {
+      if (roundingMode === EXRRoundingMode.ROUND_UP) {
+        s = Math.ceil(s / 2);
+      } else {
+        s = Math.max(1, Math.floor(s / 2));
+      }
+      count++;
+    }
+    return count;
+  }
+
+  // Build list of all levels with their tiles
+  interface TileLevelInfo {
+    levelX: number;
+    levelY: number;
+    levelWidth: number;
+    levelHeight: number;
+    numXTiles: number;
+    numYTiles: number;
+  }
+
+  const allLevels: TileLevelInfo[] = [];
+
+  if (levelMode === EXRLevelMode.ONE_LEVEL) {
+    allLevels.push({
+      levelX: 0, levelY: 0,
+      levelWidth: dataWidth, levelHeight: dataHeight,
+      numXTiles: Math.ceil(dataWidth / tileXSize),
+      numYTiles: Math.ceil(dataHeight / tileYSize),
+    });
+  } else if (levelMode === EXRLevelMode.MIPMAP_LEVELS) {
+    const nLevels = mipLevelCount(Math.max(dataWidth, dataHeight));
+    for (let l = 0; l < nLevels; l++) {
+      const lw = mipLevelSize(dataWidth, l);
+      const lh = mipLevelSize(dataHeight, l);
+      allLevels.push({
+        levelX: l, levelY: l,
+        levelWidth: lw, levelHeight: lh,
+        numXTiles: Math.ceil(lw / tileXSize),
+        numYTiles: Math.ceil(lh / tileYSize),
+      });
+    }
+  } else {
+    // RIPMAP_LEVELS
+    const nXLevels = mipLevelCount(dataWidth);
+    const nYLevels = mipLevelCount(dataHeight);
+    for (let ly = 0; ly < nYLevels; ly++) {
+      for (let lx = 0; lx < nXLevels; lx++) {
+        const lw = mipLevelSize(dataWidth, lx);
+        const lh = mipLevelSize(dataHeight, ly);
+        allLevels.push({
+          levelX: lx, levelY: ly,
+          levelWidth: lw, levelHeight: lh,
+          numXTiles: Math.ceil(lw / tileXSize),
+          numYTiles: Math.ceil(lh / tileYSize),
+        });
+      }
+    }
+  }
+
+  const totalTiles = allLevels.reduce((sum, lvl) => sum + lvl.numXTiles * lvl.numYTiles, 0);
 
   // Calculate where tile data starts
   const headerEnd = offset;
   const offsetTableSize = totalTiles * 8;
   const tileDataStart = headerEnd + offsetTableSize;
 
-  // Pre-compute tile data sizes and offsets
+  // Pre-compute tile data sizes and offsets for all levels
   const tileOffsets: bigint[] = [];
   let currentTileOffset = tileDataStart;
-  for (let ty = 0; ty < numYTiles; ty++) {
-    for (let tx = 0; tx < numXTiles; tx++) {
-      tileOffsets.push(BigInt(currentTileOffset));
-      const actualTileW = Math.min(tileXSize, dataWidth - tx * tileXSize);
-      const actualTileH = Math.min(tileYSize, dataHeight - ty * tileYSize);
-      const tileDataSize = channels.length * actualTileW * bytesPerPixel * actualTileH;
-      // tile header: tileX(4) + tileY(4) + levelX(4) + levelY(4) + packedSize(4) = 20
-      currentTileOffset += 20 + tileDataSize;
+  for (const lvl of allLevels) {
+    for (let ty = 0; ty < lvl.numYTiles; ty++) {
+      for (let tx = 0; tx < lvl.numXTiles; tx++) {
+        tileOffsets.push(BigInt(currentTileOffset));
+        const actualTileW = Math.min(tileXSize, lvl.levelWidth - tx * tileXSize);
+        const actualTileH = Math.min(tileYSize, lvl.levelHeight - ty * tileYSize);
+        const tileDataSize = channels.length * actualTileW * bytesPerPixel * actualTileH;
+        // tile header: tileX(4) + tileY(4) + levelX(4) + levelY(4) + packedSize(4) = 20
+        currentTileOffset += 20 + tileDataSize;
+      }
     }
   }
 
@@ -3471,35 +3815,37 @@ function createTiledTestEXR(
   }
 
   // === TILE DATA ===
-  for (let ty = 0; ty < numYTiles; ty++) {
-    for (let tx = 0; tx < numXTiles; tx++) {
-      const actualTileW = Math.min(tileXSize, dataWidth - tx * tileXSize);
-      const actualTileH = Math.min(tileYSize, dataHeight - ty * tileYSize);
-      const tileDataSize = channels.length * actualTileW * bytesPerPixel * actualTileH;
+  for (const lvl of allLevels) {
+    for (let ty = 0; ty < lvl.numYTiles; ty++) {
+      for (let tx = 0; tx < lvl.numXTiles; tx++) {
+        const actualTileW = Math.min(tileXSize, lvl.levelWidth - tx * tileXSize);
+        const actualTileH = Math.min(tileYSize, lvl.levelHeight - ty * tileYSize);
+        const tileDataSize = channels.length * actualTileW * bytesPerPixel * actualTileH;
 
-      writeInt32(tx); // tileX
-      writeInt32(ty); // tileY
-      writeInt32(0); // levelX
-      writeInt32(0); // levelY
-      writeInt32(tileDataSize); // packedSize
+        writeInt32(tx); // tileX
+        writeInt32(ty); // tileY
+        writeInt32(lvl.levelX); // levelX
+        writeInt32(lvl.levelY); // levelY
+        writeInt32(tileDataSize); // packedSize
 
-      // Write pixel data: channels stored separately, in sorted order, line by line within tile
-      for (let line = 0; line < actualTileH; line++) {
-        const globalY = ty * tileYSize + line;
-        for (const ch of sortedChannels) {
-          for (let x = 0; x < actualTileW; x++) {
-            const globalX = tx * tileXSize + x;
-            let value = 0;
-            if (ch === 'R') value = (globalX + globalY * dataWidth) / (dataWidth * dataHeight);
-            else if (ch === 'G') value = 0.5;
-            else if (ch === 'B') value = 1.0 - (globalX + globalY * dataWidth) / (dataWidth * dataHeight);
-            else if (ch === 'A') value = 1.0;
-            else if (ch === 'Y') value = (globalX + globalY * dataWidth) / (dataWidth * dataHeight);
+        // Write pixel data: channels stored separately, in sorted order, line by line within tile
+        for (let line = 0; line < actualTileH; line++) {
+          const globalY = ty * tileYSize + line;
+          for (const ch of sortedChannels) {
+            for (let x = 0; x < actualTileW; x++) {
+              const globalX = tx * tileXSize + x;
+              let value = 0;
+              if (ch === 'R') value = (globalX + globalY * lvl.levelWidth) / (lvl.levelWidth * lvl.levelHeight);
+              else if (ch === 'G') value = 0.5;
+              else if (ch === 'B') value = 1.0 - (globalX + globalY * lvl.levelWidth) / (lvl.levelWidth * lvl.levelHeight);
+              else if (ch === 'A') value = 1.0;
+              else if (ch === 'Y') value = (globalX + globalY * lvl.levelWidth) / (lvl.levelWidth * lvl.levelHeight);
 
-            if (pixelType === EXRPixelType.HALF) {
-              writeHalf(value);
-            } else {
-              writeFloat32(value);
+              if (pixelType === EXRPixelType.HALF) {
+                writeHalf(value);
+              } else {
+                writeFloat32(value);
+              }
             }
           }
         }
@@ -3958,8 +4304,8 @@ describe('EXR Tiled Image Support', () => {
     });
   });
 
-  describe('Tiled level mode rejection', () => {
-    it('EXR-T006: should reject MIPMAP_LEVELS tiled image', async () => {
+  describe('Tiled mipmap/ripmap level 0 decode', () => {
+    it('EXR-T006: should decode MIPMAP_LEVELS tiled image (level 0 only)', async () => {
       const buffer = createTiledTestEXR({
         width: 4,
         height: 4,
@@ -3968,10 +4314,27 @@ describe('EXR Tiled Image Support', () => {
         levelMode: EXRLevelMode.MIPMAP_LEVELS,
       });
 
-      await expect(decodeEXR(buffer)).rejects.toThrow(/Unsupported EXR tile level mode.*MIPMAP_LEVELS/);
+      const result = await decodeEXR(buffer);
+
+      // Should decode full resolution (level 0)
+      expect(result.width).toBe(4);
+      expect(result.height).toBe(4);
+      expect(result.channels).toBe(4);
+      expect(result.data.length).toBe(4 * 4 * 4);
+
+      // Green channel should be 0.5 (same as ONE_LEVEL)
+      expect(result.data[1]).toBeCloseTo(0.5, 1);
+
+      // Alpha should be 1.0
+      for (let i = 3; i < result.data.length; i += 4) {
+        expect(result.data[i]).toBeCloseTo(1.0, 2);
+      }
+
+      // Header should report MIPMAP_LEVELS
+      expect(result.header.tileDesc!.levelMode).toBe(EXRLevelMode.MIPMAP_LEVELS);
     });
 
-    it('EXR-T007: should reject RIPMAP_LEVELS tiled image', async () => {
+    it('EXR-T007: should decode RIPMAP_LEVELS tiled image (level 0 only)', async () => {
       const buffer = createTiledTestEXR({
         width: 4,
         height: 4,
@@ -3980,7 +4343,62 @@ describe('EXR Tiled Image Support', () => {
         levelMode: EXRLevelMode.RIPMAP_LEVELS,
       });
 
-      await expect(decodeEXR(buffer)).rejects.toThrow(/Unsupported EXR tile level mode.*RIPMAP_LEVELS/);
+      const result = await decodeEXR(buffer);
+
+      // Should decode full resolution (level 0)
+      expect(result.width).toBe(4);
+      expect(result.height).toBe(4);
+      expect(result.channels).toBe(4);
+      expect(result.data.length).toBe(4 * 4 * 4);
+
+      // Green channel should be 0.5 (same as ONE_LEVEL)
+      expect(result.data[1]).toBeCloseTo(0.5, 1);
+
+      // Alpha should be 1.0
+      for (let i = 3; i < result.data.length; i += 4) {
+        expect(result.data[i]).toBeCloseTo(1.0, 2);
+      }
+
+      // Header should report RIPMAP_LEVELS
+      expect(result.header.tileDesc!.levelMode).toBe(EXRLevelMode.RIPMAP_LEVELS);
+    });
+
+    it('EXR-T006b: should produce identical level-0 output for MIPMAP vs ONE_LEVEL', async () => {
+      const opts = { width: 8, height: 8, tileXSize: 4, tileYSize: 4 };
+
+      const oneLevelBuf = createTiledTestEXR({ ...opts, levelMode: EXRLevelMode.ONE_LEVEL });
+      const mipmapBuf = createTiledTestEXR({ ...opts, levelMode: EXRLevelMode.MIPMAP_LEVELS });
+
+      const oneLevelResult = await decodeEXR(oneLevelBuf);
+      const mipmapResult = await decodeEXR(mipmapBuf);
+
+      expect(mipmapResult.width).toBe(oneLevelResult.width);
+      expect(mipmapResult.height).toBe(oneLevelResult.height);
+      expect(mipmapResult.data.length).toBe(oneLevelResult.data.length);
+
+      // Pixel data should be identical
+      for (let i = 0; i < oneLevelResult.data.length; i++) {
+        expect(mipmapResult.data[i]).toBeCloseTo(oneLevelResult.data[i]!, 4);
+      }
+    });
+
+    it('EXR-T007b: should produce identical level-0 output for RIPMAP vs ONE_LEVEL', async () => {
+      const opts = { width: 8, height: 8, tileXSize: 4, tileYSize: 4 };
+
+      const oneLevelBuf = createTiledTestEXR({ ...opts, levelMode: EXRLevelMode.ONE_LEVEL });
+      const ripmapBuf = createTiledTestEXR({ ...opts, levelMode: EXRLevelMode.RIPMAP_LEVELS });
+
+      const oneLevelResult = await decodeEXR(oneLevelBuf);
+      const ripmapResult = await decodeEXR(ripmapBuf);
+
+      expect(ripmapResult.width).toBe(oneLevelResult.width);
+      expect(ripmapResult.height).toBe(oneLevelResult.height);
+      expect(ripmapResult.data.length).toBe(oneLevelResult.data.length);
+
+      // Pixel data should be identical
+      for (let i = 0; i < oneLevelResult.data.length; i++) {
+        expect(ripmapResult.data[i]).toBeCloseTo(oneLevelResult.data[i]!, 4);
+      }
     });
   });
 
@@ -4989,7 +5407,7 @@ describe('EXR Tiled Image Support', () => {
         pos += part.length;
       }
 
-      await expect(decodeEXR(result.buffer)).rejects.toThrow(/[Dd]eep.*tiled|deeptile/);
+      await expect(decodeEXR(result.buffer)).rejects.toThrow(/deep tiled image data.*cannot be decoded/i);
     });
   });
 

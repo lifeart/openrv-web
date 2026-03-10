@@ -205,16 +205,37 @@ describe('HotReloadManager', () => {
       warnSpy.mockRestore();
     });
 
-    it('PHOT-019: cleans up tracking when loadFromURL fails', async () => {
+    it('PHOT-019: keeps old plugin and tracked URL when loadFromURL fails', async () => {
       (registry.loadFromURL as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('network error'));
 
       manager.trackURL('test.plugin', 'http://localhost:3000/plugin.js');
       await expect(manager.reload('test.plugin')).rejects.toThrow('network error');
 
+      // Old plugin should NOT be disposed or unregistered
+      expect(registry.dispose).not.toHaveBeenCalled();
+      expect(registry.unregister).not.toHaveBeenCalled();
+      expect(registry.activate).not.toHaveBeenCalled();
+      // Tracked URL should be preserved so developer can retry
+      expect(manager.isTracked('test.plugin')).toBe(true);
+    });
+
+    it('PHOT-021: retry succeeds after transient reload failure', async () => {
+      (registry.loadFromURL as ReturnType<typeof vi.fn>)
+        .mockRejectedValueOnce(new Error('network error'));
+
+      manager.trackURL('test.plugin', 'http://localhost:3000/plugin.js');
+
+      // First attempt fails
+      await expect(manager.reload('test.plugin')).rejects.toThrow('network error');
+      expect(manager.isTracked('test.plugin')).toBe(true);
+
+      // Second attempt succeeds (default mock implementation)
+      await manager.reload('test.plugin');
+
       expect(registry.dispose).toHaveBeenCalledWith('test.plugin');
       expect(registry.unregister).toHaveBeenCalledWith('test.plugin');
-      expect(registry.activate).not.toHaveBeenCalled();
-      expect(manager.isTracked('test.plugin')).toBe(false);
+      expect(registry.activate).toHaveBeenCalledWith('reloaded.plugin');
+      expect(manager.isTracked('reloaded.plugin')).toBe(true);
     });
 
     it('PHOT-020: rejects concurrent reload of same plugin', async () => {

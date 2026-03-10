@@ -534,6 +534,24 @@ describe('PluginRegistry', () => {
       // The URL passes origin validation but import() will fail in test env
       await expect(registry.loadFromURL('https://trusted.example.com/plugin.js')).rejects.toThrow(); // import() fails, but origin validation passed
     });
+
+    it('PREG-030c: rejects any URL when no allowed origins are configured (deny-by-default)', async () => {
+      // Fresh registry has empty allowedOrigins — should deny all origins
+      await expect(registry.loadFromURL('https://example.com/plugin.js')).rejects.toThrow(
+        'not in the allowed origins list',
+      );
+    });
+
+    it('PREG-030d: rejects same-origin URL when allowedOrigins not explicitly set', async () => {
+      // Even a plausible same-origin URL must be rejected when no origins configured
+      await expect(registry.loadFromURL('http://localhost/plugin.js')).rejects.toThrow(
+        'not in the allowed origins list',
+      );
+    });
+
+    it('PREG-030e: rejects invalid URL when no origins are configured', async () => {
+      await expect(registry.loadFromURL('not-a-url')).rejects.toThrow('Invalid plugin URL');
+    });
   });
 
   // -------------------------------------------------------------------------

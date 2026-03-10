@@ -15,6 +15,9 @@ import {
   type SampleSize,
   type SourceMode,
 } from './PixelProbe';
+import * as Modal from './shared/Modal';
+
+const showAlertSpy = vi.spyOn(Modal, 'showAlert').mockReturnValue(Promise.resolve());
 
 // Helper to create test ImageData
 function createTestImageData(
@@ -1489,6 +1492,52 @@ describe('PixelProbe rendered fallback indicator (Issue #75)', () => {
       await vi.waitFor(() => {
         expect(writeTextMock).toHaveBeenCalled();
       });
+    });
+
+    it('PROBE-U203: shows alert when clipboard write fails (#196)', async () => {
+      showAlertSpy.mockClear();
+      const overlay = document.querySelector('[data-testid="pixel-probe-overlay"]') as HTMLElement;
+      const firstRow = overlay.querySelector('[role="button"]') as HTMLElement;
+      expect(firstRow).not.toBeNull();
+
+      const writeTextMock = vi.fn().mockRejectedValue(new Error('Clipboard denied'));
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { writeText: writeTextMock },
+        writable: true,
+        configurable: true,
+      });
+
+      const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true });
+      firstRow.dispatchEvent(event);
+
+      await vi.waitFor(() => {
+        expect(showAlertSpy).toHaveBeenCalledWith(
+          'Failed to copy value to clipboard. Your browser may have denied clipboard access.',
+          { type: 'warning', title: 'Clipboard Unavailable' },
+        );
+      });
+    });
+
+    it('PROBE-U204: does not show alert when clipboard write succeeds (#196)', async () => {
+      showAlertSpy.mockClear();
+      const overlay = document.querySelector('[data-testid="pixel-probe-overlay"]') as HTMLElement;
+      const firstRow = overlay.querySelector('[role="button"]') as HTMLElement;
+      expect(firstRow).not.toBeNull();
+
+      const writeTextMock = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { writeText: writeTextMock },
+        writable: true,
+        configurable: true,
+      });
+
+      const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true });
+      firstRow.dispatchEvent(event);
+
+      await vi.waitFor(() => {
+        expect(writeTextMock).toHaveBeenCalled();
+      });
+      expect(showAlertSpy).not.toHaveBeenCalled();
     });
   });
 });

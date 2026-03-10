@@ -25,6 +25,7 @@ import type { NoteOverlay } from './NoteOverlay';
 import type { PlaylistManager } from '../../core/session/PlaylistManager';
 import type { TransitionManager } from '../../core/session/TransitionManager';
 import { CORE_PREFERENCE_STORAGE_KEYS } from '../../core/PreferencesManager';
+import { showAlert } from './shared/Modal';
 
 export class Timeline {
   /** Radius of the playhead drag handle circle in pixels */
@@ -588,7 +589,10 @@ export class Timeline {
       onRemoveMark: (f) => this.session.removeMark(f),
       onCopyTimecode: (tc) => {
         navigator.clipboard.writeText(tc).catch(() => {
-          // clipboard may not be available
+          showAlert('Failed to copy timecode to clipboard. Your browser may have denied clipboard access.', {
+            type: 'warning',
+            title: 'Clipboard Unavailable',
+          });
         });
       },
     });

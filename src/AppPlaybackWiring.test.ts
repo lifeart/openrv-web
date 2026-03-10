@@ -392,6 +392,31 @@ describe('wirePlaybackControls', () => {
     expect(viewer.copyFrameToClipboard).toHaveBeenCalledWith(false);
   });
 
+  it('PW-006d: copyRequested shows alert when clipboard copy fails (#196)', async () => {
+    showAlertSpy.mockClear();
+    viewer.copyFrameToClipboard.mockResolvedValue(false);
+    const exportControl = headerBar.getExportControl();
+    exportControl.emit('copyRequested', { includeAnnotations: true });
+    // Wait for the async handler to complete
+    await vi.waitFor(() => {
+      expect(showAlertSpy).toHaveBeenCalledWith(
+        'Failed to copy frame to clipboard. Your browser may have denied clipboard access.',
+        { type: 'warning', title: 'Clipboard Unavailable' },
+      );
+    });
+  });
+
+  it('PW-006e: copyRequested does not show alert when clipboard copy succeeds (#196)', async () => {
+    showAlertSpy.mockClear();
+    viewer.copyFrameToClipboard.mockResolvedValue(true);
+    const exportControl = headerBar.getExportControl();
+    exportControl.emit('copyRequested', { includeAnnotations: true });
+    await vi.waitFor(() => {
+      expect(viewer.copyFrameToClipboard).toHaveBeenCalled();
+    });
+    expect(showAlertSpy).not.toHaveBeenCalled();
+  });
+
   it('PW-006b: sourceExportRequested calls viewer.exportSourceFrame()', () => {
     const exportControl = headerBar.getExportControl();
     exportControl.emit('sourceExportRequested', {

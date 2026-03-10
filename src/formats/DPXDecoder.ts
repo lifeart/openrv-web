@@ -4,7 +4,7 @@
  * Supports:
  * - 8-bit, 10-bit (Method A packed), 12-bit (in 16-bit container), and 16-bit data
  * - Big-endian and little-endian byte order
- * - RGB and RGBA images
+ * - RGB, RGBA, and Luma (grayscale) images
  * - Linear and logarithmic transfer functions
  * - Optional log-to-linear conversion
  *
@@ -107,6 +107,9 @@ export function getDPXInfo(buffer: ArrayBuffer): DPXInfo | null {
     const descriptor = view.getUint8(800);
     let channels: number;
     switch (descriptor) {
+      case 6: // Luma (grayscale)
+        channels = 1;
+        break;
       case 50: // RGB
         channels = 3;
         break;
@@ -117,8 +120,7 @@ export function getDPXInfo(buffer: ArrayBuffer): DPXInfo | null {
         channels = 4;
         break;
       default:
-        channels = 3; // Default to RGB
-        break;
+        throw new DecoderError('DPX', `Unsupported DPX descriptor: ${descriptor}`);
     }
 
     return {
@@ -130,7 +132,10 @@ export function getDPXInfo(buffer: ArrayBuffer): DPXInfo | null {
       channels,
       dataOffset,
     };
-  } catch {
+  } catch (e) {
+    if (e instanceof DecoderError) {
+      throw e;
+    }
     return null;
   }
 }

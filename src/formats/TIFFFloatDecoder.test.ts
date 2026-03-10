@@ -538,30 +538,33 @@ describe('TIFFFloatDecoder', () => {
       await expect(decodeTIFFFloat(buffer)).rejects.toThrow('Unsupported bits per sample: 16');
     });
 
-    it('should throw for unsupported samples per pixel (1 channel)', async () => {
-      // Create a TIFF with 1 sample per pixel by building manually
-      const buffer = createTestFloatTIFF({ channels: 3, sampleFormat: 3 });
-      // Manually patch the SamplesPerPixel tag to 1
-      // Need to find and modify the tag in the IFD
-      const view = new DataView(buffer);
-      const le = true;
-      const ifdOffset = 8;
-      const numTags = view.getUint16(ifdOffset, le);
-      for (let i = 0; i < numTags; i++) {
-        const tagPos = ifdOffset + 2 + i * 12;
-        const tagId = view.getUint16(tagPos, le);
-        if (tagId === 277) {
-          // SamplesPerPixel
-          view.setUint16(tagPos + 8, 1, le); // Set to 1
-          break;
-        }
-      }
+    it('should decode 1-channel (grayscale) float TIFF by expanding to RGB', async () => {
+      const grayValue = 0.5;
+      const buffer = createTestFloatTIFF({
+        width: 2,
+        height: 2,
+        channels: 1,
+        sampleFormat: 3,
+        pixelValues: [grayValue, grayValue, grayValue, grayValue],
+      });
 
-      await expect(decodeTIFFFloat(buffer)).rejects.toThrow('Unsupported samples per pixel: 1');
+      const result = await decodeTIFFFloat(buffer);
+      expect(result.width).toBe(2);
+      expect(result.height).toBe(2);
+      expect(result.channels).toBe(4);
+      // First pixel: grayscale expanded to RGB, alpha = 1.0
+      const approx = (v: number) => expect(v).toBeCloseTo(grayValue, 4);
+      approx(result.data[0]!); // R
+      approx(result.data[1]!); // G
+      approx(result.data[2]!); // B
+      expect(result.data[3]).toBeCloseTo(1.0, 4); // A
     });
 
-    it('should throw for unsupported samples per pixel (5 channels)', async () => {
-      const buffer = createTestFloatTIFF({ channels: 3, sampleFormat: 3 });
+    it('should decode 5+ channel float TIFF by reading first 4 channels', async () => {
+      // Create a 3-channel TIFF and patch SamplesPerPixel to 5
+      // The pixel data only has 3 channels worth of data per the original buffer,
+      // but the decoder should not throw; it reads min(samplesPerPixel, 4) channels
+      const buffer = createTestFloatTIFF({ channels: 4, sampleFormat: 3 });
       const view = new DataView(buffer);
       const le = true;
       const ifdOffset = 8;
@@ -570,13 +573,16 @@ describe('TIFFFloatDecoder', () => {
         const tagPos = ifdOffset + 2 + i * 12;
         const tagId = view.getUint16(tagPos, le);
         if (tagId === 277) {
-          // SamplesPerPixel
-          view.setUint16(tagPos + 8, 5, le); // Set to 5
+          // SamplesPerPixel — set to 5
+          view.setUint16(tagPos + 8, 5, le);
           break;
         }
       }
 
-      await expect(decodeTIFFFloat(buffer)).rejects.toThrow('Unsupported samples per pixel: 5');
+      // Should not throw — it reads only the first 4 channels
+      const result = await decodeTIFFFloat(buffer);
+      expect(result.channels).toBe(4);
+      expect(result.metadata.originalChannels).toBe(5);
     });
 
     it('should throw for zero-width image', async () => {
@@ -2470,6 +2476,83 @@ describe('TIFFFloatDecoder', () => {
       for (let i = 0; i < stripResult.data.length; i++) {
         expect(tiledResult.data[i]).toBeCloseTo(stripResult.data[i]!, 4);
       }
+    });
+  });
+
+  describe('non-RGB channel layout support', () => {
+    it('should decode 1-channel grayscale with correct pixel values', async () => {
+      const values = [0.1, 0.5, 0.9, 0.0];
+      const buffer = createTestFloatTIFF({
+        width: 2,
+        height: 2,
+        channels: 1,
+        sampleFormat: 3,
+        pixelValues: values,
+      });
+
+      const result = await decodeTIFFFloat(buffer);
+      expect(result.width).toBe(2);
+      expect(result.height).toBe(2);
+      expect(result.channels).toBe(4);
+      expect(result.data.length).toBe(2 * 2 * 4);
+      expect(result.metadata.originalChannels).toBe(1);
+
+      // Each grayscale value should be replicated to R, G, B with alpha = 1.0
+      for (let i = 0; i < values.length; i++) {
+        const base = i * 4;
+        expect(result.data[base]).toBeCloseTo(values[i]!, 4); // R
+        expect(result.data[base + 1]).toBeCloseTo(values[i]!, 4); // G
+        expect(result.data[base + 2]).toBeCloseTo(values[i]!, 4); // B
+        expect(result.data[base + 3]).toBeCloseTo(1.0, 4); // A
+      }
+    });
+
+    it('should decode 2-channel luminance+alpha with correct pixel values', async () => {
+      // 2x2 image, 2 channels: [lum, alpha] per pixel
+      const values = [0.3, 0.8, 0.6, 0.5, 0.1, 1.0, 0.9, 0.2];
+      const buffer = createTestFloatTIFF({
+        width: 2,
+        height: 2,
+        channels: 2,
+        sampleFormat: 3,
+        pixelValues: values,
+      });
+
+      const result = await decodeTIFFFloat(buffer);
+      expect(result.width).toBe(2);
+      expect(result.height).toBe(2);
+      expect(result.channels).toBe(4);
+      expect(result.data.length).toBe(2 * 2 * 4);
+      expect(result.metadata.originalChannels).toBe(2);
+
+      // Each pair [lum, alpha] should expand to [lum, lum, lum, alpha]
+      for (let i = 0; i < 4; i++) {
+        const lum = values[i * 2]!;
+        const alpha = values[i * 2 + 1]!;
+        const base = i * 4;
+        expect(result.data[base]).toBeCloseTo(lum, 4); // R
+        expect(result.data[base + 1]).toBeCloseTo(lum, 4); // G
+        expect(result.data[base + 2]).toBeCloseTo(lum, 4); // B
+        expect(result.data[base + 3]).toBeCloseTo(alpha, 4); // A
+      }
+    });
+
+    it('should throw for 0 samples per pixel', async () => {
+      const buffer = createTestFloatTIFF({ channels: 3, sampleFormat: 3 });
+      const view = new DataView(buffer);
+      const le = true;
+      const ifdOffset = 8;
+      const numTags = view.getUint16(ifdOffset, le);
+      for (let i = 0; i < numTags; i++) {
+        const tagPos = ifdOffset + 2 + i * 12;
+        const tagId = view.getUint16(tagPos, le);
+        if (tagId === 277) {
+          view.setUint16(tagPos + 8, 0, le);
+          break;
+        }
+      }
+
+      await expect(decodeTIFFFloat(buffer)).rejects.toThrow('Unsupported samples per pixel: 0');
     });
   });
 });

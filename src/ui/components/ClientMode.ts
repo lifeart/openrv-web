@@ -81,37 +81,24 @@ const DEFAULT_RESTRICTED_CATEGORIES: string[] = [
  * hidden or disabled in client mode. External code uses these to apply
  * visibility changes.
  *
- * TODO(#52): These selectors use `data-panel` and `data-toolbar` attributes that
- * no production DOM elements currently have. To make client mode actually hide
- * editing UI, production components need to add matching `data-panel` / `data-toolbar`
- * attributes. The affected components are:
- *   - Color panel → needs `data-panel="color"`
- *   - Effects panel → needs `data-panel="effects"`
- *   - Transform panel → needs `data-panel="transform"`
- *   - Annotate panel → needs `data-panel="annotate"`
- *   - Export panel → needs `data-panel="export"`
- *   - Paint panel → needs `data-panel="paint"`
- *   - Channel panel → needs `data-panel="channel"`
- *   - Stereo panel → needs `data-panel="stereo"`
- *   - Notes panel → needs `data-panel="notes"`
- *   - Snapshots panel → needs `data-panel="snapshots"`
- *   - Network panel → needs `data-panel="network"`
- *   - Editing toolbar → needs `data-toolbar="editing"`
- *   - Annotation toolbar → needs `data-toolbar="annotation"`
- *   - Paint toolbar → needs `data-toolbar="paint"`
+ * These selectors target `data-panel` and `data-toolbar` attributes that
+ * are applied to production DOM elements by LayoutOrchestrator.tagClientModeElements().
+ * The attributes are added during layout creation, covering:
+ *   - Tab bar buttons for editing tabs (color, effects, transform, annotate)
+ *   - Context toolbar tab panel containers
+ *   - Paint toolbar, notes panel, snapshots/history panel, left panel (color tools)
+ *   - Editing toolbar (context toolbar) and annotation toolbar (tab bar)
+ *
+ * Actions for features without dedicated panel DOM (export, channel, stereo,
+ * network) are gated by isActionAllowed() instead of DOM hiding.
  */
 const DEFAULT_RESTRICTED_ELEMENTS: string[] = [
   '[data-panel="color"]',
   '[data-panel="effects"]',
   '[data-panel="transform"]',
   '[data-panel="annotate"]',
-  '[data-panel="export"]',
-  '[data-panel="paint"]',
-  '[data-panel="channel"]',
-  '[data-panel="stereo"]',
   '[data-panel="notes"]',
   '[data-panel="snapshots"]',
-  '[data-panel="network"]',
   '[data-toolbar="editing"]',
   '[data-toolbar="annotation"]',
   '[data-toolbar="paint"]',

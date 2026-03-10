@@ -484,6 +484,13 @@ export class AppPersistenceManager {
       }
     } catch (err) {
       console.error('Auto-save initialization failed:', err);
+      // Surface the failure to the user and disable the indicator so it
+      // does not look active when the backend never came up (fix #192).
+      this.ctx.autoSaveIndicator.setStatus('disabled');
+      showAlert(
+        'Auto-save could not be initialized. Your work will not be automatically saved. You can still save manually via File > Save Project.',
+        { type: 'warning', title: 'Auto-Save Unavailable' },
+      );
     }
   }
 

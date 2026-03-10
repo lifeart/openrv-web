@@ -606,6 +606,11 @@ export class LayoutOrchestrator {
     });
     if (unsubPresetApplied) this._unsubscribers.push(unsubPresetApplied);
 
+    // === TAG DOM ELEMENTS for client mode restriction selectors ===
+    // Add data-panel / data-toolbar attributes to production DOM elements so
+    // that ClientMode.getRestrictedElements() selectors match real DOM (#194).
+    this.tagClientModeElements(tabBarEl, contextToolbarEl, controls);
+
     // Bind all session event handlers (scopes, info panel, HDR auto-config, etc.)
     sessionBridge.bindSessionEvents();
 
@@ -640,6 +645,47 @@ export class LayoutOrchestrator {
   // -------------------------------------------------------------------------
   // Client mode
   // -------------------------------------------------------------------------
+
+  /**
+   * Add data-panel / data-toolbar attributes to production DOM elements so that
+   * the CSS selectors in ClientMode.getRestrictedElements() match real elements.
+   * Fixes #194: client mode selectors previously targeted attributes that no
+   * production component provided.
+   */
+  private tagClientModeElements(
+    tabBarEl: HTMLElement,
+    contextToolbarEl: HTMLElement,
+    controls: LayoutControlsSubset,
+  ): void {
+    // Tag tab bar buttons for restricted tabs
+    const restrictedTabs = ['color', 'effects', 'transform', 'annotate'];
+    for (const tabId of restrictedTabs) {
+      const btn = tabBarEl.querySelector(`[data-tab-id="${tabId}"]`);
+      if (btn) btn.setAttribute('data-panel', tabId);
+    }
+
+    // Tag context toolbar tab panel containers
+    const panelMap: Record<string, string> = {
+      color: 'tabpanel-color',
+      effects: 'tabpanel-effects',
+      transform: 'tabpanel-transform',
+      annotate: 'tabpanel-annotate',
+    };
+    for (const [panelName, panelId] of Object.entries(panelMap)) {
+      const panel = contextToolbarEl.querySelector(`#${panelId}`);
+      if (panel) panel.setAttribute('data-panel', panelName);
+    }
+
+    // Tag specific control elements with data-panel / data-toolbar
+    controls.paintToolbar.render().setAttribute('data-toolbar', 'paint');
+    controls.notePanel.getElement().setAttribute('data-panel', 'notes');
+    controls.historyPanel.getElement().setAttribute('data-panel', 'snapshots');
+    controls.leftPanelContent.getElement().setAttribute('data-panel', 'color');
+
+    // Tag the toolbars
+    contextToolbarEl.setAttribute('data-toolbar', 'editing');
+    tabBarEl.setAttribute('data-toolbar', 'annotation');
+  }
 
   applyClientModeRestrictions(): void {
     const { container, clientMode } = this.deps;

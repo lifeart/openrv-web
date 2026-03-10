@@ -217,8 +217,14 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
     }),
   );
   subs.add(
-    exportControl.on('copyRequested', ({ includeAnnotations }) => {
-      viewer.copyFrameToClipboard(includeAnnotations);
+    exportControl.on('copyRequested', async ({ includeAnnotations }) => {
+      const ok = await viewer.copyFrameToClipboard(includeAnnotations);
+      if (!ok) {
+        showAlert('Failed to copy frame to clipboard. Your browser may have denied clipboard access.', {
+          type: 'warning',
+          title: 'Clipboard Unavailable',
+        });
+      }
     }),
   );
   subs.add(

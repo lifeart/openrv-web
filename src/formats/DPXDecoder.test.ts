@@ -19,7 +19,8 @@ function createTestDPX(
     bitDepth?: number;
     bigEndian?: boolean;
     transfer?: number; // 0=linear, 3=log
-    channels?: number; // 3=RGB, 4=RGBA
+    channels?: number; // 1=Luma, 3=RGB, 4=RGBA
+    descriptor?: number; // explicit descriptor override (e.g. 6=Luma, 50=RGB, 51=RGBA, 52=ABGR)
     dataOffset?: number;
   } = {},
 ): ArrayBuffer {
@@ -72,8 +73,9 @@ function createTestDPX(
   // Height (offset 776)
   view.setUint32(776, height, le);
 
-  // Descriptor (offset 800): 50=RGB, 51=RGBA
-  view.setUint8(800, channels === 4 ? 51 : 50);
+  // Descriptor (offset 800): 6=Luma, 50=RGB, 51=RGBA
+  const defaultDescriptor = channels === 4 ? 51 : channels === 1 ? 6 : 50;
+  view.setUint8(800, options.descriptor ?? defaultDescriptor);
 
   // Transfer function (offset 801)
   view.setUint8(801, transfer);
@@ -545,14 +547,12 @@ describe('DPXDecoder', () => {
       expect(info!.channels).toBe(4);
     });
 
-    it('should default to 3 channels for unknown descriptor', () => {
+    it('should throw for unsupported descriptor', () => {
       const buffer = createTestDPX({ channels: 3, bigEndian: true });
       const view = new DataView(buffer);
-      view.setUint8(800, 100); // Unknown descriptor
+      view.setUint8(800, 100); // CbYCrY descriptor (unsupported)
 
-      const info = getDPXInfo(buffer);
-      expect(info).not.toBeNull();
-      expect(info!.channels).toBe(3);
+      expect(() => getDPXInfo(buffer)).toThrow('Unsupported DPX descriptor: 100');
     });
 
     it('should report correct data offset', () => {
@@ -560,6 +560,86 @@ describe('DPXDecoder', () => {
       const info = getDPXInfo(buffer);
       expect(info).not.toBeNull();
       expect(info!.dataOffset).toBe(4096);
+    });
+  });
+
+  describe('getDPXInfo - Luma descriptor', () => {
+    it('should detect Luma descriptor (6) as 1 channel', () => {
+      const buffer = createTestDPX({ channels: 1, bigEndian: true });
+      const info = getDPXInfo(buffer);
+      expect(info).not.toBeNull();
+      expect(info!.channels).toBe(1);
+    });
+  });
+
+  describe('decodeDPX - Luma (grayscale)', () => {
+    it('should decode an 8-bit Luma DPX and expand to RGBA', async () => {
+      const buffer = createTestDPX({ width: 2, height: 2, bitDepth: 8, channels: 1, bigEndian: true });
+      // Overwrite pixel data with known luma values
+      const pixelStart = 2048;
+      const bytes = new Uint8Array(buffer);
+      bytes[pixelStart] = 128;
+      bytes[pixelStart + 1] = 0;
+      bytes[pixelStart + 2] = 255;
+      bytes[pixelStart + 3] = 64;
+
+      const result = await decodeDPX(buffer);
+
+      expect(result.width).toBe(2);
+      expect(result.height).toBe(2);
+      expect(result.channels).toBe(4);
+      expect(result.data.length).toBe(2 * 2 * 4);
+      // First pixel: R=G=B=128/255, A=1.0
+      expect(result.data[0]).toBeCloseTo(128 / 255, 4);
+      expect(result.data[1]).toBeCloseTo(128 / 255, 4);
+      expect(result.data[2]).toBeCloseTo(128 / 255, 4);
+      expect(result.data[3]).toBe(1.0);
+      // Second pixel: R=G=B=0, A=1.0
+      expect(result.data[4]).toBeCloseTo(0, 4);
+      expect(result.data[5]).toBeCloseTo(0, 4);
+      expect(result.data[6]).toBeCloseTo(0, 4);
+      expect(result.data[7]).toBe(1.0);
+    });
+
+    it('should decode a 10-bit Luma DPX', async () => {
+      const buffer = createTestDPX({ width: 3, height: 1, bitDepth: 10, channels: 1, bigEndian: true });
+      const result = await decodeDPX(buffer);
+
+      expect(result.width).toBe(3);
+      expect(result.height).toBe(1);
+      expect(result.channels).toBe(4);
+      expect(result.data.length).toBe(3 * 1 * 4);
+      // Each pixel should have R=G=B (grayscale expansion) and A=1.0
+      for (let px = 0; px < 3; px++) {
+        const base = px * 4;
+        expect(result.data[base]).toBe(result.data[base + 1]);
+        expect(result.data[base + 1]).toBe(result.data[base + 2]);
+        expect(result.data[base + 3]).toBe(1.0);
+      }
+    });
+
+    it('should report originalChannels=1 in metadata for Luma', async () => {
+      const buffer = createTestDPX({ width: 2, height: 2, bitDepth: 8, channels: 1 });
+      const result = await decodeDPX(buffer);
+      expect(result.metadata.originalChannels).toBe(1);
+    });
+  });
+
+  describe('decodeDPX - unsupported descriptor', () => {
+    it('should throw for unsupported descriptor via decodeDPX', async () => {
+      const buffer = createTestDPX({ channels: 3, bigEndian: true });
+      const view = new DataView(buffer);
+      view.setUint8(800, 101); // CbYACrYA - unsupported
+
+      await expect(decodeDPX(buffer)).rejects.toThrow('Unsupported DPX descriptor: 101');
+    });
+
+    it('should throw for user-defined descriptor (0)', async () => {
+      const buffer = createTestDPX({ channels: 3, bigEndian: true });
+      const view = new DataView(buffer);
+      view.setUint8(800, 0);
+
+      await expect(decodeDPX(buffer)).rejects.toThrow('Unsupported DPX descriptor: 0');
     });
   });
 

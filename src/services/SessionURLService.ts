@@ -286,17 +286,27 @@ export class SessionURLService {
           networkControl.showInfo(
             'Connected as guest via WebRTC. Copy the response token (or response URL) and send it to the host.',
           );
+        } else {
+          networkControl.showInfo(
+            'The WebRTC invite link could not be processed. It may be malformed, expired, or the connection is already in use.',
+          );
         }
       } else if (signal?.type === 'answer') {
         handledServerlessOffer = true;
         networkControl.showInfo(
           'This is a WebRTC response link. Paste it into the host Network Sync panel and click Apply.',
         );
+      } else {
+        // signal is null (malformed/corrupt token) or has an unrecognized type
+        handledServerlessOffer = true;
+        networkControl.showInfo(
+          'The WebRTC link is malformed or corrupted and could not be processed.',
+        );
       }
     }
 
-    if (!handledServerlessOffer && roomCode && pinCode) {
-      networkSyncManager.joinRoom(roomCode.toUpperCase(), 'User', pinCode);
+    if (!handledServerlessOffer && roomCode) {
+      networkSyncManager.joinRoom(roomCode.toUpperCase(), 'User', pinCode ?? undefined);
     }
 
     const sharedState = decodeSessionState(this.deps.getLocationHash());

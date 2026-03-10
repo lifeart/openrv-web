@@ -341,12 +341,16 @@ export class PluginRegistry {
   // Dynamic loading
   // -----------------------------------------------------------------------
 
-  /** Allowed URL origins for plugin loading. Empty set = all origins allowed. */
+  /**
+   * Allowed URL origins for plugin loading.
+   * Empty set = no origins allowed (deny-by-default).
+   * Must be explicitly populated via setAllowedOrigins() before loadFromURL() will accept any URL.
+   */
   private allowedOrigins = new Set<string>();
 
   /**
    * Set allowed origins for loadFromURL. Only URLs matching these origins
-   * will be accepted. Pass an empty array to allow all origins (not recommended).
+   * will be accepted. Must be called during bootstrap to allow any plugin loading.
    */
   setAllowedOrigins(origins: string[]): void {
     this.allowedOrigins = new Set(origins);
@@ -356,23 +360,21 @@ export class PluginRegistry {
    * Load a plugin from a URL (ES module with default export).
    * The module must export a default Plugin object.
    *
-   * If allowed origins are configured via setAllowedOrigins(), only URLs
-   * matching those origins will be accepted.
+   * Only URLs whose origin is in the allowlist (set via setAllowedOrigins())
+   * will be accepted. By default no origins are allowed.
    */
   async loadFromURL(url: string): Promise<PluginId> {
-    // Validate origin if allowlist is configured
-    if (this.allowedOrigins.size > 0) {
-      try {
-        const parsed = new URL(url);
-        if (!this.allowedOrigins.has(parsed.origin)) {
-          throw new Error(`Plugin URL origin "${parsed.origin}" is not in the allowed origins list`);
-        }
-      } catch (e) {
-        if (e instanceof TypeError) {
-          throw new Error(`Invalid plugin URL: ${url}`);
-        }
-        throw e;
+    // Always validate origin — deny-by-default when allowlist is empty
+    try {
+      const parsed = new URL(url);
+      if (!this.allowedOrigins.has(parsed.origin)) {
+        throw new Error(`Plugin URL origin "${parsed.origin}" is not in the allowed origins list`);
       }
+    } catch (e) {
+      if (e instanceof TypeError) {
+        throw new Error(`Invalid plugin URL: ${url}`);
+      }
+      throw e;
     }
 
     const module = await import(/* @vite-ignore */ url);

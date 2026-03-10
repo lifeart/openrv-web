@@ -18,6 +18,7 @@ import { getIconSvg } from './shared/Icons';
 import { clamp } from '../../utils/math';
 import { rgbToHsl as rgbToHslFloat } from '../../utils/color';
 import { luminanceRec709 } from '../../color/ColorProcessingFacade';
+import { showAlert } from './shared/Modal';
 
 export interface PixelProbeEvents extends EventMap {
   stateChanged: PixelProbeState;
@@ -965,6 +966,10 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
       }
     } catch (err) {
       console.warn('Failed to copy to clipboard:', err);
+      showAlert('Failed to copy value to clipboard. Your browser may have denied clipboard access.', {
+        type: 'warning',
+        title: 'Clipboard Unavailable',
+      });
     }
   }
 

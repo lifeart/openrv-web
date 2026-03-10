@@ -6,6 +6,7 @@
 
 import type { Session } from '../core/session/Session';
 import { ValidationError } from '../core/errors';
+import { DisposableAPI } from './Disposable';
 
 /**
  * Public marker data returned by the API
@@ -17,10 +18,11 @@ export interface MarkerInfo {
   endFrame?: number; // Optional end frame for duration/range markers
 }
 
-export class MarkersAPI {
+export class MarkersAPI extends DisposableAPI {
   private session: Session;
 
   constructor(session: Session) {
+    super();
     this.session = session;
   }
 
@@ -40,6 +42,7 @@ export class MarkersAPI {
    * ```
    */
   add(frame: number, note?: string, color?: string, endFrame?: number): void {
+    this.assertNotDisposed();
     if (typeof frame !== 'number' || isNaN(frame) || frame < 1) {
       throw new ValidationError('add() requires a valid positive frame number');
     }
@@ -72,6 +75,7 @@ export class MarkersAPI {
    * ```
    */
   remove(frame: number): void {
+    this.assertNotDisposed();
     if (typeof frame !== 'number' || isNaN(frame)) {
       throw new ValidationError('remove() requires a valid frame number');
     }
@@ -90,6 +94,7 @@ export class MarkersAPI {
    * ```
    */
   getAll(): MarkerInfo[] {
+    this.assertNotDisposed();
     const marks = this.session.marks;
     return Array.from(marks.values())
       .map((m) => {
@@ -119,6 +124,7 @@ export class MarkersAPI {
    * ```
    */
   get(frame: number): MarkerInfo | null {
+    this.assertNotDisposed();
     const marker = this.session.getMarker(frame);
     if (!marker) return null;
     const info: MarkerInfo = {
@@ -141,6 +147,7 @@ export class MarkersAPI {
    * ```
    */
   clear(): void {
+    this.assertNotDisposed();
     this.session.clearMarks();
   }
 
@@ -155,6 +162,7 @@ export class MarkersAPI {
    * ```
    */
   goToNext(): number | null {
+    this.assertNotDisposed();
     return this.session.goToNextMarker();
   }
 
@@ -169,6 +177,7 @@ export class MarkersAPI {
    * ```
    */
   goToPrevious(): number | null {
+    this.assertNotDisposed();
     return this.session.goToPreviousMarker();
   }
 
@@ -183,6 +192,7 @@ export class MarkersAPI {
    * ```
    */
   count(): number {
+    this.assertNotDisposed();
     return this.session.marks.size;
   }
 }

@@ -34,6 +34,7 @@ function createMockOpenRV() {
       setPlaybackMode: vi.fn(),
       getPlaybackMode: vi.fn((): string => 'realtime'),
       step: vi.fn(),
+      getMeasuredFPS: vi.fn((): number => 0),
       setSpeed: vi.fn(),
       getSpeed: vi.fn(() => 1),
       stop: vi.fn(),
@@ -203,10 +204,31 @@ describe('MuCommands', () => {
       expect(() => cmd.setFPS(NaN)).toThrow(TypeError);
     });
 
-    it('realFPS() returns same as fps()', () => {
-      expect(cmd.realFPS()).toBe(24);
+    it('realFPS() returns measured FPS from playback engine', () => {
+      mockOpenRV.playback.getMeasuredFPS.mockReturnValue(23.5);
+      expect(cmd.realFPS()).toBe(23.5);
+      expect(mockOpenRV.playback.getMeasuredFPS).toHaveBeenCalled();
+    });
+
+    it('realFPS() differs from nominal fps() when playback is slower', () => {
+      // Nominal FPS is 24
+      expect(cmd.fps()).toBe(24);
+      // Measured FPS is lower due to slow playback
+      mockOpenRV.playback.getMeasuredFPS.mockReturnValue(18.2);
+      expect(cmd.realFPS()).toBe(18.2);
+      expect(cmd.realFPS()).not.toBe(cmd.fps());
+    });
+
+    it('realFPS() returns 0 when not playing', () => {
+      mockOpenRV.playback.getMeasuredFPS.mockReturnValue(0);
+      expect(cmd.realFPS()).toBe(0);
+    });
+
+    it('realFPS() is independent of setFPS() override', () => {
       cmd.setFPS(60);
-      expect(cmd.realFPS()).toBe(60);
+      expect(cmd.fps()).toBe(60); // nominal overridden
+      mockOpenRV.playback.getMeasuredFPS.mockReturnValue(58.7);
+      expect(cmd.realFPS()).toBe(58.7); // measured, not the override
     });
 
     it('setRealtime(true) sets realtime mode', () => {

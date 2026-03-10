@@ -107,36 +107,31 @@ export class AutoSaveManager extends EventEmitter<AutoSaveEvents> {
    * Returns true if recovery data is available
    */
   async initialize(): Promise<boolean> {
-    try {
-      await this.openDatabase();
-      this.isInitialized = true;
+    await this.openDatabase();
+    this.isInitialized = true;
 
-      // Check for crash recovery
-      const wasCleanShutdown = await this.checkCleanShutdown();
-      if (!wasCleanShutdown) {
-        const entries = await this.listAutoSaves();
-        if (entries.length > 0) {
-          this.emit('recoveryAvailable', { entries });
-          return true;
-        }
+    // Check for crash recovery
+    const wasCleanShutdown = await this.checkCleanShutdown();
+    if (!wasCleanShutdown) {
+      const entries = await this.listAutoSaves();
+      if (entries.length > 0) {
+        this.emit('recoveryAvailable', { entries });
+        return true;
       }
-
-      // Mark as active session (not clean shutdown until dispose)
-      await this.setCleanShutdown(false);
-
-      // Start auto-save timer if enabled
-      if (this.config.enabled) {
-        this.startTimer();
-      }
-
-      // Listen for beforeunload to mark clean shutdown
-      window.addEventListener('beforeunload', this.handleBeforeUnload);
-
-      return false;
-    } catch (err) {
-      console.error('AutoSaveManager initialization failed:', err);
-      return false;
     }
+
+    // Mark as active session (not clean shutdown until dispose)
+    await this.setCleanShutdown(false);
+
+    // Start auto-save timer if enabled
+    if (this.config.enabled) {
+      this.startTimer();
+    }
+
+    // Listen for beforeunload to mark clean shutdown
+    window.addEventListener('beforeunload', this.handleBeforeUnload);
+
+    return false;
   }
 
   /**

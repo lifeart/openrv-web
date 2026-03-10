@@ -3,6 +3,8 @@ import { SessionURLService, type SessionURLDeps } from './SessionURLService';
 import type { SessionURLState } from '../core/session/SessionURLManager';
 import { encodeSessionState, decodeSessionState } from '../core/session/SessionURLManager';
 import { createMockSession, createMockViewer } from '../../test/mocks';
+import { encodeWebRTCURLSignal, WEBRTC_URL_SIGNAL_PARAM } from '../network/WebRTCURLSignaling';
+import type { WebRTCURLOfferSignal, WebRTCURLAnswerSignal } from '../network/WebRTCURLSignaling';
 
 // ---------------------------------------------------------------------------
 // Lightweight test doubles
@@ -377,7 +379,7 @@ describe('SessionURLService', () => {
       expect(deps.networkSyncManager.joinRoom).toHaveBeenCalledWith('ABCD', 'User', '1234');
     });
 
-    it('SU-017: does not join room when only room code is present (no pin)', async () => {
+    it('SU-017: auto-joins room when only room code is present (no pin)', async () => {
       deps = createDeps({
         getLocationSearch: () => '?room=ABCD',
         getLocationHash: () => '',
@@ -387,6 +389,34 @@ describe('SessionURLService', () => {
       await service.handleURLBootstrap();
 
       expect(deps.networkControl.setJoinRoomCodeFromLink).toHaveBeenCalledWith('ABCD');
+      expect(deps.networkSyncManager.joinRoom).toHaveBeenCalledWith('ABCD', 'User', undefined);
+    });
+
+    it('SU-040: auto-joins room with PIN when both room and pin are present', async () => {
+      deps = createDeps({
+        getLocationSearch: () => '?room=WXYZ&pin=5678',
+        getLocationHash: () => '',
+      });
+      service = new SessionURLService(deps);
+
+      await service.handleURLBootstrap();
+
+      expect(deps.networkControl.setJoinRoomCodeFromLink).toHaveBeenCalledWith('WXYZ');
+      expect(deps.networkControl.setPinCode).toHaveBeenCalledWith('5678');
+      expect(deps.networkSyncManager.setPinCode).toHaveBeenCalledWith('5678');
+      expect(deps.networkSyncManager.joinRoom).toHaveBeenCalledWith('WXYZ', 'User', '5678');
+    });
+
+    it('SU-041: does not auto-join when no room code is present', async () => {
+      deps = createDeps({
+        getLocationSearch: () => '?pin=9999',
+        getLocationHash: () => '',
+      });
+      service = new SessionURLService(deps);
+
+      await service.handleURLBootstrap();
+
+      expect(deps.networkControl.setJoinRoomCodeFromLink).not.toHaveBeenCalled();
       expect(deps.networkSyncManager.joinRoom).not.toHaveBeenCalled();
     });
 
@@ -860,6 +890,180 @@ describe('SessionURLService', () => {
 
       expect(deps.compareControl.setWipeMode).toHaveBeenCalledWith('off');
       expect(deps.compareControl.setWipePosition).toHaveBeenCalledWith(0.5);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Issue #197: Malformed WebRTC share links surface errors
+  // -----------------------------------------------------------------------
+
+  describe('issue #197: malformed WebRTC share links surface errors', () => {
+    const validOfferSignal: WebRTCURLOfferSignal = {
+      version: 1,
+      type: 'offer',
+      roomId: 'room-123',
+      roomCode: 'ABCD',
+      hostUserId: 'host-1',
+      hostUserName: 'Host',
+      hostColor: '#ff0000',
+      createdAt: Date.now(),
+      sdp: 'v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\n',
+    };
+
+    const validAnswerSignal: WebRTCURLAnswerSignal = {
+      version: 1,
+      type: 'answer',
+      roomId: 'room-123',
+      roomCode: 'ABCD',
+      hostUserId: 'host-1',
+      guestUserId: 'guest-1',
+      guestUserName: 'Guest',
+      guestColor: '#00ff00',
+      createdAt: Date.now(),
+      sdp: 'v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\n',
+    };
+
+    it('SU-042: shows error when webrtc token is completely malformed', async () => {
+      deps = createDeps({
+        getLocationSearch: () => `?${WEBRTC_URL_SIGNAL_PARAM}=not-valid-base64!!!`,
+        getLocationHash: () => '',
+      });
+      service = new SessionURLService(deps);
+
+      await service.handleURLBootstrap();
+
+      expect(deps.networkControl.showInfo).toHaveBeenCalledWith(
+        'The WebRTC link is malformed or corrupted and could not be processed.',
+      );
+    });
+
+    it('SU-043: shows error when webrtc token decodes but is not offer or answer', async () => {
+      // Encode a token that is valid base64/JSON but has no valid signal type
+      const garbageToken = btoa(JSON.stringify({ version: 1, type: 'unknown' }))
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/g, '');
+
+      deps = createDeps({
+        getLocationSearch: () => `?${WEBRTC_URL_SIGNAL_PARAM}=${garbageToken}`,
+        getLocationHash: () => '',
+      });
+      service = new SessionURLService(deps);
+
+      await service.handleURLBootstrap();
+
+      expect(deps.networkControl.showInfo).toHaveBeenCalledWith(
+        'The WebRTC link is malformed or corrupted and could not be processed.',
+      );
+    });
+
+    it('SU-044: shows error when offer token is valid but joinServerlessRoomFromOfferToken returns null', async () => {
+      const token = encodeWebRTCURLSignal(validOfferSignal);
+
+      deps = createDeps({
+        getLocationSearch: () => `?${WEBRTC_URL_SIGNAL_PARAM}=${token}`,
+        getLocationHash: () => '',
+        getLocationHref: () => 'http://localhost/',
+      });
+      deps.networkSyncManager.joinServerlessRoomFromOfferToken.mockResolvedValue(null);
+      service = new SessionURLService(deps);
+
+      await service.handleURLBootstrap();
+
+      expect(deps.networkSyncManager.joinServerlessRoomFromOfferToken).toHaveBeenCalled();
+      expect(deps.networkControl.showInfo).toHaveBeenCalledWith(
+        'The WebRTC invite link could not be processed. It may be malformed, expired, or the connection is already in use.',
+      );
+    });
+
+    it('SU-045: does NOT show error when offer token succeeds (answer token returned)', async () => {
+      const token = encodeWebRTCURLSignal(validOfferSignal);
+      const answerToken = encodeWebRTCURLSignal(validAnswerSignal);
+
+      deps = createDeps({
+        getLocationSearch: () => `?${WEBRTC_URL_SIGNAL_PARAM}=${token}`,
+        getLocationHash: () => '',
+        getLocationHref: () => 'http://localhost/',
+      });
+      deps.networkSyncManager.joinServerlessRoomFromOfferToken.mockResolvedValue(answerToken);
+      service = new SessionURLService(deps);
+
+      await service.handleURLBootstrap();
+
+      expect(deps.networkControl.showInfo).toHaveBeenCalledWith(
+        'Connected as guest via WebRTC. Copy the response token (or response URL) and send it to the host.',
+      );
+      // Should NOT have the error message
+      expect(deps.networkControl.showInfo).not.toHaveBeenCalledWith(
+        expect.stringContaining('could not be processed'),
+      );
+    });
+
+    it('SU-046: answer link still shows guidance message', async () => {
+      const token = encodeWebRTCURLSignal(validAnswerSignal);
+
+      deps = createDeps({
+        getLocationSearch: () => `?${WEBRTC_URL_SIGNAL_PARAM}=${token}`,
+        getLocationHash: () => '',
+      });
+      service = new SessionURLService(deps);
+
+      await service.handleURLBootstrap();
+
+      expect(deps.networkControl.showInfo).toHaveBeenCalledWith(
+        'This is a WebRTC response link. Paste it into the host Network Sync panel and click Apply.',
+      );
+    });
+
+    it('SU-047: malformed webrtc token prevents room auto-join', async () => {
+      deps = createDeps({
+        getLocationSearch: () => `?room=ABCD&${WEBRTC_URL_SIGNAL_PARAM}=garbage!!!`,
+        getLocationHash: () => '',
+      });
+      service = new SessionURLService(deps);
+
+      await service.handleURLBootstrap();
+
+      // handledServerlessOffer should be true, so room auto-join is skipped
+      expect(deps.networkSyncManager.joinRoom).not.toHaveBeenCalled();
+      expect(deps.networkControl.showInfo).toHaveBeenCalledWith(
+        'The WebRTC link is malformed or corrupted and could not be processed.',
+      );
+    });
+
+    it('SU-048: empty webrtc token does not trigger error (no token present)', async () => {
+      deps = createDeps({
+        getLocationSearch: () => '',
+        getLocationHash: () => '',
+      });
+      service = new SessionURLService(deps);
+
+      await service.handleURLBootstrap();
+
+      expect(deps.networkControl.showInfo).not.toHaveBeenCalled();
+    });
+
+    it('SU-049: offer link failure still allows shared state from hash to apply', async () => {
+      const token = encodeWebRTCURLSignal(validOfferSignal);
+      const state: SessionURLState = { frame: 77, fps: 24, sourceIndex: 0 };
+      const encoded = encodeSessionState(state);
+
+      deps = createDeps({
+        getLocationSearch: () => `?${WEBRTC_URL_SIGNAL_PARAM}=${token}`,
+        getLocationHash: () => `#s=${encoded}`,
+        getLocationHref: () => 'http://localhost/',
+      });
+      deps.networkSyncManager.joinServerlessRoomFromOfferToken.mockResolvedValue(null);
+      service = new SessionURLService(deps);
+
+      await service.handleURLBootstrap();
+
+      // Error shown for the failed WebRTC link
+      expect(deps.networkControl.showInfo).toHaveBeenCalledWith(
+        'The WebRTC invite link could not be processed. It may be malformed, expired, or the connection is already in use.',
+      );
+      // Shared state from hash should still be applied
+      expect(deps.session.goToFrame).toHaveBeenCalledWith(77);
     });
   });
 

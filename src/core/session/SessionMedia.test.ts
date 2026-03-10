@@ -408,6 +408,16 @@ describe('SessionMedia', () => {
       expect(listener).toHaveBeenCalledWith(info);
     });
 
+    it('SM-029b: hdrDowngraded event fires with filename', () => {
+      const listener = vi.fn();
+      media.on('hdrDowngraded', listener);
+
+      const info = { filename: 'hdr_clip.mp4' };
+      media.emit('hdrDowngraded', info);
+
+      expect(listener).toHaveBeenCalledWith(info);
+    });
+
     it('SM-030: on() returns unsubscribe function', () => {
       const listener = vi.fn();
       const unsubscribe = media.on('durationChanged', listener);

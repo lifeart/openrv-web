@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { MuSourceBridge } from '../MuSourceBridge';
+import type { PixelReadbackProvider } from '../MuSourceBridge';
 
 // --- Mock openrv API ---
 
@@ -332,9 +333,9 @@ describe('MuSourceBridge', () => {
   });
 
   describe('sourcePixelValue', () => {
-    it('returns [0,0,0,0] for non-image sources', async () => {
+    it('returns null for non-image sources without readback provider', async () => {
       const name = await bridge.addSourceVerbose(['/a.mov']);
-      expect(bridge.sourcePixelValue(name, 0, 0)).toEqual([0, 0, 0, 0]);
+      expect(bridge.sourcePixelValue(name, 0, 0)).toBeNull();
     });
 
     it('reads from in-memory image source', () => {
@@ -350,15 +351,15 @@ describe('MuSourceBridge', () => {
       expect(bridge.sourcePixelValue(name, 1, 1)).toEqual([1, 1, 1, 1]);
     });
 
-    it('returns [0,0,0,0] for out-of-bounds coordinates', () => {
+    it('returns null for out-of-bounds coordinates on in-memory source', () => {
       const name = bridge.newImageSource('testImg', 2, 2, 4);
       bridge.newImageSourcePixels(
         name,
         0,
         new Float32Array(2 * 2 * 4),
       );
-      expect(bridge.sourcePixelValue(name, -1, 0)).toEqual([0, 0, 0, 0]);
-      expect(bridge.sourcePixelValue(name, 5, 5)).toEqual([0, 0, 0, 0]);
+      expect(bridge.sourcePixelValue(name, -1, 0)).toBeNull();
+      expect(bridge.sourcePixelValue(name, 5, 5)).toBeNull();
     });
 
     it('throws on invalid coordinates', async () => {
@@ -371,6 +372,57 @@ describe('MuSourceBridge', () => {
       expect(() => bridge.sourcePixelValue('nope', 0, 0)).toThrow(
         'Source not found',
       );
+    });
+
+    it('delegates to PixelReadbackProvider for GPU-backed sources', async () => {
+      const name = await bridge.addSourceVerbose(['/movie.mov']);
+      const mockProvider: PixelReadbackProvider = {
+        readSourcePixel: vi.fn().mockReturnValue([0.5, 0.25, 0.75, 1.0]),
+      };
+      bridge.setPixelReadbackProvider(mockProvider);
+
+      const result = bridge.sourcePixelValue(name, 100, 200);
+      expect(result).toEqual([0.5, 0.25, 0.75, 1.0]);
+      expect(mockProvider.readSourcePixel).toHaveBeenCalledWith(name, 100, 200);
+    });
+
+    it('returns null when readback provider returns null', async () => {
+      const name = await bridge.addSourceVerbose(['/movie.mov']);
+      const mockProvider: PixelReadbackProvider = {
+        readSourcePixel: vi.fn().mockReturnValue(null),
+      };
+      bridge.setPixelReadbackProvider(mockProvider);
+
+      expect(bridge.sourcePixelValue(name, 0, 0)).toBeNull();
+    });
+
+    it('prefers in-memory data over readback provider', () => {
+      const name = bridge.newImageSource('testImg', 2, 2, 4);
+      const pixels = new Float32Array([
+        1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1, 1, 1, 1, 1, 1,
+      ]);
+      bridge.newImageSourcePixels(name, 0, pixels);
+
+      const mockProvider: PixelReadbackProvider = {
+        readSourcePixel: vi.fn().mockReturnValue([0, 0, 0, 0]),
+      };
+      bridge.setPixelReadbackProvider(mockProvider);
+
+      // Should use in-memory data, not provider
+      expect(bridge.sourcePixelValue(name, 0, 0)).toEqual([1, 0, 0, 1]);
+      expect(mockProvider.readSourcePixel).not.toHaveBeenCalled();
+    });
+
+    it('clearing provider restores null return for GPU sources', async () => {
+      const name = await bridge.addSourceVerbose(['/movie.mov']);
+      const mockProvider: PixelReadbackProvider = {
+        readSourcePixel: vi.fn().mockReturnValue([0.5, 0.5, 0.5, 1.0]),
+      };
+      bridge.setPixelReadbackProvider(mockProvider);
+      expect(bridge.sourcePixelValue(name, 0, 0)).toEqual([0.5, 0.5, 0.5, 1.0]);
+
+      bridge.setPixelReadbackProvider(null);
+      expect(bridge.sourcePixelValue(name, 0, 0)).toBeNull();
     });
   });
 
