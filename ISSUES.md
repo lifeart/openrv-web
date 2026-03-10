@@ -5555,6 +5555,91 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The getting-started docs make manual snapshot naming sound like a first-class part of the shipped capture workflow.
   - Users opening the panel can expect a naming step that never appears during normal snapshot creation.
 
+### 472. The advanced-compare docs present Quad View as a shipped feature, but the live UI itself marks it as preview-only and unwired
+
+- Severity: Low
+- Area: Documentation / compare workflow
+- Evidence:
+  - The advanced-compare page describes Quad View as a working mode where four quadrants each display a different source and stay in sync during playback in [docs/compare/advanced-compare.md](/Users/lifeart/Repos/openrv-web/docs/compare/advanced-compare.md#L7) through [docs/compare/advanced-compare.md](/Users/lifeart/Repos/openrv-web/docs/compare/advanced-compare.md#L11).
+  - The shipped Compare dropdown now labels Quad View with a `preview` badge and an explicit tooltip saying it is “not yet connected to the viewer rendering pipeline” in [src/ui/components/CompareControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/CompareControl.ts#L585) through [src/ui/components/CompareControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/CompareControl.ts#L593).
+  - Production view wiring still only subscribes to wipe, A/B, difference matte, and blend-mode events; quad-view changes only produce a warning in [src/AppViewWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppViewWiring.ts#L87) through [src/AppViewWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppViewWiring.ts#L143).
+- Impact:
+  - The docs teach Quad View as ready for real multi-version review even though the shipped UI itself warns that it is only a preview surface.
+  - That makes the comparison docs more optimistic than the app and sets users up to trust a mode that is still non-functional in production.
+
+### 473. The advanced-compare docs teach a full Reference Image Manager workflow, but the shipped UI only exposes capture plus a binary toggle
+
+- Severity: Low
+- Area: Documentation / compare workflow
+- Evidence:
+  - The advanced-compare page presents five reference comparison modes and describes overlay opacity as part of the user-facing workflow in [docs/compare/advanced-compare.md](/Users/lifeart/Repos/openrv-web/docs/compare/advanced-compare.md#L13) through [docs/compare/advanced-compare.md#L31).
+  - The shipped View tab only mounts two reference actions: `Capture reference frame` and `Toggle reference comparison` in [src/services/tabContent/buildViewTab.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildViewTab.ts#L85) through [src/services/tabContent/buildViewTab.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildViewTab.ts#L117).
+  - `ReferenceManager` still carries `viewMode`, `opacity`, and `wipePosition` as real state in [src/ui/components/ReferenceManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ReferenceManager.ts#L25) through [src/ui/components/ReferenceManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ReferenceManager.ts#L30), but there is no shipped UI for changing those fields.
+- Impact:
+  - The docs make reference comparison look like a configurable end-user tool when the shipped interface only exposes the narrowest on/off subset.
+  - Users following the page will look for mode and opacity controls that do not exist in the real app.
+
+### 474. The advanced-compare docs present Matte Overlay as part of the review toolkit even though the shipped compare/view UI never exposes it
+
+- Severity: Low
+- Area: Documentation / compare workflow
+- Evidence:
+  - The advanced-compare page lists Matte Overlay as one of the core advanced comparison capabilities and describes aspect, opacity, and center-point configuration in [docs/compare/advanced-compare.md](/Users/lifeart/Repos/openrv-web/docs/compare/advanced-compare.md#L33) through [docs/compare/advanced-compare.md#L47).
+  - The viewer does implement a matte overlay and exposes it through [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L3792) through [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L3795), with overlay creation in [src/ui/components/OverlayManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/OverlayManager.ts#L111) through [src/ui/components/OverlayManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/OverlayManager.ts#L113).
+  - The shipped View tab control surface contains compare, layout, stereo, ghost, reference, stack, PAR, background-pattern, and other display buttons, but no matte-overlay entry in [src/services/tabContent/buildViewTab.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildViewTab.ts#L31) through [src/services/tabContent/buildViewTab.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildViewTab.ts#L439).
+- Impact:
+  - The compare docs make Matte Overlay sound like part of the normal review toolbox when the shipped UI still provides no way to enable or configure it.
+  - That sends users to the comparison docs for a feature they cannot actually reach from the app.
+
+### 475. The advanced-compare docs say comparison annotations follow the underlying source, but production still keys them to the active `A/B` slot
+
+- Severity: Low
+- Area: Documentation / compare annotations
+- Evidence:
+  - The advanced-compare page says “Annotations are tied to the source they were drawn on” and that switching between A and B preserves each source’s annotation layer independently in [docs/compare/advanced-compare.md](/Users/lifeart/Repos/openrv-web/docs/compare/advanced-compare.md#L61) through [docs/compare/advanced-compare.md#L63).
+  - Production paint wiring still forwards `session.currentAB` into the annotation version selector in [src/services/LayoutOrchestrator.ts](/Users/lifeart/Repos/openrv-web/src/services/LayoutOrchestrator.ts#L645).
+  - The underlying compare state that drives that routing is only `A` or `B`, not a stable source identity, in [src/core/session/ABCompareManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/ABCompareManager.ts#L26) through [src/core/session/ABCompareManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/ABCompareManager.ts#L43).
+- Impact:
+  - The docs imply source-stable comparison annotations, but the shipped behavior can drift when A/B assignments change.
+  - Reviewers can trust the docs and assume an annotation belongs to a media source when production is still anchoring it to the compare slot instead.
+
+### 476. The overlays guide says embedded source timecode is shown alongside session timecode, but the shipped overlay only renders one timecode plus a frame counter
+
+- Severity: Low
+- Area: Documentation / timecode overlay
+- Evidence:
+  - The overlays guide says that for sources with embedded timecode metadata, “the source timecode is displayed alongside the session timecode” in [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L18).
+  - The shipped `TimecodeOverlay` only renders two text rows: a single formatted timecode string and an optional `Frame N / total` counter in [src/ui/components/TimecodeOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/TimecodeOverlay.ts#L73) through [src/ui/components/TimecodeOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/TimecodeOverlay.ts#L97) and [src/ui/components/TimecodeOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/TimecodeOverlay.ts#L119) through [src/ui/components/TimecodeOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/TimecodeOverlay.ts#L129).
+  - The overlay state only supports position, font size, frame-counter visibility, and background opacity in [src/ui/components/TimecodeOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/TimecodeOverlay.ts#L18) through [src/ui/components/TimecodeOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/TimecodeOverlay.ts#L33); there is no second source-timecode field or metadata binding in the component.
+- Impact:
+  - The docs promise a richer review overlay than the shipped implementation actually provides.
+  - Users expecting both session and embedded source timecode on screen will only get a single timecode readout.
+
+### 477. The overlays guide documents adjustable clipping thresholds, but the shipped clipping overlay hardcodes its trigger values
+
+- Severity: Low
+- Area: Documentation / clipping overlay
+- Evidence:
+  - The overlays guide says clipping thresholds can be adjusted away from the default `0.0/1.0` positions and gives `0.95` as a practical example in [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L56) through [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L58).
+  - The shipped `ClippingOverlayState` has no threshold fields; it only carries enable/show-highlights/show-shadows/color/opacity in [src/ui/components/ClippingOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ClippingOverlay.ts#L12) through [src/ui/components/ClippingOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ClippingOverlay.ts#L29).
+  - The actual clip checks are hardcoded to `r/g/b <= 1` for shadows and `r/g/b >= 254` or `luma >= 254` for highlights in [src/ui/components/ClippingOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ClippingOverlay.ts#L63) through [src/ui/components/ClippingOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ClippingOverlay.ts#L72).
+- Impact:
+  - The docs present an early-warning threshold workflow that the shipped overlay simply cannot perform.
+  - Users looking for configurable near-clipping detection will find only a fixed binary implementation.
+
+### 478. The overlays guide describes a single “missing frame indicator” behavior, but production ships multiple modes and the default does not replace the viewer content
+
+- Severity: Low
+- Area: Documentation / missing-frame behavior
+- Evidence:
+  - The overlays guide says the missing-frame indicator “replaces the viewer content” with a red-X warning state and highlights the missing frame on the timeline in [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L62) through [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L70).
+  - The shipped View tab exposes four distinct missing-frame modes, `Off`, `Frame`, `Hold`, and `Black`, in [src/services/tabContent/buildViewTab.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildViewTab.ts#L191) through [src/services/tabContent/buildViewTab.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildViewTab.ts#L199).
+  - In the renderer, only `black` truly replaces the viewed image; `hold` reuses a nearby frame and the default `show-frame` path continues drawing the current source image while separately showing the overlay in [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L1521) through [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L1558).
+  - The shipped `MissingFrameOverlay` itself is a centered warning icon plus frame number, not a red-X fill pattern, in [src/ui/components/MissingFrameOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/MissingFrameOverlay.ts#L31) through [src/ui/components/MissingFrameOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/MissingFrameOverlay.ts#L69).
+- Impact:
+  - The docs describe one fixed missing-frame experience, but the real app exposes multiple viewer behaviors and defaults to a much less destructive overlay mode.
+  - That can mislead users about what will happen during sequence review and what the current missing-frame setting actually controls.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

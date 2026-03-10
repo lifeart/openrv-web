@@ -76,13 +76,23 @@ export class MuExtraCommands {
     if (typeof console !== 'undefined') {
       console.info(`[RV Feedback] ${message}`);
     }
-    // Auto-clear after duration
-    if (typeof setTimeout !== 'undefined' && duration > 0) {
+    // Auto-clear after duration, then drain queue
+    if (typeof setTimeout !== 'undefined') {
       setTimeout(() => {
         if (this._currentFeedback === message) {
           this._currentFeedback = null;
+          this.drainFeedbackQueue();
         }
-      }, duration * 1000);
+      }, Math.max(0, duration * 1000));
+    }
+  }
+
+  /** Show the next queued feedback message, if any. */
+  private drainFeedbackQueue(): void {
+    if (this._currentFeedback !== null) return;
+    const next = this.feedbackQueue.shift();
+    if (next) {
+      this.displayFeedback(next.message, next.duration);
     }
   }
 

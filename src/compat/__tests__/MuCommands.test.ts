@@ -664,6 +664,171 @@ describe('MuExtraCommands', () => {
       expect(() => extra.displayFeedbackQueue('queued')).not.toThrow();
       spy.mockRestore();
     });
+
+    describe('feedback queue drain', () => {
+      beforeEach(() => {
+        vi.useFakeTimers();
+      });
+
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
+      it('displays all 3 queued messages in order', () => {
+        const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+        extra.displayFeedbackQueue('msg1', 1.0);
+        extra.displayFeedbackQueue('msg2', 1.0);
+        extra.displayFeedbackQueue('msg3', 1.0);
+
+        // msg1 shown immediately
+        expect(spy).toHaveBeenCalledWith('[RV Feedback] msg1');
+        expect(spy).toHaveBeenCalledTimes(1);
+
+        // After 1s, msg1 expires → msg2 shown
+        vi.advanceTimersByTime(1000);
+        expect(spy).toHaveBeenCalledWith('[RV Feedback] msg2');
+        expect(spy).toHaveBeenCalledTimes(2);
+
+        // After another 1s, msg2 expires → msg3 shown
+        vi.advanceTimersByTime(1000);
+        expect(spy).toHaveBeenCalledWith('[RV Feedback] msg3');
+        expect(spy).toHaveBeenCalledTimes(3);
+
+        spy.mockRestore();
+      });
+
+      it('each message is displayed only after the previous timeout expires', () => {
+        const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+        extra.displayFeedbackQueue('a', 2.0);
+        extra.displayFeedbackQueue('b', 1.0);
+
+        expect(spy).toHaveBeenCalledTimes(1);
+
+        // Half-way through first message — second should not appear yet
+        vi.advanceTimersByTime(1000);
+        expect(spy).toHaveBeenCalledTimes(1);
+
+        // First message expires
+        vi.advanceTimersByTime(1000);
+        expect(spy).toHaveBeenCalledTimes(2);
+        expect(spy).toHaveBeenLastCalledWith('[RV Feedback] b');
+
+        spy.mockRestore();
+      });
+
+      it('messages added during drain are also eventually displayed', () => {
+        const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+        extra.displayFeedbackQueue('first', 1.0);
+
+        // While first is showing, add another
+        extra.displayFeedbackQueue('second', 1.0);
+
+        vi.advanceTimersByTime(1000);
+        expect(spy).toHaveBeenCalledWith('[RV Feedback] second');
+
+        // Add one more during second
+        extra.displayFeedbackQueue('third', 1.0);
+
+        vi.advanceTimersByTime(1000);
+        expect(spy).toHaveBeenCalledWith('[RV Feedback] third');
+        expect(spy).toHaveBeenCalledTimes(3);
+
+        spy.mockRestore();
+      });
+
+      it('queue is fully empty after all messages are shown', () => {
+        const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+        extra.displayFeedbackQueue('x', 0.5);
+        extra.displayFeedbackQueue('y', 0.5);
+
+        vi.advanceTimersByTime(500);
+        vi.advanceTimersByTime(500);
+
+        // Access private feedbackQueue via cast
+        const queue = (extra as unknown as { feedbackQueue: unknown[] }).feedbackQueue;
+        expect(queue).toHaveLength(0);
+
+        spy.mockRestore();
+      });
+
+      it('zero-duration middle message does not stall the drain loop', () => {
+        const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+        extra.displayFeedbackQueue('first', 1.0);
+        extra.displayFeedbackQueue('mid-zero', 0);
+        extra.displayFeedbackQueue('last', 1.0);
+
+        // first shown immediately
+        expect(spy).toHaveBeenCalledWith('[RV Feedback] first');
+        expect(spy).toHaveBeenCalledTimes(1);
+
+        // After 1s first expires → mid-zero shown and immediately cleared → last shown
+        vi.advanceTimersByTime(1000);
+        expect(spy).toHaveBeenCalledWith('[RV Feedback] mid-zero');
+        // setTimeout(..., 0) fires on next tick
+        vi.advanceTimersByTime(0);
+        expect(spy).toHaveBeenCalledWith('[RV Feedback] last');
+        expect(spy).toHaveBeenCalledTimes(3);
+
+        // After last expires, _currentFeedback is cleared
+        vi.advanceTimersByTime(1000);
+        const current = (extra as unknown as { _currentFeedback: string | null })._currentFeedback;
+        expect(current).toBeNull();
+
+        spy.mockRestore();
+      });
+
+      it('zero-duration first message still drains to normal second message', () => {
+        const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+        extra.displayFeedbackQueue('zero-first', 0);
+        extra.displayFeedbackQueue('normal-second', 1.0);
+
+        // zero-first shown immediately
+        expect(spy).toHaveBeenCalledWith('[RV Feedback] zero-first');
+        expect(spy).toHaveBeenCalledTimes(1);
+
+        // setTimeout(..., 0) fires → zero-first cleared → normal-second shown
+        vi.advanceTimersByTime(0);
+        expect(spy).toHaveBeenCalledWith('[RV Feedback] normal-second');
+        expect(spy).toHaveBeenCalledTimes(2);
+
+        // After 1s, normal-second cleared
+        vi.advanceTimersByTime(1000);
+        const current = (extra as unknown as { _currentFeedback: string | null })._currentFeedback;
+        expect(current).toBeNull();
+
+        spy.mockRestore();
+      });
+
+      it('_currentFeedback is null after last zero-duration message drains', () => {
+        const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+        extra.displayFeedbackQueue('only-zero', 0);
+
+        expect(spy).toHaveBeenCalledWith('[RV Feedback] only-zero');
+
+        vi.advanceTimersByTime(0);
+        const current = (extra as unknown as { _currentFeedback: string | null })._currentFeedback;
+        expect(current).toBeNull();
+
+        const queue = (extra as unknown as { feedbackQueue: unknown[] }).feedbackQueue;
+        expect(queue).toHaveLength(0);
+
+        spy.mockRestore();
+      });
+
+      it('single displayFeedback() call still works without queue', () => {
+        const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+        extra.displayFeedback('standalone', 1.0);
+        expect(spy).toHaveBeenCalledWith('[RV Feedback] standalone');
+
+        vi.advanceTimersByTime(1000);
+        // No errors, _currentFeedback cleared
+        const current = (extra as unknown as { _currentFeedback: string | null })._currentFeedback;
+        expect(current).toBeNull();
+        expect(spy).toHaveBeenCalledTimes(1);
+
+        spy.mockRestore();
+      });
+    });
   });
 
   // --- Session State Queries ---
