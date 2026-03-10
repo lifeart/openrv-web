@@ -10,11 +10,13 @@
 import type { ColorAdjustments, ChannelMode } from '../core/types/color';
 import type { CDLValues } from '../color/CDL';
 import type { ColorCurvesData } from '../color/ColorCurves';
+import type { TextureFilterMode } from '../core/types/filter';
+import type { BackgroundPatternState } from '../core/types/background';
 
 /**
  * Minimal viewer interface required by the API layer.
  *
- * Provides zoom, pan, and channel mode control.
+ * Provides zoom, pan, channel mode, texture filter, and background pattern control.
  */
 export interface ViewerProvider {
   setZoom(level: number): void;
@@ -27,6 +29,10 @@ export interface ViewerProvider {
   getPan(): { x: number; y: number };
   setChannelMode(mode: ChannelMode): void;
   getChannelMode(): ChannelMode;
+  setFilterMode(mode: TextureFilterMode): void;
+  getFilterMode(): TextureFilterMode;
+  setBackgroundPatternState(state: BackgroundPatternState): void;
+  getBackgroundPatternState(): BackgroundPatternState;
 }
 
 /**

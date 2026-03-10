@@ -3,7 +3,7 @@ import { type PaintEngine } from '../../paint/PaintEngine';
 import { PaintRenderer } from '../../paint/PaintRenderer';
 import { PerfTrace } from '../../utils/PerfTrace';
 import { type ColorAdjustments } from './ColorControls';
-import { type WipeState, type WipeMode } from './WipeControl';
+import { type WipeState, type WipeMode } from '../../core/types/wipe';
 import { type Transform2D } from './TransformControl';
 import { type FilterSettings, DEFAULT_FILTER_SETTINGS } from './FilterControl';
 import type { TextureFilterMode } from '../../core/types/filter';
@@ -2447,8 +2447,9 @@ export class Viewer {
   }
 
   // Texture filter mode methods (nearest-neighbor vs bilinear)
-  toggleFilterMode(): void {
-    this._textureFilterMode = this._textureFilterMode === 'linear' ? 'nearest' : 'linear';
+  setFilterMode(mode: TextureFilterMode): void {
+    if (mode === this._textureFilterMode) return;
+    this._textureFilterMode = mode;
 
     // Persist preference
     persistFilterModePreference(this._textureFilterMode);
@@ -2466,6 +2467,10 @@ export class Viewer {
 
     // Re-render current frame
     this.scheduleRender();
+  }
+
+  toggleFilterMode(): void {
+    this.setFilterMode(this._textureFilterMode === 'linear' ? 'nearest' : 'linear');
   }
 
   getFilterMode(): TextureFilterMode {

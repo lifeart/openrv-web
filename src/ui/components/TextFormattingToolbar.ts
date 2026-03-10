@@ -111,6 +111,12 @@ export class TextFormattingToolbar extends EventEmitter<TextFormattingToolbarEve
       this.paintEngine.on('annotationsChanged', () => {
         this.refreshStateFromActiveAnnotation();
       }),
+      // Listen for canvas text selection events
+      this.paintEngine.on('annotationSelected', (selection) => {
+        if (selection && selection.annotation.type === 'text') {
+          this.setActiveAnnotation(selection.annotation.id, selection.frame);
+        }
+      }),
     );
   }
 
@@ -238,13 +244,10 @@ export class TextFormattingToolbar extends EventEmitter<TextFormattingToolbarEve
   /**
    * Set the active text annotation externally.
    *
-   * TODO(#106): This method is never called from production wiring.
-   * Text selection changes in the canvas should call this so the toolbar
-   * tracks the user-selected annotation, not just the most recently created one.
+   * Called when the user clicks on an existing text annotation in the canvas,
+   * wired via the PaintEngine 'annotationSelected' event.
    */
   setActiveAnnotation(id: string, frame: number): void {
-    // TODO(#106): Wire this from canvas text selection events
-    console.info('[TextFormattingToolbar] setActiveAnnotation called externally — not yet wired from production');
     const annotations = this.paintEngine.getAnnotationsForFrame(frame);
     const annotation = annotations.find((a) => a.id === id && a.type === 'text') as TextAnnotation | undefined;
 

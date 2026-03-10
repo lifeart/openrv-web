@@ -153,51 +153,44 @@ describe('VolumeControl', () => {
   });
 
   describe('slider visibility (H-06 mobile/touch/keyboard)', () => {
-    it('VOL-H06a: clicking the mute button toggles the slider expanded state', () => {
+    it('VOL-H06a: clicking the mute button only toggles mute, does not expand slider', () => {
       const element = volumeControl.render();
       document.body.appendChild(element);
 
       const muteButton = element.querySelector('button')!;
       expect(volumeControl.isSliderExpanded()).toBe(false);
 
-      // First click should expand
-      muteButton.click();
-      expect(volumeControl.isSliderExpanded()).toBe(true);
-
-      // Second click should collapse
+      // Click should only mute, not expand slider
       muteButton.click();
       expect(volumeControl.isSliderExpanded()).toBe(false);
     });
 
-    it('VOL-H06b: when expanded via click, slider remains visible on pointerleave', () => {
+    it('VOL-H06b: hover expands slider, pointerleave collapses it', () => {
       const element = volumeControl.render();
       document.body.appendChild(element);
 
-      const muteButton = element.querySelector('button')!;
       const sliderContainer = element.querySelector('div')!;
 
-      // Click to expand
-      muteButton.click();
-      expect(volumeControl.isSliderExpanded()).toBe(true);
+      // Hover to expand
+      element.dispatchEvent(new MouseEvent('pointerenter', { bubbles: true }));
       expect(sliderContainer.style.width).toBe('160px');
+      expect(volumeControl.isSliderExpanded()).toBe(true);
 
-      // Simulate pointerleave on the container
+      // Pointer leave collapses
       element.dispatchEvent(new MouseEvent('pointerleave', { bubbles: true }));
-
-      // Should still be expanded because it was pinned via click
-      expect(volumeControl.isSliderExpanded()).toBe(true);
-      expect(sliderContainer.style.width).toBe('160px');
+      expect(sliderContainer.style.width).toMatch(/^0(px)?$/);
+      expect(volumeControl.isSliderExpanded()).toBe(false);
     });
 
-    it('VOL-H06c: the slider is focusable via keyboard when expanded', () => {
+    it('VOL-H06c: the slider is focusable via keyboard when expanded by focus', () => {
       const element = volumeControl.render();
       document.body.appendChild(element);
 
       const muteButton = element.querySelector('button')!;
       const slider = element.querySelector('input[type="range"]') as HTMLInputElement;
 
-      // Click to expand
-      muteButton.click();
+      // Focus mute button to expand
+      muteButton.focus();
       expect(volumeControl.isSliderExpanded()).toBe(true);
 
       // The slider container should have non-zero width, making the slider reachable
@@ -209,26 +202,6 @@ describe('VolumeControl', () => {
       expect(document.activeElement).toBe(slider);
     });
 
-    it('VOL-H06d: clicking outside the volume control area collapses the slider', () => {
-      const element = volumeControl.render();
-      document.body.appendChild(element);
-
-      const muteButton = element.querySelector('button')!;
-
-      // Click to expand
-      muteButton.click();
-      expect(volumeControl.isSliderExpanded()).toBe(true);
-
-      // Click outside (on document body, not inside the control)
-      const outsideElement = document.createElement('div');
-      document.body.appendChild(outsideElement);
-      outsideElement.click();
-
-      expect(volumeControl.isSliderExpanded()).toBe(false);
-      const sliderContainer = element.querySelector('div')!;
-      expect(sliderContainer.style.width).toBe('0px');
-    });
-
     it('VOL-H06e: the mute button has aria-label attribute', () => {
       const element = volumeControl.render();
       const muteButton = element.querySelector('button')!;
@@ -236,19 +209,19 @@ describe('VolumeControl', () => {
       expect(muteButton.getAttribute('aria-label')).toBe('Toggle mute');
     });
 
-    it('VOL-H06f: hover-only expand still collapses on pointerleave when not pinned', () => {
+    it('VOL-H06f: hover expand collapses on pointerleave', () => {
       const element = volumeControl.render();
       document.body.appendChild(element);
 
       const sliderContainer = element.querySelector('div')!;
 
-      // Hover to expand (without clicking)
+      // Hover to expand
       element.dispatchEvent(new MouseEvent('pointerenter', { bubbles: true }));
       expect(sliderContainer.style.width).toBe('160px');
 
-      // Pointer leave should collapse since not pinned
+      // Pointer leave should collapse
       element.dispatchEvent(new MouseEvent('pointerleave', { bubbles: true }));
-      expect(sliderContainer.style.width).toBe('0px');
+      expect(sliderContainer.style.width).toMatch(/^0(px)?$/);
       expect(volumeControl.isSliderExpanded()).toBe(false);
     });
 
@@ -258,8 +231,8 @@ describe('VolumeControl', () => {
 
       const muteButton = element.querySelector('button')!;
 
-      // Click to expand
-      muteButton.click();
+      // Focus to expand
+      muteButton.focus();
       expect(volumeControl.isSliderExpanded()).toBe(true);
 
       // Create an external element to receive focus
@@ -284,8 +257,8 @@ describe('VolumeControl', () => {
       const muteButton = element.querySelector('button')!;
       const slider = element.querySelector('input[type="range"]')!;
 
-      // Click to expand
-      muteButton.click();
+      // Focus to expand
+      muteButton.focus();
       expect(volumeControl.isSliderExpanded()).toBe(true);
 
       // Dispatch focusout with relatedTarget inside the control (e.g., moving from button to slider)
@@ -306,8 +279,8 @@ describe('VolumeControl', () => {
       const element = volumeControl.render();
       document.body.appendChild(element);
 
-      const muteButton = element.querySelector('button')!;
-      muteButton.click();
+      // Hover to expand
+      element.dispatchEvent(new MouseEvent('pointerenter', { bubbles: true }));
 
       const sliderContainer = element.querySelector('div')!;
       const expandedWidth = parseInt(sliderContainer.style.width, 10);
@@ -321,8 +294,8 @@ describe('VolumeControl', () => {
       const element = volumeControl.render();
       document.body.appendChild(element);
 
-      const muteButton = element.querySelector('button')!;
-      muteButton.click();
+      // Hover to expand
+      element.dispatchEvent(new MouseEvent('pointerenter', { bubbles: true }));
 
       const scrubCheckbox = element.querySelector(
         'input[type="checkbox"]',

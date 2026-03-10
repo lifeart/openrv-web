@@ -341,6 +341,12 @@ export class ViewerInputHandler {
       } else if (tool === 'text') {
         const point = this.getCanvasPoint(e.clientX, e.clientY);
         if (point) {
+          // Check if the click hits an existing text annotation first
+          const hit = paintEngine.hitTestTextAnnotations(session.currentFrame, point);
+          if (hit) {
+            paintEngine.emit('annotationSelected', { annotation: hit, frame: session.currentFrame });
+            return;
+          }
           this.showTextInputOverlay(e.clientX, e.clientY, point);
         }
       } else if (this.isShapeTool(tool)) {

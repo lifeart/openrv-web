@@ -1,5 +1,22 @@
 # Fixed Issues
 
+## Issue #235: Several Mu compat display commands are marked supported but only mutate bridge-local state, not the real viewer
+
+- **Severity**: Medium
+- **Area**: Mu compatibility / view-display scripting
+- **Root Cause**: `setFiltering`, `getFiltering`, `setBGMethod`, `bgMethod`, `setMargins`, and `margins` were marked as `supported` in the Mu command manifest, but implementations only updated local bridge fields (`_filterMode`, `_bgMethod`, `_margins`) without calling into the real viewer/renderer.
+- **Fix**:
+  - **Filtering**: Wired `setFiltering`/`getFiltering` to new `ViewAPI.setTextureFilterMode()`/`getTextureFilterMode()` → `Viewer.setFilterMode()` → `Renderer.setTextureFilterMode()`. Mu integer constants (0=nearest, 1=linear) mapped to `TextureFilterMode` strings. Extracted `setFilterMode()` from `toggleFilterMode()` in Viewer for direct mode setting.
+  - **Background**: Wired `setBGMethod`/`bgMethod` to new `ViewAPI.setBackgroundPattern()`/`getBackgroundPattern()` → `Viewer.setBackgroundPatternState()`/`getBackgroundPatternState()`. Preserves existing pattern state fields via spread on set.
+  - **Margins**: Downgraded from `supported` to `'stub'` in manifest — no real viewer margins concept exists. Local-only implementation preserved for backward compat but manifest is now honest.
+  - Added `'stub'` as valid support level in `SUPPORT_MAP` type.
+  - Removed local `_filterMode` and `_bgMethod` fields.
+- **Regression Tests**: Tests across 2 files:
+  - MuCommands: Real API delegation for filtering/background, Mu constant mapping, stub status for margins, invalid input validation
+  - OpenRVAPI: ViewAPI delegation (API-U048–U056), input validation, disposed guards for all 4 new methods
+- **Verification**: TypeScript clean, all 110 MuCommands tests pass, all 278 OpenRVAPI tests pass.
+- **Files Changed**: `src/compat/MuCommands.ts`, `src/compat/__tests__/MuCommands.test.ts`, `src/api/ViewAPI.ts`, `src/api/types.ts`, `src/api/OpenRVAPI.test.ts`, `src/ui/components/Viewer.ts`
+
 ## Issue #234: Mu compat `setFPS()` only changes compat readback state and does not affect real playback timing
 
 - **Severity**: Medium
@@ -1037,8 +1054,9 @@
 
 - **Severity**: Medium
 - **Fix**: Added TODO(#106) + `console.info` in `setActiveAnnotation()` documenting the gap.
-- **Regression Tests**: TFT-106a.
-- **Files Changed**: `src/ui/components/TextFormattingToolbar.ts`, `src/ui/components/TextFormattingToolbar.test.ts`
+- **TODO(#106) Resolved**: Added `hitTestTextAnnotations()` to PaintEngine (proximity-based, reverse iteration for topmost-wins). ViewerInputHandler text-tool click now checks hit-test first — if an existing text annotation is hit, emits `annotationSelected` event instead of creating new overlay. TextFormattingToolbar subscribes to `annotationSelected` and updates state via `setActiveAnnotation()`. Removed console.info and TODO comments.
+- **Regression Tests**: TFT-106a (updated), TFT-106b/c (new: event wiring, null safety), PAINT-055 through PAINT-061 (7 hit-test tests), H106-01/02 (ViewerInputHandler branching).
+- **Files Changed**: `src/paint/PaintEngine.ts`, `src/ui/components/ViewerInputHandler.ts`, `src/ui/components/TextFormattingToolbar.ts`, `src/paint/PaintEngine.test.ts`, `src/ui/components/TextFormattingToolbar.test.ts`, `src/ui/components/ViewerInputHandler.test.ts`
 
 ## Issue #107: Snapshot panel promises a Preview action, but the shipped UI only shows preview metadata
 
@@ -1123,8 +1141,9 @@
 
 - **Severity**: Low
 - **Fix**: Added TODO(#118) to the existing `@deprecated` JSDoc noting it should be removed when safe.
-- **Regression Tests**: 2 tests.
-- **Files Changed**: `src/ui/components/WipeControl.ts`
+- **TODO(#118) Resolved**: Deleted `WipeControl.ts` and its test files. All production and test imports redirected from `./WipeControl` to `../../core/types/wipe` (the canonical source for `WipeState`, `WipeMode`, `DEFAULT_WIPE_STATE`). Cleaned up "WipeControl compatibility" comments in CompareControl and ComparisonManager. No production code instantiated WipeControl.
+- **Files Deleted**: `src/ui/components/WipeControl.ts`, `src/ui/components/WipeControl.test.ts`, `src/ui/components/WipeControl.issue118.test.ts`
+- **Files Changed**: `src/ui/components/Viewer.ts`, `src/ui/components/WipeManager.ts`, `src/ui/components/ViewerWipe.ts`, `src/ui/components/CompareControl.ts`, `src/ui/components/ComparisonManager.ts` (+ their test files)
 
 ## Issue #119: Project save knows it is dropping active viewer state, but the save flow only logs that loss to the console
 

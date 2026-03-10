@@ -3,7 +3,7 @@
  * Handles wipe comparison UI elements and interaction logic.
  */
 
-import { type WipeState } from './WipeControl';
+import { type WipeState } from '../../core/types/wipe';
 
 // Wipe label constants
 const DEFAULT_WIPE_LABEL_A = 'Original';

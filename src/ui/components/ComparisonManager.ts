@@ -423,7 +423,7 @@ export class ComparisonManager extends EventEmitter<ComparisonManagerEvents> {
   }
 
   /**
-   * Get wipe state for WipeControl compatibility
+   * Get wipe state
    */
   getWipeState(): { mode: WipeMode; position: number; showOriginal: 'left' | 'right' | 'top' | 'bottom' } {
     let showOriginal: 'left' | 'right' | 'top' | 'bottom' = 'left';

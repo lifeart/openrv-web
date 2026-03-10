@@ -6,6 +6,8 @@
 
 import type { ViewerProvider } from './types';
 import type { ChannelMode } from '../core/types/color';
+import type { TextureFilterMode } from '../core/types/filter';
+import type { BackgroundPatternState } from '../core/types/background';
 import { ValidationError } from '../core/errors';
 import { DisposableAPI } from './Disposable';
 
@@ -200,5 +202,69 @@ export class ViewAPI extends DisposableAPI {
   getChannel(): string {
     this.assertNotDisposed();
     return this.viewer.getChannelMode();
+  }
+
+  /**
+   * Set the texture filtering mode.
+   *
+   * @param mode - `'nearest'` for pixel-perfect (nearest-neighbor) or `'linear'` for smooth (bilinear).
+   * @throws {ValidationError} If `mode` is not `'nearest'` or `'linear'`.
+   *
+   * @example
+   * ```ts
+   * openrv.view.setTextureFilterMode('nearest');
+   * ```
+   */
+  setTextureFilterMode(mode: TextureFilterMode): void {
+    this.assertNotDisposed();
+    if (mode !== 'nearest' && mode !== 'linear') {
+      throw new ValidationError(`setTextureFilterMode() requires 'nearest' or 'linear', got: "${mode}"`);
+    }
+    this.viewer.setFilterMode(mode);
+  }
+
+  /**
+   * Get the current texture filtering mode.
+   *
+   * @returns `'nearest'` or `'linear'`.
+   *
+   * @example
+   * ```ts
+   * const mode = openrv.view.getTextureFilterMode(); // e.g. 'linear'
+   * ```
+   */
+  getTextureFilterMode(): TextureFilterMode {
+    this.assertNotDisposed();
+    return this.viewer.getFilterMode();
+  }
+
+  /**
+   * Set the background pattern state.
+   *
+   * @param state - The full background pattern state including pattern type, checker size, and custom color.
+   *
+   * @example
+   * ```ts
+   * openrv.view.setBackgroundPattern({ pattern: 'checker', checkerSize: 'medium', customColor: '#1a1a1a' });
+   * ```
+   */
+  setBackgroundPattern(state: BackgroundPatternState): void {
+    this.assertNotDisposed();
+    this.viewer.setBackgroundPatternState(state);
+  }
+
+  /**
+   * Get the current background pattern state.
+   *
+   * @returns The current background pattern state.
+   *
+   * @example
+   * ```ts
+   * const bg = openrv.view.getBackgroundPattern();
+   * ```
+   */
+  getBackgroundPattern(): BackgroundPatternState {
+    this.assertNotDisposed();
+    return this.viewer.getBackgroundPatternState();
   }
 }

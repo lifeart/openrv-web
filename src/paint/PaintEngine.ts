@@ -31,6 +31,7 @@ export interface PaintEngineEvents extends EventMap {
   effectsChanged: PaintEffects;
   toolChanged: PaintTool;
   brushChanged: BrushType;
+  annotationSelected: { annotation: TextAnnotation; frame: number } | null;
 }
 
 export type BuiltinPaintTool =
@@ -826,5 +827,38 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
       this.state.effects = { ...this.state.effects, ...effects };
       this.emit('effectsChanged', this.state.effects);
     }
+  }
+
+  /**
+   * Hit-test text annotations on a given frame against a normalized point.
+   * Returns the topmost (last-added) text annotation within `tolerance`
+   * of the point, or null if none match.
+   *
+   * @param frame - Frame number to search
+   * @param point - Normalized click point (0-1 range)
+   * @param tolerance - Distance threshold in normalized coordinates (default 0.05)
+   */
+  hitTestTextAnnotations(
+    frame: number,
+    point: { x: number; y: number },
+    tolerance = 0.05,
+  ): TextAnnotation | null {
+    const annotations = this.getAnnotationsForFrame(frame);
+    const textAnnotations = annotations.filter(
+      (a): a is TextAnnotation => a.type === 'text',
+    );
+
+    // Iterate in reverse order so topmost (last-added) annotation wins
+    for (let i = textAnnotations.length - 1; i >= 0; i--) {
+      const ann = textAnnotations[i]!;
+      const dx = point.x - ann.position.x;
+      const dy = point.y - ann.position.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      if (distance <= tolerance) {
+        return ann;
+      }
+    }
+
+    return null;
   }
 }

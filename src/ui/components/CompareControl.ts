@@ -1265,7 +1265,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
   }
 
   /**
-   * Get wipe state for WipeControl compatibility
+   * Get wipe state
    */
   getWipeState(): { mode: WipeMode; position: number; showOriginal: 'left' | 'right' | 'top' | 'bottom' } {
     return this.manager.getWipeState();

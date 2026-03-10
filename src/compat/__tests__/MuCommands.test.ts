@@ -76,6 +76,10 @@ function createMockOpenRV() {
       getPan: vi.fn((): { x: number; y: number } => ({ x: 0, y: 0 })),
       setChannel: vi.fn(),
       getChannel: vi.fn(() => 'rgb'),
+      setTextureFilterMode: vi.fn(),
+      getTextureFilterMode: vi.fn((): string => 'linear'),
+      setBackgroundPattern: vi.fn(),
+      getBackgroundPattern: vi.fn(() => ({ pattern: 'black', checkerSize: 'medium', customColor: '#1a1a1a' })),
     },
     markers: {
       add: vi.fn(),
@@ -412,32 +416,58 @@ describe('MuCommands', () => {
       expect(() => cmd.setWindowTitle(123 as unknown as string)).toThrow(TypeError);
     });
 
-    it('setFiltering() / getFiltering() manage filter mode', () => {
-      expect(cmd.getFiltering()).toBe(FilterLinear); // default
-
+    it('setFiltering() calls the real API to set texture filter mode', () => {
       cmd.setFiltering(FilterNearest);
-      expect(cmd.getFiltering()).toBe(FilterNearest);
+      expect(mockOpenRV.view.setTextureFilterMode).toHaveBeenCalledWith('nearest');
 
       cmd.setFiltering(FilterLinear);
+      expect(mockOpenRV.view.setTextureFilterMode).toHaveBeenCalledWith('linear');
+    });
+
+    it('getFiltering() reads from the real API, not local cache', () => {
+      mockOpenRV.view.getTextureFilterMode.mockReturnValue('linear');
       expect(cmd.getFiltering()).toBe(FilterLinear);
+
+      mockOpenRV.view.getTextureFilterMode.mockReturnValue('nearest');
+      expect(cmd.getFiltering()).toBe(FilterNearest);
+      expect(mockOpenRV.view.getTextureFilterMode).toHaveBeenCalled();
+    });
+
+    it('setFiltering() affects viewer state via real API, not just local readback', () => {
+      cmd.setFiltering(FilterNearest);
+      expect(mockOpenRV.view.setTextureFilterMode).toHaveBeenCalledWith('nearest');
+      // Verify getFiltering reads from API, not local state
+      mockOpenRV.view.getTextureFilterMode.mockReturnValue('nearest');
+      expect(cmd.getFiltering()).toBe(FilterNearest);
     });
 
     it('setFiltering() throws on invalid mode', () => {
       expect(() => cmd.setFiltering(99)).toThrow(TypeError);
     });
 
-    it('setBGMethod() / bgMethod() manage background method', () => {
-      expect(cmd.bgMethod()).toBe('black'); // default
-
+    it('setBGMethod() calls the real API to set background pattern', () => {
       cmd.setBGMethod('checker');
+      expect(mockOpenRV.view.setBackgroundPattern).toHaveBeenCalledWith(
+        expect.objectContaining({ pattern: 'checker' }),
+      );
+    });
+
+    it('bgMethod() reads from the real API, not local cache', () => {
+      mockOpenRV.view.getBackgroundPattern.mockReturnValue({ pattern: 'checker', checkerSize: 'medium', customColor: '#1a1a1a' });
       expect(cmd.bgMethod()).toBe('checker');
+      expect(mockOpenRV.view.getBackgroundPattern).toHaveBeenCalled();
     });
 
     it('setBGMethod() throws on non-string', () => {
       expect(() => cmd.setBGMethod(123 as unknown as string)).toThrow(TypeError);
     });
 
-    it('setMargins() / margins() manage viewport margins', () => {
+    it('setMargins/margins are marked as stub, not supported', () => {
+      expect(cmd.isSupported('setMargins')).toBe('stub');
+      expect(cmd.isSupported('margins')).toBe('stub');
+    });
+
+    it('setMargins() / margins() manage viewport margins (local-only stub)', () => {
       expect(cmd.margins()).toEqual([0, 0, 0, 0]); // default
 
       cmd.setMargins([10, 20, 10, 20], false);

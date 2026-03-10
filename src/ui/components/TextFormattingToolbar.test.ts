@@ -271,21 +271,72 @@ describe('TextFormattingToolbar', () => {
     });
   });
 
-  describe('issue #106 regression: setActiveAnnotation exists but is not wired', () => {
-    it('TFT-106a: setActiveAnnotation logs console.info when called', () => {
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+  describe('issue #106: annotationSelected event wires to toolbar', () => {
+    it('TFT-106a: setActiveAnnotation updates toolbar state from annotation', () => {
       toolbar.render();
       paintEngine.tool = 'text';
-      paintEngine.addText(0, { x: 0.5, y: 0.5 }, 'Test');
+
+      // Add two annotations with different formatting
+      paintEngine.addText(0, { x: 0.2, y: 0.2 }, 'Plain');
+      const formatted = paintEngine.addText(0, { x: 0.5, y: 0.5 }, 'Test', 24, {
+        bold: true,
+        italic: true,
+        underline: false,
+      });
+
+      // Toolbar state reflects the last-added annotation (formatted)
+      expect(toolbar.getState().bold).toBe(true);
+      expect(toolbar.getState().italic).toBe(true);
+
+      // Now select the plain annotation (no bold/italic)
       const annotations = paintEngine.getAnnotationsForFrame(0);
-      const textAnn = annotations.find((a) => a.type === 'text');
-      if (textAnn) {
-        toolbar.setActiveAnnotation(textAnn.id, 0);
-        expect(infoSpy).toHaveBeenCalledWith(
-          expect.stringContaining('setActiveAnnotation called externally'),
-        );
+      const plainAnn = annotations.find((a) => a.type === 'text' && a.id !== formatted.id);
+      expect(plainAnn).toBeTruthy();
+      if (plainAnn) {
+        toolbar.setActiveAnnotation(plainAnn.id, 0);
+        expect(toolbar.getState().bold).toBe(false);
+        expect(toolbar.getState().italic).toBe(false);
       }
-      infoSpy.mockRestore();
+
+      // Now select the formatted annotation again
+      toolbar.setActiveAnnotation(formatted.id, 0);
+      expect(toolbar.getState().bold).toBe(true);
+      expect(toolbar.getState().italic).toBe(true);
+      expect(toolbar.getState().underline).toBe(false);
+    });
+
+    it('TFT-106b: annotationSelected event triggers setActiveAnnotation on toolbar', () => {
+      toolbar.render();
+      paintEngine.tool = 'text';
+
+      // Add two text annotations with different formatting
+      paintEngine.addText(0, { x: 0.2, y: 0.2 }, 'First', 24, { bold: true });
+      const second = paintEngine.addText(0, { x: 0.8, y: 0.8 }, 'Second', 24, {
+        italic: true,
+      });
+
+      // Toolbar state should reflect the last-added annotation (Second)
+      expect(toolbar.getState().italic).toBe(true);
+      expect(toolbar.getState().bold).toBe(false);
+
+      // Emit annotationSelected for the first annotation
+      const annotations = paintEngine.getAnnotationsForFrame(0);
+      const firstAnn = annotations.find((a) => a.type === 'text' && a.id !== second.id);
+      expect(firstAnn).toBeTruthy();
+      if (firstAnn) {
+        paintEngine.emit('annotationSelected', { annotation: firstAnn as any, frame: 0 });
+        // Toolbar should now reflect the first annotation's formatting
+        expect(toolbar.getState().bold).toBe(true);
+        expect(toolbar.getState().italic).toBe(false);
+      }
+    });
+
+    it('TFT-106c: null annotationSelected does not crash', () => {
+      toolbar.render();
+      paintEngine.tool = 'text';
+      // Should not throw
+      paintEngine.emit('annotationSelected', null);
+      expect(toolbar.getState().bold).toBe(false);
     });
   });
 });

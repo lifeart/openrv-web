@@ -9,8 +9,7 @@
  * Viewer because it needs deep session/canvas coupling.
  */
 
-import { DEFAULT_WIPE_STATE } from './WipeControl';
-import type { WipeState, WipeMode, StencilBox } from '../../core/types/wipe';
+import { DEFAULT_WIPE_STATE, type WipeState, type WipeMode, type StencilBox } from '../../core/types/wipe';
 import {
   createWipeUIElements,
   updateWipeLinePosition,

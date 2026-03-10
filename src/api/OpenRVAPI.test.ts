@@ -260,6 +260,16 @@ function createMockViewer() {
     viewer._channelMode = mode;
   });
   viewer.getChannelMode = vi.fn(() => viewer._channelMode);
+  viewer._filterMode = 'linear';
+  viewer.setFilterMode = vi.fn((mode: string) => {
+    viewer._filterMode = mode;
+  });
+  viewer.getFilterMode = vi.fn(() => viewer._filterMode);
+  viewer._backgroundPatternState = { pattern: 'black', checkerSize: 'medium', customColor: '#1a1a1a' };
+  viewer.setBackgroundPatternState = vi.fn((state: any) => {
+    viewer._backgroundPatternState = state;
+  });
+  viewer.getBackgroundPatternState = vi.fn(() => viewer._backgroundPatternState);
 
   return viewer;
 }
@@ -1024,6 +1034,55 @@ describe('ViewAPI', () => {
     expect(view.getFitMode()).toBe('height');
     view.fitToWindow();
     expect(view.getFitMode()).toBe('all');
+  });
+
+  it('API-U048: setTextureFilterMode() delegates to viewer', () => {
+    view.setTextureFilterMode('nearest');
+    expect(viewer.setFilterMode).toHaveBeenCalledWith('nearest');
+    expect(view.getTextureFilterMode()).toBe('nearest');
+  });
+
+  it('API-U049: setTextureFilterMode() validates input', () => {
+    expect(() => view.setTextureFilterMode('bicubic' as any)).toThrow(/nearest.*linear/);
+    expect(() => view.setTextureFilterMode('' as any)).toThrow();
+    expect(() => view.setTextureFilterMode(123 as any)).toThrow();
+  });
+
+  it('API-U050: getTextureFilterMode() returns current filter mode', () => {
+    expect(view.getTextureFilterMode()).toBe('linear');
+    view.setTextureFilterMode('nearest');
+    expect(view.getTextureFilterMode()).toBe('nearest');
+  });
+
+  it('API-U051: setBackgroundPattern() delegates to viewer', () => {
+    const state = { pattern: 'checker' as const, checkerSize: 'large' as const, customColor: '#ff0000' };
+    view.setBackgroundPattern(state);
+    expect(viewer.setBackgroundPatternState).toHaveBeenCalledWith(state);
+  });
+
+  it('API-U052: getBackgroundPattern() returns current state', () => {
+    const defaultState = view.getBackgroundPattern();
+    expect(defaultState).toEqual({ pattern: 'black', checkerSize: 'medium', customColor: '#1a1a1a' });
+  });
+
+  it('API-U053: setTextureFilterMode() throws after dispose', () => {
+    view.dispose();
+    expect(() => view.setTextureFilterMode('nearest')).toThrow();
+  });
+
+  it('API-U054: getTextureFilterMode() throws after dispose', () => {
+    view.dispose();
+    expect(() => view.getTextureFilterMode()).toThrow();
+  });
+
+  it('API-U055: setBackgroundPattern() throws after dispose', () => {
+    view.dispose();
+    expect(() => view.setBackgroundPattern({ pattern: 'black', checkerSize: 'medium', customColor: '#1a1a1a' })).toThrow();
+  });
+
+  it('API-U056: getBackgroundPattern() throws after dispose', () => {
+    view.dispose();
+    expect(() => view.getBackgroundPattern()).toThrow();
   });
 });
 
@@ -2153,6 +2212,22 @@ describe('Sub-API disposed guards', () => {
 
   it('API-U138: view.getChannel() throws after dispose', () => {
     expect(() => api.view.getChannel()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U138a: view.setTextureFilterMode() throws after dispose', () => {
+    expect(() => api.view.setTextureFilterMode('nearest')).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U138b: view.getTextureFilterMode() throws after dispose', () => {
+    expect(() => api.view.getTextureFilterMode()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U138c: view.setBackgroundPattern() throws after dispose', () => {
+    expect(() => api.view.setBackgroundPattern({ pattern: 'black', checkerSize: 'medium', customColor: '#1a1a1a' })).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U138d: view.getBackgroundPattern() throws after dispose', () => {
+    expect(() => api.view.getBackgroundPattern()).toThrow(DISPOSED_MSG);
   });
 
   // -- ColorAPI --

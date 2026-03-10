@@ -5184,6 +5184,42 @@ This file tracks findings from exploratory review and targeted validation runs.
   - A corrupted or truncated normal share URL can open the app with no state applied and no explanation of why the link failed.
   - The behavior is inconsistent with malformed WebRTC links, which do surface actionable feedback.
 
+### 434. Malformed WebSocket sync messages are dropped silently with no error path
+
+- Severity: Medium
+- Area: Collaboration / WebSocket protocol handling
+- Evidence:
+  - `WebSocketClient.handleMessage(...)` deserializes incoming strings and immediately returns when `deserializeMessage(...)` fails, under the explicit comment `Reject malformed messages silently`, in [src/network/WebSocketClient.ts](/Users/lifeart/Repos/openrv-web/src/network/WebSocketClient.ts#L196) through [src/network/WebSocketClient.ts#L203).
+  - `NetworkSyncManager` depends on the client's `message` and `error` events for protocol handling and user-facing error propagation in [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L759) through [src/network/NetworkSyncManager.ts#L806).
+  - The current tests codify the silent-drop behavior by asserting malformed messages do not reach any handler in [src/network/WebSocketClient.test.ts](/Users/lifeart/Repos/openrv-web/src/network/WebSocketClient.test.ts#L194) through [src/network/WebSocketClient.test.ts#L205).
+- Impact:
+  - A server/proxy that sends malformed or truncated sync payloads can cause missed collaboration updates with no toast, no error event, and no visible explanation.
+  - That makes protocol corruption look like random state drift rather than a diagnosable network failure.
+
+### 435. Inbound WebSocket `ping` messages never send the `pong` response the protocol advertises
+
+- Severity: Medium
+- Area: Collaboration / WebSocket protocol compatibility
+- Evidence:
+  - The protocol layer defines a first-class `createPongMessage(...)` helper specifically “in response to a ping” in [src/network/MessageProtocol.ts](/Users/lifeart/Repos/openrv-web/src/network/MessageProtocol.ts#L275) through [src/network/MessageProtocol.ts#L281).
+  - `WebSocketClient.handleMessage(...)` also documents inbound `ping` handling as “responding with pong,” but the actual branch only calls `resetHeartbeatTimeout()` and returns in [src/network/WebSocketClient.ts](/Users/lifeart/Repos/openrv-web/src/network/WebSocketClient.ts#L205) through [src/network/WebSocketClient.ts#L214).
+  - A production source search finds no callsite that sends `createPongMessage(...)` from `WebSocketClient`.
+- Impact:
+  - Inference: any server or relay that expects the browser client to answer protocol `ping` messages with `pong` can treat the client as unhealthy even while the local UI thinks the socket is fine.
+  - At minimum, the shipped client behavior does not match its own protocol helper and inline comment, which makes cross-implementation interoperability brittle.
+
+### 436. Outbound collaboration updates can be dropped silently when realtime transport send fails
+
+- Severity: Medium
+- Area: Collaboration / outbound transport reliability
+- Evidence:
+  - `WebSocketClient.send(...)` explicitly returns `false` when the socket is not open or serialization/send throws in [src/network/WebSocketClient.ts](/Users/lifeart/Repos/openrv-web/src/network/WebSocketClient.ts#L109) through [src/network/WebSocketClient.ts#L124).
+  - `NetworkSyncManager.dispatchRealtimeMessage(...)` only checks that WebSocket return value, then tries the serverless data channel once and ignores whether that fallback also returned `false` in [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L1221) through [src/network/NetworkSyncManager.ts#L1238).
+  - All of the live sync senders (`sendPlaybackSync`, `sendFrameSync`, `sendViewSync`, `sendColorSync`, `sendAnnotationSync`, `sendNoteSync`, `sendCursorPosition`, media-sync messages, and permission changes) route through that same helper in [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L463) through [src/network/NetworkSyncManager.ts#L742).
+- Impact:
+  - During transport flaps or serialization failures, local sync changes can be treated as sent even though neither WebSocket nor serverless peer transport accepted the message.
+  - From the user’s perspective, collaboration can drift silently instead of surfacing an actionable transport failure.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

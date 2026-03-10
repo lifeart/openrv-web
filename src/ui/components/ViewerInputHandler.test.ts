@@ -1444,3 +1444,75 @@ describe('ViewerInputHandler – RVEDL drop handling (Issue #155)', () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Issue #106: Text annotation selection via canvas clicks
+// ---------------------------------------------------------------------------
+
+describe('ViewerInputHandler – Text Annotation Selection (#106)', () => {
+  let ctx: ViewerInputContext;
+  let handler: ViewerInputHandler;
+  let dropOverlay: HTMLElement;
+
+  beforeEach(() => {
+    ctx = createMockContext();
+    dropOverlay = document.createElement('div');
+    handler = new ViewerInputHandler(ctx, dropOverlay);
+    handler.bindEvents();
+    ctx.getPaintEngine().tool = 'text';
+  });
+
+  afterEach(() => {
+    handler.unbindEvents();
+    const container = ctx.getContainer();
+    if (container.parentNode) {
+      container.parentNode.removeChild(container);
+    }
+  });
+
+  it('H106-01: clicking on existing text annotation emits annotationSelected instead of creating overlay', () => {
+    const paintEngine = ctx.getPaintEngine();
+    const session = ctx.getSession();
+
+    // Add a text annotation at normalized (0.5, 0.5)
+    // With canvas 800x600 and no transform, point (400, 300) maps to (0.5, 0.5)
+    const ann = paintEngine.addText(session.currentFrame, { x: 0.5, y: 0.5 }, 'Existing');
+
+    const listener = vi.fn();
+    paintEngine.on('annotationSelected', listener);
+
+    // Click near the annotation position
+    const container = ctx.getContainer();
+    const e = createPointerEvent('pointerdown', 400, 300);
+    container.dispatchEvent(e);
+
+    // Should emit annotationSelected
+    expect(listener).toHaveBeenCalledWith({
+      annotation: expect.objectContaining({ id: ann.id, type: 'text' }),
+      frame: session.currentFrame,
+    });
+
+    // Should NOT create text overlay
+    const overlay = container.querySelector('[data-testid="text-input-overlay"]');
+    expect(overlay).toBeNull();
+  });
+
+  it('H106-02: clicking on empty area still creates text overlay', () => {
+    const paintEngine = ctx.getPaintEngine();
+
+    const listener = vi.fn();
+    paintEngine.on('annotationSelected', listener);
+
+    // Click on area with no text annotations
+    const container = ctx.getContainer();
+    const e = createPointerEvent('pointerdown', 400, 300);
+    container.dispatchEvent(e);
+
+    // Should NOT emit annotationSelected
+    expect(listener).not.toHaveBeenCalled();
+
+    // Should create text overlay
+    const overlay = container.querySelector('[data-testid="text-input-overlay"]');
+    expect(overlay).not.toBeNull();
+  });
+});

@@ -12,6 +12,7 @@
  */
 
 import { PLAY_MODE_TO_LOOP, LOOP_TO_PLAY_MODE, FilterNearest, FilterLinear } from './constants';
+import type { BackgroundPatternState } from '../core/types/background';
 
 /**
  * Lazily resolve the openrv API from the global scope.
@@ -57,6 +58,10 @@ function getOpenRV(): {
     getZoom(): number;
     setPan(x: number, y: number): void;
     getPan(): { x: number; y: number };
+    setTextureFilterMode(mode: 'nearest' | 'linear'): void;
+    getTextureFilterMode(): 'nearest' | 'linear';
+    setBackgroundPattern(state: BackgroundPatternState): void;
+    getBackgroundPattern(): BackgroundPatternState;
   };
   markers: {
     add(frame: number, note?: string, color?: string): void;
@@ -73,7 +78,7 @@ function getOpenRV(): {
 }
 
 /** Supported commands and their support status */
-const SUPPORT_MAP: Record<string, true | false | 'partial'> = {
+const SUPPORT_MAP: Record<string, true | false | 'partial' | 'stub'> = {
   // Playback - DIRECT
   play: true,
   stop: true,
@@ -116,8 +121,8 @@ const SUPPORT_MAP: Record<string, true | false | 'partial'> = {
   getFiltering: true,
   setBGMethod: true,
   bgMethod: true,
-  setMargins: true,
-  margins: true,
+  setMargins: 'stub',
+  margins: 'stub',
   contentAspect: 'partial',
   devicePixelRatio: true,
   // Frame Marks
@@ -135,8 +140,6 @@ export class MuCommands {
   private _inc = 1;
   private _skippedFrames = 0;
   private _mbps = 0;
-  private _filterMode: number = FilterLinear;
-  private _bgMethod = 'black';
   private _margins: number[] = [0, 0, 0, 0];
   private _canvas: HTMLCanvasElement | null = null;
 
@@ -164,7 +167,7 @@ export class MuCommands {
    * Check whether a command is supported.
    * @returns `true`, `false`, or `'partial'`
    */
-  isSupported(name: string): boolean | 'partial' {
+  isSupported(name: string): boolean | 'partial' | 'stub' {
     return SUPPORT_MAP[name] ?? false;
   }
 
@@ -422,12 +425,13 @@ export class MuCommands {
     if (mode !== FilterNearest && mode !== FilterLinear) {
       throw new TypeError(`setFiltering() invalid mode: ${mode}. Use FilterNearest(0) or FilterLinear(1)`);
     }
-    this._filterMode = mode;
+    getOpenRV().view.setTextureFilterMode(mode === FilterNearest ? 'nearest' : 'linear');
   }
 
   /** Get current texture filtering mode. (Mu #40) */
   getFiltering(): number {
-    return this._filterMode;
+    const mode = getOpenRV().view.getTextureFilterMode();
+    return mode === 'nearest' ? FilterNearest : FilterLinear;
   }
 
   /** Set background method. (Mu #41) */
@@ -435,12 +439,16 @@ export class MuCommands {
     if (typeof method !== 'string') {
       throw new TypeError('setBGMethod() requires a string');
     }
-    this._bgMethod = method;
+    const current = getOpenRV().view.getBackgroundPattern();
+    getOpenRV().view.setBackgroundPattern({
+      ...current,
+      pattern: method as BackgroundPatternState['pattern'],
+    });
   }
 
   /** Get current background method. (Mu #42) */
   bgMethod(): string {
-    return this._bgMethod;
+    return getOpenRV().view.getBackgroundPattern().pattern;
   }
 
   /** Set viewport margins. (Mu #43) */

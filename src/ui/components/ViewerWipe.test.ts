@@ -8,7 +8,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createWipeUIElements, updateWipeLinePosition, type WipeUIElements } from './ViewerWipe';
-import type { WipeState } from './WipeControl';
+import type { WipeState } from '../../core/types/wipe';
 
 // Helper to create mock DOMRect
 function makeDOMRect(x: number, y: number, w: number, h: number): DOMRect {
