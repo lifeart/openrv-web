@@ -179,14 +179,14 @@ describe('VolumeControl', () => {
       // Click to expand
       muteButton.click();
       expect(volumeControl.isSliderExpanded()).toBe(true);
-      expect(sliderContainer.style.width).toBe('96px');
+      expect(sliderContainer.style.width).toBe('160px');
 
       // Simulate pointerleave on the container
       element.dispatchEvent(new MouseEvent('pointerleave', { bubbles: true }));
 
       // Should still be expanded because it was pinned via click
       expect(volumeControl.isSliderExpanded()).toBe(true);
-      expect(sliderContainer.style.width).toBe('96px');
+      expect(sliderContainer.style.width).toBe('160px');
     });
 
     it('VOL-H06c: the slider is focusable via keyboard when expanded', () => {
@@ -202,7 +202,7 @@ describe('VolumeControl', () => {
 
       // The slider container should have non-zero width, making the slider reachable
       const sliderContainer = slider.parentElement!;
-      expect(sliderContainer.style.width).toBe('96px');
+      expect(sliderContainer.style.width).toBe('160px');
 
       // The slider should be focusable
       slider.focus();
@@ -244,7 +244,7 @@ describe('VolumeControl', () => {
 
       // Hover to expand (without clicking)
       element.dispatchEvent(new MouseEvent('pointerenter', { bubbles: true }));
-      expect(sliderContainer.style.width).toBe('96px');
+      expect(sliderContainer.style.width).toBe('160px');
 
       // Pointer leave should collapse since not pinned
       element.dispatchEvent(new MouseEvent('pointerleave', { bubbles: true }));
@@ -298,6 +298,69 @@ describe('VolumeControl', () => {
 
       // Should still be expanded
       expect(volumeControl.isSliderExpanded()).toBe(true);
+    });
+  });
+
+  describe('popout width accommodates slider and scrub toggle (issue #43)', () => {
+    it('VOL-043a: expanded popout width fits both the slider and scrub toggle', () => {
+      const element = volumeControl.render();
+      document.body.appendChild(element);
+
+      const muteButton = element.querySelector('button')!;
+      muteButton.click();
+
+      const sliderContainer = element.querySelector('div')!;
+      const expandedWidth = parseInt(sliderContainer.style.width, 10);
+
+      // The slider is 80px + 16px margin = 96px, plus scrub checkbox (~16px) + label (~30px) + spacing
+      // The expanded width must be at least 140px to fit everything
+      expect(expandedWidth).toBeGreaterThanOrEqual(140);
+    });
+
+    it('VOL-043b: scrub toggle is present and clickable when popout is expanded', () => {
+      const element = volumeControl.render();
+      document.body.appendChild(element);
+
+      const muteButton = element.querySelector('button')!;
+      muteButton.click();
+
+      const scrubCheckbox = element.querySelector(
+        'input[type="checkbox"]',
+      ) as HTMLInputElement;
+      expect(scrubCheckbox).toBeInstanceOf(HTMLInputElement);
+      expect(scrubCheckbox.disabled).toBe(false);
+
+      // Toggle the checkbox
+      const listener = vi.fn();
+      volumeControl.on('audioScrubChanged', listener);
+      scrubCheckbox.click();
+      expect(listener).toHaveBeenCalledWith(false);
+    });
+
+    it('VOL-043c: scrub label is visible inside the expanded popout', () => {
+      const element = volumeControl.render();
+      document.body.appendChild(element);
+
+      const muteButton = element.querySelector('button')!;
+      muteButton.click();
+
+      const label = element.querySelector('label')!;
+      expect(label).toBeInstanceOf(HTMLLabelElement);
+      expect(label.textContent).toContain('Scrub');
+      // Label should have white-space: nowrap to prevent text wrapping/clipping
+      expect(label.style.whiteSpace).toBe('nowrap');
+    });
+
+    it('VOL-043d: hover expansion also uses the wider width', () => {
+      const element = volumeControl.render();
+      document.body.appendChild(element);
+
+      const sliderContainer = element.querySelector('div')!;
+
+      element.dispatchEvent(
+        new MouseEvent('pointerenter', { bubbles: true }),
+      );
+      expect(sliderContainer.style.width).toBe('160px');
     });
   });
 

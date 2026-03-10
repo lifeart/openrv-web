@@ -730,10 +730,24 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
   }
 
   /**
-   * Toggle tone mapping on/off
+   * Toggle tone mapping on/off.
+   *
+   * When enabling and the operator is 'off', automatically selects a default
+   * operator ('reinhard') so the shortcut has an immediate visible effect.
+   * When disabling, the operator is preserved so re-enabling restores it.
    */
   toggle(): void {
-    this.setEnabled(!this.state.enabled);
+    const willEnable = !this.state.enabled;
+    if (willEnable && this.state.operator === 'off') {
+      // Pick the first non-'off' operator as a sensible default
+      const fallback = TONE_MAPPING_OPERATORS.find((op) => op.key !== 'off');
+      if (fallback) {
+        this.state.operator = fallback.key;
+        this.updateOperatorButtons();
+        this.updateParameterVisibility();
+      }
+    }
+    this.setEnabled(willEnable);
   }
 
   /**

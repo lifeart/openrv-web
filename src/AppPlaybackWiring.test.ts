@@ -223,6 +223,7 @@ function createMockPersistenceManager() {
     openProject: vi.fn(),
     retryAutoSave: vi.fn(),
     restoreSnapshot: vi.fn(),
+    createQuickSnapshot: vi.fn(),
     saveRvSession: vi.fn(),
   };
 }
@@ -494,6 +495,16 @@ describe('wirePlaybackControls', () => {
       expect.any(Function), // renderFrame callback
       expect.objectContaining({ title: 'Test Session' }),
     );
+  });
+
+  it('PW-016: snapshotPanel createRequested calls persistenceManager.createQuickSnapshot()', () => {
+    controls.snapshotPanel.emit('createRequested', undefined);
+    expect(persistenceManager.createQuickSnapshot).toHaveBeenCalled();
+  });
+
+  it('PW-017: snapshotPanel restoreRequested calls persistenceManager.restoreSnapshot()', () => {
+    controls.snapshotPanel.emit('restoreRequested', { id: 'snap-42' });
+    expect(persistenceManager.restoreSnapshot).toHaveBeenCalledWith('snap-42');
   });
 
   describe('disposal', () => {

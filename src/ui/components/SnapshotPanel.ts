@@ -17,6 +17,8 @@ import { showPrompt, showConfirm, showAlert } from './shared/Modal';
 export interface SnapshotPanelEvents extends EventMap {
   /** Emitted when user wants to restore a snapshot */
   restoreRequested: { id: string };
+  /** Emitted when user wants to create a new snapshot */
+  createRequested: void;
   /** Emitted when panel visibility changes */
   visibilityChanged: { open: boolean };
   /** Emitted when panel is closed */
@@ -190,6 +192,30 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
       background: var(--bg-tertiary);
     `;
 
+    const createBtn = document.createElement('button');
+    createBtn.textContent = 'Create Snapshot';
+    createBtn.dataset.testid = 'create-snapshot-btn';
+    createBtn.style.cssText = `
+      flex: 1;
+      padding: 8px;
+      border: 1px solid var(--accent-primary);
+      border-radius: 4px;
+      background: transparent;
+      color: var(--accent-primary);
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.12s ease;
+    `;
+    createBtn.addEventListener('click', () => this.emit('createRequested', undefined));
+    createBtn.addEventListener('pointerenter', () => {
+      createBtn.style.background = 'rgba(var(--accent-primary-rgb), 0.1)';
+    });
+    createBtn.addEventListener('pointerleave', () => {
+      createBtn.style.background = 'transparent';
+    });
+    applyA11yFocus(createBtn);
+    footer.appendChild(createBtn);
+
     const clearAllBtn = document.createElement('button');
     clearAllBtn.textContent = 'Clear All';
     clearAllBtn.style.cssText = `
@@ -261,7 +287,7 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
       emptyState.innerHTML = `
         ${getIconSvg('history', 'lg')}
         <p style="margin-top: 12px;">No snapshots found</p>
-        <p style="margin-top: 4px; font-size: 11px;">Create a snapshot to save your session state</p>
+        <p style="margin-top: 4px; font-size: 11px;">Create a snapshot to save your session state (Ctrl+Shift+S)</p>
       `;
       this.listContainer.appendChild(emptyState);
       return;

@@ -10,6 +10,7 @@ import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import type { ConnectionState, SyncUser, SyncSettings, RoomInfo } from '../../network/types';
 import { DEFAULT_SYNC_SETTINGS, USER_COLORS } from '../../network/types';
+import { getCorePreferencesManager } from '../../core/PreferencesManager';
 
 /**
  * Validate that a color string is a safe CSS color value.
@@ -418,7 +419,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
         digits.length >= 4
       ) {
         this.state.linkedRoomAutoJoinArmed = false;
-        this.emit('joinRoom', { roomCode: this.state.linkedRoomCode, userName: 'User' });
+        this.emit('joinRoom', { roomCode: this.state.linkedRoomCode, userName: this.getUserName('User') });
       }
     });
     pinSection.appendChild(this.pinCodeInput);
@@ -451,7 +452,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     });
     createBtn.addEventListener('click', () => {
       this.state.pinCode = this.pinCodeInput.value.replace(/\D/g, '').slice(0, 10);
-      this.emit('createRoom', { userName: this.state.syncSettings ? 'Host' : 'User' });
+      this.emit('createRoom', { userName: this.getUserName(this.state.syncSettings ? 'Host' : 'User') });
     });
     createSection.appendChild(createBtn);
     panel.appendChild(createSection);
@@ -959,6 +960,17 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     }
   }
 
+  /** Get the current user name from preferences, with a fallback. */
+  private getUserName(fallback: string): string {
+    try {
+      const name = getCorePreferencesManager().getGeneralPrefs().userName;
+      if (name && name.trim()) return name.trim();
+    } catch {
+      // PreferencesManager not wired — fall back
+    }
+    return fallback;
+  }
+
   private handleJoinRoom(): void {
     const code = this.roomCodeInput.value.trim().toUpperCase() || this.state.linkedRoomCode || '';
     if (this.pinCodeInput) {
@@ -969,7 +981,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
       return;
     }
     this.hideError();
-    this.emit('joinRoom', { roomCode: code, userName: 'User' });
+    this.emit('joinRoom', { roomCode: code, userName: this.getUserName('User') });
   }
 
   // ---- State Updates ----

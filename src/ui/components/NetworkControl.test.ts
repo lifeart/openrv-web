@@ -6,6 +6,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NetworkControl } from './NetworkControl';
 import type { SyncUser } from '../../network/types';
 
+// Mock PreferencesManager so we can control userName
+const mockGetGeneralPrefs = vi.fn(() => ({ userName: '' }));
+vi.mock('../../core/PreferencesManager', () => ({
+  getCorePreferencesManager: () => ({
+    getGeneralPrefs: mockGetGeneralPrefs,
+  }),
+}));
+
 describe('NetworkControl', () => {
   let control: NetworkControl;
 
@@ -551,6 +559,96 @@ describe('NetworkControl', () => {
       const state = control.getState();
       expect(state.connectionState).toBe('disconnected');
       expect(state.isPanelOpen).toBe(false);
+    });
+  });
+
+  describe('user name from preferences', () => {
+    afterEach(() => {
+      mockGetGeneralPrefs.mockReturnValue({ userName: '' });
+    });
+
+    it('NCC-090: createRoom uses custom user name from preferences', () => {
+      mockGetGeneralPrefs.mockReturnValue({ userName: 'Alice' });
+      const handler = vi.fn();
+      control.on('createRoom', handler);
+      control.openPanel();
+
+      const createBtn = document.querySelector('[data-testid="network-create-room-button"]') as HTMLButtonElement;
+      createBtn.click();
+
+      expect(handler).toHaveBeenCalledWith({ userName: 'Alice' });
+    });
+
+    it('NCC-091: joinRoom uses custom user name from preferences', () => {
+      mockGetGeneralPrefs.mockReturnValue({ userName: 'Bob' });
+      const handler = vi.fn();
+      control.on('joinRoom', handler);
+      control.openPanel();
+
+      const input = document.querySelector('[data-testid="network-room-code-input"]') as HTMLInputElement;
+      input.value = 'ABCD-1234';
+
+      const joinBtn = document.querySelector('[data-testid="network-join-room-button"]') as HTMLButtonElement;
+      joinBtn.click();
+
+      expect(handler).toHaveBeenCalledWith({ roomCode: 'ABCD-1234', userName: 'Bob' });
+    });
+
+    it('NCC-092: createRoom falls back to Host/User when no name is set', () => {
+      mockGetGeneralPrefs.mockReturnValue({ userName: '' });
+      const handler = vi.fn();
+      control.on('createRoom', handler);
+      control.openPanel();
+
+      const createBtn = document.querySelector('[data-testid="network-create-room-button"]') as HTMLButtonElement;
+      createBtn.click();
+
+      // Default syncSettings is truthy, so fallback is 'Host'
+      expect(handler).toHaveBeenCalledWith({ userName: 'Host' });
+    });
+
+    it('NCC-093: joinRoom falls back to User when no name is set', () => {
+      mockGetGeneralPrefs.mockReturnValue({ userName: '' });
+      const handler = vi.fn();
+      control.on('joinRoom', handler);
+      control.openPanel();
+
+      const input = document.querySelector('[data-testid="network-room-code-input"]') as HTMLInputElement;
+      input.value = 'ABCD-1234';
+
+      const joinBtn = document.querySelector('[data-testid="network-join-room-button"]') as HTMLButtonElement;
+      joinBtn.click();
+
+      expect(handler).toHaveBeenCalledWith({ roomCode: 'ABCD-1234', userName: 'User' });
+    });
+
+    it('NCC-094: auto-join uses custom user name from preferences', () => {
+      mockGetGeneralPrefs.mockReturnValue({ userName: 'Charlie' });
+      const handler = vi.fn();
+      control.on('joinRoom', handler);
+      control.setJoinRoomCodeFromLink('ABCD1234');
+      control.openPanel();
+
+      const pinInput = document.querySelector('[data-testid="network-pin-code-input"]') as HTMLInputElement;
+      pinInput.value = '1234';
+      pinInput.dispatchEvent(new Event('input'));
+
+      expect(handler).toHaveBeenCalledWith({ roomCode: 'ABCD-1234', userName: 'Charlie' });
+    });
+
+    it('NCC-095: whitespace-only user name falls back to default', () => {
+      mockGetGeneralPrefs.mockReturnValue({ userName: '   ' });
+      const handler = vi.fn();
+      control.on('joinRoom', handler);
+      control.openPanel();
+
+      const input = document.querySelector('[data-testid="network-room-code-input"]') as HTMLInputElement;
+      input.value = 'ABCD-1234';
+
+      const joinBtn = document.querySelector('[data-testid="network-join-room-button"]') as HTMLButtonElement;
+      joinBtn.click();
+
+      expect(handler).toHaveBeenCalledWith({ roomCode: 'ABCD-1234', userName: 'User' });
     });
   });
 

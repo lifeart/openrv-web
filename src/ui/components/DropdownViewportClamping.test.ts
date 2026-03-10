@@ -47,10 +47,7 @@ function setViewportSize(width: number, height: number): void {
  * Mocks `getBoundingClientRect` on an element to return the given rect values.
  * All unspecified fields default to 0.
  */
-function mockRect(
-  el: HTMLElement,
-  rect: Partial<DOMRect>,
-): void {
+function mockRect(el: HTMLElement, rect: Partial<DOMRect>): void {
   el.getBoundingClientRect = () => ({
     x: 0,
     y: 0,
@@ -72,28 +69,30 @@ function mockRect(
 // ---------------------------------------------------------------------------
 describe('DisplayProfileControl – dropdown viewport clamping', () => {
   let control: DisplayProfileControl;
+  let el: HTMLElement;
 
   beforeEach(() => {
     localStorageMock.clear();
     vi.clearAllMocks();
     control = new DisplayProfileControl();
+    el = control.render();
+    document.body.appendChild(el);
   });
 
   afterEach(() => {
     control.dispose();
+    el.remove();
   });
 
-  function openDropdown(): { button: HTMLElement; dropdown: HTMLElement } {
-    const el = control.render();
-    document.body.appendChild(el);
+  function getElements(): { button: HTMLElement; dropdown: HTMLElement } {
     const button = el.querySelector('[data-testid="display-profile-button"]') as HTMLElement;
-    const dropdown = document.querySelector('[data-testid="display-profile-dropdown"]') as HTMLElement;
+    const dropdown = el.querySelector('[data-testid="display-profile-dropdown"]') as HTMLElement;
     return { button, dropdown };
   }
 
   it('CLAMP-DP01: clamps dropdown left when it would overflow right edge', () => {
     setViewportSize(300, 600);
-    const { button, dropdown } = openDropdown();
+    const { button, dropdown } = getElements();
 
     // Button near right edge of viewport
     mockRect(button, { left: 250, right: 330, bottom: 40, top: 30, width: 80, height: 10 });
@@ -109,7 +108,7 @@ describe('DisplayProfileControl – dropdown viewport clamping', () => {
 
   it('CLAMP-DP02: clamps dropdown left when it would go off left edge (negative)', () => {
     setViewportSize(300, 600);
-    const { button, dropdown } = openDropdown();
+    const { button, dropdown } = getElements();
 
     // Button near left edge
     mockRect(button, { left: -50, right: 30, bottom: 40, top: 30, width: 80, height: 10 });
@@ -123,7 +122,7 @@ describe('DisplayProfileControl – dropdown viewport clamping', () => {
 
   it('CLAMP-DP03: dropdown left is unchanged when viewport is wide enough', () => {
     setViewportSize(1200, 800);
-    const { button, dropdown } = openDropdown();
+    const { button, dropdown } = getElements();
 
     mockRect(button, { left: 100, right: 180, bottom: 40, top: 30, width: 80, height: 10 });
     mockRect(dropdown, { width: 200, height: 150 });
@@ -131,6 +130,7 @@ describe('DisplayProfileControl – dropdown viewport clamping', () => {
     button.click();
 
     const left = parseFloat(dropdown.style.left);
+    // 100 + 200 = 300 < 1200 - 8, so no clamping needed
     expect(left).toBe(100);
   });
 });
@@ -140,31 +140,42 @@ describe('DisplayProfileControl – dropdown viewport clamping', () => {
 // ---------------------------------------------------------------------------
 describe('ToneMappingControl – dropdown viewport clamping', () => {
   let control: ToneMappingControl;
+  let el: HTMLElement;
 
   beforeEach(() => {
     control = new ToneMappingControl();
+    el = control.render();
+    document.body.appendChild(el);
   });
 
   afterEach(() => {
     control.dispose();
+    el.remove();
   });
 
-  function openDropdown(): { button: HTMLElement; dropdown: HTMLElement } {
-    const el = control.render();
-    document.body.appendChild(el);
-    const button = el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLElement;
-    const dropdown = document.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
-    return { button, dropdown };
+  function getButton(): HTMLElement {
+    return el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLElement;
+  }
+
+  function getDropdown(): HTMLElement {
+    return document.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
   }
 
   it('CLAMP-TM01: clamps dropdown left when it would overflow right edge', () => {
     setViewportSize(300, 600);
-    const { button, dropdown } = openDropdown();
-
+    const button = getButton();
     mockRect(button, { left: 250, right: 330, bottom: 40, top: 30, width: 80, height: 10 });
+
+    // Click to open - dropdown gets appended to body
+    button.click();
+
+    const dropdown = getDropdown();
+    expect(dropdown).not.toBeNull();
     mockRect(dropdown, { width: 200, height: 150 });
 
-    button.click();
+    // Close and re-open to trigger positioning with mocked rect
+    button.click(); // close
+    button.click(); // re-open
 
     const left = parseFloat(dropdown.style.left);
     expect(left + 200).toBeLessThanOrEqual(300 - 8);
@@ -172,11 +183,14 @@ describe('ToneMappingControl – dropdown viewport clamping', () => {
 
   it('CLAMP-TM02: clamps dropdown left when it would go off left edge', () => {
     setViewportSize(300, 600);
-    const { button, dropdown } = openDropdown();
-
+    const button = getButton();
     mockRect(button, { left: -50, right: 30, bottom: 40, top: 30, width: 80, height: 10 });
+
+    button.click();
+    const dropdown = getDropdown();
     mockRect(dropdown, { width: 200, height: 150 });
 
+    button.click();
     button.click();
 
     const left = parseFloat(dropdown.style.left);
@@ -185,11 +199,14 @@ describe('ToneMappingControl – dropdown viewport clamping', () => {
 
   it('CLAMP-TM03: dropdown left is unchanged when viewport is wide enough', () => {
     setViewportSize(1200, 800);
-    const { button, dropdown } = openDropdown();
-
+    const button = getButton();
     mockRect(button, { left: 100, right: 180, bottom: 40, top: 30, width: 80, height: 10 });
+
+    button.click();
+    const dropdown = getDropdown();
     mockRect(dropdown, { width: 200, height: 150 });
 
+    button.click();
     button.click();
 
     const left = parseFloat(dropdown.style.left);
@@ -202,31 +219,39 @@ describe('ToneMappingControl – dropdown viewport clamping', () => {
 // ---------------------------------------------------------------------------
 describe('StereoControl – dropdown viewport clamping', () => {
   let control: StereoControl;
+  let el: HTMLElement;
 
   beforeEach(() => {
     control = new StereoControl();
+    el = control.render();
+    document.body.appendChild(el);
   });
 
   afterEach(() => {
     control.dispose();
+    el.remove();
   });
 
-  function openDropdown(): { button: HTMLElement; dropdown: HTMLElement } {
-    const el = control.render();
-    document.body.appendChild(el);
-    const button = el.querySelector('[data-testid="stereo-mode-button"]') as HTMLElement;
-    const dropdown = document.querySelector('[data-testid="stereo-mode-dropdown"]') as HTMLElement;
-    return { button, dropdown };
+  function getButton(): HTMLElement {
+    return el.querySelector('[data-testid="stereo-mode-button"]') as HTMLElement;
+  }
+
+  function getDropdown(): HTMLElement {
+    return document.querySelector('[data-testid="stereo-mode-dropdown"]') as HTMLElement;
   }
 
   it('CLAMP-ST01: clamps dropdown left when it would overflow right edge', () => {
     setViewportSize(300, 600);
-    const { button, dropdown } = openDropdown();
-
+    const button = getButton();
     mockRect(button, { left: 250, right: 330, bottom: 40, top: 30, width: 80, height: 10 });
-    mockRect(dropdown, { width: 200, height: 150 });
 
     button.click();
+    const dropdown = getDropdown();
+    expect(dropdown).not.toBeNull();
+    mockRect(dropdown, { width: 200, height: 150 });
+
+    button.click(); // close
+    button.click(); // re-open
 
     const left = parseFloat(dropdown.style.left);
     expect(left + 200).toBeLessThanOrEqual(300 - 8);
@@ -234,11 +259,14 @@ describe('StereoControl – dropdown viewport clamping', () => {
 
   it('CLAMP-ST02: clamps dropdown left when it would go off left edge', () => {
     setViewportSize(300, 600);
-    const { button, dropdown } = openDropdown();
-
+    const button = getButton();
     mockRect(button, { left: -50, right: 30, bottom: 40, top: 30, width: 80, height: 10 });
+
+    button.click();
+    const dropdown = getDropdown();
     mockRect(dropdown, { width: 200, height: 150 });
 
+    button.click();
     button.click();
 
     const left = parseFloat(dropdown.style.left);
@@ -247,11 +275,14 @@ describe('StereoControl – dropdown viewport clamping', () => {
 
   it('CLAMP-ST03: dropdown left is unchanged when viewport is wide enough', () => {
     setViewportSize(1200, 800);
-    const { button, dropdown } = openDropdown();
-
+    const button = getButton();
     mockRect(button, { left: 100, right: 180, bottom: 40, top: 30, width: 80, height: 10 });
+
+    button.click();
+    const dropdown = getDropdown();
     mockRect(dropdown, { width: 200, height: 150 });
 
+    button.click();
     button.click();
 
     const left = parseFloat(dropdown.style.left);
@@ -264,54 +295,58 @@ describe('StereoControl – dropdown viewport clamping', () => {
 // ---------------------------------------------------------------------------
 describe('OCIOControl – panel viewport clamping', () => {
   let control: OCIOControl;
+  let el: HTMLElement;
 
   beforeEach(() => {
     localStorageMock.clear();
     vi.clearAllMocks();
     control = new OCIOControl();
+    el = control.render();
+    document.body.appendChild(el);
   });
 
   afterEach(() => {
     control.dispose();
+    el.remove();
   });
 
-  function setupPanel(): { button: HTMLElement; panel: HTMLElement } {
-    const el = control.render();
-    document.body.appendChild(el);
-    const button = el.querySelector('[data-testid="ocio-panel-button"]') as HTMLElement;
-    // Panel is appended to body on show()
-    return { button, panel: null as unknown as HTMLElement };
+  function getButton(): HTMLElement {
+    return el.querySelector('[data-testid="ocio-panel-button"]') as HTMLElement;
+  }
+
+  function getPanel(): HTMLElement {
+    return document.querySelector('[data-testid="ocio-panel"]') as HTMLElement;
   }
 
   it('CLAMP-OC01: clamps panel left when it would overflow right edge', () => {
-    setViewportSize(300, 600);
-    const { button } = setupPanel();
+    setViewportSize(500, 600);
+    const button = getButton();
+    mockRect(button, { left: 400, right: 480, bottom: 40, top: 30, width: 80, height: 10 });
 
-    mockRect(button, { left: 250, right: 330, bottom: 40, top: 30, width: 80, height: 10 });
-
+    // First show to get panel into DOM
     control.show();
-
-    const panel = document.querySelector('[data-testid="ocio-panel"]') as HTMLElement;
-    // Mock panel rect after it's in the DOM
-    mockRect(panel, { width: 360, height: 400 });
+    const panel = getPanel();
+    expect(panel).not.toBeNull();
+    mockRect(panel, { width: 300, height: 400 });
 
     // Re-show to trigger positioning with the mocked rect
     control.hide();
     control.show();
 
     const left = parseFloat(panel.style.left);
-    expect(left + 360).toBeLessThanOrEqual(300 - 8);
+    // left + 300 should be <= 500 - 8 (viewport - padding)
+    expect(left + 300).toBeLessThanOrEqual(500 - 8);
+    // left should not go negative
+    expect(left).toBeGreaterThanOrEqual(8);
   });
 
   it('CLAMP-OC02: clamps panel left when it would go off left edge', () => {
     setViewportSize(300, 600);
-    const { button } = setupPanel();
-
+    const button = getButton();
     mockRect(button, { left: -50, right: 30, bottom: 40, top: 30, width: 80, height: 10 });
 
     control.show();
-
-    const panel = document.querySelector('[data-testid="ocio-panel"]') as HTMLElement;
+    const panel = getPanel();
     mockRect(panel, { width: 360, height: 400 });
 
     control.hide();
@@ -323,13 +358,11 @@ describe('OCIOControl – panel viewport clamping', () => {
 
   it('CLAMP-OC03: panel left is unchanged when viewport is wide enough', () => {
     setViewportSize(1200, 800);
-    const { button } = setupPanel();
-
+    const button = getButton();
     mockRect(button, { left: 100, right: 180, bottom: 40, top: 30, width: 80, height: 10 });
 
     control.show();
-
-    const panel = document.querySelector('[data-testid="ocio-panel"]') as HTMLElement;
+    const panel = getPanel();
     mockRect(panel, { width: 360, height: 400 });
 
     control.hide();

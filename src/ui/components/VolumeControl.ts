@@ -151,7 +151,7 @@ export class VolumeControl extends EventEmitter<VolumeControlEvents> {
 
     // Show slider on hover (but don't collapse if pinned open via click)
     this.container.addEventListener('pointerenter', () => {
-      this.volumeContainer.style.width = '96px';
+      this.volumeContainer.style.width = '160px';
     });
 
     this.container.addEventListener('pointerleave', () => {
@@ -196,7 +196,7 @@ export class VolumeControl extends EventEmitter<VolumeControlEvents> {
   /** Toggle the slider expanded (pinned open) state. */
   private toggleSliderExpanded(): void {
     this._sliderExpanded = !this._sliderExpanded;
-    this.volumeContainer.style.width = this._sliderExpanded ? '96px' : '0';
+    this.volumeContainer.style.width = this._sliderExpanded ? '160px' : '0';
   }
 
   /** Collapse the slider and clear the expanded flag. */

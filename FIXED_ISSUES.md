@@ -349,3 +349,63 @@
 - **Regression Tests**: QUAD-060 through QUAD-070 (C/D console.warn, A/B no-warn, A/B still works, C/D disabled in DOM, warning opacity, warning border color, warning tooltip, styling updates on source change, warning is UI-layer only).
 - **Verification**: All 51 QuadView tests pass, TypeScript clean.
 - **Files Changed**: `src/ui/components/CompareControl.ts`, `src/ui/components/QuadView.test.ts`
+
+## Issue #40: Several advanced dropdowns and panels can render partly off-screen on narrow viewports
+
+- **Severity**: Medium
+- **Area**: UI layout, small-window/mobile usability
+- **Root Cause**: `DisplayProfileControl`, `ToneMappingControl`, `StereoControl`, and `OCIOControl` positioned dropdowns at `rect.left` with no viewport clamping (or insufficient clamping in OCIO's case). `CompareControl` already had the correct pattern.
+- **Fix**: Applied CompareControl's clamping pattern to all 4 controls: below-first with above-flip, `viewportPadding = 8`, right-edge clamp (`innerWidth - dropdownWidth - 8`), left-edge clamp (`>= 8`), top clamp (`>= 8`).
+- **Regression Tests**: DropdownViewportClamping.test.ts — 12 tests (3 per control: right-edge clamping, left-edge clamping, no-clamping-when-wide-enough).
+- **Verification**: All 12 clamping tests + 399 existing control tests pass, TypeScript clean.
+- **Files Changed**: `src/ui/components/DisplayProfileControl.ts`, `src/ui/components/ToneMappingControl.ts`, `src/ui/components/StereoControl.ts`, `src/ui/components/OCIOControl.ts`, `src/ui/components/DropdownViewportClamping.test.ts` (new)
+
+## Issue #41: The tone-mapping shortcut can toggle a hidden flag without actually enabling tone mapping
+
+- **Severity**: Medium
+- **Area**: Effects UI, keyboard semantics
+- **Root Cause**: `toggle()` only flipped the `enabled` flag. Default state had `operator: 'off'`, and `isEnabled()` requires both `enabled && operator !== 'off'`. So the shortcut set `enabled=true` without visible effect.
+- **Fix**: When `toggle()` enables and `operator === 'off'`, auto-selects `'reinhard'` (first non-off operator from `TONE_MAPPING_OPERATORS`). Updates operator buttons and parameter visibility before enabling. Toggling off preserves operator for re-enable.
+- **Regression Tests**: TONE-U072 through TONE-U077 (fresh state selects reinhard, off preserves operator, re-enable restores operator, non-off operator unchanged, isEnabled() returns true, keyboard shortcut exercises full path).
+- **Verification**: All 112 ToneMappingControl tests pass, TypeScript clean.
+- **Files Changed**: `src/ui/components/ToneMappingControl.ts`, `src/ui/components/ToneMappingControl.test.ts`
+
+## Issue #42: The Snapshot panel tells users to create snapshots but does not offer any create action on that surface
+
+- **Severity**: Medium
+- **Area**: Snapshot UI, empty-state usefulness
+- **Root Cause**: Snapshot panel's empty state said "Create a snapshot to save your session state" but had no create button. The create action only existed as a keyboard shortcut (`Ctrl+Shift+S`).
+- **Fix**: Added "Create Snapshot" button in the panel footer (before "Clear All"), emitting `createRequested` event. Wired in `AppPlaybackWiring.ts` to call `persistenceManager.createQuickSnapshot()`. Updated empty-state text to include the `Ctrl+Shift+S` shortcut hint.
+- **Regression Tests**: SNAP-080 (button exists), SNAP-081 (click emits createRequested), SNAP-082 (shortcut hint in empty state), PW-016 (production wiring calls createQuickSnapshot), PW-017 (existing restoreRequested wiring).
+- **Verification**: All 80 tests pass (41 SnapshotPanel + 39 AppPlaybackWiring), TypeScript clean.
+- **Files Changed**: `src/ui/components/SnapshotPanel.ts`, `src/AppPlaybackWiring.ts`, `src/ui/components/SnapshotPanel.test.ts`, `src/AppPlaybackWiring.test.ts`
+
+## Issue #43: The volume popout is too narrow to cleanly fit both the slider and the audio-scrub toggle
+
+- **Severity**: Medium
+- **Area**: Header UI, audio controls
+- **Root Cause**: Popout container hardcapped at `96px` width. Slider consumed 80px + 16px margin, leaving the scrub checkbox/label cramped or clipped by `overflow: hidden`.
+- **Fix**: Widened popout from `96px` to `160px` in both hover and pinned-open paths. 160px accommodates slider (96px) + scrub checkbox (16px) + "Scrub" label (~30px) + padding.
+- **Regression Tests**: VOL-043a (expanded width >= 140px), VOL-043b (scrub checkbox present and clickable), VOL-043c (label has nowrap), VOL-043d (hover uses wider width).
+- **Verification**: All 29 VolumeControl tests pass, TypeScript clean.
+- **Files Changed**: `src/ui/components/VolumeControl.ts`, `src/ui/components/VolumeControl.test.ts`
+
+## Issue #44: Network Sync hardcodes participant names and never exposes the user name the rest of the app supports
+
+- **Severity**: Medium
+- **Area**: Collaboration UI, session identity
+- **Root Cause**: `NetworkControl` hardcoded `'User'` and `'Host'` in all three `createRoom`/`joinRoom` emission points, ignoring `PreferencesManager.getGeneralPrefs().userName`.
+- **Fix**: Added `getUserName(fallback)` method that reads from `getCorePreferencesManager().getGeneralPrefs()`, falling back to the provided default if name is empty/whitespace or prefs unavailable. Replaced all 3 hardcoded strings with `getUserName('Host')`/`getUserName('User')`.
+- **Regression Tests**: NCC-090 through NCC-095 (custom name in createRoom/joinRoom/auto-join, fallback to Host/User when empty, whitespace-only fallback).
+- **Verification**: All 42 NetworkControl tests pass, TypeScript clean.
+- **Files Changed**: `src/ui/components/NetworkControl.ts`, `src/ui/components/NetworkControl.test.ts`
+
+## Issue #45: Closing HSL Qualifier can leave the eyedropper armed and the viewer in a hidden pick state
+
+- **Severity**: Medium
+- **Area**: QC UI, HSL Qualifier workflow
+- **Root Cause**: Eyedropper callback only fired on explicit button toggle. Panel close paths (toggle close, outside click, dispose) hid the panel but never deactivated the eyedropper or called the callback with `false`, leaving the viewer click handler and crosshair cursor armed.
+- **Fix**: Added `deactivateEyedropper()` calls to all close paths: `toggleDropdown()` close, `handleOutsideClick` close, and `dispose()`. Modified `deactivateEyedropper()` to call `onEyedropperCallback(false)` when the eyedropper was active, so the QC tab wiring properly removes the viewer click handler. No-ops when eyedropper is already inactive (no spurious notifications).
+- **Regression Tests**: HSL-U070 through HSL-U076 (toggle close deactivates, callback fires on toggle close, outside click deactivates, callback fires on outside click, button style reset, no spurious callback when inactive, dispose cleanup).
+- **Verification**: All 37 HSLQualifierControl tests pass, TypeScript clean.
+- **Files Changed**: `src/ui/components/HSLQualifierControl.ts`, `src/ui/components/HSLQualifierControl.test.ts`

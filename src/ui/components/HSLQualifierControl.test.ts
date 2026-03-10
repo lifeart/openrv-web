@@ -295,6 +295,139 @@ describe('HSLQualifierControl', () => {
     });
   });
 
+  describe('eyedropper deactivation on panel close (Issue #45)', () => {
+    it('HSL-U070: closing dropdown via toggle deactivates the eyedropper', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="hsl-qualifier-control-toggle"]') as HTMLButtonElement;
+
+      button.click(); // open
+      const dropdown = document.querySelector('[data-testid="hsl-qualifier-dropdown"]') as HTMLElement;
+      const eyedropperBtn = dropdown.querySelector('[data-testid="hsl-eyedropper-button"]') as HTMLButtonElement;
+
+      eyedropperBtn.click(); // activate eyedropper
+      expect(control.isEyedropperActive()).toBe(true);
+
+      button.click(); // close
+      expect(control.isEyedropperActive()).toBe(false);
+    });
+
+    it('HSL-U071: closing dropdown via toggle calls eyedropper callback with false', () => {
+      const callback = vi.fn();
+      control.setEyedropperCallback(callback);
+
+      const el = control.render();
+      const button = el.querySelector('[data-testid="hsl-qualifier-control-toggle"]') as HTMLButtonElement;
+
+      button.click(); // open
+      const dropdown = document.querySelector('[data-testid="hsl-qualifier-dropdown"]') as HTMLElement;
+      const eyedropperBtn = dropdown.querySelector('[data-testid="hsl-eyedropper-button"]') as HTMLButtonElement;
+
+      eyedropperBtn.click(); // activate
+      callback.mockClear();
+
+      button.click(); // close
+      expect(callback).toHaveBeenCalledWith(false);
+    });
+
+    it('HSL-U072: closing dropdown via outside click deactivates the eyedropper', () => {
+      const el = control.render();
+      document.body.appendChild(el);
+      const button = el.querySelector('[data-testid="hsl-qualifier-control-toggle"]') as HTMLButtonElement;
+
+      button.click(); // open
+      const dropdown = document.querySelector('[data-testid="hsl-qualifier-dropdown"]') as HTMLElement;
+      const eyedropperBtn = dropdown.querySelector('[data-testid="hsl-eyedropper-button"]') as HTMLButtonElement;
+
+      eyedropperBtn.click(); // activate
+      expect(control.isEyedropperActive()).toBe(true);
+
+      // Simulate outside click
+      const outsideEl = document.createElement('div');
+      document.body.appendChild(outsideEl);
+      document.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(control.isEyedropperActive()).toBe(false);
+
+      document.body.removeChild(el);
+      outsideEl.remove();
+    });
+
+    it('HSL-U073: closing dropdown via outside click calls eyedropper callback with false', () => {
+      const callback = vi.fn();
+      control.setEyedropperCallback(callback);
+
+      const el = control.render();
+      document.body.appendChild(el);
+      const button = el.querySelector('[data-testid="hsl-qualifier-control-toggle"]') as HTMLButtonElement;
+
+      button.click(); // open
+      const dropdown = document.querySelector('[data-testid="hsl-qualifier-dropdown"]') as HTMLElement;
+      const eyedropperBtn = dropdown.querySelector('[data-testid="hsl-eyedropper-button"]') as HTMLButtonElement;
+
+      eyedropperBtn.click(); // activate
+      callback.mockClear();
+
+      // Simulate outside click
+      document.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(callback).toHaveBeenCalledWith(false);
+
+      document.body.removeChild(el);
+    });
+
+    it('HSL-U074: eyedropper button style is reset when panel closes', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="hsl-qualifier-control-toggle"]') as HTMLButtonElement;
+
+      button.click(); // open
+      const dropdown = document.querySelector('[data-testid="hsl-qualifier-dropdown"]') as HTMLElement;
+      const eyedropperBtn = dropdown.querySelector('[data-testid="hsl-eyedropper-button"]') as HTMLButtonElement;
+
+      eyedropperBtn.click(); // activate
+      expect(eyedropperBtn.style.background).toBe('var(--accent-primary)');
+
+      button.click(); // close
+      expect(eyedropperBtn.style.background).toBe('var(--bg-secondary)');
+      expect(eyedropperBtn.style.color).toBe('var(--text-secondary)');
+    });
+
+    it('HSL-U075: callback is not called with false when eyedropper is already inactive on close', () => {
+      const callback = vi.fn();
+      control.setEyedropperCallback(callback);
+
+      const el = control.render();
+      const button = el.querySelector('[data-testid="hsl-qualifier-control-toggle"]') as HTMLButtonElement;
+
+      button.click(); // open (eyedropper not activated)
+      callback.mockClear();
+
+      button.click(); // close
+      expect(callback).not.toHaveBeenCalled();
+    });
+
+    it('HSL-U076: dispose deactivates the eyedropper and calls callback', () => {
+      const callback = vi.fn();
+      control.setEyedropperCallback(callback);
+
+      const el = control.render();
+      const button = el.querySelector('[data-testid="hsl-qualifier-control-toggle"]') as HTMLButtonElement;
+
+      button.click(); // open
+      const dropdown = document.querySelector('[data-testid="hsl-qualifier-dropdown"]') as HTMLElement;
+      const eyedropperBtn = dropdown.querySelector('[data-testid="hsl-eyedropper-button"]') as HTMLButtonElement;
+
+      eyedropperBtn.click(); // activate
+      callback.mockClear();
+
+      control.dispose();
+      expect(callback).toHaveBeenCalledWith(false);
+
+      // Re-create for afterEach cleanup
+      hslQualifier = new HSLQualifier();
+      control = new HSLQualifierControl(hslQualifier);
+    });
+  });
+
   describe('hardcoded color fix (M-33)', () => {
     it('HSL-M33a: reset button pointerleave should set background to a CSS variable (not hardcoded hex)', () => {
       const el = control.render();

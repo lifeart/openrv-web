@@ -332,6 +332,82 @@ describe('ToneMappingControl', () => {
       control.toggle();
       expect(control.getState().enabled).toBe(false);
     });
+
+    it('TONE-U072: toggle from fresh state (operator=off) selects a default operator', () => {
+      // Fresh state: enabled=false, operator='off'
+      expect(control.getState().operator).toBe('off');
+      expect(control.getState().enabled).toBe(false);
+
+      control.toggle();
+
+      const state = control.getState();
+      expect(state.enabled).toBe(true);
+      expect(state.operator).not.toBe('off');
+      // Should pick 'reinhard' as the first non-off operator
+      expect(state.operator).toBe('reinhard');
+    });
+
+    it('TONE-U073: toggle off preserves the operator', () => {
+      // Set up an active state with a specific operator
+      control.setOperator('aces');
+      expect(control.getState().enabled).toBe(true);
+      expect(control.getState().operator).toBe('aces');
+
+      // Toggle off
+      control.toggle();
+
+      const state = control.getState();
+      expect(state.enabled).toBe(false);
+      // Operator should be preserved, not reset to 'off'
+      expect(state.operator).toBe('aces');
+    });
+
+    it('TONE-U074: toggle back on re-enables with preserved operator', () => {
+      // Set up an active state, then toggle off, then back on
+      control.setOperator('filmic');
+      expect(control.getState().operator).toBe('filmic');
+
+      control.toggle(); // off
+      expect(control.getState().enabled).toBe(false);
+      expect(control.getState().operator).toBe('filmic');
+
+      control.toggle(); // back on
+      const state = control.getState();
+      expect(state.enabled).toBe(true);
+      expect(state.operator).toBe('filmic');
+    });
+
+    it('TONE-U075: toggle with non-off operator works normally without changing operator', () => {
+      // Set a non-off operator, disable, then toggle
+      control.setState({ enabled: false, operator: 'agx' });
+      expect(control.getState().operator).toBe('agx');
+
+      control.toggle();
+
+      const state = control.getState();
+      expect(state.enabled).toBe(true);
+      expect(state.operator).toBe('agx');
+    });
+
+    it('TONE-U076: toggle from fresh state makes isEnabled() return true', () => {
+      // isEnabled() requires both enabled=true AND operator!='off'
+      expect(control.isEnabled()).toBe(false);
+
+      control.toggle();
+
+      expect(control.isEnabled()).toBe(true);
+    });
+
+    it('TONE-U077: toggle via keyboard shortcut from fresh state selects default operator', () => {
+      expect(control.getState().operator).toBe('off');
+
+      control.handleKeyboard('j', true, true);
+
+      const state = control.getState();
+      expect(state.enabled).toBe(true);
+      expect(state.operator).toBe('reinhard');
+      expect(control.isEnabled()).toBe(true);
+    });
   });
 
   describe('setState', () => {

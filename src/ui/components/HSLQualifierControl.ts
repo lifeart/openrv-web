@@ -729,6 +729,7 @@ export class HSLQualifierControl {
       window.addEventListener('scroll', this.boundHandleReposition, true);
     } else {
       this.dropdown.style.display = 'none';
+      this.deactivateEyedropper();
       document.removeEventListener('click', this.handleOutsideClick);
       window.removeEventListener('resize', this.boundHandleReposition);
       window.removeEventListener('scroll', this.boundHandleReposition, true);
@@ -756,6 +757,7 @@ export class HSLQualifierControl {
         this.isDropdownOpen = false;
         this.toggleButton.setAttribute('aria-expanded', 'false');
         this.dropdown.style.display = 'none';
+        this.deactivateEyedropper();
         document.removeEventListener('click', this.handleOutsideClick);
         window.removeEventListener('resize', this.boundHandleReposition);
         window.removeEventListener('scroll', this.boundHandleReposition, true);
@@ -774,11 +776,15 @@ export class HSLQualifierControl {
    * Deactivate eyedropper (called after color is picked)
    */
   deactivateEyedropper(): void {
+    const wasActive = this.eyedropperActive;
     this.eyedropperActive = false;
     const eyedropperBtn = this.dropdown.querySelector('[data-testid="hsl-eyedropper-button"]') as HTMLButtonElement;
     if (eyedropperBtn) {
       eyedropperBtn.style.background = 'var(--bg-secondary)';
       eyedropperBtn.style.color = 'var(--text-secondary)';
+    }
+    if (wasActive && this.onEyedropperCallback) {
+      this.onEyedropperCallback(false);
     }
   }
 
@@ -807,6 +813,7 @@ export class HSLQualifierControl {
    * Dispose
    */
   dispose(): void {
+    this.deactivateEyedropper();
     this.subs.dispose();
     document.removeEventListener('click', this.handleOutsideClick);
     window.removeEventListener('resize', this.boundHandleReposition);

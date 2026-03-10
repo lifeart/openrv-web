@@ -613,6 +613,42 @@ describe('SnapshotPanel', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // Create snapshot button (Issue #42)
+  // ---------------------------------------------------------------------------
+  describe('create snapshot button', () => {
+    it('SNAP-080: create snapshot button exists in footer', () => {
+      const el = panel.render();
+      const createBtn = el.querySelector('[data-testid="create-snapshot-btn"]');
+      expect(createBtn).not.toBeNull();
+      expect(createBtn!.textContent).toBe('Create Snapshot');
+    });
+
+    it('SNAP-081: clicking create button emits createRequested event', () => {
+      const handler = vi.fn();
+      panel.on('createRequested', handler);
+
+      const el = panel.render();
+      const createBtn = el.querySelector('[data-testid="create-snapshot-btn"]') as HTMLButtonElement;
+      createBtn.click();
+
+      expect(handler).toHaveBeenCalledTimes(1);
+    });
+
+    it('SNAP-082: empty state includes keyboard shortcut hint', async () => {
+      manager.listSnapshots.mockResolvedValue([]);
+      document.body.appendChild(panel.render());
+      panel.show();
+
+      await vi.waitFor(() => {
+        const text = panel.render().textContent || '';
+        expect(text).toContain('Ctrl+Shift+S');
+      });
+
+      document.body.removeChild(panel.render());
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // Mutual exclusion (L-48)
   // ---------------------------------------------------------------------------
   describe('mutual exclusion', () => {

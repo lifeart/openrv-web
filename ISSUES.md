@@ -1790,6 +1790,261 @@ This file tracks findings from exploratory review and targeted validation runs.
   - On fallback rendering paths, File/Look/Display LUT assignments remain editable state but never affect pixels.
   - That makes the multi-stage LUT pipeline partly fiction outside the GPU-chain path: the app stores and syncs the configuration, but the renderer drops it completely.
 
+### 146. The shipped LUT Pipeline panel does not persist through project save/load at all
+
+- Severity: High
+- Area: Color workflow / project persistence
+- Evidence:
+  - The shipped Color tab exposes a real `LUT Pipeline` panel toggle in [src/services/tabContent/buildColorTab.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildColorTab.ts#L73), and the panel itself is a first-class UI for `Pre-Cache -> File -> Look -> Display` LUT stages in [src/ui/components/LUTPipelinePanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/LUTPipelinePanel.ts#L1).
+  - Runtime panel edits are wired into the viewer via `pipelineChanged -> viewer.syncLUTPipeline()` in [src/AppColorWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppColorWiring.ts#L207).
+  - The pipeline model even has an explicit serializable state API in `LUTPipeline.getSerializableState()` in [src/color/pipeline/LUTPipeline.ts](/Users/lifeart/Repos/openrv-web/src/color/pipeline/LUTPipeline.ts#L314).
+  - But `.orvproject` schema has no field for LUT pipeline state in [src/core/session/SessionState.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionState.ts#L94), and `SessionSerializer.toJSON(...)` / `fromJSON(...)` never save or restore it in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L257) and [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L354).
+- Impact:
+  - The app exposes a detailed, production-mounted LUT pipeline workflow that completely disappears after project save/load.
+  - That is especially misleading because the codebase already contains a serializable pipeline state shape, so the feature looks designed for persistence even though the shipping persistence layer ignores it.
+
+### 147. The registered MXF “decoder” returns a dummy 1x1 pixel instead of actual image data
+
+- Severity: High
+- Area: Format support / MXF media loading
+- Evidence:
+  - The format registry registers MXF as a normal decoder with `canDecode: isMXFFile` in [src/formats/DecoderRegistry.ts](/Users/lifeart/Repos/openrv-web/src/formats/DecoderRegistry.ts#L785).
+  - The adapter comment explicitly states it does not decode video frames and only returns metadata in [src/formats/DecoderRegistry.ts](/Users/lifeart/Repos/openrv-web/src/formats/DecoderRegistry.ts#L772).
+  - Its `decode()` implementation returns `width: 1`, `height: 1`, and `data: new Float32Array(4)` with `metadataOnly: true` in [src/formats/DecoderRegistry.ts](/Users/lifeart/Repos/openrv-web/src/formats/DecoderRegistry.ts#L792).
+  - No other production code path consumes `metadataOnly` as a special “do not display” contract; that marker appears only in this adapter result in [src/formats/DecoderRegistry.ts](/Users/lifeart/Repos/openrv-web/src/formats/DecoderRegistry.ts#L802).
+- Impact:
+  - MXF can be recognized as supported media while producing a fake 1x1 image instead of real frames.
+  - That is worse than an explicit unsupported-format error because the app pretends to load the file successfully while showing meaningless pixels.
+
+### 148. HDR VideoFrame upload failure degrades to a blank frame rather than a usable fallback
+
+- Severity: High
+- Area: HDR rendering / browser fallback correctness
+- Evidence:
+  - HDR video and several HDR image formats are represented as VideoFrame-backed `IPImage`s with only a 4-byte placeholder buffer, for example in [src/nodes/sources/VideoSourceNode.ts](/Users/lifeart/Repos/openrv-web/src/nodes/sources/VideoSourceNode.ts#L924), [src/nodes/sources/FileSourceNode.ts](/Users/lifeart/Repos/openrv-web/src/nodes/sources/FileSourceNode.ts#L1249), [src/nodes/sources/FileSourceNode.ts](/Users/lifeart/Repos/openrv-web/src/nodes/sources/FileSourceNode.ts#L1343), and [src/nodes/sources/FileSourceNode.ts](/Users/lifeart/Repos/openrv-web/src/nodes/sources/FileSourceNode.ts#L1504).
+  - The renderer’s HDR path tries `gl.texImage2D(..., image.videoFrame)` directly in [src/render/Renderer.ts](/Users/lifeart/Repos/openrv-web/src/render/Renderer.ts#L857).
+  - If that upload fails, the renderer releases the managed VideoFrame and falls through to the typed-array upload path in [src/render/Renderer.ts](/Users/lifeart/Repos/openrv-web/src/render/Renderer.ts#L880).
+  - The source code explicitly notes that for these HDR VideoFrame-only images, the typed-array fallback “will produce a blank frame” in [src/render/Renderer.ts](/Users/lifeart/Repos/openrv-web/src/render/Renderer.ts#L883).
+- Impact:
+  - On browsers/GPUs where `texImage2D(VideoFrame)` fails, HDR video and HDR VideoFrame-backed image formats can turn into blank output instead of degrading to SDR or surfacing a clear unsupported-path error.
+  - This is a user-visible render failure, not just a performance downgrade.
+
+### 149. Share links serialize `sourceUrl` but never use it, so a clean recipient cannot reconstruct the shared media
+
+- Severity: High
+- Area: URL sharing / review-link reproducibility
+- Evidence:
+  - `SessionURLService.captureSessionURLState()` explicitly serializes the current source URL into `sourceUrl` in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L124).
+  - The URL-state schema describes that field as `Source URL (for reference / re-loading)` in [src/core/session/SessionURLManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionURLManager.ts#L27).
+  - The encoder persists that field as compact key `su` in [src/core/session/SessionURLManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionURLManager.ts#L135), and decoding restores it in [src/core/session/SessionURLManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionURLManager.ts#L200).
+  - But `SessionURLService.applySessionURLState()` never reads `state.sourceUrl` at all in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L146).
+  - The parallel network-share path captures the same `sourceUrl` field in [src/AppNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppNetworkBridge.ts#L1073), but its apply path also never consumes it in [src/AppNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppNetworkBridge.ts#L1083).
+- Impact:
+  - The app advertises shareable review links with encoded source identity, but opening that link in a clean session cannot reload the shared shot from the serialized URL.
+  - In practice, the link only replays partial view state onto whatever media is already open locally, which makes the shared hash non-reproducible for the most important case: a fresh recipient opening the link.
+
+### 150. Share-link URL state cannot explicitly reset defaults, so recipients keep stale local transform / wipe / OCIO / A-B state
+
+- Severity: High
+- Area: URL sharing / state application semantics
+- Evidence:
+  - The compact URL encoder intentionally omits default/off values: current A/B stays omitted when it is `A`, wipe mode is omitted when it is `off`, default transforms are omitted, and OCIO is omitted when disabled in [src/core/session/SessionURLManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionURLManager.ts#L140), [src/core/session/SessionURLManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionURLManager.ts#L142), [src/core/session/SessionURLManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionURLManager.ts#L146), and [src/core/session/SessionURLManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionURLManager.ts#L151).
+  - The tests explicitly codify that omission behavior, for example `currentAB` omitted when default, `wipeMode` omitted when `"off"`, and disabled OCIO omitted in [src/core/session/SessionURLManager.test.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionURLManager.test.ts#L220), [src/core/session/SessionURLManager.test.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionURLManager.test.ts#L225), and [src/core/session/SessionURLManager.test.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionURLManager.test.ts#L235).
+  - `SessionURLService.applySessionURLState()` applies only fields that are present and never resets omitted state back to defaults in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L166), [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L180), [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L184), and [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L191).
+- Impact:
+  - A sender with default/off state cannot reliably share that state to a recipient who already has non-default settings.
+  - Links from a neutral view can still open with stale pan/zoom, wipe, OCIO enabled, or B-side compare state on the receiver, which breaks the promise that the URL reproduces the shared review state.
+
+### 151. Unified preferences export / import / reset drops FPS indicator settings even though the shipped overlay persists them
+
+- Severity: Medium
+- Area: Preferences portability / overlay state persistence
+- Evidence:
+  - `FPSIndicator` loads its live state from persisted `getFPSIndicatorPrefs()` on construction in [src/ui/components/FPSIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/FPSIndicator.ts#L80).
+  - The core preferences facade defines a dedicated `fpsIndicator` storage key in [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L72) and read/write methods in [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L330).
+  - But the exported preferences payload has no `fpsIndicatorPrefs` field at all in [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L57), and `buildExportPayload()` never includes it in [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L454).
+  - `importAll(...)` also never restores FPS indicator prefs in [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L356), and `resetAll()` does not emit an `fpsIndicatorPrefsChanged` reset event in [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L433).
+- Impact:
+  - The app treats FPS indicator configuration as persisted user state during normal use, but that state is silently lost when users rely on the unified preferences backup/restore path.
+  - A reset/import flow can leave the FPS overlay configuration diverging from the rest of the supposedly restored preferences set.
+
+### 152. Large parts of the unified preferences model are storage-only and never affect runtime behavior
+
+- Severity: Medium
+- Area: Preferences / dead user configuration
+- Evidence:
+  - The core preferences model defines persisted `ColorDefaults`, `ExportDefaults`, and `GeneralPrefs` fields including `defaultInputColorSpace`, `defaultExposure`, `frameburnEnabled`, `frameburnConfig`, `defaultFps`, `autoPlayOnLoad`, and `showWelcome` in [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L35), [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L42), and [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L50).
+  - Those values are exported/imported as first-class preference payload fields in [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L65) and [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L400).
+  - But outside `PreferencesManager` itself, the only production read of `getGeneralPrefs()` is the note-author fallback in [src/ui/components/NotePanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NotePanel.ts#L949).
+  - Source-level search found no non-test production callers of `getColorDefaults()` or `getExportDefaults()`, and no production reads of the modeled fields like `autoPlayOnLoad`, `showWelcome`, `defaultInputColorSpace`, `defaultExposure`, or `frameburnEnabled`.
+- Impact:
+  - The app persists and backs up several preference categories that users would reasonably expect to change startup, default color, or export behavior, but they currently do nothing in production.
+  - That creates misleading configuration surface area: exported preferences can look richer and more complete than the runtime behavior they actually control.
+
+### 153. Drag-and-drop GTO/RV session loading loses sidecar file resolution that the file picker preserves
+
+- Severity: High
+- Area: Session ingest / drag-and-drop parity
+- Evidence:
+  - The header file-picker path builds an `availableFiles` map from the non-session files in the selection and passes it into `loadFromGTO(...)` in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1392).
+  - The viewer drag-and-drop path detects `.rv` / `.gto` files but calls `session.loadFromGTO(content)` without any `availableFiles` map in [src/ui/components/ViewerInputHandler.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInputHandler.ts#L728).
+  - GTO import actually uses `availableFiles` to resolve referenced media/CDL files by basename in [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L692) and [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L1991).
+- Impact:
+  - Importing an RV/GTO session together with its companion media works differently depending on whether users use the file picker or drag-and-drop.
+  - The drag path silently loses local sidecar resolution, so the same bundle can import more incompletely from the viewer than from the header.
+
+### 154. Drag-and-drop skips single-file sequence inference that the file picker supports
+
+- Severity: Medium
+- Area: Media ingest / sequence detection consistency
+- Evidence:
+  - The header file-picker path tries `inferSequenceFromSingleFile(singleFile, fileArray)` when exactly one image file is selected and will promote that single file into a detected sequence in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1436).
+  - The viewer drag-and-drop path only auto-detects sequences when more than one image file is dropped; otherwise it falls straight through to single-file loading in [src/ui/components/ViewerInputHandler.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInputHandler.ts#L709).
+- Impact:
+  - A numbered frame chosen through the file picker can open as a full sequence, while dropping the exact same file onto the viewer only loads a single still.
+  - That makes the app’s main ingest paths disagree on a core review workflow.
+
+### 155. Drag-and-drop treats `.rvedl` as media and routes it into the wrong loader
+
+- Severity: Medium
+- Area: Session ingest / EDL workflow
+- Evidence:
+  - The header file input explicitly accepts `.rvedl` and has a dedicated RVEDL parse path through `session.loadEDL(text)` in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L216) and [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1350).
+  - The viewer drag-and-drop path only special-cases `.rv` / `.gto`; everything else goes through `session.loadFile(file)` in [src/ui/components/ViewerInputHandler.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInputHandler.ts#L726).
+  - `SessionMedia.loadFile(...)` only dispatches to image/video loading in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L352).
+  - Unknown extensions default to `'image'` in `detectMediaTypeFromFile(...)` in [src/utils/media/SupportedMediaFormats.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SupportedMediaFormats.ts#L88).
+- Impact:
+  - A `.rvedl` that loads correctly from the header can fail or be misrouted when dropped onto the viewer.
+  - Users are given two different session-ingest surfaces, but only one of them actually supports the documented EDL path.
+
+### 156. Dropping a session bundle with multiple image files can ignore the session file completely
+
+- Severity: High
+- Area: Session ingest / drag-and-drop branch ordering
+- Evidence:
+  - The viewer drag-and-drop path checks `imageFiles.length > 1` before it looks for `.rv` / `.gto` files in [src/ui/components/ViewerInputHandler.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInputHandler.ts#L709).
+  - When that branch succeeds, it immediately calls `session.loadSequence(bestSequence)` and `return`s in [src/ui/components/ViewerInputHandler.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInputHandler.ts#L715).
+  - The `.rv` / `.gto` handling loop only runs afterward in [src/ui/components/ViewerInputHandler.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInputHandler.ts#L725).
+  - The header file-picker path does the opposite: it prioritizes the session file first and only falls back to sequence detection when no session file is present in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1387).
+- Impact:
+  - Dropping an RV/GTO session together with a frame sequence can open the sequence directly and skip the session instructions, nodes, and review state entirely.
+  - That makes “drop the whole session bundle” actively unsafe in the viewer, because the same file set is interpreted differently from the header import path.
+
+### 157. Unsupported dropped files are deliberately misclassified as images instead of being rejected up front
+
+- Severity: Medium
+- Area: File ingest / unsupported-format handling
+- Evidence:
+  - `detectMediaTypeFromFile(...)` documents that unknown types “default to image to preserve existing behavior” in [src/utils/media/SupportedMediaFormats.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SupportedMediaFormats.ts#L88).
+  - The implementation returns `'image'` for any extension/MIME it does not recognize in [src/utils/media/SupportedMediaFormats.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SupportedMediaFormats.ts#L113).
+  - `SessionMedia.loadFile(...)` only branches into image/video loading based on that classification and has no unsupported-file path in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L352).
+- Impact:
+  - Non-media files dropped onto the viewer are pushed through the image loader stack instead of getting an immediate “unsupported file type” rejection.
+  - That produces misleading downstream errors and is the underlying reason session-adjacent files like `.rvedl` get routed into the wrong loader when drag-and-dropped.
+
+### 158. The dedicated `Open Project` button cannot actually pick most formats that its loader supports
+
+- Severity: Medium
+- Area: Project/session open workflow
+- Evidence:
+  - The header’s dedicated project input only accepts `.orvproject` in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L223).
+  - But the `openProject(...)` handler explicitly supports `.orvproject`, `.rv`, `.gto`, and `.rvedl` in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L290) and [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L319).
+  - The unsupported-file warning in that same handler even tells users it expects `.orvproject, .rv, .gto, or .rvedl` in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L327).
+- Impact:
+  - The shipped `Open Project` UI suggests a broader project/session open path exists, but in normal use the browser picker only exposes `.orvproject`.
+  - That leaves the `.rv` / `.gto` / `.rvedl` branches effectively unreachable from the button that is supposed to invoke them.
+
+### 159. Plugin settings have backup/import APIs but are excluded from the app’s real preferences backup flow
+
+- Severity: Medium
+- Area: Plugin persistence / backup portability
+- Evidence:
+  - The plugin system owns a real persistent `PluginSettingsStore` on the registry in [src/plugin/PluginRegistry.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginRegistry.ts#L90).
+  - Plugin settings are exposed to plugins through `PluginContext.settings` in [src/plugin/PluginRegistry.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginRegistry.ts#L457).
+  - That store has explicit `exportAll()` / `importAll()` backup helpers in [src/plugin/PluginSettingsStore.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginSettingsStore.ts#L198).
+  - But the app’s actual unified backup/import path goes through `PreferencesManager.exportAll()` / `importAll()` in [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L352), and that payload contains no plugin-settings field in [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L57).
+  - Source-level search found no production caller wiring `PluginSettingsStore.exportAll()` or `importAll()` into any app backup/restore flow.
+- Impact:
+  - Plugin settings can persist locally during normal use but disappear from the app’s real preferences backup/transfer mechanism.
+  - That makes plugin-backed workflows non-portable even though both sides of the codebase imply a complete settings backup story.
+
+### 160. `openProject()` only resyncs compare/stack UI for `.orvproject`, not for `.rv` / `.gto` loads
+
+- Severity: Medium
+- Area: Project/session open workflow / UI truthfulness
+- Evidence:
+  - `openProject()` calls `syncControlsFromState(state)` only in the `.orvproject` branch in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L290).
+  - The `.rv` / `.gto` branch only calls `session.loadFromGTO(content)` and returns in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L319).
+  - `syncControlsFromState(...)` is the helper that explicitly pushes loaded wipe state into `compareControl` and loaded stack state into `stackControl` in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L477).
+  - The tests for this helper are written only around the `.orvproject` path (`APM-100` / `APM-101` / `APM-102`) in [src/AppPersistenceManager.test.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.test.ts#L625).
+- Impact:
+  - Loading RV/GTO sessions through the project-open path can leave compare/stack controls showing stale UI state even if the underlying session/viewer state changed.
+  - The app already has a dedicated post-load control sync step, but it is applied inconsistently across supported project/session formats.
+
+### 161. `openProject()` creates an auto-checkpoint before it knows whether anything will actually be loaded
+
+- Severity: Medium
+- Area: Project/session open workflow / recovery history quality
+- Evidence:
+  - `openProject()` unconditionally calls `createAutoCheckpoint('Before Project Load')` before any extension/type branching in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L286).
+  - `createAutoCheckpoint(...)` serializes the current session and writes an auto-checkpoint through `snapshotManager.createAutoCheckpoint(...)` in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L180).
+  - The later branches include non-replacing flows like `.rvedl` import and even the unsupported-file warning path in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L322) and [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L326).
+- Impact:
+  - Trying to open an unsupported file, or opening an EDL that does not actually replace the session, still creates a “Before Project Load” recovery checkpoint.
+  - That pollutes recovery history with misleading checkpoints for operations that never became a real project/session replacement.
+
+### 162. The project-open path for `.rv/.gto` can never provide companion files for session-side media resolution
+
+- Severity: Medium
+- Area: Project/session open workflow / RV-GTO interchange
+- Evidence:
+  - `openProject(file: File)` only accepts a single `File` object and the dedicated project input is not multi-select in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L223).
+  - The `.rv` / `.gto` branch in `openProject()` reads that single file and calls `session.loadFromGTO(content)` with no `availableFiles` map in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L319).
+  - The broader media/session import path is explicitly designed to pass a map of companion files into `loadFromGTO(...)` for basename resolution in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1392).
+  - GTO import uses that `availableFiles` map to match referenced media/CDL files in [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L692) and [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L1991).
+- Impact:
+  - Even if an RV/GTO session is opened through the project-open API, that path cannot bring along the companion media bundle that the importer needs for best-effort reconstruction.
+  - So the app ships two session-open paths, but only the general media-open flow can perform the richer sidecar-aware RV/GTO import.
+
+### 163. RVEDL import parses and stores entries, but the timeline editor never consumes them
+
+- Severity: Medium
+- Area: EDL workflow / timeline visibility
+- Evidence:
+  - RVEDL import stores parsed entries on the session and emits `edlLoaded` in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L227).
+  - The session exposes those parsed entries through `session.edlEntries` in [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L509).
+  - `TimelineEditorService` does not subscribe to `edlLoaded`; it only resyncs on `graphLoaded`, `durationChanged`, and `sourceLoaded` in [src/services/TimelineEditorService.ts](/Users/lifeart/Repos/openrv-web/src/services/TimelineEditorService.ts#L152).
+  - Its `syncFromGraph()` path also never reads `session.edlEntries`; it only loads from a `SequenceGroupNode`, playlist clips, or a synthetic fallback built from loaded sources in [src/services/TimelineEditorService.ts](/Users/lifeart/Repos/openrv-web/src/services/TimelineEditorService.ts#L264).
+  - The header/import UI still presents RVEDL load as a successful operation in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1352) and [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L322).
+- Impact:
+  - Users can successfully import an RVEDL and get a success message, but the timeline editor does not switch to or display that imported cut structure.
+  - In practice, RVEDL support currently behaves more like metadata storage than an actually usable timeline-import workflow.
+
+### 164. Loaded RVEDL state is not saved into `.orvproject` at all
+
+- Severity: Medium
+- Area: EDL workflow / project persistence
+- Evidence:
+  - RVEDL entries are stored on `SessionGraph` as `_edlEntries` and exposed through `session.edlEntries` in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L73) and [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L509).
+  - `SessionState` has no field for EDL entries in [src/core/session/SessionState.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionState.ts#L94).
+  - `SessionSerializer.toJSON(...)` serializes media/playback/view/color/playlist/notes/version/status state, but not `edlEntries`, in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L257).
+- Impact:
+  - Even if a user loads an RVEDL successfully, saving the session as `.orvproject` silently drops that imported cut list.
+  - So RVEDL import is not only weakly consumed at runtime, it is also non-persistent across the app’s main project-save workflow.
+
+### 165. The viewer’s persisted texture-filter preference is outside the app’s real preferences backup/import path
+
+- Severity: Medium
+- Area: Viewer preferences / backup portability
+- Evidence:
+  - The viewer loads its texture-filter mode from `loadFilterModePreference()` during startup in [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L874).
+  - Changing the mode persists it through `persistFilterModePreference(...)` in [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L2439).
+  - That preference is stored under its own standalone localStorage key `openrv.filterMode` in [src/ui/components/ViewerIndicators.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerIndicators.ts#L15) and [src/ui/components/ViewerIndicators.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerIndicators.ts#L240).
+  - The app’s formal preferences backup/import flow only exports the `PreferencesManager` payload in [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L352), and that payload contains no filter-mode field in [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L57).
+- Impact:
+  - A user’s nearest-neighbor/bilinear QC preference persists locally, but disappears when they rely on the app’s real preferences export/import path.
+  - That makes viewer behavior less portable than the rest of the settings model implies.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed
