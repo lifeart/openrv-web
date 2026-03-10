@@ -1254,6 +1254,78 @@ This file tracks findings from exploratory review and targeted validation runs.
   - If the right inspector is hidden while playback/frame/source state changes, reopening it can show stale frame/timecode/media info until another frame or source event happens.
   - That makes the inspector feel unreliable precisely when users reopen it to check current media state.
 
+### 104. Advanced paint-tool buttons advertise `D` / `U` / `C` / `M`, but those shortcuts do not exist
+
+- Severity: Medium
+- Area: Annotate toolbar, paint tools
+- Evidence:
+  - The shipped paint toolbar labels the advanced buttons as `Dodge tool (D)`, `Burn tool (U)`, `Clone stamp (C)`, and `Smudge tool (M)` in [src/ui/components/PaintToolbar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PaintToolbar.ts#L55).
+  - The actual default paint shortcut block only defines `paint.pan`, `paint.pen`, `paint.eraser`, `paint.text`, `paint.rectangle`, `paint.ellipse`, `paint.line`, `paint.arrow`, `paint.toggleBrush`, `paint.toggleGhost`, and `paint.toggleHold` in [src/utils/input/KeyBindings.ts](/Users/lifeart/Repos/openrv-web/src/utils/input/KeyBindings.ts#L337).
+  - The production keyboard action map mirrors that same limited set and has no handlers for `dodge`, `burn`, `clone`, or `smudge` in [src/services/KeyboardActionMap.ts](/Users/lifeart/Repos/openrv-web/src/services/KeyboardActionMap.ts#L572).
+- Impact:
+  - The Annotate toolbar promises fast single-key access to four destructive paint tools, but those keys do nothing in the shipped app.
+  - That makes the toolbar misleading and slows down the exact workflows those tools are intended for.
+
+### 105. Text-format toolbar advertises `Ctrl+B` / `Ctrl+I` / `Ctrl+U`, but production never routes those shortcuts to it
+
+- Severity: Medium
+- Area: Annotate toolbar, text annotation formatting
+- Evidence:
+  - The text-format buttons are explicitly titled `Bold (Ctrl+B)`, `Italic (Ctrl+I)`, and `Underline (Ctrl+U)` in [src/ui/components/TextFormattingToolbar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/TextFormattingToolbar.ts#L63).
+  - The component does implement a local `handleKeyboard(key, ctrlKey)` path for those combinations in [src/ui/components/TextFormattingToolbar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/TextFormattingToolbar.ts#L291).
+  - But the shipped annotate tab only renders the toolbar in [src/services/tabContent/buildAnnotateTab.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildAnnotateTab.ts#L24), and the production keyboard map contains no corresponding text-format actions or calls into `textFormattingToolbar.handleKeyboard(...)`.
+- Impact:
+  - Users are told standard rich-text shortcuts work for text annotations, but those shortcuts are not actually wired through the app.
+  - That makes text formatting slower and undermines confidence in the rest of the annotate toolbar’s shortcut hints.
+
+### 106. Text-format toolbar never follows actual text selection, so it only tracks newly created or most-recent text
+
+- Severity: Medium
+- Area: Annotate toolbar, text annotation editing
+- Evidence:
+  - The component documentation says it updates the “currently selected or most recently created text annotation” in [src/ui/components/TextFormattingToolbar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/TextFormattingToolbar.ts#L1).
+  - In practice, its internal tracking is only refreshed from `toolChanged`, `strokeAdded`, and `annotationsChanged` in [src/ui/components/TextFormattingToolbar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/TextFormattingToolbar.ts#L98).
+  - The explicit `setActiveAnnotation(id, frame)` entry point exists in [src/ui/components/TextFormattingToolbar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/TextFormattingToolbar.ts#L241), but the production annotate wiring just instantiates and renders the toolbar in [src/services/controls/createAnnotateControls.ts](/Users/lifeart/Repos/openrv-web/src/services/controls/createAnnotateControls.ts#L15) and [src/services/tabContent/buildAnnotateTab.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildAnnotateTab.ts#L24), with no selection handoff.
+- Impact:
+  - On frames with multiple text annotations, the toolbar has no production path to retarget formatting to the text the user actually wants to edit.
+  - That leaves the UI behaving like a “last text” formatter while presenting itself as a real selected-text editor.
+
+### 107. Snapshot panel promises a Preview action, but the shipped UI only shows preview metadata
+
+- Severity: Medium
+- Area: Snapshot management
+- Evidence:
+  - The component advertises snapshot actions as `Preview, Restore, Export, Delete, Rename` in [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L2).
+  - The actual action row only creates `Restore`, `Rename`, `Export`, and `Delete` buttons in [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L383).
+  - The only preview-related rendering is passive summary metadata from `snapshot.preview` in [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L354), and there is no preview event or action path in `SnapshotPanelEvents`.
+- Impact:
+  - Users can inspect small bits of snapshot metadata, but they cannot actually preview a snapshot before restoring it.
+  - That makes snapshot comparison less useful and turns restore into a more blind action than the panel suggests.
+
+### 108. Playlist panel claims EDL import/export support, but the shipped UI only exposes export
+
+- Severity: Medium
+- Area: Playlist management
+- Evidence:
+  - The panel advertises `EDL import/export` in its feature block in [src/ui/components/PlaylistPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PlaylistPanel.ts#L2).
+  - The visible footer only exposes `EDL` and `OTIO` export buttons in [src/ui/components/PlaylistPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PlaylistPanel.ts#L258).
+  - There is no import button, import event, or playlist-panel import flow in the component itself, even though the broader app can load `.rvedl` through separate file-open flows.
+- Impact:
+  - Users working inside the playlist UI cannot round-trip timelines the way the panel description implies.
+  - Import exists as an app capability, but not as a usable playlist-panel workflow.
+
+### 109. Network Sync can show `Copied!` before the share link copy actually succeeds
+
+- Severity: Medium
+- Area: Network Sync, share/invite flow
+- Evidence:
+  - The panel’s `Copy Link` button immediately updates its own label to `Copied!` right after emitting `copyLink` in [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L842).
+  - The actual clipboard write happens asynchronously in the app bridge in [src/AppNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppNetworkBridge.ts#L138).
+  - That bridge can still fail and surface `Clipboard unavailable...` or `Failed to generate share URL...` errors after the button has already switched to success styling in [src/AppNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppNetworkBridge.ts#L167).
+- Impact:
+  - The panel can briefly report success and failure at the same time for the same copy attempt.
+  - That makes the invite/share workflow less trustworthy, especially on browsers or environments with clipboard restrictions.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

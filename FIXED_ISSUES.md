@@ -239,3 +239,13 @@
 - **Regression Tests**: APM-100 through APM-106 (project load wipe sync, stack sync, empty stack clearing, auto-save sync, full control verification, graceful without optional controls, no-wipe edge case).
 - **Verification**: All 45 persistence + 77 StackControl tests pass, TypeScript clean.
 - **Files Changed**: `src/AppPersistenceManager.ts`, `src/ui/components/StackControl.ts`, `src/AppPersistenceManager.test.ts`
+
+## Issue #29: External presentation windows never render the viewer and ignore most synced state
+
+- **Severity**: High
+- **Area**: External presentation, multi-window review
+- **Root Cause**: The child presentation window's inline script only handled `ping` and `syncFrame` messages. `syncPlayback` and `syncColor` messages sent by `App.ts` were silently dropped.
+- **Fix**: Extended `generatePresentationHTML()` inline script to handle all three sync message types: `syncFrame`, `syncPlayback` (tracks playing/paused state, rate, frame), and `syncColor` (stores exposure, gamma, temperature, tint with `console.warn` explaining color pipeline can't be visually applied without WebGL). Added `updateInfoDisplay()` for combined status rendering. Added `default` case that warns on truly unknown message types.
+- **Regression Tests**: EP-HTML-MSG-001 through EP-HTML-MSG-005 (HTML contains handlers for all sync types, color pipeline warning, no silent drops), EP-SYNC-001/002 (event forwarding), EP-ISO-001/002 (session isolation), EP-LIFE-001 through EP-LIFE-003 (window lifecycle), EP-EDGE-001 through EP-EDGE-011 (edge cases: pre-init calls, empty/partial fields, rapid sequences, unknown messages, double dispose), EP-HTML-BEH-001 through EP-HTML-BEH-004 (display behavior verification).
+- **Verification**: All 53 ExternalPresentation tests pass, TypeScript clean.
+- **Files Changed**: `src/ui/components/ExternalPresentation.ts`, `src/ui/components/ExternalPresentation.test.ts`

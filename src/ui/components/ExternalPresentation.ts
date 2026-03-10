@@ -180,6 +180,26 @@ export function generatePresentationHTML(windowId: string, channelName: string, 
       timestamp: Date.now(),
     });
 
+    // Presentation state
+    var playbackState = { playing: false, playbackRate: 1.0, frame: 0 };
+    var colorState = {};
+
+    function updateInfoDisplay() {
+      var parts = ['Frame: ' + playbackState.frame];
+      if (playbackState.playing) {
+        parts.push('\\u25B6 ' + playbackState.playbackRate + 'x');
+      } else {
+        parts.push('\\u23F8');
+      }
+      var colorParts = [];
+      if (colorState.exposure !== undefined) colorParts.push('Exp:' + colorState.exposure.toFixed(2));
+      if (colorState.gamma !== undefined) colorParts.push('\\u03B3:' + colorState.gamma.toFixed(2));
+      if (colorState.temperature !== undefined) colorParts.push('Temp:' + colorState.temperature + 'K');
+      if (colorState.tint !== undefined) colorParts.push('Tint:' + colorState.tint.toFixed(2));
+      if (colorParts.length > 0) parts.push(colorParts.join(' '));
+      document.getElementById('info').textContent = parts.join(' | ');
+    }
+
     // Handle messages
     channel.onmessage = function(event) {
       const msg = event.data;
@@ -198,8 +218,31 @@ export function generatePresentationHTML(windowId: string, channelName: string, 
           });
           break;
         case 'syncFrame':
+          playbackState.frame = msg.frame;
           document.getElementById('info').textContent =
             'Frame: ' + msg.frame + ' / ' + msg.totalFrames;
+          break;
+        case 'syncPlayback':
+          playbackState.playing = msg.playing;
+          playbackState.playbackRate = msg.playbackRate;
+          playbackState.frame = msg.frame;
+          updateInfoDisplay();
+          console.info('[OpenRV Presentation] Playback state synced: ' +
+            (msg.playing ? 'playing' : 'paused') + ' at ' + msg.playbackRate + 'x, frame ' + msg.frame);
+          break;
+        case 'syncColor':
+          if (msg.exposure !== undefined) colorState.exposure = msg.exposure;
+          if (msg.gamma !== undefined) colorState.gamma = msg.gamma;
+          if (msg.temperature !== undefined) colorState.temperature = msg.temperature;
+          if (msg.tint !== undefined) colorState.tint = msg.tint;
+          updateInfoDisplay();
+          console.warn('[OpenRV Presentation] Color settings received but cannot be applied without WebGL viewer. ' +
+            'Received: ' + JSON.stringify({exposure: msg.exposure, gamma: msg.gamma, temperature: msg.temperature, tint: msg.tint}));
+          break;
+        default:
+          if (msg.type !== 'windowReady' && msg.type !== 'windowClosed' && msg.type !== 'pong') {
+            console.warn('[OpenRV Presentation] Unhandled message type: ' + msg.type);
+          }
           break;
       }
     };
