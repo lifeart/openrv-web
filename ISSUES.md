@@ -4636,6 +4636,81 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Users cannot set the documented upper half of the supported retention range from the shipped UI.
   - That also means imported or persisted values above 50 are outside the control’s visible authored range, which makes the settings surface less trustworthy.
 
+### 376. Auto-checkpoints are documented as broad safety nets before major operations, but production only creates them for restore and project-load flows
+
+- Severity: Medium
+- Area: Snapshots / recovery workflow / documentation
+- Evidence:
+  - The session-management guide says, "Auto-checkpoints are generated before major operations (e.g., loading new media, clearing annotations)" in [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L96).
+  - Production only defines checkpoint creation in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L194) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L212).
+  - A production-code search shows live call sites only before snapshot restore and project/session load in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L227) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L234), [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L349) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L356), and [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L385) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L393).
+  - There is no corresponding checkpoint wiring around ordinary media loads, annotation clearing, or similar destructive editing paths.
+- Impact:
+  - Users can trust auto-checkpoints to protect routine destructive actions that the shipped app never checkpoints.
+  - That makes the documented safety net much narrower than it sounds, especially during active review/editing work where people are not explicitly loading projects.
+
+### 377. Crash-recovery detection leaves auto-save half-initialized, so normal auto-save is not re-armed after recovery is found
+
+- Severity: High
+- Area: Auto-save / crash recovery
+- Evidence:
+  - `AutoSaveManager.initialize()` returns early as soon as it finds recovery entries in [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L113) through [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L120).
+  - That early return skips the normal post-init path that marks the session active, starts the timer, and installs the `beforeunload` clean-shutdown handler in [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L123) through [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L132).
+  - The app consumes the boolean from `initialize()` and then immediately goes into recover/discard UI flow in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L448) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L487), but it never re-initializes or otherwise re-arms the manager afterward.
+- Impact:
+  - After any startup path that detects crash recovery, the session can continue without the normal auto-save timer and clean-shutdown bookkeeping fully restored.
+  - That weakens the very safety mechanism users depend on right after a crash, when another failure would be most costly.
+
+### 378. Snapshot descriptions are searchable and displayable, but the shipped UI never lets users author or edit them
+
+- Severity: Low
+- Area: Snapshot workflow / UI completeness
+- Evidence:
+  - The Snapshot panel supports searching by description and renders description text on cards in [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L130) through [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L145) and [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L385) through [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L398).
+  - The shipped actions only expose create, import, restore, rename, export, delete, and clear-all in [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L197) through [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L260) and [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L540) through [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L569).
+  - The underlying manager does have an `updateDescription(...)` API in [src/core/session/SnapshotManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SnapshotManager.ts#L405) through [src/core/session/SnapshotManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SnapshotManager.ts#L420), but a production-code search finds no live caller for it.
+- Impact:
+  - In normal production use, snapshot descriptions are effectively import-only metadata even though the panel treats them like a first-class searchable field.
+  - That makes the description search/filter path much less useful for real in-app snapshot curation than the UI suggests.
+
+### 379. Turning auto-save off does not actually stop auto-save writes after state changes
+
+- Severity: High
+- Area: Auto-save / settings correctness
+- Evidence:
+  - The session-management guide presents `Enabled: On / Off` as a real auto-save configuration switch in [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L132) through [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L140), and the UI renders an `Enable auto-save` toggle plus `Auto-save off` disabled state in [src/ui/components/AutoSaveIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/AutoSaveIndicator.ts#L280) through [src/ui/components/AutoSaveIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/AutoSaveIndicator.ts#L286) and [src/ui/components/AutoSaveIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/AutoSaveIndicator.ts#L527).
+  - Disabling only stops the interval timer in [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L554) through [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L564).
+  - `markDirty(...)` still schedules a 2-second delayed save unconditionally in [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L276) through [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L290), and `saveWithGetter()` / `save()` do not check `config.enabled` in [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L232) through [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L237) and [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L296) through [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L335).
+  - Production marks the session dirty on ordinary review changes such as frame changes, marks, annotations, and effects in [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L36) through [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L39) and [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L781) through [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L784).
+- Impact:
+  - Users can disable auto-save in the UI, see an `Auto-save off` state, and still have new auto-save entries written a couple of seconds after ordinary edits.
+  - That makes the toggle misleading for privacy, storage, and workflow expectations, not just cosmetically wrong.
+
+### 380. The auto-save interval setting is mostly bypassed by a hardcoded 2-second save path
+
+- Severity: Medium
+- Area: Auto-save timing semantics
+- Evidence:
+  - The session-management guide says the system saves "at the configured interval" after state becomes dirty in [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L142) through [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L147).
+  - `AutoSaveManager` does have an interval timer keyed off the configured minutes value in [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L219) through [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L226).
+  - But every `markDirty(...)` call also starts a separate hardcoded `2000ms` debounce that directly saves the session in [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L276) through [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L290).
+  - Production invokes that dirty-mark path for routine review interactions like frame changes, marks, annotations, and effects in [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L36) through [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L39) and [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L781) through [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L784).
+- Impact:
+  - In normal use, the selected interval is not the real cadence users get; most changes are saved after about two seconds of inactivity instead.
+  - That makes the interval control misleading and changes the storage/performance tradeoff users think they are configuring.
+
+### 381. Snapshot import bypasses the documented snapshot-retention limits
+
+- Severity: Low
+- Area: Snapshot storage / import workflow
+- Evidence:
+  - The session-management guide documents hard limits of 50 manual snapshots and 10 auto-checkpoints in [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L118) through [docs/advanced/session-management.md#L122).
+  - Normal in-app snapshot creation enforces those limits by pruning after `createSnapshot(...)` and `createAutoCheckpoint(...)` in [src/core/session/SnapshotManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SnapshotManager.ts#L124) through [src/core/session/SnapshotManager.ts#L152) and [src/core/session/SnapshotManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SnapshotManager.ts#L159) through [src/core/session/SnapshotManager.ts#L188).
+  - But `importSnapshot(...)` writes the imported snapshot and notifies listeners without calling any prune path in [src/core/session/SnapshotManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SnapshotManager.ts#L508) through [src/core/session/SnapshotManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SnapshotManager.ts#L539).
+- Impact:
+  - Users can exceed the documented retention limits simply by importing snapshot files, so the storage model behaves differently depending on how entries were created.
+  - That makes the snapshot limits less trustworthy and can leave more retained state than the UI/docs imply.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

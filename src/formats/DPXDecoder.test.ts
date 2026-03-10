@@ -535,6 +535,97 @@ describe('DPXDecoder', () => {
     });
   });
 
+  describe('decodeDPX - ABGR swizzle', () => {
+    it('should swizzle ABGR to RGBA for descriptor 52 with 8-bit data', async () => {
+      // Create a 1x1 8-bit ABGR DPX with known pixel values
+      const buffer = createTestDPX({
+        width: 1,
+        height: 1,
+        bitDepth: 8,
+        channels: 4,
+        descriptor: 52,
+        bigEndian: true,
+      });
+      // Overwrite pixel data: A=10, B=20, G=30, R=40
+      const pixelStart = 2048;
+      const bytes = new Uint8Array(buffer);
+      bytes[pixelStart] = 10;     // A
+      bytes[pixelStart + 1] = 20; // B
+      bytes[pixelStart + 2] = 30; // G
+      bytes[pixelStart + 3] = 40; // R
+
+      const result = await decodeDPX(buffer);
+
+      // After swizzle, output should be RGBA: R=40, G=30, B=20, A=10
+      expect(result.data[0]).toBeCloseTo(40 / 255, 4);  // R
+      expect(result.data[1]).toBeCloseTo(30 / 255, 4);  // G
+      expect(result.data[2]).toBeCloseTo(20 / 255, 4);  // B
+      expect(result.data[3]).toBeCloseTo(10 / 255, 4);  // A
+    });
+
+    it('should swizzle ABGR to RGBA for descriptor 52 with 16-bit data', async () => {
+      const buffer = createTestDPX({
+        width: 1,
+        height: 1,
+        bitDepth: 16,
+        channels: 4,
+        descriptor: 52,
+        bigEndian: true,
+      });
+      const pixelView = new DataView(buffer, 2048);
+      // A=1000, B=2000, G=3000, R=4000
+      pixelView.setUint16(0, 1000, false); // A
+      pixelView.setUint16(2, 2000, false); // B
+      pixelView.setUint16(4, 3000, false); // G
+      pixelView.setUint16(6, 4000, false); // R
+
+      const result = await decodeDPX(buffer);
+
+      expect(result.data[0]).toBeCloseTo(4000 / 65535, 4); // R
+      expect(result.data[1]).toBeCloseTo(3000 / 65535, 4); // G
+      expect(result.data[2]).toBeCloseTo(2000 / 65535, 4); // B
+      expect(result.data[3]).toBeCloseTo(1000 / 65535, 4); // A
+    });
+
+    it('should NOT swizzle RGBA descriptor 51', async () => {
+      const buffer = createTestDPX({
+        width: 1,
+        height: 1,
+        bitDepth: 8,
+        channels: 4,
+        descriptor: 51,
+        bigEndian: true,
+      });
+      const pixelStart = 2048;
+      const bytes = new Uint8Array(buffer);
+      bytes[pixelStart] = 10;     // R
+      bytes[pixelStart + 1] = 20; // G
+      bytes[pixelStart + 2] = 30; // B
+      bytes[pixelStart + 3] = 40; // A
+
+      const result = await decodeDPX(buffer);
+
+      // No swizzle — data stays as R=10, G=20, B=30, A=40
+      expect(result.data[0]).toBeCloseTo(10 / 255, 4);  // R
+      expect(result.data[1]).toBeCloseTo(20 / 255, 4);  // G
+      expect(result.data[2]).toBeCloseTo(30 / 255, 4);  // B
+      expect(result.data[3]).toBeCloseTo(40 / 255, 4);  // A
+    });
+
+    it('should report descriptor 52 in metadata for ABGR', async () => {
+      const buffer = createTestDPX({
+        width: 1,
+        height: 1,
+        bitDepth: 8,
+        channels: 4,
+        descriptor: 52,
+        bigEndian: true,
+      });
+      const result = await decodeDPX(buffer);
+      expect(result.metadata.descriptor).toBe(52);
+    });
+  });
+
   describe('getDPXInfo - ABGR descriptor', () => {
     it('should detect ABGR descriptor as 4 channels', () => {
       // Create a DPX with default channels=3 and then override descriptor to ABGR (52)
@@ -640,6 +731,80 @@ describe('DPXDecoder', () => {
       view.setUint8(800, 0);
 
       await expect(decodeDPX(buffer)).rejects.toThrow('Unsupported DPX descriptor: 0');
+    });
+
+    it('should throw for CbYCrY descriptor (100)', async () => {
+      const buffer = createTestDPX({ channels: 3, bigEndian: true });
+      const view = new DataView(buffer);
+      view.setUint8(800, 100);
+
+      await expect(decodeDPX(buffer)).rejects.toThrow('Unsupported DPX descriptor: 100');
+    });
+
+    it('should throw for CbYCr descriptor (102)', async () => {
+      const buffer = createTestDPX({ channels: 3, bigEndian: true });
+      const view = new DataView(buffer);
+      view.setUint8(800, 102);
+
+      await expect(decodeDPX(buffer)).rejects.toThrow('Unsupported DPX descriptor: 102');
+    });
+
+    it('should not silently fall through to 3 channels for unknown descriptors', () => {
+      const buffer = createTestDPX({ channels: 3, bigEndian: true });
+      const view = new DataView(buffer);
+      view.setUint8(800, 150); // arbitrary unknown descriptor
+
+      expect(() => getDPXInfo(buffer)).toThrow('Unsupported DPX descriptor: 150');
+    });
+  });
+
+  describe('getDPXInfo - descriptor value in info', () => {
+    it('should include descriptor value for RGB (50)', () => {
+      const buffer = createTestDPX({ channels: 3 });
+      const info = getDPXInfo(buffer);
+      expect(info).not.toBeNull();
+      expect(info!.descriptor).toBe(50);
+    });
+
+    it('should include descriptor value for RGBA (51)', () => {
+      const buffer = createTestDPX({ channels: 4, descriptor: 51 });
+      const info = getDPXInfo(buffer);
+      expect(info).not.toBeNull();
+      expect(info!.descriptor).toBe(51);
+    });
+
+    it('should include descriptor value for ABGR (52)', () => {
+      const buffer = createTestDPX({ channels: 4, descriptor: 52 });
+      const info = getDPXInfo(buffer);
+      expect(info).not.toBeNull();
+      expect(info!.descriptor).toBe(52);
+    });
+
+    it('should include descriptor value for Luma (6)', () => {
+      const buffer = createTestDPX({ channels: 1 });
+      const info = getDPXInfo(buffer);
+      expect(info).not.toBeNull();
+      expect(info!.descriptor).toBe(6);
+    });
+  });
+
+  describe('decodeDPX - descriptor in metadata', () => {
+    it('should include descriptor in metadata for RGB', async () => {
+      const buffer = createTestDPX({ channels: 3 });
+      const result = await decodeDPX(buffer);
+      expect(result.metadata.descriptor).toBe(50);
+    });
+
+    it('should include descriptor in metadata for RGBA', async () => {
+      const buffer = createTestDPX({ channels: 4 });
+      const result = await decodeDPX(buffer);
+      expect(result.metadata.descriptor).toBe(51);
+    });
+
+    it('should include descriptor in metadata for Luma', async () => {
+      const buffer = createTestDPX({ channels: 1, bitDepth: 8 });
+      const result = await decodeDPX(buffer);
+      expect(result.metadata.descriptor).toBe(6);
     });
   });
 
