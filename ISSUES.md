@@ -2769,6 +2769,18 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Even when the backend accepts the new HDR mode, the viewer can keep showing the old frame until some unrelated state change triggers a render.
   - That makes HDR mode changes feel unreliable or inert, especially on static images where no other redraw source is active.
 
+### 226. Async system HDR headroom detection updates renderer state without triggering a redraw
+
+- Severity: Medium
+- Area: HDR output / viewer refresh
+- Evidence:
+  - On source load, the viewer starts an async `queryHDRHeadroom()` call in [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L1001).
+  - When that promise resolves, it calls `this.glRendererManager.setHDRHeadroom(headroom)` and logs the value, but does not call `scheduleRender()` in [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L1002).
+  - The underlying renderer setters only store the new headroom value; they do not trigger rendering themselves in [src/render/Renderer.ts](/Users/lifeart/Repos/openrv-web/src/render/Renderer.ts#L1267), [src/render/WebGPUBackend.ts](/Users/lifeart/Repos/openrv-web/src/render/WebGPUBackend.ts#L457), and [src/ui/components/ViewerGLRenderer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerGLRenderer.ts#L1472).
+- Impact:
+  - On HDR-capable systems, the initial frame can render with stale/default headroom and stay that way until another unrelated interaction causes a redraw.
+  - That makes highlight rolloff and tone mapping depend on incidental follow-up events instead of updating when the measured display capability arrives.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

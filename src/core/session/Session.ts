@@ -1091,6 +1091,21 @@ export class Session extends EventEmitter<SessionEvents> {
     return this._media.loadSequence(files, fps);
   }
 
+  /**
+   * Load media from a URL, auto-detecting whether it is a video or image
+   * based on the file extension. Used to reconstruct shared media from a
+   * share-link sourceUrl on a clean session.
+   */
+  async loadSourceFromUrl(url: string): Promise<void> {
+    const name = url.split('/').pop() || url;
+    const ext = name.includes('.') ? name.split('.').pop()!.toLowerCase() : '';
+    const videoExts = new Set(['mp4', 'm4v', '3gp', '3g2', 'mov', 'qt', 'mkv', 'mk3d', 'webm', 'ogg', 'ogv', 'ogm', 'ogx', 'avi']);
+    if (videoExts.has(ext)) {
+      return this.loadVideo(name, url);
+    }
+    return this.loadImage(name, url);
+  }
+
   // Frame access — delegated to SessionMedia
   async getSequenceFrameImage(frameIndex?: number): Promise<ImageBitmap | null> {
     return this._media.getSequenceFrameImage(frameIndex);

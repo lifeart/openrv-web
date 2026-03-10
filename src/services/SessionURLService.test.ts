@@ -183,14 +183,14 @@ describe('SessionURLService', () => {
   // -----------------------------------------------------------------------
 
   describe('applySessionURLState', () => {
-    it('SU-006: applies frame and source', () => {
+    it('SU-006: applies frame and source', async () => {
       const state: SessionURLState = {
         frame: 50,
         fps: 30,
         sourceIndex: 1,
       };
 
-      service.applySessionURLState(state);
+      await service.applySessionURLState(state);
 
       expect(deps.session.setCurrentSource).toHaveBeenCalledWith(1);
       expect(deps.session.goToFrame).toHaveBeenCalledWith(50);
@@ -198,7 +198,7 @@ describe('SessionURLService', () => {
       expect(deps.networkSyncManager._syncStateManager.endApplyRemote).toHaveBeenCalled();
     });
 
-    it('SU-007: applies viewer settings (transform, wipe)', () => {
+    it('SU-007: applies viewer settings (transform, wipe)', async () => {
       const transform = {
         rotation: 180 as const,
         flipH: false,
@@ -215,14 +215,14 @@ describe('SessionURLService', () => {
         wipePosition: 0.7,
       };
 
-      service.applySessionURLState(state);
+      await service.applySessionURLState(state);
 
       expect(deps.viewer.setTransform).toHaveBeenCalledWith(transform);
       expect(deps.compareControl.setWipeMode).toHaveBeenCalledWith('vertical');
       expect(deps.compareControl.setWipePosition).toHaveBeenCalledWith(0.7);
     });
 
-    it('SU-008: applies A/B source settings', () => {
+    it('SU-008: applies A/B source settings', async () => {
       const state: SessionURLState = {
         frame: 1,
         fps: 24,
@@ -232,14 +232,14 @@ describe('SessionURLService', () => {
         currentAB: 'B',
       };
 
-      service.applySessionURLState(state);
+      await service.applySessionURLState(state);
 
       expect(deps.session.setSourceA).toHaveBeenCalledWith(0);
       expect(deps.session.setSourceB).toHaveBeenCalledWith(1);
       expect(deps.session.setCurrentAB).toHaveBeenCalledWith('B');
     });
 
-    it('SU-009: applies OCIO state', () => {
+    it('SU-009: applies OCIO state', async () => {
       const state: SessionURLState = {
         frame: 1,
         fps: 24,
@@ -254,7 +254,7 @@ describe('SessionURLService', () => {
         },
       };
 
-      service.applySessionURLState(state);
+      await service.applySessionURLState(state);
 
       expect(deps.ocioControl.setState).toHaveBeenCalledWith({
         enabled: true,
@@ -266,7 +266,7 @@ describe('SessionURLService', () => {
       });
     });
 
-    it('SU-010: clamps sourceIndex to valid range', () => {
+    it('SU-010: clamps sourceIndex to valid range', async () => {
       deps.session.sourceCount = 2;
       const state: SessionURLState = {
         frame: 1,
@@ -274,12 +274,12 @@ describe('SessionURLService', () => {
         sourceIndex: 99,
       };
 
-      service.applySessionURLState(state);
+      await service.applySessionURLState(state);
 
       expect(deps.session.setCurrentSource).toHaveBeenCalledWith(1); // clamped to sourceCount-1
     });
 
-    it('SU-011: skips source switch when sourceCount is 0', () => {
+    it('SU-011: skips source switch when sourceCount is 0', async () => {
       deps.session.sourceCount = 0;
       const state: SessionURLState = {
         frame: 1,
@@ -287,12 +287,12 @@ describe('SessionURLService', () => {
         sourceIndex: 0,
       };
 
-      service.applySessionURLState(state);
+      await service.applySessionURLState(state);
 
       expect(deps.session.setCurrentSource).not.toHaveBeenCalled();
     });
 
-    it('SU-012: applies in/out points and fps', () => {
+    it('SU-012: applies in/out points and fps', async () => {
       const state: SessionURLState = {
         frame: 1,
         fps: 30,
@@ -301,24 +301,24 @@ describe('SessionURLService', () => {
         outPoint: 90,
       };
 
-      service.applySessionURLState(state);
+      await service.applySessionURLState(state);
 
       expect(deps.session.setInPoint).toHaveBeenCalledWith(10);
       expect(deps.session.setOutPoint).toHaveBeenCalledWith(90);
     });
 
-    it('SU-013: always calls endApplyRemote even if an error occurs', () => {
+    it('SU-013: always calls endApplyRemote even if an error occurs', async () => {
       deps.session.setCurrentSource = vi.fn().mockImplementation(() => {
         throw new Error('boom');
       });
 
-      expect(() => {
+      await expect(
         service.applySessionURLState({
           frame: 1,
           fps: 24,
           sourceIndex: 0,
-        });
-      }).toThrow('boom');
+        }),
+      ).rejects.toThrow('boom');
 
       expect(deps.networkSyncManager._syncStateManager.endApplyRemote).toHaveBeenCalled();
     });
@@ -409,14 +409,14 @@ describe('SessionURLService', () => {
   // -----------------------------------------------------------------------
 
   describe('edge cases', () => {
-    it('SU-019: applySessionURLState handles partial state (only required fields)', () => {
+    it('SU-019: applySessionURLState handles partial state (only required fields)', async () => {
       const state: SessionURLState = {
         frame: 5,
         fps: 24,
         sourceIndex: 0,
       };
 
-      service.applySessionURLState(state);
+      await service.applySessionURLState(state);
 
       expect(deps.session.goToFrame).toHaveBeenCalledWith(5);
       expect(deps.viewer.setTransform).not.toHaveBeenCalled();
@@ -434,6 +434,143 @@ describe('SessionURLService', () => {
       const state = service.captureSessionURLState();
 
       expect(state.sourceUrl).toBeUndefined();
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // sourceUrl consumption (Issue #149)
+  // -----------------------------------------------------------------------
+
+  describe('sourceUrl consumption', () => {
+    it('SU-023: loads media from sourceUrl when session is empty', async () => {
+      const loadSourceFromUrl = vi.fn().mockResolvedValue(undefined);
+      deps.session.sourceCount = 0;
+      (deps.session as any).loadSourceFromUrl = loadSourceFromUrl;
+
+      const state: SessionURLState = {
+        frame: 1,
+        fps: 24,
+        sourceIndex: 0,
+        sourceUrl: 'https://example.com/image.png',
+      };
+
+      await service.applySessionURLState(state);
+
+      expect(loadSourceFromUrl).toHaveBeenCalledWith('https://example.com/image.png');
+    });
+
+    it('SU-024: skips sourceUrl when session already has media loaded', async () => {
+      const loadSourceFromUrl = vi.fn().mockResolvedValue(undefined);
+      deps.session.sourceCount = 2;
+      (deps.session as any).loadSourceFromUrl = loadSourceFromUrl;
+
+      const state: SessionURLState = {
+        frame: 1,
+        fps: 24,
+        sourceIndex: 0,
+        sourceUrl: 'https://example.com/image.png',
+      };
+
+      await service.applySessionURLState(state);
+
+      expect(loadSourceFromUrl).not.toHaveBeenCalled();
+    });
+
+    it('SU-025: handles sourceUrl load failure gracefully', async () => {
+      const loadSourceFromUrl = vi.fn().mockRejectedValue(new Error('network error'));
+      deps.session.sourceCount = 0;
+      (deps.session as any).loadSourceFromUrl = loadSourceFromUrl;
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const state: SessionURLState = {
+        frame: 10,
+        fps: 24,
+        sourceIndex: 0,
+        sourceUrl: 'https://example.com/missing.png',
+      };
+
+      // Should not throw
+      await service.applySessionURLState(state);
+
+      expect(loadSourceFromUrl).toHaveBeenCalledWith('https://example.com/missing.png');
+      expect(warnSpy).toHaveBeenCalled();
+      // View state should still be applied despite load failure
+      expect(deps.session.goToFrame).toHaveBeenCalledWith(10);
+
+      warnSpy.mockRestore();
+    });
+
+    it('SU-026: skips sourceUrl when it is empty string', async () => {
+      const loadSourceFromUrl = vi.fn().mockResolvedValue(undefined);
+      deps.session.sourceCount = 0;
+      (deps.session as any).loadSourceFromUrl = loadSourceFromUrl;
+
+      const state: SessionURLState = {
+        frame: 1,
+        fps: 24,
+        sourceIndex: 0,
+        sourceUrl: '',
+      };
+
+      await service.applySessionURLState(state);
+
+      expect(loadSourceFromUrl).not.toHaveBeenCalled();
+    });
+
+    it('SU-027: skips sourceUrl when it is undefined', async () => {
+      const loadSourceFromUrl = vi.fn().mockResolvedValue(undefined);
+      deps.session.sourceCount = 0;
+      (deps.session as any).loadSourceFromUrl = loadSourceFromUrl;
+
+      const state: SessionURLState = {
+        frame: 1,
+        fps: 24,
+        sourceIndex: 0,
+      };
+
+      await service.applySessionURLState(state);
+
+      expect(loadSourceFromUrl).not.toHaveBeenCalled();
+    });
+
+    it('SU-028: skips sourceUrl when loadSourceFromUrl is not available', async () => {
+      deps.session.sourceCount = 0;
+      // No loadSourceFromUrl on session
+
+      const state: SessionURLState = {
+        frame: 1,
+        fps: 24,
+        sourceIndex: 0,
+        sourceUrl: 'https://example.com/image.png',
+      };
+
+      // Should not throw
+      await service.applySessionURLState(state);
+    });
+
+    it('SU-029: handleURLBootstrap loads from sourceUrl in hash', async () => {
+      const loadSourceFromUrl = vi.fn().mockResolvedValue(undefined);
+      const state: SessionURLState = {
+        frame: 42,
+        fps: 24,
+        sourceIndex: 0,
+        sourceUrl: 'https://example.com/review.png',
+      };
+      const encoded = encodeSessionState(state);
+
+      deps = createDeps({
+        session: createMockSession({
+          sourceCount: 0,
+          loadSourceFromUrl,
+        }) as any,
+        getLocationSearch: () => '',
+        getLocationHash: () => `#s=${encoded}`,
+      });
+      service = new SessionURLService(deps);
+
+      await service.handleURLBootstrap();
+
+      expect(loadSourceFromUrl).toHaveBeenCalledWith('https://example.com/review.png');
     });
   });
 

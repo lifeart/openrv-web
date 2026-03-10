@@ -1736,4 +1736,194 @@ describe('AppNetworkBridge', () => {
       expect(ctx._networkSyncManager.sendViewSync).toHaveBeenCalledTimes(1);
     });
   });
+
+  // -----------------------------------------------------------------------
+  // sourceUrl consumption in network bridge (Issue #149)
+  // -----------------------------------------------------------------------
+
+  describe('sourceUrl consumption via network bridge', () => {
+    it('ANB-150: applyCapturedSessionURLState loads from sourceUrl when session is empty', async () => {
+      const loadSourceFromUrl = vi.fn().mockResolvedValue(undefined);
+      ctx._session.sourceCount = 0;
+      (ctx._session as any).loadSourceFromUrl = loadSourceFromUrl;
+      (ctx._session as any).loadImage = vi.fn().mockResolvedValue(undefined);
+
+      bridge = new AppNetworkBridge({
+        session: ctx.session,
+        viewer: ctx.viewer,
+        paintEngine: ctx.paintEngine,
+        colorControls: ctx.colorControls,
+        networkSyncManager: ctx.networkSyncManager,
+        networkControl: ctx.networkControl,
+        headerBar: ctx.headerBar,
+      });
+      bridge.setup();
+
+      const state = encodeSessionState({
+        frame: 10,
+        fps: 24,
+        sourceIndex: 0,
+        sourceUrl: 'https://example.com/review.exr',
+      });
+
+      ctx._networkSyncManager.emit('sessionStateReceived', {
+        sessionState: state,
+        senderUserId: 'host',
+      });
+
+      // Allow async handlers to resolve
+      await vi.waitFor(() => {
+        expect(loadSourceFromUrl).toHaveBeenCalledWith('https://example.com/review.exr');
+      });
+    });
+
+    it('ANB-151: applyCapturedSessionURLState skips sourceUrl when session has media', async () => {
+      const loadSourceFromUrl = vi.fn().mockResolvedValue(undefined);
+      ctx._session.sourceCount = 2;
+      (ctx._session as any).loadSourceFromUrl = loadSourceFromUrl;
+
+      bridge = new AppNetworkBridge({
+        session: ctx.session,
+        viewer: ctx.viewer,
+        paintEngine: ctx.paintEngine,
+        colorControls: ctx.colorControls,
+        networkSyncManager: ctx.networkSyncManager,
+        networkControl: ctx.networkControl,
+        headerBar: ctx.headerBar,
+      });
+      bridge.setup();
+
+      const state = encodeSessionState({
+        frame: 10,
+        fps: 24,
+        sourceIndex: 0,
+        sourceUrl: 'https://example.com/review.exr',
+      });
+
+      ctx._networkSyncManager.emit('sessionStateReceived', {
+        sessionState: state,
+        senderUserId: 'host',
+      });
+
+      // Allow async handlers to resolve
+      await new Promise((r) => setTimeout(r, 10));
+
+      expect(loadSourceFromUrl).not.toHaveBeenCalled();
+    });
+
+    it('ANB-152: applyCapturedSessionURLState handles sourceUrl load failure gracefully', async () => {
+      const loadSourceFromUrl = vi.fn().mockRejectedValue(new Error('404 not found'));
+      ctx._session.sourceCount = 0;
+      (ctx._session as any).loadSourceFromUrl = loadSourceFromUrl;
+      (ctx._session as any).loadImage = vi.fn().mockRejectedValue(new Error('404 not found'));
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      bridge = new AppNetworkBridge({
+        session: ctx.session,
+        viewer: ctx.viewer,
+        paintEngine: ctx.paintEngine,
+        colorControls: ctx.colorControls,
+        networkSyncManager: ctx.networkSyncManager,
+        networkControl: ctx.networkControl,
+        headerBar: ctx.headerBar,
+      });
+      bridge.setup();
+
+      const state = encodeSessionState({
+        frame: 10,
+        fps: 24,
+        sourceIndex: 0,
+        sourceUrl: 'https://example.com/missing.exr',
+      });
+
+      ctx._networkSyncManager.emit('sessionStateReceived', {
+        sessionState: state,
+        senderUserId: 'host',
+      });
+
+      // Allow async handlers to resolve
+      await vi.waitFor(() => {
+        expect(warnSpy).toHaveBeenCalled();
+      });
+
+      // View state should still be applied
+      expect(ctx._session.goToFrame).toHaveBeenCalledWith(10);
+
+      warnSpy.mockRestore();
+    });
+
+    it('ANB-153: applyCapturedSessionURLState skips when sourceUrl is missing', async () => {
+      const loadImage = vi.fn().mockResolvedValue(undefined);
+      ctx._session.sourceCount = 0;
+      (ctx._session as any).loadImage = loadImage;
+
+      bridge = new AppNetworkBridge({
+        session: ctx.session,
+        viewer: ctx.viewer,
+        paintEngine: ctx.paintEngine,
+        colorControls: ctx.colorControls,
+        networkSyncManager: ctx.networkSyncManager,
+        networkControl: ctx.networkControl,
+        headerBar: ctx.headerBar,
+      });
+      bridge.setup();
+
+      const state = encodeSessionState({
+        frame: 10,
+        fps: 24,
+        sourceIndex: 0,
+        // No sourceUrl
+      });
+
+      ctx._networkSyncManager.emit('sessionStateReceived', {
+        sessionState: state,
+        senderUserId: 'host',
+      });
+
+      // Allow async handlers to resolve
+      await new Promise((r) => setTimeout(r, 10));
+
+      expect(loadImage).not.toHaveBeenCalled();
+    });
+
+    it('ANB-154: applySessionURLState callback path also consumes sourceUrl', async () => {
+      const loadSourceFromUrl = vi.fn().mockResolvedValue(undefined);
+      const applySessionURLState = vi.fn();
+      ctx._session.sourceCount = 0;
+      (ctx._session as any).loadSourceFromUrl = loadSourceFromUrl;
+
+      bridge = new AppNetworkBridge({
+        session: ctx.session,
+        viewer: ctx.viewer,
+        paintEngine: ctx.paintEngine,
+        colorControls: ctx.colorControls,
+        networkSyncManager: ctx.networkSyncManager,
+        networkControl: ctx.networkControl,
+        headerBar: ctx.headerBar,
+        applySessionURLState,
+      });
+      bridge.setup();
+
+      const state = encodeSessionState({
+        frame: 10,
+        fps: 24,
+        sourceIndex: 0,
+        sourceUrl: 'https://example.com/review.exr',
+      });
+
+      ctx._networkSyncManager.emit('sessionStateReceived', {
+        sessionState: state,
+        senderUserId: 'host',
+      });
+
+      // When applySessionURLState callback is provided, it is used instead
+      await vi.waitFor(() => {
+        expect(applySessionURLState).toHaveBeenCalled();
+      });
+
+      // The loadSourceFromUrl should NOT be called by the bridge directly
+      // because the callback path is used (the callback is responsible for loading)
+      expect(loadSourceFromUrl).not.toHaveBeenCalled();
+    });
+  });
 });
