@@ -1,5 +1,19 @@
 # Fixed Issues
 
+## Issue #227: Per-source OCIO assignments are keyed by display name, so same-named media can inherit each other's color space
+
+- **Severity**: Medium
+- **Area**: OCIO / per-source state identity
+- **Root Cause**: The OCIO per-source key was constructed as `source.name || \`source_${session.currentSourceIndex}\`` in `sourceLoadedHandlers.ts`. Since `source.name` is just the display filename (e.g., `plate.exr`), two unrelated files with the same basename from different directories shared the same key, causing their OCIO color space assignments to collide.
+- **Fix**: Changed the key to `source.url || source.name || \`source_${session.currentSourceIndex}\``. The `url` property is always unique per source (blob URLs for file drops, full HTTP URLs for remote loads), stable within a session, and falls back gracefully when empty.
+- **Regression Tests**: Added SLH-U050 through SLH-U053 in `sourceLoadedHandlers.test.ts`:
+  - SLH-U050: Two sources with same name but different URLs get different OCIO source IDs
+  - SLH-U051: Changing OCIO assignment on one same-named source does not affect the other
+  - SLH-U052: URL-based key vs name fallback when URL is empty
+  - SLH-U053: Index-based fallback when both URL and name are empty
+- **Verification**: TypeScript clean, all 51 sourceLoadedHandlers tests pass, all 119 OCIOProcessor tests pass, all 30 OCIOStateManager tests pass.
+- **Files Changed**: `src/handlers/sourceLoadedHandlers.ts`, `src/handlers/sourceLoadedHandlers.test.ts`
+
 ## Issue #7: Lint is already red because the Vitest setup file imports `vitest` twice
 
 - **Severity**: Medium

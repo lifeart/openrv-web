@@ -940,26 +940,57 @@ describe('handleSourceLoaded', () => {
   });
 
   it('SLH-U051: changing OCIO assignment on one same-named source does not affect the other', () => {
-    // Use a real OCIOProcessor to verify isolation
-    const { OCIOProcessor } = require('../color/OCIOProcessor');
-    const realProcessor = new OCIOProcessor();
+    // Both sources have the same display name but different URLs (different files)
+    // Simulate source A getting a user override to ACEScg
+    const contextA = createMockContext({
+      currentSource: { name: 'plate.exr', url: 'blob:http://localhost/abc-123', width: 1920, height: 1080 },
+    });
+    const processorA = contextA.getOCIOControl().getProcessor();
+    (processorA.detectColorSpaceFromExtension as ReturnType<typeof vi.fn>).mockReturnValue('Linear sRGB');
 
-    // Simulate two sources with the same display name but different URLs
-    const sourceIdA = 'blob:http://localhost/abc-123';
-    const sourceIdB = 'blob:http://localhost/def-456';
+    handleSourceLoaded(
+      contextA,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
 
-    // Both auto-detected as Linear sRGB (from .exr extension)
-    realProcessor.setSourceInputColorSpace(sourceIdA, 'Linear sRGB');
-    realProcessor.setSourceInputColorSpace(sourceIdB, 'Linear sRGB');
+    // Source A should be keyed by its URL
+    expect(processorA.setSourceInputColorSpace).toHaveBeenCalledWith(
+      'blob:http://localhost/abc-123',
+      'Linear sRGB',
+    );
 
-    // User overrides source A to ACEScg
-    realProcessor.setSourceInputColorSpace(sourceIdA, 'ACEScg');
+    // Simulate source B with same display name but different URL
+    const contextB = createMockContext({
+      currentSource: { name: 'plate.exr', url: 'blob:http://localhost/def-456', width: 1920, height: 1080 },
+    });
+    const processorB = contextB.getOCIOControl().getProcessor();
+    (processorB.detectColorSpaceFromExtension as ReturnType<typeof vi.fn>).mockReturnValue('Linear sRGB');
 
-    // Source B should still be Linear sRGB
-    expect(realProcessor.getSourceInputColorSpace(sourceIdA)).toBe('ACEScg');
-    expect(realProcessor.getSourceInputColorSpace(sourceIdB)).toBe('Linear sRGB');
+    handleSourceLoaded(
+      contextB,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
 
-    realProcessor.dispose();
+    // Source B should be keyed by ITS URL, not sharing key with source A
+    expect(processorB.setSourceInputColorSpace).toHaveBeenCalledWith(
+      'blob:http://localhost/def-456',
+      'Linear sRGB',
+    );
+
+    // The two source IDs are different even though the names are the same
+    const sourceIdA = (processorA.setActiveSource as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    const sourceIdB = (processorB.setActiveSource as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(sourceIdA).not.toBe(sourceIdB);
   });
 
   it('SLH-U052: source with URL uses URL as OCIO key, source without URL falls back to name', () => {
