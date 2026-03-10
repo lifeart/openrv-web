@@ -5094,6 +5094,19 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Importing an RV/GTO session with no notes, no version groups, or no statuses cannot clear the old review data already present in the app.
   - That leaves review metadata dependent on previous local state, directly contradicting the comments in the live import path.
 
+### 427. RV/GTO multi-source imports derive crop and annotation geometry from inconsistent source dimensions
+
+- Severity: Medium
+- Area: RV/GTO import / multi-source restore
+- Evidence:
+  - `SessionGraph.parseSession(...)` walks every `RVFileSource`, but only records `sourceWidth` / `sourceHeight` from the first source while overwriting `aspectRatio` on every later source in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L515) through [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L535).
+  - It then feeds the first source dimensions into `_parseInitialSettings(dto, { width: sourceWidth, height: sourceHeight })` for crop parsing in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L552).
+  - The same method passes the last-seen `aspectRatio` into `annotationStore.parsePaintAnnotations(dto, aspectRatio)` in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L549) through [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L550).
+  - `parseCrop(...)` converts crop bounds using the supplied width/height in [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L568) through [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L579), while `AnnotationStore` converts paint coordinates using the supplied aspect ratio in [src/core/session/AnnotationStore.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AnnotationStore.ts#L440) through [src/core/session/AnnotationStore.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AnnotationStore.ts#L465).
+- Impact:
+  - In multi-source RV/GTO sessions with differing source sizes or aspect ratios, crop restore is normalized against the first source while paint annotations are normalized against the last one.
+  - That makes imported geometry depend on source ordering rather than the authored session state.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

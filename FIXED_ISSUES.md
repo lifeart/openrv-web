@@ -1,5 +1,21 @@
 # Fixed Issues
 
+## Issue #232: Display gamma and brightness controls are neutralized on HDR output paths, so the sliders stop having any effect there
+
+- **Severity**: Medium
+- **Area**: Display profile / HDR output behavior
+- **Root Cause**: `applyHDRDisplayOverrides()` in `ViewerGLRenderer.ts` forcibly set `displayGamma: 1` and `displayBrightness: 1` alongside `transferFunction: 0` on every HDR output path. This neutralized the user's calibration slider values. The `transferFunction: 0` override is correct (prevents double EOTF encoding), but gamma/brightness are independent post-tone-mapping calibration knobs that work as valid relative adjustments on linear-light HDR data.
+- **Fix**: Modified `applyHDRDisplayOverrides()` to only override `transferFunction: 0`, preserving `displayGamma` and `displayBrightness` from the user's display profile. Updated comments at all 4 HDR call sites (native WebGL, tiled HDR, WebGPU blit, Canvas2D blit) to document the preserved behavior.
+- **Regression Tests**: Updated 4 existing tests + added 2 new tests in `ViewerGLRenderer.test.ts`:
+  - VGLR-031: HLG path preserves displayGamma (2.4)
+  - VGLR-031b: PQ path preserves gamma/brightness
+  - VGLR-031c: Extended HDR path preserves gamma/brightness
+  - VGLR-032: HLG path preserves displayBrightness (1.5)
+  - VGLR-073: Canvas2D blit path preserves gamma/brightness
+  - VGLR-104: Tiled HDR path preserves gamma/brightness
+- **Verification**: TypeScript clean, all 97 ViewerGLRenderer tests pass, all 140 Renderer tests pass.
+- **Files Changed**: `src/ui/components/ViewerGLRenderer.ts`, `src/ui/components/ViewerGLRenderer.test.ts`
+
 ## Issue #231: The RAW preview path advertises broader RAW support than its TIFF-only parser can actually handle
 
 - **Severity**: Medium
