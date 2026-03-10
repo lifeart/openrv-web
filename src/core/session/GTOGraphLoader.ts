@@ -63,6 +63,8 @@ export interface GTOParseResult {
     markerNotes?: string[];
     /** Marker colors (parallel array to marks) */
     markerColors?: string[];
+    /** Marker end frames (parallel array to marks; -1 means point marker) */
+    markerEndFrames?: number[];
     /** Real-time playback rate from GTO (0 means use fps) */
     realtime?: number;
     /** Frame increment for playback */
@@ -311,6 +313,15 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
         const markerColors = markerColorsValue.filter((value): value is string => typeof value === 'string');
         if (markerColors.length > 0) {
           sessionInfo.markerColors = markerColors;
+        }
+      }
+
+      // Parse marker end frames (parallel array to marks; -1 means point marker)
+      const markerEndFramesValue = sessionComp.property('markerEndFrames').value();
+      if (Array.isArray(markerEndFramesValue)) {
+        const markerEndFrames = markerEndFramesValue.filter((value): value is number => typeof value === 'number');
+        if (markerEndFrames.length > 0) {
+          sessionInfo.markerEndFrames = markerEndFrames;
         }
       }
 

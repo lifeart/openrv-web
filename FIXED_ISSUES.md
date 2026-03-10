@@ -1916,3 +1916,23 @@
 - **Regression Tests**: 19 new tests — unsupported descriptor rejection (0, 100, 101, 102, 150) via both getDPXInfo and decodeDPX, no-silent-fallthrough guard, descriptor field in DPXInfo for all 4 supported descriptors (6, 50, 51, 52), descriptor in decode metadata (RGB, RGBA, Luma), ABGR swizzle verification at 8-bit and 16-bit, RGBA non-swizzle negative test, ABGR metadata check.
 - **Verification**: All 68 DPXDecoder tests pass, TypeScript clean.
 - **Files Changed**: `src/formats/DPXDecoder.ts`, `src/formats/DPXDecoder.test.ts`
+
+## Issue #219: MXF start timecode falls back to 24fps when edit rate is missing or invalid
+
+- **Severity**: Medium
+- **Area**: Format metadata / MXF parsing
+- **Root Cause**: The code already correctly stored the raw frame count in `metadata.startTimecodeFrames` and only computed `startTimecode` when a valid edit rate was present (no 24fps fabrication on this branch). However, when a Timecode Component was found but the edit rate was missing/invalid, the parser silently dropped the timecode with no diagnostic output.
+- **Fix**: Added `console.warn` in the `else` branch when a Timecode Component is found but the edit rate is missing or has zero denominator. Warning includes the raw frame count for debugging and clearly states the timecode could not be resolved.
+- **Regression Tests**: Updated MXF-TC-COMP-004 (missing edit rate) and MXF-TC-COMP-005 (zero denominator) to verify `console.warn` is called with "Cannot resolve start timecode" message.
+- **Verification**: All 60 MXFDemuxer tests pass, TypeScript clean.
+- **Files Changed**: `src/formats/MXFDemuxer.ts`, `src/formats/MXFDemuxer.test.ts`
+
+## Issue #220: JP2 parsing stops on valid extended boxes larger than 4 GB
+
+- **Severity**: Low
+- **Area**: Format support / JP2 parsing
+- **Root Cause**: `findCodestreamOffset()` silently broke out of parsing when encountering a >4GB extended box (high 32 bits non-zero), with no warning or error. Valid JP2 files with large extended boxes could fail to find the codestream with no explanation.
+- **Fix**: Added `console.warn` before the `break`, including the box type and high-length value, clearly stating ">4 GB boxes are not supported by this parser." The `break` is preserved since JS DataView can't handle >4GB offsets.
+- **Regression Tests**: JP2-EXT-001 (normal boxes still parse), JP2-EXT-002 (extended box with hiLen=0 works), JP2-EXT-003 (extended box with hiLen>0 warns and stops).
+- **Verification**: All 59 JP2Decoder tests pass, TypeScript clean.
+- **Files Changed**: `src/formats/JP2Decoder.ts`, `src/formats/JP2Decoder.test.ts`

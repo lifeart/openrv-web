@@ -2,7 +2,7 @@
  * TIFF Float Image Format Decoder
  *
  * Supports:
- * - 32-bit IEEE float pixel data
+ * - 16-bit IEEE half-float, 32-bit float, and 64-bit double pixel data
  * - RGB and RGBA images
  * - Big-endian and little-endian byte order
  * - Uncompressed (1), LZW (5), and Deflate/ZIP (8, 32946) compression
@@ -106,7 +106,7 @@ export function isTIFFFile(buffer: ArrayBuffer): boolean {
 export function isFloatTIFF(buffer: ArrayBuffer): boolean {
   const info = getTIFFInfo(buffer);
   if (!info) return false;
-  return info.sampleFormat === 'float' && info.bitsPerSample === 32;
+  return info.sampleFormat === 'float' && (info.bitsPerSample === 16 || info.bitsPerSample === 32 || info.bitsPerSample === 64);
 }
 
 /**
@@ -568,6 +568,52 @@ export function getTIFFInfo(buffer: ArrayBuffer): TIFFInfo | null {
  */
 
 /**
+ * Convert a 16-bit IEEE 754 half-precision float to a 32-bit float.
+ * Format: 1 sign bit, 5 exponent bits, 10 mantissa bits.
+ */
+function float16ToFloat32(h: number): number {
+  const sign = (h >>> 15) & 0x1;
+  const exp = (h >>> 10) & 0x1f;
+  const mant = h & 0x3ff;
+
+  if (exp === 0) {
+    if (mant === 0) {
+      // Zero (positive or negative)
+      return sign ? -0 : 0;
+    }
+    // Subnormal: value = (-1)^sign * 2^-14 * (mant / 1024)
+    const val = (mant / 1024) * Math.pow(2, -14);
+    return sign ? -val : val;
+  } else if (exp === 0x1f) {
+    if (mant === 0) {
+      return sign ? -Infinity : Infinity;
+    }
+    return NaN;
+  }
+
+  // Normalized: value = (-1)^sign * 2^(exp-15) * (1 + mant/1024)
+  const val = (1 + mant / 1024) * Math.pow(2, exp - 15);
+  return sign ? -val : val;
+}
+
+/**
+ * Read a single float sample from a DataView at the given byte offset,
+ * handling 16-bit, 32-bit, and 64-bit float formats.
+ */
+function readFloatSample(srcView: DataView, byteOffset: number, bytesPerSample: number, le: boolean): number {
+  if (bytesPerSample === 4) {
+    return srcView.getFloat32(byteOffset, le);
+  } else if (bytesPerSample === 8) {
+    // Read float64 and truncate to float32 precision
+    return srcView.getFloat64(byteOffset, le);
+  } else {
+    // 2 bytes = 16-bit half float
+    const bits = srcView.getUint16(byteOffset, le);
+    return float16ToFloat32(bits);
+  }
+}
+
+/**
  * Expand source pixel channels to RGBA output.
  * - 1 channel (grayscale): replicate to R, G, B; alpha = 1.0 (pre-initialized)
  * - 2 channels (luminance + alpha): replicate luminance to R, G, B; copy alpha
@@ -581,33 +627,34 @@ function expandPixelToRGBA(
   outputIdx: number,
   readChannels: number,
   le: boolean,
+  bytesPerSample: number = 4,
 ): void {
   if (readChannels === 1) {
     // Grayscale: replicate single value to R, G, B
-    const v = srcView.getFloat32(srcByteOffset, le);
+    const v = readFloatSample(srcView, srcByteOffset, bytesPerSample, le);
     outputData[outputIdx] = v;
     outputData[outputIdx + 1] = v;
     outputData[outputIdx + 2] = v;
     // Alpha already initialized to 1.0
   } else if (readChannels === 2) {
     // Luminance + Alpha: replicate luminance to R, G, B; copy alpha
-    const lum = srcView.getFloat32(srcByteOffset, le);
-    const alpha = srcView.getFloat32(srcByteOffset + 4, le);
+    const lum = readFloatSample(srcView, srcByteOffset, bytesPerSample, le);
+    const alpha = readFloatSample(srcView, srcByteOffset + bytesPerSample, bytesPerSample, le);
     outputData[outputIdx] = lum;
     outputData[outputIdx + 1] = lum;
     outputData[outputIdx + 2] = lum;
     outputData[outputIdx + 3] = alpha;
   } else if (readChannels === 3) {
     // RGB: copy R, G, B; alpha already initialized to 1.0
-    outputData[outputIdx] = srcView.getFloat32(srcByteOffset, le);
-    outputData[outputIdx + 1] = srcView.getFloat32(srcByteOffset + 4, le);
-    outputData[outputIdx + 2] = srcView.getFloat32(srcByteOffset + 8, le);
+    outputData[outputIdx] = readFloatSample(srcView, srcByteOffset, bytesPerSample, le);
+    outputData[outputIdx + 1] = readFloatSample(srcView, srcByteOffset + bytesPerSample, bytesPerSample, le);
+    outputData[outputIdx + 2] = readFloatSample(srcView, srcByteOffset + 2 * bytesPerSample, bytesPerSample, le);
   } else {
     // RGBA (4 channels): copy all four
-    outputData[outputIdx] = srcView.getFloat32(srcByteOffset, le);
-    outputData[outputIdx + 1] = srcView.getFloat32(srcByteOffset + 4, le);
-    outputData[outputIdx + 2] = srcView.getFloat32(srcByteOffset + 8, le);
-    outputData[outputIdx + 3] = srcView.getFloat32(srcByteOffset + 12, le);
+    outputData[outputIdx] = readFloatSample(srcView, srcByteOffset, bytesPerSample, le);
+    outputData[outputIdx + 1] = readFloatSample(srcView, srcByteOffset + bytesPerSample, bytesPerSample, le);
+    outputData[outputIdx + 2] = readFloatSample(srcView, srcByteOffset + 2 * bytesPerSample, bytesPerSample, le);
+    outputData[outputIdx + 3] = readFloatSample(srcView, srcByteOffset + 3 * bytesPerSample, bytesPerSample, le);
   }
 }
 
@@ -658,9 +705,17 @@ export async function decodeTIFFFloat(buffer: ArrayBuffer): Promise<TIFFDecodeRe
     );
   }
 
-  if (bitsPerSample !== 32) {
-    throw new DecoderError('TIFF', `Unsupported bits per sample: ${bitsPerSample}. Only 32-bit float is supported.`);
+  if (bitsPerSample !== 16 && bitsPerSample !== 32 && bitsPerSample !== 64) {
+    console.warn(
+      `TIFF: Unsupported float bits per sample: ${bitsPerSample}. Supported: 16-bit half-float, 32-bit float, 64-bit double.`,
+    );
+    throw new DecoderError(
+      'TIFF',
+      `Unsupported float bits per sample: ${bitsPerSample}. Supported: 16-bit half-float, 32-bit float, 64-bit double.`,
+    );
   }
+
+  const bytesPerSample = bitsPerSample / 8;
 
   const supportedCompressions = [COMPRESSION_NONE, COMPRESSION_LZW, COMPRESSION_DEFLATE, COMPRESSION_ADOBE_DEFLATE];
   if (!supportedCompressions.includes(compression)) {
@@ -734,7 +789,7 @@ export async function decodeTIFFFloat(buffer: ArrayBuffer): Promise<TIFFDecodeRe
   }
 
   let currentRow = 0;
-  const bytesPerPixel = samplesPerPixel * 4; // float32
+  const bytesPerPixel = samplesPerPixel * bytesPerSample;
 
   for (let stripIdx = 0; stripIdx < stripOffsets.length; stripIdx++) {
     const stripOffset = stripOffsets[stripIdx]!;
@@ -757,7 +812,7 @@ export async function decodeTIFFFloat(buffer: ArrayBuffer): Promise<TIFFDecodeRe
 
         if (srcByteOffset + bytesPerPixel > buffer.byteLength) break;
 
-        expandPixelToRGBA(view, srcByteOffset, outputData, outputIdx, readChannels, le);
+        expandPixelToRGBA(view, srcByteOffset, outputData, outputIdx, readChannels, le, bytesPerSample);
       }
     } else {
       // Compressed path — validate buffer bounds
@@ -776,7 +831,7 @@ export async function decodeTIFFFloat(buffer: ArrayBuffer): Promise<TIFFDecodeRe
 
       // Apply predictor if needed
       if (predictor !== PREDICTOR_NONE) {
-        decompressed = applyPredictor(decompressed, predictor, width, samplesPerPixel, 4, stripRows);
+        decompressed = applyPredictor(decompressed, predictor, width, samplesPerPixel, bytesPerSample, stripRows);
       }
 
       // Parse floats from decompressed data
@@ -792,7 +847,7 @@ export async function decodeTIFFFloat(buffer: ArrayBuffer): Promise<TIFFDecodeRe
 
         if (srcByteOffset + bytesPerPixel > decompressed.length) break;
 
-        expandPixelToRGBA(stripView, srcByteOffset, outputData, outputIdx, readChannels, le);
+        expandPixelToRGBA(stripView, srcByteOffset, outputData, outputIdx, readChannels, le, bytesPerSample);
       }
     }
 
@@ -841,7 +896,8 @@ async function decodeTiledTIFF(
 ): Promise<TIFFDecodeResult> {
   const totalPixels = width * height;
   const outputData = new Float32Array(totalPixels * 4); // Always RGBA
-  const bytesPerPixel = samplesPerPixel * 4; // float32
+  const bytesPerSample = bitsPerSample / 8;
+  const bytesPerPixel = samplesPerPixel * bytesPerSample;
   const readChannels = Math.min(samplesPerPixel, 4);
 
   // Initialize alpha to 1.0 if input has no alpha channel
@@ -891,7 +947,7 @@ async function decodeTiledTIFF(
 
             if (srcByteOffset + bytesPerPixel > buffer.byteLength) continue;
 
-            expandPixelToRGBA(view, srcByteOffset, outputData, outputIdx, readChannels, le);
+            expandPixelToRGBA(view, srcByteOffset, outputData, outputIdx, readChannels, le, bytesPerSample);
           }
         }
       } else {
@@ -913,7 +969,7 @@ async function decodeTiledTIFF(
         // For predictors, we use tileWidth as the row width and tileLength as the row count,
         // since the tile data is stored as a full-sized tile
         if (predictor !== PREDICTOR_NONE) {
-          decompressed = applyPredictor(decompressed, predictor, tileWidth, samplesPerPixel, 4, tileLength);
+          decompressed = applyPredictor(decompressed, predictor, tileWidth, samplesPerPixel, bytesPerSample, tileLength);
         }
 
         const tileView = new DataView(decompressed.buffer, decompressed.byteOffset, decompressed.byteLength);
@@ -929,7 +985,7 @@ async function decodeTiledTIFF(
 
             if (srcByteOffset + bytesPerPixel > decompressed.length) continue;
 
-            expandPixelToRGBA(tileView, srcByteOffset, outputData, outputIdx, readChannels, le);
+            expandPixelToRGBA(tileView, srcByteOffset, outputData, outputIdx, readChannels, le, bytesPerSample);
           }
         }
       }

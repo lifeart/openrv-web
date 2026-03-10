@@ -1467,17 +1467,6 @@ export class SessionGTOExporter {
 
     const obj = builder.object(name, 'RVSession', 1);
 
-    // TODO(#135): Marker `endFrame` is not exported to GTO. Duration markers
-    // (where endFrame > frame) will collapse into point markers on round-trip.
-    // The RV GTO schema would need a `markerEndFrames` int[] property.
-    const durationMarkers = playback.marks.filter((m) => m.endFrame !== undefined && m.endFrame > m.frame);
-    if (durationMarkers.length > 0) {
-      console.info(
-        `[SessionGTOExporter] ${durationMarkers.length} duration marker(s) will be collapsed to point markers ` +
-          `on export — endFrame is not serialized in the GTO format.`,
-      );
-    }
-
     obj
       .component('session')
       .string('viewNode', viewNode)
@@ -1499,6 +1488,10 @@ export class SessionGTOExporter {
       .string(
         'markerColors',
         playback.marks.map((m) => m.color || '#ff4444'),
+      )
+      .int(
+        'markerEndFrames',
+        playback.marks.map((m) => m.endFrame ?? -1),
       )
       .int('version', metadata.version)
       .int('clipboard', metadata.clipboard)
@@ -1676,11 +1669,17 @@ export class SessionGTOExporter {
             'markerColors',
             playback.marks.map((m) => m.color || '#ff4444'),
           );
+          this.updateProperty(
+            sessionComp,
+            'markerEndFrames',
+            playback.marks.map((m) => m.endFrame ?? -1),
+          );
         } else {
           // Remove marks property if empty? Or set to empty array?
           this.updateProperty(sessionComp, 'marks', []);
           this.updateProperty(sessionComp, 'markerNotes', []);
           this.updateProperty(sessionComp, 'markerColors', []);
+          this.updateProperty(sessionComp, 'markerEndFrames', []);
         }
 
         // Update notes component — rebuild from scratch to avoid stale slots

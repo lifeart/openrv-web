@@ -26,6 +26,7 @@ function createMockDTO(config: {
     marks?: number[];
     markerNotes?: string[];
     markerColors?: string[];
+    markerEndFrames?: number[];
     inc?: number;
     version?: number;
     clipboard?: number;
@@ -79,6 +80,7 @@ function createMockDTO(config: {
               if (propName === 'marks') return s.marks;
               if (propName === 'markerNotes') return s.markerNotes;
               if (propName === 'markerColors') return s.markerColors;
+              if (propName === 'markerEndFrames') return s.markerEndFrames;
               if (propName === 'inc') return s.inc;
               if (propName === 'version') return s.version;
               if (propName === 'clipboard') return s.clipboard;
@@ -263,6 +265,45 @@ describe('GTOGraphLoader', () => {
       expect(result.sessionInfo.marks).toEqual([10, 20, 30]);
       expect(result.sessionInfo.markerNotes).toEqual(['First note', 'Second note', 'Third note']);
       expect(result.sessionInfo.markerColors).toEqual(['#ff0000', '#00ff00', '#0000ff']);
+    });
+
+    it('GTO-MRK-U010: extracts markerEndFrames from GTO data', () => {
+      const dto = createMockDTO({
+        sessions: [
+          {
+            name: 'DurationMarkerSession',
+            marks: [10, 20, 30],
+            markerNotes: ['First', 'Second', 'Third'],
+            markerColors: ['#ff0000', '#00ff00', '#0000ff'],
+            markerEndFrames: [25, -1, 50],
+          },
+        ],
+        objects: [],
+      });
+
+      const result = loadGTOGraph(dto as never);
+
+      expect(result.sessionInfo.markerEndFrames).toEqual([25, -1, 50]);
+    });
+
+    it('GTO-MRK-U011: handles missing markerEndFrames gracefully (legacy files)', () => {
+      const dto = createMockDTO({
+        sessions: [
+          {
+            name: 'LegacySession',
+            marks: [5, 15],
+            markerNotes: ['A', 'B'],
+            markerColors: ['#ff0000', '#00ff00'],
+            // No markerEndFrames - legacy format
+          },
+        ],
+        objects: [],
+      });
+
+      const result = loadGTOGraph(dto as never);
+
+      expect(result.sessionInfo.marks).toEqual([5, 15]);
+      expect(result.sessionInfo.markerEndFrames).toBeUndefined();
     });
 
     it('GTO-MRK-U002: handles missing marker notes and colors gracefully', () => {

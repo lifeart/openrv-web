@@ -173,7 +173,12 @@ function findCodestreamOffset(buffer: ArrayBuffer): number {
       // Use lower 32 bits only (safe for files < 4 GB)
       const hiLen = view.getUint32(offset + 8, false);
       const loLen = view.getUint32(offset + 12, false);
-      if (hiLen !== 0) break; // > 4 GB not supported in this parser
+      if (hiLen !== 0) {
+        console.warn(
+          `JP2 box '${boxType}' has extended length with high 32 bits = ${hiLen}; >4 GB boxes are not supported by this parser`,
+        );
+        break;
+      }
       boxLen = loLen;
       headerSize = 16;
     }

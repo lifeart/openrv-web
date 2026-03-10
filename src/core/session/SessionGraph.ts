@@ -324,6 +324,7 @@ export class SessionGraph extends EventEmitter<SessionGraphEvents> {
           result.sessionInfo.marks,
           result.sessionInfo.markerNotes,
           result.sessionInfo.markerColors,
+          result.sessionInfo.markerEndFrames,
         );
       }
 

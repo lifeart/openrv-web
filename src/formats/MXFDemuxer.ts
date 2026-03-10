@@ -873,6 +873,10 @@ export function parseMXFHeader(buffer: ArrayBuffer): MXFMetadata {
           } else {
             metadata.startTimecode = framesToTimecode(startTC, fps);
           }
+        } else {
+          console.warn(
+            `MXF: Cannot resolve start timecode (frame ${startTC}) — edit rate is missing or invalid`,
+          );
         }
       }
     }

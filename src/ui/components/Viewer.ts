@@ -3950,6 +3950,15 @@ export class Viewer {
   }
 
   /**
+   * Clear the prerender (effects) cache
+   */
+  clearPrerenderCache(): void {
+    if (this.prerenderBuffer) {
+      this.prerenderBuffer.clear();
+    }
+  }
+
+  /**
    * Set callback to be called when prerender cache is updated
    * Used by CacheIndicator to refresh display in real-time
    */

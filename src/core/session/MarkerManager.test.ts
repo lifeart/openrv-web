@@ -223,6 +223,40 @@ describe('MarkerManager', () => {
       expect(manager.getMarker(1)?.color).toBe(MARKER_COLORS[0]);
     });
 
+    it('MKR-038: setFromFrameNumbers with endFrames creates duration markers', () => {
+      manager.setFromFrameNumbers([10, 20, 30], ['A', 'B', 'C'], ['#ff0000', '#00ff00', '#0000ff'], [25, -1, 50]);
+      expect(manager.marks.size).toBe(3);
+
+      // Frame 10 should be a duration marker with endFrame 25
+      const m10 = manager.getMarker(10);
+      expect(m10?.endFrame).toBe(25);
+      expect(m10?.note).toBe('A');
+
+      // Frame 20 has endFrame -1 (point marker) — should not have endFrame
+      const m20 = manager.getMarker(20);
+      expect(m20?.endFrame).toBeUndefined();
+
+      // Frame 30 should be a duration marker with endFrame 50
+      const m30 = manager.getMarker(30);
+      expect(m30?.endFrame).toBe(50);
+    });
+
+    it('MKR-039: setFromFrameNumbers with partial endFrames array', () => {
+      // endFrames array shorter than frames array — extra markers are point markers
+      manager.setFromFrameNumbers([10, 20, 30], undefined, undefined, [25]);
+      expect(manager.marks.size).toBe(3);
+
+      expect(manager.getMarker(10)?.endFrame).toBe(25);
+      expect(manager.getMarker(20)?.endFrame).toBeUndefined();
+      expect(manager.getMarker(30)?.endFrame).toBeUndefined();
+    });
+
+    it('MKR-040: setFromFrameNumbers without endFrames creates only point markers', () => {
+      manager.setFromFrameNumbers([10, 20]);
+      expect(manager.getMarker(10)?.endFrame).toBeUndefined();
+      expect(manager.getMarker(20)?.endFrame).toBeUndefined();
+    });
+
     it('MKR-032: setFromArray supports mixed number and Marker format', () => {
       const markerObj: Marker = { frame: 10, note: 'hello', color: '#00ff00' };
       manager.setFromArray([5, markerObj]);

@@ -6,7 +6,7 @@
  * descriptor parsing, full demux, and error handling.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   isMXFFile,
   parseKLV,
@@ -1059,6 +1059,7 @@ describe('MXF Demuxer', () => {
 
     it('MXF-TC-COMP-004: should not produce startTimecode when editRate is missing', () => {
       // No Timeline Track KLV, so metadata.editRate is undefined
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const partitionBytes = buildHeaderPartitionKLV(OP1A_UL, 2000);
 
       const tcValue = buildLocalSetValue([
@@ -1073,9 +1074,14 @@ describe('MXF Demuxer', () => {
 
       expect(metadata.startTimecode).toBeUndefined();
       expect(metadata.startTimecodeFrames).toBe(90000);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Cannot resolve start timecode'),
+      );
+      warnSpy.mockRestore();
     });
 
     it('MXF-TC-COMP-005: should not produce startTimecode when editRate den is 0', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const partitionBytes = buildHeaderPartitionKLV(OP1A_UL, 2000);
 
       // Edit rate with denominator 0 (invalid)
@@ -1096,6 +1102,10 @@ describe('MXF Demuxer', () => {
 
       expect(metadata.startTimecode).toBeUndefined();
       expect(metadata.startTimecodeFrames).toBe(48000);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Cannot resolve start timecode'),
+      );
+      warnSpy.mockRestore();
     });
 
     it('MXF-TC-COMP-006: should set startTimecodeFrames alongside startTimecode when editRate is valid', () => {

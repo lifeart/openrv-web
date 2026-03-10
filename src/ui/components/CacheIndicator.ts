@@ -28,6 +28,7 @@ export interface CacheIndicatorState {
 export interface CacheIndicatorEvents extends EventMap {
   visibilityChanged: boolean;
   clearRequested: void;
+  effectsClearRequested: void;
 }
 
 export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
@@ -35,6 +36,7 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
   private barContainer: HTMLElement;
   private infoContainer: HTMLElement;
   private clearButton: HTMLButtonElement;
+  private clearEffectsButton: HTMLButtonElement;
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private session: Session;
@@ -144,8 +146,6 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
 
     this.clearButton = document.createElement('button');
     this.clearButton.dataset.testid = 'cache-indicator-clear';
-    // TODO(#102): Clear only clears video cache but effects cache stats are also shown.
-    // Add effects cache clearing or split into separate clear actions.
     this.clearButton.textContent = 'Clear Video Cache';
     this.clearButton.style.cssText = `
       background: transparent;
@@ -172,9 +172,40 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
       this.scheduleUpdate();
     });
 
+    // Clear Effects Cache button
+    this.clearEffectsButton = document.createElement('button');
+    this.clearEffectsButton.dataset.testid = 'cache-indicator-clear-effects';
+    this.clearEffectsButton.textContent = 'Clear Effects Cache';
+    this.clearEffectsButton.style.cssText = `
+      background: transparent;
+      border: 1px solid var(--border-secondary);
+      color: var(--text-muted);
+      padding: 1px 6px;
+      font-size: 10px;
+      border-radius: 3px;
+      cursor: pointer;
+      transition: all 0.12s ease;
+      flex-shrink: 0;
+      display: none;
+    `;
+    this.clearEffectsButton.addEventListener('pointerenter', () => {
+      this.clearEffectsButton.style.background = 'var(--bg-hover)';
+      this.clearEffectsButton.style.color = 'var(--text-primary)';
+    });
+    this.clearEffectsButton.addEventListener('pointerleave', () => {
+      this.clearEffectsButton.style.background = 'transparent';
+      this.clearEffectsButton.style.color = 'var(--text-muted)';
+    });
+    this.clearEffectsButton.addEventListener('click', () => {
+      this.viewer?.clearPrerenderCache();
+      this.emit('effectsClearRequested', undefined);
+      this.scheduleUpdate();
+    });
+
     this.infoContainer.appendChild(statsSpan);
     this.infoContainer.appendChild(this.prerenderStatsSpan);
     this.infoContainer.appendChild(this.clearButton);
+    this.infoContainer.appendChild(this.clearEffectsButton);
 
     this.container.appendChild(this.barContainer);
     this.container.appendChild(this.infoContainer);
@@ -349,6 +380,7 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
 
     if (!this.viewer) {
       this.prerenderStatsSpan.textContent = '';
+      this.clearEffectsButton.style.display = 'none';
       return;
     }
 
@@ -356,6 +388,7 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
     // Hide stats when nothing to show (no cache and no activity)
     if (!stats || (stats.cacheSize === 0 && stats.pendingRequests === 0 && stats.activeRequests === 0)) {
       this.prerenderStatsSpan.textContent = '';
+      this.clearEffectsButton.style.display = 'none';
       return;
     }
 
@@ -368,6 +401,9 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
     }
 
     this.prerenderStatsSpan.textContent = text;
+
+    // Show clear effects button when there are cached effects
+    this.clearEffectsButton.style.display = stats.cacheSize > 0 ? '' : 'none';
   }
 
   /**

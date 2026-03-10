@@ -10,6 +10,43 @@ const TIFF_BE = 0x4d4d; // "MM"
 const TIFF_MAGIC = 42;
 
 /**
+ * Convert a float32 value to a 16-bit half-float representation (for test data writing).
+ */
+function float32ToFloat16(value: number): number {
+  const buf = new ArrayBuffer(4);
+  const fView = new DataView(buf);
+  fView.setFloat32(0, value, true);
+  const bits = fView.getUint32(0, true);
+
+  const sign = (bits >>> 31) & 0x1;
+  const exp = (bits >>> 23) & 0xff;
+  const mant = bits & 0x7fffff;
+
+  if (exp === 0xff) {
+    // Infinity or NaN
+    return (sign << 15) | (0x1f << 10) | (mant ? 0x200 : 0);
+  }
+  if (exp === 0) {
+    // Zero or subnormal (too small for half)
+    return sign << 15;
+  }
+
+  const newExp = exp - 127 + 15;
+  if (newExp >= 0x1f) {
+    // Overflow → Infinity
+    return (sign << 15) | (0x1f << 10);
+  }
+  if (newExp <= 0) {
+    // Underflow → subnormal or zero
+    if (newExp < -10) return sign << 15;
+    const m = (mant | 0x800000) >> (1 - newExp + 13);
+    return (sign << 15) | (m & 0x3ff);
+  }
+
+  return (sign << 15) | (newExp << 10) | (mant >> 13);
+}
+
+/**
  * Create a minimal valid float TIFF file buffer for testing.
  * Creates an uncompressed float32 RGB or RGBA TIFF with strip organization.
  *
@@ -150,9 +187,20 @@ function createTestFloatTIFF(
   }
 
   // === Write pixel data ===
+  // Helper to write a float sample at the appropriate bit depth
+  function writeSample(offset: number, value: number): void {
+    if (bitsPerSample === 16) {
+      view.setUint16(offset, float32ToFloat16(value), le);
+    } else if (bitsPerSample === 64) {
+      view.setFloat64(offset, value, le);
+    } else {
+      view.setFloat32(offset, value, le);
+    }
+  }
+
   if (pixelValues) {
     for (let i = 0; i < pixelValues.length && i < width * height * channels; i++) {
-      view.setFloat32(pixelDataOffset + i * 4, pixelValues[i]!, le);
+      writeSample(pixelDataOffset + i * bytesPerSample, pixelValues[i]!);
     }
   } else {
     // Fill with test pattern
@@ -161,7 +209,7 @@ function createTestFloatTIFF(
         const pixelIdx = (y * width + x) * channels;
         for (let c = 0; c < channels; c++) {
           const value = (x + y * width + c) / (width * height * channels);
-          view.setFloat32(pixelDataOffset + (pixelIdx + c) * 4, value, le);
+          writeSample(pixelDataOffset + (pixelIdx + c) * bytesPerSample, value);
         }
       }
     }
@@ -207,6 +255,16 @@ describe('TIFFFloatDecoder', () => {
   describe('isFloatTIFF', () => {
     it('should return true for 32-bit float TIFF', () => {
       const buffer = createTestFloatTIFF({ sampleFormat: 3, bitsPerSample: 32 });
+      expect(isFloatTIFF(buffer)).toBe(true);
+    });
+
+    it('should return true for 16-bit half-float TIFF', () => {
+      const buffer = createTestFloatTIFF({ sampleFormat: 3, bitsPerSample: 16 });
+      expect(isFloatTIFF(buffer)).toBe(true);
+    });
+
+    it('should return true for 64-bit double float TIFF', () => {
+      const buffer = createTestFloatTIFF({ sampleFormat: 3, bitsPerSample: 64 });
       expect(isFloatTIFF(buffer)).toBe(true);
     });
 
@@ -511,8 +569,8 @@ describe('TIFFFloatDecoder', () => {
       await expect(decodeTIFFFloat(buffer)).rejects.toThrow('IFD offset out of range');
     });
 
-    it('should throw for unsupported bits per sample', async () => {
-      // Create a valid 32-bit float TIFF, then patch the BitsPerSample tag to 16
+    it('should throw for unsupported bits per sample with informative message', async () => {
+      // Create a valid 32-bit float TIFF, then patch the BitsPerSample tag to 24 (unsupported)
       const buffer = createTestFloatTIFF({ bitsPerSample: 32, sampleFormat: 3 });
       const view = new DataView(buffer);
       const le = true;
@@ -523,19 +581,62 @@ describe('TIFFFloatDecoder', () => {
         const tagId = view.getUint16(tagPos, le);
         if (tagId === 258) {
           // BitsPerSample
-          // If count=1 and inline, patch inline value
           const count = view.getUint32(tagPos + 4, le);
           if (count === 1) {
-            view.setUint16(tagPos + 8, 16, le);
+            view.setUint16(tagPos + 8, 24, le);
           } else {
-            // Patch the external array
             const extOffset = view.getUint32(tagPos + 8, le);
-            view.setUint16(extOffset, 16, le);
+            view.setUint16(extOffset, 24, le);
           }
           break;
         }
       }
-      await expect(decodeTIFFFloat(buffer)).rejects.toThrow('Unsupported bits per sample: 16');
+      await expect(decodeTIFFFloat(buffer)).rejects.toThrow('Unsupported float bits per sample: 24');
+      await expect(decodeTIFFFloat(buffer)).rejects.toThrow('16-bit half-float, 32-bit float, 64-bit double');
+    });
+
+    it('should decode 16-bit half-float TIFF', async () => {
+      const buffer = createTestFloatTIFF({
+        width: 2,
+        height: 2,
+        channels: 3,
+        bitsPerSample: 16,
+        sampleFormat: 3,
+        pixelValues: [0.5, 0.25, 0.75, 1.0, 0.0, 0.5, 0.5, 0.25, 0.75, 1.0, 0.0, 0.5],
+      });
+
+      const result = await decodeTIFFFloat(buffer);
+      expect(result.width).toBe(2);
+      expect(result.height).toBe(2);
+      expect(result.channels).toBe(4);
+      // Check first pixel (half-float has ~3 decimal digits of precision)
+      expect(result.data[0]).toBeCloseTo(0.5, 2); // R
+      expect(result.data[1]).toBeCloseTo(0.25, 2); // G
+      expect(result.data[2]).toBeCloseTo(0.75, 2); // B
+      expect(result.data[3]).toBeCloseTo(1.0, 4); // A (pre-initialized)
+      expect(result.metadata.bitsPerSample).toBe(16);
+    });
+
+    it('should decode 64-bit double float TIFF', async () => {
+      const buffer = createTestFloatTIFF({
+        width: 2,
+        height: 2,
+        channels: 3,
+        bitsPerSample: 64,
+        sampleFormat: 3,
+        pixelValues: [0.5, 0.25, 0.75, 1.0, 0.0, 0.5, 0.5, 0.25, 0.75, 1.0, 0.0, 0.5],
+      });
+
+      const result = await decodeTIFFFloat(buffer);
+      expect(result.width).toBe(2);
+      expect(result.height).toBe(2);
+      expect(result.channels).toBe(4);
+      // Check first pixel (64-bit has full float32 precision after truncation)
+      expect(result.data[0]).toBeCloseTo(0.5, 5); // R
+      expect(result.data[1]).toBeCloseTo(0.25, 5); // G
+      expect(result.data[2]).toBeCloseTo(0.75, 5); // B
+      expect(result.data[3]).toBeCloseTo(1.0, 5); // A (pre-initialized)
+      expect(result.metadata.bitsPerSample).toBe(64);
     });
 
     it('should decode 1-channel (grayscale) float TIFF by expanding to RGB', async () => {

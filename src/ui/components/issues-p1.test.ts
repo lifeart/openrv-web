@@ -459,27 +459,30 @@ describe('Issue #101: InfoPanel unwired fields documentation', () => {
 // ============================================================
 import { CacheIndicator } from './CacheIndicator';
 
-describe('Issue #102: CacheIndicator clear button label', () => {
-  it('#102-1: clear button label says "Clear Video Cache"', () => {
-    const mockSession = {
-      getCachedFrames: vi.fn(() => new Set<number>()),
-      getPendingFrames: vi.fn(() => new Set<number>()),
-      getCacheStats: vi.fn(() => ({ cachedFrames: 0 })),
-      clearVideoCache: vi.fn(),
-      isUsingMediabunny: vi.fn(() => true),
-      get currentSource() {
-        return { duration: 100, width: 1920, height: 1080 };
-      },
-      get inPoint() {
-        return 1;
-      },
-      get outPoint() {
-        return 100;
-      },
-      on: vi.fn(),
-      off: vi.fn(),
-    };
+vi.useFakeTimers();
 
+describe('Issue #102: CacheIndicator clear button label and effects cache clearing', () => {
+  const createMockSession102 = () => ({
+    getCachedFrames: vi.fn(() => new Set<number>()),
+    getPendingFrames: vi.fn(() => new Set<number>()),
+    getCacheStats: vi.fn(() => ({ cachedFrames: 0 })),
+    clearVideoCache: vi.fn(),
+    isUsingMediabunny: vi.fn(() => true),
+    get currentSource() {
+      return { duration: 100, width: 1920, height: 1080 };
+    },
+    get inPoint() {
+      return 1;
+    },
+    get outPoint() {
+      return 100;
+    },
+    on: vi.fn(),
+    off: vi.fn(),
+  });
+
+  it('#102-1: clear button label says "Clear Video Cache"', () => {
+    const mockSession = createMockSession102();
     const indicator = new CacheIndicator(mockSession as any);
     const el = indicator.getElement();
     const clearBtn = el.querySelector('[data-testid="cache-indicator-clear"]') as HTMLButtonElement;
@@ -487,5 +490,47 @@ describe('Issue #102: CacheIndicator clear button label', () => {
     expect(clearBtn.textContent).toBe('Clear Video Cache');
 
     indicator.dispose();
+  });
+
+  it('#102-2: effects clear button label says "Clear Effects Cache"', () => {
+    const mockSession = createMockSession102();
+    const indicator = new CacheIndicator(mockSession as any);
+    const el = indicator.getElement();
+    const clearEffectsBtn = el.querySelector('[data-testid="cache-indicator-clear-effects"]') as HTMLButtonElement;
+    expect(clearEffectsBtn).toBeTruthy();
+    expect(clearEffectsBtn.textContent).toBe('Clear Effects Cache');
+
+    indicator.dispose();
+  });
+
+  it('#102-3: clicking effects clear button calls viewer.clearPrerenderCache()', () => {
+    const mockSession = createMockSession102();
+    const mockViewer = {
+      getPrerenderStats: vi.fn(() => ({
+        cacheSize: 5,
+        totalFrames: 100,
+        pendingRequests: 0,
+        activeRequests: 0,
+        memorySizeMB: 10,
+        cacheHits: 0,
+        cacheMisses: 0,
+        hitRate: 0,
+      })),
+      setOnPrerenderCacheUpdate: vi.fn(),
+      clearPrerenderCache: vi.fn(),
+    };
+
+    const indicator = new CacheIndicator(mockSession as any, mockViewer as any);
+    vi.advanceTimersByTime(16);
+
+    const el = indicator.getElement();
+    const clearEffectsBtn = el.querySelector('[data-testid="cache-indicator-clear-effects"]') as HTMLButtonElement;
+    clearEffectsBtn.click();
+
+    expect(mockViewer.clearPrerenderCache).toHaveBeenCalled();
+
+    indicator.dispose();
+    vi.useRealTimers();
+    vi.useFakeTimers();
   });
 });

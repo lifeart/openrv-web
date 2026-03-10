@@ -359,6 +359,7 @@ describe('CacheIndicator', () => {
             : null,
         ),
         setOnPrerenderCacheUpdate: vi.fn(),
+        clearPrerenderCache: vi.fn(),
       };
     };
 
@@ -593,6 +594,89 @@ describe('CacheIndicator', () => {
       registeredCallback();
 
       expect(scheduleSpy).toHaveBeenCalled();
+    });
+
+    it('CACHE-U120: effects clear button exists in DOM', () => {
+      const el = indicator.getElement();
+      const clearEffectsBtn = el.querySelector('[data-testid="cache-indicator-clear-effects"]');
+      expect(clearEffectsBtn).not.toBeNull();
+    });
+
+    it('CACHE-U121: effects clear button hidden when no viewer', () => {
+      const el = indicator.getElement();
+      vi.advanceTimersByTime(16);
+      const clearEffectsBtn = el.querySelector('[data-testid="cache-indicator-clear-effects"]') as HTMLButtonElement;
+      expect(clearEffectsBtn.style.display).toBe('none');
+    });
+
+    it('CACHE-U122: effects clear button shown when viewer has cached effects', () => {
+      const mockViewer = createMockViewer({
+        cacheSize: 10,
+        totalFrames: 100,
+        memorySizeMB: 20,
+      });
+
+      indicator.setViewer(mockViewer as any);
+      vi.advanceTimersByTime(16);
+
+      const el = indicator.getElement();
+      const clearEffectsBtn = el.querySelector('[data-testid="cache-indicator-clear-effects"]') as HTMLButtonElement;
+      expect(clearEffectsBtn.style.display).not.toBe('none');
+    });
+
+    it('CACHE-U123: effects clear button calls viewer.clearPrerenderCache() on click', () => {
+      const mockViewer = createMockViewer({
+        cacheSize: 10,
+        totalFrames: 100,
+        memorySizeMB: 20,
+      });
+
+      indicator.setViewer(mockViewer as any);
+      vi.advanceTimersByTime(16);
+
+      const el = indicator.getElement();
+      const clearEffectsBtn = el.querySelector('[data-testid="cache-indicator-clear-effects"]') as HTMLButtonElement;
+      clearEffectsBtn.click();
+
+      expect(mockViewer.clearPrerenderCache).toHaveBeenCalled();
+    });
+
+    it('CACHE-U124: effects clear button emits effectsClearRequested event', () => {
+      const mockViewer = createMockViewer({
+        cacheSize: 10,
+        totalFrames: 100,
+        memorySizeMB: 20,
+      });
+
+      indicator.setViewer(mockViewer as any);
+      vi.advanceTimersByTime(16);
+
+      const callback = vi.fn();
+      indicator.on('effectsClearRequested', callback);
+
+      const el = indicator.getElement();
+      const clearEffectsBtn = el.querySelector('[data-testid="cache-indicator-clear-effects"]') as HTMLButtonElement;
+      clearEffectsBtn.click();
+
+      expect(callback).toHaveBeenCalled();
+    });
+
+    it('CACHE-U125: effects clear button hidden when effects cache is empty', () => {
+      const mockViewer = createMockViewer({
+        cacheSize: 0,
+        totalFrames: 100,
+        pendingRequests: 0,
+        activeRequests: 3,
+        memorySizeMB: 0,
+      });
+
+      indicator.setViewer(mockViewer as any);
+      vi.advanceTimersByTime(16);
+
+      const el = indicator.getElement();
+      const clearEffectsBtn = el.querySelector('[data-testid="cache-indicator-clear-effects"]') as HTMLButtonElement;
+      // Even though there are active requests, button is hidden because cacheSize is 0
+      expect(clearEffectsBtn.style.display).toBe('none');
     });
   });
 });
