@@ -73,7 +73,7 @@ export class MediaAPI extends DisposableAPI {
   /**
    * Get the frames per second of the current source.
    *
-   * @returns The FPS value for the active session.
+   * @returns The FPS of the current source, or the session playback FPS if no source is loaded.
    *
    * @example
    * ```ts
@@ -81,6 +81,21 @@ export class MediaAPI extends DisposableAPI {
    * ```
    */
   getFPS(): number {
+    this.assertNotDisposed();
+    return this.session.currentSource?.fps ?? this.session.fps;
+  }
+
+  /**
+   * Get the session playback FPS (which may differ from the source FPS if overridden).
+   *
+   * @returns The current session playback rate in frames per second.
+   *
+   * @example
+   * ```ts
+   * const playbackFps = openrv.media.getPlaybackFPS(); // e.g. 48
+   * ```
+   */
+  getPlaybackFPS(): number {
     this.assertNotDisposed();
     return this.session.fps;
   }

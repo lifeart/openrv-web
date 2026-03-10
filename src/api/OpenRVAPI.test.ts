@@ -652,6 +652,32 @@ describe('MediaAPI', () => {
     expect(media.getFPS()).toBe(24);
   });
 
+  it('API-U209: getFPS() returns source FPS, not session playback FPS', () => {
+    // Source has fps=24, but session playback fps is overridden to 48
+    session._currentSource = {
+      name: 'test.mp4',
+      type: 'video',
+      width: 1920,
+      height: 1080,
+      duration: 100,
+      fps: 24,
+    };
+    session._fps = 48;
+    expect(media.getFPS()).toBe(24);
+    expect(media.getPlaybackFPS()).toBe(48);
+  });
+
+  it('API-U210: getFPS() falls back to session FPS when no source is loaded', () => {
+    session._currentSource = null;
+    session._fps = 30;
+    expect(media.getFPS()).toBe(30);
+  });
+
+  it('API-U211: getPlaybackFPS() returns session playback FPS', () => {
+    session._fps = 60;
+    expect(media.getPlaybackFPS()).toBe(60);
+  });
+
   it('API-U033: getResolution() returns width and height', () => {
     const res = media.getResolution();
     expect(res.width).toBe(1920);
@@ -1965,6 +1991,10 @@ describe('Sub-API disposed guards', () => {
 
   it('API-U104: media.getFPS() throws after dispose', () => {
     expect(() => api.media.getFPS()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U212: media.getPlaybackFPS() throws after dispose', () => {
+    expect(() => api.media.getPlaybackFPS()).toThrow(DISPOSED_MSG);
   });
 
   it('API-U105: media.getResolution() throws after dispose', () => {
