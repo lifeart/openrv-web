@@ -224,6 +224,8 @@ function createMockSession() {
   });
 
   session.sources = [{ name: 'test.mp4', type: 'video', width: 1920, height: 1080, duration: 100, fps: 24 }];
+  session.loadSourceFromUrl = vi.fn().mockResolvedValue(undefined);
+  session.clearSources = vi.fn();
 
   return session;
 }
@@ -789,6 +791,16 @@ describe('MediaAPI', () => {
   it('API-U043: getStartFrame() returns 1 when no source is loaded', () => {
     session._currentSource = null;
     expect(media.getStartFrame()).toBe(1);
+  });
+
+  it('API-U215: addSourceFromURL() delegates to session.loadSourceFromUrl', async () => {
+    await media.addSourceFromURL('https://example.com/clip.mp4');
+    expect(session.loadSourceFromUrl).toHaveBeenCalledWith('https://example.com/clip.mp4');
+  });
+
+  it('API-U216: clearSources() delegates to session.clearSources', () => {
+    media.clearSources();
+    expect(session.clearSources).toHaveBeenCalled();
   });
 });
 
@@ -2134,6 +2146,14 @@ describe('Sub-API disposed guards', () => {
 
   it('API-U109: media.loadMovieProc() throws after dispose', () => {
     expect(() => api.media.loadMovieProc('test.movieproc')).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U217: media.addSourceFromURL() throws after dispose', async () => {
+    await expect(api.media.addSourceFromURL('https://example.com/clip.mp4')).rejects.toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U218: media.clearSources() throws after dispose', () => {
+    expect(() => api.media.clearSources()).toThrow(DISPOSED_MSG);
   });
 
   // -- AudioAPI --

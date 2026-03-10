@@ -236,4 +236,35 @@ export class MediaAPI extends DisposableAPI {
     this.assertNotDisposed();
     this.session.loadMovieProc(url);
   }
+
+  /**
+   * Load a media source from a URL into the session.
+   *
+   * Validates the URL scheme (only `http:` and `https:` are allowed) and
+   * auto-detects the media type (image vs. video) from the file extension.
+   *
+   * @param url - The HTTP/HTTPS URL to load.
+   *
+   * @example
+   * ```ts
+   * await openrv.media.addSourceFromURL('https://example.com/clip.mp4');
+   * ```
+   */
+  async addSourceFromURL(url: string): Promise<void> {
+    this.assertNotDisposed();
+    return this.session.loadSourceFromUrl(url);
+  }
+
+  /**
+   * Clear all loaded media sources, releasing associated resources.
+   *
+   * @example
+   * ```ts
+   * openrv.media.clearSources();
+   * ```
+   */
+  clearSources(): void {
+    this.assertNotDisposed();
+    this.session.clearSources();
+  }
 }

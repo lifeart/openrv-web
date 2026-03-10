@@ -37,30 +37,51 @@ export interface PixelReadbackProvider {
   ): [number, number, number, number] | null;
 }
 
+/** Shape of the openrv public API that this bridge may consume. */
+interface OpenRVMediaAPI {
+  getCurrentSource(): {
+    name: string;
+    type: string;
+    width: number;
+    height: number;
+    duration: number;
+    fps: number;
+  } | null;
+  getResolution(): { width: number; height: number };
+  hasMedia(): boolean;
+  getFPS(): number;
+  getSourceCount(): number;
+  /** Load a media source from a URL (async, may not exist on older builds). */
+  addSourceFromURL?(url: string): Promise<void>;
+  /** Load a procedural source from a .movieproc URL string. */
+  loadMovieProc?(url: string): void;
+  /** Clear all loaded media sources. */
+  clearSources?(): void;
+}
+
+interface OpenRVAPI {
+  media: OpenRVMediaAPI;
+}
+
 /**
  * Lazily resolve the openrv API from the global scope.
+ * Throws when the API is not yet initialised.
  */
-function getOpenRV(): {
-  media: {
-    getCurrentSource(): {
-      name: string;
-      type: string;
-      width: number;
-      height: number;
-      duration: number;
-      fps: number;
-    } | null;
-    getResolution(): { width: number; height: number };
-    hasMedia(): boolean;
-    getFPS(): number;
-    getSourceCount(): number;
-  };
-} {
+function getOpenRV(): OpenRVAPI {
   const api = (globalThis as Record<string, unknown>).openrv;
   if (!api) {
     throw new Error('window.openrv is not available. Initialize OpenRVAPI first.');
   }
-  return api as ReturnType<typeof getOpenRV>;
+  return api as OpenRVAPI;
+}
+
+/**
+ * Try to resolve the openrv API, returning null when unavailable.
+ * Used by mutation methods that should degrade gracefully.
+ */
+function tryGetOpenRV(): OpenRVAPI | null {
+  const api = (globalThis as Record<string, unknown>).openrv;
+  return (api as OpenRVAPI) ?? null;
 }
 
 /** Internal source record tracked by the bridge */
@@ -233,6 +254,7 @@ export class MuSourceBridge {
       return;
     }
     this._createSourceRecord(paths, tag);
+    await this._loadIntoSession(paths);
   }
 
   /**
@@ -265,6 +287,7 @@ export class MuSourceBridge {
       return this._generateSourceName();
     }
     const record = this._createSourceRecord(paths, tag);
+    await this._loadIntoSession(paths);
     return record.name;
   }
 
@@ -306,6 +329,7 @@ export class MuSourceBridge {
     this._batchQueue = [];
     for (const { paths, tag } of queue) {
       this._createSourceRecord(paths, tag);
+      await this._loadIntoSession(paths);
     }
   }
 
@@ -320,6 +344,10 @@ export class MuSourceBridge {
   addToSource(sourceName: string, mediaPath: string): void {
     const source = this._getSource(sourceName);
     source.mediaPaths.push(mediaPath);
+    this._loadIntoSession([mediaPath]).catch((err) => {
+      // eslint-disable-next-line no-console
+      console.warn('[MuSourceBridge] addToSource session propagation failed:', err);
+    });
   }
 
   /**
@@ -332,6 +360,10 @@ export class MuSourceBridge {
     }
     const source = this._getSource(sourceName);
     source.mediaPaths = [...paths];
+    this._loadIntoSession(paths).catch((err) => {
+      // eslint-disable-next-line no-console
+      console.warn('[MuSourceBridge] setSourceMedia session propagation failed:', err);
+    });
   }
 
   /**
@@ -348,6 +380,10 @@ export class MuSourceBridge {
     } else {
       source.mediaPaths.push(newPath);
     }
+    this._loadIntoSession([newPath]).catch((err) => {
+      // eslint-disable-next-line no-console
+      console.warn('[MuSourceBridge] relocateSource session propagation failed:', err);
+    });
   }
 
   // =====================================================================
@@ -587,6 +623,17 @@ export class MuSourceBridge {
    * Equivalent to Mu's `commands.clearSession()`. (Mu #71)
    */
   clearSession(): void {
+    // Clear the real session first
+    try {
+      const api = tryGetOpenRV();
+      if (api?.media.clearSources) {
+        api.media.clearSources();
+      }
+    } catch {
+      // eslint-disable-next-line no-console
+      console.warn('[MuSourceBridge] clearSession: real session unavailable, clearing local state only');
+    }
+
     this._sources.clear();
     this._imageSources.clear();
     this._sourceCounter = 0;
@@ -642,6 +689,14 @@ export class MuSourceBridge {
       );
     }
     source.activeRep = repName;
+
+    // Propagate to real session — attempt to load the rep's media
+    if (rep.mediaPaths.length > 0) {
+      this._loadIntoSession(rep.mediaPaths).catch((err) => {
+        // eslint-disable-next-line no-console
+        console.warn('[MuSourceBridge] setActiveSourceMediaRep session propagation failed:', err);
+      });
+    }
   }
 
   /**
@@ -847,5 +902,36 @@ export class MuSourceBridge {
       throw new Error(`Source not found: "${name}"`);
     }
     return source;
+  }
+
+  /**
+   * Attempt to load media paths into the real OpenRV session.
+   *
+   * For each path:
+   * - `.movieproc` suffixes are loaded as procedural sources.
+   * - `http://` / `https://` URLs are loaded via the session URL loader.
+   * - Other paths (local file paths) are tracked in the shadow registry only
+   *   because browser security prevents direct filesystem access.
+   *
+   * Errors are caught and logged so that the shadow state remains intact
+   * even when the real session is unavailable.
+   */
+  private async _loadIntoSession(paths: string[]): Promise<void> {
+    const api = tryGetOpenRV();
+    if (!api) return;
+
+    for (const path of paths) {
+      try {
+        if (path.endsWith('.movieproc') && api.media.loadMovieProc) {
+          api.media.loadMovieProc(path);
+        } else if (/^https?:\/\//i.test(path) && api.media.addSourceFromURL) {
+          await api.media.addSourceFromURL(path);
+        }
+        // Local file paths cannot be loaded in the browser; shadow-only.
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn(`[MuSourceBridge] Failed to load "${path}" into session:`, err);
+      }
+    }
   }
 }

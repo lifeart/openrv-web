@@ -19,6 +19,9 @@ function createMockOpenRV() {
       hasMedia: vi.fn().mockReturnValue(true),
       getFPS: vi.fn().mockReturnValue(24),
       getSourceCount: vi.fn().mockReturnValue(1),
+      addSourceFromURL: vi.fn().mockResolvedValue(undefined),
+      loadMovieProc: vi.fn(),
+      clearSources: vi.fn(),
     },
   };
 }
@@ -771,6 +774,391 @@ describe('MuSourceBridge', () => {
       // addSource should still work (doesn't call openrv)
       await bridge.addSource(['/a.mov']);
       expect(bridge.sourceCount()).toBe(1);
+    });
+  });
+
+  // ==================================================================
+  // Session Integration (real session propagation)
+  // ==================================================================
+
+  describe('session integration', () => {
+    it('addSource loads http URLs into the real session', async () => {
+      await bridge.addSource(['https://example.com/movie.mp4']);
+      expect(mockOpenRV.media.addSourceFromURL).toHaveBeenCalledWith(
+        'https://example.com/movie.mp4',
+      );
+    });
+
+    it('addSource loads .movieproc paths via loadMovieProc', async () => {
+      await bridge.addSource(['smpte_bars,width=1920.movieproc']);
+      expect(mockOpenRV.media.loadMovieProc).toHaveBeenCalledWith(
+        'smpte_bars,width=1920.movieproc',
+      );
+    });
+
+    it('addSource skips local file paths (no session call)', async () => {
+      await bridge.addSource(['/local/path/movie.mov']);
+      expect(mockOpenRV.media.addSourceFromURL).not.toHaveBeenCalled();
+      expect(mockOpenRV.media.loadMovieProc).not.toHaveBeenCalled();
+      // Shadow state still tracks it
+      expect(bridge.sourceCount()).toBe(1);
+    });
+
+    it('addSourceVerbose loads into session and returns name', async () => {
+      const name = await bridge.addSourceVerbose(
+        ['https://cdn.example.com/clip.mov'],
+        'movie',
+      );
+      expect(name).toMatch(/^sourceGroup\d{6}$/);
+      expect(mockOpenRV.media.addSourceFromURL).toHaveBeenCalledWith(
+        'https://cdn.example.com/clip.mov',
+      );
+    });
+
+    it('addSources loads multiple URLs into session', async () => {
+      await bridge.addSources([
+        ['https://example.com/a.mp4'],
+        ['https://example.com/b.mp4'],
+      ]);
+      expect(mockOpenRV.media.addSourceFromURL).toHaveBeenCalledTimes(2);
+    });
+
+    it('addSourceEnd loads batched URLs into session', async () => {
+      bridge.addSourceBegin();
+      await bridge.addSource(['https://example.com/a.mp4']);
+      await bridge.addSource(['https://example.com/b.mp4']);
+      expect(mockOpenRV.media.addSourceFromURL).not.toHaveBeenCalled();
+
+      await bridge.addSourceEnd();
+      expect(mockOpenRV.media.addSourceFromURL).toHaveBeenCalledTimes(2);
+    });
+
+    it('clearSession clears the real session', async () => {
+      await bridge.addSource(['/a.mov']);
+      bridge.clearSession();
+      expect(mockOpenRV.media.clearSources).toHaveBeenCalled();
+    });
+
+    it('clearSession works when openrv is unavailable', async () => {
+      await bridge.addSource(['/a.mov']);
+      delete (globalThis as Record<string, unknown>).openrv;
+      // Should not throw
+      bridge.clearSession();
+      expect(bridge.sourceCount()).toBe(0);
+    });
+
+    it('clearSession still clears shadow state when clearSources throws', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      await bridge.addSource(['/a.mov']);
+      await bridge.addSource(['/b.mov']);
+      expect(bridge.sourceCount()).toBe(2);
+
+      mockOpenRV.media.clearSources.mockImplementation(() => {
+        throw new Error('session exploded');
+      });
+
+      // Should not throw
+      expect(() => bridge.clearSession()).not.toThrow();
+      // Shadow state (_sources) must still be cleared
+      expect(bridge.sourceCount()).toBe(0);
+      warnSpy.mockRestore();
+    });
+
+    it('setSourceMedia propagates http URL to session', async () => {
+      const name = await bridge.addSourceVerbose(['/old.mov']);
+      mockOpenRV.media.addSourceFromURL.mockClear();
+      bridge.setSourceMedia(name, ['https://example.com/new.mp4']);
+      // Allow async propagation to flush
+      await vi.waitFor(() => {
+        expect(mockOpenRV.media.addSourceFromURL).toHaveBeenCalledWith(
+          'https://example.com/new.mp4',
+        );
+      });
+    });
+
+    it('relocateSource propagates http URL to session', async () => {
+      const name = await bridge.addSourceVerbose(['/old.mov']);
+      mockOpenRV.media.addSourceFromURL.mockClear();
+      bridge.relocateSource(name, 'https://example.com/relocated.mp4');
+      await vi.waitFor(() => {
+        expect(mockOpenRV.media.addSourceFromURL).toHaveBeenCalledWith(
+          'https://example.com/relocated.mp4',
+        );
+      });
+    });
+
+    it('addToSource propagates http URL to session', async () => {
+      const name = await bridge.addSourceVerbose(['/old.mov']);
+      mockOpenRV.media.addSourceFromURL.mockClear();
+      bridge.addToSource(name, 'https://example.com/layer2.mp4');
+      await vi.waitFor(() => {
+        expect(mockOpenRV.media.addSourceFromURL).toHaveBeenCalledWith(
+          'https://example.com/layer2.mp4',
+        );
+      });
+    });
+
+    it('addToSource propagates movieproc to session', async () => {
+      const name = await bridge.addSourceVerbose(['/old.mov']);
+      mockOpenRV.media.loadMovieProc.mockClear();
+      bridge.addToSource(name, 'color.movieproc');
+      await vi.waitFor(() => {
+        expect(mockOpenRV.media.loadMovieProc).toHaveBeenCalledWith(
+          'color.movieproc',
+        );
+      });
+    });
+
+    it('setActiveSourceMediaRep propagates rep media to session', async () => {
+      const name = await bridge.addSourceVerbose(['/full.mov']);
+      bridge.addSourceMediaRep(name, 'full', ['/full.mov']);
+      bridge.addSourceMediaRep(name, 'proxy', [
+        'https://cdn.example.com/proxy.mp4',
+      ]);
+      mockOpenRV.media.addSourceFromURL.mockClear();
+      bridge.setActiveSourceMediaRep(name, 'proxy');
+      await vi.waitFor(() => {
+        expect(mockOpenRV.media.addSourceFromURL).toHaveBeenCalledWith(
+          'https://cdn.example.com/proxy.mp4',
+        );
+      });
+    });
+
+    it('gracefully handles session load errors', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      mockOpenRV.media.addSourceFromURL.mockRejectedValue(
+        new Error('Network error'),
+      );
+      // Should not throw — error is caught and logged
+      await bridge.addSource(['https://example.com/fail.mp4']);
+      expect(bridge.sourceCount()).toBe(1); // shadow state still works
+      expect(warnSpy).toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+
+    it('gracefully handles missing API methods', async () => {
+      // Simulate an older openrv build without addSourceFromURL
+      delete (mockOpenRV.media as Record<string, unknown>).addSourceFromURL;
+      delete (mockOpenRV.media as Record<string, unknown>).loadMovieProc;
+      delete (mockOpenRV.media as Record<string, unknown>).clearSources;
+
+      // All mutations should still work via shadow state
+      await bridge.addSource(['https://example.com/movie.mp4']);
+      expect(bridge.sourceCount()).toBe(1);
+
+      bridge.clearSession();
+      expect(bridge.sourceCount()).toBe(0);
+    });
+
+    it('addSource routes http:// (non-TLS) URLs to addSourceFromURL', async () => {
+      await bridge.addSource(['http://example.com/clip.mp4']);
+      expect(mockOpenRV.media.addSourceFromURL).toHaveBeenCalledWith(
+        'http://example.com/clip.mp4',
+      );
+    });
+
+    it('addSource handles mixed path types in a single call', async () => {
+      // addSource accepts an array of paths; each path is routed independently
+      await bridge.addSource([
+        'https://example.com/movie.mp4',
+        'smpte_bars.movieproc',
+        '/local/path.mov',
+      ]);
+      expect(mockOpenRV.media.addSourceFromURL).toHaveBeenCalledWith(
+        'https://example.com/movie.mp4',
+      );
+      expect(mockOpenRV.media.loadMovieProc).toHaveBeenCalledWith(
+        'smpte_bars.movieproc',
+      );
+      // Local path should not trigger any session call beyond the above two
+      expect(mockOpenRV.media.addSourceFromURL).toHaveBeenCalledTimes(1);
+      expect(mockOpenRV.media.loadMovieProc).toHaveBeenCalledTimes(1);
+      // Shadow state tracks all three paths
+      expect(bridge.sourceCount()).toBe(1);
+      const media = bridge.sourceMedia(bridge.sources()[0]!.name);
+      expect(media.media).toEqual([
+        'https://example.com/movie.mp4',
+        'smpte_bars.movieproc',
+        '/local/path.mov',
+      ]);
+    });
+
+    it('addSourceVerbose in batch mode defers session loading until addSourceEnd', async () => {
+      bridge.addSourceBegin();
+      const name = await bridge.addSourceVerbose(
+        ['https://example.com/batch.mp4'],
+        'movie',
+      );
+      expect(typeof name).toBe('string');
+      // No session call yet
+      expect(mockOpenRV.media.addSourceFromURL).not.toHaveBeenCalled();
+
+      await bridge.addSourceEnd();
+      expect(mockOpenRV.media.addSourceFromURL).toHaveBeenCalledWith(
+        'https://example.com/batch.mp4',
+      );
+    });
+
+    it('batch mode defers movieproc loading until addSourceEnd', async () => {
+      bridge.addSourceBegin();
+      await bridge.addSource(['checkerboard.movieproc']);
+      expect(mockOpenRV.media.loadMovieProc).not.toHaveBeenCalled();
+
+      await bridge.addSourceEnd();
+      expect(mockOpenRV.media.loadMovieProc).toHaveBeenCalledWith(
+        'checkerboard.movieproc',
+      );
+    });
+
+    it('clearSession clears both real session AND shadow state atomically', async () => {
+      await bridge.addSource(['https://example.com/a.mp4']);
+      await bridge.addSource(['/local/b.mov']);
+      bridge.newImageSource('img', 10, 10);
+      expect(bridge.sourceCount()).toBe(3);
+
+      bridge.clearSession();
+      // Real session cleared
+      expect(mockOpenRV.media.clearSources).toHaveBeenCalled();
+      // Shadow state cleared (sourceCount tracks local registry only)
+      expect(bridge.sourceCount()).toBe(0);
+      // sources() falls back to openrv current source when local registry is empty
+      // — this is correct: after clearSession both sides are wiped
+      expect(bridge.hasSource(bridge.sources()[0]?.name ?? '')).toBe(false);
+    });
+
+    it('setSourceMedia shadow state updated even when session propagation fails', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const name = await bridge.addSourceVerbose(['/old.mov']);
+      mockOpenRV.media.addSourceFromURL.mockRejectedValue(
+        new Error('Network error'),
+      );
+      bridge.setSourceMedia(name, ['https://example.com/fail.mp4']);
+      // Shadow state reflects the new media immediately
+      expect(bridge.sourceMedia(name).media).toEqual([
+        'https://example.com/fail.mp4',
+      ]);
+      // Wait for fire-and-forget propagation to flush
+      await vi.waitFor(() => {
+        expect(warnSpy).toHaveBeenCalled();
+      });
+      warnSpy.mockRestore();
+    });
+
+    it('relocateSource shadow state updated even when session propagation fails', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const name = await bridge.addSourceVerbose(['/old.mov']);
+      mockOpenRV.media.addSourceFromURL.mockRejectedValue(
+        new Error('Network error'),
+      );
+      bridge.relocateSource(name, 'https://example.com/fail.mp4');
+      // Shadow state has the new path
+      expect(bridge.sourceMedia(name).media[0]).toBe(
+        'https://example.com/fail.mp4',
+      );
+      await vi.waitFor(() => {
+        expect(warnSpy).toHaveBeenCalled();
+      });
+      warnSpy.mockRestore();
+    });
+
+    it('addToSource shadow state updated even when session propagation fails', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const name = await bridge.addSourceVerbose(['/old.mov']);
+      mockOpenRV.media.addSourceFromURL.mockRejectedValue(
+        new Error('Network error'),
+      );
+      bridge.addToSource(name, 'https://example.com/fail.mp4');
+      // Shadow state reflects the appended media immediately
+      expect(bridge.sourceMedia(name).media).toEqual([
+        '/old.mov',
+        'https://example.com/fail.mp4',
+      ]);
+      await vi.waitFor(() => {
+        expect(warnSpy).toHaveBeenCalled();
+      });
+      warnSpy.mockRestore();
+    });
+
+    it('setActiveSourceMediaRep shadow state updated even when session propagation fails', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const name = await bridge.addSourceVerbose(['/full.mov']);
+      bridge.addSourceMediaRep(name, 'full', ['/full.mov']);
+      bridge.addSourceMediaRep(name, 'proxy', [
+        'https://cdn.example.com/proxy.mp4',
+      ]);
+      mockOpenRV.media.addSourceFromURL.mockRejectedValue(
+        new Error('CDN error'),
+      );
+      bridge.setActiveSourceMediaRep(name, 'proxy');
+      // Shadow state switched immediately
+      expect(bridge.sourceMediaRep(name)).toBe('proxy');
+      await vi.waitFor(() => {
+        expect(warnSpy).toHaveBeenCalled();
+      });
+      warnSpy.mockRestore();
+    });
+
+    it('loadMovieProc errors are caught and shadow state preserved', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      mockOpenRV.media.loadMovieProc.mockImplementation(() => {
+        throw new Error('Proc parse error');
+      });
+      await bridge.addSource(['bad.movieproc']);
+      // Shadow state still tracks the source
+      expect(bridge.sourceCount()).toBe(1);
+      expect(warnSpy).toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+
+    it('setSourceMedia works when openrv is unavailable', async () => {
+      const name = await bridge.addSourceVerbose(['/old.mov']);
+      delete (globalThis as Record<string, unknown>).openrv;
+      // Should not throw, shadow state updated
+      bridge.setSourceMedia(name, ['/new.mov']);
+      expect(bridge.sourceMedia(name).media).toEqual(['/new.mov']);
+    });
+
+    it('relocateSource works when openrv is unavailable', async () => {
+      const name = await bridge.addSourceVerbose(['/old.mov']);
+      delete (globalThis as Record<string, unknown>).openrv;
+      bridge.relocateSource(name, '/relocated.mov');
+      expect(bridge.sourceMedia(name).media[0]).toBe('/relocated.mov');
+    });
+
+    it('addToSource works when openrv is unavailable', async () => {
+      const name = await bridge.addSourceVerbose(['/old.mov']);
+      delete (globalThis as Record<string, unknown>).openrv;
+      bridge.addToSource(name, '/layer2.mov');
+      expect(bridge.sourceMedia(name).media).toEqual(['/old.mov', '/layer2.mov']);
+    });
+
+    it('setActiveSourceMediaRep works when openrv is unavailable', async () => {
+      const name = await bridge.addSourceVerbose(['/full.mov']);
+      bridge.addSourceMediaRep(name, 'full', ['/full.mov']);
+      bridge.addSourceMediaRep(name, 'proxy', ['/proxy.mov']);
+      delete (globalThis as Record<string, unknown>).openrv;
+      bridge.setActiveSourceMediaRep(name, 'proxy');
+      expect(bridge.sourceMediaRep(name)).toBe('proxy');
+    });
+
+    it('shadow state remains consistent after successful session loads', async () => {
+      await bridge.addSource(['https://example.com/a.mp4'], 'movie');
+      await bridge.addSource(['pattern.movieproc'], 'proc');
+      await bridge.addSource(['/local/file.mov'], 'local');
+
+      // All three should be in shadow state
+      expect(bridge.sourceCount()).toBe(3);
+      const sources = bridge.sources();
+      expect(sources[0]!.media).toBe('https://example.com/a.mp4');
+      expect(sources[0]!.tag).toBe('movie');
+      expect(sources[1]!.media).toBe('pattern.movieproc');
+      expect(sources[1]!.tag).toBe('proc');
+      expect(sources[2]!.media).toBe('/local/file.mov');
+      expect(sources[2]!.tag).toBe('local');
+
+      // Session calls were made for URL and movieproc but not local
+      expect(mockOpenRV.media.addSourceFromURL).toHaveBeenCalledTimes(1);
+      expect(mockOpenRV.media.loadMovieProc).toHaveBeenCalledTimes(1);
     });
   });
 });

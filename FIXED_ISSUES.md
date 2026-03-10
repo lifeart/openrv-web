@@ -810,9 +810,9 @@
 - **Area**: Review overlays, feature reachability
 - **Root Cause**: `InfoPanel` implements `setPosition()`, `setFields()`, and `toggleField()` for configurable display, but the only production UI affordance is a binary toggle button. Users cannot choose position or visible fields.
 - **Fix**: Added TODO(#68) JSDoc on the class documenting the gap and recommending a settings popover. Added one-time `console.info` on first `enable()` call referencing the available customization API and issue #68.
-- **Regression Tests**: INFO-U130 (logs customization info on first enable), INFO-U131 (logs only once across multiple enable calls).
-- **Verification**: All 65 InfoPanel tests pass, TypeScript clean.
-- **Files Changed**: `src/ui/components/InfoPanel.ts`, `src/ui/components/InfoPanel.test.ts`
+- **TODO(#68) Resolved**: Added `InfoPanelSettingsMenu` — a right-click context menu on the InfoPanel toggle button with: position section (4 radio items: top-left/top-right/bottom-left/bottom-right) and fields section (7 toggle items: filename/resolution/frameInfo/timecode/duration/fps/colorAtCursor). Position selection closes menu; field toggles stay open for multi-toggle. Full ARIA support (menuitemradio/menuitemcheckbox). Dismiss on Escape/click-outside/blur. Removed TODO comment, console.info hint, and `hasLoggedCustomizationHint` flag.
+- **Regression Tests**: INFO-U130/U131 (updated: expect 0 console.info), IPSM-U001 through IPSM-U032 (32 new: show/hide, positions, fields, dismiss, ARIA).
+- **Files Changed**: `src/ui/components/InfoPanelSettingsMenu.ts` (new), `src/ui/components/InfoPanelSettingsMenu.test.ts` (new), `src/services/tabContent/buildPanelToggles.ts`, `src/ui/components/InfoPanel.ts`, `src/ui/components/InfoPanel.test.ts`
 
 ## Issue #70: The auto-save indicator is clickable for settings and retry, but it is not keyboard-focusable
 
@@ -1447,7 +1447,7 @@
 - **Area**: Preferences / dead user configuration
 - **Root Cause**: `ColorDefaults`, `ExportDefaults`, and most `GeneralPrefs` fields (`defaultFps`, `autoPlayOnLoad`, `showWelcome`) are persisted, exported, and imported by `PreferencesManager`, but no production code reads `getColorDefaults()` or `getExportDefaults()`, and the unused `GeneralPrefs` fields have no runtime consumers. Only `userName` is actually used (by NotePanel and NetworkControl).
 - **Fix**: Added TODO(#152) JSDoc to `ColorDefaults` and `ExportDefaults` interfaces, and per-field annotations on unused `GeneralPrefs` fields, documenting each as storage-only with no production consumer. Added one-time `console.info` in constructor (gated by static flag) referencing TODO(#152). No API changes — fields preserved for future wiring.
-- **TODO(#152) Partial**: Wired `autoPlayOnLoad` preference. `handleSourceLoaded()` now accepts optional `autoPlayOnLoad` parameter; when true and source has >1 frame and not already playing, calls `session.play()`. `AppSessionBridge` reads the preference and passes it. Remaining unwired: `defaultFps`, `showWelcome`, `ColorDefaults`, `ExportDefaults.frameburnEnabled/frameburnConfig`.
+- **TODO(#152) Partial**: Wired `autoPlayOnLoad` and `defaultFps` preferences. `handleSourceLoaded()` now accepts optional `autoPlayOnLoad` parameter; when true and source has >1 frame and not already playing, calls `session.play()`. `App` constructor reads `defaultFps` and sets `session.fps` after creation, ensuring all downstream fallbacks respect it. Remaining unwired: `showWelcome`, `ColorDefaults`, `ExportDefaults.frameburnEnabled/frameburnConfig`.
 - **Regression Tests**: CPRF-152-001 through 005 (unchanged), SLH-U060 through SLH-U064 (5 new: auto-play on/off, still image guard, already-playing guard, undefined guard).
 - **Files Changed**: `src/core/PreferencesManager.ts`, `src/handlers/sourceLoadedHandlers.ts`, `src/AppSessionBridge.ts`, `src/handlers/sourceLoadedHandlers.test.ts`
 
@@ -2178,3 +2178,12 @@
 - **Regression Tests**: VWR-HDRHROOM-001 through VWR-HDRHROOM-006 (new value triggers render, same value skips, null skips, no HDR capability skips, rejected promise skips, sequential changes tracked correctly).
 - **Verification**: All 128 Viewer tests pass, TypeScript clean.
 - **Files Changed**: `src/ui/components/Viewer.ts`, `src/ui/components/Viewer.test.ts`
+## Issue #239: Mu source-management commands mostly mutate a shadow source registry instead of the real OpenRV session
+
+- **Severity**: High
+- **Area**: Mu compatibility / source management
+- **Root Cause**: `MuSourceBridge` methods (`addSource`, `addSources`, `addSourceVerbose`, `clearSession`, `setSourceMedia`, `relocateSource`, `setActiveSourceMediaRep`, `addToSource`) only created/mutated in-memory `SourceRecord` objects in the private `_sources` map. `_createSourceRecord()` stored placeholder records without ever loading media into the app session. Follow-up compat queries read from this shadow registry, reinforcing the false impression that scripts had modified the live session.
+- **Fix**: (A) Added `addSourceFromURL(url)` and `clearSources()` public methods to `MediaAPI` delegating to `Session.loadSourceFromUrl` and `Session.clearSources`. (B) Extracted `OpenRVMediaAPI`/`OpenRVAPI` interfaces in `MuSourceBridge` with optional mutation methods. Added `tryGetOpenRV()` helper for graceful degradation. (C) Added `_loadIntoSession(paths)` private method that routes `.movieproc` paths to `loadMovieProc()`, HTTP/HTTPS URLs to `addSourceFromURL()`, and skips local file paths (browser limitation). (D) Wired all mutator methods through to the real session: `addSource`, `addSources`, `addSourceVerbose`, `addSourceEnd` (batch), `clearSession`, `setSourceMedia`, `relocateSource`, `setActiveSourceMediaRep`, and `addToSource` now propagate to the real OpenRV session. Fire-and-forget pattern with `.catch()` for synchronous methods; `await` for async methods. Shadow registry maintained as cache/compat layer.
+- **Regression Tests**: 30 new tests across `MuSourceBridge.test.ts` and `OpenRVAPI.test.ts` covering: URL/movieproc/local-path routing, batch mode deferred loading, clearSession completeness (real + shadow), error resilience (API throws/unavailable), graceful degradation when `window.openrv` undefined, shadow state consistency after mutations, `addToSource` session propagation, MediaAPI delegation and post-dispose guards.
+- **Verification**: All 458 compat tests pass (8 files), all API tests pass. TypeScript clean.
+- **Files Changed**: `src/api/MediaAPI.ts`, `src/compat/MuSourceBridge.ts`, `src/compat/__tests__/MuSourceBridge.test.ts`, `src/api/OpenRVAPI.test.ts`
