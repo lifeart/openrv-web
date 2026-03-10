@@ -2053,41 +2053,17 @@ This file tracks findings from exploratory review and targeted validation runs.
   - If the browser rejects fullscreen, the control can feel unresponsive rather than explicitly failing.
   - Users get no guidance about whether fullscreen is unsupported, blocked, or just temporarily unavailable.
 
-### 183. DCC `syncColor` advertises LUT sync, but the app silently ignores it
+### 183. DCC LUT sync failures are log-only and never reported back to the tool or user
 
 - Severity: Medium
-- Area: DCC integration / color sync
+- Area: DCC integration / color sync diagnostics
 - Evidence:
-  - The DCC protocol exposes `lutPath` on inbound `syncColor` messages in [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L53).
-  - Production wiring in [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L128) only forwards `exposure`, `gamma`, `temperature`, and `tint`.
-  - No runtime consumer of `msg.lutPath` exists in the shipped DCC wiring path.
+  - Inbound `syncColor` does consume `lutPath` and calls `fetchAndApplyLUT(...)` in [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L228) through [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L242).
+  - `fetchAndApplyLUT(...)` reduces fetch failures, parse failures, and unsupported 1D LUTs to `log.warn(...)` calls only in [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L101) through [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L122).
+  - Unlike `loadMedia` failures, this path never calls `dccBridge.sendError(...)` and never uses the optional alert hook exposed by the wiring deps in [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L69) through [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L72) and [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L198) through [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L220).
 - Impact:
-  - A DCC tool can send a syntactically valid color-sync message that looks supported by the protocol but still loses its LUT intent on arrival.
-  - The integration behaves as partial color sync while presenting itself as a fuller transport.
-
-### 184. DCC bridge defines outbound `annotationAdded`, but production never emits it
-
-- Severity: Medium
-- Area: DCC integration / review sync
-- Evidence:
-  - `DCCBridge` exposes `sendAnnotationAdded(...)` and documents `annotationAdded` as an outbound event in [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L12) and [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L308).
-  - The shipped wiring in [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L77) only connects frame sync and color sync.
-  - Production search finds no runtime caller of `sendAnnotationAdded(...)` outside tests and the bridge class itself.
-- Impact:
-  - External DCC clients cannot rely on live annotation notifications even though the integration API claims they exist.
-  - The bridge surface overstates what the real app actually sends.
-
-### 185. DCC `loadMedia` failures are never reported back to the requesting tool
-
-- Severity: Medium
-- Area: DCC integration / error handling
-- Evidence:
-  - Inbound `loadMedia` requests are handled in [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L96).
-  - When media loading fails, the app only logs `Failed to load video from DCC` or `Failed to load image from DCC` in [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L110) and [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L121).
-  - The DCC protocol already has an outbound `error` message type in [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L104), but this failure path never sends one.
-- Impact:
-  - A remote DCC client can issue `loadMedia` and receive no structured failure response when the app cannot open the media.
-  - That makes automation and host-side UX harder because the request can fail silently from the sender’s point of view.
+  - A DCC tool can send a valid LUT-sync request and have it fail with no structured response back to the sender and no app-level feedback beyond the console.
+  - That makes LUT-driven review sync harder to debug than the rest of the DCC media path.
 
 ### 186. Network session join only requests host media when the guest starts completely empty
 
@@ -2112,18 +2088,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - A guest can end up with the host’s frame/view/compare state layered onto missing or incompatible local media even after refusing the transfer or hitting an import error.
   - The recovery path preserves the wrong part of the sync and loses the part that would have made it meaningful.
-
-### 188. DCC bridge connection and protocol errors have no app-level surface
-
-- Severity: Medium
-- Area: DCC integration / diagnostics
-- Evidence:
-  - `DCCBridge` emits `error` for connection failures, parse failures, send failures, and reconnect exhaustion in [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L126), [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L357), and [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L465).
-  - The production bootstrap only constructs the bridge, wires frame/color/media sync, and calls `connect()` in [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L591).
-  - Production search finds no runtime subscriber for `dccBridge.on('error', ...)` outside tests.
-- Impact:
-  - A broken `?dcc=` integration can fail without any app-level toast, modal, or status indication for the user.
-  - Debugging DCC connectivity becomes unnecessarily opaque because the bridge has error signals, but the shipped app drops them.
 
 ### 190. Timeline waveform extraction failures are reduced to a missing waveform with no UI explanation
 
@@ -5228,6 +5192,18 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Inference: a DCC peer that stops responding at the protocol level can remain in a healthy-looking `connected` state until the browser WebSocket itself closes, because the bridge never enforces its own heartbeat timeout.
   - The runtime behavior also does not match the advertised ping/pong health model, which makes cross-tool heartbeat expectations brittle.
+
+### 443. Outbound DCC sync events can be dropped silently when the bridge is not writable
+
+- Severity: Medium
+- Area: DCC integration / outbound reliability
+- Evidence:
+  - `DCCBridge.send(...)` returns `false` immediately when no WebSocket is open, and only emits an `error` event when a `ws.send(...)` call itself throws in [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L266) through [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L280).
+  - The app-level outbound DCC wiring ignores those return values for frame sync, color sync, and annotation sync in [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L246) through [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L276).
+  - That means the `frameChanged`, `colorChanged`, and `annotationAdded` paths have no retry, queue, or user/tool feedback when the bridge is temporarily disconnected or otherwise unwritable.
+- Impact:
+  - DCC-driven review sync can quietly stop propagating outbound viewer changes even though the local app continues to behave normally.
+  - From the DCC side, lost updates look like random desynchronization rather than an explicit transport failure.
 
 ## Validation Notes
 

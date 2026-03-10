@@ -370,8 +370,22 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
         }
 
         try {
+          const sourceName = session.currentSource?.name?.replace(/\.[^/.]+$/, '') ?? 'export';
+
           if (exporter.kind === 'blob') {
+            const frameCount = session.frameCount || 1;
+            const fps = session.fps || 24;
+
+            // Render one frame to determine dimensions
+            const probeCanvas = await viewer.renderFrameToCanvas(session.currentFrame, true);
+            const width = probeCanvas?.width ?? 1920;
+            const height = probeCanvas?.height ?? 1080;
+
             const blob = await exporter.export({
+              frameRange: { start: session.inPoint, end: Math.min(session.outPoint, frameCount) },
+              width,
+              height,
+              fps,
               getFrame: async (frame: number) => {
                 const canvas = await viewer.renderFrameToCanvas(frame, true);
                 if (!canvas) throw new Error(`Failed to render frame ${frame}`);
@@ -381,13 +395,12 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
               },
             });
             const ext = exporter.extensions[0] ?? 'bin';
-            const sourceName = session.currentSource?.name?.replace(/\.[^/.]+$/, '') ?? 'export';
             downloadBlob(blob, `${sourceName}.${ext}`);
           } else {
             const text = await exporter.export({});
             const ext = exporter.extensions[0] ?? 'txt';
-            const sourceName = session.currentSource?.name?.replace(/\.[^/.]+$/, '') ?? 'export';
-            const blob = new Blob([text], { type: 'text/plain' });
+            const mimeType = exporter.mimeType || 'text/plain';
+            const blob = new Blob([text], { type: mimeType });
             downloadBlob(blob, `${sourceName}.${ext}`);
           }
         } catch (err) {
