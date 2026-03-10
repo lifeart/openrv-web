@@ -3646,6 +3646,18 @@ This file tracks findings from exploratory review and targeted validation runs.
   - External integrations can read a version string that does not match the actual shipped build/package they are running against.
   - That weakens version-based debugging and future compatibility checks, especially alongside the already-unenforced plugin `engineVersion` metadata.
 
+### 295. Plugin authors are offered `app:stop` and `app:error` subscriptions, but those bridged app events never fire
+
+- Severity: Medium
+- Area: Plugin event API / application event bridge
+- Evidence:
+  - `PluginEventBus` exposes `app:stop` and `app:error` as valid plugin-visible app events and maps them directly from `OpenRVEventName` in [src/plugin/PluginEventBus.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginEventBus.ts#L18) through [src/plugin/PluginEventBus.ts#L35](/Users/lifeart/Repos/openrv-web/src/plugin/PluginEventBus.ts#L35) and [src/plugin/PluginEventBus.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginEventBus.ts#L79) through [src/plugin/PluginEventBus.ts#L92](/Users/lifeart/Repos/openrv-web/src/plugin/PluginEventBus.ts#L92).
+  - The generated API docs also advertise both events to plugin authors in [docs/api/index.md](/Users/lifeart/Repos/openrv-web/docs/api/index.md#L99) through [docs/api/index.md#L115](/Users/lifeart/Repos/openrv-web/docs/api/index.md#L115).
+  - The underlying `EventsAPI` never emits `stop` in its internal wiring and only exposes `error` through a manual `emitError(...)` helper that production does not use in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L192) through [src/api/EventsAPI.ts#L278](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L278).
+- Impact:
+  - Plugin code can subscribe to `context.events.onApp('app:stop', ...)` or `context.events.onApp('app:error', ...)` and never receive callbacks in production.
+  - That makes the plugin-facing event bridge broader on paper than in live behavior, which is especially misleading for automation or monitoring plugins.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

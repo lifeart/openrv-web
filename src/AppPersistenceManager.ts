@@ -368,6 +368,18 @@ export class AppPersistenceManager {
       } else if (ext === 'rv' || ext === 'gto') {
         const content = await file.arrayBuffer();
         await session.loadFromGTO(content);
+
+        // Sync UI controls that the settingsLoaded event handler does NOT cover (fix #160).
+        // GTO loading fires settingsLoaded which already syncs color, CDL, filter,
+        // transform, crop, lens, and noiseReduction controls. We only need to sync
+        // wipe/compare, stack, PAR, backgroundPattern, and watermark here.
+        const wipeState = viewer.getWipeState();
+        this.syncControlsFromState({
+          watermark: viewer.getWatermarkState(),
+          wipe: { mode: wipeState.mode, position: wipeState.position },
+          par: viewer.getPARState(),
+          backgroundPattern: viewer.getBackgroundPatternState(),
+        });
       } else if (ext === 'rvedl') {
         const text = await file.text();
         session.loadEDL(text);

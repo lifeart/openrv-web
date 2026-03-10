@@ -87,6 +87,11 @@ function createMockContext(): PersistenceManagerContext & {
       getChannelMode: vi.fn(() => 'rgb'),
       getStereoState: vi.fn(() => null),
       getNoiseReductionParams: vi.fn(() => null),
+      getFilterSettings: vi.fn(() => null),
+      getWipeState: vi.fn(() => ({ mode: 'off', position: 0.5, showOriginal: 'left' })),
+      getWatermarkState: vi.fn(() => null),
+      getPARState: vi.fn(() => null),
+      getBackgroundPatternState: vi.fn(() => null),
     } as any,
     paintEngine: {
       toJSON: vi.fn(() => ({ nextId: 1, show: true, frames: {} })),
@@ -113,6 +118,8 @@ function createMockContext(): PersistenceManagerContext & {
     watermarkControl: { setState: vi.fn() } as any,
     compareControl: { setWipeMode: vi.fn(), setWipePosition: vi.fn() } as any,
     stackControl: { setLayers: vi.fn(), clearLayers: vi.fn(), getLayers: vi.fn(() => []) } as any,
+    parControl: { setState: vi.fn() } as any,
+    backgroundPatternControl: { setState: vi.fn() } as any,
   };
 
   return {
@@ -545,6 +552,94 @@ describe('AppPersistenceManager', () => {
         expect.stringContaining('.xyz'),
         expect.objectContaining({ type: 'warning' }),
       );
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Issue #160: GTO load syncs controls
+  // -----------------------------------------------------------------------
+  describe('issue #160: GTO load syncs compare/stack controls', () => {
+    it('APM-160a: openProject .rv file syncs compare control from viewer wipe state', async () => {
+      (fullCtx.viewer as any).getWipeState.mockReturnValue({
+        mode: 'horizontal',
+        position: 0.3,
+        showOriginal: 'left',
+      });
+      const file = new File(['rv-data'], 'session.rv');
+
+      await manager.openProject(file);
+
+      expect(fullCtx.session.loadFromGTO).toHaveBeenCalled();
+      expect(fullCtx.compareControl!.setWipeMode).toHaveBeenCalledWith('horizontal');
+      expect(fullCtx.compareControl!.setWipePosition).toHaveBeenCalledWith(0.3);
+    });
+
+    it('APM-160b: openProject .gto file syncs compare control from viewer wipe state', async () => {
+      (fullCtx.viewer as any).getWipeState.mockReturnValue({
+        mode: 'vertical',
+        position: 0.7,
+        showOriginal: 'right',
+      });
+      const file = new File(['gto-data'], 'session.gto');
+
+      await manager.openProject(file);
+
+      expect(fullCtx.session.loadFromGTO).toHaveBeenCalled();
+      expect(fullCtx.compareControl!.setWipeMode).toHaveBeenCalledWith('vertical');
+      expect(fullCtx.compareControl!.setWipePosition).toHaveBeenCalledWith(0.7);
+    });
+
+    it('APM-160c: openProject .rv file does NOT re-sync color controls (handled by settingsLoaded)', async () => {
+      const mockColor = { exposure: 1.5, brightness: 0.2 };
+      (fullCtx.viewer as any).getColorAdjustments.mockReturnValue(mockColor);
+      const file = new File(['rv-data'], 'session.rv');
+
+      await manager.openProject(file);
+
+      // Color controls are synced by the settingsLoaded event handler, not by openProject
+      expect(fullCtx.colorControls.setAdjustments).not.toHaveBeenCalled();
+    });
+
+    it('APM-160d: openProject .gto file only syncs controls not covered by settingsLoaded', async () => {
+      const mockWatermark = { text: 'DRAFT' };
+      const mockPAR = { ratio: 2.0 };
+      const mockBgPattern = { type: 'checkerboard' };
+
+      (fullCtx.viewer as any).getWatermarkState.mockReturnValue(mockWatermark);
+      (fullCtx.viewer as any).getWipeState.mockReturnValue({ mode: 'horizontal', position: 0.4, showOriginal: 'left' });
+      (fullCtx.viewer as any).getPARState.mockReturnValue(mockPAR);
+      (fullCtx.viewer as any).getBackgroundPatternState.mockReturnValue(mockBgPattern);
+
+      const file = new File(['gto-data'], 'session.gto');
+      await manager.openProject(file);
+
+      // Controls synced by openProject (settingsLoaded does NOT handle these)
+      expect(fullCtx.watermarkControl!.setState).toHaveBeenCalledWith(mockWatermark);
+      expect(fullCtx.compareControl!.setWipeMode).toHaveBeenCalledWith('horizontal');
+      expect(fullCtx.compareControl!.setWipePosition).toHaveBeenCalledWith(0.4);
+      expect(fullCtx.parControl!.setState).toHaveBeenCalledWith(mockPAR);
+      expect(fullCtx.backgroundPatternControl!.setState).toHaveBeenCalledWith(mockBgPattern);
+
+      // Controls NOT synced by openProject (handled by settingsLoaded event)
+      expect(fullCtx.colorControls.setAdjustments).not.toHaveBeenCalled();
+      expect(fullCtx.cdlControl.setCDL).not.toHaveBeenCalled();
+      expect(fullCtx.filterControl.setSettings).not.toHaveBeenCalled();
+      expect(fullCtx.transformControl.setTransform).not.toHaveBeenCalled();
+      expect(fullCtx.cropControl.setState).not.toHaveBeenCalled();
+      expect(fullCtx.lensControl.setParams).not.toHaveBeenCalled();
+      expect(fullCtx.noiseReductionControl!.setParams).not.toHaveBeenCalled();
+    });
+
+    it('APM-160e: openProject .rv file works when compareControl is not provided', async () => {
+      const { _autoSaveManager: _a, _snapshotManager: _s, ...ctx } = fullCtx;
+      const minCtx = { ...ctx, compareControl: undefined, stackControl: undefined };
+      const minManager = new AppPersistenceManager(minCtx);
+
+      const file = new File(['rv-data'], 'session.rv');
+
+      // Should not throw even without compare/stack controls
+      await expect(minManager.openProject(file)).resolves.not.toThrow();
+      expect(fullCtx.session.loadFromGTO).toHaveBeenCalled();
     });
   });
 

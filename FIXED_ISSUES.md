@@ -1327,3 +1327,13 @@
 - **Regression Tests**: CPRF-159-001 through CPRF-159-010 (export with/without provider, import with/without provider, import non-object skipped, reset with/without provider, null provider removal, round-trip, imported event payload).
 - **Verification**: All 144 tests pass (99 PreferencesManager + 45 PluginSettingsStore), TypeScript clean.
 - **Files Changed**: `src/core/PreferencesManager.ts`, `src/plugin/PluginSettingsStore.ts`, `src/main.ts`, `src/core/PreferencesManager.test.ts`
+
+## Issue #160: `openProject()` only resyncs compare/stack UI for `.orvproject`, not for `.rv`/`.gto` loads
+
+- **Severity**: Medium
+- **Area**: Project/session open workflow / UI truthfulness
+- **Root Cause**: `openProject()` called `syncControlsFromState()` only in the `.orvproject` branch. The `.rv`/`.gto` branch called `session.loadFromGTO(content)` and returned without syncing compare/stack/wipe/PAR/background controls. The `settingsLoaded` event fired by GTO loading already syncs color, CDL, filter, transform, crop, lens, and noiseReduction — but NOT wipe, watermark, PAR, backgroundPattern, or stack.
+- **Fix**: After `session.loadFromGTO()` in the GTO branch, calls `syncControlsFromState()` with only the controls that `settingsLoaded` does NOT cover: wipe (from `viewer.getWipeState()`), watermark (`getWatermarkState()`), PAR (`getPARState()`), backgroundPattern (`getBackgroundPatternState()`), and stack (cleared via `clearLayers`). Does NOT double-apply color/CDL/filter/transform/crop/lens/noiseReduction that `settingsLoaded` already handles.
+- **Regression Tests**: APM-160a (wipe sync for .rv), APM-160b (wipe sync for .gto), APM-160c (color NOT re-synced — handled by settingsLoaded), APM-160d (comprehensive: only wipe/watermark/PAR/backgroundPattern synced, others NOT), APM-160e (graceful without optional controls).
+- **Verification**: All 56 AppPersistenceManager tests pass, TypeScript clean.
+- **Files Changed**: `src/AppPersistenceManager.ts`, `src/AppPersistenceManager.test.ts`
