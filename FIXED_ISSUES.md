@@ -352,9 +352,9 @@
 - **Area**: Plugin system, UI extension points
 - **Root Cause**: `registerUIPanel()` stored panels in the registry, but no production code called `getUIPanel()` or `getUIPanels()` — panels were invisible to users.
 - **Fix**: Added `uiPanelRegistered` signal for reactive discovery, `console.warn` on registration noting panels aren't yet displayed, and TODO(#15) documenting what's needed for layout integration. Existing API unchanged.
-- **Regression Tests**: PREG-047 (warning emitted on registration), PREG-048 (signal fires with correct pluginId and panel data).
-- **Verification**: All 51 PluginRegistry tests pass, TypeScript clean.
-- **Files Changed**: `src/plugin/PluginRegistry.ts`, `src/plugin/PluginRegistry.test.ts`
+- **TODO(#15) Resolved**: Plugin UI panels now appear in the app layout. `buildPanelToggles` returns `PanelTogglesResult` with `addPluginPanel()`/`removePluginPanel()` methods for dynamic toggle buttons with floating containers. `App.wirePluginPanels()` mounts existing panels on layout creation, subscribes to `uiPanelRegistered`/`uiPanelUnregistered` signals for dynamic add/remove. Added `uiPanelUnregistered` signal to `PluginRegistry`. Removed console.warn and TODO comments.
+- **Regression Tests**: PREG-047 (updated: no warn), PREG-049 (new: unregistered signal with destroy), 6 new buildPanelToggles tests for plugin panel helpers.
+- **Files Changed**: `src/plugin/PluginRegistry.ts`, `src/services/tabContent/buildPanelToggles.ts`, `src/services/tabContent/index.ts`, `src/AppControlRegistry.ts`, `src/App.ts`, and their test files
 
 ## Issue #18: Plugin exporters can be registered but the export flow never consults them
 
