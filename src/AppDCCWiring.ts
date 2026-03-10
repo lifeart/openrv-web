@@ -18,6 +18,7 @@ import type { Annotation } from './paint/types';
 import { Logger } from './utils/Logger';
 import { DisposableSubscriptionManager } from './utils/DisposableSubscriptionManager';
 import { basename } from './utils/path';
+import { showAlert } from './ui/components/shared/Modal';
 
 const log = new Logger('AppDCCWiring');
 
@@ -67,6 +68,8 @@ export interface DCCWiringDeps {
   paintEngine?: DCCWiringPaintEngine;
   /** Optional fetch implementation for loading LUT files (defaults to globalThis.fetch). */
   fetchFn?: typeof globalThis.fetch;
+  /** Optional alert function for surfacing errors to the user (defaults to showAlert). */
+  showAlertFn?: (message: string, options?: { type?: string; title?: string }) => void;
 }
 
 /** Mutable state owned by the DCC wiring (exposed for loop-protection tests). */
@@ -142,10 +145,29 @@ export function mapAnnotationType(annotation: Annotation): 'pen' | 'text' | 'sha
 export function wireDCCBridge(deps: DCCWiringDeps): DCCWiringState {
   const { dccBridge, session, viewer, colorControls, paintEngine } = deps;
   const fetchFn = deps.fetchFn ?? globalThis.fetch.bind(globalThis);
+  const alertFn = deps.showAlertFn ?? ((msg: string, opts?: { type?: string; title?: string }) =>
+    showAlert(msg, opts as any));
 
   const subs = new DisposableSubscriptionManager();
 
   const state: DCCWiringState = { suppressFrameSync: false, subscriptions: subs };
+
+  // Error event: surface DCC bridge errors to the user with throttling
+  const ERROR_THROTTLE_MS = 5_000;
+  let lastErrorAlertTime = 0;
+  subs.add(
+    dccBridge.on('error', (err: Error) => {
+      const now = Date.now();
+      if (now - lastErrorAlertTime >= ERROR_THROTTLE_MS) {
+        lastErrorAlertTime = now;
+        alertFn(`DCC connection error: ${err.message}`, {
+          type: 'warning',
+          title: 'DCC Bridge',
+        });
+      }
+      log.warn('DCC bridge error:', err.message);
+    }),
+  );
 
   // Inbound: syncFrame with loop protection
   subs.add(

@@ -325,6 +325,51 @@ describe('wirePlaybackControls', () => {
     expect(volumeControl.setScrubAudioAvailable).toHaveBeenLastCalledWith(false);
   });
 
+  // ---- Audio error surfacing (fix #189) ----
+
+  it('PW-004d: audioError event shows a warning alert to the user', () => {
+    showAlertSpy.mockClear();
+
+    session.emit('audioError', {
+      type: 'decode',
+      message: 'Failed to decode audio',
+    });
+
+    expect(showAlertSpy).toHaveBeenCalledTimes(1);
+    expect(showAlertSpy).toHaveBeenCalledWith('Audio playback error: Failed to decode audio', {
+      type: 'warning',
+      title: 'Audio Error',
+    });
+  });
+
+  it('PW-004e: audioError event surfaces autoplay errors', () => {
+    showAlertSpy.mockClear();
+
+    session.emit('audioError', {
+      type: 'autoplay',
+      message: 'Playback blocked by browser autoplay policy. Click to enable audio.',
+    });
+
+    expect(showAlertSpy).toHaveBeenCalledTimes(1);
+    expect(showAlertSpy).toHaveBeenCalledWith(
+      'Audio playback error: Playback blocked by browser autoplay policy. Click to enable audio.',
+      { type: 'warning', title: 'Audio Error' },
+    );
+  });
+
+  it('PW-004f: normal volume/mute operations do not trigger audio error alerts', () => {
+    showAlertSpy.mockClear();
+
+    const volumeControl = headerBar.getVolumeControl();
+    volumeControl.emit('volumeChanged', 0.5);
+    volumeControl.emit('mutedChanged', true);
+    volumeControl.emit('mutedChanged', false);
+    session.emit('volumeChanged', 0.8);
+    session.emit('mutedChanged', false);
+
+    expect(showAlertSpy).not.toHaveBeenCalled();
+  });
+
   it('PW-005: exportRequested calls viewer.exportFrame()', () => {
     const exportControl = headerBar.getExportControl();
     exportControl.emit('exportRequested', {

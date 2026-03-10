@@ -81,6 +81,8 @@ export class AppNetworkBridge {
   private ctx: NetworkBridgeContext;
   private unsubscribers: (() => void)[] = [];
   private pendingStateByTransferId = new Map<string, SessionURLState>();
+  private pendingAnnotationsByTransferId = new Map<string, unknown[] | undefined>();
+  private pendingNotesByTransferId = new Map<string, unknown[] | undefined>();
   private outgoingMediaTransfers = new Map<string, OutgoingMediaTransfer>();
   private incomingMediaTransfers = new Map<string, IncomingMediaTransfer>();
   private colorSyncThrottle: Throttled<[ColorSyncPayload]> | null = null;
@@ -275,8 +277,8 @@ export class AppNetworkBridge {
           const transferId = networkSyncManager.requestMediaSync(payload.senderUserId);
           if (transferId) {
             this.pendingStateByTransferId.set(transferId, decoded);
-            await this.applySharedSessionState(decoded);
-            this.applyReceivedAnnotationsAndNotes(payload.annotations, payload.notes);
+            this.pendingAnnotationsByTransferId.set(transferId, payload.annotations);
+            this.pendingNotesByTransferId.set(transferId, payload.notes);
             return;
           }
         }
@@ -328,11 +330,9 @@ export class AppNetworkBridge {
         networkSyncManager.sendMediaResponse(transferId, senderUserId, accepted);
 
         if (!accepted) {
-          const pendingState = this.pendingStateByTransferId.get(transferId);
-          if (pendingState) {
-            await this.applySharedSessionState(pendingState);
-            this.pendingStateByTransferId.delete(transferId);
-          }
+          this.pendingStateByTransferId.delete(transferId);
+          this.pendingAnnotationsByTransferId.delete(transferId);
+          this.pendingNotesByTransferId.delete(transferId);
           return;
         }
 
@@ -391,10 +391,17 @@ export class AppNetworkBridge {
       networkSyncManager.on('mediaSyncCompleted', async ({ transferId, senderUserId }) => {
         const transfer = this.incomingMediaTransfers.get(transferId);
         const pendingState = this.pendingStateByTransferId.get(transferId);
+        const pendingAnnotations = this.pendingAnnotationsByTransferId.get(transferId);
+        const pendingNotes = this.pendingNotesByTransferId.get(transferId);
 
         try {
           if (transfer && transfer.senderUserId === senderUserId) {
             await this.importIncomingMediaTransfer(transfer);
+          }
+
+          if (pendingState) {
+            await this.applySharedSessionState(pendingState);
+            this.applyReceivedAnnotationsAndNotes(pendingAnnotations, pendingNotes);
           }
         } catch (error) {
           networkControl.showError(
@@ -403,10 +410,8 @@ export class AppNetworkBridge {
         } finally {
           this.incomingMediaTransfers.delete(transferId);
           this.pendingStateByTransferId.delete(transferId);
-        }
-
-        if (pendingState) {
-          await this.applySharedSessionState(pendingState);
+          this.pendingAnnotationsByTransferId.delete(transferId);
+          this.pendingNotesByTransferId.delete(transferId);
         }
       }),
     );
@@ -840,7 +845,7 @@ export class AppNetworkBridge {
   }
 
   private shouldRequestMediaSync(state: SessionURLState): boolean {
-    return this.ctx.session.sourceCount === 0 && state.sourceIndex >= 0;
+    return state.sourceIndex >= 0;
   }
 
   private async confirmMediaSync(totalBytes: number, fileCount: number): Promise<boolean> {
@@ -1154,6 +1159,8 @@ export class AppNetworkBridge {
     this.viewSyncThrottle = null;
     this.ctx.viewer.setOnViewChanged(null);
     this.pendingStateByTransferId.clear();
+    this.pendingAnnotationsByTransferId.clear();
+    this.pendingNotesByTransferId.clear();
     this.outgoingMediaTransfers.clear();
     this.incomingMediaTransfers.clear();
   }

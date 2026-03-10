@@ -941,4 +941,83 @@ describe('AudioCoordinator', () => {
       expect(coordinator.isWebAudioActive).toBe(true);
     });
   });
+
+  // ======================================================================
+  // Error forwarding (fix #189)
+  // ======================================================================
+
+  describe('error forwarding', () => {
+    it('AC-110: AudioPlaybackManager error events are forwarded via onAudioError callback', async () => {
+      const onAudioError = vi.fn();
+      coordinator.setCallbacks({ onAudioPathChanged: vi.fn(), onAudioError });
+
+      // Trigger an error on the underlying manager
+      coordinator.manager.emit('error', {
+        type: 'decode',
+        message: 'Test decode error',
+      });
+
+      expect(onAudioError).toHaveBeenCalledTimes(1);
+      expect(onAudioError).toHaveBeenCalledWith({
+        type: 'decode',
+        message: 'Test decode error',
+      });
+    });
+
+    it('AC-111: error forwarding works without onAudioError callback (no crash)', () => {
+      coordinator.setCallbacks({ onAudioPathChanged: vi.fn() });
+
+      // Should not throw when onAudioError is not provided
+      expect(() => {
+        coordinator.manager.emit('error', {
+          type: 'unknown',
+          message: 'Some error',
+        });
+      }).not.toThrow();
+    });
+
+    it('AC-112: error forwarding is cleaned up after dispose', async () => {
+      const onAudioError = vi.fn();
+      coordinator.setCallbacks({ onAudioPathChanged: vi.fn(), onAudioError });
+
+      coordinator.dispose();
+
+      // After dispose, errors should not reach the callback
+      coordinator.manager.emit('error', {
+        type: 'network',
+        message: 'Post-dispose error',
+      });
+
+      expect(onAudioError).not.toHaveBeenCalled();
+    });
+
+    it('AC-113: normal audio operation does not trigger onAudioError', async () => {
+      const onAudioError = vi.fn();
+      coordinator.setCallbacks({ onAudioPathChanged: vi.fn(), onAudioError });
+
+      await loadWebAudio();
+      coordinator.onPlaybackStarted(1, 24, 1, 1);
+      coordinator.onFrameChanged(10, 24, true);
+      coordinator.onPlaybackStopped();
+
+      expect(onAudioError).not.toHaveBeenCalled();
+    });
+
+    it('AC-114: setCallbacks replaces error listener (no duplicate calls)', () => {
+      const onAudioError1 = vi.fn();
+      const onAudioError2 = vi.fn();
+
+      coordinator.setCallbacks({ onAudioPathChanged: vi.fn(), onAudioError: onAudioError1 });
+      coordinator.setCallbacks({ onAudioPathChanged: vi.fn(), onAudioError: onAudioError2 });
+
+      coordinator.manager.emit('error', {
+        type: 'autoplay',
+        message: 'Autoplay blocked',
+      });
+
+      // Only the second callback should be called (no duplicates)
+      expect(onAudioError1).not.toHaveBeenCalled();
+      expect(onAudioError2).toHaveBeenCalledTimes(1);
+    });
+  });
 });

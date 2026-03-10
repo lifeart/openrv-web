@@ -1587,3 +1587,42 @@
 - **Regression Tests**: DCCFIX-050 (video error sent), DCCFIX-051 (image error sent), DCCFIX-052 (success no error), DCCFIX-053/054 (error messages include file path).
 - **Verification**: All 22,664 tests pass, TypeScript clean.
 - **Files Changed**: `src/integrations/DCCBridge.ts`, `src/AppDCCWiring.ts`, `src/AppWiringFixes.test.ts`
+
+## Issue #188: DCC bridge connection and protocol errors have no app-level surface
+
+- **Severity**: Medium
+- **Area**: DCC integration / diagnostics
+- **Root Cause**: `DCCBridge` emitted `error` events for connection/parse/send/reconnect failures, but no production code subscribed to them.
+- **Fix**: Added `dccBridge.on('error')` subscription in `wireDCCBridge()` that shows throttled warning alerts (max one per 5 seconds to avoid spam). All errors logged regardless of throttle.
+- **Regression Tests**: DCCFIX-060 (error shows alert), DCCFIX-061 (alert contains message), DCCFIX-062 (throttle suppresses rapid duplicates), DCCFIX-063 (no alert after disposal).
+- **Verification**: All 22,668 tests pass, TypeScript clean.
+- **Files Changed**: `src/AppDCCWiring.ts`, `src/AppWiringFixes.test.ts`
+
+## Issue #186: Network session join only requests host media when the guest starts completely empty
+
+- **Severity**: Medium
+- **Area**: Collaboration / session transfer
+- **Root Cause**: `shouldRequestMediaSync()` returned `true` only when `session.sourceCount === 0`, so joining from a non-empty session mapped host state onto unrelated local media.
+- **Fix**: Removed the `sourceCount === 0` condition. Media sync is now always requested when the host has media, regardless of guest state.
+- **Regression Tests**: ANB-186a (media sync requested with existing sources), ANB-186b (shouldRequestMediaSync true regardless of sourceCount).
+- **Verification**: All 22,674 tests pass, TypeScript clean.
+
+## Issue #187: Network media-transfer decline or failure still applies the host's pending session state
+
+- **Severity**: Medium
+- **Area**: Collaboration / session transfer
+- **Root Cause**: Host session state was applied immediately on receipt, before media transfer completed. Declined or failed transfers left incompatible state applied.
+- **Fix**: Deferred state/annotation/note application until after media import succeeds. Decline path discards all pending state. Added pending maps with cleanup in `finally`.
+- **Regression Tests**: ANB-187a through ANB-187d — state not applied on decline, not applied on failure, applied on success, annotations/notes not applied on decline.
+- **Verification**: All 22,674 tests pass, TypeScript clean.
+- **Files Changed**: `src/AppNetworkBridge.ts`, `src/AppNetworkBridge.test.ts`
+
+## Issue #189: Audio playback setup errors are detected internally but never surfaced through the app
+
+- **Severity**: Medium
+- **Area**: Audio playback / diagnostics
+- **Root Cause**: `AudioPlaybackManager` emitted structured `error` events but no production code subscribed. `AudioCoordinator` didn't expose errors to callers.
+- **Fix**: Added `onAudioError` callback to `AudioCoordinator`. Wired through `SessionPlayback` → `Session` → `AppPlaybackWiring` to `showAlert()` with non-blocking warning. Proper lifecycle management.
+- **Regression Tests**: 8 tests — error forwarding, no-crash without callback, dispose cleanup, normal ops no errors, autoplay errors surfaced, alert content.
+- **Verification**: All 22,682 tests pass, TypeScript clean.
+- **Files Changed**: `src/audio/AudioCoordinator.ts`, `src/audio/AudioCoordinator.test.ts`, `src/core/session/SessionPlayback.ts`, `src/AppPlaybackWiring.ts`, `src/AppPlaybackWiring.test.ts`

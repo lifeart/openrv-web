@@ -29,6 +29,8 @@ export interface AudioCoordinatorCallbacks {
   onAudioPathChanged(): void;
   /** Scrub audio availability changed; host should update UI affordances. */
   onAudioScrubAvailabilityChanged?(available: boolean): void;
+  /** An audio playback error occurred; host should surface it to the user. */
+  onAudioError?(error: import('./AudioPlaybackManager').AudioPlaybackError): void;
 }
 
 export class AudioCoordinator implements ManagerBase {
@@ -73,7 +75,14 @@ export class AudioCoordinator implements ManagerBase {
 
   setCallbacks(callbacks: AudioCoordinatorCallbacks): void {
     this._callbacks = callbacks;
+    // Wire manager error events to the callback so they surface to the host
+    this._errorUnsub?.();
+    this._errorUnsub = this._manager.on('error', (error) => {
+      this._callbacks?.onAudioError?.(error);
+    });
   }
+
+  private _errorUnsub: (() => void) | null = null;
 
   // ---- Loading ----
 
@@ -261,6 +270,8 @@ export class AudioCoordinator implements ManagerBase {
   // ---- Cleanup ----
 
   dispose(): void {
+    this._errorUnsub?.();
+    this._errorUnsub = null;
     this._manager.dispose();
     this._callbacks = null;
   }

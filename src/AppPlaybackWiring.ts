@@ -185,6 +185,16 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
     }),
   );
 
+  // Surface audio playback errors as non-blocking warnings (fix #189)
+  subs.add(
+    session.on('audioError', (error) => {
+      showAlert(`Audio playback error: ${error.message}`, {
+        type: 'warning',
+        title: 'Audio Error',
+      });
+    }),
+  );
+
   const syncAudioScrubAvailability = () => {
     volumeControl.setScrubAudioAvailable(isAudioScrubAvailable(session.currentSource, session.audioPlaybackManager));
   };

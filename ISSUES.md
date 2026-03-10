@@ -1381,9 +1381,9 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Severity: Low
 - Area: Color / shortcut discoverability
 - Evidence:
-  - The OCIO button title says `Toggle OCIO color management panel (Shift+O)` in [src/ui/components/OCIOControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/OCIOControl.ts#L98).
-  - The real shared key binding for `panel.ocio` is plain `O`, not `Shift+O`, in [src/utils/input/KeyBindings.ts](/Users/lifeart/Repos/openrv-web/src/utils/input/KeyBindings.ts#L231).
-  - The action map wires that binding directly to `controls.ocioControl.toggle()` in [src/services/KeyboardActionMap.ts](/Users/lifeart/Repos/openrv-web/src/services/KeyboardActionMap.ts#L445).
+  - The OCIO button title says `Toggle OCIO color management panel (O)` in [src/ui/components/OCIOControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/OCIOControl.ts#L98).
+  - The real shared key binding for `panel.ocio` is `Shift+O`, not plain `O`, in [src/utils/input/KeyBindings.ts](/Users/lifeart/Repos/openrv-web/src/utils/input/KeyBindings.ts#L231) through [src/utils/input/KeyBindings.ts](/Users/lifeart/Repos/openrv-web/src/utils/input/KeyBindings.ts#L234).
+  - The docs also consistently teach `Shift+O`, so the drift is in the shipped button tooltip, not the written shortcut reference, in [docs/color/ocio.md](/Users/lifeart/Repos/openrv-web/docs/color/ocio.md#L17), [docs/getting-started/ui-overview.md](/Users/lifeart/Repos/openrv-web/docs/getting-started/ui-overview.md#L114), and [docs/reference/keyboard-shortcuts.md](/Users/lifeart/Repos/openrv-web/docs/reference/keyboard-shortcuts.md#L117).
 - Impact:
   - Users relying on the tooltip are taught the wrong shortcut for a high-traffic color-management panel.
   - That is another UI-to-keymap drift point in the app’s shortcut system.
@@ -4193,6 +4193,213 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Users looking for crash recovery, auto-checkpoints, or snapshot restore in the History panel will land in the wrong tool entirely.
   - That makes the recovery workflow docs materially misleading, because the described panel does not match the shipped runtime behavior.
+
+### 341. Network-sync docs promise participant avatars in the viewer, but presence only renders inside the connection panel
+
+- Severity: Medium
+- Area: Collaboration UI / documentation contract
+- Evidence:
+  - The network-sync docs say participants are visible "as avatar overlays in the viewer" and that presence avatars appear "in the top-right corner of the viewer" in [docs/advanced/network-sync.md](/Users/lifeart/Repos/openrv-web/docs/advanced/network-sync.md#L41) through [docs/advanced/network-sync.md](/Users/lifeart/Repos/openrv-web/docs/advanced/network-sync.md#L47).
+  - The shipped `NetworkControl` renders user avatars only inside `userListContainer` in the connection panel in [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L1273) through [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L1325).
+  - A production-code search finds no viewer-side presence overlay or avatar rendering path outside that panel list; the runtime matches are limited to `NetworkControl`'s panel DOM.
+- Impact:
+  - Users expecting live participant presence in the viewer itself will not get the on-image collaboration cue the docs describe.
+  - That makes collaborative review feel less visible than documented, especially when the network panel is closed during playback.
+
+### 342. Network-sync docs describe a dedicated conflict/warning header state that the shipped indicator cannot represent
+
+- Severity: Medium
+- Area: Collaboration status UI / documentation contract
+- Evidence:
+  - The network-sync guide says the header sync indicator shows a `Red warning` state for conflicts and manual intervention in [docs/advanced/network-sync.md](/Users/lifeart/Repos/openrv-web/docs/advanced/network-sync.md#L139) through [docs/advanced/network-sync.md](/Users/lifeart/Repos/openrv-web/docs/advanced/network-sync.md#L143).
+  - The runtime connection-state model only defines `disconnected`, `connecting`, `connected`, `reconnecting`, and `error` in [src/network/types.ts](/Users/lifeart/Repos/openrv-web/src/network/types.ts#L9).
+  - `NetworkControl.updateButtonStyle()` only renders three visual cases: connected, connecting/reconnecting, and everything else muted; there is no separate conflict/manual-intervention styling path in [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L1133) through [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L1148).
+  - Conflict detection currently lives in `SyncStateManager` logic only, with no UI consumer found in the production indicator path.
+- Impact:
+  - Users cannot rely on the header control to distinguish a sync conflict from ordinary disconnection/reconnection states the way the docs describe.
+  - That weakens trust in the collaboration status indicator during remote review, because one of the documented states is not actually expressible in the shipped UI.
+
+### 343. The stereo documentation disagrees with itself and with the shipped mode list
+
+- Severity: Medium
+- Area: Documentation / stereo workflow
+- Evidence:
+  - The practical stereo guide says users get "seven primary display modes," then "seven stereo display modes plus the default Off state," and later says the dropdown contains "all eight options" in [docs/advanced/stereo-3d.md](/Users/lifeart/Repos/openrv-web/docs/advanced/stereo-3d.md#L3), [docs/advanced/stereo-3d.md](/Users/lifeart/Repos/openrv-web/docs/advanced/stereo-3d.md#L11), and [docs/advanced/stereo-3d.md](/Users/lifeart/Repos/openrv-web/docs/advanced/stereo-3d.md#L55).
+  - The technical stereo guide instead says OpenRV Web supports "ten stereo display modes" and includes `left-only` and `right-only` in the cycle order in [docs/guides/stereo-3d-viewing.md](/Users/lifeart/Repos/openrv-web/docs/guides/stereo-3d-viewing.md#L9), [docs/guides/stereo-3d-viewing.md](/Users/lifeart/Repos/openrv-web/docs/guides/stereo-3d-viewing.md#L17), and [docs/guides/stereo-3d-viewing.md](/Users/lifeart/Repos/openrv-web/docs/guides/stereo-3d-viewing.md#L125).
+  - The shipped runtime exposes exactly ten total `StereoMode` values including `off`, with `left-only` and `right-only` present in both the core type and the actual dropdown order in [src/core/types/stereo.ts](/Users/lifeart/Repos/openrv-web/src/core/types/stereo.ts#L1) through [src/core/types/stereo.ts](/Users/lifeart/Repos/openrv-web/src/core/types/stereo.ts#L11) and [src/ui/components/StereoControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/StereoControl.ts#L19) through [src/ui/components/StereoControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/StereoControl.ts#L30).
+- Impact:
+  - Users cannot trust the stereo guides to tell them how many modes actually exist or which ones `Shift+3` will cycle through.
+  - That makes the stereo feature set look unstable even though the runtime behavior is deterministic.
+
+### 344. The stereo guides publish the wrong convergence-offset range for the shipped UI
+
+- Severity: Medium
+- Area: Documentation / stereo control contract
+- Evidence:
+  - The technical stereo guide says the convergence offset range is `-50 to +50` in [docs/guides/stereo-3d-viewing.md](/Users/lifeart/Repos/openrv-web/docs/guides/stereo-3d-viewing.md#L105).
+  - The practical stereo guide describes the control as an offset slider and uses example values, but the shipped slider is explicitly clamped to `-20` through `20` with `0.5` steps in [src/ui/components/StereoControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/StereoControl.ts#L213) through [src/ui/components/StereoControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/StereoControl.ts#L219).
+  - The same stereo control is the production entry point for mode/offset changes; there is no separate wider-range UI path in the shipped component.
+- Impact:
+  - Users following the docs can expect correction headroom that the actual control cannot provide.
+  - That is especially misleading for stereo review/calibration workflows where the numeric offset range matters.
+
+### 345. Multi-view EXR and alternate stereo-input workflows are documented as integrated, but production hardcodes side-by-side stereo
+
+- Severity: High
+- Area: Stereo media workflow / documentation contract
+- Evidence:
+  - The docs say multi-view EXR "integrates with the stereo viewing system" and can be displayed via stereo mode in [docs/playback/exr-layers.md](/Users/lifeart/Repos/openrv-web/docs/playback/exr-layers.md#L72) through [docs/playback/exr-layers.md](/Users/lifeart/Repos/openrv-web/docs/playback/exr-layers.md#L76), and say separate stereo input plus automatic multi-view stereo-pair mapping are supported in [docs/guides/stereo-3d-viewing.md](/Users/lifeart/Repos/openrv-web/docs/guides/stereo-3d-viewing.md#L79) through [docs/guides/stereo-3d-viewing.md](/Users/lifeart/Repos/openrv-web/docs/guides/stereo-3d-viewing.md#L97) and [docs/advanced/stereo-3d.md](/Users/lifeart/Repos/openrv-web/docs/advanced/stereo-3d.md#L163) through [docs/advanced/stereo-3d.md](/Users/lifeart/Repos/openrv-web/docs/advanced/stereo-3d.md#L171).
+  - The `MultiViewEXR` parser/helpers exist, but a production-code search finds no runtime consumer outside the format barrel export in [src/formats/index.ts](/Users/lifeart/Repos/openrv-web/src/formats/index.ts#L14) through [src/formats/index.ts](/Users/lifeart/Repos/openrv-web/src/formats/index.ts#L20).
+  - The shipped viewer stereo path applies `StereoManager.applyStereoMode(...)` / `applyStereoModeWithEyeTransforms(...)` without any input-format argument in [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L2112) through [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L2118), and `Viewer.getStereoPair()` explicitly hardcodes `'side-by-side'` in [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L3050) through [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L3058).
+  - `StereoManager` also calls the renderer helpers without supplying any alternate `StereoInputFormat`, so the default side-by-side path is used in [src/ui/components/StereoManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/StereoManager.ts#L132) through [src/ui/components/StereoManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/StereoManager.ts#L152).
+- Impact:
+  - Users are told to expect separate-input and multi-view stereo workflows that the shipped viewer does not actually wire end-to-end.
+  - That makes stereo EXR review look supported on paper while production behavior remains side-by-side-centric.
+
+### 346. The accessibility overview overclaims live announcements for frame navigation and tool selection
+
+- Severity: Medium
+- Area: Accessibility / documentation contract
+- Evidence:
+  - The UI overview says screen readers are notified for "playback start/stop, frame navigation, source loading, and tool selection" in [docs/getting-started/ui-overview.md](/Users/lifeart/Repos/openrv-web/docs/getting-started/ui-overview.md#L234) through [docs/getting-started/ui-overview.md](/Users/lifeart/Repos/openrv-web/docs/getting-started/ui-overview.md#L236).
+  - The production `AriaAnnouncer` wiring in `LayoutOrchestrator` only announces tab changes, file loads, playback start/pause, and playback speed changes in [src/services/LayoutOrchestrator.ts](/Users/lifeart/Repos/openrv-web/src/services/LayoutOrchestrator.ts#L388) through [src/services/LayoutOrchestrator.ts](/Users/lifeart/Repos/openrv-web/src/services/LayoutOrchestrator.ts#L435).
+  - `KeyboardActionMap` adds announcements for range-shift actions only, not ordinary frame stepping or generic tool selection, in [src/services/KeyboardActionMap.ts](/Users/lifeart/Repos/openrv-web/src/services/KeyboardActionMap.ts#L343) through [src/services/KeyboardActionMap.ts](/Users/lifeart/Repos/openrv-web/src/services/KeyboardActionMap.ts#L366).
+  - A source search for frame-announcement calls finds no production announcement path for normal frame stepping/seek events.
+- Impact:
+  - Assistive-technology users can rely on the docs for a level of navigation feedback that the shipped app does not consistently provide.
+  - That makes the accessibility overview materially overstate what is currently announced at runtime.
+
+### 347. The channel-isolation docs still advertise `Shift+L` as the normal luminance shortcut even though production routes that combo elsewhere
+
+- Severity: Medium
+- Area: Documentation / channel-isolation workflow
+- Evidence:
+  - The channel-isolation guide tells users luminance is on `Shift+L` or `Shift+Y`, and specifically instructs them to switch to luminance with `Shift+L`, in [docs/playback/channel-isolation.md](/Users/lifeart/Repos/openrv-web/docs/playback/channel-isolation.md#L18) and [docs/playback/channel-isolation.md](/Users/lifeart/Repos/openrv-web/docs/playback/channel-isolation.md#L63).
+  - The shortcut reference also lists `Shift+L` as `Luminance / Grayscale` and `Shift+Y` as its alias in [docs/reference/keyboard-shortcuts.md](/Users/lifeart/Repos/openrv-web/docs/reference/keyboard-shortcuts.md#L107) and [docs/reference/keyboard-shortcuts.md](/Users/lifeart/Repos/openrv-web/docs/reference/keyboard-shortcuts.md#L108).
+  - In the shipped keymap, `Shift+L` is a conflict between `channel.luminance` and `lut.togglePanel` in [src/utils/input/KeyBindings.ts](/Users/lifeart/Repos/openrv-web/src/utils/input/KeyBindings.ts#L418) through [src/utils/input/KeyBindings.ts](/Users/lifeart/Repos/openrv-web/src/utils/input/KeyBindings.ts#L428).
+  - `AppKeyboardHandler` explicitly treats `channel.luminance` as a conflicting default and does not register it like a normal direct shortcut, while `channel.grayscale` (`Shift+Y`) remains separately listed in the channel section in [src/AppKeyboardHandler.ts](/Users/lifeart/Repos/openrv-web/src/AppKeyboardHandler.ts#L48), [src/AppKeyboardHandler.ts](/Users/lifeart/Repos/openrv-web/src/AppKeyboardHandler.ts#L205) through [src/AppKeyboardHandler.ts](/Users/lifeart/Repos/openrv-web/src/AppKeyboardHandler.ts#L213), and [src/utils/input/KeyBindings.ts](/Users/lifeart/Repos/openrv-web/src/utils/input/KeyBindings.ts#L430) through [src/utils/input/KeyBindings.ts](/Users/lifeart/Repos/openrv-web/src/utils/input/KeyBindings.ts#L434).
+- Impact:
+  - Users following the docs can press `Shift+L` and land in LUT-panel behavior instead of luminance view, then conclude channel isolation is unreliable.
+  - The only robust documented shortcut here is effectively the alias, not the primary combo the docs emphasize.
+
+### 348. The shortcut docs still advertise `H` and `W` for histogram and waveform even though those defaults are hidden by conflicts
+
+- Severity: Medium
+- Area: Documentation / scopes workflow
+- Evidence:
+  - The shortcut reference lists `H` for histogram and `W` for waveform in [docs/reference/keyboard-shortcuts.md](/Users/lifeart/Repos/openrv-web/docs/reference/keyboard-shortcuts.md#L72) through [docs/reference/keyboard-shortcuts.md](/Users/lifeart/Repos/openrv-web/docs/reference/keyboard-shortcuts.md#L73).
+  - The getting-started UI overview repeats those same shortcuts for the panels in [docs/getting-started/ui-overview.md](/Users/lifeart/Repos/openrv-web/docs/getting-started/ui-overview.md#L203) through [docs/getting-started/ui-overview.md](/Users/lifeart/Repos/openrv-web/docs/getting-started/ui-overview.md#L204).
+  - In production, `AppKeyboardHandler` marks both `panel.histogram` and `panel.waveform` as conflicting defaults because `H` and `W` are taken by fit-to-height and fit-to-width behavior in [src/AppKeyboardHandler.ts](/Users/lifeart/Repos/openrv-web/src/AppKeyboardHandler.ts#L41) through [src/AppKeyboardHandler.ts](/Users/lifeart/Repos/openrv-web/src/AppKeyboardHandler.ts#L47).
+  - The scopes actions still exist in `KeyboardActionMap`, but the conflict handling means the docs are describing shortcuts that are not normally registered for direct use in [src/services/KeyboardActionMap.ts](/Users/lifeart/Repos/openrv-web/src/services/KeyboardActionMap.ts#L442) through [src/services/KeyboardActionMap.ts](/Users/lifeart/Repos/openrv-web/src/services/KeyboardActionMap.ts#L445).
+- Impact:
+  - Users can follow the official shortcut docs, press `H` or `W`, and get a different viewer action than the scopes panel they were promised.
+  - That keeps the scopes area looking broken even when the underlying panels themselves still work through buttons or custom bindings.
+
+### 349. The published shortcut reference assigns several key combos to different actions in the same table
+
+- Severity: Medium
+- Area: Documentation / keyboard reference integrity
+- Evidence:
+  - The shortcut reference lists `Shift+B` both for background pattern cycling and for blue-channel isolation in [docs/reference/keyboard-shortcuts.md](/Users/lifeart/Repos/openrv-web/docs/reference/keyboard-shortcuts.md#L38) and [docs/reference/keyboard-shortcuts.md](/Users/lifeart/Repos/openrv-web/docs/reference/keyboard-shortcuts.md#L105).
+  - The same reference lists `Shift+R` both for red-channel isolation and for rotate-left in [docs/reference/keyboard-shortcuts.md](/Users/lifeart/Repos/openrv-web/docs/reference/keyboard-shortcuts.md#L103) and [docs/reference/keyboard-shortcuts.md](/Users/lifeart/Repos/openrv-web/docs/reference/keyboard-shortcuts.md#L127).
+  - It also lists `Shift+N` both for resetting channel view and for opening network sync in [docs/reference/keyboard-shortcuts.md](/Users/lifeart/Repos/openrv-web/docs/reference/keyboard-shortcuts.md#L109) and [docs/reference/keyboard-shortcuts.md](/Users/lifeart/Repos/openrv-web/docs/reference/keyboard-shortcuts.md#L163).
+  - Those collisions match the production conflict list in `AppKeyboardHandler`, which explicitly notes `Shift+R`, `Shift+B`, and `Shift+N` are reserved by other actions in [src/AppKeyboardHandler.ts](/Users/lifeart/Repos/openrv-web/src/AppKeyboardHandler.ts#L43) through [src/AppKeyboardHandler.ts](/Users/lifeart/Repos/openrv-web/src/AppKeyboardHandler.ts#L45).
+- Impact:
+  - Users cannot treat the published shortcut table as a reliable source of truth because it contradicts itself before they even try the app.
+  - That also makes support/debugging harder, since two different official pages can both appear "correct" while describing the same key differently.
+
+### 350. Multiple docs still teach `Shift+R` / `Shift+B` / `Shift+N` channel shortcuts that production reserves for other actions
+
+- Severity: Medium
+- Area: Documentation / channel-isolation workflow
+- Evidence:
+  - The channel-isolation guide still tells users to use `Shift+R`, `Shift+B`, and `Shift+N` for red, blue, and reset in [docs/playback/channel-isolation.md](/Users/lifeart/Repos/openrv-web/docs/playback/channel-isolation.md#L13) through [docs/playback/channel-isolation.md](/Users/lifeart/Repos/openrv-web/docs/playback/channel-isolation.md#L17) and [docs/playback/channel-isolation.md](/Users/lifeart/Repos/openrv-web/docs/playback/channel-isolation.md#L71).
+  - Other docs repeat those same combos as if they are normal live shortcuts, including troubleshooting, EXR-layer review, and histogram guidance in [docs/reference/troubleshooting.md](/Users/lifeart/Repos/openrv-web/docs/reference/troubleshooting.md#L49), [docs/playback/exr-layers.md](/Users/lifeart/Repos/openrv-web/docs/playback/exr-layers.md#L102), and [docs/scopes/histogram.md](/Users/lifeart/Repos/openrv-web/docs/scopes/histogram.md#L66).
+  - In the shipped keyboard layer, those three channel actions are explicitly marked as conflicting defaults because `Shift+R`, `Shift+B`, and `Shift+N` are already taken by rotate-left, background-pattern cycling, and network sync in [src/AppKeyboardHandler.ts](/Users/lifeart/Repos/openrv-web/src/AppKeyboardHandler.ts#L43) through [src/AppKeyboardHandler.ts](/Users/lifeart/Repos/openrv-web/src/AppKeyboardHandler.ts#L45).
+  - The channel actions still exist in `KeyboardActionMap`, but the conflict handling means the docs are publishing shortcuts that are not the normal production path in [src/services/KeyboardActionMap.ts](/Users/lifeart/Repos/openrv-web/src/services/KeyboardActionMap.ts#L603) through [src/services/KeyboardActionMap.ts](/Users/lifeart/Repos/openrv-web/src/services/KeyboardActionMap.ts#L611).
+- Impact:
+  - Users following the docs for EXR QC, histogram analysis, or basic troubleshooting can keep pressing keys that are consumed by unrelated actions instead of changing channels.
+  - That turns several otherwise-valid workflows into false bug reports because the official docs are teaching shortcuts that production intentionally does not expose as defaults.
+
+### 351. The format-support reference overstates several partially supported formats as if they were fully usable
+
+- Severity: Medium
+- Area: Documentation / format support contract
+- Evidence:
+  - The quick format table presents `EXR` as supporting "multi-view stereo", `Float TIFF` as a supported HDR image format, and `MXF` as a supported video format in [docs/reference/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/reference/file-formats.md#L16), [docs/reference/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/reference/file-formats.md#L20), and [docs/reference/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/reference/file-formats.md#L59).
+  - The FAQ likewise lists `MXF` among supported video formats in [docs/reference/faq.md](/Users/lifeart/Repos/openrv-web/docs/reference/faq.md#L29).
+  - Production stereo wiring is still side-by-side-centric: `Viewer.getStereoPair()` hardcodes `'side-by-side'`, and the `MultiViewEXR` helpers have no production consumer outside barrel exports in [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L3050) through [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L3058) and [src/formats/index.ts](/Users/lifeart/Repos/openrv-web/src/formats/index.ts#L14) through [src/formats/index.ts](/Users/lifeart/Repos/openrv-web/src/formats/index.ts#L20).
+  - The deeper technical guide already admits MXF is metadata-only with "No pixel decode" in [docs/guides/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/guides/file-formats.md#L262) through [docs/guides/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/guides/file-formats.md#L269) and [docs/guides/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/guides/file-formats.md#L418).
+  - Existing decoder/runtime behavior also narrows the practical support envelope further than the top-level table suggests:
+    - valid float TIFF layouts are rejected outside the decoder’s narrow accepted channel/compression cases
+    - EXR multi-view stereo is parsed but not wired to real stereo playback
+    - MXF registration does not mean usable frame decode
+- Impact:
+  - Users reading the top-level support table can assume they can review MXF media or multi-view stereo EXRs end-to-end when the shipped app only provides partial or metadata-level behavior.
+  - That makes the support matrix look more complete than the runtime actually is, which is costly when teams plan media handoff formats around it.
+
+### 352. The overlays guide relies on a non-existent `Overlays` submenu and a non-existent `Clear All Overlays` action
+
+- Severity: Medium
+- Area: Documentation / overlay controls
+- Evidence:
+  - The overlays guide tells users to toggle overlays from the `Overlays menu`, says the EXR window overlay is enabled from the `Overlays menu`, and claims all overlays live under an `Overlays` submenu in the View tab with a master `Clear All Overlays` option in [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L20), [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L86), and [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L211) through [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L215).
+  - A production-code search finds no `Overlays` menu/submenu and no `Clear All Overlays` implementation.
+  - The shipped overlay entry points are scattered as individual buttons and controls instead, such as EXR window, info strip, spotlight, and FPS indicator toggles in the View tab and watermark in Effects, as shown in [src/services/tabContent/buildViewTab.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildViewTab.ts#L375) through [src/services/tabContent/buildViewTab.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildViewTab.ts#L440) and [src/services/tabContent/buildEffectsTab.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildEffectsTab.ts#L53) through [src/services/tabContent/buildEffectsTab.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildEffectsTab.ts#L66).
+- Impact:
+  - Users following the overlays guide can waste time looking for a centralized menu and bulk-clear action that do not exist in the shipped app.
+  - That also obscures the real control layout, because the actual overlay toggles are distributed across separate toolbar buttons and panels.
+
+### 353. The overlays guide says EXR window overlay auto-activates on mismatched windows, but production only loads the bounds and leaves it disabled
+
+- Severity: Medium
+- Area: Documentation / EXR overlay behavior
+- Evidence:
+  - The overlays guide says the EXR window overlay "activates automatically when an EXR file with mismatched data/display windows is detected" in [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L86).
+  - The runtime default state is still `enabled: false`, and visibility only changes through `toggle()`, `enable()`, or direct state updates in [src/ui/components/EXRWindowOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/EXRWindowOverlay.ts#L44) through [src/ui/components/EXRWindowOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/EXRWindowOverlay.ts#L53) and [src/ui/components/EXRWindowOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/EXRWindowOverlay.ts#L140) through [src/ui/components/EXRWindowOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/EXRWindowOverlay.ts#L158).
+  - On source load, production only calls `setWindows(...)` or `clearWindows()` and never enables the overlay in [src/handlers/sourceLoadedHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/sourceLoadedHandlers.ts#L273) through [src/handlers/sourceLoadedHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/sourceLoadedHandlers.ts#L283).
+- Impact:
+  - Users can load an EXR with mismatched windows and see no overlay until they manually toggle it, even though the docs present that case as automatic.
+  - That makes EXR overscan/data-window review look broken when the actual problem is a bad documentation contract.
+
+### 354. The overlays guide documents a viewer note overlay, but production `NoteOverlay` is only a timeline note-bar helper
+
+- Severity: Medium
+- Area: Documentation / notes UI
+- Evidence:
+  - The overlays guide describes a bottom-of-viewer note panel with frame text, authors, stacked notes, and navigation arrows in [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L171) through [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L182).
+  - The shipped `NoteOverlay` implementation explicitly "draws colored bars on the timeline canvas for notes" and contains only timeline draw logic, not viewer-overlay text UI, in [src/ui/components/NoteOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NoteOverlay.ts#L1) through [src/ui/components/NoteOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NoteOverlay.ts#L104).
+  - App bootstrap wires that object into the timeline, not the viewer, in [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L171) through [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L177).
+  - `OverlayManager` enumerates the actual viewer overlays and does not include any viewer note overlay in [src/ui/components/OverlayManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/OverlayManager.ts#L10) through [src/ui/components/OverlayManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/OverlayManager.ts#L32) and [src/ui/components/OverlayManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/OverlayManager.ts#L45) through [src/ui/components/OverlayManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/OverlayManager.ts#L63).
+- Impact:
+  - Users looking for a live viewer note overlay will not find the panel, arrows, or automatic current-frame note text that the docs describe.
+  - The only shipped "note overlay" is a compact timeline mark, so the documentation currently promises a different UI than the app provides.
+
+### 355. The overlays guide documents a tiled text watermark system, but the shipped watermark is only a single positioned image overlay
+
+- Severity: Medium
+- Area: Documentation / watermark workflow
+- Evidence:
+  - The overlays guide says the watermark overlay tiles "a text string or image across the entire frame" and exposes text, rotation, and color controls in [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L130) through [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L146).
+  - The shipped `WatermarkOverlay` is defined as a "Static image overlay" whose state only contains image URL, position, scale, opacity, and margin in [src/ui/components/WatermarkOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/WatermarkOverlay.ts#L1) through [src/ui/components/WatermarkOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/WatermarkOverlay.ts#L31).
+  - Rendering is a single `drawImage(...)` call at one calculated position, not a tiled text/image pattern, in [src/ui/components/WatermarkOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/WatermarkOverlay.ts#L199) through [src/ui/components/WatermarkOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/WatermarkOverlay.ts#L215).
+  - The shipped `WatermarkControl` only exposes image upload/removal plus position, scale, opacity, and margin controls in [src/ui/components/WatermarkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/WatermarkControl.ts#L1) through [src/ui/components/WatermarkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/WatermarkControl.ts#L8) and [src/ui/components/WatermarkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/WatermarkControl.ts#L89) through [src/ui/components/WatermarkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/WatermarkControl.ts#L140).
+- Impact:
+  - Users expecting confidential tiled text watermarks or recipient-name overlays from the shipped UI will not be able to create them.
+  - The current documentation describes a substantially broader watermark feature than the runtime actually implements.
+
+### 356. The overlays guide's `Perspective Grid` section describes composition guides, but production splits those features between Safe Areas and a perspective-correction mesh
+
+- Severity: Medium
+- Area: Documentation / overlay feature model
+- Evidence:
+  - The overlays guide describes a configurable `Perspective Grid` with rule-of-thirds, golden-ratio, custom-grid, and crosshair modes plus color/line-width/diagonal options in [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L150) through [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L167).
+  - The shipped `PerspectiveGridOverlay` is actually a perspective-correction mesh with four draggable corner handles, a fixed 8x8 subdivision count, and fixed colors in [src/ui/components/PerspectiveGridOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PerspectiveGridOverlay.ts#L1) through [src/ui/components/PerspectiveGridOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PerspectiveGridOverlay.ts#L13) and [src/ui/components/PerspectiveGridOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PerspectiveGridOverlay.ts#L78) through [src/ui/components/PerspectiveGridOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PerspectiveGridOverlay.ts#L104).
+  - The composition-guide pieces the docs mention are instead attached to `SafeAreasOverlay`, which implements rule-of-thirds, center crosshair, aspect-ratio guides, and configurable color/opacity in [src/ui/components/SafeAreasOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SafeAreasOverlay.ts#L1) through [src/ui/components/SafeAreasOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SafeAreasOverlay.ts#L29), [src/ui/components/SafeAreasOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SafeAreasOverlay.ts#L151) through [src/ui/components/SafeAreasOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SafeAreasOverlay.ts#L201), and [src/ui/components/SafeAreasOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SafeAreasOverlay.ts#L307) through [src/ui/components/SafeAreasOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SafeAreasOverlay.ts#L380).
+  - There is no production evidence for the documented golden-ratio, arbitrary row/column grid, diagonal-line, or line-width options.
+- Impact:
+  - Users are taught to look for one configurable perspective-grid feature, but the shipped app splits part of that into Safe Areas and omits the rest entirely.
+  - That makes both the composition-guide workflow and the perspective-correction workflow harder to discover because the docs collapse them into a feature model the UI does not match.
 
 ## Validation Notes
 

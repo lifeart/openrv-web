@@ -570,6 +570,7 @@ export class SessionPlayback extends EventEmitter<SessionPlaybackEvents> {
     this._audioCoordinator.setCallbacks({
       onAudioPathChanged: () => this.applyVolumeToVideo(),
       onAudioScrubAvailabilityChanged: (available) => this.emit('audioScrubAvailabilityChanged', available),
+      onAudioError: (error) => this.emit('audioError', error),
     });
   }
 

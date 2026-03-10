@@ -67,6 +67,10 @@ class MockNetworkSyncManager extends EventEmitter {
   leaveRoom = vi.fn();
   setSyncSettings = vi.fn();
   requestMediaSync = vi.fn(() => '');
+  sendMediaResponse = vi.fn();
+  sendMediaOffer = vi.fn();
+  sendMediaChunk = vi.fn();
+  sendMediaComplete = vi.fn();
   roomInfo = null;
   isHost = false;
   userId = 'test-user-id';
@@ -1922,6 +1926,284 @@ describe('AppNetworkBridge', () => {
       // The loadSourceFromUrl should NOT be called by the bridge directly
       // because the callback path is used (the callback is responsible for loading)
       expect(loadSourceFromUrl).not.toHaveBeenCalled();
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Issue #186 & #187 regressions
+  // -----------------------------------------------------------------------
+  describe('media sync join flow (#186 / #187)', () => {
+    it('ANB-186a: media sync is requested even when guest has existing sources', async () => {
+      ctx._session.sourceCount = 2; // guest already has media
+      ctx._networkSyncManager.requestMediaSync.mockReturnValue('transfer-1');
+
+      bridge.setup();
+
+      const state = encodeSessionState({
+        frame: 5,
+        fps: 24,
+        sourceIndex: 1,
+      });
+
+      ctx._networkSyncManager.emit('sessionStateReceived', {
+        sessionState: state,
+        senderUserId: 'host-user',
+      });
+
+      await new Promise((r) => setTimeout(r, 10));
+
+      expect(ctx._networkSyncManager.requestMediaSync).toHaveBeenCalledWith('host-user');
+    });
+
+    it('ANB-187a: host state is NOT applied when media transfer is declined', async () => {
+      ctx._session.sourceCount = 0;
+      ctx._networkSyncManager.requestMediaSync.mockReturnValue('transfer-decline');
+
+      bridge.setup();
+
+      const state = encodeSessionState({
+        frame: 42,
+        fps: 30,
+        sourceIndex: 0,
+      });
+
+      ctx._networkSyncManager.emit('sessionStateReceived', {
+        sessionState: state,
+        senderUserId: 'host-user',
+      });
+
+      await new Promise((r) => setTimeout(r, 10));
+
+      // State should NOT have been applied yet (deferred until media transfer completes)
+      expect(ctx._session.goToFrame).not.toHaveBeenCalled();
+
+      // Simulate the offer arriving and guest declining
+      ctx._networkSyncManager.emit('mediaSyncOffered', {
+        transferId: 'transfer-decline',
+        senderUserId: 'host-user',
+        totalBytes: 1000,
+        files: [{ id: 'f1', name: 'test.exr', type: 'image/x-exr', size: 1000, lastModified: 1 }],
+        sources: [{ kind: 'image', fileIds: ['f1'], fps: 24 }],
+      });
+
+      // The confirm dialog — mock showConfirm to decline
+      const showConfirmModule = await import('./ui/components/shared/Modal');
+      vi.spyOn(showConfirmModule, 'showConfirm').mockResolvedValue(false);
+
+      // Re-emit after the mock is in place
+      ctx._session.goToFrame.mockClear();
+      ctx._networkSyncManager.emit('mediaSyncOffered', {
+        transferId: 'transfer-decline',
+        senderUserId: 'host-user',
+        totalBytes: 1000,
+        files: [{ id: 'f1', name: 'test.exr', type: 'image/x-exr', size: 1000, lastModified: 1 }],
+        sources: [{ kind: 'image', fileIds: ['f1'], fps: 24 }],
+      });
+
+      await new Promise((r) => setTimeout(r, 50));
+
+      // State should NOT be applied after decline
+      expect(ctx._session.goToFrame).not.toHaveBeenCalled();
+    });
+
+    it('ANB-187b: host state is NOT applied when media import fails', async () => {
+      ctx._session.sourceCount = 0;
+      ctx._networkSyncManager.requestMediaSync.mockReturnValue('transfer-fail');
+
+      bridge.setup();
+
+      const state = encodeSessionState({
+        frame: 99,
+        fps: 24,
+        sourceIndex: 0,
+      });
+
+      ctx._networkSyncManager.emit('sessionStateReceived', {
+        sessionState: state,
+        senderUserId: 'host-user',
+      });
+
+      await new Promise((r) => setTimeout(r, 10));
+
+      // State should NOT have been applied yet
+      expect(ctx._session.goToFrame).not.toHaveBeenCalled();
+
+      // Simulate mediaSyncCompleted with an incomplete transfer that will throw
+      // (no files set up, so importIncomingMediaTransfer will fail)
+      const incompleteFiles = new Map();
+      incompleteFiles.set('f1', {
+        descriptor: { id: 'f1', name: 'test.exr', type: 'image/x-exr', size: 100, lastModified: 1 },
+        chunks: new Map(),
+        totalChunks: 1, // expects 1 chunk but none provided → will throw
+      });
+
+      // Manually set up the incoming transfer map via the bridge's private field
+      (bridge as any).incomingMediaTransfers.set('transfer-fail', {
+        senderUserId: 'host-user',
+        files: incompleteFiles,
+        sources: [{ kind: 'image', fileIds: ['f1'], fps: 24 }],
+        totalBytes: 100,
+      });
+
+      ctx._networkSyncManager.emit('mediaSyncCompleted', {
+        transferId: 'transfer-fail',
+        senderUserId: 'host-user',
+      });
+
+      await new Promise((r) => setTimeout(r, 50));
+
+      // State should NOT be applied after import failure
+      expect(ctx._session.goToFrame).not.toHaveBeenCalled();
+      // Error should be shown
+      expect(ctx._networkControl.showError).toHaveBeenCalled();
+    });
+
+    it('ANB-187c: successful media transfer applies pending state', async () => {
+      ctx._session.sourceCount = 0;
+      ctx._networkSyncManager.requestMediaSync.mockReturnValue('transfer-ok');
+
+      const loadFile = vi.fn().mockResolvedValue(undefined);
+      (ctx._session as any).loadFile = loadFile;
+
+      bridge.setup();
+
+      const state = encodeSessionState({
+        frame: 15,
+        fps: 24,
+        sourceIndex: 0,
+      });
+
+      ctx._networkSyncManager.emit('sessionStateReceived', {
+        sessionState: state,
+        senderUserId: 'host-user',
+      });
+
+      await new Promise((r) => setTimeout(r, 10));
+
+      // State should NOT have been applied yet
+      expect(ctx._session.goToFrame).not.toHaveBeenCalled();
+
+      // Build a valid transfer with proper chunk data
+      const testData = new Uint8Array([1, 2, 3, 4]);
+      let binary = '';
+      for (let i = 0; i < testData.length; i++) {
+        binary += String.fromCharCode(testData[i]!);
+      }
+      const base64Data = btoa(binary);
+
+      const validFiles = new Map();
+      validFiles.set('f1', {
+        descriptor: { id: 'f1', name: 'test.exr', type: 'image/x-exr', size: 4, lastModified: 1 },
+        chunks: new Map([[0, base64Data]]),
+        totalChunks: 1,
+      });
+
+      (bridge as any).incomingMediaTransfers.set('transfer-ok', {
+        senderUserId: 'host-user',
+        files: validFiles,
+        sources: [{ kind: 'image', fileIds: ['f1'], fps: 24 }],
+        totalBytes: 4,
+      });
+
+      ctx._networkSyncManager.emit('mediaSyncCompleted', {
+        transferId: 'transfer-ok',
+        senderUserId: 'host-user',
+      });
+
+      await vi.waitFor(() => {
+        expect(loadFile).toHaveBeenCalled();
+      });
+
+      // State should be applied after successful import
+      await vi.waitFor(() => {
+        expect(ctx._session.goToFrame).toHaveBeenCalledWith(15);
+      });
+    });
+
+    it('ANB-186b: shouldRequestMediaSync returns true regardless of guest sourceCount', async () => {
+      // Access the private method for direct verification
+      const bridge2 = new AppNetworkBridge({
+        session: ctx.session,
+        viewer: ctx.viewer,
+        paintEngine: ctx.paintEngine,
+        colorControls: ctx.colorControls,
+        networkSyncManager: ctx.networkSyncManager,
+        networkControl: ctx.networkControl,
+        headerBar: ctx.headerBar,
+      });
+
+      // With sourceCount = 0 and sourceIndex >= 0
+      ctx._session.sourceCount = 0;
+      expect((bridge2 as any).shouldRequestMediaSync({ sourceIndex: 0 })).toBe(true);
+
+      // With sourceCount > 0 and sourceIndex >= 0
+      ctx._session.sourceCount = 3;
+      expect((bridge2 as any).shouldRequestMediaSync({ sourceIndex: 1 })).toBe(true);
+
+      // With sourceIndex < 0 (host has no media)
+      expect((bridge2 as any).shouldRequestMediaSync({ sourceIndex: -1 })).toBe(false);
+    });
+
+    it('ANB-187d: pending annotations and notes are not applied on decline', async () => {
+      ctx._session.sourceCount = 0;
+      ctx._networkSyncManager.requestMediaSync.mockReturnValue('transfer-ann');
+      const loadSpy = vi.spyOn(ctx._paintEngine, 'loadFromAnnotations');
+
+      bridge.setup();
+
+      const state = encodeSessionState({ frame: 1, fps: 24, sourceIndex: 0 });
+
+      const annotations = [
+        {
+          type: 'pen',
+          id: 'a1',
+          frame: 1,
+          user: 'host',
+          color: [1, 0, 0, 1],
+          width: 2,
+          brush: 0,
+          points: [{ x: 0.5, y: 0.5 }],
+          join: 3,
+          cap: 2,
+          splat: false,
+          mode: 0,
+          startFrame: 1,
+          duration: 0,
+        },
+      ];
+
+      ctx._networkSyncManager.emit('sessionStateReceived', {
+        sessionState: state,
+        senderUserId: 'host-user',
+        annotations,
+        notes: [{ id: 'n1', frame: 1, text: 'test', status: 'open', color: 'yellow' }],
+      });
+
+      await new Promise((r) => setTimeout(r, 10));
+
+      // Annotations should not have been applied yet
+      expect(loadSpy).not.toHaveBeenCalled();
+
+      // Decline - directly set pendingState for the transfer then call decline path
+      // Simulate decline via mediaSyncOffered
+      const showConfirmModule = await import('./ui/components/shared/Modal');
+      vi.spyOn(showConfirmModule, 'showConfirm').mockResolvedValue(false);
+
+      ctx._networkSyncManager.emit('mediaSyncOffered', {
+        transferId: 'transfer-ann',
+        senderUserId: 'host-user',
+        totalBytes: 100,
+        files: [{ id: 'f1', name: 'test.exr', type: 'image/x-exr', size: 100, lastModified: 1 }],
+        sources: [{ kind: 'image', fileIds: ['f1'], fps: 24 }],
+      });
+
+      await new Promise((r) => setTimeout(r, 50));
+
+      // Annotations and notes should NOT have been applied after decline
+      expect(loadSpy).not.toHaveBeenCalled();
+      expect(ctx._session.noteManager.toSerializable()).toEqual([]);
+
+      loadSpy.mockRestore();
     });
   });
 });

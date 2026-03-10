@@ -595,6 +595,72 @@ describe('DCCBridge loadMedia error reporting', () => {
 });
 
 // ---------------------------------------------------------------------------
+// DCCBridge error event surfacing tests (Issue #188)
+// ---------------------------------------------------------------------------
+
+describe('DCCBridge error event user alert', () => {
+  it('DCCFIX-060: DCC error event shows user alert', () => {
+    const { deps, dccBridge } = createDCCDeps();
+    const mockAlert = vi.fn();
+    deps.showAlertFn = mockAlert;
+
+    wireDCCBridge(deps);
+
+    dccBridge.emit('error', new Error('Connection refused'));
+
+    expect(mockAlert).toHaveBeenCalledTimes(1);
+    expect(mockAlert).toHaveBeenCalledWith(
+      expect.stringContaining('DCC connection error'),
+      expect.objectContaining({ type: 'warning', title: 'DCC Bridge' }),
+    );
+  });
+
+  it('DCCFIX-061: alert contains the error message', () => {
+    const { deps, dccBridge } = createDCCDeps();
+    const mockAlert = vi.fn();
+    deps.showAlertFn = mockAlert;
+
+    wireDCCBridge(deps);
+
+    dccBridge.emit('error', new Error('WebSocket error for ws://localhost:45124'));
+
+    expect(mockAlert).toHaveBeenCalledWith(
+      expect.stringContaining('WebSocket error for ws://localhost:45124'),
+      expect.any(Object),
+    );
+  });
+
+  it('DCCFIX-062: repeated errors within throttle window are suppressed', () => {
+    const { deps, dccBridge } = createDCCDeps();
+    const mockAlert = vi.fn();
+    deps.showAlertFn = mockAlert;
+
+    wireDCCBridge(deps);
+
+    // Emit multiple errors rapidly
+    dccBridge.emit('error', new Error('error 1'));
+    dccBridge.emit('error', new Error('error 2'));
+    dccBridge.emit('error', new Error('error 3'));
+
+    // Only the first should trigger an alert due to throttling
+    expect(mockAlert).toHaveBeenCalledTimes(1);
+  });
+
+  it('DCCFIX-063: error alert not fired after dispose', () => {
+    const { deps, dccBridge } = createDCCDeps();
+    const mockAlert = vi.fn();
+    deps.showAlertFn = mockAlert;
+
+    const state = wireDCCBridge(deps);
+    state.subscriptions.dispose();
+
+    dccBridge.emit('error', new Error('late error'));
+
+    expect(mockAlert).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // ContextualKeyboardManager instantiation and usage tests
 // ---------------------------------------------------------------------------
 
