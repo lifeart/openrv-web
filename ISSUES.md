@@ -1558,19 +1558,18 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Users can spend time configuring shipped effects and save a project that silently loses them on reload.
   - Because these omissions are not even included in the serializer’s warning list, the save flow gives a false sense that the current Effects-tab state is project-safe.
 
-### 131. Loading ordinary media after a GTO/RV session does not clear the old session metadata or uncrop side-state
+### 131. Loading ordinary media after a GTO/RV session can leave the header showing stale session metadata because `clearData()` never emits `metadataChanged`
 
 - Severity: High
 - Area: Session reset / media loading / export correctness
 - Evidence:
   - All normal media-loading paths call `clearGraphData()` before loading new files or procedural sources in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L272), [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L316), [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L348), [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L363), and [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L481).
-  - But `SessionGraph.clearData()` only nulls `_graph`, `_gtoData`, and `_graphParseResult`; it does not reset `_metadata`, `_uncropState`, or `_edlEntries` in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L199).
-  - Header/session identity comes directly from that persistent metadata object, and the header display listens to `metadataChanged` from the session in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L152) and [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1486).
-  - RV export also still consumes `session.metadata` and `session.uncropState` after ordinary media loads in [src/core/session/SessionGTOExporter.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGTOExporter.ts#L1462) and [src/core/session/SessionGTOExporter.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGTOExporter.ts#L492).
-  - The normal `sourceLoaded` handling updates crop dimensions but does not reset uncrop state in [src/handlers/sourceLoadedHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/sourceLoadedHandlers.ts#L169).
+  - `SessionGraph.clearData()` now does reset `_metadata`, `_uncropState`, and `_edlEntries`, but it does so silently without emitting `metadataChanged` in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L205) through [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L220).
+  - The header name display updates from `session.metadata` only when it receives `metadataChanged` in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L595) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L606) and [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1518).
+  - There is no compensating `metadataChanged` emission from the normal media-load path; the emitted events there are `sourceLoaded` and related media events, as shown in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L340), [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L373), and [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L711).
 - Impact:
-  - After opening a plain image/video following an imported RV/GTO session, the app can continue showing the old session name/comment/origin in the header instead of reflecting the new media context.
-  - The previous uncrop state can also leak into later RV exports or remain active in effect state even though the user has already moved on to unrelated media.
+  - After opening plain media following an imported RV/GTO session, the running session metadata may be cleared internally while the header still shows the old session name/comment.
+  - That leaves the app UI out of sync with the actual session state at the exact moment users expect a clean context switch.
 
 ### 132. Project save/load preserves wipe mode but not the actual A/B compare assignment state
 

@@ -883,9 +883,9 @@
 ## Issue #102: Cache indicator's `Clear` action only clears video cache while still presenting effects-cache stats
 
 - **Severity**: Medium
-- **Fix**: Changed clear button label from "Clear" to "Clear Video Cache" to accurately describe its scope. Added TODO(#102) for adding effects cache clearing.
-- **Regression Tests**: 1 test.
-- **Files Changed**: `src/ui/components/CacheIndicator.ts`, `src/ui/components/issues-p1.test.ts`
+- **Fix**: Changed clear button label from "Clear" to "Clear Video Cache". Added a separate "Clear Effects Cache" button that calls `viewer.clearPrerenderCache()` to clear the prerender/effects cache. Added `clearPrerenderCache()` public method to `Viewer` delegating to `PrerenderBufferManager.clear()`. Added `effectsClearRequested` event to `CacheIndicatorEvents`. The effects clear button is shown/hidden based on whether the effects cache has content (`stats.cacheSize > 0`).
+- **Regression Tests**: CACHE-U120 through CACHE-U125 (effects clear button exists, hidden when no viewer, shown when effects cached, calls clearPrerenderCache on click, emits effectsClearRequested event, hidden when cache empty). Updated issues-p1 #102 tests (video clear label, effects clear label, click handler).
+- **Files Changed**: `src/ui/components/CacheIndicator.ts`, `src/ui/components/Viewer.ts`, `src/ui/components/CacheIndicator.test.ts`, `src/ui/components/issues-p1.test.ts`
 
 ## Issue #103: Right-panel media info can go stale after the panel is hidden and shown again
 
@@ -918,8 +918,8 @@
 ## Issue #107: Snapshot panel promises a Preview action, but the shipped UI only shows preview metadata
 
 - **Severity**: Medium
-- **Fix**: Updated docs to remove "Preview" from action list. Added TODO(#107).
-- **Regression Tests**: SNAP-107a (no Preview button in action row).
+- **Fix**: Added Preview button (eye icon) to each snapshot entry's action row, placed before Restore. Clicking Preview fetches the full `SessionState` via `snapshotManager.getSnapshot(id)` and displays a read-only detail view showing media sources, playback state (frame, in/out, FPS, loop), color adjustments (only non-default values), annotation count, and view state (zoom, pan). A "Back" button returns to the list view. Added `previewRequested` event to `SnapshotPanelEvents`. Handles missing snapshot data gracefully with `console.warn`.
+- **Regression Tests**: SNAP-107a (Preview button exists), SNAP-107b (emits previewRequested event), SNAP-107c (calls getSnapshot with correct id), SNAP-107d (detail view renders state info), SNAP-107e (Back button returns to list), SNAP-107f (handles null state gracefully). 6 tests.
 - **Files Changed**: `src/ui/components/SnapshotPanel.ts`, `src/ui/components/SnapshotPanel.test.ts`
 
 ## Issue #108: Playlist panel claims EDL import/export support, but the shipped UI only exposes export
@@ -1107,16 +1107,16 @@
 ## Issue #134: `.orvproject` serializes media representations, but project load never rebuilds or reselects them
 
 - **Severity**: Medium
-- **Fix**: Added TODO(#134) + `console.info` in `SessionSerializer.fromJSON()` documenting that representations and activeRepresentationId are saved but never restored on load.
-- **Regression Tests**: 1 test.
-- **Files Changed**: `src/core/session/SessionSerializer.ts`
+- **Fix**: Implemented representation restoration in `SessionSerializer.fromJSON()`. Added index tracking (`mediaIndexMap`) to map serialized media references to loaded source indices. After media loading, iterates over successfully loaded sources and calls `session.addRepresentationToSource()` for each serialized representation, then `session.switchRepresentation()` to reselect the previously active representation. Handles failed media loads (skipped), missing representations (no-op), and failed switches (warning added). Removed the TODO(#134) comment and `console.info`.
+- **Regression Tests**: SER-REP-001 (updated: no spurious console.info), SER-REP-002 (representations restored and active switched), SER-REP-003 (skipped for failed loads), SER-REP-004 (warning on failed switch), SER-REP-005 (no-op for media without representations), SER-REP-006 (representations added but no switch when no activeRepresentationId). 6 tests.
+- **Files Changed**: `src/core/session/SessionSerializer.ts`, `src/core/session/SessionSerializer.test.ts`
 
 ## Issue #135: RV/GTO round-trips collapse duration markers into point markers
 
 - **Severity**: Medium
-- **Fix**: Added TODO(#135) in `SessionGTOExporter.ts` documenting that `endFrame` is not exported. Added `console.info` on export when duration markers exist.
-- **Regression Tests**: 1 test.
-- **Files Changed**: `src/core/session/SessionGTOExporter.ts`
+- **Fix**: Implemented `endFrame` export/import for duration markers. Added `markerEndFrames` parallel int array to the GTO export (using `-1` sentinel for point markers) in both `buildSessionObject` and `updateSessionObject`. Added `markerEndFrames` parsing in `GTOGraphLoader` with graceful handling of legacy files without the field. Extended `MarkerManager.setFromFrameNumbers()` with optional `endFrames` parameter. Wired through `SessionGraph.loadFromGTO()`. Removed the TODO(#135) comment and `console.info` warning.
+- **Regression Tests**: GTO-MRK-U005 through U009 (export markerEndFrames, -1 sentinel for point markers, no console.info warning, updateGTOData path), GTO-MRK-U010/U011 (import markerEndFrames, legacy file handling), MKR-038 through MKR-040 (setFromFrameNumbers with endFrames, partial array, without endFrames). 11 tests.
+- **Files Changed**: `src/core/session/SessionGTOExporter.ts`, `src/core/session/GTOGraphLoader.ts`, `src/core/session/MarkerManager.ts`, `src/core/session/SessionGraph.ts`, `src/core/session/SessionGTOExporter.test.ts`, `src/core/session/GTOGraphLoader.test.ts`, `src/core/session/MarkerManager.test.ts`
 
 ## Issue #136: Omitted viewer states can leak from the previous session on project load
 
@@ -1214,9 +1214,9 @@
 
 - **Severity**: High
 - **Root Cause**: When `texImage2D(VideoFrame)` fails, the renderer falls through to a typed-array path that produces a blank frame for HDR VideoFrame-only images.
-- **Fix**: Added `console.warn` when VideoFrame upload fails, clearly stating the frame will appear blank. Added TODO(#148) for implementing SDR fallback.
-- **Regression Tests**: 1 test.
-- **Files Changed**: `src/render/Renderer.ts`
+- **Fix**: Implemented SDR fallback via `_extractSDRFromVideoFrame()` helper that draws the VideoFrame to an `OffscreenCanvas` (browser-native HDR→SDR tone-mapping), reads back RGBA pixels via `getImageData()`, and replaces the IPImage's data using the new `overrideData()` method on `IPImage`. On fallback success: clears HDR metadata (`transferFunction`, `colorPrimaries`), nulls `image.texture` so the typed-array path creates a fresh texture, and logs a warning. On fallback failure (e.g., `OffscreenCanvas` unavailable): logs that the frame will appear blank. Added `overrideData(data, dataType, channels)` `@internal` method to `IPImage` for safe mutation of readonly fields with cache invalidation.
+- **Regression Tests**: REN-VF-148 (SDR fallback works: data overridden, metadata cleared, VideoFrame released), REN-VF-148-B (blank frame when SDR extraction also fails), REN-VF-148-C (_extractSDRFromVideoFrame returns pixel data), REN-VF-148-D (_extractSDRFromVideoFrame returns null when OffscreenCanvas unavailable). 4 tests.
+- **Files Changed**: `src/render/Renderer.ts`, `src/core/image/Image.ts`, `src/render/Renderer.test.ts`
 
 ## Issue #149: Share links serialize `sourceUrl` but never use it, so a clean recipient cannot reconstruct the shared media
 

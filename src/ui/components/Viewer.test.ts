@@ -1787,13 +1787,13 @@ describe('Viewer', () => {
       const t = testable(viewer);
       // Enable HDR capabilities so the guard passes
       t.capabilities = { displayHDR: true };
-      t.pendingRender = false;
 
       // Mock queryHDRHeadroom to resolve with a non-default value
       mockedQueryHDRHeadroom.mockResolvedValue(3.5);
 
       const setHDRHeadroomSpy = vi.fn();
       t.glRendererManager.setHDRHeadroom = setHDRHeadroomSpy;
+      const scheduleRenderSpy = vi.spyOn(t, 'scheduleRender' as never);
 
       t.syncHDRHeadroomFromSystem();
 
@@ -1802,20 +1802,20 @@ describe('Viewer', () => {
         expect(setHDRHeadroomSpy).toHaveBeenCalledWith(3.5);
       });
 
-      expect(t.pendingRender).toBe(true);
+      expect(scheduleRenderSpy).toHaveBeenCalled();
       expect(t.lastSystemHDRHeadroom).toBe(3.5);
     });
 
     it('VWR-HDRHROOM-002: does NOT scheduleRender when headroom is the same as last known value', async () => {
       const t = testable(viewer);
       t.capabilities = { displayHDR: true };
-      t.pendingRender = false;
       t.lastSystemHDRHeadroom = 2.5;
 
       mockedQueryHDRHeadroom.mockResolvedValue(2.5);
 
       const setHDRHeadroomSpy = vi.fn();
       t.glRendererManager.setHDRHeadroom = setHDRHeadroomSpy;
+      const scheduleRenderSpy = vi.spyOn(t, 'scheduleRender' as never);
 
       t.syncHDRHeadroomFromSystem();
 
@@ -1823,58 +1823,58 @@ describe('Viewer', () => {
       await new Promise((r) => setTimeout(r, 10));
 
       expect(setHDRHeadroomSpy).not.toHaveBeenCalled();
-      expect(t.pendingRender).toBe(false);
+      expect(scheduleRenderSpy).not.toHaveBeenCalled();
     });
 
     it('VWR-HDRHROOM-003: does NOT scheduleRender when headroom query returns null', async () => {
       const t = testable(viewer);
       t.capabilities = { displayHDR: true };
-      t.pendingRender = false;
 
       mockedQueryHDRHeadroom.mockResolvedValue(null);
 
       const setHDRHeadroomSpy = vi.fn();
       t.glRendererManager.setHDRHeadroom = setHDRHeadroomSpy;
+      const scheduleRenderSpy = vi.spyOn(t, 'scheduleRender' as never);
 
       t.syncHDRHeadroomFromSystem();
 
       await new Promise((r) => setTimeout(r, 10));
 
       expect(setHDRHeadroomSpy).not.toHaveBeenCalled();
-      expect(t.pendingRender).toBe(false);
+      expect(scheduleRenderSpy).not.toHaveBeenCalled();
     });
 
     it('VWR-HDRHROOM-004: does NOT scheduleRender when displayHDR capability is missing', async () => {
       const t = testable(viewer);
       t.capabilities = undefined;
-      t.pendingRender = false;
 
       mockedQueryHDRHeadroom.mockResolvedValue(3.0);
+      const scheduleRenderSpy = vi.spyOn(t, 'scheduleRender' as never);
 
       t.syncHDRHeadroomFromSystem();
 
       await new Promise((r) => setTimeout(r, 10));
 
       expect(mockedQueryHDRHeadroom).not.toHaveBeenCalled();
-      expect(t.pendingRender).toBe(false);
+      expect(scheduleRenderSpy).not.toHaveBeenCalled();
     });
 
     it('VWR-HDRHROOM-005: does NOT scheduleRender when headroom query rejects', async () => {
       const t = testable(viewer);
       t.capabilities = { displayHDR: true };
-      t.pendingRender = false;
 
       mockedQueryHDRHeadroom.mockRejectedValue(new Error('Permission denied'));
 
       const setHDRHeadroomSpy = vi.fn();
       t.glRendererManager.setHDRHeadroom = setHDRHeadroomSpy;
+      const scheduleRenderSpy = vi.spyOn(t, 'scheduleRender' as never);
 
       t.syncHDRHeadroomFromSystem();
 
       await new Promise((r) => setTimeout(r, 10));
 
       expect(setHDRHeadroomSpy).not.toHaveBeenCalled();
-      expect(t.pendingRender).toBe(false);
+      expect(scheduleRenderSpy).not.toHaveBeenCalled();
     });
 
     it('VWR-HDRHROOM-006: updates lastSystemHDRHeadroom and schedules render on changed headroom', async () => {
@@ -1884,6 +1884,7 @@ describe('Viewer', () => {
 
       const setHDRHeadroomSpy = vi.fn();
       t.glRendererManager.setHDRHeadroom = setHDRHeadroomSpy;
+      const scheduleRenderSpy = vi.spyOn(t, 'scheduleRender' as never);
 
       // First call with 2.0
       mockedQueryHDRHeadroom.mockResolvedValue(2.0);
@@ -1892,16 +1893,17 @@ describe('Viewer', () => {
         expect(setHDRHeadroomSpy).toHaveBeenCalledWith(2.0);
       });
       expect(t.lastSystemHDRHeadroom).toBe(2.0);
+      expect(scheduleRenderSpy).toHaveBeenCalledTimes(1);
 
-      t.pendingRender = false;
       setHDRHeadroomSpy.mockClear();
+      scheduleRenderSpy.mockClear();
 
       // Second call with same value - should not trigger
       mockedQueryHDRHeadroom.mockResolvedValue(2.0);
       t.syncHDRHeadroomFromSystem();
       await new Promise((r) => setTimeout(r, 10));
       expect(setHDRHeadroomSpy).not.toHaveBeenCalled();
-      expect(t.pendingRender).toBe(false);
+      expect(scheduleRenderSpy).not.toHaveBeenCalled();
 
       // Third call with new value - should trigger
       mockedQueryHDRHeadroom.mockResolvedValue(4.0);
@@ -1909,7 +1911,7 @@ describe('Viewer', () => {
       await vi.waitFor(() => {
         expect(setHDRHeadroomSpy).toHaveBeenCalledWith(4.0);
       });
-      expect(t.pendingRender).toBe(true);
+      expect(scheduleRenderSpy).toHaveBeenCalledTimes(1);
       expect(t.lastSystemHDRHeadroom).toBe(4.0);
     });
   });
