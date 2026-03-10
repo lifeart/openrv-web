@@ -746,9 +746,27 @@ describe('TIFFFloatDecoder', () => {
       await expect(decodeTIFFFloat(buffer)).rejects.toThrow(/exceed maximum/);
     });
 
-    it('should throw for PackBits compression', async () => {
-      const buffer = createTestFloatTIFF({ compression: 32773, sampleFormat: 3 }); // PackBits
-      await expect(decodeTIFFFloat(buffer)).rejects.toThrow('Unsupported TIFF compression: 32773');
+    it('should decode PackBits compression with trivial literal encoding', async () => {
+      // createTestFloatTIFF with compression=32773 sets the tag but writes raw data.
+      // The decoder's PackBits decompressor handles literal-run encoding,
+      // so we need to use the compressed TIFF helper with actual PackBits data.
+      // This simple test just verifies the tag is accepted (no longer throws).
+      const width = 2,
+        height = 2,
+        channels = 3;
+      const rawBytes = createFloatPixelBytes(width, height, channels, true);
+      const compressed = packBitsCompress(rawBytes);
+      const tiffBuffer = createCompressedTIFF(compressed, {
+        width,
+        height,
+        channels,
+        compression: 32773,
+        uncompressedSize: rawBytes.length,
+      });
+      const result = await decodeTIFFFloat(tiffBuffer);
+      expect(result.width).toBe(width);
+      expect(result.height).toBe(height);
+      expect(result.channels).toBe(4);
     });
 
     it('should include metadata with bigEndian and originalChannels', async () => {
@@ -973,6 +991,54 @@ describe('TIFFFloatDecoder', () => {
 
     writeCode(EOI_CODE);
     flush();
+
+    return new Uint8Array(output);
+  }
+
+  /**
+   * Minimal PackBits compressor for TIFF (simple RLE).
+   * Uses a simple strategy: emit literal runs of up to 128 bytes.
+   * This produces valid PackBits output (no repeat runs for simplicity).
+   */
+  function packBitsCompress(input: Uint8Array): Uint8Array {
+    const output: number[] = [];
+    let pos = 0;
+
+    while (pos < input.length) {
+      // Check for a run of repeated bytes (at least 3)
+      let runLen = 1;
+      while (pos + runLen < input.length && runLen < 128 && input[pos + runLen] === input[pos]) {
+        runLen++;
+      }
+
+      if (runLen >= 3) {
+        // Repeated run: header byte = -(runLen - 1), then the repeated byte
+        output.push(256 - (runLen - 1)); // Two's complement for signed byte
+        output.push(input[pos]!);
+        pos += runLen;
+      } else {
+        // Literal run: collect up to 128 non-repeating bytes
+        const litStart = pos;
+        let litLen = 0;
+        while (pos + litLen < input.length && litLen < 128) {
+          // Check if next bytes form a run of 3+
+          if (
+            pos + litLen + 2 < input.length &&
+            input[pos + litLen] === input[pos + litLen + 1] &&
+            input[pos + litLen] === input[pos + litLen + 2]
+          ) {
+            break; // Stop literal, let repeat-run handle it
+          }
+          litLen++;
+        }
+        if (litLen === 0) litLen = 1; // Ensure progress
+        output.push(litLen - 1); // Header byte for literal run
+        for (let i = 0; i < litLen; i++) {
+          output.push(input[litStart + i]!);
+        }
+        pos += litLen;
+      }
+    }
 
     return new Uint8Array(output);
   }
@@ -1797,17 +1863,154 @@ describe('TIFFFloatDecoder', () => {
     });
   });
 
+  // ==================== PackBits Compression Tests ====================
+
+  describe('PackBits compression', () => {
+    it('TIFF-PB001: should decode PackBits compressed RGB float TIFF', async () => {
+      const width = 2,
+        height = 2,
+        channels = 3;
+      const rawBytes = createFloatPixelBytes(width, height, channels, true);
+      const compressed = packBitsCompress(rawBytes);
+      const tiffBuffer = createCompressedTIFF(compressed, {
+        width,
+        height,
+        channels,
+        compression: 32773,
+        uncompressedSize: rawBytes.length,
+      });
+
+      const result = await decodeTIFFFloat(tiffBuffer);
+
+      expect(result.width).toBe(width);
+      expect(result.height).toBe(height);
+      expect(result.channels).toBe(4);
+      expect(result.data.length).toBe(width * height * 4);
+      expect(result.metadata.compression).toBe(32773);
+    });
+
+    it('TIFF-PB002: should decode PackBits compressed RGBA float TIFF', async () => {
+      const width = 2,
+        height = 2,
+        channels = 4;
+      const rawBytes = createFloatPixelBytes(width, height, channels, true);
+      const compressed = packBitsCompress(rawBytes);
+      const tiffBuffer = createCompressedTIFF(compressed, {
+        width,
+        height,
+        channels,
+        compression: 32773,
+        uncompressedSize: rawBytes.length,
+      });
+
+      const result = await decodeTIFFFloat(tiffBuffer);
+
+      expect(result.width).toBe(width);
+      expect(result.height).toBe(height);
+      expect(result.channels).toBe(4);
+    });
+
+    it('TIFF-PB003: should preserve pixel values through PackBits round-trip', async () => {
+      const width = 2,
+        height = 2,
+        channels = 3;
+      const pixelValues = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.0, 0.5];
+      const rawBytes = createFloatPixelBytes(width, height, channels, true, pixelValues);
+      const compressed = packBitsCompress(rawBytes);
+      const tiffBuffer = createCompressedTIFF(compressed, {
+        width,
+        height,
+        channels,
+        compression: 32773,
+        uncompressedSize: rawBytes.length,
+      });
+
+      const result = await decodeTIFFFloat(tiffBuffer);
+
+      // Check first pixel RGB values
+      expect(result.data[0]).toBeCloseTo(0.1, 4);
+      expect(result.data[1]).toBeCloseTo(0.2, 4);
+      expect(result.data[2]).toBeCloseTo(0.3, 4);
+      expect(result.data[3]).toBe(1.0); // Alpha for RGB input
+    });
+
+    it('TIFF-PB004: should decode PackBits data with repeated byte runs', async () => {
+      const width = 4,
+        height = 1,
+        channels = 3;
+      // All zeros — will produce repeated-byte runs in PackBits
+      const pixelValues = new Array(width * channels).fill(0);
+      const rawBytes = createFloatPixelBytes(width, height, channels, true, pixelValues);
+      const compressed = packBitsCompress(rawBytes);
+      const tiffBuffer = createCompressedTIFF(compressed, {
+        width,
+        height,
+        channels,
+        compression: 32773,
+        uncompressedSize: rawBytes.length,
+      });
+
+      const result = await decodeTIFFFloat(tiffBuffer);
+
+      expect(result.width).toBe(width);
+      expect(result.height).toBe(height);
+      // All pixel values should be 0 (RGB) with alpha=1
+      for (let i = 0; i < width; i++) {
+        expect(result.data[i * 4]).toBeCloseTo(0, 4);
+        expect(result.data[i * 4 + 1]).toBeCloseTo(0, 4);
+        expect(result.data[i * 4 + 2]).toBeCloseTo(0, 4);
+        expect(result.data[i * 4 + 3]).toBe(1.0);
+      }
+    });
+
+    it('TIFF-PB005: should produce same output as LZW for identical input', async () => {
+      const width = 2,
+        height = 2,
+        channels = 3;
+      const rawBytes = createFloatPixelBytes(width, height, channels, true);
+
+      const packBitsCompressed = packBitsCompress(rawBytes);
+      const packBitsTiff = createCompressedTIFF(packBitsCompressed, {
+        width,
+        height,
+        channels,
+        compression: 32773,
+        uncompressedSize: rawBytes.length,
+      });
+
+      const lzwCompressed = lzwCompress(rawBytes);
+      const lzwTiff = createCompressedTIFF(lzwCompressed, {
+        width,
+        height,
+        channels,
+        compression: 5,
+        uncompressedSize: rawBytes.length,
+      });
+
+      const packBitsResult = await decodeTIFFFloat(packBitsTiff);
+      const lzwResult = await decodeTIFFFloat(lzwTiff);
+
+      for (let i = 0; i < packBitsResult.data.length; i++) {
+        expect(packBitsResult.data[i]).toBe(lzwResult.data[i]);
+      }
+    });
+  });
+
   // ==================== Compression Error Handling Tests ====================
 
   describe('Compression error handling', () => {
-    it('TIFF-ERR001: should reject JPEG compression (7)', async () => {
+    it('TIFF-ERR001: should reject JPEG compression (7) with descriptive error', async () => {
       const buffer = createTestFloatTIFF({ compression: 7 });
-      await expect(decodeTIFFFloat(buffer)).rejects.toThrow('Unsupported TIFF compression: 7');
+      await expect(decodeTIFFFloat(buffer)).rejects.toThrow(
+        'Unsupported TIFF compression: 7 (JPEG). Supported modes: Uncompressed (1), LZW (5), Deflate (8, 32946), PackBits (32773).',
+      );
     });
 
-    it('TIFF-ERR002: should reject PackBits compression (32773)', async () => {
-      const buffer = createTestFloatTIFF({ compression: 32773 });
-      await expect(decodeTIFFFloat(buffer)).rejects.toThrow('Unsupported TIFF compression: 32773');
+    it('TIFF-ERR002: should reject unknown compression with code and supported list', async () => {
+      const buffer = createTestFloatTIFF({ compression: 99 });
+      await expect(decodeTIFFFloat(buffer)).rejects.toThrow(
+        'Unsupported TIFF compression: 99 (unknown). Supported modes: Uncompressed (1), LZW (5), Deflate (8, 32946), PackBits (32773).',
+      );
     });
 
     it('TIFF-ERR003: should reject unsupported predictor', async () => {

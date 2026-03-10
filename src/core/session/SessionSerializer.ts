@@ -27,6 +27,7 @@ import { DEFAULT_PAINT_EFFECTS } from '../../paint/types';
 import { showFileReloadPrompt } from '../../ui/components/shared/Modal';
 import type { MediaCacheManager } from '../../cache/MediaCacheManager';
 import { serializeRepresentation } from '../types/representation';
+import type { AddRepresentationConfig } from '../types/representation';
 import { DEFAULT_TONE_MAPPING_STATE } from '../types/effects';
 import { DEFAULT_GAMUT_MAPPING_STATE } from '../types/effects';
 import { DEFAULT_STEREO_STATE } from '../types/stereo';
@@ -446,9 +447,13 @@ export class SessionSerializer {
     // Clear existing media before loading new project to replace the session (fix #121).
     session.clearSources();
 
-    // Load media (track successes)
+    // Load media (track successes and map media ref index → source index)
     let loadedMedia = 0;
-    for (const ref of migrated.media) {
+    let nextSourceIndex = 0;
+    const mediaIndexMap = new Map<number, number>();
+
+    for (let refIndex = 0; refIndex < migrated.media.length; refIndex++) {
+      const ref = migrated.media[refIndex]!;
       try {
         // Handle files that require user to reload (originally blob URLs)
         if (ref.requiresReload) {
@@ -461,6 +466,7 @@ export class SessionSerializer {
                   type: ref.type === 'video' ? 'video/mp4' : 'image/png',
                 });
                 await session.loadFile(cachedFile);
+                mediaIndexMap.set(refIndex, nextSourceIndex++);
                 loadedMedia++;
                 continue;
               }
@@ -479,6 +485,7 @@ export class SessionSerializer {
             // User provided a file - load it
             try {
               await session.loadFile(file);
+              mediaIndexMap.set(refIndex, nextSourceIndex++);
               loadedMedia++;
             } catch (_loadErr) {
               warnings.push(`Failed to reload: ${ref.name}`);
@@ -502,9 +509,11 @@ export class SessionSerializer {
 
         if (ref.type === 'image') {
           await session.loadImage(ref.name, ref.path);
+          mediaIndexMap.set(refIndex, nextSourceIndex++);
           loadedMedia++;
         } else if (ref.type === 'video') {
           await session.loadVideo(ref.name, ref.path);
+          mediaIndexMap.set(refIndex, nextSourceIndex++);
           loadedMedia++;
         } else if (ref.type === 'sequence') {
           // Sequences require file selection - emit warning
@@ -515,14 +524,44 @@ export class SessionSerializer {
       }
     }
 
-    // TODO(#134): Media representations and activeRepresentationId are serialized
-    // in toJSON() but never restored here. On project load, representations are
-    // lost and the active representation is not reselected. This needs a
-    // representation rebuild + reselect pass after media loading completes.
-    console.info(
-      '[SessionSerializer] Media representations are saved but not restored on load. ' +
-        'Active representation selection will be lost.',
-    );
+    // Restore media representations (fix #134)
+    for (let refIndex = 0; refIndex < migrated.media.length; refIndex++) {
+      const ref = migrated.media[refIndex]!;
+      const sourceIndex = mediaIndexMap.get(refIndex);
+      if (sourceIndex === undefined) continue;
+      if (!ref.representations || ref.representations.length === 0) continue;
+
+      for (const serializedRep of ref.representations) {
+        const config: AddRepresentationConfig = {
+          id: serializedRep.id,
+          label: serializedRep.label,
+          kind: serializedRep.kind,
+          priority: serializedRep.priority,
+          resolution: serializedRep.resolution,
+          par: serializedRep.par,
+          audioTrackPresent: serializedRep.audioTrackPresent,
+          startFrame: serializedRep.startFrame,
+          colorSpace: serializedRep.colorSpace,
+          loaderConfig: serializedRep.loaderConfig,
+        };
+        session.addRepresentationToSource(sourceIndex, config);
+      }
+
+      if (ref.activeRepresentationId) {
+        try {
+          const switched = await session.switchRepresentation(sourceIndex, ref.activeRepresentationId);
+          if (!switched) {
+            warnings.push(
+              `Failed to restore active representation "${ref.activeRepresentationId}" for "${ref.name}"`,
+            );
+          }
+        } catch (_err) {
+          warnings.push(
+            `Failed to restore active representation "${ref.activeRepresentationId}" for "${ref.name}"`,
+          );
+        }
+      }
+    }
 
     // Restore playback state regardless of media count (fix #124).
     // Playback settings (loop mode, volume, etc.) are valid even without media.

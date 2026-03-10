@@ -1946,3 +1946,13 @@
 - **Regression Tests**: 4 new tests — 16-bit half-float decode with pixel verification, 64-bit double decode with pixel verification, `isFloatTIFF` for 16-bit and 64-bit. 1 updated test — unsupported bit depth (24) error message quality.
 - **Verification**: All 86 TIFFFloatDecoder tests pass, TypeScript clean.
 - **Files Changed**: `src/formats/TIFFFloatDecoder.ts`, `src/formats/TIFFFloatDecoder.test.ts`
+
+## Issue #222: Float TIFF decoding rejects common TIFF compression modes outside uncompressed, LZW, and Deflate
+
+- **Severity**: Medium
+- **Area**: Format support / TIFF decoding
+- **Root Cause**: The decoder whitelisted only compression codes 1 (uncompressed), 5 (LZW), 8 (Deflate), and 32946 (Adobe Deflate). PackBits (32773), a very common TIFF compression, threw a hard error with a vague message.
+- **Fix**: (A) Added full PackBits (32773) RLE decompression per TIFF 6.0 spec — literal runs (0..127), repeat runs (-127..-1), nop (-128), with output padding for truncated data. Wired into both strip and tiled decode paths. (B) Added `COMPRESSION_NAMES` lookup table for human-readable error messages. (C) Improved error messages to include the compression code, human-readable name, and full list of supported modes. (D) Added `console.warn` before throwing for unsupported compression.
+- **Regression Tests**: 5 new PackBits tests (RGB decode, RGBA decode, pixel value preservation, repeated-byte runs, cross-validation vs LZW). 2 updated tests (JPEG error message quality, unknown compression code 99).
+- **Verification**: All 91 TIFFFloatDecoder tests pass, TypeScript clean.
+- **Files Changed**: `src/formats/TIFFFloatDecoder.ts`, `src/formats/TIFFFloatDecoder.test.ts`

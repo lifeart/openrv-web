@@ -1065,17 +1065,209 @@ describe('SessionSerializer', () => {
   // Issue #134: representations not restored on load
   // -----------------------------------------------------------------------
   describe('issue #134: representation restoration', () => {
-    it('SER-REP-001: fromJSON logs info about missing representation restoration', async () => {
+    it('SER-REP-001: fromJSON does not log info about missing representation restoration', async () => {
       const components = createMockComponents();
       const state = SessionSerializer.createEmpty();
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
       await SessionSerializer.fromJSON(state, components);
 
-      expect(infoSpy).toHaveBeenCalledWith(
+      expect(infoSpy).not.toHaveBeenCalledWith(
         expect.stringContaining('representations are saved but not restored'),
       );
       infoSpy.mockRestore();
+    });
+
+    it('SER-REP-002: fromJSON restores representations to loaded sources', async () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty();
+      state.media = [
+        {
+          type: 'image' as const,
+          path: 'test.exr',
+          name: 'test',
+          width: 4096,
+          height: 2160,
+          duration: 1,
+          fps: 24,
+          representations: [
+            {
+              id: 'rep-full',
+              label: 'EXR Full',
+              kind: 'frames' as const,
+              priority: 0,
+              resolution: { width: 4096, height: 2160 },
+              par: 1.0,
+              audioTrackPresent: false,
+              startFrame: 0,
+              loaderConfig: { path: 'test.exr' },
+            },
+            {
+              id: 'rep-proxy',
+              label: 'Proxy',
+              kind: 'proxy' as const,
+              priority: 2,
+              resolution: { width: 1920, height: 1080 },
+              par: 1.0,
+              audioTrackPresent: false,
+              startFrame: 0,
+              loaderConfig: { url: 'http://example.com/proxy.mp4' },
+            },
+          ],
+          activeRepresentationId: 'rep-proxy',
+        },
+      ];
+
+      await SessionSerializer.fromJSON(state, components);
+
+      const addRep = components.session.addRepresentationToSource as ReturnType<typeof vi.fn>;
+      expect(addRep).toHaveBeenCalledTimes(2);
+      expect(addRep).toHaveBeenCalledWith(0, expect.objectContaining({ id: 'rep-full', kind: 'frames' }));
+      expect(addRep).toHaveBeenCalledWith(0, expect.objectContaining({ id: 'rep-proxy', kind: 'proxy' }));
+
+      const switchRep = components.session.switchRepresentation as ReturnType<typeof vi.fn>;
+      expect(switchRep).toHaveBeenCalledWith(0, 'rep-proxy');
+    });
+
+    it('SER-REP-003: fromJSON skips representations for failed media loads', async () => {
+      const components = createMockComponents();
+      (components.session.loadImage as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('load failed'));
+      const state = SessionSerializer.createEmpty();
+      state.media = [
+        {
+          type: 'image' as const,
+          path: 'missing.exr',
+          name: 'missing',
+          width: 1920,
+          height: 1080,
+          duration: 1,
+          fps: 24,
+          representations: [
+            {
+              id: 'rep-1',
+              label: 'Full',
+              kind: 'frames' as const,
+              priority: 0,
+              resolution: { width: 1920, height: 1080 },
+              par: 1.0,
+              audioTrackPresent: false,
+              startFrame: 0,
+              loaderConfig: { path: 'missing.exr' },
+            },
+          ],
+          activeRepresentationId: 'rep-1',
+        },
+      ];
+
+      const result = await SessionSerializer.fromJSON(state, components);
+
+      const addRep = components.session.addRepresentationToSource as ReturnType<typeof vi.fn>;
+      expect(addRep).not.toHaveBeenCalled();
+
+      const switchRep = components.session.switchRepresentation as ReturnType<typeof vi.fn>;
+      expect(switchRep).not.toHaveBeenCalled();
+
+      expect(result.warnings).toContain('Failed to load: missing');
+    });
+
+    it('SER-REP-004: fromJSON produces warning when representation switch fails', async () => {
+      const components = createMockComponents();
+      (components.session.switchRepresentation as ReturnType<typeof vi.fn>).mockResolvedValue(false);
+      const state = SessionSerializer.createEmpty();
+      state.media = [
+        {
+          type: 'video' as const,
+          path: 'test.mp4',
+          name: 'test',
+          width: 1920,
+          height: 1080,
+          duration: 100,
+          fps: 24,
+          representations: [
+            {
+              id: 'rep-1',
+              label: 'Full',
+              kind: 'movie' as const,
+              priority: 0,
+              resolution: { width: 1920, height: 1080 },
+              par: 1.0,
+              audioTrackPresent: true,
+              startFrame: 0,
+              loaderConfig: { path: 'test.mp4' },
+            },
+          ],
+          activeRepresentationId: 'rep-1',
+        },
+      ];
+
+      const result = await SessionSerializer.fromJSON(state, components);
+
+      expect(result.warnings).toContain(
+        'Failed to restore active representation "rep-1" for "test"',
+      );
+    });
+
+    it('SER-REP-005: fromJSON handles media with no representations (no-op)', async () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty();
+      state.media = [
+        {
+          type: 'image' as const,
+          path: 'simple.png',
+          name: 'simple',
+          width: 800,
+          height: 600,
+          duration: 1,
+          fps: 24,
+        },
+      ];
+
+      await SessionSerializer.fromJSON(state, components);
+
+      const addRep = components.session.addRepresentationToSource as ReturnType<typeof vi.fn>;
+      expect(addRep).not.toHaveBeenCalled();
+
+      const switchRep = components.session.switchRepresentation as ReturnType<typeof vi.fn>;
+      expect(switchRep).not.toHaveBeenCalled();
+    });
+
+    it('SER-REP-006: fromJSON handles media with representations but no activeRepresentationId', async () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty();
+      state.media = [
+        {
+          type: 'image' as const,
+          path: 'test.exr',
+          name: 'test',
+          width: 4096,
+          height: 2160,
+          duration: 1,
+          fps: 24,
+          representations: [
+            {
+              id: 'rep-full',
+              label: 'EXR Full',
+              kind: 'frames' as const,
+              priority: 0,
+              resolution: { width: 4096, height: 2160 },
+              par: 1.0,
+              audioTrackPresent: false,
+              startFrame: 0,
+              loaderConfig: { path: 'test.exr' },
+            },
+          ],
+          // No activeRepresentationId
+        },
+      ];
+
+      await SessionSerializer.fromJSON(state, components);
+
+      const addRep = components.session.addRepresentationToSource as ReturnType<typeof vi.fn>;
+      expect(addRep).toHaveBeenCalledTimes(1);
+      expect(addRep).toHaveBeenCalledWith(0, expect.objectContaining({ id: 'rep-full' }));
+
+      const switchRep = components.session.switchRepresentation as ReturnType<typeof vi.fn>;
+      expect(switchRep).not.toHaveBeenCalled();
     });
   });
 
@@ -1280,6 +1472,8 @@ function createMockComponents(): SessionComponents {
       },
       edlEntries: [] as any[],
       setEdlEntries: vi.fn(),
+      addRepresentationToSource: vi.fn().mockReturnValue({ id: 'mock-rep' }),
+      switchRepresentation: vi.fn<(sourceIndex: number, repId: string) => Promise<boolean>>().mockResolvedValue(true),
     },
     paintEngine,
     viewer: {

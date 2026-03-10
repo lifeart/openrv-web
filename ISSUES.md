@@ -1958,19 +1958,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Trying to open an unsupported file, or opening an EDL that does not actually replace the session, still creates a “Before Project Load” recovery checkpoint.
   - That pollutes recovery history with misleading checkpoints for operations that never became a real project/session replacement.
 
-### 162. The project-open path for `.rv/.gto` can never provide companion files for session-side media resolution
-
-- Severity: Medium
-- Area: Project/session open workflow / RV-GTO interchange
-- Evidence:
-  - `openProject(file: File)` only accepts a single `File` object and the dedicated project input is not multi-select in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L223).
-  - The `.rv` / `.gto` branch in `openProject()` reads that single file and calls `session.loadFromGTO(content)` with no `availableFiles` map in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L319).
-  - The broader media/session import path is explicitly designed to pass a map of companion files into `loadFromGTO(...)` for basename resolution in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1392).
-  - GTO import uses that `availableFiles` map to match referenced media/CDL files in [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L692) and [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L1991).
-- Impact:
-  - Even if an RV/GTO session is opened through the project-open API, that path cannot bring along the companion media bundle that the importer needs for best-effort reconstruction.
-  - So the app ships two session-open paths, but only the general media-open flow can perform the richer sidecar-aware RV/GTO import.
-
 ### 163. RVEDL import parses and stores entries, but the timeline editor never consumes them
 
 - Severity: Medium
@@ -4761,6 +4748,80 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Recovering supported local EXR/DPX/RAW-style media can become harder than loading the same files through the normal Open Media entry point.
   - That makes the restore workflow less capable than the app's advertised format support, specifically in the crash/project-recovery path where users most need reliable file reattachment.
+
+### 386. The docs say `.orvproject` files can be dragged onto the viewer, but the viewer drop handler does not support them
+
+- Severity: Medium
+- Area: Project loading / drag-and-drop
+- Evidence:
+  - The session export guide says users can load a `.orvproject` "through the file picker ... or by dragging the file onto the viewer" in [docs/export/sessions.md](/Users/lifeart/Repos/openrv-web/docs/export/sessions.md#L35).
+  - The session-management guide repeats the same viewer-drop workflow in [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L67).
+  - The viewer drop handler only special-cases `.rvedl`, `.rv`, and `.gto`, then falls through to sequence/media loading in [src/ui/components/ViewerInputHandler.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInputHandler.ts#L709) through [src/ui/components/ViewerInputHandler.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInputHandler.ts#L819).
+  - A dropped `.orvproject` therefore reaches `session.loadFile(file)` in the generic file loop, but `loadFile(...)` only accepts media types detected as image/video and rejects unknown extensions in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L379) through [src/core/session/SessionMedia.ts#L393](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L393).
+- Impact:
+  - Users following the documented drag-and-drop project workflow will get a load error instead of opening the project.
+  - That makes project restore behavior inconsistent between the explicit Open Project button and the viewer’s drop zone.
+
+### 387. The RV/GTO companion-file resolution path is effectively unreachable from the shipped Open Project picker
+
+- Severity: Medium
+- Area: Project loading / session sidecars
+- Evidence:
+  - `openProject(file, companionFiles)` explicitly supports additional media/CDL sidecar files for `.rv` / `.gto` resolution in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L339) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L341) and [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L396) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L402).
+  - The header wiring forwards all selected files from the hidden project input to that API in [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L60) through [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L61).
+  - But the shipped project input only accepts `.orvproject,.rv,.gto,.rvedl` in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L226) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L231), so users cannot normally select the non-session media/CDL companion files that the resolver expects.
+- Impact:
+  - The code supports basename-based RV/GTO sidecar recovery, but the primary shipped Open Project picker does not let users provide the needed sidecar files.
+  - In practice that leaves drag-and-drop as the only obvious path for companion resolution, which makes the “Open Project” flow less capable than the underlying implementation suggests.
+
+### 388. The Open Project picker allows multiple files, but the app still treats only the first selected file as the real project
+
+- Severity: Low
+- Area: Project loading / picker behavior
+- Evidence:
+  - The shipped hidden project input is configured with `multiple = true` in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L226) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L229).
+  - `handleProjectOpen(...)` forwards the entire `FileList` as-is in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1503) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1508).
+  - But production wiring always calls `openProject(files[0]!, files.slice(1))`, so only the first selected file is treated as the actual project/session and every remaining file is demoted to a companion slot in [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L60) through [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L61).
+  - In the `.orvproject` branch, those extra selected files are ignored entirely because `companionFiles` are only used for `.rv` / `.gto` handling in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L348) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L384) and [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L396) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L402).
+- Impact:
+  - The picker UI suggests multi-file project opening is meaningful, but selecting multiple project/session files has ambiguous or ignored results.
+  - That makes the Open Project affordance less predictable than the single-project mental model the runtime actually implements.
+
+### 389. The `Open project` picker also accepts `.rvedl`, even though that path does not open a project
+
+- Severity: Low
+- Area: Project loading UI / EDL workflow
+- Evidence:
+  - The shipped project input accepts `.orvproject,.rv,.gto,.rvedl` in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L226) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L229).
+  - The same button is presented simply as `Open project` in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L243).
+  - But the `.rvedl` branch in `openProject(...)` only parses EDL text and calls `session.loadEDL(text)`; it does not restore project/session state in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L418) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L423).
+- Impact:
+  - The project-opening affordance bundles a timeline-import format that behaves fundamentally differently from a real project/session load.
+  - That makes the button’s semantics fuzzy and increases the chance that users expect a session replacement when they are really just importing an edit list.
+
+### 390. `SnapshotManager` advertises a `snapshotRestored` event, but production never emits it
+
+- Severity: Low
+- Area: Snapshot subsystem / event contract
+- Evidence:
+  - `SnapshotManagerEvents` declares `snapshotRestored` in [src/core/session/SnapshotManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SnapshotManager.ts#L43) through [src/core/session/SnapshotManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SnapshotManager.ts#L52).
+  - A production-code search finds no `emit('snapshotRestored', ...)` call anywhere in `src`; the only hit is the event type declaration itself.
+  - The real restore path lives in `AppPersistenceManager.restoreSnapshot(...)`, which performs the restore and user alerts without going back through any `SnapshotManager` restore event in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L218) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L274).
+- Impact:
+  - Any runtime code written against the advertised snapshot-manager event surface cannot observe completed snapshot restores.
+  - That makes the snapshot event contract less trustworthy than the create/delete/rename paths, which do emit corresponding events.
+
+### 391. Snapshot backend initialization failures are swallowed while the snapshot UI stays enabled
+
+- Severity: Medium
+- Area: Snapshot workflow / startup robustness
+- Evidence:
+  - Snapshot manager startup errors are caught and only logged in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L437) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L442).
+  - The snapshot panel is still created as a normal shipped control in [src/services/controls/createPanelControls.ts](/Users/lifeart/Repos/openrv-web/src/services/controls/createPanelControls.ts#L75) and remains wired to create/restore actions in [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L328) through [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L329).
+  - Those actions only fail later, at use time, when `createQuickSnapshot()` calls `snapshotManager.createSnapshot(...)` in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L165) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L184), or when panel loads hit the inline error path.
+- Impact:
+  - The app can boot with a broken snapshot backend while still presenting snapshots as an available feature.
+  - That delays failure until the user actually tries to rely on snapshots, which is worse than disabling or clearly marking the feature unavailable up front.
 
 ## Validation Notes
 
