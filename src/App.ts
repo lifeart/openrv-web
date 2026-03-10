@@ -176,6 +176,7 @@ export class App {
       viewer: this.viewer,
       paintEngine: this.paintEngine,
       displayCapabilities: this.displayCapabilities,
+      cacheManager: this.cacheManager,
     });
 
     // Wire NoteOverlay into timeline for note visualization

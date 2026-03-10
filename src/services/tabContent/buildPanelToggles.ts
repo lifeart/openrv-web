@@ -84,6 +84,26 @@ export function buildPanelToggles(deps: BuildPanelTogglesDeps): HTMLElement {
     }),
   );
 
+  // Cache Management Panel toggle button
+  if (registry.cacheManagementPanel) {
+    const cachePanel = registry.cacheManagementPanel;
+    const cachePanelButton = ContextToolbar.createIconButton(
+      'box',
+      () => {
+        cachePanel.toggle();
+      },
+      { title: 'Media Cache' },
+    );
+    cachePanelButton.dataset.testid = 'cache-panel-toggle';
+    panelToggles.appendChild(cachePanelButton);
+
+    addUnsubscriber(
+      cachePanel.on('visibilityChanged', (visible) => {
+        setButtonActive(cachePanelButton, visible, 'icon');
+      }),
+    );
+  }
+
   // Conform / Re-link panel toggle button
   const conformButton = ContextToolbar.createIconButton(
     'link',

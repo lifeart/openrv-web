@@ -5044,6 +5044,56 @@ This file tracks findings from exploratory review and targeted validation runs.
   - RV/GTO files that represent grading with standalone color nodes can be recognized by the loader layer yet still lose exposure/curve/vibrance/shadow/highlight/grayscale/conversion intent in the live restore path.
   - That leaves color interchange materially narrower than the repo’s own serializer/exporter/loader surface suggests.
 
+### 423. RV/GTO import cannot clear markers when the file carries an empty marks array
+
+- Severity: Medium
+- Area: RV/GTO import / marker restore
+- Evidence:
+  - `GTOGraphLoader` reads `session.marks`, but only assigns `sessionInfo.marks` when the filtered array has `length > 0` in [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L293) through [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L299).
+  - `SessionGraph.loadFromGTO(...)` only calls `markerManager.setFromFrameNumbers(...)` when `result.sessionInfo.marks` is present in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L321) through [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L329).
+  - The marker manager itself does support explicit clearing through `setFromFrameNumbers([])`, which resets the map and emits change notifications in [src/core/session/MarkerManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MarkerManager.ts#L256) through [src/core/session/MarkerManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MarkerManager.ts#L271).
+- Impact:
+  - Importing an RV/GTO session that explicitly contains zero markers cannot clear markers left over from the current session.
+  - Marker state therefore depends on previous local state instead of the imported file whenever the incoming marks payload is empty.
+
+### 424. RV/GTO crop restore derives source dimensions from RVFileSource only, so still-image sessions can import with a full-frame crop
+
+- Severity: Medium
+- Area: RV/GTO import / crop restore
+- Evidence:
+  - `SessionGTOExporter.buildSourceGroupObjects(...)` emits still sources as `RVImageSource`, not `RVFileSource`, while still attaching the same `proxy.size` dimensions in [src/core/session/SessionGTOExporter.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGTOExporter.ts#L597) through [src/core/session/SessionGTOExporter.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGTOExporter.ts#L635).
+  - `SessionGraph.parseSession(...)` derives `sourceWidth` and `sourceHeight` only from `dto.byProtocol('RVFileSource')` in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L515) through [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L547).
+  - `parseCrop(...)` needs non-zero source dimensions to convert pixel crop bounds into normalized region values; otherwise it falls back to `{ x: 0, y: 0, width: 1, height: 1 }` even when crop coordinates are present in [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L568) through [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L585).
+  - `SessionGraph.parseSession(...)` feeds those derived dimensions directly into `_parseInitialSettings(dto, { width: sourceWidth, height: sourceHeight })` in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L552).
+- Impact:
+  - RV/GTO sessions built around still images can carry a valid crop but restore it as an enabled full-frame region because the parser never discovers the image dimensions.
+  - Crop behavior therefore differs by source protocol, even though the exporter writes the same `proxy.size` data for both still and file/video sources.
+
+### 425. RV/GTO paint-annotation import uses a default 1.0 aspect ratio for RVImageSource sessions
+
+- Severity: Medium
+- Area: RV/GTO import / annotation geometry
+- Evidence:
+  - `SessionGraph.parseSession(...)` computes `aspectRatio` only while iterating `dto.byProtocol('RVFileSource')` in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L515) through [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L547).
+  - Still-image sessions are exported as `RVImageSource` objects, not `RVFileSource`, in [src/core/session/SessionGTOExporter.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGTOExporter.ts#L597) through [src/core/session/SessionGTOExporter.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGTOExporter.ts#L635).
+  - `SessionGraph.parseSession(...)` then passes the derived `aspectRatio` into `annotationStore.parsePaintAnnotations(dto, aspectRatio)` in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L549) through [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L550).
+  - `AnnotationStore` uses that aspect ratio directly when converting OpenRV coordinates for pen strokes and text annotations in [src/core/session/AnnotationStore.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AnnotationStore.ts#L440) through [src/core/session/AnnotationStore.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AnnotationStore.ts#L465) and [src/core/session/AnnotationStore.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AnnotationStore.ts#L537) through [src/core/session/AnnotationStore.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AnnotationStore.ts#L554).
+- Impact:
+  - Paint annotations imported from still-image RV/GTO sessions can be placed incorrectly whenever the image aspect ratio is not 1:1.
+  - The same annotation payload therefore restores differently depending on whether the source was serialized as `RVImageSource` or `RVFileSource`.
+
+### 426. RV/GTO import cannot clear notes, version groups, or shot statuses when the incoming session data is empty
+
+- Severity: High
+- Area: RV/GTO import / stale review-session data
+- Evidence:
+  - `SessionGraph.loadFromGTO(...)` explicitly claims it will “always call, even for empty arrays, to clear old data” for notes, version groups, and statuses in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L347) through [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L359).
+  - But `GTOGraphLoader` only assigns `sessionInfo.notes` when `notes.length > 0` in [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L460) through [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L495), only assigns `sessionInfo.versionGroups` when `versionGroups.length > 0` in [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L499) through [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L547), and only assigns `sessionInfo.statuses` when `parsedStatuses.length > 0` in [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L625) through [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L649).
+  - The managers themselves do support explicit clearing on empty arrays: `NoteManager.fromSerializable([])` clears notes in [src/core/session/NoteManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/NoteManager.ts#L316) through [src/core/session/NoteManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/NoteManager.ts#L330), `VersionManager.fromSerializable([])` clears groups in [src/core/session/VersionManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/VersionManager.ts#L338) through [src/core/session/VersionManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/VersionManager.ts#L343), and `StatusManager.fromSerializable([])` clears statuses in [src/core/session/StatusManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/StatusManager.ts#L178) through [src/core/session/StatusManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/StatusManager.ts#L183).
+- Impact:
+  - Importing an RV/GTO session with no notes, no version groups, or no statuses cannot clear the old review data already present in the app.
+  - That leaves review metadata dependent on previous local state, directly contradicting the comments in the live import path.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

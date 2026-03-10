@@ -83,6 +83,7 @@ export interface LayoutLayoutStore {
 
 export interface LayoutControlsSubset {
   cacheIndicator: { getElement(): HTMLElement };
+  cacheManagementPanel: { getElement(): HTMLElement } | null;
   rightPanelContent: {
     getElement(): HTMLElement;
     updateHistogram(data: unknown): void;
@@ -559,6 +560,11 @@ export class LayoutOrchestrator {
 
     // Add note panel to viewer container
     viewer.getContainer().appendChild(controls.notePanel.getElement());
+
+    // Add cache management panel to viewer container (if available)
+    if (controls.cacheManagementPanel) {
+      viewer.getContainer().appendChild(controls.cacheManagementPanel.getElement());
+    }
 
     // Wire up cursor color updates from viewer to info panel
     viewer.onCursorColorChange((color, position) => {

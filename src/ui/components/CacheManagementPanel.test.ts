@@ -15,31 +15,13 @@ function createMockCacheManager(): MediaCacheManager {
 
 describe('CacheManagementPanel', () => {
   let panel: CacheManagementPanel;
-  let infoSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
     panel = new CacheManagementPanel(createMockCacheManager());
   });
 
   afterEach(() => {
     panel.dispose();
-    infoSpy.mockRestore();
-  });
-
-  describe('not-wired documentation', () => {
-    it('CACHE-PANEL-001: has a static NOT_WIRED_MESSAGE property', () => {
-      expect(CacheManagementPanel.NOT_WIRED_MESSAGE).toContain('not mounted in production layout');
-    });
-
-    it('CACHE-PANEL-002: logs an info message on construction about not being wired', () => {
-      expect(infoSpy).toHaveBeenCalledWith(CacheManagementPanel.NOT_WIRED_MESSAGE);
-    });
-
-    it('CACHE-PANEL-003: source file contains TODO(#16) referencing the wiring issue', async () => {
-      // Verify the static message references the issue number
-      expect(CacheManagementPanel.NOT_WIRED_MESSAGE).toContain('#16');
-    });
   });
 
   describe('basic functionality', () => {

@@ -206,6 +206,7 @@ export class AppControlRegistry {
       snapshotManager: this.playback.snapshotManager,
       playlistManager: this.playback.playlistManager,
       transitionManager: this.playback.transitionManager,
+      cacheManager: deps.cacheManager,
     });
   }
 
@@ -393,6 +394,9 @@ export class AppControlRegistry {
   }
   get cacheIndicator(): CacheIndicator {
     return this.panel.cacheIndicator;
+  }
+  get cacheManagementPanel(): CacheManagementPanel | null {
+    return this.panel.cacheManagementPanel;
   }
   get snapshotPanel(): SnapshotPanel {
     return this.panel.snapshotPanel;
@@ -842,6 +846,7 @@ export class AppControlRegistry {
     this.rightPanelContent.dispose();
     this.leftPanelContent.dispose();
     this.cacheIndicator.dispose();
+    this.cacheManagementPanel?.dispose();
     this.paintToolbar.dispose();
     this.colorControls.dispose();
     this.zoomControl.dispose();

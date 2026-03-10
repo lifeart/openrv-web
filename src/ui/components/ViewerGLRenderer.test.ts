@@ -496,22 +496,22 @@ describe('ViewerGLRenderer', () => {
       expect(capturedStates[0]!.displayColor.transferFunction).toBe(0);
     });
 
-    it('VGLR-031: HDR native path sets displayColor.displayGamma to 1', () => {
+    it('VGLR-031: HDR native path preserves displayColor.displayGamma from profile', () => {
       const { glRenderer, capturedStates } = setupHDRRenderer('hlg');
       const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'uint8' });
       glRenderer.renderHDRWithWebGL(image, 100, 100);
 
       expect(capturedStates.length).toBe(1);
-      expect(capturedStates[0]!.displayColor.displayGamma).toBe(1);
+      expect(capturedStates[0]!.displayColor.displayGamma).toBe(2.4);
     });
 
-    it('VGLR-032: HDR native path sets displayColor.displayBrightness to 1', () => {
+    it('VGLR-032: HDR native path preserves displayColor.displayBrightness from profile', () => {
       const { glRenderer, capturedStates } = setupHDRRenderer('hlg');
       const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'uint8' });
       glRenderer.renderHDRWithWebGL(image, 100, 100);
 
       expect(capturedStates.length).toBe(1);
-      expect(capturedStates[0]!.displayColor.displayBrightness).toBe(1);
+      expect(capturedStates[0]!.displayColor.displayBrightness).toBe(1.5);
     });
 
     it('VGLR-033: SDR output path does NOT override displayColor', () => {
@@ -522,6 +522,28 @@ describe('ViewerGLRenderer', () => {
       expect(capturedStates.length).toBe(1);
       // SDR path should NOT override display settings — they should remain as built
       expect(capturedStates[0]!.displayColor.transferFunction).toBe(3);
+      expect(capturedStates[0]!.displayColor.displayGamma).toBe(2.4);
+      expect(capturedStates[0]!.displayColor.displayBrightness).toBe(1.5);
+    });
+
+    it('VGLR-031b: HDR PQ path preserves displayGamma and displayBrightness from profile', () => {
+      const { glRenderer, capturedStates } = setupHDRRenderer('pq');
+      const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'uint8' });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      expect(capturedStates.length).toBe(1);
+      expect(capturedStates[0]!.displayColor.transferFunction).toBe(0);
+      expect(capturedStates[0]!.displayColor.displayGamma).toBe(2.4);
+      expect(capturedStates[0]!.displayColor.displayBrightness).toBe(1.5);
+    });
+
+    it('VGLR-031c: HDR extended path preserves displayGamma and displayBrightness from profile', () => {
+      const { glRenderer, capturedStates } = setupHDRRenderer('extended');
+      const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'uint8' });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      expect(capturedStates.length).toBe(1);
+      expect(capturedStates[0]!.displayColor.transferFunction).toBe(0);
       expect(capturedStates[0]!.displayColor.displayGamma).toBe(2.4);
       expect(capturedStates[0]!.displayColor.displayBrightness).toBe(1.5);
     });
@@ -720,8 +742,8 @@ describe('ViewerGLRenderer', () => {
       expect(ok).toBe(true);
       expect(capturedStates.length).toBe(1);
       expect(capturedStates[0]!.displayColor.transferFunction).toBe(0);
-      expect(capturedStates[0]!.displayColor.displayGamma).toBe(1);
-      expect(capturedStates[0]!.displayColor.displayBrightness).toBe(1);
+      expect(capturedStates[0]!.displayColor.displayGamma).toBe(2.4);
+      expect(capturedStates[0]!.displayColor.displayBrightness).toBe(1.5);
       expect(mockRendererObj.setColorPrimaries).toHaveBeenCalledWith('bt2020', 'rec2020');
     });
 
@@ -1071,15 +1093,15 @@ describe('ViewerGLRenderer', () => {
       expect(capturedStates[0]!.toneMappingState.dragoLmax).toBeCloseTo(8.0, 5);
     });
 
-    it('VGLR-073: Canvas2D blit path sets displayColor overrides for linear-light output', () => {
+    it('VGLR-073: Canvas2D blit path neutralizes transferFunction but preserves gamma/brightness', () => {
       const { glRenderer, capturedStates } = setupCanvas2DBlitRenderer();
       const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'float32' });
       glRenderer.renderHDRWithWebGL(image, 100, 100);
 
       expect(capturedStates.length).toBe(1);
       expect(capturedStates[0]!.displayColor.transferFunction).toBe(0);
-      expect(capturedStates[0]!.displayColor.displayGamma).toBe(1);
-      expect(capturedStates[0]!.displayColor.displayBrightness).toBe(1);
+      expect(capturedStates[0]!.displayColor.displayGamma).toBe(2.4);
+      expect(capturedStates[0]!.displayColor.displayBrightness).toBe(1.5);
     });
 
     it('VGLR-074: Canvas2D blit path preserves creative gamma setting', () => {
