@@ -451,6 +451,12 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
     return this._playDirection;
   }
 
+  set playDirection(value: number) {
+    const normalized = value >= 0 ? 1 : -1;
+    if (normalized === this._playDirection) return;
+    this.togglePlayDirection();
+  }
+
   get effectiveFps(): number {
     return this._isPlaying ? this._ts.effectiveFps : 0;
   }

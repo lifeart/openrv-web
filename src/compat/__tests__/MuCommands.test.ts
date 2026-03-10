@@ -37,6 +37,8 @@ function createMockOpenRV() {
       getMeasuredFPS: vi.fn((): number => 0),
       setSpeed: vi.fn(),
       getSpeed: vi.fn(() => 1),
+      setPlayDirection: vi.fn(),
+      getPlayDirection: vi.fn(() => 1),
       stop: vi.fn(),
     },
     media: {
@@ -277,23 +279,39 @@ describe('MuCommands', () => {
       expect(cmd.isRealtime()).toBe(false);
     });
 
-    it('setInc() / inc() manage playback direction', () => {
-      expect(cmd.inc()).toBe(1); // default forward
+    it('setInc() delegates to openrv.playback.setPlayDirection()', () => {
       cmd.setInc(-1);
-      expect(cmd.inc()).toBe(-1);
+      expect(mockOpenRV.playback.setPlayDirection).toHaveBeenCalledWith(-1);
       cmd.setInc(1);
-      expect(cmd.inc()).toBe(1);
+      expect(mockOpenRV.playback.setPlayDirection).toHaveBeenCalledWith(1);
     });
 
-    it('setInc() normalizes to +1/-1', () => {
-      cmd.setInc(5);
+    it('inc() reads from the real API via getPlayDirection()', () => {
+      mockOpenRV.playback.getPlayDirection.mockReturnValue(1);
       expect(cmd.inc()).toBe(1);
-      cmd.setInc(-3);
+      expect(mockOpenRV.playback.getPlayDirection).toHaveBeenCalled();
+
+      mockOpenRV.playback.getPlayDirection.mockReturnValue(-1);
       expect(cmd.inc()).toBe(-1);
+    });
+
+    it('setInc() forwards raw value to the real API (normalization is done by PlaybackEngine)', () => {
+      cmd.setInc(5);
+      expect(mockOpenRV.playback.setPlayDirection).toHaveBeenCalledWith(5);
+      cmd.setInc(-3);
+      expect(mockOpenRV.playback.setPlayDirection).toHaveBeenCalledWith(-3);
     });
 
     it('setInc() throws on invalid input', () => {
       expect(() => cmd.setInc(NaN)).toThrow(TypeError);
+    });
+
+    it('setInc() does not use local state — inc() always reads from real API', () => {
+      // Simulate the real API returning -1 even though setInc was called with 1
+      cmd.setInc(1);
+      mockOpenRV.playback.getPlayDirection.mockReturnValue(-1);
+      expect(cmd.inc()).toBe(-1);
+      expect(mockOpenRV.playback.getPlayDirection).toHaveBeenCalled();
     });
 
     it('setPlayMode() maps Mu constants to loop modes', () => {
@@ -671,24 +689,35 @@ describe('MuExtraCommands', () => {
 
     it('isPlayingForwards() returns true when playing forward', () => {
       mockOpenRV.playback.isPlaying.mockReturnValue(true);
-      cmd.setInc(1);
+      mockOpenRV.playback.getPlayDirection.mockReturnValue(1);
       expect(extra.isPlayingForwards()).toBe(true);
     });
 
     it('isPlayingForwards() returns false when not playing', () => {
       mockOpenRV.playback.isPlaying.mockReturnValue(false);
+      mockOpenRV.playback.getPlayDirection.mockReturnValue(1);
       expect(extra.isPlayingForwards()).toBe(false);
     });
 
     it('isPlayingBackwards() returns true when playing backward', () => {
       mockOpenRV.playback.isPlaying.mockReturnValue(true);
-      cmd.setInc(-1);
+      mockOpenRV.playback.getPlayDirection.mockReturnValue(-1);
       expect(extra.isPlayingBackwards()).toBe(true);
     });
 
     it('isPlayingBackwards() returns false when playing forward', () => {
       mockOpenRV.playback.isPlaying.mockReturnValue(true);
-      cmd.setInc(1);
+      mockOpenRV.playback.getPlayDirection.mockReturnValue(1);
+      expect(extra.isPlayingBackwards()).toBe(false);
+    });
+
+    it('isPlayingBackwards() reflects real playback state, not local bookkeeping', () => {
+      mockOpenRV.playback.isPlaying.mockReturnValue(true);
+      // Real API says reverse
+      mockOpenRV.playback.getPlayDirection.mockReturnValue(-1);
+      expect(extra.isPlayingBackwards()).toBe(true);
+      // Real API changes to forward
+      mockOpenRV.playback.getPlayDirection.mockReturnValue(1);
       expect(extra.isPlayingBackwards()).toBe(false);
     });
   });
@@ -701,12 +730,14 @@ describe('MuExtraCommands', () => {
       expect(mockOpenRV.playback.toggle).toHaveBeenCalledOnce();
     });
 
-    it('toggleForwardsBackwards() flips direction', () => {
-      expect(cmd.inc()).toBe(1);
+    it('toggleForwardsBackwards() flips direction via real API', () => {
+      mockOpenRV.playback.getPlayDirection.mockReturnValue(1);
       extra.toggleForwardsBackwards();
-      expect(cmd.inc()).toBe(-1);
+      expect(mockOpenRV.playback.setPlayDirection).toHaveBeenCalledWith(-1);
+
+      mockOpenRV.playback.getPlayDirection.mockReturnValue(-1);
       extra.toggleForwardsBackwards();
-      expect(cmd.inc()).toBe(1);
+      expect(mockOpenRV.playback.setPlayDirection).toHaveBeenCalledWith(1);
     });
 
     it('toggleRealtime() flips realtime mode', () => {

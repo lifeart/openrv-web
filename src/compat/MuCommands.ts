@@ -32,6 +32,8 @@ function getOpenRV(): {
     getPlaybackMode(): 'realtime' | 'playAllFrames';
     step(n?: number): void;
     getMeasuredFPS(): number;
+    setPlayDirection(direction: number): void;
+    getPlayDirection(): number;
   };
   media: {
     getFPS(): number;
@@ -138,7 +140,6 @@ const ASYNC_COMMANDS = new Set<string>(['fullScreenMode']);
 export class MuCommands {
   // --- Internal state for ADD commands ---
   private _frameStart = 1;
-  private _inc = 1;
   private _skippedFrames = 0;
   private _mbps = 0;
   private _margins: number[] = [0, 0, 0, 0];
@@ -237,12 +238,12 @@ export class MuCommands {
     if (typeof inc !== 'number' || isNaN(inc)) {
       throw new TypeError('setInc() requires a valid number');
     }
-    this._inc = inc >= 0 ? 1 : -1;
+    getOpenRV().playback.setPlayDirection(inc);
   }
 
   /** Get playback increment. (Mu #14) */
   inc(): number {
-    return this._inc;
+    return getOpenRV().playback.getPlayDirection();
   }
 
   /** Set play mode using Mu integer constants. (Mu #15) */

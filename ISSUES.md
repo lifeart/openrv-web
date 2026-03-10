@@ -2150,18 +2150,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - When waveform extraction fails, the timeline simply loses the waveform instead of telling the user why.
   - Troubleshooting falls back to the console even though the waveform subsystem already captures the failure reason.
 
-### 193. Room share links without a PIN do not auto-join during URL bootstrap
-
-- Severity: Medium
-- Area: Collaboration / URL bootstrap
-- Evidence:
-  - `SessionURLService.handleURLBootstrap()` only auto-joins a room when both `roomCode` and `pinCode` are present in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L260).
-  - The same service still pre-fills the join-room UI when only `room` exists in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L216).
-  - The underlying `NetworkSyncManager.joinRoom(...)` API already accepts an optional PIN in [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L403).
-- Impact:
-  - A valid room share link without a PIN stops at a prefilled panel instead of actually joining.
-  - PIN-protected and non-PIN room links behave inconsistently even though the join API supports both.
-
 ### 194. Client mode relies on selector attributes that the shipped DOM still does not provide
 
 - Severity: High
@@ -2201,18 +2189,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - On browsers with denied clipboard permissions or unsupported clipboard APIs, copy commands can appear to do nothing with no user-visible explanation.
   - The app treats similar clipboard workflows inconsistently, which makes export/probe/timeline copy actions less trustworthy than the network-sharing UI.
-
-### 197. Malformed WebRTC share links are silently ignored during URL bootstrap
-
-- Severity: Medium
-- Area: Collaboration / URL bootstrap
-- Evidence:
-  - `SessionURLService.handleURLBootstrap()` only handles WebRTC URL signals when `decodeWebRTCURLSignal(...)` yields an `offer` or `answer`; any other decoded result falls through with no `showInfo(...)` or error path in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L226).
-  - For offer links, `NetworkSyncManager.joinServerlessRoomFromOfferToken(...)` also returns `null` on malformed tokens, wrong signal type, invalid room codes, or already-busy connection state without emitting a user-facing message in [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L280).
-  - App startup awaits `handleURLBootstrap()` directly in [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L721), so a bad `?webrtc=` link can complete bootstrap with no visible indication that link handling failed.
-- Impact:
-  - Users opening a malformed or partially-corrupted WebRTC invite/response URL can land in a normal-looking app state with no clue that the collaboration link was ignored.
-  - That makes shared-link failures hard to diagnose because the broken input disappears into startup logic instead of surfacing an actionable error.
 
 ### 198. Mu compat `realFPS()` reports nominal FPS, not measured playback FPS
 
@@ -5241,6 +5217,42 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Inference: if a slower older LUT request resolves after a newer one, it can overwrite the newer DCC color state and leave the viewer on stale LUT content.
   - That makes rapid DCC-driven look switching race-sensitive instead of deterministic.
+
+### 440. URL-based media loading bypasses the app's decoder stack and breaks remote EXR or other decoder-backed images
+
+- Severity: Medium
+- Area: Share links / DCC integration / URL media loading
+- Evidence:
+  - `Session.loadSourceFromUrl(...)` classifies URL media only as “known video extension” vs “everything else,” and routes every non-video URL into `loadImage(...)` in [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L1119) through [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L1139).
+  - `SessionMedia.loadImage(...)` then loads the URL through a plain `HTMLImageElement` in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L400) through [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L434), bypassing the `FileSourceNode` and decoder-backed file pipeline used for EXR, TIFF, RAW previews, and other advanced formats in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L437) through [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L515).
+  - Share-link bootstrap uses `session.loadSourceFromUrl(...)` for `sourceUrl` reconstruction in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L152) through [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L157), and DCC `loadMedia` sends non-video URLs through `session.loadImage(...)` in [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L184) through [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L221).
+- Impact:
+  - Remote EXR plates, float TIFFs, and other formats that only work through the decoder/file pipeline cannot be reconstructed from share links or loaded via URL-based DCC commands even though the app broadly advertises support for those formats.
+  - URL workflows are materially less capable than file workflows, which makes remote review/integration flows unreliable for high-end image formats.
+
+### 441. URL-based media loading cannot detect extensionless or routed video URLs and falls back to the image path
+
+- Severity: Medium
+- Area: Share links / DCC integration / URL media detection
+- Evidence:
+  - `Session.loadSourceFromUrl(...)` extracts the media type only from the last pathname extension in [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L1131) through [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L1137); if there is no recognizable extension, it unconditionally calls `loadImage(...)` in [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L1139).
+  - DCC `loadMedia` uses the same extension-only heuristic with `path.split('.').pop()?.toLowerCase()` in [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L186) through [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L190).
+  - The file-loading side of the app explicitly documents a more reliable magic-number-first detection strategy for real files in [docs/guides/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/guides/file-formats.md#L11), but the URL path never gets equivalent sniffing or content-type-based detection.
+- Impact:
+  - CDN or API-style video URLs such as `/media/12345`, `/stream/latest`, or signed routes without a terminal extension can be treated as still images and fail to load correctly.
+  - The app's URL-based loading is weaker than its file-loading path in a way that is hard for integrators and share-link users to predict from the UI.
+
+### 442. The DCC bridge heartbeat timeout is effectively dead, and its keepalive path sends unsolicited `pong` messages instead
+
+- Severity: Medium
+- Area: DCC integration / connection health
+- Evidence:
+  - `DCCBridgeConfig` exposes both `heartbeatInterval` and `heartbeatTimeout`, and the bridge stores `heartbeatTimeoutTimer` plus `_lastPongTime` state in [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L141) through [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L198).
+  - The only runtime heartbeat loop just sends `{ type: 'pong' }` on an interval in [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L508) through [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L518).
+  - `handlePing(...)` updates `_lastPongTime` and replies with `pong` in [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L463) through [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L466), but production search finds no code that ever schedules `heartbeatTimeoutTimer` or evaluates `_lastPongTime` against `heartbeatTimeout`.
+- Impact:
+  - Inference: a DCC peer that stops responding at the protocol level can remain in a healthy-looking `connected` state until the browser WebSocket itself closes, because the bridge never enforces its own heartbeat timeout.
+  - The runtime behavior also does not match the advertised ping/pong health model, which makes cross-tool heartbeat expectations brittle.
 
 ## Validation Notes
 

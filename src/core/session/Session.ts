@@ -807,6 +807,10 @@ export class Session extends EventEmitter<SessionEvents> {
     return this._playback.playDirection;
   }
 
+  set playDirection(value: number) {
+    this._playback.playDirection = value;
+  }
+
   /**
    * Get effective FPS (actual frames rendered per second during playback)
    * Returns 0 when not playing

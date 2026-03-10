@@ -75,13 +75,14 @@ export class PluginRegistry {
   /**
    * Emitted when a plugin registers an exporter.
    * Consumers can listen to this signal for reactive discovery of plugin-contributed exporters.
-   *
-   * TODO(#18): The export flow (ExportControl -> AppPlaybackWiring -> viewer) is wired
-   * directly to built-in handlers and never consults plugin-registered exporters. A future
-   * integration should listen to this signal (or query getExporters()) and present
-   * plugin exporters alongside the built-in export options.
    */
   readonly exporterRegistered = new Signal<{ pluginId: PluginId; name: string; exporter: ExporterContribution }>();
+
+  /**
+   * Emitted when a plugin exporter is unregistered (e.g., on deactivation).
+   * Consumers should remove the exporter from any UI surfaces.
+   */
+  readonly exporterUnregistered = new Signal<{ pluginId: PluginId; name: string }>();
 
   /** Event bus for plugin event subscriptions */
   readonly eventBus = new PluginEventBus();
@@ -419,13 +420,6 @@ export class PluginRegistry {
       registerExporter: (name: string, exporter: ExporterContribution) => {
         ExporterRegistry.register(name, exporter);
         reg.exporters.push(name);
-        // TODO(#18): Plugin exporters are registered but the export flow
-        // (ExportControl -> AppPlaybackWiring -> viewer) never consults them.
-        // This warning will be removed once the export integration is implemented.
-        console.warn(
-          `[plugin:${manifest.id}] Exporter "${name}" registered but plugin exporters ` +
-          `are not yet consulted by the export flow. See issue #18.`,
-        );
         registry.exporterRegistered.emit(
           { pluginId: manifest.id, name, exporter },
           { pluginId: manifest.id, name, exporter },
@@ -509,6 +503,10 @@ export class PluginRegistry {
       for (const name of reg.exporters) {
         try {
           ExporterRegistry.unregister(name);
+          this.exporterUnregistered.emit(
+            { pluginId, name },
+            { pluginId, name },
+          );
         } catch (e) {
           console.warn(`[plugin:${pluginId}] Failed to unregister exporter "${name}":`, e);
         }

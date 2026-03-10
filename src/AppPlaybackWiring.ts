@@ -45,6 +45,18 @@ export interface PlaybackWiringDeps {
   getFullscreenManager: () => FullscreenManager | undefined;
   getAudioMixer?: () => AudioMixer;
   getShortcutCheatSheet?: () => { show(): void } | null;
+  getPluginRegistry?: () => PluginRegistryExportAPI | null;
+}
+
+/**
+ * Minimal interface for the plugin registry export API,
+ * decoupled from the full PluginRegistry class for testability.
+ */
+export interface PluginRegistryExportAPI {
+  getExporters(): Map<string, import('./plugin/types').ExporterContribution>;
+  getExporter(name: string): import('./plugin/types').ExporterContribution | undefined;
+  exporterRegistered: { connect(cb: (data: { pluginId: string; name: string; exporter: import('./plugin/types').ExporterContribution }) => void): () => void };
+  exporterUnregistered: { connect(cb: (data: { pluginId: string; name: string }) => void): () => void };
 }
 
 /**
@@ -324,6 +336,67 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
       });
     }),
   );
+
+  // Plugin exporters: wire plugin registry signals to ExportControl dropdown
+  const pluginRegistry = deps.getPluginRegistry?.() ?? null;
+  if (pluginRegistry) {
+    // Add existing exporters
+    for (const [name, exporter] of pluginRegistry.getExporters()) {
+      // Derive pluginId from the exporter registry entry (name is the key)
+      exportControl.addPluginExporter('plugin', name, exporter.label);
+    }
+
+    // Subscribe to new exporter registrations
+    subs.add(
+      pluginRegistry.exporterRegistered.connect(({ pluginId, name, exporter }) => {
+        exportControl.addPluginExporter(pluginId, name, exporter.label);
+      }),
+    );
+
+    // Subscribe to exporter removals
+    subs.add(
+      pluginRegistry.exporterUnregistered.connect(({ pluginId, name }) => {
+        exportControl.removePluginExporter(pluginId, name);
+      }),
+    );
+
+    // Handle plugin export requests
+    subs.add(
+      exportControl.on('pluginExportRequested', async ({ name }) => {
+        const exporter = pluginRegistry.getExporter(name);
+        if (!exporter) {
+          showAlert(`Plugin exporter "${name}" is no longer available`, { type: 'warning', title: 'Export' });
+          return;
+        }
+
+        try {
+          if (exporter.kind === 'blob') {
+            const blob = await exporter.export({
+              getFrame: async (frame: number) => {
+                const canvas = await viewer.renderFrameToCanvas(frame, true);
+                if (!canvas) throw new Error(`Failed to render frame ${frame}`);
+                const ctx2d = canvas.getContext('2d');
+                if (!ctx2d) throw new Error('Failed to get 2D context');
+                return ctx2d.getImageData(0, 0, canvas.width, canvas.height);
+              },
+            });
+            const ext = exporter.extensions[0] ?? 'bin';
+            const sourceName = session.currentSource?.name?.replace(/\.[^/.]+$/, '') ?? 'export';
+            downloadBlob(blob, `${sourceName}.${ext}`);
+          } else {
+            const text = await exporter.export({});
+            const ext = exporter.extensions[0] ?? 'txt';
+            const sourceName = session.currentSource?.name?.replace(/\.[^/.]+$/, '') ?? 'export';
+            const blob = new Blob([text], { type: 'text/plain' });
+            downloadBlob(blob, `${sourceName}.${ext}`);
+          }
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          showAlert(`Plugin export failed: ${message}`, { type: 'error', title: 'Export Error' });
+        }
+      }),
+    );
+  }
 
   // Snapshot panel restore & create
   subs.add(controls.snapshotPanel.on('restoreRequested', ({ id }) => persistenceManager.restoreSnapshot(id)));

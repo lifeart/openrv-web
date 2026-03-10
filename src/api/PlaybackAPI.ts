@@ -191,6 +191,41 @@ export class PlaybackAPI extends DisposableAPI {
   }
 
   /**
+   * Set the playback direction.
+   *
+   * @param direction - Positive values (including 0) set forward playback,
+   *   negative values set reverse playback. The value is normalized to +1 or -1.
+   *
+   * @example
+   * ```ts
+   * openrv.playback.setPlayDirection(-1); // reverse
+   * openrv.playback.setPlayDirection(1);  // forward
+   * ```
+   */
+  setPlayDirection(direction: number): void {
+    this.assertNotDisposed();
+    if (typeof direction !== 'number' || isNaN(direction)) {
+      throw new ValidationError('setPlayDirection() requires a valid number');
+    }
+    this.session.playDirection = direction;
+  }
+
+  /**
+   * Get the current playback direction.
+   *
+   * @returns `1` for forward, `-1` for reverse.
+   *
+   * @example
+   * ```ts
+   * const dir = openrv.playback.getPlayDirection(); // 1 or -1
+   * ```
+   */
+  getPlayDirection(): number {
+    this.assertNotDisposed();
+    return this.session.playDirection;
+  }
+
+  /**
    * Check if playback is currently active.
    *
    * @returns `true` if playing, `false` if paused or stopped.

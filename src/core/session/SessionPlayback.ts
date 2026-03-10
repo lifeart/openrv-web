@@ -159,6 +159,9 @@ export class SessionPlayback extends EventEmitter<SessionPlaybackEvents> {
   get playDirection(): number {
     return this._playbackEngine.playDirection;
   }
+  set playDirection(value: number) {
+    this._playbackEngine.playDirection = value;
+  }
   get effectiveFps(): number {
     return this._playbackEngine.effectiveFps;
   }

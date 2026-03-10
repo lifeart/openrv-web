@@ -26,6 +26,11 @@ export interface VideoExportRequest {
   useInOutRange: boolean;
 }
 
+export interface PluginExportRequest {
+  pluginId: string;
+  name: string;
+}
+
 export interface ExportControlEvents extends EventMap {
   exportRequested: ExportRequest;
   sourceExportRequested: { format: ExportFormat; quality: number };
@@ -37,6 +42,7 @@ export interface ExportControlEvents extends EventMap {
   annotationsJSONImportRequested: void;
   annotationsPDFExportRequested: void;
   reportExportRequested: { format: 'csv' | 'html' };
+  pluginExportRequested: PluginExportRequest;
 }
 
 export class ExportControl extends EventEmitter<ExportControlEvents> {
@@ -48,6 +54,13 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
   private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
   private _cleanupA11yFocus: (() => void) | null = null;
   private readonly preferencesManager: PreferencesManager;
+
+  /** Plugin exporter menu items keyed by "pluginId:name" */
+  private pluginExporterItems = new Map<string, HTMLElement>();
+  /** Separator element shown before plugin exporter section */
+  private pluginExporterSeparator: HTMLElement | null = null;
+  /** Section header for plugin exporters */
+  private pluginExporterHeader: HTMLElement | null = null;
 
   constructor(preferencesManager?: PreferencesManager) {
     super();
@@ -486,6 +499,138 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
 
   private exportReport(format: 'csv' | 'html'): void {
     this.emit('reportExportRequested', { format });
+  }
+
+  /**
+   * Add a plugin-contributed exporter to the dropdown menu.
+   * The item appears in a "Plugin Exporters" section at the end of the dropdown
+   * (before the annotations toggle).
+   */
+  addPluginExporter(pluginId: string, name: string, label: string): void {
+    const key = `${pluginId}:${name}`;
+    if (this.pluginExporterItems.has(key)) return;
+
+    // Ensure the plugin exporter section exists (separator + header)
+    if (!this.pluginExporterSeparator) {
+      this.pluginExporterSeparator = document.createElement('div');
+      this.pluginExporterSeparator.style.cssText = `
+        height: 1px;
+        background: var(--bg-hover);
+        margin: 4px 0;
+      `;
+      this.pluginExporterSeparator.dataset.testid = 'plugin-exporter-separator';
+      // Insert before the annotations toggle (last child is the toggle row)
+      const annotationsToggle = this.dropdown.lastElementChild as HTMLElement | null;
+      // Go back two: the separator before annotations toggle, then annotations toggle
+      const optionsSeparator = annotationsToggle?.previousElementSibling;
+      if (optionsSeparator) {
+        this.dropdown.insertBefore(this.pluginExporterSeparator, optionsSeparator);
+      } else {
+        this.dropdown.appendChild(this.pluginExporterSeparator);
+      }
+
+      this.pluginExporterHeader = document.createElement('div');
+      this.pluginExporterHeader.style.cssText = `
+        padding: 6px 12px 4px;
+        color: var(--text-muted);
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      `;
+      this.pluginExporterHeader.textContent = 'Plugin Exporters';
+      this.pluginExporterHeader.dataset.testid = 'plugin-exporter-header';
+      this.pluginExporterSeparator.insertAdjacentElement('afterend', this.pluginExporterHeader);
+    }
+
+    // Create the menu item button
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.setAttribute('role', 'menuitem');
+    row.tabIndex = -1;
+    row.dataset.testid = `plugin-exporter-${key}`;
+    row.style.cssText = `
+      display: flex;
+      align-items: center;
+      padding: 6px 12px;
+      cursor: pointer;
+      transition: background 0.12s ease;
+      gap: 8px;
+      color: var(--text-muted);
+      background: transparent;
+      border: none;
+      width: 100%;
+      text-align: left;
+      font-family: inherit;
+      font-size: inherit;
+      outline: none;
+    `;
+
+    row.addEventListener('pointerenter', () => {
+      row.style.background = 'var(--bg-hover)';
+      row.style.color = 'var(--text-primary)';
+    });
+    row.addEventListener('pointerleave', () => {
+      row.style.background = 'transparent';
+      row.style.color = 'var(--text-muted)';
+    });
+    row.addEventListener('focus', () => {
+      row.style.background = 'var(--bg-hover)';
+      row.style.color = 'var(--text-primary)';
+    });
+    row.addEventListener('blur', () => {
+      row.style.background = 'transparent';
+      row.style.color = 'var(--text-muted)';
+    });
+
+    const iconEl = document.createElement('span');
+    iconEl.innerHTML = getIconSvg('download', 'sm');
+    iconEl.style.cssText = 'display: flex; align-items: center;';
+
+    const labelEl = document.createElement('span');
+    labelEl.textContent = label;
+    labelEl.style.cssText = 'flex: 1; font-size: 12px;';
+
+    row.appendChild(iconEl);
+    row.appendChild(labelEl);
+
+    row.addEventListener('click', () => {
+      this.emit('pluginExportRequested', { pluginId, name });
+      this.closeDropdown();
+    });
+
+    // Insert after the header (or after the last plugin exporter item)
+    const insertAfter = this.pluginExporterHeader!;
+    // Find the right insertion point: after header + all existing plugin items
+    let lastPluginItem: HTMLElement = insertAfter;
+    for (const item of this.pluginExporterItems.values()) {
+      if (item.compareDocumentPosition(lastPluginItem) & Node.DOCUMENT_POSITION_FOLLOWING) {
+        continue;
+      }
+      lastPluginItem = item;
+    }
+    lastPluginItem.insertAdjacentElement('afterend', row);
+
+    this.pluginExporterItems.set(key, row);
+  }
+
+  /**
+   * Remove a plugin-contributed exporter from the dropdown menu.
+   */
+  removePluginExporter(pluginId: string, name: string): void {
+    const key = `${pluginId}:${name}`;
+    const item = this.pluginExporterItems.get(key);
+    if (!item) return;
+
+    item.remove();
+    this.pluginExporterItems.delete(key);
+
+    // If no more plugin exporters, remove the section separator and header
+    if (this.pluginExporterItems.size === 0) {
+      this.pluginExporterSeparator?.remove();
+      this.pluginExporterSeparator = null;
+      this.pluginExporterHeader?.remove();
+      this.pluginExporterHeader = null;
+    }
   }
 
   quickExport(format: ExportFormat = 'png'): void {
