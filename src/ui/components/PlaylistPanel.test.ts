@@ -311,10 +311,10 @@ describe('PlaylistPanel', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // Issue #108 regression: no import button
+  // Issue #108: EDL/OTIO import support
   // ---------------------------------------------------------------------------
-  describe('issue #108 regression: only export buttons exist, no import', () => {
-    it('PL-108a: footer contains EDL export button but no import button', () => {
+  describe('issue #108: EDL/OTIO import', () => {
+    it('PL-108a: footer contains import button alongside export buttons', () => {
       const el = panel.render();
       const buttons = el.querySelectorAll('button');
       const buttonTexts = Array.from(buttons).map((btn) => btn.textContent?.trim() ?? '');
@@ -323,13 +323,168 @@ describe('PlaylistPanel', () => {
       expect(buttonTexts.some((t) => t.includes('EDL'))).toBe(true);
       expect(buttonTexts.some((t) => t.includes('OTIO'))).toBe(true);
 
-      // Should NOT have any import button
+      // Should have an import button
       const importBtn = Array.from(buttons).find(
         (btn) =>
           btn.title?.toLowerCase().includes('import') ||
           btn.textContent?.toLowerCase().includes('import'),
       );
-      expect(importBtn).toBeUndefined();
+      expect(importBtn).toBeDefined();
+    });
+
+    it('PL-108b: import button present with correct testid', () => {
+      const el = panel.render();
+      const importBtn = el.querySelector('[data-testid="playlist-import-btn"]');
+      expect(importBtn).toBeInstanceOf(HTMLButtonElement);
+    });
+
+    it('PL-108c: clicking import creates file input', () => {
+      document.body.appendChild(panel.render());
+      panel.show();
+
+      const importBtn = panel.render().querySelector('[data-testid="playlist-import-btn"]') as HTMLButtonElement;
+      expect(importBtn).toBeDefined();
+
+      importBtn.click();
+
+      const fileInput = document.body.querySelector('[data-testid="import-playlist-file-input"]');
+      expect(fileInput).toBeInstanceOf(HTMLInputElement);
+      if (fileInput) {
+        expect((fileInput as HTMLInputElement).type).toBe('file');
+        expect((fileInput as HTMLInputElement).accept).toBe('.edl,.otio,.json,.rvedl');
+      }
+
+      // Clean up the file input if still in DOM
+      if (fileInput && document.body.contains(fileInput)) {
+        document.body.removeChild(fileInput);
+      }
+      document.body.removeChild(panel.render());
+    });
+
+    it('PL-108d: EDL file import calls manager.fromEDL', async () => {
+      (manager as unknown as Record<string, unknown>).fromEDL = vi.fn().mockReturnValue(2);
+      (manager as unknown as Record<string, unknown>).clear = vi.fn();
+      (manager as unknown as Record<string, unknown>).unresolvedClips = [];
+
+      document.body.appendChild(panel.render());
+      panel.show();
+
+      const importedHandler = vi.fn();
+      panel.on('imported', importedHandler);
+
+      const importBtn = panel.render().querySelector('[data-testid="playlist-import-btn"]') as HTMLButtonElement;
+      importBtn.click();
+
+      const fileInput = document.body.querySelector('[data-testid="import-playlist-file-input"]') as HTMLInputElement;
+      expect(fileInput).toBeTruthy();
+
+      // Simulate file selection
+      const edlContent = '001  ShotA  V  C  01:00:00:00  01:00:01:00  01:00:00:00  01:00:01:00';
+      const file = new File([edlContent], 'test.edl', { type: 'text/plain' });
+      Object.defineProperty(fileInput, 'files', { value: [file], writable: false });
+      fileInput.dispatchEvent(new Event('change'));
+
+      // Wait for FileReader to complete
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect((manager as unknown as Record<string, ReturnType<typeof vi.fn>>).clear).toHaveBeenCalled();
+      expect((manager as unknown as Record<string, ReturnType<typeof vi.fn>>).fromEDL).toHaveBeenCalledWith(
+        edlContent,
+        expect.any(Function),
+      );
+      expect(importedHandler).toHaveBeenCalledWith(
+        expect.objectContaining({ format: 'edl', importedCount: 2 }),
+      );
+
+      document.body.removeChild(panel.render());
+    });
+
+    it('PL-108e: OTIO file import calls manager.fromOTIO', async () => {
+      (manager as unknown as Record<string, unknown>).fromOTIO = vi.fn().mockReturnValue(3);
+      (manager as unknown as Record<string, unknown>).clear = vi.fn();
+      (manager as unknown as Record<string, unknown>).unresolvedClips = [{ id: 'u1' }];
+
+      document.body.appendChild(panel.render());
+      panel.show();
+
+      const importedHandler = vi.fn();
+      panel.on('imported', importedHandler);
+
+      const importBtn = panel.render().querySelector('[data-testid="playlist-import-btn"]') as HTMLButtonElement;
+      importBtn.click();
+
+      const fileInput = document.body.querySelector('[data-testid="import-playlist-file-input"]') as HTMLInputElement;
+      expect(fileInput).toBeTruthy();
+
+      const otioContent = '{"OTIO_SCHEMA": "Timeline.1"}';
+      const file = new File([otioContent], 'test.otio', { type: 'application/json' });
+      Object.defineProperty(fileInput, 'files', { value: [file], writable: false });
+      fileInput.dispatchEvent(new Event('change'));
+
+      // Wait for FileReader to complete
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect((manager as unknown as Record<string, ReturnType<typeof vi.fn>>).clear).toHaveBeenCalled();
+      expect((manager as unknown as Record<string, ReturnType<typeof vi.fn>>).fromOTIO).toHaveBeenCalledWith(
+        otioContent,
+        expect.any(Function),
+      );
+      expect(importedHandler).toHaveBeenCalledWith(
+        expect.objectContaining({ format: 'otio', importedCount: 3, unresolvedCount: 1 }),
+      );
+
+      document.body.removeChild(panel.render());
+    });
+
+    it('PL-108f: import cleans up file input from DOM', () => {
+      document.body.appendChild(panel.render());
+      panel.show();
+
+      const importBtn = panel.render().querySelector('[data-testid="playlist-import-btn"]') as HTMLButtonElement;
+      importBtn.click();
+
+      const fileInput = document.body.querySelector('[data-testid="import-playlist-file-input"]');
+      expect(fileInput).toBeTruthy();
+
+      // Simulate cancel
+      fileInput!.dispatchEvent(new Event('cancel'));
+
+      const fileInputAfter = document.body.querySelector('[data-testid="import-playlist-file-input"]');
+      expect(fileInputAfter).toBeNull();
+
+      document.body.removeChild(panel.render());
+    });
+
+    it('PL-108g: setSourceNameResolver accepts resolver function', () => {
+      const resolver = vi.fn().mockReturnValue({ index: 0, frameCount: 100 });
+      expect(() => panel.setSourceNameResolver(resolver)).not.toThrow();
+    });
+
+    it('PL-108h: import with no resolver handles gracefully', async () => {
+      (manager as unknown as Record<string, unknown>).fromEDL = vi.fn().mockReturnValue(0);
+      (manager as unknown as Record<string, unknown>).clear = vi.fn();
+
+      document.body.appendChild(panel.render());
+      panel.show();
+
+      const importBtn = panel.render().querySelector('[data-testid="playlist-import-btn"]') as HTMLButtonElement;
+      importBtn.click();
+
+      const fileInput = document.body.querySelector('[data-testid="import-playlist-file-input"]') as HTMLInputElement;
+      const file = new File(['001  ShotA  V  C  01:00:00:00  01:00:01:00'], 'test.edl', { type: 'text/plain' });
+      Object.defineProperty(fileInput, 'files', { value: [file], writable: false });
+      fileInput.dispatchEvent(new Event('change'));
+
+      // Wait for FileReader to complete
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Should not throw, and fromEDL should be called with a fallback resolver
+      expect((manager as unknown as Record<string, ReturnType<typeof vi.fn>>).fromEDL).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Function),
+      );
+
+      document.body.removeChild(panel.render());
     });
   });
 });

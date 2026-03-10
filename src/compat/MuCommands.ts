@@ -35,6 +35,7 @@ function getOpenRV(): {
   media: {
     getFPS(): number;
     getPlaybackFPS(): number;
+    setPlaybackFPS(fps: number): void;
     getResolution(): { width: number; height: number };
     hasMedia(): boolean;
   };
@@ -132,7 +133,6 @@ export class MuCommands {
   // --- Internal state for ADD commands ---
   private _frameStart = 1;
   private _inc = 1;
-  private _overrideFPS: number | null = null;
   private _skippedFrames = 0;
   private _mbps = 0;
   private _filterMode: number = FilterLinear;
@@ -222,12 +222,11 @@ export class MuCommands {
     if (typeof fps !== 'number' || isNaN(fps) || fps <= 0) {
       throw new TypeError('setFPS() requires a positive number');
     }
-    this._overrideFPS = fps;
+    getOpenRV().media.setPlaybackFPS(fps);
   }
 
   /** Get effective FPS. (Mu #9) */
   fps(): number {
-    if (this._overrideFPS !== null) return this._overrideFPS;
     return getOpenRV().media.getPlaybackFPS();
   }
 

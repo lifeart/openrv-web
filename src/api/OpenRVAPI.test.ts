@@ -89,7 +89,7 @@ function createMockSession() {
   });
   Object.defineProperty(session, 'inPoint', { get: () => session._inPoint });
   Object.defineProperty(session, 'outPoint', { get: () => session._outPoint });
-  Object.defineProperty(session, 'fps', { get: () => session._fps });
+  Object.defineProperty(session, 'fps', { get: () => session._fps, set: (v: number) => { session._fps = v; } });
   Object.defineProperty(session, 'playDirection', { get: () => session._playDirection });
   Object.defineProperty(session, 'marks', { get: () => session._marks });
   Object.defineProperty(session, 'sourceCount', { get: () => session.sources?.length ?? 0 });
@@ -675,6 +675,25 @@ describe('MediaAPI', () => {
 
   it('API-U211: getPlaybackFPS() returns session playback FPS', () => {
     session._fps = 60;
+    expect(media.getPlaybackFPS()).toBe(60);
+  });
+
+  it('API-U212: setPlaybackFPS() sets session playback FPS', () => {
+    media.setPlaybackFPS(48);
+    expect(session._fps).toBe(48);
+    expect(media.getPlaybackFPS()).toBe(48);
+  });
+
+  it('API-U213: setPlaybackFPS() throws on invalid input', () => {
+    expect(() => media.setPlaybackFPS(0)).toThrow(TypeError);
+    expect(() => media.setPlaybackFPS(-1)).toThrow(TypeError);
+    expect(() => media.setPlaybackFPS(NaN)).toThrow(TypeError);
+    expect(() => media.setPlaybackFPS('abc' as unknown as number)).toThrow(TypeError);
+  });
+
+  it('API-U214: setPlaybackFPS() updates getPlaybackFPS() readback', () => {
+    expect(media.getPlaybackFPS()).toBe(24);
+    media.setPlaybackFPS(60);
     expect(media.getPlaybackFPS()).toBe(60);
   });
 

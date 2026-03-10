@@ -1,5 +1,17 @@
 # Fixed Issues
 
+## Issue #234: Mu compat `setFPS()` only changes compat readback state and does not affect real playback timing
+
+- **Severity**: Medium
+- **Area**: Mu compatibility / playback scripting
+- **Root Cause**: `MuCommands.setFPS()` only stored the FPS value in a private `_overrideFPS` field without calling through to the session API. `fps()` returned this local override, creating a false sense the command worked while actual playback timing remained unchanged.
+- **Fix**: Added `setPlaybackFPS(fps)` to `MediaAPI` that sets `session.fps` (which delegates to `PlaybackEngine.fps`, genuinely changing playback timing). Changed `MuCommands.setFPS()` to call `getOpenRV().media.setPlaybackFPS(fps)`. Changed `MuCommands.fps()` to always read from `getPlaybackFPS()`. Removed the unused `_overrideFPS` field entirely. Both methods include input validation (positive number check).
+- **Regression Tests**: Added 6 new tests across two files:
+  - MuCommands: `setFPS()` calls real API, `fps()` reads real state after set, playback FPS returned (not source), input validation (0, -1, NaN)
+  - OpenRVAPI: `setPlaybackFPS()` basic functionality, input validation, readback consistency
+- **Verification**: TypeScript clean, all 106 MuCommands tests pass, all 265 OpenRVAPI tests pass.
+- **Files Changed**: `src/api/MediaAPI.ts`, `src/compat/MuCommands.ts`, `src/compat/__tests__/MuCommands.test.ts`, `src/api/OpenRVAPI.test.ts`
+
 ## Issue #233: MXF parsing hard-fails on indefinite BER lengths instead of degrading or surfacing narrower support
 
 - **Severity**: Medium
@@ -1039,7 +1051,8 @@
 
 - **Severity**: Medium
 - **Fix**: Updated docs from "EDL import/export" to "EDL/OTIO export". Added TODO(#108).
-- **Regression Tests**: PL-108a (no import button).
+- **TODO(#108) Resolved**: Added Import button to PlaylistPanel footer (upload icon, accepts `.edl,.otio,.json,.rvedl`). `handleImport()` detects format by extension, clears playlist, calls `fromEDL()` or `fromOTIO()` with source resolver. Added `imported` event with format/importedCount/unresolvedCount. Added `setSourceNameResolver()` for name-to-index mapping. File input cleaned up on both completion and cancel.
+- **Regression Tests**: PL-108a (updated: import button exists), PL-108b through PL-108h (7 new: button testid, file input creation, EDL import, OTIO import, cleanup, resolver, fallback).
 - **Files Changed**: `src/ui/components/PlaylistPanel.ts`, `src/ui/components/PlaylistPanel.test.ts`
 
 ## Issue #109: Network Sync can show `Copied!` before the share link copy actually succeeds

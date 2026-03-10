@@ -42,6 +42,7 @@ function createMockOpenRV() {
     media: {
       getFPS: vi.fn((): number => 24),
       getPlaybackFPS: vi.fn((): number => 24),
+      setPlaybackFPS: vi.fn(),
       getResolution: vi.fn((): { width: number; height: number } => ({ width: 1920, height: 1080 })),
       hasMedia: vi.fn((): boolean => true),
       getCurrentSource: vi.fn(() => null),
@@ -193,10 +194,24 @@ describe('MuCommands', () => {
       expect(cmd.frameEnd()).toBe(200);
     });
 
-    it('setFPS() / fps() manage FPS override', () => {
-      expect(cmd.fps()).toBe(24); // default from media
+    it('setFPS() calls the real API to change session playback FPS', () => {
       cmd.setFPS(30);
-      expect(cmd.fps()).toBe(30); // override
+      expect(mockOpenRV.media.setPlaybackFPS).toHaveBeenCalledWith(30);
+    });
+
+    it('fps() returns real session playback FPS after setFPS()', () => {
+      // Simulate the real API updating the playback FPS
+      mockOpenRV.media.getPlaybackFPS.mockReturnValue(30);
+      expect(cmd.fps()).toBe(30);
+    });
+
+    it('setFPS() affects playback state via the real API, not just local readback', () => {
+      cmd.setFPS(60);
+      expect(mockOpenRV.media.setPlaybackFPS).toHaveBeenCalledWith(60);
+      // fps() reads from the real API, not a local cache
+      mockOpenRV.media.getPlaybackFPS.mockReturnValue(60);
+      expect(cmd.fps()).toBe(60);
+      expect(mockOpenRV.media.getPlaybackFPS).toHaveBeenCalled();
     });
 
     it('fps() returns playback FPS (not source FPS) when no override', () => {
@@ -231,11 +246,12 @@ describe('MuCommands', () => {
       expect(cmd.realFPS()).toBe(0);
     });
 
-    it('realFPS() is independent of setFPS() override', () => {
+    it('realFPS() is independent of setFPS()', () => {
       cmd.setFPS(60);
-      expect(cmd.fps()).toBe(60); // nominal overridden
+      mockOpenRV.media.getPlaybackFPS.mockReturnValue(60);
+      expect(cmd.fps()).toBe(60); // nominal from real API
       mockOpenRV.playback.getMeasuredFPS.mockReturnValue(58.7);
-      expect(cmd.realFPS()).toBe(58.7); // measured, not the override
+      expect(cmd.realFPS()).toBe(58.7); // measured, not the nominal
     });
 
     it('setRealtime(true) sets realtime mode', () => {

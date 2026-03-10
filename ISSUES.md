@@ -5146,6 +5146,44 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Expired signed URLs, blocked network media, or unsupported remote media can open as a blank or stale viewer with no actionable explanation.
   - The failure mode is effectively “open the app and log to console,” which is not usable for ordinary recipients of a share link.
 
+### 431. Media-bearing share links only load the shared media on an empty session
+
+- Severity: High
+- Area: URL sharing / session bootstrap
+- Evidence:
+  - `applySessionURLState(...)` attempts `loadSourceFromUrl(...)` only behind `if (session.sourceCount === 0 && state.sourceUrl && session.loadSourceFromUrl)` in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L148) through [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L164).
+  - When the recipient already has any media loaded, the same method skips `sourceUrl` entirely and proceeds to apply frame/source/view state to the existing session in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L166) through [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L220).
+  - Share-link capture still records the sender's current `sourceUrl` in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L122) through [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L145), so the shared media identity is available but intentionally ignored once the receiver is not on a blank session.
+- Impact:
+  - Opening a media-bearing share link while you already have anything loaded can apply the sender's frame/view/compare state to the wrong local media instead of the shared media.
+  - That makes share links context-sensitive: the same link behaves differently depending on whether the recipient opens it in a fresh app state or not.
+
+### 432. Share-link parsing validates `sourceIndex`, but not A/B compare indices
+
+- Severity: Medium
+- Area: URL sharing / compare-state validation
+- Evidence:
+  - `parseState(...)` rejects invalid primary `sourceIndex` values, but accepts any numeric `sai` / `sbi` as `sourceAIndex` / `sourceBIndex` in [src/core/session/SessionURLManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionURLManager.ts#L196) through [src/core/session/SessionURLManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionURLManager.ts#L205).
+  - `applySessionURLState(...)` clamps the primary `sourceIndex` before applying it, but forwards `sourceAIndex` and `sourceBIndex` raw to the session in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L169) through [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L189).
+  - The A/B manager silently ignores out-of-range compare indices rather than clearing or clamping them in [src/core/session/ABCompareManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/ABCompareManager.ts#L124) through [src/core/session/ABCompareManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/ABCompareManager.ts#L138).
+  - The same restore path does have an explicit B-clear API available, but URL-state apply never uses it in [src/core/session/ABCompareManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/ABCompareManager.ts#L141) through [src/core/session/ABCompareManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/ABCompareManager.ts#L151).
+- Impact:
+  - Malformed or source-count-mismatched share links can leave stale local A/B assignments behind even though the primary source index is sanitized.
+  - Compare-state restore is therefore less deterministic than normal source restore and can depend on the receiver's prior session state.
+
+### 433. Malformed normal session share links fail silently during URL bootstrap
+
+- Severity: Medium
+- Area: URL sharing / bootstrap error handling
+- Evidence:
+  - `decodeSessionState(...)` returns `null` for empty, invalid, or unparsable `#s=...` payloads in [src/core/session/SessionURLManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionURLManager.ts#L65) through [src/core/session/SessionURLManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionURLManager.ts#L83).
+  - `handleURLBootstrap()` only applies shared state when `decodeSessionState(...)` returns a value and otherwise does nothing in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L312) through [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L315).
+  - The test suite codifies that behavior as “handles invalid hash gracefully (no crash)” with no user-facing message in [src/services/SessionURLService.test.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.test.ts#L423) through [src/services/SessionURLService.test.ts#L430).
+  - By contrast, the same bootstrap service explicitly calls `networkControl.showInfo(...)` for malformed WebRTC links in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L296) through [src/services/SessionURLService.ts#L302).
+- Impact:
+  - A corrupted or truncated normal share URL can open the app with no state applied and no explanation of why the link failed.
+  - The behavior is inconsistent with malformed WebRTC links, which do surface actionable feedback.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

@@ -101,6 +101,24 @@ export class MediaAPI extends DisposableAPI {
   }
 
   /**
+   * Set the session playback FPS (overrides the source FPS for playback timing).
+   *
+   * @param fps - The desired playback rate in frames per second. Must be a positive number.
+   *
+   * @example
+   * ```ts
+   * openrv.media.setPlaybackFPS(48); // play back at 48 fps
+   * ```
+   */
+  setPlaybackFPS(fps: number): void {
+    this.assertNotDisposed();
+    if (typeof fps !== 'number' || isNaN(fps) || fps <= 0) {
+      throw new TypeError('setPlaybackFPS() requires a positive number');
+    }
+    this.session.fps = fps;
+  }
+
+  /**
    * Get the resolution of the current source.
    *
    * @returns An object with `width` and `height` in pixels, or `{ width: 0, height: 0 }` if
