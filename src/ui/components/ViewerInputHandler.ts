@@ -13,7 +13,7 @@ import { type PaintEngine, type PaintTool } from '../../paint/PaintEngine';
 import { type PaintRenderer } from '../../paint/PaintRenderer';
 import { type StrokePoint, ShapeType, type Point } from '../../paint/types';
 import { type Session } from '../../core/session/Session';
-import { filterImageFiles, getBestSequence } from '../../utils/media/SequenceLoader';
+import { filterImageFiles, getBestSequence, inferSequenceFromSingleFile } from '../../utils/media/SequenceLoader';
 import { showAlert } from './shared/Modal';
 import {
   type PointerState,
@@ -743,6 +743,22 @@ export class ViewerInputHandler {
           showAlert(`Failed to load sequence: ${err}`, { type: 'error', title: 'Load Error' });
           return;
         }
+      }
+    }
+
+    // Single image file - try to infer a sequence from available files
+    if (imageFiles.length === 1) {
+      const singleFile = imageFiles[0]!;
+      try {
+        const sequenceInfo = await inferSequenceFromSingleFile(singleFile, fileArray);
+        if (sequenceInfo) {
+          const sequenceFiles = sequenceInfo.frames.map((f) => f.file);
+          await session.loadSequence(sequenceFiles);
+          return;
+        }
+      } catch (err) {
+        console.error('Failed to infer sequence:', err);
+        // Fall through to single file loading
       }
     }
 

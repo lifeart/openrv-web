@@ -1164,3 +1164,158 @@ describe('ViewerInputHandler – Rotation Scrub (Ctrl+Shift+Drag)', () => {
     expect(container.releasePointerCapture).toHaveBeenCalled();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Single-file sequence inference on drop (Issue #154)
+// ---------------------------------------------------------------------------
+
+// We need to mock inferSequenceFromSingleFile to control its return value.
+// Use dynamic import + vi.mock to intercept the module.
+vi.mock('../../utils/media/SequenceLoader', async (importOriginal) => {
+  const actual = (await importOriginal()) as any;
+  return {
+    ...actual,
+    inferSequenceFromSingleFile: vi.fn(() => Promise.resolve(null)),
+  };
+});
+
+// Re-import the mock so we can control it in tests
+import { inferSequenceFromSingleFile } from '../../utils/media/SequenceLoader';
+const mockedInferSequence = vi.mocked(inferSequenceFromSingleFile);
+
+describe('ViewerInputHandler – Single-file sequence inference on drop (Issue #154)', () => {
+  let ctx: ViewerInputContext;
+  let handler: ViewerInputHandler;
+  let dropOverlay: HTMLElement;
+
+  beforeEach(() => {
+    ctx = createMockContext();
+    dropOverlay = document.createElement('div');
+    handler = new ViewerInputHandler(ctx, dropOverlay);
+    handler.bindEvents();
+    mockedInferSequence.mockReset();
+    mockedInferSequence.mockResolvedValue(null);
+  });
+
+  afterEach(() => {
+    handler.unbindEvents();
+    const container = ctx.getContainer();
+    if (container.parentNode) {
+      container.parentNode.removeChild(container);
+    }
+  });
+
+  function dispatchDrop(container: HTMLElement, files: File[]): void {
+    const mockDataTransfer = { files };
+    const dropEvent = new Event('drop', { bubbles: true }) as any;
+    dropEvent.dataTransfer = mockDataTransfer;
+    dropEvent.preventDefault = vi.fn();
+    container.dispatchEvent(dropEvent);
+  }
+
+  it('SEQ-INFER-001: single numbered image file dropped triggers sequence inference', async () => {
+    const container = ctx.getContainer();
+    const singleFile = new File(['img'], 'render_0001.exr');
+
+    dispatchDrop(container, [singleFile]);
+
+    await vi.waitFor(() => {
+      expect(mockedInferSequence).toHaveBeenCalledTimes(1);
+    });
+
+    expect(mockedInferSequence).toHaveBeenCalledWith(singleFile, [singleFile]);
+  });
+
+  it('SEQ-INFER-002: sequence inference succeeds → loaded as sequence', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+
+    const file1 = new File(['a'], 'frame_0001.exr');
+    const file2 = new File(['b'], 'frame_0002.exr');
+    const file3 = new File(['c'], 'frame_0003.exr');
+
+    mockedInferSequence.mockResolvedValue({
+      name: 'frame_####.exr',
+      pattern: 'frame_####.exr',
+      frames: [
+        { file: file1, frameNumber: 1, index: 0 },
+        { file: file2, frameNumber: 2, index: 1 },
+        { file: file3, frameNumber: 3, index: 2 },
+      ],
+      fps: 24,
+      startFrame: 1,
+      endFrame: 3,
+      width: 1920,
+      height: 1080,
+      missingFrames: [],
+    });
+
+    dispatchDrop(container, [file1]);
+
+    await vi.waitFor(() => {
+      expect(mockSession.loadSequence).toHaveBeenCalledTimes(1);
+    });
+
+    expect(mockSession.loadSequence).toHaveBeenCalledWith([file1, file2, file3]);
+    expect(mockSession.loadFile).not.toHaveBeenCalled();
+  });
+
+  it('SEQ-INFER-003: sequence inference returns null → falls through to single file load', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+
+    const singleFile = new File(['img'], 'photo_0042.png');
+
+    mockedInferSequence.mockResolvedValue(null);
+
+    dispatchDrop(container, [singleFile]);
+
+    await vi.waitFor(() => {
+      expect(mockSession.loadFile).toHaveBeenCalledTimes(1);
+    });
+
+    expect(mockSession.loadFile).toHaveBeenCalledWith(singleFile);
+    expect(mockSession.loadSequence).not.toHaveBeenCalled();
+  });
+
+  it('SEQ-INFER-004: multiple image files dropped still use existing getBestSequence path', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+
+    // Drop multiple image files — should go through getBestSequence, not inferSequenceFromSingleFile
+    const file1 = new File(['a'], 'shot_001.exr');
+    const file2 = new File(['b'], 'shot_002.exr');
+    const file3 = new File(['c'], 'shot_003.exr');
+
+    dispatchDrop(container, [file1, file2, file3]);
+
+    await vi.waitFor(() => {
+      // getBestSequence should handle this, loadSequence or loadFile should be called
+      expect(
+        (mockSession.loadSequence as any).mock.calls.length +
+          (mockSession.loadFile as any).mock.calls.length,
+      ).toBeGreaterThan(0);
+    });
+
+    // inferSequenceFromSingleFile should NOT be called for multi-file drops
+    expect(mockedInferSequence).not.toHaveBeenCalled();
+  });
+
+  it('SEQ-INFER-005: sequence inference throws error → falls through to single file load', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+
+    const singleFile = new File(['img'], 'frame_0001.tiff');
+
+    mockedInferSequence.mockRejectedValue(new Error('inference failed'));
+
+    dispatchDrop(container, [singleFile]);
+
+    await vi.waitFor(() => {
+      expect(mockSession.loadFile).toHaveBeenCalledTimes(1);
+    });
+
+    expect(mockSession.loadFile).toHaveBeenCalledWith(singleFile);
+    expect(mockSession.loadSequence).not.toHaveBeenCalled();
+  });
+});

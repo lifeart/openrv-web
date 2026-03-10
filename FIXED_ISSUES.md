@@ -1268,3 +1268,13 @@
 - **Regression Tests**: SIDECAR-001 (GTO + companions builds map), SIDECAR-002 (GTO alone passes empty map), SIDECAR-003 (.rv extension works), SIDECAR-004 (multiple companions with correct basenames), SIDECAR-005 (non-session files fall through to loadFile), SIDECAR-006 (session file excluded from map).
 - **Verification**: All 48 ViewerInputHandler tests pass, TypeScript clean.
 - **Files Changed**: `src/ui/components/ViewerInputHandler.ts`, `src/ui/components/ViewerInputHandler.test.ts`
+
+## Issue #154: Drag-and-drop skips single-file sequence inference that the file picker supports
+
+- **Severity**: Medium
+- **Area**: Media ingest / sequence detection consistency
+- **Root Cause**: The header file-picker path called `inferSequenceFromSingleFile()` when exactly one image file was selected, promoting numbered frames to full sequences. The drag-and-drop path in `ViewerInputHandler.ts` only did sequence detection for multiple image files; a single numbered frame fell straight through to single-file loading.
+- **Fix**: Added `inferSequenceFromSingleFile(singleFile, fileArray)` call in the drag-and-drop handler when exactly one image file is dropped. If inference succeeds, loads as sequence via `session.loadSequence()`. If it returns null or throws, falls through to single-file `loadFile()` as before. Matches HeaderBar's pattern exactly.
+- **Regression Tests**: SEQ-INFER-001 (inference called with correct args), SEQ-INFER-002 (successful inference loads as sequence), SEQ-INFER-003 (null inference falls through to loadFile), SEQ-INFER-004 (multiple images still use existing getBestSequence — no regression), SEQ-INFER-005 (inference error falls through to loadFile).
+- **Verification**: All 53 ViewerInputHandler tests pass, TypeScript clean.
+- **Files Changed**: `src/ui/components/ViewerInputHandler.ts`, `src/ui/components/ViewerInputHandler.test.ts`

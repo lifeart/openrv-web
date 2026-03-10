@@ -3225,6 +3225,197 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Mu-compatible scripts can fail to enter fullscreen, or incorrectly think fullscreen is off, in Safari-like environments where the main app itself still handles fullscreen correctly.
   - On the `MuCommands` path, denied fullscreen can also surface as an unhandled promise rejection instead of a contained warning.
 
+### 262. Mu compat active media-representation selection never changes what `sourceMedia()` or `sourceMediaInfo()` report
+
+- Severity: Medium
+- Area: Mu compatibility / source representations
+- Evidence:
+  - `setActiveSourceMediaRep(...)` only updates `source.activeRep` in [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L602) through [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L610).
+  - `sourceMedia(...)` ignores `activeRep` and always returns `source.mediaPaths` from the base source record in [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L341) through [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L344).
+  - `sourceMediaInfo(...)` likewise ignores `activeRep` and always reports `file: source.mediaPaths[0]` plus the base source dimensions/range in [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L350) through [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L381).
+  - The tests confirm that active representation can be switched via `sourceMediaRep(name)` in [src/compat/__tests__/MuSourceBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuSourceBridge.test.ts#L524) through [src/compat/__tests__/MuSourceBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuSourceBridge.test.ts#L538), but there is no test that `sourceMedia(...)` or `sourceMediaInfo(...)` reflect that switch.
+- Impact:
+  - Mu-compatible scripts can switch a source to `proxy` or another representation and still have follow-up media queries report the old base media.
+  - That breaks representation-aware workflows because the bridge advertises rep switching while its own read APIs continue to describe a different source state.
+
+### 263. Mu compat `imagesAtPixel()` returns all rendered images, not just images under the queried point
+
+- Severity: Medium
+- Area: Mu compatibility / image-query scripting
+- Evidence:
+  - The API documentation says `imagesAtPixel(...)` should return “images under the point” in [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L226) through [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L234).
+  - The implementation computes `inside` and `edge`, but then unconditionally pushes a result for every rendered image as long as `_screenToImage(...)` returns coordinates in [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L239) through [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L263).
+  - That means a point far outside the image still returns that image with `inside: false`, which the current tests explicitly accept in [src/compat/__tests__/MuEvalBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuEvalBridge.test.ts#L274) through [src/compat/__tests__/MuEvalBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuEvalBridge.test.ts#L279).
+  - On multi-image renders, the method will therefore report all images with projected coordinates rather than filtering to the actual hit set.
+- Impact:
+  - Mu-compatible hit-testing scripts can treat non-hit images as if they were returned by the query, unless they add their own extra filtering.
+  - That makes the command semantically misleading because its name and docs promise a filtered hit result, but the implementation returns a per-image projection table instead.
+
+### 264. Mu compat `imageGeometryByTag()` ignores the tag argument entirely
+
+- Severity: Medium
+- Area: Mu compatibility / image-query scripting
+- Evidence:
+  - `imageGeometryByTag(imageName, _tag)` explicitly comments that tags are not implemented and simply forwards to `imageGeometry(imageName)` in [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L305) through [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L307).
+  - That means the `tag` parameter never influences the selected geometry, even though the API name and signature imply tag-based selection.
+  - The current test only verifies that the method falls back to name-based lookup and does not check any tag distinction in [src/compat/__tests__/MuEvalBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuEvalBridge.test.ts#L420) through [src/compat/__tests__/MuEvalBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuEvalBridge.test.ts#L426).
+- Impact:
+  - Mu-compatible scripts cannot query per-tag image geometry even though the command surface suggests they can.
+  - This is another silent semantic mismatch because callers can vary the tag and receive the same answer every time.
+
+### 265. Mu compat `eventToImageSpace()` ignores its `useLocalCoords` flag
+
+- Severity: Medium
+- Area: Mu compatibility / coordinate transforms
+- Evidence:
+  - The method signature includes `_useLocalCoords = false` and the documentation describes it as controlling whether local coordinates are used in [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L313) through [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L319).
+  - The implementation never branches on `_useLocalCoords`; it follows the same code path regardless of the flag value in [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L320) through [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L333).
+  - There is no compat test covering differing outputs for `useLocalCoords = true` versus `false`.
+- Impact:
+  - Mu-compatible tools that expect local-coordinate conversion can pass `true` and still get the global/default coordinate behavior.
+  - That can break overlay or node-local interaction logic because the flag is accepted but semantically inert.
+
+### 266. Mu compat `sourcesAtFrame()` ignores the requested frame when it falls back to the current OpenRV source
+
+- Severity: Medium
+- Area: Mu compatibility / source queries
+- Evidence:
+  - `sourcesAtFrame(frame)` correctly filters local `SourceRecord`s against `startFrame` and `endFrame` in [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L158) through [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L167).
+  - If no local source matches, the fallback path simply appends `getOpenRV().media.getCurrentSource().name` without comparing the requested frame to any duration or range in [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L169) through [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L178).
+  - The mock current source used in tests even exposes a `duration` field, but the fallback path does not consult it in [src/compat/__tests__/MuSourceBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuSourceBridge.test.ts#L6) through [src/compat/__tests__/MuSourceBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuSourceBridge.test.ts#L22).
+  - The existing fallback test only checks frame `1`, so the out-of-range behavior is untested in [src/compat/__tests__/MuSourceBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuSourceBridge.test.ts#L71) through [src/compat/__tests__/MuSourceBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuSourceBridge.test.ts#L74).
+- Impact:
+  - Mu-compatible scripts can ask which sources are active at an out-of-range frame and still be told that the current OpenRV source is active.
+  - That makes the fallback semantics inconsistent with the local-source path and unreliable for timeline-aware tooling.
+
+### 267. Mu compat `sourceMediaInfoList()` omits the same fallback current source that `sources()` exposes
+
+- Severity: Medium
+- Area: Mu compatibility / source queries
+- Evidence:
+  - `sources()` returns a fabricated fallback entry from `openrv.media.getCurrentSource()` when there are no local sources in [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L124) through [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L147).
+  - `sourceMediaInfoList()` does not use that fallback path at all; it only maps over `this._sources.values()` in [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L389) through [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L393).
+  - So in the “no local sources, but current OpenRV source exists” case, the bridge can report one source via `sources()` and zero sources via `sourceMediaInfoList()`.
+  - The current tests cover local-source listing for `sourceMediaInfoList()`, but not its behavior in the fallback-only case in [src/compat/__tests__/MuSourceBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuSourceBridge.test.ts#L284) through [src/compat/__tests__/MuSourceBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuSourceBridge.test.ts#L292).
+- Impact:
+  - Mu-compatible scripts can get contradictory answers from adjacent source-listing APIs depending on whether they ask for names or info objects.
+  - That inconsistency makes the fallback source model harder to consume and easy to mis-handle in integrations.
+
+### 268. Mu compat fallback `sources()` entries put the source name in the `media` field instead of a media path
+
+- Severity: Medium
+- Area: Mu compatibility / source queries
+- Evidence:
+  - When no local sources exist, `sources()` returns a fallback object using `media: current.name` in [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L133) through [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L141).
+  - The mocked `getCurrentSource()` payload used by the tests contains only metadata such as `name`, `type`, `width`, `height`, `duration`, and `fps`; it does not contain an actual media path in [src/compat/__tests__/MuSourceBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuSourceBridge.test.ts#L6) through [src/compat/__tests__/MuSourceBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuSourceBridge.test.ts#L22).
+  - So the fallback `media` value is, by construction, not the same kind of data that locally tracked source entries return in their `media` field.
+  - The current fallback test only asserts the returned `name` and does not validate the `media` field content in [src/compat/__tests__/MuSourceBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuSourceBridge.test.ts#L43) through [src/compat/__tests__/MuSourceBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuSourceBridge.test.ts#L48).
+- Impact:
+  - Mu-compatible scripts consuming `sources()` can interpret the fallback entry’s `media` value as a real path and then mis-handle it in file/path-based workflows.
+  - This is another schema inconsistency inside the same API, because local entries expose media paths while fallback entries expose source identifiers.
+
+### 269. Mu compat `setNodeInputs()` is not atomic and can leave a node partially rewired after a later connection failure
+
+- Severity: Medium
+- Area: Mu compatibility / node graph editing
+- Evidence:
+  - `setNodeInputs(name, inputNames)` resolves all input nodes first, then immediately disconnects all existing inputs via `node.disconnectAllInputs()` in [src/compat/MuNodeBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuNodeBridge.ts#L178) through [src/compat/MuNodeBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuNodeBridge.ts#L188).
+  - It then connects the new inputs one by one in a loop, relying on `Graph.connect(...)` to detect cycles in [src/compat/MuNodeBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuNodeBridge.ts#L189) through [src/compat/MuNodeBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuNodeBridge.ts#L192).
+  - `Graph.connect(...)` can throw `Connection would create a cycle` after earlier connections have already been applied in [src/core/graph/Graph.ts](/Users/lifeart/Repos/openrv-web/src/core/graph/Graph.ts#L57) through [src/core/graph/Graph.ts](/Users/lifeart/Repos/openrv-web/src/core/graph/Graph.ts#L68).
+  - There is no rollback path to restore the original inputs if one of the later connections fails.
+- Impact:
+  - Mu-compatible scripts can attempt to replace a node’s inputs and end up with a partially applied graph mutation instead of either the old inputs or the full new set.
+  - That makes graph editing brittle because a single invalid input in the requested set can silently destroy the previous connection layout before the method throws.
+
+### 270. Mu compat `nodeConnections(..., traverseGroups)` ignores the `traverseGroups` flag
+
+- Severity: Medium
+- Area: Mu compatibility / node graph queries
+- Evidence:
+  - The API signature exposes `nodeConnections(name, traverseGroups)` and documents the second parameter as controlling whether group nodes are traversed in [src/compat/MuNodeBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuNodeBridge.ts#L152) through [src/compat/MuNodeBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuNodeBridge.ts#L159).
+  - The implementation names that parameter `_traverseGroups` and never branches on it in [src/compat/MuNodeBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuNodeBridge.ts#L160) through [src/compat/MuNodeBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuNodeBridge.ts#L165).
+  - So the method always returns the direct `node.inputs` and `node.outputs` lists, regardless of the caller’s traversal request.
+  - The existing tests only cover the default direct-connection behavior and do not exercise `traverseGroups = true` in [src/compat/__tests__/MuNodeBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuNodeBridge.test.ts#L134) through [src/compat/__tests__/MuNodeBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuNodeBridge.test.ts#L148).
+- Impact:
+  - Mu-compatible scripts cannot use this API to flatten or traverse through group nodes even though the flag suggests they can.
+  - That creates another silent semantic mismatch, because callers can pass `true` and receive the exact same answer as `false`.
+
+### 271. Mu compat `imagesAtPixel()` ignores its `useStencil` flag
+
+- Severity: Medium
+- Area: Mu compatibility / image-query scripting
+- Evidence:
+  - The API signature exposes `imagesAtPixel(point, viewNodeName, useStencil)` and documents `useStencil` as controlling precise hit testing in [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L226) through [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L234).
+  - The implementation names the parameter `_useStencil` and never branches on it anywhere in [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L235) through [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L266).
+  - There is no compat test covering different behavior for `useStencil = true`.
+- Impact:
+  - Mu-compatible scripts can request stencil-accurate hit testing and still receive the same coarse projected result as the default path.
+  - That is another silent no-op flag in the image-query API surface.
+
+### 272. Mu compat `eventToCameraSpace()` ignores the supplied view-node argument
+
+- Severity: Medium
+- Area: Mu compatibility / coordinate transforms
+- Evidence:
+  - The method signature is `eventToCameraSpace(viewNodeName, eventPoint)` in [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L336) through [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L345).
+  - The implementation names the parameter `_viewNodeName` and computes camera coordinates solely from the global `_viewTransform` in [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L346) through [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L355).
+  - There is no branch that resolves or uses the named view node, and the tests call the method with an empty string rather than validating per-view-node behavior in [src/compat/__tests__/MuEvalBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuEvalBridge.test.ts#L489) through [src/compat/__tests__/MuEvalBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuEvalBridge.test.ts#L518).
+- Impact:
+  - Mu-compatible tools cannot query camera-space coordinates relative to a specific view node even though the method signature suggests they can.
+  - In multi-view or graph-aware contexts, that makes the returned coordinates depend only on whatever global transform was last injected.
+
+### 273. Mu settings helpers can throw in blocked-storage environments even though read/write paths are guarded
+
+- Severity: Medium
+- Area: Mu compatibility / settings persistence
+- Evidence:
+  - `readSetting(...)` and `writeSetting(...)` wrap `localStorage` access in `try/catch` in [src/compat/MuSettingsBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSettingsBridge.ts#L23) through [src/compat/MuSettingsBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSettingsBridge.ts#L55).
+  - The rest of the API does not: `hasSetting(...)`, `removeSetting(...)`, `listSettings(...)`, `clearGroup(...)`, and `clearAll()` call `localStorage` directly with no protection in [src/compat/MuSettingsBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSettingsBridge.ts#L60) through [src/compat/MuSettingsBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSettingsBridge.ts#L123).
+  - In browsers or privacy modes where storage access itself throws, the bridge therefore mixes “graceful fallback” behavior for some operations with hard exceptions for adjacent ones.
+  - The compat tests only cover normal storage behavior and do not exercise blocked or throwing `localStorage` paths.
+- Impact:
+  - Mu-compatible integrations can see settings reads/writes quietly degrade while settings enumeration or removal crashes the bridge in the same environment.
+  - That inconsistency makes storage failures harder to reason about and can break recovery/cleanup paths specifically when storage is already degraded.
+
+### 274. Mu compat `sendInternalEvent()` discards handler-written `returnContents`
+
+- Severity: Medium
+- Area: Mu compatibility / event dispatch
+- Evidence:
+  - The `MuEvent` type explicitly includes a mutable `returnContents` field “for reject/accept signaling” in [src/compat/types.ts](/Users/lifeart/Repos/openrv-web/src/compat/types.ts#L15) through [src/compat/types.ts](/Users/lifeart/Repos/openrv-web/src/compat/types.ts#L25).
+  - `MuEventBridge.sendInternalEvent(...)` creates an event object with `returnContents: ''`, dispatches it, and returns `void` in [src/compat/MuEventBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEventBridge.ts#L191) through [src/compat/MuEventBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEventBridge.ts#L200).
+  - That means any handler mutation of `event.returnContents` is lost to the caller unless they bypass `MuEventBridge` and directly use `ModeManager.dispatchEvent(...)` with their own event object.
+  - The current bridge tests validate only that `sendInternalEvent(...)` creates and dispatches the event object, not that any return payload can be observed by the caller in [src/compat/__tests__/MuEventBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuEventBridge.test.ts#L341) through [src/compat/__tests__/MuEventBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuEventBridge.test.ts#L424).
+- Impact:
+  - Mu-compatible code cannot use the public bridge to get reply data back from internal event handlers even though the event model advertises a return channel.
+  - That turns `sendInternalEvent()` into a fire-and-forget dispatch path, which is a semantic mismatch for callers expecting request/response-style event handling.
+
+### 275. `registerMuCompat()` is documented as a no-op on repeat calls but still returns fresh unmounted command objects each time
+
+- Severity: Medium
+- Area: Mu compatibility / bootstrap contract
+- Evidence:
+  - The function comment says repeated calls are safe and “subsequent calls are no-ops” in [src/compat/index.ts](/Users/lifeart/Repos/openrv-web/src/compat/index.ts#L35) through [src/compat/index.ts](/Users/lifeart/Repos/openrv-web/src/compat/index.ts#L40), and the public docs repeat the same promise in [docs/advanced/mu-compat.md](/Users/lifeart/Repos/openrv-web/docs/advanced/mu-compat.md#L12) through [docs/advanced/mu-compat.md](/Users/lifeart/Repos/openrv-web/docs/advanced/mu-compat.md#L16).
+  - The implementation still constructs a brand new `MuCommands` and `MuExtraCommands` pair on every call in [src/compat/index.ts](/Users/lifeart/Repos/openrv-web/src/compat/index.ts#L42) through [src/compat/index.ts](/Users/lifeart/Repos/openrv-web/src/compat/index.ts#L53).
+  - If `window.rv` already exists, the function leaves the global untouched but still returns the fresh pair, so the returned objects are not the mounted global compat instances in [src/compat/index.ts](/Users/lifeart/Repos/openrv-web/src/compat/index.ts#L46) through [src/compat/index.ts](/Users/lifeart/Repos/openrv-web/src/compat/index.ts#L50).
+  - The tests verify only that an existing `window.rv` is not overwritten, not that repeat calls return the already-mounted objects in [src/compat/__tests__/MuCommands.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuCommands.test.ts#L734) through [src/compat/__tests__/MuCommands.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuCommands.test.ts#L740).
+- Impact:
+  - Integrations can call `registerMuCompat()` twice and receive a second compat object graph that is detached from the globally mounted `window.rv` namespace.
+  - That breaks the documented “no-op” contract and can split state across multiple compat instances without the caller realizing it.
+
+### 276. Mu compat async introspection says `fullScreenMode` is async, but the command does not actually return a Promise
+
+- Severity: Medium
+- Area: Mu compatibility / command introspection
+- Evidence:
+  - `MuCommands.isAsync(name)` reports `true` for `fullScreenMode` because `ASYNC_COMMANDS` contains that command name in [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L126) through [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L173).
+  - The public docs reinforce that contract by saying `fullScreenMode()` returns a Promise internally and pointing callers to `commands.isAsync(name)` in [docs/advanced/mu-compat.md](/Users/lifeart/Repos/openrv-web/docs/advanced/mu-compat.md#L486) through [docs/advanced/mu-compat.md](/Users/lifeart/Repos/openrv-web/docs/advanced/mu-compat.md#L490).
+  - The actual implementation of `MuCommands.fullScreenMode(...)` returns `void` and just fires the fullscreen calls without awaiting or returning their promises in [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L391) through [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L399).
+  - The tests only validate that `isAsync('fullScreenMode')` is `true`; they do not check the runtime return value of `fullScreenMode(...)` in [src/compat/__tests__/MuCommands.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuCommands.test.ts#L135) through [src/compat/__tests__/MuCommands.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuCommands.test.ts#L140).
+- Impact:
+  - A caller can use the official introspection path, conclude that `fullScreenMode` is awaitable, and then receive `undefined` instead of a promise.
+  - That makes the async-command contract unreliable exactly where the docs tell callers to depend on it.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed
