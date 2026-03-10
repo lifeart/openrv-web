@@ -66,6 +66,7 @@ import { MediaCacheManager } from './cache/MediaCacheManager';
 import { DisposableSubscriptionManager } from './utils/DisposableSubscriptionManager';
 import { VirtualSliderController } from './ui/components/VirtualSliderController';
 import { getCurrentSourceStartFrame } from './utils/media/SourceUIState';
+import { pluginRegistry } from './plugin/PluginRegistry';
 
 const log = new Logger('App');
 
@@ -640,6 +641,7 @@ export class App {
         getFullscreenManager: () => this.fullscreenManager ?? undefined,
         getAudioMixer: () => this.audioOrchestrator.getAudioMixer(),
         getShortcutCheatSheet: () => this.shortcutCheatSheet,
+        getPluginRegistry: () => pluginRegistry,
       }),
       wireStackControls(wiringCtx),
     ];
