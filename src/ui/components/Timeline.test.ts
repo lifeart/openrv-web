@@ -793,6 +793,92 @@ describe('Timeline', () => {
     });
   });
 
+  describe('waveform error indicator (issue #190)', () => {
+    it('TML-WERR-001: shows waveformError when loadWaveform fails', async () => {
+      const waveformRenderer = (timeline as any).waveformRenderer;
+      vi.spyOn(waveformRenderer, 'loadFromVideo').mockResolvedValue(false);
+      vi.spyOn(waveformRenderer, 'getError').mockReturnValue('decode error');
+
+      await (timeline as any).loadWaveform();
+
+      expect((timeline as any).waveformLoaded).toBe(false);
+      expect((timeline as any).waveformError).toBe('decode error');
+    });
+
+    it('TML-WERR-002: clears waveformError on successful load', async () => {
+      // First set an error state
+      (timeline as any).waveformError = 'previous error';
+
+      const waveformRenderer = (timeline as any).waveformRenderer;
+      vi.spyOn(waveformRenderer, 'loadFromBlob').mockResolvedValue(true);
+
+      const mockFile = new File(['audio-data'], 'test.mp4', { type: 'video/mp4' });
+      const currentSource = session.currentSource!;
+      (currentSource as any).videoSourceNode = { getFile: () => mockFile };
+
+      await (timeline as any).loadWaveform();
+
+      expect((timeline as any).waveformLoaded).toBe(true);
+      expect((timeline as any).waveformError).toBeNull();
+    });
+
+    it('TML-WERR-003: draws "Waveform unavailable" text when waveformError is set', () => {
+      timeline.setSize(800, 80);
+      (timeline as any).waveformError = 'decode error';
+      (timeline as any).waveformLoaded = false;
+
+      const ctx = (timeline as any).ctx as CanvasRenderingContext2D;
+      const fillTextSpy = vi.spyOn(ctx, 'fillText');
+
+      timeline.drawCount = 0;
+      (timeline as any).draw();
+
+      const waveformUnavailableCall = fillTextSpy.mock.calls.find(
+        (call: unknown[]) => call[0] === 'Waveform unavailable',
+      );
+      expect(waveformUnavailableCall).toBeDefined();
+    });
+
+    it('TML-WERR-004: does not draw error text when waveform loaded successfully', () => {
+      timeline.setSize(800, 80);
+      (timeline as any).waveformError = null;
+      (timeline as any).waveformLoaded = true;
+
+      const ctx = (timeline as any).ctx as CanvasRenderingContext2D;
+      const fillTextSpy = vi.spyOn(ctx, 'fillText');
+
+      timeline.drawCount = 0;
+      (timeline as any).draw();
+
+      const waveformUnavailableCall = fillTextSpy.mock.calls.find(
+        (call: unknown[]) => call[0] === 'Waveform unavailable',
+      );
+      expect(waveformUnavailableCall).toBeUndefined();
+    });
+
+    it('TML-WERR-005: uses fallback message when getError() returns null', async () => {
+      const waveformRenderer = (timeline as any).waveformRenderer;
+      vi.spyOn(waveformRenderer, 'loadFromVideo').mockResolvedValue(false);
+      vi.spyOn(waveformRenderer, 'getError').mockReturnValue(null);
+
+      await (timeline as any).loadWaveform();
+
+      expect((timeline as any).waveformError).toBe('Waveform unavailable');
+    });
+
+    it('TML-WERR-006: schedules redraw on waveform failure', async () => {
+      const waveformRenderer = (timeline as any).waveformRenderer;
+      vi.spyOn(waveformRenderer, 'loadFromVideo').mockResolvedValue(false);
+      vi.spyOn(waveformRenderer, 'getError').mockReturnValue(null);
+
+      timeline.drawCount = 0;
+      await (timeline as any).loadWaveform();
+      flushRaf();
+
+      expect(timeline.drawCount).toBeGreaterThanOrEqual(1);
+    });
+  });
+
   describe('Task 1.1: rAF Draw Coalescing', () => {
     it('TML-COAL-001: 5x scheduleDraw() results in exactly 1 draw() call', () => {
       timeline.drawCount = 0;

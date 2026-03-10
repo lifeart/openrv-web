@@ -4401,6 +4401,80 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Users are taught to look for one configurable perspective-grid feature, but the shipped app splits part of that into Safe Areas and omits the rest entirely.
   - That makes both the composition-guide workflow and the perspective-correction workflow harder to discover because the docs collapse them into a feature model the UI does not match.
 
+### 357. The session export docs tell users to save `.orvproject` files from the Export menu, but production only exposes RV/GTO exports there
+
+- Severity: Medium
+- Area: Documentation / session save workflow
+- Evidence:
+  - The session save/load guide says users can "Click the Save button in the header bar or use the Export menu to save the current session" in [docs/export/sessions.md](/Users/lifeart/Repos/openrv-web/docs/export/sessions.md#L9) through [docs/export/sessions.md](/Users/lifeart/Repos/openrv-web/docs/export/sessions.md#L11).
+  - The shipped export dropdown's `Session` section contains only `Save RV Session (.rv)` and `Save RV Session (.gto)` items, not `.orvproject` save, in [src/ui/components/ExportControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ExportControl.ts#L198) through [src/ui/components/ExportControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ExportControl.ts#L201).
+  - Production `.orvproject` save is triggered from the header save button wiring, not from `ExportControl`, in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L237) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L240) and [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L59).
+- Impact:
+  - Users following the session docs can open the Export menu looking for `.orvproject` save and find only RV/GTO export commands.
+  - That makes the primary session-save workflow look missing or mislabeled even though it still exists in the header.
+
+### 358. The frame-export docs promise an error message on clipboard denial, but production clipboard export only logs and returns `false`
+
+- Severity: Medium
+- Area: Documentation / frame export feedback
+- Evidence:
+  - The frame-export guide says that if clipboard access is denied, "an error message appears" in [docs/export/frame-export.md](/Users/lifeart/Repos/openrv-web/docs/export/frame-export.md#L40) through [docs/export/frame-export.md](/Users/lifeart/Repos/openrv-web/docs/export/frame-export.md#L42).
+  - The actual clipboard helper catches errors, logs `Failed to copy to clipboard`, and only returns `false` in [src/utils/export/FrameExporter.ts](/Users/lifeart/Repos/openrv-web/src/utils/export/FrameExporter.ts#L152) through [src/utils/export/FrameExporter.ts](/Users/lifeart/Repos/openrv-web/src/utils/export/FrameExporter.ts#L163).
+  - `Viewer.copyFrameToClipboard(...)` just forwards that boolean result in [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L3361) through [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L3365), and the keyboard/export action path does not surface any alert for a `false` result in [src/services/KeyboardActionMap.ts](/Users/lifeart/Repos/openrv-web/src/services/KeyboardActionMap.ts#L545) through [src/services/KeyboardActionMap.ts](/Users/lifeart/Repos/openrv-web/src/services/KeyboardActionMap.ts#L549).
+- Impact:
+  - Users can follow the frame-export docs, hit a browser clipboard denial, and receive no user-visible explanation even though the docs promise one.
+  - That makes clipboard export failures look random and silent instead of a permissions issue the user can act on.
+
+### 359. The network-sync guide overstates generic one-click joining from share URLs
+
+- Severity: Medium
+- Area: Documentation / network sync onboarding
+- Evidence:
+  - The network-sync guide says opening a copied shareable URL "automatically populates the room code and initiates a join" in [docs/advanced/network-sync.md](/Users/lifeart/Repos/openrv-web/docs/advanced/network-sync.md#L35), and later describes URL-based signaling as one-click joining without manual entry in [docs/advanced/network-sync.md](/Users/lifeart/Repos/openrv-web/docs/advanced/network-sync.md#L88).
+  - During URL bootstrap, production only auto-joins the normal room path when both `room` and `pin` are present, in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L295) through [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L299).
+  - Plain room links without a PIN are only prefilled into the UI and do not auto-join, since `handleURLBootstrap()` sets the join field from `room` but skips `joinRoom(...)` unless `pinCode` is also present, in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L251) through [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L260) and [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L295) through [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L299).
+  - Malformed WebRTC share links are also silently ignored during bootstrap because invalid decoded payloads never produce a UI error path in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L263) through [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L293).
+- Impact:
+  - Users can rely on the docs for generic one-click join behavior that only works for narrower URL shapes than the guide implies.
+  - When a copied link does not auto-join or a malformed invite opens silently, the app appears unreliable instead of merely under-documented.
+
+### 360. The crash-recovery docs say the UI offers restore on `recoveryAvailable`, but production never consumes that event
+
+- Severity: Medium
+- Area: Documentation / crash recovery workflow
+- Evidence:
+  - The session-management guide says startup crash detection emits `recoveryAvailable` and "the UI offers to restore from the most recent auto-save entry" in [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L163) through [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L170).
+  - `AutoSaveManager` does define and emit that event during startup recovery detection in [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L60) and [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L119).
+  - A production-code search finds no `on('recoveryAvailable', ...)` subscriber outside tests, so there is no live UI hook for the event.
+- Impact:
+  - Users following the crash-recovery docs can expect an automatic restore prompt that the shipped app does not actually wire from the emitted event.
+  - That makes recovery behavior feel inconsistent and harder to trust after an unclean shutdown.
+
+### 361. The stabilization docs describe controls and viewer progress UI that the shipped stabilization panel does not provide
+
+- Severity: Medium
+- Area: Documentation / stabilization workflow
+- Evidence:
+  - The effects guide describes a short pre-analysis pass with a progress indicator in the viewer, and lists translation and rotation enable/disable controls in [docs/advanced/filters-effects.md](/Users/lifeart/Repos/openrv-web/docs/advanced/filters-effects.md#L85) through [docs/advanced/filters-effects.md](/Users/lifeart/Repos/openrv-web/docs/advanced/filters-effects.md#L90).
+  - The shipped `StabilizationControl` only exposes three user-facing controls: `Enabled`, `Smoothing Strength`, and `Crop Amount` in [src/ui/components/StabilizationControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/StabilizationControl.ts#L158) through [src/ui/components/StabilizationControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/StabilizationControl.ts#L203).
+  - A production-code search finds no viewer-side stabilization progress indicator or progress UI path.
+  - The underlying effect adapter does still mention `stabilizationAutoMotion`, but there is no corresponding shipped panel control for the documented translation/rotation toggles in [src/effects/adapters/StabilizationEffect.ts](/Users/lifeart/Repos/openrv-web/src/effects/adapters/StabilizationEffect.ts#L13) through [src/effects/adapters/StabilizationEffect.ts#L18).
+- Impact:
+  - Users following the stabilization docs can look for controls and progress feedback that the shipped panel never surfaces.
+  - That makes stabilization feel incomplete or broken in production even when the simpler crop/smoothing implementation is working as designed.
+
+### 362. The display-profile guide promises a viewer status-area profile indicator that production does not expose
+
+- Severity: Low
+- Area: Documentation / display-profile feedback
+- Evidence:
+  - The display-profile guide says `Shift+Alt+D` cycles display profiles and that "The active profile name appears in the viewer status area" in [docs/color/display-profiles.md](/Users/lifeart/Repos/openrv-web/docs/color/display-profiles.md#L22) through [docs/color/display-profiles.md](/Users/lifeart/Repos/openrv-web/docs/color/display-profiles.md#L24).
+  - The shipped `DisplayProfileControl` does provide the `Shift+Alt+D` shortcut and the dropdown/button UI in [src/ui/components/DisplayProfileControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/DisplayProfileControl.ts#L56) through [src/ui/components/DisplayProfileControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/DisplayProfileControl.ts#L59), but it does not create any separate viewer status indicator.
+  - A production-code search for display-profile status rendering only finds the control itself and its tests; there is no viewer HUD/status widget that displays the active profile name.
+- Impact:
+  - Users following the guide can look for an on-viewer status readout that never appears.
+  - That makes profile cycling feel less observable than the docs imply, especially when using only the keyboard shortcut.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

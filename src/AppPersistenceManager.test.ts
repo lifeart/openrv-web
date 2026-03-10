@@ -555,7 +555,7 @@ describe('AppPersistenceManager', () => {
     });
 
     it('APM-161a: openProject creates auto-checkpoint for .orvproject files', async () => {
-      const spy = vi.spyOn(manager, 'createAutoCheckpoint').mockResolvedValue();
+      const spy = vi.spyOn(manager, 'createAutoCheckpoint').mockResolvedValue(true);
       const file = new File(['{}'], 'scene.orvproject');
       await manager.openProject(file);
 
@@ -563,7 +563,7 @@ describe('AppPersistenceManager', () => {
     });
 
     it('APM-161b: openProject creates auto-checkpoint for .rv files', async () => {
-      const spy = vi.spyOn(manager, 'createAutoCheckpoint').mockResolvedValue();
+      const spy = vi.spyOn(manager, 'createAutoCheckpoint').mockResolvedValue(true);
       const file = new File([new ArrayBuffer(8)], 'scene.rv');
       await manager.openProject(file);
 
@@ -571,7 +571,7 @@ describe('AppPersistenceManager', () => {
     });
 
     it('APM-161c: openProject creates auto-checkpoint for .gto files', async () => {
-      const spy = vi.spyOn(manager, 'createAutoCheckpoint').mockResolvedValue();
+      const spy = vi.spyOn(manager, 'createAutoCheckpoint').mockResolvedValue(true);
       const file = new File([new ArrayBuffer(8)], 'scene.gto');
       await manager.openProject(file);
 
@@ -579,7 +579,7 @@ describe('AppPersistenceManager', () => {
     });
 
     it('APM-161d: openProject does NOT create auto-checkpoint for .rvedl import', async () => {
-      const spy = vi.spyOn(manager, 'createAutoCheckpoint').mockResolvedValue();
+      const spy = vi.spyOn(manager, 'createAutoCheckpoint').mockResolvedValue(true);
       const file = new File(['EDL content'], 'timeline.rvedl');
       await manager.openProject(file);
 
@@ -587,7 +587,7 @@ describe('AppPersistenceManager', () => {
     });
 
     it('APM-161e: openProject does NOT create auto-checkpoint for unsupported file types', async () => {
-      const spy = vi.spyOn(manager, 'createAutoCheckpoint').mockResolvedValue();
+      const spy = vi.spyOn(manager, 'createAutoCheckpoint').mockResolvedValue(true);
       const file = new File(['data'], 'image.png');
       await manager.openProject(file);
 

@@ -1626,3 +1626,23 @@
 - **Regression Tests**: 8 tests — error forwarding, no-crash without callback, dispose cleanup, normal ops no errors, autoplay errors surfaced, alert content.
 - **Verification**: All 22,682 tests pass, TypeScript clean.
 - **Files Changed**: `src/audio/AudioCoordinator.ts`, `src/audio/AudioCoordinator.test.ts`, `src/core/session/SessionPlayback.ts`, `src/AppPlaybackWiring.ts`, `src/AppPlaybackWiring.test.ts`
+
+## Issue #190: Timeline waveform extraction failures are reduced to a missing waveform with no UI explanation
+
+- **Severity**: Low
+- **Area**: Timeline / audio UX
+- **Root Cause**: Waveform load failures were caught with `console.warn()` only. `WaveformRenderer.getError()` was never consumed in production.
+- **Fix**: Added `waveformError` state to `Timeline`. On failure, reads `getError()` and renders a subtle inline "Waveform unavailable" text (9px, 60% opacity) centered in the track area. Successful load clears the error.
+- **Regression Tests**: TML-WERR-001 through TML-WERR-006 — error set on failure, cleared on success, inline indicator rendered, no indicator on success, fallback message, redraw scheduled.
+- **Verification**: All 22,688 tests pass, TypeScript clean.
+- **Files Changed**: `src/ui/components/Timeline.ts`, `src/ui/components/Timeline.test.ts`
+
+## Issue #191: Pre-restore and pre-load auto-checkpoints can fail silently while destructive operations still proceed
+
+- **Severity**: Medium
+- **Area**: Persistence / recovery safety
+- **Root Cause**: `createAutoCheckpoint()` caught all failures and only `console.error`-ed. Callers in restore/load proceeded without knowing the safety checkpoint wasn't created.
+- **Fix**: `createAutoCheckpoint` now returns `Promise<boolean>` (true on success, false on failure). `restoreSnapshot` and `openProject` check the result and show a non-blocking "Checkpoint Warning" alert on failure. Operations still proceed to not block workflows.
+- **Regression Tests**: 8 tests — boolean return, checkpoint-failure warning in restore/orvproject/GTO paths, no warning on success.
+- **Verification**: All 22,696 tests pass, TypeScript clean.
+- **Files Changed**: `src/AppPersistenceManager.ts`, `src/AppPersistenceManager.test.ts`, `src/AppPersistenceManager.issue191.test.ts`

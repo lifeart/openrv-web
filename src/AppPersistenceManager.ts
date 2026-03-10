@@ -191,7 +191,7 @@ export class AppPersistenceManager {
    * TODO(#138): Auto-checkpoints use the same lossy SessionSerializer.toJSON()
    * as project save. Viewer states tracked by getSerializationGaps() are lost.
    */
-  async createAutoCheckpoint(event: string): Promise<void> {
+  async createAutoCheckpoint(event: string): Promise<boolean> {
     const { session, paintEngine, viewer, snapshotManager } = this.ctx;
     try {
       const state = SessionSerializer.toJSON(
@@ -205,8 +205,10 @@ export class AppPersistenceManager {
         session.currentSource?.name || 'Untitled',
       );
       await snapshotManager.createAutoCheckpoint(event, state);
+      return true;
     } catch (err) {
       console.error('Failed to create auto-checkpoint:', err);
+      return false;
     }
   }
 
@@ -223,7 +225,13 @@ export class AppPersistenceManager {
       }
 
       // Create auto-checkpoint before restore
-      await this.createAutoCheckpoint('Before Restore');
+      const checkpointOk = await this.createAutoCheckpoint('Before Restore');
+      if (!checkpointOk) {
+        showAlert(
+          'Could not create a safety checkpoint before restore. No rollback will be available if you need to undo this operation.',
+          { type: 'warning', title: 'Checkpoint Warning' },
+        );
+      }
 
       // Clear existing session before restore so we replace rather than
       // append onto the current session (fix #139).
@@ -339,7 +347,13 @@ export class AppPersistenceManager {
     try {
       if (ext === 'orvproject') {
         // Create auto-checkpoint before replacing session state
-        await this.createAutoCheckpoint('Before Project Load');
+        const checkpointOk = await this.createAutoCheckpoint('Before Project Load');
+        if (!checkpointOk) {
+          showAlert(
+            'Could not create a safety checkpoint before loading. No rollback will be available if you need to undo this operation.',
+            { type: 'warning', title: 'Checkpoint Warning' },
+          );
+        }
         const state = await SessionSerializer.loadFromFile(file);
         const result = await SessionSerializer.fromJSON(state, {
           session,
@@ -370,7 +384,13 @@ export class AppPersistenceManager {
         }
       } else if (ext === 'rv' || ext === 'gto') {
         // Create auto-checkpoint before replacing session state
-        await this.createAutoCheckpoint('Before Project Load');
+        const checkpointOk2 = await this.createAutoCheckpoint('Before Project Load');
+        if (!checkpointOk2) {
+          showAlert(
+            'Could not create a safety checkpoint before loading. No rollback will be available if you need to undo this operation.',
+            { type: 'warning', title: 'Checkpoint Warning' },
+          );
+        }
         const content = await file.arrayBuffer();
 
         // Build availableFiles map from companion files so loadFromGTO can
