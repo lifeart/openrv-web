@@ -6,6 +6,7 @@
  */
 import { ContextToolbar } from '../../ui/components/layout/ContextToolbar';
 import { setButtonActive } from '../../ui/components/shared/Button';
+import { InfoPanelSettingsMenu } from '../../ui/components/InfoPanelSettingsMenu';
 import type { Panel } from '../../ui/components/shared/Panel';
 import type { AppControlRegistry } from '../../AppControlRegistry';
 import type { AppSessionBridge } from '../../AppSessionBridge';
@@ -44,10 +45,18 @@ export function buildPanelToggles(deps: BuildPanelTogglesDeps): PanelTogglesResu
         sessionBridge.updateInfoPanel();
       }
     },
-    { title: 'Info Panel (Shift+Alt+I)' },
+    { title: 'Info Panel (Shift+Alt+I) — Right-click for settings' },
   );
   infoPanelButton.dataset.testid = 'info-panel-toggle';
   panelToggles.appendChild(infoPanelButton);
+
+  // Right-click context menu for InfoPanel settings
+  const infoPanelSettingsMenu = new InfoPanelSettingsMenu(registry.infoPanel);
+  infoPanelButton.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    infoPanelSettingsMenu.show(e.clientX, e.clientY);
+  });
+  addUnsubscriber(() => infoPanelSettingsMenu.dispose());
 
   addUnsubscriber(
     registry.infoPanel.on('visibilityChanged', (visible) => {

@@ -5293,6 +5293,268 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The documentation understates a real runtime capability that already exists in share-link/bootstrap flows.
   - Users and integrators reading the FAQ can conclude URL-based review links are impossible, even though the app does support a narrower live `sourceUrl` path today.
 
+### 451. The FAQ describes collaboration as peer-to-peer WebRTC, but the normal room lifecycle is WebSocket-based
+
+- Severity: Low
+- Area: Documentation / collaboration architecture
+- Evidence:
+  - The FAQ says collaborative review features "use peer-to-peer WebRTC connections" and that collaboration "uses WebRTC peer-to-peer connections for real-time collaboration" in [docs/reference/faq.md](/Users/lifeart/Repos/openrv-web/docs/reference/faq.md#L15) and [docs/reference/faq.md](/Users/lifeart/Repos/openrv-web/docs/reference/faq.md#L73) through [docs/reference/faq.md](/Users/lifeart/Repos/openrv-web/docs/reference/faq.md#L75).
+  - The collaboration types and main transport are explicitly defined as WebSocket-based in [src/network/types.ts](/Users/lifeart/Repos/openrv-web/src/network/types.ts#L1) through [src/network/types.ts](/Users/lifeart/Repos/openrv-web/src/network/types.ts#L5) and [src/network/WebSocketClient.ts](/Users/lifeart/Repos/openrv-web/src/network/WebSocketClient.ts#L2) through [src/network/WebSocketClient.ts](/Users/lifeart/Repos/openrv-web/src/network/WebSocketClient.ts#L16).
+  - Normal `createRoom(...)` and `joinRoom(...)` both connect `wsClient` first and only then send `room.create` / `room.join` in [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L380) through [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L395) and [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L401) through [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L426).
+  - The network guide itself describes WebSocket as the primary sync transport and WebRTC as an additional path in [docs/advanced/network-sync.md](/Users/lifeart/Repos/openrv-web/docs/advanced/network-sync.md#L82) through [docs/advanced/network-sync.md](/Users/lifeart/Repos/openrv-web/docs/advanced/network-sync.md#L115).
+- Impact:
+  - The FAQ makes collaboration sound like a pure WebRTC system even though production normally depends on a WebSocket room service for create/join and sync transport.
+  - Operators reading only the FAQ can underestimate the server/runtime dependencies of the shipped collaboration flow.
+
+### 452. The FAQ says collaboration data stays peer-to-peer, but production falls back to WebSocket for state and media transfer
+
+- Severity: Medium
+- Area: Documentation / collaboration data path
+- Evidence:
+  - The FAQ says "No media passes through any server -- all data flows directly between peers" in [docs/reference/faq.md](/Users/lifeart/Repos/openrv-web/docs/reference/faq.md#L79).
+  - `sendSessionStateResponse(...)` is explicitly implemented to try WebRTC first and then fall back to realtime transport in [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L642) through [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L668).
+  - That realtime path routes through `dispatchRealtimeMessage(...)`, which prefers `wsClient.send(message)` before any serverless peer channel in [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L1222) through [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L1232).
+  - Media transfer requests are also sent through that same realtime/WebSocket path by default in [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L670) through [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L681).
+- Impact:
+  - The FAQ overstates the privacy and deployment model of collaboration by implying that shared state and media bytes never traverse a server-backed transport.
+  - In production, state/media exchange can use the WebSocket path when peer transport is unavailable, so the all-peer-to-peer claim is false.
+
+### 453. The FAQ says locally loaded files never leave the machine, but collaboration media sync can transmit them to other participants
+
+- Severity: Medium
+- Area: Documentation / privacy and data movement
+- Evidence:
+  - The FAQ says files loaded through drag-and-drop or the file picker "never leave the machine" in [docs/reference/faq.md](/Users/lifeart/Repos/openrv-web/docs/reference/faq.md#L15).
+  - The collaboration bridge can request local media from another participant through `requestMediaSync(...)` in [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L670) through [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L681).
+  - The app wiring responds to those requests by reading local file data and sending chunk payloads back through `sendMediaChunk(...)` / `sendMediaComplete(...)` in [src/AppNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppNetworkBridge.ts#L292) through [src/AppNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppNetworkBridge.ts#L391) and [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L723) through [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L746).
+  - Those media chunks are sent over the same realtime transport helper in [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L1222) through [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L1232).
+- Impact:
+  - The FAQ understates how collaboration can move user-selected local media off the originating machine.
+  - Users relying on that privacy statement can miss the fact that review peers may receive transferred file contents during sync workflows.
+
+### 454. The self-hosting docs present static hosting as sufficient, but the shipped collaboration flow still expects separate signaling infrastructure
+
+- Severity: Low
+- Area: Documentation / deployment requirements
+- Evidence:
+  - The FAQ says users can self-host by deploying the built `dist/` files "to any web server or static hosting service" in [docs/reference/faq.md](/Users/lifeart/Repos/openrv-web/docs/reference/faq.md#L21) through [docs/reference/faq.md](/Users/lifeart/Repos/openrv-web/docs/reference/faq.md#L23).
+  - The installation guide likewise says the production build is "a collection of static files" and that "No server-side runtime is required" in [docs/getting-started/installation.md](/Users/lifeart/Repos/openrv-web/docs/getting-started/installation.md#L55) through [docs/getting-started/installation.md](/Users/lifeart/Repos/openrv-web/docs/getting-started/installation.md#L68).
+  - The same installation guide exposes `VITE_NETWORK_SIGNALING_SERVERS` as an environment variable for collaborative review sessions in [docs/getting-started/installation.md](/Users/lifeart/Repos/openrv-web/docs/getting-started/installation.md#L90) through [docs/getting-started/installation.md](/Users/lifeart/Repos/openrv-web/docs/getting-started/installation.md#L96).
+  - Production collaboration config ships with a WebSocket signaling URL in [src/network/types.ts](/Users/lifeart/Repos/openrv-web/src/network/types.ts#L445) through [src/network/types.ts](/Users/lifeart/Repos/openrv-web/src/network/types.ts#L453), and normal room create/join still go through `wsClient.connect(...)` in [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L380) through [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L426).
+- Impact:
+  - The deployment docs make the full app sound entirely static-hosted even though the advertised collaboration feature still has external signaling/runtime dependencies in normal operation.
+  - Self-hosters can deploy the static app successfully and still be surprised when collaborative review is unavailable or misconfigured.
+
+### 455. The installation guide still says Node 18+ is enough, but the current toolchain declares Node 20.19+ or 22.12+
+
+- Severity: Medium
+- Area: Documentation / local build prerequisites
+- Evidence:
+  - The installation guide still lists "Node.js 18 or later" as the prerequisite in [docs/getting-started/installation.md](/Users/lifeart/Repos/openrv-web/docs/getting-started/installation.md#L21) through [docs/getting-started/installation.md](/Users/lifeart/Repos/openrv-web/docs/getting-started/installation.md#L27).
+  - The repository now declares `engines.node` as `^20.19.0 || >=22.12.0` in [package.json](/Users/lifeart/Repos/openrv-web/package.json#L119) through [package.json](/Users/lifeart/Repos/openrv-web/package.json#L121).
+  - The locked toolchain reflects that newer floor as well, with `vite@7.3.1` requiring `^20.19.0 || >=22.12.0` and `vitest@4.0.18` requiring Node 20+ in [pnpm-lock.yaml](/Users/lifeart/Repos/openrv-web/pnpm-lock.yaml#L2209) through [pnpm-lock.yaml](/Users/lifeart/Repos/openrv-web/pnpm-lock.yaml#L2211) and [pnpm-lock.yaml](/Users/lifeart/Repos/openrv-web/pnpm-lock.yaml#L2261) through [pnpm-lock.yaml](/Users/lifeart/Repos/openrv-web/pnpm-lock.yaml#L2263).
+- Impact:
+  - A developer following the published installation guide can start from a supported-looking Node 18 setup and still fail during install/build.
+  - The prerequisite docs no longer match the actual package/toolchain contract the repo enforces.
+
+### 456. The browser-requirements guide says Presentation Mode depends on the Fullscreen API, but the runtime mode is separate
+
+- Severity: Low
+- Area: Documentation / browser feature requirements
+- Evidence:
+  - The browser-requirements guide says "Presentation mode (clean display with cursor auto-hide) also depends on this API" under the Fullscreen API section in [docs/getting-started/browser-requirements.md](/Users/lifeart/Repos/openrv-web/docs/getting-started/browser-requirements.md#L71) through [docs/getting-started/browser-requirements.md](/Users/lifeart/Repos/openrv-web/docs/getting-started/browser-requirements.md#L73).
+  - `PresentationMode` is implemented as a DOM/UI-hiding mode with cursor auto-hide in [src/utils/ui/PresentationMode.ts](/Users/lifeart/Repos/openrv-web/src/utils/ui/PresentationMode.ts#L1) through [src/utils/ui/PresentationMode.ts#L17), and its state transitions only hide/restore elements and cursor behavior in [src/utils/ui/PresentationMode.ts](/Users/lifeart/Repos/openrv-web/src/utils/ui/PresentationMode.ts#L52) through [src/utils/ui/PresentationMode.ts](/Users/lifeart/Repos/openrv-web/src/utils/ui/PresentationMode.ts#L89).
+  - A production-code search of the PresentationMode implementation finds no Fullscreen API call or dependency.
+- Impact:
+  - The docs overstate the browser requirement for Presentation Mode and make the feature sound unavailable without Fullscreen support.
+  - In production, fullscreen and presentation are separate behaviors, so troubleshooting/browser-support guidance becomes less accurate than it should be.
+
+### 457. The image-sequences guide says the detected pattern is shown in sequence information, but the shipped UI never surfaces `sequenceInfo.pattern`
+
+- Severity: Low
+- Area: Documentation / image-sequence UI
+- Evidence:
+  - The image-sequences guide says "The detected pattern is displayed using hash notation ... in the sequence information" in [docs/playback/image-sequences.md](/Users/lifeart/Repos/openrv-web/docs/playback/image-sequences.md#L35).
+  - Production code does store the pattern in sequence state and serialization, for example in [src/core/session/loaders/SequenceRepresentationLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/loaders/SequenceRepresentationLoader.ts#L59) and [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L411).
+  - A production-code search finds no UI consumer of `sequenceInfo.pattern` or `sequencePattern`; outside persistence/internal loaders, those fields are not rendered anywhere in the shipped interface.
+- Impact:
+  - Users reading the sequence docs can expect a visible sequence-pattern readout that never appears in the actual UI.
+  - The runtime keeps the pattern as internal metadata, but the documented “sequence information” surface is not real.
+
+### 458. The image-sequences guide presents `detectMissingFrames()` and `isFrameMissing()` as programmatic affordances, but they are internal utilities, not public API
+
+- Severity: Low
+- Area: Documentation / scripting surface
+- Evidence:
+  - The image-sequences guide says missing frames can be queried programmatically via `detectMissingFrames()` and `isFrameMissing(frame)` in [docs/playback/image-sequences.md](/Users/lifeart/Repos/openrv-web/docs/playback/image-sequences.md#L43) through [docs/playback/image-sequences.md](/Users/lifeart/Repos/openrv-web/docs/playback/image-sequences.md#L44).
+  - Those functions exist only as exports from the internal utility module [src/utils/media/SequenceLoader.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SequenceLoader.ts#L268) and [src/utils/media/SequenceLoader.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SequenceLoader.ts#L290).
+  - The shipped public API surface in [src/api/OpenRVAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.ts#L42) through [src/api/OpenRVAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.ts#L98) exposes no sequence/missing-frame module or helper methods for those calls.
+- Impact:
+  - The docs make internal loader helpers sound like supported scripting features even though end users do not get them through `window.openrv`.
+  - That can mislead automation/integration users who treat the page as public-app behavior rather than internal source layout.
+
+### 459. The image-sequences guide says sequence FPS can be configured, but its example only calls `getFPS()` and omits the real public setter
+
+- Severity: Low
+- Area: Documentation / scripting surface
+- Evidence:
+  - The image-sequences guide says "The session FPS can be configured" but the code sample only calls `window.openrv.media.getFPS()` in [docs/playback/image-sequences.md](/Users/lifeart/Repos/openrv-web/docs/playback/image-sequences.md#L56) through [docs/playback/image-sequences.md#L60).
+  - The public API does expose `getPlaybackFPS()` and `setPlaybackFPS(...)` for this purpose in [src/api/MediaAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/MediaAPI.ts#L86) through [src/api/MediaAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/MediaAPI.ts#L119).
+  - The same page's scripting section never mentions those methods and instead only documents `getFPS()` in [docs/playback/image-sequences.md](/Users/lifeart/Repos/openrv-web/docs/playback/image-sequences.md#L84) through [docs/playback/image-sequences.md#L88).
+- Impact:
+  - Readers get told that sequence FPS is configurable but are not shown the public method that actually does it.
+  - That makes the page's scripting guidance incomplete and nudges users toward the wrong API surface.
+
+### 460. The browser-support docs present External Presentation as a working BroadcastChannel feature, but the shipped feature is already broken at runtime
+
+- Severity: Low
+- Area: Documentation / browser compatibility
+- Evidence:
+  - The browser-requirements page says BroadcastChannel "enables the External Presentation feature, which synchronizes frame, playback, and color state" in [docs/getting-started/browser-requirements.md](/Users/lifeart/Repos/openrv-web/docs/getting-started/browser-requirements.md#L65) through [docs/getting-started/browser-requirements.md#L67).
+  - The browser-compatibility matrix likewise lists `BroadcastChannel (ext. presentation)` as an available feature by browser in [docs/reference/browser-compatibility.md](/Users/lifeart/Repos/openrv-web/docs/reference/browser-compatibility.md#L34) through [docs/reference/browser-compatibility.md#L38).
+  - The runtime problem is already visible in production code: the external presentation window is a blank shell that only updates frame text while ignoring real viewer rendering/playback/color state, as documented in issue `29` with evidence in [src/ui/components/ExternalPresentation.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ExternalPresentation.ts#L132) through [src/ui/components/ExternalPresentation.ts#L244) and [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L546) through [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L566).
+- Impact:
+  - The compatibility docs make External Presentation sound like a reliable browser-capability question, when the stronger limitation is that the shipped feature itself is not functionally complete.
+  - Users can spend time diagnosing browser support for a feature that is already broken independent of API availability.
+
+### 461. The browser-requirements page presents WebRTC as required for network sync, but the normal collaboration path is WebSocket-based
+
+- Severity: Low
+- Area: Documentation / browser feature requirements
+- Evidence:
+  - The browser-requirements page says "WebRTC powers peer-to-peer connections for collaborative review sessions ... Required only for network sync features" in [docs/getting-started/browser-requirements.md](/Users/lifeart/Repos/openrv-web/docs/getting-started/browser-requirements.md#L77) through [docs/getting-started/browser-requirements.md#L79).
+  - Normal room create/join flows do not require `RTCPeerConnection`; they go straight through `wsClient.connect(...)` in [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L377) through [src/network/NetworkSyncManager.ts#L418).
+  - `canUseWebRTC()` is only checked for the serverless/WebRTC-specific paths and peer-transfer helpers in [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L275), [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L668), and [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L1542) through [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L1547).
+- Impact:
+  - The page overstates WebRTC as a baseline requirement for collaboration when the shipped app’s ordinary room/sync path is primarily WebSocket-driven.
+  - Browser-support guidance becomes less accurate, especially for deployments that use collaboration without peer-to-peer fallback paths.
+
+### 462. The UI overview says all interactive controls are semantic and properly labeled, but the shipped UI still has mouse-only/non-semantic interactions
+
+- Severity: Low
+- Area: Documentation / accessibility claims
+- Evidence:
+  - The UI overview says "All interactive controls use semantic HTML elements with appropriate ARIA labels and roles" in [docs/getting-started/ui-overview.md](/Users/lifeart/Repos/openrv-web/docs/getting-started/ui-overview.md#L236) through [docs/getting-started/ui-overview.md#L238).
+  - The shipped Pixel Probe exposes copyable value rows as mouse-only `div`s rather than real buttons in [src/ui/components/PixelProbe.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PixelProbe.ts#L358) through [src/ui/components/PixelProbe.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PixelProbe.ts#L403), which is already captured as issue `75`.
+  - The left/right inspector accordion headers are still mouse-only click targets rather than keyboard-operable disclosure controls in [src/ui/layout/panels/LeftPanelContent.ts](/Users/lifeart/Repos/openrv-web/src/ui/layout/panels/LeftPanelContent.ts#L169) through [src/ui/layout/panels/LeftPanelContent.ts#L206) and [src/ui/layout/panels/RightPanelContent.ts](/Users/lifeart/Repos/openrv-web/src/ui/layout/panels/RightPanelContent.ts#L178) through [src/ui/layout/panels/RightPanelContent.ts#L214), already captured as issue `65`.
+- Impact:
+  - The overview overstates the current accessibility quality of the shipped UI.
+  - Users and auditors can infer a more consistently semantic control surface than the runtime actually provides.
+
+### 463. The UI overview advertises the Info panel as a metadata panel, but production wiring only keeps cursor-color updates alive
+
+- Severity: Low
+- Area: Documentation / UI capability description
+- Evidence:
+  - The UI overview panel table describes `Info panel` as `Filename, resolution, frame, FPS` in [docs/getting-started/ui-overview.md](/Users/lifeart/Repos/openrv-web/docs/getting-started/ui-overview.md#L207) through [docs/getting-started/ui-overview.md#L213).
+  - The `InfoPanel` component is implemented to show that richer metadata in [src/ui/components/InfoPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/InfoPanel.ts#L1) through [src/ui/components/InfoPanel.ts#L301).
+  - In production wiring, the only live update path is the viewer cursor-color callback in [src/services/LayoutOrchestrator.ts](/Users/lifeart/Repos/openrv-web/src/services/LayoutOrchestrator.ts#L569) through [src/services/LayoutOrchestrator.ts#L576), which is already captured as issue `101`.
+- Impact:
+  - The getting-started docs make the Info panel sound far more useful than it is in the shipped app.
+  - Users can open that panel expecting source/frame metadata and instead get a mostly cursor-color readout.
+
+### 464. The UI overview still teaches `H` and `W` as direct Histogram/Waveform shortcuts even though those defaults are hidden by conflicts
+
+- Severity: Low
+- Area: Documentation / keyboard shortcuts
+- Evidence:
+  - The UI overview panel table still lists `Histogram | H` and `Waveform | W` in [docs/getting-started/ui-overview.md](/Users/lifeart/Repos/openrv-web/docs/getting-started/ui-overview.md#L200) through [docs/getting-started/ui-overview.md#L205).
+  - In production, those direct defaults are hidden from registration because `H` and `W` are reserved by other actions in [src/AppKeyboardHandler.ts](/Users/lifeart/Repos/openrv-web/src/AppKeyboardHandler.ts#L43) through [src/AppKeyboardHandler.ts](/Users/lifeart/Repos/openrv-web/src/AppKeyboardHandler.ts#L45).
+  - The underlying runtime conflict is already confirmed in issues `1` and `2`.
+- Impact:
+  - New users can learn broken shortcuts directly from the getting-started overview page.
+  - That increases first-use friction for scopes and makes the UI overview less trustworthy as a quick reference.
+
+### 465. The EDL/OTIO guide overstates the main-app import/export paths; those workflows are still mostly confined to the Playlist panel
+
+- Severity: Low
+- Area: Documentation / editorial workflow UX
+- Evidence:
+  - The EDL/OTIO guide says users can export EDL "from the Playlist panel or the Export menu" in [docs/export/edl-otio.md](/Users/lifeart/Repos/openrv-web/docs/export/edl-otio.md#L7) through [docs/export/edl-otio.md#L9).
+  - The shipped main `ExportControl` has no EDL or OTIO actions; its menu sections are frame/sequence/video/session/annotations/reports only in [src/ui/components/ExportControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ExportControl.ts#L170) through [src/ui/components/ExportControl.ts#L220).
+  - The same guide says OTIO files can be imported by loading them "through the file picker or drag and drop" in [docs/export/edl-otio.md](/Users/lifeart/Repos/openrv-web/docs/export/edl-otio.md#L59) through [docs/export/edl-otio.md#L67).
+  - The normal header file picker and viewer drag-drop paths only special-case `.rvedl`, `.rv`, and `.gto` before falling back to ordinary media loading in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1382) through [src/ui/components/layout/HeaderBar.ts#L1455) and [src/ui/components/ViewerInputHandler.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInputHandler.ts#L709) through [src/ui/components/ViewerInputHandler.ts#L761).
+  - OTIO import is actually wired through the Playlist panel’s dedicated import input in [src/ui/components/PlaylistPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PlaylistPanel.ts#L795) through [src/ui/components/PlaylistPanel.ts#L830).
+- Impact:
+  - Editorial users following the guide can look for EDL export in the header Export menu and generic OTIO drag/drop import, then conclude the app ignored them.
+  - The real workflow is narrower and more panel-specific than the guide currently suggests.
+
+### 466. The EDL/OTIO guide presents the Conform/Re-link panel as a working local-file relinker, but its browse actions are still production stubs
+
+- Severity: Low
+- Area: Documentation / editorial relink workflow
+- Evidence:
+  - The EDL/OTIO guide says the Conform/Re-link panel allows "Selecting replacement files from the local filesystem" and that once media is relinked the timeline plays correctly in [docs/export/edl-otio.md](/Users/lifeart/Repos/openrv-web/docs/export/edl-otio.md#L67) through [docs/export/edl-otio.md#L74).
+  - `ConformPanel` does implement UI affordances for per-clip browse and folder browse, but those buttons only dispatch `conform-browse` and `conform-browse-folder` custom events in [src/ui/components/ConformPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ConformPanel.ts#L363) through [src/ui/components/ConformPanel.ts#L376).
+  - A production-code search finds no app-level handler for those custom events, which is already captured as issue `51`.
+  - The fuzzy filename suggestion logic is real inside the panel in [src/ui/components/ConformPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ConformPanel.ts#L71) through [src/ui/components/ConformPanel.ts#L186), but the local-file browsing workflow described by the docs is not actually wired through the app.
+- Impact:
+  - The guide makes the conform workflow sound end-to-end usable when the most important relink entry points still dead-end in production.
+  - Editorial users can reach the panel, see browse actions, and assume they missed something when the app simply does not handle them.
+
+### 467. The OTIO import docs claim markers are imported, but the shipped parser does not read OTIO marker data at all
+
+- Severity: Low
+- Area: Documentation / OTIO feature coverage
+- Evidence:
+  - The EDL/OTIO guide's supported-elements table lists `Markers | Imported as timeline markers` in [docs/export/edl-otio.md](/Users/lifeart/Repos/openrv-web/docs/export/edl-otio.md#L49) through [docs/export/edl-otio.md#L56).
+  - The shipped OTIO parser only models clips, gaps, transitions, tracks, stacks, timelines, media references, and metadata in [src/utils/media/OTIOParser.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/OTIOParser.ts#L9) through [src/utils/media/OTIOParser.ts#L155).
+  - `parseTrack(...)` only handles `Clip.1`, `Gap.1`, and `Transition.1` children in [src/utils/media/OTIOParser.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/OTIOParser.ts#L217) through [src/utils/media/OTIOParser.ts#L286), and `PlaylistManager.fromOTIO(...)` only consumes the parser's clips/transitions output in [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L674) through [src/core/session/PlaylistManager.ts#L703).
+- Impact:
+  - Editorial users can expect OTIO note/marker round-trip that the shipped importer simply does not perform.
+  - That makes the supported-elements table materially richer than the real OTIO ingest path.
+
+### 468. The OTIO import docs say metadata is preserved for display, but the live playlist import path drops OTIO metadata
+
+- Severity: Low
+- Area: Documentation / OTIO feature coverage
+- Evidence:
+  - The OTIO guide's supported-elements table says `Metadata | Preserved for display` in [docs/export/edl-otio.md](/Users/lifeart/Repos/openrv-web/docs/export/edl-otio.md#L49) through [docs/export/edl-otio.md#L56).
+  - `OTIOParser` does capture clip/transition metadata in [src/utils/media/OTIOParser.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/OTIOParser.ts#L242) and [src/utils/media/OTIOParser.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/OTIOParser.ts#L267).
+  - But `PlaylistManager.fromOTIO(...)` only imports clip names, source resolution, and frame ranges; it never stores or forwards `clip.metadata` into playlist/UI state in [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L674) through [src/core/session/PlaylistManager.ts#L703).
+  - A production-code search finds no playlist/timeline UI path that renders OTIO metadata after import.
+- Impact:
+  - The docs promise richer editorial context than the shipped OTIO workflow actually preserves.
+  - Users can expect imported metadata to remain inspectable in the app when it is currently discarded during import.
+
+### 469. The OTIO import docs say gaps and transitions are recognized, but the shipped playlist import path linearizes clips and drops both structures
+
+- Severity: Low
+- Area: Documentation / OTIO feature coverage
+- Evidence:
+  - The OTIO guide says `Gaps` are recognized as empty regions and `Transitions` are recognized during import in [docs/export/edl-otio.md](/Users/lifeart/Repos/openrv-web/docs/export/edl-otio.md#L49) through [docs/export/edl-otio.md#L56).
+  - The single-track parser used by live import returns only `clips`, `fps`, and `totalFrames`; it does not expose transitions in the `OTIOParseResult` returned by `parseOTIO(...)` in [src/utils/media/OTIOParser.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/OTIOParser.ts#L315) through [src/utils/media/OTIOParser.ts#L337).
+  - `PlaylistManager.fromOTIO(...)` consumes only `result.clips` and calls `addClip(...)` for each one in [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L674) through [src/core/session/PlaylistManager.ts#L703).
+  - `addClip(...)` rebuilds a simple sequential playlist with contiguous `globalStartFrame` values in [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L133) through [src/core/session/PlaylistManager.ts#L159), so OTIO gap spacing and transition overlap data are not preserved in the imported playlist.
+- Impact:
+  - The docs make OTIO import sound structurally richer than the runtime actually is.
+  - Users can expect editorial gaps and transitions to survive import semantics when the shipped workflow collapses them into a plain cut list.
+
+### 470. OTIO import is lossy: the live playlist import path collapses editorial structure into a plain clip list
+
+- Severity: Medium
+- Area: OTIO import / editorial fidelity
+- Evidence:
+  - The only production OTIO import path is `PlaylistManager.fromOTIO(...)`, which uses the backward-compatible single-track `parseOTIO(...)` helper in [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L674) through [src/core/session/PlaylistManager.ts#L703) and [src/utils/media/OTIOParser.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/OTIOParser.ts#L315) through [src/utils/media/OTIOParser.ts#L337).
+  - That single-track parse result returns only clips plus timing, not transition objects, even though the richer `parseOTIOMultiTrack(...)` path exists separately in [src/utils/media/OTIOParser.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/OTIOParser.ts#L347) through [src/utils/media/OTIOParser.ts#L382).
+  - `fromOTIO(...)` then imports each resolved clip via `addClip(...)`, which rebuilds a contiguous cut-only playlist with fresh sequential `globalStartFrame` values in [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L133) through [src/core/session/PlaylistManager.ts#L159).
+  - OTIO parser metadata is captured transiently, but `fromOTIO(...)` drops it; OTIO markers are not parsed at all.
+- Impact:
+  - Importing OTIO into the shipped app silently degrades the editorial timeline into a much simpler playlist model.
+  - Gaps, transitions, markers, and metadata context can disappear without any explicit warning that the import was lossy.
+
+### 471. The UI overview advertises snapshots as named captures, but the shipped create flow does not prompt for a snapshot name
+
+- Severity: Low
+- Area: Documentation / snapshot workflow
+- Evidence:
+  - The UI overview panel table describes `Snapshots` as `Named session snapshots` in [docs/getting-started/ui-overview.md](/Users/lifeart/Repos/openrv-web/docs/getting-started/ui-overview.md#L208) through [docs/getting-started/ui-overview.md#L211).
+  - The shipped Snapshot panel's create button only emits a bare `createRequested` event with no naming or description prompt in [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L198) through [src/ui/components/SnapshotPanel.ts#L211).
+  - Snapshot descriptions are effectively import-only metadata in the current UI, as already captured in issue `380`.
+- Impact:
+  - The getting-started docs make manual snapshot naming sound like a first-class part of the shipped capture workflow.
+  - Users opening the panel can expect a naming step that never appears during normal snapshot creation.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

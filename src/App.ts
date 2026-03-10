@@ -151,6 +151,7 @@ export class App {
 
     // Create core components
     this.session = new Session();
+    this.session.fps = getCorePreferencesManager().getGeneralPrefs().defaultFps;
     this.session.setHDRResizeTier(this.displayCapabilities.canvasHDRResizeTier);
     this.paintEngine = new PaintEngine();
     this.viewer = new Viewer({

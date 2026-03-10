@@ -59,18 +59,10 @@ const DEFAULT_FIELDS: InfoPanelFields = {
   colorAtCursor: true,
 };
 
-/**
- * TODO(#68): InfoPanel has rich customization features — `setPosition()`, `setFields()`,
- * `toggleField()` — but the current production UI only exposes a binary on/off toggle.
- * A settings popover or context menu should be added to let users configure position
- * and visible fields without requiring code changes.
- *
- */
 export class InfoPanel extends EventEmitter<InfoPanelEvents> {
   private container: HTMLElement;
   private contentElement: HTMLElement;
   private enabled = false;
-  private hasLoggedCustomizationHint = false;
   private position: InfoPanelPosition = 'top-left';
   private fields: InfoPanelFields = { ...DEFAULT_FIELDS };
   private currentData: InfoPanelData = {};
@@ -124,16 +116,6 @@ export class InfoPanel extends EventEmitter<InfoPanelEvents> {
     this.render();
     this.emit('visibilityChanged', true);
     this.emitStateChanged();
-
-    // TODO(#68): Log customization hint on first show
-    if (!this.hasLoggedCustomizationHint) {
-      this.hasLoggedCustomizationHint = true;
-      console.info(
-        '[InfoPanel] Customization is available via setPosition(), setFields(), and toggleField() ' +
-          'but is not yet exposed in the UI. See issue #68.',
-      );
-    }
-
   }
 
   /**

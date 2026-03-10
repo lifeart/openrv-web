@@ -67,6 +67,7 @@ vi.mock('./AppStackWiring', () => ({ wireStackControls: vi.fn() }));
 vi.mock('./AppDCCWiring', () => ({ wireDCCBridge: vi.fn() }));
 
 import { App } from './App';
+import { getCorePreferencesManager, resetCorePreferencesManagerForTests } from './core/PreferencesManager';
 
 // ---------------------------------------------------------------------------
 // BroadcastChannel polyfill for jsdom (used by ExternalPresentation)
@@ -134,5 +135,29 @@ describe('App', () => {
     app1.dispose();
     const app2 = new App();
     app2.dispose();
+  });
+
+  it('APP-006: session fps is set from defaultFps preference', () => {
+    resetCorePreferencesManagerForTests();
+    const prefs = getCorePreferencesManager();
+    prefs.setGeneralPrefs({ defaultFps: 30 });
+
+    app = new App();
+    const config = app.getAPIConfig();
+    expect(config.session.fps).toBe(30);
+    app.dispose();
+
+    // Clean up: reset singleton and clear stored prefs
+    prefs.resetAll();
+    resetCorePreferencesManagerForTests();
+  });
+
+  it('APP-007: session fps uses default 24 when no preference is stored', () => {
+    resetCorePreferencesManagerForTests();
+
+    app = new App();
+    const config = app.getAPIConfig();
+    expect(config.session.fps).toBe(24);
+    app.dispose();
   });
 });

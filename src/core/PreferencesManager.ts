@@ -74,7 +74,7 @@ export interface ExportDefaults {
 export interface GeneralPrefs {
   /** Used by NotePanel and NetworkControl. */
   userName: string;
-  /** TODO(#152): Storage-only — not yet consumed by any production code. */
+  /** Default FPS used for new sessions and media without embedded frame rate. Wired in App constructor. */
   defaultFps: number;
   /** When true, sequences (frameCount > 1) auto-play on source load. Wired in handleSourceLoaded. */
   autoPlayOnLoad: boolean;
@@ -334,7 +334,7 @@ export class PreferencesManager extends EventEmitter<CorePreferencesEvents> {
       // TODO(#152): Remove this notice once these preference categories are wired to runtime behavior.
       console.info(
         '[PreferencesManager] Note: colorDefaults, exportDefaults, and several generalPrefs fields ' +
-          '(showWelcome, defaultFps, etc.) are persisted but not yet consumed by ' +
+          '(showWelcome, etc.) are persisted but not yet consumed by ' +
           'production code. See TODO(#152).',
       );
     }

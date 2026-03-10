@@ -483,25 +483,23 @@ describe('InfoPanel', () => {
     });
   });
 
-  describe('customization hint (#68)', () => {
+  describe('customization hint (#68 - resolved)', () => {
     afterEach(() => {
       vi.restoreAllMocks();
     });
 
-    it('INFO-U130: logs customization info on first enable', () => {
+    it('INFO-U130: does not log customization hint (settings menu now available)', () => {
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
       panel.enable();
-      expect(infoSpy).toHaveBeenCalledTimes(1);
-      expect(infoSpy.mock.calls[0]![0]).toContain('[InfoPanel]');
-      expect(infoSpy.mock.calls[0]![0]).toContain('#68');
+      expect(infoSpy).toHaveBeenCalledTimes(0);
     });
 
-    it('INFO-U131: logs customization info only once across multiple enable calls', () => {
+    it('INFO-U131: no console.info across multiple enable/disable cycles', () => {
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
       panel.enable();
       panel.disable();
       panel.enable();
-      expect(infoSpy).toHaveBeenCalledTimes(1);
+      expect(infoSpy).toHaveBeenCalledTimes(0);
     });
   });
 });

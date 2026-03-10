@@ -174,6 +174,17 @@ describe('Session', () => {
       session.fps = 30;
       expect(session.fps).toBe(30);
     });
+
+    it('SES-006b: defaults to 24 fps on new session', () => {
+      const fresh = new Session();
+      expect(fresh.fps).toBe(24);
+    });
+
+    it('SES-006c: fps can be set before loading media to act as defaultFps', () => {
+      const fresh = new Session();
+      fresh.fps = 48;
+      expect(fresh.fps).toBe(48);
+    });
   });
 
   describe('loopMode', () => {
