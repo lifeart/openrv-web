@@ -1976,3 +1976,13 @@
 - **Regression Tests**: VWR-HDR-001 through VWR-HDR-005 (returns true/false, no-renderer returns false, render on success, no render on reject), VW-011b/VW-011c (warn on reject, no warn on accept).
 - **Verification**: All 162 tests pass (Viewer + AppViewWiring), TypeScript clean.
 - **Files Changed**: `src/ui/components/Viewer.ts`, `src/AppViewWiring.ts`, `src/ui/components/Viewer.test.ts`, `src/AppViewWiring.test.ts`
+
+## Issue #226: Async system HDR headroom detection updates renderer state without triggering a redraw
+
+- **Severity**: Medium
+- **Area**: HDR output / viewer refresh
+- **Root Cause**: `syncHDRHeadroomFromSystem()` called `setHDRHeadroom()` when the async `queryHDRHeadroom()` promise resolved, but never called `scheduleRender()`. The initial frame rendered with default headroom and stayed that way until an unrelated event triggered a redraw.
+- **Fix**: Added change detection via `lastSystemHDRHeadroom` tracker (initialized to 1.0/SDR default). After headroom resolves, compares against last value — if changed, applies the headroom and calls `scheduleRender()`. Handles null, non-finite, non-positive, missing HDR capability, and rejected promises gracefully (no unnecessary redraws).
+- **Regression Tests**: VWR-HDRHROOM-001 through VWR-HDRHROOM-006 (new value triggers render, same value skips, null skips, no HDR capability skips, rejected promise skips, sequential changes tracked correctly).
+- **Verification**: All 128 Viewer tests pass, TypeScript clean.
+- **Files Changed**: `src/ui/components/Viewer.ts`, `src/ui/components/Viewer.test.ts`

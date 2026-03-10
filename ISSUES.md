@@ -4897,6 +4897,19 @@ This file tracks findings from exploratory review and targeted validation runs.
   - After adding or changing a crossfade/dissolve, the app can keep navigating and syncing playback against stale clip boundaries.
   - That makes transition-enabled playlists internally inconsistent: duration/transition math sees overlaps, while several core playback paths still use pre-transition clip positions.
 
+### 406. Restored playlist playhead position is effectively ignored because enablement sync runs before `currentFrame` restore
+
+- Severity: Medium
+- Area: Playlist persistence / restore behavior
+- Evidence:
+  - `SessionSerializer.fromJSON(...)` restores session playback state first and only then calls `playlistManager.setState(migrated.playlist)` in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L566) through [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L574).
+  - Inside `PlaylistManager.setState(...)`, enabling playlist mode happens before `currentFrame` is assigned back from saved state in [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L562) through [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L566).
+  - The production `enabledChanged` handler immediately syncs the runtime to a target global frame derived from the current session source/frame or the first clip, not from the saved playlist `currentFrame`, in [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L764) through [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L793).
+  - After `currentFrame` is finally assigned inside `PlaylistManager.setState(...)`, no follow-up event or resync is triggered.
+- Impact:
+  - A restored project/snapshot/auto-save can bring playlist mode back enabled without reopening at the saved global playlist position.
+  - That makes playlist persistence incomplete in a user-visible way: the clip list comes back, but the review position within it does not reliably resume.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed
