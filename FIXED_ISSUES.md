@@ -264,9 +264,9 @@
 - **Area**: Components, cache UI
 - **Root Cause**: Complete cache management UI exists but has no mount path — users cannot open it.
 - **Fix**: Added TODO(#16) JSDoc, static `NOT_WIRED_MESSAGE`, and `console.info` in constructor documenting the orphaned status and what's needed to wire it in.
-- **Regression Tests**: CACHE-PANEL-001 through 007 (documentation markers, constructor warning, basic functionality).
-- **Verification**: All 7 tests pass, TypeScript clean.
-- **Files Changed**: `src/ui/components/CacheManagementPanel.ts`, `src/ui/components/CacheManagementPanel.test.ts` (new)
+- **TODO(#16) Resolved**: Wired CacheManagementPanel into the production layout. Added `cacheManager` to control creation pipeline (`createPanelControls` → `AppControlRegistry` → `App.ts`). Panel element mounted in viewer container via `LayoutOrchestrator`. Added "Media Cache" toggle button in `buildPanelToggles` with active state tracking. Removed `NOT_WIRED_MESSAGE`, constructor `console.info`, and TODO comments. Panel is nullable (gracefully absent when OPFS unavailable).
+- **Regression Tests**: 4 CacheManagementPanel tests (updated), 4 buildPanelToggles tests pass.
+- **Files Changed**: `src/services/controls/createPanelControls.ts`, `src/services/controls/ControlGroups.ts`, `src/AppControlRegistry.ts`, `src/App.ts`, `src/services/LayoutOrchestrator.ts`, `src/services/tabContent/buildPanelToggles.ts`, `src/ui/components/CacheManagementPanel.ts`, `src/ui/components/CacheManagementPanel.test.ts`
 
 ## Issue #19: The async render-worker path silently drops file/look/display LUT stages
 
