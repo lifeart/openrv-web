@@ -1217,3 +1217,14 @@
 - **Fix**: Added `console.warn` when VideoFrame upload fails, clearly stating the frame will appear blank. Added TODO(#148) for implementing SDR fallback.
 - **Regression Tests**: 1 test.
 - **Files Changed**: `src/render/Renderer.ts`
+
+## Issue #149: Share links serialize `sourceUrl` but never use it, so a clean recipient cannot reconstruct the shared media
+
+- **Severity**: High
+- **Area**: URL sharing / review-link reproducibility
+- **Root Cause**: `SessionURLService.captureSessionURLState()` serialized the current source URL into `sourceUrl` (compact key `su`), and `SessionURLManager` encoded/decoded it correctly, but `applySessionURLState()` never read `state.sourceUrl`. The parallel network-share path in `AppNetworkBridge` had the same gap.
+- **Fix**: Made `applySessionURLState()` async. When the session is empty (`sourceCount === 0`) and `state.sourceUrl` is present, calls `session.loadSourceFromUrl(url)` before applying view state. Added `loadSourceFromUrl(url)` to `Session.ts` with URL scheme validation (http/https only), pathname-based extension detection for video vs image routing, and proper query-param handling. Applied the same consumption pattern in `AppNetworkBridge.applyCapturedSessionURLState()`. Graceful degradation: load failures are caught, logged via `console.warn`, and remaining state (frame, transform, wipe, etc.) still applied.
+- **Security**: URL scheme allowlist prevents `javascript:`, `data:`, `ftp:`, and other non-HTTP protocols. Extension extraction uses `new URL(url).pathname` to handle query params and fragments correctly.
+- **Regression Tests**: SU-023 through SU-031 (sourceUrl consumed when empty, skipped when has media, load failure graceful, empty/undefined skipped, missing method handled, bootstrap integration, javascript: rejected, data: rejected), ANB-150 through ANB-154 (network bridge load, skip, failure, missing, callback delegation), plus 12 direct `Session.loadSourceFromUrl` tests (scheme validation for javascript/data/ftp/invalid, http/https accepted, video extensions routed correctly, query params handled, no-extension defaults to image).
+- **Verification**: All 107 tests pass (31 SessionURLService + 64 AppNetworkBridge + 12 Session.loadSourceFromUrl), TypeScript clean.
+- **Files Changed**: `src/services/SessionURLService.ts`, `src/AppNetworkBridge.ts`, `src/core/session/Session.ts`, `src/services/SessionURLService.test.ts`, `src/AppNetworkBridge.test.ts`, `src/core/session/Session.loadSourceFromUrl.test.ts` (new)

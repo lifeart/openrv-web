@@ -533,6 +533,53 @@ describe('SessionURLService', () => {
       expect(loadSourceFromUrl).not.toHaveBeenCalled();
     });
 
+    it('SU-030: rejects javascript: URL scheme gracefully', async () => {
+      const loadSourceFromUrl = vi.fn().mockRejectedValue(new Error('Unsupported URL scheme: javascript:'));
+      deps.session.sourceCount = 0;
+      (deps.session as any).loadSourceFromUrl = loadSourceFromUrl;
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const state: SessionURLState = {
+        frame: 5,
+        fps: 24,
+        sourceIndex: 0,
+        sourceUrl: 'javascript:alert(1)',
+      };
+
+      // Should not throw — the try/catch logs a warning and continues
+      await service.applySessionURLState(state);
+
+      expect(loadSourceFromUrl).toHaveBeenCalledWith('javascript:alert(1)');
+      expect(warnSpy).toHaveBeenCalled();
+      // View state should still be applied despite the rejected URL
+      expect(deps.session.goToFrame).toHaveBeenCalledWith(5);
+
+      warnSpy.mockRestore();
+    });
+
+    it('SU-031: rejects data: URL scheme gracefully', async () => {
+      const loadSourceFromUrl = vi.fn().mockRejectedValue(new Error('Unsupported URL scheme: data:'));
+      deps.session.sourceCount = 0;
+      (deps.session as any).loadSourceFromUrl = loadSourceFromUrl;
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const state: SessionURLState = {
+        frame: 3,
+        fps: 24,
+        sourceIndex: 0,
+        sourceUrl: 'data:text/html,<h1>hello</h1>',
+      };
+
+      await service.applySessionURLState(state);
+
+      expect(loadSourceFromUrl).toHaveBeenCalledWith('data:text/html,<h1>hello</h1>');
+      expect(warnSpy).toHaveBeenCalled();
+      // View state should still be applied
+      expect(deps.session.goToFrame).toHaveBeenCalledWith(3);
+
+      warnSpy.mockRestore();
+    });
+
     it('SU-028: skips sourceUrl when loadSourceFromUrl is not available', async () => {
       deps.session.sourceCount = 0;
       // No loadSourceFromUrl on session

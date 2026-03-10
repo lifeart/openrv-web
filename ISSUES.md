@@ -2805,6 +2805,42 @@ This file tracks findings from exploratory review and targeted validation runs.
   - A shared media URL like `shot.mov?token=...` or `clip.mp4#signed` is classified as an image, so clean-session share-link restore can fail to reconstruct the media at all.
   - This particularly hurts real-world CDN or signed review links, where query parameters are common rather than exceptional.
 
+### 229. Display HDR / gamut capability is frozen at startup, so moving the app between displays leaves stale output assumptions
+
+- Severity: Medium
+- Area: Display capability detection / HDR output
+- Evidence:
+  - The app detects display capabilities exactly once in the constructor and stores them on the app instance in [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L125).
+  - `detectDisplayCapabilities()` is explicitly documented as a one-time startup probe in [src/color/DisplayCapabilities.ts](/Users/lifeart/Repos/openrv-web/src/color/DisplayCapabilities.ts#L112).
+  - The repo does not register any `matchMedia('(dynamic-range: high)')` or `matchMedia('(color-gamut: ...)')` change listeners for display capability refresh; the only related runtime probe left is `queryHDRHeadroom()`, which runs on source-load paths in [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L1022) and [src/handlers/sourceLoadedHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/sourceLoadedHandlers.ts#L125).
+- Impact:
+  - If the window is moved between SDR and HDR displays, or between sRGB and wide-gamut displays, the renderer and UI keep using the startup display assumptions until the whole app is reloaded.
+  - That makes HDR availability, tone-mapping defaults, and output color-space behavior drift from the actual monitor the user is now viewing on.
+
+### 230. `openrv.media.getFPS()` reports mutable session playback FPS, not the current source FPS it claims to return
+
+- Severity: Medium
+- Area: Public API / media metadata consistency
+- Evidence:
+  - The public API documentation for `MediaAPI.getFPS()` says it returns “the frames per second of the current source” in [src/api/MediaAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/MediaAPI.ts#L69).
+  - The implementation actually returns `this.session.fps` in [src/api/MediaAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/MediaAPI.ts#L79), while `getCurrentSource()` exposes the source’s own stored `fps` field in [src/api/MediaAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/MediaAPI.ts#L45).
+  - Session playback FPS is independently mutable after media load, for example when applying shared URL state in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L174) and [src/AppNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppNetworkBridge.ts#L1109), without rewriting the source metadata object.
+- Impact:
+  - API consumers can observe contradictory values for the same loaded clip, such as `openrv.media.getCurrentSource().fps === 24` while `openrv.media.getFPS() === 48`.
+  - That makes scripting/export logic unreliable if it expects `getFPS()` to describe source metadata rather than the current session playback rate override.
+
+### 231. The RAW preview path advertises broader RAW support than its TIFF-only parser can actually handle
+
+- Severity: Medium
+- Area: Format support / camera RAW preview loading
+- Evidence:
+  - The RAW preview decoder advertises support for `CR2, CR3, NEF, ARW, DNG, RAF, ORF, RW2, PEF, SRW` in [src/formats/RAWPreviewDecoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/RAWPreviewDecoder.ts#L8), and `isRAWExtension(...)` accepts those extensions in [src/formats/RAWPreviewDecoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/RAWPreviewDecoder.ts#L46).
+  - The actual extractor only understands TIFF-style RAW containers: `extractRAWPreview(...)` immediately requires TIFF byte-order marks plus TIFF magic `42` in [src/formats/RAWPreviewDecoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/RAWPreviewDecoder.ts#L269), and the registry’s detection path is likewise TIFF-header-only in [src/formats/DecoderRegistry.ts](/Users/lifeart/Repos/openrv-web/src/formats/DecoderRegistry.ts#L328).
+  - The live file-loading path routes any extension-listed RAW file into this extractor with no alternate non-TIFF RAW implementation in [src/nodes/sources/FileSourceNode.ts](/Users/lifeart/Repos/openrv-web/src/nodes/sources/FileSourceNode.ts#L2030).
+- Impact:
+  - Inference from the parser design: extension-listed RAW families that are not actually TIFF/IFD containers are advertised as supported but will still fall through or fail at load time.
+  - That makes the RAW support surface look broader than the implementation really is, especially for users relying on extension-based expectations rather than the underlying container format.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

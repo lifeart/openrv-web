@@ -1746,7 +1746,6 @@ describe('AppNetworkBridge', () => {
       const loadSourceFromUrl = vi.fn().mockResolvedValue(undefined);
       ctx._session.sourceCount = 0;
       (ctx._session as any).loadSourceFromUrl = loadSourceFromUrl;
-      (ctx._session as any).loadImage = vi.fn().mockResolvedValue(undefined);
 
       bridge = new AppNetworkBridge({
         session: ctx.session,
@@ -1815,7 +1814,6 @@ describe('AppNetworkBridge', () => {
       const loadSourceFromUrl = vi.fn().mockRejectedValue(new Error('404 not found'));
       ctx._session.sourceCount = 0;
       (ctx._session as any).loadSourceFromUrl = loadSourceFromUrl;
-      (ctx._session as any).loadImage = vi.fn().mockRejectedValue(new Error('404 not found'));
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       bridge = new AppNetworkBridge({
@@ -1853,9 +1851,9 @@ describe('AppNetworkBridge', () => {
     });
 
     it('ANB-153: applyCapturedSessionURLState skips when sourceUrl is missing', async () => {
-      const loadImage = vi.fn().mockResolvedValue(undefined);
+      const loadSourceFromUrl = vi.fn().mockResolvedValue(undefined);
       ctx._session.sourceCount = 0;
-      (ctx._session as any).loadImage = loadImage;
+      (ctx._session as any).loadSourceFromUrl = loadSourceFromUrl;
 
       bridge = new AppNetworkBridge({
         session: ctx.session,
@@ -1883,7 +1881,7 @@ describe('AppNetworkBridge', () => {
       // Allow async handlers to resolve
       await new Promise((r) => setTimeout(r, 10));
 
-      expect(loadImage).not.toHaveBeenCalled();
+      expect(loadSourceFromUrl).not.toHaveBeenCalled();
     });
 
     it('ANB-154: applySessionURLState callback path also consumes sourceUrl', async () => {

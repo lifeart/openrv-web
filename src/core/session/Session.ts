@@ -1097,7 +1097,19 @@ export class Session extends EventEmitter<SessionEvents> {
    * share-link sourceUrl on a clean session.
    */
   async loadSourceFromUrl(url: string): Promise<void> {
-    const name = url.split('/').pop() || url;
+    const allowedSchemes = ['http:', 'https:'];
+    try {
+      const parsed = new URL(url);
+      if (!allowedSchemes.includes(parsed.protocol)) {
+        throw new Error(`Unsupported URL scheme: ${parsed.protocol}`);
+      }
+    } catch (e) {
+      if (e instanceof Error && e.message.startsWith('Unsupported')) throw e;
+      throw new Error('Invalid source URL');
+    }
+
+    const pathname = new URL(url).pathname;
+    const name = pathname.split('/').pop() || pathname;
     const ext = name.includes('.') ? name.split('.').pop()!.toLowerCase() : '';
     const videoExts = new Set(['mp4', 'm4v', '3gp', '3g2', 'mov', 'qt', 'mkv', 'mk3d', 'webm', 'ogg', 'ogv', 'ogm', 'ogx', 'avi']);
     if (videoExts.has(ext)) {

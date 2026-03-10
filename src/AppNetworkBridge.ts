@@ -1088,12 +1088,7 @@ export class AppNetworkBridge {
     if (session.sourceCount === 0 && state.sourceUrl) {
       try {
         console.info(`[AppNetworkBridge] Loading media from share link: ${state.sourceUrl}`);
-        if (typeof (session as any).loadSourceFromUrl === 'function') {
-          await (session as any).loadSourceFromUrl(state.sourceUrl);
-        } else {
-          const name = state.sourceUrl.split('/').pop() || state.sourceUrl;
-          await session.loadImage(name, state.sourceUrl);
-        }
+        await session.loadSourceFromUrl(state.sourceUrl);
       } catch (err) {
         console.warn(
           '[AppNetworkBridge] Failed to load media from share link sourceUrl, continuing with view state:',
