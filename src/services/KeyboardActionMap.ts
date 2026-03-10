@@ -601,13 +601,8 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
     'channel.green': () => controls.channelSelect.handleKeyboard('G', true),
     'channel.blue': () => controls.channelSelect.handleKeyboard('B', true),
     'channel.alpha': () => controls.channelSelect.handleKeyboard('A', true),
-    'channel.luminance': () => {
-      if (tabBar.activeTab === 'color') {
-        controls.lutPipelinePanel.toggle();
-        return;
-      }
-      controls.channelSelect.handleKeyboard('L', true);
-    },
+    'channel.luminance': () => controls.channelSelect.handleKeyboard('L', true),
+    'lut.togglePanel': () => controls.lutPipelinePanel.toggle(),
     'channel.grayscale': () => controls.channelSelect.handleKeyboard('Y', true),
     'channel.none': () => controls.channelSelect.handleKeyboard('N', true),
 

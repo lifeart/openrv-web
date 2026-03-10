@@ -225,6 +225,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   },
   'panel.histogram': {
     code: 'KeyH',
+    context: 'panel',
     description: 'Toggle histogram',
   },
   'panel.ocio': {
@@ -396,7 +397,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   'channel.red': {
     code: 'KeyR',
     shift: true,
-    context: 'channel',
+    context: 'viewer',
     description: 'Select red channel',
   },
   'channel.green': {
@@ -417,7 +418,14 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   'channel.luminance': {
     code: 'KeyL',
     shift: true,
+    context: 'viewer',
     description: 'Select luminance channel',
+  },
+  'lut.togglePanel': {
+    code: 'KeyL',
+    shift: true,
+    context: 'global',
+    description: 'Toggle LUT pipeline panel',
   },
   'channel.grayscale': {
     code: 'KeyY',

@@ -203,7 +203,7 @@ export class App {
           annotate: 'paint',
           transform: 'transform',
           view: 'viewer',
-          qc: 'viewer',
+          qc: 'panel',
         };
         this.activeContextManager.setContext(contextMap[tabId] ?? 'global');
       }),
@@ -302,7 +302,39 @@ export class App {
       'Toggle CIE gamut diagram',
     );
 
-    // Shift+R: transform.rotateLeft (global) vs channel.red (channel)
+    // KeyH: view.fitToHeight (global) vs panel.histogram (panel)
+    this.contextualKeyboardManager.register(
+      'view.fitToHeight',
+      { code: 'KeyH' },
+      () => this.viewer.smoothFitToHeight(),
+      'global',
+      'Fit image height to window',
+    );
+    this.contextualKeyboardManager.register(
+      'panel.histogram',
+      { code: 'KeyH' },
+      () => this.controls.scopesControl.toggleScope('histogram'),
+      'panel',
+      'Toggle histogram',
+    );
+
+    // KeyW: view.fitToWidth (global) vs panel.waveform (panel)
+    this.contextualKeyboardManager.register(
+      'view.fitToWidth',
+      { code: 'KeyW' },
+      () => this.viewer.smoothFitToWidth(),
+      'global',
+      'Fit image width to window',
+    );
+    this.contextualKeyboardManager.register(
+      'panel.waveform',
+      { code: 'KeyW' },
+      () => this.controls.scopesControl.toggleScope('waveform'),
+      'panel',
+      'Toggle waveform scope',
+    );
+
+    // Shift+R: transform.rotateLeft (global) vs channel.red (viewer/panel)
     this.contextualKeyboardManager.register(
       'transform.rotateLeft',
       { code: 'KeyR', shift: true },
@@ -314,11 +346,18 @@ export class App {
       'channel.red',
       { code: 'KeyR', shift: true },
       () => this.controls.channelSelect.handleKeyboard('R', true),
-      'channel',
+      'viewer',
+      'Select red channel',
+    );
+    this.contextualKeyboardManager.register(
+      'channel.red.panel',
+      { code: 'KeyR', shift: true },
+      () => this.controls.channelSelect.handleKeyboard('R', true),
+      'panel',
       'Select red channel',
     );
 
-    // Shift+B: view.cycleBackgroundPattern (global) vs channel.blue (channel)
+    // Shift+B: view.cycleBackgroundPattern (global) vs channel.blue (viewer/panel)
     this.contextualKeyboardManager.register(
       'view.cycleBackgroundPattern',
       { code: 'KeyB', shift: true },
@@ -330,11 +369,41 @@ export class App {
       'channel.blue',
       { code: 'KeyB', shift: true },
       () => this.controls.channelSelect.handleKeyboard('B', true),
-      'channel',
+      'viewer',
+      'Select blue channel',
+    );
+    this.contextualKeyboardManager.register(
+      'channel.blue.panel',
+      { code: 'KeyB', shift: true },
+      () => this.controls.channelSelect.handleKeyboard('B', true),
+      'panel',
       'Select blue channel',
     );
 
-    // Shift+N: network.togglePanel (global) vs channel.none (channel)
+    // Shift+L: lut.togglePanel (global) vs channel.luminance (viewer/panel)
+    this.contextualKeyboardManager.register(
+      'lut.togglePanel',
+      { code: 'KeyL', shift: true },
+      () => this.controls.lutPipelinePanel.toggle(),
+      'global',
+      'Toggle LUT pipeline panel',
+    );
+    this.contextualKeyboardManager.register(
+      'channel.luminance',
+      { code: 'KeyL', shift: true },
+      () => this.controls.channelSelect.handleKeyboard('L', true),
+      'viewer',
+      'Select luminance channel',
+    );
+    this.contextualKeyboardManager.register(
+      'channel.luminance.panel',
+      { code: 'KeyL', shift: true },
+      () => this.controls.channelSelect.handleKeyboard('L', true),
+      'panel',
+      'Select luminance channel',
+    );
+
+    // Shift+N: network.togglePanel (global) vs channel.none (viewer/panel)
     this.contextualKeyboardManager.register(
       'network.togglePanel',
       { code: 'KeyN', shift: true },
@@ -346,7 +415,14 @@ export class App {
       'channel.none',
       { code: 'KeyN', shift: true },
       () => this.controls.channelSelect.handleKeyboard('N', true),
-      'channel',
+      'viewer',
+      'Select no channel',
+    );
+    this.contextualKeyboardManager.register(
+      'channel.none.panel',
+      { code: 'KeyN', shift: true },
+      () => this.controls.channelSelect.handleKeyboard('N', true),
+      'panel',
       'Select no channel',
     );
 

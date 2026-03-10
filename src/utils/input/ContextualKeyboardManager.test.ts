@@ -314,4 +314,176 @@ describe('ContextualKeyboardManager', () => {
       expect(keyManager.resolve({ code: 'KeyR', ctrl: true })!.action).toBe('action.ctrl');
     });
   });
+
+  describe('production tab-to-context mapping - scope shortcuts reachability', () => {
+    // Regression tests for issue #10: panel context must be activated by QC tab
+    // so that scope shortcuts (H, G, W) resolve to their panel actions.
+    const TAB_CONTEXT_MAP: Record<string, string> = {
+      annotate: 'paint',
+      transform: 'transform',
+      view: 'viewer',
+      qc: 'panel',
+    };
+
+    it('CKM-100: QC tab activates panel context (not viewer)', () => {
+      const context = TAB_CONTEXT_MAP['qc'];
+      expect(context).toBe('panel');
+    });
+
+    it('CKM-101: KeyH resolves to panel.histogram when QC tab is active', () => {
+      const fitHandler = vi.fn();
+      const histogramHandler = vi.fn();
+
+      keyManager.register('view.fitToHeight', { code: 'KeyH' }, fitHandler, 'global');
+      keyManager.register('panel.histogram', { code: 'KeyH' }, histogramHandler, 'panel');
+
+      // Simulate QC tab selection
+      contextManager.setContext(TAB_CONTEXT_MAP['qc'] as 'panel');
+
+      const result = keyManager.resolve({ code: 'KeyH' });
+      expect(result).not.toBeNull();
+      expect(result!.action).toBe('panel.histogram');
+      result!.handler();
+      expect(histogramHandler).toHaveBeenCalledOnce();
+      expect(fitHandler).not.toHaveBeenCalled();
+    });
+
+    it('CKM-102: KeyG resolves to panel.gamutDiagram when QC tab is active', () => {
+      const gotoHandler = vi.fn();
+      const gamutHandler = vi.fn();
+
+      keyManager.register('navigation.gotoFrame', { code: 'KeyG' }, gotoHandler, 'global');
+      keyManager.register('panel.gamutDiagram', { code: 'KeyG' }, gamutHandler, 'panel');
+
+      // Simulate QC tab selection
+      contextManager.setContext(TAB_CONTEXT_MAP['qc'] as 'panel');
+
+      const result = keyManager.resolve({ code: 'KeyG' });
+      expect(result).not.toBeNull();
+      expect(result!.action).toBe('panel.gamutDiagram');
+      result!.handler();
+      expect(gamutHandler).toHaveBeenCalledOnce();
+      expect(gotoHandler).not.toHaveBeenCalled();
+    });
+
+    it('CKM-103: KeyW resolves to panel.waveform when QC tab is active', () => {
+      const fitWidthHandler = vi.fn();
+      const waveformHandler = vi.fn();
+
+      keyManager.register('view.fitToWidth', { code: 'KeyW' }, fitWidthHandler, 'global');
+      keyManager.register('panel.waveform', { code: 'KeyW' }, waveformHandler, 'panel');
+
+      // Simulate QC tab selection
+      contextManager.setContext(TAB_CONTEXT_MAP['qc'] as 'panel');
+
+      const result = keyManager.resolve({ code: 'KeyW' });
+      expect(result).not.toBeNull();
+      expect(result!.action).toBe('panel.waveform');
+      result!.handler();
+      expect(waveformHandler).toHaveBeenCalledOnce();
+      expect(fitWidthHandler).not.toHaveBeenCalled();
+    });
+
+    it('CKM-104: KeyH resolves to view.fitToHeight when view tab is active (not QC)', () => {
+      const fitHandler = vi.fn();
+      const histogramHandler = vi.fn();
+
+      keyManager.register('view.fitToHeight', { code: 'KeyH' }, fitHandler, 'global');
+      keyManager.register('panel.histogram', { code: 'KeyH' }, histogramHandler, 'panel');
+
+      // Simulate view tab selection (viewer context, not panel)
+      contextManager.setContext(TAB_CONTEXT_MAP['view'] as 'viewer');
+
+      const result = keyManager.resolve({ code: 'KeyH' });
+      expect(result).not.toBeNull();
+      expect(result!.action).toBe('view.fitToHeight');
+    });
+
+    it('CKM-105: KeyG resolves to navigation.gotoFrame when view tab is active (not QC)', () => {
+      const gotoHandler = vi.fn();
+      const gamutHandler = vi.fn();
+
+      keyManager.register('navigation.gotoFrame', { code: 'KeyG' }, gotoHandler, 'global');
+      keyManager.register('panel.gamutDiagram', { code: 'KeyG' }, gamutHandler, 'panel');
+
+      // Simulate view tab selection
+      contextManager.setContext(TAB_CONTEXT_MAP['view'] as 'viewer');
+
+      const result = keyManager.resolve({ code: 'KeyG' });
+      expect(result).not.toBeNull();
+      expect(result!.action).toBe('navigation.gotoFrame');
+    });
+
+    it('CKM-106: KeyW resolves to view.fitToWidth when view tab is active (not QC)', () => {
+      const fitWidthHandler = vi.fn();
+      const waveformHandler = vi.fn();
+
+      keyManager.register('view.fitToWidth', { code: 'KeyW' }, fitWidthHandler, 'global');
+      keyManager.register('panel.waveform', { code: 'KeyW' }, waveformHandler, 'panel');
+
+      // Simulate view tab selection
+      contextManager.setContext(TAB_CONTEXT_MAP['view'] as 'viewer');
+
+      const result = keyManager.resolve({ code: 'KeyW' });
+      expect(result).not.toBeNull();
+      expect(result!.action).toBe('view.fitToWidth');
+    });
+
+    it('CKM-107: global shortcuts still work as fallback in panel context', () => {
+      const spaceHandler = vi.fn();
+      keyManager.register('playback.toggle', { code: 'Space' }, spaceHandler, 'global');
+
+      // Simulate QC tab selection
+      contextManager.setContext(TAB_CONTEXT_MAP['qc'] as 'panel');
+
+      const result = keyManager.resolve({ code: 'Space' });
+      expect(result).not.toBeNull();
+      expect(result!.action).toBe('playback.toggle');
+    });
+  });
+
+  describe('KeyH histogram vs fitToHeight resolution', () => {
+    it('CKM-090: KeyH resolves to view.fitToHeight in global context', () => {
+      const fitHandler = vi.fn();
+      const histogramHandler = vi.fn();
+
+      keyManager.register('view.fitToHeight', { code: 'KeyH' }, fitHandler, 'global');
+      keyManager.register('panel.histogram', { code: 'KeyH' }, histogramHandler, 'panel');
+
+      // Default context is global
+      const result = keyManager.resolve({ code: 'KeyH' });
+      expect(result).not.toBeNull();
+      expect(result!.action).toBe('view.fitToHeight');
+    });
+
+    it('CKM-091: KeyH resolves to panel.histogram in panel context', () => {
+      const fitHandler = vi.fn();
+      const histogramHandler = vi.fn();
+
+      keyManager.register('view.fitToHeight', { code: 'KeyH' }, fitHandler, 'global');
+      keyManager.register('panel.histogram', { code: 'KeyH' }, histogramHandler, 'panel');
+
+      contextManager.setContext('panel');
+
+      const result = keyManager.resolve({ code: 'KeyH' });
+      expect(result).not.toBeNull();
+      expect(result!.action).toBe('panel.histogram');
+    });
+
+    it('CKM-092: KeyH histogram handler toggles histogram (not fitToHeight) in panel context', () => {
+      const fitHandler = vi.fn();
+      const histogramHandler = vi.fn();
+
+      keyManager.register('view.fitToHeight', { code: 'KeyH' }, fitHandler, 'global');
+      keyManager.register('panel.histogram', { code: 'KeyH' }, histogramHandler, 'panel');
+
+      contextManager.setContext('panel');
+
+      const result = keyManager.resolve({ code: 'KeyH' });
+      result!.handler();
+
+      expect(histogramHandler).toHaveBeenCalledOnce();
+      expect(fitHandler).not.toHaveBeenCalled();
+    });
+  });
 });

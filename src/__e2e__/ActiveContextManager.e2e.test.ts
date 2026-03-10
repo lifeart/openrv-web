@@ -278,7 +278,7 @@ describe('ActiveContextManager E2E', () => {
       const channelHandler = vi.fn();
 
       keyManager.register('transform.rotateLeft', { code: 'KeyR', shift: true }, transformHandler, 'transform');
-      keyManager.register('channel.red', { code: 'KeyR', shift: true }, channelHandler, 'channel');
+      keyManager.register('channel.red', { code: 'KeyR', shift: true }, channelHandler, 'viewer');
 
       updateActiveContext(contextManager, 'transform');
       const result = keyManager.resolve({ code: 'KeyR', shift: true });

@@ -38,14 +38,18 @@ export class AppKeyboardHandler {
     'navigation.gotoFrame', // G key - handled with paint/panel context variants
     'paint.toggleGhost', // G key - handled with global/panel context variants
     'panel.gamutDiagram', // G key - handled with global/paint context variants
+    'view.fitToHeight', // H key - handled with global/panel context variants (fitToHeight global, histogram panel)
+    'panel.histogram', // H key - handled with global/panel context variants (fitToHeight global, histogram panel)
     'channel.red', // Shift+R is reserved for transform.rotateLeft
     'channel.blue', // Shift+B is reserved for view.cycleBackgroundPattern
     'channel.none', // Shift+N is reserved for network.togglePanel
+    'view.fitToWidth', // W key - handled with global/panel context variants (fitToWidth global, waveform panel)
+    'panel.waveform', // W key - handled with global/panel context variants (fitToWidth global, waveform panel)
+    'channel.luminance', // Shift+L - handled with viewer/panel context (luminance channel) vs global (LUT panel)
+    'lut.togglePanel', // Shift+L - handled with global context (LUT panel) vs viewer/panel (luminance channel)
   ]);
   private static readonly HIDDEN_DEFAULTS = new Set([
-    'view.toggleWaveform', // W key - now used for view.fitToWidth
-    'panel.waveform', // W key - now used for view.fitToWidth
-    'panel.histogram', // H key - now used for view.fitToHeight
+    'view.toggleWaveform', // W key - legacy duplicate of panel.waveform
     'notes.addNote', // N key - handled by view.toggleFilterMode
   ]);
 
@@ -234,7 +238,7 @@ export class AppKeyboardHandler {
         'edit.undo',
         'edit.redo',
       ],
-      COLOR: ['panel.color', 'panel.curves', 'panel.ocio', 'display.cycleProfile'],
+      COLOR: ['panel.color', 'panel.curves', 'panel.ocio', 'display.cycleProfile', 'lut.togglePanel'],
       'WIPE COMPARISON': ['view.cycleWipeMode', 'view.toggleSplitScreen'],
       'AUDIO (Video only)': ['audio.toggleMute'], // Also has special non-binding entries below
       EXPORT: ['export.quickExport', 'export.copyFrame'],

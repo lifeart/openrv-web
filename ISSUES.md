@@ -853,6 +853,286 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Mouse users can open auto-save settings or retry a failed save, but keyboard users cannot focus the same control.
   - A header element that visibly behaves like an action surface is effectively inaccessible unless the user happens to click it.
 
+### 71. The playback-speed control advertises a menu button, but default activation does not open its menu
+
+- Severity: Medium
+- Area: Playback header, control semantics
+- Evidence:
+  - The speed button declares `aria-haspopup="menu"` in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L622).
+  - Its normal click handler cycles playback speed instead of opening the menu in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L660).
+  - The actual preset menu is only available through right-click or `Shift+Enter` / `Shift+Space` in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L663) and [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L668).
+- Impact:
+  - Assistive-tech and keyboard users encounter a control that announces menu semantics but does something else on standard activation.
+  - The full speed preset list is effectively hidden behind non-obvious alternate gestures, which makes the control harder to understand and less useful than it looks.
+
+### 72. Notes and markers still rely on clickable text for key actions, leaving parts of review workflow mouse-only
+
+- Severity: Medium
+- Area: Notes/markers review panels, keyboard accessibility
+- Evidence:
+  - `MarkerListPanel` uses plain text elements for navigation and editing affordances: the frame label click-to-jump in [src/ui/components/MarkerListPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/MarkerListPanel.ts#L548), the note text click-to-edit in [src/ui/components/MarkerListPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/MarkerListPanel.ts#L730), and the empty-note hint click-to-edit in [src/ui/components/MarkerListPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/MarkerListPanel.ts#L745).
+  - `NotePanel` likewise uses a plain `span` for frame-jump interaction in [src/ui/components/NotePanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NotePanel.ts#L536), and the whole note card itself becomes a click target for navigation in [src/ui/components/NotePanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NotePanel.ts#L718).
+  - Those elements are not buttons and do not receive keyboard activation wiring.
+- Impact:
+  - Important review actions like “jump to this note/marker” and “edit this marker note” work by mouse click but are not reachable as proper controls from the keyboard.
+  - The panels are visually rich and interactive, but some of their most common actions still behave like hidden mouse gestures rather than explicit UI controls.
+
+### 73. Several header menu buttons open popups without exposing expanded state
+
+- Severity: Low
+- Area: Header accessibility, menu truthfulness
+- Evidence:
+  - The layout menu button correctly manages `aria-expanded` in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L376), [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1227), and [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1232).
+  - By contrast, the Sources button only sets `aria-haspopup="menu"` in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L268) and then delegates to `DropdownMenu.toggle(...)` without ever syncing `aria-expanded` in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L264).
+  - The Help button also sets `aria-haspopup="menu"` without maintaining `aria-expanded` in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L432), and the speed button has the same gap in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L622).
+- Impact:
+  - Similar header controls report different accessibility state quality even though they all open menus.
+  - Screen-reader and keyboard users do not get reliable open/closed state feedback for several header popups, which makes the header feel inconsistent and harder to trust.
+
+### 74. Custom header menus trap `Tab` back onto their trigger instead of letting focus continue
+
+- Severity: Medium
+- Area: Header keyboard navigation, accessibility
+- Evidence:
+  - The speed menu intercepts `Tab`, calls `preventDefault()`, closes, and forces focus back to the anchor in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L930).
+  - The help menu does the same in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1066).
+  - The layout menu repeats the same pattern in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1208).
+- Impact:
+  - Keyboard users cannot tab through the header naturally after opening one of these menus, because focus snaps back to the trigger instead of advancing.
+  - That makes the custom header menus feel stickier and less usable than the shared dropdowns elsewhere in the app, which close on `Tab` without hijacking focus flow.
+
+### 75. Pixel Probe `Source` mode silently falls back to rendered values on the WebGL / HDR path
+
+- Severity: High
+- Area: QC tools, measurement correctness
+- Evidence:
+  - In the WebGL / HDR branch, `PixelSamplingManager` samples the displayed float pixels and always forwards them through `updateFromHDRValues(...)` in [src/ui/components/PixelSamplingManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PixelSamplingManager.ts#L131) and [src/ui/components/PixelSamplingManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PixelSamplingManager.ts#L279).
+  - The pre-grade `sourceImageData` path is only populated in the 2D-canvas branch when `getSourceMode() === 'source'` in [src/ui/components/PixelSamplingManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PixelSamplingManager.ts#L191).
+  - `PixelProbe` itself treats missing `sourceImageData` as a silent fallback to the rendered image in [src/ui/components/PixelProbe.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PixelProbe.ts#L652).
+- Impact:
+  - On the common graded / GL-rendered path, the probe can show `Source` in the UI while still reporting post-pipeline values.
+  - That makes the probe unreliable for real QC tasks where users are explicitly trying to compare original pixel values against rendered output.
+
+### 76. Viewer timecode overlay ignores source start-frame offsets, and exported frameburn inherits the wrong offset
+
+- Severity: High
+- Area: Viewer overlays, export correctness
+- Evidence:
+  - App-level timecode offset sync only updates the goto-frame overlay and the header timecode display in [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L767).
+  - The viewer `TimecodeOverlay` does support its own `startFrame` offset in [src/ui/components/TimecodeOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/TimecodeOverlay.ts#L235), but that setter is never wired from app bootstrap.
+  - Exported frameburn options are taken from the viewer overlay’s state, including `timecodeOverlay.getStartFrame()`, in [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L3334).
+- Impact:
+  - The viewer overlay can show different timecode than the header for sources with non-zero start-frame offsets.
+  - Frame exports that include timecode burn-in can inherit the same wrong offset, so the exported image disagrees with the rest of the app UI.
+
+### 77. The viewer timecode overlay is effectively hidden from the shipped UI
+
+- Severity: Medium
+- Area: View overlays, discoverability and usefulness
+- Evidence:
+  - The feature is wired to a keyboard-only action: `view.toggleTimecodeOverlay` is defined in [src/utils/input/KeyBindings.ts](/Users/lifeart/Repos/openrv-web/src/utils/input/KeyBindings.ts#L477) and mapped in [src/services/KeyboardActionMap.ts](/Users/lifeart/Repos/openrv-web/src/services/KeyboardActionMap.ts#L392).
+  - The shipped View toolbar exposes Info Strip and FPS toggles, but no timecode overlay control, in [src/services/tabContent/buildViewTab.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildViewTab.ts#L398).
+  - `TimecodeOverlay` has real user-facing configuration surface in code, including position, font size, frame counter, and background opacity, in [src/ui/components/TimecodeOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/TimecodeOverlay.ts#L18).
+- Impact:
+  - A visible viewer overlay feature exists, but normal users have no in-app way to discover or configure it unless they already know the hidden shortcut.
+  - Because the same overlay state feeds export frameburn, a feature with output impact is effectively missing from the production UI.
+
+### 78. The FPS indicator has rich persisted settings, but the shipped UI only exposes a binary toggle
+
+- Severity: Medium
+- Area: View overlays, settings reachability
+- Evidence:
+  - The View tab only exposes a single `Toggle FPS indicator` button in [src/services/tabContent/buildViewTab.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildViewTab.ts#L415).
+  - `FPSIndicator` itself carries real settings for position, dropped-frame visibility, target-FPS visibility, background opacity, and warning / critical thresholds in [src/ui/components/FPSIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/FPSIndicator.ts#L23).
+  - Those settings are persisted through `FPSIndicatorPrefs` in [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L101).
+- Impact:
+  - Users can only turn the HUD on or off, while every other meaningful aspect of its behavior is hidden behind internal state or persisted prefs.
+  - If the indicator ever ends up in a non-default configuration, the shipped UI offers no way to inspect, tune, or reset what the HUD is actually showing.
+
+### 79. Pixel Probe exposes copyable value rows as mouse-only `div`s
+
+- Severity: Medium
+- Area: QC tools, keyboard accessibility
+- Evidence:
+  - The generic Pixel Probe value rows are built as plain `div` containers with only hover and click handlers in [src/ui/components/PixelProbe.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PixelProbe.ts#L578).
+  - The HDR `Nits` row is implemented the same way in [src/ui/components/PixelProbe.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PixelProbe.ts#L300).
+  - Those rows are presented as explicit copy actions in the overlay, but they are never given button semantics, focusability, or keyboard activation.
+- Impact:
+  - Keyboard users can reach the probe’s format/source buttons, but not the visible “click row to copy” actions that the overlay itself advertises.
+  - A core QC tool ends up partially mouse-only even though its on-screen layout looks like a complete interactive panel.
+
+### 80. Several custom popups bypass the shared dropdown primitive and lose its keyboard navigation
+
+- Severity: Medium
+- Area: View/QC control consistency, keyboard usability
+- Evidence:
+  - The shared [src/ui/components/shared/DropdownMenu.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/shared/DropdownMenu.ts#L429) already implements arrow-key navigation, `Home`/`End`, `Enter`/`Space`, and close-on-`Tab` behavior for popup lists.
+  - `DisplayProfileControl` declares menu/radio semantics in [src/ui/components/DisplayProfileControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/DisplayProfileControl.ts#L55) and [src/ui/components/DisplayProfileControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/DisplayProfileControl.ts#L122), but each profile option only gets click handlers in [src/ui/components/DisplayProfileControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/DisplayProfileControl.ts#L147), and the popup-level key handling only closes on `Escape` in [src/ui/components/DisplayProfileControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/DisplayProfileControl.ts#L465).
+  - `MultiSourceLayoutControl` exposes its own fixed popup in [src/ui/components/MultiSourceLayoutControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/MultiSourceLayoutControl.ts#L58) and builds mode rows as click-only buttons in [src/ui/components/MultiSourceLayoutControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/MultiSourceLayoutControl.ts#L367), with no matching popup keyboard navigation layer.
+  - `BackgroundPatternControl` marks its popup as a `radiogroup` in [src/ui/components/BackgroundPatternControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/BackgroundPatternControl.ts#L103), but individual items only support click plus `Enter`/`Space` in [src/ui/components/BackgroundPatternControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/BackgroundPatternControl.ts#L283), so users cannot browse the radio set with arrow keys.
+- Impact:
+  - Similar controls behave inconsistently depending on whether they use the shared dropdown utility or a bespoke popup.
+  - Keyboard users lose fast list navigation in several real production controls even though the app already has a working implementation for that behavior.
+
+### 81. Safe Areas ships only the binary guide toggles while real overlay customization stays unreachable
+
+- Severity: Medium
+- Area: View overlays, usefulness
+- Evidence:
+  - `SafeAreasControl` still describes itself as a dropdown for safe-area presets with guide color and opacity controls in [src/ui/components/SafeAreasControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SafeAreasControl.ts#L1).
+  - The actual popup only exposes enable/title-safe/action-safe/center-crosshair/rule-of-thirds toggles plus an aspect-ratio preset list in [src/ui/components/SafeAreasControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SafeAreasControl.ts#L109) and [src/ui/components/SafeAreasControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SafeAreasControl.ts#L153).
+  - The mounted overlay still carries `guideColor`, `guideOpacity`, and a `custom` aspect ratio mode in [src/ui/components/SafeAreasOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SafeAreasOverlay.ts#L20), with dedicated setters in [src/ui/components/SafeAreasOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SafeAreasOverlay.ts#L141).
+  - Those setters are not called anywhere in production UI code; the remaining references are tests.
+- Impact:
+  - Users can enable the overlay, but they cannot tune its line visibility or define a custom framing ratio even though the live overlay and persisted state support both.
+  - The control presents Safe Areas as a complete review tool while shipping only a reduced subset of the functionality the app actually implements.
+
+### 82. Watermark panel drops the overlay's custom-position mode on the floor
+
+- Severity: Medium
+- Area: Effects panel, watermark usability
+- Evidence:
+  - The watermark panel only renders the 3x3 preset grid in [src/ui/components/WatermarkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/WatermarkControl.ts#L174) and [src/ui/components/WatermarkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/WatermarkControl.ts#L191).
+  - The live overlay still supports a distinct `custom` position with persisted `customX` / `customY` coordinates in [src/ui/components/WatermarkOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/WatermarkOverlay.ts#L331).
+  - Saved snapshot / recovery state is pushed straight back into the watermark control in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L241) and [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L444), so production can restore watermark states that the panel itself cannot represent.
+- Impact:
+  - A restored or programmatically configured custom watermark position has no matching UI state in the panel, so users cannot tell which placement is active.
+  - Any edit from the panel snaps the watermark back onto the nearest preset workflow, which makes the persisted custom-position capability effectively unmanageable from the shipped UI.
+
+### 83. Client mode hides restricted UI one-way and does not restore it when the mode is turned off
+
+- Severity: Medium
+- Area: Review mode, layout state
+- Evidence:
+  - The app initializes a real `ClientMode` state object in [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L133).
+  - Layout orchestration only reacts to client-mode state changes when `enabled` becomes true in [src/services/LayoutOrchestrator.ts](/Users/lifeart/Repos/openrv-web/src/services/LayoutOrchestrator.ts#L589).
+  - `applyClientModeRestrictions()` mutates matching elements to `style.display = 'none'` in [src/services/LayoutOrchestrator.ts](/Users/lifeart/Repos/openrv-web/src/services/LayoutOrchestrator.ts#L615), and there is no inverse path that restores the previous display state when client mode is later disabled.
+- Impact:
+  - Any host or embedding flow that enables review/client mode and then turns it back off leaves parts of the editing UI hidden until a full reload.
+  - The mode behaves like a destructive layout mutation instead of a reversible presentation state, which makes API-driven review workflows unreliable.
+
+### 84. Info Strip ships as a toggle-only overlay while its opacity control stays hidden
+
+- Severity: Low
+- Area: View overlays, usefulness
+- Evidence:
+  - The live info-strip state includes `backgroundOpacity` in [src/ui/components/InfoStripOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/InfoStripOverlay.ts#L15), and the overlay renders that value into its background in [src/ui/components/InfoStripOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/InfoStripOverlay.ts#L84).
+  - Production UI only exposes a View-tab toggle button in [src/services/tabContent/buildViewTab.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildViewTab.ts#L398) plus the keyboard path/full-path toggle in [src/services/KeyboardActionMap.ts](/Users/lifeart/Repos/openrv-web/src/services/KeyboardActionMap.ts#L393).
+  - There is no production control path that adjusts `backgroundOpacity`; the remaining references are component tests.
+- Impact:
+  - Users can show the strip and flip between basename and full-path display, but they cannot tune how intrusive the overlay is against different footage.
+  - Another viewer HUD ships as a binary on/off feature even though the live overlay already supports a more practical review setting.
+
+### 85. EXR window overlay exposes only a binary toggle while the useful per-window controls stay unreachable
+
+- Severity: Medium
+- Area: View overlays, EXR review
+- Evidence:
+  - `EXRWindowOverlay` supports separate `showDataWindow` / `showDisplayWindow` toggles, independent colors, line width, dash pattern, and labels in [src/ui/components/EXRWindowOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/EXRWindowOverlay.ts#L22) and [src/ui/components/EXRWindowOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/EXRWindowOverlay.ts#L149).
+  - The shipped View tab only mounts a single icon button that calls `viewer.getEXRWindowOverlay().toggle()` in [src/services/tabContent/buildViewTab.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildViewTab.ts#L381).
+  - There is no other production UI path for the per-window visibility or styling settings; the remaining references are tests.
+- Impact:
+  - Artists can turn the EXR boundary overlay on, but they cannot isolate just the data window or just the display window, which is often the whole point of checking these boundaries.
+  - The overlay’s most useful review controls exist in code but are absent from the shipped UI, so the feature lands as a blunt diagnostic instead of a practical EXR inspection tool.
+
+### 86. Bug overlay is implemented in the viewer but has no production entry point
+
+- Severity: Medium
+- Area: Viewer overlays, branding/review workflows
+- Evidence:
+  - The viewer exposes a real bug/logo overlay via [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L3783), backed by `OverlayManager.getBugOverlay()` in [src/ui/components/OverlayManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/OverlayManager.ts#L246).
+  - `BugOverlay` itself is a complete feature with image loading, corner placement, size, opacity, and margin controls in [src/ui/components/BugOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/BugOverlay.ts#L57).
+  - There is no View-tab button, panel, or keyboard action that references `getBugOverlay()`; the remaining matches are the viewer/overlay-manager plumbing and tests.
+- Impact:
+  - A potentially useful review/branding overlay is effectively absent from the shipped app even though the underlying feature is implemented.
+  - Teams that need a persistent logo or channel-identification bug cannot activate or configure it without adding new UI or calling private APIs.
+
+### 87. Matte overlay is fully implemented but unreachable from the shipped UI
+
+- Severity: Medium
+- Area: Viewer overlays, framing/review tools
+- Evidence:
+  - `MatteOverlay` is a complete letterbox/pillarbox feature with aspect, opacity, and center-point controls in [src/ui/components/MatteOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/MatteOverlay.ts#L1).
+  - The overlay is eagerly created in the viewer stack via [src/ui/components/OverlayManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/OverlayManager.ts#L111) and exposed through [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L3719).
+  - There is no tab button, panel, or keyboard action that references `getMatteOverlay()`; the only production matches are the viewer/overlay-manager plumbing.
+- Impact:
+  - Users have no way to turn on or tune an overlay that would be directly useful for aspect-framing and letterbox review.
+  - The app carries a finished framing tool in the runtime layer without shipping the UI needed to use it.
+
+### 88. Clipping overlay ships as a binary histogram toggle while its useful controls stay hidden
+
+- Severity: Medium
+- Area: QC tools, clipping review
+- Evidence:
+  - `ClippingOverlay` supports separate highlight/shadow toggles plus configurable overlay opacity in [src/ui/components/ClippingOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ClippingOverlay.ts#L14) and [src/ui/components/ClippingOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ClippingOverlay.ts#L139).
+  - Production wiring only connects the histogram footer click target to `enable()` / `disable()` in [src/services/tabContent/buildQCTab.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildQCTab.ts#L128), and the histogram UI itself only advertises “Click to toggle clipping overlay on viewer” in [src/ui/components/Histogram.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Histogram.ts#L175).
+  - There is no production UI path for `showHighlights`, `showShadows`, or `opacity`; the remaining references are tests.
+- Impact:
+  - Users can only switch the clipping visualization on or off, even though real grading review often needs highlights-only, shadows-only, or lower-opacity inspection.
+  - The app ships a more capable clipping-analysis feature than the UI actually allows people to use.
+
+### 89. Reference comparison exposes only capture/on-off while the real comparison modes stay inaccessible
+
+- Severity: Medium
+- Area: View tools, reference comparison
+- Evidence:
+  - The View tab only exposes `Capture reference frame` and `Toggle reference comparison` in [src/services/tabContent/buildViewTab.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildViewTab.ts#L96) and [src/services/tabContent/buildViewTab.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildViewTab.ts#L105).
+  - `ReferenceManager` still carries `viewMode`, `opacity`, and `wipePosition` as first-class state in [src/ui/components/ReferenceManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ReferenceManager.ts#L25).
+  - The viewer renderer does honor multiple reference view modes and overlay opacity in [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L3812) and [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L3853), but there is no production control path for selecting those modes.
+  - `wipePosition` is even worse: it exists in `ReferenceManager`, but the viewer hardcodes split comparisons to `0.5` in [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L3859) and [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L3868), with no production consumer for the stored value.
+- Impact:
+  - Users can capture a reference image, but they cannot choose whether to compare it as overlay, vertical split, horizontal split, side-by-side, or toggle despite the renderer supporting those modes.
+  - Part of the persisted reference state model is effectively dead, so the feature looks much simpler in the shipped UI than the underlying implementation and tests imply.
+
+### 90. Spotlight ships as a bare toggle while most of the tool's real controls are hidden
+
+- Severity: Medium
+- Area: View tools, spotlight review aid
+- Evidence:
+  - Production UI only exposes a Spotlight toggle button in [src/services/tabContent/buildViewTab.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildViewTab.ts#L364) and the matching keyboard action in [src/services/KeyboardActionMap.ts](/Users/lifeart/Repos/openrv-web/src/services/KeyboardActionMap.ts#L402).
+  - `SpotlightOverlay` supports shape switching, explicit position/size control, dim amount, and feather settings in [src/ui/components/SpotlightOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SpotlightOverlay.ts#L313) through [src/ui/components/SpotlightOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SpotlightOverlay.ts#L350).
+  - There is no production panel or dropdown that exposes those settings; the remaining non-test wiring only toggles the overlay.
+- Impact:
+  - Users can move and resize the default spotlight directly on the canvas, but they cannot switch to the rectangular mode or tune how strong and soft the isolation effect is.
+  - A review aid that is implemented as a configurable tool ships as a much narrower fixed-behavior overlay.
+
+### 91. The shipped slate panel exposes only a small subset of the slate feature it actually drives
+
+- Severity: Medium
+- Area: Effects panel, export usability
+- Evidence:
+  - The production slate panel only builds inputs for show, shot, version, artist, date, background color, font size, logo upload, and manual preview generation in [src/AppControlRegistry.ts](/Users/lifeart/Repos/openrv-web/src/AppControlRegistry.ts#L567) through [src/AppControlRegistry.ts](/Users/lifeart/Repos/openrv-web/src/AppControlRegistry.ts#L765).
+  - The underlying `SlateEditor` state and config model also support custom fields, text and accent colors, logo position, logo scale, and explicit output resolution in [src/ui/components/SlateEditor.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SlateEditor.ts#L67), [src/ui/components/SlateEditor.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SlateEditor.ts#L201), [src/ui/components/SlateEditor.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SlateEditor.ts#L387), [src/ui/components/SlateEditor.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SlateEditor.ts#L401), and [src/ui/components/SlateEditor.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SlateEditor.ts#L473).
+  - The slate metadata model also supports frame in/out, FPS, resolution, codec, and color-space fields in [src/export/SlateRenderer.ts](/Users/lifeart/Repos/openrv-web/src/export/SlateRenderer.ts#L54), and export prepends whatever `controls.slateEditor.generateConfig()` returns in [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L531).
+- Impact:
+  - Users can technically export a slate, but they cannot configure many of the fields and layout controls that the runtime slate generator already supports.
+  - The shipped panel makes the slate feature look much simpler than the real export path, which reduces usefulness for actual review deliverables.
+
+### 92. Slate logo upload failures are swallowed without any user-visible feedback
+
+- Severity: Medium
+- Area: Effects panel, error handling
+- Evidence:
+  - `SlateEditor` emits explicit `logoError` events for invalid URLs and failed image loads in [src/ui/components/SlateEditor.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SlateEditor.ts#L58), [src/ui/components/SlateEditor.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SlateEditor.ts#L301), and [src/ui/components/SlateEditor.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SlateEditor.ts#L329).
+  - The production panel upload handler catches `loadLogoFile()` failures and does nothing except a comment saying the error was emitted elsewhere in [src/AppControlRegistry.ts](/Users/lifeart/Repos/openrv-web/src/AppControlRegistry.ts#L704).
+  - I found no production listener for `logoError`; the remaining matches are the event declaration and emission sites.
+- Impact:
+  - If a logo file is corrupt or unsupported, the upload simply fails with no alert, inline error, or status message.
+  - Users are left guessing whether the file was ignored, still loading, or incompatible, which is poor behavior for an export-facing tool.
+
+### 93. The advanced multi-field frameburn export overlay is implemented but unreachable in production
+
+- Severity: Medium
+- Area: Export UI, frameburn overlays
+- Evidence:
+  - `ViewerExport` supports a separate `frameburnConfig` and `frameburnContext` path that composites a multi-field export overlay via `compositeFrameburn()` in [src/ui/components/ViewerExport.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerExport.ts#L157) and [src/ui/components/ViewerExport.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerExport.ts#L235).
+  - That config can express multiple field types plus font, colors, padding, and six anchor positions in [src/ui/components/FrameburnCompositor.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/FrameburnCompositor.ts#L20).
+  - The only non-test production callsites of `createExportCanvas()` and `renderFrameToCanvas()` come from `Viewer`, and they pass only the simpler timecode-overlay options in [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L3362) and [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L3386).
+  - I found no non-test production consumer of `frameburnConfig` or `frameburnContext`, and no export UI that authors those values.
+- Impact:
+  - The app ships a richer export frameburn system than users can actually reach from the production UI.
+  - Export behavior is effectively limited to the on-viewer timecode overlay, while the more useful multi-field frameburn path remains dead code in real workflows.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed
