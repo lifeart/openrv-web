@@ -381,7 +381,8 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
       await showAlert('Invalid marker file. Expected { version, markers: [...] } format.');
       return;
     }
-    const validMarkers = (data as MarkerExportData).markers.filter(
+    const allMarkers = (data as MarkerExportData).markers;
+    const validMarkers = allMarkers.filter(
       (m) =>
         typeof m.frame === 'number' &&
         Number.isFinite(m.frame) &&
@@ -389,25 +390,34 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
         typeof m.note === 'string' &&
         typeof m.color === 'string',
     );
+    const invalidCount = allMarkers.length - validMarkers.length;
 
     if (mode === 'replace') {
       this.session.clearMarks();
     }
 
-    let skippedCount = 0;
+    let collisionCount = 0;
     for (const m of validMarkers) {
       if (mode === 'merge' && this.session.hasMarker(m.frame)) {
-        skippedCount++;
+        collisionCount++;
         continue;
       }
       this.session.setMarker(m.frame, m.note, m.color, m.endFrame);
     }
 
-    if (mode === 'merge' && skippedCount > 0) {
-      await showAlert(
-        `${skippedCount} marker${skippedCount > 1 ? 's were' : ' was'} skipped due to frame collisions with existing markers.`,
+    const importedCount = validMarkers.length - collisionCount;
+    const parts: string[] = [];
+    parts.push(`${importedCount} marker${importedCount !== 1 ? 's' : ''} imported.`);
+    if (invalidCount > 0) {
+      parts.push(`${invalidCount} invalid entry${invalidCount !== 1 ? 'ies' : 'y'} skipped.`);
+    }
+    if (mode === 'merge' && collisionCount > 0) {
+      parts.push(
+        `${collisionCount} marker${collisionCount > 1 ? 's' : ''} skipped due to frame collisions.`,
       );
     }
+
+    await showAlert(parts.join(' '));
   }
 
   /**

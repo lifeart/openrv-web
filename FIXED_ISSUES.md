@@ -1497,3 +1497,13 @@
 - **Regression Tests**: 5 tests — copy respects checkbox on/off, wiring passes flag through, keyboard shortcut reads preferences.
 - **Verification**: All 22,597 tests pass, TypeScript clean.
 - **Files Changed**: `src/ui/components/ExportControl.ts`, `src/ui/components/ExportControl.test.ts`, `src/AppPlaybackWiring.ts`, `src/AppPlaybackWiring.test.ts`, `src/services/KeyboardActionMap.ts`, `src/services/KeyboardActionMap.test.ts`
+
+## Issue #177: Notes import performs almost no schema validation and can inject malformed notes
+
+- **Severity**: Medium
+- **Area**: Notes workflow / data integrity
+- **Root Cause**: `NoteManager.fromSerializable()` inserted imported objects verbatim with no field validation. Missing/invalid fields could corrupt live UI state.
+- **Fix**: Added `validateNoteEntry()` that validates required fields (frameStart, frameEnd as numbers; text as string), defaults optional fields (author, status, createdAt, color, sourceIndex, parentId, id), filters out invalid entries. Returns `ImportResult` with imported/rejected counts. NotePanel shows alert when entries are skipped.
+- **Regression Tests**: 20 tests — valid imports, missing required fields, wrong types, NaN/Infinity rejection, non-object entries, optional defaults, mixed batches, ID generation, status preservation.
+- **Verification**: All 22,617 tests pass, TypeScript clean.
+- **Files Changed**: `src/core/session/NoteManager.ts`, `src/core/session/NoteManager.test.ts`, `src/ui/components/NotePanel.ts`, `src/AppNetworkBridge.test.ts`

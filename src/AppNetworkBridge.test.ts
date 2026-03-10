@@ -1357,7 +1357,7 @@ describe('AppNetworkBridge', () => {
       });
 
       const notes = [
-        { id: 'n1', frame: 1, startFrame: 1, endFrame: 5, text: 'synced note', author: 'peer', resolved: false },
+        { id: 'n1', sourceIndex: 0, frameStart: 1, frameEnd: 5, text: 'synced note', author: 'peer', status: 'open', createdAt: '2026-01-01T00:00:00Z', modifiedAt: '2026-01-01T00:00:00Z', parentId: null, color: '#fbbf24' },
       ];
 
       ctx._networkSyncManager.emit('sessionStateReceived', {

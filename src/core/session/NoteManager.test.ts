@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { NoteManager, type Note } from './NoteManager';
+import { NoteManager, type Note, type ImportResult } from './NoteManager';
 
 describe('NoteManager', () => {
   let manager: NoteManager;
@@ -338,6 +338,181 @@ describe('NoteManager', () => {
       manager.removeNote(l1.id);
       expect(manager.getNotes().length).toBe(0);
       expect(manager.getNote(l4.id)).toBeUndefined();
+    });
+  });
+
+  describe('fromSerializable validation', () => {
+    const validNote: Note = {
+      id: 'valid-1',
+      sourceIndex: 0,
+      frameStart: 1,
+      frameEnd: 5,
+      text: 'Test note',
+      author: 'Alice',
+      createdAt: '2026-01-01T00:00:00Z',
+      modifiedAt: '2026-01-01T00:00:00Z',
+      status: 'open',
+      parentId: null,
+      color: '#fbbf24',
+    };
+
+    it('imports valid notes correctly and returns import count', () => {
+      const result: ImportResult = manager.fromSerializable([validNote]);
+      expect(result.imported).toBe(1);
+      expect(result.rejected).toBe(0);
+      expect(manager.getNotes().length).toBe(1);
+      const imported = manager.getNote('valid-1')!;
+      expect(imported.frameStart).toBe(1);
+      expect(imported.text).toBe('Test note');
+    });
+
+    it('rejects entries missing frameStart', () => {
+      const bad = { ...validNote, frameStart: undefined };
+      const result = manager.fromSerializable([bad as unknown as Note]);
+      expect(result.imported).toBe(0);
+      expect(result.rejected).toBe(1);
+      expect(manager.getNotes().length).toBe(0);
+    });
+
+    it('rejects entries missing frameEnd', () => {
+      const bad = { ...validNote, frameEnd: undefined };
+      const result = manager.fromSerializable([bad as unknown as Note]);
+      expect(result.imported).toBe(0);
+      expect(result.rejected).toBe(1);
+    });
+
+    it('rejects entries missing text', () => {
+      const bad = { ...validNote, text: undefined };
+      const result = manager.fromSerializable([bad as unknown as Note]);
+      expect(result.imported).toBe(0);
+      expect(result.rejected).toBe(1);
+    });
+
+    it('rejects entries with non-number frameStart', () => {
+      const bad = { ...validNote, frameStart: 'not-a-number' };
+      const result = manager.fromSerializable([bad as unknown as Note]);
+      expect(result.imported).toBe(0);
+      expect(result.rejected).toBe(1);
+    });
+
+    it('rejects entries with non-number frameEnd', () => {
+      const bad = { ...validNote, frameEnd: null };
+      const result = manager.fromSerializable([bad as unknown as Note]);
+      expect(result.imported).toBe(0);
+      expect(result.rejected).toBe(1);
+    });
+
+    it('rejects entries with non-string text', () => {
+      const bad = { ...validNote, text: 42 };
+      const result = manager.fromSerializable([bad as unknown as Note]);
+      expect(result.imported).toBe(0);
+      expect(result.rejected).toBe(1);
+    });
+
+    it('rejects non-object entries (null, number, string)', () => {
+      const result = manager.fromSerializable([null, 42, 'bad'] as unknown as Note[]);
+      expect(result.imported).toBe(0);
+      expect(result.rejected).toBe(3);
+    });
+
+    it('rejects entries with NaN frameStart', () => {
+      const bad = { ...validNote, frameStart: NaN };
+      const result = manager.fromSerializable([bad as unknown as Note]);
+      expect(result.imported).toBe(0);
+      expect(result.rejected).toBe(1);
+    });
+
+    it('rejects entries with Infinity frameEnd', () => {
+      const bad = { ...validNote, frameEnd: Infinity };
+      const result = manager.fromSerializable([bad as unknown as Note]);
+      expect(result.imported).toBe(0);
+      expect(result.rejected).toBe(1);
+    });
+
+    it('defaults author to empty string if missing', () => {
+      const partial = { frameStart: 1, frameEnd: 5, text: 'Test', id: 'p1' };
+      const result = manager.fromSerializable([partial as unknown as Note]);
+      expect(result.imported).toBe(1);
+      const note = manager.getNote('p1')!;
+      expect(note.author).toBe('');
+    });
+
+    it('defaults status to open if missing or invalid', () => {
+      const partial = { frameStart: 1, frameEnd: 5, text: 'Test', id: 'p2', status: 'bogus' };
+      const result = manager.fromSerializable([partial as unknown as Note]);
+      expect(result.imported).toBe(1);
+      expect(manager.getNote('p2')!.status).toBe('open');
+    });
+
+    it('defaults createdAt to current time if missing', () => {
+      const partial = { frameStart: 1, frameEnd: 5, text: 'Test', id: 'p3' };
+      const result = manager.fromSerializable([partial as unknown as Note]);
+      expect(result.imported).toBe(1);
+      const note = manager.getNote('p3')!;
+      expect(note.createdAt).toBeTruthy();
+      // Should be a valid ISO string
+      expect(() => new Date(note.createdAt)).not.toThrow();
+    });
+
+    it('defaults color to #fbbf24 if missing', () => {
+      const partial = { frameStart: 1, frameEnd: 5, text: 'Test', id: 'p4' };
+      const result = manager.fromSerializable([partial as unknown as Note]);
+      expect(result.imported).toBe(1);
+      expect(manager.getNote('p4')!.color).toBe('#fbbf24');
+    });
+
+    it('defaults sourceIndex to 0 if missing', () => {
+      const partial = { frameStart: 1, frameEnd: 5, text: 'Test', id: 'p5' };
+      const result = manager.fromSerializable([partial as unknown as Note]);
+      expect(result.imported).toBe(1);
+      expect(manager.getNote('p5')!.sourceIndex).toBe(0);
+    });
+
+    it('defaults parentId to null if missing', () => {
+      const partial = { frameStart: 1, frameEnd: 5, text: 'Test', id: 'p6' };
+      const result = manager.fromSerializable([partial as unknown as Note]);
+      expect(result.imported).toBe(1);
+      expect(manager.getNote('p6')!.parentId).toBeNull();
+    });
+
+    it('generates an id if missing', () => {
+      const partial = { frameStart: 1, frameEnd: 5, text: 'Test' };
+      const result = manager.fromSerializable([partial as unknown as Note]);
+      expect(result.imported).toBe(1);
+      const notes = manager.getNotes();
+      expect(notes[0]!.id).toBeTruthy();
+      expect(notes[0]!.id.length).toBeGreaterThan(0);
+    });
+
+    it('reports mixed valid and invalid entries correctly', () => {
+      const entries = [
+        validNote,
+        { frameStart: 'bad' }, // invalid
+        { ...validNote, id: 'valid-2', text: 'Another valid' },
+        null, // invalid
+        { frameStart: 10, frameEnd: 20, text: 'Minimal valid', id: 'valid-3' },
+      ];
+      const result = manager.fromSerializable(entries as unknown as Note[]);
+      expect(result.imported).toBe(3);
+      expect(result.rejected).toBe(2);
+      expect(manager.getNotes().length).toBe(3);
+    });
+
+    it('preserves valid status values', () => {
+      const resolved = { ...validNote, id: 'r1', status: 'resolved' as const };
+      const wontfix = { ...validNote, id: 'r2', status: 'wontfix' as const };
+      manager.fromSerializable([resolved, wontfix]);
+      expect(manager.getNote('r1')!.status).toBe('resolved');
+      expect(manager.getNote('r2')!.status).toBe('wontfix');
+    });
+
+    it('clears existing notes before importing', () => {
+      manager.addNote(0, 1, 1, 'Old', 'Alice');
+      expect(manager.getNotes().length).toBe(1);
+      const result = manager.fromSerializable([validNote]);
+      expect(result.imported).toBe(1);
+      expect(manager.getNotes().length).toBe(1);
+      expect(manager.getNote('valid-1')).toBeDefined();
     });
   });
 

@@ -957,9 +957,12 @@ describe('MarkerListPanel', () => {
 
       await applyImport(panel, importData, 'merge');
 
-      // Should report 2 collisions
+      // Should report 2 collisions and 1 imported
       expect(alertMock).toHaveBeenCalledWith(
-        expect.stringContaining('2 markers were skipped'),
+        expect.stringContaining('2 markers skipped due to frame collisions'),
+      );
+      expect(alertMock).toHaveBeenCalledWith(
+        expect.stringContaining('1 marker imported'),
       );
       // Existing markers unchanged
       expect(session.getMarker(10)?.note).toBe('Existing A');
@@ -987,11 +990,11 @@ describe('MarkerListPanel', () => {
       await applyImport(panel, importData, 'merge');
 
       expect(alertMock).toHaveBeenCalledWith(
-        expect.stringContaining('1 marker was skipped'),
+        expect.stringContaining('1 marker skipped due to frame collisions'),
       );
     });
 
-    it('MARK-U157: merge mode does NOT show alert when there are no collisions', async () => {
+    it('MARK-U157: merge mode with no collisions does NOT mention collisions in alert', async () => {
       session.setMarker(10, 'Existing', MARKER_COLORS[0]);
       panel.show();
 
@@ -1008,7 +1011,111 @@ describe('MarkerListPanel', () => {
 
       await applyImport(panel, importData, 'merge');
 
-      expect(alertMock).not.toHaveBeenCalled();
+      // Should show import summary but no collision message
+      expect(alertMock).toHaveBeenCalledWith(
+        expect.stringContaining('1 marker imported'),
+      );
+      expect(alertMock).not.toHaveBeenCalledWith(
+        expect.stringContaining('collision'),
+      );
+    });
+
+    it('MARK-U158: import reports invalid entry count when entries fail validation', async () => {
+      panel.show();
+      const alertMock = vi.mocked(Modal.showAlert).mockClear();
+
+      const importData = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        fps: 24,
+        markers: [
+          { frame: 10, note: 'Valid', color: '#ff4444' },
+          { frame: -5, note: 'Negative', color: '#ff4444' },
+          { frame: 'bad', note: 'Bad frame', color: '#ff4444' },
+          { frame: 20, note: 123, color: '#ff4444' }, // bad note type
+        ],
+      };
+
+      await applyImport(panel, importData);
+
+      expect(alertMock).toHaveBeenCalledWith(
+        expect.stringContaining('1 marker imported'),
+      );
+      expect(alertMock).toHaveBeenCalledWith(
+        expect.stringContaining('3 invalid entries skipped'),
+      );
+      expect(session.marks.size).toBe(1);
+    });
+
+    it('MARK-U159: import with no invalid entries does NOT mention invalid in alert', async () => {
+      panel.show();
+      const alertMock = vi.mocked(Modal.showAlert).mockClear();
+
+      const importData: MarkerExportData = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        fps: 24,
+        markers: [
+          { frame: 10, note: 'A', color: '#ff4444' },
+          { frame: 20, note: 'B', color: '#44ff44' },
+        ],
+      };
+
+      await applyImport(panel, importData);
+
+      expect(alertMock).toHaveBeenCalledWith(
+        expect.stringContaining('2 markers imported'),
+      );
+      expect(alertMock).not.toHaveBeenCalledWith(
+        expect.stringContaining('invalid'),
+      );
+    });
+
+    it('MARK-U160A: import with mix of valid, invalid, and collisions shows all counts', async () => {
+      session.setMarker(10, 'Existing', MARKER_COLORS[0]);
+      panel.show();
+      const alertMock = vi.mocked(Modal.showAlert).mockClear();
+
+      const importData = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        fps: 24,
+        markers: [
+          { frame: 10, note: 'Collision', color: '#ff4444' },
+          { frame: 20, note: 'Valid new', color: '#44ff44' },
+          { frame: 30, note: 'Also valid', color: '#4444ff' },
+          { frame: 'bad', note: 'Invalid', color: '#ff4444' },
+          { frame: 40, note: 123, color: '#ff4444' }, // invalid note type
+        ],
+      };
+
+      await applyImport(panel, importData, 'merge');
+
+      const alertArg = alertMock.mock.calls[0]![0] as string;
+      expect(alertArg).toContain('2 markers imported');
+      expect(alertArg).toContain('2 invalid entries skipped');
+      expect(alertArg).toContain('1 marker skipped due to frame collisions');
+    });
+
+    it('MARK-U160B: import reports single invalid entry with correct grammar', async () => {
+      panel.show();
+      const alertMock = vi.mocked(Modal.showAlert).mockClear();
+
+      const importData = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        fps: 24,
+        markers: [
+          { frame: 10, note: 'Valid', color: '#ff4444' },
+          { frame: -1, note: 'Invalid', color: '#ff4444' },
+        ],
+      };
+
+      await applyImport(panel, importData);
+
+      expect(alertMock).toHaveBeenCalledWith(
+        expect.stringContaining('1 invalid entry skipped'),
+      );
     });
   });
 

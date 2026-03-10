@@ -3828,6 +3828,42 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The repo carries a documented graph-mutation/view-history service that is effectively test-only in the shipped app.
   - That makes the published session architecture ahead of production wiring for any future graph-browser or view-history workflows that would depend on this manager.
 
+### 310. Editing a multi-cut timeline collapses session `pingpong` looping into plain playlist looping
+
+- Severity: Medium
+- Area: Timeline editing / playback loop semantics
+- Evidence:
+  - Core session playback supports `once`, `loop`, and `pingpong` loop modes in [src/core/types/session.ts](/Users/lifeart/Repos/openrv-web/src/core/types/session.ts#L1) and [src/core/session/PlaybackEngine.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaybackEngine.ts#L850) through [src/core/session/PlaybackEngine.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaybackEngine.ts#L943).
+  - When `TimelineEditorService` applies edits that produce multiple cuts, it hands playback over to `PlaylistManager` and maps the session loop mode with `const mappedMode = this.session.loopMode === 'once' ? 'none' : 'all'` in [src/services/TimelineEditorService.ts](/Users/lifeart/Repos/openrv-web/src/services/TimelineEditorService.ts#L410) through [src/services/TimelineEditorService.ts](/Users/lifeart/Repos/openrv-web/src/services/TimelineEditorService.ts#L412).
+  - `PlaylistManager` only supports `none`, `single`, and `all` in [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L52) and [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L486).
+- Impact:
+  - If a user is in `pingpong` loop mode and then edits or creates a multi-cut timeline, playback silently degrades to simple wraparound looping.
+  - That changes loop behavior as a side effect of editing structure, not of any explicit loop-mode choice by the user.
+
+### 311. RVEDL entries with unmatched source paths are silently rebound to loaded source `0`
+
+- Severity: Medium
+- Area: RVEDL import / timeline source mapping
+- Evidence:
+  - `TimelineEditorService.buildEDLFromRVEDLEntries(...)` resolves RVEDL source paths by basename against loaded sources in [src/services/TimelineEditorService.ts](/Users/lifeart/Repos/openrv-web/src/services/TimelineEditorService.ts#L220) through [src/services/TimelineEditorService.ts](/Users/lifeart/Repos/openrv-web/src/services/TimelineEditorService.ts#L249).
+  - When no match is found, it explicitly falls back to `sourceIndex = 0` “so the cut structure is still visible” in [src/services/TimelineEditorService.ts](/Users/lifeart/Repos/openrv-web/src/services/TimelineEditorService.ts#L251) through [src/services/TimelineEditorService.ts](/Users/lifeart/Repos/openrv-web/src/services/TimelineEditorService.ts#L252).
+  - The resulting mapped EDL is then loaded straight into the timeline editor as if it were resolved successfully in [src/services/TimelineEditorService.ts](/Users/lifeart/Repos/openrv-web/src/services/TimelineEditorService.ts#L348) through [src/services/TimelineEditorService.ts](/Users/lifeart/Repos/openrv-web/src/services/TimelineEditorService.ts#L353).
+- Impact:
+  - An RVEDL that references media the app cannot actually match will still render a timeline, but those cuts can point at the wrong loaded source instead of remaining visibly unresolved.
+  - That makes timeline review look superficially successful while silently corrupting clip-to-media mapping.
+
+### 312. Imported RVEDL cuts are ignored whenever the session already has playlist clips
+
+- Severity: Medium
+- Area: RVEDL import / timeline precedence
+- Evidence:
+  - `SessionGraph.loadEDL(...)` stores RVEDL entries and emits `edlLoaded` in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L244) through [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L259).
+  - `TimelineEditorService.syncFromGraph()` checks playlist clips before it checks `session.edlEntries`; if any playlist clips exist, it immediately loads those and returns in [src/services/TimelineEditorService.ts](/Users/lifeart/Repos/openrv-web/src/services/TimelineEditorService.ts#L334) through [src/services/TimelineEditorService.ts](/Users/lifeart/Repos/openrv-web/src/services/TimelineEditorService.ts#L345).
+  - The RVEDL branch only runs afterward, in [src/services/TimelineEditorService.ts](/Users/lifeart/Repos/openrv-web/src/services/TimelineEditorService.ts#L348) through [src/services/TimelineEditorService.ts](/Users/lifeart/Repos/openrv-web/src/services/TimelineEditorService.ts#L353).
+- Impact:
+  - If a user imports an RVEDL into a session that already has playlist clips, the timeline editor continues to show the old playlist structure instead of the newly imported edit list.
+  - That makes RVEDL import feel ineffective or broken in exactly the scenarios where users are likely comparing or replacing an existing cut structure.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

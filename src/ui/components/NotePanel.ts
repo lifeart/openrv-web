@@ -887,7 +887,12 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
             );
             if (!confirmed) return;
           }
-          this.session.noteManager.fromSerializable(data.notes);
+          const result = this.session.noteManager.fromSerializable(data.notes);
+          if (result.rejected > 0) {
+            await showAlert(
+              `Imported ${result.imported} note(s). ${result.rejected} invalid entry/entries were skipped.`,
+            );
+          }
         } catch {
           await showAlert('Invalid JSON file. Could not parse note data.');
         }

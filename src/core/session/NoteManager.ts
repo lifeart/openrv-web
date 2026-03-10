@@ -252,14 +252,64 @@ export class NoteManager {
   }
 
   /**
-   * Restore notes from a serialized array (for load/import)
+   * Validate and sanitize a single note entry from external data.
+   * Returns a valid Note or null if required fields are missing/invalid.
    */
-  fromSerializable(notes: Note[]): void {
+  private validateNoteEntry(entry: unknown): Note | null {
+    if (typeof entry !== 'object' || entry === null) return null;
+    const raw = entry as Record<string, unknown>;
+
+    // Required fields
+    if (typeof raw.frameStart !== 'number' || !Number.isFinite(raw.frameStart)) return null;
+    if (typeof raw.frameEnd !== 'number' || !Number.isFinite(raw.frameEnd)) return null;
+    if (typeof raw.text !== 'string') return null;
+
+    const now = new Date().toISOString();
+    const id = typeof raw.id === 'string' && raw.id.length > 0 ? raw.id : crypto.randomUUID();
+    const sourceIndex = typeof raw.sourceIndex === 'number' && Number.isFinite(raw.sourceIndex) ? raw.sourceIndex : 0;
+    const author = typeof raw.author === 'string' ? raw.author : '';
+    const status: NoteStatus =
+      typeof raw.status === 'string' && VALID_STATUSES.has(raw.status) ? (raw.status as NoteStatus) : 'open';
+    const createdAt = typeof raw.createdAt === 'string' && raw.createdAt.length > 0 ? raw.createdAt : now;
+    const modifiedAt = typeof raw.modifiedAt === 'string' && raw.modifiedAt.length > 0 ? raw.modifiedAt : now;
+    const parentId = typeof raw.parentId === 'string' ? raw.parentId : null;
+    const color = typeof raw.color === 'string' && raw.color.length > 0 ? raw.color : '#fbbf24';
+
+    return {
+      id,
+      sourceIndex,
+      frameStart: raw.frameStart as number,
+      frameEnd: raw.frameEnd as number,
+      text: raw.text as string,
+      author,
+      createdAt,
+      modifiedAt,
+      status,
+      parentId,
+      color,
+    };
+  }
+
+  /**
+   * Restore notes from a serialized array (for load/import).
+   * Validates each entry — invalid entries are silently dropped.
+   * Returns a summary of how many notes were imported vs rejected.
+   */
+  fromSerializable(notes: unknown[]): ImportResult {
     this._notes.clear();
-    for (const note of notes) {
-      this._notes.set(note.id, { ...note });
+    let imported = 0;
+    let rejected = 0;
+    for (const entry of notes) {
+      const validated = this.validateNoteEntry(entry);
+      if (validated) {
+        this._notes.set(validated.id, validated);
+        imported++;
+      } else {
+        rejected++;
+      }
     }
     this.notifyChange();
+    return { imported, rejected };
   }
 
   dispose(): void {
