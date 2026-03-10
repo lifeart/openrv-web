@@ -412,9 +412,9 @@ describe('MediaManager', () => {
       expect(manager.getMediaType(new File([], 'test.dpx', { type: '' }))).toBe('image');
     });
 
-    it('MM-027: defaults to image for unknown types', () => {
-      expect(manager.getMediaType(new File([], 'unknown.xyz', { type: '' }))).toBe('image');
-      expect(manager.getMediaType(new File([], 'noext', { type: '' }))).toBe('image');
+    it('MM-027: returns unknown for unrecognized types', () => {
+      expect(manager.getMediaType(new File([], 'unknown.xyz', { type: '' }))).toBe('unknown');
+      expect(manager.getMediaType(new File([], 'noext', { type: '' }))).toBe('unknown');
     });
   });
 

@@ -11,7 +11,6 @@ import { FileSourceNode } from '../../nodes/sources/FileSourceNode';
 import { ProceduralSourceNode, parseMovieProc } from '../../nodes/sources/ProceduralSourceNode';
 import type { PatternName, GradientDirection } from '../../nodes/sources/ProceduralSourceNode';
 import type { HDRResizeTier } from '../../utils/media/HDRFrameResizer';
-import type { MediaType } from '../types/session';
 import type { MediaSource, UnsupportedCodecInfo } from './SessionTypes';
 import type { IPImage } from '../../core/image/Image';
 import type { GTOParseResult } from './GTOGraphLoader';
@@ -380,6 +379,12 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
     this._host!.clearGraphData();
     const type = this.getMediaType(file);
 
+    if (type === 'unknown') {
+      const ext = file.name.includes('.') ? file.name.split('.').pop() : '(none)';
+      log.warn(`Unsupported file type: ${file.name} (extension: .${ext})`);
+      throw new Error(`Unsupported file type: ${file.name}`);
+    }
+
     if (type === 'video') {
       await this.loadVideoFile(file);
     } else if (type === 'image') {
@@ -387,7 +392,7 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
     }
   }
 
-  private getMediaType(file: File): MediaType {
+  private getMediaType(file: File): 'image' | 'video' | 'unknown' {
     return detectMediaTypeFromFile(file);
   }
 

@@ -1,6 +1,5 @@
 import type { ManagerBase } from '../ManagerBase';
 import type { MediaSource, UnsupportedCodecInfo } from './SessionTypes';
-import type { MediaType } from '../types/session';
 import {
   createSequenceInfo,
   loadFrameImage,
@@ -322,7 +321,7 @@ export class MediaManager implements ManagerBase {
   // File type detection
   // ---------------------------------------------------------------
 
-  getMediaType(file: File): MediaType {
+  getMediaType(file: File): 'image' | 'video' | 'unknown' {
     return detectMediaTypeFromFile(file);
   }
 
@@ -332,6 +331,12 @@ export class MediaManager implements ManagerBase {
 
   async loadFile(file: File): Promise<void> {
     const type = this.getMediaType(file);
+
+    if (type === 'unknown') {
+      const ext = file.name.includes('.') ? file.name.split('.').pop() : '(none)';
+      log.warn(`Unsupported file type: ${file.name} (extension: .${ext})`);
+      throw new Error(`Unsupported file type: ${file.name}`);
+    }
 
     try {
       if (type === 'video') {

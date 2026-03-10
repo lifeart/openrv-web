@@ -87,9 +87,10 @@ function getFileExtension(filename: string): string {
 
 /**
  * Classify a file as image/video using MIME first, then extension fallback.
- * Unknown types default to image to preserve existing behavior.
+ * Returns `'unknown'` for unrecognized extensions/MIME types so callers can
+ * reject unsupported files with a clear error instead of misclassifying them.
  */
-export function detectMediaTypeFromFile(file: Pick<File, 'name' | 'type'>): 'image' | 'video' {
+export function detectMediaTypeFromFile(file: Pick<File, 'name' | 'type'>): 'image' | 'video' | 'unknown' {
   const mime = (file.type ?? '').trim().toLowerCase();
 
   if (mime.startsWith('video/')) {
@@ -110,7 +111,7 @@ export function detectMediaTypeFromFile(file: Pick<File, 'name' | 'type'>): 'ima
     return 'image';
   }
 
-  return 'image';
+  return 'unknown';
 }
 
 const acceptExtensions = Array.from(

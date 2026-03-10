@@ -3495,6 +3495,95 @@ This file tracks findings from exploratory review and targeted validation runs.
   - External scripting against the shipped documentation is materially unreliable across several major color workflows, not just LUT loading.
   - The public API looks much broader in docs than it is in the actual runtime object.
 
+### 283. `openrv.dispose()` advertises the API as unusable afterward, but only the event module is actually torn down
+
+- Severity: Medium
+- Area: Public scripting API / lifecycle contract
+- Evidence:
+  - `OpenRVAPI.dispose()` sets `_ready = false` and calls only `this.events.dispose()` in [src/api/OpenRVAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.ts#L120) through [src/api/OpenRVAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.ts#L131).
+  - The doc comment says “After calling this, the API instance should not be used” in [src/api/OpenRVAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.ts#L112) through [src/api/OpenRVAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.ts#L127).
+  - None of the other modules are disposed or guarded by `_ready`: `playback`, `media`, `audio`, `loop`, `view`, `color`, `markers`, and `plugins` remain the same live objects created in the constructor in [src/api/OpenRVAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.ts#L81) through [src/api/OpenRVAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.ts#L96).
+  - `EventsAPI.dispose()` only removes subscriptions and clears listener sets in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L279) through [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L292), so transport/view/color operations still have their original session and viewer references.
+- Impact:
+  - External callers can see `openrv.isReady()` return `false` and still successfully mutate playback, view, audio, markers, and plugins through the supposedly disposed API object.
+  - That makes the lifecycle contract misleading and can break integrations that treat `dispose()` as a hard shutdown boundary.
+
+### 284. The overlays docs publish `openrv.matte.enable(...)`, but `openrv.matte` is not part of the shipped public API
+
+- Severity: Medium
+- Area: Public scripting API / documentation contract
+- Evidence:
+  - The overlays guide says “The matte overlay is accessible via the API” and gives `openrv.matte.enable({ aspect: 2.39, opacity: 0.8 })` as the public call in [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L100) through [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L105).
+  - The mounted public API modules are only `playback`, `media`, `audio`, `loop`, `view`, `color`, `markers`, `events`, and `plugins` in [src/api/OpenRVAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.ts#L42) through [src/api/OpenRVAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.ts#L87).
+  - A repo-wide search only finds `openrv.matte` in that documentation page; there is no corresponding public API module or mounted property in the runtime tree.
+- Impact:
+  - Users following the overlays documentation will try to call a public API module that does not exist.
+  - That turns the documented matte-overlay scripting path into an immediate runtime failure.
+
+### 285. The scripting guide’s `exposureCheck()` example can hang because it waits for `frameChange` after a synchronous `seek()`
+
+- Severity: Medium
+- Area: Documentation / scripting workflow example
+- Evidence:
+  - The published example seeks first and only then subscribes with `openrv.events.once('frameChange', resolve)` in [docs/advanced/scripting-api.md](/Users/lifeart/Repos/openrv-web/docs/advanced/scripting-api.md#L326) through [docs/advanced/scripting-api.md](/Users/lifeart/Repos/openrv-web/docs/advanced/scripting-api.md#L336).
+  - `PlaybackAPI.seek(...)` immediately calls `session.goToFrame(frame)` in [src/api/PlaybackAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/PlaybackAPI.ts#L67) through [src/api/PlaybackAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/PlaybackAPI.ts#L83).
+  - `PlaybackEngine.goToFrame(...)` immediately assigns `currentFrame`, and that setter emits `frameChanged` synchronously in [src/core/session/PlaybackEngine.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaybackEngine.ts#L221) through [src/core/session/PlaybackEngine.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaybackEngine.ts#L228) and [src/core/session/PlaybackEngine.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaybackEngine.ts#L667) through [src/core/session/PlaybackEngine.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaybackEngine.ts#L668).
+- Impact:
+  - On a normal synchronous seek path, the sample can miss the event entirely and await forever on the very first loop iteration.
+  - That makes the published “custom workflow” example unsafe to copy into real automation code.
+
+### 286. The scripting guide’s plugin examples do not match the actual plugin registration API shape
+
+- Severity: High
+- Area: Plugin API / documentation contract
+- Evidence:
+  - The actual `Plugin` interface requires a `manifest` object containing `id`, `name`, `version`, and `contributes`, with lifecycle methods alongside it in [src/plugin/types.ts](/Users/lifeart/Repos/openrv-web/src/plugin/types.ts#L15) through [src/plugin/types.ts](/Users/lifeart/Repos/openrv-web/src/plugin/types.ts#L118).
+  - `PluginRegistry.register(...)` immediately reads `plugin.manifest` and throws if it is missing in [src/plugin/PluginRegistry.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginRegistry.ts#L127) through [src/plugin/PluginRegistry.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginRegistry.ts#L144).
+  - The scripting guide examples instead pass flat top-level plugin objects with `id`, `name`, `version`, `contributes`, and `settingsSchema` directly on the plugin object rather than inside `manifest` in [docs/advanced/scripting-api.md](/Users/lifeart/Repos/openrv-web/docs/advanced/scripting-api.md#L385) through [docs/advanced/scripting-api.md](/Users/lifeart/Repos/openrv-web/docs/advanced/scripting-api.md#L399), [docs/advanced/scripting-api.md](/Users/lifeart/Repos/openrv-web/docs/advanced/scripting-api.md#L405) through [docs/advanced/scripting-api.md](/Users/lifeart/Repos/openrv-web/docs/advanced/scripting-api.md#L443), [docs/advanced/scripting-api.md](/Users/lifeart/Repos/openrv-web/docs/advanced/scripting-api.md#L452) through [docs/advanced/scripting-api.md](/Users/lifeart/Repos/openrv-web/docs/advanced/scripting-api.md#L476), and [docs/advanced/scripting-api.md](/Users/lifeart/Repos/openrv-web/docs/advanced/scripting-api.md#L482) through [docs/advanced/scripting-api.md](/Users/lifeart/Repos/openrv-web/docs/advanced/scripting-api.md#L520).
+  - The first example also calls `context.registerExporter({ name, label, export })`, but the real context signature is `registerExporter(name, exporter)` in [src/plugin/types.ts](/Users/lifeart/Repos/openrv-web/src/plugin/types.ts#L55) through [src/plugin/types.ts](/Users/lifeart/Repos/openrv-web/src/plugin/types.ts#L63).
+- Impact:
+  - Copying the published plugin examples into real code will fail at registration before activation ever runs.
+  - That makes the main plugin onboarding documentation misleading at the most basic “hello world” level.
+
+### 287. `openrv.isReady()` can return true before mount-time initialization has finished
+
+- Severity: Medium
+- Area: Public scripting API / bootstrap contract
+- Evidence:
+  - The scripting docs say `isReady()` returns `true` “once the application has fully initialized” in [docs/advanced/scripting-api.md](/Users/lifeart/Repos/openrv-web/docs/advanced/scripting-api.md#L27) through [docs/advanced/scripting-api.md](/Users/lifeart/Repos/openrv-web/docs/advanced/scripting-api.md#L37).
+  - In production bootstrap, `main.ts` calls `app.mount('#app')` without awaiting the returned promise, then immediately constructs `window.openrv = new OpenRVAPI(app.getAPIConfig())` in [src/main.ts](/Users/lifeart/Repos/openrv-web/src/main.ts#L14) through [src/main.ts](/Users/lifeart/Repos/openrv-web/src/main.ts#L27).
+  - `OpenRVAPI` sets `_ready = true` synchronously in its constructor in [src/api/OpenRVAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.ts#L81) through [src/api/OpenRVAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.ts#L103).
+  - The awaited tail of `App.mount(...)` still has work after layout/render startup, including `await this.persistenceManager.init()` and `await this.sessionURLService.handleURLBootstrap()` in [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L715) through [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L721).
+- Impact:
+  - External scripts can observe `openrv.isReady() === true` while persistence recovery and URL bootstrap are still in flight.
+  - That makes readiness checks unreliable for integrations that need the post-bootstrap session state rather than just a constructed API object.
+
+### 288. The plugin scripting guide omits the required `openrv.plugins.activate(id)` step, so its examples would remain inert even if the object shape were corrected
+
+- Severity: Medium
+- Area: Plugin API / documentation contract
+- Evidence:
+  - The scripting guide presents plugin registration examples as the complete workflow and says plugins “are registered through `window.openrv.plugins` and can contribute” in [docs/advanced/scripting-api.md](/Users/lifeart/Repos/openrv-web/docs/advanced/scripting-api.md#L375) through [docs/advanced/scripting-api.md#L399](/Users/lifeart/Repos/openrv-web/docs/advanced/scripting-api.md#L399).
+  - The mounted public API exposes a separate `plugins.activate(id)` method in [src/api/OpenRVAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.ts#L75) through [src/api/OpenRVAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.ts#L87).
+  - `PluginRegistry.register(...)` only stores the plugin with state `'registered'` and does not call `activate(...)` in [src/plugin/PluginRegistry.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginRegistry.ts#L127) through [src/plugin/PluginRegistry.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginRegistry.ts#L170).
+  - Actual lifecycle execution happens only in `activate(id)`, which calls `plugin.activate(context)` and flips the state to `'active'` in [src/plugin/PluginRegistry.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginRegistry.ts#L186) through [src/plugin/PluginRegistry.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginRegistry.ts#L220).
+- Impact:
+  - A reader who fixes the documented plugin object shape but follows the guide literally will still end up with a registered-only plugin that contributes nothing.
+  - That leaves the public plugin quick-start incomplete even before the deeper plugin wiring gaps already recorded elsewhere.
+
+### 289. The AI docs-generation templates are seeded with nonexistent `window.openrv.*` methods, so regenerated docs can keep reintroducing API drift
+
+- Severity: Medium
+- Area: Docs toolchain / API documentation source of truth
+- Evidence:
+  - The tutorial template instructs generated examples to use `await window.openrv.media.loadFiles(...)` and `window.openrv.view.setCompareMode('wipe')` in [docs/scripts/lib/templates.ts](/Users/lifeart/Repos/openrv-web/docs/scripts/lib/templates.ts#L187) through [docs/scripts/lib/templates.ts](/Users/lifeart/Repos/openrv-web/docs/scripts/lib/templates.ts#L205).
+  - The FAQ template likewise uses `window.openrv.loop.setRange(...)` and `window.openrv.loop.enable()` in [docs/scripts/lib/templates.ts](/Users/lifeart/Repos/openrv-web/docs/scripts/lib/templates.ts#L250) through [docs/scripts/lib/templates.ts](/Users/lifeart/Repos/openrv-web/docs/scripts/lib/templates.ts#L257).
+  - Those templates are not dead text; the docs generator imports them and uses them to build prompts in [docs/scripts/ai-generate.ts](/Users/lifeart/Repos/openrv-web/docs/scripts/ai-generate.ts#L23) through [docs/scripts/ai-generate.ts](/Users/lifeart/Repos/openrv-web/docs/scripts/ai-generate.ts#L25) and [docs/scripts/ai-generate.ts](/Users/lifeart/Repos/openrv-web/docs/scripts/ai-generate.ts#L181) through [docs/scripts/ai-generate.ts](/Users/lifeart/Repos/openrv-web/docs/scripts/ai-generate.ts#L189).
+  - The public API tree has no `media.loadFiles`, `view.setCompareMode`, `loop.setRange`, or `loop.enable` methods in the mounted scripting modules.
+- Impact:
+  - Even after fixing individual markdown pages, the docs toolchain can regenerate new public docs with invalid API examples.
+  - That makes documentation drift a recurring pipeline problem rather than a one-off page bug.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

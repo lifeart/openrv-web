@@ -1279,6 +1279,15 @@
 - **Verification**: All 53 ViewerInputHandler tests pass, TypeScript clean.
 - **Files Changed**: `src/ui/components/ViewerInputHandler.ts`, `src/ui/components/ViewerInputHandler.test.ts`
 
+## Issue #156: Dropping a session bundle with multiple image files can ignore the session file completely
+
+- **Severity**: High
+- **Area**: Session ingest / drag-and-drop branch ordering
+- **Root Cause**: The drag-and-drop handler checked `imageFiles.length > 1` (sequence detection) before looking for `.rv`/`.gto` session files. When a session bundle was dropped with companion image files, the sequence detection fired first, loaded the images as a sequence, and returned — skipping the session file entirely.
+- **Fix**: Already resolved by Issue #153's fix. Session file detection (`.rv`/`.gto`) was moved before sequence detection in `ViewerInputHandler.onDrop()`. The session file now takes priority, and companion files are passed as `availableFiles` for sidecar resolution. The SIDECAR-004 test from Issue #153 explicitly covers the multi-file + session scenario.
+- **Verification**: Confirmed by code inspection — session detection at lines 742-764 runs before sequence detection at line 766+.
+- **Files Changed**: (same as Issue #153)
+
 ## Issue #155: Drag-and-drop treats `.rvedl` as media and routes it into the wrong loader
 
 - **Severity**: Medium
@@ -1288,3 +1297,13 @@
 - **Regression Tests**: EDL-DROP-001 (`.rvedl` drop calls loadEDL with correct text), EDL-DROP-002 (not routed through loadFile/loadFromGTO/loadSequence), EDL-DROP-003 (error handled gracefully), EDL-DROP-004 (`.rv`/`.gto` still works — no regression), EDL-DROP-005 (case-insensitive `.RVEDL` recognized).
 - **Verification**: All 58 ViewerInputHandler tests pass, TypeScript clean.
 - **Files Changed**: `src/ui/components/ViewerInputHandler.ts`, `src/ui/components/ViewerInputHandler.test.ts`
+
+## Issue #157: Unsupported dropped files are deliberately misclassified as images instead of being rejected up front
+
+- **Severity**: Medium
+- **Area**: File ingest / unsupported-format handling
+- **Root Cause**: `detectMediaTypeFromFile()` returned `'image'` for any unrecognized extension/MIME type ("default to image to preserve existing behavior"). `SessionMedia.loadFile()` only branched into image/video loading with no unsupported-file path. Non-media files were pushed through the image loader, producing misleading downstream errors.
+- **Fix**: Changed `detectMediaTypeFromFile()` to return `'unknown'` for unrecognized file types instead of `'image'`. Added `'unknown'` handling in both `SessionMedia.loadFile()` and `MediaManager.loadFile()` that throws a clear `Error('Unsupported file type: ${file.name}')` with `console.warn`. The existing try/catch in `ViewerInputHandler.onDrop()` already shows this error to users via `showAlert()`. Updated `MediaManager.test.ts` MM-027 to expect `'unknown'`. `filterImageFiles()` is unaffected (uses its own independent extension set).
+- **Regression Tests**: 38 SupportedMediaFormats tests (known image/video extensions, MIME types, MIME priority, unrecognized extensions return 'unknown', no-extension returns 'unknown'), SM-084 through SM-086 (loadFile rejects unknown types, no source added, known types still work).
+- **Verification**: All 239 tests pass (38 SupportedMediaFormats + 89 SessionMedia + 112 MediaManager), TypeScript clean.
+- **Files Changed**: `src/utils/media/SupportedMediaFormats.ts`, `src/core/session/SessionMedia.ts`, `src/core/session/MediaManager.ts`, `src/core/session/MediaManager.test.ts`, `src/utils/media/SupportedMediaFormats.test.ts` (new), `src/core/session/SessionMedia.test.ts`

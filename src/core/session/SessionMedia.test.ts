@@ -1003,4 +1003,48 @@ describe('SessionMedia', () => {
       expect(source.opfsCacheKey).toBe('mock-cache-key-abc123');
     });
   });
+
+  describe('loadFile - unsupported file type rejection', () => {
+    it('SM-084: loadFile rejects unknown file types with a clear error', async () => {
+      const { detectMediaTypeFromFile } = await import('../../utils/media/SupportedMediaFormats');
+      (detectMediaTypeFromFile as ReturnType<typeof vi.fn>).mockReturnValue('unknown');
+
+      const file = new File(['test'], 'document.pdf', { type: 'application/pdf' });
+
+      await expect(media.loadFile(file)).rejects.toThrow('Unsupported file type: document.pdf');
+    });
+
+    it('SM-085: loadFile does not add a source for unknown file types', async () => {
+      const { detectMediaTypeFromFile } = await import('../../utils/media/SupportedMediaFormats');
+      (detectMediaTypeFromFile as ReturnType<typeof vi.fn>).mockReturnValue('unknown');
+
+      const file = new File(['test'], 'notes.txt', { type: 'text/plain' });
+
+      try {
+        await media.loadFile(file);
+      } catch {
+        // expected
+      }
+
+      expect(media.allSources).toHaveLength(0);
+    });
+
+    it('SM-086: loadFile does not throw "Unsupported file type" for known image types', async () => {
+      const { detectMediaTypeFromFile } = await import('../../utils/media/SupportedMediaFormats');
+      (detectMediaTypeFromFile as ReturnType<typeof vi.fn>).mockReturnValue('image');
+
+      const file = new File(['test'], 'photo.png', { type: 'image/png' });
+
+      // loadFile should attempt image loading (which may fail due to mocked FileSourceNode),
+      // but it should NOT throw "Unsupported file type"
+      let errorMessage = '';
+      try {
+        await media.loadFile(file);
+      } catch (err: any) {
+        errorMessage = err.message ?? '';
+      }
+
+      expect(errorMessage).not.toContain('Unsupported file type');
+    });
+  });
 });
