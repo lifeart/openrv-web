@@ -3060,6 +3060,119 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Mu-compatible scripts can accidentally destroy or replace a previously created source just by reusing its name.
   - Because the overwrite is silent, later source and pixel queries can appear to “work” while actually pointing at a different in-memory image than the script intended.
 
+### 249. Mu compat ND properties lose their declared shape after any set or insert operation
+
+- Severity: Medium
+- Area: Mu compatibility / property system
+- Evidence:
+  - `newNDProperty(...)` correctly stores the declared multi-dimensional shape in `prop.dimensions` when the property is created in [src/compat/MuPropertyBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuPropertyBridge.ts#L236) through [src/compat/MuPropertyBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuPropertyBridge.ts#L254).
+  - Every write path then overwrites that metadata with a flat one-dimensional shape: `setStringProperty(...)` sets `prop.dimensions = [values.length]` in [src/compat/MuPropertyBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuPropertyBridge.ts#L154) through [src/compat/MuPropertyBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuPropertyBridge.ts#L165), `_setNumericProperty(...)` does the same in [src/compat/MuPropertyBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuPropertyBridge.ts#L397) through [src/compat/MuPropertyBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuPropertyBridge.ts#L410), and both insert helpers flatten dimensions in [src/compat/MuPropertyBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuPropertyBridge.ts#L177) through [src/compat/MuPropertyBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuPropertyBridge.ts#L189) and [src/compat/MuPropertyBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuPropertyBridge.ts#L412) through [src/compat/MuPropertyBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuPropertyBridge.ts#L431).
+  - The tests only verify that `newNDProperty(...)` starts with the right `[4, 4]` dimensions in [src/compat/__tests__/MuPropertyBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuPropertyBridge.test.ts#L78) through [src/compat/__tests__/MuPropertyBridge.test.ts#L85); there is no coverage for writing to an ND property and preserving its shape metadata.
+- Impact:
+  - Mu-compatible scripts can create a matrix- or tensor-shaped property and have its metadata silently collapse to a flat vector after the first update.
+  - That breaks any downstream logic that relies on `propertyInfo().dimensions` to understand the property's declared structure.
+
+### 250. Mu compat `closestNodesOfType()` returns farther matches too, instead of only the nearest layer of matches
+
+- Severity: Medium
+- Area: Mu compatibility / graph evaluation
+- Evidence:
+  - `closestNodesOfType(...)` uses BFS, but it keeps traversing upstream even after it finds a node of the target type, collecting every later match into the result array in [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L164) through [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L190).
+  - Because the search does not stop at the first matching depth, a branched graph with both near and far matches will return the far ones too, despite the API name and docs saying “closest nodes of a given type.”
+  - The current tests only cover single-depth or same-depth cases and explicitly accept multiple returned matches without checking that farther-depth matches are excluded in [src/compat/__tests__/MuEvalBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuEvalBridge.test.ts#L166) through [src/compat/__tests__/MuEvalBridge.test.ts#L196).
+- Impact:
+  - Mu-compatible scripts asking for the nearest upstream nodes of a type can receive a broader set that includes non-nearest ancestors.
+  - That changes graph-query semantics in a way that can select the wrong control or source node when scripts expect the first matching layer only.
+
+### 251. Mu compat `metaEvaluateClosestByType()` chooses the first depth-first match, not the actual closest match in branched graphs
+
+- Severity: Medium
+- Area: Mu compatibility / graph evaluation
+- Evidence:
+  - `metaEvaluateClosestByType(...)` delegates to `_traverseEvalChainUntilType(...)`, which performs a depth-first recursive walk over `node.inputs` and returns as soon as any branch finds the target type in [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L139) through [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L151) and [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L471) through [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L505).
+  - In a branched graph, that means the returned path depends on input iteration order, not on which matching node is actually topologically closest to the start node.
+  - The existing tests exercise only a single linear chain, so they confirm “first encountered in DFS” behavior rather than true closest-match behavior in [src/compat/__tests__/MuEvalBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuEvalBridge.test.ts#L135) through [src/compat/__tests__/MuEvalBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuEvalBridge.test.ts#L159).
+- Impact:
+  - Mu-compatible scripts can get a path to the wrong matching node when multiple upstream branches contain the requested type.
+  - That makes “closest by type” unstable across graph shapes and input ordering, which is a logic bug rather than just an approximation.
+
+### 252. Mu compat source-list fallbacks can return phantom source names that the rest of the source API cannot resolve
+
+- Severity: Medium
+- Area: Mu compatibility / source management
+- Evidence:
+  - When there are no local source records, `sources()` fabricates an entry from `openrv.media.getCurrentSource()` and returns its `name` as a source identifier in [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L124) through [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L147).
+  - `sourcesAtFrame(...)` does the same fallback and returns `current.name` even though no corresponding local `SourceRecord` exists in [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L158) through [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L179).
+  - Almost every other source command resolves through `_getSource(...)`, which only looks in the local `_sources` map and throws if the name is absent in [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L785) through [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L790).
+  - The fallback tests explicitly validate that `sources()` and `sourcesAtFrame()` return the OpenRV current source name `test-source` when no local sources exist in [src/compat/__tests__/MuSourceBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuSourceBridge.test.ts#L43) through [src/compat/__tests__/MuSourceBridge.test.ts#L48) and [src/compat/__tests__/MuSourceBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuSourceBridge.test.ts#L71) through [src/compat/__tests__/MuSourceBridge.test.ts#L74), but there is no test that follow-up source queries can actually use that returned name.
+- Impact:
+  - Mu-compatible scripts can enumerate a source name from `sources()` or `sourcesAtFrame()` and then immediately fail when calling `sourceMedia(...)`, `sourceMediaInfo(...)`, `sourceAttributes(...)`, or other source methods on that same name.
+  - This also makes the bridge internally inconsistent, because source discovery can report a source while `hasSource(...)` and `sourceCount()` still say there are no local sources.
+
+### 253. Mu compat `properties('#TypeName')` does not honor the documented hash-path semantics
+
+- Severity: Medium
+- Area: Mu compatibility / property system
+- Evidence:
+  - The `properties(nodeName)` API is documented as accepting either a node name or `#TypeName` in [src/compat/MuPropertyBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuPropertyBridge.ts#L270) through [src/compat/MuPropertyBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuPropertyBridge.ts#L285).
+  - Its implementation does not use `_resolveKey(...)` or any hash resolution logic; it merely strips `#` and does `key.startsWith(prefix + '.')` in [src/compat/MuPropertyBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuPropertyBridge.ts#L276) through [src/compat/MuPropertyBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuPropertyBridge.ts#L284).
+  - That behavior is inconsistent with the rest of the hash-path API, where `_resolveKey(...)` matches exact names or node names containing the type token for `#TypeName.component.property` lookups in [src/compat/MuPropertyBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuPropertyBridge.ts#L343) through [src/compat/MuPropertyBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuPropertyBridge.ts#L380).
+  - The tests cover normal `properties('myNode')` usage and hash-path resolution for `get*`, `propertyInfo`, and `propertyExists`, but there is no coverage for `properties('#TypeName')` in [src/compat/__tests__/MuPropertyBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuPropertyBridge.test.ts#L134) through [src/compat/__tests__/MuPropertyBridge.test.ts#L151) and [src/compat/__tests__/MuPropertyBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuPropertyBridge.test.ts#L331) through [src/compat/__tests__/MuPropertyBridge.test.ts#L356).
+- Impact:
+  - Mu-compatible scripts can successfully use `#TypeName.component.property` in point lookups and then get a contradictory empty or incomplete result when they try to list properties with `properties('#TypeName')`.
+  - That inconsistency makes hash-based property discovery unreliable and can break tooling that first enumerates properties by type and then reads them individually.
+
+### 254. Mu compat `fileKind()` misclassifies normal signed or query-string media URLs as unknown files
+
+- Severity: Medium
+- Area: Mu compatibility / file-kind detection
+- Evidence:
+  - `fileKind(path)` determines the extension by calling `getExtension(path)` and lowercasing the substring after the last literal `.` in [src/compat/MuUtilsBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuUtilsBridge.ts#L83) through [src/compat/MuUtilsBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuUtilsBridge.ts#L143).
+  - `getExtension(...)` does not strip query strings or fragments; it simply returns `path.slice(lastDot + 1)` in [src/compat/MuUtilsBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuUtilsBridge.ts#L351) through [src/compat/MuUtilsBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuUtilsBridge.ts#L355).
+  - A common browser URL like `https://example.com/shot.exr?token=abc` therefore yields the extension `exr?token=abc`, which will not match any supported extension list.
+  - The tests only cover bare filenames such as `test.exr`, `video.mp4`, and `TEST.EXR`; there is no coverage for URL-style inputs with `?` or `#` in [src/compat/__tests__/MuEventBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuEventBridge.test.ts#L558) through [src/compat/__tests__/MuEventBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuEventBridge.test.ts#L599).
+- Impact:
+  - Mu-compatible scripts that classify browser-delivered media URLs can get `UnknownFile` for ordinary signed image, movie, LUT, or CDL URLs.
+  - That breaks detection logic exactly in the web scenarios where browser-style URLs are most common.
+
+### 255. Mu compat `remoteConnect()` forces `wss` for every non-local host, which blocks valid plain-`ws` remotes
+
+- Severity: Medium
+- Area: Mu compatibility / remote networking
+- Evidence:
+  - `remoteConnect(name, host, port)` selects `ws` only for `localhost` or `127.0.0.1`; every other host is forced to `wss` in [src/compat/MuNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuNetworkBridge.ts#L85) through [src/compat/MuNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuNetworkBridge.ts#L87).
+  - The method does not inspect the current page protocol, allow an explicit scheme, or provide any override for environments where a non-local remote is legitimately served over plain `ws`.
+  - The compat tests only check the disabled-network warning path and never exercise actual socket URL construction in [src/compat/__tests__/MuEventBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuEventBridge.test.ts#L671) through [src/compat/__tests__/MuEventBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuEventBridge.test.ts#L677).
+- Impact:
+  - Mu-compatible scripts cannot connect to a valid non-local RV peer that is exposed over plain WebSocket, even in environments where that is expected and allowed.
+  - This is a logic bug in connection setup rather than a browser limitation, because the bridge chooses the scheme before the connection attempt even starts.
+
+### 256. Mu compat hash-path property resolution is insertion-order dependent when multiple node names contain the same type token
+
+- Severity: Medium
+- Area: Mu compatibility / property system
+- Evidence:
+  - For hash paths like `#TypeName.component.property`, `_resolveKey(...)` first checks an exact node-name match and then returns the first stored key whose node name merely `includes(typeName)` in [src/compat/MuPropertyBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuPropertyBridge.ts#L360) through [src/compat/MuPropertyBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuPropertyBridge.ts#L378).
+  - Because the fallback search iterates `this._store.keys()` directly, the chosen property depends on insertion order when multiple node names contain the same token and share the same component/property suffix.
+  - There is no disambiguation by actual node type, graph structure, or strongest match beyond exact node-name equality.
+  - The current tests cover only a single matching hash target at a time in [src/compat/__tests__/MuPropertyBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuPropertyBridge.test.ts#L331) through [src/compat/__tests__/MuPropertyBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuPropertyBridge.test.ts#L356), so ambiguous multi-match behavior is unverified.
+- Impact:
+  - Mu-compatible scripts can read or overwrite the wrong property when multiple nodes happen to contain the same type token in their names.
+  - That makes hash-path access nondeterministic at the API level, because the result depends on property insertion order rather than a stable graph identity rule.
+
+### 257. Mu compat playback-health commands are marked supported but only expose hardcoded or never-updated local state
+
+- Severity: Medium
+- Area: Mu compatibility / playback telemetry
+- Evidence:
+  - `skipped()` returns the private `_skippedFrames` field, but production source search finds no non-test code that ever increments or synchronizes that field; it is only initialized to `0` in [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L134) and read in [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L301) through [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L304).
+  - `mbps()` likewise returns the private `_mbps` field, and `resetMbps()` only sets that same local field back to `0` in [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L135) and [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L321) through [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L329); there is no non-test writer that records real throughput.
+  - `isCurrentFrameIncomplete()`, `isCurrentFrameError()`, and `isBuffering()` are all marked supported in the command manifest in [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L97) through [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L100), but their implementations are hardcoded `false` in [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L306) through [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L319) despite the real app having buffering state in [src/core/session/SessionPlayback.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionPlayback.ts#L148), [src/core/session/PlaybackEngine.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaybackEngine.ts#L371), and [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L616).
+  - The compat tests explicitly validate the inert behavior: `skipped()` returns `0`, `mbps()` returns `0`, and the three health booleans return `false` in [src/compat/__tests__/MuCommands.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuCommands.test.ts#L295) through [src/compat/__tests__/MuCommands.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuCommands.test.ts#L315).
+- Impact:
+  - Mu-compatible scripts can query playback health and receive clean-looking values even while the real player is buffering, skipping frames, or experiencing decode issues.
+  - That is more misleading than an unsupported-path warning because the API reports a valid state snapshot that never came from the actual playback engine.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

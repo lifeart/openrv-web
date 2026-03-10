@@ -706,6 +706,30 @@ export class ViewerInputHandler {
     const fileArray = Array.from(files);
     const session = this.ctx.getSession();
 
+    // Check for .rv or .gto session file among dropped files (before sequence detection)
+    const sessionFile = fileArray.find(
+      (f) => f.name.toLowerCase().endsWith('.rv') || f.name.toLowerCase().endsWith('.gto'),
+    );
+
+    if (sessionFile) {
+      // Build availableFiles map from non-session files (sidecar media/CDL)
+      const availableFiles = new Map<string, File>();
+      for (const file of fileArray) {
+        if (file !== sessionFile) {
+          availableFiles.set(file.name, file);
+        }
+      }
+
+      try {
+        const content = await sessionFile.arrayBuffer();
+        await session.loadFromGTO(content, availableFiles);
+      } catch (err) {
+        console.error('Failed to load session file:', err);
+        showAlert(`Failed to load ${sessionFile.name}: ${err}`, { type: 'error', title: 'Load Error' });
+      }
+      return;
+    }
+
     // Check for sequence
     const imageFiles = filterImageFiles(fileArray);
     if (imageFiles.length > 1) {
@@ -722,15 +746,10 @@ export class ViewerInputHandler {
       }
     }
 
-    // Single file or mixed files
+    // Single file or mixed non-session files
     for (const file of fileArray) {
       try {
-        if (file.name.toLowerCase().endsWith('.rv') || file.name.toLowerCase().endsWith('.gto')) {
-          const content = await file.arrayBuffer();
-          await session.loadFromGTO(content);
-        } else {
-          await session.loadFile(file);
-        }
+        await session.loadFile(file);
       } catch (err) {
         console.error('Failed to load file:', err);
         showAlert(`Failed to load ${file.name}: ${err}`, { type: 'error', title: 'Load Error' });

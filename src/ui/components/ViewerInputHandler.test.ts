@@ -779,6 +779,162 @@ describe('ViewerInputHandler – Case-insensitive drop extensions', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Drag-and-drop GTO/RV sidecar file resolution (Issue #153)
+// ---------------------------------------------------------------------------
+
+describe('ViewerInputHandler – GTO drop with sidecar files', () => {
+  let ctx: ViewerInputContext;
+  let handler: ViewerInputHandler;
+  let dropOverlay: HTMLElement;
+
+  beforeEach(() => {
+    ctx = createMockContext();
+    dropOverlay = document.createElement('div');
+    handler = new ViewerInputHandler(ctx, dropOverlay);
+    handler.bindEvents();
+  });
+
+  afterEach(() => {
+    handler.unbindEvents();
+    const container = ctx.getContainer();
+    if (container.parentNode) {
+      container.parentNode.removeChild(container);
+    }
+  });
+
+  function dispatchDrop(container: HTMLElement, files: File[]): void {
+    const mockDataTransfer = { files };
+    const dropEvent = new Event('drop', { bubbles: true }) as any;
+    dropEvent.dataTransfer = mockDataTransfer;
+    dropEvent.preventDefault = vi.fn();
+    container.dispatchEvent(dropEvent);
+  }
+
+  it('SIDECAR-001: GTO dropped with companion files builds availableFiles map and passes it to loadFromGTO', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+
+    const gtoFile = new File(['gto-data'], 'scene.gto');
+    const mediaFile1 = new File(['img-data'], 'plate.exr');
+    const mediaFile2 = new File(['cdl-data'], 'grade.cdl');
+
+    dispatchDrop(container, [gtoFile, mediaFile1, mediaFile2]);
+
+    await vi.waitFor(() => {
+      expect(mockSession.loadFromGTO).toHaveBeenCalledTimes(1);
+    });
+
+    const callArgs = (mockSession.loadFromGTO as any).mock.calls[0];
+    // First arg is the ArrayBuffer content
+    expect(callArgs[0]).toBeInstanceOf(ArrayBuffer);
+    // Second arg is the availableFiles map
+    const availableFiles: Map<string, File> = callArgs[1];
+    expect(availableFiles).toBeInstanceOf(Map);
+    expect(availableFiles.size).toBe(2);
+    expect(availableFiles.get('plate.exr')).toBe(mediaFile1);
+    expect(availableFiles.get('grade.cdl')).toBe(mediaFile2);
+  });
+
+  it('SIDECAR-002: GTO dropped alone calls loadFromGTO with empty availableFiles map', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+
+    const gtoFile = new File(['gto-data'], 'scene.gto');
+
+    dispatchDrop(container, [gtoFile]);
+
+    await vi.waitFor(() => {
+      expect(mockSession.loadFromGTO).toHaveBeenCalledTimes(1);
+    });
+
+    const callArgs = (mockSession.loadFromGTO as any).mock.calls[0];
+    const availableFiles: Map<string, File> = callArgs[1];
+    expect(availableFiles).toBeInstanceOf(Map);
+    expect(availableFiles.size).toBe(0);
+  });
+
+  it('SIDECAR-003: .rv file dropped with companions also builds availableFiles map', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+
+    const rvFile = new File(['rv-data'], 'session.rv');
+    const mediaFile = new File(['img-data'], 'render.dpx');
+
+    dispatchDrop(container, [rvFile, mediaFile]);
+
+    await vi.waitFor(() => {
+      expect(mockSession.loadFromGTO).toHaveBeenCalledTimes(1);
+    });
+
+    const callArgs = (mockSession.loadFromGTO as any).mock.calls[0];
+    const availableFiles: Map<string, File> = callArgs[1];
+    expect(availableFiles).toBeInstanceOf(Map);
+    expect(availableFiles.size).toBe(1);
+    expect(availableFiles.get('render.dpx')).toBe(mediaFile);
+  });
+
+  it('SIDECAR-004: multiple non-session files build correct basename keys', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+
+    const gtoFile = new File(['gto-data'], 'project.gto');
+    const file1 = new File(['a'], 'shot01.exr');
+    const file2 = new File(['b'], 'shot02.exr');
+    const file3 = new File(['c'], 'look.cdl');
+    const file4 = new File(['d'], 'lut.cube');
+
+    dispatchDrop(container, [file1, gtoFile, file2, file3, file4]);
+
+    await vi.waitFor(() => {
+      expect(mockSession.loadFromGTO).toHaveBeenCalledTimes(1);
+    });
+
+    const callArgs = (mockSession.loadFromGTO as any).mock.calls[0];
+    const availableFiles: Map<string, File> = callArgs[1];
+    expect(availableFiles.size).toBe(4);
+    expect(availableFiles.get('shot01.exr')).toBe(file1);
+    expect(availableFiles.get('shot02.exr')).toBe(file2);
+    expect(availableFiles.get('look.cdl')).toBe(file3);
+    expect(availableFiles.get('lut.cube')).toBe(file4);
+  });
+
+  it('SIDECAR-005: non-session files without a GTO are loaded via loadFile individually', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+
+    // Use non-image extensions to avoid triggering sequence detection
+    const file1 = new File(['a'], 'grade.cdl');
+    const file2 = new File(['b'], 'lookup.cube');
+
+    dispatchDrop(container, [file1, file2]);
+
+    await vi.waitFor(() => {
+      expect(mockSession.loadFile).toHaveBeenCalledTimes(2);
+    });
+
+    expect(mockSession.loadFromGTO).not.toHaveBeenCalled();
+  });
+
+  it('SIDECAR-006: session file is not included in the availableFiles map', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+
+    const gtoFile = new File(['gto-data'], 'scene.gto');
+    const mediaFile = new File(['img'], 'plate.exr');
+
+    dispatchDrop(container, [gtoFile, mediaFile]);
+
+    await vi.waitFor(() => {
+      expect(mockSession.loadFromGTO).toHaveBeenCalledTimes(1);
+    });
+
+    const callArgs = (mockSession.loadFromGTO as any).mock.calls[0];
+    const availableFiles: Map<string, File> = callArgs[1];
+    expect(availableFiles.has('scene.gto')).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Rotation Scrub (Ctrl+Shift+Drag) Tests
 // ---------------------------------------------------------------------------
 
