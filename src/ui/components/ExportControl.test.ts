@@ -610,6 +610,72 @@ describe('ExportControl keyboard accessibility', () => {
     });
   });
 
+  describe('copy to clipboard respects annotations checkbox (#176)', () => {
+    function openDropdown(): void {
+      const el = control.render();
+      document.body.appendChild(el);
+      const button = el.querySelector('button') as HTMLButtonElement;
+      button.click();
+    }
+
+    function getDropdown(): HTMLElement {
+      return document.querySelector('.export-dropdown') as HTMLElement;
+    }
+
+    afterEach(() => {
+      const el = control.render();
+      if (el.parentNode) {
+        el.parentNode.removeChild(el);
+      }
+    });
+
+    it('EXPORT-U176-01: copyRequested carries includeAnnotations: true when checkbox is checked', () => {
+      const callback = vi.fn();
+      control.on('copyRequested', callback);
+
+      openDropdown();
+      const dropdown = getDropdown();
+      const checkbox = dropdown.querySelector('#export-annotations') as HTMLInputElement;
+      checkbox.checked = true;
+
+      const copyItem = Array.from(dropdown.querySelectorAll('button')).find((btn) =>
+        btn.textContent?.includes('Copy to Clipboard'),
+      ) as HTMLButtonElement;
+      copyItem.click();
+
+      expect(callback).toHaveBeenCalledWith({ includeAnnotations: true });
+    });
+
+    it('EXPORT-U176-02: copyRequested carries includeAnnotations: false when checkbox is unchecked', () => {
+      const callback = vi.fn();
+      control.on('copyRequested', callback);
+
+      openDropdown();
+      const dropdown = getDropdown();
+      const checkbox = dropdown.querySelector('#export-annotations') as HTMLInputElement;
+      checkbox.checked = false;
+
+      const copyItem = Array.from(dropdown.querySelectorAll('button')).find((btn) =>
+        btn.textContent?.includes('Copy to Clipboard'),
+      ) as HTMLButtonElement;
+      copyItem.click();
+
+      expect(callback).toHaveBeenCalledWith({ includeAnnotations: false });
+    });
+
+    it('EXPORT-U176-03: copyRequested event is no longer void', () => {
+      const callback = vi.fn();
+      control.on('copyRequested', callback);
+
+      (control as any).copyToClipboard();
+
+      expect(callback).toHaveBeenCalledTimes(1);
+      const arg = callback.mock.calls[0]![0];
+      expect(arg).toHaveProperty('includeAnnotations');
+      expect(typeof arg.includeAnnotations).toBe('boolean');
+    });
+  });
+
   describe('test IDs', () => {
     it('EXPORT-U100: export button has data-testid="export-button"', () => {
       const el = control.render();

@@ -3,6 +3,8 @@
  */
 export type NoteStatus = 'open' | 'resolved' | 'wontfix';
 
+const VALID_STATUSES: ReadonlySet<string> = new Set<NoteStatus>(['open', 'resolved', 'wontfix']);
+
 /**
  * A note/comment attached to a frame range on a specific media source
  */
@@ -18,6 +20,14 @@ export interface Note {
   status: NoteStatus;
   parentId: string | null; // null = top-level, string = reply
   color: string; // Hex color (default '#fbbf24')
+}
+
+/**
+ * Result of a fromSerializable import operation.
+ */
+export interface ImportResult {
+  imported: number;
+  rejected: number;
 }
 
 /**

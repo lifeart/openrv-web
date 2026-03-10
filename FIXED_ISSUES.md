@@ -1477,3 +1477,23 @@
 - **Regression Tests**: MARK-U151 through MARK-U157 — mode choice dialog shown/skipped, replace clears existing, merge preserves existing, collision count reported, single collision grammar, no alert on zero collisions.
 - **Verification**: All 22,579 tests pass, TypeScript clean.
 - **Files Changed**: `src/ui/components/MarkerListPanel.ts`, `src/ui/components/MarkerListPanel.test.ts`
+
+## Issue #175: The shipped export UI ignores the app's saved export-default preferences
+
+- **Severity**: Medium
+- **Area**: Export workflow / preferences
+- **Root Cause**: `ExportControl` hardcoded quality (0.92/0.95) and format ('png') values. `getExportDefaults()` from `PreferencesManager` was never consumed in production.
+- **Fix**: `ExportControl` now reads from `preferencesManager.getExportDefaults()` at call time for format, quality, and includeAnnotations. Falls back to hardcoded defaults when no preferences are stored. Annotations checkbox initial state also driven by preference.
+- **Regression Tests**: 14 tests — fallback to defaults, each export type respects persisted quality/format/annotations, runtime preference changes picked up, combined format+quality.
+- **Verification**: All 22,592 tests pass, TypeScript clean.
+- **Files Changed**: `src/ui/components/ExportControl.ts`, `src/ui/components/ExportControl.test.ts`, `src/core/PreferencesManager.ts`
+
+## Issue #176: The export menu's `Include annotations` option does not apply to `Copy to Clipboard`
+
+- **Severity**: Medium
+- **Area**: Export UI / behavior consistency
+- **Root Cause**: `copyRequested` event carried no annotation flag, and both the wiring and keyboard action hardcoded `viewer.copyFrameToClipboard(true)`.
+- **Fix**: `copyRequested` now carries `{ includeAnnotations: boolean }` from the checkbox state. AppPlaybackWiring uses the flag. Keyboard shortcut reads `includeAnnotations` from `PreferencesManager.getExportDefaults()`.
+- **Regression Tests**: 5 tests — copy respects checkbox on/off, wiring passes flag through, keyboard shortcut reads preferences.
+- **Verification**: All 22,597 tests pass, TypeScript clean.
+- **Files Changed**: `src/ui/components/ExportControl.ts`, `src/ui/components/ExportControl.test.ts`, `src/AppPlaybackWiring.ts`, `src/AppPlaybackWiring.test.ts`, `src/services/KeyboardActionMap.ts`, `src/services/KeyboardActionMap.test.ts`

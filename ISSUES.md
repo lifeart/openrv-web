@@ -3804,6 +3804,30 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The app carries a substantial adaptive frame-cache design, but the shipped runtime never actually turns it on.
   - That leaves cache modes, warm-up behavior, and memory-pressure coordination effectively test-only despite the surrounding config and UI-oriented metadata.
 
+### 308. Collaboration permission roles affect sync behavior, but the shipped UI never reflects or enforces them locally
+
+- Severity: Medium
+- Area: Network sync / collaboration permissions
+- Evidence:
+  - `NetworkSyncManager` exposes real participant roles, defaults unknown users to `reviewer`, and uses `viewer` to suppress outgoing sync via `canUserSync(...)`, `sendAnnotationSync(...)`, and `sendNoteSync(...)` in [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L210) through [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L236) and [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L547) through [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L594).
+  - Incoming host permission changes are applied and emitted as `participantPermissionChanged` in [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L1105) through [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L1113).
+  - A production-code search finds no `participantPermissionChanged` subscriber in app wiring, and the visible network panel only renders a `Host` badge with no reviewer/viewer state or permission controls in [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L1278) through [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L1320).
+- Impact:
+  - A user can be downgraded to `viewer` and silently stop sending synced notes or annotations while the local UI still presents normal collaboration controls.
+  - The permission system exists at the transport layer, but the shipped interface gives no clear indication of current role or why collaboration actions stopped propagating.
+
+### 309. `SessionManager` is documented as a central session subsystem, but it is never instantiated in production
+
+- Severity: Low
+- Area: Session graph architecture
+- Evidence:
+  - `SessionManager` presents itself as the “Central orchestrator for graph mutations, view history, tree model, and media-graph bridge” in [src/core/session/SessionManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionManager.ts#L1) through [src/core/session/SessionManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionManager.ts#L7).
+  - The docs-generation templates also present `SessionManager` as part of the session-system architecture and include its source file in the generated module set in [docs/scripts/lib/templates.ts](/Users/lifeart/Repos/openrv-web/docs/scripts/lib/templates.ts#L288) through [docs/scripts/lib/templates.ts](/Users/lifeart/Repos/openrv-web/docs/scripts/lib/templates.ts#L304) and [docs/scripts/modules.ts](/Users/lifeart/Repos/openrv-web/docs/scripts/modules.ts#L46) through [docs/scripts/modules.ts](/Users/lifeart/Repos/openrv-web/docs/scripts/modules.ts#L52).
+  - A production-code search finds no `new SessionManager()` outside tests.
+- Impact:
+  - The repo carries a documented graph-mutation/view-history service that is effectively test-only in the shipped app.
+  - That makes the published session architecture ahead of production wiring for any future graph-browser or view-history workflows that would depend on this manager.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

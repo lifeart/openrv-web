@@ -335,10 +335,16 @@ describe('wirePlaybackControls', () => {
     expect(viewer.exportFrame).toHaveBeenCalledWith('png', false, 0.9);
   });
 
-  it('PW-006: copyRequested calls viewer.copyFrameToClipboard(true)', () => {
+  it('PW-006: copyRequested with annotations passes true to viewer.copyFrameToClipboard', () => {
     const exportControl = headerBar.getExportControl();
-    exportControl.emit('copyRequested', undefined);
+    exportControl.emit('copyRequested', { includeAnnotations: true });
     expect(viewer.copyFrameToClipboard).toHaveBeenCalledWith(true);
+  });
+
+  it('PW-006c: copyRequested with annotations unchecked passes false to viewer.copyFrameToClipboard (#176)', () => {
+    const exportControl = headerBar.getExportControl();
+    exportControl.emit('copyRequested', { includeAnnotations: false });
+    expect(viewer.copyFrameToClipboard).toHaveBeenCalledWith(false);
   });
 
   it('PW-006b: sourceExportRequested calls viewer.exportSourceFrame()', () => {

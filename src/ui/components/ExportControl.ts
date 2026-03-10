@@ -29,7 +29,7 @@ export interface VideoExportRequest {
 export interface ExportControlEvents extends EventMap {
   exportRequested: ExportRequest;
   sourceExportRequested: { format: ExportFormat; quality: number };
-  copyRequested: void;
+  copyRequested: { includeAnnotations: boolean };
   sequenceExportRequested: SequenceExportRequest;
   videoExportRequested: VideoExportRequest;
   rvSessionExportRequested: { format: 'rv' | 'gto' };
@@ -440,7 +440,7 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
   }
 
   private copyToClipboard(): void {
-    this.emit('copyRequested', undefined);
+    this.emit('copyRequested', { includeAnnotations: this.getIncludeAnnotations() });
   }
 
   private exportSourceAs(format: ExportFormat): void {

@@ -202,8 +202,8 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
     }),
   );
   subs.add(
-    exportControl.on('copyRequested', () => {
-      viewer.copyFrameToClipboard(true);
+    exportControl.on('copyRequested', ({ includeAnnotations }) => {
+      viewer.copyFrameToClipboard(includeAnnotations);
     }),
   );
   subs.add(

@@ -7,6 +7,7 @@
 
 import { getThemeManager } from '../utils/ui/ThemeManager';
 import { getGlobalHistoryManager } from '../utils/HistoryManager';
+import { getCorePreferencesManager } from '../core/PreferencesManager';
 
 // ---------------------------------------------------------------------------
 // Dependency interfaces (structural typing)
@@ -542,7 +543,10 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
 
     // -- Export ----------------------------------------------------------
     'export.quickExport': () => headerBar.getExportControl().quickExport('png'),
-    'export.copyFrame': () => viewer.copyFrameToClipboard(true),
+    'export.copyFrame': () => {
+      const includeAnnotations = getCorePreferencesManager().getExportDefaults().includeAnnotations;
+      viewer.copyFrameToClipboard(includeAnnotations);
+    },
 
     // -- Edit / Paint ----------------------------------------------------
     'edit.undo': () => {

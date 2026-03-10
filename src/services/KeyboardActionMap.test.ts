@@ -10,6 +10,13 @@ vi.mock('../utils/ui/ThemeManager', () => ({
   getThemeManager: () => mockThemeManager,
 }));
 
+const mockPreferencesManager = {
+  getExportDefaults: vi.fn().mockReturnValue({ includeAnnotations: true, defaultFormat: 'png', defaultQuality: 0.92 }),
+};
+vi.mock('../core/PreferencesManager', () => ({
+  getCorePreferencesManager: () => mockPreferencesManager,
+}));
+
 // ---------------------------------------------------------------------------
 // Helpers to build lightweight test doubles
 // ---------------------------------------------------------------------------
@@ -569,9 +576,16 @@ describe('buildActionHandlers', () => {
     expect(mockQuickExport).toHaveBeenCalledWith('png');
   });
 
-  it('export.copyFrame calls viewer.copyFrameToClipboard with true', () => {
+  it('export.copyFrame reads includeAnnotations from preferences (#176)', () => {
+    mockPreferencesManager.getExportDefaults.mockReturnValue({ includeAnnotations: true, defaultFormat: 'png', defaultQuality: 0.92 });
     handlers['export.copyFrame']!();
     expect(deps.viewer.copyFrameToClipboard).toHaveBeenCalledWith(true);
+  });
+
+  it('export.copyFrame passes false when preferences have includeAnnotations=false (#176)', () => {
+    mockPreferencesManager.getExportDefaults.mockReturnValue({ includeAnnotations: false, defaultFormat: 'png', defaultQuality: 0.92 });
+    handlers['export.copyFrame']!();
+    expect(deps.viewer.copyFrameToClipboard).toHaveBeenCalledWith(false);
   });
 
   // -- Undo/Redo ---------------------------------------------------------
