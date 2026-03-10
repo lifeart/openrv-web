@@ -2781,6 +2781,30 @@ This file tracks findings from exploratory review and targeted validation runs.
   - On HDR-capable systems, the initial frame can render with stale/default headroom and stay that way until another unrelated interaction causes a redraw.
   - That makes highlight rolloff and tone mapping depend on incidental follow-up events instead of updating when the measured display capability arrives.
 
+### 227. Per-source OCIO assignments are keyed by display name, so same-named media can inherit each other's color space
+
+- Severity: Medium
+- Area: OCIO / per-source state identity
+- Evidence:
+  - On source load, the app builds the OCIO per-source key as `source.name || \`source_${session.currentSourceIndex}\`` in [src/handlers/sourceLoadedHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/sourceLoadedHandlers.ts#L178).
+  - The per-source OCIO map is then persisted verbatim by source ID in [src/color/OCIOProcessor.ts](/Users/lifeart/Repos/openrv-web/src/color/OCIOProcessor.ts#L331), [src/color/OCIOProcessor.ts](/Users/lifeart/Repos/openrv-web/src/color/OCIOProcessor.ts#L382), and [src/ui/components/OCIOStateManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/OCIOStateManager.ts#L341).
+  - Real media sources only carry a display-style `name` plus `url`; for URL loads the name is derived from the basename in [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L1100), and for image/video loads it is stored exactly as passed in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L402) and [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L530).
+- Impact:
+  - Two unrelated files named `plate.exr` can share the same persisted OCIO input assignment even when they come from different folders or URLs.
+  - That breaks the promise that OCIO detection/overrides are per-source; switching to a different same-named shot can silently pick up the previous shot's color space.
+
+### 228. Share-link media auto-load misclassifies signed or query-string video URLs as images
+
+- Severity: Medium
+- Area: Share links / URL media loading
+- Evidence:
+  - `Session.loadSourceFromUrl(...)` extracts the extension from `url.split('/').pop()` and then `name.split('.').pop()`, without stripping query or hash parts, in [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L1099).
+  - The share-link restore path depends on that helper in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L153) and [src/AppNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppNetworkBridge.ts#L1091).
+  - Elsewhere in the UI, the repo already treats `?token=...` URLs as normal asset URLs and strips query parameters when extracting a basename in [src/ui/components/InfoStripOverlay.test.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/InfoStripOverlay.test.ts#L278).
+- Impact:
+  - A shared media URL like `shot.mov?token=...` or `clip.mp4#signed` is classified as an image, so clean-session share-link restore can fail to reconstruct the media at all.
+  - This particularly hurts real-world CDN or signed review links, where query parameters are common rather than exceptional.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed
