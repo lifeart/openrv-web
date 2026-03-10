@@ -78,6 +78,7 @@ import type { NetworkSyncManager } from './network/NetworkSyncManager';
 import type { NetworkControl } from './ui/components/NetworkControl';
 import type { ShotGridConfigUI } from './integrations/ShotGridConfig';
 import type { ShotGridPanel } from './ui/components/ShotGridPanel';
+import type { CacheManagementPanel } from './ui/components/CacheManagementPanel';
 import type { ConformPanel } from './ui/components/ConformPanel';
 import type { TimelineEditor } from './ui/components/TimelineEditor';
 import type { MultiSourceLayoutControl } from './ui/components/MultiSourceLayoutControl';
@@ -131,6 +132,7 @@ export interface ControlRegistryDeps {
   viewer: Viewer;
   paintEngine: PaintEngine;
   displayCapabilities: DisplayCapabilities;
+  cacheManager?: import('./cache/MediaCacheManager').MediaCacheManager;
 }
 
 export class AppControlRegistry {

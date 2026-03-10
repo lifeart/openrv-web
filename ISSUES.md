@@ -5031,6 +5031,19 @@ This file tracks findings from exploratory review and targeted validation runs.
   - RV/GTO files that express CDL as standalone `RVColorCDL` or `RVColorACESLogCDL` nodes can be recognized by the loader layer but still fail to restore grading through the live `settingsLoaded` path.
   - That leaves CDL interchange narrower than the repo’s own serializer, exporter, and graph-loader contracts imply.
 
+### 422. RV/GTO settings restore only understands embedded RVColor data and ignores most standalone color-node protocols
+
+- Severity: Medium
+- Area: RV/GTO import / color interchange coverage
+- Evidence:
+  - The repo exposes standalone GTO builders for `RVColorExposure`, `RVColorCurve`, `RVColorSaturation`, `RVColorVibrance`, `RVColorShadow`, `RVColorHighlight`, `RVColorGrayScale`, `RVColorLinearToSRGB`, `RVColorSRGBToLinear`, and `RVPrimaryConvert` in [src/core/session/serializers/ColorSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/serializers/ColorSerializer.ts#L443) through [src/core/session/serializers/ColorSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/serializers/ColorSerializer.ts#L654), re-exported through [src/core/session/SessionGTOExporter.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGTOExporter.ts#L1026) through [src/core/session/SessionGTOExporter.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGTOExporter.ts#L1106).
+  - `GTOGraphLoader` also treats those protocols as real importable node types and parses their properties in [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L1888) through [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L2138).
+  - But the live settings parser only restores color adjustments from `RVColor` and `RVDisplayColor`, plus the narrower dedicated parsers for CDL and linearize in [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L24) through [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L95) and [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L238) through [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L317).
+  - The app’s live grading model is broader than that parser surface: `ColorAdjustments` still includes fields like `vibrance`, `highlights`, and `shadows` in [src/core/types/color.ts](/Users/lifeart/Repos/openrv-web/src/core/types/color.ts#L3) through [src/core/types/color.ts](/Users/lifeart/Repos/openrv-web/src/core/types/color.ts#L18), and the restore handler would apply any parsed adjustments via `setAdjustments(...)` in [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L79) through [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L81).
+- Impact:
+  - RV/GTO files that represent grading with standalone color nodes can be recognized by the loader layer yet still lose exposure/curve/vibrance/shadow/highlight/grayscale/conversion intent in the live restore path.
+  - That leaves color interchange materially narrower than the repo’s own serializer/exporter/loader surface suggests.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

@@ -8,6 +8,7 @@ import { NotePanel } from '../../ui/components/NotePanel';
 import { RightPanelContent } from '../../ui/layout/panels/RightPanelContent';
 import { LeftPanelContent } from '../../ui/layout/panels/LeftPanelContent';
 import { CacheIndicator } from '../../ui/components/CacheIndicator';
+import { CacheManagementPanel } from '../../ui/components/CacheManagementPanel';
 import { SnapshotPanel } from '../../ui/components/SnapshotPanel';
 import { PlaylistPanel } from '../../ui/components/PlaylistPanel';
 import { ShotGridConfigUI } from '../../integrations/ShotGridConfig';
@@ -29,6 +30,7 @@ import type { ColorControls } from '../../ui/components/ColorControls';
 import type { SnapshotManager } from '../../core/session/SnapshotManager';
 import type { PlaylistManager } from '../../core/session/PlaylistManager';
 import type { TransitionManager } from '../../core/session/TransitionManager';
+import type { MediaCacheManager } from '../../cache/MediaCacheManager';
 
 export interface PanelControlDeps {
   session: Session;
@@ -38,6 +40,7 @@ export interface PanelControlDeps {
   snapshotManager: SnapshotManager;
   playlistManager: PlaylistManager;
   transitionManager: TransitionManager;
+  cacheManager?: MediaCacheManager;
 }
 
 export interface PanelControlGroupInternal extends PanelControlGroup {
@@ -70,6 +73,7 @@ export function createPanelControls(deps: PanelControlDeps): PanelControlGroupIn
 
   // --- Cache ---
   const cacheIndicator = new CacheIndicator(session, viewer);
+  const cacheManagementPanel = deps.cacheManager ? new CacheManagementPanel(deps.cacheManager) : null;
 
   // --- Snapshot / Playlist panels ---
   const snapshotPanel = new SnapshotPanel(snapshotManager);
@@ -140,6 +144,7 @@ export function createPanelControls(deps: PanelControlDeps): PanelControlGroupIn
     playlistPanel,
     shotGridConfig,
     shotGridPanel,
+    cacheManagementPanel,
     conformPanel,
     conformPanelElement,
     conformPanelContainer,

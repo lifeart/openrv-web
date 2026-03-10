@@ -168,7 +168,7 @@ JPEG 2000 and its high-throughput variant HTJ2K, used in digital cinema (DCI) pa
 - **Bit depth**: Supports various bit depths (8, 10, 12, 16-bit) with signed and unsigned samples
 - **Color space**: `colr` box parsing for ICC profiles and enumerated color spaces
 
-### RAW Preview (.cr2, .nef, .arw, .dng, .raf, etc.)
+### RAW Preview (.cr2, .nef, .arw, .dng, .orf, etc.)
 
 Camera RAW files are detected by their TIFF-based container structure, and the largest embedded JPEG preview is extracted:
 

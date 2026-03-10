@@ -1,5 +1,19 @@
 # Fixed Issues
 
+## Issue #231: The RAW preview path advertises broader RAW support than its TIFF-only parser can actually handle
+
+- **Severity**: Medium
+- **Area**: Format support / camera RAW preview loading
+- **Root Cause**: `RAW_EXTENSIONS` included `cr3` (ISO BMFF container), `raf` (Fuji proprietary header), and `rw2` (Panasonic proprietary) alongside genuinely TIFF-based formats. The `extractRAWPreview()` parser requires TIFF byte-order marks + magic `42`, so these non-TIFF formats would always fail silently at load time despite being advertised as supported.
+- **Fix**: Removed `cr3`, `raf`, `rw2` from `RAW_EXTENSIONS` and `SUPPORTED_IMAGE_EXTENSIONS`. Updated `DecoderRegistry` JSDoc, `RAWPreviewDecoder` file-level docs, and `docs/guides/file-formats.md` to clearly document which formats are supported (TIFF-based: CR2, NEF, ARW, DNG, ORF, PEF, SRW) and which are excluded with reasons.
+- **Regression Tests**: Added RAW-T016 through RAW-T019 in `RAWPreviewDecoder.test.ts`:
+  - RAW-T016: CR3, RAF, RW2 extensions no longer recognized by `isRAWExtension()` (with case variations)
+  - RAW-T017: ISO BMFF/CR3-like binary data gracefully returns null
+  - RAW-T018: Fuji RAF-like binary data gracefully returns null
+  - RAW-T019: Random binary data gracefully returns null
+- **Verification**: TypeScript clean, all 21 RAWPreviewDecoder tests pass, all 38 SupportedMediaFormats tests pass.
+- **Files Changed**: `src/formats/RAWPreviewDecoder.ts`, `src/formats/RAWPreviewDecoder.test.ts`, `src/formats/DecoderRegistry.ts`, `src/utils/media/SupportedMediaFormats.ts`, `scripts/docs/generate-formats.ts`, `docs/guides/file-formats.md`
+
 ## Issue #230: `openrv.media.getFPS()` reports mutable session playback FPS, not the current source FPS it claims to return
 
 - **Severity**: Medium
