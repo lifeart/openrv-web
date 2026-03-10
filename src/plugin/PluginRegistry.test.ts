@@ -885,11 +885,11 @@ describe('PluginRegistry', () => {
   });
 
   // -------------------------------------------------------------------------
-  // Exporter registration warnings and signal (Issue #18)
+  // Exporter registration signals (Issue #18)
   // -------------------------------------------------------------------------
 
-  describe('registerExporter warnings and signal', () => {
-    it('PREG-049: registerExporter emits console.warn about exporters not being consulted', async () => {
+  describe('registerExporter signals', () => {
+    it('PREG-049: registerExporter does not emit console.warn (wiring complete, #18)', async () => {
       cleanupExporters.push('warn-exp');
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const exporter: ExporterContribution = { kind: 'blob', label: 'W', extensions: ['w'], export: vi.fn() };
@@ -900,15 +900,15 @@ describe('PluginRegistry', () => {
       });
       registry.register(plugin);
       await registry.activate('test.plugin');
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Exporter "warn-exp" registered but plugin exporters are not yet consulted'),
+      const exporterWarns = warnSpy.mock.calls.filter(
+        (args) => typeof args[0] === 'string' && args[0].includes('not yet consulted'),
       );
+      expect(exporterWarns).toHaveLength(0);
       warnSpy.mockRestore();
     });
 
     it('PREG-050: registerExporter emits exporterRegistered signal with name, exporter and pluginId', async () => {
       cleanupExporters.push('sig-exp');
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const exporter: ExporterContribution = { kind: 'blob', label: 'S', extensions: ['s'], export: vi.fn() };
       const signalData: Array<{ pluginId: string; name: string; exporter: ExporterContribution }> = [];
       registry.exporterRegistered.connect((data) => {
@@ -925,7 +925,28 @@ describe('PluginRegistry', () => {
       expect(signalData[0]!.pluginId).toBe('test.plugin');
       expect(signalData[0]!.name).toBe('sig-exp');
       expect(signalData[0]!.exporter).toBe(exporter);
-      warnSpy.mockRestore();
+    });
+
+    it('PREG-051: deactivating a plugin emits exporterUnregistered signal for each exporter', async () => {
+      cleanupExporters.push('unreg-exp');
+      const exporter: ExporterContribution = { kind: 'blob', label: 'U', extensions: ['u'], export: vi.fn() };
+      const unregData: Array<{ pluginId: string; name: string }> = [];
+      registry.exporterUnregistered.connect((data) => {
+        unregData.push(data);
+      });
+      const plugin = createPlugin({
+        activate: (ctx: PluginContext) => {
+          ctx.registerExporter('unreg-exp', exporter);
+        },
+      });
+      registry.register(plugin);
+      await registry.activate('test.plugin');
+      expect(unregData).toHaveLength(0);
+
+      await registry.deactivate('test.plugin');
+      expect(unregData).toHaveLength(1);
+      expect(unregData[0]!.pluginId).toBe('test.plugin');
+      expect(unregData[0]!.name).toBe('unreg-exp');
     });
   });
 });
