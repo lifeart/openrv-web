@@ -819,3 +819,89 @@ describe('FPS Indicator Preferences', () => {
     expect(prefs.criticalThreshold).toBe(0.7);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Issue #152 — storage-only advisory & regression
+// ---------------------------------------------------------------------------
+
+describe('Issue #152: storage-only preferences advisory', () => {
+  afterEach(() => {
+    resetCorePreferencesManagerForTests();
+    vi.restoreAllMocks();
+  });
+
+  it('CPRF-152-001: constructor emits console.info advisory once', () => {
+    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const { manager: _m1 } = createManager();
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy).toHaveBeenCalledWith(
+      expect.stringContaining('[PreferencesManager]'),
+    );
+    expect(spy).toHaveBeenCalledWith(
+      expect.stringContaining('TODO(#152)'),
+    );
+  });
+
+  it('CPRF-152-002: advisory is emitted only once across multiple instances', () => {
+    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    createManager();
+    createManager();
+    createManager();
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it('CPRF-152-003: colorDefaults get/set/export/import remain functional', () => {
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    const { manager } = createManager();
+    manager.setColorDefaults({ defaultExposure: 7, defaultGamma: 1.8 });
+    expect(manager.getColorDefaults().defaultExposure).toBe(7);
+    expect(manager.getColorDefaults().defaultGamma).toBe(1.8);
+
+    const json = manager.exportAll();
+    const parsed = JSON.parse(json) as PreferencesExportPayload;
+    expect(parsed.colorDefaults.defaultExposure).toBe(7);
+
+    const { manager: m2 } = createManager();
+    m2.importAll(json);
+    expect(m2.getColorDefaults().defaultExposure).toBe(7);
+  });
+
+  it('CPRF-152-004: exportDefaults get/set/export/import remain functional', () => {
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    const { manager } = createManager();
+    manager.setExportDefaults({ defaultFormat: 'webp', frameburnEnabled: true });
+    expect(manager.getExportDefaults().defaultFormat).toBe('webp');
+    expect(manager.getExportDefaults().frameburnEnabled).toBe(true);
+
+    const json = manager.exportAll();
+    const parsed = JSON.parse(json) as PreferencesExportPayload;
+    expect(parsed.exportDefaults.defaultFormat).toBe('webp');
+
+    const { manager: m2 } = createManager();
+    m2.importAll(json);
+    expect(m2.getExportDefaults().defaultFormat).toBe('webp');
+    expect(m2.getExportDefaults().frameburnEnabled).toBe(true);
+  });
+
+  it('CPRF-152-005: unused generalPrefs fields get/set/export/import remain functional', () => {
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    const { manager } = createManager();
+    manager.setGeneralPrefs({ autoPlayOnLoad: true, showWelcome: false, defaultFps: 60 });
+    const prefs = manager.getGeneralPrefs();
+    expect(prefs.autoPlayOnLoad).toBe(true);
+    expect(prefs.showWelcome).toBe(false);
+    expect(prefs.defaultFps).toBe(60);
+
+    const json = manager.exportAll();
+    const parsed = JSON.parse(json) as PreferencesExportPayload;
+    expect(parsed.generalPrefs.autoPlayOnLoad).toBe(true);
+    expect(parsed.generalPrefs.showWelcome).toBe(false);
+    expect(parsed.generalPrefs.defaultFps).toBe(60);
+
+    const { manager: m2 } = createManager();
+    m2.importAll(json);
+    expect(m2.getGeneralPrefs().autoPlayOnLoad).toBe(true);
+    expect(m2.getGeneralPrefs().showWelcome).toBe(false);
+    expect(m2.getGeneralPrefs().defaultFps).toBe(60);
+  });
+});

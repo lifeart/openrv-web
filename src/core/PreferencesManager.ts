@@ -32,6 +32,11 @@ export interface PreferencesSubsystems {
 
 export type ThemeMode = 'dark' | 'light' | 'auto';
 
+/**
+ * TODO(#152): Storage-only — no production code reads `getColorDefaults()`.
+ * These fields are persisted, exported, and imported, but not yet consumed
+ * by any runtime behavior (e.g., renderer, color pipeline).
+ */
 export interface ColorDefaults {
   defaultInputColorSpace: string;
   defaultExposure: number;
@@ -39,6 +44,11 @@ export interface ColorDefaults {
   defaultCDLPreset: string | null;
 }
 
+/**
+ * TODO(#152): Storage-only — no production code reads `getExportDefaults()`.
+ * These fields are persisted, exported, and imported, but not yet consumed
+ * by any runtime behavior (e.g., snapshot export, frame burn-in).
+ */
 export interface ExportDefaults {
   defaultFormat: 'png' | 'jpeg' | 'webp';
   defaultQuality: number;
@@ -48,9 +58,13 @@ export interface ExportDefaults {
 }
 
 export interface GeneralPrefs {
+  /** Used by NotePanel and NetworkControl. */
   userName: string;
+  /** TODO(#152): Storage-only — not yet consumed by any production code. */
   defaultFps: number;
+  /** TODO(#152): Storage-only — not yet consumed by any production code. */
   autoPlayOnLoad: boolean;
+  /** TODO(#152): Storage-only — not yet consumed by any production code. */
   showWelcome: boolean;
 }
 
@@ -249,8 +263,20 @@ function hasOwnKey(obj: Record<string, unknown>, key: string): boolean {
 export class PreferencesManager extends EventEmitter<CorePreferencesEvents> {
   private _subsystems: PreferencesSubsystems = {};
 
+  /** @internal Ensures the storage-only advisory is logged at most once. */
+  static _storageOnlyWarningEmitted = false;
+
   constructor(private readonly storage: StoragePreferencesManager = getPreferencesManager()) {
     super();
+    if (!PreferencesManager._storageOnlyWarningEmitted) {
+      PreferencesManager._storageOnlyWarningEmitted = true;
+      // TODO(#152): Remove this notice once these preference categories are wired to runtime behavior.
+      console.info(
+        '[PreferencesManager] Note: colorDefaults, exportDefaults, and several generalPrefs fields ' +
+          '(autoPlayOnLoad, showWelcome, defaultFps, etc.) are persisted but not yet consumed by ' +
+          'production code. See TODO(#152).',
+      );
+    }
   }
 
   /**
@@ -499,4 +525,6 @@ export function getCorePreferencesManager(): PreferencesManager {
 /** Test helper: reset the singleton between tests. */
 export function resetCorePreferencesManagerForTests(): void {
   sharedCorePreferencesManager = null;
+  // Also reset the one-time storage-only warning so tests can verify it independently.
+  PreferencesManager._storageOnlyWarningEmitted = false;
 }

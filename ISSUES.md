@@ -2942,6 +2942,124 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Mu-compatible source-management scripts can appear to succeed while the real viewer/session media stays unchanged.
   - This is more severe than a missing feature flag because follow-up compat queries then read from the shadow registry and reinforce the false impression that the script really modified the live session.
 
+### 240. Mu compat `displayFeedbackQueue()` never drains queued messages after the first one
+
+- Severity: Medium
+- Area: Mu compatibility / HUD-feedback scripting
+- Evidence:
+  - `displayFeedbackQueue(...)` pushes each entry into `feedbackQueue`, but it only displays immediately when `_currentFeedback === null` and then removes just that first item in [src/compat/MuExtraCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuExtraCommands.ts#L92) through [src/compat/MuExtraCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuExtraCommands.ts#L103).
+  - `displayFeedback(...)` clears `_currentFeedback` after a timeout, but that timeout handler only sets `_currentFeedback = null`; it never dequeues and displays the next message in [src/compat/MuExtraCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuExtraCommands.ts#L69) through [src/compat/MuExtraCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuExtraCommands.ts#L86).
+  - There is no other queue-drain path in `MuExtraCommands`; production source search finds no method that consumes `feedbackQueue` after the first display.
+  - The compat tests only assert that `displayFeedbackQueue()` "does not throw" in [src/compat/__tests__/MuCommands.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuCommands.test.ts#L519), so the queued-display behavior itself is unverified.
+- Impact:
+  - A Mu-compatible script can enqueue several feedback messages and only the first one will ever be shown.
+  - That makes queued HUD/toast flows unreliable in automation because later messages are silently stranded in the internal queue.
+
+### 241. Mu compat `bindRegex()` is effectively dead because dispatch never evaluates regex bindings
+
+- Severity: Medium
+- Area: Mu compatibility / event binding
+- Evidence:
+  - `bindRegex(...)` stores regex handlers under sentinel keys like `__regex__pattern` and explicitly assumes "dispatch handles regex matching" in [src/compat/MuEventBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEventBridge.ts#L48) through [src/compat/MuEventBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEventBridge.ts#L62).
+  - `ModeManager.dispatchEvent(...)` never iterates bindings or checks regex sentinels; it only performs exact `bindings.get(event.name)` lookups for override tables, event tables, and global tables in [src/compat/ModeManager.ts](/Users/lifeart/Repos/openrv-web/src/compat/ModeManager.ts#L185) through [src/compat/ModeManager.ts](/Users/lifeart/Repos/openrv-web/src/compat/ModeManager.ts#L235).
+  - Production source search finds no alternate regex-dispatch path and no non-test use of the sentinel `__regex__` keys outside [src/compat/MuEventBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEventBridge.ts#L56).
+  - There are no compat tests covering `bindRegex()` or `unbindRegex()`.
+- Impact:
+  - Mu-compatible scripts that rely on regex event bindings can register successfully and still never receive matching events.
+  - This is a silent logic break because the API surface exists and accepts the binding, but dispatch cannot reach it.
+
+### 242. Mu compat `bind()` and `unbind()` ignore `modeName`, so mode-scoped handlers become always-active table bindings
+
+- Severity: Medium
+- Area: Mu compatibility / mode system
+- Evidence:
+  - `MuEventBridge.bind(...)` and `unbind(...)` ignore the `modeName` argument entirely and forward only `tableName` into `ModeManager.bind(...)` / `unbind(...)` in [src/compat/MuEventBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEventBridge.ts#L35) through [src/compat/MuEventBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEventBridge.ts#L68).
+  - `ModeManager.bind(...)` creates or reuses plain event-table-stack entries, not minor-mode global/override tables, in [src/compat/ModeManager.ts](/Users/lifeart/Repos/openrv-web/src/compat/ModeManager.ts#L156) through [src/compat/ModeManager.ts](/Users/lifeart/Repos/openrv-web/src/compat/ModeManager.ts#L170).
+  - The event table stack is dispatched independently of mode activation in [src/compat/ModeManager.ts](/Users/lifeart/Repos/openrv-web/src/compat/ModeManager.ts#L200) through [src/compat/ModeManager.ts](/Users/lifeart/Repos/openrv-web/src/compat/ModeManager.ts#L219).
+  - The bridge tests confirm that `bridge.bind('mode', 'table', ...)` handlers fire immediately via `sendInternalEvent(...)` without any mode definition or activation in [src/compat/__tests__/MuEventBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuEventBridge.test.ts#L341) through [src/compat/__tests__/MuEventBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuEventBridge.test.ts#L349).
+- Impact:
+  - Mu-compatible code cannot rely on `modeName` to scope handlers to active/inactive modes the way the API signature suggests.
+  - That changes event precedence and lifecycle semantics, because handlers that should be gated by mode activation are instead effectively live as soon as they are bound.
+
+### 243. Mu compat progressive-loading state is disconnected from real media loading
+
+- Severity: Medium
+- Area: Mu compatibility / loading-progress scripting
+- Evidence:
+  - `MuUtilsBridge` exposes `loadTotal()`, `loadCount()`, `progressiveSourceLoading()`, and `waitForProgressiveLoading()` entirely from private fields `_loadTotal`, `_loadCount`, and `_progressiveSourceLoading` in [src/compat/MuUtilsBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuUtilsBridge.ts#L21) through [src/compat/MuUtilsBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuUtilsBridge.ts#L272).
+  - Those counters are only mutated by the bridge’s own helper paths `startPreloadingMedia(...)` and `setLoadCounters(...)` in [src/compat/MuUtilsBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuUtilsBridge.ts#L277) through [src/compat/MuUtilsBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuUtilsBridge.ts#L293).
+  - Production source search finds no non-test caller of `startPreloadingMedia(...)` or `setLoadCounters(...)`.
+  - The compat tests seed those counters manually with `setLoadCounters(...)` and only verify local readback / immediate resolution in [src/compat/__tests__/MuEventBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuEventBridge.test.ts#L604) through [src/compat/__tests__/MuEventBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuEventBridge.test.ts#L620).
+- Impact:
+  - Mu-compatible scripts can query loading progress or wait for progressive loading and get answers based on synthetic bridge-local counters instead of actual OpenRV media activity.
+  - In practice that means `waitForProgressiveLoading()` can resolve too early, or never become meaningful at all, unless some external caller manually keeps the counters in sync.
+
+### 244. Mu compat remote contact-name and permission settings are local-only metadata that never reach the wire
+
+- Severity: Medium
+- Area: Mu compatibility / remote networking
+- Evidence:
+  - `MuNetworkBridge` stores `localContactName` and `defaultPermission` only as private fields with plain getters/setters in [src/compat/MuNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuNetworkBridge.ts#L17) through [src/compat/MuNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuNetworkBridge.ts#L24) and [src/compat/MuNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuNetworkBridge.ts#L217) through [src/compat/MuNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuNetworkBridge.ts#L266).
+  - `remoteConnect(...)` does not transmit either field; it only opens a raw WebSocket and stores the caller-supplied `name`, `host`, and `port` in local `connectionInfo` in [src/compat/MuNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuNetworkBridge.ts#L73) through [src/compat/MuNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuNetworkBridge.ts#L113).
+  - `remoteSendMessage(...)`, `remoteSendEvent(...)`, and `remoteSendDataEvent(...)` also omit both `localContactName` and `defaultPermission` from their payloads in [src/compat/MuNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuNetworkBridge.ts#L132) through [src/compat/MuNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuNetworkBridge.ts#L190).
+  - The compat tests only validate local readback of those settings in [src/compat/__tests__/MuEventBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuEventBridge.test.ts#L647) through [src/compat/__tests__/MuEventBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuEventBridge.test.ts#L668).
+- Impact:
+  - Mu-compatible scripts can set a remote contact name or default permission and then get a successful local readback even though remote peers never see or enforce either value.
+  - That makes the remote-networking bridge misleading for automation because identity/permission controls look mutable but are effectively inert outside the local bridge object.
+
+### 245. Mu eval/image-query commands are effectively unwired because production never feeds render or view state into `MuEvalBridge`
+
+- Severity: Medium
+- Area: Mu compatibility / image-query scripting
+- Evidence:
+  - `MuEvalBridge` depends on external callers to seed both live view state via `setViewTransform(...)` and the current rendered-image list via `setRenderedImages(...)` in [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L82) through [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L95).
+  - Commands like `renderedImages()`, `imagesAtPixel(...)`, `imageGeometry(...)`, and `eventToImageSpace(...)` all read from those private caches in [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L221) through [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L333).
+  - Production source search finds no non-test caller of `setViewTransform(...)` or `setRenderedImages(...)`.
+  - `registerMuCompat()` only wires `window.rv.commands` and `window.rv.extra_commands`, not an eval bridge that the app keeps synchronized in [src/compat/index.ts](/Users/lifeart/Repos/openrv-web/src/compat/index.ts#L42) through [src/compat/index.ts](/Users/lifeart/Repos/openrv-web/src/compat/index.ts#L53).
+- Impact:
+  - Mu-compatible image-query commands can legitimately exist in code while returning empty/default answers in the shipped app, because no live renderer or viewport state reaches the bridge.
+  - That makes rendered-image hit testing and image-geometry scripting unreliable by default rather than merely approximate.
+
+### 246. Mu compat batched `addSourceVerbose()` returns source names that do not match the records created at commit time
+
+- Severity: Medium
+- Area: Mu compatibility / source management
+- Evidence:
+  - In batch mode, `addSourceVerbose(...)` enqueues the source and returns `this._generateSourceName()` immediately instead of creating the record in [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L237) through [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L244).
+  - `addSourceEnd()` later commits that same queued item by calling `_createSourceRecord(...)`, which calls `_generateSourceName()` again and therefore advances the counter a second time in [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L279) through [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L287) and [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L773).
+  - That means the name returned during batching is not the name of the committed source record unless the counter is specially compensated, which the implementation never does.
+  - The existing batch test only asserts that `addSourceVerbose` returns a string during batch mode and never checks that the returned name resolves after `addSourceEnd()` in [src/compat/__tests__/MuSourceBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuSourceBridge.test.ts#L174).
+- Impact:
+  - Mu-compatible scripts can store the returned source name from batched verbose adds and then fail to look that source up after the batch commits.
+  - This breaks the main reason to use the verbose variant in batch workflows, because the bridge hands back an identifier that does not actually name the created source.
+
+### 247. Mu node-view history can get stuck repeating the same node when navigating back then forward
+
+- Severity: Medium
+- Area: Mu compatibility / node-view navigation
+- Evidence:
+  - `setViewNode(...)` stores prior view nodes in `_viewHistory` and leaves the currently active node outside the history array in [src/compat/MuNodeBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuNodeBridge.ts#L291) through [src/compat/MuNodeBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuNodeBridge.ts#L308).
+  - `previousViewNode()` then appends the current view node into `_viewHistory` when `_viewHistoryIndex === _viewHistory.length - 1`, but it does not advance the index before reading the previous entry in [src/compat/MuNodeBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuNodeBridge.ts#L321) through [src/compat/MuNodeBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuNodeBridge.ts#L337).
+  - With the sequence `setViewNode('source1') -> setViewNode('color1') -> setViewNode('seq1')`, history becomes `[source1, color1]` and current is `seq1`; calling `previousViewNode()` pushes `seq1` to history but returns `color1`, leaving `_viewHistoryIndex` at `0`.
+  - A subsequent `nextViewNode()` increments the index back to `1` and returns `history[1]`, which is still `color1`, not `seq1`, per the implementation in [src/compat/MuNodeBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuNodeBridge.ts#L348) through [src/compat/MuNodeBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuNodeBridge.ts#L359).
+  - The existing test only checks that `nextViewNode()` returns a non-empty string after a back-step and never verifies that it returns the actual forward successor in [src/compat/__tests__/MuNodeBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuNodeBridge.test.ts#L293).
+- Impact:
+  - Mu-compatible scripts using previous/next view navigation can fail to return to the node they just backed out of.
+  - That makes view-history traversal logically inconsistent and can strand automation on repeated intermediate nodes instead of moving through the actual navigation stack.
+
+### 248. Mu compat `newImageSource()` can silently replace an existing source with the same name
+
+- Severity: Medium
+- Area: Mu compatibility / in-memory source management
+- Evidence:
+  - `newImageSource(...)` validates only that `name` is non-empty and dimensions are positive; it never checks whether `_sources` or `_imageSources` already contain that name in [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L479) through [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L518).
+  - After creating an auto-named record, it deletes the temporary entry and unconditionally writes `this._sources.set(name, record)` in [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L506) through [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L508).
+  - It then unconditionally overwrites any prior in-memory pixel store with `this._imageSources.set(name, ...)` in [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L510) through [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L516).
+  - The existing tests cover creation and validation errors, but not duplicate-name collisions.
+- Impact:
+  - Mu-compatible scripts can accidentally destroy or replace a previously created source just by reusing its name.
+  - Because the overwrite is silent, later source and pixel queries can appear to “work” while actually pointing at a different in-memory image than the script intended.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

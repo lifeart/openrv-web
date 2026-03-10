@@ -1248,3 +1248,13 @@
 - **Regression Tests**: CPRF-FPS-011 (export includes prefs), CPRF-FPS-012 (import restores prefs), CPRF-FPS-013 (import null resets to defaults), CPRF-FPS-014 (resetAll emits event), CPRF-FPS-015 (full round-trip), FPS-130 (live state updates on event), FPS-131 (stateChanged emitted), FPS-132 (DOM styles updated), FPS-133 (subscription cleaned up on dispose).
 - **Verification**: All 130 tests pass (84 PreferencesManager + 46 FPSIndicator), TypeScript clean.
 - **Files Changed**: `src/core/PreferencesManager.ts`, `src/ui/components/FPSIndicator.ts`, `src/core/PreferencesManager.test.ts`, `src/ui/components/FPSIndicator.test.ts`
+
+## Issue #152: Large parts of the unified preferences model are storage-only and never affect runtime behavior
+
+- **Severity**: Medium
+- **Area**: Preferences / dead user configuration
+- **Root Cause**: `ColorDefaults`, `ExportDefaults`, and most `GeneralPrefs` fields (`defaultFps`, `autoPlayOnLoad`, `showWelcome`) are persisted, exported, and imported by `PreferencesManager`, but no production code reads `getColorDefaults()` or `getExportDefaults()`, and the unused `GeneralPrefs` fields have no runtime consumers. Only `userName` is actually used (by NotePanel and NetworkControl).
+- **Fix**: Added TODO(#152) JSDoc to `ColorDefaults` and `ExportDefaults` interfaces, and per-field annotations on unused `GeneralPrefs` fields, documenting each as storage-only with no production consumer. Added one-time `console.info` in constructor (gated by static flag) referencing TODO(#152). No API changes — fields preserved for future wiring.
+- **Regression Tests**: CPRF-152-001 (console.info emitted on first construction), CPRF-152-002 (emitted only once across instances), CPRF-152-003 (colorDefaults get/set/export/import still functional), CPRF-152-004 (exportDefaults still functional), CPRF-152-005 (unused generalPrefs fields still functional).
+- **Verification**: All 89 PreferencesManager tests pass, TypeScript clean.
+- **Files Changed**: `src/core/PreferencesManager.ts`, `src/core/PreferencesManager.test.ts`
