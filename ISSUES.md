@@ -496,17 +496,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - On a fresh state, pressing the advertised shortcut can change internal state without making the control visibly active or changing output.
   - That makes the shortcut feel broken until the user first opens the panel and manually picks a non-`off` operator.
 
-### 42. The Snapshot panel tells users to create snapshots but does not offer any create action on that surface
-
-- Severity: Medium
-- Area: Snapshot UI, empty-state usefulness
-- Evidence:
-  - The Snapshot panel toolbar contains only search and filter controls in [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L126), and the footer only offers `Clear All` in [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L183).
-  - Its empty state tells users `Create a snapshot to save your session state` in [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L253).
-  - The actual create action exists only as `snapshot.create` in keyboard/persistence wiring in [src/services/KeyboardActionMap.ts](/Users/lifeart/Repos/openrv-web/src/services/KeyboardActionMap.ts#L631) and [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L148).
-- Impact:
-  - The panel’s empty state sends the user toward an action that is not available anywhere in that panel.
-  - This makes the snapshot-management surface much less self-explanatory than it looks, especially for users who are exploring the UI rather than memorizing shortcuts.
 
 ### 43. The volume popout is too narrow to cleanly fit both the slider and the audio-scrub toggle
 
@@ -1193,18 +1182,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - The context menu presents keyboard affordances for split and duplicate that users cannot actually trigger from the keyboard.
   - That makes the visual timeline editor feel more capable than it is, then fails exactly when an editor tries to use it efficiently.
-
-### 100. Snapshot panel hides load failures behind a blank or stale panel state
-
-- Severity: Medium
-- Area: Snapshot panel, error handling
-- Evidence:
-  - Opening the panel in [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L605) only shows the container and starts `loadSnapshots()`.
-  - `loadSnapshots()` catches snapshot listing failures and only logs `Failed to load snapshots` to the console in [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L225), with no alert, inline error, or retry UI.
-  - The list is only re-rendered on successful load in [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L227), so a failed fetch can leave the panel blank on first open or showing stale results from an earlier successful load.
-- Impact:
-  - If snapshot storage is unavailable or listing fails, users get a panel that looks empty or out-of-date rather than a clear failure state.
-  - That makes snapshot problems look like “no snapshots exist” instead of “the panel failed to load them.”
 
 ### 101. The floating Info Panel is mostly unwired and can only show cursor color reliably
 

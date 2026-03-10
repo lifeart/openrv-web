@@ -1577,3 +1577,13 @@
 - **Regression Tests**: DCCFIX-040 (pen stroke emits), DCCFIX-041 (text emits), DCCFIX-042 (shape emits), DCCFIX-043 (no emission after dispose), DCCFIX-044 (backward compat without paintEngine).
 - **Verification**: All 22,659 tests pass, TypeScript clean.
 - **Files Changed**: `src/AppDCCWiring.ts`, `src/App.ts`, `src/AppWiringFixes.test.ts`
+
+## Issue #185: DCC `loadMedia` failures are never reported back to the requesting tool
+
+- **Severity**: Medium
+- **Area**: DCC integration / error handling
+- **Root Cause**: `loadMedia` catch blocks only used `console.error`. The DCC protocol had an `error` message type but no production code sent it for load failures.
+- **Fix**: Added `sendError(code, message, id?)` convenience method to `DCCBridge`. Both video and image load catch blocks now call `dccBridge.sendError('LOAD_MEDIA_FAILED', ...)` with file path, error details, and request ID for correlation.
+- **Regression Tests**: DCCFIX-050 (video error sent), DCCFIX-051 (image error sent), DCCFIX-052 (success no error), DCCFIX-053/054 (error messages include file path).
+- **Verification**: All 22,664 tests pass, TypeScript clean.
+- **Files Changed**: `src/integrations/DCCBridge.ts`, `src/AppDCCWiring.ts`, `src/AppWiringFixes.test.ts`
