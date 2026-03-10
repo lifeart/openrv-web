@@ -1906,3 +1906,13 @@
 - **Regression Tests**: Updated rejection tests to decode tests for 1ch and 5ch. Added grayscale pixel verification, luminance+alpha pixel verification, 0-samples rejection. 5 tests.
 - **Verification**: All 22,890 tests pass, TypeScript clean.
 - **Files Changed**: `src/formats/TIFFFloatDecoder.ts`, `src/formats/TIFFFloatDecoder.test.ts`
+
+## Issue #218: DPX files with non-RGB/A descriptors are silently reinterpreted as RGB
+
+- **Severity**: Medium
+- **Area**: Format support / DPX decoding
+- **Root Cause**: Two problems: (1) The `descriptor` value was not preserved in `DPXInfo` or decode metadata, making it impossible for consumers to know which descriptor was used. (2) ABGR (descriptor 52) data was passed through `toRGBA()` without channel swizzling, so channels were silently misinterpreted (A→R, B→G, G→B, R→A). Unsupported descriptors already threw `DecoderError` on this branch.
+- **Fix**: (A) Added `descriptor: number` field to `DPXInfo` interface, returned from `getDPXInfo()`, and included in `decodeDPX()` result metadata. (B) Added ABGR→RGBA in-place swizzle after `toRGBA()` when `descriptor === 52`, correctly remapping [A,B,G,R] → [R,G,B,A] for every pixel.
+- **Regression Tests**: 19 new tests — unsupported descriptor rejection (0, 100, 101, 102, 150) via both getDPXInfo and decodeDPX, no-silent-fallthrough guard, descriptor field in DPXInfo for all 4 supported descriptors (6, 50, 51, 52), descriptor in decode metadata (RGB, RGBA, Luma), ABGR swizzle verification at 8-bit and 16-bit, RGBA non-swizzle negative test, ABGR metadata check.
+- **Verification**: All 68 DPXDecoder tests pass, TypeScript clean.
+- **Files Changed**: `src/formats/DPXDecoder.ts`, `src/formats/DPXDecoder.test.ts`
