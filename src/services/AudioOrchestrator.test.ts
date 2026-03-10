@@ -8,7 +8,16 @@ import { AudioMixer } from '../audio/AudioMixer';
 
 type EventHandler = (...args: unknown[]) => void;
 
-function createMockSession() {
+interface MockSession {
+  currentFrame: number;
+  fps: number;
+  on: ReturnType<typeof vi.fn>;
+  off: ReturnType<typeof vi.fn>;
+  _emit(event: string, ...args: unknown[]): void;
+  _handlers: Map<string, EventHandler[]>;
+}
+
+function createMockSession(): MockSession {
   const handlers = new Map<string, EventHandler[]>();
   return {
     currentFrame: 0,
@@ -49,12 +58,17 @@ function createMockAudioMixer() {
   } as unknown as AudioMixer;
 }
 
-function createDeps(overrides?: Partial<AudioOrchestratorDeps>) {
+interface MockDeps {
+  session: MockSession;
+  audioMixer: AudioMixer;
+}
+
+function createDeps(overrides?: Partial<AudioOrchestratorDeps>): MockDeps {
   return {
     session: createMockSession(),
     audioMixer: createMockAudioMixer(),
     ...overrides,
-  };
+  } as MockDeps;
 }
 
 // ---------------------------------------------------------------------------
@@ -62,7 +76,7 @@ function createDeps(overrides?: Partial<AudioOrchestratorDeps>) {
 // ---------------------------------------------------------------------------
 
 describe('AudioOrchestrator', () => {
-  let deps: ReturnType<typeof createDeps>;
+  let deps: MockDeps;
   let orchestrator: AudioOrchestrator;
 
   beforeEach(() => {
@@ -482,6 +496,99 @@ describe('AudioOrchestrator', () => {
 
       fetchSpy.mockRestore();
       warnSpy.mockRestore();
+    });
+
+    it('AO-031: sourceLoaded resumes decode after sessionAudioActive reverts to false', () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 404 }));
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      orchestrator.setSessionAudioActive(true);
+      orchestrator.bindEvents();
+      orchestrator.setupLazyInit();
+      document.dispatchEvent(new Event('click'));
+
+      const source: AudioOrchestratorSource = {
+        type: 'video',
+        name: 'test.mp4',
+        url: 'http://example.com/test.mp4',
+      };
+
+      // While active — should skip
+      deps.session._emit('sourceLoaded', source);
+      expect(fetchSpy).not.toHaveBeenCalled();
+
+      // Revert to inactive — decode should resume
+      orchestrator.setSessionAudioActive(false);
+      deps.session._emit('sourceLoaded', source);
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+      fetchSpy.mockRestore();
+      warnSpy.mockRestore();
+    });
+
+    it('AO-032: no warning fires when sessionAudioActive is false', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 404 }));
+
+      orchestrator.setSessionAudioActive(false);
+      orchestrator.bindEvents();
+      orchestrator.setupLazyInit();
+      document.dispatchEvent(new Event('click'));
+
+      const source: AudioOrchestratorSource = {
+        type: 'video',
+        name: 'test.mp4',
+        url: 'http://example.com/test.mp4',
+      };
+
+      deps.session._emit('sourceLoaded', source);
+      deps.session._emit('sourceLoaded', source);
+
+      const dualPipelineWarnings = warnSpy.mock.calls.filter(
+        (call) => typeof call[0] === 'string' && call[0].includes('Dual audio pipeline'),
+      );
+      expect(dualPipelineWarnings).toHaveLength(0);
+
+      fetchSpy.mockRestore();
+      warnSpy.mockRestore();
+    });
+
+    it('AO-033: sourceLoaded skips video source with empty URL and no element', () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+      orchestrator.setSessionAudioActive(false);
+      orchestrator.bindEvents();
+      orchestrator.setupLazyInit();
+      document.dispatchEvent(new Event('click'));
+
+      const source: AudioOrchestratorSource = {
+        type: 'video',
+        name: 'test.mp4',
+        url: '',
+      };
+
+      deps.session._emit('sourceLoaded', source);
+
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(deps.audioMixer.addTrack).not.toHaveBeenCalled();
+
+      fetchSpy.mockRestore();
+    });
+
+    it('AO-034: playbackChanged still works when sessionAudioActive is true', () => {
+      orchestrator.setSessionAudioActive(true);
+      orchestrator.bindEvents();
+      orchestrator.setupLazyInit();
+      document.dispatchEvent(new Event('click'));
+
+      deps.session.currentFrame = 48;
+      deps.session.fps = 24;
+
+      deps.session._emit('playbackChanged', true);
+
+      // playbackChanged is NOT guarded by sessionAudioActive —
+      // mixer play/stop must still work for any pre-existing tracks
+      expect(deps.audioMixer.play).toHaveBeenCalledWith(2);
     });
   });
 

@@ -249,3 +249,13 @@
 - **Regression Tests**: EP-HTML-MSG-001 through EP-HTML-MSG-005 (HTML contains handlers for all sync types, color pipeline warning, no silent drops), EP-SYNC-001/002 (event forwarding), EP-ISO-001/002 (session isolation), EP-LIFE-001 through EP-LIFE-003 (window lifecycle), EP-EDGE-001 through EP-EDGE-011 (edge cases: pre-init calls, empty/partial fields, rapid sequences, unknown messages, double dispose), EP-HTML-BEH-001 through EP-HTML-BEH-004 (display behavior verification).
 - **Verification**: All 53 ExternalPresentation tests pass, TypeScript clean.
 - **Files Changed**: `src/ui/components/ExternalPresentation.ts`, `src/ui/components/ExternalPresentation.test.ts`
+
+## Issue #30: The app still wires a legacy `AudioMixer` pipeline alongside `SessionPlayback`'s `AudioCoordinator`
+
+- **Severity**: High
+- **Area**: Audio architecture, playback wiring
+- **Root Cause**: `AudioOrchestrator` (legacy) and `SessionPlayback`'s `AudioCoordinator` (modern) both active simultaneously. `AudioOrchestrator.onSourceLoaded()` fetched/decoded video audio independently, causing double decoding. Volume/mute state could diverge between the two paths.
+- **Fix**: Added `sessionAudioActive` dependency to `AudioOrchestrator` (supports boolean or function for lazy evaluation). When session audio is active, `onSourceLoaded()` skips fetch/decode entirely. Added `console.warn` (fires once) when dual-pipeline condition detected. Added `@deprecated` JSDoc and `TODO(audio-cleanup)` markers. App.ts passes `sessionAudioActive: () => this.session.audioPlaybackManager?.isUsingWebAudio ?? false`.
+- **Regression Tests**: AO-020 through AO-034 — `isSessionAudioActive` default/boolean/function modes, `setSessionAudioActive` runtime updates, decode skip when session audio active, normal decode when inactive, dual-pipeline warning fires once, dynamic function transitions, deprecation markers, volume/mute interface contract, decode resume after deactivation, negative warning path, empty URL edge case, playback handler independence.
+- **Verification**: All 35 AudioOrchestrator tests pass, TypeScript clean.
+- **Files Changed**: `src/services/AudioOrchestrator.ts`, `src/App.ts`, `src/services/AudioOrchestrator.test.ts`

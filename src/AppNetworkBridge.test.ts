@@ -56,6 +56,7 @@ class MockNetworkSyncManager extends EventEmitter {
   isConnected = true;
   sendPlaybackSync = vi.fn();
   sendFrameSync = vi.fn();
+  sendViewSync = vi.fn();
   sendAnnotationSync = vi.fn();
   sendColorSync = vi.fn();
   sendNoteSync = vi.fn();
@@ -134,6 +135,11 @@ function createMockNetworkControl() {
 function createMockViewer() {
   return {
     setZoom: vi.fn(),
+    setPan: vi.fn(),
+    getPan: vi.fn(() => ({ x: 0, y: 0 })),
+    getChannelMode: vi.fn(() => 'rgb'),
+    setChannelMode: vi.fn(),
+    setOnViewChanged: vi.fn(),
     getColorAdjustments: vi.fn(() => ({
       exposure: 0,
       gamma: 1,
@@ -1367,6 +1373,148 @@ describe('AppNetworkBridge', () => {
 
       const allNotes = ctx._session.noteManager.toSerializable();
       expect(allNotes[0]!.text).toBe('synced note');
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // View sync
+  // -----------------------------------------------------------------------
+  describe('view sync', () => {
+    it('ANB-130: incoming syncView applies zoom, pan, and channelMode', () => {
+      bridge.setup();
+
+      ctx._networkSyncManager.emit('syncView', {
+        panX: 100,
+        panY: -50,
+        zoom: 2.5,
+        channelMode: 'red',
+      });
+
+      expect(ctx._viewer.setZoom).toHaveBeenCalledWith(2.5);
+      expect(ctx._viewer.setPan).toHaveBeenCalledWith(100, -50);
+      expect(ctx._viewer.setChannelMode).toHaveBeenCalledWith('red');
+    });
+
+    it('ANB-131: incoming syncView wraps changes in beginApplyRemote/endApplyRemote', () => {
+      bridge.setup();
+
+      const sm = ctx._networkSyncManager.getSyncStateManager();
+
+      ctx._networkSyncManager.emit('syncView', {
+        panX: 0,
+        panY: 0,
+        zoom: 1,
+        channelMode: 'rgb',
+      });
+
+      expect(sm.beginApplyRemote).toHaveBeenCalled();
+      expect(sm.endApplyRemote).toHaveBeenCalled();
+    });
+
+    it('ANB-132: local view change triggers sendViewSync', () => {
+      bridge.setup();
+
+      // Capture the callback registered via setOnViewChanged
+      const viewChangedCallback = ctx._viewer.setOnViewChanged.mock.calls[0]?.[0];
+      expect(viewChangedCallback).toBeDefined();
+
+      // Simulate a local view change
+      viewChangedCallback(10, -20, 3.0);
+
+      expect(ctx._networkSyncManager.sendViewSync).toHaveBeenCalledTimes(1);
+      expect(ctx._networkSyncManager.sendViewSync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          panX: 10,
+          panY: -20,
+          zoom: 3.0,
+          channelMode: 'rgb',
+        }),
+      );
+    });
+
+    it('ANB-133: outgoing view sync skipped during remote apply', () => {
+      bridge.setup();
+
+      const sm = ctx._networkSyncManager.getSyncStateManager();
+      sm.isApplyingRemoteState = true;
+
+      const viewChangedCallback = ctx._viewer.setOnViewChanged.mock.calls[0]?.[0];
+      viewChangedCallback(10, -20, 3.0);
+
+      expect(ctx._networkSyncManager.sendViewSync).not.toHaveBeenCalled();
+
+      sm.isApplyingRemoteState = false;
+    });
+
+    it('ANB-134: outgoing view sync skipped when not connected', () => {
+      bridge.setup();
+
+      ctx._networkSyncManager.isConnected = false;
+
+      const viewChangedCallback = ctx._viewer.setOnViewChanged.mock.calls[0]?.[0];
+      viewChangedCallback(10, -20, 3.0);
+
+      expect(ctx._networkSyncManager.sendViewSync).not.toHaveBeenCalled();
+
+      ctx._networkSyncManager.isConnected = true;
+    });
+
+    it('ANB-135: dispose clears the view changed callback', () => {
+      bridge.setup();
+      bridge.dispose();
+
+      // setOnViewChanged should have been called twice: once during setup, once with null during dispose
+      expect(ctx._viewer.setOnViewChanged).toHaveBeenCalledTimes(2);
+      expect(ctx._viewer.setOnViewChanged).toHaveBeenLastCalledWith(null);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Throttled view sync
+  // -----------------------------------------------------------------------
+  describe('throttled view sync', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('ANB-140: rapid view changes are throttled', () => {
+      bridge.setup();
+
+      const viewChangedCallback = ctx._viewer.setOnViewChanged.mock.calls[0]?.[0];
+
+      // First call fires immediately (leading edge)
+      viewChangedCallback(10, -20, 2.0);
+      expect(ctx._networkSyncManager.sendViewSync).toHaveBeenCalledTimes(1);
+
+      // Second call within interval is batched
+      viewChangedCallback(20, -40, 3.0);
+      expect(ctx._networkSyncManager.sendViewSync).toHaveBeenCalledTimes(1);
+
+      // After interval, trailing fires
+      vi.advanceTimersByTime(100);
+      expect(ctx._networkSyncManager.sendViewSync).toHaveBeenCalledTimes(2);
+      expect(ctx._networkSyncManager.sendViewSync).toHaveBeenLastCalledWith(
+        expect.objectContaining({ panX: 20, panY: -40, zoom: 3.0 }),
+      );
+    });
+
+    it('ANB-141: dispose cancels pending throttled view sync', () => {
+      bridge.setup();
+
+      const viewChangedCallback = ctx._viewer.setOnViewChanged.mock.calls[0]?.[0];
+
+      viewChangedCallback(10, -20, 2.0);
+      viewChangedCallback(20, -40, 3.0);
+
+      bridge.dispose();
+      vi.advanceTimersByTime(200);
+
+      // Only the leading call should have fired, not the trailing
+      expect(ctx._networkSyncManager.sendViewSync).toHaveBeenCalledTimes(1);
     });
   });
 });

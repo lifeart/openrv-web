@@ -1374,6 +1374,147 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Users opening the `?` overlay get a static wall of shortcuts, not the searchable/context-aware cheat sheet the component surface suggests.
   - That reduces the usefulness of the app’s fastest shortcut-discovery path and contributes to drift between the two help UIs.
 
+### 114. Tone Mapping can be “enabled” in the dropdown while still being functionally off
+
+- Severity: Medium
+- Area: Color / tone mapping UI
+- Evidence:
+  - The dropdown exposes an `Enable Tone Mapping` checkbox in [src/ui/components/ToneMappingControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ToneMappingControl.ts#L152).
+  - That checkbox only flips `state.enabled` via `setEnabled(...)` in [src/ui/components/ToneMappingControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ToneMappingControl.ts#L680), and does not change the operator from the default `off`.
+  - The control button and the actual active-state logic both still treat tone mapping as off unless `enabled && operator !== 'off'` in [src/ui/components/ToneMappingControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ToneMappingControl.ts#L591) and [src/ui/components/ColorPipelineManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ColorPipelineManager.ts#L338).
+  - The test suite explicitly codifies this contradiction: `setEnabled(true)` with operator `off` still yields `isEnabled() === false` in [src/ui/components/ToneMappingControl.test.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ToneMappingControl.test.ts#L605).
+- Impact:
+  - A user can check `Enable Tone Mapping` and still get no tone-mapping effect, no active button state, and no obvious explanation.
+  - That makes the control internally self-contradictory and undermines trust in the Color tab.
+
+### 115. Typing a custom PAR value does not actually enable PAR correction
+
+- Severity: Medium
+- Area: View / pixel aspect ratio
+- Evidence:
+  - Choosing a PAR preset explicitly sets `state.enabled = true` in [src/ui/components/PARControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PARControl.ts#L281).
+  - Editing `Custom PAR` only updates `state.par` and `state.preset = 'custom'` in [src/ui/components/PARControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PARControl.ts#L184), but never enables correction.
+  - The control only shows active state and applies a non-trivial correction when `enabled && par != 1.0` in [src/ui/components/PARControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PARControl.ts#L337) and [src/utils/media/PixelAspectRatio.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/PixelAspectRatio.ts#L141).
+- Impact:
+  - Presets and manual entry for the same feature behave differently: presets apply immediately, but a typed custom PAR can look like a no-op until the user separately discovers the enable toggle.
+  - That makes the custom path feel broken and is especially confusing when the button label still says plain `PAR`.
+
+### 116. Volume slider disclosure is tied to the mute button, so keyboard/touch use mutates audio state just to reach the slider
+
+- Severity: Medium
+- Area: Header / audio controls
+- Evidence:
+  - The only visible volume affordance in the header is the mute button from [src/ui/components/VolumeControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/VolumeControl.ts#L47), mounted by [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L95) and [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L410).
+  - Hover expands the slider on desktop in [src/ui/components/VolumeControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/VolumeControl.ts#L152), but the click path on the mute button does two things at once: `toggleMute()` and `toggleSliderExpanded()` in [src/ui/components/VolumeControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/VolumeControl.ts#L68).
+  - The tests explicitly describe this as the mobile/touch/keyboard path, where clicking the mute button expands the slider in [src/ui/components/VolumeControl.test.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/VolumeControl.test.ts#L155).
+- Impact:
+  - Keyboard, touch, and any non-hover user has to mute audio first just to access the volume slider and scrub toggle.
+  - That turns basic volume adjustment into a state-changing side effect instead of a clean disclosure action.
+
+### 117. The OCIO button advertises the wrong shortcut
+
+- Severity: Low
+- Area: Color / shortcut discoverability
+- Evidence:
+  - The OCIO button title says `Toggle OCIO color management panel (Shift+O)` in [src/ui/components/OCIOControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/OCIOControl.ts#L98).
+  - The real shared key binding for `panel.ocio` is plain `O`, not `Shift+O`, in [src/utils/input/KeyBindings.ts](/Users/lifeart/Repos/openrv-web/src/utils/input/KeyBindings.ts#L231).
+  - The action map wires that binding directly to `controls.ocioControl.toggle()` in [src/services/KeyboardActionMap.ts](/Users/lifeart/Repos/openrv-web/src/services/KeyboardActionMap.ts#L445).
+- Impact:
+  - Users relying on the tooltip are taught the wrong shortcut for a high-traffic color-management panel.
+  - That is another UI-to-keymap drift point in the app’s shortcut system.
+
+### 118. `WipeControl` is a dead legacy UI widget with no production mount path
+
+- Severity: Low
+- Area: UI codebase / comparison tooling
+- Evidence:
+  - `WipeControl` is explicitly marked as a deprecated legacy widget kept for backward compatibility in [src/ui/components/WipeControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/WipeControl.ts#L17).
+  - Production compare UI now goes through `CompareControl` instead, which carries the shipped wipe/A-B entry point in [src/ui/components/CompareControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/CompareControl.ts#L86) and [src/services/tabContent/buildViewTab.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildViewTab.ts#L38).
+  - A repo-wide search shows no production `new WipeControl(...)` instantiation path outside tests.
+- Impact:
+  - The repo still carries a tested UI control surface that users can never actually reach in the shipped app.
+  - That increases maintenance noise and makes shortcut/help drift easier, because old wipe-specific UI behavior can diverge without affecting production until much later.
+
+### 119. Project save knows it is dropping active viewer state, but the save flow only logs that loss to the console
+
+- Severity: High
+- Area: Persistence / project save
+- Evidence:
+  - `SessionSerializer` explicitly tracks a long list of unsaved viewer-state gaps, including OCIO, display profile, gamut mapping, curves, tone mapping, ghost frames, stereo, blend mode, and channel isolation, in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L71).
+  - `SessionSerializer.toJSON(...)` detects active gaps and only emits a `console.warn(...)` about them in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L230).
+  - The real save entry point `AppPersistenceManager.saveProject()` just calls `SessionSerializer.toJSON(...)` and downloads the file; it never surfaces those warnings in the UI in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L240).
+  - The load path does surface warnings to the user via `showAlert(...)`, including serialization-gap warnings, in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L303) and [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L504).
+- Impact:
+  - Users can save a project believing the current review/color/view state is preserved, while the app already knows several active states will be lost.
+  - The warning arrives only after reload, which is too late for a save workflow that should let the user decide whether to continue, snapshot, or export another format first.
+
+### 120. Restored PAR and background-pattern state can disagree with the visible controls
+
+- Severity: Medium
+- Area: Persistence / UI state sync
+- Evidence:
+  - Project serialization saves both PAR and background-pattern state in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L288).
+  - Project load restores those states directly into the viewer in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L467).
+  - The production view wiring is one-way from controls to viewer for those features in [src/AppViewWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppViewWiring.ts#L192) and [src/AppViewWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppViewWiring.ts#L199).
+  - `AppPersistenceManager.syncControlsFromState(...)` updates many restored controls, but it has no PAR or background-pattern control inputs and no sync step for them in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L442).
+  - Both shipped controls do have explicit state setters, so this is a missing bridge rather than a missing control API: [src/ui/components/PARControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PARControl.ts#L409) and [src/ui/components/BackgroundPatternControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/BackgroundPatternControl.ts#L487).
+- Impact:
+  - After project load, snapshot restore, or auto-recovery, the viewer can be showing PAR correction or a background pattern while the visible controls still show their pre-load state.
+  - That makes the UI untrustworthy exactly when users are checking whether a restored session came back correctly.
+
+### 121. Opening a project imports its media on top of the current session instead of replacing the session
+
+- Severity: High
+- Area: Persistence / project open / recovery
+- Evidence:
+  - `HeaderBar` exposes this flow as `Open project` rather than an import/append action in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L238).
+  - `AppPersistenceManager.openProject()` calls `SessionSerializer.fromJSON(...)` without clearing the existing session first in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L282).
+  - `SessionSerializer.fromJSON(...)` simply loops the saved media and calls `session.loadImage(...)`, `session.loadVideo(...)`, or `session.loadFile(...)` in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L364).
+  - The runtime media service appends every loaded source via `_sources.push(source)` in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L210).
+  - The only “reset” helper in `SessionMedia` is `resetSourcesInternal(...)`, and it is explicitly test-only in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L190).
+- Impact:
+  - Loading a project, restoring a snapshot, or recovering an auto-save can leave the previous session’s media still present alongside the restored session’s media.
+  - That corrupts source indexing, compare setups, playlist assumptions, and any per-source notes/status workflows that depend on the restored session being a clean replacement.
+
+### 122. Saved current-source selection is serialized but never restored
+
+- Severity: Medium
+- Area: Persistence / playback restore
+- Evidence:
+  - Project save serializes `currentSourceIndex` as part of playback state in [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L1270).
+  - The project state schema also defines `currentSourceIndex` as a persisted field in [src/core/session/SessionState.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionState.ts#L63).
+  - `SessionSerializer.fromJSON(...)` restores playback by calling `session.setPlaybackState(migrated.playback)` in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L433).
+  - `Session.setPlaybackState(...)` applies fps, loop mode, playback mode, volume, mute, in/out, frame, and marks, but it never applies `currentSourceIndex` despite accepting it in the type in [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L1303).
+  - Meanwhile the media loader makes the most recently loaded source current by default in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L216).
+- Impact:
+  - Multi-source projects do not reopen on the source the user was actually reviewing when they saved.
+  - In practice the active source drifts to the last file loaded during restore, which is an especially bad failure mode for compare/QC notes tied to a specific source.
+
+### 123. Loading empty notes, version groups, or statuses does not clear the old session data
+
+- Severity: High
+- Area: Persistence / session-owned metadata restore
+- Evidence:
+  - `SessionSerializer.fromJSON(...)` only restores notes when `migrated.notes.length > 0`, only restores version groups when `migrated.versionGroups.length > 0`, and only restores statuses when `migrated.statuses.length > 0` in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L476).
+  - The underlying managers are designed to clear and replace their contents on restore in [src/core/session/NoteManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/NoteManager.ts#L247), [src/core/session/VersionManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/VersionManager.ts#L338), and [src/core/session/StatusManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/StatusManager.ts#L178).
+  - Because `fromJSON(...)` skips those calls for empty arrays, the previous in-memory data survives instead of being replaced by “empty.”
+- Impact:
+  - Opening a clean project after a reviewed session can leave old notes, version groups, or shot statuses attached to the new session.
+  - That is data contamination, not just stale UI, because the underlying managers keep reporting metadata that the newly loaded project does not contain.
+
+### 124. State-only or failed-media project loads skip playback-state restore entirely
+
+- Severity: Medium
+- Area: Persistence / load with missing media
+- Evidence:
+  - `SessionSerializer.fromJSON(...)` only calls `session.setPlaybackState(...)` when `loadedMedia > 0` in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L433).
+  - The same load flow can legitimately produce `loadedMedia === 0` for state-only projects, skipped blob reloads, sequence placeholders, or failed media loads in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L366).
+  - The project schema still persists playback settings like loop mode, playback mode, volume, mute, and audio scrub in [src/core/session/SessionState.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionState.ts#L63).
+  - The serializer tests even document that playback restoration currently depends on loading at least one source: “Must include a source so that `loadedMedia > 0` and `setPlaybackState` is called” in [src/core/session/SessionSerializer.test.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.test.ts#L1048).
+- Impact:
+  - If a project reopens without media, or the user skips reloading local files, the app silently drops persisted playback settings instead of restoring the parts that are still meaningful.
+  - That makes project recovery much less reliable for exactly the cases where users most need the saved state to survive partial media failure.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

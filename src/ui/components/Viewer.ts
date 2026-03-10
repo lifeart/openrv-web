@@ -2364,6 +2364,14 @@ export class Viewer {
     this.scheduleRender();
   }
 
+  /**
+   * Set a callback that fires when the view (pan/zoom) changes.
+   * Used by network sync to broadcast local view changes.
+   */
+  setOnViewChanged(callback: ((panX: number, panY: number, zoom: number) => void) | null): void {
+    this.transformManager.setOnViewChanged(callback);
+  }
+
   setColorAdjustments(adjustments: ColorAdjustments): void {
     this.colorPipeline.setColorAdjustments(adjustments);
     this.glRendererManager.setColorAdjustments(adjustments);

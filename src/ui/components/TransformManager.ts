@@ -72,6 +72,9 @@ export class TransformManager implements ManagerBase {
   // --- Callback for zoom change notifications ---
   private _onZoomChanged: ((zoom: number) => void) | null = null;
 
+  // --- Callback for view change notifications (pan/zoom) ---
+  private _onViewChanged: ((panX: number, panY: number, zoom: number) => void) | null = null;
+
   /**
    * Set the render callback. Called by the Viewer during construction so that
    * animation frames can request re-renders.
@@ -96,6 +99,18 @@ export class TransformManager implements ManagerBase {
     this._onZoomChanged = callback;
   }
 
+  /**
+   * Set a callback that fires when the view (pan/zoom) changes.
+   * Used by network sync to broadcast local view changes.
+   */
+  setOnViewChanged(callback: ((panX: number, panY: number, zoom: number) => void) | null): void {
+    this._onViewChanged = callback;
+  }
+
+  private notifyViewChanged(): void {
+    this._onViewChanged?.(this._panX, this._panY, this._zoom);
+  }
+
   private requestRender(): void {
     if (this._scheduleRender) {
       this._scheduleRender();
@@ -112,6 +127,7 @@ export class TransformManager implements ManagerBase {
 
   set panX(value: number) {
     this._panX = value;
+    this.notifyViewChanged();
   }
 
   get panY(): number {
@@ -120,6 +136,7 @@ export class TransformManager implements ManagerBase {
 
   set panY(value: number) {
     this._panY = value;
+    this.notifyViewChanged();
   }
 
   getPan(): { x: number; y: number } {
@@ -129,6 +146,7 @@ export class TransformManager implements ManagerBase {
   setPan(x: number, y: number): void {
     this._panX = x;
     this._panY = y;
+    this.notifyViewChanged();
   }
 
   // =========================================================================
@@ -141,6 +159,7 @@ export class TransformManager implements ManagerBase {
 
   set zoom(value: number) {
     this._zoom = value;
+    this.notifyViewChanged();
   }
 
   getZoom(): number {
@@ -154,6 +173,7 @@ export class TransformManager implements ManagerBase {
     this._panX = 0;
     this._panY = 0;
     this._onZoomChanged?.(level);
+    this.notifyViewChanged();
   }
 
   // =========================================================================
@@ -299,6 +319,7 @@ export class TransformManager implements ManagerBase {
       if (targetPanX !== undefined) this._panX = targetPanX;
       if (targetPanY !== undefined) this._panY = targetPanY;
       this._onZoomChanged?.(targetZoom);
+      this.notifyViewChanged();
       this.requestRender();
       return;
     }
@@ -315,6 +336,7 @@ export class TransformManager implements ManagerBase {
       this._panX = panXTarget;
       this._panY = panYTarget;
       this._onZoomChanged?.(targetZoom);
+      this.notifyViewChanged();
       this.requestRender();
       return;
     }
@@ -352,6 +374,7 @@ export class TransformManager implements ManagerBase {
         // Signal interaction end for quality tiering
         this._onInteractionEnd?.();
         this._onZoomChanged?.(this._zoomAnimationTargetZoom);
+        this.notifyViewChanged();
         this.requestRender();
       }
     };
@@ -413,5 +436,6 @@ export class TransformManager implements ManagerBase {
     this._onInteractionStart = null;
     this._onInteractionEnd = null;
     this._onZoomChanged = null;
+    this._onViewChanged = null;
   }
 }

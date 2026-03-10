@@ -20,6 +20,7 @@ import type {
   AnnotationSyncPayload,
   NoteSyncPayload,
   ColorSyncPayload,
+  ViewSyncPayload,
 } from './network/types';
 import {
   buildShareURL,
@@ -84,6 +85,7 @@ export class AppNetworkBridge {
   private incomingMediaTransfers = new Map<string, IncomingMediaTransfer>();
   private colorSyncThrottle: Throttled<[ColorSyncPayload]> | null = null;
   private frameSyncThrottle: Throttled<[number]> | null = null;
+  private viewSyncThrottle: Throttled<[ViewSyncPayload]> | null = null;
   private lastPlaybackSyncFrame = -1;
   private lastPlaybackSyncTime = 0;
 
@@ -498,6 +500,10 @@ export class AppNetworkBridge {
         sm.beginApplyRemote();
         try {
           viewer.setZoom(payload.zoom);
+          viewer.setPan(payload.panX, payload.panY);
+          if (payload.channelMode) {
+            viewer.setChannelMode(payload.channelMode as Parameters<typeof viewer.setChannelMode>[0]);
+          }
         } finally {
           sm.endApplyRemote();
         }
@@ -550,6 +556,22 @@ export class AppNetworkBridge {
         }),
       );
     }
+
+    // Wire outgoing view sync when local pan/zoom changes
+    this.viewSyncThrottle = createThrottle((payload: ViewSyncPayload) => {
+      networkSyncManager.sendViewSync(payload);
+    }, 100);
+
+    viewer.setOnViewChanged((panX: number, panY: number, zoom: number) => {
+      if (networkSyncManager.isConnected && !networkSyncManager.getSyncStateManager().isApplyingRemoteState) {
+        this.viewSyncThrottle!.call({
+          panX,
+          panY,
+          zoom,
+          channelMode: viewer.getChannelMode(),
+        });
+      }
+    });
 
     // Wire incoming annotation sync
     const paintEngine = this.ctx.paintEngine;
@@ -1101,6 +1123,9 @@ export class AppNetworkBridge {
     this.colorSyncThrottle = null;
     this.frameSyncThrottle?.cancel();
     this.frameSyncThrottle = null;
+    this.viewSyncThrottle?.cancel();
+    this.viewSyncThrottle = null;
+    this.ctx.viewer.setOnViewChanged(null);
     this.pendingStateByTransferId.clear();
     this.outgoingMediaTransfers.clear();
     this.incomingMediaTransfers.clear();
