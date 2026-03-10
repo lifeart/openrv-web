@@ -5018,6 +5018,19 @@ This file tracks findings from exploratory review and targeted validation runs.
   - An imported RV/GTO file can explicitly mark RVColor or RVDisplayColor inactive and still have its exposure, gamma, brightness, or out-of-range state applied on load.
   - That makes disabled grading/display-color nodes behave as if they were enabled, which is the opposite of what the serialized `active=0` contract says.
 
+### 421. RV/GTO settings restore ignores standalone RVColorCDL nodes and only reads embedded CDL components
+
+- Severity: Medium
+- Area: RV/GTO import / CDL restore coverage
+- Evidence:
+  - `parseCDL(...)` only reads CDL data from `RVColor` and `RVLinearize` protocol nodes in [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L323) through [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L367).
+  - The repo’s own serializer/exporter defines standalone `RVColorCDL` objects as a first-class GTO shape via `ColorSerializer.buildColorCDLObject(...)` in [src/core/session/serializers/ColorSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/serializers/ColorSerializer.ts#L581) through [src/core/session/serializers/ColorSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/serializers/ColorSerializer.ts#L604) and `SessionGTOExporter.buildColorCDLObject(...)` in [src/core/session/SessionGTOExporter.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGTOExporter.ts#L1082) through [src/core/session/SessionGTOExporter.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGTOExporter.ts#L1085).
+  - The graph loader also recognizes both `RVColorCDL` and `RVColorACESLogCDL` as real import protocols and parses their properties in [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L1987) through [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L2007).
+  - The live restore path does have a real `if (settings.cdl)` branch that would apply parsed CDL values through `context.getCDLControl().setCDL(...)` in [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L89) through [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L90).
+- Impact:
+  - RV/GTO files that express CDL as standalone `RVColorCDL` or `RVColorACESLogCDL` nodes can be recognized by the loader layer but still fail to restore grading through the live `settingsLoaded` path.
+  - That leaves CDL interchange narrower than the repo’s own serializer, exporter, and graph-loader contracts imply.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

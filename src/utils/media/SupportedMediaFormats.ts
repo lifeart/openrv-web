@@ -29,15 +29,12 @@ export const SUPPORTED_IMAGE_EXTENSIONS = [
   'jxl',
   'heic',
   'heif',
-  // RAW formats (preview extraction)
+  // RAW formats (TIFF-based preview extraction only)
   'cr2',
-  'cr3',
   'nef',
   'arw',
   'dng',
-  'raf',
   'orf',
-  'rw2',
   'pef',
   'srw',
 ] as const;
