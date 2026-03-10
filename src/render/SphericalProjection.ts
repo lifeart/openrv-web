@@ -367,6 +367,9 @@ export class SphericalProjection {
   private _dragStartYaw = 0;
   private _dragStartPitch = 0;
 
+  // Listeners notified when enabled state changes
+  private _enabledChangeListeners = new Set<(enabled: boolean) => void>();
+
   // ---------------------------------------------------------------------------
   // Enable / Disable
   // ---------------------------------------------------------------------------
@@ -378,15 +381,38 @@ export class SphericalProjection {
 
   /** Enable spherical projection mode. */
   enable(): void {
-    this._enabled = true;
+    if (!this._enabled) {
+      this._enabled = true;
+      this._notifyEnabledChange();
+    }
   }
 
   /** Disable spherical projection mode and reset view. */
   disable(): void {
-    this._enabled = false;
-    this._yaw = 0;
-    this._pitch = 0;
-    this._fov = DEFAULT_FOV;
+    if (this._enabled) {
+      this._enabled = false;
+      this._yaw = 0;
+      this._pitch = 0;
+      this._fov = DEFAULT_FOV;
+      this._notifyEnabledChange();
+    }
+  }
+
+  /**
+   * Register a listener for enabled-state changes.
+   * Returns an unsubscribe function.
+   */
+  onEnabledChange(listener: (enabled: boolean) => void): () => void {
+    this._enabledChangeListeners.add(listener);
+    return () => {
+      this._enabledChangeListeners.delete(listener);
+    };
+  }
+
+  private _notifyEnabledChange(): void {
+    for (const listener of this._enabledChangeListeners) {
+      listener(this._enabled);
+    }
   }
 
   // ---------------------------------------------------------------------------

@@ -142,6 +142,11 @@ export class MultiSourceLayoutManager extends EventEmitter<MultiSourceLayoutMana
     }
   }
 
+  /** Update a tile's source index. */
+  setTileSourceIndex(tileId: string, sourceIndex: number, label?: string): void {
+    this.store.setTileSourceIndex(tileId, sourceIndex, label);
+  }
+
   /** Set the active tile. */
   setActiveTile(tileId: string | null): void {
     this.store.setActiveTile(tileId);

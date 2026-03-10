@@ -113,6 +113,7 @@ export interface SessionEvents extends EventMap {
   sourceLoaded: MediaSource;
   sessionLoaded: void;
   durationChanged: number;
+  currentSourceChanged: number;
   inOutChanged: { inPoint: number; outPoint: number };
   loopModeChanged: LoopMode;
   playbackModeChanged: PlaybackMode;

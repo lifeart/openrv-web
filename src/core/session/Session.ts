@@ -393,6 +393,7 @@ export class Session extends EventEmitter<SessionEvents> {
     const mediaEvents = [
       'sourceLoaded',
       'durationChanged',
+      'currentSourceChanged',
       'unsupportedCodec',
       'representationChanged',
       'representationError',

@@ -73,24 +73,15 @@ export function buildQCTab(deps: BuildQCTabDeps): HTMLElement {
       viewerContainer.style.cursor = 'crosshair';
       const clickHandler = (e: MouseEvent) => {
         pendingEyedropperHandler = null;
-        const rect = viewerContainer.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
         const imageData = viewer.getImageData();
         if (imageData) {
-          const canvas = viewerContainer.querySelector('canvas');
-          if (canvas) {
-            const scaleX = imageData.width / canvas.clientWidth;
-            const scaleY = imageData.height / canvas.clientHeight;
-            const pixelX = Math.floor(x * scaleX);
-            const pixelY = Math.floor(y * scaleY);
-            if (pixelX >= 0 && pixelX < imageData.width && pixelY >= 0 && pixelY < imageData.height) {
-              const idx = (pixelY * imageData.width + pixelX) * 4;
-              const r = imageData.data[idx]!;
-              const g = imageData.data[idx + 1]!;
-              const b = imageData.data[idx + 2]!;
-              viewer.getHSLQualifier().pickColor(r, g, b);
-            }
+          const position = viewer.getPixelCoordinatesFromClient(e.clientX, e.clientY);
+          if (position && position.x >= 0 && position.x < imageData.width && position.y >= 0 && position.y < imageData.height) {
+            const idx = (position.y * imageData.width + position.x) * 4;
+            const r = imageData.data[idx]!;
+            const g = imageData.data[idx + 1]!;
+            const b = imageData.data[idx + 2]!;
+            viewer.getHSLQualifier().pickColor(r, g, b);
           }
         }
         registry.hslQualifierControl.deactivateEyedropper();

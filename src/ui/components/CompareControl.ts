@@ -581,9 +581,19 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     quadSection.style.cssText = 'display: flex; flex-direction: column; gap: 2px;';
 
     const quadHeader = document.createElement('div');
-    quadHeader.textContent = 'Quad View';
+    quadHeader.dataset.testid = 'quad-view-header';
     quadHeader.style.cssText =
-      'color: var(--text-secondary); font-size: 10px; text-transform: uppercase; padding: 4px 6px;';
+      'color: var(--text-secondary); font-size: 10px; text-transform: uppercase; padding: 4px 6px; display: flex; align-items: center; gap: 6px;';
+    const quadLabel = document.createElement('span');
+    quadLabel.textContent = 'Quad View';
+    quadHeader.appendChild(quadLabel);
+    const quadPreviewBadge = document.createElement('span');
+    quadPreviewBadge.dataset.testid = 'quad-view-preview-badge';
+    quadPreviewBadge.textContent = 'preview';
+    quadPreviewBadge.title = 'Quad View is not yet connected to the viewer rendering pipeline';
+    quadPreviewBadge.style.cssText =
+      'font-size: 9px; text-transform: lowercase; background: var(--bg-hover, #333); color: var(--text-tertiary, #999); padding: 1px 4px; border-radius: 3px;';
+    quadHeader.appendChild(quadPreviewBadge);
     quadSection.appendChild(quadHeader);
 
     // Quad view toggle button
@@ -649,7 +659,10 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
       for (const src of sources) {
         const option = document.createElement('option');
         option.value = src;
-        option.textContent = src;
+        const isUnavailable = src === 'C' || src === 'D';
+        option.textContent = isUnavailable ? `${src} (not available)` : src;
+        option.disabled = isUnavailable;
+        option.title = isUnavailable ? 'Source C and D have no production assignment path' : '';
         if (managerState.quadView.sources[i] === src) {
           option.selected = true;
         }
@@ -897,12 +910,18 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
       if (quadSourcesContainer) {
         quadSourcesContainer.style.display = state.quadView.enabled ? 'flex' : 'none';
 
-        // Update select values
+        // Update select values and warn styling for unavailable sources
         const quadSources = state.quadView.sources;
         for (let i = 0; i < 4; i++) {
           const select = quadSourcesContainer.querySelector(`[data-testid="quad-source-${i}"]`) as HTMLSelectElement;
           if (select) {
             select.value = quadSources[i as 0 | 1 | 2 | 3];
+            const isUnavailable = quadSources[i as 0 | 1 | 2 | 3] === 'C' || quadSources[i as 0 | 1 | 2 | 3] === 'D';
+            select.style.opacity = isUnavailable ? '0.5' : '1';
+            select.style.borderColor = isUnavailable ? 'var(--warning-color, #e8a838)' : 'var(--border-secondary)';
+            select.title = isUnavailable
+              ? 'This source has no production assignment path'
+              : '';
           }
         }
       }
@@ -1219,6 +1238,11 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
    * Set the source for a specific quadrant.
    */
   setQuadViewSource(quadrant: 0 | 1 | 2 | 3, source: ABSource): void {
+    if (source === 'C' || source === 'D') {
+      console.warn(
+        `[CompareControl] Source "${source}" selected for quadrant ${quadrant}, but sources C and D have no production assignment path. Only A and B are bound to real media sources.`
+      );
+    }
     this.manager.setQuadSource(quadrant, source);
   }
 

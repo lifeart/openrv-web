@@ -133,6 +133,16 @@ export function wireViewControls(ctx: AppWiringContext): WiringResult {
       });
     }),
   );
+  subs.add(
+    controls.compareControl.on('quadViewChanged', (state) => {
+      if (state.enabled) {
+        console.warn(
+          '[OpenRV] Quad View is not yet connected to the viewer. ' +
+            'The UI reflects the selected state but the viewer will not render a quad layout.',
+        );
+      }
+    }),
+  );
 
   // Layout control -> viewer (mutual exclusion with compare)
   const layoutManager = controls.layoutControl.getManager();
@@ -145,6 +155,16 @@ export function wireViewControls(ctx: AppWiringContext): WiringResult {
     if (cc.getBlendMode() !== 'off') cc.setBlendMode('off');
     if (cc.isQuadViewEnabled()) cc.setQuadViewEnabled(false);
   });
+
+  // Wire layout control source tracking from session
+  controls.layoutControl.setSourceCount(session.sourceCount);
+  controls.layoutControl.setCurrentSourceIndex(session.currentSourceIndex);
+  subs.add(
+    session.on('sourceLoaded', () => {
+      controls.layoutControl.setSourceCount(session.sourceCount);
+      controls.layoutControl.setCurrentSourceIndex(session.currentSourceIndex);
+    }),
+  );
 
   // Wire mutual exclusion: when a compare mode is activated, deactivate layout
   subs.add(
@@ -164,6 +184,13 @@ export function wireViewControls(ctx: AppWiringContext): WiringResult {
   subs.add(
     controls.compareControl.on('blendModeChanged', (state) => {
       if (state.mode !== 'off' && layoutManager.enabled) {
+        layoutManager.disable();
+      }
+    }),
+  );
+  subs.add(
+    controls.compareControl.on('quadViewChanged', (state) => {
+      if (state.enabled && layoutManager.enabled) {
         layoutManager.disable();
       }
     }),
@@ -260,19 +287,10 @@ export function wireViewControls(ctx: AppWiringContext): WiringResult {
     const stereoState = viewer.getStereoState();
     if (stereoState.mode === 'off') return;
 
-    const rect = viewerContainer.getBoundingClientRect();
-    const canvas = viewerContainer.querySelector('canvas');
-    if (!canvas) return;
+    const position = viewer.getPixelCoordinatesFromClient(mouseEvent.clientX, mouseEvent.clientY);
+    if (!position) return;
 
-    const imageData = viewer.getImageData();
-    if (!imageData) return;
-
-    const scaleX = imageData.width / canvas.clientWidth;
-    const scaleY = imageData.height / canvas.clientHeight;
-    const x = (mouseEvent.clientX - rect.left) * scaleX;
-    const y = (mouseEvent.clientY - rect.top) * scaleY;
-
-    controls.convergenceMeasure.setCursorPosition(x, y);
+    controls.convergenceMeasure.setCursorPosition(position.x, position.y);
 
     const pair = viewer.getStereoPair();
     if (pair) {
@@ -291,6 +309,13 @@ export function wireViewControls(ctx: AppWiringContext): WiringResult {
 
       const result = detectFloatingWindowViolations(pair.left, pair.right);
       controls.convergenceMeasure.emit('floatingWindowViolation' as never, result as never);
+    }),
+  );
+
+  // Clear floating window QC result when source changes to avoid stale state
+  subs.add(
+    session.on('currentSourceChanged', () => {
+      controls.floatingWindowControl.clearResult();
     }),
   );
 

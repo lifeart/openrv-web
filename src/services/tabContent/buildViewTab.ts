@@ -167,12 +167,19 @@ export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
         registry.sphericalProjection.enable();
       }
       updateSphericalUniforms();
-      setButtonActive(sphericalButton, registry.sphericalProjection.enabled, 'icon');
     },
     { title: '360 View' },
   );
   sphericalButton.dataset.testid = 'spherical-projection-btn';
   viewContent.appendChild(sphericalButton);
+
+  // Subscribe to spherical projection state changes so the button reflects
+  // the actual state even when toggled externally (e.g. auto-detect on source load).
+  addUnsubscriber(
+    registry.sphericalProjection.onEnabledChange((enabled) => {
+      setButtonActive(sphericalButton, enabled, 'icon');
+    }),
+  );
 
   // Missing-frame mode dropdown
   const missingFrameContainer = document.createElement('div');
@@ -354,11 +361,15 @@ export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
     'edit',
     () => {
       timelineEditorPanel.toggle(timelineEditorButton);
-      setButtonActive(timelineEditorButton, timelineEditorPanel.isVisible(), 'icon');
     },
     { title: 'Toggle visual timeline editor' },
   );
   timelineEditorButton.dataset.testid = 'timeline-editor-toggle-button';
+  addUnsubscriber(
+    timelineEditorPanel.onVisibilityChange((visible) => {
+      setButtonActive(timelineEditorButton, visible, 'icon');
+    }),
+  );
   viewContent.appendChild(timelineEditorButton);
 
   // Spotlight Tool toggle button

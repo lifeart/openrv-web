@@ -1271,5 +1271,32 @@ describe('CompareControl', () => {
       const button = el.querySelector('[data-testid="compare-control-button"]') as HTMLButtonElement;
       expect(button.textContent).toContain('Quad');
     });
+
+    it('QUAD-057: quad view section header displays preview badge', () => {
+      const dropdown = openDropdown();
+      const badge = dropdown.querySelector('[data-testid="quad-view-preview-badge"]');
+      expect(badge).not.toBeNull();
+      expect(badge!.textContent).toBe('preview');
+    });
+
+    it('QUAD-058: quad view preview badge has tooltip explaining unwired state', () => {
+      const dropdown = openDropdown();
+      const badge = dropdown.querySelector('[data-testid="quad-view-preview-badge"]') as HTMLElement;
+      expect(badge.title).toContain('not yet connected');
+    });
+
+    it('QUAD-059: other compare modes still work normally when quad view has preview badge', () => {
+      // Verify wipe, diff, and blend modes still function
+      control.setWipeMode('horizontal');
+      expect(control.getWipeMode()).toBe('horizontal');
+
+      control.setWipeMode('off');
+      control.setDifferenceMatteEnabled(true);
+      expect(control.isDifferenceMatteEnabled()).toBe(true);
+
+      control.setDifferenceMatteEnabled(false);
+      control.setBlendMode('onionskin');
+      expect(control.getBlendMode()).toBe('onionskin');
+    });
   });
 });

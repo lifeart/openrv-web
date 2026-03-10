@@ -386,3 +386,168 @@ describe('ABCompareManager C/D sources', () => {
     expect(manager.isQuadAvailable(3)).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Issue #39: C/D source selectors transparency warnings
+// ---------------------------------------------------------------------------
+
+describe('CompareControl C/D source unavailability warnings', () => {
+  let control: CompareControl;
+
+  beforeEach(() => {
+    control = new CompareControl();
+  });
+
+  afterEach(() => {
+    control.dispose();
+  });
+
+  it('QUAD-060: selecting source C produces a console.warn', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    control.setQuadViewSource(0, 'C');
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Source "C" selected')
+    );
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('no production assignment path')
+    );
+    warnSpy.mockRestore();
+  });
+
+  it('QUAD-061: selecting source D produces a console.warn', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    control.setQuadViewSource(1, 'D');
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Source "D" selected')
+    );
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('no production assignment path')
+    );
+    warnSpy.mockRestore();
+  });
+
+  it('QUAD-062: selecting source A does not produce a warning', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    control.setQuadViewSource(0, 'A');
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it('QUAD-063: selecting source B does not produce a warning', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    control.setQuadViewSource(0, 'B');
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it('QUAD-064: A and B selections still work normally', () => {
+    control.setQuadViewSource(0, 'B');
+    control.setQuadViewSource(1, 'A');
+    const sources = control.getQuadSources();
+    expect(sources[0]).toBe('B');
+    expect(sources[1]).toBe('A');
+  });
+
+  function openDropdown(): HTMLElement {
+    const el = control.render();
+    document.body.appendChild(el);
+    const button = el.querySelector('[data-testid="compare-control-button"]') as HTMLButtonElement;
+    button.click();
+    return document.querySelector('[data-testid="compare-dropdown"]')!;
+  }
+
+  afterEach(() => {
+    document.querySelectorAll('.compare-control, .compare-dropdown').forEach((el) => el.remove());
+  });
+
+  it('QUAD-065: C and D options are disabled in dropdown selectors', () => {
+    const dropdown = openDropdown();
+
+    for (let i = 0; i < 4; i++) {
+      const select = dropdown.querySelector(`[data-testid="quad-source-${i}"]`) as HTMLSelectElement;
+      expect(select).not.toBeNull();
+      const options = select.querySelectorAll('option');
+      for (const opt of options) {
+        const optEl = opt as HTMLOptionElement;
+        if (optEl.value === 'C' || optEl.value === 'D') {
+          expect(optEl.disabled).toBe(true);
+          expect(optEl.textContent).toContain('not available');
+        } else {
+          expect(optEl.disabled).toBe(false);
+        }
+      }
+    }
+  });
+
+  it('QUAD-066: quadrant selectors with C/D values show warning styling', () => {
+    const dropdown = openDropdown();
+
+    // Default sources include C at index 2 and D at index 3
+    const selectC = dropdown.querySelector('[data-testid="quad-source-2"]') as HTMLSelectElement;
+    const selectD = dropdown.querySelector('[data-testid="quad-source-3"]') as HTMLSelectElement;
+    const selectA = dropdown.querySelector('[data-testid="quad-source-0"]') as HTMLSelectElement;
+
+    // C and D selectors should have reduced opacity
+    expect(selectC.style.opacity).toBe('0.5');
+    expect(selectD.style.opacity).toBe('0.5');
+    // A selector should be fully opaque
+    expect(selectA.style.opacity).toBe('1');
+  });
+
+  it('QUAD-067: C/D selectors show warning border color', () => {
+    const dropdown = openDropdown();
+
+    const selectC = dropdown.querySelector('[data-testid="quad-source-2"]') as HTMLSelectElement;
+    const selectD = dropdown.querySelector('[data-testid="quad-source-3"]') as HTMLSelectElement;
+    const selectA = dropdown.querySelector('[data-testid="quad-source-0"]') as HTMLSelectElement;
+
+    // C and D selectors should have warning border
+    expect(selectC.style.borderColor).toBe('var(--warning-color, #e8a838)');
+    expect(selectD.style.borderColor).toBe('var(--warning-color, #e8a838)');
+    // A selector should have default border
+    expect(selectA.style.borderColor).toBe('var(--border-secondary)');
+  });
+
+  it('QUAD-068: C/D selectors have warning title tooltip', () => {
+    const dropdown = openDropdown();
+
+    const selectC = dropdown.querySelector('[data-testid="quad-source-2"]') as HTMLSelectElement;
+    const selectD = dropdown.querySelector('[data-testid="quad-source-3"]') as HTMLSelectElement;
+    const selectA = dropdown.querySelector('[data-testid="quad-source-0"]') as HTMLSelectElement;
+
+    expect(selectC.title).toContain('no production assignment path');
+    expect(selectD.title).toContain('no production assignment path');
+    expect(selectA.title).toBe('');
+  });
+
+  it('QUAD-069: warning styling updates when source changes from C to A', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const dropdown = openDropdown();
+
+    // Quadrant 2 starts with source C (has warning styling)
+    const select2 = dropdown.querySelector('[data-testid="quad-source-2"]') as HTMLSelectElement;
+    expect(select2.style.opacity).toBe('0.5');
+
+    // Change quadrant 2 to A programmatically
+    control.setQuadViewSource(2 as 0 | 1 | 2 | 3, 'A');
+
+    // Warning styling should be removed after update
+    expect(select2.style.opacity).toBe('1');
+    expect(select2.style.borderColor).toBe('var(--border-secondary)');
+    warnSpy.mockRestore();
+  });
+
+  it('QUAD-070: ComparisonManager.setQuadSource does not warn (warning is UI-layer only)', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const manager = new ComparisonManager();
+
+    manager.setQuadSource(0, 'C');
+    manager.setQuadSource(1, 'D');
+    expect(warnSpy).not.toHaveBeenCalled();
+
+    manager.dispose();
+    warnSpy.mockRestore();
+  });
+});

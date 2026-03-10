@@ -8,6 +8,7 @@ import type { AppWiringContext } from './AppWiringContext';
  * and vi.fn() stubs for all methods read by wireViewControls.
  */
 function createMockContext() {
+  const viewerContainer = document.createElement('div');
   const viewer = {
     smoothFitToWindow: vi.fn(),
     smoothFitToWidth: vi.fn(),
@@ -28,14 +29,17 @@ function createMockContext() {
     setStereoAlignMode: vi.fn(),
     resetStereoEyeTransforms: vi.fn(),
     resetStereoAlignMode: vi.fn(),
-    getContainer: vi.fn(() => document.createElement('div')),
+    getContainer: vi.fn(() => viewerContainer),
     getImageData: vi.fn(() => null),
     getStereoState: vi.fn(() => ({ mode: 'off' })),
     getStereoPair: vi.fn(() => null),
+    getPixelCoordinatesFromClient: vi.fn(() => null) as ReturnType<typeof vi.fn>,
   };
 
   const session = Object.assign(new EventEmitter(), {
     setCurrentAB: vi.fn(),
+    sourceCount: 1,
+    currentSourceIndex: 0,
   });
 
   const sessionBridge = {
@@ -87,6 +91,8 @@ function createMockContext() {
 
   const layoutControl = Object.assign(new EventEmitter(), {
     getManager: vi.fn().mockReturnValue(layoutManager),
+    setSourceCount: vi.fn(),
+    setCurrentSourceIndex: vi.fn(),
   });
 
   const toneMappingControl = new EventEmitter();
@@ -128,6 +134,10 @@ function createMockContext() {
       isEnabled: vi.fn(() => false),
       setCursorPosition: vi.fn(),
       measureAtCursor: vi.fn(),
+    }),
+    floatingWindowControl: Object.assign(new EventEmitter(), {
+      hasResult: vi.fn(() => false),
+      clearResult: vi.fn(),
     }),
     updateStereoEyeControlsVisibility: vi.fn(),
   };
@@ -337,6 +347,183 @@ describe('wireViewControls', () => {
     expect(viewer.smoothFitToHeight).toHaveBeenCalledOnce();
     expect(viewer.smoothFitToWindow).not.toHaveBeenCalled();
     expect(viewer.smoothSetZoom).not.toHaveBeenCalled();
+  });
+
+  // VW-030: Layout source tracking wiring
+  it('VW-030: wireViewControls initializes layout source count and current index from session', () => {
+    expect(controls.layoutControl.setSourceCount).toHaveBeenCalledWith(1);
+    expect(controls.layoutControl.setCurrentSourceIndex).toHaveBeenCalledWith(0);
+  });
+
+  // VW-031: sourceLoaded updates layout source tracking
+  it('VW-031: sourceLoaded event updates layout control source count and current index', () => {
+    controls.layoutControl.setSourceCount.mockClear();
+    controls.layoutControl.setCurrentSourceIndex.mockClear();
+
+    // Simulate session state change
+    (session as unknown as { sourceCount: number; currentSourceIndex: number }).sourceCount = 3;
+    (session as unknown as { sourceCount: number; currentSourceIndex: number }).currentSourceIndex = 2;
+
+    (session as EventEmitter).emit('sourceLoaded', undefined as never);
+
+    expect(controls.layoutControl.setSourceCount).toHaveBeenCalledWith(3);
+    expect(controls.layoutControl.setCurrentSourceIndex).toHaveBeenCalledWith(2);
+  });
+
+  describe('convergence measurement coordinate conversion', () => {
+    it('VW-CONV-001: uses viewer.getPixelCoordinatesFromClient instead of querySelector canvas', () => {
+      // Enable convergence and stereo
+      controls.convergenceMeasure.isEnabled.mockReturnValue(true);
+      viewer.getStereoState.mockReturnValue({ mode: 'side-by-side' });
+      viewer.getPixelCoordinatesFromClient.mockReturnValue({ x: 100, y: 200 });
+
+      const container = viewer.getContainer();
+      const event = new MouseEvent('mousemove', { clientX: 150, clientY: 250 });
+      container.dispatchEvent(event);
+
+      expect(viewer.getPixelCoordinatesFromClient).toHaveBeenCalledWith(150, 250);
+      expect(controls.convergenceMeasure.setCursorPosition).toHaveBeenCalledWith(100, 200);
+    });
+
+    it('VW-CONV-002: does not call setCursorPosition when getPixelCoordinatesFromClient returns null (out of bounds)', () => {
+      controls.convergenceMeasure.isEnabled.mockReturnValue(true);
+      viewer.getStereoState.mockReturnValue({ mode: 'side-by-side' });
+      viewer.getPixelCoordinatesFromClient.mockReturnValue(null);
+
+      const container = viewer.getContainer();
+      const event = new MouseEvent('mousemove', { clientX: -10, clientY: -10 });
+      container.dispatchEvent(event);
+
+      expect(viewer.getPixelCoordinatesFromClient).toHaveBeenCalledWith(-10, -10);
+      expect(controls.convergenceMeasure.setCursorPosition).not.toHaveBeenCalled();
+    });
+
+    it('VW-CONV-003: handles zoomed viewer state (coordinates mapped through viewer method)', () => {
+      controls.convergenceMeasure.isEnabled.mockReturnValue(true);
+      viewer.getStereoState.mockReturnValue({ mode: 'anaglyph' });
+      // Simulate 2x zoom: client coords 300,400 map to pixel coords 600,800
+      viewer.getPixelCoordinatesFromClient.mockReturnValue({ x: 600, y: 800 });
+
+      const container = viewer.getContainer();
+      const event = new MouseEvent('mousemove', { clientX: 300, clientY: 400 });
+      container.dispatchEvent(event);
+
+      expect(viewer.getPixelCoordinatesFromClient).toHaveBeenCalledWith(300, 400);
+      expect(controls.convergenceMeasure.setCursorPosition).toHaveBeenCalledWith(600, 800);
+    });
+
+    it('VW-CONV-004: handles panned viewer state (coordinates mapped through viewer method)', () => {
+      controls.convergenceMeasure.isEnabled.mockReturnValue(true);
+      viewer.getStereoState.mockReturnValue({ mode: 'side-by-side' });
+      // Simulate panned state: client coords offset by pan
+      viewer.getPixelCoordinatesFromClient.mockReturnValue({ x: 50, y: 75 });
+
+      const container = viewer.getContainer();
+      const event = new MouseEvent('mousemove', { clientX: 200, clientY: 300 });
+      container.dispatchEvent(event);
+
+      expect(controls.convergenceMeasure.setCursorPosition).toHaveBeenCalledWith(50, 75);
+    });
+  });
+
+  describe('floating window QC clear on source change', () => {
+    it('VW-FW-001: currentSourceChanged clears floating window result', () => {
+      controls.floatingWindowControl.hasResult.mockReturnValue(true);
+
+      (session as EventEmitter).emit('currentSourceChanged', 1);
+
+      expect(controls.floatingWindowControl.clearResult).toHaveBeenCalledTimes(1);
+    });
+
+    it('VW-FW-002: currentSourceChanged clears result even when no result exists', () => {
+      controls.floatingWindowControl.hasResult.mockReturnValue(false);
+
+      (session as EventEmitter).emit('currentSourceChanged', 2);
+
+      // clearResult is always called; it is a no-op internally when there is no result
+      expect(controls.floatingWindowControl.clearResult).toHaveBeenCalledTimes(1);
+    });
+
+    it('VW-FW-003: multiple source changes clear result each time', () => {
+      (session as EventEmitter).emit('currentSourceChanged', 1);
+      (session as EventEmitter).emit('currentSourceChanged', 0);
+      (session as EventEmitter).emit('currentSourceChanged', 2);
+
+      expect(controls.floatingWindowControl.clearResult).toHaveBeenCalledTimes(3);
+    });
+
+    it('VW-FW-004: stereo-off clear path (via updateStereoEyeControlsVisibility) still works independently', () => {
+      // The stereo-off clear path is in AppControlRegistry.updateStereoEyeControlsVisibility,
+      // which is called when stereoControl emits stateChanged with mode 'off'.
+      // Verify the wiring still calls updateStereoEyeControlsVisibility on stereo state change.
+      (controls.stereoControl as EventEmitter).emit('stateChanged', { mode: 'off' });
+
+      expect(controls.updateStereoEyeControlsVisibility).toHaveBeenCalled();
+    });
+  });
+
+  describe('quad view wiring', () => {
+    it('VW-QUAD-001: quadViewChanged with enabled=true logs a console.warn', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      (controls.compareControl as EventEmitter).emit('quadViewChanged', {
+        enabled: true,
+        sources: ['A', 'B', 'C', 'D'],
+      });
+      expect(warnSpy).toHaveBeenCalledOnce();
+      expect(warnSpy.mock.calls[0]![0]).toContain('Quad View is not yet connected');
+      warnSpy.mockRestore();
+    });
+
+    it('VW-QUAD-002: quadViewChanged with enabled=false does not log a warning', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      (controls.compareControl as EventEmitter).emit('quadViewChanged', {
+        enabled: false,
+        sources: ['A', 'B', 'C', 'D'],
+      });
+      expect(warnSpy).not.toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+
+    it('VW-QUAD-003: quadViewChanged disables layout when layout is active', () => {
+      const lm = controls.layoutControl.getManager();
+      lm.enabled = true;
+      (controls.compareControl as EventEmitter).emit('quadViewChanged', {
+        enabled: true,
+        sources: ['A', 'B', 'C', 'D'],
+      });
+      expect(lm.disable).toHaveBeenCalled();
+      // Suppress the console.warn from the other subscription
+    });
+
+    it('VW-QUAD-004: quadViewChanged does not disable layout when layout is inactive', () => {
+      const lm = controls.layoutControl.getManager();
+      lm.enabled = false;
+      (controls.compareControl as EventEmitter).emit('quadViewChanged', {
+        enabled: true,
+        sources: ['A', 'B', 'C', 'D'],
+      });
+      expect(lm.disable).not.toHaveBeenCalled();
+    });
+
+    it('VW-QUAD-005: deactivateCompareCallback disables quad view when active', () => {
+      const lm = controls.layoutControl.getManager();
+      // Capture the callback passed to setDeactivateCompareCallback
+      const callback = lm.setDeactivateCompareCallback.mock.calls[0]![0] as () => void;
+
+      // Simulate quad view being active
+      controls.compareControl.isQuadViewEnabled.mockReturnValue(true);
+      callback();
+      expect(controls.compareControl.setQuadViewEnabled).toHaveBeenCalledWith(false);
+    });
+
+    it('VW-QUAD-006: deactivateCompareCallback skips quad view when not active', () => {
+      const lm = controls.layoutControl.getManager();
+      const callback = lm.setDeactivateCompareCallback.mock.calls[0]![0] as () => void;
+
+      controls.compareControl.isQuadViewEnabled.mockReturnValue(false);
+      callback();
+      expect(controls.compareControl.setQuadViewEnabled).not.toHaveBeenCalled();
+    });
   });
 
   describe('disposal', () => {

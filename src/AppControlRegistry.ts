@@ -486,6 +486,7 @@ export class AppControlRegistry {
         noiseReductionPanel: this.noiseReductionPanel,
         watermarkPanel: this.watermarkPanel,
         slateEditorPanel: this.slateEditorPanel,
+        addUnsubscriber,
       }),
     );
 

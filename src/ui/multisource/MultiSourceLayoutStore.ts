@@ -240,6 +240,21 @@ export class MultiSourceLayoutStore extends EventEmitter<MultiSourceLayoutStoreE
     return newId;
   }
 
+  /** Update a tile's source index. */
+  setTileSourceIndex(tileId: string, sourceIndex: number, label?: string): void {
+    const tile = this.state.tiles.find((t) => t.id === tileId);
+    if (!tile) return;
+
+    const newLabel = label !== undefined ? label : `Source ${sourceIndex + 1}`;
+    const changed = tile.sourceIndex !== sourceIndex || tile.label !== newLabel;
+    tile.sourceIndex = sourceIndex;
+    tile.label = newLabel;
+
+    if (changed) {
+      this.emitLayoutChanged();
+    }
+  }
+
   /** Update a tile's pan/zoom state. */
   updateTileTransform(tileId: string, update: Partial<Pick<TileState, 'panX' | 'panY' | 'zoom'>>): void {
     const tile = this.state.tiles.find((t) => t.id === tileId);

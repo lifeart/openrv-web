@@ -31,6 +31,7 @@ const log = new Logger('SessionMedia');
 export interface SessionMediaEvents extends EventMap {
   sourceLoaded: MediaSource;
   durationChanged: number;
+  currentSourceChanged: number;
   unsupportedCodec: UnsupportedCodecInfo;
   representationChanged: {
     sourceIndex: number;
@@ -232,6 +233,7 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
         currentSource.element.pause();
       }
 
+      const previousIndex = this._currentSourceIndex;
       this._currentSourceIndex = index;
       const newSource = this.currentSource;
       if (newSource) {
@@ -239,6 +241,9 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
         this._host!.setInPoint(1);
         this._host!.setCurrentFrame(1);
         this.emit('durationChanged', newSource.duration);
+      }
+      if (index !== previousIndex) {
+        this.emit('currentSourceChanged', index);
       }
     }
   }

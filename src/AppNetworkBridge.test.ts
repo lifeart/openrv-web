@@ -4,6 +4,7 @@ import { EventEmitter } from './utils/EventEmitter';
 import { PaintEngine } from './paint/PaintEngine';
 import { NoteManager } from './core/session/NoteManager';
 import { encodeSessionState } from './core/session/SessionURLManager';
+import * as PinEncryption from './network/PinEncryption';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -1465,6 +1466,77 @@ describe('AppNetworkBridge', () => {
 
       // Color sync should still be sent even though no adjustments event occurred
       expect(ctx._networkSyncManager.sendColorSync).toHaveBeenCalledTimes(1);
+    });
+
+    it('ANB-129: sessionStateRequested sends color sync in encrypted path', async () => {
+      // Give networkControl a getPinCode returning a valid PIN
+      (ctx._networkControl as any).getPinCode = vi.fn(() => '1234');
+
+      const fakeEncrypted = {
+        version: 1 as const,
+        algorithm: 'AES-GCM' as const,
+        salt: 'fakesalt',
+        iv: 'fakeiv',
+        ciphertext: 'fakeciphertext',
+      };
+
+      // Stub encryptSessionStateWithPin to return a canned value
+      const encryptSpy = vi
+        .spyOn(PinEncryption, 'encryptSessionStateWithPin')
+        .mockResolvedValue(fakeEncrypted);
+
+      bridge.setup();
+      ctx._networkSyncManager.isHost = true;
+
+      ctx._networkSyncManager.emit('sessionStateRequested', {
+        requestId: 'req-enc',
+        requesterUserId: 'user-enc',
+      });
+
+      await vi.waitFor(() => {
+        expect(ctx._networkSyncManager.sendSessionStateResponse).toHaveBeenCalled();
+      });
+
+      // Encryption path was used
+      expect(encryptSpy).toHaveBeenCalled();
+      expect(ctx._networkSyncManager.sendSessionStateResponse).toHaveBeenCalledWith(
+        'req-enc',
+        'user-enc',
+        expect.objectContaining({ encryptedSessionState: fakeEncrypted }),
+      );
+
+      // Color sync still fires after the encrypted response
+      expect(ctx._networkSyncManager.sendColorSync).toHaveBeenCalledTimes(1);
+
+      encryptSpy.mockRestore();
+    });
+
+    it('ANB-129b: sessionStateRequested skips color sync when encryption fails', async () => {
+      (ctx._networkControl as any).getPinCode = vi.fn(() => '5678');
+
+      const encryptSpy = vi
+        .spyOn(PinEncryption, 'encryptSessionStateWithPin')
+        .mockRejectedValue(new Error('crypto failure'));
+
+      bridge.setup();
+      ctx._networkSyncManager.isHost = true;
+
+      ctx._networkSyncManager.emit('sessionStateRequested', {
+        requestId: 'req-fail',
+        requesterUserId: 'user-fail',
+      });
+
+      await vi.waitFor(() => {
+        expect(ctx._networkControl.showError).toHaveBeenCalled();
+      });
+
+      // Session state response should NOT have been sent
+      expect(ctx._networkSyncManager.sendSessionStateResponse).not.toHaveBeenCalled();
+
+      // Color sync should NOT be sent when encryption failed
+      expect(ctx._networkSyncManager.sendColorSync).not.toHaveBeenCalled();
+
+      encryptSpy.mockRestore();
     });
   });
 

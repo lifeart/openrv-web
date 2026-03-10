@@ -452,8 +452,30 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
 
   private positionDropdown(): void {
     const rect = this.toggleButton.getBoundingClientRect();
-    this.dropdown.style.top = `${rect.bottom + 4}px`;
-    this.dropdown.style.left = `${rect.left}px`;
+    const dropdownRect = this.dropdown.getBoundingClientRect();
+    const viewportPadding = 8;
+
+    let top = rect.bottom + 4;
+    let left = rect.left;
+
+    // Prefer rendering below, then flip above if needed.
+    if (top + dropdownRect.height > window.innerHeight - viewportPadding) {
+      top = rect.top - dropdownRect.height - 4;
+    }
+
+    // Clamp to viewport edges.
+    if (top < viewportPadding) {
+      top = viewportPadding;
+    }
+    if (left + dropdownRect.width > window.innerWidth - viewportPadding) {
+      left = window.innerWidth - dropdownRect.width - viewportPadding;
+    }
+    if (left < viewportPadding) {
+      left = viewportPadding;
+    }
+
+    this.dropdown.style.top = `${top}px`;
+    this.dropdown.style.left = `${left}px`;
   }
 
   private handleOutsideClick = (e: MouseEvent): void => {

@@ -1030,8 +1030,30 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
 
     // Position relative to button
     const rect = this.toggleButton.getBoundingClientRect();
-    this.panel.style.top = `${rect.bottom + 4}px`;
-    this.panel.style.left = `${Math.min(rect.left, window.innerWidth - 360)}px`;
+    const panelRect = this.panel.getBoundingClientRect();
+    const viewportPadding = 8;
+
+    let top = rect.bottom + 4;
+    let left = rect.left;
+
+    // Prefer rendering below, then flip above if needed.
+    if (top + panelRect.height > window.innerHeight - viewportPadding) {
+      top = rect.top - panelRect.height - 4;
+    }
+
+    // Clamp to viewport edges.
+    if (top < viewportPadding) {
+      top = viewportPadding;
+    }
+    if (left + panelRect.width > window.innerWidth - viewportPadding) {
+      left = window.innerWidth - panelRect.width - viewportPadding;
+    }
+    if (left < viewportPadding) {
+      left = viewportPadding;
+    }
+
+    this.panel.style.top = `${top}px`;
+    this.panel.style.left = `${left}px`;
 
     this.isExpanded = true;
     this.panel.style.display = 'block';

@@ -89,7 +89,6 @@ export function buildPanelToggles(deps: BuildPanelTogglesDeps): HTMLElement {
     'link',
     () => {
       conformPanelElement.toggle(conformButton);
-      setButtonActive(conformButton, conformPanelElement.isVisible(), 'icon');
       if (conformPanelElement.isVisible()) {
         registry.conformPanel.render();
       }
@@ -97,6 +96,11 @@ export function buildPanelToggles(deps: BuildPanelTogglesDeps): HTMLElement {
     { title: 'Conform / Re-link' },
   );
   conformButton.dataset.testid = 'conform-panel-toggle';
+  addUnsubscriber(
+    conformPanelElement.onVisibilityChange((visible) => {
+      setButtonActive(conformButton, visible, 'icon');
+    }),
+  );
   panelToggles.appendChild(conformButton);
 
   // ShotGrid Panel toggle button

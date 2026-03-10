@@ -1579,6 +1579,217 @@ This file tracks findings from exploratory review and targeted validation runs.
   - RV/GTO round-trips silently forget whether scrub audio was enabled in the original session.
   - That creates another “exported but not actually restorable” playback setting in the session interchange path.
 
+### 130. Several shipped Effects-tab controls are fully wired, but `.orvproject` persistence ignores them entirely and does not warn
+
+- Severity: High
+- Area: Project persistence / effects stack
+- Evidence:
+  - The shipped Effects tab exposes deinterlace, film emulation, perspective correction, and stabilization controls in [src/services/tabContent/buildEffectsTab.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildEffectsTab.ts#L19).
+  - Those controls are fully wired into the real viewer state in [src/AppEffectsWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppEffectsWiring.ts#L73), and the viewer has explicit getters/setters for those effect states in [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L2767), [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L2784), [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L2801), and [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L2937).
+  - The same applies to uncrop/canvas extension: it is a real user control and viewer state in [src/AppEffectsWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppEffectsWiring.ts#L51) and [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L2835).
+  - But the `.orvproject` schema and serializer only persist crop, lens, filters, noise reduction, watermark, LUT intensity, PAR, and background pattern, with no fields for uncrop, deinterlace, film emulation, perspective correction, or stabilization in [src/core/session/SessionState.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionState.ts#L94) and [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L257).
+  - `SessionSerializer.getSerializationGaps(...)` also does not warn about any of those omitted states in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L98).
+- Impact:
+  - Users can spend time configuring shipped effects and save a project that silently loses them on reload.
+  - Because these omissions are not even included in the serializer’s warning list, the save flow gives a false sense that the current Effects-tab state is project-safe.
+
+### 131. Loading ordinary media after a GTO/RV session does not clear the old session metadata or uncrop side-state
+
+- Severity: High
+- Area: Session reset / media loading / export correctness
+- Evidence:
+  - All normal media-loading paths call `clearGraphData()` before loading new files or procedural sources in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L272), [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L316), [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L348), [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L363), and [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L481).
+  - But `SessionGraph.clearData()` only nulls `_graph`, `_gtoData`, and `_graphParseResult`; it does not reset `_metadata`, `_uncropState`, or `_edlEntries` in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L199).
+  - Header/session identity comes directly from that persistent metadata object, and the header display listens to `metadataChanged` from the session in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L152) and [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1486).
+  - RV export also still consumes `session.metadata` and `session.uncropState` after ordinary media loads in [src/core/session/SessionGTOExporter.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGTOExporter.ts#L1462) and [src/core/session/SessionGTOExporter.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGTOExporter.ts#L492).
+  - The normal `sourceLoaded` handling updates crop dimensions but does not reset uncrop state in [src/handlers/sourceLoadedHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/sourceLoadedHandlers.ts#L169).
+- Impact:
+  - After opening a plain image/video following an imported RV/GTO session, the app can continue showing the old session name/comment/origin in the header instead of reflecting the new media context.
+  - The previous uncrop state can also leak into later RV exports or remain active in effect state even though the user has already moved on to unrelated media.
+
+### 132. Project save/load preserves wipe mode but not the actual A/B compare assignment state
+
+- Severity: Medium
+- Area: Project persistence / compare workflow
+- Evidence:
+  - The live session tracks real A/B compare state including `currentAB`, `sourceAIndex`, `sourceBIndex`, and `syncPlayhead` in [src/core/session/SessionPlayback.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionPlayback.ts#L228).
+  - The shipped compare UI is built around those A/B concepts, not just wipe mode, in [src/ui/components/CompareControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/CompareControl.ts#L1).
+  - `.orvproject` playback serialization does not include any of those A/B fields; `Session.getPlaybackState()` only saves frame/fps/loop/volume/mute/marks/current source/audio scrub in [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L1270).
+  - `SessionState.PlaybackState` likewise has no A/B assignment fields in [src/core/session/SessionState.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionState.ts#L63).
+  - The project serializer only persists `wipe` as a visual compare setting in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L282), so project restore can recover wipe position without recovering which sources were assigned to A/B.
+- Impact:
+  - Multi-source compare sessions do not round-trip as actual compare sessions; they reopen without the source B assignment and linked-playhead behavior the user was reviewing.
+  - That is especially confusing because part of the compare UI survives, making the restored state look more complete than it really is.
+
+### 133. RV/GTO import loses `play all frames` playback mode because `realtime = 0` is parsed as “missing”
+
+- Severity: Medium
+- Area: RV/GTO round-trip / playback mode
+- Evidence:
+  - RV/GTO export encodes `playAllFrames` by writing `realtime = 0` in [src/core/session/SessionGTOExporter.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGTOExporter.ts#L1476).
+  - The GTO loader only treats `realtime` as meaningful when it is greater than zero in [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L317).
+  - `SessionGraph.loadFromGTO(...)` restores playback mode only when `sessionInfo.realtime !== undefined`, and then specifically interprets `0` as `playAllFrames`, in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L329).
+  - Because the parser discards zero, that restoration branch never runs for exported `playAllFrames` sessions.
+- Impact:
+  - RV/GTO round-trips silently reopen in realtime mode even when the source session was explicitly saved in play-all-frames mode.
+  - This is a pure export/import contradiction: the exporter writes the sentinel value that the importer-side application logic expects, but the parser strips it first.
+
+### 134. `.orvproject` serializes media representations, but project load never rebuilds or reselects them
+
+- Severity: Medium
+- Area: Project persistence / media representations
+- Evidence:
+  - `SessionSerializer.serializeMedia(...)` writes per-source `representations` and `activeRepresentationId` into the saved project in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L335).
+  - The project schema explicitly includes those fields on `MediaReference` in [src/core/session/SessionState.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionState.ts#L33).
+  - But `SessionSerializer.fromJSON(...)` only reloads the base media paths via `session.loadImage(...)`, `session.loadVideo(...)`, or `session.loadFile(...)` and never applies `ref.representations` or `ref.activeRepresentationId` anywhere in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L364).
+  - The runtime session does have real APIs for adding and switching representations in [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L1178) and [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L1195).
+- Impact:
+  - Projects can save representation ladders and active-representation selection that never come back on reload.
+  - That makes representation-aware review workflows look project-safe in the file format while actually restoring only the default source stream.
+
+### 135. RV/GTO round-trips collapse duration markers into point markers
+
+- Severity: Medium
+- Area: RV/GTO round-trip / marker fidelity
+- Evidence:
+  - The app’s real marker model supports range markers via optional `endFrame` in [src/core/session/MarkerManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MarkerManager.ts#L20), and the marker UI exposes editing of that end frame in [src/ui/components/MarkerListPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/MarkerListPanel.ts#L416).
+  - Project/session state can preserve full marker objects through `MarkerManager.toArray()` in [src/core/session/MarkerManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MarkerManager.ts#L285).
+  - But RV/GTO export only writes bare `marks` frame numbers plus parallel note/color arrays, with no end-frame field at all, in [src/core/session/SessionGTOExporter.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGTOExporter.ts#L1478).
+  - RV/GTO import then rebuilds markers from frame numbers only via `setFromFrameNumbers(...)`, which creates point markers without `endFrame`, in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L294) and [src/core/session/MarkerManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MarkerManager.ts#L253).
+- Impact:
+  - Review sessions that use duration/range markers lose their span information when exported to and reloaded from RV/GTO.
+  - That changes marker meaning, not just presentation, because a range marker becomes a single-frame marker after interchange.
+
+### 136. Omitted viewer states can leak from the previous session on project load, even though the warning says they “use defaults”
+
+- Severity: High
+- Area: Project load / viewer-state restore correctness
+- Evidence:
+  - The serializer explicitly tells users that omitted states such as tone mapping, ghost frames, stereo, channel isolation, difference matte, and blend mode “use defaults” after load in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L504).
+  - But `SessionSerializer.fromJSON(...)` only reapplies the serialized viewer fields and never resets any of those omitted states in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L455).
+  - The viewer does have explicit reset methods for those omitted states, such as `resetToneMappingState()`, `resetGhostFrameState()`, `resetStereoState()`, `resetStereoEyeTransforms()`, `resetStereoAlignMode()`, `resetChannelMode()`, and `resetDifferenceMatteState()`, in [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L2985), [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L3000), [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L3015), [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L3044), [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L3086), [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L3107), and [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L2969).
+  - `getSerializationGaps(...)` decides omission by comparing the current live viewer state to defaults in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L146), so leaked prior-session state can survive and still be reported as if the load fell back to defaults.
+- Impact:
+  - Loading a project after using omitted viewer features can leave those old features still active, even though they were not part of the project being loaded.
+  - That is worse than ordinary non-persistence: the app not only fails to restore the saved project correctly, it can actively contaminate it with stale state from the previous session while presenting a misleading warning message.
+
+### 137. Project load and auto-save recovery can never reach a clean success state because `fromJSON()` always injects a generic serialization-gap warning
+
+- Severity: Medium
+- Area: Persistence / recovery UX semantics
+- Evidence:
+  - `SessionSerializer.getSerializationGaps(...)` builds a fixed catalog of unsupported viewer states and marks each one with `isActive`, but it returns the full list regardless of whether those states are active in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L98).
+  - `SessionSerializer.toJSON(...)` correctly filters that list down to `activeGaps` before warning on save in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L230).
+  - `SessionSerializer.fromJSON(...)`, however, unconditionally appends a warning using `gaps.map((g) => g.name)` with no `isActive` filter in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L504).
+  - Project open and auto-save recovery only show their success state when `warnings.length === 0`, but both flows route any warning list into the warning UI branch in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L303) and [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L412).
+  - The current tests explicitly codify this always-on warning behavior in `SER-GAP-030` in [src/core/session/SessionSerializer.test.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.test.ts#L988).
+- Impact:
+  - Clean project loads and clean crash recoveries still surface as warning flows instead of success flows, even when the only “warning” is a static list of unsupported features that may not have been used.
+  - That dilutes genuinely actionable restore problems like skipped reloads or failed media loads because the UI is trained to warn all the time.
+
+### 138. Snapshots, auto-checkpoints, and auto-saves are presented as session-state recovery features, but they use the same lossy project serializer
+
+- Severity: High
+- Area: Snapshots / auto-save / recovery fidelity
+- Evidence:
+  - The snapshot UI explicitly tells users to “Create a snapshot to save your session state” in [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L261).
+  - Auto-save dirty tracking serializes state through `SessionSerializer.toJSON(...)` in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L111).
+  - Quick snapshots and auto-checkpoints also serialize through the same `SessionSerializer.toJSON(...)` path in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L154) and [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L180).
+  - That serializer is the same project serializer which already omits multiple live viewer/effects states and only warns in the console for active gaps in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L226).
+  - Snapshot restore and crash recovery both deserialize through `SessionSerializer.fromJSON(...)` in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L215) and [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L401).
+- Impact:
+  - These features read like full-fidelity “save my session / recover my session” tools, but they silently inherit the same persistence gaps as manual project save/load.
+  - Users can trust snapshots or crash recovery as safety nets for active review state that those mechanisms do not actually preserve.
+
+### 139. Snapshot restore appends the snapshot onto the current session instead of replacing it
+
+- Severity: High
+- Area: Snapshot restore semantics
+- Evidence:
+  - `restoreSnapshot(...)` restores directly into the live session via `SessionSerializer.fromJSON(...)` without clearing or resetting the current session first in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L202).
+  - `SessionSerializer.fromJSON(...)` restores media by calling `session.loadImage(...)`, `session.loadVideo(...)`, and `session.loadFile(...)` in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L364).
+  - `SessionMedia.addSource(...)` appends every restored source with `_sources.push(source)` and makes the newly appended one current in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L210).
+- Impact:
+  - Restoring a snapshot during an active review session merges the snapshot media into the current session instead of rolling the app back to the snapshot’s own state.
+  - That breaks the normal expectation of a snapshot restore and can quietly accumulate extra sources, A/B assignments, and stale session state across repeated restores.
+
+### 140. Snapshot restore ignores partial-load warnings and always reports success
+
+- Severity: High
+- Area: Snapshot restore / user feedback correctness
+- Evidence:
+  - `restoreSnapshot(...)` awaits `SessionSerializer.fromJSON(...)` but discards its `{ loadedMedia, warnings }` result in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L214).
+  - The same method then force-syncs UI controls from the raw serialized state via `syncControlsFromState(state)` in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L223).
+  - Finally it always shows `Restored "..."` success UI in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L229).
+  - `SessionSerializer.fromJSON(...)` can legitimately accumulate warnings for skipped reload prompts and failed reloads in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L369), and for manual LUT re-apply requirements in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L491).
+- Impact:
+  - A snapshot can be only partially restored while the app still claims the restore succeeded and updates controls to match the intended snapshot state.
+  - That leaves users with a misleading UI: the controls and success message can imply a complete rollback even when key media or LUT inputs did not actually come back.
+
+### 141. Auto-save recovery deletes the only recovery entry even when recovery completed with warnings
+
+- Severity: High
+- Area: Crash recovery / retry safety
+- Evidence:
+  - Crash recovery promises users they can “Recover” a previous session from the most recent auto-save in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L364).
+  - `recoverAutoSave(...)` restores through `SessionSerializer.fromJSON(...)` and can surface warning-laden recovery in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L399).
+  - Those warnings include cases like `Skipped reload: ...` and `Failed to reload: ...` from [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L369).
+  - But `recoverAutoSave(...)` deletes the recovered auto-save entry unconditionally immediately afterward in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L424).
+- Impact:
+  - If the user skips a reload prompt, picks the wrong replacement file, or otherwise gets an incomplete recovery, the original recovery checkpoint is destroyed before they can try again.
+  - That turns a recoverable partial-restore path into a one-shot operation with no built-in retry safety.
+
+### 142. Disabling audio scrub does not stop the scrub snippet that is already playing
+
+- Severity: Medium
+- Area: Audio scrub / playback controls
+- Evidence:
+  - `AudioCoordinator.onAudioScrubEnabledChanged(...)` is documented as stopping any active scrub snippet immediately when scrub is disabled in [src/audio/AudioCoordinator.ts](/Users/lifeart/Repos/openrv-web/src/audio/AudioCoordinator.ts#L172).
+  - The implementation only flips `_audioScrubEnabled` and resets the scrub mode to `discrete`; it explicitly admits it is merely relying on future gating instead of stopping the current snippet in [src/audio/AudioCoordinator.ts](/Users/lifeart/Repos/openrv-web/src/audio/AudioCoordinator.ts#L176).
+  - The underlying manager does have active scrub state (`scrubSourceNode`, `scrubEnvelopeNode`) and a real `stopScrubSnippet()` implementation in [src/audio/AudioPlaybackManager.ts](/Users/lifeart/Repos/openrv-web/src/audio/AudioPlaybackManager.ts#L678).
+- Impact:
+  - Toggling scrub audio off does not take effect immediately if a scrub snippet is already sounding.
+  - That makes the control semantically unreliable: the UI says scrub is off while the user can still hear the tail of the just-triggered scrub audio.
+
+### 143. The HEIC WASM fallback can decode the wrong top-level image when `is_primary()` is unavailable
+
+- Severity: Medium
+- Area: HEIC decoding / cross-browser fallback correctness
+- Evidence:
+  - The WASM HEIC fallback is the production path for Chrome/Firefox/Edge, while Safari uses native `createImageBitmap`, in [src/formats/HEICWasmDecoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/HEICWasmDecoder.ts#L2) and [src/formats/HEICGainmapDecoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/HEICGainmapDecoder.ts#L716).
+  - `decodeHEICToImageData(...)` is intended to return the primary image, but if the libheif binding does not expose `is_primary()`, it falls back to `targetIndex = 0` in [src/formats/HEICWasmDecoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/HEICWasmDecoder.ts#L62).
+  - The source code itself notes that `is_primary()` may be unavailable in some libheif-js builds in [src/formats/HEICWasmDecoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/HEICWasmDecoder.ts#L76).
+  - The HEIC gainmap fallback path depends on that same `decodeHEICToImageData(buffer)` call for the base image in [src/formats/HEICGainmapDecoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/HEICGainmapDecoder.ts#L780).
+- Impact:
+  - Multi-image HEIC files can decode the wrong top-level image on the WASM fallback path when the primary-item binding is missing.
+  - On gainmap HEICs, that can also mean the HDR reconstruction starts from the wrong base image, producing an incorrect final result rather than a clean failure.
+
+### 144. The single 3D LUT path silently becomes a no-op when the WebGL LUT processor is unavailable
+
+- Severity: High
+- Area: Color pipeline / LUT rendering fallback
+- Evidence:
+  - `ColorPipelineManager.initLUTProcessor()` logs that it is “falling back to CPU” when `WebGLLUTProcessor` creation fails in [src/ui/components/ColorPipelineManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ColorPipelineManager.ts#L88).
+  - `setLUT(...)` still accepts and stores the LUT even when no `_lutProcessor` exists in [src/ui/components/ColorPipelineManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ColorPipelineManager.ts#L196).
+  - `Viewer` keeps calling `applyLUTToCanvas(...)` whenever `currentLUT` is set and intensity is non-zero in [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L2140).
+  - But `ColorPipelineManager.applyLUTToCanvas(...)` only applies through the GPU processor and explicitly states there is “No CPU fallback implemented” in [src/ui/components/ColorPipelineManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ColorPipelineManager.ts#L368).
+- Impact:
+  - On browsers or environments where the dedicated WebGL LUT processor cannot be created, users can successfully load a LUT and keep seeing LUT state in the UI while the image output is unchanged.
+  - The current log message is actively misleading because it claims a CPU fallback that the implementation does not provide.
+
+### 145. File / Look / Display LUT pipeline stages are dropped entirely when the GPU LUT chain is unavailable
+
+- Severity: High
+- Area: Multi-stage LUT pipeline / renderer fallback
+- Evidence:
+  - The shipped pipeline is explicitly modeled as `Pre-Cache -> File -> [Color Corrections] -> Look -> Display`, with File/Look/Display intended as runtime stages in [src/color/pipeline/LUTPipeline.ts](/Users/lifeart/Repos/openrv-web/src/color/pipeline/LUTPipeline.ts#L1).
+  - `Viewer.syncLUTPipeline()` only transfers File/Look/Display LUT stage state into the renderer when `gpuChain` exists; otherwise it does nothing for those stages in [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L2512).
+  - The actual draw path only applies the multi-stage pipeline through `gpuLUTChain.applyToCanvas(...)` when `gpuLUTChain?.hasAnyLUT()` is true in [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L2131).
+  - `ColorPipelineManager.initGPULUTChain()` can legitimately fail and leave `_gpuLUTChain = null` on non-WebGL2 paths in [src/ui/components/ColorPipelineManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ColorPipelineManager.ts#L102).
+- Impact:
+  - On fallback rendering paths, File/Look/Display LUT assignments remain editable state but never affect pixels.
+  - That makes the multi-stage LUT pipeline partly fiction outside the GPU-chain path: the app stores and syncs the configuration, but the renderer drops it completely.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

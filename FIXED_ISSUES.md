@@ -269,3 +269,83 @@
 - **Regression Tests**: ANB-130 through ANB-141 (incoming full payload, remote apply guard, outgoing trigger, feedback loop protection, not-connected guard, dispose cleanup, throttle behavior, dispose cancels throttle), ANB-136 through ANB-138 (partial payload, zero values, error resilience), TM onViewChanged tests (zoom/panX/panY/setPan/setZoom setters fire callback, null callback, dispose clears, smoothZoomTo, fitToWindow exclusion).
 - **Verification**: All 113 tests pass (59 TransformManager + 54 AppNetworkBridge), TypeScript clean.
 - **Files Changed**: `src/ui/components/TransformManager.ts`, `src/ui/components/Viewer.ts`, `src/AppNetworkBridge.ts`, `src/AppNetworkBridge.test.ts`, `src/ui/components/TransformManager.test.ts`
+
+## Issue #32: Initial network state transfer omits the host's current color adjustments
+
+- **Severity**: Medium
+- **Area**: Network sync, initial join state
+- **Root Cause**: `sessionStateRequested` handler sent session state (frame, source, range, OCIO, transform) plus annotations and notes, but never sent color adjustments. Joiners only received color state when the host changed controls after the join.
+- **Fix**: Added `sendColorSync` call at the end of the `sessionStateRequested` handler, after the session state response. Restructured encrypted/unencrypted branching so color sync fires in both paths (only skipped on encryption failure). Color payload reads current viewer state (exposure, gamma, contrast, saturation, temperature, tint, brightness).
+- **Regression Tests**: ANB-126 (sessionStateRequested triggers sendColorSync), ANB-127 (payload matches non-default viewer state), ANB-128 (color sent even without prior adjustmentsChanged events), ANB-129 (fires after encrypted state), ANB-129b (not sent on encryption failure).
+- **Verification**: All 59 AppNetworkBridge tests pass, TypeScript clean.
+- **Files Changed**: `src/AppNetworkBridge.ts`, `src/AppNetworkBridge.test.ts`
+
+## Issue #33: The multi-source layout UI cannot actually add the current source and offers no way to reassign tile sources
+
+- **Severity**: High
+- **Area**: View UI, multi-source layout control
+- **Root Cause**: "Add current source" button hardcoded source index 0. Tile rows only rendered a label and remove button — no source reassignment UI. No production wiring informed the control of the active source.
+- **Fix**: Added `_currentSourceIndex`/`_sourceCount` tracking to `MultiSourceLayoutControl` with public setters. Fixed "Add current source" to use actual current index. Added `<select>` dropdown (with `aria-label`) to each tile row for source reassignment, calling `manager.setTileSourceIndex()`. Added `setTileSourceIndex()` to `MultiSourceLayoutStore` and `MultiSourceLayoutManager`. Wired from `AppViewWiring.ts` to update source count and current index on `sourceLoaded`. Domain review fixed: label change detection in store, aria-label on select, production wiring.
+- **Regression Tests**: MSL-U010 through MSL-U090 (current index tracking, source count, add uses actual index, selector rendering/reflection/change, store setTileSourceIndex with label/events/invalid ID/label-only change/no-change, manager delegation, max capacity, tile removal, selector refresh, aria-label), VW-030/031 (AppViewWiring source tracking).
+- **Verification**: All 52 tests pass (28 MultiSourceLayoutControl + 24 AppViewWiring), TypeScript clean.
+- **Files Changed**: `src/ui/components/MultiSourceLayoutControl.ts`, `src/ui/multisource/MultiSourceLayoutStore.ts`, `src/ui/multisource/MultiSourceLayoutManager.ts`, `src/AppViewWiring.ts`, `src/ui/components/MultiSourceLayoutControl.test.ts`, `src/AppViewWiring.test.ts`
+
+## Issue #34: Several toolbar toggle buttons drift out of sync with the actual panel visibility state
+
+- **Severity**: Medium
+- **Area**: Toolbar UI, panel toggles, active-state feedback
+- **Root Cause**: Panel.ts had no visibility change notification mechanism. Buttons only updated active styling inside click handlers, so outside-click and Escape closes left buttons visually "on".
+- **Fix**: Added `onVisibilityChange(listener)` to `Panel.ts` (called from `show()`, `hide()`, covering toggle/outside-click/Escape/dispose). Subscribed all 5 affected buttons (Denoise, Watermark, Slate in `buildEffectsTab`; timeline-editor in `buildViewTab`; Conform in `buildPanelToggles`) to their panel's visibility. Removed inline active-state updates from click handlers. Review fixed: missing `addUnsubscriber` wiring in `buildEffectsTab` and `AppControlRegistry`.
+- **Regression Tests**: PANEL-U059/059a/059b (Panel onVisibilityChange: show/hide/Escape/outside-click/unsubscribe/toggle), buildEffectsTab tests (Denoise/Watermark/Slate toggle-on/off/Escape/outside-click, unsubscriber count, unsubscribe stops updates), buildViewTab tests (timeline-editor all close paths), buildPanelToggles tests (Conform all close paths).
+- **Verification**: All 81 tests pass (58 Panel + 14 Effects + 5 View + 4 PanelToggles), TypeScript clean.
+- **Files Changed**: `src/ui/components/shared/Panel.ts`, `src/services/tabContent/buildEffectsTab.ts`, `src/services/tabContent/buildViewTab.ts`, `src/services/tabContent/buildPanelToggles.ts`, `src/AppControlRegistry.ts`, + corresponding test files
+
+## Issue #35: QC pixel-picking tools use the wrong coordinate model for transformed or letterboxed viewer states
+
+- **Severity**: High
+- **Area**: QC UI, HSL eyedropper, stereo convergence measurement
+- **Root Cause**: HSL eyedropper and stereo convergence used `querySelector('canvas')` + `clientWidth/clientHeight` scaling for coordinate mapping. This is wrong because the viewer stacks multiple canvases, and the scaling doesn't account for zoom, pan, or letterboxing. The app already had a correct coordinate conversion in `PixelSamplingManager`.
+- **Fix**: Added public `getPixelCoordinatesFromClient(clientX, clientY)` to `Viewer.ts`, using `getImageCanvasRect()` and the existing `getPixelCoordinates()` utility (same approach as PixelSamplingManager). Replaced naive coordinate mapping in `buildQCTab.ts` (HSL eyedropper) and `AppViewWiring.ts` (stereo convergence) with the new method. Removed all `querySelector('canvas')` coordinate patterns. No remaining instances of naive pattern in codebase.
+- **Regression Tests**: QC-EYE-001 through QC-EYE-006 (correct delegation, out-of-bounds null, zoom, pan, no querySelector regression, image boundary rejection), VW-CONV-001 through VW-CONV-004 (correct delegation, out-of-bounds, zoom, pan).
+- **Verification**: All 34 tests pass (6 QC + 28 AppViewWiring), TypeScript clean.
+- **Files Changed**: `src/ui/components/Viewer.ts`, `src/services/tabContent/buildQCTab.ts`, `src/AppViewWiring.ts`, `src/services/tabContent/buildQCTab.test.ts` (new), `src/AppViewWiring.test.ts`
+
+## Issue #36: The 360-view toolbar button can lie about the current spherical-projection state
+
+- **Severity**: Medium
+- **Area**: View UI, spherical projection
+- **Root Cause**: The 360 View button only updated active styling inside its click handler. `LayoutOrchestrator` auto-enables/disables spherical projection on source load, but the button had no subscription to state changes.
+- **Fix**: Added `onEnabledChange(listener)` callback to `SphericalProjection.ts` with idempotent guards (no duplicate notifications). Subscribed the button in `buildViewTab.ts` via the callback, removed inline active-state from click handler. Cleanup via `addUnsubscriber`.
+- **Regression Tests**: buildViewTab tests (external enable activates button, external disable deactivates, manual click toggle), SP-CLS-027 through SP-CLS-033 (enable/disable idempotency, listener fires on enable/disable, unsubscribe, multiple listeners).
+- **Verification**: All 76 tests pass (68 SphericalProjection + 8 buildViewTab), TypeScript clean.
+- **Files Changed**: `src/render/SphericalProjection.ts`, `src/services/tabContent/buildViewTab.ts`, `src/services/LayoutOrchestrator.ts`, `src/render/SphericalProjection.test.ts`, `src/services/tabContent/buildViewTab.test.ts`
+
+## Issue #37: Floating-window QC status can remain stale after switching sources
+
+- **Severity**: Medium
+- **Area**: View UI, stereo QC feedback
+- **Root Cause**: `FloatingWindowControl.clearResult()` was only called when stereo was turned off (`AppControlRegistry`). No clear-on-source-change path existed, so violation indicators persisted across source switches.
+- **Fix**: Added `currentSourceChanged` event to `SessionMedia`/`Session` (guarded: only fires when index actually changes, not for same-index or out-of-range). Wired `clearResult()` call in `AppViewWiring` on source change. Existing stereo-off clear path preserved.
+- **Regression Tests**: SM-028b/c/d (event fires on change, suppressed for same-index, suppressed for out-of-range), VW-FW-001 through VW-FW-004 (clear on source change with/without result, multiple changes, stereo-off independence).
+- **Verification**: All 118 tests pass (86 SessionMedia + 32 AppViewWiring), TypeScript clean.
+- **Files Changed**: `src/core/session/SessionMedia.ts`, `src/core/session/SessionTypes.ts`, `src/core/session/Session.ts`, `src/AppViewWiring.ts`, `src/core/session/SessionMedia.test.ts`, `src/AppViewWiring.test.ts`
+
+## Issue #38: The Compare dropdown exposes a `Quad View` mode that is not wired to the viewer
+
+- **Severity**: High
+- **Area**: Compare UI, viewer integration
+- **Root Cause**: CompareControl emitted `quadViewChanged` events, but no production wiring in AppViewWiring subscribed to them. The viewer never received quad-view state changes, so the UI silently pretended the mode was active.
+- **Fix**: Added `quadViewChanged` subscription in `AppViewWiring.ts` with `console.warn` when enabled (explaining the rendering pipeline gap). Added "preview" badge with tooltip to the Quad View section header in `CompareControl.ts`. Added mutual exclusion between quad view and layout mode (consistent with wipe, diff matte, and blend modes).
+- **Regression Tests**: VW-QUAD-001 through VW-QUAD-006 (warning on enable, no warning on disable, layout mutual exclusion in both directions, negative cases), QUAD-057/058/059 (preview badge presence, tooltip content, other compare modes unaffected).
+- **Verification**: All 188 tests pass (38 AppViewWiring + 150 CompareControl), TypeScript clean.
+- **Files Changed**: `src/AppViewWiring.ts`, `src/ui/components/CompareControl.ts`, `src/AppViewWiring.test.ts`, `src/ui/components/CompareControl.test.ts`
+
+## Issue #39: Quad-view source selectors expose C and D concepts that production UI never lets the user bind to real sources
+
+- **Severity**: High
+- **Area**: Compare UI, source assignment semantics
+- **Root Cause**: Quad-view UI let users assign quadrants to A/B/C/D, but only A and B had production assignment paths via `SessionPlayback`. `setSourceC()`/`setSourceD()` existed only in the low-level `ABCompareManager` with no production callers.
+- **Fix**: Disabled C/D options in quad-view dropdown selectors with "(not available)" labels and tooltip explanations. Added warning styling (opacity 0.5, warning border color) for quadrants assigned to C/D. Added `console.warn` when C/D is selected via `setQuadViewSource`. A/B selections unaffected.
+- **Regression Tests**: QUAD-060 through QUAD-070 (C/D console.warn, A/B no-warn, A/B still works, C/D disabled in DOM, warning opacity, warning border color, warning tooltip, styling updates on source change, warning is UI-layer only).
+- **Verification**: All 51 QuadView tests pass, TypeScript clean.
+- **Files Changed**: `src/ui/components/CompareControl.ts`, `src/ui/components/QuadView.test.ts`

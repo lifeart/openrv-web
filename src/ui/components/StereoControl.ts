@@ -265,8 +265,30 @@ export class StereoControl extends EventEmitter<StereoControlEvents> {
   private positionDropdown(): void {
     if (!this.isDropdownOpen) return;
     const rect = this.modeButton.getBoundingClientRect();
-    this.modeDropdown.style.top = `${rect.bottom + 4}px`;
-    this.modeDropdown.style.left = `${rect.left}px`;
+    const dropdownRect = this.modeDropdown.getBoundingClientRect();
+    const viewportPadding = 8;
+
+    let top = rect.bottom + 4;
+    let left = rect.left;
+
+    // Prefer rendering below, then flip above if needed.
+    if (top + dropdownRect.height > window.innerHeight - viewportPadding) {
+      top = rect.top - dropdownRect.height - 4;
+    }
+
+    // Clamp to viewport edges.
+    if (top < viewportPadding) {
+      top = viewportPadding;
+    }
+    if (left + dropdownRect.width > window.innerWidth - viewportPadding) {
+      left = window.innerWidth - dropdownRect.width - viewportPadding;
+    }
+    if (left < viewportPadding) {
+      left = viewportPadding;
+    }
+
+    this.modeDropdown.style.top = `${top}px`;
+    this.modeDropdown.style.left = `${left}px`;
   }
 
   private updateModeButtonLabel(): void {

@@ -98,7 +98,7 @@ import {
   drawBackgroundPattern,
 } from './BackgroundPatternControl';
 import { FrameInterpolator } from '../../utils/media/FrameInterpolator';
-import { isViewerContentElement as isViewerContentElementUtil } from './ViewerInteraction';
+import { isViewerContentElement as isViewerContentElementUtil, getPixelCoordinates } from './ViewerInteraction';
 import {
   drawWithTransform as drawWithTransformUtil,
   type FilterStringCache,
@@ -3712,6 +3712,17 @@ export class Viewer {
    */
   getDisplayHeight(): number {
     return this.displayHeight;
+  }
+
+  /**
+   * Convert client (mouse event) coordinates to image pixel coordinates.
+   * Uses the image canvas bounding rect and display dimensions for correct
+   * mapping regardless of zoom, pan, letterboxing, or canvas stacking.
+   * Returns null if the coordinates are outside the image canvas bounds.
+   */
+  getPixelCoordinatesFromClient(clientX: number, clientY: number): { x: number; y: number } | null {
+    const canvasRect = this.getImageCanvasRect();
+    return getPixelCoordinates(clientX, clientY, canvasRect, this.displayWidth, this.displayHeight);
   }
 
   /**

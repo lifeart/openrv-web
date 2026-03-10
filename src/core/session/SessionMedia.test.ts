@@ -351,6 +351,45 @@ describe('SessionMedia', () => {
       expect(listener).toHaveBeenCalledWith(1);
     });
 
+    it('SM-028b: setCurrentSource emits currentSourceChanged when index changes', () => {
+      const listener = vi.fn();
+      media.on('currentSourceChanged', listener);
+
+      media.addSource(makeImageSource({ name: 'a.png', duration: 1 }));
+      media.addSource(makeVideoSource({ name: 'b.mp4', duration: 120 }));
+
+      listener.mockClear();
+      media.setCurrentSource(0);
+
+      expect(listener).toHaveBeenCalledWith(0);
+    });
+
+    it('SM-028c: setCurrentSource does not emit currentSourceChanged when index is the same', () => {
+      const listener = vi.fn();
+      media.on('currentSourceChanged', listener);
+
+      media.addSource(makeImageSource({ name: 'a.png', duration: 1 }));
+      media.addSource(makeVideoSource({ name: 'b.mp4', duration: 120 }));
+
+      // addSource sets currentSourceIndex to 1 (last added)
+      listener.mockClear();
+      media.setCurrentSource(1);
+
+      expect(listener).not.toHaveBeenCalled();
+    });
+
+    it('SM-028d: setCurrentSource does not emit currentSourceChanged for out-of-range index', () => {
+      const listener = vi.fn();
+      media.on('currentSourceChanged', listener);
+
+      media.addSource(makeImageSource({ name: 'a.png', duration: 1 }));
+
+      listener.mockClear();
+      media.setCurrentSource(5);
+
+      expect(listener).not.toHaveBeenCalled();
+    });
+
     it('SM-029: unsupportedCodec event signature test (registration verification)', () => {
       // Note: unsupportedCodec is emitted by loadVideoFile which requires heavy mocking.
       // This test verifies the event type signature is correctly accepted by on/emit,

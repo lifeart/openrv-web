@@ -117,6 +117,7 @@ export interface LayoutControlsSubset {
     enabled: boolean;
     enable(): void;
     disable(): void;
+    onEnabledChange(listener: (enabled: boolean) => void): () => void;
   };
   timelineMagnifier?: {
     getElement(): HTMLElement;
