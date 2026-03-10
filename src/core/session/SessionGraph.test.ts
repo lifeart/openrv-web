@@ -278,6 +278,7 @@ describe('SessionGraph', () => {
         emitInOutChanged: vi.fn(),
         emitFrameIncrementChanged: vi.fn(),
         setPlaybackMode: vi.fn(),
+        setAudioScrubEnabled: vi.fn(),
         getAnnotations: vi.fn() as any,
         loadVideoSourcesFromGraph: vi.fn().mockResolvedValue(undefined),
       };
@@ -313,6 +314,7 @@ describe('SessionGraph', () => {
         emitInOutChanged: vi.fn(),
         emitFrameIncrementChanged: vi.fn(),
         setPlaybackMode: vi.fn(),
+        setAudioScrubEnabled: vi.fn(),
         getAnnotations: () => mockAnnotations,
         loadVideoSourcesFromGraph: vi.fn().mockResolvedValue(undefined),
       };

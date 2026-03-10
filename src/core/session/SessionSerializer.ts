@@ -39,6 +39,9 @@ import {
   isDefaultStereoEyeTransformState,
   DEFAULT_STEREO_ALIGN_MODE,
 } from '../../stereo/StereoRenderer';
+import { isDeinterlaceActive } from '../../filters/Deinterlace';
+import { isFilmEmulationActive } from '../../filters/FilmEmulation';
+import { isPerspectiveActive } from '../../transform/PerspectiveCorrection';
 
 /** Components needed for serialization */
 export interface SessionComponents {
@@ -87,7 +90,15 @@ export class SessionSerializer {
   //   - Stereo align mode (off, grid, crosshair, difference, edges)
   //   - Compare state: difference matte (enabled, gain, heatmap)
   //   - Compare state: blend mode (mode, opacity, flicker frame)
+  //   - Compare state: A/B compare assignment (sourceAIndex, sourceBIndex, etc.) (fix #132)
   //   - Channel isolation mode (R/G/B/A/luminance)
+  //
+  // Effects-tab gaps (fix #130):
+  //   - Deinterlace (enabled, mode)
+  //   - Film emulation (enabled, stock, intensity)
+  //   - Perspective correction (enabled, corner points, quality)
+  //   - Stabilization (enabled, smoothing, crop mode)
+  //   - Uncrop (active, dimensions, offset)
 
   /**
    * Return the list of viewer states that are NOT currently serialized,
@@ -197,6 +208,48 @@ export class SessionSerializer {
       impact: 'Channel isolation will revert to RGB on reload',
     });
 
+    // --- Effects-tab gaps (fix #130) ---
+
+    const deinterlaceParams = viewer.getDeinterlaceParams();
+    gaps.push({
+      name: 'Deinterlace',
+      category: 'view',
+      isActive: isDeinterlaceActive(deinterlaceParams),
+      impact: 'Deinterlace settings will revert to defaults on reload',
+    });
+
+    const filmEmulationParams = viewer.getFilmEmulationParams();
+    gaps.push({
+      name: 'Film emulation',
+      category: 'view',
+      isActive: isFilmEmulationActive(filmEmulationParams),
+      impact: 'Film emulation settings will revert to defaults on reload',
+    });
+
+    const perspectiveParams = viewer.getPerspectiveParams();
+    gaps.push({
+      name: 'Perspective correction',
+      category: 'view',
+      isActive: isPerspectiveActive(perspectiveParams),
+      impact: 'Perspective correction will revert to defaults on reload',
+    });
+
+    const stabilizationParams = viewer.getStabilizationParams();
+    gaps.push({
+      name: 'Stabilization',
+      category: 'view',
+      isActive: stabilizationParams.enabled === true,
+      impact: 'Stabilization settings will revert to defaults on reload',
+    });
+
+    const uncropActive = viewer.isUncropActive();
+    gaps.push({
+      name: 'Uncrop',
+      category: 'view',
+      isActive: uncropActive,
+      impact: 'Uncrop padding will be removed on reload',
+    });
+
     // --- Compare gaps ---
 
     const differenceMatte = viewer.getDifferenceMatteState();
@@ -216,6 +269,10 @@ export class SessionSerializer {
       isActive: blendModeActive,
       impact: 'Blend mode comparison will revert to off on reload',
     });
+
+    // TODO(#132): A/B compare assignment state (sourceAIndex, sourceBIndex, etc.)
+    // is not persisted. Only wipe mode/position is saved via the wipe state.
+    // console.info('[SessionSerializer] A/B compare assignment state is not persisted in .orvproject files.');
 
     return gaps;
   }
@@ -288,6 +345,10 @@ export class SessionSerializer {
       par: viewer.getPARState(),
       backgroundPattern: viewer.getBackgroundPatternState(),
       ...(components.playlistManager ? { playlist: components.playlistManager.getState() } : {}),
+      // TODO(#126): The node graph serializer exists (SessionGTOExporter) but is not wired
+      // into .orvproject save/load. The `graph` field in SessionState schema is reserved for
+      // this purpose but requires careful design to avoid breaking existing projects.
+      // graph: undefined,
       notes: session.noteManager.toSerializable(),
       versionGroups: session.versionManager.toSerializable(),
       statuses: session.statusManager.toSerializable(),
@@ -433,10 +494,18 @@ export class SessionSerializer {
       }
     }
 
-    // Restore playback state (only if media loaded)
-    if (loadedMedia > 0) {
-      session.setPlaybackState(migrated.playback);
-    }
+    // TODO(#134): Media representations and activeRepresentationId are serialized
+    // in toJSON() but never restored here. On project load, representations are
+    // lost and the active representation is not reselected. This needs a
+    // representation rebuild + reselect pass after media loading completes.
+    console.info(
+      '[SessionSerializer] Media representations are saved but not restored on load. ' +
+        'Active representation selection will be lost.',
+    );
+
+    // Restore playback state regardless of media count (fix #124).
+    // Playback settings (loop mode, volume, etc.) are valid even without media.
+    session.setPlaybackState(migrated.playback);
 
     // Restore playlist state when available (used by project save/load, snapshots,
     // and auto-save recovery in AppPersistenceManager).
@@ -476,18 +545,18 @@ export class SessionSerializer {
     viewer.setZoom(migrated.view.zoom);
     viewer.setPan(migrated.view.panX, migrated.view.panY);
 
-    // Restore notes
-    if (migrated.notes && migrated.notes.length > 0) {
+    // Restore notes (fix #123: always call, even for empty arrays, to clear old data)
+    if (migrated.notes) {
       session.noteManager.fromSerializable(migrated.notes);
     }
 
-    // Restore version groups
-    if (migrated.versionGroups && migrated.versionGroups.length > 0) {
+    // Restore version groups (fix #123: always call, even for empty arrays, to clear old data)
+    if (migrated.versionGroups) {
       session.versionManager.fromSerializable(migrated.versionGroups);
     }
 
-    // Restore statuses
-    if (migrated.statuses && migrated.statuses.length > 0) {
+    // Restore statuses (fix #123: always call, even for empty arrays, to clear old data)
+    if (migrated.statuses) {
       session.statusManager.fromSerializable(migrated.statuses);
     }
 
@@ -504,14 +573,29 @@ export class SessionSerializer {
       );
     }
 
+    // Reset omitted viewer states to defaults so that stale state from the
+    // previous session does not leak into the newly-loaded project (fix #136).
+    viewer.resetToneMappingState();
+    viewer.resetGhostFrameState();
+    viewer.resetStereoState();
+    viewer.resetStereoEyeTransforms();
+    viewer.resetStereoAlignMode();
+    viewer.resetChannelMode();
+    viewer.resetDifferenceMatteState();
+
     // Append warnings about viewer states that are not persisted in the project
-    // file, so the caller can surface them to the user.
+    // file, so the caller can surface them to the user.  Only warn about gaps
+    // that are *actively* non-default — clean loads should not produce gap
+    // warnings (fix #137).
     const gaps = this.getSerializationGaps(viewer);
-    const gapNames = gaps.map((g) => g.name);
-    warnings.push(
-      `The following viewer states are not saved in project files and use defaults: ${gapNames.join(', ')}. ` +
-        `Adjust them manually if needed after loading.`,
-    );
+    const activeGaps = gaps.filter((g) => g.isActive);
+    if (activeGaps.length > 0) {
+      const gapNames = activeGaps.map((g) => g.name);
+      warnings.push(
+        `The following viewer states are not saved in project files and use defaults: ${gapNames.join(', ')}. ` +
+          `Adjust them manually if needed after loading.`,
+      );
+    }
 
     return { loadedMedia, warnings };
   }

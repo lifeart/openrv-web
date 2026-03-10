@@ -963,3 +963,143 @@
 - **Fix**: Updated docs to remove misleading search/filter claims. Added TODO(#113).
 - **Regression Tests**: CS-113 (no search input in overlay).
 - **Files Changed**: `src/ui/components/ShortcutCheatSheet.ts`, `src/ui/components/ShortcutCheatSheet.test.ts`
+
+## Issue #114: Tone Mapping can be "enabled" in the dropdown while still being functionally off
+
+- **Severity**: Medium
+- **Fix**: In `setEnabled(true)`, when operator is `'off'`, auto-select the first non-off operator (matching the `toggle()` behavior from Issue #41).
+- **Regression Tests**: 5 tests in ToneMappingControl.issue114.test.ts.
+- **Files Changed**: `src/ui/components/ToneMappingControl.ts`
+
+## Issue #115: Typing a custom PAR value does not actually enable PAR correction
+
+- **Severity**: Medium
+- **Fix**: Added `state.enabled = true` and `updateEnableCheckbox()` in the custom input change handler, matching preset behavior.
+- **Regression Tests**: 2 tests in PARControl.issue115.test.ts.
+- **Files Changed**: `src/ui/components/PARControl.ts`
+
+## Issue #116: Volume slider disclosure is tied to the mute button, so keyboard/touch use mutates audio state just to reach the slider
+
+- **Severity**: Medium
+- **Fix**: Added TODO(#116) comment documenting the UX issue. Larger redesign needed to separate disclosure from mute.
+- **Regression Tests**: 1 test documenting the behavior.
+- **Files Changed**: `src/ui/components/VolumeControl.ts`
+
+## Issue #117: The OCIO button advertises the wrong shortcut
+
+- **Severity**: Low
+- **Fix**: Changed tooltip from `(Shift+O)` to `(O)`.
+- **Regression Tests**: 1 test.
+- **Files Changed**: `src/ui/components/OCIOControl.ts`
+
+## Issue #118: `WipeControl` is a dead legacy UI widget with no production mount path
+
+- **Severity**: Low
+- **Fix**: Added TODO(#118) to the existing `@deprecated` JSDoc noting it should be removed when safe.
+- **Regression Tests**: 2 tests.
+- **Files Changed**: `src/ui/components/WipeControl.ts`
+
+## Issue #119: Project save knows it is dropping active viewer state, but the save flow only logs that loss to the console
+
+- **Severity**: High
+- **Fix**: After `toJSON()`, check `getSerializationGaps()` for active gaps and call `showAlert()` with warning details before saving. Matches the pattern used by the load path.
+- **Regression Tests**: 2 tests.
+- **Files Changed**: `src/AppPersistenceManager.ts`
+
+## Issue #120: Restored PAR and background-pattern state can disagree with the visible controls
+
+- **Severity**: Medium
+- **Fix**: Added PAR and background-pattern control sync in `syncControlsFromState()`. Added both controls to `PersistenceManagerContext`.
+- **Regression Tests**: 2 tests.
+- **Files Changed**: `src/AppPersistenceManager.ts`
+
+## Issue #121: Opening a project imports its media on top of the current session instead of replacing the session
+
+- **Severity**: High
+- **Fix**: Added `clearSources()` method to SessionMedia/Session. `SessionSerializer.fromJSON()` now calls `session.clearSources()` before loading media.
+- **Regression Tests**: 1 test.
+- **Files Changed**: `src/core/session/SessionMedia.ts`, `src/core/session/Session.ts`, `src/core/session/SessionSerializer.ts`
+
+## Issue #122: Saved current-source selection is serialized but never restored
+
+- **Severity**: Medium
+- **Fix**: Added `setCurrentSource(state.currentSourceIndex)` at the end of `setPlaybackState()` in Session.
+- **Regression Tests**: 1 test.
+- **Files Changed**: `src/core/session/Session.ts`
+
+## Issue #123: Loading empty notes, version groups, or statuses does not clear the old session data
+
+- **Severity**: High
+- **Fix**: Removed `length > 0` guards from notes, versionGroups, and statuses restore in `SessionSerializer.fromJSON()`. Managers are now called even for empty arrays, clearing old data.
+- **Regression Tests**: 3 tests (one per data type).
+- **Files Changed**: `src/core/session/SessionSerializer.ts`
+
+## Issue #124: State-only or failed-media project loads skip playback-state restore entirely
+
+- **Severity**: Medium
+- **Fix**: Removed the `if (loadedMedia > 0)` guard around `setPlaybackState()`. Playback settings are now restored regardless of media count.
+- **Regression Tests**: 2 tests.
+- **Files Changed**: `src/core/session/SessionSerializer.ts`
+
+## Issue #125: RV/GTO session import keeps old review metadata when the imported file contains none
+
+- **Severity**: High
+- **Fix**: Removed `length > 0` guards for marks, notes, versionGroups, and statuses in `SessionGraph.loadFromGTO()`. Managers are called even with empty arrays.
+- **Regression Tests**: 2 tests.
+- **Files Changed**: `src/core/session/SessionGraph.ts`
+
+## Issue #126: `.orvproject` save/load never persists the node graph
+
+- **Severity**: High
+- **Fix**: Added TODO(#126) comment documenting that the graph serializer exists but isn't wired into .orvproject save/load. Too complex for a single fix without risking breakage.
+- **Regression Tests**: 1 test.
+- **Files Changed**: `src/core/session/SessionSerializer.ts`
+
+## Issue #127: Session renaming in the header is not honored by project save/load
+
+- **Severity**: Medium
+- **Fix**: `saveProject()` now uses `session.metadata?.displayName` instead of hardcoded `'project'`. Falls back to `'project'` if empty.
+- **Regression Tests**: 3 tests.
+- **Files Changed**: `src/AppPersistenceManager.ts`
+
+## Issue #128: RV/GTO marker notes and marker colors are exported and parsed, but import drops them
+
+- **Severity**: Medium
+- **Fix**: `MarkerManager.setFromFrameNumbers()` now accepts optional `notes` and `colors` parallel arrays. `SessionGraph.loadFromGTO()` passes parsed marker notes/colors.
+- **Regression Tests**: 5 tests.
+- **Files Changed**: `src/core/session/MarkerManager.ts`, `src/core/session/SessionGraph.ts`
+
+## Issue #129: RV/GTO audio-scrub state is exported and parsed, but never restored
+
+- **Severity**: Medium
+- **Fix**: Added `setAudioScrubEnabled` to `SessionGraphHost` interface and restore logic in `loadFromGTO()`. Wired in Session.
+- **Regression Tests**: 1 test.
+- **Files Changed**: `src/core/session/SessionGraph.ts`, `src/core/session/Session.ts`
+
+## Issue #130: Several shipped Effects-tab controls are fully wired, but `.orvproject` persistence ignores them
+
+- **Severity**: High
+- **Fix**: Added 5 new entries to `getSerializationGaps()`: Deinterlace, Film emulation, Perspective correction, Stabilization, Uncrop. Each checks viewer state against defaults and surfaces warnings at save time.
+- **Regression Tests**: 2 tests.
+- **Files Changed**: `src/core/session/SessionSerializer.ts`
+
+## Issue #131: Loading ordinary media after a GTO/RV session does not clear old session metadata or uncrop
+
+- **Severity**: High
+- **Fix**: `SessionGraph.clearData()` now also resets `_metadata` to defaults, `_uncropState` to null, and `_edlEntries` to empty array.
+- **Regression Tests**: 2 tests.
+- **Files Changed**: `src/core/session/SessionGraph.ts`
+
+## Issue #132: Project save/load preserves wipe mode but not the actual A/B compare assignment state
+
+- **Severity**: Medium
+- **Fix**: Added TODO(#132) comment in serialization gaps section and in `getSerializationGaps()` documenting the gap.
+- **Regression Tests**: 1 test.
+- **Files Changed**: `src/core/session/SessionSerializer.ts`
+
+## Issue #133: RV/GTO import loses `play all frames` because `realtime = 0` is parsed as "missing"
+
+- **Severity**: Medium
+- **Fix**: Changed condition from `realtime > 0` to `typeof realtime === 'number'`, preserving `realtime = 0` as a valid value for play-all-frames mode.
+- **Regression Tests**: 4 tests.
+- **Files Changed**: `src/core/session/GTOGraphLoader.ts`

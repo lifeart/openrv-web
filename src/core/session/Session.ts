@@ -348,6 +348,9 @@ export class Session extends EventEmitter<SessionEvents> {
       setPlaybackMode: (mode) => {
         this.playbackMode = mode;
       },
+      setAudioScrubEnabled: (enabled) => {
+        this.audioScrubEnabled = enabled;
+      },
       emitInOutChanged: (inP, outP) => this.emit('inOutChanged', { inPoint: inP, outPoint: outP }),
       emitFrameIncrementChanged: (inc) => this.emit('frameIncrementChanged', inc),
       getAnnotations: () => this._annotations,

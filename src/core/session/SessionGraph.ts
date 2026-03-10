@@ -38,6 +38,7 @@ export interface SessionGraphHost {
   setOutPoint(value: number): void;
   setFrameIncrement(value: number): void;
   setPlaybackMode(mode: PlaybackMode): void;
+  setAudioScrubEnabled(enabled: boolean): void;
   emitInOutChanged(inPoint: number, outPoint: number): void;
   emitFrameIncrementChanged(inc: number): void;
 
@@ -197,12 +198,27 @@ export class SessionGraph extends EventEmitter<SessionGraphEvents> {
   }
 
   /**
-   * Resets gtoData and graphParseResult (called by media loading methods).
+   * Resets gtoData, graphParseResult, and session metadata (called by media loading methods).
+   * Fix #131: Also clear metadata, uncropState, and edlEntries so old session
+   * data doesn't leak when loading ordinary media after a GTO/RV session.
    */
   clearData(): void {
     this._graph = null;
     this._gtoData = null;
     this._graphParseResult = null;
+    this._metadata = {
+      displayName: '',
+      comment: '',
+      version: 2,
+      origin: 'openrv-web',
+      creationContext: 0,
+      clipboard: 0,
+      membershipContains: [],
+      realtime: 0,
+      bgColor: [0.18, 0.18, 0.18, 1.0],
+    };
+    this._uncropState = null;
+    this._edlEntries = [];
   }
 
   dispose(): void {
@@ -291,8 +307,13 @@ export class SessionGraph extends EventEmitter<SessionGraphEvents> {
         this._host!.setOutPoint(result.sessionInfo.outPoint);
         this._host!.emitInOutChanged(result.sessionInfo.inPoint, result.sessionInfo.outPoint);
       }
-      if (result.sessionInfo.marks && result.sessionInfo.marks.length > 0) {
-        annotations.markerManager.setFromFrameNumbers(result.sessionInfo.marks);
+      // Fix #125: always call setFromFrameNumbers, even for empty arrays, to clear old markers
+      if (result.sessionInfo.marks) {
+        annotations.markerManager.setFromFrameNumbers(
+          result.sessionInfo.marks,
+          result.sessionInfo.markerNotes,
+          result.sessionInfo.markerColors,
+        );
       }
 
       // Apply frame increment
@@ -311,18 +332,18 @@ export class SessionGraph extends EventEmitter<SessionGraphEvents> {
         annotations.annotationStore.setMatteSettings(result.sessionInfo.matte);
       }
 
-      // Apply notes
-      if (result.sessionInfo.notes && result.sessionInfo.notes.length > 0) {
+      // Apply notes (fix #125: always call, even for empty arrays, to clear old data)
+      if (result.sessionInfo.notes) {
         annotations.noteManager.fromSerializable(result.sessionInfo.notes);
       }
 
-      // Apply version groups
-      if (result.sessionInfo.versionGroups && result.sessionInfo.versionGroups.length > 0) {
+      // Apply version groups (fix #125: always call, even for empty arrays, to clear old data)
+      if (result.sessionInfo.versionGroups) {
         annotations.versionManager.fromSerializable(result.sessionInfo.versionGroups);
       }
 
-      // Apply statuses
-      if (result.sessionInfo.statuses && result.sessionInfo.statuses.length > 0) {
+      // Apply statuses (fix #125: always call, even for empty arrays, to clear old data)
+      if (result.sessionInfo.statuses) {
         annotations.statusManager.fromSerializable(result.sessionInfo.statuses);
       }
 
@@ -331,6 +352,11 @@ export class SessionGraph extends EventEmitter<SessionGraphEvents> {
       if (result.sessionInfo.realtime !== undefined) {
         const gtoRealtime = result.sessionInfo.realtime;
         this._host!.setPlaybackMode(gtoRealtime === 0 ? 'playAllFrames' : 'realtime');
+      }
+
+      // Fix #129: Restore audio scrub state from GTO import
+      if (result.sessionInfo.audioScrubEnabled !== undefined) {
+        this._host!.setAudioScrubEnabled(result.sessionInfo.audioScrubEnabled);
       }
 
       // Apply session metadata

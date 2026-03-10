@@ -314,12 +314,18 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
         }
       }
 
-      // Prefer 'realtime' (actual playback fps) over 'fps' if both exist
+      // Prefer 'realtime' (actual playback fps) over 'fps' if both exist.
+      // Fix #133: realtime = 0 is a valid value meaning "play all frames",
+      // so check for undefined/null instead of treating 0 as falsy.
       const fps = sessionComp.property('fps').value() as number;
       const realtime = sessionComp.property('realtime').value() as number;
-      if (typeof realtime === 'number' && realtime > 0) {
-        sessionInfo.fps = realtime;
+      if (typeof realtime === 'number') {
         sessionInfo.realtime = realtime;
+        if (realtime > 0) {
+          sessionInfo.fps = realtime;
+        } else if (typeof fps === 'number' && fps > 0) {
+          sessionInfo.fps = fps;
+        }
       } else if (typeof fps === 'number' && fps > 0) {
         sessionInfo.fps = fps;
       }

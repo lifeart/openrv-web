@@ -7,7 +7,7 @@
  * #122: Saved current-source selection should be restored on load
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { AppPersistenceManager, type PersistenceManagerContext } from './AppPersistenceManager';
 import { SessionSerializer } from './core/session/SessionSerializer';
 import * as Modal from './ui/components/shared/Modal';
@@ -91,6 +91,11 @@ function createMockContext(overrides?: Partial<PersistenceManagerContext>): Pers
         green: { points: [{ x: 0, y: 0 }, { x: 1, y: 1 }], enabled: true },
         blue: { points: [{ x: 0, y: 0 }, { x: 1, y: 1 }], enabled: true },
       }),
+      getDeinterlaceParams: () => ({ method: 'bob', fieldOrder: 'tff', enabled: false }),
+      getFilmEmulationParams: () => ({ enabled: false, stock: 'kodak-portra-400', intensity: 1.0 }),
+      getPerspectiveParams: () => ({ enabled: false, topLeft: { x: 0, y: 0 }, topRight: { x: 1, y: 0 }, bottomRight: { x: 1, y: 1 }, bottomLeft: { x: 0, y: 1 }, quality: 'bilinear' }),
+      getStabilizationParams: () => ({ enabled: false }),
+      isUncropActive: () => false,
       setColorAdjustments: vi.fn(),
       setCDL: vi.fn(),
       setFilterSettings: vi.fn(),
@@ -168,7 +173,7 @@ describe('AppPersistenceManager - issue #119: saveProject surfaces warnings', ()
       (call: any[]) => call[1]?.type === 'warning' && call[1]?.title === 'Save Warning',
     );
     expect(warningCalls.length).toBe(1);
-    expect(warningCalls[0][0]).toContain('Tone mapping');
+    expect(warningCalls[0]![0]).toContain('Tone mapping');
 
     saveToFileSpy.mockRestore();
   });
@@ -178,6 +183,7 @@ describe('AppPersistenceManager - issue #119: saveProject surfaces warnings', ()
     // Override viewer to have no active gaps
     (ctx.viewer as any).getToneMappingState = () => ({ enabled: false, operator: 'off' });
     (ctx.viewer as any).isOCIOEnabled = () => false;
+    (ctx.viewer as any).getDisplayColorState = () => ({ transferFunction: 'srgb', displayGamma: 1.0 });
 
     const manager = new AppPersistenceManager(ctx);
     const saveToFileSpy = vi.spyOn(SessionSerializer, 'saveToFile').mockResolvedValue(undefined);
@@ -304,13 +310,18 @@ describe('SessionSerializer.fromJSON - issue #121: clears session before import'
         green: { points: [{ x: 0, y: 0 }, { x: 1, y: 1 }], enabled: true },
         blue: { points: [{ x: 0, y: 0 }, { x: 1, y: 1 }], enabled: true },
       }),
+      getDeinterlaceParams: () => ({ method: 'bob', fieldOrder: 'tff', enabled: false }),
+      getFilmEmulationParams: () => ({ enabled: false, stock: 'kodak-portra-400', intensity: 1.0 }),
+      getPerspectiveParams: () => ({ enabled: false, topLeft: { x: 0, y: 0 }, topRight: { x: 1, y: 0 }, bottomRight: { x: 1, y: 1 }, bottomLeft: { x: 0, y: 1 }, quality: 'bilinear' }),
+      getStabilizationParams: () => ({ enabled: false }),
+      isUncropActive: () => false,
     } as any;
 
     const paintEngine = { loadFromAnnotations: vi.fn() } as any;
 
     const state = SessionSerializer.createEmpty('test');
     state.media = [
-      { path: 'http://example.com/test.jpg', name: 'test.jpg', type: 'image', width: 100, height: 100 },
+      { path: 'http://example.com/test.jpg', name: 'test.jpg', type: 'image', width: 100, height: 100, duration: 0, fps: 0 },
     ];
 
     await SessionSerializer.fromJSON(state, { session, paintEngine, viewer });
@@ -377,6 +388,11 @@ describe('Session.setPlaybackState - issue #122: restores currentSourceIndex', (
         green: { points: [{ x: 0, y: 0 }, { x: 1, y: 1 }], enabled: true },
         blue: { points: [{ x: 0, y: 0 }, { x: 1, y: 1 }], enabled: true },
       }),
+      getDeinterlaceParams: () => ({ method: 'bob', fieldOrder: 'tff', enabled: false }),
+      getFilmEmulationParams: () => ({ enabled: false, stock: 'kodak-portra-400', intensity: 1.0 }),
+      getPerspectiveParams: () => ({ enabled: false, topLeft: { x: 0, y: 0 }, topRight: { x: 1, y: 0 }, bottomRight: { x: 1, y: 1 }, bottomLeft: { x: 0, y: 1 }, quality: 'bilinear' }),
+      getStabilizationParams: () => ({ enabled: false }),
+      isUncropActive: () => false,
     } as any;
 
     const paintEngine = { loadFromAnnotations: vi.fn() } as any;
@@ -384,8 +400,8 @@ describe('Session.setPlaybackState - issue #122: restores currentSourceIndex', (
     const state = SessionSerializer.createEmpty('test');
     // Simulate 2 media sources with currentSourceIndex = 1
     state.media = [
-      { path: 'http://example.com/a.jpg', name: 'a.jpg', type: 'image', width: 100, height: 100 },
-      { path: 'http://example.com/b.jpg', name: 'b.jpg', type: 'image', width: 100, height: 100 },
+      { path: 'http://example.com/a.jpg', name: 'a.jpg', type: 'image', width: 100, height: 100, duration: 0, fps: 0 },
+      { path: 'http://example.com/b.jpg', name: 'b.jpg', type: 'image', width: 100, height: 100, duration: 0, fps: 0 },
     ];
     state.playback.currentSourceIndex = 1;
 

@@ -1467,6 +1467,17 @@ export class SessionGTOExporter {
 
     const obj = builder.object(name, 'RVSession', 1);
 
+    // TODO(#135): Marker `endFrame` is not exported to GTO. Duration markers
+    // (where endFrame > frame) will collapse into point markers on round-trip.
+    // The RV GTO schema would need a `markerEndFrames` int[] property.
+    const durationMarkers = playback.marks.filter((m) => m.endFrame !== undefined && m.endFrame > m.frame);
+    if (durationMarkers.length > 0) {
+      console.info(
+        `[SessionGTOExporter] ${durationMarkers.length} duration marker(s) will be collapsed to point markers ` +
+          `on export — endFrame is not serialized in the GTO format.`,
+      );
+    }
+
     obj
       .component('session')
       .string('viewNode', viewNode)

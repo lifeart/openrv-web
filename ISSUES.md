@@ -2351,6 +2351,55 @@ This file tracks findings from exploratory review and targeted validation runs.
   - When waveform extraction fails, the timeline simply loses the waveform instead of telling the user why.
   - Troubleshooting falls back to the console even though the waveform subsystem already captures the failure reason.
 
+### 191. Pre-restore and pre-load auto-checkpoints can fail silently while destructive operations still proceed
+
+- Severity: Medium
+- Area: Persistence / recovery safety
+- Evidence:
+  - `createAutoCheckpoint(...)` catches all failures and only `console.error(...)`s them in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L184).
+  - Snapshot restore still proceeds immediately after that call in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L215).
+  - Project load does the same before replacing the current session in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L304).
+- Impact:
+  - The app promises itself a rollback checkpoint before major state replacement, but users are not told when that protection was never created.
+  - A failed checkpoint can turn restore/load into a one-way action with no visible warning that the safety net is gone.
+
+### 192. Auto-save can fail to initialize while the header indicator still makes it look active
+
+- Severity: Medium
+- Area: Persistence / autosave UX
+- Evidence:
+  - The header auto-save indicator is connected and rendered during playback wiring in [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L62).
+  - App startup only initializes the actual IndexedDB-backed autosave system later in [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L716).
+  - If initialization fails, `AutoSaveManager.initialize()` returns `false` after only logging the error in [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L136), and `AppPersistenceManager.initAutoSave()` also only logs in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L406).
+- Impact:
+  - Users can see an autosave control in the header even when the autosave backend never came up.
+  - The failure mode is misleading: the feature looks present, but recovery and background saves may be unavailable with no explicit in-app notice.
+
+### 193. Room share links without a PIN do not auto-join during URL bootstrap
+
+- Severity: Medium
+- Area: Collaboration / URL bootstrap
+- Evidence:
+  - `SessionURLService.handleURLBootstrap()` only auto-joins a room when both `roomCode` and `pinCode` are present in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L260).
+  - The same service still pre-fills the join-room UI when only `room` exists in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L216).
+  - The underlying `NetworkSyncManager.joinRoom(...)` API already accepts an optional PIN in [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L403).
+- Impact:
+  - A valid room share link without a PIN stops at a prefilled panel instead of actually joining.
+  - PIN-protected and non-PIN room links behave inconsistently even though the join API supports both.
+
+### 194. Client mode relies on selector attributes that the shipped DOM still does not provide
+
+- Severity: High
+- Area: Review mode / restricted UI
+- Evidence:
+  - The client-mode selector list still targets `[data-panel="..."]` and `[data-toolbar="..."]` attributes in [src/ui/components/ClientMode.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ClientMode.ts#L103).
+  - The same file explicitly documents that no production DOM elements currently have those attributes in [src/ui/components/ClientMode.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ClientMode.ts#L84).
+  - Production source search finds those `data-panel` and `data-toolbar` attributes only in tests and in the selector definitions themselves, not in real mounted UI components.
+  - `LayoutOrchestrator.applyClientModeRestrictions()` already warns that unmatched selectors mean client mode may not be hiding the intended UI in [src/services/LayoutOrchestrator.ts](/Users/lifeart/Repos/openrv-web/src/services/LayoutOrchestrator.ts#L663).
+- Impact:
+  - Client mode can be enabled while restricted editing panels and toolbars remain visible because the hide selectors match nothing.
+  - The feature’s core promise, a review-safe trimmed UI, is currently dependent on test-only markup rather than the shipped interface.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

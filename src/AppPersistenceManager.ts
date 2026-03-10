@@ -111,6 +111,9 @@ export class AppPersistenceManager {
   /**
    * Mark the session as having unsaved changes for auto-save.
    * Uses lazy evaluation - state is only serialized when actually saving.
+   *
+   * TODO(#138): Auto-save uses the same lossy SessionSerializer.toJSON() as
+   * project save. Viewer states tracked by getSerializationGaps() are lost.
    */
   markAutoSaveDirty(): void {
     const { session, paintEngine, viewer, autoSaveManager, autoSaveIndicator } = this.ctx;
@@ -154,6 +157,10 @@ export class AppPersistenceManager {
 
   /**
    * Create a quick snapshot with auto-generated name
+   *
+   * TODO(#138): Snapshots use the same lossy SessionSerializer.toJSON() as
+   * project save. Viewer states tracked by getSerializationGaps() (tone mapping,
+   * stereo, channel isolation, etc.) are silently lost in the snapshot.
    */
   async createQuickSnapshot(): Promise<void> {
     const { session, paintEngine, viewer, snapshotManager } = this.ctx;
@@ -180,6 +187,9 @@ export class AppPersistenceManager {
 
   /**
    * Create an auto-checkpoint before major operations
+   *
+   * TODO(#138): Auto-checkpoints use the same lossy SessionSerializer.toJSON()
+   * as project save. Viewer states tracked by getSerializationGaps() are lost.
    */
   async createAutoCheckpoint(event: string): Promise<void> {
     const { session, paintEngine, viewer, snapshotManager } = this.ctx;
@@ -215,8 +225,12 @@ export class AppPersistenceManager {
       // Create auto-checkpoint before restore
       await this.createAutoCheckpoint('Before Restore');
 
+      // Clear existing session before restore so we replace rather than
+      // append onto the current session (fix #139).
+      session.clearSources();
+
       // Restore the session state
-      await SessionSerializer.fromJSON(state, {
+      const result = await SessionSerializer.fromJSON(state, {
         session,
         paintEngine,
         viewer,
@@ -231,7 +245,22 @@ export class AppPersistenceManager {
       snapshotPanel.hide();
 
       const metadata = await snapshotManager.getSnapshotMetadata(id);
-      showAlert(`Restored "${metadata?.name || 'snapshot'}"`, { type: 'success', title: 'Snapshot Restored' });
+      const snapName = metadata?.name || 'snapshot';
+
+      // Surface warnings from restore rather than always reporting success (fix #140).
+      if (result.warnings.length > 0) {
+        showAlert(
+          `Restored "${snapName}" with ${result.warnings.length} warning(s):\n${result.warnings.join('\n')}`,
+          { type: 'warning', title: 'Snapshot Restored' },
+        );
+      } else if (result.loadedMedia === 0) {
+        showAlert(`Restored "${snapName}" (no media files — state only)`, {
+          type: 'info',
+          title: 'Snapshot Restored',
+        });
+      } else {
+        showAlert(`Restored "${snapName}"`, { type: 'success', title: 'Snapshot Restored' });
+      }
     } catch (err) {
       console.error('Failed to restore snapshot:', err);
       showAlert(`Failed to restore snapshot: ${err}`, { type: 'error', title: 'Restore Error' });
@@ -244,6 +273,8 @@ export class AppPersistenceManager {
   async saveProject(): Promise<void> {
     const { session, paintEngine, viewer } = this.ctx;
     try {
+      // Fix #127: Use session display name instead of hardcoded 'project'
+      const displayName = session.metadata?.displayName?.trim() || 'project';
       const state = SessionSerializer.toJSON(
         {
           session,
@@ -252,7 +283,7 @@ export class AppPersistenceManager {
           playlistManager: this.ctx.playlistManager,
           cacheManager: this.ctx.cacheManager,
         },
-        'project',
+        displayName,
       );
 
       // Surface serialization gaps to the user (fix #119).
@@ -268,7 +299,7 @@ export class AppPersistenceManager {
         );
       }
 
-      await SessionSerializer.saveToFile(state, 'project.orvproject');
+      await SessionSerializer.saveToFile(state, `${displayName}.orvproject`);
     } catch (err) {
       showAlert(`Failed to save project: ${err}`, { type: 'error', title: 'Save Error' });
     }
@@ -428,19 +459,27 @@ export class AppPersistenceManager {
         this.syncControlsFromState(state);
 
         if (warnings.length > 0) {
-          showAlert(`Session recovered with ${warnings.length} warning(s):\n${warnings.join('\n')}`, {
-            title: 'Recovery Warnings',
-            type: 'warning',
-          });
-        } else if (loadedMedia > 0) {
-          showAlert(`Session recovered successfully with ${loadedMedia} media file(s).`, {
-            title: 'Recovery Complete',
-            type: 'success',
-          });
-        }
+          // Keep the auto-save entry when recovery has warnings so the user
+          // can attempt recovery again if needed (fix #141).
+          showAlert(
+            `Session recovered with ${warnings.length} warning(s):\n${warnings.join('\n')}\n\n` +
+              `The auto-save entry has been preserved in case you need to retry recovery.`,
+            {
+              title: 'Recovery Warnings',
+              type: 'warning',
+            },
+          );
+        } else {
+          // Only delete the entry when recovery completes cleanly (fix #141).
+          await autoSaveManager.deleteAutoSave(id);
 
-        // Clear the recovered entry
-        await autoSaveManager.deleteAutoSave(id);
+          if (loadedMedia > 0) {
+            showAlert(`Session recovered successfully with ${loadedMedia} media file(s).`, {
+              title: 'Recovery Complete',
+              type: 'success',
+            });
+          }
+        }
       }
     } catch (err) {
       showAlert(`Failed to recover session: ${err}`, {
