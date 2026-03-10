@@ -48,6 +48,7 @@ describe('BugOverlaySettingsMenu', () => {
     menu.dispose();
     document.body.innerHTML = '';
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it('BOM-001: shows a settings menu with expected aria label', () => {

@@ -13,13 +13,12 @@
  * - Image loading and rendering lifecycle
  * - Dispose cleanup
  *
- * Findings documented in test descriptions:
+ * Integration notes documented in test descriptions:
  * - BugOverlay extends CanvasOverlay (confirmed)
  * - setViewerDimensions(w, h, 0, 0, w, h) is the call pattern (offset 0,0 means
  *   display region fills entire canvas -- correct when no letterboxing)
- * - NO toggle button exists in the View tab (AppControlRegistry) for BugOverlay
- * - Bug image source can be set via loadImage(url) or setImage(HTMLImageElement),
- *   but there is no UI control to set the bug image -- API-only
+ * - Bug image source can be set via loadImage(url) or setImage(HTMLImageElement)
+ * - Production UI wiring lives separately in the View tab toolbar/menu layer
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -365,10 +364,10 @@ describe('BugOverlay E2E Integration', () => {
   });
 
   // =========================================================================
-  // 6. Missing wiring assessment (documented findings)
+  // 6. API surface assessment
   // =========================================================================
-  describe('missing wiring assessment', () => {
-    it('BUG-E2E-050: BugOverlay is API-only (loadImage, setImage, toggle, enable, disable exist)', () => {
+  describe('API surface assessment', () => {
+    it('BUG-E2E-050: BugOverlay exposes the methods needed by the production UI', () => {
       const bugOverlay = viewer.getBugOverlay();
       expect(typeof bugOverlay.loadImage).toBe('function');
       expect(typeof bugOverlay.setImage).toBe('function');

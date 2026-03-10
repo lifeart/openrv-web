@@ -13,6 +13,7 @@ function createToggleOverlay() {
   const emitter = new EventEmitter();
   let state = {
     enabled: false,
+    imageUrl: null as string | null,
     showFullPath: false,
     showDataWindow: true,
     showDisplayWindow: true,
@@ -33,6 +34,13 @@ function createToggleOverlay() {
   return Object.assign(emitter, {
     toggle: vi.fn(),
     getState: vi.fn(() => ({ ...state })),
+    hasImage: vi.fn(() => state.imageUrl !== null),
+    loadImage: vi.fn(async (imageUrl) => {
+      state = { ...state, imageUrl, enabled: true };
+    }),
+    removeImage: vi.fn(() => {
+      state = { ...state, imageUrl: null, enabled: false };
+    }),
     setShowFullPath: vi.fn((showFullPath) => {
       state = { ...state, showFullPath };
     }),
@@ -75,7 +83,36 @@ function createToggleOverlay() {
   });
 }
 
+function createMatteOverlay() {
+  const emitter = new EventEmitter();
+  let settings = {
+    show: false,
+    aspect: 1.78,
+    opacity: 0.66,
+    heightVisible: -1,
+    centerPoint: [0, 0] as [number, number],
+  };
+
+  return Object.assign(emitter, {
+    toggle: vi.fn(() => {
+      settings = { ...settings, show: !settings.show };
+    }),
+    getSettings: vi.fn(() => ({ ...settings, centerPoint: [...settings.centerPoint] as [number, number] })),
+    setAspect: vi.fn((aspect) => {
+      settings = { ...settings, aspect };
+    }),
+    setOpacity: vi.fn((opacity) => {
+      settings = { ...settings, opacity };
+    }),
+    setCenterPoint: vi.fn((x, y) => {
+      settings = { ...settings, centerPoint: [x, y] };
+    }),
+  });
+}
+
 function createTestDeps() {
+  const bugOverlay = createToggleOverlay();
+  const matteOverlay = createMatteOverlay();
   const infoStripOverlay = createToggleOverlay();
   const spotlightOverlay = createToggleOverlay();
   const exrWindowOverlay = createToggleOverlay();
@@ -147,6 +184,8 @@ function createTestDeps() {
     setSphericalProjection: vi.fn(),
     getMissingFrameMode: vi.fn(() => 'off'),
     setMissingFrameMode: vi.fn(),
+    getBugOverlay: vi.fn(() => bugOverlay),
+    getMatteOverlay: vi.fn(() => matteOverlay),
     getSpotlightOverlay: vi.fn(() => spotlightOverlay),
     getEXRWindowOverlay: vi.fn(() => exrWindowOverlay),
     getInfoStripOverlay: vi.fn(() => infoStripOverlay),
@@ -161,10 +200,86 @@ function createTestDeps() {
     unsubscribers.push(unsub);
   };
 
-  return { registry, viewer, timelineEditorPanel, addUnsubscriber, unsubscribers, infoStripOverlay, timecodeOverlay };
+  return {
+    registry,
+    viewer,
+    timelineEditorPanel,
+    addUnsubscriber,
+    unsubscribers,
+    bugOverlay,
+    matteOverlay,
+    infoStripOverlay,
+    timecodeOverlay,
+  };
 }
 
 describe('buildViewTab', () => {
+  it('adds a matte overlay toggle button wired to the overlay', () => {
+    const deps = createTestDeps();
+
+    const result = buildViewTab(deps);
+
+    const button = result.element.querySelector<HTMLButtonElement>('[data-testid="matte-overlay-toggle-btn"]');
+    expect(button).not.toBeNull();
+
+    button!.click();
+    expect(deps.matteOverlay.toggle).toHaveBeenCalledOnce();
+  });
+
+  it('opens the matte overlay settings menu on right-click', () => {
+    const deps = createTestDeps();
+
+    const result = buildViewTab(deps);
+    const button = result.element.querySelector<HTMLButtonElement>('[data-testid="matte-overlay-toggle-btn"]')!;
+
+    button.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 14, clientY: 26 }));
+
+    const menu = document.querySelector('.matte-overlay-settings-menu');
+    expect(menu).not.toBeNull();
+    expect(menu?.getAttribute('aria-label')).toBe('Matte Overlay settings');
+  });
+
+  it('opens the bug overlay settings menu when the button is clicked without an image', () => {
+    const deps = createTestDeps();
+
+    const result = buildViewTab(deps);
+
+    const button = result.element.querySelector<HTMLButtonElement>('[data-testid="bug-overlay-toggle-btn"]');
+    expect(button).not.toBeNull();
+
+    button!.click();
+
+    const menu = document.querySelector('.bug-overlay-settings-menu');
+    expect(menu).not.toBeNull();
+    expect(menu?.getAttribute('aria-label')).toBe('Bug Overlay settings');
+    expect(deps.bugOverlay.toggle).not.toHaveBeenCalled();
+  });
+
+  it('toggles the bug overlay when an image is already loaded', async () => {
+    const deps = createTestDeps();
+    await deps.bugOverlay.loadImage('data:image/png;base64,Zm9v');
+
+    const result = buildViewTab(deps);
+    const button = result.element.querySelector<HTMLButtonElement>('[data-testid="bug-overlay-toggle-btn"]');
+    expect(button).not.toBeNull();
+
+    button!.click();
+    expect(deps.bugOverlay.toggle).toHaveBeenCalledOnce();
+  });
+
+  it('opens the bug overlay settings menu on right-click', () => {
+    const deps = createTestDeps();
+
+    const result = buildViewTab(deps);
+    const button = result.element.querySelector<HTMLButtonElement>('[data-testid="bug-overlay-toggle-btn"]')!;
+
+    button.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 22 }));
+
+    const menu = document.querySelector('.bug-overlay-settings-menu');
+    expect(menu).not.toBeNull();
+    expect(menu?.getAttribute('aria-label')).toBe('Bug Overlay settings');
+  });
+
   it('adds an info strip toggle button wired to the overlay', () => {
     const deps = createTestDeps();
 

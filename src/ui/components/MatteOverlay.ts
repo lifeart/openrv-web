@@ -24,14 +24,8 @@ export const DEFAULT_MATTE_SETTINGS: MatteSettings = {
   centerPoint: [0, 0],
 };
 
-/**
- * TODO(#87): MatteOverlay is fully implemented with letterbox/pillarbox, aspect
- * ratio, opacity, and center point controls, but has no production UI entry
- * point. A panel or menu item should be added to expose this feature.
- */
 export class MatteOverlay extends CanvasOverlay<MatteOverlayEvents> {
   private settings: MatteSettings = { ...DEFAULT_MATTE_SETTINGS };
-  private hasLoggedCustomizationHint = false;
   private sourceAspect = 1; // Aspect ratio of the source content
 
   constructor() {
@@ -87,15 +81,6 @@ export class MatteOverlay extends CanvasOverlay<MatteOverlayEvents> {
    */
   enable(): void {
     this.setSettings({ show: true });
-
-    // TODO(#87): Log customization hint on first enable
-    if (!this.hasLoggedCustomizationHint) {
-      this.hasLoggedCustomizationHint = true;
-      console.info(
-        '[MatteOverlay] Aspect ratio, opacity, and center point are configurable ' +
-          'via the API but are not yet exposed in the UI. See issue #87.',
-      );
-    }
   }
 
   /**

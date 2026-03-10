@@ -396,6 +396,19 @@ describe('BugOverlay', () => {
       expect(state.opacity).toBe(0.5);
       expect(state.margin).toBe(20);
     });
+
+    it('BUG-111: setState clamps numeric properties to valid ranges', () => {
+      overlay.setState({
+        size: 1,
+        opacity: -1,
+        margin: 200,
+      });
+
+      const state = overlay.getState();
+      expect(state.size).toBe(0.3);
+      expect(state.opacity).toBe(0);
+      expect(state.margin).toBe(100);
+    });
   });
 
   // ---------------------------------------------------------------------------
@@ -483,38 +496,5 @@ describe('Compositing: display:none for inactive overlay', () => {
     overlay.disable();
     expect(overlay.getElement().style.display).toBe('none');
     overlay.dispose();
-  });
-
-  // -------------------------------------------------------------------------
-  // #86: console.info on first enable
-  // -------------------------------------------------------------------------
-  it('BUG-HINT-001: logs console.info on first enable', () => {
-    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
-    try {
-      const overlay = new BugOverlay();
-      overlay.enable();
-      expect(infoSpy).toHaveBeenCalledTimes(1);
-      expect(infoSpy.mock.calls[0]![0]).toContain('[BugOverlay]');
-      expect(infoSpy.mock.calls[0]![0]).toContain('#86');
-      overlay.dispose();
-    } finally {
-      infoSpy.mockRestore();
-    }
-  });
-
-  it('BUG-HINT-002: logs only once across multiple enable calls', () => {
-    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
-    try {
-      const overlay = new BugOverlay();
-      overlay.enable();
-      overlay.disable();
-      overlay.enable();
-      overlay.disable();
-      overlay.enable();
-      expect(infoSpy).toHaveBeenCalledTimes(1);
-      overlay.dispose();
-    } finally {
-      infoSpy.mockRestore();
-    }
   });
 });

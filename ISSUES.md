@@ -5927,6 +5927,31 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The docs present `.ico` as a supported browser-native format, but the shipped open-media flow does not consistently treat it as one.
   - Users can expect `.ico` files to appear and classify like other listed image formats when the real picker/runtime support is narrower.
 
+### 502. The JPEG gainmap guide documents the wrong HDR reconstruction formula for the shipped decoder
+
+- Severity: Low
+- Area: Documentation / JPEG gainmap HDR behavior
+- Evidence:
+  - The file-format guide says JPEG gainmap reconstruction uses `hdr = sdr_linear * (1 + gainMap * headroom)` in [docs/guides/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/guides/file-formats.md#L123).
+  - The shipped JPEG gainmap decoder documents and implements the simplified ISO 21496-1-style exponential model `HDR_linear = sRGB_to_linear(base) * exp2(gainmap * headroom)` in [src/formats/JPEGGainmapDecoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/JPEGGainmapDecoder.ts#L15) through [src/formats/JPEGGainmapDecoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/JPEGGainmapDecoder.ts#L17).
+  - The shared gain-map reconstruction path also precomputes gain factors with `Math.exp((i / 255.0) * headroom * Math.LN2)`, which is the same exponential formulation, in [src/formats/GainMapMetadata.ts](/Users/lifeart/Repos/openrv-web/src/formats/GainMapMetadata.ts#L284) through [src/formats/GainMapMetadata.ts](/Users/lifeart/Repos/openrv-web/src/formats/GainMapMetadata.ts#L288).
+- Impact:
+  - The docs explain the shipped HDR reconstruction math incorrectly.
+  - Anyone using the guide to reason about highlight scaling, parity checks, or external reimplementation of the decoder will get the wrong model.
+
+### 503. The file-format guide says all image decoding yields `Float32Array` RGBA data, but standard browser-native image loads still stay as `HTMLImageElement` sources
+
+- Severity: Low
+- Area: Documentation / image decode architecture
+- Evidence:
+  - The guide claims “All image decoding produces **Float32Array** pixel data in RGBA layout” in [docs/guides/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/guides/file-formats.md#L9).
+  - The normal `FileSourceNode.load(...)` path for standard JPEG/AVIF and other browser-native images stores the decoded result as `this.image = img` and explicitly leaves `this.cachedIPImage = null` in [src/nodes/sources/FileSourceNode.ts](/Users/lifeart/Repos/openrv-web/src/nodes/sources/FileSourceNode.ts#L655) through [src/nodes/sources/FileSourceNode.ts](/Users/lifeart/Repos/openrv-web/src/nodes/sources/FileSourceNode.ts#L679) and [src/nodes/sources/FileSourceNode.ts](/Users/lifeart/Repos/openrv-web/src/nodes/sources/FileSourceNode.ts#L725) through [src/nodes/sources/FileSourceNode.ts](/Users/lifeart/Repos/openrv-web/src/nodes/sources/FileSourceNode.ts#L749).
+  - The URL/image-element path likewise resolves ordinary images into `HTMLImageElement`-backed `MediaSource` objects in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L399) through [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L431).
+  - By contrast, the real `Float32Array` / `IPImage` path is only used for specific HDR/decoder-backed formats such as EXR, gainmap HDR, JXL/HEIC SDR fallback, and other explicit buffer decodes in [src/nodes/sources/FileSourceNode.ts](/Users/lifeart/Repos/openrv-web/src/nodes/sources/FileSourceNode.ts#L989) through [src/nodes/sources/FileSourceNode.ts](/Users/lifeart/Repos/openrv-web/src/nodes/sources/FileSourceNode.ts#L1049) and [src/nodes/sources/FileSourceNode.ts](/Users/lifeart/Repos/openrv-web/src/nodes/sources/FileSourceNode.ts#L1764) through [src/nodes/sources/FileSourceNode.ts](/Users/lifeart/Repos/openrv-web/src/nodes/sources/FileSourceNode.ts#L1782).
+- Impact:
+  - The docs overstate how uniform the shipped decode pipeline really is.
+  - Anyone reading the guide to understand memory behavior, plugin integration, or browser-native image handling will expect a Float32 decode stage that standard images do not actually use.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

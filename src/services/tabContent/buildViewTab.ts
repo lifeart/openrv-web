@@ -13,6 +13,8 @@ import { TimecodeOverlaySettingsMenu } from '../../ui/components/TimecodeOverlay
 import { FPSIndicatorSettingsMenu } from '../../ui/components/FPSIndicatorSettingsMenu';
 import { InfoStripSettingsMenu } from '../../ui/components/InfoStripSettingsMenu';
 import { EXRWindowOverlaySettingsMenu } from '../../ui/components/EXRWindowOverlaySettingsMenu';
+import { BugOverlaySettingsMenu } from '../../ui/components/BugOverlaySettingsMenu';
+import { MatteOverlaySettingsMenu } from '../../ui/components/MatteOverlaySettingsMenu';
 
 export interface BuildViewTabDeps {
   registry: AppControlRegistry;
@@ -29,6 +31,8 @@ export interface BuildViewTabResult {
 
 export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
   const { registry, viewer, timelineEditorPanel, addUnsubscriber } = deps;
+  const bugOverlay = viewer.getBugOverlay();
+  const matteOverlay = viewer.getMatteOverlay();
   const exrWindowOverlay = viewer.getEXRWindowOverlay();
   const infoStripOverlay = viewer.getInfoStripOverlay();
   const timecodeOverlay = viewer.getTimecodeOverlay();
@@ -394,6 +398,57 @@ export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
   addUnsubscriber(
     viewer.getSpotlightOverlay().on('stateChanged', (state) => {
       setButtonActive(spotlightButton, state.enabled, 'icon');
+    }),
+  );
+
+  const matteOverlayButton = ContextToolbar.createIconButton(
+    'crop',
+    () => {
+      matteOverlay.toggle();
+    },
+    { title: 'Toggle matte overlay — Right-click for settings' },
+  );
+  matteOverlayButton.dataset.testid = 'matte-overlay-toggle-btn';
+  viewContent.appendChild(matteOverlayButton);
+
+  const matteOverlaySettingsMenu = new MatteOverlaySettingsMenu(matteOverlay);
+  matteOverlayButton.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    matteOverlaySettingsMenu.show(e.clientX, e.clientY);
+  });
+  addUnsubscriber(() => matteOverlaySettingsMenu.dispose());
+
+  addUnsubscriber(
+    matteOverlay.on('settingsChanged', (settings) => {
+      setButtonActive(matteOverlayButton, settings.show, 'icon');
+    }),
+  );
+
+  const bugOverlayButton = ContextToolbar.createIconButton(
+    'flag',
+    () => {
+      if (!bugOverlay.hasImage()) {
+        const rect = bugOverlayButton.getBoundingClientRect();
+        bugOverlaySettingsMenu.show(rect.left, rect.bottom + 4);
+        return;
+      }
+      bugOverlay.toggle();
+    },
+    { title: 'Toggle bug overlay — Click to configure when empty, right-click for settings' },
+  );
+  bugOverlayButton.dataset.testid = 'bug-overlay-toggle-btn';
+  viewContent.appendChild(bugOverlayButton);
+
+  const bugOverlaySettingsMenu = new BugOverlaySettingsMenu(bugOverlay);
+  bugOverlayButton.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    bugOverlaySettingsMenu.show(e.clientX, e.clientY);
+  });
+  addUnsubscriber(() => bugOverlaySettingsMenu.dispose());
+
+  addUnsubscriber(
+    bugOverlay.on('stateChanged', (state) => {
+      setButtonActive(bugOverlayButton, state.enabled, 'icon');
     }),
   );
 
