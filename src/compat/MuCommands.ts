@@ -41,6 +41,7 @@ function getOpenRV(): {
     setPlaybackFPS(fps: number): void;
     getResolution(): { width: number; height: number };
     hasMedia(): boolean;
+    getStartFrame(): number;
   };
   audio: {
     setAudioScrubEnabled(enabled: boolean): void;
@@ -98,7 +99,7 @@ const SUPPORT_MAP: Record<string, true | false | 'partial' | 'stub'> = {
   outPoint: true,
   setInPoint: true,
   setOutPoint: true,
-  // Playback - ADD (implemented with local state)
+  // Playback - ADD
   frameStart: true,
   setFPS: true,
   realFPS: true,
@@ -139,7 +140,6 @@ const ASYNC_COMMANDS = new Set<string>(['fullScreenMode']);
 
 export class MuCommands {
   // --- Internal state for ADD commands ---
-  private _frameStart = 1;
   private _skippedFrames = 0;
   private _mbps = 0;
   private _margins: number[] = [0, 0, 0, 0];
@@ -197,7 +197,7 @@ export class MuCommands {
 
   /** Get frame range start. (Mu #6) */
   frameStart(): number {
-    return this._frameStart;
+    return getOpenRV().media.getStartFrame();
   }
 
   /** Get frame range end (total frames). (Mu #7) */

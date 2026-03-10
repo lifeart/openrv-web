@@ -349,9 +349,9 @@
 - **Area**: Plugin system, export pipeline
 - **Root Cause**: `registerExporter()` stored exporters in the registry, but the production export flow (`ExportControl` → `AppPlaybackWiring` → built-in handlers) never called `getExporter()` or `getExporters()`.
 - **Fix**: Added `exporterRegistered` signal for reactive discovery, `console.warn` on registration noting exporters aren't yet consulted, and TODO(#18) documenting what's needed. Existing API unchanged.
-- **Regression Tests**: PREG-049 (warning emitted on registration), PREG-050 (signal fires with correct pluginId, name, and exporter data).
-- **Verification**: All 53 PluginRegistry tests pass, TypeScript clean.
-- **Files Changed**: `src/plugin/PluginRegistry.ts`, `src/plugin/PluginRegistry.test.ts`
+- **TODO(#18) Resolved**: Plugin exporters now appear in the export dropdown. `ExportControl` gained `addPluginExporter()`/`removePluginExporter()` methods with a "Plugin Exporters" section. `AppPlaybackWiring` seeds existing exporters on init, subscribes to `exporterRegistered`/`exporterUnregistered` signals for dynamic updates, and handles `pluginExportRequested` with blob/text export dispatch and download. Added `exporterUnregistered` signal to `PluginRegistry`. Removed console.warn and TODO comments.
+- **Regression Tests**: PREG-049 (updated: no warn), PREG-051 (new: unregistered signal), EXPORT-PLG01 through PLG11 (11 new), PW-PLG01 through PLG05 (5 new).
+- **Files Changed**: `src/ui/components/ExportControl.ts`, `src/plugin/PluginRegistry.ts`, `src/AppPlaybackWiring.ts`, `src/App.ts`, and their test files
 
 ## Issue #16: CacheManagementPanel is fully implemented but has no production wiring
 

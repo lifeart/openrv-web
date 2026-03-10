@@ -122,7 +122,7 @@ import { buildColorTab } from './services/tabContent/buildColorTab';
 import { buildEffectsTab } from './services/tabContent/buildEffectsTab';
 import { buildTransformTab } from './services/tabContent/buildTransformTab';
 import { buildAnnotateTab } from './services/tabContent/buildAnnotateTab';
-import { buildPanelToggles } from './services/tabContent/buildPanelToggles';
+import { buildPanelToggles, type PanelTogglesResult } from './services/tabContent/buildPanelToggles';
 
 /**
  * Dependencies required by AppControlRegistry to create all controls.
@@ -154,6 +154,14 @@ export class AppControlRegistry {
   private readonly slateEditorPanel: Panel;
   private convergenceButton: HTMLButtonElement | null = null;
   private floatingWindowButton: HTMLButtonElement | null = null;
+
+  /** Panel toggles result with helpers for plugin panel management */
+  private _panelTogglesResult: PanelTogglesResult | null = null;
+
+  /** Expose panel toggles result for plugin panel wiring */
+  get panelTogglesResult(): PanelTogglesResult | null {
+    return this._panelTogglesResult;
+  }
 
   constructor(deps: ControlRegistryDeps) {
     const { session, viewer, paintEngine, displayCapabilities } = deps;
@@ -475,14 +483,16 @@ export class AppControlRegistry {
     contextToolbar.setTabContent('color', buildColorTab({ registry: this, viewer, addUnsubscriber }));
 
     // === PANEL TOGGLES -> HeaderBar utility area ===
-    headerBar.setPanelToggles(
-      buildPanelToggles({
-        registry: this,
-        sessionBridge,
-        conformPanelElement: this.panel.conformPanelElement,
-        addUnsubscriber,
-      }),
-    );
+    const panelTogglesResult = buildPanelToggles({
+      registry: this,
+      sessionBridge,
+      conformPanelElement: this.panel.conformPanelElement,
+      addUnsubscriber,
+    });
+    headerBar.setPanelToggles(panelTogglesResult.element);
+
+    // Store the panel toggles result for plugin panel wiring
+    this._panelTogglesResult = panelTogglesResult;
 
     // === EFFECTS TAB ===
     contextToolbar.setTabContent(

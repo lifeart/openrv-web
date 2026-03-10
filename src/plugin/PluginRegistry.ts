@@ -64,13 +64,14 @@ export class PluginRegistry {
   /**
    * Emitted when a plugin registers a UI panel.
    * Consumers can listen to this signal to discover and mount plugin-contributed panels.
-   *
-   * TODO(#15): The app layout does not yet consume this signal. Plugin panels are stored
-   * in the registry but never mounted into the visible application. A future integration
-   * should listen to this signal (or query getUIPanels()) during initialization and
-   * mount plugin panels into the appropriate layout regions.
    */
   readonly uiPanelRegistered = new Signal<{ pluginId: PluginId; panel: UIPanelContribution }>();
+
+  /**
+   * Emitted when a plugin UI panel is unregistered (e.g., on deactivation).
+   * Consumers should remove the panel from any UI surfaces.
+   */
+  readonly uiPanelUnregistered = new Signal<{ pluginId: PluginId; panelId: string }>();
 
   /**
    * Emitted when a plugin registers an exporter.
@@ -432,14 +433,6 @@ export class PluginRegistry {
       registerUIPanel: (panel: UIPanelContribution) => {
         registry.uiPanelRegistry.set(panel.id, panel);
         reg.uiPanels.push(panel.id);
-        // TODO(#15): Plugin UI panels are registered but not yet consumed by the app
-        // layout system. This warning will be removed once the layout integration is
-        // implemented. Consumers can listen to registry.uiPanelRegistered for panel
-        // discovery.
-        console.warn(
-          `[plugin:${manifest.id}] UI panel "${panel.id}" registered but plugin panels ` +
-          `are not yet displayed in the application layout. See issue #15.`,
-        );
         registry.uiPanelRegistered.emit(
           { pluginId: manifest.id, panel },
           { pluginId: manifest.id, panel },
@@ -527,6 +520,10 @@ export class PluginRegistry {
           const panel = this.uiPanelRegistry.get(id);
           panel?.destroy?.();
           this.uiPanelRegistry.delete(id);
+          this.uiPanelUnregistered.emit(
+            { pluginId, panelId: id },
+            { pluginId, panelId: id },
+          );
         } catch (e) {
           console.warn(`[plugin:${pluginId}] Failed to unregister UI panel "${id}":`, e);
         }

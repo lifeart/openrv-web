@@ -7,6 +7,7 @@
 import type { Session } from '../core/session/Session';
 import type { PatternName, GradientDirection } from '../nodes/sources/ProceduralSourceNode';
 import { DisposableAPI } from './Disposable';
+import { getCurrentSourceStartFrame } from '../utils/media/SourceUIState';
 
 /**
  * Public source information returned by the API
@@ -151,6 +152,28 @@ export class MediaAPI extends DisposableAPI {
   hasMedia(): boolean {
     this.assertNotDisposed();
     return this.session.currentSource !== null;
+  }
+
+  /**
+   * Get the start frame number of the current source.
+   *
+   * For image sequences this is the first frame number in the sequence
+   * (e.g. 1001 for a VFX sequence starting at frame 1001).
+   * For single images or when no source is loaded, returns 1.
+   *
+   * @returns The start frame number (1-based).
+   *
+   * @example
+   * ```ts
+   * const start = openrv.media.getStartFrame(); // e.g. 1001
+   * ```
+   */
+  getStartFrame(): number {
+    this.assertNotDisposed();
+    const source = this.session.currentSource;
+    const startFrame = getCurrentSourceStartFrame(source);
+    // Default to 1 (the standard first frame) when no source metadata is available
+    return startFrame || 1;
   }
 
   /**

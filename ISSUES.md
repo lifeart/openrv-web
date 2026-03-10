@@ -5205,6 +5205,42 @@ This file tracks findings from exploratory review and targeted validation runs.
   - DCC-driven review sync can quietly stop propagating outbound viewer changes even though the local app continues to behave normally.
   - From the DCC side, lost updates look like random desynchronization rather than an explicit transport failure.
 
+### 444. The DCC guide promises a configurable bridge endpoint, but production only supports `?dcc=` URL bootstrap
+
+- Severity: Low
+- Area: Documentation / DCC connection setup
+- Evidence:
+  - The DCC guide says the browser connects to `ws://localhost:9200` and that for remote setups “the bridge server address can be configured in the OpenRV Web settings” in [docs/advanced/dcc-integration.md](/Users/lifeart/Repos/openrv-web/docs/advanced/dcc-integration.md#L24) through [docs/advanced/dcc-integration.md](/Users/lifeart/Repos/openrv-web/docs/advanced/dcc-integration.md#L27).
+  - Production bootstrap only creates the bridge when a `dcc` query parameter is present in the page URL, in [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L603) through [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L617).
+  - A production-code search finds no DCC settings panel, no persisted DCC endpoint preference, and no other runtime entry point for configuring a bridge URL outside that query-param path.
+- Impact:
+  - Users following the guide can look for a settings-driven DCC connection flow that the shipped app does not provide.
+  - Remote or repeated DCC setups are less usable than documented because the endpoint must be supplied out-of-band in the launch URL.
+
+### 445. The DCC guide promises browser review notes back to the DCC, but the shipped bridge only reports paint annotations
+
+- Severity: Low
+- Area: Documentation / DCC review roundtrip
+- Evidence:
+  - The DCC guide says artists can “push review notes and status updates back to the DCC” and that outbound viewer messages include `annotationCreated` in [docs/advanced/dcc-integration.md](/Users/lifeart/Repos/openrv-web/docs/advanced/dcc-integration.md#L3) through [docs/advanced/dcc-integration.md](/Users/lifeart/Repos/openrv-web/docs/advanced/dcc-integration.md#L4) and [docs/advanced/dcc-integration.md](/Users/lifeart/Repos/openrv-web/docs/advanced/dcc-integration.md#L89) through [docs/advanced/dcc-integration.md](/Users/lifeart/Repos/openrv-web/docs/advanced/dcc-integration.md#L96).
+  - The actual outbound protocol defines `annotationAdded`, not `annotationCreated`, and it has no note message type at all in [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L26) through [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L27) and [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L91) through [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L117).
+  - Production wiring only forwards `paintEngine.strokeAdded` through `sendAnnotationAdded(...)` in [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L267) through [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L276), and there is no runtime subscriber to note-manager changes in the DCC path.
+- Impact:
+  - Users and integrators can expect note-level review roundtrip from the guide, but the shipped bridge only reports paint annotations.
+  - That makes the documented DCC review loop sound richer than the real protocol and can mislead pipeline implementers about what feedback types they will receive.
+
+### 446. The DCC guide overstates app-specific Nuke, Maya, and Houdini workflows that the shipped bridge does not model
+
+- Severity: Medium
+- Area: Documentation / DCC feature scope
+- Evidence:
+  - The DCC guide presents concrete app-specific features such as Nuke node-selection sync and flipbook replacement, Maya camera sync and shot-context push, and Houdini flipbook/MPlay integration in [docs/advanced/dcc-integration.md](/Users/lifeart/Repos/openrv-web/docs/advanced/dcc-integration.md#L33) through [docs/advanced/dcc-integration.md](/Users/lifeart/Repos/openrv-web/docs/advanced/dcc-integration.md#L61).
+  - The actual shipped bridge protocol only exposes four inbound message types (`loadMedia`, `syncFrame`, `syncColor`, `ping`) and a small outbound set (`frameChanged`, `colorChanged`, `annotationAdded`, `pong`, `error`) in [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L23) through [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L27) and [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L112) through [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L117).
+  - App wiring only connects those generic media/frame/color/annotation paths in [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L172) through [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L280), and a production-code search finds no Nuke-, Maya-, or Houdini-specific bridge module or runtime feature layer.
+- Impact:
+  - Pipeline teams reading the guide can expect first-class DCC-specific workflows that the shipped browser app does not actually expose as protocol or UI features.
+  - The real integration surface is a generic WebSocket media/frame/color bridge, not the richer per-application workflow the docs currently imply.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

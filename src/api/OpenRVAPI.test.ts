@@ -750,6 +750,46 @@ describe('MediaAPI', () => {
     expect(source1).toEqual(source2);
     expect(source1).not.toBe(source2); // different object references
   });
+
+  it('API-U040: getStartFrame() returns 1 by default (no sequence info)', () => {
+    expect(media.getStartFrame()).toBe(1);
+  });
+
+  it('API-U041: getStartFrame() returns sequence start frame from sequenceInfo', () => {
+    session._currentSource = {
+      name: 'shot.0001.exr',
+      type: 'sequence',
+      width: 1920,
+      height: 1080,
+      duration: 100,
+      fps: 24,
+      sequenceInfo: { startFrame: 1001, endFrame: 1100, padding: 4, pattern: 'shot.%04d.exr' },
+    };
+    expect(media.getStartFrame()).toBe(1001);
+  });
+
+  it('API-U042: getStartFrame() prefers active representation startFrame', () => {
+    session._currentSource = {
+      name: 'shot.0001.exr',
+      type: 'sequence',
+      width: 1920,
+      height: 1080,
+      duration: 100,
+      fps: 24,
+      sequenceInfo: { startFrame: 1001, endFrame: 1100, padding: 4, pattern: 'shot.%04d.exr' },
+      representations: [
+        { id: 'rep0', startFrame: 500, status: 'ready' },
+        { id: 'rep1', startFrame: 86400, status: 'ready' },
+      ],
+      activeRepresentationIndex: 1,
+    };
+    expect(media.getStartFrame()).toBe(86400);
+  });
+
+  it('API-U043: getStartFrame() returns 1 when no source is loaded', () => {
+    session._currentSource = null;
+    expect(media.getStartFrame()).toBe(1);
+  });
 });
 
 // ============================================================

@@ -47,6 +47,7 @@ function createMockOpenRV() {
       setPlaybackFPS: vi.fn(),
       getResolution: vi.fn((): { width: number; height: number } => ({ width: 1920, height: 1080 })),
       hasMedia: vi.fn((): boolean => true),
+      getStartFrame: vi.fn((): number => 1),
       getCurrentSource: vi.fn(() => null),
       getDuration: vi.fn(() => 100),
       getSourceCount: vi.fn(() => 1),
@@ -192,8 +193,23 @@ describe('MuCommands', () => {
       expect(cmd.frame()).toBe(42);
     });
 
-    it('frameStart() returns 1 by default', () => {
+    it('frameStart() delegates to openrv.media.getStartFrame()', () => {
+      mockOpenRV.media.getStartFrame.mockReturnValue(1);
       expect(cmd.frameStart()).toBe(1);
+      expect(mockOpenRV.media.getStartFrame).toHaveBeenCalled();
+    });
+
+    it('frameStart() returns real source start frame, not a hardcoded default', () => {
+      mockOpenRV.media.getStartFrame.mockReturnValue(1001);
+      expect(cmd.frameStart()).toBe(1001);
+    });
+
+    it('frameStart() reads from real API on every call (no local cache)', () => {
+      mockOpenRV.media.getStartFrame.mockReturnValue(1);
+      expect(cmd.frameStart()).toBe(1);
+
+      mockOpenRV.media.getStartFrame.mockReturnValue(86400);
+      expect(cmd.frameStart()).toBe(86400);
     });
 
     it('frameEnd() returns total frames', () => {
@@ -665,6 +681,7 @@ describe('MuExtraCommands', () => {
 
     it('isNarrowed() returns false when in/out match range', () => {
       // frameStart=1, frameEnd=100, inPoint=1, outPoint=100
+      mockOpenRV.media.getStartFrame.mockReturnValue(1);
       mockOpenRV.loop.getInPoint.mockReturnValue(1);
       mockOpenRV.loop.getOutPoint.mockReturnValue(100);
       mockOpenRV.playback.getTotalFrames.mockReturnValue(100);
@@ -677,14 +694,43 @@ describe('MuExtraCommands', () => {
       expect(extra.isNarrowed()).toBe(true);
     });
 
+    it('isNarrowed() uses real frameStart (not hardcoded 1) for comparison', () => {
+      // Sequence starts at frame 1001, in/out match the full range
+      mockOpenRV.media.getStartFrame.mockReturnValue(1001);
+      mockOpenRV.loop.getInPoint.mockReturnValue(1001);
+      mockOpenRV.loop.getOutPoint.mockReturnValue(100);
+      mockOpenRV.playback.getTotalFrames.mockReturnValue(100);
+      expect(extra.isNarrowed()).toBe(false);
+    });
+
+    it('isNarrowed() detects narrowing with non-default frameStart', () => {
+      mockOpenRV.media.getStartFrame.mockReturnValue(1001);
+      mockOpenRV.loop.getInPoint.mockReturnValue(1010);
+      mockOpenRV.loop.getOutPoint.mockReturnValue(100);
+      mockOpenRV.playback.getTotalFrames.mockReturnValue(100);
+      expect(extra.isNarrowed()).toBe(true);
+    });
+
     it('isPlayable() returns true when range > 1 frame', () => {
       mockOpenRV.playback.getTotalFrames.mockReturnValue(100);
       expect(extra.isPlayable()).toBe(true);
     });
 
     it('isPlayable() returns false for single-frame source', () => {
+      mockOpenRV.media.getStartFrame.mockReturnValue(1);
       mockOpenRV.playback.getTotalFrames.mockReturnValue(1);
       expect(extra.isPlayable()).toBe(false);
+    });
+
+    it('isPlayable() uses real frameStart for comparison', () => {
+      // frameStart=1001, frameEnd=1001 -> not playable (single frame)
+      mockOpenRV.media.getStartFrame.mockReturnValue(1001);
+      mockOpenRV.playback.getTotalFrames.mockReturnValue(1001);
+      expect(extra.isPlayable()).toBe(false);
+
+      // frameStart=1001, frameEnd=1100 -> playable
+      mockOpenRV.playback.getTotalFrames.mockReturnValue(1100);
+      expect(extra.isPlayable()).toBe(true);
     });
 
     it('isPlayingForwards() returns true when playing forward', () => {
