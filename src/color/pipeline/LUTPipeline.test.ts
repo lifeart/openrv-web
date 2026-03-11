@@ -484,6 +484,67 @@ describe('LUTPipeline', () => {
       expect(serializable.displayLUT.lutName).toBe('display.cube');
       expect(serializable.displayLUT.lutData).toBeUndefined();
     });
+
+    it('MLUT-U082: loadSerializableState restores names, settings, and active source without LUT binaries', () => {
+      const serializable = {
+        sources: {
+          'source-1': {
+            sourceId: 'source-1',
+            preCacheLUT: {
+              enabled: false,
+              lutName: 'pre.cube',
+              intensity: 0.4,
+              source: 'manual' as const,
+              bitDepth: '16bit' as const,
+              inMatrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0.1, 0.2, 0.3, 1],
+              outMatrix: null,
+            },
+            fileLUT: {
+              enabled: true,
+              lutName: 'file.cube',
+              intensity: 0.7,
+              source: 'manual' as const,
+              inMatrix: null,
+              outMatrix: null,
+            },
+            lookLUT: {
+              enabled: true,
+              lutName: 'look.cube',
+              intensity: 0.8,
+              source: 'manual' as const,
+              inMatrix: null,
+              outMatrix: null,
+            },
+          },
+        },
+        displayLUT: {
+          enabled: false,
+          lutName: 'display.cube',
+          intensity: 0.9,
+          source: 'manual' as const,
+          inMatrix: null,
+          outMatrix: null,
+        },
+        activeSourceId: 'source-1',
+      };
+
+      pipeline.loadSerializableState(serializable);
+
+      const restored = pipeline.getState();
+      const source = restored.sources.get('source-1')!;
+      expect(restored.activeSourceId).toBe('source-1');
+      expect(source.preCacheLUT.lutName).toBe('pre.cube');
+      expect(source.preCacheLUT.enabled).toBe(false);
+      expect(source.preCacheLUT.intensity).toBeCloseTo(0.4);
+      expect(source.preCacheLUT.bitDepth).toBe('16bit');
+      expect(source.preCacheLUT.lutData).toBeNull();
+      expect(source.preCacheLUT.inMatrix).toBeInstanceOf(Float32Array);
+      expect(source.fileLUT.lutName).toBe('file.cube');
+      expect(source.lookLUT.lutName).toBe('look.cube');
+      expect(restored.displayLUT.lutName).toBe('display.cube');
+      expect(restored.displayLUT.enabled).toBe(false);
+      expect(restored.displayLUT.lutData).toBeNull();
+    });
   });
 
   describe('Event Emission', () => {

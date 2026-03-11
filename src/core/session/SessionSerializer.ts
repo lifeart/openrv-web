@@ -250,26 +250,6 @@ export class SessionSerializer {
       impact: 'Uncrop padding will be removed on reload',
     });
 
-    // --- LUT pipeline gap (fix #146) ---
-
-    // TODO(#146): The LUT Pipeline panel state (File/Look/Display LUT stages)
-    // is not persisted through project save/load. Only the single pre-cache LUT
-    // path is partially captured via lutPath/lutIntensity.
-    const lutPipeline = viewer.getLUTPipeline();
-    const lutSourceId = lutPipeline.getActiveSourceId() ?? 'default';
-    const lutSourceConfig = lutPipeline.getSourceConfig(lutSourceId);
-    const lutPipelineState = lutPipeline.getState();
-    const lutPipelineActive =
-      !!(lutSourceConfig?.fileLUT.lutData && lutSourceConfig.fileLUT.enabled) ||
-      !!(lutSourceConfig?.lookLUT.lutData && lutSourceConfig.lookLUT.enabled) ||
-      !!(lutPipelineState.displayLUT.lutData && lutPipelineState.displayLUT.enabled);
-    gaps.push({
-      name: 'LUT Pipeline',
-      category: 'color',
-      isActive: lutPipelineActive,
-      impact: 'File/Look/Display LUT stages will be lost on reload',
-    });
-
     // --- Compare gaps ---
 
     const differenceMatte = viewer.getDifferenceMatteState();
@@ -358,6 +338,7 @@ export class SessionSerializer {
       watermark: viewer.getWatermarkState(),
       lutPath: viewer.getLUT()?.title,
       lutIntensity: viewer.getLUTIntensity(),
+      lutPipeline: viewer.getLUTPipeline().getSerializableState(),
       par: viewer.getPARState(),
       backgroundPattern: viewer.getBackgroundPatternState(),
       ...(components.playlistManager ? { playlist: components.playlistManager.getState() } : {}),
@@ -592,6 +573,13 @@ export class SessionSerializer {
     viewer.setNoiseReductionParams(migrated.noiseReduction ?? DEFAULT_NOISE_REDUCTION_PARAMS);
     viewer.setWatermarkState(migrated.watermark ?? DEFAULT_WATERMARK_STATE);
     viewer.setLUTIntensity(migrated.lutIntensity);
+    const lutPipeline = viewer.getLUTPipeline?.();
+    if (lutPipeline && typeof lutPipeline.loadSerializableState === 'function') {
+      lutPipeline.loadSerializableState(migrated.lutPipeline);
+    }
+    if (typeof viewer.syncLUTPipeline === 'function') {
+      viewer.syncLUTPipeline();
+    }
     if (migrated.par) {
       viewer.setPARState(migrated.par);
     }
@@ -631,6 +619,14 @@ export class SessionSerializer {
       warnings.push(
         `LUT "${migrated.lutPath}" needs to be reloaded manually${intensityNote}. ` +
           `The LUT intensity setting has been preserved.`,
+      );
+    }
+
+    const lutPipelineReloads = this.getLUTPipelineReloadWarnings(migrated);
+    if (lutPipelineReloads.length > 0) {
+      warnings.push(
+        `LUT Pipeline assignments need to be reloaded manually: ${lutPipelineReloads.join(', ')}. ` +
+          `Stage names, enabled flags, intensities, and active source were restored.`,
       );
     }
 
@@ -715,6 +711,24 @@ export class SessionSerializer {
     return migrated;
   }
 
+  private static getLUTPipelineReloadWarnings(state: SessionState): string[] {
+    const warnings: string[] = [];
+    const lutPipeline = state.lutPipeline;
+    if (!lutPipeline) return warnings;
+
+    for (const source of Object.values(lutPipeline.sources ?? {})) {
+      const sourceLabel = source.sourceId || 'default';
+      if (source.preCacheLUT.lutName) warnings.push(`${sourceLabel} Pre-Cache ("${source.preCacheLUT.lutName}")`);
+      if (source.fileLUT.lutName) warnings.push(`${sourceLabel} File ("${source.fileLUT.lutName}")`);
+      if (source.lookLUT.lutName) warnings.push(`${sourceLabel} Look ("${source.lookLUT.lutName}")`);
+    }
+    if (lutPipeline.displayLUT?.lutName) {
+      warnings.push(`Display ("${lutPipeline.displayLUT.lutName}")`);
+    }
+
+    return warnings;
+  }
+
   /**
    * Save to .orvproject file (triggers download)
    */
@@ -785,6 +799,11 @@ export class SessionSerializer {
       noiseReduction: { ...DEFAULT_NOISE_REDUCTION_PARAMS },
       watermark: { ...DEFAULT_WATERMARK_STATE },
       lutIntensity: 1.0,
+      lutPipeline: {
+        sources: {},
+        displayLUT: { enabled: true, lutName: null, intensity: 1, source: 'manual', inMatrix: null, outMatrix: null },
+        activeSourceId: null,
+      },
     };
   }
 }

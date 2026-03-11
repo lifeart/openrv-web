@@ -2227,18 +2227,18 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Callers can receive command objects that are not the same objects reachable via `window.rv`, even though the API contract reads like an idempotent registration helper.
   - Repeated bootstrap or tool-side setup code can silently diverge between “returned handle” and “installed global” state.
 
-### 208. `openrv.events` drops duration-marker `endFrame` data from `markerChange`
+### 208. The published `markerChange` event contract still drops duration-marker `endFrame` data even though the runtime now emits it
 
 - Severity: Medium
-- Area: Public API / events
+- Area: Documentation / public API events
 - Evidence:
-  - Session markers support duration ranges through an optional `endFrame` on the core `Marker` type in [src/core/session/MarkerManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MarkerManager.ts#L20).
-  - The public marker API preserves that field in `MarkerInfo`, `add()`, `get()`, and `getAll()` in [src/api/MarkersAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/MarkersAPI.ts#L13).
-  - The public event payload type for `markerChange` omits `endFrame` entirely in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L33).
-  - The bridge from `marksChanged` to `markerChange` only emits `frame`, `note`, and `color` in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L245).
+  - The live public event type includes optional `endFrame` on `markerChange` in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L49).
+  - The runtime bridge also forwards `endFrame` whenever a marker range has one in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L292) and [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L304).
+  - The generated API reference still documents `app:markerChange` as `{ markers: [{ frame, note, color }] }` in [docs/api/index.md](/Users/lifeart/Repos/openrv-web/docs/api/index.md#L113).
+  - The main scripting guide repeats that older payload shape in [docs/advanced/scripting-api.md](/Users/lifeart/Repos/openrv-web/docs/advanced/scripting-api.md#L315).
 - Impact:
-  - External scripts listening to `openrv.events.on('markerChange', ...)` cannot distinguish range markers from point markers.
-  - The public marker query API and the public marker event API expose inconsistent marker semantics, so automation loses information exactly on change notification.
+  - Script authors reading the published event tables are steered toward an incomplete payload contract and can ignore valid `endFrame` data that the runtime already emits.
+  - The docs now understate marker-range support on the public event surface, which makes the event API look less capable than the real app.
 
 ### 210. `window.openrv.plugins.loadFromURL()` is unrestricted by origin in production
 
@@ -6706,6 +6706,58 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - A script can drive the session into an invalid `currentFrame = NaN` state through a single public API call when looped stepping is active.
   - Once frame state is `NaN`, downstream playback, event payloads, and any UI or automation that assumes integer frame numbers can misbehave unpredictably.
+
+### 567. `openrv.view.setZoom()` and `setPan()` accept non-finite numbers and write them straight into live transform state
+
+- Severity: High
+- Area: Public API / viewer transform state
+- Evidence:
+  - `ViewAPI.setZoom()` rejects only non-numbers, `NaN`, and values `<= 0`, so `Infinity` is still accepted and forwarded to the viewer in [src/api/ViewAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/ViewAPI.ts#L47) through [src/api/ViewAPI.ts#L57).
+  - `ViewAPI.setPan()` similarly rejects only non-numbers and `NaN`, not non-finite coordinates, in [src/api/ViewAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/ViewAPI.ts#L139) through [src/api/ViewAPI.ts#L148).
+  - The concrete viewer path does not sanitize those values: `Viewer.setZoom()` / `setPan()` delegate straight into `TransformManager`, and `TransformManager.setZoom()` / `setPan()` store the raw numbers directly in `_zoom`, `_panX`, and `_panY` before notifying listeners in [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L1261) through [src/ui/components/Viewer.ts#L1262), [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L2387) through [src/ui/components/Viewer.ts#L2388), and [src/ui/components/TransformManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/TransformManager.ts#L146) through [src/ui/components/TransformManager.ts#L177).
+  - The current API tests cover `0`, negative, `NaN`, and wrong-type inputs for zoom/pan, but do not defend against `Infinity`, in [src/api/OpenRVAPI.test.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.test.ts#L984) through [src/api/OpenRVAPI.test.ts#L987) and [src/api/OpenRVAPI.test.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.test.ts#L1044) through [src/api/OpenRVAPI.test.ts#L1046).
+- Impact:
+  - A script can put the viewer into `zoom = Infinity` or infinite pan offsets with one public API call, and those values then propagate through view-change listeners and rendering math.
+  - That can destabilize visible navigation, derived `viewTransformChanged` payloads, and any consumer that assumes the public view state is finite geometry.
+
+### 568. `openrv.color.setCDL()` accepts non-finite values and pushes them directly into the live grading pipeline
+
+- Severity: High
+- Area: Public API / color pipeline / CDL
+- Evidence:
+  - `ColorAPI.setCDL()` validates CDL channel values and saturation with `isNaN(...)`, not `Number.isFinite(...)`, so `Infinity` and `-Infinity` pass as “valid numbers” in [src/api/ColorAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/ColorAPI.ts#L155) through [src/api/ColorAPI.ts#L236).
+  - The downstream control/pipeline layers do not sanitize them: `CDLControl.setCDL()` and `ColorPipelineManager.setCDL()` deep-copy and store the raw values directly in [src/ui/components/CDLControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/CDLControl.ts#L498) through [src/ui/components/CDLControl.ts#L518) and [src/ui/components/ColorPipelineManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ColorPipelineManager.ts#L350) through [src/ui/components/ColorPipelineManager.ts#L352).
+  - The actual CDL math then consumes those values without any finite-number guard. `applyCDLToValue()` multiplies and powers the incoming value with raw `slope`/`offset`/`power`, and `applySaturation()` applies raw `saturation`, in [src/color/CDL.ts](/Users/lifeart/Repos/openrv-web/src/color/CDL.ts#L57) through [src/color/CDL.ts#L75) and [src/color/CDL.ts](/Users/lifeart/Repos/openrv-web/src/color/CDL.ts#L83) through [src/color/CDL.ts#L100).
+  - The neighboring primary-adjustments path already treats `Infinity` as invalid and falls back to defaults in [src/ui/components/ColorControls.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ColorControls.ts#L746) through [src/ui/components/ColorControls.ts#L753), so this is a specific CDL gap rather than a deliberate global policy.
+- Impact:
+  - A script can inject non-finite CDL state into the live viewer, after which CPU and GPU grading paths may produce infinite or unstable pixel values.
+  - That makes the public color API internally inconsistent: primary adjustments defend against non-finite inputs, but CDL grading does not.
+
+### 569. `openrv.markers.add()` accepts non-finite `frame` and `endFrame`, and the marker subsystem stores them as live marker state
+
+- Severity: Medium
+- Area: Public API / markers
+- Evidence:
+  - `MarkersAPI.add()` rejects only non-numbers, `NaN`, and frames `< 1`, so `Infinity` still passes for both `frame` and `endFrame` in [src/api/MarkersAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/MarkersAPI.ts#L44) through [src/api/MarkersAPI.ts#L63).
+  - The core marker manager does not sanitize those values; it stores `frame` as the map key and preserves any `endFrame > frame` verbatim in [src/core/session/MarkerManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MarkerManager.ts#L132) through [src/core/session/MarkerManager.ts#L142).
+  - Marker queries then operate on those raw values. `getMarkerAtFrame()` treats any frame `<= marker.endFrame`, so a marker with `endFrame = Infinity` becomes an effectively unbounded range in [src/core/session/MarkerManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MarkerManager.ts#L95) through [src/core/session/MarkerManager.ts#L103).
+  - The public readback path also returns marker frames/end frames unchanged in [src/api/MarkersAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/MarkersAPI.ts#L96) through [src/api/MarkersAPI.ts#L110).
+  - Current API tests cover `NaN`, zero, negatives, and normal floats, but they do not defend against non-finite marker positions in [src/api/OpenRVAPI.test.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.test.ts#L1368) through [src/api/OpenRVAPI.test.ts#L1511).
+- Impact:
+  - A script can create an infinite-range marker or an `Infinity`-position marker with one public API call, and that malformed state is then visible through `get()`, `getAll()`, and `markerChange`.
+  - Once such a marker exists, marker-hit testing and range semantics stop matching the app’s integer frame model, which can confuse automation and any UI or export path that assumes finite frame boundaries.
+
+### 570. `openrv.color.setAdjustments()` silently ignores or resets invalid numeric values instead of rejecting them
+
+- Severity: Medium
+- Area: Public API / color adjustments
+- Evidence:
+  - `ColorAPI.setAdjustments()` only validates that the outer argument is an object. Per-field numeric values are accepted whenever they are `typeof number` and not `NaN`, so `Infinity` still passes the API boundary while `NaN` is just skipped without an error in [src/api/ColorAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/ColorAPI.ts#L93) through [src/api/ColorAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/ColorAPI.ts#L127).
+  - The downstream control layer then rewrites non-finite numbers back to defaults instead of surfacing an error, in [src/ui/components/ColorControls.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ColorControls.ts#L746) through [src/ui/components/ColorControls.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ColorControls.ts#L755).
+  - The current tests explicitly lock in that behavior: `setAdjustments({ exposure: NaN, gamma: 2 })` keeps `gamma` and silently ignores the bad `exposure`, and `ColorControls` tests expect `Infinity` to fall back to defaults in [src/api/OpenRVAPI.test.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.test.ts#L1212) through [src/api/OpenRVAPI.test.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.test.ts#L1217) and [src/ui/components/ColorControls.test.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ColorControls.test.ts#L101) through [src/ui/components/ColorControls.test.ts#L108).
+- Impact:
+  - A script can send malformed primary-adjustment values and get a partial success with no exception, which makes automation bugs harder to notice than they should be.
+  - The public color API becomes internally inconsistent: primary adjustments silently normalize bad values, while neighboring setters like `setCDL()` are framed as validation-based APIs.
 
 ## Validation Notes
 

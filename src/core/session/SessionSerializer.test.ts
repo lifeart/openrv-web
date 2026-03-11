@@ -16,6 +16,7 @@ import { DEFAULT_DIFFERENCE_MATTE_STATE } from '../../ui/components/DifferenceMa
 import { DEFAULT_BLEND_MODE_STATE } from '../../ui/components/ComparisonManager';
 import { createDefaultCurvesData } from '../../color/ColorCurves';
 import { DEFAULT_STEREO_EYE_TRANSFORM_STATE, DEFAULT_STEREO_ALIGN_MODE } from '../../stereo/StereoRenderer';
+import { LUTPipeline } from '../../color/pipeline/LUTPipeline';
 
 // Mock the showFileReloadPrompt dialog
 vi.mock('../../ui/components/shared/Modal', () => ({
@@ -1311,16 +1312,102 @@ describe('SessionSerializer', () => {
   });
 
   // -----------------------------------------------------------------------
-  // Issue #146: LUT Pipeline in serialization gaps
+  // Issue #146: LUT Pipeline project persistence
   // -----------------------------------------------------------------------
-  describe('issue #146: LUT Pipeline serialization gap', () => {
-    it('SER-LUT-001: getSerializationGaps includes LUT Pipeline entry', () => {
+  describe('issue #146: LUT Pipeline project persistence', () => {
+    it('SER-LUT-001: toJSON includes serializable LUT Pipeline state', () => {
+      const components = createMockComponents();
+      const pipeline = (components.viewer as any).getLUTPipeline();
+      const lut = {
+        title: 'Test LUT',
+        size: 2,
+        domainMin: [0, 0, 0] as [number, number, number],
+        domainMax: [1, 1, 1] as [number, number, number],
+        data: new Float32Array(24),
+      };
+      pipeline.setPreCacheLUT('default', lut, 'decode.cube');
+      pipeline.setPreCacheLUTEnabled('default', false);
+      pipeline.setPreCacheLUTIntensity('default', 0.25);
+      pipeline.setFileLUT('default', lut, 'file.cube');
+      pipeline.setFileLUTIntensity('default', 0.5);
+      pipeline.setDisplayLUT(lut, 'display.cube');
+      pipeline.setDisplayLUTIntensity(0.75);
+
+      const state = SessionSerializer.toJSON(components, 'LUT Project');
+
+      expect(state.lutPipeline).toBeDefined();
+      expect(state.lutPipeline?.sources.default?.preCacheLUT.lutName).toBe('decode.cube');
+      expect(state.lutPipeline?.sources.default?.preCacheLUT.enabled).toBe(false);
+      expect(state.lutPipeline?.sources.default?.fileLUT.intensity).toBeCloseTo(0.5);
+      expect(state.lutPipeline?.displayLUT.lutName).toBe('display.cube');
+    });
+
+    it('SER-LUT-002: fromJSON restores LUT Pipeline metadata and warns to reload named LUTs', async () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty('Restore LUT Pipeline');
+      state.lutPipeline = {
+        sources: {
+          default: {
+            sourceId: 'default',
+            preCacheLUT: {
+              enabled: false,
+              lutName: 'decode.cube',
+              intensity: 0.3,
+              source: 'manual',
+              bitDepth: '16bit',
+              inMatrix: null,
+              outMatrix: null,
+            },
+            fileLUT: {
+              enabled: true,
+              lutName: 'file.cube',
+              intensity: 0.6,
+              source: 'manual',
+              inMatrix: null,
+              outMatrix: null,
+            },
+            lookLUT: {
+              enabled: true,
+              lutName: 'look.cube',
+              intensity: 0.8,
+              source: 'manual',
+              inMatrix: null,
+              outMatrix: null,
+            },
+          },
+        },
+        displayLUT: {
+          enabled: true,
+          lutName: 'display.cube',
+          intensity: 0.9,
+          source: 'manual',
+          inMatrix: null,
+          outMatrix: null,
+        },
+        activeSourceId: 'default',
+      };
+
+      const result = await SessionSerializer.fromJSON(state, components);
+      const pipeline = (components.viewer as any).getLUTPipeline() as LUTPipeline;
+      const restored = pipeline.getState();
+
+      expect(restored.activeSourceId).toBe('default');
+      expect(restored.sources.get('default')?.preCacheLUT.lutName).toBe('decode.cube');
+      expect(restored.sources.get('default')?.preCacheLUT.enabled).toBe(false);
+      expect(restored.sources.get('default')?.fileLUT.intensity).toBeCloseTo(0.6);
+      expect(restored.sources.get('default')?.lookLUT.lutName).toBe('look.cube');
+      expect(restored.displayLUT.lutName).toBe('display.cube');
+      expect((components.viewer as any).syncLUTPipeline).toHaveBeenCalled();
+      expect(result.warnings.some((w) => w.includes('LUT Pipeline assignments need to be reloaded manually'))).toBe(
+        true,
+      );
+    });
+
+    it('SER-LUT-003: getSerializationGaps no longer reports LUT Pipeline as an unserialized gap', () => {
       const components = createMockComponents();
       const gaps = SessionSerializer.getSerializationGaps(components.viewer as any);
       const lutGap = gaps.find((g) => g.name === 'LUT Pipeline');
-      expect(lutGap).toBeDefined();
-      expect(lutGap!.category).toBe('color');
-      expect(lutGap!.isActive).toBe(false); // No LUT data in mock
+      expect(lutGap).toBeUndefined();
     });
   });
 
@@ -1445,6 +1532,9 @@ function createMockComponents(): SessionComponents {
   const paintEngine = new PaintEngine();
   // Spy on loadFromAnnotations so tests can assert it was called
   vi.spyOn(paintEngine, 'loadFromAnnotations');
+  const lutPipeline = new LUTPipeline();
+  lutPipeline.registerSource('default');
+  lutPipeline.setActiveSource('default');
 
   return {
     session: {
@@ -1540,6 +1630,7 @@ function createMockComponents(): SessionComponents {
       setBackgroundPatternState: vi.fn(),
       setZoom: vi.fn(),
       setPan: vi.fn(),
+      syncLUTPipeline: vi.fn(),
       // Reset methods for omitted viewer states (fix #136)
       resetToneMappingState: vi.fn(),
       resetGhostFrameState: vi.fn(),
@@ -1549,17 +1640,7 @@ function createMockComponents(): SessionComponents {
       resetChannelMode: vi.fn(),
       resetDifferenceMatteState: vi.fn(),
       // LUT pipeline (fix #146)
-      getLUTPipeline: vi.fn().mockReturnValue({
-        getActiveSourceId: vi.fn().mockReturnValue('default'),
-        getSourceConfig: vi.fn().mockReturnValue({
-          fileLUT: { lutData: null, enabled: false, intensity: 1 },
-          lookLUT: { lutData: null, enabled: false, intensity: 1 },
-          preCacheLUT: { lutData: null, enabled: false, intensity: 1 },
-        }),
-        getState: vi.fn().mockReturnValue({
-          displayLUT: { lutData: null, enabled: false, intensity: 1 },
-        }),
-      }),
+      getLUTPipeline: vi.fn().mockReturnValue(lutPipeline),
     },
   } as any;
 }

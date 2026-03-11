@@ -26,6 +26,7 @@ import type { VersionGroup } from './VersionManager';
 import type { StatusEntry } from './StatusManager';
 import type { SerializedGraph } from './SessionManagerTypes';
 import type { RVEDLEntry } from '../../formats/RVEDLParser';
+import type { SerializableLUTPipelineState } from '../../color/pipeline/LUTPipelineState';
 
 /** Schema version for migration support */
 export const SESSION_STATE_VERSION = 2;
@@ -140,6 +141,8 @@ export interface SessionState {
   lutPath?: string;
   /** LUT intensity blend */
   lutIntensity: number;
+  /** Multi-stage LUT pipeline settings (binary LUT data omitted) */
+  lutPipeline?: SerializableLUTPipelineState;
   /** Pixel Aspect Ratio correction (optional, defaults to disabled square pixels) */
   par?: PARState;
   /** Background pattern for alpha visualization (optional, defaults to black) */

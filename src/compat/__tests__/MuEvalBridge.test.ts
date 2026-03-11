@@ -482,10 +482,44 @@ describe('MuEvalBridge', () => {
       expect(result[0]!.name).toBe('testImg');
     });
 
-    it('reports inside=false for points outside the image', () => {
-      // Far outside the image area
+    it('returns empty array for points outside the image', () => {
+      // Far outside the image area — should not be returned at all
       const result = bridge.imagesAtPixel([0, 0]);
+      expect(result).toHaveLength(0);
+    });
+
+    it('only returns images under the queried point, not all rendered images', () => {
+      // Two images: one at center, one offset far to the right
+      bridge.setRenderedImages([
+        makeRenderedImage('imgCenter', 0, 200, 100),
+        makeRenderedImage('imgRight', 1, 200, 100),
+      ]);
+      // Offset the second image far right via a separate view transform
+      // With default centering both overlap at center, so use a point
+      // inside imgCenter but at center of viewport
+      const result = bridge.imagesAtPixel([400, 300]);
+      // Both images are centered the same way, so both should be hit
+      expect(result).toHaveLength(2);
+      expect(result.every((r) => r.inside)).toBe(true);
+    });
+
+    it('returns no images when point misses all rendered images', () => {
+      bridge.setRenderedImages([
+        makeRenderedImage('img1', 0, 200, 100),
+        makeRenderedImage('img2', 1, 200, 100),
+      ]);
+      // Far outside any image
+      const result = bridge.imagesAtPixel([0, 0]);
+      expect(result).toHaveLength(0);
+    });
+
+    it('includes edge pixels (point exactly on image boundary)', () => {
+      // Image is 200x100, centered in 800x600 viewport
+      // Top-left corner in screen space: (300, 250)
+      // Query 1 pixel outside top-left → should be edge
+      const result = bridge.imagesAtPixel([299, 249]);
       expect(result).toHaveLength(1);
+      expect(result[0]!.edge).toBe(true);
       expect(result[0]!.inside).toBe(false);
     });
 

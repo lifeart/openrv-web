@@ -1526,9 +1526,9 @@
 ## Issue #146: The shipped LUT Pipeline panel does not persist through project save/load at all
 
 - **Severity**: High
-- **Fix**: Added LUT Pipeline to `getSerializationGaps()` so it surfaces in save-time warnings. Added TODO(#146).
-- **Regression Tests**: 1 test.
-- **Files Changed**: `src/core/session/SessionSerializer.ts`
+- **TODO(#146) Resolved**: `.orvproject` save/load now persists the LUT Pipeline panel’s serializable state: per-source Pre-Cache/File/Look stage metadata, session-wide Display stage metadata, source registrations, and the active source. `LUTPipeline.loadSerializableState()` restores those names/settings without embedded binary LUT data, and project load now reapplies the pipeline and warns which named LUT files still need to be reloaded manually.
+- **Regression Tests**: 3 tests.
+- **Files Changed**: `src/core/session/SessionSerializer.ts`, `src/core/session/SessionState.ts`, `src/core/session/SessionSerializer.test.ts`, `src/color/pipeline/LUTPipeline.ts`, `src/color/pipeline/LUTPipeline.test.ts`
 
 ## Issue #147: The registered MXF "decoder" returns a dummy 1x1 pixel instead of actual image data
 

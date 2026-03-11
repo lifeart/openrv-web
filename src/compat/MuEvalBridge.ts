@@ -351,16 +351,18 @@ export class MuEvalBridge {
         ix >= -1 && ix <= img.width &&
         iy >= -1 && iy <= img.height;
 
-      results.push({
-        name: img.name,
-        x: Math.floor(ix),
-        y: Math.floor(iy),
-        px: ix,
-        py: iy,
-        inside,
-        edge,
-        modelMatrix: this._getImageModelMatrix(img),
-      });
+      if (inside || edge) {
+        results.push({
+          name: img.name,
+          x: Math.floor(ix),
+          y: Math.floor(iy),
+          px: ix,
+          py: iy,
+          inside,
+          edge,
+          modelMatrix: this._getImageModelMatrix(img),
+        });
+      }
     }
 
     return results;
