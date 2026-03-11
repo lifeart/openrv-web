@@ -303,13 +303,30 @@ export class MuPropertyBridge {
    * @returns Array of full property paths
    */
   properties(nodeName: string): string[] {
-    const prefix = nodeName.startsWith('#') ? nodeName.slice(1) : nodeName;
+    const isHashPath = nodeName.startsWith('#');
     const result: string[] = [];
-    for (const key of this._store.keys()) {
-      if (key.startsWith(prefix + '.')) {
-        result.push(key);
+
+    if (isHashPath) {
+      const typeName = nodeName.slice(1);
+      if (!typeName) return result;
+      for (const key of this._store.keys()) {
+        // Extract the node portion (everything before the first dot)
+        const firstDot = key.indexOf('.');
+        if (firstDot === -1) continue;
+        const nodePart = key.slice(0, firstDot);
+        if (nodePart === typeName || nodePart.includes(typeName)) {
+          result.push(key);
+        }
+      }
+    } else {
+      const prefix = nodeName + '.';
+      for (const key of this._store.keys()) {
+        if (key.startsWith(prefix)) {
+          result.push(key);
+        }
       }
     }
+
     return result;
   }
 

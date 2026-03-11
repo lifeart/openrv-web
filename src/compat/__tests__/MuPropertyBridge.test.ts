@@ -148,6 +148,61 @@ describe('MuPropertyBridge', () => {
     it('returns empty array for unknown node', () => {
       expect(bridge.properties('unknown')).toEqual([]);
     });
+
+    it('returns properties matching #TypeName hash-path', () => {
+      bridge.newProperty('group000_RVSourceGroup.source.media', MuPropertyType.String, 1);
+      bridge.newProperty('group000_RVSourceGroup.color.gamma', MuPropertyType.Float, 1);
+      bridge.newProperty('otherNode.color.gamma', MuPropertyType.Float, 1);
+
+      const props = bridge.properties('#RVSourceGroup');
+      expect(props).toHaveLength(2);
+      expect(props).toContain('group000_RVSourceGroup.source.media');
+      expect(props).toContain('group000_RVSourceGroup.color.gamma');
+    });
+
+    it('returns properties from multiple nodes matching #TypeName', () => {
+      bridge.newProperty('group000_RVSourceGroup.source.media', MuPropertyType.String, 1);
+      bridge.newProperty('group001_RVSourceGroup.source.media', MuPropertyType.String, 1);
+      bridge.newProperty('otherNode.color.gamma', MuPropertyType.Float, 1);
+
+      const props = bridge.properties('#RVSourceGroup');
+      expect(props).toHaveLength(2);
+      expect(props).toContain('group000_RVSourceGroup.source.media');
+      expect(props).toContain('group001_RVSourceGroup.source.media');
+    });
+
+    it('exact name returns only that node while #TypeName returns all matching', () => {
+      bridge.newProperty('group000_RVSourceGroup.source.media', MuPropertyType.String, 1);
+      bridge.newProperty('group001_RVSourceGroup.source.media', MuPropertyType.String, 1);
+
+      const exact = bridge.properties('group000_RVSourceGroup');
+      expect(exact).toHaveLength(1);
+      expect(exact).toContain('group000_RVSourceGroup.source.media');
+
+      const hash = bridge.properties('#RVSourceGroup');
+      expect(hash).toHaveLength(2);
+    });
+
+    it('returns empty array for non-matching #TypeName', () => {
+      bridge.newProperty('group000_RVSourceGroup.source.media', MuPropertyType.String, 1);
+      expect(bridge.properties('#NonExistent')).toEqual([]);
+    });
+
+    it('returns empty array for bare # (not all properties)', () => {
+      bridge.newProperty('group000_RVSourceGroup.source.media', MuPropertyType.String, 1);
+      bridge.newProperty('otherNode.color.gamma', MuPropertyType.Float, 1);
+      expect(bridge.properties('#')).toEqual([]);
+    });
+
+    it('substring over-matching: #RVSource matches both RVSource and RVSourceGroup nodes', () => {
+      bridge.newProperty('node1_RVSource.media.url', MuPropertyType.String, 1);
+      bridge.newProperty('node2_RVSourceGroup.source.media', MuPropertyType.String, 1);
+
+      const props = bridge.properties('#RVSource');
+      expect(props).toHaveLength(2);
+      expect(props).toContain('node1_RVSource.media.url');
+      expect(props).toContain('node2_RVSourceGroup.source.media');
+    });
   });
 
   // ---- Float property get/set ----

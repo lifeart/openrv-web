@@ -2449,3 +2449,12 @@
 - **Regression Tests**: 9 new tests covering: fallback name usable by sourceMedia, sourceMediaInfo, sourceAttributes, hasSource returns true, sourceCount reflects fallback, sourcesAtFrame fallback also usable, no duplicate on repeated calls, and existing clearSession assertion updated.
 - **Verification**: All 605 compat tests pass (8 files), TypeScript clean.
 - **Files Changed**: `src/compat/MuSourceBridge.ts`, `src/compat/__tests__/MuSourceBridge.test.ts`
+
+### 253. Mu compat properties('#TypeName') does not honor the documented hash-path semantics
+- **Severity**: Medium
+- **Area**: Mu compatibility / property system
+- **Root Cause**: `properties()` handled `#TypeName` by stripping `#` and using `key.startsWith(prefix + '.')`, which looked for keys literally starting with the type name. This was inconsistent with `_resolveKey()` which uses `nodePart.includes(typeName)` to match type tokens embedded in node names (e.g., `group000_RVSourceGroup` matching `#RVSourceGroup`).
+- **Fix**: Replaced the `startsWith` logic in the hash branch with `includes`-based matching consistent with `_resolveKey()`. Added empty-hash guard (`if (!typeName) return result`) to prevent `properties('#')` from matching all properties due to JS empty-string `includes` behavior.
+- **Regression Tests**: 6 new tests covering: hash-path type matching, multiple nodes of same type, hash vs exact name distinction, non-matching hash returns empty, bare `#` returns empty, and substring over-matching documenting intentional semantics.
+- **Verification**: All 611 compat tests pass (8 files), TypeScript clean.
+- **Files Changed**: `src/compat/MuPropertyBridge.ts`, `src/compat/__tests__/MuPropertyBridge.test.ts`
