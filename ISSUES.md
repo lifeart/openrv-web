@@ -6607,6 +6607,41 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Callers using the documented or typed contract can treat `'stub'` as impossible and mis-handle the real runtime result.
   - That makes command introspection unreliable exactly where scripts are supposed to branch around unsupported versus partially supported functionality.
 
+### 556. The generated public API reference under-documents the live event surface by omitting several valid `openrv.events` names
+
+- Severity: Medium
+- Area: Public API documentation / scripting events
+- Evidence:
+  - The live `OpenRVEventName` union includes `sourceLoadingStarted`, `sourceLoadFailed`, `viewTransformChanged`, and `renderedImagesChanged` in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L16) through [src/api/EventsAPI.ts#L29), and `getEventNames()` returns the full `VALID_EVENTS` set in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L78) through [src/api/EventsAPI.ts#L83) and [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L199) through [src/api/EventsAPI.ts#L202).
+  - The generated API index still documents `OpenRVEventName` as only `"frameChange" | "play" | "pause" | "stop" | "speedChange" | "volumeChange" | "muteChange" | "audioScrubEnabledChange" | "loopModeChange" | "inOutChange" | "markerChange" | "sourceLoaded" | "error"` in [docs/api/index.md](/Users/lifeart/Repos/openrv-web/docs/api/index.md#L46) through [docs/api/index.md#L55).
+  - The same generated reference also publishes plugin-visible `app:` events only for that narrower subset in [docs/api/index.md](/Users/lifeart/Repos/openrv-web/docs/api/index.md#L99) through [docs/api/index.md#L115), so the omission propagates into plugin-facing documentation too.
+- Impact:
+  - Script and plugin authors reading the generated API reference can conclude that several real runtime events do not exist and avoid subscribing to them.
+  - That makes the documented scripting surface narrower than the actual shipped API, which is the opposite of the other docs-drift problems already logged.
+
+### 557. The generated API index is full of dead local links because it advertises class/interface pages that do not exist in the shipped docs tree
+
+- Severity: Medium
+- Area: API documentation / discoverability
+- Evidence:
+  - `docs/api/index.md` links to local pages such as `classes/AudioAPI.md`, `classes/OpenRVAPI.md`, and `interfaces/OpenRVEventData.md` in [docs/api/index.md](/Users/lifeart/Repos/openrv-web/docs/api/index.md#L3) through [docs/api/index.md](/Users/lifeart/Repos/openrv-web/docs/api/index.md#L28).
+  - The actual docs tree in this checkout contains only a single file, [docs/api/index.md](/Users/lifeart/Repos/openrv-web/docs/api/index.md), with no `docs/api/classes/` or `docs/api/interfaces/` directories.
+- Impact:
+  - Readers can see a full API table of contents and then immediately hit dead links for most of the advertised reference pages.
+  - That makes the generated API area look complete while failing at the first level of navigation.
+
+### 558. Plugin `onApp(...)` subscriptions only cover an older subset of public events, so plugins cannot observe newer `openrv.events` signals through the advertised bridge
+
+- Severity: Medium
+- Area: Plugin API / event bridging
+- Evidence:
+  - The public event layer exposes `sourceLoadingStarted`, `sourceLoadFailed`, `viewTransformChanged`, and `renderedImagesChanged` as valid `OpenRVEventName` values in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L16) through [src/api/EventsAPI.ts#L29).
+  - `PluginEventBus.AppEventName` and `APP_EVENT_TO_API` only include the older subset through `app:sourceLoaded` plus `app:error`, with no plugin-visible equivalents for those newer events, in [src/plugin/PluginEventBus.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginEventBus.ts#L19) through [src/plugin/PluginEventBus.ts#L49) and [src/plugin/PluginEventBus.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginEventBus.ts#L79) through [src/plugin/PluginEventBus.ts#L92).
+  - Plugin authors are told that `onApp(...)` subscribes to “application events” mapped from the public API surface in [docs/api/index.md](/Users/lifeart/Repos/openrv-web/docs/api/index.md#L92) through [docs/api/index.md](/Users/lifeart/Repos/openrv-web/docs/api/index.md#L115), but the runtime bridge does not actually provide parity with the live `EventsAPI`.
+- Impact:
+  - A plugin can subscribe to public app-state events only if they happen to be in the reduced plugin bridge subset; newer loading/view/render events are unavailable even though external scripts can subscribe to them directly.
+  - That makes plugin automation less observant than plain `window.openrv.events` consumers for no obvious reason.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

@@ -3,9 +3,79 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+const { mockLoadGTOGraph, mockSimpleReaderOpen, mockByProtocol } = vi.hoisted(() => ({
+  mockLoadGTOGraph: vi.fn(),
+  mockSimpleReaderOpen: vi.fn(),
+  mockByProtocol: vi.fn(() => []),
+}));
+
+vi.mock('gto-js', () => ({
+  SimpleReader: class {
+    result = {};
+
+    open(_data: unknown) {
+      mockSimpleReaderOpen();
+    }
+  },
+  GTODTO: class {
+    constructor(_result: unknown) {}
+
+    byProtocol(_protocol: string) {
+      return mockByProtocol();
+    }
+  },
+}));
+
+vi.mock('./GTOGraphLoader', () => ({
+  loadGTOGraph: mockLoadGTOGraph,
+}));
+
 import { SessionGraph } from './SessionGraph';
 import type { SessionGraphHost } from './SessionGraph';
 import type { SessionAnnotations } from './SessionAnnotations';
+
+function createMockHost() {
+  const annotations = {
+    markerManager: { setFromFrameNumbers: vi.fn() },
+    annotationStore: {
+      setPaintEffects: vi.fn(),
+      setMatteSettings: vi.fn(),
+      parsePaintAnnotations: vi.fn(),
+    },
+    noteManager: { fromSerializable: vi.fn() },
+    versionManager: { fromSerializable: vi.fn() },
+    statusManager: { fromSerializable: vi.fn() },
+  } as unknown as SessionAnnotations;
+
+  const host: SessionGraphHost = {
+    setFps: vi.fn(),
+    setCurrentFrame: vi.fn(),
+    setInPoint: vi.fn(),
+    setOutPoint: vi.fn(),
+    setFrameIncrement: vi.fn(),
+    emitInOutChanged: vi.fn(),
+    emitFrameIncrementChanged: vi.fn(),
+    setPlaybackMode: vi.fn(),
+    setAudioScrubEnabled: vi.fn(),
+    getAnnotations: () => annotations,
+    loadVideoSourcesFromGraph: vi.fn().mockResolvedValue(undefined),
+  };
+
+  return { annotations, host };
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockByProtocol.mockReturnValue([]);
+  mockLoadGTOGraph.mockReturnValue({
+    graph: {} as any,
+    nodes: new Map(),
+    rootNode: null,
+    skippedNodes: [],
+    degradedModes: [],
+    sessionInfo: {},
+  });
+});
 
 describe('Issue #131: clearData resets metadata, uncropState, edlEntries', () => {
   let graph: SessionGraph;
@@ -64,38 +134,57 @@ describe('Issue #131: clearData resets metadata, uncropState, edlEntries', () =>
   });
 });
 
-describe('Issue #125: empty GTO metadata clears old data (host interface checks)', () => {
-  it('ISS-125-001: SessionGraphHost interface includes setAudioScrubEnabled', () => {
-    const mockAnnotations = {
-      markerManager: { setFromFrameNumbers: vi.fn() },
-      annotationStore: {
-        setPaintEffects: vi.fn(),
-        setMatteSettings: vi.fn(),
-        parsePaintAnnotations: vi.fn(),
-      },
-      noteManager: { fromSerializable: vi.fn() },
-      versionManager: { fromSerializable: vi.fn() },
-      statusManager: { fromSerializable: vi.fn() },
-    } as unknown as SessionAnnotations;
-
-    const host: SessionGraphHost = {
-      setFps: vi.fn(),
-      setCurrentFrame: vi.fn(),
-      setInPoint: vi.fn(),
-      setOutPoint: vi.fn(),
-      setFrameIncrement: vi.fn(),
-      emitInOutChanged: vi.fn(),
-      emitFrameIncrementChanged: vi.fn(),
-      setPlaybackMode: vi.fn(),
-      setAudioScrubEnabled: vi.fn(),
-      getAnnotations: () => mockAnnotations,
-      loadVideoSourcesFromGraph: vi.fn().mockResolvedValue(undefined),
-    };
-
+describe('Issue #125: empty GTO metadata clears old data', () => {
+  it('ISS-125-001: loadFromGTO clears markers when session contains an empty marks array', async () => {
+    const { annotations, host } = createMockHost();
     const graph = new SessionGraph();
     graph.setHost(host);
 
-    // Verify the host compiles and can be set
-    expect((graph as any)._host).toBe(host);
+    mockLoadGTOGraph.mockReturnValue({
+      graph: {} as any,
+      nodes: new Map(),
+      rootNode: null,
+      skippedNodes: [],
+      degradedModes: [],
+      sessionInfo: {
+        marks: [],
+      },
+    });
+
+    await graph.loadFromGTO('GTOa mock session');
+
+    expect(annotations.markerManager.setFromFrameNumbers).toHaveBeenCalledWith(
+      [],
+      undefined,
+      undefined,
+      undefined,
+    );
+    expect(host.loadVideoSourcesFromGraph).toHaveBeenCalledTimes(1);
+  });
+
+  it('ISS-125-002: loadFromGTO clears notes, version groups, and statuses with empty arrays', async () => {
+    const { annotations, host } = createMockHost();
+    const graph = new SessionGraph();
+    graph.setHost(host);
+
+    mockLoadGTOGraph.mockReturnValue({
+      graph: {} as any,
+      nodes: new Map(),
+      rootNode: null,
+      skippedNodes: [],
+      degradedModes: [],
+      sessionInfo: {
+        notes: [],
+        versionGroups: [],
+        statuses: [],
+      },
+    });
+
+    await graph.loadFromGTO('GTOa mock session');
+
+    expect(annotations.noteManager.fromSerializable).toHaveBeenCalledWith([]);
+    expect(annotations.versionManager.fromSerializable).toHaveBeenCalledWith([]);
+    expect(annotations.statusManager.fromSerializable).toHaveBeenCalledWith([]);
+    expect(host.loadVideoSourcesFromGraph).toHaveBeenCalledTimes(1);
   });
 });

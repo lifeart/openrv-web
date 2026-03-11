@@ -1363,9 +1363,10 @@
 ## Issue #125: RV/GTO session import keeps old review metadata when the imported file contains none
 
 - **Severity**: High
-- **Fix**: Removed `length > 0` guards for marks, notes, versionGroups, and statuses in `SessionGraph.loadFromGTO()`. Managers are called even with empty arrays.
-- **Regression Tests**: 2 tests.
-- **Files Changed**: `src/core/session/SessionGraph.ts`
+- **TODO(#125) Resolved**: `SessionGraph.loadFromGTO()` now applies empty marker, note, version-group, and status arrays during import, so RV/GTO session restore clears stale review metadata instead of silently keeping old session state.
+- **Regression Tests**: `SessionGraph.issue125-131.test.ts` verifies empty `marks` clears markers and empty `notes`/`versionGroups`/`statuses` arrays each trigger their restore path with `[]`.
+- **Verification**: `SessionGraph.issue125-131.test.ts` (6 tests) passes. TypeScript clean.
+- **Files Changed**: `src/core/session/SessionGraph.ts`, `src/core/session/SessionGraph.issue125-131.test.ts`
 
 ## Issue #126: `.orvproject` save/load never persists the node graph
 

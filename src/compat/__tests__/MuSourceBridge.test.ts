@@ -537,6 +537,39 @@ describe('MuSourceBridge', () => {
       expect(() => bridge.newImageSource('x', 0, 10)).toThrow(TypeError);
       expect(() => bridge.newImageSource('x', 10, -1)).toThrow(TypeError);
     });
+
+    it('throws TypeError when creating a source with a duplicate name', () => {
+      bridge.newImageSource('foo', 10, 10, 4);
+      expect(() => bridge.newImageSource('foo', 20, 20, 3)).toThrow(TypeError);
+      expect(() => bridge.newImageSource('foo', 20, 20, 3)).toThrow(
+        /Source 'foo' already exists/,
+      );
+    });
+
+    it('preserves the original source after duplicate name rejection', () => {
+      bridge.newImageSource('foo', 10, 10, 4);
+      expect(() => bridge.newImageSource('foo', 99, 99, 3)).toThrow(TypeError);
+      const info = bridge.sourceMediaInfo('foo');
+      expect(info.width).toBe(10);
+      expect(info.height).toBe(10);
+      expect(info.channelNames).toEqual(['R', 'G', 'B', 'A']);
+    });
+
+    it('allows creating a different name after duplicate rejection', () => {
+      bridge.newImageSource('foo', 10, 10, 4);
+      expect(() => bridge.newImageSource('foo', 20, 20)).toThrow(TypeError);
+      const name = bridge.newImageSource('bar', 20, 20, 3);
+      expect(name).toBe('bar');
+      expect(bridge.hasSource('bar')).toBe(true);
+    });
+
+    it('treats names as case-sensitive', () => {
+      bridge.newImageSource('Foo', 10, 10, 4);
+      const name = bridge.newImageSource('foo', 20, 20, 3);
+      expect(name).toBe('foo');
+      expect(bridge.hasSource('Foo')).toBe(true);
+      expect(bridge.hasSource('foo')).toBe(true);
+    });
   });
 
   describe('newImageSourcePixels', () => {
