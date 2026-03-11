@@ -368,4 +368,35 @@ describe('ShotGridPanel', () => {
 
     expect(panel.resolveMediaUrl(version)).toBe('https://storage.example.com/movie.mov');
   });
+
+  it('SG-PNL-026: shows inline validation error for empty query input', () => {
+    panel.setConnected(true);
+    panel.show();
+
+    const input = document.body.querySelector<HTMLInputElement>('[data-testid="shotgrid-query-input"]')!;
+    const loadBtn = document.body.querySelector<HTMLButtonElement>('[data-testid="shotgrid-load-btn"]')!;
+
+    input.value = '';
+    loadBtn.click();
+
+    const state = document.body.querySelector<HTMLElement>('[data-testid="shotgrid-state"]')!;
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+    expect(state.style.display).toBe('block');
+    expect(state.textContent).toContain('required');
+  });
+
+  it('SG-PNL-027: marks invalid non-positive IDs with aria-invalid and error text', () => {
+    panel.setConnected(true);
+    panel.show();
+
+    const input = document.body.querySelector<HTMLInputElement>('[data-testid="shotgrid-query-input"]')!;
+    const loadBtn = document.body.querySelector<HTMLButtonElement>('[data-testid="shotgrid-load-btn"]')!;
+
+    input.value = '-5';
+    loadBtn.click();
+
+    const state = document.body.querySelector<HTMLElement>('[data-testid="shotgrid-state"]')!;
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+    expect(state.textContent).toContain('Invalid');
+  });
 });

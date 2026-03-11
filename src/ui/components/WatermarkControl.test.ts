@@ -312,6 +312,29 @@ describe('WatermarkControl', () => {
       const preview = container.querySelector('[data-testid="watermark-preview"]') as HTMLElement;
       expect(preview.style.display).toBe('none');
     });
+
+    it('WMC-U072: shows inline error feedback when image loading fails', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const overlay = control.getOverlay();
+      vi.spyOn(overlay, 'loadImage').mockRejectedValue(new Error('corrupt file'));
+
+      const fileInput = container.querySelector('[data-testid="watermark-file-input"]') as HTMLInputElement;
+      const file = new File([''], 'bad.png', { type: 'image/png' });
+      Object.defineProperty(fileInput, 'files', { configurable: true, value: [file] });
+
+      fileInput.dispatchEvent(new Event('change'));
+
+      await vi.waitFor(() => {
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Failed to load watermark image'));
+      });
+
+      const preview = container.querySelector('[data-testid="watermark-preview"]') as HTMLElement;
+      const errorEl = container.querySelector('[data-testid="watermark-load-error"]') as HTMLElement;
+      expect(preview.style.display).toBe('flex');
+      expect(errorEl.textContent).toContain('corrupt file');
+
+      warnSpy.mockRestore();
+    });
   });
 
   describe('dispose', () => {

@@ -1088,30 +1088,42 @@
 
 - **Severity**: Medium
 - **Area**: Effects panel, error handling
-- **Fix**: Added `console.warn` in `WatermarkControl.handleFileSelect()` catch block and inline error display in the preview container.
-- **Regression Tests**: 1 test (console.warn on failure).
-- **Files Changed**: `src/ui/components/WatermarkControl.ts`, `src/ui/components/issues-p1.test.ts`
+- **TODO(#94) Resolved**: `WatermarkControl.handleFileSelect()` now surfaces image-load failures in the shipped panel instead of swallowing them. Failed loads emit a `console.warn`, reveal the preview area, and render an inline error message with the failure text so the user gets immediate feedback after a bad watermark upload.
+- **Regression Tests**:
+  - `WatermarkControl.test.ts`: added coverage for failed image loads, including the warning path and inline error rendering
+  - `issues-p1.test.ts`: removed the now-redundant issue-specific watermark test after migrating coverage into the component suite
+- **Verification**: `WatermarkControl.test.ts` (37 tests) passes. TypeScript clean.
+- **Files Changed**: `src/ui/components/WatermarkControl.ts`, `src/ui/components/WatermarkControl.test.ts`, `src/ui/components/issues-p1.test.ts`
 
 ## Issue #95: Playlist transition edits can silently collapse back to a cut with no explanation
 
 - **Severity**: Medium
-- **Fix**: Added `console.warn` when `validateTransition()` returns null, logging the rejected transition type and gap index.
-- **Regression Tests**: 1 test.
-- **Files Changed**: `src/ui/components/PlaylistPanel.ts`, `src/ui/components/issues-p1.test.ts`
+- **TODO(#95) Resolved**: `PlaylistPanel` now warns when a requested transition cannot be validated instead of silently reverting the edit. When `validateTransition()` rejects a non-cut transition, the UI logs a clear rejection message naming the transition type and gap, then explicitly resets the selector back to `cut` so the fallback is visible and traceable.
+- **Regression Tests**:
+  - `PlaylistPanel.test.ts`: added coverage for rejected transition edits, including the warning path, selector reset, and fallback `setTransition(..., null)` behavior
+  - `issues-p1.test.ts`: removed the now-redundant issue-specific transition test after migrating coverage into the component suite
+- **Verification**: `PlaylistPanel.test.ts` (30 tests) passes. TypeScript clean.
+- **Files Changed**: `src/ui/components/PlaylistPanel.ts`, `src/ui/components/PlaylistPanel.test.ts`, `src/ui/components/issues-p1.test.ts`
 
 ## Issue #96: ShotGrid load requests with invalid IDs fail as a silent no-op
 
 - **Severity**: Low
-- **Fix**: `handleLoad()` now shows inline error via `showState('error', ...)` and sets `aria-invalid="true"` on input for empty/invalid IDs. Clears on valid input.
-- **Regression Tests**: 2 tests (error message, aria-invalid).
-- **Files Changed**: `src/ui/components/ShotGridPanel.ts`, `src/ui/components/issues-p1.test.ts`
+- **TODO(#96) Resolved**: `ShotGridPanel.handleLoad()` now validates the query field before dispatching load events. Empty or non-positive IDs immediately show inline error state through `showState('error', ...)`, mark the input with `aria-invalid="true"`, and clear that invalid state again once the query is valid.
+- **Regression Tests**:
+  - `ShotGridPanel.test.ts`: added coverage for empty-query and invalid-ID validation, including inline error text and `aria-invalid` behavior
+  - `issues-p1.test.ts`: removed the now-redundant issue-specific ShotGrid validation tests after migrating coverage into the component suite
+- **Verification**: `ShotGridPanel.test.ts` (27 tests) passes. TypeScript clean.
+- **Files Changed**: `src/ui/components/ShotGridPanel.ts`, `src/ui/components/ShotGridPanel.test.ts`, `src/ui/components/issues-p1.test.ts`
 
 ## Issue #97: Timeline context menu advertises `Ctrl+C` for timecode copy, but that shortcut is still bound to frame copy
 
 - **Severity**: Medium
-- **Fix**: Removed `Ctrl+C` shortcut hint from "Copy Timecode" menu item (set to `null`). The action is click-only.
-- **Regression Tests**: Updated TCM-023 to verify no shortcut hint.
-- **Files Changed**: `src/ui/components/TimelineContextMenu.ts`, `src/ui/components/TimelineContextMenu.test.ts`
+- **TODO(#97) Resolved**: The main timeline context menu no longer advertises a fake `Ctrl+C` shortcut for timecode copy. `Copy Timecode` is now explicitly click-only while the real keyboard binding remains reserved for frame copy, eliminating the mismatch between the menu hint and actual behavior.
+- **Regression Tests**:
+  - `TimelineContextMenu.test.ts`: existing `TCM-023` now verifies that `Copy Timecode` renders without a `Ctrl+C` hint while real shortcut-backed items still show their hints
+  - `issues-p1.test.ts`: removed the now-redundant issue-specific timeline-context-menu test after confirming coverage in the component suite
+- **Verification**: `TimelineContextMenu.test.ts` (54 tests) passes. TypeScript clean.
+- **Files Changed**: `src/ui/components/TimelineContextMenu.ts`, `src/ui/components/TimelineContextMenu.test.ts`, `src/ui/components/issues-p1.test.ts`
 
 ## Issue #98: Ghost Frames, PAR, and Stereo Align use different interaction models for mouse and keyboard
 

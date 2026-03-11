@@ -261,6 +261,62 @@ describe('PlaylistPanel', () => {
     });
   });
 
+  describe('transition validation', () => {
+    it('PL-040: logs a warning and reverts to cut when a transition is rejected', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const clips = [
+        {
+          id: 'c1',
+          sourceIndex: 0,
+          sourceName: 'clip1.mp4',
+          inPoint: 1,
+          outPoint: 50,
+          duration: 50,
+          globalStartFrame: 1,
+        },
+        {
+          id: 'c2',
+          sourceIndex: 1,
+          sourceName: 'clip2.mp4',
+          inPoint: 1,
+          outPoint: 30,
+          duration: 30,
+          globalStartFrame: 51,
+        },
+      ];
+
+      const transitionPanel = new PlaylistPanel({
+        ...createMockPlaylistManager(),
+        getClips: vi.fn().mockReturnValue(clips),
+        getTotalDuration: vi.fn().mockReturnValue(80),
+      } as unknown as PlaylistManager);
+      const transitionManager = {
+        getTransition: vi.fn(() => null),
+        setTransition: vi.fn(),
+        validateTransition: vi.fn(() => null),
+        calculateOverlapAdjustedFrames: vi.fn((value: unknown[]) => value),
+        on: vi.fn(),
+        off: vi.fn(),
+      };
+
+      transitionPanel.setTransitionManager(transitionManager as never);
+      transitionPanel.show();
+
+      const typeSelect = document.querySelector('[data-testid="transition-type-0"]') as HTMLSelectElement;
+      expect(typeSelect).toBeTruthy();
+
+      typeSelect.value = 'crossfade';
+      typeSelect.dispatchEvent(new Event('change'));
+
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Transition "crossfade" rejected'));
+      expect(typeSelect.value).toBe('cut');
+      expect(transitionManager.setTransition).toHaveBeenCalledWith(0, null);
+
+      transitionPanel.dispose();
+      warnSpy.mockRestore();
+    });
+  });
+
   describe('clip trimming', () => {
     it('PL-040: changing in/out inputs updates clip points in manager', () => {
       const clip = {

@@ -6281,6 +6281,109 @@ This file tracks findings from exploratory review and targeted validation runs.
   - A representation kind that the shared model treats as valid still fails at the point of actual use.
   - That leaves the representation contract broader than the shipped runtime and makes `streaming` look supported until activation time.
 
+### 530. Non-sequence file, movie, and proxy representations also cannot round-trip through serialization, because the saved loader config strips the `File` objects their live loaders require
+
+- Severity: Medium
+- Area: Media representations / project persistence
+- Evidence:
+  - Representation serialization removes both `file` and `files` from `loaderConfig` before save in [src/core/types/representation.ts](/Users/lifeart/Repos/openrv-web/src/core/types/representation.ts#L234) through [src/core/types/representation.ts](/Users/lifeart/Repos/openrv-web/src/core/types/representation.ts#L246).
+  - `SessionSerializer.fromJSON(...)` restores representations from that stripped `loaderConfig` and feeds it straight back into `addRepresentationToSource(...)`, then tries to reactivate the saved `activeRepresentationId` in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L527) through [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L560).
+  - The normal single-image representation path still uses `FileRepresentationLoader`, which throws `FileRepresentationLoader: no file provided` when `loaderConfig.file` is absent in [src/core/session/loaders/FileRepresentationLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/loaders/FileRepresentationLoader.ts#L15) through [src/core/session/loaders/FileRepresentationLoader.ts#L22).
+  - The normal `movie` / `proxy` path still uses `VideoRepresentationLoader`, which likewise throws `VideoRepresentationLoader: no file provided` when `loaderConfig.file` is absent in [src/core/session/loaders/VideoRepresentationLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/loaders/VideoRepresentationLoader.ts#L21) through [src/core/session/loaders/VideoRepresentationLoader.ts#L29).
+- Impact:
+  - Saved projects can preserve alternate representation metadata and IDs, but any restored non-sequence representation that still depends on a runtime `File` object can fail as soon as activation is attempted.
+  - That leaves representation persistence broken more broadly than the already-logged sequence case: metadata round-trips, but the real loadable media payload does not.
+
+### 531. The shared representation loader contract advertises `path` and `url` configs, but live representation activation still hard-fails unless an in-memory `File` object is present
+
+- Severity: Medium
+- Area: Media representations / runtime contract
+- Evidence:
+  - `RepresentationLoaderConfig` explicitly documents `path` for file-based representations and `url` for URL-based representations in [src/core/types/representation.ts](/Users/lifeart/Repos/openrv-web/src/core/types/representation.ts#L69) through [src/core/types/representation.ts#L85).
+  - The shared type tests also treat those fields as normal inputs, for example creating reps with `loaderConfig: { url: 'http://example.com/video.mp4' }` and `loaderConfig: { path: '/path/to/file.exr' }` in [src/core/types/representation.test.ts](/Users/lifeart/Repos/openrv-web/src/core/types/representation.test.ts#L25) through [src/core/types/representation.test.ts#L56).
+  - But the live `frames` loader ignores `url` and requires `loaderConfig.file`, throwing `FileRepresentationLoader: no file provided` when it is missing in [src/core/session/loaders/FileRepresentationLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/loaders/FileRepresentationLoader.ts#L15) through [src/core/session/loaders/FileRepresentationLoader.ts#L22).
+  - The live `movie` / `proxy` loader does the same, throwing `VideoRepresentationLoader: no file provided` whenever `loaderConfig.file` is absent in [src/core/session/loaders/VideoRepresentationLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/loaders/VideoRepresentationLoader.ts#L21) through [src/core/session/loaders/VideoRepresentationLoader.ts#L29).
+- Impact:
+  - A representation config that looks valid by shared types, comments, and tests can still fail at first real activation if it was built from a path or URL instead of a `File`.
+  - That leaves the published representation contract broader than the shipped runtime and makes URL-based or path-only variants look supported when they are not.
+
+### 532. Representation-level `opfsCacheKey` is serialized and tested, but no live representation loader or restore path ever uses it
+
+- Severity: Medium
+- Area: Media representations / resilience contract
+- Evidence:
+  - `RepresentationLoaderConfig` explicitly includes `opfsCacheKey` for “resilience against File reference invalidation,” and `SerializedRepresentation` preserves it in [src/core/types/representation.ts](/Users/lifeart/Repos/openrv-web/src/core/types/representation.ts#L73) through [src/core/types/representation.ts#L113).
+  - The shared representation tests also assert that `serializeRepresentation(...)` keeps `loaderConfig.opfsCacheKey` in [src/core/types/representation.test.ts](/Users/lifeart/Repos/openrv-web/src/core/types/representation.test.ts#L124) through [src/core/types/representation.test.ts#L167).
+  - But the actual OPFS restore logic in `SessionSerializer.fromJSON(...)` only checks the top-level media reference `ref.opfsCacheKey` before reloading the base source in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L387) through [src/core/session/SessionSerializer.ts#L408) and [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L458) through [src/core/session/SessionSerializer.ts#L476).
+  - The live representation loaders still only read `loaderConfig.file` and throw if it is missing, with no `opfsCacheKey` lookup path in [src/core/session/loaders/FileRepresentationLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/loaders/FileRepresentationLoader.ts#L15) through [src/core/session/loaders/FileRepresentationLoader.ts#L25) and [src/core/session/loaders/VideoRepresentationLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/loaders/VideoRepresentationLoader.ts#L21) through [src/core/session/loaders/VideoRepresentationLoader.ts#L32).
+- Impact:
+  - Representation configs can carry an `opfsCacheKey` that appears to promise resilient reload behavior, but losing the original `File` handle still leaves those variants unloadable.
+  - That makes the representation persistence model look more fault-tolerant than the real runtime actually is.
+
+### 533. Representation switching claims frame-accurate remapping via `startFrame`, but the live switch path never uses the remap logic
+
+- Severity: Medium
+- Area: Media representations / playback continuity
+- Evidence:
+  - The shared representation model says `startFrame` is “Used for frame-accurate switching” between editorial-offset variants in [src/core/types/representation.ts](/Users/lifeart/Repos/openrv-web/src/core/types/representation.ts#L51) through [src/core/types/representation.ts#L55).
+  - `MediaRepresentationManager` does implement `mapFrame(currentFrame, fromRep, toRep, maxFrame?)` for exactly that purpose in [src/core/session/MediaRepresentationManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaRepresentationManager.ts#L297) through [src/core/session/MediaRepresentationManager.ts#L315).
+  - But the real `switchRepresentation(...)` path only swaps the active representation, applies the shim, and emits `representationChanged`; it never calls `mapFrame(...)` or updates the host’s current frame in [src/core/session/MediaRepresentationManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaRepresentationManager.ts#L133) through [src/core/session/MediaRepresentationManager.ts#L229).
+  - Production subscribers to `representationChanged` only resync timecode offsets and audio-scrub availability in [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L198) and [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L218); a repo search finds no live caller that remaps the current frame through `mapFrame(...)`.
+- Impact:
+  - Switching between representations with different start-frame offsets can leave playback on the wrong relative frame even though the type/model explicitly promises frame-accurate switching.
+  - That is especially damaging for EXR-vs-proxy editorial workflows, where the whole point of the stored offset is to preserve shot alignment across representation changes.
+
+### 534. Representation fallback and removal can change the active media without emitting the `representationChanged` event that the rest of the app relies on
+
+- Severity: Medium
+- Area: Media representations / app-state synchronization
+- Evidence:
+  - Removing the active representation immediately picks the next ready one and reapplies the shim, but `removeRepresentation(...)` emits no `representationChanged` event afterward in [src/core/session/MediaRepresentationManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaRepresentationManager.ts#L88) through [src/core/session/MediaRepresentationManager.ts#L116).
+  - Error fallback does something similar for ready fallbacks: it updates `activeRepresentationIndex`, applies the shim, and emits only `fallbackActivated`, not `representationChanged`, in [src/core/session/MediaRepresentationManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaRepresentationManager.ts#L241) through [src/core/session/MediaRepresentationManager.ts#L265).
+  - Production app code listens to `representationChanged` to resync timecode offsets and audio-scrub availability in [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L194) through [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L199) and [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L212) through [src/AppPlaybackWiring.ts#L219).
+  - A repo search finds no equivalent live subscriber for `fallbackActivated`; it is forwarded by `SessionMedia`, but not consumed by the app shell in production.
+- Impact:
+  - The real active media can change after a representation failure or removal while the rest of the app still behaves as if the old representation were active.
+  - That can leave derived UI state such as timecode offsets and scrub-audio availability stale until some other unrelated event forces a refresh.
+
+### 535. Even if a sequence representation loaded successfully, the shim path would still discard the sequence metadata that the rest of the app expects
+
+- Severity: Medium
+- Area: Media representations / sequence runtime wiring
+- Evidence:
+  - The normal sequence load path builds a `MediaSource` with `sequenceInfo`, `sequenceFrames`, `duration`, `fps`, and the first frame element, then updates host FPS and out-point accordingly in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L743) through [src/core/session/SessionMedia.ts#L771).
+  - `SequenceRepresentationLoader` does preserve `SequenceInfo` and frame data inside `SequenceSourceNodeWrapper` via its `sequenceInfo` and `frames` accessors in [src/core/session/loaders/SequenceRepresentationLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/loaders/SequenceRepresentationLoader.ts#L21) through [src/core/session/loaders/SequenceRepresentationLoader.ts#L49).
+  - But `SessionMedia.applyRepresentationShim(...)` clears `source.sequenceInfo` and `source.sequenceFrames`, and for non-file/non-video sources it only copies `getElement(1)` plus `type = 'sequence'` in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L1180) through [src/core/session/SessionMedia.ts#L1214).
+- Impact:
+  - A sequence-based alternate representation would still be only partially wired even after the loader problems were fixed.
+  - Existing sequence-aware playback and UI paths would lose access to frame lists, sequence metadata, and the normal source-level sequence state they depend on.
+
+### 536. Representation switches only update width and height on the active source, leaving source-level duration/FPS state stale
+
+- Severity: Medium
+- Area: Media representations / source metadata consistency
+- Evidence:
+  - `MediaSource` exposes `duration` and `fps` alongside `width` and `height` as the canonical source-level metadata read throughout the app in [src/core/session/SessionTypes.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionTypes.ts#L191) through [src/core/session/SessionTypes.ts#L217).
+  - Normal media load paths update those fields and emit the matching host/session events, for example video load sets detected FPS and duration and then calls `setFps(...)`, `emitFpsChanged(...)`, `setOutPoint(...)`, and `emitDurationChanged(...)` in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L709) through [src/core/session/SessionMedia.ts#L728).
+  - But `SessionMedia.applyRepresentationShim(...)` only copies `representation.resolution.width` and `representation.resolution.height`, clears node-specific fields, and never updates `source.duration`, `source.fps`, or any host playback bounds/events in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L1180) through [src/core/session/SessionMedia.ts#L1216).
+  - Large parts of the runtime still read `source.duration` and `source.fps` directly after source changes, including public API/event payloads and timeline/viewer UI in [src/api/MediaAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/MediaAPI.ts#L52) through [src/api/MediaAPI.ts#L55), [src/ui/components/Timeline.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Timeline.ts#L408) through [src/ui/components/Timeline.ts#L417), and [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L1682) through [src/ui/components/Viewer.ts#L1683).
+- Impact:
+  - Switching to a representation with different duration or FPS can leave the app reporting and using stale source metadata from the previous variant.
+  - That undermines timeline bounds, public media-info APIs, and any UI that assumes representation switches keep the source metadata coherent.
+
+### 537. Removing the last active representation can leave the source shim pointing at a disposed node
+
+- Severity: Medium
+- Area: Media representations / removal edge case
+- Evidence:
+  - `removeRepresentation(...)` disposes the loader for the removed representation and deletes it from the internal map in [src/core/session/MediaRepresentationManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaRepresentationManager.ts#L96) through [src/core/session/MediaRepresentationManager.ts#L101).
+  - If that removed representation was active and there is no ready fallback, the code only sets `activeRepresentationIndex` to `-1`; it does not call `applyRepresentationShim(...)` or otherwise clear the source-level node fields in [src/core/session/MediaRepresentationManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaRepresentationManager.ts#L103) through [src/core/session/MediaRepresentationManager.ts#L116).
+  - The actual clearing of `source.videoSourceNode`, `source.fileSourceNode`, `source.sequenceInfo`, `source.sequenceFrames`, and `source.element` lives inside `SessionMedia.applyRepresentationShim(...)` in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L1188) through [src/core/session/SessionMedia.ts#L1194).
+  - Both file and video representation loaders dispose their held source nodes when removed in [src/core/session/loaders/FileRepresentationLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/loaders/FileRepresentationLoader.ts#L42) through [src/core/session/loaders/FileRepresentationLoader.ts#L46) and [src/core/session/loaders/VideoRepresentationLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/loaders/VideoRepresentationLoader.ts#L51) through [src/core/session/loaders/VideoRepresentationLoader.ts#L55).
+- Impact:
+  - After removing the last active representation, the source can still hold legacy pointers to a node that has already been disposed.
+  - That leaves the app in a stale half-switched state instead of clearly falling back or clearly clearing the active media variant.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed
