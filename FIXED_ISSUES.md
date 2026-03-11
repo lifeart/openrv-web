@@ -1371,44 +1371,50 @@
 ## Issue #126: `.orvproject` save/load never persists the node graph
 
 - **Severity**: High
-- **Fix**: Added TODO(#126) comment documenting that the graph serializer exists but isn't wired into .orvproject save/load. Too complex for a single fix without risking breakage.
-- **Regression Tests**: 1 test.
-- **Files Changed**: `src/core/session/SessionSerializer.ts`
+- **TODO(#126) Resolved**: `.orvproject` save/load now persists the live node graph. `SessionSerializer.toJSON()` writes the reserved `graph` field when a graph is present, and `fromJSON()` restores it through `Session`/`SessionGraph`, including output-node, view-node, and connection topology.
+- **Regression Tests**: `SessionSerializer.issue123-133.test.ts` verifies graph field save/load wiring, `SessionGraph.test.ts` verifies graph serialization and topology restore, and `SessionSerializer.test.ts` stays green against the updated serializer contract.
+- **Verification**: `SessionGraph.test.ts` (31 tests), `SessionSerializer.issue123-133.test.ts` (15 tests), and `SessionSerializer.test.ts` (77 tests) pass. TypeScript clean.
+- **Files Changed**: `src/core/session/SessionSerializer.ts`, `src/core/session/Session.ts`, `src/core/session/SessionGraph.ts`, `src/core/session/SessionGraph.test.ts`, `src/core/session/SessionSerializer.issue123-133.test.ts`
 
 ## Issue #127: Session renaming in the header is not honored by project save/load
 
 - **Severity**: Medium
-- **Fix**: `saveProject()` now uses `session.metadata?.displayName` instead of hardcoded `'project'`. Falls back to `'project'` if empty.
-- **Regression Tests**: 3 tests.
-- **Files Changed**: `src/AppPersistenceManager.ts`
+- **TODO(#127) Resolved**: Project save now uses the session display name from header metadata instead of always writing `project.orvproject`, while still falling back to `project` when the name is empty or whitespace.
+- **Regression Tests**: `AppPersistenceManager.issue127.test.ts` verifies display-name save, empty-name fallback, and whitespace fallback.
+- **Verification**: `AppPersistenceManager.issue127.test.ts` (3 tests) passes. TypeScript clean.
+- **Files Changed**: `src/AppPersistenceManager.ts`, `src/AppPersistenceManager.issue127.test.ts`
 
 ## Issue #128: RV/GTO marker notes and marker colors are exported and parsed, but import drops them
 
 - **Severity**: Medium
-- **Fix**: `MarkerManager.setFromFrameNumbers()` now accepts optional `notes` and `colors` parallel arrays. `SessionGraph.loadFromGTO()` passes parsed marker notes/colors.
-- **Regression Tests**: 5 tests.
-- **Files Changed**: `src/core/session/MarkerManager.ts`, `src/core/session/SessionGraph.ts`
+- **TODO(#128) Resolved**: RV/GTO marker import now preserves marker notes and colors end to end. Parsed `markerNotes`/`markerColors` are forwarded through `SessionGraph.loadFromGTO()` into `MarkerManager.setFromFrameNumbers()`.
+- **Regression Tests**: `MarkerManager.issue128.test.ts` verifies note/color persistence and default filling, and `SessionGraph.issue125-131.test.ts` verifies `loadFromGTO()` forwards marker notes/colors to marker restore.
+- **Verification**: `MarkerManager.issue128.test.ts` (5 tests) and `SessionGraph.issue125-131.test.ts` (8 tests) pass. TypeScript clean.
+- **Files Changed**: `src/core/session/MarkerManager.ts`, `src/core/session/SessionGraph.ts`, `src/core/session/MarkerManager.issue128.test.ts`, `src/core/session/SessionGraph.issue125-131.test.ts`
 
 ## Issue #129: RV/GTO audio-scrub state is exported and parsed, but never restored
 
 - **Severity**: Medium
-- **Fix**: Added `setAudioScrubEnabled` to `SessionGraphHost` interface and restore logic in `loadFromGTO()`. Wired in Session.
-- **Regression Tests**: 1 test.
-- **Files Changed**: `src/core/session/SessionGraph.ts`, `src/core/session/Session.ts`
+- **TODO(#129) Resolved**: RV/GTO import now restores audio-scrub state by applying parsed `audioScrubEnabled` through `SessionGraph.loadFromGTO()` into the session host wiring.
+- **Regression Tests**: `SessionGraph.issue125-131.test.ts` verifies `loadFromGTO()` applies `audioScrubEnabled` to the host.
+- **Verification**: `SessionGraph.issue125-131.test.ts` (8 tests) passes. TypeScript clean.
+- **Files Changed**: `src/core/session/SessionGraph.ts`, `src/core/session/Session.ts`, `src/core/session/SessionGraph.issue125-131.test.ts`
 
 ## Issue #130: Several shipped Effects-tab controls are fully wired, but `.orvproject` persistence ignores them
 
 - **Severity**: High
-- **Fix**: Added 5 new entries to `getSerializationGaps()`: Deinterlace, Film emulation, Perspective correction, Stabilization, Uncrop. Each checks viewer state against defaults and surfaces warnings at save time.
-- **Regression Tests**: 2 tests.
-- **Files Changed**: `src/core/session/SessionSerializer.ts`
+- **TODO(#130) Resolved**: `.orvproject` save warnings now explicitly report the missing Effects-tab persistence gaps for Deinterlace, Film emulation, Perspective correction, Stabilization, and Uncrop, with active/default detection per control.
+- **Regression Tests**: `SessionSerializer.issue123-133.test.ts` verifies the effects-gap entries exist, stay inactive at defaults, and flip active for representative enabled states.
+- **Verification**: `SessionSerializer.issue123-133.test.ts` (15 tests) passes. TypeScript clean.
+- **Files Changed**: `src/core/session/SessionSerializer.ts`, `src/core/session/SessionSerializer.issue123-133.test.ts`
 
 ## Issue #131: Loading ordinary media after a GTO/RV session does not clear old session metadata or uncrop
 
 - **Severity**: High
-- **Fix**: `SessionGraph.clearData()` now also resets `_metadata` to defaults, `_uncropState` to null, and `_edlEntries` to empty array.
-- **Regression Tests**: 2 tests.
-- **Files Changed**: `src/core/session/SessionGraph.ts`
+- **TODO(#131) Resolved**: `SessionGraph.clearData()` now clears carried-over session metadata, uncrop state, EDL entries, graph, raw GTO data, and parse result so ordinary media loads do not inherit stale RV/GTO session state.
+- **Regression Tests**: `SessionGraph.issue125-131.test.ts` verifies metadata reset, uncrop reset, EDL clearing, and graph/GTO/parse-result clearing.
+- **Verification**: `SessionGraph.issue125-131.test.ts` (8 tests) passes. TypeScript clean.
+- **Files Changed**: `src/core/session/SessionGraph.ts`, `src/core/session/SessionGraph.issue125-131.test.ts`
 
 ## Issue #132: Project save/load preserves wipe mode but not the actual A/B compare assignment state
 
@@ -2395,3 +2401,13 @@
 - **Regression Tests**: 11 new/updated tests covering: back returns correct node, forward returns correct node, full back-forward traversal, forward truncation on new navigation, boundary conditions (start/end), deleteNode cleanup (end/middle/current), deleteNode+setViewNode duplicate prevention, and repeated back→forward zigzag stability.
 - **Verification**: All 570 compat tests pass (8 files), TypeScript clean.
 - **Files Changed**: `src/compat/MuNodeBridge.ts`, `src/compat/__tests__/MuNodeBridge.test.ts`
+
+## Issue #248: Mu compat `newImageSource()` can silently replace an existing source with the same name
+
+- **Severity**: Medium
+- **Area**: Mu compatibility / in-memory source management
+- **Root Cause**: `newImageSource()` validated only that the name was non-empty and dimensions were positive. It never checked whether `_sources`, `_imageSources`, or the batch queue already contained the given name, unconditionally overwriting any existing source record and pixel data.
+- **Fix**: Added a duplicate-name check before any writes in `newImageSource()`. Throws `TypeError` with a clear message if the name exists in `_sources`, `_imageSources`, or any pending `_batchQueue` entry with a pre-generated name. The check runs before any side effects, so no partial state is created on rejection.
+- **Regression Tests**: 5 new tests covering: duplicate name throws TypeError, original source preserved after rejection, different name succeeds after rejection, case-sensitive names treated as distinct, and batch queue collision detection (addSourceVerbose name collides with newImageSource).
+- **Verification**: All 575 compat tests pass (8 files), TypeScript clean.
+- **Files Changed**: `src/compat/MuSourceBridge.ts`, `src/compat/__tests__/MuSourceBridge.test.ts`

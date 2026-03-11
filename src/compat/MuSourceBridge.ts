@@ -559,7 +559,8 @@ export class MuSourceBridge {
     if (width <= 0 || height <= 0) {
       throw new TypeError('newImageSource() requires positive width and height');
     }
-    if (this._sources.has(name) || this._imageSources.has(name)) {
+    const pendingInBatch = this._batchQueue.some(entry => entry.name === name);
+    if (this._sources.has(name) || this._imageSources.has(name) || pendingInBatch) {
       throw new TypeError(
         `Source '${name}' already exists. Use a unique name or delete the existing source first.`,
       );

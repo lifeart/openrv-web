@@ -229,6 +229,19 @@ describe('MuSourceBridge', () => {
       expect(bridge.sourceCount()).toBe(1);
       expect(bridge.sourceMedia(name).media).toEqual(['/a.mov']);
     });
+
+    it('newImageSource throws when name is already queued in batch', async () => {
+      bridge.addSourceBegin();
+      const batchName = await bridge.addSourceVerbose(['/a.mov'], 'tag');
+      expect(() => bridge.newImageSource(batchName, 10, 10, 4)).toThrow(TypeError);
+      expect(() => bridge.newImageSource(batchName, 10, 10, 4)).toThrow(
+        /already exists/,
+      );
+      // Batch queue entry is preserved and commit still succeeds
+      await bridge.addSourceEnd();
+      expect(bridge.sourceCount()).toBe(1);
+      expect(bridge.sourceMedia(batchName).media).toEqual(['/a.mov']);
+    });
   });
 
   // ==================================================================
