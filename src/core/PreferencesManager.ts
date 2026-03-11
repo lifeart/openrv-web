@@ -638,6 +638,9 @@ export class PreferencesManager extends EventEmitter<CorePreferencesEvents> {
       }
     }
 
+    // Apply live subsystem changes so the UI updates without a page reload.
+    this.applySubsystemsFromStorage(parsed);
+
     this.emit('imported', this.buildExportPayload());
   }
 
@@ -651,11 +654,40 @@ export class PreferencesManager extends EventEmitter<CorePreferencesEvents> {
     if (this._pluginSettingsProvider) {
       this._pluginSettingsProvider.clearAll();
     }
+
+    // Apply live subsystem resets so the UI reverts to defaults without a page reload.
+    this.resetSubsystems();
+
     this.emit('colorDefaultsChanged', { ...DEFAULT_COLOR_DEFAULTS });
     this.emit('exportDefaultsChanged', { ...DEFAULT_EXPORT_DEFAULTS });
     this.emit('generalPrefsChanged', { ...DEFAULT_GENERAL_PREFS });
     this.emit('fpsIndicatorPrefsChanged', { ...DEFAULT_FPS_INDICATOR_PREFS });
     this.emit('reset', undefined);
+  }
+
+  /**
+   * Tell live subsystems to pick up freshly-imported storage values.
+   * Null-safe: skips any subsystem that is not yet wired.
+   */
+  private applySubsystemsFromStorage(parsed: Record<string, unknown>): void {
+    if (this._subsystems.theme && hasOwnKey(parsed, 'themeMode')) {
+      const mode = parsed.themeMode;
+      this._subsystems.theme.setMode(isThemeMode(mode) ? mode : 'auto');
+    }
+    this._subsystems.layout?.reloadFromStorage();
+    this._subsystems.keyBindings?.reloadFromStorage();
+    this._subsystems.ocio?.reloadFromStorage();
+  }
+
+  /**
+   * Tell live subsystems to revert to defaults after storage was cleared.
+   * Null-safe: skips any subsystem that is not yet wired.
+   */
+  private resetSubsystems(): void {
+    this._subsystems.theme?.setMode('auto');
+    this._subsystems.layout?.reloadFromStorage();
+    this._subsystems.keyBindings?.reloadFromStorage();
+    this._subsystems.ocio?.reloadFromStorage();
   }
 
   private writeJSON(key: string, value: unknown): void {

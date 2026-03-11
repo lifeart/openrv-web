@@ -315,4 +315,10 @@ export class CustomKeyBindingsManager {
       currentCombo: this.getEffectiveCombo(action),
     }));
   }
+
+  /** Re-read bindings from storage and apply them (used after preferences import/reset). */
+  reloadFromStorage(): void {
+    this.loadFromStorage();
+    this.applyCustomBindings();
+  }
 }

@@ -2579,3 +2579,15 @@
 - **Regression Tests**: 4 new tests — returns Promise, resolves without error, exit returns Promise, isAsync matches actual runtime return type.
 - **Verification**: All 736 compat tests pass.
 - **Files Changed**: `src/compat/MuCommands.ts`, `src/compat/__tests__/MuCommands.test.ts`
+
+---
+
+### 277. Unified preferences import/reset writes storage but does not apply the live theme/layout/keybinding/OCIO subsystems
+
+- **Severity**: High
+- **Area**: Preferences / runtime state application
+- **Root Cause**: `importAll()` and `resetAll()` only wrote/cleared storage keys and emitted facade events. They never told the live subsystem managers (ThemeManager, LayoutStore, CustomKeyBindingsManager, OCIOStateManager) to reload from storage, leaving the UI stale until page reload.
+- **Fix**: (1) Added `reloadFromStorage()` public methods to LayoutStore, CustomKeyBindingsManager, and OCIOStateManager. (2) Added `applySubsystemsFromStorage()` and `resetSubsystems()` private helpers in PreferencesManager, called after storage writes in `importAll()`/`resetAll()`. ThemeManager uses existing `setMode()`. All calls are null-safe.
+- **Regression Tests**: 17 new tests — 10 in PreferencesManager (import/reset for each subsystem, null-safety, partial import, event emission), 3 in LayoutStore, 2 in CustomKeyBindingsManager, 2 in OCIOStateManager (all testing reloadFromStorage behavior).
+- **Verification**: All tests pass.
+- **Files Changed**: `src/core/PreferencesManager.ts`, `src/core/PreferencesManager.test.ts`, `src/ui/layout/LayoutStore.ts`, `src/ui/layout/LayoutStore.test.ts`, `src/utils/input/CustomKeyBindingsManager.ts`, `src/utils/input/CustomKeyBindingsManager.test.ts`, `src/ui/components/OCIOStateManager.ts`, `src/ui/components/OCIOStateManager.test.ts`

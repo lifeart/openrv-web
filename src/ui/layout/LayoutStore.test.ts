@@ -593,4 +593,56 @@ describe('LayoutStore', () => {
       expect(saved.panels.bottom.size).toBe(333);
     });
   });
+
+  describe('reloadFromStorage', () => {
+    it('re-reads layout from storage', () => {
+      const customLayout: import('./LayoutStore').LayoutData = {
+        version: LAYOUT_SCHEMA_VERSION,
+        panels: {
+          left: { size: 400, collapsed: false, activeTab: 1 },
+          right: { size: 350, collapsed: false, activeTab: 2 },
+          bottom: { size: 200, collapsed: true, activeTab: 0 },
+        },
+      };
+      localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(customLayout));
+
+      store.reloadFromStorage();
+
+      expect(store.panels.left.size).toBe(400);
+      expect(store.panels.left.collapsed).toBe(false);
+      expect(store.panels.left.activeTab).toBe(1);
+      expect(store.panels.right.size).toBe(350);
+      expect(store.panels.right.activeTab).toBe(2);
+      expect(store.panels.bottom.size).toBe(200);
+      expect(store.panels.bottom.collapsed).toBe(true);
+    });
+
+    it('emits layoutChanged', () => {
+      const spy = vi.fn();
+      store.on('layoutChanged', spy);
+
+      store.reloadFromStorage();
+
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy).toHaveBeenCalledWith(store.layout);
+    });
+
+    it('handles empty storage by applying defaults', () => {
+      // Mutate current layout away from defaults
+      store.setPanelCollapsed('left', false);
+      store.setPanelSize('right', 500);
+
+      // Clear storage so reload falls back to defaults
+      localStorage.clear();
+
+      store.reloadFromStorage();
+
+      expect(store.panels.left.collapsed).toBe(DEFAULT_PANEL_STATES.left.collapsed);
+      expect(store.panels.left.size).toBe(DEFAULT_PANEL_STATES.left.size);
+      expect(store.panels.right.size).toBe(DEFAULT_PANEL_STATES.right.size);
+      expect(store.panels.right.collapsed).toBe(DEFAULT_PANEL_STATES.right.collapsed);
+      expect(store.panels.bottom.size).toBe(DEFAULT_PANEL_STATES.bottom.size);
+      expect(store.panels.bottom.collapsed).toBe(DEFAULT_PANEL_STATES.bottom.collapsed);
+    });
+  });
 });

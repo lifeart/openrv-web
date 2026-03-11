@@ -1516,3 +1516,134 @@ describe('PreferencesManager missingFrameMode (#168)', () => {
     expect(manager.getMissingFrameMode()).toBe('hold');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Issue #277: importAll/resetAll apply live subsystems
+// ---------------------------------------------------------------------------
+
+describe('Issue #277: importAll/resetAll apply live subsystems', () => {
+  function createMockSubsystems() {
+    return {
+      theme: { setMode: vi.fn() } as any,
+      layout: { reloadFromStorage: vi.fn() } as any,
+      keyBindings: { reloadFromStorage: vi.fn() } as any,
+      ocio: { reloadFromStorage: vi.fn() } as any,
+    };
+  }
+
+  it('CPRF-277-001: importAll with theme data calls ThemeManager.setMode', () => {
+    const { manager } = createManager();
+    const subs = createMockSubsystems();
+    manager.setSubsystems(subs);
+
+    manager.importAll(JSON.stringify({ themeMode: 'light' }));
+
+    expect(subs.theme.setMode).toHaveBeenCalledWith('light');
+  });
+
+  it('CPRF-277-002: importAll with invalid themeMode calls setMode("auto")', () => {
+    const { manager } = createManager();
+    const subs = createMockSubsystems();
+    manager.setSubsystems(subs);
+
+    manager.importAll(JSON.stringify({ themeMode: 'neon' }));
+
+    expect(subs.theme.setMode).toHaveBeenCalledWith('auto');
+  });
+
+  it('CPRF-277-003: importAll with null themeMode calls setMode("auto")', () => {
+    const { manager } = createManager();
+    const subs = createMockSubsystems();
+    manager.setSubsystems(subs);
+
+    manager.importAll(JSON.stringify({ themeMode: null }));
+
+    expect(subs.theme.setMode).toHaveBeenCalledWith('auto');
+  });
+
+  it('CPRF-277-004: importAll calls reloadFromStorage on layout, keyBindings, ocio', () => {
+    const { manager } = createManager();
+    const subs = createMockSubsystems();
+    manager.setSubsystems(subs);
+
+    manager.importAll(
+      JSON.stringify({
+        layout: { version: 1 },
+        keyBindings: [],
+        ocioState: { enabled: true },
+      }),
+    );
+
+    expect(subs.layout.reloadFromStorage).toHaveBeenCalled();
+    expect(subs.keyBindings.reloadFromStorage).toHaveBeenCalled();
+    expect(subs.ocio.reloadFromStorage).toHaveBeenCalled();
+  });
+
+  it('CPRF-277-005: importAll without themeMode key does not call theme.setMode', () => {
+    const { manager } = createManager();
+    const subs = createMockSubsystems();
+    manager.setSubsystems(subs);
+
+    manager.importAll(JSON.stringify({ generalPrefs: { userName: 'Alice' } }));
+
+    expect(subs.theme.setMode).not.toHaveBeenCalled();
+  });
+
+  it('CPRF-277-006: resetAll calls setMode("auto") on theme and reloadFromStorage on others', () => {
+    const { manager } = createManager();
+    const subs = createMockSubsystems();
+    manager.setSubsystems(subs);
+
+    manager.resetAll();
+
+    expect(subs.theme.setMode).toHaveBeenCalledWith('auto');
+    expect(subs.layout.reloadFromStorage).toHaveBeenCalled();
+    expect(subs.keyBindings.reloadFromStorage).toHaveBeenCalled();
+    expect(subs.ocio.reloadFromStorage).toHaveBeenCalled();
+  });
+
+  it('CPRF-277-007: importAll with null subsystems does not crash', () => {
+    const { manager } = createManager();
+    // No subsystems wired — should not throw
+    expect(() => {
+      manager.importAll(
+        JSON.stringify({
+          themeMode: 'dark',
+          layout: { version: 1 },
+          keyBindings: [],
+          ocioState: { enabled: true },
+        }),
+      );
+    }).not.toThrow();
+  });
+
+  it('CPRF-277-008: resetAll with null subsystems does not crash', () => {
+    const { manager } = createManager();
+    // No subsystems wired — should not throw
+    expect(() => manager.resetAll()).not.toThrow();
+  });
+
+  it('CPRF-277-009: importAll still emits imported event after applying subsystems', () => {
+    const { manager } = createManager();
+    const subs = createMockSubsystems();
+    manager.setSubsystems(subs);
+
+    const spy = vi.fn();
+    manager.on('imported', spy);
+    manager.importAll(JSON.stringify({ themeMode: 'dark' }));
+
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it('CPRF-277-010: resetAll still emits reset event after applying subsystems', () => {
+    const { manager } = createManager();
+    const subs = createMockSubsystems();
+    manager.setSubsystems(subs);
+
+    const spy = vi.fn();
+    manager.on('reset', spy);
+    manager.resetAll();
+
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+});
