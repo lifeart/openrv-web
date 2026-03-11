@@ -6555,6 +6555,31 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Public/compat consumers can receive geometrically wrong view-transform data for anamorphic or other non-square-pixel cases.
   - That makes external coordinate reasoning less accurate than the event contract suggests, especially in tools that rely on `pixelAspect` for hit testing or screen-space mapping.
 
+### 552. Mu compat `remoteContacts()` returns the locally supplied connection labels instead of the peer contact names received on handshake
+
+- Severity: Medium
+- Area: Mu compatibility / remote networking
+- Evidence:
+  - `MuNetworkBridge.remoteContacts()` simply maps `connectionInfo.values()` to `info.name` in [src/compat/MuNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuNetworkBridge.ts#L258) through [src/compat/MuNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuNetworkBridge.ts#L260).
+  - That `name` field comes from the caller-supplied `remoteConnect(name, host, port)` argument when the connection record is created in [src/compat/MuNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuNetworkBridge.ts#L88) through [src/compat/MuNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuNetworkBridge.ts#L111).
+  - The bridge separately stores the actual peer identity in `peerContactName` when the handshake arrives in [src/compat/MuNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuNetworkBridge.ts#L404) through [src/compat/MuNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuNetworkBridge.ts#L411), and the type contract explicitly describes that field as “Peer's contact name received via handshake” in [src/compat/types.ts](/Users/lifeart/Repos/openrv-web/src/compat/types.ts#L95) through [src/compat/types.ts](/Users/lifeart/Repos/openrv-web/src/compat/types.ts#L104).
+- Impact:
+  - Mu-compatible scripts asking for remote contacts get back whatever local label was passed into `remoteConnect(...)`, not the actual contact names advertised by the remote peers.
+  - That makes peer identity unreliable for collaboration/integration code that needs to distinguish real remote users from local aliases.
+
+### 553. Public `openrv.media.getStartFrame()` cannot represent legitimate frame-0 media because it coerces `0` to `1`
+
+- Severity: Medium
+- Area: Public API / media metadata
+- Evidence:
+  - `getCurrentSourceStartFrame(...)` returns the active representation start frame or sequence start frame, defaulting to `0`, in [src/utils/media/SourceUIState.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SourceUIState.ts#L20) through [src/utils/media/SourceUIState.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SourceUIState.ts#L29).
+  - `MediaAPI.getStartFrame()` then does `return startFrame || 1`, which rewrites any legitimate `0` value to `1`, in [src/api/MediaAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/MediaAPI.ts#L171) through [src/api/MediaAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/MediaAPI.ts#L177).
+  - The codebase does treat `0` as a valid start frame elsewhere, including sequence/representation fixtures in [src/core/session/SessionSerializer.test.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.test.ts#L1102) through [src/core/session/SessionSerializer.test.ts#L1255) and [src/utils/media/SourceUIState.test.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SourceUIState.test.ts#L7) through [src/utils/media/SourceUIState.test.ts#L18).
+  - Mu compat `frameStart()` delegates directly to this API in [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L189) through [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L191), so the coercion leaks into the Mu layer too.
+- Impact:
+  - Scripts and integrations cannot distinguish a real frame-0 source from the default “no metadata” fallback.
+  - That shifts downstream frame-range, timecode-offset, and sequence-origin calculations by one frame for 0-based media.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

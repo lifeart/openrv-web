@@ -1291,16 +1291,18 @@
 ## Issue #116: Volume slider disclosure is tied to the mute button, so keyboard/touch use mutates audio state just to reach the slider
 
 - **Severity**: Medium
-- **Fix**: Added TODO(#116) comment documenting the UX issue. Larger redesign needed to separate disclosure from mute.
-- **Regression Tests**: 1 test documenting the behavior.
-- **Files Changed**: `src/ui/components/VolumeControl.ts`
+- **TODO(#116) Resolved**: Volume slider disclosure is no longer tied to mute. Clicking the mute button only toggles mute, while disclosure is handled separately through hover and keyboard focus so users can reach the slider without mutating audio state.
+- **Regression Tests**: `VolumeControl.test.ts` covers click-only mute behavior, hover disclosure, keyboard-focus disclosure, focus-within retention, and collapse when focus leaves the control.
+- **Verification**: `VolumeControl.test.ts` (29 tests) passes. TypeScript clean.
+- **Files Changed**: `src/ui/components/VolumeControl.ts`, `src/ui/components/VolumeControl.test.ts`
 
 ## Issue #117: The OCIO button advertises the wrong shortcut
 
 - **Severity**: Low
-- **Fix**: Changed tooltip from `(Shift+O)` to `(O)`.
-- **Regression Tests**: 1 test.
-- **Files Changed**: `src/ui/components/OCIOControl.ts`
+- **TODO(#117) Resolved**: The OCIO button tooltip now advertises the correct `O` shortcut instead of `Shift+O`.
+- **Regression Tests**: `OCIOControl.test.ts` asserts the rendered `ocio-panel-button` tooltip text.
+- **Verification**: `OCIOControl.test.ts` (20 tests) passes. TypeScript clean.
+- **Files Changed**: `src/ui/components/OCIOControl.ts`, `src/ui/components/OCIOControl.test.ts`
 
 ## Issue #118: `WipeControl` is a dead legacy UI widget with no production mount path
 
@@ -1313,30 +1315,34 @@
 ## Issue #119: Project save knows it is dropping active viewer state, but the save flow only logs that loss to the console
 
 - **Severity**: High
-- **Fix**: After `toJSON()`, check `getSerializationGaps()` for active gaps and call `showAlert()` with warning details before saving. Matches the pattern used by the load path.
-- **Regression Tests**: 2 tests.
-- **Files Changed**: `src/AppPersistenceManager.ts`
+- **TODO(#119) Resolved**: `saveProject()` now surfaces active serialization gaps with a warning alert before saving, instead of leaving that data loss visible only in the console.
+- **Regression Tests**: `AppPersistenceManager.issue119-122.test.ts` verifies warning alerts appear for active gaps and stay silent when no active gaps remain.
+- **Verification**: `AppPersistenceManager.issue119-122.test.ts` (6 tests) passes. `AppPersistenceManager.test.ts` (66 tests) passes. TypeScript clean.
+- **Files Changed**: `src/AppPersistenceManager.ts`, `src/AppPersistenceManager.issue119-122.test.ts`
 
 ## Issue #120: Restored PAR and background-pattern state can disagree with the visible controls
 
 - **Severity**: Medium
-- **Fix**: Added PAR and background-pattern control sync in `syncControlsFromState()`. Added both controls to `PersistenceManagerContext`.
-- **Regression Tests**: 2 tests.
-- **Files Changed**: `src/AppPersistenceManager.ts`
+- **TODO(#120) Resolved**: `syncControlsFromState()` now pushes restored PAR and background-pattern state back into the visible controls, keeping the UI aligned with restored session state.
+- **Regression Tests**: `AppPersistenceManager.issue119-122.test.ts` verifies PAR/background control sync and graceful handling when those controls are not mounted.
+- **Verification**: `AppPersistenceManager.issue119-122.test.ts` (6 tests) passes. `AppPersistenceManager.test.ts` (66 tests) passes. TypeScript clean.
+- **Files Changed**: `src/AppPersistenceManager.ts`, `src/AppPersistenceManager.issue119-122.test.ts`
 
 ## Issue #121: Opening a project imports its media on top of the current session instead of replacing the session
 
 - **Severity**: High
-- **Fix**: Added `clearSources()` method to SessionMedia/Session. `SessionSerializer.fromJSON()` now calls `session.clearSources()` before loading media.
-- **Regression Tests**: 1 test.
-- **Files Changed**: `src/core/session/SessionMedia.ts`, `src/core/session/Session.ts`, `src/core/session/SessionSerializer.ts`
+- **TODO(#121) Resolved**: Project restore now clears the current session before loading serialized media, so imported projects replace the session instead of stacking new sources onto existing ones.
+- **Regression Tests**: `AppPersistenceManager.issue119-122.test.ts` verifies the load path clears sources before import.
+- **Verification**: `AppPersistenceManager.issue119-122.test.ts` (6 tests) passes. TypeScript clean.
+- **Files Changed**: `src/core/session/SessionMedia.ts`, `src/core/session/Session.ts`, `src/core/session/SessionSerializer.ts`, `src/AppPersistenceManager.issue119-122.test.ts`
 
 ## Issue #122: Saved current-source selection is serialized but never restored
 
 - **Severity**: Medium
-- **Fix**: Added `setCurrentSource(state.currentSourceIndex)` at the end of `setPlaybackState()` in Session.
-- **Regression Tests**: 1 test.
-- **Files Changed**: `src/core/session/Session.ts`
+- **TODO(#122) Resolved**: `Session.setPlaybackState()` now reapplies `currentSourceIndex`, so project restore returns to the same active source that was saved.
+- **Regression Tests**: `AppPersistenceManager.issue119-122.test.ts` verifies playback restore carries `currentSourceIndex` through to the session load path.
+- **Verification**: `AppPersistenceManager.issue119-122.test.ts` (6 tests) passes. TypeScript clean.
+- **Files Changed**: `src/core/session/Session.ts`, `src/AppPersistenceManager.issue119-122.test.ts`
 
 ## Issue #123: Loading empty notes, version groups, or statuses does not clear the old session data
 
