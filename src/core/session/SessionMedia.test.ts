@@ -1057,4 +1057,49 @@ describe('SessionMedia', () => {
       expect(errorMessage).not.toContain('Unsupported file type');
     });
   });
+
+  describe('_suppressNextLoadingStarted leak guard', () => {
+    it('SM-045: emitSourceLoadingStarted reads and clears the suppress flag atomically', () => {
+      const listener = vi.fn();
+      media.on('sourceLoadingStarted', listener);
+
+      // Simulate fallback path setting the flag (via public emit to trigger the guard)
+      // Access the private flag via cast to exercise the guard behavior
+      (media as any)._suppressNextLoadingStarted = true;
+
+      // First call should be suppressed and flag cleared
+      (media as any).emitSourceLoadingStarted('suppressed.exr');
+      expect(listener).not.toHaveBeenCalled();
+
+      // Second call should NOT be suppressed — flag was cleared
+      (media as any).emitSourceLoadingStarted('normal.exr');
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(listener).toHaveBeenCalledWith({ name: 'normal.exr' });
+    });
+
+    it('SM-046: suppress flag does not leak to unrelated loads when cleared by finally', () => {
+      const listener = vi.fn();
+      media.on('sourceLoadingStarted', listener);
+
+      // Simulate: flag set, then cleared (as the finally block would do)
+      (media as any)._suppressNextLoadingStarted = true;
+      (media as any)._suppressNextLoadingStarted = false;
+
+      // Next call should work normally
+      (media as any).emitSourceLoadingStarted('unrelated.png');
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(listener).toHaveBeenCalledWith({ name: 'unrelated.png' });
+    });
+  });
+
+  describe('sourceLoadFailed event', () => {
+    it('SM-047: sourceLoadFailed event type is accepted by on()', () => {
+      const listener = vi.fn();
+      media.on('sourceLoadFailed', listener);
+
+      media.emit('sourceLoadFailed', { name: 'broken.exr' });
+
+      expect(listener).toHaveBeenCalledWith({ name: 'broken.exr' });
+    });
+  });
 });
