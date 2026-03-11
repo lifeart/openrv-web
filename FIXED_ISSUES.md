@@ -2528,3 +2528,12 @@
 - **Regression Tests**: 3 new tests covering: tag-specific geometry selection (different geometry per tag), tag mismatch falls back to name, and empty tag preserves backward compatibility.
 - **Verification**: All 672 compat tests pass (8 files), TypeScript clean.
 - **Files Changed**: `src/compat/MuEvalBridge.ts`, `src/compat/types.ts`, `src/api/EventsAPI.ts`, `src/compat/__tests__/MuEvalBridge.test.ts`
+
+### 265. Mu compat eventToImageSpace() ignores its useLocalCoords flag
+- **Severity**: Medium
+- **Area**: Mu compatibility / coordinate transforms
+- **Root Cause**: `eventToImageSpace()` accepted `_useLocalCoords` parameter but never branched on it — the same image-local coordinate transformation ran regardless of the flag value.
+- **Fix**: Renamed `_useLocalCoords` to `useLocalCoords` and added branching: when `false` (default), returns raw screen/event coordinates without transformation; when `true`, performs the screen-to-image-local coordinate transform via `_screenToImage()`. Early return on `false` avoids unnecessary image lookup.
+- **Regression Tests**: 3 new tests covering: useLocalCoords=false returns screen coords, useLocalCoords=true returns image-local coords, default (no flag) matches explicit false. Updated existing tests to pass explicit `true` for image-local assertions.
+- **Verification**: All 675 compat tests pass (8 files), TypeScript clean.
+- **Files Changed**: `src/compat/MuEvalBridge.ts`, `src/compat/__tests__/MuEvalBridge.test.ts`

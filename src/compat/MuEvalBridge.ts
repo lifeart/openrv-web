@@ -422,10 +422,16 @@ export class MuEvalBridge {
    *
    * @param imageName - The target image name
    * @param eventPoint - Screen coordinates [x, y]
-   * @param _useLocalCoords - Whether to use local coordinate system
-   * @returns Image pixel coordinates [x, y], or [0, 0] if image not found
+   * @param useLocalCoords - Whether to use local coordinate system.
+   *   When true, returns image-local pixel coordinates (0..width, 0..height).
+   *   When false (default), returns the event's screen-space coordinates.
+   * @returns Coordinates [x, y] in the requested space, or screen coords if image not found
    */
-  eventToImageSpace(imageName: string, eventPoint: [number, number], _useLocalCoords = false): [number, number] {
+  eventToImageSpace(imageName: string, eventPoint: [number, number], useLocalCoords = false): [number, number] {
+    if (!useLocalCoords) {
+      return [eventPoint[0], eventPoint[1]];
+    }
+
     const img = this._renderedImages.find((i) => i.name === imageName);
     if (!img) {
       // Fall back to using the view transform directly

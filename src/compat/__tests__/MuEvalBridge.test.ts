@@ -714,22 +714,22 @@ describe('MuEvalBridge', () => {
       ]);
     });
 
-    it('converts screen center to image center', () => {
+    it('converts screen center to image center with useLocalCoords=true', () => {
       // Image 200x100 centered in 800x600 -> top-left at (300, 250)
       // Screen center (400, 300) -> image (100, 50)
-      const [ix, iy] = bridge.eventToImageSpace('testImg', [400, 300]);
+      const [ix, iy] = bridge.eventToImageSpace('testImg', [400, 300], true);
       expect(ix).toBeCloseTo(100);
       expect(iy).toBeCloseTo(50);
     });
 
-    it('converts image top-left corner', () => {
+    it('converts image top-left corner with useLocalCoords=true', () => {
       // Image top-left is at screen (300, 250)
-      const [ix, iy] = bridge.eventToImageSpace('testImg', [300, 250]);
+      const [ix, iy] = bridge.eventToImageSpace('testImg', [300, 250], true);
       expect(ix).toBeCloseTo(0);
       expect(iy).toBeCloseTo(0);
     });
 
-    it('handles scaled view', () => {
+    it('handles scaled view with useLocalCoords=true', () => {
       bridge.setViewTransform(defaultViewTransform({
         viewWidth: 800,
         viewHeight: 600,
@@ -740,16 +740,36 @@ describe('MuEvalBridge', () => {
       // At scale 2, image (200x100) occupies 400x200 in screen space
       // Centered in 800x600 -> top-left at (200, 200)
       // Screen point (400, 300) -> image center (100, 50)
-      const [ix, iy] = bridge.eventToImageSpace('testImg', [400, 300]);
+      const [ix, iy] = bridge.eventToImageSpace('testImg', [400, 300], true);
       expect(ix).toBeCloseTo(100);
       expect(iy).toBeCloseTo(50);
     });
 
-    it('falls back to view transform for unknown image', () => {
-      const result = bridge.eventToImageSpace('unknown', [400, 300]);
+    it('falls back to view transform for unknown image with useLocalCoords=true', () => {
+      const result = bridge.eventToImageSpace('unknown', [400, 300], true);
       expect(result).toHaveLength(2);
       expect(typeof result[0]).toBe('number');
       expect(typeof result[1]).toBe('number');
+    });
+
+    it('useLocalCoords=false returns screen coordinates', () => {
+      const [sx, sy] = bridge.eventToImageSpace('testImg', [400, 300], false);
+      expect(sx).toBe(400);
+      expect(sy).toBe(300);
+    });
+
+    it('useLocalCoords=true returns image-local coordinates', () => {
+      // Image 200x100 centered in 800x600 -> top-left at (300, 250)
+      const [ix, iy] = bridge.eventToImageSpace('testImg', [400, 300], true);
+      expect(ix).toBeCloseTo(100);
+      expect(iy).toBeCloseTo(50);
+    });
+
+    it('default (no flag) behaves the same as useLocalCoords=false', () => {
+      const withoutFlag = bridge.eventToImageSpace('testImg', [400, 300]);
+      const withFalse = bridge.eventToImageSpace('testImg', [400, 300], false);
+      expect(withoutFlag[0]).toBe(withFalse[0]);
+      expect(withoutFlag[1]).toBe(withFalse[1]);
     });
   });
 
@@ -852,7 +872,7 @@ describe('MuEvalBridge', () => {
 
       // With pixelAspect=2, the image takes 400x100 screen pixels (200*2 x 100)
       // Centered in 800x600 -> top-left at (200, 250)
-      const [ix, iy] = bridge.eventToImageSpace('wideImg', [400, 300]);
+      const [ix, iy] = bridge.eventToImageSpace('wideImg', [400, 300], true);
       // Screen center to image center: (400-200)/2 = 100, (300-250)/1 = 50
       expect(ix).toBeCloseTo(100);
       expect(iy).toBeCloseTo(50);
