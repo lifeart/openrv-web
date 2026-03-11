@@ -19,7 +19,8 @@ import type { BackgroundPatternState } from '../core/types/background';
  * This avoids hard coupling and lets the compat layer be instantiated
  * before or after the main API.
  */
-function getOpenRV(): {
+/** Shape of the openrv API subset used by MuCommands. */
+type OpenRVCompat = {
   playback: {
     play(): void;
     pause(): void;
@@ -34,6 +35,8 @@ function getOpenRV(): {
     getMeasuredFPS(): number;
     setPlayDirection(direction: number): void;
     getPlayDirection(): number;
+    isBuffering(): boolean;
+    getDroppedFrameCount(): number;
   };
   media: {
     getFPS(): number;
@@ -73,12 +76,23 @@ function getOpenRV(): {
     get(frame: number): { frame: number; note: string; color: string } | null;
     getAll(): Array<{ frame: number; note: string; color: string }>;
   };
-} {
+};
+
+function getOpenRV(): OpenRVCompat {
   const api = (globalThis as Record<string, unknown>).openrv;
   if (!api) {
     throw new Error('window.openrv is not available. Initialize OpenRVAPI first.');
   }
-  return api as ReturnType<typeof getOpenRV>;
+  return api as OpenRVCompat;
+}
+
+/**
+ * Try to resolve the openrv API, returning null when unavailable.
+ * Used by health commands that should degrade gracefully.
+ */
+function tryGetOpenRV(): OpenRVCompat | null {
+  const api = (globalThis as Record<string, unknown>).openrv;
+  return (api as OpenRVCompat) ?? null;
 }
 
 /** Supported commands and their support status */
@@ -106,10 +120,10 @@ const SUPPORT_MAP: Record<string, true | false | 'partial' | 'stub'> = {
   setInc: true,
   inc: true,
   skipped: true,
-  isCurrentFrameIncomplete: true,
-  isCurrentFrameError: true,
+  isCurrentFrameIncomplete: false,
+  isCurrentFrameError: false,
   isBuffering: true,
-  mbps: true,
+  mbps: false,
   resetMbps: true,
   // Audio
   scrubAudio: 'partial',
@@ -140,7 +154,6 @@ const ASYNC_COMMANDS = new Set<string>(['fullScreenMode']);
 
 export class MuCommands {
   // --- Internal state for ADD commands ---
-  private _skippedFrames = 0;
   private _mbps = 0;
   private _margins: number[] = [0, 0, 0, 0];
 
@@ -289,7 +302,7 @@ export class MuCommands {
 
   /** Get count of skipped frames (since last reset). (Mu #21) */
   skipped(): number {
-    return this._skippedFrames;
+    return tryGetOpenRV()?.playback.getDroppedFrameCount() ?? 0;
   }
 
   /** Check if current frame decode is incomplete. (Mu #22) */
@@ -304,7 +317,7 @@ export class MuCommands {
 
   /** Check if media is buffering. (Mu #24) */
   isBuffering(): boolean {
-    return false;
+    return tryGetOpenRV()?.playback.isBuffering() ?? false;
   }
 
   /** Get I/O throughput in megabits per second. (Mu #25) */

@@ -323,4 +323,40 @@ export class PlaybackAPI extends DisposableAPI {
     this.assertNotDisposed();
     return this.session.effectiveFps;
   }
+
+  /**
+   * Check whether the playback engine is currently buffering.
+   *
+   * Returns `true` when the engine is waiting for frames (e.g. play-all-frames
+   * starvation or HDR initial buffering delay).
+   *
+   * @returns `true` if buffering, `false` otherwise.
+   *
+   * @example
+   * ```ts
+   * if (openrv.playback.isBuffering()) { showSpinner(); }
+   * ```
+   */
+  isBuffering(): boolean {
+    this.assertNotDisposed();
+    return this.session.isBuffering;
+  }
+
+  /**
+   * Get the cumulative count of dropped (skipped) frames since playback started.
+   *
+   * In realtime mode the engine may skip frames to maintain the target FPS.
+   * This counter reflects the total number of such skips.
+   *
+   * @returns The number of dropped frames.
+   *
+   * @example
+   * ```ts
+   * const dropped = openrv.playback.getDroppedFrameCount(); // e.g. 12
+   * ```
+   */
+  getDroppedFrameCount(): number {
+    this.assertNotDisposed();
+    return this.session.droppedFrameCount;
+  }
 }

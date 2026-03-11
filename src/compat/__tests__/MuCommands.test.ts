@@ -40,6 +40,8 @@ function createMockOpenRV() {
       setPlayDirection: vi.fn(),
       getPlayDirection: vi.fn(() => 1),
       stop: vi.fn(),
+      isBuffering: vi.fn((): boolean => false),
+      getDroppedFrameCount: vi.fn((): number => 0),
     },
     media: {
       getFPS: vi.fn((): number => 24),
@@ -380,6 +382,18 @@ describe('MuCommands', () => {
       expect(cmd.skipped()).toBe(0);
     });
 
+    it('skipped() reads from session dropped frame count', () => {
+      mockOpenRV.playback.getDroppedFrameCount.mockReturnValue(5);
+      expect(cmd.skipped()).toBe(5);
+    });
+
+    it('skipped() tracks real skips as count increases', () => {
+      mockOpenRV.playback.getDroppedFrameCount.mockReturnValue(1);
+      expect(cmd.skipped()).toBe(1);
+      mockOpenRV.playback.getDroppedFrameCount.mockReturnValue(3);
+      expect(cmd.skipped()).toBe(3);
+    });
+
     it('isCurrentFrameIncomplete() returns false', () => {
       expect(cmd.isCurrentFrameIncomplete()).toBe(false);
     });
@@ -388,13 +402,30 @@ describe('MuCommands', () => {
       expect(cmd.isCurrentFrameError()).toBe(false);
     });
 
-    it('isBuffering() returns false', () => {
+    it('isBuffering() returns false by default', () => {
+      expect(cmd.isBuffering()).toBe(false);
+    });
+
+    it('isBuffering() reflects session buffering state', () => {
+      mockOpenRV.playback.isBuffering.mockReturnValue(true);
+      expect(cmd.isBuffering()).toBe(true);
+
+      mockOpenRV.playback.isBuffering.mockReturnValue(false);
       expect(cmd.isBuffering()).toBe(false);
     });
 
     it('mbps() / resetMbps() manage throughput counter', () => {
       expect(cmd.mbps()).toBe(0);
       cmd.resetMbps();
+      expect(cmd.mbps()).toBe(0);
+    });
+
+    it('health commands return safe defaults when no session', () => {
+      delete (globalThis as Record<string, unknown>).openrv;
+      expect(cmd.isBuffering()).toBe(false);
+      expect(cmd.skipped()).toBe(0);
+      expect(cmd.isCurrentFrameIncomplete()).toBe(false);
+      expect(cmd.isCurrentFrameError()).toBe(false);
       expect(cmd.mbps()).toBe(0);
     });
   });

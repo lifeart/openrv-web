@@ -2485,3 +2485,12 @@
 - **Regression Tests**: 4 new tests covering: suffix preferred over substring (with insertion order proving it's not luck), alphabetical tiebreaking among equal-quality matches, insertion-order independence, and exact match still wins over suffix/substring.
 - **Verification**: All 629 compat tests pass (8 files), TypeScript clean.
 - **Files Changed**: `src/compat/MuPropertyBridge.ts`, `src/compat/__tests__/MuPropertyBridge.test.ts`
+
+### 257. Mu compat playback-health commands are marked supported but only expose hardcoded or never-updated local state
+- **Severity**: Medium
+- **Area**: Mu compatibility / playback telemetry
+- **Root Cause**: `skipped()` returned a private field never updated from real playback. `isBuffering()` was hardcoded `false`. `mbps()`, `isCurrentFrameIncomplete()`, `isCurrentFrameError()` were also stubs but all marked as fully supported in the command manifest.
+- **Fix**: Wired `isBuffering()` to `PlaybackAPI.isBuffering()` which delegates to real session buffering state. Wired `skipped()` to `PlaybackAPI.getDroppedFrameCount()` for real dropped frame tracking. Removed unused `_skippedFrames` field. Changed support table entries for `mbps`, `isCurrentFrameIncomplete`, and `isCurrentFrameError` from `true` to `false` (no session-layer APIs available for these). Added `tryGetOpenRV()` graceful degradation pattern.
+- **Regression Tests**: 4 new compat tests (buffering reflects session, skipped tracks real drops, incremental counting, safe defaults without session) + 2 new PlaybackAPI dispose-guard tests for isBuffering and getDroppedFrameCount.
+- **Verification**: All 633 compat tests pass, all 332 API tests pass, TypeScript clean.
+- **Files Changed**: `src/compat/MuCommands.ts`, `src/compat/__tests__/MuCommands.test.ts`, `src/api/PlaybackAPI.ts`, `src/api/OpenRVAPI.test.ts`

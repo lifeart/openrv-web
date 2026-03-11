@@ -2182,6 +2182,14 @@ describe('Sub-API disposed guards', () => {
     expect(() => api.playback.getMeasuredFPS()).toThrow(DISPOSED_MSG);
   });
 
+  it('API-U232: playback.isBuffering() throws after dispose', () => {
+    expect(() => api.playback.isBuffering()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U233: playback.getDroppedFrameCount() throws after dispose', () => {
+    expect(() => api.playback.getDroppedFrameCount()).toThrow(DISPOSED_MSG);
+  });
+
   // -- MediaAPI --
   it('API-U102: media.getCurrentSource() throws after dispose', () => {
     expect(() => api.media.getCurrentSource()).toThrow(DISPOSED_MSG);
