@@ -279,28 +279,139 @@ describe('MuNodeBridge', () => {
       expect(bridge.nextViewNode()).toBe('');
     });
 
-    it('navigates back through history', () => {
+    it('A→B→C, back returns B, forward returns C', () => {
       bridge.setViewNode('source1');
       bridge.setViewNode('color1');
       bridge.setViewNode('seq1');
 
-      // Current is seq1, history has [source1, color1]
-      const prev1 = bridge.previousViewNode();
-      expect(prev1).toBe('color1');
+      expect(bridge.previousViewNode()).toBe('color1');
+      expect(bridge.viewNode()).toBe('color1');
+
+      expect(bridge.nextViewNode()).toBe('seq1');
+      expect(bridge.viewNode()).toBe('seq1');
+    });
+
+    it('A→B→C, back×2 returns A, forward×2 returns C', () => {
+      bridge.setViewNode('source1');
+      bridge.setViewNode('color1');
+      bridge.setViewNode('seq1');
+
+      expect(bridge.previousViewNode()).toBe('color1');
+      expect(bridge.previousViewNode()).toBe('source1');
+      expect(bridge.nextViewNode()).toBe('color1');
+      expect(bridge.nextViewNode()).toBe('seq1');
+    });
+
+    it('A→B→C, back to B, setViewNode(D) truncates forward history', () => {
+      // Add a fourth node for this test
+      const d = new TestNode('RVMerge', 'merge1');
+      graph.addNode(d);
+
+      bridge.setViewNode('source1');
+      bridge.setViewNode('color1');
+      bridge.setViewNode('seq1');
+
+      expect(bridge.previousViewNode()).toBe('color1');
+
+      // Navigate to a new node — forward history (seq1) should be truncated
+      bridge.setViewNode('merge1');
+      expect(bridge.nextViewNode()).toBe('');
+      expect(bridge.viewNode()).toBe('merge1');
+
+      // Can still go back through source1 → color1 → merge1
+      expect(bridge.previousViewNode()).toBe('color1');
+      expect(bridge.previousViewNode()).toBe('source1');
+    });
+
+    it('at beginning, previousViewNode returns empty', () => {
+      bridge.setViewNode('source1');
+      expect(bridge.previousViewNode()).toBe('');
+      expect(bridge.viewNode()).toBe('source1');
+    });
+
+    it('at end, nextViewNode returns empty', () => {
+      bridge.setViewNode('source1');
+      bridge.setViewNode('color1');
+      expect(bridge.nextViewNode()).toBe('');
       expect(bridge.viewNode()).toBe('color1');
     });
 
-    it('navigates forward through history after going back', () => {
+    it('single node, back returns empty', () => {
+      bridge.setViewNode('source1');
+      expect(bridge.previousViewNode()).toBe('');
+      expect(bridge.nextViewNode()).toBe('');
+    });
+
+    it('A→B→C, repeated back→forward zigzag is stable', () => {
       bridge.setViewNode('source1');
       bridge.setViewNode('color1');
       bridge.setViewNode('seq1');
 
-      bridge.previousViewNode(); // -> color1
+      expect(bridge.previousViewNode()).toBe('color1');
+      expect(bridge.nextViewNode()).toBe('seq1');
+      expect(bridge.previousViewNode()).toBe('color1');
+      expect(bridge.nextViewNode()).toBe('seq1');
+    });
+  });
 
-      const next = bridge.nextViewNode();
-      // Should go forward to seq1 or color1's successor
-      expect(next).not.toBe('');
-      expect(bridge.viewNode()).toBe(next);
+  describe('deleteNode scrubs _viewHistory', () => {
+    it('A→B→C, delete C, previousViewNode returns B, nextViewNode returns empty', () => {
+      bridge.setViewNode('source1');
+      bridge.setViewNode('color1');
+      bridge.setViewNode('seq1');
+
+      bridge.deleteNode('seq1');
+
+      expect(bridge.previousViewNode()).toBe('source1');
+      // We moved back to source1; forward should be color1 (not deleted C)
+      expect(bridge.nextViewNode()).toBe('color1');
+      // At end now
+      expect(bridge.nextViewNode()).toBe('');
+    });
+
+    it('A→B→C, delete B, history is [A, C] and navigation works', () => {
+      bridge.setViewNode('source1');
+      bridge.setViewNode('color1');
+      bridge.setViewNode('seq1');
+
+      bridge.deleteNode('color1');
+
+      // Cursor should be at C (index adjusted). Going back should reach A.
+      expect(bridge.previousViewNode()).toBe('source1');
+      expect(bridge.nextViewNode()).toBe('seq1');
+    });
+
+    it('A→B→C, delete C, setViewNode(B) should NOT duplicate B in history', () => {
+      bridge.setViewNode('source1');
+      bridge.setViewNode('color1');
+      bridge.setViewNode('seq1');
+
+      bridge.deleteNode('seq1');
+
+      // After deleting C, history is [A, B] with cursor at B.
+      // setViewNode('B') should be a no-op (early return guard).
+      bridge.setViewNode('color1');
+
+      expect(bridge.previousViewNode()).toBe('source1');
+      // No duplicate B, so forward from A should be B only
+      expect(bridge.nextViewNode()).toBe('color1');
+      // At end now
+      expect(bridge.nextViewNode()).toBe('');
+    });
+
+    it('A→B→C, delete C, setViewNode(D), previousViewNode returns B', () => {
+      const d = new TestNode('RVMerge', 'merge1');
+      graph.addNode(d);
+
+      bridge.setViewNode('source1');
+      bridge.setViewNode('color1');
+      bridge.setViewNode('seq1');
+
+      bridge.deleteNode('seq1');
+
+      bridge.setViewNode('merge1');
+      expect(bridge.previousViewNode()).toBe('color1');
+      expect(bridge.previousViewNode()).toBe('source1');
     });
   });
 

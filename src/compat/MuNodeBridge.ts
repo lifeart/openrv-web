@@ -144,6 +144,34 @@ export class MuNodeBridge {
       this._viewNode = null;
     }
 
+    // Scrub deleted node from view history and adjust cursor
+    const oldIndex = this._viewHistoryIndex;
+    let removedBeforeOrAt = 0;
+    const filtered: string[] = [];
+    for (let i = 0; i < this._viewHistory.length; i++) {
+      const viewHistoryEntry = this._viewHistory[i];
+      if (viewHistoryEntry === undefined) {
+        continue;
+      }
+      if (viewHistoryEntry === name) {
+        if (i <= oldIndex) removedBeforeOrAt++;
+      } else {
+        filtered.push(viewHistoryEntry);
+      }
+    }
+    this._viewHistory = filtered;
+    this._viewHistoryIndex = Math.min(
+      Math.max(oldIndex - removedBeforeOrAt, 0),
+      this._viewHistory.length - 1,
+    );
+    if (this._viewHistory.length === 0) {
+      this._viewHistoryIndex = -1;
+    }
+
+    // Sync _viewNode with the current history cursor to prevent
+    // setViewNode from pushing a duplicate when the guard checks _viewNode.
+    this._viewNode = this._viewHistory[this._viewHistoryIndex] ?? null;
+
     this._graph.removeNode(node.id);
   }
 
@@ -293,13 +321,16 @@ export class MuNodeBridge {
       throw new Error(`Node not found: "${name}"`);
     }
 
-    if (this._viewNode !== null && this._viewNode !== name) {
-      // Truncate any forward history beyond the current position
-      this._viewHistory = this._viewHistory.slice(0, this._viewHistoryIndex + 1);
-      // Push current view onto history before switching
-      this._viewHistory.push(this._viewNode);
-      this._viewHistoryIndex = this._viewHistory.length - 1;
+    if (this._viewNode === name) {
+      this._viewableNodes.add(name);
+      return;
     }
+
+    // Truncate any forward history beyond the current position
+    this._viewHistory = this._viewHistory.slice(0, this._viewHistoryIndex + 1);
+    // Push new node onto history
+    this._viewHistory.push(name);
+    this._viewHistoryIndex = this._viewHistory.length - 1;
 
     this._viewNode = name;
 
@@ -314,29 +345,14 @@ export class MuNodeBridge {
    * @returns The previous view node name, or empty string if at start of history.
    */
   previousViewNode(): string {
-    if (this._viewHistory.length === 0 || this._viewHistoryIndex < 0) {
+    if (this._viewHistoryIndex <= 0) {
       return '';
     }
 
-    // If we are past the end of the stored history (i.e. at a fresh setViewNode),
-    // save the current node so we can navigate forward to it later.
-    if (this._viewNode && this._viewHistoryIndex === this._viewHistory.length - 1) {
-      // The current node is NOT in _viewHistory yet (it's the "active" one).
-      // Push it so nextViewNode can return to it.
-      this._viewHistory.push(this._viewNode);
-      // _viewHistoryIndex stays the same — we want to go to the item at _viewHistoryIndex.
-    }
-
-    const prev = this._viewHistory[this._viewHistoryIndex];
-    if (prev !== undefined) {
-      this._viewNode = prev;
-      if (this._viewHistoryIndex > 0) {
-        this._viewHistoryIndex--;
-      }
-      return prev;
-    }
-
-    return '';
+    this._viewHistoryIndex--;
+    const prev = this._viewHistory[this._viewHistoryIndex] ?? '';
+    this._viewNode = prev;
+    return prev;
   }
 
   /**
@@ -351,12 +367,9 @@ export class MuNodeBridge {
     }
 
     this._viewHistoryIndex++;
-    const next = this._viewHistory[this._viewHistoryIndex];
-    if (next !== undefined) {
-      this._viewNode = next;
-      return next;
-    }
-    return '';
+    const next = this._viewHistory[this._viewHistoryIndex] ?? '';
+    this._viewNode = next;
+    return next;
   }
 
   /**

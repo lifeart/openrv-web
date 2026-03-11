@@ -1128,23 +1128,34 @@
 ## Issue #98: Ghost Frames, PAR, and Stereo Align use different interaction models for mouse and keyboard
 
 - **Severity**: Medium
-- **Fix**: Updated tooltips to clarify dual behavior: "Click to configure, [shortcut] to toggle/cycle". Ghost Frames, PAR, and StereoAlign all updated.
-- **Regression Tests**: 3 tests (one per control).
-- **Files Changed**: `src/ui/components/GhostFrameControl.ts`, `src/ui/components/PARControl.ts`, `src/ui/components/StereoAlignControl.ts`, `src/ui/components/issues-p1.test.ts`
+- **TODO(#98) Resolved**: The shipped Ghost Frames, PAR, and Stereo Align controls now describe their split interaction model directly in the button tooltip: click opens configuration, while the keyboard shortcut toggles or cycles the current state. That keeps the UI copy aligned with the real behavior instead of implying a single interaction pattern.
+- **Regression Tests**:
+  - `GhostFrameControl.test.ts`: added coverage for the dual-behavior tooltip copy on the ghost-frame button
+  - `PARControl.test.ts`: added coverage for the dual-behavior tooltip copy on the PAR button
+  - `StereoAlignControl.test.ts`: added coverage for the dual-behavior tooltip copy on the stereo-align button
+  - `issues-p1.test.ts`: removed the now-redundant issue-specific tooltip tests after migrating coverage into the component suites
+- **Verification**: `GhostFrameControl.test.ts` (6 tests), `PARControl.test.ts` (22 tests), and `StereoAlignControl.test.ts` (20 tests) pass. TypeScript clean.
+- **Files Changed**: `src/ui/components/GhostFrameControl.ts`, `src/ui/components/GhostFrameControl.test.ts`, `src/ui/components/PARControl.ts`, `src/ui/components/PARControl.test.ts`, `src/ui/components/StereoAlignControl.ts`, `src/ui/components/StereoAlignControl.test.ts`, `src/ui/components/issues-p1.test.ts`
 
 ## Issue #99: Timeline editor context menu shows shortcut hints that are not actually wired
 
 - **Severity**: Medium
-- **Fix**: Removed `S` and `D` shortcut hints from "Split at Playhead" and "Duplicate Cut" items (set to `null`). Kept `Del` for Delete since it IS wired. Updated `createMenuItem` to accept `string | null`.
-- **Regression Tests**: 1 test.
-- **Files Changed**: `src/ui/components/TimelineEditor.ts`, `src/ui/components/issues-p1.test.ts`
+- **TODO(#99) Resolved**: The timeline editor context menu no longer advertises fake `S` and `D` shortcuts for `Split at Playhead` and `Duplicate Cut`. Those items now render without shortcut badges, while `Delete Cut` keeps its real `Del` hint. `TimelineEditor.createMenuItem()` accepts `string | null` so the menu can distinguish between wired and click-only actions.
+- **Regression Tests**:
+  - `TimelineEditor.test.ts`: updated `TL-EDIT-U062` to verify that split/duplicate items render label-only entries while delete still renders its `Del` shortcut badge
+  - `issues-p1.test.ts`: removed the now-redundant issue-specific timeline-editor context-menu test after moving the assertion into the component suite
+- **Verification**: `TimelineEditor.test.ts` (71 tests) passes. TypeScript clean.
+- **Files Changed**: `src/ui/components/TimelineEditor.ts`, `src/ui/components/TimelineEditor.test.ts`, `src/ui/components/issues-p1.test.ts`, `src/compat/MuNodeBridge.ts`
 
 ## Issue #100: Snapshot panel hides load failures behind a blank or stale panel state
 
 - **Severity**: Medium
-- **Fix**: Added inline error message element in `loadSnapshots()` catch block showing "Failed to load snapshots. Try again." with `data-testid="snapshot-load-error"`.
-- **Regression Tests**: 1 test.
-- **Files Changed**: `src/ui/components/SnapshotPanel.ts`, `src/ui/components/issues-p1.test.ts`
+- **TODO(#100) Resolved**: `SnapshotPanel.loadSnapshots()` now surfaces snapshot-list load failures inside the shipped panel instead of leaving users with a blank or stale list. When `listSnapshots()` rejects, the panel logs the error, clears the list area, and renders an inline `snapshot-load-error` message telling the user the snapshots failed to load.
+- **Regression Tests**:
+  - `SnapshotPanel.test.ts`: added coverage for rejected `listSnapshots()` calls, including the inline load-error element rendered during `show()`
+  - `issues-p1.test.ts`: removed the now-redundant issue-specific snapshot load-failure test after migrating coverage into the component suite
+- **Verification**: `SnapshotPanel.test.ts` (48 tests) passes. TypeScript clean.
+- **Files Changed**: `src/ui/components/SnapshotPanel.ts`, `src/ui/components/SnapshotPanel.test.ts`, `src/ui/components/issues-p1.test.ts`
 
 ## Issue #101: The floating Info Panel is mostly unwired and can only show cursor color reliably
 
@@ -1157,22 +1168,29 @@
 ## Issue #102: Cache indicator's `Clear` action only clears video cache while still presenting effects-cache stats
 
 - **Severity**: Medium
-- **Fix**: Changed clear button label from "Clear" to "Clear Video Cache". Added a separate "Clear Effects Cache" button that calls `viewer.clearPrerenderCache()` to clear the prerender/effects cache. Added `clearPrerenderCache()` public method to `Viewer` delegating to `PrerenderBufferManager.clear()`. Added `effectsClearRequested` event to `CacheIndicatorEvents`. The effects clear button is shown/hidden based on whether the effects cache has content (`stats.cacheSize > 0`).
-- **Regression Tests**: CACHE-U120 through CACHE-U125 (effects clear button exists, hidden when no viewer, shown when effects cached, calls clearPrerenderCache on click, emits effectsClearRequested event, hidden when cache empty). Updated issues-p1 #102 tests (video clear label, effects clear label, click handler).
+- **TODO(#102) Resolved**: `CacheIndicator` now distinguishes between the two caches it exposes. The original button is labeled `Clear Video Cache`, and a separate `Clear Effects Cache` action clears the viewer prerender/effects cache through `viewer.clearPrerenderCache()`. The effects-clear action is only shown when the effects cache actually has content, and `CacheIndicator` emits a dedicated `effectsClearRequested` event for that path.
+- **Regression Tests**:
+  - `CacheIndicator.test.ts`: existing effects-cache coverage (`CACHE-U120` through `CACHE-U125`) remains green, and added label coverage for both `Clear Video Cache` and `Clear Effects Cache`
+  - `issues-p1.test.ts`: removed the now-redundant issue-specific cache-indicator tests after confirming full coverage in the component suite
+- **Verification**: `CacheIndicator.test.ts` (73 tests) passes. TypeScript clean. Existing non-failing `DisposableSubscriptionManager` teardown warnings still print in this suite.
 - **Files Changed**: `src/ui/components/CacheIndicator.ts`, `src/ui/components/Viewer.ts`, `src/ui/components/CacheIndicator.test.ts`, `src/ui/components/issues-p1.test.ts`
 
 ## Issue #103: Right-panel media info can go stale after the panel is hidden and shown again
 
 - **Severity**: Medium
-- **Fix**: Already resolved by Issue #53 (pendingInfo + applyPending mechanism). Added regression tests confirming the fix.
-- **Regression Tests**: RP-103a, RP-103b.
-- **Files Changed**: `src/ui/layout/panels/RightPanelContent.test.ts`
+- **TODO(#103) Resolved**: This was already fixed by the `pendingInfo` / `applyPending()` work from Issue #53. `RightPanelContent.updateInfo()` now buffers info updates received while the panel is hidden, and `applyPending()` reapplies the latest deferred state when the panel becomes visible again, so the Media Info section no longer reopens stale or blank.
+- **Regression Tests**:
+  - `RightPanelContent.test.ts`: `RP-103a` and `RP-103b` confirm that hidden-panel updates are applied on reopen and that multiple hidden updates keep only the latest payload
+- **Verification**: `RightPanelContent.test.ts` (37 tests) passes. TypeScript clean.
+- **Files Changed**: `src/ui/layout/panels/RightPanelContent.ts`, `src/ui/layout/panels/RightPanelContent.test.ts`
 
 ## Issue #104: Advanced paint-tool buttons advertise `D` / `U` / `C` / `M`, but those shortcuts do not exist
 
 - **Severity**: Medium
-- **Fix**: Removed false shortcut hints from dodge/burn/clone/smudge tooltips in PaintToolbar.
-- **Regression Tests**: PAINT-U104a through PAINT-U104d (4 tests).
+- **TODO(#104) Resolved**: `PaintToolbar` no longer advertises fake single-letter shortcuts for the advanced destructive tools. Dodge, Burn, Clone, and Smudge now expose descriptive tooltips without `D` / `U` / `C` / `M` badges, keeping the toolbar copy aligned with the actual keyboard map.
+- **Regression Tests**:
+  - `PaintToolbar.test.ts`: `PAINT-U104a` through `PAINT-U104d` verify that dodge, burn, clone, and smudge tooltips still identify the tools but do not include nonexistent shortcut hints
+- **Verification**: `PaintToolbar.test.ts` (61 tests) passes. TypeScript clean.
 - **Files Changed**: `src/ui/components/PaintToolbar.ts`, `src/ui/components/PaintToolbar.test.ts`
 
 ## Issue #105: Text-format toolbar advertises `Ctrl+B` / `Ctrl+I` / `Ctrl+U`, but production never routes those shortcuts to it
@@ -1194,8 +1212,10 @@
 ## Issue #107: Snapshot panel promises a Preview action, but the shipped UI only shows preview metadata
 
 - **Severity**: Medium
-- **Fix**: Added Preview button (eye icon) to each snapshot entry's action row, placed before Restore. Clicking Preview fetches the full `SessionState` via `snapshotManager.getSnapshot(id)` and displays a read-only detail view showing media sources, playback state (frame, in/out, FPS, loop), color adjustments (only non-default values), annotation count, and view state (zoom, pan). A "Back" button returns to the list view. Added `previewRequested` event to `SnapshotPanelEvents`. Handles missing snapshot data gracefully with `console.warn`.
-- **Regression Tests**: SNAP-107a (Preview button exists), SNAP-107b (emits previewRequested event), SNAP-107c (calls getSnapshot with correct id), SNAP-107d (detail view renders state info), SNAP-107e (Back button returns to list), SNAP-107f (handles null state gracefully). 6 tests.
+- **TODO(#107) Resolved**: `SnapshotPanel` now exposes a real Preview action in each snapshot row instead of only showing the lightweight metadata summary. The Preview button fetches the full saved `SessionState`, opens a read-only detail view with media/playback/color/view state, and provides a Back action to return to the list. Missing snapshots are handled gracefully with `console.warn`, and preview opens emit `previewRequested`.
+- **Regression Tests**:
+  - `SnapshotPanel.test.ts`: `SNAP-107a` through `SNAP-107f` verify the Preview button, `previewRequested` emission, `getSnapshot()` lookup, detail-view rendering, Back navigation, and graceful handling of null snapshot state
+- **Verification**: `SnapshotPanel.test.ts` (48 tests) passes. TypeScript clean.
 - **Files Changed**: `src/ui/components/SnapshotPanel.ts`, `src/ui/components/SnapshotPanel.test.ts`
 
 ## Issue #108: Playlist panel claims EDL import/export support, but the shipped UI only exposes export
@@ -1209,29 +1229,37 @@
 ## Issue #109: Network Sync can show `Copied!` before the share link copy actually succeeds
 
 - **Severity**: Medium
-- **Fix**: Changed copy flow: button now shows "Copying..." immediately. Added `setCopyResult(success: boolean)` method that updates to "Copied!" or "Copy failed".
-- **Regression Tests**: NCC-109a through NCC-109c (3 tests).
-- **Files Changed**: `src/ui/components/NetworkControl.ts`, `src/ui/components/NetworkControl.test.ts`
+- **TODO(#109) Resolved**: `NetworkControl` no longer flips the share-link button straight to `Copied!` before the clipboard promise settles. The copy flow now shows `Copying...` immediately, then updates through `setCopyResult(success)` to either `Copied!` or `Copy failed` once the async clipboard write actually finishes.
+- **Regression Tests**:
+  - `NetworkControl.test.ts`: `NCC-109a` through `NCC-109c` verify the immediate `Copying...` state and the final success/failure result handling
+- **Verification**: `NetworkControl.test.ts` (45 tests) passes. TypeScript clean.
+- **Files Changed**: `src/ui/components/NetworkControl.ts`, `src/ui/components/NetworkControl.test.ts`, `src/compat/MuNodeBridge.ts`
 
 ## Issue #110: Shortcut editor import failures are completely silent
 
 - **Severity**: Medium
-- **Fix**: Added `console.warn` in import catch block. Added `showImportStatus` method for inline UI feedback.
-- **Regression Tests**: SHORTCUT-U110, U111 (2 tests).
+- **TODO(#110) Resolved**: `ShortcutEditor` no longer swallows bad import files. The import flow now catches parse/format failures, logs a `console.warn`, and surfaces inline toolbar feedback through `showImportStatus(...)` so users immediately see that the import failed instead of getting no response.
+- **Regression Tests**:
+  - `ShortcutEditor.test.ts`: `SHORTCUT-U110` now exercises the real file-import UI path and verifies both the warning and the inline `Import failed: invalid file format` status; `SHORTCUT-U111` continues covering invalid import payload formats
+- **Verification**: `ShortcutEditor.test.ts` (28 tests) passes. TypeScript clean.
 - **Files Changed**: `src/ui/components/ShortcutEditor.ts`, `src/ui/components/ShortcutEditor.test.ts`
 
 ## Issue #111: Curves import failures only hit the console, not the UI
 
 - **Severity**: Medium
-- **Fix**: Added inline error display with `data-testid="curves-import-error"`.
-- **Regression Tests**: CURVES-U111a.
+- **TODO(#111) Resolved**: `CurvesControl` now surfaces import failures inside the panel instead of only logging them. Invalid or unreadable JSON imports render an inline `curves-import-error` message in the draggable panel content, so the user sees immediate feedback when a curves import fails.
+- **Regression Tests**:
+  - `CurvesControl.test.ts`: `CURVES-U111a` now exercises the real invalid-file import flow and verifies that the inline `curves-import-error` element appears with the expected message
+- **Verification**: `CurvesControl.test.ts` (31 tests) passes. TypeScript clean.
 - **Files Changed**: `src/ui/components/CurvesControl.ts`, `src/ui/components/CurvesControl.test.ts`
 
 ## Issue #112: External presentation window opens can fail silently when blocked by the browser
 
 - **Severity**: Medium
-- **Fix**: Added `console.warn` when `window.open()` returns null.
-- **Regression Tests**: EP-112a, EP-112b (2 tests).
+- **TODO(#112) Resolved**: `ExternalPresentation.openWindow()` now warns when the browser blocks the popup instead of failing silently. If `window.open()` returns `null`, the presentation flow logs a clear warning about popup blocking; successful opens do not warn.
+- **Regression Tests**:
+  - `ExternalPresentation.test.ts`: `EP-112a` and `EP-112b` verify the blocked-popup warning path and the no-warning success path
+- **Verification**: `ExternalPresentation.test.ts` (55 tests) passes. TypeScript clean.
 - **Files Changed**: `src/ui/components/ExternalPresentation.ts`, `src/ui/components/ExternalPresentation.test.ts`
 
 ## Issue #113: The `?` shortcut cheat sheet advertises search/context filtering in code, but the shipped overlay exposes neither
@@ -1245,16 +1273,20 @@
 ## Issue #114: Tone Mapping can be "enabled" in the dropdown while still being functionally off
 
 - **Severity**: Medium
-- **Fix**: In `setEnabled(true)`, when operator is `'off'`, auto-select the first non-off operator (matching the `toggle()` behavior from Issue #41).
-- **Regression Tests**: 5 tests in ToneMappingControl.issue114.test.ts.
-- **Files Changed**: `src/ui/components/ToneMappingControl.ts`
+- **TODO(#114) Resolved**: `ToneMappingControl.setEnabled(true)` now mirrors the already-correct `toggle()` behavior from Issue #41. If tone mapping is enabled while the operator is still `'off'`, the control automatically switches to the first real operator instead of leaving the UI in an “enabled but visually off” state.
+- **Regression Tests**:
+  - `ToneMappingControl.issue114.test.ts`: 5 focused tests verify auto-selection of a non-off operator and the enabled-state behavior
+- **Verification**: `ToneMappingControl.issue114.test.ts` (5 tests) passes. TypeScript clean.
+- **Files Changed**: `src/ui/components/ToneMappingControl.ts`, `src/ui/components/ToneMappingControl.issue114.test.ts`
 
 ## Issue #115: Typing a custom PAR value does not actually enable PAR correction
 
 - **Severity**: Medium
-- **Fix**: Added `state.enabled = true` and `updateEnableCheckbox()` in the custom input change handler, matching preset behavior.
-- **Regression Tests**: 2 tests in PARControl.issue115.test.ts.
-- **Files Changed**: `src/ui/components/PARControl.ts`
+- **TODO(#115) Resolved**: Entering a custom PAR value now activates PAR correction the same way choosing a preset does. The custom-value handler explicitly sets `state.enabled = true` and refreshes the enable checkbox, so custom PAR input immediately takes effect instead of silently leaving correction off.
+- **Regression Tests**:
+  - `PARControl.issue115.test.ts`: 2 focused tests verify that custom PAR input enables correction and keeps the checkbox/UI state in sync
+- **Verification**: `PARControl.issue115.test.ts` (2 tests) passes. TypeScript clean.
+- **Files Changed**: `src/ui/components/PARControl.ts`, `src/ui/components/PARControl.issue115.test.ts`
 
 ## Issue #116: Volume slider disclosure is tied to the mute button, so keyboard/touch use mutates audio state just to reach the slider
 

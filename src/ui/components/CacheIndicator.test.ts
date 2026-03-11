@@ -250,6 +250,13 @@ describe('CacheIndicator', () => {
   });
 
   describe('clear button', () => {
+    it('CACHE-U039: clear button label says "Clear Video Cache"', () => {
+      const el = indicator.getElement();
+      const clearBtn = el.querySelector('[data-testid="cache-indicator-clear"]') as HTMLButtonElement;
+
+      expect(clearBtn.textContent).toBe('Clear Video Cache');
+    });
+
     it('CACHE-U040: clear button calls session.clearVideoCache', () => {
       const el = indicator.getElement();
       const clearBtn = el.querySelector('[data-testid="cache-indicator-clear"]') as HTMLButtonElement;
@@ -594,6 +601,12 @@ describe('CacheIndicator', () => {
       registeredCallback();
 
       expect(scheduleSpy).toHaveBeenCalled();
+    });
+
+    it('CACHE-U119: effects clear button label says "Clear Effects Cache"', () => {
+      const el = indicator.getElement();
+      const clearEffectsBtn = el.querySelector('[data-testid="cache-indicator-clear-effects"]') as HTMLButtonElement;
+      expect(clearEffectsBtn.textContent).toBe('Clear Effects Cache');
     });
 
     it('CACHE-U120: effects clear button exists in DOM', () => {

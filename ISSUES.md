@@ -6384,6 +6384,177 @@ This file tracks findings from exploratory review and targeted validation runs.
   - After removing the last active representation, the source can still hold legacy pointers to a node that has already been disposed.
   - That leaves the app in a stale half-switched state instead of clearly falling back or clearly clearing the active media variant.
 
+### 538. Switching representations while playing pauses playback and never resumes it
+
+- Severity: Medium
+- Area: Media representations / playback interaction
+- Evidence:
+  - `SessionMedia.switchRepresentation(...)` unconditionally pauses the host when playback is active before delegating to the representation manager in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L1153) through [src/core/session/SessionMedia.ts#L1164).
+  - The rest of the representation-switch path only changes the active representation and emits representation events; there is no matching resume call in [src/core/session/MediaRepresentationManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaRepresentationManager.ts#L133) through [src/core/session/MediaRepresentationManager.ts#L229).
+  - A repo search finds no production subscriber on `representationChanged` or `fallbackActivated` that restarts playback after a successful switch.
+- Impact:
+  - A user who changes representation during playback can end up unexpectedly paused even when the switch succeeds.
+  - That makes representation changes disrupt review flow instead of behaving like a transparent quality/source swap.
+
+### 539. Video representations are not promoted to full video sources, so they lose the `HTMLVideoElement` and audio wiring that normal video playback paths still rely on
+
+- Severity: High
+- Area: Media representations / video runtime wiring
+- Evidence:
+  - Normal video file loads build both a `VideoSourceNode` and an `HTMLVideoElement`, store both on the active `MediaSource`, and call `loadAudioFromVideo(...)` for audio sync/playback in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L621) through [src/core/session/SessionMedia.ts#L672).
+  - The representation shim clears `source.element` and, for `VideoSourceNode` representations, restores only `source.videoSourceNode` plus `type = 'video'` in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L1188) through [src/core/session/SessionMedia.ts#L1203).
+  - No representation-switch path recreates an `HTMLVideoElement`, calls `initVideoPreservesPitch(...)`, or calls `loadAudioFromVideo(...)`; a repo search finds those only in the normal media-load paths.
+  - Large parts of playback and export still branch on `source.element instanceof HTMLVideoElement`, including current-time sync and native video playback/audio sync in [src/core/session/SessionPlayback.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionPlayback.ts#L486) through [src/core/session/SessionPlayback.ts#L499) and [src/core/session/PlaybackEngine.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaybackEngine.ts#L536) through [src/core/session/PlaybackEngine.ts#L553), plus export/render fallbacks in [src/ui/components/ViewerExport.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerExport.ts#L102) through [src/ui/components/ViewerExport.ts#L114).
+- Impact:
+  - Switching into a video/proxy representation does not give the app the same runtime shape as loading that video normally.
+  - That can break audio sync/playback and any native-video/export path that still expects an `HTMLVideoElement` on video sources.
+
+### 540. Representation switches leave `source.name` and `source.url` pinned to the base media, even when the active variant is different
+
+- Severity: Medium
+- Area: Media representations / source identity
+- Evidence:
+  - `SessionMedia.applyRepresentationShim(...)` updates only resolution and node-specific fields; it never rewrites `source.name` or `source.url` from the active representation’s label/path/url in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L1180) through [src/core/session/SessionMedia.ts#L1216).
+  - The representation model does carry alternate identity fields such as `label` plus `loaderConfig.path` / `loaderConfig.url` in [src/core/types/representation.ts](/Users/lifeart/Repos/openrv-web/src/core/types/representation.ts#L24) through [src/core/types/representation.ts#L90).
+  - Public/source-facing runtime code continues to read `source.name` and `source.url` directly after switches, including `openrv.media.getCurrentSource()` in [src/api/MediaAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/MediaAPI.ts#L44) through [src/api/MediaAPI.ts#L54), session save/export in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L390) through [src/core/session/SessionSerializer.ts#L395) and [src/core/session/SessionGTOExporter.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGTOExporter.ts#L606) through [src/core/session/SessionGTOExporter.ts#L607), and UI surfaces like [InfoStripOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/InfoStripOverlay.ts#L172) through [src/ui/components/InfoStripOverlay.ts#L179) and [RightPanelContent.ts](/Users/lifeart/Repos/openrv-web/src/ui/layout/panels/RightPanelContent.ts).
+- Impact:
+  - After switching to a proxy or alternate file/video representation, the app can still present, serialize, and reason about the base source identity instead of the actually active media variant.
+  - That makes public media info, exports, and on-screen source labeling drift away from what the viewer is really showing.
+
+### 541. Adding a new representation can silently corrupt `activeRepresentationIndex` because the list is re-sorted without remapping the existing active slot
+
+- Severity: Medium
+- Area: Media representations / active-state integrity
+- Evidence:
+  - `MediaRepresentationManager.addRepresentation(...)` pushes the new representation and immediately sorts the array by priority in [src/core/session/MediaRepresentationManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaRepresentationManager.ts#L59) through [src/core/session/MediaRepresentationManager.ts#L68).
+  - The active representation is stored only as an index on the source via `source.activeRepresentationIndex` in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L127) through [src/core/session/SessionMedia.ts#L135).
+  - After sorting, `addRepresentation(...)` only handles the special case where no active representation exists; it never remaps a pre-existing active index to the same representation object in [src/core/session/MediaRepresentationManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaRepresentationManager.ts#L70) through [src/core/session/MediaRepresentationManager.ts#L76).
+  - The current tests cover sorting and auto-activation, but there is no case asserting that an existing active representation remains the active one after a later insertion changes ordering in [src/core/session/MediaRepresentationManager.test.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaRepresentationManager.test.ts#L119) through [src/core/session/MediaRepresentationManager.test.ts#L181).
+- Impact:
+  - Adding a higher-priority representation after one is already active can make `activeRepresentationIndex` point at a different entry than before, without any explicit switch.
+  - That can make subsequent playback, save/load, and UI state treat the wrong representation as active even though the user never changed it.
+
+### 542. Async idle-fallbacks are reported as successful before they actually load, so callers can miss real representation-restore failures
+
+- Severity: Medium
+- Area: Media representations / error reporting contract
+- Evidence:
+  - `switchRepresentation(...)` returns the boolean result of `handleRepresentationError(...)` after a system-initiated load failure in [src/core/session/MediaRepresentationManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaRepresentationManager.ts#L210) through [src/core/session/MediaRepresentationManager.ts#L228).
+  - In the idle-fallback branch, `handleRepresentationError(...)` starts `void this.switchRepresentation(...)` asynchronously and immediately returns `true`, with an inline comment calling that “Optimistically true” in [src/core/session/MediaRepresentationManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaRepresentationManager.ts#L268) through [src/core/session/MediaRepresentationManager.ts#L273).
+  - The current test suite explicitly codifies that optimistic `true` behavior in [src/core/session/MediaRepresentationManager.test.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaRepresentationManager.test.ts#L424) through [src/core/session/MediaRepresentationManager.test.ts#L444).
+  - `SessionSerializer.fromJSON(...)` treats the awaited boolean from `session.switchRepresentation(...)` as authoritative when deciding whether to warn about a failed active-representation restore in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L550) through [src/core/session/SessionSerializer.ts#L560).
+- Impact:
+  - A representation restore can be reported as successful to its caller even though the fallback path is still unresolved and may fail moments later.
+  - That makes restore/reporting logic undercount real failures and leaves error visibility dependent on later side effects instead of the original operation result.
+
+### 543. The multiple-representation subsystem is effectively unwired in the shipped app outside save/load internals
+
+- Severity: Medium
+- Area: Media representations / production reachability
+- Evidence:
+  - A repo search finds no production UI, app-shell, service, plugin, or public-API caller for `session.switchRepresentation(...)`, `addRepresentationToSource(...)`, or `removeRepresentationFromSource(...)`; outside tests, the only live caller is `SessionSerializer.fromJSON(...)` during restore in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L534) through [src/core/session/SessionSerializer.ts#L552).
+  - The public API layer exposes representation-related error events, but no matching user-facing or scripting methods to manage representations; the search over [src/api](/Users/lifeart/Repos/openrv-web/src/api) only finds `representationError` event bridging in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L351) through [src/api/EventsAPI.ts#L359).
+  - The UI/app-shell search over `src/ui`, `src/App.ts`, `src/AppPlaybackWiring.ts`, and `src/services` does not find any shipped control path that switches or edits representations.
+- Impact:
+  - The app contains a substantial media-representation system, but in production it is mostly reachable only indirectly through project/session restore.
+  - That leaves the feature set largely untestable by real users, and it helps explain why multiple restore/runtime edge cases can exist without an everyday UI path exposing them earlier.
+
+### 544. The heavily tested legacy `MediaManager` is effectively dead in production; the shipped app runs through `SessionMedia` instead
+
+- Severity: Medium
+- Area: Media loading / test-to-runtime coverage
+- Evidence:
+  - The real session runtime instantiates `SessionMedia` as its media subsystem in [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L81) through [src/core/session/Session.ts#L92).
+  - A repo search finds `new MediaManager(...)` only inside [src/core/session/MediaManager.test.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaManager.test.ts), while production code does instantiate `SessionMedia` in [src/core/session/SessionMedia.test.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.test.ts#L111) and the main runtime through `Session`.
+  - The codebase therefore carries two large, similarly named media stacks, but only one of them is actually on the app’s execution path.
+- Impact:
+  - Passing `MediaManager` tests can give false confidence about the shipped app’s media behavior, because production requests and state mutations go through different code.
+  - That increases the chance of media-loading regressions surviving despite strong-looking unit coverage on the wrong subsystem.
+
+### 545. Public source/rendered-image events stay stale across representation switches because the API bridge ignores `representationChanged`
+
+- Severity: Medium
+- Area: Public API / event consistency
+- Evidence:
+  - `EventsAPI` updates its public `sourceLoaded` payloads and `_lastLoadedSource` cache only from `session.on('sourceLoaded', ...)` and `session.on('currentSourceChanged', ...)` in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L315) through [src/api/EventsAPI.ts#L322) and [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L392) through [src/api/EventsAPI.ts#L404).
+  - The same bridge subscribes to `representationError`, but not to `representationChanged` or `fallbackActivated`, in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L351) through [src/api/EventsAPI.ts#L359).
+  - Representation switches in the session emit `representationChanged` and `fallbackActivated`, not `sourceLoaded`, in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L145) through [src/core/session/SessionMedia.ts#L152) and [src/core/session/MediaRepresentationManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaRepresentationManager.ts#L167) through [src/core/session/MediaRepresentationManager.ts#L202).
+- Impact:
+  - Scripting consumers listening for public source/rendered-image state can miss real active-media changes when the viewer switches representations.
+  - That leaves the public event surface lagging behind the actual viewer state even when the internal session correctly changes variants.
+
+### 546. `currentSourceChanged` is not emitted for representation switches, so active-source listeners can keep stale per-source state
+
+- Severity: Medium
+- Area: Session events / state invalidation
+- Evidence:
+  - `SessionMedia` emits `currentSourceChanged` only from `setCurrentSource(...)` when the source index changes in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L290).
+  - Representation switching emits `representationChanged` / `fallbackActivated`, but not `currentSourceChanged`, in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L145) through [src/core/session/SessionMedia.ts#L152) and [src/core/session/MediaRepresentationManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaRepresentationManager.ts#L167) through [src/core/session/MediaRepresentationManager.ts#L202).
+  - Production code does treat `currentSourceChanged` as the signal for clearing source-specific state, for example floating-window QC results are cleared only on that event in [src/AppViewWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppViewWiring.ts#L318) through [src/AppViewWiring.ts#L323).
+  - The public API bridge also depends on `currentSourceChanged` for part of its rendered-image refresh path in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L399) through [src/api/EventsAPI.ts#L404).
+- Impact:
+  - Switching the active media variant in place can leave source-scoped UI and API consumers behaving as if nothing changed, because the session never emits the broader “active source changed” signal they subscribe to.
+  - That makes representation changes a blind spot for invalidation logic that was written around source changes rather than source indices alone.
+
+### 547. The public scripting event surface exposes representation failures, but not successful representation changes or fallbacks
+
+- Severity: Medium
+- Area: Public API / observability
+- Evidence:
+  - The internal session emits `representationChanged` and `fallbackActivated` events in [src/core/session/MediaRepresentationManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaRepresentationManager.ts#L167) through [src/core/session/MediaRepresentationManager.ts#L202) and [src/core/session/MediaRepresentationManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaRepresentationManager.ts#L258) through [src/core/session/MediaRepresentationManager.ts#L263).
+  - `EventsAPI` only bridges the failure side of that subsystem via `representationError`, mapping it onto the generic public `error` channel in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L351) through [src/api/EventsAPI.ts#L359).
+  - The public `OpenRVEventName` union has no `representationChanged` or fallback event at all in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L14) through [src/api/EventsAPI.ts#L29).
+- Impact:
+  - Script/plugin authors can be told when representation switching fails, but they have no first-class way to observe when the active variant changes successfully or silently falls back.
+  - That makes representation-aware automation asymmetric and forces consumers to infer state changes indirectly from other stale or incomplete signals.
+
+### 548. The Network Sync copy-link button can get stuck in `Copying...` because the production bridge never reports clipboard completion back to the control
+
+- Severity: Medium
+- Area: Collaboration UI / copy-link flow
+- Evidence:
+  - `NetworkControl` emits `copyLink`, immediately switches the button into a transient `Copying...` state, and documents that callers should invoke `setCopyResult(...)` once the async clipboard write settles in [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L843) through [src/ui/components/NetworkControl.ts#L856) and [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L1349) through [src/ui/components/NetworkControl.ts#L1366).
+  - The production `AppNetworkBridge` does subscribe to `copyLink`, builds the share URL, and calls `navigator.clipboard.writeText(...)`, but it never calls `networkControl.setCopyResult(true|false)` on either success or failure in [src/AppNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppNetworkBridge.ts#L142) through [src/AppNetworkBridge.ts#L178).
+  - A repo search finds no other production caller of `setCopyResult(...)`; outside tests, the method is effectively unused.
+- Impact:
+  - The copy-link button can remain stuck in its in-progress visual state instead of resolving to `Copied!`, `Copy failed`, or resetting cleanly.
+  - That makes the collaboration share flow feel hung even when the actual clipboard operation already finished or failed.
+
+### 549. URL/session sharing has no representation awareness, so active alternate variants cannot round-trip through share links or collaboration state
+
+- Severity: Medium
+- Area: Session URL sharing / media representations
+- Evidence:
+  - `SessionURLService.captureSessionURLState()` stores only the current source index, base `sourceUrl`, A/B indices, frame, transform, wipe, and OCIO state in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L105) through [src/services/SessionURLService.ts#L132).
+  - Its `URLSession` dependency contract exposes no representation fields or methods at all beyond the base current source and source indices in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L17) through [src/services/SessionURLService.ts#L35).
+  - On apply, the service can reload only `state.sourceUrl` on a clean session and then set current source / A-B / view state; there is no path to restore active representation IDs or alternate representation definitions in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L135) through [src/services/SessionURLService.ts#L223).
+- Impact:
+  - A shared URL can reconstruct only the base media plus viewer state, not the actual active representation/variant a user was reviewing.
+  - That makes representation-based review state non-shareable across the app’s URL and collaboration entry points even though project save/load tries to preserve it.
+
+### 550. Public `renderedImagesChanged` payloads are hardcoded to one synthetic image from the last loaded source, not the actual current render set
+
+- Severity: Medium
+- Area: Public API / rendered-image model
+- Evidence:
+  - `EventsAPI.emitCurrentRenderedImages()` always emits a single-item `images` array, with `index: 0` and `nodeName: name`, derived only from `_lastLoadedSource` in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L408) through [src/api/EventsAPI.ts#L422).
+  - `_lastLoadedSource` itself stores only `{ name, width, height }`, not a real render list, node graph identity, compare overlays, or multiple active images in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L104) through [src/api/EventsAPI.ts#L105).
+  - The same public event type is described as `images: Array<...>` and is consumed by compatibility code that expects it to reflect the current render set in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L62) through [src/api/EventsAPI.ts#L70) and [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L114) through [src/compat/MuEvalBridge.ts#L128).
+- Impact:
+  - Public/compat consumers can be told there is exactly one rendered image even when the viewer is in compare or other multi-image states.
+  - That makes the rendered-image event payload a lossy approximation of viewer output rather than a trustworthy description of the current render graph.
+
+### 551. Public `viewTransformChanged` always reports `pixelAspect: 1`, even though non-square-pixel workflows exist and compat consumers use that field
+
+- Severity: Medium
+- Area: Public API / view transform accuracy
+- Evidence:
+  - `EventsAPI` hardcodes `pixelAspect: 1` in every emitted `viewTransformChanged` payload in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L369) through [src/api/EventsAPI.ts#L382).
+  - The broader app and compat layers do carry and use pixel-aspect information, for example `MuEvalBridge` uses `vt.pixelAspect` in screen/image coordinate conversions in [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L490) through [src/compat/MuEvalBridge.ts#L522), and the app supports PAR / pixel-aspect state elsewhere in [src/core/session/SessionGTOExporter.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGTOExporter.ts#L1375) and [src/transform/LensDistortion.ts](/Users/lifeart/Repos/openrv-web/src/transform/LensDistortion.ts#L230) through [src/transform/LensDistortion.ts#L262).
+- Impact:
+  - Public/compat consumers can receive geometrically wrong view-transform data for anamorphic or other non-square-pixel cases.
+  - That makes external coordinate reasoning less accurate than the event contract suggests, especially in tools that rely on `pixelAspect` for hit testing or screen-space mapping.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

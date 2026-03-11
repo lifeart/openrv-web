@@ -322,19 +322,51 @@ describe('issue #111 regression: inline error display on invalid import', () => 
 
   it('CURVES-U111a: importCurvesJSON returning null triggers inline error', async () => {
     const el = control.render();
+    const invalidFile = new File(['{"bad":true}'], 'bad-curves.json', { type: 'application/json' });
+    const originalCreateElement = document.createElement.bind(document);
+    const mockInputClick = vi.fn();
+    let capturedChangeHandler: (() => void) | null = null;
+    let mockInput: HTMLInputElement | null = null;
 
-    // Simulate the import by calling the private method path indirectly:
-    // We can't easily trigger file input, but we can verify the error element
-    // appears when showImportError is called (it's private but DOM-observable).
-    // Use the import button approach with a mock file.
+    vi.spyOn(document, 'createElement').mockImplementation(((tagName: string, options?: ElementCreationOptions) => {
+      const node = originalCreateElement(tagName, options);
+      if (tagName === 'input') {
+        mockInput = node as HTMLInputElement;
+        vi.spyOn(mockInput, 'click').mockImplementation(mockInputClick);
+        const originalAddEventListener = mockInput.addEventListener.bind(mockInput);
+        vi.spyOn(mockInput, 'addEventListener').mockImplementation(((type: string, listener: EventListenerOrEventListenerObject, opts?: boolean | AddEventListenerOptions) => {
+          if (type === 'change') {
+            capturedChangeHandler = () => {
+              if (typeof listener === 'function') {
+                void listener(new Event('change'));
+              } else {
+                void listener.handleEvent(new Event('change'));
+              }
+            };
+          }
+          return originalAddEventListener(type, listener, opts);
+        }) as HTMLInputElement['addEventListener']);
+      }
+      return node;
+    }) as typeof document.createElement);
 
-    // Verify that the error element data-testid exists when errors occur
-    // by checking the component has the infrastructure
     const importBtn = el.querySelector('[data-testid="curves-import"]') as HTMLButtonElement;
     expect(importBtn).not.toBeNull();
+    expect(el.querySelector('[data-testid="curves-import-error"]')).toBeNull();
 
-    // Verify no error is shown initially
-    const errorEl = el.querySelector('[data-testid="curves-import-error"]');
-    expect(errorEl).toBeNull();
+    importBtn.click();
+    expect(mockInputClick).toHaveBeenCalled();
+    expect(mockInput).not.toBeNull();
+    Object.defineProperty(mockInput!, 'files', { configurable: true, value: [invalidFile] });
+    expect(capturedChangeHandler).not.toBeNull();
+    capturedChangeHandler!();
+
+    await vi.waitFor(() => {
+      const errorEl = el.querySelector('[data-testid="curves-import-error"]') as HTMLElement;
+      expect(errorEl).not.toBeNull();
+      expect(errorEl.textContent).toContain('Invalid curves JSON file');
+    });
+
+    vi.restoreAllMocks();
   });
 });

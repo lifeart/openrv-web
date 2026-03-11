@@ -762,7 +762,7 @@ describe('TimelineEditor', () => {
       expect(menu!.textContent).toContain('Delete Cut');
     });
 
-    it('TL-EDIT-U062: context menu shows keyboard shortcut hints', () => {
+    it('TL-EDIT-U062: context menu only shows wired keyboard shortcut hints', () => {
       editor = new TimelineEditor(container, session);
       editor.insertCut(1, 0, 1, 50);
 
@@ -770,9 +770,24 @@ describe('TimelineEditor', () => {
       cutEl?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 100, clientY: 100 }));
 
       const menu = document.querySelector('.timeline-context-menu');
-      expect(menu!.textContent).toContain('S');
-      expect(menu!.textContent).toContain('D');
-      expect(menu!.textContent).toContain('Del');
+      const items = menu!.querySelectorAll('div[style*="cursor: pointer"]');
+      let splitItem: Element | null = null;
+      let duplicateItem: Element | null = null;
+      let deleteItem: Element | null = null;
+      items.forEach((item) => {
+        const text = item.textContent || '';
+        if (text.includes('Split at Playhead')) splitItem = item;
+        if (text.includes('Duplicate Cut')) duplicateItem = item;
+        if (text.includes('Delete Cut')) deleteItem = item;
+      });
+
+      expect(splitItem).toBeTruthy();
+      expect(splitItem!.querySelectorAll('span')).toHaveLength(1);
+      expect(duplicateItem).toBeTruthy();
+      expect(duplicateItem!.querySelectorAll('span')).toHaveLength(1);
+      expect(deleteItem).toBeTruthy();
+      expect(deleteItem!.textContent).toContain('Del');
+      expect(deleteItem!.querySelectorAll('span')).toHaveLength(2);
     });
 
     it('TL-EDIT-U063: Duplicate Cut inserts copy after current cut', () => {

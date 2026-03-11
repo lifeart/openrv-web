@@ -120,6 +120,23 @@ describe('SnapshotPanel', () => {
       document.body.removeChild(panel.render());
     });
 
+    it('SNAP-011b: show() renders inline error feedback when snapshot loading fails', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      manager.listSnapshots.mockRejectedValueOnce(new Error('storage unavailable'));
+
+      document.body.appendChild(panel.render());
+      panel.show();
+
+      await vi.waitFor(() => {
+        const errorEl = document.body.querySelector('[data-testid="snapshot-load-error"]') as HTMLElement;
+        expect(errorEl).toBeTruthy();
+        expect(errorEl.textContent).toContain('Failed to load snapshots');
+      });
+
+      errorSpy.mockRestore();
+      document.body.removeChild(panel.render());
+    });
+
     it('SNAP-012: hide() sets container display to none', () => {
       document.body.appendChild(panel.render());
       panel.show();
