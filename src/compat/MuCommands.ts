@@ -387,18 +387,18 @@ export class MuCommands {
   }
 
   /** Enter or exit fullscreen mode. (Mu #34) */
-  fullScreenMode(enable: boolean): void {
+  async fullScreenMode(enable: boolean): Promise<void> {
     if (typeof document === 'undefined') return;
     if (enable) {
       const el = document.documentElement;
       if (el.requestFullscreen) {
-        el.requestFullscreen().catch(() => {});
+        await el.requestFullscreen().catch(() => {});
       } else if ((el as any).webkitRequestFullscreen) {
         (el as any).webkitRequestFullscreen();
       }
     } else {
       if (document.exitFullscreen) {
-        document.exitFullscreen().catch(() => {});
+        await document.exitFullscreen().catch(() => {});
       } else if ((document as any).webkitExitFullscreen) {
         (document as any).webkitExitFullscreen();
       }

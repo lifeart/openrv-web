@@ -2567,3 +2567,15 @@
 - **Regression Tests**: 2 new tests — repeat calls return identical cached references, repeat calls don't construct new instances.
 - **Verification**: All 732 compat tests pass.
 - **Files Changed**: `src/compat/index.ts`, `src/compat/__tests__/bootstrap-registration.test.ts`
+
+---
+
+### 276. Mu compat async introspection says `fullScreenMode` is async, but the command does not actually return a Promise
+
+- **Severity**: Medium
+- **Area**: Mu compatibility / command introspection
+- **Root Cause**: `fullScreenMode()` was declared as returning `void` despite being listed in `ASYNC_COMMANDS`. The `requestFullscreen()`/`exitFullscreen()` promises were fire-and-forget.
+- **Fix**: Made `fullScreenMode()` `async`, returning `Promise<void>`. Now `await`s the fullscreen API promises. Webkit fallbacks work naturally via `async` semantics.
+- **Regression Tests**: 4 new tests — returns Promise, resolves without error, exit returns Promise, isAsync matches actual runtime return type.
+- **Verification**: All 736 compat tests pass.
+- **Files Changed**: `src/compat/MuCommands.ts`, `src/compat/__tests__/MuCommands.test.ts`

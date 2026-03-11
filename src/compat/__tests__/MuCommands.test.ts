@@ -516,40 +516,40 @@ describe('MuCommands', () => {
       });
     });
 
-    it('fullScreenMode(true) falls back to webkitRequestFullscreen', () => {
+    it('fullScreenMode(true) falls back to webkitRequestFullscreen', async () => {
       const origRFS = document.documentElement.requestFullscreen;
       const webkitMock = vi.fn();
       (document.documentElement as any).requestFullscreen = undefined;
       (document.documentElement as any).webkitRequestFullscreen = webkitMock;
 
-      cmd.fullScreenMode(true);
+      await cmd.fullScreenMode(true);
       expect(webkitMock).toHaveBeenCalledOnce();
 
       document.documentElement.requestFullscreen = origRFS;
       delete (document.documentElement as any).webkitRequestFullscreen;
     });
 
-    it('fullScreenMode(false) falls back to webkitExitFullscreen', () => {
+    it('fullScreenMode(false) falls back to webkitExitFullscreen', async () => {
       const origEFS = document.exitFullscreen;
       const webkitMock = vi.fn();
       (document as any).exitFullscreen = undefined;
       (document as any).webkitExitFullscreen = webkitMock;
 
-      cmd.fullScreenMode(false);
+      await cmd.fullScreenMode(false);
       expect(webkitMock).toHaveBeenCalledOnce();
 
       document.exitFullscreen = origEFS;
       delete (document as any).webkitExitFullscreen;
     });
 
-    it('fullScreenMode(true) prefers standard requestFullscreen over webkit', () => {
+    it('fullScreenMode(true) prefers standard requestFullscreen over webkit', async () => {
       const standardMock = vi.fn().mockResolvedValue(undefined);
       const webkitMock = vi.fn();
       const origRFS = document.documentElement.requestFullscreen;
       document.documentElement.requestFullscreen = standardMock;
       (document.documentElement as any).webkitRequestFullscreen = webkitMock;
 
-      cmd.fullScreenMode(true);
+      await cmd.fullScreenMode(true);
       expect(standardMock).toHaveBeenCalledOnce();
       expect(webkitMock).not.toHaveBeenCalled();
 
@@ -562,10 +562,35 @@ describe('MuCommands', () => {
       document.documentElement.requestFullscreen = vi.fn().mockRejectedValue(new Error('denied'));
 
       // Should not throw — rejection is caught internally
-      cmd.fullScreenMode(true);
-      await new Promise((r) => setTimeout(r, 0));
+      await cmd.fullScreenMode(true);
 
       document.documentElement.requestFullscreen = origRFS;
+    });
+
+    it('fullScreenMode returns a Promise', () => {
+      const result = cmd.fullScreenMode(true);
+      expect(result).toBeInstanceOf(Promise);
+    });
+
+    it('fullScreenMode resolves without error', async () => {
+      await expect(cmd.fullScreenMode(true)).resolves.toBeUndefined();
+    });
+
+    it('fullScreenMode(false) returns a Promise that resolves', async () => {
+      const result = cmd.fullScreenMode(false);
+      expect(result).toBeInstanceOf(Promise);
+      await expect(result).resolves.toBeUndefined();
+    });
+
+    it('isAsync matches actual return type for all ASYNC_COMMANDS', () => {
+      const asyncCommands = ['fullScreenMode'];
+      for (const name of asyncCommands) {
+        expect(cmd.isAsync(name)).toBe(true);
+        const method = (cmd as any)[name];
+        expect(typeof method).toBe('function');
+        const result = method.call(cmd, true);
+        expect(result).toBeInstanceOf(Promise);
+      }
     });
 
     it('setWindowTitle() sets document.title', () => {
