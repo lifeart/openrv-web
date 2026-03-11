@@ -503,6 +503,37 @@ describe('MuEventBridge', () => {
     );
   });
 
+  it('sendInternalEvent returns returnContents set by handler', () => {
+    bridge.bind('', 'table', 'req', (event) => {
+      event.returnContents = 'accepted';
+    });
+    const result = bridge.sendInternalEvent('req', '', '');
+    expect(result).toBe('accepted');
+  });
+
+  it('sendInternalEvent returns empty string when no handler modifies returnContents', () => {
+    bridge.bind('', 'table', 'noop', () => {});
+    const result = bridge.sendInternalEvent('noop');
+    expect(result).toBe('');
+  });
+
+  it('sendInternalEvent returns last write when multiple handlers set returnContents', () => {
+    bridge.bind('', 'table', 'multi', (event) => {
+      event.returnContents = 'first';
+    });
+    bridge.bind('', 'table2', 'multi', (event) => {
+      event.returnContents = 'second';
+    });
+    bridge.pushEventTable('table2');
+    const result = bridge.sendInternalEvent('multi');
+    expect(result).toBe('second');
+  });
+
+  it('sendInternalEvent returns empty string when no handler is bound at all', () => {
+    const result = bridge.sendInternalEvent('unbound_event');
+    expect(result).toBe('');
+  });
+
   it('dispose clears all state', () => {
     bridge.defineMinorMode('m', 0, [], []);
     bridge.activateMode('m');

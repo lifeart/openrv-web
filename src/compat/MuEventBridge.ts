@@ -189,8 +189,11 @@ export class MuEventBridge {
   /**
    * Send an internal event through the mode system.
    * Mu signature: sendInternalEvent(eventName, contents, sender)
+   *
+   * @returns The value of `event.returnContents` after dispatch, allowing
+   *          handlers to communicate a response back to the caller.
    */
-  sendInternalEvent(eventName: string, contents: string = '', sender: string = ''): void {
+  sendInternalEvent(eventName: string, contents: string = '', sender: string = ''): string {
     const event: MuEvent = {
       name: eventName,
       sender,
@@ -199,6 +202,7 @@ export class MuEventBridge {
       reject: false,
     };
     this.modeManager.dispatchEvent(event);
+    return event.returnContents;
   }
 
   // ── DOM event wiring ──

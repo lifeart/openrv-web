@@ -2633,3 +2633,15 @@
 - **Regression Tests**: 7 new tests in new `MuSettingsBridge.test.ts` — blocked storage for all 7 public methods (hasSetting, removeSetting, listSettings, clearGroup, clearAll, readSetting, writeSetting). Tests use try/finally for cleanup safety.
 - **Verification**: All 726 compat tests pass.
 - **Files Changed**: `src/compat/MuSettingsBridge.ts`, `src/compat/__tests__/MuSettingsBridge.test.ts` (new)
+
+---
+
+### 274. Mu compat `sendInternalEvent()` discards handler-written `returnContents`
+
+- **Severity**: Medium
+- **Area**: Mu compatibility / event dispatch
+- **Root Cause**: `sendInternalEvent()` returned `void`, discarding any `event.returnContents` value set by handlers during dispatch.
+- **Fix**: Changed return type from `void` to `string`. After `dispatchEvent()`, returns `event.returnContents` so callers can observe handler responses.
+- **Regression Tests**: 4 new tests — handler-set returnContents, no modification returns '', last-write-wins with multiple handlers, no handler bound returns ''.
+- **Verification**: All 730 compat tests pass.
+- **Files Changed**: `src/compat/MuEventBridge.ts`, `src/compat/__tests__/MuEventBridge.test.ts`
