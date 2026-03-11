@@ -2621,3 +2621,15 @@
 - **Regression Tests**: 9 new tests — empty name global, named per-node, unknown fallback, multiple nodes, post-dispose cleanup, clearViewNodeTransform, getViewNodeTransform found/undefined/defensive-copy.
 - **Verification**: All 719 compat tests pass.
 - **Files Changed**: `src/compat/MuEvalBridge.ts`, `src/compat/__tests__/MuEvalBridge.test.ts`
+
+---
+
+### 273. Mu settings helpers can throw in blocked-storage environments even though read/write paths are guarded
+
+- **Severity**: Medium
+- **Area**: Mu compatibility / settings persistence
+- **Root Cause**: `hasSetting()`, `removeSetting()`, `listSettings()`, `clearGroup()`, and `clearAll()` called `localStorage` directly with no try/catch, while `readSetting()` and `writeSetting()` were already guarded. In blocked-storage browsers, the unguarded methods would throw.
+- **Fix**: Wrapped all 5 unguarded methods in try/catch with sensible fallbacks: `hasSetting()` → false, `removeSetting()`/`clearGroup()`/`clearAll()` → no-op, `listSettings()` → empty array.
+- **Regression Tests**: 7 new tests in new `MuSettingsBridge.test.ts` — blocked storage for all 7 public methods (hasSetting, removeSetting, listSettings, clearGroup, clearAll, readSetting, writeSetting). Tests use try/finally for cleanup safety.
+- **Verification**: All 726 compat tests pass.
+- **Files Changed**: `src/compat/MuSettingsBridge.ts`, `src/compat/__tests__/MuSettingsBridge.test.ts` (new)
