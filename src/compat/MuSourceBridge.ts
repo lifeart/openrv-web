@@ -221,24 +221,13 @@ export class MuSourceBridge {
     }
     // Also include the current openrv source if we have no local sources
     if (result.length === 0) {
-      try {
-        const current = getOpenRV().media.getCurrentSource();
-        if (current) {
-          // Register the discovered source so subsequent API calls can resolve it
-          if (!this._sources.has(current.name)) {
-            const record = this._createSourceRecord([current.name], 'default', current.name);
-            if (current.duration > 0) {
-              record.endFrame = current.duration;
-            }
-          }
-          result.push({
-            name: current.name,
-            media: current.name,
-            tag: 'default',
-          });
-        }
-      } catch {
-        // openrv not available — return empty
+      const current = this._ensureFallbackSourceRegistered();
+      if (current) {
+        result.push({
+          name: current.name,
+          media: current.name,
+          tag: 'default',
+        });
       }
     }
     return result;
@@ -263,24 +252,13 @@ export class MuSourceBridge {
     }
     // Fall back to openrv API
     if (active.length === 0) {
-      try {
-        const current = getOpenRV().media.getCurrentSource();
-        if (current) {
-          // Register the discovered source so subsequent API calls can resolve it
-          if (!this._sources.has(current.name)) {
-            const record = this._createSourceRecord([current.name], 'default', current.name);
-            if (current.duration > 0) {
-              record.endFrame = current.duration;
-            }
-          }
-          // Only include if the requested frame falls within the source's range
-          const record = this._sources.get(current.name)!;
-          if (frame >= record.startFrame && frame <= record.endFrame) {
-            active.push(current.name);
-          }
+      const current = this._ensureFallbackSourceRegistered();
+      if (current) {
+        // Only include if the requested frame falls within the source's range
+        const record = this._sources.get(current.name)!;
+        if (frame >= record.startFrame && frame <= record.endFrame) {
+          active.push(current.name);
         }
-      } catch {
-        // openrv not available
       }
     }
     return active;
@@ -513,6 +491,7 @@ export class MuSourceBridge {
    * Not a direct Mu command but useful for batch queries.
    */
   sourceMediaInfoList(): SourceMediaInfo[] {
+    this._ensureFallbackSourceRegistered();
     return Array.from(this._sources.values()).map((src) =>
       this.sourceMediaInfo(src.name),
     );
@@ -981,6 +960,30 @@ export class MuSourceBridge {
   private _generateSourceName(): string {
     const idx = this._sourceCounter++;
     return `sourceGroup${String(idx).padStart(6, '0')}`;
+  }
+
+  /**
+   * If no sources have been registered yet, attempt to discover and register the
+   * current openrv media source as a fallback. Returns the current source info
+   * from the openrv API if one was found, or undefined otherwise.
+   */
+  private _ensureFallbackSourceRegistered():
+    | ReturnType<OpenRVMediaAPI['getCurrentSource']>
+    | undefined {
+    if (this._sources.size !== 0) return undefined;
+    try {
+      const current = getOpenRV().media.getCurrentSource();
+      if (current && !this._sources.has(current.name)) {
+        const record = this._createSourceRecord([current.name], 'default', current.name);
+        if (current.duration > 0) {
+          record.endFrame = current.duration;
+        }
+      }
+      return current;
+    } catch {
+      // openrv not available
+      return undefined;
+    }
   }
 
   /**

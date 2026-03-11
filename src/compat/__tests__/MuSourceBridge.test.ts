@@ -462,6 +462,31 @@ describe('MuSourceBridge', () => {
       expect(list[0]!.file).toBe('/a.mov');
       expect(list[1]!.file).toBe('/b.exr');
     });
+
+    it('returns fallback source info when no local sources exist (Issue #267)', () => {
+      // No addSource calls — bridge has no local sources
+      const list = bridge.sourceMediaInfoList();
+      expect(list).toHaveLength(1);
+      expect(list[0]!.file).toBe('test-source');
+    });
+
+    it('returns same number of entries as sources() in fallback case (Issue #267)', () => {
+      const sourcesList = bridge.sources();
+      // sources() registers the fallback source via side-effect, so
+      // sourceMediaInfoList() sees the already-registered source
+      const list = bridge.sourceMediaInfoList();
+      expect(list).toHaveLength(sourcesList.length);
+    });
+
+    it('sees fallback source after sources() registers it (Issue #267)', () => {
+      // First call sources() which triggers fallback registration
+      const sourcesList = bridge.sources();
+      expect(sourcesList).toHaveLength(1);
+      // Now sourceMediaInfoList should include the registered fallback
+      const list = bridge.sourceMediaInfoList();
+      expect(list).toHaveLength(1);
+      expect(list[0]!.file).toBe(sourcesList[0]!.name);
+    });
   });
 
   // ==================================================================

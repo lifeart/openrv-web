@@ -2549,3 +2549,15 @@
 - **Regression Tests**: 5 new tests — in-range frame returns fallback, out-of-range frame returns empty, upper boundary (endFrame=duration) returns fallback, duration-0 edge case (only frame 1 valid), local source frame filtering at boundaries.
 - **Verification**: All 680 compat tests pass.
 - **Files Changed**: `src/compat/MuSourceBridge.ts`, `src/compat/__tests__/MuSourceBridge.test.ts`
+
+---
+
+### 267. Mu compat `sourceMediaInfoList()` omits the same fallback current source that `sources()` exposes
+
+- **Severity**: Medium
+- **Area**: Mu compatibility / source queries
+- **Root Cause**: `sourceMediaInfoList()` only iterated `this._sources.values()` with no fallback to the current OpenRV source, unlike `sources()` and `sourcesAtFrame()` which discovered and registered the fallback source.
+- **Fix**: (1) Added fallback discovery to `sourceMediaInfoList()`. (2) Extracted the shared fallback logic into `_ensureFallbackSourceRegistered()` private helper, eliminating triplication across `sources()`, `sourcesAtFrame()`, and `sourceMediaInfoList()`.
+- **Regression Tests**: 3 new tests — fallback-only info list, consistency with `sources()` count, already-registered source visibility.
+- **Verification**: All 683 compat tests pass.
+- **Files Changed**: `src/compat/MuSourceBridge.ts`, `src/compat/__tests__/MuSourceBridge.test.ts`
