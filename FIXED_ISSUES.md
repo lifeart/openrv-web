@@ -2467,3 +2467,12 @@
 - **Regression Tests**: 6 new tests covering: URL with query string, URL with fragment, URL with both query+fragment, LUT URL with multiple query params, empty query string, and empty fragment.
 - **Verification**: All 614 compat tests pass (8 files), TypeScript clean.
 - **Files Changed**: `src/compat/MuUtilsBridge.ts`, `src/compat/__tests__/MuEventBridge.test.ts`
+
+### 255. Mu compat remoteConnect() forces wss for every non-local host, which blocks valid plain-ws remotes
+- **Severity**: Medium
+- **Area**: Mu compatibility / remote networking
+- **Root Cause**: `remoteConnect()` hardcoded `ws` for localhost/127.0.0.1 and `wss` for everything else, with no way to use plain `ws` for non-local hosts even when the page is served over HTTP or the caller explicitly provides a `ws://` scheme.
+- **Fix**: Redesigned scheme selection: (1) explicit `ws://`/`wss://` scheme in host is honored as-is, (2) localhost/127.0.0.1 defaults to `ws`, (3) otherwise matches page protocol (`http:` → `ws`, everything else → `wss` for secure default), (4) SSR/Node falls back to `wss`. Also fixed: double-port URL when host includes embedded port, and connection ID now derived from normalized URL so duplicate-connection detection and metadata are consistent.
+- **Regression Tests**: 11 new tests covering: localhost ws, 127.0.0.1 ws, explicit ws scheme, explicit wss scheme, http page → ws, https page → wss, file: page → wss, double-port prevention (wss), double-port prevention (ws), SSR default wss, and connection metadata correctness.
+- **Verification**: All 625 compat tests pass (8 files), TypeScript clean.
+- **Files Changed**: `src/compat/MuNetworkBridge.ts`, `src/compat/__tests__/MuEventBridge.test.ts`

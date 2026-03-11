@@ -1303,7 +1303,7 @@ describe('MuNetworkBridge wire protocol', () => {
     triggerOpen();
     mockWs.send.mockClear();
 
-    network.remoteSendMessage('localhost:9876', ['hello', 'world']);
+    network.remoteSendMessage('ws://localhost:9876', ['hello', 'world']);
 
     expect(mockWs.send).toHaveBeenCalledTimes(1);
     const msg = JSON.parse(mockWs.send.mock.calls[0]![0] as string);
@@ -1357,12 +1357,12 @@ describe('MuNetworkBridge wire protocol', () => {
     triggerOpen();
     mockWs.send.mockClear();
 
-    network.remoteSendMessage('localhost:9876', ['msg1']);
+    network.remoteSendMessage('ws://localhost:9876', ['msg1']);
     const msg1 = JSON.parse(mockWs.send.mock.calls[0]![0] as string);
     expect(msg1.senderContactName).toBe('original');
 
     network.setRemoteLocalContactName('updated');
-    network.remoteSendMessage('localhost:9876', ['msg2']);
+    network.remoteSendMessage('ws://localhost:9876', ['msg2']);
     const msg2 = JSON.parse(mockWs.send.mock.calls[1]![0] as string);
     expect(msg2.senderContactName).toBe('updated');
   });
@@ -1373,7 +1373,7 @@ describe('MuNetworkBridge wire protocol', () => {
     triggerOpen();
     mockWs.send.mockClear();
 
-    network.remoteSendMessage('localhost:9876', ['test']);
+    network.remoteSendMessage('ws://localhost:9876', ['test']);
     const msg = JSON.parse(mockWs.send.mock.calls[0]![0] as string);
     expect(msg.senderContactName).toBe('anonymous');
 
@@ -1464,7 +1464,7 @@ describe('MuNetworkBridge wire protocol', () => {
 
     triggerMessage(JSON.stringify({ type: 'handshake', contactName: 'peer-rv', permission: 2 }));
 
-    const info = network.getConnectionInfo('localhost:9876');
+    const info = network.getConnectionInfo('ws://localhost:9876');
     expect(info).toBeDefined();
     expect(info!.peerContactName).toBe('peer-rv');
     expect(info!.peerPermission).toBe(2);
@@ -1480,7 +1480,7 @@ describe('MuNetworkBridge wire protocol', () => {
 
     triggerMessage(JSON.stringify({ type: 'message', data: ['hello', 'world'], senderContactName: 'peer' }));
 
-    expect(handler).toHaveBeenCalledWith('localhost:9876', ['hello', 'world'], 'peer');
+    expect(handler).toHaveBeenCalledWith('ws://localhost:9876', ['hello', 'world'], 'peer');
   });
 
   it('incoming event at permission 2 is dispatched', () => {
@@ -1500,7 +1500,7 @@ describe('MuNetworkBridge wire protocol', () => {
       senderContactName: 'peer',
     }));
 
-    expect(handler).toHaveBeenCalledWith('localhost:9876', 'play', 'viewer', 'frame=1', ['mu'], 'peer');
+    expect(handler).toHaveBeenCalledWith('ws://localhost:9876', 'play', 'viewer', 'frame=1', ['mu'], 'peer');
   });
 
   it('binary data event frame is associated with its JSON header', () => {
@@ -1532,7 +1532,7 @@ describe('MuNetworkBridge wire protocol', () => {
     }
 
     expect(handler).toHaveBeenCalledWith(
-      'localhost:9876',
+      'ws://localhost:9876',
       'upload',
       'target',
       'meta',
@@ -1648,7 +1648,7 @@ describe('MuNetworkBridge dataEvent edge cases', () => {
 
     triggerMessage(JSON.stringify({ type: 'message', data: ['hi'] }));
 
-    expect(handler).toHaveBeenCalledWith('localhost:9876', ['hi'], '');
+    expect(handler).toHaveBeenCalledWith('ws://localhost:9876', ['hi'], '');
   });
 
   it('incoming event without senderContactName delivers empty string', () => {
@@ -1663,7 +1663,7 @@ describe('MuNetworkBridge dataEvent edge cases', () => {
       interp: [],
     }));
 
-    expect(handler).toHaveBeenCalledWith('localhost:9876', 'play', 'viewer', '', [], '');
+    expect(handler).toHaveBeenCalledWith('ws://localhost:9876', 'play', 'viewer', '', [], '');
   });
 
   // Fix 5: permission tests for dataEvent at levels 0 and 1
@@ -1750,7 +1750,7 @@ describe('MuNetworkBridge dataEvent edge cases', () => {
 
     expect(handler).toHaveBeenCalledTimes(1);
     expect(handler).toHaveBeenCalledWith(
-      'localhost:9876',
+      'ws://localhost:9876',
       'second',
       'tgt',
       'c2',
@@ -1758,6 +1758,98 @@ describe('MuNetworkBridge dataEvent edge cases', () => {
       [],
       'peer',
     );
+  });
+});
+
+// ── MuNetworkBridge remoteConnect URL scheme tests (Issue #255) ──
+
+describe('MuNetworkBridge remoteConnect URL scheme selection', () => {
+  let network: MuNetworkBridge;
+  let capturedUrl: string;
+
+  beforeEach(() => {
+    network = new MuNetworkBridge();
+    network.remoteNetwork(true);
+
+    capturedUrl = '';
+    const listeners: Record<string, Array<(e?: unknown) => void>> = {};
+
+    const MockWebSocket = function (this: Record<string, unknown>, url: string) {
+      capturedUrl = url;
+      this.send = vi.fn();
+      this.close = vi.fn();
+      this.readyState = WebSocket.OPEN;
+      this.addEventListener = vi.fn((event: string, handler: (e?: unknown) => void) => {
+        if (!listeners[event]) listeners[event] = [];
+        listeners[event].push(handler);
+      });
+    } as unknown as typeof WebSocket;
+    (MockWebSocket as unknown as Record<string, number>).OPEN = WebSocket.OPEN;
+    vi.stubGlobal('WebSocket', MockWebSocket);
+  });
+
+  afterEach(() => {
+    network.dispose();
+    vi.unstubAllGlobals();
+  });
+
+  it('uses ws:// for localhost', () => {
+    network.remoteConnect('test', 'localhost', 9876);
+    expect(capturedUrl).toBe('ws://localhost:9876');
+  });
+
+  it('uses ws:// for 127.0.0.1', () => {
+    network.remoteConnect('test', '127.0.0.1', 9876);
+    expect(capturedUrl).toBe('ws://127.0.0.1:9876');
+  });
+
+  it('respects explicit ws:// prefix on non-local host', () => {
+    network.remoteConnect('test', 'ws://remote.example.com', 9876);
+    expect(capturedUrl).toBe('ws://remote.example.com:9876');
+  });
+
+  it('respects explicit wss:// prefix on non-local host', () => {
+    network.remoteConnect('test', 'wss://remote.example.com', 9876);
+    expect(capturedUrl).toBe('wss://remote.example.com:9876');
+  });
+
+  it('does not double-append port when wss:// host already includes port', () => {
+    network.remoteConnect('test', 'wss://remote.example.com:9876', 1234);
+    expect(capturedUrl).toBe('wss://remote.example.com:9876');
+  });
+
+  it('appends port when ws:// host has no port', () => {
+    network.remoteConnect('test', 'ws://remote.example.com', 1234);
+    expect(capturedUrl).toBe('ws://remote.example.com:1234');
+  });
+
+  it('defaults to wss:// for non-local host when page protocol is file:', () => {
+    vi.stubGlobal('location', { protocol: 'file:' });
+    network.remoteConnect('test', 'remote.example.com', 9876);
+    expect(capturedUrl).toBe('wss://remote.example.com:9876');
+  });
+
+  it('uses ws:// for non-local host when page protocol is http', () => {
+    vi.stubGlobal('location', { protocol: 'http:' });
+    network.remoteConnect('test', 'remote.example.com', 9876);
+    expect(capturedUrl).toBe('ws://remote.example.com:9876');
+  });
+
+  it('uses wss:// for non-local host when page protocol is https', () => {
+    vi.stubGlobal('location', { protocol: 'https:' });
+    network.remoteConnect('test', 'remote.example.com', 9876);
+    expect(capturedUrl).toBe('wss://remote.example.com:9876');
+  });
+
+  it('defaults to wss:// when location is undefined (SSR/Node)', () => {
+    vi.stubGlobal('location', undefined);
+    network.remoteConnect('test', 'remote.example.com', 9876);
+    expect(capturedUrl).toBe('wss://remote.example.com:9876');
+  });
+
+  it('uses embedded port for ws:// host with embedded port, ignoring port parameter', () => {
+    network.remoteConnect('test', 'ws://remote.example.com:9876', 1234);
+    expect(capturedUrl).toBe('ws://remote.example.com:9876');
   });
 });
 

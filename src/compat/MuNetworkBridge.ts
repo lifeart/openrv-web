@@ -94,22 +94,39 @@ export class MuNetworkBridge {
       return;
     }
 
-    const id = `${host}:${port}`;
-    if (this.connections.has(id)) {
-      console.warn(`[MuNetworkBridge] Already connected to ${id}`);
-      return;
-    }
-
     try {
-      const protocol = host === 'localhost' || host === '127.0.0.1' ? 'ws' : 'wss';
-      const ws = new WebSocket(`${protocol}://${host}:${port}`);
+      let url: string;
+      if (host.startsWith('ws://') || host.startsWith('wss://')) {
+        // Explicit scheme provided — use as-is; avoid double port
+        const afterScheme = host.replace(/^wss?:\/\//, '');
+        url = /:\d+$/.test(afterScheme) ? host : `${host}:${port}`;
+      } else if (host === 'localhost' || host === '127.0.0.1') {
+        url = `ws://${host}:${port}`;
+      } else {
+        // Default to wss; only downgrade to ws when page is explicitly http
+        const pageProtocol = typeof location !== 'undefined' ? location.protocol : 'https:';
+        const scheme = pageProtocol === 'http:' ? 'ws' : 'wss';
+        url = `${scheme}://${host}:${port}`;
+      }
+
+      const id = url;
+      if (this.connections.has(id)) {
+        console.warn(`[MuNetworkBridge] Already connected to ${id}`);
+        return;
+      }
+
+      // Extract the effective port from the constructed URL
+      const portMatch = url.match(/:(\d+)$/);
+      const effectivePort = portMatch ? parseInt(portMatch[1], 10) : port;
+
+      const ws = new WebSocket(url);
 
       this.connections.set(id, ws);
       this.connectionInfo.set(id, {
         id,
         name,
         host,
-        port,
+        port: effectivePort,
         connected: false,
       });
 
