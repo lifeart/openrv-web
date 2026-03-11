@@ -110,11 +110,47 @@ function createMatteOverlay() {
   });
 }
 
+function createSpotlightOverlay() {
+  const emitter = new EventEmitter();
+  let state = {
+    enabled: false,
+    shape: 'circle' as const,
+    x: 0.5,
+    y: 0.5,
+    width: 0.2,
+    height: 0.2,
+    dimAmount: 0.7,
+    feather: 0.05,
+  };
+
+  return Object.assign(emitter, {
+    toggle: vi.fn(() => {
+      state = { ...state, enabled: !state.enabled };
+    }),
+    getState: vi.fn(() => ({ ...state })),
+    setShape: vi.fn((shape) => {
+      state = { ...state, shape };
+    }),
+    setPosition: vi.fn((x, y) => {
+      state = { ...state, x, y };
+    }),
+    setSize: vi.fn((width, height) => {
+      state = { ...state, width, height };
+    }),
+    setDimAmount: vi.fn((dimAmount) => {
+      state = { ...state, dimAmount };
+    }),
+    setFeather: vi.fn((feather) => {
+      state = { ...state, feather };
+    }),
+  });
+}
+
 function createTestDeps() {
   const bugOverlay = createToggleOverlay();
   const matteOverlay = createMatteOverlay();
   const infoStripOverlay = createToggleOverlay();
-  const spotlightOverlay = createToggleOverlay();
+  const spotlightOverlay = createSpotlightOverlay();
   const exrWindowOverlay = createToggleOverlay();
   const fpsOverlay = createToggleOverlay();
   const timecodeOverlay = createToggleOverlay();
@@ -303,6 +339,30 @@ describe('buildViewTab', () => {
     const menu = document.querySelector('.reference-comparison-settings-menu');
     expect(menu).not.toBeNull();
     expect(menu?.getAttribute('aria-label')).toBe('Reference Comparison settings');
+  });
+
+  it('adds a spotlight toggle button wired to the overlay', () => {
+    const deps = createTestDeps();
+
+    const result = buildViewTab(deps);
+    const button = result.element.querySelector<HTMLButtonElement>('[data-testid="spotlight-toggle-btn"]');
+    expect(button).not.toBeNull();
+
+    button!.click();
+    expect(deps.viewer.getSpotlightOverlay().toggle).toHaveBeenCalledOnce();
+  });
+
+  it('opens the spotlight settings menu on right-click', () => {
+    const deps = createTestDeps();
+
+    const result = buildViewTab(deps);
+    const button = result.element.querySelector<HTMLButtonElement>('[data-testid="spotlight-toggle-btn"]')!;
+
+    button.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 22, clientY: 34 }));
+
+    const menu = document.querySelector('.spotlight-overlay-settings-menu');
+    expect(menu).not.toBeNull();
+    expect(menu?.getAttribute('aria-label')).toBe('Spotlight settings');
   });
 
   it('passes comparison settings through to the viewer render path', () => {

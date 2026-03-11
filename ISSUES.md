@@ -6087,6 +6087,58 @@ This file tracks findings from exploratory review and targeted validation runs.
   - A local MXF file can be rejected by the app’s primary file-open path before the metadata parser ever gets a chance to inspect it.
   - That makes MXF support even narrower in practice than the already-limited metadata-only runtime path.
 
+### 514. The image-sequence workflow only recognizes a narrow legacy extension subset, even though the docs say sequences can use any supported image format
+
+- Severity: Medium
+- Area: Image sequences / format coverage
+- Evidence:
+  - The image-sequences guide says sequences can consist of files in “any supported image format,” explicitly listing JPEG XL, JPEG 2000, AVIF, and HEIC in [docs/playback/image-sequences.md](/Users/lifeart/Repos/openrv-web/docs/playback/image-sequences.md#L77) through [docs/playback/image-sequences.md#L85).
+  - The sequence loader’s `IMAGE_EXTENSIONS` set only includes `png`, `jpg`, `jpeg`, `webp`, `gif`, `bmp`, `tiff`, `tif`, `exr`, `dpx`, `cin`, and `cineon` in [src/utils/media/SequenceLoader.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SequenceLoader.ts#L33) through [src/utils/media/SequenceLoader.ts#L46).
+  - Sequence detection and inference both run through `filterImageFiles(...)` in the normal open flows in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1449) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1477) and [src/ui/components/ViewerInputHandler.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInputHandler.ts#L773) through [src/ui/components/ViewerInputHandler.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInputHandler.ts#L799).
+  - `createSequenceInfo(...)` also filters by that same subset before building sequence metadata in [src/utils/media/SequenceLoader.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SequenceLoader.ts#L227) through [src/utils/media/SequenceLoader.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SequenceLoader.ts#L235).
+- Impact:
+  - Multi-file and inferred-sequence workflows do not treat many documented “supported” image families as sequence candidates at all.
+  - Users can select AVIF, HEIC, JXL, or JPEG 2000 frame sets and get single-file loading or outright non-sequence behavior instead of the documented sequence workflow.
+
+### 515. The sequence-loading path bypasses the custom decoder stack and decodes frames with `createImageBitmap()`, so documented EXR/DPX/Cineon/HDR sequence workflows are not actually backed by the pro-format loaders
+
+- Severity: High
+- Area: Image sequences / decode pipeline
+- Evidence:
+  - The image-sequences guide says sequences can use professional formats including EXR, DPX, Cineon, Radiance HDR, JPEG XL, JPEG 2000, AVIF, and HEIC in [docs/playback/image-sequences.md](/Users/lifeart/Repos/openrv-web/docs/playback/image-sequences.md#L77) through [docs/playback/image-sequences.md#L86).
+  - The same page claims EXR sequences “benefit from the full HDR pipeline including WebAssembly decoding, Float32 precision, and layer/AOV selection” in [docs/playback/image-sequences.md](/Users/lifeart/Repos/openrv-web/docs/playback/image-sequences.md#L87).
+  - The actual sequence frame loader always calls `createImageBitmap(frame.file, ...)` in [src/utils/media/SequenceLoader.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SequenceLoader.ts#L126) through [src/utils/media/SequenceLoader.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SequenceLoader.ts#L144).
+  - `SessionMedia.loadSequence(...)`, `MediaManager.loadSequence(...)`, and `SequenceSourceNode.loadFiles(...)` all depend on `createSequenceInfo(...)` / `loadFrameImage(...)` from that same loader in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L737) through [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L765), [src/core/session/MediaManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaManager.ts#L791) through [src/core/session/MediaManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaManager.ts#L845), and [src/nodes/sources/SequenceSourceNode.ts](/Users/lifeart/Repos/openrv-web/src/nodes/sources/SequenceSourceNode.ts#L45) through [src/nodes/sources/SequenceSourceNode.ts#L80).
+  - By contrast, the dedicated pro-format decoders live elsewhere in the file-loading stack, such as `decodeEXR(...)` in [src/formats/EXRDecoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/EXRDecoder.ts#L2420) and the JPEG 2000 family branch in [src/nodes/sources/FileSourceNode.ts](/Users/lifeart/Repos/openrv-web/src/nodes/sources/FileSourceNode.ts#L2017) through [src/nodes/sources/FileSourceNode.ts](/Users/lifeart/Repos/openrv-web/src/nodes/sources/FileSourceNode.ts#L2024).
+- Impact:
+  - The shipped sequence workflow does not actually route professional image sequences through the documented decoder/HDR pipeline.
+  - That can turn EXR/DPX/Cineon/HDR sequence review into browser-native decode failures or materially different behavior from single-frame loads, while the docs promise full pro-format handling.
+
+### 516. Sequence loads collapse the numeric frame range down to `frames.length`, so missing-frame positions are not preserved as real timeline frames
+
+- Severity: High
+- Area: Image sequences / frame-range semantics
+- Evidence:
+  - `SequenceInfo` separately tracks `startFrame`, `endFrame`, and `missingFrames`, so the loader does know the original numbered range in [src/utils/media/SequenceLoader.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SequenceLoader.ts#L14) through [src/utils/media/SequenceLoader.ts#L23) and [src/utils/media/SequenceLoader.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SequenceLoader.ts#L250) through [src/utils/media/SequenceLoader.ts#L261).
+  - Despite that, both `SessionMedia.loadSequence(...)` and `MediaManager.loadSequence(...)` set source duration and out-point to `sequenceInfo.frames.length`, not to the numeric frame range, in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L754) through [src/core/session/SessionMedia.ts#L769) and [src/core/session/MediaManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaManager.ts#L804) through [src/core/session/MediaManager.ts#L821).
+  - The viewer then detects “missing frames” by comparing adjacent loaded frame numbers inside that shortened frame list in [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L1198) through [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L1225).
+  - The image-sequences guide says the sequence range runs from the lowest to highest frame number and that the timeline displays that total frame count in [docs/playback/image-sequences.md](/Users/lifeart/Repos/openrv-web/docs/playback/image-sequences.md#L50).
+- Impact:
+  - A gapped sequence like `1001, 1002, 1004` becomes a 3-frame timeline instead of a 4-frame numeric range with an actual missing-frame slot.
+  - That makes timeline duration, in/out behavior, and frame-based review semantics drift away from the source numbering the app is simultaneously trying to report.
+
+### 517. The image-sequences guide still describes per-frame blob-URL lifecycle, but the live sequence loader decodes files directly and never creates `frame.url`
+
+- Severity: Low
+- Area: Documentation / sequence memory model
+- Evidence:
+  - The image-sequences guide says sequence memory management includes “Blob URL lifecycle -- blob URLs are created when a frame loads and revoked when released” in [docs/playback/image-sequences.md](/Users/lifeart/Repos/openrv-web/docs/playback/image-sequences.md#L71).
+  - The actual sequence frame loader decodes each file directly via `createImageBitmap(frame.file, ...)` in [src/utils/media/SequenceLoader.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SequenceLoader.ts#L126) through [src/utils/media/SequenceLoader.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SequenceLoader.ts#L144).
+  - `SequenceFrame` still has an optional `url` field, but a repo search finds no production assignment to `frame.url`; only cleanup paths revoke it if present in [src/utils/media/SequenceLoader.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SequenceLoader.ts#L10), [src/utils/media/SequenceLoader.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SequenceLoader.ts#L217) through [src/utils/media/SequenceLoader.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SequenceLoader.ts#L219), and [src/utils/media/SequenceLoader.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SequenceLoader.ts#L312) through [src/utils/media/SequenceLoader.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SequenceLoader.ts#L314).
+- Impact:
+  - The guide describes an older or different sequence-frame memory model than the one the shipped app actually uses.
+  - That can mislead anyone debugging sequence memory behavior or trying to understand the current loader’s lifecycle costs.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

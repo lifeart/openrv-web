@@ -28,6 +28,8 @@ export type OpenRVEventName =
   | 'sourceLoadingStarted'
   | 'sourceLoaded'
   | 'sourceLoadFailed'
+  | 'viewTransformChanged'
+  | 'renderedImagesChanged'
   | 'error';
 
 /**
@@ -48,6 +50,26 @@ export interface OpenRVEventData {
   sourceLoadingStarted: { name: string };
   sourceLoaded: { name: string; type: string; width: number; height: number; duration: number; fps: number };
   sourceLoadFailed: { name: string };
+  viewTransformChanged: {
+    viewWidth: number;
+    viewHeight: number;
+    scale: number;
+    translation: [number, number];
+    imageWidth: number;
+    imageHeight: number;
+    pixelAspect: number;
+  };
+  renderedImagesChanged: {
+    images: Array<{
+      name: string;
+      index: number;
+      imageMin: [number, number];
+      imageMax: [number, number];
+      width: number;
+      height: number;
+      nodeName: string;
+    }>;
+  };
   error: { message: string; code?: string };
 }
 
@@ -68,6 +90,8 @@ const VALID_EVENTS: ReadonlySet<OpenRVEventName> = new Set([
   'sourceLoadingStarted',
   'sourceLoaded',
   'sourceLoadFailed',
+  'viewTransformChanged',
+  'renderedImagesChanged',
   'error',
 ]);
 
@@ -75,11 +99,15 @@ export class EventsAPI extends DisposableAPI {
   private listeners = new Map<OpenRVEventName, Set<EventCallback>>();
   private internalUnsubscribers: Array<() => void> = [];
   private session: Session;
+  private viewer: ViewerProvider;
 
-  constructor(session: Session, _viewer: ViewerProvider) {
+  /** Last loaded source info, used to build RenderedImageInfo on view changes */
+  private _lastLoadedSource: { name: string; width: number; height: number } | null = null;
+
+  constructor(session: Session, viewer: ViewerProvider) {
     super();
     this.session = session;
-    // Viewer parameter accepted for future extension (e.g., zoom/pan change events)
+    this.viewer = viewer;
     this.wireInternalEvents();
   }
 
@@ -337,6 +365,52 @@ export class EventsAPI extends DisposableAPI {
       );
     });
     this.internalUnsubscribers.push(unsubDecodeTimeout);
+
+    // View transform changes — subscribe to viewer's view change listener if available
+    if (this.viewer.addViewChangeListener) {
+      const unsubView = this.viewer.addViewChangeListener((panX, panY, zoom) => {
+        const { width: viewWidth, height: viewHeight } = this.viewer.getViewportSize();
+        const source = this.viewer.getSourceDimensions?.() ?? { width: 0, height: 0 };
+        this.emit('viewTransformChanged', {
+          viewWidth,
+          viewHeight,
+          scale: zoom,
+          translation: [panX, panY],
+          imageWidth: source.width,
+          imageHeight: source.height,
+          pixelAspect: 1,
+        });
+        // Also update rendered images on view change (same source, new transform)
+        if (this._lastLoadedSource) {
+          this.emitCurrentRenderedImages();
+        }
+      });
+      this.internalUnsubscribers.push(unsubView);
+    }
+
+    // Rendered images — emit when a source finishes loading
+    const unsubSourceRendered = this.session.on('sourceLoaded', (source) => {
+      this._lastLoadedSource = { name: source.name, width: source.width, height: source.height };
+      this.emitCurrentRenderedImages();
+    });
+    this.internalUnsubscribers.push(unsubSourceRendered);
+  }
+
+  /** Emit the current rendered images state based on the last loaded source. */
+  private emitCurrentRenderedImages(): void {
+    if (!this._lastLoadedSource) return;
+    const { name, width, height } = this._lastLoadedSource;
+    this.emit('renderedImagesChanged', {
+      images: [{
+        name,
+        index: 0,
+        imageMin: [0, 0] as [number, number],
+        imageMax: [width, height] as [number, number],
+        width,
+        height,
+        nodeName: name,
+      }],
+    });
   }
 
   /**
@@ -347,6 +421,20 @@ export class EventsAPI extends DisposableAPI {
    */
   emitError(message: string, code?: string): void {
     this.emit('error', { message, code });
+  }
+
+  /**
+   * Emit a view transform changed event (for external wiring).
+   */
+  emitViewTransformChanged(data: OpenRVEventData['viewTransformChanged']): void {
+    this.emit('viewTransformChanged', data);
+  }
+
+  /**
+   * Emit a rendered images changed event (for external wiring).
+   */
+  emitRenderedImagesChanged(data: OpenRVEventData['renderedImagesChanged']): void {
+    this.emit('renderedImagesChanged', data);
   }
 
   /**

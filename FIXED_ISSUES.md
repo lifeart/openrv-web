@@ -1044,9 +1044,13 @@
 ## Issue #90: Spotlight ships as a bare toggle while most of the tool's real controls are hidden
 
 - **Severity**: Medium
-- **Fix**: Added TODO(#90) + one-time `console.info` on first enable documenting that shape, position, size, dim amount, and feather settings have no UI surface.
-- **Regression Tests**: 2 tests.
-- **Files Changed**: `src/ui/components/SpotlightOverlay.ts`, `src/ui/components/SpotlightOverlay.test.ts`
+- **TODO(#90) Resolved**: Added a production right-click settings menu to the View-tab spotlight button so users can change shape, center position, width/height, dim amount, and feather directly instead of relying on API-only controls. `SpotlightOverlay` no longer carries the stale TODO/logging shim, and the shipped button now advertises right-click settings alongside the existing toggle behavior.
+- **Regression Tests**:
+  - `SpotlightOverlaySettingsMenu.test.ts`: added coverage for menu rendering, shape selection, slider-driven state updates, and dismissal behavior
+  - `buildViewTab.test.ts`: added coverage for the spotlight toggle button and the new right-click settings surface
+  - `SpotlightOverlay.test.ts`: removed obsolete logging-path tests while preserving overlay behavior coverage
+- **Verification**: `SpotlightOverlay.test.ts` (71 tests), `SpotlightOverlaySettingsMenu.test.ts` (3 tests), and `buildViewTab.test.ts` (22 tests) pass. TypeScript clean.
+- **Files Changed**: `src/ui/components/SpotlightOverlay.ts`, `src/ui/components/SpotlightOverlay.test.ts`, `src/ui/components/SpotlightOverlaySettingsMenu.ts`, `src/ui/components/SpotlightOverlaySettingsMenu.test.ts`, `src/services/tabContent/buildViewTab.ts`, `src/services/tabContent/buildViewTab.test.ts`
 
 ## Issue #91: The shipped slate panel exposes only a small subset of the slate feature it actually drives
 

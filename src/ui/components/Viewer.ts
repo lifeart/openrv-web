@@ -227,6 +227,10 @@ export class Viewer {
   private physicalWidth = 0;
   private physicalHeight = 0;
 
+  // Multi-listener support for view changes (pan/zoom)
+  private _viewChangeListeners = new Set<(panX: number, panY: number, zoom: number) => void>();
+  private _externalViewChangedCallback: ((panX: number, panY: number, zoom: number) => void) | null = null;
+
   // Paint overlay dimensions/offsets in logical pixels.
   private paintLogicalWidth = 0;
   private paintLogicalHeight = 0;
@@ -660,6 +664,14 @@ export class Viewer {
         const ratio = zoomToRatio(zoom, fitScale);
         const isFit = Math.abs(zoom - 1) < 0.001;
         this.scaleRatioIndicator.show(ratio, isFit);
+      }
+    });
+
+    // Wire up multiplexed view change dispatch for external + multi-listener
+    this.transformManager.setOnViewChanged((panX: number, panY: number, zoom: number) => {
+      this._externalViewChangedCallback?.(panX, panY, zoom);
+      for (const listener of this._viewChangeListeners) {
+        listener(panX, panY, zoom);
       }
     });
 
@@ -2384,7 +2396,23 @@ export class Viewer {
    * Used by network sync to broadcast local view changes.
    */
   setOnViewChanged(callback: ((panX: number, panY: number, zoom: number) => void) | null): void {
-    this.transformManager.setOnViewChanged(callback);
+    this._externalViewChangedCallback = callback;
+  }
+
+  /**
+   * Subscribe to view changes (pan/zoom). Supports multiple concurrent listeners.
+   * Returns an unsubscribe function.
+   */
+  addViewChangeListener(callback: (panX: number, panY: number, zoom: number) => void): () => void {
+    this._viewChangeListeners.add(callback);
+    return () => { this._viewChangeListeners.delete(callback); };
+  }
+
+  /**
+   * Get the native source image dimensions.
+   */
+  getSourceDimensions(): { width: number; height: number } {
+    return { width: this.sourceWidth, height: this.sourceHeight };
   }
 
   setColorAdjustments(adjustments: ColorAdjustments): void {

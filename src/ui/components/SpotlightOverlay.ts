@@ -46,14 +46,8 @@ export const DEFAULT_SPOTLIGHT_STATE: SpotlightState = {
   feather: 0.05,
 };
 
-/**
- * TODO(#90): SpotlightOverlay has shape, position, size, dim amount, and
- * feather controls, but the production UI only exposes a toggle. A settings
- * popover should be added to let users configure these options.
- */
 export class SpotlightOverlay extends CanvasOverlay<SpotlightEvents> {
   private state: SpotlightState = { ...DEFAULT_SPOTLIGHT_STATE };
-  private hasLoggedCustomizationHint = false;
 
   // Interaction state
   private isDragging = false;
@@ -306,15 +300,6 @@ export class SpotlightOverlay extends CanvasOverlay<SpotlightEvents> {
    */
   enable(): void {
     this.setState({ enabled: true });
-
-    // TODO(#90): Log customization hint on first enable
-    if (!this.hasLoggedCustomizationHint) {
-      this.hasLoggedCustomizationHint = true;
-      console.info(
-        '[SpotlightOverlay] Shape, position, size, dim amount, and feather are configurable ' +
-          'via the API but are not yet exposed in the UI. See issue #90.',
-      );
-    }
   }
 
   /**

@@ -22,6 +22,7 @@ export { ModeManager } from './ModeManager';
 export { MuSourceBridge } from './MuSourceBridge';
 export type { PixelReadbackProvider } from './MuSourceBridge';
 export { MuEvalBridge } from './MuEvalBridge';
+export type { ViewEventSource } from './MuEvalBridge';
 export { MuNetworkBridge } from './MuNetworkBridge';
 export { MuSettingsBridge } from './MuSettingsBridge';
 export { MuUtilsBridge } from './MuUtilsBridge';

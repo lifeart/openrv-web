@@ -16,6 +16,7 @@ import { EXRWindowOverlaySettingsMenu } from '../../ui/components/EXRWindowOverl
 import { BugOverlaySettingsMenu } from '../../ui/components/BugOverlaySettingsMenu';
 import { MatteOverlaySettingsMenu } from '../../ui/components/MatteOverlaySettingsMenu';
 import { ReferenceComparisonSettingsMenu } from '../../ui/components/ReferenceComparisonSettingsMenu';
+import { SpotlightOverlaySettingsMenu } from '../../ui/components/SpotlightOverlaySettingsMenu';
 
 export interface BuildViewTabDeps {
   registry: AppControlRegistry;
@@ -398,10 +399,17 @@ export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
     () => {
       viewer.getSpotlightOverlay().toggle();
     },
-    { title: 'Spotlight (Shift+Q)' },
+    { title: 'Spotlight (Shift+Q) — Right-click for settings' },
   );
   spotlightButton.dataset.testid = 'spotlight-toggle-btn';
   viewContent.appendChild(spotlightButton);
+
+  const spotlightSettingsMenu = new SpotlightOverlaySettingsMenu(viewer.getSpotlightOverlay());
+  spotlightButton.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    spotlightSettingsMenu.show(e.clientX, e.clientY);
+  });
+  addUnsubscriber(() => spotlightSettingsMenu.dispose());
 
   addUnsubscriber(
     viewer.getSpotlightOverlay().on('stateChanged', (state) => {

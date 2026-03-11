@@ -46,6 +46,15 @@ export interface ViewTransformState {
 }
 
 /**
+ * Minimal event subscription interface for connecting to the real view/render event system.
+ * Compatible with EventsAPI.on() signature.
+ */
+export interface ViewEventSource {
+  on(event: 'viewTransformChanged', cb: (data: ViewTransformState) => void): () => void;
+  on(event: 'renderedImagesChanged', cb: (data: { images: RenderedImageInfo[] }) => void): () => void;
+}
+
+/**
  * MuEvalBridge provides graph evaluation traversal and image query
  * commands for the Mu compatibility layer.
  */
@@ -66,6 +75,10 @@ export class MuEvalBridge {
 
   /** Rendered image info list, updated after each render pass */
   private _renderedImages: RenderedImageInfo[] = [];
+
+  /** Event unsubscribers for connectToEvents cleanup */
+  private _eventUnsubscribers: Array<() => void> = [];
+  private _disposed = false;
 
   constructor(graph: Graph, nodeBridge: MuNodeBridge) {
     this._graph = graph;
@@ -94,6 +107,41 @@ export class MuEvalBridge {
    */
   setRenderedImages(images: RenderedImageInfo[]): void {
     this._renderedImages = [...images];
+  }
+
+  /**
+   * Connect to real session view/render events.
+   *
+   * Subscribes to `viewTransformChanged` and `renderedImagesChanged` so that
+   * image-query commands (`renderedImages()`, `imagesAtPixel()`, etc.) reflect
+   * actual view and render state.
+   *
+   * Safe to call multiple times; previous subscriptions are cleaned up first.
+   */
+  connectToEvents(events: ViewEventSource): void {
+    this.dispose();
+    this._disposed = false;
+
+    const unsubView = events.on('viewTransformChanged', (data) => {
+      this.setViewTransform(data);
+    });
+    this._eventUnsubscribers.push(unsubView);
+
+    const unsubImages = events.on('renderedImagesChanged', (data) => {
+      this.setRenderedImages(data.images);
+    });
+    this._eventUnsubscribers.push(unsubImages);
+  }
+
+  /**
+   * Disconnect from session events and clean up subscriptions.
+   */
+  dispose(): void {
+    this._disposed = true;
+    for (const unsub of this._eventUnsubscribers) {
+      unsub();
+    }
+    this._eventUnsubscribers = [];
   }
 
   // =====================================================================
