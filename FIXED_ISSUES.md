@@ -2591,3 +2591,15 @@
 - **Regression Tests**: 17 new tests — 10 in PreferencesManager (import/reset for each subsystem, null-safety, partial import, event emission), 3 in LayoutStore, 2 in CustomKeyBindingsManager, 2 in OCIOStateManager (all testing reloadFromStorage behavior).
 - **Verification**: All tests pass.
 - **Files Changed**: `src/core/PreferencesManager.ts`, `src/core/PreferencesManager.test.ts`, `src/ui/layout/LayoutStore.ts`, `src/ui/layout/LayoutStore.test.ts`, `src/utils/input/CustomKeyBindingsManager.ts`, `src/utils/input/CustomKeyBindingsManager.test.ts`, `src/ui/components/OCIOStateManager.ts`, `src/ui/components/OCIOStateManager.test.ts`
+
+---
+
+### 278. `MediaCacheManager` claims graceful OPFS fallback, but browsers without `createWritable()` still initialize and then fail writes noisily
+
+- **Severity**: Medium
+- **Area**: Caching / storage fallback
+- **Root Cause**: `initialize()` didn't probe for `createWritable()` support on OPFS file handles. Later, `put()` called `writeFile()` which threw "createWritable not supported" on every write attempt.
+- **Fix**: Added `probeCreateWritable()` that creates a temporary file handle during init to check `createWritable` support. If unsupported, `_writableSupported = false` and `put()` returns `false` silently. Reads via `get()` still work. Probe file cleaned up in finally block. Flag reset on dispose.
+- **Regression Tests**: 8 new tests — init succeeds but put no-ops, no throws, no data written, no error events, get() reads pre-existing data, probe failure fallback, dispose+re-init re-probe, normal operation still works.
+- **Verification**: All 171 cache tests pass.
+- **Files Changed**: `src/cache/MediaCacheManager.ts`, `src/cache/MediaCacheManager.test.ts`
