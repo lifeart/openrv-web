@@ -581,6 +581,39 @@ export class AppControlRegistry {
       return input;
     };
 
+    const createSectionLabel = (text: string): HTMLDivElement => {
+      const label = document.createElement('div');
+      label.textContent = text;
+      label.style.cssText =
+        'margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-primary); color: var(--text-primary); font-size: 11px; font-weight: 600;';
+      container.appendChild(label);
+      return label;
+    };
+
+    const createColorField = (label: string, testid: string, initialValue: string): HTMLInputElement => {
+      const wrapper = document.createElement('div');
+      const lbl = document.createElement('div');
+      lbl.style.cssText = labelStyle;
+      lbl.textContent = label;
+      wrapper.appendChild(lbl);
+      const input = document.createElement('input');
+      input.type = 'color';
+      input.value = initialValue;
+      input.dataset.testid = testid;
+      input.style.cssText = 'width: 100%; height: 28px; border: none; cursor: pointer; background: transparent;';
+      wrapper.appendChild(input);
+      container.appendChild(wrapper);
+      return input;
+    };
+
+    const createNumberField = (label: string, testid: string, value: number, min?: number, max?: number): HTMLInputElement => {
+      const input = createField(label, 'number', testid);
+      input.value = String(value);
+      if (min !== undefined) input.min = String(min);
+      if (max !== undefined) input.max = String(max);
+      return input;
+    };
+
     // Text inputs for metadata
     const showNameInput = createField('Show Name', 'text', 'slate-show-name');
     const shotNameInput = createField('Shot Name', 'text', 'slate-shot-name');
@@ -605,22 +638,20 @@ export class AppControlRegistry {
     artistInput.addEventListener('input', updateMetadata);
     dateInput.addEventListener('input', updateMetadata);
 
-    // Color picker for background color
-    const bgColorWrapper = document.createElement('div');
-    const bgColorLabel = document.createElement('div');
-    bgColorLabel.style.cssText = labelStyle;
-    bgColorLabel.textContent = 'Background Color';
-    bgColorWrapper.appendChild(bgColorLabel);
-    const bgColorInput = document.createElement('input');
-    bgColorInput.type = 'color';
-    bgColorInput.value = '#000000';
-    bgColorInput.dataset.testid = 'slate-bg-color';
-    bgColorInput.style.cssText = 'width: 100%; height: 28px; border: none; cursor: pointer; background: transparent;';
-    bgColorWrapper.appendChild(bgColorInput);
-    container.appendChild(bgColorWrapper);
+    createSectionLabel('Appearance');
+
+    const bgColorInput = createColorField('Background Color', 'slate-bg-color', '#000000');
+    const textColorInput = createColorField('Text Color', 'slate-text-color', '#ffffff');
+    const accentColorInput = createColorField('Accent Color', 'slate-accent-color', '#4a9eff');
 
     bgColorInput.addEventListener('input', () => {
       this.slateEditor.setColors({ background: bgColorInput.value });
+    });
+    textColorInput.addEventListener('input', () => {
+      this.slateEditor.setColors({ text: textColorInput.value });
+    });
+    accentColorInput.addEventListener('input', () => {
+      this.slateEditor.setColors({ accent: accentColorInput.value });
     });
 
     // Font size slider
@@ -646,7 +677,102 @@ export class AppControlRegistry {
       this.slateEditor.setFontSizeMultiplier(val);
     });
 
+    createSectionLabel('Custom Fields');
+
+    const customFieldsContainer = document.createElement('div');
+    customFieldsContainer.dataset.testid = 'slate-custom-fields';
+    customFieldsContainer.style.cssText = 'display: flex; flex-direction: column; gap: 6px;';
+    container.appendChild(customFieldsContainer);
+
+    const renderCustomFieldRows = () => {
+      customFieldsContainer.innerHTML = '';
+      const fields = this.slateEditor.getCustomFields();
+
+      if (fields.length === 0) {
+        const empty = document.createElement('div');
+        empty.dataset.testid = 'slate-custom-fields-empty';
+        empty.textContent = 'No custom fields added.';
+        empty.style.cssText = 'font-size: 10px; color: var(--text-muted);';
+        customFieldsContainer.appendChild(empty);
+        return;
+      }
+
+      fields.forEach((field, index) => {
+        const row = document.createElement('div');
+        row.dataset.testid = 'slate-custom-field-row';
+        row.style.cssText =
+          'display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 88px 32px; gap: 4px; align-items: center;';
+
+        const labelInput = document.createElement('input');
+        labelInput.type = 'text';
+        labelInput.value = field.label;
+        labelInput.placeholder = 'Label';
+        labelInput.dataset.testid = `slate-custom-field-label-${index}`;
+        labelInput.style.cssText = inputStyle;
+        labelInput.addEventListener('input', () => {
+          this.slateEditor.updateCustomField(index, { label: labelInput.value });
+        });
+
+        const valueInput = document.createElement('input');
+        valueInput.type = 'text';
+        valueInput.value = field.value;
+        valueInput.placeholder = 'Value';
+        valueInput.dataset.testid = `slate-custom-field-value-${index}`;
+        valueInput.style.cssText = inputStyle;
+        valueInput.addEventListener('input', () => {
+          this.slateEditor.updateCustomField(index, { value: valueInput.value });
+        });
+
+        const sizeSelect = document.createElement('select');
+        sizeSelect.dataset.testid = `slate-custom-field-size-${index}`;
+        sizeSelect.style.cssText = inputStyle;
+        for (const size of ['large', 'medium', 'small'] as const) {
+          const option = document.createElement('option');
+          option.value = size;
+          option.textContent = size;
+          option.selected = field.size === size;
+          sizeSelect.appendChild(option);
+        }
+        sizeSelect.addEventListener('change', () => {
+          this.slateEditor.updateCustomField(index, { size: sizeSelect.value as 'large' | 'medium' | 'small' });
+        });
+
+        const removeButton = document.createElement('button');
+        removeButton.type = 'button';
+        removeButton.dataset.testid = `slate-custom-field-remove-${index}`;
+        removeButton.innerHTML = getIconSvg('trash', 'sm');
+        removeButton.title = 'Remove custom field';
+        removeButton.style.cssText =
+          'background: transparent; border: 1px solid var(--border-secondary); color: var(--text-muted); cursor: pointer; padding: 5px; border-radius: 3px;';
+        removeButton.addEventListener('click', () => {
+          this.slateEditor.removeCustomField(index);
+          renderCustomFieldRows();
+        });
+
+        row.appendChild(labelInput);
+        row.appendChild(valueInput);
+        row.appendChild(sizeSelect);
+        row.appendChild(removeButton);
+        customFieldsContainer.appendChild(row);
+      });
+    };
+
+    const addCustomFieldButton = document.createElement('button');
+    addCustomFieldButton.type = 'button';
+    addCustomFieldButton.dataset.testid = 'slate-custom-field-add';
+    addCustomFieldButton.textContent = 'Add Custom Field';
+    addCustomFieldButton.style.cssText =
+      'width: 100%; padding: 6px 10px; background: transparent; border: 1px dashed var(--border-secondary); border-radius: 3px; color: var(--text-primary); cursor: pointer; font-size: 12px;';
+    addCustomFieldButton.addEventListener('click', () => {
+      this.slateEditor.addCustomField({ label: '', value: '', size: 'medium' });
+      renderCustomFieldRows();
+    });
+    container.appendChild(addCustomFieldButton);
+    renderCustomFieldRows();
+
     // Logo file upload
+    createSectionLabel('Logo');
+
     const logoSection = document.createElement('div');
     logoSection.style.cssText = 'display: flex; flex-direction: column; gap: 4px;';
 
@@ -716,6 +842,46 @@ export class AppControlRegistry {
     logoInfo.style.cssText = 'font-size: 10px; color: var(--text-muted); display: none;';
     logoSection.appendChild(logoInfo);
 
+    const logoPositionLabel = document.createElement('div');
+    logoPositionLabel.style.cssText = labelStyle;
+    logoPositionLabel.textContent = 'Logo Position';
+    logoSection.appendChild(logoPositionLabel);
+
+    const logoPositionSelect = document.createElement('select');
+    logoPositionSelect.dataset.testid = 'slate-logo-position';
+    logoPositionSelect.style.cssText = inputStyle;
+    for (const position of ['top-left', 'top-right', 'bottom-left', 'bottom-right'] as const) {
+      const option = document.createElement('option');
+      option.value = position;
+      option.textContent = position.replace('-', ' ');
+      option.selected = position === this.slateEditor.getLogoPosition();
+      logoPositionSelect.appendChild(option);
+    }
+    logoPositionSelect.addEventListener('change', () => {
+      this.slateEditor.setLogoPosition(logoPositionSelect.value as 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right');
+    });
+    logoSection.appendChild(logoPositionSelect);
+
+    const logoScaleLabel = document.createElement('div');
+    logoScaleLabel.style.cssText = labelStyle;
+    logoScaleLabel.textContent = 'Logo Scale: 15%';
+    logoSection.appendChild(logoScaleLabel);
+
+    const logoScaleSlider = document.createElement('input');
+    logoScaleSlider.type = 'range';
+    logoScaleSlider.min = '5';
+    logoScaleSlider.max = '50';
+    logoScaleSlider.step = '1';
+    logoScaleSlider.value = '15';
+    logoScaleSlider.dataset.testid = 'slate-logo-scale';
+    logoScaleSlider.style.cssText = 'width: 100%;';
+    logoScaleSlider.addEventListener('input', () => {
+      const scale = parseInt(logoScaleSlider.value, 10) / 100;
+      logoScaleLabel.textContent = `Logo Scale: ${Math.round(scale * 100)}%`;
+      this.slateEditor.setLogoScale(scale);
+    });
+    logoSection.appendChild(logoScaleSlider);
+
     container.appendChild(logoSection);
 
     logoFileInput.addEventListener('change', async () => {
@@ -732,11 +898,13 @@ export class AppControlRegistry {
     this.slateEditor.on('logoLoaded', (dims) => {
       logoInfo.textContent = `${dims.width} \u00d7 ${dims.height}px`;
       logoInfo.style.display = 'block';
+      logoInfo.style.color = 'var(--text-muted)';
       logoRemoveButton.style.display = 'flex';
     });
 
     this.slateEditor.on('logoRemoved', () => {
       logoInfo.style.display = 'none';
+      logoInfo.style.color = 'var(--text-muted)';
       logoRemoveButton.style.display = 'none';
     });
 
@@ -747,6 +915,29 @@ export class AppControlRegistry {
       logoInfo.style.display = 'block';
       logoInfo.style.color = 'var(--error, #ff4444)';
     });
+
+    createSectionLabel('Output');
+
+    const resolutionRow = document.createElement('div');
+    resolutionRow.style.cssText = 'display: grid; grid-template-columns: 1fr 1fr; gap: 6px;';
+
+    const widthInput = createNumberField('Width', 'slate-resolution-width', 1920, 1);
+    const heightInput = createNumberField('Height', 'slate-resolution-height', 1080, 1);
+
+    const widthWrapper = widthInput.parentElement!;
+    const heightWrapper = heightInput.parentElement!;
+    resolutionRow.appendChild(widthWrapper);
+    resolutionRow.appendChild(heightWrapper);
+    container.appendChild(resolutionRow);
+
+    const updateResolution = () => {
+      this.slateEditor.setResolution(Number.parseInt(widthInput.value || '0', 10), Number.parseInt(heightInput.value || '0', 10));
+      const { width, height } = this.slateEditor.getResolution();
+      widthInput.value = String(width);
+      heightInput.value = String(height);
+    };
+    widthInput.addEventListener('input', updateResolution);
+    heightInput.addEventListener('input', updateResolution);
 
     // Preview container
     const previewContainer = document.createElement('div');

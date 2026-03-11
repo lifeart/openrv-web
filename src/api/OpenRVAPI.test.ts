@@ -1718,6 +1718,77 @@ describe('EventsAPI', () => {
     });
   });
 
+  it('API-U064b: renderedImagesChanged fires with new source data on currentSourceChanged', () => {
+    const handler = vi.fn();
+    events.on('renderedImagesChanged', handler);
+
+    // Load first source
+    session.emit('sourceLoaded', {
+      name: 'first.mp4', type: 'video', width: 1920, height: 1080, duration: 100, fps: 24,
+    });
+    handler.mockClear();
+
+    // Load second source
+    session.emit('sourceLoaded', {
+      name: 'second.mp4', type: 'video', width: 3840, height: 2160, duration: 200, fps: 30,
+    });
+    handler.mockClear();
+
+    // Switch back to first source
+    session._currentSource = {
+      name: 'first.mp4', type: 'video', width: 1920, height: 1080, duration: 100, fps: 24,
+    };
+    session.emit('currentSourceChanged', 0);
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler).toHaveBeenCalledWith({
+      images: [{
+        name: 'first.mp4',
+        index: 0,
+        imageMin: [0, 0],
+        imageMax: [1920, 1080],
+        width: 1920,
+        height: 1080,
+        nodeName: 'first.mp4',
+      }],
+    });
+  });
+
+  it('API-U064c: viewTransformChanged fires on viewport resize via addViewChangeListener', () => {
+    // Create a new EventsAPI with a viewer that supports addViewChangeListener
+    let registeredListener: ((panX: number, panY: number, zoom: number) => void) | null = null;
+    const resizableViewer: any = {
+      ...viewer,
+      addViewChangeListener: vi.fn((cb: any) => {
+        registeredListener = cb;
+        return () => { registeredListener = null; };
+      }),
+      getViewportSize: vi.fn(() => ({ width: 800, height: 600 })),
+      getSourceDimensions: vi.fn(() => ({ width: 1920, height: 1080 })),
+    };
+
+    const localEvents = new EventsAPI(session, resizableViewer);
+    const handler = vi.fn();
+    localEvents.on('viewTransformChanged', handler);
+
+    // Simulate a resize by invoking the registered listener with current pan/zoom
+    expect(registeredListener).not.toBeNull();
+    registeredListener!(0, 0, 1);
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler).toHaveBeenCalledWith({
+      viewWidth: 800,
+      viewHeight: 600,
+      scale: 1,
+      translation: [0, 0],
+      imageWidth: 1920,
+      imageHeight: 1080,
+      pixelAspect: 1,
+    });
+
+    localEvents.dispose();
+  });
+
   it('API-U065: error event can be emitted', () => {
     const handler = vi.fn();
     events.on('error', handler);

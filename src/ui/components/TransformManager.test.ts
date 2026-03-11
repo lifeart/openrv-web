@@ -534,7 +534,7 @@ describe('TransformManager', () => {
       expect(callback).toHaveBeenCalledWith(10, 20, 3);
     });
 
-    it('fitToWindow does not fire onViewChanged (uses internal fields)', () => {
+    it('fitToWindow fires onViewChanged with reset values', () => {
       const callback = vi.fn();
       tm.setOnViewChanged(callback);
       tm.zoom = 2;
@@ -542,8 +542,8 @@ describe('TransformManager', () => {
       callback.mockClear();
 
       tm.fitToWindow();
-      // fitToWindow sets _panX/_panY/_zoom directly, not through setters
-      expect(callback).not.toHaveBeenCalled();
+      // fitToWindow now notifies listeners so the bridge stays in sync
+      expect(callback).toHaveBeenCalledWith(0, 0, 1);
     });
   });
 

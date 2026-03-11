@@ -225,6 +225,7 @@ export class TransformManager implements ManagerBase {
     this._panX = 0;
     this._panY = 0;
     this._zoom = 1;
+    this.notifyViewChanged();
   }
 
   /**
@@ -263,6 +264,7 @@ export class TransformManager implements ManagerBase {
     this._panX = 0;
     this._panY = 0;
     this._zoom = 1;
+    this.notifyViewChanged();
   }
 
   /**

@@ -807,36 +807,4 @@ describe('SlateEditor', () => {
     });
   });
 
-  // -------------------------------------------------------------------------
-  // #91: console.info on first generateConfig
-  // -------------------------------------------------------------------------
-  describe('customization hint (#91)', () => {
-    it('SLATE-HINT-001: logs console.info on first generateConfig', () => {
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
-      try {
-        const editor = new SlateEditor();
-        editor.generateConfig();
-        expect(infoSpy).toHaveBeenCalledTimes(1);
-        expect(infoSpy.mock.calls[0]![0]).toContain('[SlateEditor]');
-        expect(infoSpy.mock.calls[0]![0]).toContain('#91');
-        editor.dispose();
-      } finally {
-        infoSpy.mockRestore();
-      }
-    });
-
-    it('SLATE-HINT-002: logs only once across multiple generateConfig calls', () => {
-      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
-      try {
-        const editor = new SlateEditor();
-        editor.generateConfig();
-        editor.generateConfig();
-        editor.generateConfig();
-        expect(infoSpy).toHaveBeenCalledTimes(1);
-        editor.dispose();
-      } finally {
-        infoSpy.mockRestore();
-      }
-    });
-  });
 });

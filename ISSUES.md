@@ -6139,6 +6139,70 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The guide describes an older or different sequence-frame memory model than the one the shipped app actually uses.
   - That can mislead anyone debugging sequence memory behavior or trying to understand the current loader’s lifecycle costs.
 
+### 518. The plain-AVIF docs say detection excludes gainmap AVIFs, but `isAvifFile(...)` still returns `true` for any AVIF-brand file and relies on registry ordering instead
+
+- Severity: Low
+- Area: Documentation / AVIF detection semantics
+- Evidence:
+  - The file-format guide says plain AVIF detection is an `ftyp` box with AVIF brands “without gain map auxiliary items” in [docs/guides/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/guides/file-formats.md#L157).
+  - The same section separately says gainmap AVIFs are matched first because the plain AVIF decoder is placed later in the registry chain in [docs/guides/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/guides/file-formats.md#L158).
+  - The shipped `isAvifFile(...)` implementation explicitly says it “Returns true for any AVIF file, including gainmap AVIFs” in [src/formats/avif.ts](/Users/lifeart/Repos/openrv-web/src/formats/avif.ts#L13) and only checks the `ftyp` brand in [src/formats/avif.ts](/Users/lifeart/Repos/openrv-web/src/formats/avif.ts#L16) through [src/formats/avif.ts](/Users/lifeart/Repos/openrv-web/src/formats/avif.ts#L25).
+  - The registry comment matches the implementation: plain AVIF is placed after `avifGainmapDecoder` so ordering, not the detector itself, prevents misclassification in [src/formats/DecoderRegistry.ts](/Users/lifeart/Repos/openrv-web/src/formats/DecoderRegistry.ts#L825).
+- Impact:
+  - The docs describe the plain AVIF detector as semantically stricter than it really is.
+  - That can mislead anyone reasoning about format identification or trying to reuse `isAvifFile(...)` outside the exact registry ordering the app depends on.
+
+### 519. ShotGrid frame-sequence paths are still routed through `session.loadImage(...)`, so `shot.####.exr` is treated like a single image URL instead of a sequence
+
+- Severity: Medium
+- Area: ShotGrid integration / sequence loading
+- Evidence:
+  - The ShotGrid panel now resolves `sg_path_to_frames` as the media URL when that path is present in [src/ui/components/ShotGridPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ShotGridPanel.ts#L306) through [src/ui/components/ShotGridPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ShotGridPanel.ts#L307), and the `Load` action is enabled whenever `mediaUrl` exists in [src/ui/components/ShotGridPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ShotGridPanel.ts#L497).
+  - `ShotGridIntegrationBridge` explicitly detects the “frame sequence path” case, logs it, and still routes every non-video URL into `this.session.loadImage(version.code, mediaUrl)` in [src/integrations/ShotGridIntegrationBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/ShotGridIntegrationBridge.ts#L162) through [src/integrations/ShotGridIntegrationBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/ShotGridIntegrationBridge.ts#L174).
+  - `SessionMedia.loadImage(...)` loads that URL through a plain `HTMLImageElement` and creates a single-frame `MediaSource` with `duration: 1` in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L429) through [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L456).
+  - There is no sequence-pattern expansion or sequence-loader handoff in that path; the real sequence flow depends on file batches and `SequenceLoader` helpers instead in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1449) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1477).
+- Impact:
+  - ShotGrid versions backed only by frame-sequence paths can reach a loadable UI state and still fail to behave like sequences in production.
+  - That leaves one of the app’s main review integrations unable to turn a standard `####` frame path into an actual timeline-backed source.
+
+### 520. The docs present `####` / `%04d` / `@@@@` pattern strings as supported sequence formats, but production does not have a live loader for literal pattern strings
+
+- Severity: Medium
+- Area: Documentation / sequence-pattern workflow
+- Evidence:
+  - The file-format reference lists `Printf`, `Hash`, and `At-sign` entries under `Sequence Formats` in [docs/reference/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/reference/file-formats.md#L69) through [docs/reference/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/reference/file-formats.md#L75).
+  - The image-sequences guide and file-format guide both present those same notations as supported pattern forms in [docs/playback/image-sequences.md](/Users/lifeart/Repos/openrv-web/docs/playback/image-sequences.md#L21) through [docs/playback/image-sequences.md](/Users/lifeart/Repos/openrv-web/docs/playback/image-sequences.md#L33) and [docs/guides/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/guides/file-formats.md#L301) through [docs/guides/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/guides/file-formats.md#L309).
+  - The only production sequence-ingest path uses numbered files plus `extractPatternFromFilename(...)`, `discoverSequences(...)`, and `inferSequenceFromSingleFile(...)` in [src/utils/media/SequenceLoader.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SequenceLoader.ts#L479) through [src/utils/media/SequenceLoader.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SequenceLoader.ts#L644) and is wired from file-batch UI flows in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1449) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1477) and [src/ui/components/ViewerInputHandler.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInputHandler.ts#L773) through [src/ui/components/ViewerInputHandler.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInputHandler.ts#L799).
+  - The parser helpers for literal pattern strings, `parsePatternNotation(...)`, `toHashNotation(...)`, and `toPrintfNotation(...)`, have no production callers outside tests in [src/utils/media/SequenceLoader.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SequenceLoader.ts#L426) through [src/utils/media/SequenceLoader.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SequenceLoader.ts#L457), with repo hits limited to [src/utils/media/SequenceLoader.test.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SequenceLoader.test.ts#L631) through [src/utils/media/SequenceLoader.test.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SequenceLoader.test.ts#L700).
+- Impact:
+  - The docs make literal pattern strings look like a real ingest format when the shipped app still expects concrete numbered files.
+  - Integrations or users that hand the app `shot.####.exr` or `frame.%04d.exr` can reasonably expect sequence loading and instead hit unrelated image-URL or unsupported-file behavior.
+
+### 521. `.orvproject` still serializes `sequencePattern` and `frameRange` for sequences, but the restore path never consumes them
+
+- Severity: Medium
+- Area: Project persistence / dead sequence metadata
+- Evidence:
+  - The session-state schema reserves `sequencePattern` and `frameRange` on `MediaReference` for sequences in [src/core/session/SessionState.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionState.ts#L31) through [src/core/session/SessionState.ts#L54).
+  - `SessionSerializer.serializeMedia(...)` populates both fields for sequence sources in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L409) through [src/core/session/SessionSerializer.ts#L414).
+  - The corresponding load path never consults `ref.sequencePattern` or `ref.frameRange`; for `ref.type === 'sequence'` it only emits `Sequence \"<name>\" requires manual file selection` in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L509) through [src/core/session/SessionSerializer.ts#L512).
+  - A repo search shows no production consumer of those restored sequence fields outside serialization/tests; the remaining hits are schema definitions and assertions in [src/core/session/SessionSerializer.test.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.test.ts#L278) through [src/core/session/SessionSerializer.test.ts#L279).
+- Impact:
+  - Sequence-specific metadata is written into project files without contributing anything to real restore behavior.
+  - That makes the saved project format look more sequence-aware than the load path actually is and leaves dead state in the schema that users cannot benefit from.
+
+### 522. ShotGrid media loading only recognizes `mp4|mov|webm|mkv` as video, so other otherwise-supported containers are misrouted into `loadImage(...)`
+
+- Severity: Medium
+- Area: ShotGrid integration / media type detection
+- Evidence:
+  - `ShotGridIntegrationBridge` decides whether a version URL is video using `\\.(mp4|mov|webm|mkv)(\\?|$)` in [src/integrations/ShotGridIntegrationBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/ShotGridIntegrationBridge.ts#L170).
+  - Every non-matching URL is routed into `this.session.loadImage(...)` in [src/integrations/ShotGridIntegrationBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/ShotGridIntegrationBridge.ts#L171) through [src/integrations/ShotGridIntegrationBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/ShotGridIntegrationBridge.ts#L174).
+  - The app’s broader supported video-extension set is materially wider and includes `m4v`, `3gp`, `3g2`, `qt`, `mk3d`, `ogg`, `ogv`, `ogm`, `ogx`, and `avi` in [src/utils/media/SupportedMediaFormats.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SupportedMediaFormats.ts#L39) through [src/utils/media/SupportedMediaFormats.ts#L63).
+- Impact:
+  - ShotGrid versions that point at otherwise-supported containers can still be treated like image URLs and fail to load through the correct video path.
+  - That makes ShotGrid media support narrower than the rest of the app, even for formats the main file-open flow can already classify as video.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed
