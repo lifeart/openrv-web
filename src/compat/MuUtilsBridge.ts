@@ -424,8 +424,9 @@ export class MuUtilsBridge {
   // ── Private Helpers ──
 
   private getExtension(path: string): string {
-    const lastDot = path.lastIndexOf('.');
+    const cleaned = path.split('?')[0].split('#')[0];
+    const lastDot = cleaned.lastIndexOf('.');
     if (lastDot === -1) return '';
-    return path.slice(lastDot + 1);
+    return cleaned.slice(lastDot + 1);
   }
 }

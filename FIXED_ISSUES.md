@@ -2458,3 +2458,12 @@
 - **Regression Tests**: 6 new tests covering: hash-path type matching, multiple nodes of same type, hash vs exact name distinction, non-matching hash returns empty, bare `#` returns empty, and substring over-matching documenting intentional semantics.
 - **Verification**: All 611 compat tests pass (8 files), TypeScript clean.
 - **Files Changed**: `src/compat/MuPropertyBridge.ts`, `src/compat/__tests__/MuPropertyBridge.test.ts`
+
+### 254. Mu compat fileKind() misclassifies normal signed or query-string media URLs as unknown files
+- **Severity**: Medium
+- **Area**: Mu compatibility / file-kind detection
+- **Root Cause**: `getExtension()` extracted the extension by finding the last `.` and slicing to end-of-string without stripping URL query strings (`?token=abc`) or fragments (`#section`). URLs like `shot.exr?token=abc` yielded extension `exr?token=abc` which matched no known extension list.
+- **Fix**: Added URL cleanup at the start of `getExtension()`: `path.split('?')[0].split('#')[0]` strips query and fragment before extracting the extension. The split order matches RFC 3986 URL structure (`?` precedes `#`).
+- **Regression Tests**: 6 new tests covering: URL with query string, URL with fragment, URL with both query+fragment, LUT URL with multiple query params, empty query string, and empty fragment.
+- **Verification**: All 614 compat tests pass (8 files), TypeScript clean.
+- **Files Changed**: `src/compat/MuUtilsBridge.ts`, `src/compat/__tests__/MuEventBridge.test.ts`

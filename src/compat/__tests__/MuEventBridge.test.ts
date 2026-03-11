@@ -1104,6 +1104,21 @@ describe('MuUtilsBridge', () => {
       expect(utils.fileKind('TEST.EXR')).toBe(FileKind.ImageFile);
       expect(utils.fileKind('VIDEO.MP4')).toBe(FileKind.MovieFile);
     });
+
+    it('handles URLs with query strings', () => {
+      expect(utils.fileKind('https://example.com/shot.exr?token=abc')).toBe(FileKind.ImageFile);
+      expect(utils.fileKind('path/to/lut.3dl?v=2&sig=xyz')).toBe(FileKind.LUTFile);
+      expect(utils.fileKind('image.jpg?')).toBe(FileKind.ImageFile);
+    });
+
+    it('handles URLs with fragments', () => {
+      expect(utils.fileKind('https://example.com/video.mp4#t=10')).toBe(FileKind.MovieFile);
+      expect(utils.fileKind('movie.mov#')).toBe(FileKind.MovieFile);
+    });
+
+    it('handles URLs with both query strings and fragments', () => {
+      expect(utils.fileKind('https://cdn.example.com/shot.exr?token=abc#preview')).toBe(FileKind.ImageFile);
+    });
   });
 
   describe('progressive loading', () => {
