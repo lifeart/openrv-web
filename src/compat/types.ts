@@ -40,6 +40,8 @@ export interface MuEvent {
     alt: boolean;
     meta: boolean;
   };
+  /** Optional tag for BBox-scoped hit-testing */
+  tag?: string;
 }
 
 /** Event table entry: maps event name pattern to a callback + documentation */

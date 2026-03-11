@@ -275,7 +275,7 @@ describe('ModeManager', () => {
       const handler = vi.fn();
       manager.pushEventTable('t');
       manager.bind('t', 'pointer--move', handler);
-      manager.setEventTableBBox('t', 'region', 100, 100, 200, 200);
+      manager.setEventTableBBox('t', '', 100, 100, 200, 200);
 
       const event: MuEvent = {
         name: 'pointer--move',
@@ -294,7 +294,7 @@ describe('ModeManager', () => {
       const handler = vi.fn();
       manager.pushEventTable('t');
       manager.bind('t', 'pointer--move', handler);
-      manager.setEventTableBBox('t', 'region', 100, 100, 200, 200);
+      manager.setEventTableBBox('t', '', 100, 100, 200, 200);
 
       const event: MuEvent = {
         name: 'pointer--move',
@@ -307,6 +307,85 @@ describe('ModeManager', () => {
 
       expect(manager.dispatchEvent(event)).toBe(true);
       expect(handler).toHaveBeenCalledOnce();
+    });
+
+    it('fires when BBox tag matches event tag', () => {
+      const handler = vi.fn();
+      manager.pushEventTable('t');
+      manager.bind('t', 'pointer--move', handler);
+      manager.setEventTableBBox('t', 'widgetA', 100, 100, 200, 200);
+
+      const event: MuEvent = {
+        name: 'pointer--move',
+        sender: '',
+        contents: '',
+        returnContents: '',
+        reject: false,
+        pointer: { x: 150, y: 150 },
+        tag: 'widgetA',
+      };
+
+      expect(manager.dispatchEvent(event)).toBe(true);
+      expect(handler).toHaveBeenCalledOnce();
+    });
+
+    it('blocks dispatch when BBox tag mismatches event tag', () => {
+      const handler = vi.fn();
+      manager.pushEventTable('t');
+      manager.bind('t', 'pointer--move', handler);
+      manager.setEventTableBBox('t', 'widgetA', 100, 100, 200, 200);
+
+      const event: MuEvent = {
+        name: 'pointer--move',
+        sender: '',
+        contents: '',
+        returnContents: '',
+        reject: false,
+        pointer: { x: 150, y: 150 },
+        tag: 'widgetB',
+      };
+
+      expect(manager.dispatchEvent(event)).toBe(false);
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('no-tag BBox matches any event (backward compat)', () => {
+      const handler = vi.fn();
+      manager.pushEventTable('t');
+      manager.bind('t', 'pointer--move', handler);
+      manager.setEventTableBBox('t', '', 100, 100, 200, 200);
+
+      const event: MuEvent = {
+        name: 'pointer--move',
+        sender: '',
+        contents: '',
+        returnContents: '',
+        reject: false,
+        pointer: { x: 150, y: 150 },
+        tag: 'anyTag',
+      };
+
+      expect(manager.dispatchEvent(event)).toBe(true);
+      expect(handler).toHaveBeenCalledOnce();
+    });
+
+    it('no-tag event does not match tagged BBox', () => {
+      const handler = vi.fn();
+      manager.pushEventTable('t');
+      manager.bind('t', 'pointer--move', handler);
+      manager.setEventTableBBox('t', 'widgetA', 100, 100, 200, 200);
+
+      const event: MuEvent = {
+        name: 'pointer--move',
+        sender: '',
+        contents: '',
+        returnContents: '',
+        reject: false,
+        pointer: { x: 150, y: 150 },
+      };
+
+      expect(manager.dispatchEvent(event)).toBe(false);
+      expect(handler).not.toHaveBeenCalled();
     });
   });
 

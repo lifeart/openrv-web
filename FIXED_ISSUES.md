@@ -2503,3 +2503,12 @@
 - **Regression Tests**: 9 new tests covering: rep nodes in graph, switch node queryable, multiple reps share switch, session propagation, graceful degradation without graph, clearSession removes rep nodes, setActiveRep updates switch, process routes correct input, clearSession across multiple sources.
 - **Verification**: All 642 compat tests pass (8 files), TypeScript clean.
 - **Files Changed**: `src/compat/MuSourceBridge.ts`, `src/compat/__tests__/MuSourceBridge.test.ts`
+
+### 259. Mu compat event-table BBox tag is accepted and stored but never participates in dispatch
+- **Severity**: Medium
+- **Area**: Mu compatibility / event dispatch
+- **Root Cause**: `setEventTableBBox()` stored the `tag` alongside the bounding box, but `dispatchEvent()` only checked the numeric rectangle and never compared `bbox.tag` with `event.tag`. Tags were completely ignored during hit-testing.
+- **Fix**: Added tag-matching logic in `dispatchEvent()`: if a BBox has a non-empty tag, the dispatched event must carry a matching `tag` property to be considered a spatial hit. Empty/null tags match all events (backward compatible). Added optional `tag` field to `MuEvent` interface.
+- **Regression Tests**: 4 new tests covering all tag combinations: matching tags fires, mismatching tags blocks, untagged BBox matches all events, tagged BBox blocks untagged events. Updated existing spatial tests to use empty tags for backward compatibility.
+- **Verification**: All 646 compat tests pass (8 files), TypeScript clean.
+- **Files Changed**: `src/compat/ModeManager.ts`, `src/compat/types.ts`, `src/compat/__tests__/MuEventBridge.test.ts`

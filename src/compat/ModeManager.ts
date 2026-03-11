@@ -245,6 +245,10 @@ export class ModeManager {
         if (x < bbox.x || x > bbox.x + bbox.w || y < bbox.y || y > bbox.y + bbox.h) {
           continue;
         }
+        // Tag-scoped hit-testing: if bbox has a tag, event must carry a matching tag
+        if (bbox.tag && bbox.tag !== event.tag) {
+          continue;
+        }
       }
 
       const binding = table.bindings.get(event.name);
