@@ -1347,16 +1347,18 @@
 ## Issue #123: Loading empty notes, version groups, or statuses does not clear the old session data
 
 - **Severity**: High
-- **Fix**: Removed `length > 0` guards from notes, versionGroups, and statuses restore in `SessionSerializer.fromJSON()`. Managers are now called even for empty arrays, clearing old data.
-- **Regression Tests**: 3 tests (one per data type).
-- **Files Changed**: `src/core/session/SessionSerializer.ts`
+- **TODO(#123) Resolved**: `SessionSerializer.fromJSON()` now restores notes, version groups, and statuses even when the serialized arrays are empty, so restoring a project correctly clears old review metadata instead of leaving stale session data behind.
+- **Regression Tests**: `SessionSerializer.issue123-133.test.ts` verifies empty notes, version-groups, and statuses arrays each call their corresponding restore path with `[]`.
+- **Verification**: `SessionSerializer.issue123-133.test.ts` (15 tests) passes. TypeScript clean.
+- **Files Changed**: `src/core/session/SessionSerializer.ts`, `src/core/session/SessionSerializer.issue123-133.test.ts`
 
 ## Issue #124: State-only or failed-media project loads skip playback-state restore entirely
 
 - **Severity**: Medium
-- **Fix**: Removed the `if (loadedMedia > 0)` guard around `setPlaybackState()`. Playback settings are now restored regardless of media count.
-- **Regression Tests**: 2 tests.
-- **Files Changed**: `src/core/session/SessionSerializer.ts`
+- **TODO(#124) Resolved**: Playback restore no longer depends on successfully loaded media. `SessionSerializer.fromJSON()` now reapplies playback state for state-only projects and failed-media restores as well.
+- **Regression Tests**: `SessionSerializer.issue123-133.test.ts` verifies playback state is restored when zero media loads and when all media loads fail.
+- **Verification**: `SessionSerializer.issue123-133.test.ts` (15 tests) passes. TypeScript clean.
+- **Files Changed**: `src/core/session/SessionSerializer.ts`, `src/core/session/SessionSerializer.issue123-133.test.ts`
 
 ## Issue #125: RV/GTO session import keeps old review metadata when the imported file contains none
 

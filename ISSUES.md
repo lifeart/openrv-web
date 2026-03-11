@@ -6580,6 +6580,33 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Scripts and integrations cannot distinguish a real frame-0 source from the default “no metadata” fallback.
   - That shifts downstream frame-range, timecode-offset, and sequence-origin calculations by one frame for 0-based media.
 
+### 554. The public playback/event API stays clip-local in playlist mode and never exposes the global playlist timeline the UI is actually using
+
+- Severity: Medium
+- Area: Public API / playlist runtime
+- Evidence:
+  - When the app jumps within a playlist, it stores the playlist-global frame in `playlistManager.setCurrentFrame(globalFrame)` but seeks the session to the clip-local frame via `session.goToFrame(mapping.localFrame)` in [src/services/FrameNavigationService.ts](/Users/lifeart/Repos/openrv-web/src/services/FrameNavigationService.ts#L225) through [src/services/FrameNavigationService.ts#L235) and [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L875) through [src/AppPlaybackWiring.ts#L885).
+  - `PlaybackAPI.getCurrentFrame()` returns `this.session.currentFrame` and `PlaybackAPI.getTotalFrames()` returns `this.session.currentSource?.duration`, both of which are clip-local values in that runtime model, in [src/api/PlaybackAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/PlaybackAPI.ts#L253) through [src/api/PlaybackAPI.ts#L270).
+  - The public `frameChange` event is likewise bridged directly from `session.on('frameChanged', ...)` in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L234) through [src/api/EventsAPI.ts#L237), so event consumers also see only the clip-local frame domain.
+  - The real playlist-global frame lives only in `PlaylistManager.getCurrentFrame()` / `getTotalDuration()` in [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L427) through [src/core/session/PlaylistManager.ts#L511), and the public API has no playlist module that exposes those values.
+- Impact:
+  - Automation or external review tools querying `openrv.playback` during playlist review get per-clip frame numbers and durations even while the UI/timeline is operating in playlist-global frame space.
+  - That makes scripting against playlist sessions fundamentally ambiguous: external code cannot reconstruct the same frame position the user is actually seeing from the public API alone.
+
+### 555. Mu compat `commands.isSupported()` can return `'stub'`, even though the documented/type contract only allows `true`, `false`, or `'partial'`
+
+- Severity: Medium
+- Area: Mu compatibility / command introspection
+- Evidence:
+  - `MuCommands` marks several commands as `'stub'` in its live support map, including `setViewSize`, `setMargins`, and `margins`, in [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L85) through [src/compat/MuCommands.ts#L129).
+  - `MuCommands.isSupported(name)` explicitly returns `boolean | 'partial' | 'stub'` in [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L155) through [src/compat/MuCommands.ts#L157).
+  - The shared compat type `CommandSupportStatus` still excludes `'stub'`, allowing only `true | false | 'partial'`, in [src/compat/types.ts](/Users/lifeart/Repos/openrv-web/src/compat/types.ts#L82).
+  - The published compat docs also tell users that `isSupported` returns only `true | false | 'partial'` and that `getSupportedCommands()` is `Array<[name, true | false | 'partial']>` in [docs/advanced/mu-compat.md](/Users/lifeart/Repos/openrv-web/docs/advanced/mu-compat.md#L37) through [docs/advanced/mu-compat.md#L41) and [docs/advanced/mu-compat.md](/Users/lifeart/Repos/openrv-web/docs/advanced/mu-compat.md#L515) through [docs/advanced/mu-compat.md#L526).
+  - The tests lock in the `'stub'` runtime behavior by asserting that `cmd.isSupported('setViewSize')` and `cmd.isSupported('setMargins')` return `'stub'` in [src/compat/__tests__/MuCommands.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuCommands.test.ts#L449) through [src/compat/__tests__/MuCommands.test.ts#L450) and [src/compat/__tests__/MuCommands.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuCommands.test.ts#L533) through [src/compat/__tests__/MuCommands.test.ts#L535).
+- Impact:
+  - Callers using the documented or typed contract can treat `'stub'` as impossible and mis-handle the real runtime result.
+  - That makes command introspection unreliable exactly where scripts are supposed to branch around unsupported versus partially supported functionality.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed
