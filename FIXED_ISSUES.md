@@ -2609,3 +2609,15 @@
 - **Regression Tests**: 11 new tests — geometry-only default, opaque pixel, transparent pixel, no-provider fallback, null-readback fallback, per-image filtering, provider ignored when off, coordinate verification, alpha boundary (0.01), geometry-miss bypass, post-dispose fallback.
 - **Verification**: All 710 compat tests pass.
 - **Files Changed**: `src/compat/MuEvalBridge.ts`, `src/compat/__tests__/MuEvalBridge.test.ts`
+
+---
+
+### 272. Mu compat `eventToCameraSpace()` ignores the supplied view-node argument
+
+- **Severity**: Medium
+- **Area**: Mu compatibility / coordinate transforms
+- **Root Cause**: The `viewNodeName` parameter was prefixed with `_` and never read. The method always used the global `_viewTransform`.
+- **Fix**: Added `_viewNodeTransforms` Map with `setViewNodeTransform()`, `getViewNodeTransform()`, `clearViewNodeTransform()` API. `eventToCameraSpace()` looks up per-node transform first, falls back to global when name is empty or unregistered. Map cleared on dispose.
+- **Regression Tests**: 9 new tests — empty name global, named per-node, unknown fallback, multiple nodes, post-dispose cleanup, clearViewNodeTransform, getViewNodeTransform found/undefined/defensive-copy.
+- **Verification**: All 719 compat tests pass.
+- **Files Changed**: `src/compat/MuEvalBridge.ts`, `src/compat/__tests__/MuEvalBridge.test.ts`

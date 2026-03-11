@@ -74,6 +74,9 @@ export class MuEvalBridge {
     pixelAspect: 1,
   };
 
+  /** Per-view-node transforms for multi-view scenarios */
+  private _viewNodeTransforms: Map<string, ViewTransformState> = new Map();
+
   /** Rendered image info list, updated after each render pass */
   private _renderedImages: RenderedImageInfo[] = [];
 
@@ -111,6 +114,22 @@ export class MuEvalBridge {
   /** Get the current view transform state. */
   getViewTransform(): ViewTransformState {
     return { ...this._viewTransform };
+  }
+
+  /** Set the view transform for a specific named view node. */
+  setViewNodeTransform(name: string, state: ViewTransformState): void {
+    this._viewNodeTransforms.set(name, { ...state });
+  }
+
+  /** Get the view transform for a named view node, or undefined if not set. */
+  getViewNodeTransform(name: string): ViewTransformState | undefined {
+    const vt = this._viewNodeTransforms.get(name);
+    return vt ? { ...vt } : undefined;
+  }
+
+  /** Remove the per-node transform for a named view node. */
+  clearViewNodeTransform(name: string): void {
+    this._viewNodeTransforms.delete(name);
   }
 
   /**
@@ -153,6 +172,7 @@ export class MuEvalBridge {
     }
     this._eventUnsubscribers = [];
     this._pixelReadbackProvider = null;
+    this._viewNodeTransforms.clear();
   }
 
   // =====================================================================
@@ -480,12 +500,16 @@ export class MuEvalBridge {
    *
    * Camera space is normalized to [-1, 1] with (0, 0) at center.
    *
-   * @param _viewNodeName - View node name (currently uses global view transform)
+   * @param viewNodeName - View node name. When non-empty and a per-node
+   *   transform has been registered via `setViewNodeTransform()`, that
+   *   transform is used; otherwise falls back to the global view transform.
    * @param eventPoint - Screen coordinates [x, y]
    * @returns Normalized camera coordinates [x, y]
    */
-  eventToCameraSpace(_viewNodeName: string, eventPoint: [number, number]): [number, number] {
-    const vt = this._viewTransform;
+  eventToCameraSpace(viewNodeName: string, eventPoint: [number, number]): [number, number] {
+    const vt = (viewNodeName && this._viewNodeTransforms.has(viewNodeName))
+      ? this._viewNodeTransforms.get(viewNodeName)!
+      : this._viewTransform;
     if (vt.viewWidth === 0 || vt.viewHeight === 0) return [0, 0];
 
     // Map event coords to normalized device coordinates [-1, 1]

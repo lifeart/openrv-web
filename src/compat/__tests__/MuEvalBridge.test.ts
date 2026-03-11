@@ -948,6 +948,110 @@ describe('MuEvalBridge', () => {
       bridge.setViewTransform(defaultViewTransform({ viewWidth: 0, viewHeight: 0 }));
       expect(bridge.eventToCameraSpace('', [100, 100])).toEqual([0, 0]);
     });
+
+    it('uses global transform when viewNodeName is empty', () => {
+      bridge.setViewNodeTransform('view1', defaultViewTransform({
+        viewWidth: 400,
+        viewHeight: 200,
+      }));
+      // Empty name → global 800×600
+      const [cx, cy] = bridge.eventToCameraSpace('', [400, 300]);
+      expect(cx).toBeCloseTo(0);
+      expect(cy).toBeCloseTo(0);
+    });
+
+    it('uses per-node transform when viewNodeName matches', () => {
+      bridge.setViewNodeTransform('view1', defaultViewTransform({
+        viewWidth: 400,
+        viewHeight: 200,
+      }));
+      // center of the 400×200 node viewport
+      const [cx, cy] = bridge.eventToCameraSpace('view1', [200, 100]);
+      expect(cx).toBeCloseTo(0);
+      expect(cy).toBeCloseTo(0);
+
+      // same point against global 800×600 gives different result
+      const [gx, gy] = bridge.eventToCameraSpace('', [200, 100]);
+      expect(gx).toBeCloseTo(-0.5);
+      expect(gy).toBeCloseTo(2 / 3, 4);
+    });
+
+    it('falls back to global transform for unknown viewNodeName', () => {
+      bridge.setViewNodeTransform('view1', defaultViewTransform({
+        viewWidth: 400,
+        viewHeight: 200,
+      }));
+      // 'unknown' is not registered → should use global 800×600
+      const [cx, cy] = bridge.eventToCameraSpace('unknown', [400, 300]);
+      expect(cx).toBeCloseTo(0);
+      expect(cy).toBeCloseTo(0);
+    });
+
+    it('supports multiple view nodes with independent transforms', () => {
+      bridge.setViewNodeTransform('left', defaultViewTransform({
+        viewWidth: 400,
+        viewHeight: 600,
+      }));
+      bridge.setViewNodeTransform('right', defaultViewTransform({
+        viewWidth: 1600,
+        viewHeight: 1200,
+      }));
+
+      // center for 'left' 400×600
+      const [lx, ly] = bridge.eventToCameraSpace('left', [200, 300]);
+      expect(lx).toBeCloseTo(0);
+      expect(ly).toBeCloseTo(0);
+
+      // same point in 'right' 1600×1200 is top-left quadrant
+      const [rx, ry] = bridge.eventToCameraSpace('right', [200, 300]);
+      expect(rx).toBeCloseTo(-0.75);
+      expect(ry).toBeCloseTo(0.5);
+    });
+
+    it('clearViewNodeTransform causes fallback to global transform', () => {
+      bridge.setViewNodeTransform('view1', defaultViewTransform({
+        viewWidth: 400,
+        viewHeight: 200,
+      }));
+      // Confirm per-node transform is active (center of 400×200)
+      const [nx, ny] = bridge.eventToCameraSpace('view1', [200, 100]);
+      expect(nx).toBeCloseTo(0);
+      expect(ny).toBeCloseTo(0);
+
+      bridge.clearViewNodeTransform('view1');
+
+      // Now 'view1' should fall back to global 800×600
+      const [gx, gy] = bridge.eventToCameraSpace('view1', [400, 300]);
+      expect(gx).toBeCloseTo(0);
+      expect(gy).toBeCloseTo(0);
+    });
+  });
+
+  // =====================================================================
+  // getViewNodeTransform
+  // =====================================================================
+
+  describe('getViewNodeTransform', () => {
+    it('returns the stored transform after setting it', () => {
+      const state = defaultViewTransform({ viewWidth: 400, viewHeight: 200 });
+      bridge.setViewNodeTransform('view1', state);
+      const retrieved = bridge.getViewNodeTransform('view1');
+      expect(retrieved).toBeDefined();
+      expect(retrieved!.viewWidth).toBe(400);
+      expect(retrieved!.viewHeight).toBe(200);
+    });
+
+    it('returns undefined for an unknown view node', () => {
+      expect(bridge.getViewNodeTransform('unknown')).toBeUndefined();
+    });
+
+    it('returns a copy that does not affect the stored transform', () => {
+      bridge.setViewNodeTransform('view1', defaultViewTransform({ scale: 2 }));
+      const copy = bridge.getViewNodeTransform('view1')!;
+      copy.scale = 999;
+      const fresh = bridge.getViewNodeTransform('view1')!;
+      expect(fresh.scale).toBe(2);
+    });
   });
 
   // =====================================================================
@@ -1213,6 +1317,30 @@ describe('MuEvalBridge', () => {
       const after = bridge.imagesAtPixel([400, 300], undefined, true);
       expect(after).toHaveLength(1);
       expect(after[0]!.name).toBe('testImg');
+    });
+
+    it('clears view node transforms so eventToCameraSpace falls back to global', () => {
+      bridge.setViewTransform(defaultViewTransform({
+        viewWidth: 800,
+        viewHeight: 600,
+      }));
+      bridge.setViewNodeTransform('view1', defaultViewTransform({
+        viewWidth: 400,
+        viewHeight: 200,
+      }));
+
+      // Before dispose: per-node transform is used (center of 400×200)
+      const [bx, by] = bridge.eventToCameraSpace('view1', [200, 100]);
+      expect(bx).toBeCloseTo(0);
+      expect(by).toBeCloseTo(0);
+
+      bridge.dispose();
+
+      // After dispose: per-node transform is cleared, falls back to global 800×600
+      const [ax, ay] = bridge.eventToCameraSpace('view1', [200, 100]);
+      // 200/800*2 - 1 = -0.5, 1 - 100/600*2 ≈ 0.667
+      expect(ax).toBeCloseTo(-0.5);
+      expect(ay).toBeCloseTo(2 / 3, 4);
     });
 
     it('is safe to call multiple times', () => {
