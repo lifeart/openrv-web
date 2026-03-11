@@ -14,6 +14,7 @@ import { getCurrentSourceStartFrame } from '../utils/media/SourceUIState';
  */
 export interface SourceInfo {
   name: string;
+  url: string;
   type: 'image' | 'video' | 'sequence';
   width: number;
   height: number;
@@ -48,6 +49,7 @@ export class MediaAPI extends DisposableAPI {
 
     return {
       name: source.name,
+      url: source.url,
       type: source.type,
       width: source.width,
       height: source.height,

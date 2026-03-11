@@ -2561,3 +2561,15 @@
 - **Regression Tests**: 3 new tests — fallback-only info list, consistency with `sources()` count, already-registered source visibility.
 - **Verification**: All 683 compat tests pass.
 - **Files Changed**: `src/compat/MuSourceBridge.ts`, `src/compat/__tests__/MuSourceBridge.test.ts`
+
+---
+
+### 268. Mu compat fallback `sources()` entries put the source name in the `media` field instead of a media path
+
+- **Severity**: Medium
+- **Area**: Mu compatibility / source queries
+- **Root Cause**: The `sources()` fallback and `_ensureFallbackSourceRegistered()` used `current.name` (display name) for the media field/path, creating inconsistency with local sources which have actual file paths.
+- **Fix**: (1) Added `url` field to `SourceInfo` interface in `MediaAPI.ts`, populated from `source.url`. (2) Added `url` to the compat bridge's `OpenRVMediaAPI` interface. (3) Changed fallback to use `current.url || current.name` for the media field, with name as graceful degradation.
+- **Regression Tests**: 3 new tests — fallback media is path (not name), fallback/local media consistency, empty-url fallback to name.
+- **Verification**: All 686 compat tests pass.
+- **Files Changed**: `src/api/MediaAPI.ts`, `src/compat/MuSourceBridge.ts`, `src/compat/__tests__/MuSourceBridge.test.ts`

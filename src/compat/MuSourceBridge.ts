@@ -70,6 +70,7 @@ export interface PixelReadbackProvider {
 interface OpenRVMediaAPI {
   getCurrentSource(): {
     name: string;
+    url: string;
     type: string;
     width: number;
     height: number;
@@ -225,7 +226,7 @@ export class MuSourceBridge {
       if (current) {
         result.push({
           name: current.name,
-          media: current.name,
+          media: current.url || current.name,
           tag: 'default',
         });
       }
@@ -974,7 +975,8 @@ export class MuSourceBridge {
     try {
       const current = getOpenRV().media.getCurrentSource();
       if (current && !this._sources.has(current.name)) {
-        const record = this._createSourceRecord([current.name], 'default', current.name);
+        const mediaPath = current.url || current.name;
+        const record = this._createSourceRecord([mediaPath], 'default', current.name);
         if (current.duration > 0) {
           record.endFrame = current.duration;
         }

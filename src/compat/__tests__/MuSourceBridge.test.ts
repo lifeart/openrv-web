@@ -10,6 +10,7 @@ function createMockOpenRV() {
     media: {
       getCurrentSource: vi.fn().mockReturnValue({
         name: 'test-source',
+        url: '/media/test-source.mov',
         type: 'video',
         width: 1920,
         height: 1080,
@@ -66,6 +67,43 @@ describe('MuSourceBridge', () => {
       mockOpenRV.media.getCurrentSource.mockReturnValue(null);
       expect(bridge.sources()).toEqual([]);
     });
+
+    it('fallback media field is a path, not the source name (Issue #268)', () => {
+      const result = bridge.sources();
+      expect(result).toHaveLength(1);
+      expect(result[0]!.media).toBe('/media/test-source.mov');
+      expect(result[0]!.media).not.toBe(result[0]!.name);
+    });
+
+    it('fallback media vs local media consistency (Issue #268)', async () => {
+      // Get fallback entry
+      const fallback = bridge.sources();
+      expect(fallback[0]!.media).toBe('/media/test-source.mov');
+
+      // Now create a fresh bridge with a local source
+      const bridge2 = new MuSourceBridge();
+      await bridge2.addSource(['/path/to/local.mov'], 'movie');
+      const local = bridge2.sources();
+
+      // Both should have path-like media values
+      expect(fallback[0]!.media).toMatch(/\//);
+      expect(local[0]!.media).toMatch(/\//);
+    });
+
+    it('fallback media uses current.name when url is empty (Issue #268)', () => {
+      mockOpenRV.media.getCurrentSource.mockReturnValue({
+        name: 'test-source',
+        url: '',
+        type: 'video',
+        width: 1920,
+        height: 1080,
+        duration: 100,
+        fps: 24,
+      });
+      const result = bridge.sources();
+      expect(result).toHaveLength(1);
+      expect(result[0]!.media).toBe('test-source');
+    });
   });
 
   describe('sourcesAtFrame', () => {
@@ -94,6 +132,7 @@ describe('MuSourceBridge', () => {
       // Override mock to return duration: 0 so endFrame stays at default 1
       mockOpenRV.media.getCurrentSource.mockReturnValue({
         name: 'test-source',
+        url: '/media/test-source.mov',
         type: 'video',
         width: 1920,
         height: 1080,
@@ -467,7 +506,7 @@ describe('MuSourceBridge', () => {
       // No addSource calls — bridge has no local sources
       const list = bridge.sourceMediaInfoList();
       expect(list).toHaveLength(1);
-      expect(list[0]!.file).toBe('test-source');
+      expect(list[0]!.file).toBe('/media/test-source.mov');
     });
 
     it('returns same number of entries as sources() in fallback case (Issue #267)', () => {
@@ -485,7 +524,7 @@ describe('MuSourceBridge', () => {
       // Now sourceMediaInfoList should include the registered fallback
       const list = bridge.sourceMediaInfoList();
       expect(list).toHaveLength(1);
-      expect(list[0]!.file).toBe(sourcesList[0]!.name);
+      expect(list[0]!.file).toBe(sourcesList[0]!.media);
     });
   });
 
@@ -1409,7 +1448,7 @@ describe('MuSourceBridge', () => {
       const name = result[0]!.name;
       // Should NOT throw — the fallback source was registered
       expect(() => bridge.sourceMedia(name)).not.toThrow();
-      expect(bridge.sourceMedia(name).media).toEqual([name]);
+      expect(bridge.sourceMedia(name).media).toEqual(['/media/test-source.mov']);
     });
 
     it('sources() fallback name is found by hasSource()', () => {
@@ -1429,7 +1468,7 @@ describe('MuSourceBridge', () => {
       expect(names).toHaveLength(1);
       const name = names[0]!;
       expect(() => bridge.sourceMedia(name)).not.toThrow();
-      expect(bridge.sourceMedia(name).media).toEqual([name]);
+      expect(bridge.sourceMedia(name).media).toEqual(['/media/test-source.mov']);
     });
 
     it('sourcesAtFrame() fallback name is found by hasSource()', () => {
