@@ -178,6 +178,10 @@ export class MuSourceBridge {
       try {
         const current = getOpenRV().media.getCurrentSource();
         if (current) {
+          // Register the discovered source so subsequent API calls can resolve it
+          if (!this._sources.has(current.name)) {
+            this._createSourceRecord([current.name], 'default', current.name);
+          }
           result.push({
             name: current.name,
             media: current.name,
@@ -213,6 +217,10 @@ export class MuSourceBridge {
       try {
         const current = getOpenRV().media.getCurrentSource();
         if (current) {
+          // Register the discovered source so subsequent API calls can resolve it
+          if (!this._sources.has(current.name)) {
+            this._createSourceRecord([current.name], 'default', current.name);
+          }
           active.push(current.name);
         }
       } catch {

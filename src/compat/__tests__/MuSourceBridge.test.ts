@@ -1116,8 +1116,10 @@ describe('MuSourceBridge', () => {
       // Shadow state cleared (sourceCount tracks local registry only)
       expect(bridge.sourceCount()).toBe(0);
       // sources() falls back to openrv current source when local registry is empty
-      // — this is correct: after clearSession both sides are wiped
-      expect(bridge.hasSource(bridge.sources()[0]?.name ?? '')).toBe(false);
+      // — the fallback now properly registers the discovered source
+      const fallbackSources = bridge.sources();
+      expect(fallbackSources).toHaveLength(1);
+      expect(bridge.hasSource(fallbackSources[0]?.name ?? '')).toBe(true);
     });
 
     it('setSourceMedia shadow state updated even when session propagation fails', async () => {
@@ -1265,6 +1267,77 @@ describe('MuSourceBridge', () => {
       expect(bridge.sourceCount()).toBe(3);
       // The verbose-returned name must resolve to the /b.mov source, not another
       expect(bridge.sourceMedia(verboseName).media).toEqual(['/b.mov']);
+    });
+  });
+
+  describe('source fallback registration (Issue #252)', () => {
+    it('sources() fallback name is usable by sourceMedia()', () => {
+      const result = bridge.sources();
+      expect(result).toHaveLength(1);
+      const name = result[0]!.name;
+      // Should NOT throw — the fallback source was registered
+      expect(() => bridge.sourceMedia(name)).not.toThrow();
+      expect(bridge.sourceMedia(name).media).toEqual([name]);
+    });
+
+    it('sources() fallback name is found by hasSource()', () => {
+      const result = bridge.sources();
+      expect(result).toHaveLength(1);
+      expect(bridge.hasSource(result[0]!.name)).toBe(true);
+    });
+
+    it('sources() fallback is reflected in sourceCount()', () => {
+      expect(bridge.sourceCount()).toBe(0);
+      bridge.sources(); // triggers fallback
+      expect(bridge.sourceCount()).toBe(1);
+    });
+
+    it('sourcesAtFrame() fallback name is usable by sourceMedia()', () => {
+      const names = bridge.sourcesAtFrame(1);
+      expect(names).toHaveLength(1);
+      const name = names[0]!;
+      expect(() => bridge.sourceMedia(name)).not.toThrow();
+      expect(bridge.sourceMedia(name).media).toEqual([name]);
+    });
+
+    it('sourcesAtFrame() fallback name is found by hasSource()', () => {
+      const names = bridge.sourcesAtFrame(1);
+      expect(names).toHaveLength(1);
+      expect(bridge.hasSource(names[0]!)).toBe(true);
+    });
+
+    it('calling sources() twice does not create duplicate entries', () => {
+      bridge.sources();
+      bridge.sources();
+      expect(bridge.sourceCount()).toBe(1);
+      expect(bridge.sources()).toHaveLength(1);
+    });
+
+    it('calling sourcesAtFrame() twice does not create duplicate entries', () => {
+      bridge.sourcesAtFrame(1);
+      bridge.sourcesAtFrame(1);
+      expect(bridge.sourceCount()).toBe(1);
+    });
+
+    it('sourceMediaInfo after fallback does not throw', () => {
+      const result = bridge.sources();
+      expect(result).toHaveLength(1);
+      const name = result[0]!.name;
+      // Should NOT throw — the fallback source was registered
+      expect(() => bridge.sourceMediaInfo(name)).not.toThrow();
+      const info = bridge.sourceMediaInfo(name);
+      expect(info).toBeDefined();
+      expect(typeof info).toBe('object');
+    });
+
+    it('sourceAttributes after fallback does not throw', () => {
+      const result = bridge.sources();
+      expect(result).toHaveLength(1);
+      const name = result[0]!.name;
+      // Should NOT throw — the fallback source was registered
+      expect(() => bridge.sourceAttributes(name)).not.toThrow();
+      const attrs = bridge.sourceAttributes(name);
+      expect(Array.isArray(attrs)).toBe(true);
     });
   });
 });

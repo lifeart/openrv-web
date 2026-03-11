@@ -2440,3 +2440,12 @@
 - **Regression Tests**: 4 new tests covering: branched graph near-branch wins over far-branch, exact path reconstruction verified, dead-end branch nodes excluded from result, and start-node-is-target returns single-element path.
 - **Verification**: All 596 compat tests pass (8 files), TypeScript clean.
 - **Files Changed**: `src/compat/MuEvalBridge.ts`, `src/compat/__tests__/MuEvalBridge.test.ts`
+
+### 252. Mu compat source-list fallbacks can return phantom source names that the rest of the source API cannot resolve
+- **Severity**: Medium
+- **Area**: Mu compatibility / source management
+- **Root Cause**: `sources()` and `sourcesAtFrame()` fabricated fallback entries from `openrv.media.getCurrentSource()` when no local records existed, but never registered them in `_sources`. Every subsequent API call using `_getSource()` (sourceMedia, sourceMediaInfo, sourceAttributes, hasSource, etc.) would throw "Source not found" for the returned name.
+- **Fix**: When the fallback discovers a real source from the OpenRV session, it now registers it via `_createSourceRecord()` with a duplicate-prevention guard (`_sources.has()` check). This ensures the returned name is immediately usable by all source APIs. The registration bypasses batch mode since the fallback only triggers when `_sources` is empty.
+- **Regression Tests**: 9 new tests covering: fallback name usable by sourceMedia, sourceMediaInfo, sourceAttributes, hasSource returns true, sourceCount reflects fallback, sourcesAtFrame fallback also usable, no duplicate on repeated calls, and existing clearSession assertion updated.
+- **Verification**: All 605 compat tests pass (8 files), TypeScript clean.
+- **Files Changed**: `src/compat/MuSourceBridge.ts`, `src/compat/__tests__/MuSourceBridge.test.ts`
