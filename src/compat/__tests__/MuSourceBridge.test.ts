@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { MuSourceBridge } from '../MuSourceBridge';
 import type { PixelReadbackProvider } from '../MuSourceBridge';
+import { Graph } from '../../core/graph/Graph';
 
 // --- Mock openrv API ---
 
@@ -1338,6 +1339,164 @@ describe('MuSourceBridge', () => {
       expect(() => bridge.sourceAttributes(name)).not.toThrow();
       const attrs = bridge.sourceAttributes(name);
       expect(Array.isArray(attrs)).toBe(true);
+    });
+  });
+
+  // ==================================================================
+  // Media-representation graph node registration (Issue #258)
+  // ==================================================================
+
+  describe('media-rep graph node registration (Issue #258)', () => {
+    it('rep source nodes are registered in the graph', async () => {
+      const graph = new Graph();
+      const gb = new MuSourceBridge(graph);
+      (globalThis as Record<string, unknown>).openrv = mockOpenRV;
+      const name = await gb.addSourceVerbose(['/full.mov']);
+      const repNode = gb.addSourceMediaRep(name, 'proxy', ['/proxy.mov']);
+      // The returned node name should exist in the graph
+      const found = graph.getAllNodes().find((n) => n.name === repNode);
+      expect(found).toBeDefined();
+      expect(found!.type).toBe('RVMediaRepSource');
+    });
+
+    it('switch node is queryable in the graph after adding a rep', async () => {
+      const graph = new Graph();
+      const gb = new MuSourceBridge(graph);
+      (globalThis as Record<string, unknown>).openrv = mockOpenRV;
+      const name = await gb.addSourceVerbose(['/full.mov']);
+      gb.addSourceMediaRep(name, 'full', ['/full.mov']);
+      const switchName = gb.sourceMediaRepSwitchNode(name);
+      const found = graph.getAllNodes().find((n) => n.name === switchName);
+      expect(found).toBeDefined();
+      expect(found!.type).toBe('RVMediaRepSwitch');
+    });
+
+    it('multiple reps share the same switch node', async () => {
+      const graph = new Graph();
+      const gb = new MuSourceBridge(graph);
+      (globalThis as Record<string, unknown>).openrv = mockOpenRV;
+      const name = await gb.addSourceVerbose(['/full.mov']);
+      gb.addSourceMediaRep(name, 'full', ['/full.mov']);
+      gb.addSourceMediaRep(name, 'proxy', ['/proxy.mov']);
+      // Only one switch node in the graph
+      const switchNodes = graph
+        .getAllNodes()
+        .filter((n) => n.name === `${name}_switch`);
+      expect(switchNodes).toHaveLength(1);
+      // The switch node should have 2 inputs (one per rep)
+      expect(switchNodes[0]!.inputs).toHaveLength(2);
+    });
+
+    it('session propagation is attempted when openrv is available', async () => {
+      const graph = new Graph();
+      const gb = new MuSourceBridge(graph);
+      mockOpenRV.media.addSourceFromURL = vi.fn().mockResolvedValue(undefined);
+      (globalThis as Record<string, unknown>).openrv = mockOpenRV;
+      const name = await gb.addSourceVerbose(['https://cdn.example.com/full.mp4']);
+      gb.addSourceMediaRep(name, 'full', ['https://cdn.example.com/full.mp4']);
+      // Allow the async session load to settle
+      await new Promise((r) => setTimeout(r, 10));
+      expect(mockOpenRV.media.addSourceFromURL).toHaveBeenCalled();
+    });
+
+    it('gracefully degrades when no graph is provided', async () => {
+      // Default (no-graph) bridge still works as before
+      const name = await bridge.addSourceVerbose(['/full.mov']);
+      const repNode = bridge.addSourceMediaRep(name, 'proxy', ['/proxy.mov']);
+      expect(typeof repNode).toBe('string');
+      expect(repNode).toContain('proxy');
+    });
+
+    it('clearSession removes rep nodes from the graph', async () => {
+      const graph = new Graph();
+      const gb = new MuSourceBridge(graph);
+      (globalThis as Record<string, unknown>).openrv = mockOpenRV;
+      const name = await gb.addSourceVerbose(['/full.mov']);
+      gb.addSourceMediaRep(name, 'full', ['/full.mov']);
+      gb.addSourceMediaRep(name, 'proxy', ['/proxy.mov']);
+      // Nodes exist before clear
+      const switchName = `${name}_switch`;
+      expect(graph.getAllNodes().find((n) => n.name === switchName)).toBeDefined();
+      expect(graph.getAllNodes().some((n) => n.type === 'RVMediaRepSource')).toBe(true);
+
+      gb.clearSession();
+
+      // All rep nodes removed from graph
+      expect(graph.getAllNodes().find((n) => n.name === switchName)).toBeUndefined();
+      expect(graph.getAllNodes().some((n) => n.type === 'RVMediaRepSource')).toBe(false);
+      expect(graph.getAllNodes().some((n) => n.type === 'RVMediaRepSwitch')).toBe(false);
+    });
+
+    it('setActiveSourceMediaRep updates the switch node active input', async () => {
+      const graph = new Graph();
+      const gb = new MuSourceBridge(graph);
+      (globalThis as Record<string, unknown>).openrv = mockOpenRV;
+      const name = await gb.addSourceVerbose(['/full.mov']);
+      gb.addSourceMediaRep(name, 'full', ['/full.mov']);
+      gb.addSourceMediaRep(name, 'proxy', ['/proxy.mov']);
+
+      const switchName = `${name}_switch`;
+      const switchNode = graph.getAllNodes().find((n) => n.name === switchName);
+      expect(switchNode).toBeDefined();
+      // Initially the active rep is the first one added ('full', index 0)
+      expect((switchNode as unknown as { activeInputIndex: number }).activeInputIndex).toBe(0);
+
+      gb.setActiveSourceMediaRep(name, 'proxy');
+      // After switching, activeInputIndex should be 1
+      expect((switchNode as unknown as { activeInputIndex: number }).activeInputIndex).toBe(1);
+    });
+
+    it('process routes the input selected by activeInputIndex', async () => {
+      const graph = new Graph();
+      const gb = new MuSourceBridge(graph);
+      (globalThis as Record<string, unknown>).openrv = mockOpenRV;
+      const name = await gb.addSourceVerbose(['/full.mov']);
+      gb.addSourceMediaRep(name, 'full', ['/full.mov']);
+      gb.addSourceMediaRep(name, 'proxy', ['/proxy.mov']);
+
+      const switchName = `${name}_switch`;
+      const switchNode = graph.getAllNodes().find((n) => n.name === switchName)!;
+      expect(switchNode).toBeDefined();
+
+      const imgA = { width: 10, height: 10 } as unknown as import('../../core/image/Image').IPImage;
+      const imgB = { width: 20, height: 20 } as unknown as import('../../core/image/Image').IPImage;
+      const ctx = { frame: 0, fps: 24, stereoEye: 'left' } as import('../../core/graph/Graph').EvalContext;
+
+      // activeInputIndex defaults to 0 → should return first input
+      const result0 = (switchNode as unknown as { process(ctx: unknown, inputs: unknown[]): unknown }).process(ctx, [imgA, imgB]);
+      expect(result0).toBe(imgA);
+
+      // Switch to index 1 → should return second input
+      gb.setActiveSourceMediaRep(name, 'proxy');
+      const result1 = (switchNode as unknown as { process(ctx: unknown, inputs: unknown[]): unknown }).process(ctx, [imgA, imgB]);
+      expect(result1).toBe(imgB);
+    });
+
+    it('clearSession removes rep nodes from multiple independent sources', async () => {
+      const graph = new Graph();
+      const gb = new MuSourceBridge(graph);
+      (globalThis as Record<string, unknown>).openrv = mockOpenRV;
+
+      const name1 = await gb.addSourceVerbose(['/alpha.mov']);
+      gb.addSourceMediaRep(name1, 'full', ['/alpha.mov']);
+      gb.addSourceMediaRep(name1, 'proxy', ['/alpha_proxy.mov']);
+
+      const name2 = await gb.addSourceVerbose(['/beta.mov']);
+      gb.addSourceMediaRep(name2, 'full', ['/beta.mov']);
+      gb.addSourceMediaRep(name2, 'proxy', ['/beta_proxy.mov']);
+
+      // Both sources have switch and rep nodes in the graph
+      expect(graph.getAllNodes().find((n) => n.name === `${name1}_switch`)).toBeDefined();
+      expect(graph.getAllNodes().find((n) => n.name === `${name2}_switch`)).toBeDefined();
+      expect(graph.getAllNodes().filter((n) => n.type === 'RVMediaRepSource').length).toBeGreaterThanOrEqual(4);
+
+      gb.clearSession();
+
+      // ALL rep nodes from both sources must be gone
+      expect(graph.getAllNodes().find((n) => n.name === `${name1}_switch`)).toBeUndefined();
+      expect(graph.getAllNodes().find((n) => n.name === `${name2}_switch`)).toBeUndefined();
+      expect(graph.getAllNodes().some((n) => n.type === 'RVMediaRepSource')).toBe(false);
+      expect(graph.getAllNodes().some((n) => n.type === 'RVMediaRepSwitch')).toBe(false);
     });
   });
 });

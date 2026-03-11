@@ -8,6 +8,10 @@
  *   - Source modification (setSourceMedia, addToSource, relocateSource)
  *   - Source attributes (sourceAttributes, sourceDataAttributes, sourcePixelValue)
  *   - Source display channels (sourceDisplayChannelNames)
+ *
+ * When an optional Graph is provided, media-representation helper nodes
+ * (source + switch) are created as real graph nodes so that downstream
+ * queries (e.g. MuNodeBridge.nodeExists) can resolve them.
  *   - Image sources (newImageSource, newImageSourcePixels, getCurrentImageSize)
  *   - Session clearing (clearSession)
  *   - Media representations (addSourceMediaRep, setActiveSourceMediaRep, etc.)
@@ -17,6 +21,31 @@
  */
 
 import type { SourceMediaInfo } from './types';
+import { Graph } from '../core/graph/Graph';
+import { IPNode } from '../nodes/base/IPNode';
+import type { IPImage } from '../core/image/Image';
+import type { EvalContext } from '../core/graph/Graph';
+
+/**
+ * Lightweight placeholder node used to materialise media-representation
+ * node names inside the graph so they are queryable via `nodeExists()` etc.
+ */
+class MediaRepNode extends IPNode {
+  activeInputIndex = 0;
+
+  constructor(type: string, name: string) {
+    super(type, name);
+  }
+
+  /** Set which input index is currently active (used by switch nodes). */
+  setActiveInput(index: number): void {
+    this.activeInputIndex = index;
+  }
+
+  process(_context: EvalContext, inputs: (IPImage | null)[]): IPImage | null {
+    return inputs[this.activeInputIndex] ?? null;
+  }
+}
 
 /**
  * Provider interface for reading pixel data from GPU-backed sources.
@@ -150,6 +179,23 @@ export class MuSourceBridge {
 
   /** In-memory image source pixel data */
   private _imageSources = new Map<string, ImageSourcePixels>();
+
+  /** Optional graph for materialising media-rep nodes */
+  private _graph: Graph | null = null;
+
+  constructor(graph?: Graph) {
+    this._graph = graph ?? null;
+  }
+
+  /** Get the underlying graph (if any). */
+  get graph(): Graph | null {
+    return this._graph;
+  }
+
+  /** Assign or replace the graph used for media-rep node creation. */
+  setGraph(graph: Graph): void {
+    this._graph = graph;
+  }
 
   /** Optional GPU pixel readback provider for non-in-memory sources */
   private _pixelReadbackProvider: PixelReadbackProvider | null = null;
@@ -649,6 +695,25 @@ export class MuSourceBridge {
       console.warn('[MuSourceBridge] clearSession: real session unavailable, clearing local state only');
     }
 
+    // Remove media-rep nodes from the graph before clearing source records
+    if (this._graph) {
+      const removedNames = new Set<string>();
+      for (const source of this._sources.values()) {
+        for (const rep of source.representations) {
+          if (!removedNames.has(rep.nodeName)) {
+            const node = this._graph.getAllNodes().find((n) => n.name === rep.nodeName);
+            if (node) this._graph.removeNode(node.id);
+            removedNames.add(rep.nodeName);
+          }
+          if (!removedNames.has(rep.switchNodeName)) {
+            const node = this._graph.getAllNodes().find((n) => n.name === rep.switchNodeName);
+            if (node) this._graph.removeNode(node.id);
+            removedNames.add(rep.switchNodeName);
+          }
+        }
+      }
+    }
+
     this._sources.clear();
     this._imageSources.clear();
     this._sourceCounter = 0;
@@ -688,6 +753,18 @@ export class MuSourceBridge {
       source.activeRep = repName;
     }
 
+    // Materialise nodes in the graph so they are discoverable
+    this._ensureRepNodes(source, nodeName, switchNodeName);
+
+    // Propagate to live session when available
+    const api = tryGetOpenRV();
+    if (api && paths.length > 0) {
+      this._loadIntoSession(paths).catch((err) => {
+        // eslint-disable-next-line no-console
+        console.warn('[MuSourceBridge] addSourceMediaRep session propagation failed:', err);
+      });
+    }
+
     return nodeName;
   }
 
@@ -704,6 +781,19 @@ export class MuSourceBridge {
       );
     }
     source.activeRep = repName;
+
+    // Update the graph switch node's active input
+    if (this._graph) {
+      const activeIdx = source.representations.findIndex((r) => r.name === repName);
+      if (activeIdx >= 0) {
+        const switchNode = this._graph.getAllNodes().find(
+          (n) => n.name === rep.switchNodeName,
+        );
+        if (switchNode && switchNode instanceof MediaRepNode) {
+          switchNode.setActiveInput(activeIdx);
+        }
+      }
+    }
 
     // Propagate to real session — attempt to load the rep's media
     if (rep.mediaPaths.length > 0) {
@@ -948,6 +1038,50 @@ export class MuSourceBridge {
         // eslint-disable-next-line no-console
         console.warn(`[MuSourceBridge] Failed to load "${path}" into session:`, err);
       }
+    }
+  }
+
+  /**
+   * Create real graph nodes for a media representation so that the
+   * fabricated names are resolvable by MuNodeBridge.nodeExists() etc.
+   *
+   * - One source node per representation (type `RVMediaRepSource`)
+   * - One switch node per source, shared across all reps (type `RVMediaRepSwitch`)
+   * - Source nodes are wired as inputs to the switch node.
+   */
+  private _ensureRepNodes(
+    source: SourceRecord,
+    sourceNodeName: string,
+    switchNodeName: string,
+  ): void {
+    if (!this._graph) return;
+
+    // Create the source node for this rep
+    const sourceNode = new MediaRepNode('RVMediaRepSource', sourceNodeName);
+    this._graph.addNode(sourceNode);
+
+    // Create or find the switch node (one per source)
+    let switchNode: IPNode | undefined;
+    for (const n of this._graph.getAllNodes()) {
+      if (n.name === switchNodeName) {
+        switchNode = n;
+        break;
+      }
+    }
+    if (!switchNode) {
+      switchNode = new MediaRepNode('RVMediaRepSwitch', switchNodeName);
+      this._graph.addNode(switchNode);
+    }
+
+    // Wire source -> switch
+    this._graph.connect(sourceNode, switchNode);
+
+    // Set the switch's active input to the currently active rep index
+    const activeIdx = source.representations.findIndex(
+      (r) => r.name === source.activeRep,
+    );
+    if (activeIdx >= 0 && switchNode instanceof MediaRepNode) {
+      switchNode.setActiveInput(activeIdx);
     }
   }
 }

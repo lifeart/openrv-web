@@ -2494,3 +2494,12 @@
 - **Regression Tests**: 4 new compat tests (buffering reflects session, skipped tracks real drops, incremental counting, safe defaults without session) + 2 new PlaybackAPI dispose-guard tests for isBuffering and getDroppedFrameCount.
 - **Verification**: All 633 compat tests pass, all 332 API tests pass, TypeScript clean.
 - **Files Changed**: `src/compat/MuCommands.ts`, `src/compat/__tests__/MuCommands.test.ts`, `src/api/PlaybackAPI.ts`, `src/api/OpenRVAPI.test.ts`
+
+### 258. Mu compat media-representation node APIs return fabricated node names that are never created in a real graph
+- **Severity**: Medium
+- **Area**: Mu compatibility / source representations
+- **Root Cause**: `addSourceMediaRep()` synthesized node names and stored them locally but never created corresponding nodes in the graph, never wired representation switching, and never propagated to the live session. Query APIs returned phantom names that couldn't be used as real node identities.
+- **Fix**: Created `MediaRepNode` — a lightweight `IPNode` subclass that materializes fabricated node names as real graph nodes. `addSourceMediaRep()` now calls `_ensureRepNodes()` to create real `RVMediaRepSource` and `RVMediaRepSwitch` nodes in the graph with proper source→switch connections. `setActiveSourceMediaRep()` updates the switch node's `activeInputIndex`. `clearSession()` removes all rep nodes from the graph. `MediaRepNode.process()` routes the correct input based on `activeInputIndex`. Session propagation via `tryGetOpenRV()` for graceful degradation.
+- **Regression Tests**: 9 new tests covering: rep nodes in graph, switch node queryable, multiple reps share switch, session propagation, graceful degradation without graph, clearSession removes rep nodes, setActiveRep updates switch, process routes correct input, clearSession across multiple sources.
+- **Verification**: All 642 compat tests pass (8 files), TypeScript clean.
+- **Files Changed**: `src/compat/MuSourceBridge.ts`, `src/compat/__tests__/MuSourceBridge.test.ts`
