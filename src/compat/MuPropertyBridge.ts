@@ -159,8 +159,19 @@ export class MuPropertyBridge {
     if (prop.type !== MuPropertyType.String) {
       throw new TypeError(`Property "${path}" is not a string property (type=${MuPropertyTypeNames[prop.type]})`);
     }
+    if (prop.dimensions.length > 1) {
+      // ND property: validate value count matches declared shape
+      const expectedTotal = prop.dimensions.reduce((a, b) => a * b, 1);
+      if (values.length !== expectedTotal) {
+        throw new TypeError(
+          `Property "${path}": ND property set requires exactly ${expectedTotal} values (dimensions: [${prop.dimensions.join(',')}]), got ${values.length}`
+        );
+      }
+    }
     prop.data = [...values];
-    prop.dimensions = [values.length];
+    if (prop.dimensions.length <= 1) {
+      prop.dimensions = [values.length];
+    }
     if (!quiet) this._notify(path, prop.data);
   }
 
@@ -183,9 +194,27 @@ export class MuPropertyBridge {
       throw new TypeError(`Property "${path}" is not a string property`);
     }
     const data = prop.data as string[];
+    if (prop.dimensions.length > 1) {
+      const innerSize = prop.dimensions.slice(1).reduce((a, b) => a * b, 1);
+      if (values.length % innerSize !== 0) {
+        throw new TypeError(
+          `Property "${path}": ND property insert requires value count to be a multiple of inner size ${innerSize} (dimensions: [${prop.dimensions.join(',')}]), got ${values.length}`
+        );
+      }
+      if (index % innerSize !== 0) {
+        throw new TypeError(
+          `Property "${path}": ND property insert requires index to be aligned to inner size ${innerSize} (dimensions: [${prop.dimensions.join(',')}]), got index ${index}`
+        );
+      }
+    }
     const idx = Math.max(0, Math.min(index, data.length));
     data.splice(idx, 0, ...values);
-    prop.dimensions = [data.length];
+    if (prop.dimensions.length > 1) {
+      const innerSize = prop.dimensions.slice(1).reduce((a, b) => a * b, 1);
+      prop.dimensions = [data.length / innerSize, ...prop.dimensions.slice(1)];
+    } else {
+      prop.dimensions = [data.length];
+    }
     this._notify(path, prop.data);
   }
 
@@ -404,8 +433,19 @@ export class MuPropertyBridge {
         `Property "${path}" is a string property, cannot set ${MuPropertyTypeNames[expectedType]} values`
       );
     }
+    if (prop.dimensions.length > 1) {
+      // ND property: validate value count matches declared shape
+      const expectedTotal = prop.dimensions.reduce((a, b) => a * b, 1);
+      if (values.length !== expectedTotal) {
+        throw new TypeError(
+          `Property "${path}": ND property set requires exactly ${expectedTotal} values (dimensions: [${prop.dimensions.join(',')}]), got ${values.length}`
+        );
+      }
+    }
     prop.data = [...values];
-    prop.dimensions = [values.length];
+    if (prop.dimensions.length <= 1) {
+      prop.dimensions = [values.length];
+    }
     if (!quiet) this._notify(path, prop.data);
   }
 
@@ -425,9 +465,27 @@ export class MuPropertyBridge {
       );
     }
     const data = prop.data as number[];
+    if (prop.dimensions.length > 1) {
+      const innerSize = prop.dimensions.slice(1).reduce((a, b) => a * b, 1);
+      if (values.length % innerSize !== 0) {
+        throw new TypeError(
+          `Property "${path}": ND property insert requires value count to be a multiple of inner size ${innerSize} (dimensions: [${prop.dimensions.join(',')}]), got ${values.length}`
+        );
+      }
+      if (index % innerSize !== 0) {
+        throw new TypeError(
+          `Property "${path}": ND property insert requires index to be aligned to inner size ${innerSize} (dimensions: [${prop.dimensions.join(',')}]), got index ${index}`
+        );
+      }
+    }
     const idx = Math.max(0, Math.min(index, data.length));
     data.splice(idx, 0, ...values);
-    prop.dimensions = [data.length];
+    if (prop.dimensions.length > 1) {
+      const innerSize = prop.dimensions.slice(1).reduce((a, b) => a * b, 1);
+      prop.dimensions = [data.length / innerSize, ...prop.dimensions.slice(1)];
+    } else {
+      prop.dimensions = [data.length];
+    }
     this._notify(path, prop.data);
   }
 

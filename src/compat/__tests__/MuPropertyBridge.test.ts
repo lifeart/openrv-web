@@ -435,6 +435,75 @@ describe('MuPropertyBridge', () => {
     });
   });
 
+  // ---- ND property dimension preservation (Issue #249) ----
+
+  describe('ND property dimension preservation', () => {
+    it('preserves [4,4] dimensions after setFloatProperty', () => {
+      bridge.newNDProperty('node.transform.matrix', MuPropertyType.Float, [4, 4]);
+      const values = Array.from({ length: 16 }, (_, i) => i + 1);
+      bridge.setFloatProperty('node.transform.matrix', values);
+      const info = bridge.propertyInfo('node.transform.matrix');
+      expect(info.dimensions).toEqual([4, 4]);
+      expect(info.size).toBe(16);
+    });
+
+    it('preserves [4,4] dimensions after setIntProperty', () => {
+      bridge.newNDProperty('node.transform.intmat', MuPropertyType.Int, [4, 4]);
+      bridge.setIntProperty('node.transform.intmat', Array(16).fill(0));
+      expect(bridge.propertyInfo('node.transform.intmat').dimensions).toEqual([4, 4]);
+    });
+
+    it('preserves ND string dimensions after setStringProperty', () => {
+      bridge.newNDProperty('node.data.grid', MuPropertyType.String, [3, 2]);
+      bridge.setStringProperty('node.data.grid', ['a', 'b', 'c', 'd', 'e', 'f']);
+      expect(bridge.propertyInfo('node.data.grid').dimensions).toEqual([3, 2]);
+    });
+
+    it('updates outermost dimension on insert for ND float property', () => {
+      bridge.newNDProperty('node.transform.matrix', MuPropertyType.Float, [4, 4]);
+      bridge.setFloatProperty('node.transform.matrix', Array(16).fill(1));
+      // Insert one full row (4 elements) at the end
+      bridge.insertFloatProperty('node.transform.matrix', [9, 9, 9, 9], 16);
+      const info = bridge.propertyInfo('node.transform.matrix');
+      expect(info.dimensions).toEqual([5, 4]);
+      expect(info.size).toBe(20);
+    });
+
+    it('updates outermost dimension on insert for ND string property', () => {
+      bridge.newNDProperty('node.data.grid', MuPropertyType.String, [2, 3]);
+      bridge.setStringProperty('node.data.grid', ['a', 'b', 'c', 'd', 'e', 'f']);
+      bridge.insertStringProperty('node.data.grid', ['g', 'h', 'i'], 6);
+      const info = bridge.propertyInfo('node.data.grid');
+      expect(info.dimensions).toEqual([3, 3]);
+      expect(info.size).toBe(9);
+    });
+
+    it('1D property dimensions update to [newLength] after set', () => {
+      bridge.newProperty('node.points.x', MuPropertyType.Float, 3);
+      bridge.setFloatProperty('node.points.x', [1.0, 2.0, 3.0, 4.0, 5.0]);
+      const info = bridge.propertyInfo('node.points.x');
+      expect(info.dimensions).toEqual([5]);
+      expect(info.size).toBe(5);
+    });
+
+    it('1D property dimensions update to [newLength] after insert', () => {
+      bridge.newProperty('node.points.x', MuPropertyType.Float, 3);
+      bridge.setFloatProperty('node.points.x', [1.0, 2.0, 3.0]);
+      bridge.insertFloatProperty('node.points.x', [4.0], 3);
+      const info = bridge.propertyInfo('node.points.x');
+      expect(info.dimensions).toEqual([4]);
+      expect(info.size).toBe(4);
+    });
+
+    it('propertyInfo reflects correct shape after multiple set operations on ND property', () => {
+      bridge.newNDProperty('node.color.lut', MuPropertyType.Float, [2, 3, 4]);
+      bridge.setFloatProperty('node.color.lut', Array(24).fill(0.5));
+      expect(bridge.propertyInfo('node.color.lut').dimensions).toEqual([2, 3, 4]);
+      bridge.setFloatProperty('node.color.lut', Array(24).fill(1.0));
+      expect(bridge.propertyInfo('node.color.lut').dimensions).toEqual([2, 3, 4]);
+    });
+  });
+
   // ---- Cross-type numeric compatibility ----
 
   describe('cross-type numeric compatibility', () => {
@@ -449,6 +518,63 @@ describe('MuPropertyBridge', () => {
       bridge.newProperty('node.val.x', MuPropertyType.Int, 1);
       bridge.setFloatProperty('node.val.x', [42]);
       expect(bridge.getIntProperty('node.val.x')).toEqual([42]);
+    });
+  });
+
+  // ---- ND property validation (Issue #249 regressions) ----
+
+  describe('ND property set/insert validation', () => {
+    it('throws TypeError when setFloatProperty value count mismatches [4,4] ND dimensions', () => {
+      bridge.newNDProperty('node.transform.matrix', MuPropertyType.Float, [4, 4]);
+      expect(() => bridge.setFloatProperty('node.transform.matrix', new Array(10).fill(0))).toThrow(TypeError);
+      expect(() => bridge.setFloatProperty('node.transform.matrix', new Array(10).fill(0))).toThrow(
+        /Property "node\.transform\.matrix": ND property set requires exactly 16 values \(dimensions: \[4,4\]\), got 10/
+      );
+    });
+
+    it('throws TypeError when insertFloatProperty value count is not a multiple of inner size for [4,4] ND', () => {
+      bridge.newNDProperty('node.transform.matrix', MuPropertyType.Float, [4, 4]);
+      expect(() => bridge.insertFloatProperty('node.transform.matrix', [1, 2, 3], 0)).toThrow(TypeError);
+      expect(() => bridge.insertFloatProperty('node.transform.matrix', [1, 2, 3], 0)).toThrow(
+        /Property "node\.transform\.matrix": ND property insert requires value count to be a multiple of inner size 4 \(dimensions: \[4,4\]\), got 3/
+      );
+    });
+
+    it('throws TypeError when setStringProperty value count mismatches [2,3] ND dimensions', () => {
+      bridge.newNDProperty('node.data.grid', MuPropertyType.String, [2, 3]);
+      expect(() => bridge.setStringProperty('node.data.grid', ['a', 'b'])).toThrow(TypeError);
+      expect(() => bridge.setStringProperty('node.data.grid', ['a', 'b'])).toThrow(
+        /Property "node\.data\.grid": ND property set requires exactly 6 values \(dimensions: \[2,3\]\), got 2/
+      );
+    });
+
+    it('throws TypeError when insertStringProperty value count is not a multiple of inner size for [2,3] ND', () => {
+      bridge.newNDProperty('node.data.grid', MuPropertyType.String, [2, 3]);
+      expect(() => bridge.insertStringProperty('node.data.grid', ['a', 'b'], 0)).toThrow(TypeError);
+      expect(() => bridge.insertStringProperty('node.data.grid', ['a', 'b'], 0)).toThrow(
+        /Property "node\.data\.grid": ND property insert requires value count to be a multiple of inner size 3 \(dimensions: \[2,3\]\), got 2/
+      );
+    });
+
+    it('inserts 12 values into a [2,3,4] 3D property and updates dimensions to [3,3,4]', () => {
+      bridge.newNDProperty('node.color.lut', MuPropertyType.Float, [2, 3, 4]);
+      // Total = 2*3*4 = 24 elements, set them
+      bridge.setFloatProperty('node.color.lut', new Array(24).fill(1));
+      // innerSize = 3*4 = 12; inserting 12 values adds one outermost "slice"
+      bridge.insertFloatProperty('node.color.lut', new Array(12).fill(2), 0);
+      const info = bridge.propertyInfo('node.color.lut');
+      expect(info.dimensions).toEqual([3, 3, 4]);
+      expect(info.size).toBe(36);
+    });
+
+    it('throws TypeError when insertFloatProperty index is not aligned to inner size for [4,4] ND', () => {
+      bridge.newNDProperty('node.transform.matrix', MuPropertyType.Float, [4, 4]);
+      bridge.setFloatProperty('node.transform.matrix', new Array(16).fill(0));
+      // innerSize = 4, index 2 is not aligned
+      expect(() => bridge.insertFloatProperty('node.transform.matrix', [1, 2, 3, 4], 2)).toThrow(TypeError);
+      expect(() => bridge.insertFloatProperty('node.transform.matrix', [1, 2, 3, 4], 2)).toThrow(
+        /Property "node\.transform\.matrix": ND property insert requires index to be aligned to inner size 4.*got index 2/
+      );
     });
   });
 });

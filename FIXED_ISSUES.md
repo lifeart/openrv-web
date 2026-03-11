@@ -1419,16 +1419,18 @@
 ## Issue #132: Project save/load preserves wipe mode but not the actual A/B compare assignment state
 
 - **Severity**: Medium
-- **Fix**: Added TODO(#132) comment in serialization gaps section and in `getSerializationGaps()` documenting the gap.
-- **Regression Tests**: 1 test.
-- **Files Changed**: `src/core/session/SessionSerializer.ts`
+- **TODO(#132) Resolved**: Project playback persistence now includes A/B compare assignment state. `.orvproject` save/load round-trips `sourceAIndex`, `sourceBIndex`, and `currentAB` through playback state instead of preserving only wipe mode.
+- **Regression Tests**: `SessionSerializer.issue123-133.test.ts` verifies serializer save/load wiring for A/B assignment, and `Session.state.test.ts` verifies `Session.getPlaybackState()`/`setPlaybackState()` export and restore the A/B assignment and active side.
+- **Verification**: `SessionSerializer.issue123-133.test.ts` (15 tests), `SessionSerializer.test.ts` (77 tests), and `Session.state.test.ts` (132 tests) pass. TypeScript clean.
+- **Files Changed**: `src/core/session/SessionState.ts`, `src/core/session/Session.ts`, `src/core/session/SessionSerializer.ts`, `src/core/session/SessionSerializer.issue123-133.test.ts`, `src/core/session/Session.state.test.ts`
 
 ## Issue #133: RV/GTO import loses `play all frames` because `realtime = 0` is parsed as "missing"
 
 - **Severity**: Medium
-- **Fix**: Changed condition from `realtime > 0` to `typeof realtime === 'number'`, preserving `realtime = 0` as a valid value for play-all-frames mode.
-- **Regression Tests**: 4 tests.
-- **Files Changed**: `src/core/session/GTOGraphLoader.ts`
+- **TODO(#133) Resolved**: RV/GTO import now treats `realtime = 0` as a valid parsed value, preserving OpenRV's “play all frames” mode instead of discarding it as missing.
+- **Regression Tests**: `GTOGraphLoader.issue133.test.ts` verifies `realtime = 0` is preserved, prefers `realtime` over `fps` when present, and still falls back to `fps` when absent.
+- **Verification**: `GTOGraphLoader.issue133.test.ts` (4 tests) and `GTOGraphLoader.test.ts` (80 tests) pass. TypeScript clean.
+- **Files Changed**: `src/core/session/GTOGraphLoader.ts`, `src/core/session/GTOGraphLoader.issue133.test.ts`
 
 ## Issue #134: `.orvproject` serializes media representations, but project load never rebuilds or reselects them
 
@@ -1447,18 +1449,18 @@
 ## Issue #136: Omitted viewer states can leak from the previous session on project load
 
 - **Severity**: High
-- **Root Cause**: `SessionSerializer.fromJSON()` only reapplied serialized viewer fields and never reset omitted states (tone mapping, ghost frames, stereo, channel, difference matte, blend mode). Those states leaked from the previous session.
-- **Fix**: Added calls to all viewer reset methods (`resetToneMappingState`, `resetGhostFrameState`, `resetStereoState`, `resetStereoEyeTransforms`, `resetStereoAlignMode`, `resetChannelMode`, `resetDifferenceMatteState`) at the start of `fromJSON()` before applying restored state.
-- **Regression Tests**: 2 tests verifying reset methods are called during fromJSON.
-- **Files Changed**: `src/core/session/SessionSerializer.ts`
+- **TODO(#136) Resolved**: `SessionSerializer.fromJSON()` now resets omitted viewer state before applying restored project data, preventing stale tone mapping, ghost-frame, stereo, channel, and difference-matte state from leaking across loads.
+- **Regression Tests**: `SessionSerializer.test.ts` verifies the viewer reset methods are called during restore.
+- **Verification**: `SessionSerializer.test.ts` (77 tests) passes. TypeScript clean.
+- **Files Changed**: `src/core/session/SessionSerializer.ts`, `src/core/session/SessionSerializer.test.ts`
 
 ## Issue #137: `fromJSON()` always injects serialization-gap warnings even when not active
 
 - **Severity**: Medium
-- **Root Cause**: `fromJSON()` used `gaps.map((g) => g.name)` without filtering by `isActive`, causing ALL gap names to appear as warnings even for features the user never used.
-- **Fix**: Filtered gaps to `activeGaps` (where `isActive === true`) before adding to warnings, matching the save path pattern.
-- **Regression Tests**: 2 tests verifying clean loads produce no gap warnings and only active gaps appear.
-- **Files Changed**: `src/core/session/SessionSerializer.ts`
+- **TODO(#137) Resolved**: Project-load gap warnings are now filtered to active non-default gaps only, so clean loads no longer report unused persistence gaps.
+- **Regression Tests**: `SessionSerializer.test.ts` verifies clean loads stay warning-free and active gaps are still surfaced.
+- **Verification**: `SessionSerializer.test.ts` (77 tests) passes. TypeScript clean.
+- **Files Changed**: `src/core/session/SessionSerializer.ts`, `src/core/session/SessionSerializer.test.ts`
 
 ## Issue #138: Snapshots, auto-checkpoints, and auto-saves use the same lossy project serializer
 
@@ -2411,3 +2413,12 @@
 - **Regression Tests**: 5 new tests covering: duplicate name throws TypeError, original source preserved after rejection, different name succeeds after rejection, case-sensitive names treated as distinct, and batch queue collision detection (addSourceVerbose name collides with newImageSource).
 - **Verification**: All 575 compat tests pass (8 files), TypeScript clean.
 - **Files Changed**: `src/compat/MuSourceBridge.ts`, `src/compat/__tests__/MuSourceBridge.test.ts`
+
+### 249. Mu compat ND properties lose their declared shape after any set or insert operation
+- **Severity**: Medium
+- **Area**: Mu compatibility / property system
+- **Root Cause**: All four write paths (`setStringProperty`, `_setNumericProperty`, `insertStringProperty`, `_insertNumericProperty`) unconditionally replaced `prop.dimensions` with `[values.length]` or `[data.length]`, flattening any multi-dimensional shape to a 1D vector after the first update.
+- **Fix**: Added `prop.dimensions.length > 1` checks in all 4 write methods. For `set` operations: dimensions are preserved and value count is validated against `dimensions.reduce((a,b)=>a*b,1)`. For `insert` operations: innerSize is computed from `dimensions.slice(1).reduce(...)`, value count must be a multiple of innerSize, insertion index must be aligned to innerSize boundary, and outermost dimension is recomputed as `data.length / innerSize`. All validations throw `TypeError` with property path, expected values, and actual values for debuggability. 1D properties continue using the original flat-dimension behavior.
+- **Regression Tests**: 14 new tests covering: set preserves 2D shape, set preserves 3D shape, insert updates outermost 2D dimension, insert updates outermost 3D dimension, wrong value count on numeric set throws, wrong value count on string set throws, non-aligned insert count on numeric throws, non-aligned insert count on string throws, misaligned insert index throws, and happy-path round-trips for both numeric and string ND properties.
+- **Verification**: All 589 compat tests pass (8 files), TypeScript clean.
+- **Files Changed**: `src/compat/MuPropertyBridge.ts`, `src/compat/__tests__/MuPropertyBridge.test.ts`
