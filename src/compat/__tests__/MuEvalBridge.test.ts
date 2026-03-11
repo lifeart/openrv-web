@@ -489,18 +489,17 @@ describe('MuEvalBridge', () => {
     });
 
     it('only returns images under the queried point, not all rendered images', () => {
-      // Two images: one at center, one offset far to the right
+      // Image A (200×100) centered in 800×600 viewport → screen [300,250]–[500,350]
+      // Image B (50×50) centered in 800×600 viewport → screen [375,275]–[425,325]
       bridge.setRenderedImages([
-        makeRenderedImage('imgCenter', 0, 200, 100),
-        makeRenderedImage('imgRight', 1, 200, 100),
+        makeRenderedImage('imgA', 0, 200, 100),
+        makeRenderedImage('imgB', 1, 50, 50),
       ]);
-      // Offset the second image far right via a separate view transform
-      // With default centering both overlap at center, so use a point
-      // inside imgCenter but at center of viewport
-      const result = bridge.imagesAtPixel([400, 300]);
-      // Both images are centered the same way, so both should be hit
-      expect(result).toHaveLength(2);
-      expect(result.every((r) => r.inside)).toBe(true);
+      // Point (310, 260) is inside imgA but outside imgB
+      const result = bridge.imagesAtPixel([310, 260]);
+      expect(result).toHaveLength(1);
+      expect(result[0].name).toBe('imgA');
+      expect(result[0].inside).toBe(true);
     });
 
     it('returns no images when point misses all rendered images', () => {

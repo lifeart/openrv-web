@@ -1534,9 +1534,9 @@
 
 - **Severity**: High
 - **Root Cause**: MXF decoder returned fake 1x1 image with `metadataOnly: true` but no consumer handled that marker.
-- **Fix**: Added `console.warn` when MXF is decoded, clearly stating it's metadata-only and no video frames are decoded. Added TODO(#147).
-- **Regression Tests**: 1 test.
-- **Files Changed**: `src/formats/DecoderRegistry.ts`
+- **TODO(#147) Resolved**: Removed MXF from the still-image decoder registry so `detectFormat()` / `detectAndDecode()` no longer advertise a fake image decode path. `.mxf` now routes through the shared video/container classification instead, which lets the existing video-loading and unsupported-codec paths handle MXF files without manufacturing a bogus 1x1 frame.
+- **Regression Tests**: 3 tests.
+- **Files Changed**: `src/formats/DecoderRegistry.ts`, `src/formats/DecoderRegistry.test.ts`, `src/utils/media/SupportedMediaFormats.ts`, `src/utils/media/SupportedMediaFormats.test.ts`, `src/core/session/Session.ts`, `src/core/session/Session.loadSourceFromUrl.test.ts`
 
 ## Issue #148: HDR VideoFrame upload failure degrades to a blank frame rather than a usable fallback
 
@@ -2539,3 +2539,12 @@
 - **Regression Tests**: 7 new tests covering: sourceMedia reflects active rep, sourceMediaInfo reflects active rep, sources() reflects active rep, base media default with no reps, base media fallback with no reps added, first-rep auto-activation, and switching between representations.
 - **Verification**: All 667 compat tests pass (8 files), TypeScript clean.
 - **Files Changed**: `src/compat/MuSourceBridge.ts`, `src/compat/__tests__/MuSourceBridge.test.ts`
+
+### 263. Mu compat imagesAtPixel() returns all rendered images, not just images under the queried point
+- **Severity**: Medium
+- **Area**: Mu compatibility / image-query scripting
+- **Root Cause**: `imagesAtPixel()` computed `inside` and `edge` booleans per image but unconditionally pushed ALL rendered images to the result array. A point outside an image still returned that image with `inside: false`, making the method a projection table rather than a hit-test filter.
+- **Fix**: Added `if (inside || edge)` guard before pushing to results. Only images where the queried point falls within bounds or within 1 pixel of the boundary are returned. Points outside all images return an empty array.
+- **Regression Tests**: 4 new tests covering: selective filtering (point inside one image but not another), empty array for complete miss, edge pixel inclusion, and overlapping image multi-hit. Updated existing test that asserted old unfiltered behavior.
+- **Verification**: All 670 compat tests pass (8 files), TypeScript clean.
+- **Files Changed**: `src/compat/MuEvalBridge.ts`, `src/compat/__tests__/MuEvalBridge.test.ts`
