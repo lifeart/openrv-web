@@ -167,8 +167,7 @@ describe('MuEvalBridge', () => {
       const result = bridge.metaEvaluateClosestByType(1, 'display1', 'RVColor');
       const nodeNames = result.map((r) => r.node);
       // Should include display1 -> seq1 -> color1, then stop
-      expect(nodeNames).toContain('display1');
-      expect(nodeNames).toContain('color1');
+      expect(nodeNames).toEqual(['display1', 'seq1', 'color1']);
       // Should NOT include source1 (past the matching node)
       expect(nodeNames).not.toContain('source1');
     });
@@ -186,6 +185,93 @@ describe('MuEvalBridge', () => {
 
     it('returns empty for unknown start node', () => {
       expect(bridge.metaEvaluateClosestByType(1, 'nope', 'RVSource')).toEqual([]);
+    });
+
+    it('returns the near branch in a branched graph, not the deep DFS branch', () => {
+      // Build branched graph:
+      //   srcDeep(Target) -> mid(TypeM) -> deep(TypeD) -> start(TypeS)
+      //   srcNear(Target) -> start(TypeS)
+      // BFS from start should find srcNear at depth 1, not srcDeep at depth 3
+      const g = new Graph();
+      const start = new TestNode('TypeS', 'start');
+      const deep = new TestNode('TypeD', 'deep');
+      const mid = new TestNode('TypeM', 'mid');
+      const srcDeep = new TestNode('Target', 'srcDeep');
+      const srcNear = new TestNode('Target', 'srcNear');
+
+      g.addNode(start);
+      g.addNode(deep);
+      g.addNode(mid);
+      g.addNode(srcDeep);
+      g.addNode(srcNear);
+
+      g.connect(srcDeep, mid);
+      g.connect(mid, deep);
+      g.connect(deep, start);
+      g.connect(srcNear, start);
+
+      const nb = new MuNodeBridge(g);
+      const b = new MuEvalBridge(g, nb);
+
+      const result = b.metaEvaluateClosestByType(1, 'start', 'Target');
+      const names = result.map((r) => r.node);
+      expect(names).toEqual(['start', 'srcNear']);
+    });
+
+    it('returns the correct chain of nodes from start to target', () => {
+      // Chain: A(TypeA) -> B(TypeB) -> C(TypeC) -> D(TypeD)
+      // Looking for TypeA from D should return [D, C, B, A]
+      const g = new Graph();
+      const a = new TestNode('TypeA', 'A');
+      const b = new TestNode('TypeB', 'B');
+      const c = new TestNode('TypeC', 'C');
+      const d = new TestNode('TypeD', 'D');
+
+      g.addNode(a);
+      g.addNode(b);
+      g.addNode(c);
+      g.addNode(d);
+
+      g.connect(a, b);
+      g.connect(b, c);
+      g.connect(c, d);
+
+      const nb = new MuNodeBridge(g);
+      const eb = new MuEvalBridge(g, nb);
+
+      const result = eb.metaEvaluateClosestByType(1, 'D', 'TypeA');
+      const names = result.map((r) => r.node);
+      expect(names).toEqual(['D', 'C', 'B', 'A']);
+    });
+
+    it('excludes dead-end branch nodes from the result', () => {
+      // Graph:
+      //   deadEnd(TypeX) -> mid(TypeM) -> start(TypeS)
+      //   target(Target) -> start(TypeS)
+      // Result should be [start, target] — deadEnd and mid should NOT appear
+      const g = new Graph();
+      const start = new TestNode('TypeS', 'start');
+      const mid = new TestNode('TypeM', 'mid');
+      const deadEnd = new TestNode('TypeX', 'deadEnd');
+      const target = new TestNode('Target', 'target');
+
+      g.addNode(start);
+      g.addNode(mid);
+      g.addNode(deadEnd);
+      g.addNode(target);
+
+      g.connect(deadEnd, mid);
+      g.connect(mid, start);
+      g.connect(target, start);
+
+      const nb = new MuNodeBridge(g);
+      const b = new MuEvalBridge(g, nb);
+
+      const result = b.metaEvaluateClosestByType(1, 'start', 'Target');
+      const names = result.map((r) => r.node);
+      expect(names).toEqual(['start', 'target']);
+      expect(names).not.toContain('deadEnd');
+      expect(names).not.toContain('mid');
     });
   });
 

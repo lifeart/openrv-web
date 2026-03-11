@@ -172,14 +172,15 @@ export class MuEvalBridge {
   }
 
   /**
-   * Traverse the graph and stop at the first node matching the given type.
+   * Traverse the graph upstream via BFS to find the closest node matching the given type,
+   * then return the path from start to that node.
    *
    * Mu equivalent: `commands.metaEvaluateClosestByType(frame, viewNodeName, typeName)`
    *
    * @param frame - Frame number for evaluation context
    * @param viewNodeName - Starting node name
-   * @param typeName - Stop at the first node of this type
-   * @returns Array of MetaEvalInfo up to and including the first matching node
+   * @param typeName - Stop at the closest node of this type (BFS depth)
+   * @returns Array of MetaEvalInfo from start to the closest matching node (inclusive)
    */
   metaEvaluateClosestByType(frame: number, viewNodeName?: string, typeName?: string): MetaEvalInfo[] {
     const startName = viewNodeName || this._nodeBridge.viewNode();
@@ -188,12 +189,60 @@ export class MuEvalBridge {
     const startNode = this._findNode(startName);
     if (!startNode) return [];
 
-    const result: MetaEvalInfo[] = [];
+    const targetType = typeName ?? '';
+
+    // BFS to find the closest matching node, tracking parent pointers for path reconstruction
     const visited = new Set<string>();
+    const parentMap = new Map<string, IPNode | null>(); // node.id -> parent node (null for start)
+    let currentLevel: IPNode[] = [startNode];
+    visited.add(startNode.id);
+    parentMap.set(startNode.id, null);
 
-    this._traverseEvalChainUntilType(startNode, frame, typeName ?? '', result, visited);
+    let matchNode: IPNode | null = null;
 
-    return result;
+    while (currentLevel.length > 0 && matchNode === null) {
+      const nextLevel: IPNode[] = [];
+
+      for (const node of currentLevel) {
+        if (node.type === targetType) {
+          matchNode = node;
+          break;
+        }
+
+        for (const input of node.inputs) {
+          if (!visited.has(input.id)) {
+            visited.add(input.id);
+            parentMap.set(input.id, node);
+            nextLevel.push(input);
+          }
+        }
+      }
+
+      currentLevel = nextLevel;
+    }
+
+    // No match found — return all reachable nodes (preserve existing behavior)
+    if (matchNode === null) {
+      const result: MetaEvalInfo[] = [];
+      const allVisited = new Set<string>();
+      this._collectAllUpstream(startNode, frame, result, allVisited);
+      return result;
+    }
+
+    // Reconstruct path from start to matchNode using parentMap
+    const path: IPNode[] = [];
+    let cur: IPNode | null = matchNode;
+    while (cur !== null) {
+      path.push(cur);
+      cur = parentMap.get(cur.id) ?? null;
+    }
+    path.reverse();
+
+    return path.map((n) => ({
+      node: n.name,
+      nodeType: n.type,
+      frame,
+    }));
   }
 
   /**
@@ -439,17 +488,15 @@ export class MuEvalBridge {
   }
 
   /**
-   * Traverse upstream and stop at the first node matching the target type.
-   * Returns true if a matching node was found (signals callers to stop).
+   * Collect all reachable upstream nodes via DFS (used when no type match is found).
    */
-  private _traverseEvalChainUntilType(
+  private _collectAllUpstream(
     node: IPNode,
     frame: number,
-    typeName: string,
     result: MetaEvalInfo[],
     visited: Set<string>,
-  ): boolean {
-    if (visited.has(node.id)) return false;
+  ): void {
+    if (visited.has(node.id)) return;
     visited.add(node.id);
 
     result.push({
@@ -458,18 +505,9 @@ export class MuEvalBridge {
       frame,
     });
 
-    // If this node matches the target type, stop
-    if (node.type === typeName) {
-      return true;
-    }
-
-    // Walk upstream
     for (const input of node.inputs) {
-      const found = this._traverseEvalChainUntilType(input, frame, typeName, result, visited);
-      if (found) return true;
+      this._collectAllUpstream(input, frame, result, visited);
     }
-
-    return false;
   }
 
   /**

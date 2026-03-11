@@ -2431,3 +2431,12 @@
 - **Regression Tests**: 4 new tests covering: multi-depth chain (only nearest returned), branching graph with matches at different depths (only nearest depth returned), all matches at same depth (all returned), and no-matches (empty array).
 - **Verification**: All 593 compat tests pass (8 files), TypeScript clean.
 - **Files Changed**: `src/compat/MuEvalBridge.ts`, `src/compat/__tests__/MuEvalBridge.test.ts`
+
+### 251. Mu compat metaEvaluateClosestByType() chooses the first depth-first match, not the actual closest match in branched graphs
+- **Severity**: Medium
+- **Area**: Mu compatibility / graph evaluation
+- **Root Cause**: `metaEvaluateClosestByType()` delegated to `_traverseEvalChainUntilType()` which used DFS, returning the first encountered match regardless of topological distance. Dead-end branch nodes also leaked into the result path.
+- **Fix**: Replaced DFS-based `_traverseEvalChainUntilType()` with BFS approach: level-by-level traversal finds the true closest matching node, then a parent-map reconstructs the exact path from start to match. Dead-end branches are never included in the result. Added `_collectAllUpstream()` helper for the no-match fallback (preserving backward-compatible behavior of returning all reachable nodes).
+- **Regression Tests**: 4 new tests covering: branched graph near-branch wins over far-branch, exact path reconstruction verified, dead-end branch nodes excluded from result, and start-node-is-target returns single-element path.
+- **Verification**: All 596 compat tests pass (8 files), TypeScript clean.
+- **Files Changed**: `src/compat/MuEvalBridge.ts`, `src/compat/__tests__/MuEvalBridge.test.ts`
