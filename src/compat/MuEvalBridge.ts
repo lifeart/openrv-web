@@ -18,6 +18,7 @@
 import { Graph } from '../core/graph/Graph';
 import type { IPNode } from '../nodes/base/IPNode';
 import type { MuNodeBridge } from './MuNodeBridge';
+import type { PixelReadbackProvider } from './MuSourceBridge';
 import type {
   MetaEvalInfo,
   PixelImageInfo,
@@ -79,9 +80,21 @@ export class MuEvalBridge {
   /** Event unsubscribers for connectToEvents cleanup */
   private _eventUnsubscribers: Array<() => void> = [];
 
+  /** Optional provider for pixel-precise stencil hit testing */
+  private _pixelReadbackProvider: PixelReadbackProvider | null = null;
+
   constructor(graph: Graph, nodeBridge: MuNodeBridge) {
     this._graph = graph;
     this._nodeBridge = nodeBridge;
+  }
+
+  /**
+   * Set or clear the pixel readback provider used for stencil hit testing.
+   * When set and `useStencil=true`, `imagesAtPixel()` will check the actual
+   * pixel alpha to filter out transparent regions.
+   */
+  setPixelReadbackProvider(provider: PixelReadbackProvider | null): void {
+    this._pixelReadbackProvider = provider;
   }
 
   /** Replace the underlying graph (e.g. after session load). */
@@ -139,6 +152,7 @@ export class MuEvalBridge {
       unsub();
     }
     this._eventUnsubscribers = [];
+    this._pixelReadbackProvider = null;
   }
 
   // =====================================================================
@@ -333,7 +347,7 @@ export class MuEvalBridge {
    * @param _useStencil - Whether to use stencil buffer for precise hit-testing
    * @returns Array of PixelImageInfo for images under the point
    */
-  imagesAtPixel(point: [number, number], _viewNodeName?: string, _useStencil = false): PixelImageInfo[] {
+  imagesAtPixel(point: [number, number], _viewNodeName?: string, useStencil = false): PixelImageInfo[] {
     const [sx, sy] = point;
     const results: PixelImageInfo[] = [];
 
@@ -352,6 +366,19 @@ export class MuEvalBridge {
         iy >= -1 && iy <= img.height;
 
       if (inside || edge) {
+        // When stencil testing is enabled, check actual pixel alpha
+        if (useStencil && this._pixelReadbackProvider) {
+          const pixel = this._pixelReadbackProvider.readSourcePixel(
+            img.name,
+            Math.floor(ix),
+            Math.floor(iy),
+          );
+          // Skip image if pixel is fully transparent (alpha ≈ 0)
+          if (pixel && pixel[3] <= 0) {
+            continue;
+          }
+        }
+
         results.push({
           name: img.name,
           x: Math.floor(ix),

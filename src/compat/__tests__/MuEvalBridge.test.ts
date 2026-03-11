@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MuEvalBridge, type ViewTransformState, type ViewEventSource } from '../MuEvalBridge';
 import { MuNodeBridge } from '../MuNodeBridge';
 import { Graph } from '../../core/graph/Graph';
@@ -6,6 +6,7 @@ import { IPNode } from '../../nodes/base/IPNode';
 import type { IPImage } from '../../core/image/Image';
 import type { EvalContext } from '../../core/graph/Graph';
 import type { RenderedImageInfo } from '../types';
+import type { PixelReadbackProvider } from '../MuSourceBridge';
 
 // --- Test helpers ---
 
@@ -546,6 +547,146 @@ describe('MuEvalBridge', () => {
   });
 
   // =====================================================================
+  // imagesAtPixel — useStencil flag
+  // =====================================================================
+
+  describe('imagesAtPixel with useStencil', () => {
+    beforeEach(() => {
+      bridge.setViewTransform(defaultViewTransform({
+        viewWidth: 800,
+        viewHeight: 600,
+        scale: 1,
+        translation: [0, 0],
+        imageWidth: 200,
+        imageHeight: 100,
+      }));
+      bridge.setRenderedImages([
+        makeRenderedImage('testImg', 0, 200, 100),
+      ]);
+    });
+
+    it('useStencil=false uses geometry-only hit test (default behavior)', () => {
+      const result = bridge.imagesAtPixel([400, 300], undefined, false);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.name).toBe('testImg');
+      expect(result[0]!.inside).toBe(true);
+    });
+
+    it('useStencil defaults to false', () => {
+      // Calling without the third argument should behave like useStencil=false
+      const withDefault = bridge.imagesAtPixel([400, 300]);
+      const withExplicit = bridge.imagesAtPixel([400, 300], undefined, false);
+      expect(withDefault).toEqual(withExplicit);
+    });
+
+    it('useStencil=true with opaque pixel still returns the image', () => {
+      const provider: PixelReadbackProvider = {
+        readSourcePixel: () => [1.0, 0.5, 0.0, 1.0], // opaque pixel
+      };
+      bridge.setPixelReadbackProvider(provider);
+
+      const result = bridge.imagesAtPixel([400, 300], undefined, true);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.name).toBe('testImg');
+    });
+
+    it('useStencil=true with transparent pixel excludes the image', () => {
+      const provider: PixelReadbackProvider = {
+        readSourcePixel: () => [0.0, 0.0, 0.0, 0.0], // fully transparent
+      };
+      bridge.setPixelReadbackProvider(provider);
+
+      const result = bridge.imagesAtPixel([400, 300], undefined, true);
+      expect(result).toHaveLength(0);
+    });
+
+    it('useStencil=true falls back to geometry when no provider is set', () => {
+      // No provider set — should still return geometry hit
+      bridge.setPixelReadbackProvider(null);
+      const result = bridge.imagesAtPixel([400, 300], undefined, true);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.name).toBe('testImg');
+    });
+
+    it('useStencil=true falls back to geometry when provider returns null', () => {
+      const provider: PixelReadbackProvider = {
+        readSourcePixel: () => null, // readback not available
+      };
+      bridge.setPixelReadbackProvider(provider);
+
+      const result = bridge.imagesAtPixel([400, 300], undefined, true);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.name).toBe('testImg');
+    });
+
+    it('useStencil=true filters per-image independently', () => {
+      bridge.setRenderedImages([
+        makeRenderedImage('opaqueImg', 0, 200, 100),
+        makeRenderedImage('transparentImg', 1, 200, 100),
+      ]);
+
+      const provider: PixelReadbackProvider = {
+        readSourcePixel: (name: string) => {
+          if (name === 'transparentImg') return [0.0, 0.0, 0.0, 0.0];
+          return [1.0, 1.0, 1.0, 1.0];
+        },
+      };
+      bridge.setPixelReadbackProvider(provider);
+
+      const result = bridge.imagesAtPixel([400, 300], undefined, true);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.name).toBe('opaqueImg');
+    });
+
+    it('readSourcePixel receives correct image-local coordinates', () => {
+      const readSourcePixel = vi.fn().mockReturnValue([1.0, 1.0, 1.0, 1.0]);
+      bridge.setPixelReadbackProvider({ readSourcePixel });
+
+      // Screen center [400,300] with viewWidth=800, viewHeight=600, scale=1,
+      // image 200×100 → image top-left at screen (300,250)
+      // ix = (400-300)/1 = 100, iy = (300-250)/1 = 50
+      bridge.imagesAtPixel([400, 300], undefined, true);
+
+      expect(readSourcePixel).toHaveBeenCalledOnce();
+      expect(readSourcePixel).toHaveBeenCalledWith('testImg', 100, 50);
+    });
+
+    it('alpha just above zero (0.01) includes the image', () => {
+      const provider: PixelReadbackProvider = {
+        readSourcePixel: () => [0.0, 0.0, 0.0, 0.01],
+      };
+      bridge.setPixelReadbackProvider(provider);
+
+      const result = bridge.imagesAtPixel([400, 300], undefined, true);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.name).toBe('testImg');
+    });
+
+    it('point outside geometry returns empty even with opaque stencil provider', () => {
+      const provider: PixelReadbackProvider = {
+        readSourcePixel: () => [1.0, 1.0, 1.0, 1.0],
+      };
+      bridge.setPixelReadbackProvider(provider);
+
+      // [0, 0] is far outside the image area (image occupies screen ~[300,500]×[250,350])
+      const result = bridge.imagesAtPixel([0, 0], undefined, true);
+      expect(result).toHaveLength(0);
+    });
+
+    it('useStencil=false ignores provider even when set', () => {
+      const provider: PixelReadbackProvider = {
+        readSourcePixel: () => [0.0, 0.0, 0.0, 0.0], // transparent
+      };
+      bridge.setPixelReadbackProvider(provider);
+
+      // With useStencil=false, the provider should not be consulted
+      const result = bridge.imagesAtPixel([400, 300], undefined, false);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.name).toBe('testImg');
+    });
+  });
+
+  // =====================================================================
   // imageGeometry
   // =====================================================================
 
@@ -1043,6 +1184,35 @@ describe('MuEvalBridge', () => {
       });
       expect(bridge.renderedImages()).toHaveLength(1);
       expect(bridge.renderedImages()[0]!.name).toBe('img1'); // unchanged
+    });
+
+    it('clears pixel readback provider so stencil falls back to geometry', () => {
+      bridge.setViewTransform(defaultViewTransform({
+        viewWidth: 800,
+        viewHeight: 600,
+        scale: 1,
+        translation: [0, 0],
+        imageWidth: 200,
+        imageHeight: 100,
+      }));
+      bridge.setRenderedImages([makeRenderedImage('testImg', 0, 200, 100)]);
+
+      // Provider that would reject the pixel (transparent)
+      const provider: PixelReadbackProvider = {
+        readSourcePixel: () => [0.0, 0.0, 0.0, 0.0],
+      };
+      bridge.setPixelReadbackProvider(provider);
+
+      // Before dispose: stencil rejects the transparent pixel
+      const before = bridge.imagesAtPixel([400, 300], undefined, true);
+      expect(before).toHaveLength(0);
+
+      bridge.dispose();
+
+      // After dispose: provider is cleared, falls back to geometry-only
+      const after = bridge.imagesAtPixel([400, 300], undefined, true);
+      expect(after).toHaveLength(1);
+      expect(after[0]!.name).toBe('testImg');
     });
 
     it('is safe to call multiple times', () => {

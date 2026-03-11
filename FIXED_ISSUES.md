@@ -2597,3 +2597,15 @@
 - **Regression Tests**: 7 new tests — false with groups, true replaces groups with leaves, true=false without groups, nested groups, duplicate preservation, output traversal, empty group passthrough.
 - **Verification**: All 698 compat tests pass.
 - **Files Changed**: `src/compat/MuNodeBridge.ts`, `src/compat/__tests__/MuNodeBridge.test.ts`
+
+---
+
+### 271. Mu compat `imagesAtPixel()` ignores its `useStencil` flag
+
+- **Severity**: Medium
+- **Area**: Mu compatibility / image-query scripting
+- **Root Cause**: The `useStencil` parameter was prefixed with `_` and never read. The method always used geometry-only hit testing regardless of the flag.
+- **Fix**: When `useStencil=true` and a `PixelReadbackProvider` is available, read the actual pixel alpha at the hit point. If alpha ≤ 0 (fully transparent), skip the image. Falls back to geometry-only when no provider is set. Provider cleaned up on dispose.
+- **Regression Tests**: 11 new tests — geometry-only default, opaque pixel, transparent pixel, no-provider fallback, null-readback fallback, per-image filtering, provider ignored when off, coordinate verification, alpha boundary (0.01), geometry-miss bypass, post-dispose fallback.
+- **Verification**: All 710 compat tests pass.
+- **Files Changed**: `src/compat/MuEvalBridge.ts`, `src/compat/__tests__/MuEvalBridge.test.ts`
