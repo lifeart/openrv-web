@@ -394,6 +394,16 @@ export class EventsAPI extends DisposableAPI {
       this.emitCurrentRenderedImages();
     });
     this.internalUnsubscribers.push(unsubSourceRendered);
+
+    // Current source changed — update rendered images for the newly active source
+    const unsubSourceChanged = this.session.on('currentSourceChanged', () => {
+      const source = this.session.currentSource;
+      if (source) {
+        this._lastLoadedSource = { name: source.name, width: source.width, height: source.height };
+        this.emitCurrentRenderedImages();
+      }
+    });
+    this.internalUnsubscribers.push(unsubSourceChanged);
   }
 
   /** Emit the current rendered images state based on the last loaded source. */

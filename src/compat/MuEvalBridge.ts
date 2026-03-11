@@ -78,7 +78,6 @@ export class MuEvalBridge {
 
   /** Event unsubscribers for connectToEvents cleanup */
   private _eventUnsubscribers: Array<() => void> = [];
-  private _disposed = false;
 
   constructor(graph: Graph, nodeBridge: MuNodeBridge) {
     this._graph = graph;
@@ -120,7 +119,6 @@ export class MuEvalBridge {
    */
   connectToEvents(events: ViewEventSource): void {
     this.dispose();
-    this._disposed = false;
 
     const unsubView = events.on('viewTransformChanged', (data) => {
       this.setViewTransform(data);
@@ -137,7 +135,6 @@ export class MuEvalBridge {
    * Disconnect from session events and clean up subscriptions.
    */
   dispose(): void {
-    this._disposed = true;
     for (const unsub of this._eventUnsubscribers) {
       unsub();
     }

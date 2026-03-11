@@ -1055,9 +1055,13 @@
 ## Issue #91: The shipped slate panel exposes only a small subset of the slate feature it actually drives
 
 - **Severity**: Medium
-- **Fix**: Added TODO(#91) + one-time `console.info` on first `generateConfig()` call documenting that custom fields, text/accent colors, logo position/scale, and output resolution have no UI surface.
-- **Regression Tests**: SLATE-HINT-001, SLATE-HINT-002.
-- **Files Changed**: `src/ui/components/SlateEditor.ts`, `src/ui/components/SlateEditor.test.ts`
+- **TODO(#91) Resolved**: Extended the shipped slate panel in `AppControlRegistry` to expose the editor features it already drives: text and accent colors, custom-field CRUD, logo position and scale, and output width/height. `SlateEditor` no longer carries the stale TODO/logging shim because these controls are now available from the production UI instead of only through the API.
+- **Regression Tests**:
+  - `AppControlRegistry.test.ts`: added coverage for the newly exposed slate panel controls, including color updates, custom-field CRUD, and logo position/scale wiring
+  - `SlateEditor.test.ts`: removed obsolete logging-path tests while preserving editor behavior coverage
+  - `SlateEditor.e2e.test.ts`: remains green with the expanded shipped panel surface
+- **Verification**: `SlateEditor.test.ts` (73 tests), `AppControlRegistry.test.ts` (23 tests), and `SlateEditor.e2e.test.ts` (61 tests) pass. TypeScript clean.
+- **Files Changed**: `src/AppControlRegistry.ts`, `src/AppControlRegistry.test.ts`, `src/ui/components/SlateEditor.ts`, `src/ui/components/SlateEditor.test.ts`, `src/compat/MuEvalBridge.ts`
 
 ## Issue #92: Slate logo upload failures are swallowed without any user-visible feedback
 
@@ -2303,3 +2307,13 @@
 - **Regression Tests**: 25 new tests covering: handshake transmission, senderContactName in all send methods, name change after connect, empty name fallback, peer identity storage, message/event/dataEvent dispatch at permission 2, permission enforcement at levels 0/1 for all types, binary+header association, orphan binary drop, timeout expiry, rapid headers, backward-compat for missing senderContactName, and disconnect cleanup.
 - **Verification**: All 545 compat tests pass (8 files), TypeScript clean.
 - **Files Changed**: `src/compat/MuNetworkBridge.ts`, `src/compat/__tests__/MuEventBridge.test.ts`
+
+## Issue #245: Mu eval/image-query commands are effectively unwired because production never feeds render or view state into `MuEvalBridge`
+
+- **Severity**: Medium
+- **Area**: Mu compatibility / image-query scripting
+- **Root Cause**: `MuEvalBridge` depended on external callers to seed live view state via `setViewTransform()` and rendered-image list via `setRenderedImages()`, but no production code called either method. `registerMuCompat()` only wired `window.rv.commands` and `window.rv.extra_commands`, not the eval bridge. Commands like `renderedImages()`, `imagesAtPixel()`, `imageGeometry()`, and `eventToImageSpace()` returned empty/default answers.
+- **Fix**: (A) Added `ViewEventSource` interface and `connectToEvents()` method on `MuEvalBridge` for subscribing to `viewTransformChanged` and `renderedImagesChanged` events, with `dispose()` for cleanup. (B) Added `viewTransformChanged` and `renderedImagesChanged` events to `EventsAPI`, wired from Viewer's view change listeners and source load/switch events. (C) Added `addViewChangeListener()` (multi-listener support) and `getSourceDimensions()` to Viewer. (D) Viewer's ResizeObserver now notifies view change listeners so viewport size changes propagate. (E) `TransformManager.fitToWindow()` and `resetForSourceChange()` now call `notifyViewChanged()` to keep the bridge in sync. (F) `EventsAPI` subscribes to `currentSourceChanged` to update rendered images when switching between already-loaded sources. (G) Backward compat preserved for `setViewTransform()`/`setRenderedImages()`.
+- **Regression Tests**: 18 new tests covering: event subscription wiring, view transform updates, rendered image updates, coordinate conversion with live state, source switching emits correct data, viewport resize triggers update, dispose cleanup, reconnection, and backward compat for manual setters.
+- **Verification**: All 556 compat tests pass (8 files), TypeScript clean.
+- **Files Changed**: `src/compat/MuEvalBridge.ts`, `src/compat/__tests__/MuEvalBridge.test.ts`, `src/compat/index.ts`, `src/api/EventsAPI.ts`, `src/api/types.ts`, `src/ui/components/Viewer.ts`

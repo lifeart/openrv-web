@@ -668,11 +668,8 @@ export class Viewer {
     });
 
     // Wire up multiplexed view change dispatch for external + multi-listener
-    this.transformManager.setOnViewChanged((panX: number, panY: number, zoom: number) => {
-      this._externalViewChangedCallback?.(panX, panY, zoom);
-      for (const listener of this._viewChangeListeners) {
-        listener(panX, panY, zoom);
-      }
+    this.transformManager.setOnViewChanged(() => {
+      this.notifyViewChangeListeners();
     });
 
     // Create container
@@ -927,6 +924,7 @@ export class Viewer {
     // Setup resize observer
     this.resizeObserver = new ResizeObserver(() => {
       this.invalidateLayoutCache();
+      this.notifyViewChangeListeners();
       this.scheduleRender();
     });
     this.resizeObserver.observe(this.container);
@@ -2406,6 +2404,20 @@ export class Viewer {
   addViewChangeListener(callback: (panX: number, panY: number, zoom: number) => void): () => void {
     this._viewChangeListeners.add(callback);
     return () => { this._viewChangeListeners.delete(callback); };
+  }
+
+  /**
+   * Dispatch current pan/zoom state to all view change listeners.
+   * Called by TransformManager's onViewChanged callback and by the ResizeObserver.
+   */
+  private notifyViewChangeListeners(): void {
+    const panX = this.transformManager.panX;
+    const panY = this.transformManager.panY;
+    const zoom = this.transformManager.zoom;
+    this._externalViewChangedCallback?.(panX, panY, zoom);
+    for (const listener of this._viewChangeListeners) {
+      listener(panX, panY, zoom);
+    }
   }
 
   /**
