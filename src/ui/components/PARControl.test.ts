@@ -29,6 +29,14 @@ describe('PARControl', () => {
       expect(button).not.toBeNull();
       expect(button?.textContent).toContain('PAR');
     });
+
+    it('PARC-U004: button title describes both click configuration and Shift+P toggle behavior', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="par-control-button"]') as HTMLButtonElement;
+      expect(button.title).toMatch(/click/i);
+      expect(button.title).toMatch(/Shift\+P/i);
+      expect(button.title).toMatch(/toggle/i);
+    });
   });
 
   describe('setState', () => {
