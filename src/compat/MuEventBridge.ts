@@ -14,6 +14,7 @@ import type { MuEvent, MuEventCallback } from './types';
 export class MuEventBridge {
   private modeManager: ModeManager;
   private domListenerCleanups: Array<() => void> = [];
+  private wiredTargets = new WeakSet<EventTarget>();
 
   constructor(modeManager?: ModeManager) {
     this.modeManager = modeManager ?? new ModeManager();
@@ -207,6 +208,9 @@ export class MuEventBridge {
    * Translates keyboard, pointer, and wheel events into Mu event names.
    */
   wireDOMEvents(target: EventTarget): void {
+    if (this.wiredTargets.has(target)) return;
+    this.wiredTargets.add(target);
+
     const wire = (type: string, handler: (e: Event) => void) => {
       target.addEventListener(type, handler);
       this.domListenerCleanups.push(() => target.removeEventListener(type, handler));
@@ -228,6 +232,7 @@ export class MuEventBridge {
       cleanup();
     }
     this.domListenerCleanups = [];
+    this.wiredTargets = new WeakSet<EventTarget>();
     this.modeManager.dispose();
   }
 

@@ -515,6 +515,94 @@ describe('MuEventBridge', () => {
   });
 });
 
+// ── wireDOMEvents double-registration guard (Issue #260) ──
+
+describe('MuEventBridge wireDOMEvents dedup', () => {
+  let bridge: MuEventBridge;
+
+  beforeEach(() => {
+    bridge = new MuEventBridge();
+  });
+
+  afterEach(() => {
+    bridge.dispose();
+  });
+
+  it('does not double-register listeners when wireDOMEvents is called twice on the same target', () => {
+    const target = document.createElement('div');
+    const handler = vi.fn();
+    bridge.bind('', 'global', 'key-down--a', handler);
+    bridge.getModeManager().pushEventTable('global');
+
+    bridge.wireDOMEvents(target);
+    bridge.wireDOMEvents(target); // second call should be a no-op
+
+    target.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' }));
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it('still wires different targets independently', () => {
+    const targetA = document.createElement('div');
+    const targetB = document.createElement('div');
+    const handler = vi.fn();
+    bridge.bind('', 'global', 'key-down--a', handler);
+    bridge.getModeManager().pushEventTable('global');
+
+    bridge.wireDOMEvents(targetA);
+    bridge.wireDOMEvents(targetB);
+
+    targetA.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' }));
+    expect(handler).toHaveBeenCalledTimes(1);
+
+    targetB.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' }));
+    expect(handler).toHaveBeenCalledTimes(2);
+  });
+
+  it('allows re-wiring the same target on a NEW bridge after dispose', () => {
+    const target = document.createElement('div');
+    const handler = vi.fn();
+    bridge.bind('', 'global', 'key-down--a', handler);
+    bridge.getModeManager().pushEventTable('global');
+
+    bridge.wireDOMEvents(target);
+    bridge.dispose();
+
+    // Re-create bridge and wire again
+    bridge = new MuEventBridge();
+    const handler2 = vi.fn();
+    bridge.bind('', 'global', 'key-down--a', handler2);
+    bridge.getModeManager().pushEventTable('global');
+    bridge.wireDOMEvents(target);
+
+    target.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' }));
+    expect(handler2).toHaveBeenCalledOnce();
+  });
+
+  it('allows re-wiring the same target on the SAME bridge after dispose', () => {
+    const target = document.createElement('div');
+    const handler = vi.fn();
+    bridge.bind('', 'global', 'key-down--a', handler);
+    bridge.getModeManager().pushEventTable('global');
+
+    bridge.wireDOMEvents(target);
+
+    // Verify it works before dispose
+    target.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' }));
+    expect(handler).toHaveBeenCalledOnce();
+
+    bridge.dispose();
+
+    // Re-initialize the SAME bridge instance: re-bind and re-push table
+    const handler2 = vi.fn();
+    bridge.bind('', 'global', 'key-down--a', handler2);
+    bridge.getModeManager().pushEventTable('global');
+    bridge.wireDOMEvents(target);
+
+    target.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' }));
+    expect(handler2).toHaveBeenCalledOnce();
+  });
+});
+
 // ── Regex Binding Dispatch Tests ──
 
 describe('ModeManager regex dispatch', () => {

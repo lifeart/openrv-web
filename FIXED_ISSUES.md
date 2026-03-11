@@ -2512,3 +2512,12 @@
 - **Regression Tests**: 4 new tests covering all tag combinations: matching tags fires, mismatching tags blocks, untagged BBox matches all events, tagged BBox blocks untagged events. Updated existing spatial tests to use empty tags for backward compatibility.
 - **Verification**: All 646 compat tests pass (8 files), TypeScript clean.
 - **Files Changed**: `src/compat/ModeManager.ts`, `src/compat/types.ts`, `src/compat/__tests__/MuEventBridge.test.ts`
+
+### 260. Mu compat wireDOMEvents() double-registers listeners if called more than once on the same target
+- **Severity**: Medium
+- **Area**: Mu compatibility / DOM event wiring
+- **Root Cause**: `wireDOMEvents(target)` unconditionally added fresh DOM listeners on every call without tracking already-wired targets. A second call on the same target doubled all event dispatches.
+- **Fix**: Added a `WeakSet<EventTarget>` (`wiredTargets`) that tracks already-wired targets. `wireDOMEvents()` returns early if the target is already in the set. `dispose()` resets the WeakSet to `new WeakSet()` (since WeakSet has no `clear()` method) to allow re-wiring after disposal.
+- **Regression Tests**: 4 new tests covering: double-wire prevention (handler fires once not twice), independent targets work separately, re-wire after dispose with new bridge, re-wire after dispose on same bridge instance (verifying WeakSet reset).
+- **Verification**: All 650 compat tests pass (8 files), TypeScript clean.
+- **Files Changed**: `src/compat/MuEventBridge.ts`, `src/compat/__tests__/MuEventBridge.test.ts`
