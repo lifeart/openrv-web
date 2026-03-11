@@ -1649,153 +1649,63 @@
 
 ## Issue #162: The project-open path for `.rv/.gto` can never provide companion files for session-side media resolution
 
-- **Severity**: Medium
-- **Area**: Project/session open workflow / RV-GTO interchange
-- **Root Cause**: `openProject()` accepted only a single `File` and the project file input was not multi-select. The `.rv`/`.gto` branch called `session.loadFromGTO(content)` without passing an `availableFiles` map, even though the GTO importer supports companion-file resolution for referenced media/CDL files.
-- **Fix**: Made the project file input multi-select. Changed `openProject(file: File)` to `openProject(file: File, companionFiles?: File[])`. In the `.rv`/`.gto` branch, builds a `Map<string, File>` from companion files and passes it to `session.loadFromGTO(content, availableFiles)`. Single-file selection remains backward compatible.
-- **Regression Tests**: Added APM-162a through APM-162e — verify companion files are passed through for `.rv`/`.gto`, single file still works, empty companions handled, `.orvproject` ignores companions.
-- **Verification**: All 22,468 tests pass, TypeScript clean.
-- **Files Changed**: `src/AppPersistenceManager.ts`, `src/AppPersistenceManager.test.ts`, `src/ui/components/layout/HeaderBar.ts`, `src/ui/components/layout/HeaderBar.test.ts`, `src/AppPlaybackWiring.ts`
+- **TODO(#162) Resolved**: The project-open path already supports RV/GTO companion files. `HeaderBar` project-open is multi-select, `AppPlaybackWiring` passes the selected extras through, and `AppPersistenceManager.openProject(file, companionFiles?)` builds an `availableFiles` map for `session.loadFromGTO(content, availableFiles)`. Current regression coverage is `APM-162a` through `APM-162e`.
 
 ## Issue #163: RVEDL import parses and stores entries, but the timeline editor never consumes them
 
-- **Severity**: Medium
-- **Area**: EDL workflow / timeline visibility
-- **Root Cause**: `TimelineEditorService` did not subscribe to the `edlLoaded` event and `syncFromGraph()` never read `session.edlEntries`. RVEDL import succeeded but the timeline editor never displayed the imported cut structure.
-- **Fix**: Added `edlLoaded` event subscription to trigger resync. Added `buildEDLFromRVEDLEntries()` to convert RVEDL entries into timeline cuts by matching basenames against loaded sources. Added RVEDL branch in `syncFromGraph()` with priority: SequenceGroupNode > Playlist > RVEDL > Fallback.
-- **Regression Tests**: Added TLE-037 through TLE-046 — unit tests for EDL-to-cut conversion (basename matching, frame clamping, empty input) and integration tests for sync priority and event-driven resync.
-- **Verification**: All 22,478 tests pass, TypeScript clean.
-- **Files Changed**: `src/services/TimelineEditorService.ts`, `src/services/TimelineEditorService.test.ts`
+- **TODO(#163) Resolved**: `TimelineEditorService` already consumes imported RVEDL state. It listens for `edlLoaded`, builds timeline cuts from `session.edlEntries`, and gives that branch the intended priority after sequence-group and playlist sources. Current regression coverage is `TLE-037` through `TLE-046`.
 
 ## Issue #164: Loaded RVEDL state is not saved into `.orvproject` at all
 
-- **Severity**: Medium
-- **Area**: EDL workflow / project persistence
-- **Root Cause**: `SessionState` had no `edlEntries` field, and `SessionSerializer` neither serialized nor restored RVEDL entries. Saving as `.orvproject` silently dropped the imported cut list.
-- **Fix**: Added `edlEntries?: RVEDLEntry[]` to `SessionState`. `toJSON()` serializes entries when non-empty. `fromJSON()` restores them via new `Session.setEdlEntries()` which fires `edlLoaded` so `TimelineEditorService` picks up restored EDL.
-- **Regression Tests**: Added SER-EDL-001 through SER-EDL-008 — toJSON includes/omits entries, fromJSON restores/skips, event firing, round-trip.
-- **Verification**: All 22,486 tests pass, TypeScript clean.
-- **Files Changed**: `src/core/session/SessionState.ts`, `src/core/session/SessionGraph.ts`, `src/core/session/Session.ts`, `src/core/session/SessionSerializer.ts`, `src/core/session/SessionSerializer.test.ts`
+- **TODO(#164) Resolved**: `.orvproject` persistence already round-trips RVEDL state. `SessionState` includes `edlEntries`, `SessionSerializer.toJSON()` writes them when present, and restore calls `session.setEdlEntries(...)` so the timeline service sees the restored cut list. Current regression coverage is `SER-EDL-001` through `SER-EDL-008`.
 
 ## Issue #165: The viewer's persisted texture-filter preference is outside the app's real preferences backup/import path
 
-- **Severity**: Medium
-- **Area**: Viewer preferences / backup portability
-- **Root Cause**: The texture-filter mode was stored under a standalone localStorage key (`openrv.filterMode`) that wasn't part of `PreferencesManager`'s export/import/reset payload.
-- **Fix**: Added `filterMode` to `PreferencesManager` with get/set methods, export, import (with validation for 'nearest'/'linear'), and reset. Unified the localStorage key to `openrv-prefs-filter-mode`. ViewerIndicators updated to use the same key.
-- **Regression Tests**: Added CPRF-165-001 through CPRF-165-011 — export includes filterMode, import restores/clears, reset clears, round-trip, getter/setter edge cases.
-- **Verification**: All 22,497 tests pass, TypeScript clean.
-- **Files Changed**: `src/core/PreferencesManager.ts`, `src/core/PreferencesManager.test.ts`, `src/ui/components/ViewerIndicators.ts`, `src/ui/components/ViewerIndicators.test.ts`
+- **TODO(#165) Resolved**: Texture-filter preference already lives inside the unified preferences flow. `PreferencesManager` exports/imports/resets `filterMode`, and the UI path uses the same unified key rather than a separate standalone preference. Current regression coverage is `CPRF-165-001` through `CPRF-165-011`.
 
 ## Issue #166: Display profile state omitted from unified preferences export/import
 
-- **Severity**: Medium
-- **Area**: Display preferences / backup portability
-- **Root Cause**: The display profile was persisted under its own localStorage key but excluded from `PreferencesManager`'s export/import payload.
-- **Fix**: Added `displayProfile` to the unified preferences system — export, import (with `sanitizeDisplayProfile()` validation and value clamping), reset. `DisplayTransfer.ts` continues to work unchanged via existing key.
-- **Regression Tests**: 13 tests covering get/set, export, import, round-trip, reset, validation, clamping, corrupt data.
-- **Verification**: All 22,524 tests pass, TypeScript clean.
-- **Files Changed**: `src/core/PreferencesManager.ts`, `src/core/PreferencesManager.test.ts`
+- **TODO(#166) Resolved**: Display profile state is already part of the unified preferences payload. `PreferencesManager` exports/imports/resets it with validation and clamping, while the runtime display-transfer path keeps using the same persisted data. Current regression coverage is the `CPRF-166-*` suite.
 
 ## Issue #167: Timeline timecode-display mode omitted from unified preferences backup/import/reset
 
-- **Severity**: Medium
-- **Area**: Timeline preferences / backup portability
-- **Root Cause**: Timeline display mode used a standalone localStorage key `openrv.timeline.displayMode` not included in `PreferencesManager` or its reset flow.
-- **Fix**: Added `timelineDisplayMode` to `CORE_PREFERENCE_STORAGE_KEYS` with unified key. Updated `Timeline.ts` to reference the shared key. Added export, import (with mode validation), and reset support.
-- **Regression Tests**: 14 tests covering get/set, export, import, round-trip, reset, all four valid modes, invalid mode rejection.
-- **Verification**: All 22,524 tests pass, TypeScript clean.
-- **Files Changed**: `src/core/PreferencesManager.ts`, `src/core/PreferencesManager.test.ts`, `src/ui/components/Timeline.ts`, `src/ui/components/Timeline.test.ts`
+- **TODO(#167) Resolved**: Timeline display mode already round-trips through unified preferences. `PreferencesManager` owns the key, export/import/reset handle it, and `Timeline` reads the shared preference path instead of a detached standalone key. Current regression coverage is the `CPRF-167-*` suite.
 
 ## Issue #168: Missing-frame overlay mode bypasses the app's real preferences portability/reset flow
 
-- **Severity**: Medium
-- **Area**: Viewer preferences / backup portability
-- **Root Cause**: Missing-frame mode was persisted under standalone key `openrv.missingFrameMode` not included in `PreferencesManager`'s export/import/reset.
-- **Fix**: Added `missingFrameMode` to `CORE_PREFERENCE_STORAGE_KEYS` with unified key. Viewer.ts reads unified key first with automatic migration from legacy key. Added export, import (with validation for 4 valid modes), and reset support.
-- **Regression Tests**: Added CPRF-168-001 through CPRF-168-014 — getter/setter, export, import, round-trip, reset, all four modes, invalid value handling.
-- **Verification**: All 22,538 tests pass, TypeScript clean.
-- **Files Changed**: `src/core/PreferencesManager.ts`, `src/core/PreferencesManager.test.ts`, `src/ui/components/Viewer.ts`, `src/ui/components/Viewer.render.test.ts`
+- **TODO(#168) Resolved**: Missing-frame overlay mode is already inside the unified preferences flow. `PreferencesManager` exports/imports/resets it, and `Viewer` reads the unified key with legacy-key migration so older stored values still carry forward. Current regression coverage is `CPRF-168-001` through `CPRF-168-014`.
 
 ## Issue #169: Multi-source layout persistence exists in code and tests, but production never calls it
 
-- **Severity**: Medium
-- **Area**: Multi-source layout / persistence wiring
-- **Root Cause**: `MultiSourceLayoutStore` had `saveToStorage()`/`loadFromStorage()` methods that were never called in runtime wiring, so layout state wasn't persisted across reloads.
-- **Fix**: Constructor now calls `loadFromStorage()` on initialization. `emitLayoutChanged()` now triggers debounced (300ms) `saveToStorage()`. Added `flushSave()` for tests/shutdown.
-- **Regression Tests**: 6 tests — restore on construction, auto-save on change, debounce coalescing, no-op when unchanged, flush behavior.
-- **Verification**: All 22,544 tests pass, TypeScript clean.
-- **Files Changed**: `src/ui/multisource/MultiSourceLayoutStore.ts`, `src/ui/multisource/__tests__/MultiSourceLayoutStore.test.ts`
+- **TODO(#169) Resolved**: `MultiSourceLayoutStore` already persists itself in production. Construction loads from storage, layout changes debounce into `saveToStorage()`, and `flushSave()` exists for shutdown/test determinism. Current regression coverage is the `MultiSourceLayoutStore` persistence suite.
 
 ## Issue #170: Playback FPS reporting can contradict the dropped-frame counter
 
-- **Severity**: Medium
-- **Area**: Playback metrics / viewer diagnostics
-- **Root Cause**: `trackFrameAdvance()` was called for skipped frames, inflating measured FPS while the dropped-frame counter correctly showed skips — contradictory diagnostics.
-- **Fix**: `advanceFrame()` now accepts `skipped: boolean = false`. When true, `trackFrameAdvance()` is skipped. Updated three call sites: absolute timeout skip, starvation timeout skip, and accumulator overflow intermediate frames.
-- **Regression Tests**: PE-165 (skipped frames don't inflate FPS), PE-166 (dropped-frame counter unaffected), PE-167 (normal playback unchanged).
-- **Verification**: All 22,547 tests pass, TypeScript clean.
-- **Files Changed**: `src/core/session/PlaybackEngine.ts`, `src/core/session/PlaybackEngine.test.ts`
+- **TODO(#170) Resolved**: Playback timing already avoids inflating FPS on skipped frames. `PlaybackEngine.advanceFrame(direction, skipped)` suppresses `trackFrameAdvance()` for skip paths, so FPS reporting and dropped-frame counters stay aligned. Current regression coverage is `PE-165` through `PE-167`.
 
 ## Issue #171: Snapshot export is one-way in the shipped UI
 
-- **Severity**: Medium
-- **Area**: Snapshot workflow / interchange
-- **Root Cause**: `SnapshotManager.importSnapshot()` was fully implemented but never wired to any UI control. The panel had Export but no Import action.
-- **Fix**: Added an "Import" button to the SnapshotPanel footer with file picker (`.json`), calls `importSnapshot()`, refreshes the list on success, shows error alert on failure via `showAlert()`.
-- **Regression Tests**: 5 tests — import button exists, text content, file picker triggered, successful import refreshes list, failed import shows error.
-- **Verification**: All 22,552 tests pass, TypeScript clean.
-- **Files Changed**: `src/ui/components/SnapshotPanel.ts`, `src/ui/components/__tests__/SnapshotPanel.test.ts`
+- **TODO(#171) Resolved**: Snapshot import is already exposed in the shipped panel. `SnapshotPanel` has an `Import` action wired to `importSnapshot()`, refreshes the list after success, and reports failures through the existing alert path. Current regression coverage is the snapshot-import UI suite.
 
 ## Issue #172: The unified preferences export/import/reset system is effectively unreachable in production UI
 
-- **Severity**: Medium
-- **Area**: Preferences workflow / UI wiring
-- **Root Cause**: `PreferencesManager` had `exportAll()`, `importAll()`, and `resetAll()` methods but no production UI invoked them.
-- **Fix**: Added three menu items to the Help dropdown: "Export Preferences" (downloads JSON), "Import Preferences" (file picker + importAll with error handling), "Reset All Preferences" (confirmation dialog + resetAll). Wired through `AppPlaybackWiring`.
-- **Regression Tests**: 14 tests — menu items exist with correct labels, emit correct events, export triggers download, import opens picker and calls importAll, failed import shows error, reset shows confirmation, reset skipped on cancel.
-- **Verification**: All 22,565 tests pass, TypeScript clean.
-- **Files Changed**: `src/ui/components/layout/HeaderBar.ts`, `src/ui/components/layout/HeaderBar.test.ts`, `src/AppPlaybackWiring.ts`, `src/AppPlaybackWiring.test.ts`
+- **TODO(#172) Resolved**: Preferences backup/import/reset is already reachable in the shipped UI. `HeaderBar` exposes `Export Preferences`, `Import Preferences`, and `Reset All Preferences` in the Help dropdown, and `AppPlaybackWiring` handles the download/import/confirm-reset flows. Current regression coverage is the `HDR-U092*` and preferences-wiring tests in `AppPlaybackWiring.test.ts`.
 
 ## Issue #173: Annotation JSON support is export-only in the shipped app
 
-- **Severity**: Medium
-- **Area**: Annotation workflow / interchange
-- **Root Cause**: `parseAnnotationsJSON()` and `applyAnnotationsJSON()` were implemented but never wired to any UI control. The export menu had "Export Annotations (JSON)" but no import counterpart.
-- **Fix**: Added "Import Annotations (JSON)" menu item to ExportControl dropdown. Handler opens file picker (.json), validates via `parseAnnotationsJSON()`, applies in replace mode via `applyAnnotationsJSON()`, shows success count or error feedback.
-- **Regression Tests**: 7 tests — menu item exists, event emission, file picker opens, valid file triggers parse+apply+success, invalid JSON shows error, apply exception shows error.
-- **Verification**: All 22,572 tests pass, TypeScript clean.
-- **Files Changed**: `src/ui/components/ExportControl.ts`, `src/ui/components/ExportControl.test.ts`, `src/AppPlaybackWiring.ts`, `src/AppPlaybackWiring.test.ts`
+- **TODO(#173) Resolved**: Annotation JSON import is already exposed in the export dropdown. `ExportControl` includes `Import Annotations (JSON)`, and `AppPlaybackWiring` parses the file, applies it in replace mode, and reports success or failure through alerts. Current regression coverage is the `EXP-IMP*` export-control tests plus the wiring tests in `AppPlaybackWiring.test.ts`.
 
 ## Issue #174: Marker import is merge-only in the shipped UI and silently drops frame collisions
 
-- **Severity**: Medium
-- **Area**: Marker workflow / interchange
-- **Root Cause**: Import button hardcoded `importMarkers('merge')` with no user choice. Frame collisions in merge mode were silently skipped.
-- **Fix**: Import now prompts for merge/replace choice when existing markers are present (skips dialog when empty). Merge mode tracks and reports collision count via `showAlert()` with correct singular/plural grammar. Replace mode clears before importing.
-- **Regression Tests**: MARK-U151 through MARK-U157 — mode choice dialog shown/skipped, replace clears existing, merge preserves existing, collision count reported, single collision grammar, no alert on zero collisions.
-- **Verification**: All 22,579 tests pass, TypeScript clean.
-- **Files Changed**: `src/ui/components/MarkerListPanel.ts`, `src/ui/components/MarkerListPanel.test.ts`
+- **TODO(#174) Resolved**: Marker import already offers merge-versus-replace behavior and reports merge collisions. `MarkerListPanel` prompts when existing markers are present, clears on replace, preserves on merge, and summarizes skipped collision counts with the correct grammar. Current regression coverage is `MARK-U151` through `MARK-U157`.
 
 ## Issue #175: The shipped export UI ignores the app's saved export-default preferences
 
-- **Severity**: Medium
-- **Area**: Export workflow / preferences
-- **Root Cause**: `ExportControl` hardcoded quality (0.92/0.95) and format ('png') values. `getExportDefaults()` from `PreferencesManager` was never consumed in production.
-- **Fix**: `ExportControl` now reads from `preferencesManager.getExportDefaults()` at call time for format, quality, and includeAnnotations. Falls back to hardcoded defaults when no preferences are stored. Annotations checkbox initial state also driven by preference.
-- **Regression Tests**: 14 tests — fallback to defaults, each export type respects persisted quality/format/annotations, runtime preference changes picked up, combined format+quality.
-- **Verification**: All 22,592 tests pass, TypeScript clean.
-- **Files Changed**: `src/ui/components/ExportControl.ts`, `src/ui/components/ExportControl.test.ts`, `src/core/PreferencesManager.ts`
+- **TODO(#175) Resolved**: The export UI already reads persisted export defaults at runtime. `ExportControl` pulls format, quality, and `includeAnnotations` from `preferencesManager.getExportDefaults()` and updates behavior immediately when those preferences change. Current regression coverage is the `EXPORT-P175-*` suite.
 
 ## Issue #176: The export menu's `Include annotations` option does not apply to `Copy to Clipboard`
 
-- **Severity**: Medium
-- **Area**: Export UI / behavior consistency
-- **Root Cause**: `copyRequested` event carried no annotation flag, and both the wiring and keyboard action hardcoded `viewer.copyFrameToClipboard(true)`.
-- **Fix**: `copyRequested` now carries `{ includeAnnotations: boolean }` from the checkbox state. AppPlaybackWiring uses the flag. Keyboard shortcut reads `includeAnnotations` from `PreferencesManager.getExportDefaults()`.
-- **Regression Tests**: 5 tests — copy respects checkbox on/off, wiring passes flag through, keyboard shortcut reads preferences.
-- **Verification**: All 22,597 tests pass, TypeScript clean.
-- **Files Changed**: `src/ui/components/ExportControl.ts`, `src/ui/components/ExportControl.test.ts`, `src/AppPlaybackWiring.ts`, `src/AppPlaybackWiring.test.ts`, `src/services/KeyboardActionMap.ts`, `src/services/KeyboardActionMap.test.ts`
+- **TODO(#176) Resolved**: Clipboard export already respects the `Include annotations` setting. `ExportControl` emits `copyRequested` with the checkbox state, `AppPlaybackWiring` passes that flag through to `viewer.copyFrameToClipboard(...)`, and the keyboard shortcut pulls the same preference from `PreferencesManager`. Current regression coverage is the `EXPORT-U176-*`, `PW-006*`, and keyboard-action tests.
 
 ## Issue #177: Notes import performs almost no schema validation and can inject malformed notes
 
@@ -2645,3 +2555,15 @@
 - **Regression Tests**: 4 new tests — handler-set returnContents, no modification returns '', last-write-wins with multiple handlers, no handler bound returns ''.
 - **Verification**: All 730 compat tests pass.
 - **Files Changed**: `src/compat/MuEventBridge.ts`, `src/compat/__tests__/MuEventBridge.test.ts`
+
+---
+
+### 275. `registerMuCompat()` is documented as a no-op on repeat calls but still returns fresh unmounted command objects each time
+
+- **Severity**: Medium
+- **Area**: Mu compatibility / bootstrap contract
+- **Root Cause**: `registerMuCompat()` constructed new `MuCommands` and `MuExtraCommands` objects on every call. When `window.rv` already existed, it returned fresh unmounted objects instead of the already-mounted instances.
+- **Fix**: Added module-level `_cachedResult` variable. First call caches the result; subsequent calls return the cached reference immediately, making them true no-ops. `_resetMuCompatCache()` exported for test isolation.
+- **Regression Tests**: 2 new tests — repeat calls return identical cached references, repeat calls don't construct new instances.
+- **Verification**: All 732 compat tests pass.
+- **Files Changed**: `src/compat/index.ts`, `src/compat/__tests__/bootstrap-registration.test.ts`

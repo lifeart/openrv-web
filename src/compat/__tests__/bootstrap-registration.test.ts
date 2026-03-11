@@ -15,18 +15,20 @@ vi.mock('../index', async (importOriginal) => {
   };
 });
 
-import { registerMuCompat } from '../index';
+import { registerMuCompat, _resetMuCompatCache } from '../index';
 
 describe('bootstrap Mu compat registration (Issue #201)', () => {
   const g = globalThis as unknown as { rv?: { commands: unknown; extra_commands: unknown } };
 
   beforeEach(() => {
     delete g.rv;
+    _resetMuCompatCache();
     vi.mocked(registerMuCompat).mockClear();
   });
 
   afterEach(() => {
     delete g.rv;
+    _resetMuCompatCache();
   });
 
   it('registerMuCompat is exported and callable', () => {
@@ -101,5 +103,30 @@ describe('bootstrap Mu compat registration (Issue #201)', () => {
     expect(openrvIndex).toBeGreaterThan(-1);
     expect(muCompatIndex).toBeGreaterThan(-1);
     expect(muCompatIndex).toBeGreaterThan(openrvIndex);
+  });
+
+  it('repeat calls return identical cached references (Issue #275)', () => {
+    const first = registerMuCompat();
+    const second = registerMuCompat();
+    const third = registerMuCompat();
+
+    // All calls must return the exact same object references
+    expect(second).toBe(first);
+    expect(third).toBe(first);
+    expect(second.commands).toBe(first.commands);
+    expect(second.extra_commands).toBe(first.extra_commands);
+  });
+
+  it('repeat calls do not construct new MuCommands instances (Issue #275)', () => {
+    const first = registerMuCompat();
+
+    const commandsRef = first.commands;
+    const extraRef = first.extra_commands;
+
+    const second = registerMuCompat();
+
+    // Must return the exact same cached result object, not a new wrapper
+    expect(second.commands).toBe(commandsRef);
+    expect(second.extra_commands).toBe(extraRef);
   });
 });
