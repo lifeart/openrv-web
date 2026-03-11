@@ -212,24 +212,31 @@ export class MuEvalBridge {
 
     const result: string[] = [];
     const visited = new Set<string>();
-    const queue: IPNode[] = [startNode];
+    let currentLevel: IPNode[] = [startNode];
 
-    // BFS to find closest nodes of the target type
-    while (queue.length > 0) {
-      const node = queue.shift()!;
-      if (visited.has(node.id)) continue;
-      visited.add(node.id);
+    // BFS level-by-level to find closest nodes of the target type
+    while (currentLevel.length > 0) {
+      const nextLevel: IPNode[] = [];
 
-      if (node.type === typeName) {
-        result.push(node.name);
-      }
+      for (const node of currentLevel) {
+        if (visited.has(node.id)) continue;
+        visited.add(node.id);
 
-      // Walk upstream through inputs
-      for (const input of node.inputs) {
-        if (!visited.has(input.id)) {
-          queue.push(input);
+        if (node.type === typeName) {
+          result.push(node.name);
+        }
+
+        // Walk upstream through inputs
+        for (const input of node.inputs) {
+          if (!visited.has(input.id)) {
+            nextLevel.push(input);
+          }
         }
       }
+
+      // Stop once we found matches at this depth
+      if (result.length > 0) break;
+      currentLevel = nextLevel;
     }
 
     return result;

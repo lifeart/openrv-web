@@ -224,6 +224,101 @@ describe('MuEvalBridge', () => {
       expect(result).toContain('source1');
       expect(result).toContain('source2');
     });
+
+    it('returns only the nearest depth matches in a multi-depth chain', () => {
+      // Chain: srcA(X) -> mid(Y) -> srcB(X) -> end(Z)
+      // Searching from end for type X should return only srcB (depth 1), not srcA (depth 3)
+      const g = new Graph();
+      const srcA = new TestNode('TypeX', 'srcA');
+      const mid = new TestNode('TypeY', 'mid');
+      const srcB = new TestNode('TypeX', 'srcB');
+      const end = new TestNode('TypeZ', 'end');
+
+      g.addNode(srcA);
+      g.addNode(mid);
+      g.addNode(srcB);
+      g.addNode(end);
+
+      g.connect(srcA, mid);
+      g.connect(mid, srcB);
+      g.connect(srcB, end);
+
+      const nb = new MuNodeBridge(g);
+      const b = new MuEvalBridge(g, nb);
+
+      const result = b.closestNodesOfType('end', 'TypeX');
+      expect(result).toEqual(['srcB']);
+    });
+
+    it('returns only the nearest depth in a branching graph', () => {
+      // Branch1: nearX(X) -> end(Z)        (depth 1)
+      // Branch2: farX(X) -> mid(Y) -> end   (depth 2 via mid)
+      // Only nearX should be returned
+      const g = new Graph();
+      const nearX = new TestNode('TypeX', 'nearX');
+      const farX = new TestNode('TypeX', 'farX');
+      const mid = new TestNode('TypeY', 'mid');
+      const end = new TestNode('TypeZ', 'end');
+
+      g.addNode(nearX);
+      g.addNode(farX);
+      g.addNode(mid);
+      g.addNode(end);
+
+      g.connect(nearX, end);
+      g.connect(farX, mid);
+      g.connect(mid, end);
+
+      const nb = new MuNodeBridge(g);
+      const b = new MuEvalBridge(g, nb);
+
+      const result = b.closestNodesOfType('end', 'TypeX');
+      expect(result).toEqual(['nearX']);
+    });
+
+    it('returns all matches when they are at the same depth', () => {
+      // a(X) -> end(Z) and b(X) -> end(Z)  — both at depth 1
+      const g = new Graph();
+      const a = new TestNode('TypeX', 'a');
+      const b2 = new TestNode('TypeX', 'b');
+      const end = new TestNode('TypeZ', 'end');
+
+      g.addNode(a);
+      g.addNode(b2);
+      g.addNode(end);
+
+      g.connect(a, end);
+      g.connect(b2, end);
+
+      const nb = new MuNodeBridge(g);
+      const b = new MuEvalBridge(g, nb);
+
+      const result = b.closestNodesOfType('end', 'TypeX');
+      expect(result).toContain('a');
+      expect(result).toContain('b');
+      expect(result).toHaveLength(2);
+    });
+
+    it('returns empty array when no upstream nodes match the type', () => {
+      // Chain with no TypeX: a(Y) -> b(Z) -> end(W)
+      const g = new Graph();
+      const a = new TestNode('TypeY', 'a');
+      const b2 = new TestNode('TypeZ', 'b');
+      const end = new TestNode('TypeW', 'end');
+
+      g.addNode(a);
+      g.addNode(b2);
+      g.addNode(end);
+
+      g.connect(a, b2);
+      g.connect(b2, end);
+
+      const nb = new MuNodeBridge(g);
+      const b = new MuEvalBridge(g, nb);
+
+      const result = b.closestNodesOfType('end', 'TypeX');
+      expect(result).toEqual([]);
+    });
   });
 
   // =====================================================================

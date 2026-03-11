@@ -1465,9 +1465,9 @@
 ## Issue #138: Snapshots, auto-checkpoints, and auto-saves use the same lossy project serializer
 
 - **Severity**: High
-- **Fix**: Added TODO(#138) comments in `AppPersistenceManager.ts` snapshot and auto-save methods documenting that these use the same lossy serializer as project save.
-- **Regression Tests**: 1 test.
-- **Files Changed**: `src/AppPersistenceManager.ts`
+- **Fix**: `AppPersistenceManager` now wraps project serialization with a local-only `localPersistence` payload for auto-saves, snapshots, and auto-checkpoints. This captures viewer-only state that `.orvproject` still does not persist, including OCIO state, tone mapping, display profile, gamut mapping, color inversion, curves, channel isolation, stereo state, stereo eye transforms, stereo align mode, difference matte, blend mode, deinterlace, film emulation, perspective correction, stabilization, and uncrop. Snapshot and auto-save restore paths now reapply that local state back into both the `Viewer` and the corresponding UI controls.
+- **Regression Tests**: 2 tests.
+- **Files Changed**: `src/AppPersistenceManager.ts`, `src/AppPersistenceManager.test.ts`, `src/App.ts`
 
 ## Issue #139: Snapshot restore appends the snapshot onto the current session instead of replacing it
 
@@ -2422,3 +2422,12 @@
 - **Regression Tests**: 14 new tests covering: set preserves 2D shape, set preserves 3D shape, insert updates outermost 2D dimension, insert updates outermost 3D dimension, wrong value count on numeric set throws, wrong value count on string set throws, non-aligned insert count on numeric throws, non-aligned insert count on string throws, misaligned insert index throws, and happy-path round-trips for both numeric and string ND properties.
 - **Verification**: All 589 compat tests pass (8 files), TypeScript clean.
 - **Files Changed**: `src/compat/MuPropertyBridge.ts`, `src/compat/__tests__/MuPropertyBridge.test.ts`
+
+### 250. Mu compat closestNodesOfType() returns farther matches too, instead of only the nearest layer of matches
+- **Severity**: Medium
+- **Area**: Mu compatibility / graph evaluation
+- **Root Cause**: `closestNodesOfType()` used a simple BFS that continued traversing past the first matching depth, collecting matches at ALL upstream depths instead of stopping at the nearest layer.
+- **Fix**: Replaced single-queue BFS with level-by-level BFS. Each depth level is fully processed before checking for matches. Once any matches are found at a depth, traversal stops immediately — only that nearest layer is returned. Visited-set cycle detection prevents duplicate processing in diamond graphs.
+- **Regression Tests**: 4 new tests covering: multi-depth chain (only nearest returned), branching graph with matches at different depths (only nearest depth returned), all matches at same depth (all returned), and no-matches (empty array).
+- **Verification**: All 593 compat tests pass (8 files), TypeScript clean.
+- **Files Changed**: `src/compat/MuEvalBridge.ts`, `src/compat/__tests__/MuEvalBridge.test.ts`
