@@ -2376,3 +2376,13 @@
 - **Regression Tests**: 5 new tests covering: single batch name resolves after commit, multiple batch names all resolve, sequential naming correctness, mixed `addSource`+`addSourceVerbose` in same batch, and non-batch backward compat.
 - **Verification**: All 561 compat tests pass (8 files), TypeScript clean.
 - **Files Changed**: `src/compat/MuSourceBridge.ts`, `src/compat/__tests__/MuSourceBridge.test.ts`
+
+## Issue #247: Mu node-view history can get stuck repeating the same node when navigating back then forward
+
+- **Severity**: Medium
+- **Area**: Mu compatibility / node-view navigation
+- **Root Cause**: The view history used a split model where the current node was separate from the history array. `previousViewNode()` appended the current node to history but didn't advance the index correctly. `nextViewNode()` then returned the same intermediate node instead of the forward successor. Additionally, `deleteNode()` didn't clean up history entries, allowing navigation to deleted nodes.
+- **Fix**: (A) Replaced the split model with a browser-like cursor model — all visited nodes live in `_viewHistory` with `_viewHistoryIndex` as cursor. `setViewNode()` appends and truncates forward entries (like browser navigation). `previousViewNode()`/`nextViewNode()` simply move the cursor. (B) `deleteNode()` now scrubs deleted node from `_viewHistory`, adjusts `_viewHistoryIndex` for removed entries before cursor, and syncs `_viewNode` with the cursor position to prevent duplicate entries on subsequent `setViewNode()`.
+- **Regression Tests**: 11 new/updated tests covering: back returns correct node, forward returns correct node, full back-forward traversal, forward truncation on new navigation, boundary conditions (start/end), deleteNode cleanup (end/middle/current), deleteNode+setViewNode duplicate prevention, and repeated back→forward zigzag stability.
+- **Verification**: All 570 compat tests pass (8 files), TypeScript clean.
+- **Files Changed**: `src/compat/MuNodeBridge.ts`, `src/compat/__tests__/MuNodeBridge.test.ts`
