@@ -23,6 +23,24 @@ export class MuNetworkBridge {
   /** Default permission level for remote connections (0=none, 1=read, 2=readwrite) */
   private defaultPermission = 0;
 
+  /** Handler for incoming remote messages */
+  private _onRemoteMessage: ((connectionId: string, messages: string[], senderContactName: string) => void) | null = null;
+
+  /** Handler for incoming remote events */
+  private _onRemoteEvent: ((connectionId: string, eventName: string, targetName: string, contents: string, interp: string[], senderContactName: string) => void) | null = null;
+
+  /** Handler for incoming remote data events */
+  private _onRemoteDataEvent: ((connectionId: string, eventName: string, targetName: string, contents: string, data: Uint8Array, interp: string[], senderContactName: string) => void) | null = null;
+
+  /** Pending data event headers awaiting binary follow-up, keyed by connection ID */
+  private pendingDataEvents = new Map<string, {
+    header: { event: string; target: string; contents: string; interp: string[]; dataLength: number; senderContactName: string };
+    timeoutId: ReturnType<typeof setTimeout>;
+  }>();
+
+  /** Timeout in ms for binary follow-up after a dataEvent header */
+  private static readonly DATA_EVENT_TIMEOUT_MS = 5000;
+
   // ── HTTP Methods ──
 
   /**
@@ -98,11 +116,29 @@ export class MuNetworkBridge {
       ws.addEventListener('open', () => {
         const info = this.connectionInfo.get(id);
         if (info) info.connected = true;
+
+        // Send identification handshake with contact name and permission
+        const handshake = JSON.stringify({
+          type: 'handshake',
+          contactName: this.localContactName || 'anonymous',
+          permission: this.defaultPermission,
+        });
+        ws.send(handshake);
       });
 
       ws.addEventListener('close', () => {
         this.connections.delete(id);
         this.connectionInfo.delete(id);
+        // Clean up any pending data event for this connection (Fix 2)
+        const pending = this.pendingDataEvents.get(id);
+        if (pending) {
+          clearTimeout(pending.timeoutId);
+          this.pendingDataEvents.delete(id);
+        }
+      });
+
+      ws.addEventListener('message', (event) => {
+        this.handleIncomingMessage(id, event);
       });
 
       ws.addEventListener('error', (e) => {
@@ -123,6 +159,12 @@ export class MuNetworkBridge {
       this.connections.delete(connectionId);
       this.connectionInfo.delete(connectionId);
     }
+    // Clean up any pending data event for this connection (Fix 2)
+    const pending = this.pendingDataEvents.get(connectionId);
+    if (pending) {
+      clearTimeout(pending.timeoutId);
+      this.pendingDataEvents.delete(connectionId);
+    }
   }
 
   /**
@@ -135,7 +177,11 @@ export class MuNetworkBridge {
       console.warn(`[MuNetworkBridge] No open connection for ${connectionId}`);
       return;
     }
-    ws.send(JSON.stringify({ type: 'message', data: messages }));
+    ws.send(JSON.stringify({
+      type: 'message',
+      data: messages,
+      senderContactName: this.localContactName || 'anonymous',
+    }));
   }
 
   /**
@@ -155,6 +201,7 @@ export class MuNetworkBridge {
       target: targetName,
       contents,
       interp,
+      senderContactName: this.localContactName || 'anonymous',
     });
     for (const [, ws] of this.connections) {
       if (ws.readyState === WebSocket.OPEN) {
@@ -180,6 +227,7 @@ export class MuNetworkBridge {
       contents,
       interp,
       dataLength: data.byteLength,
+      senderContactName: this.localContactName || 'anonymous',
     });
 
     for (const [, ws] of this.connections) {
@@ -266,6 +314,26 @@ export class MuNetworkBridge {
     this.defaultPermission = level;
   }
 
+  /** Register a handler for incoming remote messages. */
+  setOnRemoteMessage(handler: ((connectionId: string, messages: string[], senderContactName: string) => void) | null): void {
+    this._onRemoteMessage = handler;
+  }
+
+  /** Register a handler for incoming remote events. */
+  setOnRemoteEvent(handler: ((connectionId: string, eventName: string, targetName: string, contents: string, interp: string[], senderContactName: string) => void) | null): void {
+    this._onRemoteEvent = handler;
+  }
+
+  /** Register a handler for incoming remote data events. */
+  setOnRemoteDataEvent(handler: ((connectionId: string, eventName: string, targetName: string, contents: string, data: Uint8Array, interp: string[], senderContactName: string) => void) | null): void {
+    this._onRemoteDataEvent = handler;
+  }
+
+  /** Get connection info including peer identity from handshake. */
+  getConnectionInfo(connectionId: string): RemoteConnectionInfo | undefined {
+    return this.connectionInfo.get(connectionId);
+  }
+
   /**
    * Clean up all connections.
    */
@@ -275,9 +343,123 @@ export class MuNetworkBridge {
     }
     this.connections.clear();
     this.connectionInfo.clear();
+    for (const pending of this.pendingDataEvents.values()) {
+      clearTimeout(pending.timeoutId);
+    }
+    this.pendingDataEvents.clear();
+    this._onRemoteMessage = null;
+    this._onRemoteEvent = null;
+    this._onRemoteDataEvent = null;
   }
 
   // ── Private ──
+
+  /**
+   * Handle incoming WebSocket messages with permission enforcement.
+   */
+  private handleIncomingMessage(connectionId: string, event: MessageEvent): void {
+    // Handle binary frames (ArrayBuffer) for dataEvent payloads
+    if (typeof event.data !== 'string') {
+      const pending = this.pendingDataEvents.get(connectionId);
+      if (pending) {
+        clearTimeout(pending.timeoutId);
+        this.pendingDataEvents.delete(connectionId);
+
+        const data = event.data instanceof ArrayBuffer
+          ? new Uint8Array(event.data)
+          : new Uint8Array(0);
+
+        if (this._onRemoteDataEvent) {
+          this._onRemoteDataEvent(
+            connectionId,
+            pending.header.event,
+            pending.header.target,
+            pending.header.contents,
+            data,
+            pending.header.interp,
+            pending.header.senderContactName,
+          );
+        }
+      }
+      // Binary frame without pending header — drop safely
+      return;
+    }
+
+    try {
+      const msg = JSON.parse(event.data);
+      // Enforce permission: 0 = none → reject non-handshake messages
+      if (this.defaultPermission === 0 && msg.type !== 'handshake') {
+        console.warn(
+          `[MuNetworkBridge] Rejecting incoming "${msg.type}" from ${connectionId}: permission is "none" (0)`,
+        );
+        return;
+      }
+      // Permission 1 = read-only → reject write-style messages
+      if (this.defaultPermission === 1 && (msg.type === 'message' || msg.type === 'event' || msg.type === 'dataEvent')) {
+        console.warn(
+          `[MuNetworkBridge] Rejecting incoming "${msg.type}" from ${connectionId}: permission is "read" (1)`,
+        );
+        return;
+      }
+
+      // Dispatch allowed messages
+      switch (msg.type) {
+        case 'handshake': {
+          const info = this.connectionInfo.get(connectionId);
+          if (info) {
+            info.peerContactName = msg.contactName ?? '';
+            info.peerPermission = msg.permission ?? 0;
+          }
+          break;
+        }
+        case 'message': {
+          if (this._onRemoteMessage) {
+            this._onRemoteMessage(connectionId, msg.data ?? [], msg.senderContactName ?? '');
+          }
+          break;
+        }
+        case 'event': {
+          if (this._onRemoteEvent) {
+            this._onRemoteEvent(
+              connectionId,
+              msg.event ?? '',
+              msg.target ?? '',
+              msg.contents ?? '',
+              msg.interp ?? [],
+              msg.senderContactName ?? '',
+            );
+          }
+          break;
+        }
+        case 'dataEvent': {
+          // Clear any existing pending entry to avoid leaked timers (Fix 1)
+          const existing = this.pendingDataEvents.get(connectionId);
+          if (existing) {
+            clearTimeout(existing.timeoutId);
+          }
+
+          const timeoutId = setTimeout(() => {
+            this.pendingDataEvents.delete(connectionId);
+          }, MuNetworkBridge.DATA_EVENT_TIMEOUT_MS);
+
+          this.pendingDataEvents.set(connectionId, {
+            header: {
+              event: msg.event ?? '',
+              target: msg.target ?? '',
+              contents: msg.contents ?? '',
+              interp: msg.interp ?? [],
+              dataLength: msg.dataLength ?? 0,
+              senderContactName: msg.senderContactName ?? '',
+            },
+            timeoutId,
+          });
+          break;
+        }
+      }
+    } catch {
+      // Non-JSON text payload — ignore
+    }
+  }
 
   private async fetchWithMethod(
     method: string,

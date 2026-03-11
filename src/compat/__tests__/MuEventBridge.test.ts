@@ -2,7 +2,7 @@
  * Tests for MuEventBridge and ModeManager — Mu event system compatibility.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MuEventBridge } from '../MuEventBridge';
 import { ModeManager } from '../ModeManager';
 import { MuSettingsBridge } from '../MuSettingsBridge';
@@ -1187,6 +1187,568 @@ describe('MuNetworkBridge', () => {
   it('dispose cleans up', () => {
     network.dispose();
     expect(network.remoteConnections()).toEqual([]);
+  });
+});
+
+// ── MuNetworkBridge Wire-Protocol Tests (Issue #244) ──
+
+describe('MuNetworkBridge wire protocol', () => {
+  let network: MuNetworkBridge;
+  let mockWs: {
+    send: ReturnType<typeof vi.fn>;
+    close: ReturnType<typeof vi.fn>;
+    readyState: number;
+    addEventListener: ReturnType<typeof vi.fn>;
+    listeners: Record<string, Array<(e?: unknown) => void>>;
+  };
+
+  beforeEach(() => {
+    network = new MuNetworkBridge();
+    network.remoteNetwork(true);
+
+    // Track listeners for manual triggering
+    const listeners: Record<string, Array<(e?: unknown) => void>> = {};
+
+    mockWs = {
+      send: vi.fn(),
+      close: vi.fn(),
+      readyState: WebSocket.OPEN,
+      addEventListener: vi.fn((event: string, handler: (e?: unknown) => void) => {
+        if (!listeners[event]) listeners[event] = [];
+        listeners[event].push(handler);
+      }),
+      listeners,
+    };
+
+    // Use a class-based mock so `new WebSocket(...)` works
+    const MockWebSocket = function (this: typeof mockWs) {
+      Object.assign(this, mockWs);
+    } as unknown as typeof WebSocket;
+    // Preserve the OPEN constant for readyState checks
+    (MockWebSocket as unknown as Record<string, number>).OPEN = WebSocket.OPEN;
+    vi.stubGlobal('WebSocket', MockWebSocket);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function triggerOpen() {
+    for (const handler of mockWs.listeners['open'] ?? []) {
+      handler();
+    }
+  }
+
+  function triggerMessage(data: string) {
+    for (const handler of mockWs.listeners['message'] ?? []) {
+      handler({ data } as MessageEvent);
+    }
+  }
+
+  it('remoteConnect sends handshake with localContactName and defaultPermission on open', () => {
+    network.setRemoteLocalContactName('alice');
+    network.setRemoteDefaultPermission(2);
+    network.remoteConnect('test-app', 'localhost', 9876);
+
+    // Before open, no messages sent
+    expect(mockWs.send).not.toHaveBeenCalled();
+
+    // Trigger WebSocket open
+    triggerOpen();
+
+    expect(mockWs.send).toHaveBeenCalledTimes(1);
+    const handshake = JSON.parse(mockWs.send.mock.calls[0][0] as string);
+    expect(handshake).toEqual({
+      type: 'handshake',
+      contactName: 'alice',
+      permission: 2,
+    });
+  });
+
+  it('handshake uses "anonymous" when localContactName is empty', () => {
+    network.setRemoteLocalContactName('');
+    network.remoteConnect('test-app', 'localhost', 9876);
+    triggerOpen();
+
+    const handshake = JSON.parse(mockWs.send.mock.calls[0][0] as string);
+    expect(handshake.contactName).toBe('anonymous');
+  });
+
+  it('handshake transmits defaultPermission=0 by default', () => {
+    network.remoteConnect('test-app', 'localhost', 9876);
+    triggerOpen();
+
+    const handshake = JSON.parse(mockWs.send.mock.calls[0][0] as string);
+    expect(handshake.permission).toBe(0);
+  });
+
+  it('remoteSendMessage includes senderContactName in payload', () => {
+    network.setRemoteLocalContactName('bob');
+    network.remoteConnect('test-app', 'localhost', 9876);
+    triggerOpen();
+    mockWs.send.mockClear();
+
+    network.remoteSendMessage('localhost:9876', ['hello', 'world']);
+
+    expect(mockWs.send).toHaveBeenCalledTimes(1);
+    const msg = JSON.parse(mockWs.send.mock.calls[0][0] as string);
+    expect(msg.type).toBe('message');
+    expect(msg.data).toEqual(['hello', 'world']);
+    expect(msg.senderContactName).toBe('bob');
+  });
+
+  it('remoteSendEvent includes senderContactName in payload', () => {
+    network.setRemoteLocalContactName('carol');
+    network.remoteConnect('test-app', 'localhost', 9876);
+    triggerOpen();
+    mockWs.send.mockClear();
+
+    network.remoteSendEvent('play', 'viewer', 'frame=1', ['mu']);
+
+    expect(mockWs.send).toHaveBeenCalledTimes(1);
+    const msg = JSON.parse(mockWs.send.mock.calls[0][0] as string);
+    expect(msg.type).toBe('event');
+    expect(msg.event).toBe('play');
+    expect(msg.target).toBe('viewer');
+    expect(msg.contents).toBe('frame=1');
+    expect(msg.interp).toEqual(['mu']);
+    expect(msg.senderContactName).toBe('carol');
+  });
+
+  it('remoteSendDataEvent includes senderContactName in header', () => {
+    network.setRemoteLocalContactName('dave');
+    network.remoteConnect('test-app', 'localhost', 9876);
+    triggerOpen();
+    mockWs.send.mockClear();
+
+    const binaryData = new Uint8Array([1, 2, 3, 4]);
+    network.remoteSendDataEvent('upload', 'target', 'meta', binaryData, ['mu']);
+
+    // header + binary = 2 sends
+    expect(mockWs.send).toHaveBeenCalledTimes(2);
+    const header = JSON.parse(mockWs.send.mock.calls[0][0] as string);
+    expect(header.type).toBe('dataEvent');
+    expect(header.event).toBe('upload');
+    expect(header.dataLength).toBe(4);
+    expect(header.senderContactName).toBe('dave');
+
+    // Second send is the binary data
+    expect(mockWs.send.mock.calls[1][0]).toEqual(binaryData);
+  });
+
+  it('changing localContactName after connect affects subsequent messages', () => {
+    network.setRemoteLocalContactName('original');
+    network.remoteConnect('test-app', 'localhost', 9876);
+    triggerOpen();
+    mockWs.send.mockClear();
+
+    network.remoteSendMessage('localhost:9876', ['msg1']);
+    const msg1 = JSON.parse(mockWs.send.mock.calls[0][0] as string);
+    expect(msg1.senderContactName).toBe('original');
+
+    network.setRemoteLocalContactName('updated');
+    network.remoteSendMessage('localhost:9876', ['msg2']);
+    const msg2 = JSON.parse(mockWs.send.mock.calls[1][0] as string);
+    expect(msg2.senderContactName).toBe('updated');
+  });
+
+  it('send methods use "anonymous" when localContactName is empty', () => {
+    network.setRemoteLocalContactName('');
+    network.remoteConnect('test-app', 'localhost', 9876);
+    triggerOpen();
+    mockWs.send.mockClear();
+
+    network.remoteSendMessage('localhost:9876', ['test']);
+    const msg = JSON.parse(mockWs.send.mock.calls[0][0] as string);
+    expect(msg.senderContactName).toBe('anonymous');
+
+    mockWs.send.mockClear();
+    network.remoteSendEvent('ev', 'tgt', 'body');
+    const evt = JSON.parse(mockWs.send.mock.calls[0][0] as string);
+    expect(evt.senderContactName).toBe('anonymous');
+  });
+
+  it('existing wire fields are preserved in message payload', () => {
+    network.remoteConnect('test-app', 'localhost', 9876);
+    triggerOpen();
+    mockWs.send.mockClear();
+
+    network.remoteSendEvent('play', 'viewer', 'frame=1', ['mu']);
+    const msg = JSON.parse(mockWs.send.mock.calls[0][0] as string);
+
+    // All original fields still present
+    expect(msg).toHaveProperty('type', 'event');
+    expect(msg).toHaveProperty('event', 'play');
+    expect(msg).toHaveProperty('target', 'viewer');
+    expect(msg).toHaveProperty('contents', 'frame=1');
+    expect(msg).toHaveProperty('interp');
+    // New field is additive
+    expect(msg).toHaveProperty('senderContactName');
+  });
+
+  it('permission=0 logs warning for incoming non-handshake messages', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    network.setRemoteDefaultPermission(0);
+    network.remoteConnect('test-app', 'localhost', 9876);
+    triggerOpen();
+
+    triggerMessage(JSON.stringify({ type: 'message', data: ['hello'] }));
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Rejecting incoming "message"'),
+    );
+    warnSpy.mockRestore();
+  });
+
+  it('permission=1 (read) logs warning for incoming write-type messages', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    network.setRemoteDefaultPermission(1);
+    network.remoteConnect('test-app', 'localhost', 9876);
+    triggerOpen();
+
+    triggerMessage(JSON.stringify({ type: 'event', event: 'play' }));
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Rejecting incoming "event"'),
+    );
+    warnSpy.mockRestore();
+  });
+
+  it('permission=2 (readwrite) allows incoming messages without warning', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    network.setRemoteDefaultPermission(2);
+    network.remoteConnect('test-app', 'localhost', 9876);
+    triggerOpen();
+
+    triggerMessage(JSON.stringify({ type: 'message', data: ['hello'] }));
+
+    expect(warnSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining('Rejecting'),
+    );
+    warnSpy.mockRestore();
+  });
+
+  it('permission=0 allows incoming handshake messages', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    network.setRemoteDefaultPermission(0);
+    network.remoteConnect('test-app', 'localhost', 9876);
+    triggerOpen();
+
+    triggerMessage(JSON.stringify({ type: 'handshake', contactName: 'peer' }));
+
+    expect(warnSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining('Rejecting'),
+    );
+    warnSpy.mockRestore();
+  });
+
+  it('incoming handshake stores peer identity', () => {
+    network.setRemoteDefaultPermission(0);
+    network.remoteConnect('test-app', 'localhost', 9876);
+    triggerOpen();
+
+    triggerMessage(JSON.stringify({ type: 'handshake', contactName: 'peer-rv', permission: 2 }));
+
+    const info = network.getConnectionInfo('localhost:9876');
+    expect(info).toBeDefined();
+    expect(info!.peerContactName).toBe('peer-rv');
+    expect(info!.peerPermission).toBe(2);
+  });
+
+  it('incoming message at permission 2 is dispatched', () => {
+    network.setRemoteDefaultPermission(2);
+    network.remoteConnect('test-app', 'localhost', 9876);
+    triggerOpen();
+
+    const handler = vi.fn();
+    network.setOnRemoteMessage(handler);
+
+    triggerMessage(JSON.stringify({ type: 'message', data: ['hello', 'world'], senderContactName: 'peer' }));
+
+    expect(handler).toHaveBeenCalledWith('localhost:9876', ['hello', 'world'], 'peer');
+  });
+
+  it('incoming event at permission 2 is dispatched', () => {
+    network.setRemoteDefaultPermission(2);
+    network.remoteConnect('test-app', 'localhost', 9876);
+    triggerOpen();
+
+    const handler = vi.fn();
+    network.setOnRemoteEvent(handler);
+
+    triggerMessage(JSON.stringify({
+      type: 'event',
+      event: 'play',
+      target: 'viewer',
+      contents: 'frame=1',
+      interp: ['mu'],
+      senderContactName: 'peer',
+    }));
+
+    expect(handler).toHaveBeenCalledWith('localhost:9876', 'play', 'viewer', 'frame=1', ['mu'], 'peer');
+  });
+
+  it('binary data event frame is associated with its JSON header', () => {
+    vi.useFakeTimers();
+    network.setRemoteDefaultPermission(2);
+    network.remoteConnect('test-app', 'localhost', 9876);
+    triggerOpen();
+
+    const handler = vi.fn();
+    network.setOnRemoteDataEvent(handler);
+
+    // Send the JSON header first
+    triggerMessage(JSON.stringify({
+      type: 'dataEvent',
+      event: 'upload',
+      target: 'target',
+      contents: 'meta',
+      interp: ['mu'],
+      dataLength: 4,
+      senderContactName: 'peer',
+    }));
+
+    expect(handler).not.toHaveBeenCalled();
+
+    // Send the binary follow-up
+    const binaryData = new Uint8Array([1, 2, 3, 4]).buffer;
+    for (const h of mockWs.listeners['message'] ?? []) {
+      h({ data: binaryData } as MessageEvent);
+    }
+
+    expect(handler).toHaveBeenCalledWith(
+      'localhost:9876',
+      'upload',
+      'target',
+      'meta',
+      new Uint8Array([1, 2, 3, 4]),
+      ['mu'],
+      'peer',
+    );
+    vi.useRealTimers();
+  });
+
+  it('binary frame without preceding header is dropped safely', () => {
+    network.setRemoteDefaultPermission(2);
+    network.remoteConnect('test-app', 'localhost', 9876);
+    triggerOpen();
+
+    const handler = vi.fn();
+    network.setOnRemoteDataEvent(handler);
+
+    // Send a binary frame without a preceding dataEvent header
+    const binaryData = new Uint8Array([1, 2, 3, 4]).buffer;
+    for (const h of mockWs.listeners['message'] ?? []) {
+      h({ data: binaryData } as MessageEvent);
+    }
+
+    expect(handler).not.toHaveBeenCalled();
+  });
+});
+
+// ── MuNetworkBridge dataEvent edge-case tests (Issue #244 QA) ──
+
+describe('MuNetworkBridge dataEvent edge cases', () => {
+  let network: MuNetworkBridge;
+  let mockWs: {
+    send: ReturnType<typeof vi.fn>;
+    close: ReturnType<typeof vi.fn>;
+    readyState: number;
+    addEventListener: ReturnType<typeof vi.fn>;
+    listeners: Record<string, Array<(e?: unknown) => void>>;
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    network = new MuNetworkBridge();
+    network.remoteNetwork(true);
+    network.setRemoteDefaultPermission(2);
+
+    const listeners: Record<string, Array<(e?: unknown) => void>> = {};
+
+    mockWs = {
+      send: vi.fn(),
+      close: vi.fn(),
+      readyState: WebSocket.OPEN,
+      addEventListener: vi.fn((event: string, handler: (e?: unknown) => void) => {
+        if (!listeners[event]) listeners[event] = [];
+        listeners[event].push(handler);
+      }),
+      listeners,
+    };
+
+    const MockWebSocket = function (this: typeof mockWs) {
+      Object.assign(this, mockWs);
+    } as unknown as typeof WebSocket;
+    (MockWebSocket as unknown as Record<string, number>).OPEN = WebSocket.OPEN;
+    vi.stubGlobal('WebSocket', MockWebSocket);
+
+    network.remoteConnect('test-app', 'localhost', 9876);
+    // Trigger open
+    for (const handler of mockWs.listeners['open'] ?? []) {
+      handler();
+    }
+  });
+
+  afterEach(() => {
+    network.dispose();
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  function triggerMessage(data: string | ArrayBuffer) {
+    for (const h of mockWs.listeners['message'] ?? []) {
+      h({ data } as MessageEvent);
+    }
+  }
+
+  function triggerClose() {
+    for (const h of mockWs.listeners['close'] ?? []) {
+      h();
+    }
+  }
+
+  // Fix 3: dataEvent timeout expires pending entry
+  it('dataEvent header expires after timeout — binary follow-up is ignored', () => {
+    const handler = vi.fn();
+    network.setOnRemoteDataEvent(handler);
+
+    triggerMessage(JSON.stringify({
+      type: 'dataEvent',
+      event: 'upload',
+      target: 'tgt',
+      contents: '',
+      interp: [],
+      dataLength: 4,
+      senderContactName: 'peer',
+    }));
+
+    // Advance past the 5 000 ms timeout
+    vi.advanceTimersByTime(5000);
+
+    // Now send the binary follow-up — should be dropped
+    triggerMessage(new Uint8Array([1, 2, 3, 4]).buffer);
+
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  // Fix 4: backward-compat — missing senderContactName defaults to ''
+  it('incoming message without senderContactName delivers empty string', () => {
+    const handler = vi.fn();
+    network.setOnRemoteMessage(handler);
+
+    triggerMessage(JSON.stringify({ type: 'message', data: ['hi'] }));
+
+    expect(handler).toHaveBeenCalledWith('localhost:9876', ['hi'], '');
+  });
+
+  it('incoming event without senderContactName delivers empty string', () => {
+    const handler = vi.fn();
+    network.setOnRemoteEvent(handler);
+
+    triggerMessage(JSON.stringify({
+      type: 'event',
+      event: 'play',
+      target: 'viewer',
+      contents: '',
+      interp: [],
+    }));
+
+    expect(handler).toHaveBeenCalledWith('localhost:9876', 'play', 'viewer', '', [], '');
+  });
+
+  // Fix 5: permission tests for dataEvent at levels 0 and 1
+  it('permission=0 rejects dataEvent header and creates no pending state', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    network.setRemoteDefaultPermission(0);
+
+    const handler = vi.fn();
+    network.setOnRemoteDataEvent(handler);
+
+    triggerMessage(JSON.stringify({
+      type: 'dataEvent',
+      event: 'upload',
+      target: 'tgt',
+      contents: '',
+      interp: [],
+      dataLength: 4,
+      senderContactName: 'peer',
+    }));
+
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Rejecting incoming "dataEvent"'));
+
+    // Binary follow-up should not fire handler (no pending state)
+    triggerMessage(new Uint8Array([1, 2, 3, 4]).buffer);
+    expect(handler).not.toHaveBeenCalled();
+
+    warnSpy.mockRestore();
+  });
+
+  it('permission=1 rejects dataEvent header and creates no pending state', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    network.setRemoteDefaultPermission(1);
+
+    const handler = vi.fn();
+    network.setOnRemoteDataEvent(handler);
+
+    triggerMessage(JSON.stringify({
+      type: 'dataEvent',
+      event: 'upload',
+      target: 'tgt',
+      contents: '',
+      interp: [],
+      dataLength: 4,
+      senderContactName: 'peer',
+    }));
+
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Rejecting incoming "dataEvent"'));
+
+    triggerMessage(new Uint8Array([1, 2, 3, 4]).buffer);
+    expect(handler).not.toHaveBeenCalled();
+
+    warnSpy.mockRestore();
+  });
+
+  // Fix 1 test: rapid dataEvent headers — second overwrites first cleanly
+  it('rapid dataEvent headers — only the second header fires on binary', () => {
+    const handler = vi.fn();
+    network.setOnRemoteDataEvent(handler);
+
+    // First header
+    triggerMessage(JSON.stringify({
+      type: 'dataEvent',
+      event: 'first',
+      target: 'tgt',
+      contents: 'c1',
+      interp: [],
+      dataLength: 2,
+      senderContactName: 'peer',
+    }));
+
+    // Second header arrives before binary follow-up
+    triggerMessage(JSON.stringify({
+      type: 'dataEvent',
+      event: 'second',
+      target: 'tgt',
+      contents: 'c2',
+      interp: [],
+      dataLength: 2,
+      senderContactName: 'peer',
+    }));
+
+    // Binary follow-up — should match the second header
+    triggerMessage(new Uint8Array([0xAB, 0xCD]).buffer);
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler).toHaveBeenCalledWith(
+      'localhost:9876',
+      'second',
+      'tgt',
+      'c2',
+      new Uint8Array([0xAB, 0xCD]),
+      [],
+      'peer',
+    );
   });
 });
 
