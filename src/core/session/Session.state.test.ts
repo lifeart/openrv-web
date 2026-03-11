@@ -429,6 +429,16 @@ describe('Session', () => {
   });
 
   describe('playback state', () => {
+    const createPlaybackSource = (name: string): MediaSource => ({
+      type: 'image',
+      name,
+      url: `file://${name}`,
+      width: 100,
+      height: 100,
+      duration: 30,
+      fps: 24,
+    });
+
     it('getPlaybackState() exports current state', () => {
       session.volume = 0.5;
       session.fps = 30;
@@ -470,6 +480,18 @@ describe('Session', () => {
       session.setPlaybackState({ volume: 0.3 });
       expect(session.volume).toBe(0.3);
       expect(session.fps).toBe(24); // Unchanged
+    });
+
+    it('getPlaybackState() exports A/B compare assignment state', () => {
+      session.setSources([createPlaybackSource('source1'), createPlaybackSource('source2')]);
+      session.setSourceB(1);
+      session.setCurrentAB('B');
+
+      const state = session.getPlaybackState();
+
+      expect(state.sourceAIndex).toBe(0);
+      expect(state.sourceBIndex).toBe(1);
+      expect(state.currentAB).toBe('B');
     });
   });
 
@@ -684,6 +706,25 @@ describe('Session', () => {
 
       sessionInternal.addSource(source3);
       expect(session.sourceBIndex).toBe(1); // Still 1, not changed to 2
+    });
+
+    it('AB-021: setPlaybackState restores A/B source assignment and active side', () => {
+      const source1 = createMockSource('source1');
+      const source2 = createMockSource('source2');
+      const source3 = createMockSource('source3');
+
+      session.setSources([source1, source2, source3]);
+
+      session.setPlaybackState({
+        sourceAIndex: 2,
+        sourceBIndex: 1,
+        currentAB: 'B',
+      });
+
+      expect(session.sourceAIndex).toBe(2);
+      expect(session.sourceBIndex).toBe(1);
+      expect(session.currentAB).toBe('B');
+      expect(session.currentSourceIndex).toBe(1);
     });
   });
 

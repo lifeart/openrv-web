@@ -72,6 +72,12 @@ export interface PlaybackState {
   muted: boolean;
   marks: Marker[] | number[]; // Support both old format (number[]) and new format (Marker[])
   currentSourceIndex: number;
+  /** A/B compare source A assignment (optional for backward compat) */
+  sourceAIndex?: number;
+  /** A/B compare source B assignment (-1 or omitted means unassigned) */
+  sourceBIndex?: number;
+  /** Active A/B side (optional for backward compat, defaults to 'A') */
+  currentAB?: 'A' | 'B';
   /** Whether audio scrub is enabled (optional for backward compat, defaults to true) */
   audioScrubEnabled?: boolean;
 }
@@ -170,5 +176,8 @@ export const DEFAULT_PLAYBACK_STATE: PlaybackState = {
   muted: false,
   marks: [],
   currentSourceIndex: 0,
+  sourceAIndex: 0,
+  sourceBIndex: -1,
+  currentAB: 'A',
   audioScrubEnabled: true,
 };

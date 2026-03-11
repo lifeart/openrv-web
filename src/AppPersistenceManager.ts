@@ -21,17 +21,46 @@ import type { ColorControls } from './ui/components/ColorControls';
 import type { CDLControl } from './ui/components/CDLControl';
 import type { FilterControl } from './ui/components/FilterControl';
 import type { TransformControl } from './ui/components/TransformControl';
-import type { CropControl } from './ui/components/CropControl';
+import type { CropControl, UncropState } from './ui/components/CropControl';
 import type { LensControl } from './ui/components/LensControl';
 import type { NoiseReductionControl } from './ui/components/NoiseReductionControl';
+import type { DeinterlaceControl } from './ui/components/DeinterlaceControl';
+import type { FilmEmulationControl } from './ui/components/FilmEmulationControl';
+import type { PerspectiveCorrectionControl } from './ui/components/PerspectiveCorrectionControl';
+import type { StabilizationControl } from './ui/components/StabilizationControl';
 import type { WatermarkControl } from './ui/components/WatermarkControl';
 import type { CompareControl } from './ui/components/CompareControl';
 import type { StackControl } from './ui/components/StackControl';
 import type { PARControl } from './ui/components/PARControl';
 import type { BackgroundPatternControl } from './ui/components/BackgroundPatternControl';
+import type { ToneMappingControl } from './ui/components/ToneMappingControl';
+import type { GhostFrameControl, GhostFrameState } from './ui/components/GhostFrameControl';
+import type { ChannelSelect } from './ui/components/ChannelSelect';
+import type { StereoControl } from './ui/components/StereoControl';
+import type { StereoEyeTransformControl } from './ui/components/StereoEyeTransformControl';
+import type { StereoAlignControl } from './ui/components/StereoAlignControl';
+import type { DisplayProfileControl } from './ui/components/DisplayProfileControl';
+import type { OCIOControl } from './ui/components/OCIOControl';
+import type { GamutMappingControl } from './ui/components/GamutMappingControl';
+import type { CurvesControl } from './ui/components/CurvesControl';
+import type { ColorInversionToggle } from './ui/components/ColorInversionToggle';
 import type { PlaylistManager } from './core/session/PlaylistManager';
 import type { MediaCacheManager } from './cache/MediaCacheManager';
 import { showAlert, showConfirm } from './ui/components/shared/Modal';
+import type { OCIOState } from './color/OCIOConfig';
+import type { ToneMappingState, GamutMappingState } from './core/types/effects';
+import type { DisplayColorState } from './color/DisplayTransfer';
+import type { ColorCurvesData } from './color/ColorCurves';
+import type { ChannelMode } from './core/types/color';
+import type { StereoState } from './core/types/stereo';
+import type { StereoEyeTransformState, StereoAlignMode } from './stereo/StereoRenderer';
+import type { DifferenceMatteState } from './ui/components/DifferenceMatteControl';
+import type { BlendModeState } from './ui/components/ComparisonManager';
+import type { DeinterlaceParams } from './filters/Deinterlace';
+import type { FilmEmulationParams } from './filters/FilmEmulation';
+import type { PerspectiveCorrectionParams } from './transform/PerspectiveCorrection';
+import type { StabilizationParams } from './filters/StabilizeMotion';
+import type { SessionState } from './core/session/SessionState';
 
 /**
  * Context interface for dependencies needed by the persistence manager.
@@ -51,15 +80,53 @@ export interface PersistenceManagerContext {
   transformControl: TransformControl;
   cropControl: CropControl;
   lensControl: LensControl;
+  deinterlaceControl?: DeinterlaceControl;
+  filmEmulationControl?: FilmEmulationControl;
+  perspectiveCorrectionControl?: PerspectiveCorrectionControl;
+  stabilizationControl?: StabilizationControl;
   noiseReductionControl?: NoiseReductionControl;
   watermarkControl?: WatermarkControl;
   compareControl?: CompareControl;
   stackControl?: StackControl;
   parControl?: PARControl;
   backgroundPatternControl?: BackgroundPatternControl;
+  toneMappingControl?: ToneMappingControl;
+  ghostFrameControl?: GhostFrameControl;
+  channelSelect?: ChannelSelect;
+  stereoControl?: StereoControl;
+  stereoEyeTransformControl?: StereoEyeTransformControl;
+  stereoAlignControl?: StereoAlignControl;
+  displayProfileControl?: DisplayProfileControl;
+  ocioControl?: OCIOControl;
+  gamutMappingControl?: GamutMappingControl;
+  curvesControl?: CurvesControl;
+  colorInversionToggle?: ColorInversionToggle;
   playlistManager?: PlaylistManager;
   cacheManager?: MediaCacheManager;
 }
+
+interface LocalPersistenceState {
+  ocioState?: OCIOState;
+  toneMappingState: ToneMappingState;
+  ghostFrameState: GhostFrameState;
+  displayColorState: DisplayColorState;
+  gamutMappingState: GamutMappingState;
+  colorInversion: boolean;
+  curves: ColorCurvesData;
+  channelMode: ChannelMode;
+  stereoState: StereoState;
+  stereoEyeTransforms: StereoEyeTransformState;
+  stereoAlignMode: StereoAlignMode;
+  differenceMatteState: DifferenceMatteState;
+  blendModeState: BlendModeState & { flickerFrame?: 0 | 1 };
+  deinterlaceParams: DeinterlaceParams;
+  filmEmulationParams: FilmEmulationParams;
+  perspectiveParams: PerspectiveCorrectionParams;
+  stabilizationParams: StabilizationParams;
+  uncropState: UncropState;
+}
+
+type AppPersistenceState = SessionState & { localPersistence?: LocalPersistenceState };
 
 export class AppPersistenceManager {
   private ctx: PersistenceManagerContext;
@@ -108,28 +175,59 @@ export class AppPersistenceManager {
     this.markAutoSaveDirty();
   }
 
+  private serializeBaseState(projectName: string): SessionState {
+    const { session, paintEngine, viewer } = this.ctx;
+    return SessionSerializer.toJSON(
+      {
+        session,
+        paintEngine,
+        viewer,
+        playlistManager: this.ctx.playlistManager,
+        cacheManager: this.ctx.cacheManager,
+      },
+      projectName,
+    );
+  }
+
+  private serializeLocalPersistenceState(projectName: string): AppPersistenceState {
+    return {
+      ...this.serializeBaseState(projectName),
+      localPersistence: this.captureLocalPersistenceState(),
+    };
+  }
+
+  private captureLocalPersistenceState(): LocalPersistenceState {
+    const { viewer, ocioControl } = this.ctx;
+    return {
+      ...(ocioControl ? { ocioState: ocioControl.getState() } : {}),
+      toneMappingState: viewer.getToneMappingState(),
+      ghostFrameState: viewer.getGhostFrameState(),
+      displayColorState: viewer.getDisplayColorState(),
+      gamutMappingState: viewer.getGamutMappingState(),
+      colorInversion: viewer.getColorInversion(),
+      curves: viewer.getCurves(),
+      channelMode: viewer.getChannelMode(),
+      stereoState: viewer.getStereoState(),
+      stereoEyeTransforms: viewer.getStereoEyeTransforms(),
+      stereoAlignMode: viewer.getStereoAlignMode(),
+      differenceMatteState: viewer.getDifferenceMatteState(),
+      blendModeState: viewer.getBlendModeState(),
+      deinterlaceParams: viewer.getDeinterlaceParams(),
+      filmEmulationParams: viewer.getFilmEmulationParams(),
+      perspectiveParams: viewer.getPerspectiveParams(),
+      stabilizationParams: viewer.getStabilizationParams(),
+      uncropState: viewer.getUncropState(),
+    };
+  }
+
   /**
    * Mark the session as having unsaved changes for auto-save.
    * Uses lazy evaluation - state is only serialized when actually saving.
-   *
-   * TODO(#138): Auto-save uses the same lossy SessionSerializer.toJSON() as
-   * project save. Viewer states tracked by getSerializationGaps() are lost.
    */
   markAutoSaveDirty(): void {
-    const { session, paintEngine, viewer, autoSaveManager, autoSaveIndicator } = this.ctx;
+    const { session, autoSaveManager, autoSaveIndicator } = this.ctx;
     // Pass a getter function for lazy evaluation - serialization only happens when saving
-    autoSaveManager.markDirty(() =>
-      SessionSerializer.toJSON(
-        {
-          session,
-          paintEngine,
-          viewer,
-          playlistManager: this.ctx.playlistManager,
-          cacheManager: this.ctx.cacheManager,
-        },
-        session.currentSource?.name || 'Untitled',
-      ),
-    );
+    autoSaveManager.markDirty(() => this.serializeLocalPersistenceState(session.currentSource?.name || 'Untitled'));
     autoSaveIndicator.markUnsaved();
   }
 
@@ -137,18 +235,9 @@ export class AppPersistenceManager {
    * Retry auto-save after a failure
    */
   retryAutoSave(): void {
-    const { session, paintEngine, viewer, autoSaveManager } = this.ctx;
+    const { session, autoSaveManager } = this.ctx;
     try {
-      const state = SessionSerializer.toJSON(
-        {
-          session,
-          paintEngine,
-          viewer,
-          playlistManager: this.ctx.playlistManager,
-          cacheManager: this.ctx.cacheManager,
-        },
-        session.currentSource?.name || 'Untitled',
-      );
+      const state = this.serializeLocalPersistenceState(session.currentSource?.name || 'Untitled');
       autoSaveManager.saveNow(state);
     } catch (err) {
       console.error('Failed to retry auto-save:', err);
@@ -157,24 +246,11 @@ export class AppPersistenceManager {
 
   /**
    * Create a quick snapshot with auto-generated name
-   *
-   * TODO(#138): Snapshots use the same lossy SessionSerializer.toJSON() as
-   * project save. Viewer states tracked by getSerializationGaps() (tone mapping,
-   * stereo, channel isolation, etc.) are silently lost in the snapshot.
    */
   async createQuickSnapshot(): Promise<void> {
-    const { session, paintEngine, viewer, snapshotManager } = this.ctx;
+    const { session, snapshotManager } = this.ctx;
     try {
-      const state = SessionSerializer.toJSON(
-        {
-          session,
-          paintEngine,
-          viewer,
-          playlistManager: this.ctx.playlistManager,
-          cacheManager: this.ctx.cacheManager,
-        },
-        session.currentSource?.name || 'Untitled',
-      );
+      const state = this.serializeLocalPersistenceState(session.currentSource?.name || 'Untitled');
       const now = new Date();
       const name = `Snapshot ${now.toLocaleTimeString()}`;
       await snapshotManager.createSnapshot(name, state);
@@ -187,23 +263,11 @@ export class AppPersistenceManager {
 
   /**
    * Create an auto-checkpoint before major operations
-   *
-   * TODO(#138): Auto-checkpoints use the same lossy SessionSerializer.toJSON()
-   * as project save. Viewer states tracked by getSerializationGaps() are lost.
    */
   async createAutoCheckpoint(event: string): Promise<boolean> {
-    const { session, paintEngine, viewer, snapshotManager } = this.ctx;
+    const { session, snapshotManager } = this.ctx;
     try {
-      const state = SessionSerializer.toJSON(
-        {
-          session,
-          paintEngine,
-          viewer,
-          playlistManager: this.ctx.playlistManager,
-          cacheManager: this.ctx.cacheManager,
-        },
-        session.currentSource?.name || 'Untitled',
-      );
+      const state = this.serializeLocalPersistenceState(session.currentSource?.name || 'Untitled');
       await snapshotManager.createAutoCheckpoint(event, state);
       return true;
     } catch (err) {
@@ -218,7 +282,7 @@ export class AppPersistenceManager {
   async restoreSnapshot(id: string): Promise<void> {
     const { session, paintEngine, viewer, snapshotManager, snapshotPanel } = this.ctx;
     try {
-      const state = await snapshotManager.getSnapshot(id);
+      const state = (await snapshotManager.getSnapshot(id)) as AppPersistenceState | null;
       if (!state) {
         showAlert('Snapshot not found', { type: 'error', title: 'Restore Error' });
         return;
@@ -279,20 +343,11 @@ export class AppPersistenceManager {
    * Save project to file
    */
   async saveProject(): Promise<void> {
-    const { session, paintEngine, viewer } = this.ctx;
+    const { session, viewer } = this.ctx;
     try {
       // Fix #127: Use session display name instead of hardcoded 'project'
       const displayName = session.metadata?.displayName?.trim() || 'project';
-      const state = SessionSerializer.toJSON(
-        {
-          session,
-          paintEngine,
-          viewer,
-          playlistManager: this.ctx.playlistManager,
-          cacheManager: this.ctx.cacheManager,
-        },
-        displayName,
-      );
+      const state = this.serializeBaseState(displayName);
 
       // Surface serialization gaps to the user (fix #119).
       // SessionSerializer.toJSON() logs active gaps to the console, but the user
@@ -500,7 +555,7 @@ export class AppPersistenceManager {
   private async recoverAutoSave(id: string): Promise<void> {
     const { autoSaveManager, session, paintEngine, viewer } = this.ctx;
     try {
-      const state = await autoSaveManager.getAutoSave(id);
+      const state = (await autoSaveManager.getAutoSave(id)) as AppPersistenceState | null;
       if (state) {
         const { loadedMedia, warnings } = await SessionSerializer.fromJSON(state, {
           session,
@@ -564,20 +619,37 @@ export class AppPersistenceManager {
     stack?: any;
     par?: any;
     backgroundPattern?: any;
+    localPersistence?: LocalPersistenceState;
   }): void {
     const {
+      viewer,
       colorControls,
       cdlControl,
       filterControl,
       transformControl,
       cropControl,
       lensControl,
+      deinterlaceControl,
+      filmEmulationControl,
+      perspectiveCorrectionControl,
+      stabilizationControl,
       noiseReductionControl,
       watermarkControl,
       compareControl,
       stackControl,
       parControl,
       backgroundPatternControl,
+      toneMappingControl,
+      ghostFrameControl,
+      channelSelect,
+      stereoControl,
+      stereoEyeTransformControl,
+      stereoAlignControl,
+      displayProfileControl,
+      ocioControl,
+      gamutMappingControl,
+      curvesControl,
+      colorInversionToggle,
     } = this.ctx;
 
     // Color / grading controls
@@ -613,6 +685,70 @@ export class AppPersistenceManager {
     // Background pattern control (fix #120)
     if (state.backgroundPattern && backgroundPatternControl) {
       backgroundPatternControl.setState(state.backgroundPattern);
+    }
+
+    const local = state.localPersistence;
+    if (!local) return;
+
+    viewer.setToneMappingState(local.toneMappingState);
+    if (toneMappingControl) toneMappingControl.setState(local.toneMappingState);
+
+    viewer.setGhostFrameState(local.ghostFrameState);
+    if (ghostFrameControl) ghostFrameControl.setState(local.ghostFrameState);
+
+    viewer.setDisplayColorState(local.displayColorState);
+    if (displayProfileControl) displayProfileControl.setState(local.displayColorState);
+
+    viewer.setGamutMappingState(local.gamutMappingState);
+    if (gamutMappingControl) gamutMappingControl.setState(local.gamutMappingState);
+
+    viewer.setColorInversion(local.colorInversion);
+    if (colorInversionToggle) colorInversionToggle.setEnabled(local.colorInversion);
+
+    viewer.setCurves(local.curves);
+    if (curvesControl) curvesControl.setCurves(local.curves);
+
+    viewer.setChannelMode(local.channelMode);
+    if (channelSelect) channelSelect.setChannel(local.channelMode);
+
+    viewer.setStereoState(local.stereoState);
+    if (stereoControl) stereoControl.setState(local.stereoState);
+
+    viewer.setStereoEyeTransforms(local.stereoEyeTransforms);
+    if (stereoEyeTransformControl) stereoEyeTransformControl.setState(local.stereoEyeTransforms);
+
+    viewer.setStereoAlignMode(local.stereoAlignMode);
+    if (stereoAlignControl) stereoAlignControl.setMode(local.stereoAlignMode);
+
+    viewer.setDifferenceMatteState(local.differenceMatteState);
+    viewer.setBlendModeState(local.blendModeState);
+    if (compareControl) {
+      compareControl.setDifferenceMatteEnabled(local.differenceMatteState.enabled);
+      compareControl.setDifferenceMatteGain(local.differenceMatteState.gain);
+      compareControl.setDifferenceMatteHeatmap(local.differenceMatteState.heatmap);
+      compareControl.setBlendMode(local.blendModeState.mode);
+      compareControl.setOnionOpacity(local.blendModeState.onionOpacity);
+      compareControl.setFlickerRate(local.blendModeState.flickerRate);
+      compareControl.setBlendRatio(local.blendModeState.blendRatio);
+    }
+
+    viewer.setDeinterlaceParams(local.deinterlaceParams);
+    if (deinterlaceControl) deinterlaceControl.setParams(local.deinterlaceParams);
+
+    viewer.setFilmEmulationParams(local.filmEmulationParams);
+    if (filmEmulationControl) filmEmulationControl.setParams(local.filmEmulationParams);
+
+    viewer.setPerspectiveParams(local.perspectiveParams);
+    if (perspectiveCorrectionControl) perspectiveCorrectionControl.setParams(local.perspectiveParams);
+
+    viewer.setStabilizationParams(local.stabilizationParams);
+    if (stabilizationControl) stabilizationControl.setParams(local.stabilizationParams);
+
+    viewer.setUncropState(local.uncropState);
+    cropControl.setUncropState(local.uncropState);
+
+    if (local.ocioState && ocioControl) {
+      ocioControl.setState(local.ocioState);
     }
   }
 

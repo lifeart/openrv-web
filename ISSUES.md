@@ -2264,19 +2264,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - External scripts listening to `openrv.events.on('markerChange', ...)` cannot distinguish range markers from point markers.
   - The public marker query API and the public marker event API expose inconsistent marker semantics, so automation loses information exactly on change notification.
 
-### 209. The public plugin scripting API is one-way: it exposes no `dispose` or `unregister`, so plugin IDs cannot be fully reloaded from `window.openrv`
-
-- Severity: Medium
-- Area: Public API / plugins
-- Evidence:
-  - `window.openrv.plugins` only exposes `register`, `activate`, `deactivate`, `loadFromURL`, `getState`, and `list` in [src/api/OpenRVAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.ts#L75).
-  - The underlying registry has separate `dispose(id)` and `unregister(id)` lifecycle steps in [src/plugin/PluginRegistry.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginRegistry.ts#L259).
-  - `PluginRegistry.register()` rejects duplicate IDs even when a prior entry still exists in disposed state in [src/plugin/PluginRegistry.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginRegistry.ts#L127).
-  - `PluginRegistry.unregister()` is explicitly required to remove a disposed plugin so it can be re-registered with the same ID in [src/plugin/PluginRegistry.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginRegistry.ts#L290).
-- Impact:
-  - External scripting can load or register a plugin, but it cannot fully unload that plugin through the same public API.
-  - Public API consumers cannot do clean same-ID plugin reloads or hot-reload-style workflows from `window.openrv`, even though the underlying registry supports them.
-
 ### 210. `window.openrv.plugins.loadFromURL()` is unrestricted by origin in production
 
 - Severity: Medium
@@ -6641,6 +6628,69 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - A plugin can subscribe to public app-state events only if they happen to be in the reduced plugin bridge subset; newer loading/view/render events are unavailable even though external scripts can subscribe to them directly.
   - That makes plugin automation less observant than plain `window.openrv.events` consumers for no obvious reason.
+
+### 559. The main scripting guide also under-documents the live event surface, so script authors are steered away from valid `openrv.events` subscriptions
+
+- Severity: Medium
+- Area: Public API documentation / scripting guide
+- Evidence:
+  - The live `EventsAPI` exposes `sourceLoadingStarted`, `sourceLoadFailed`, `viewTransformChanged`, and `renderedImagesChanged` in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L16) through [src/api/EventsAPI.ts#L32).
+  - The “Available Events” table in [docs/advanced/scripting-api.md](/Users/lifeart/Repos/openrv-web/docs/advanced/scripting-api.md#L303) through [docs/advanced/scripting-api.md#L317) lists only the narrower subset ending at `sourceLoaded` and `error`.
+  - The same page explicitly tells users to call `openrv.events.getEventNames()` for the available set in [docs/advanced/scripting-api.md](/Users/lifeart/Repos/openrv-web/docs/advanced/scripting-api.md#L298), but the written table still omits several names that `getEventNames()` would return at runtime.
+- Impact:
+  - Script authors reading the primary scripting guide can conclude that loading-progress, view-transform, and rendered-image events are unavailable when they are actually live.
+  - That makes the human-facing guide lag behind the real event API even for users who never consult the generated reference.
+
+### 560. `openrv.dispose()` does not detach the singleton plugin registry, so active plugin contexts keep a dead API/events bridge after disposal
+
+- Severity: Medium
+- Area: Public API lifecycle / plugins
+- Evidence:
+  - `OpenRVAPI.dispose()` only marks the API unready and disposes its own submodules in [src/api/OpenRVAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.ts#L166) through [src/api/OpenRVAPI.ts#L175); it never informs `pluginRegistry`, clears `pluginRegistry.apiRef`, or resets the plugin event bus.
+  - The singleton `PluginRegistry` stores both an `apiRef` and a bridged `eventsAPI` reference set during bootstrap in [src/plugin/PluginRegistry.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginRegistry.ts#L95) through [src/plugin/PluginRegistry.ts#L109).
+  - Plugin contexts expose `context.api` by returning that stored `apiRef` directly in [src/plugin/PluginRegistry.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginRegistry.ts#L442) through [src/plugin/PluginRegistry.ts#L445), and app-event subscriptions continue to route through the stored `eventsAPI` in [src/plugin/PluginEventBus.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginEventBus.ts#L119) through [src/plugin/PluginEventBus.ts#L120) and [src/plugin/PluginEventBus.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginEventBus.ts#L240) through [src/plugin/PluginEventBus.ts#L257).
+  - The scripting docs describe `dispose()` as cleaning up the API instance while also presenting plugins as part of the same public surface in [src/api/OpenRVAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.ts#L156) through [src/api/OpenRVAPI.ts#L175) and [docs/advanced/scripting-api.md](/Users/lifeart/Repos/openrv-web/docs/advanced/scripting-api.md#L21) through [docs/advanced/scripting-api.md#L23).
+- Impact:
+  - After `openrv.dispose()`, already-activated plugins can still hold `context.api` and event subscriptions that point at a disposed API object rather than being torn down or explicitly invalidated.
+  - That leaves the plugin layer in a half-alive state where host-side scripting is “disposed” but plugin-side integrations can still try to operate against stale references and fail later at call time.
+
+### 561. Every plugin gets `context.settings`, even without a `settingsSchema`, so the API degrades into a trap object instead of a clearly absent capability
+
+- Severity: Medium
+- Area: Plugin API / settings lifecycle
+- Evidence:
+  - `PluginRegistry.createContext()` injects `settings: registry.settingsStore.createAccessor(manifest.id)` for every plugin with no guard on `manifest.settingsSchema` in [src/plugin/PluginRegistry.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginRegistry.ts#L395) through [src/plugin/PluginRegistry.ts#L449).
+  - The settings store only registers schemas when `manifest.settingsSchema` exists in [src/plugin/PluginRegistry.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginRegistry.ts#L167) through [src/plugin/PluginRegistry.ts#L169).
+  - That accessor is only partially usable without a schema: `get()` falls through to `undefined`, `getAll()` returns an empty object, but `set()` throws `No settings schema registered for plugin ...` in [src/plugin/PluginSettingsStore.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginSettingsStore.ts#L110) through [src/plugin/PluginSettingsStore.ts#L114), [src/plugin/PluginSettingsStore.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginSettingsStore.ts#L129) through [src/plugin/PluginSettingsStore.ts#L131), and [src/plugin/PluginSettingsStore.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginSettingsStore.ts#L260) through [src/plugin/PluginSettingsStore.ts#L276).
+  - The published API docs describe `context.settings` as requiring a `settingsSchema` in the manifest in [docs/api/index.md](/Users/lifeart/Repos/openrv-web/docs/api/index.md#L129), but the runtime still exposes it unconditionally.
+- Impact:
+  - Plugin authors can reasonably treat `context.settings` as a supported capability because it is always present, then hit runtime-only failures on first write if their plugin has no schema.
+  - That makes the plugin context harder to reason about than either alternative: omitting `settings` entirely when unsupported, or making it fully no-op and explicit.
+
+### 562. The published plugin-settings API still claims `set()` is `void` and always persists, hiding the real success/failure signal from plugin authors
+
+- Severity: Medium
+- Area: Plugin API documentation / settings persistence
+- Evidence:
+  - The real `PluginSettingsAccessor` contract defines `set(key, value): boolean` and documents that it returns `true` when persisted and `false` when the update only landed in memory in [src/plugin/PluginSettingsStore.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginSettingsStore.ts#L49) through [src/plugin/PluginSettingsStore.ts#L58).
+  - The generated API reference still publishes `set(key: string, value: unknown): void` and says it “persists to localStorage” in [docs/api/index.md](/Users/lifeart/Repos/openrv-web/docs/api/index.md#L136) through [docs/api/index.md#L141).
+  - The main scripting guide makes the same unconditional persistence claim and shows `context.settings.set(...)` without any returned status handling in [docs/advanced/scripting-api.md](/Users/lifeart/Repos/openrv-web/docs/advanced/scripting-api.md#L403) through [docs/advanced/scripting-api.md#L443).
+  - The runtime already has a real failure mode where settings updates can remain in-memory only, which is why the boolean exists in the first place, as captured in issue `211`.
+- Impact:
+  - Plugin authors reading the shipped docs can conclude there is no reason to check for persistence failure, even though the live API was explicitly designed to report it.
+  - That turns the existing partial-persistence behavior into a documentation trap instead of a documented recovery path.
+
+### 563. The generated API reference is pinned to an old GitHub commit, so its “Defined in” links can disagree with the checked-in source tree
+
+- Severity: Medium
+- Area: API documentation / source traceability
+- Evidence:
+  - The current checkout is at commit `947e3067bd8fb58079981ef7fc78d98ca117799f`.
+  - `docs/api/index.md` still points every “Defined in” source link at GitHub blob `c0dd53144dcb872c686e6581e476322380198403`, for example in [docs/api/index.md](/Users/lifeart/Repos/openrv-web/docs/api/index.md#L40) through [docs/api/index.md](/Users/lifeart/Repos/openrv-web/docs/api/index.md#L50) and [docs/api/index.md](/Users/lifeart/Repos/openrv-web/docs/api/index.md#L131) through [docs/api/index.md#L162).
+  - The same generated page is already drifting from the live tree in content, such as the stale `OpenRVEventName` union documented there versus the current source, as captured in issue `556`.
+- Impact:
+  - A reader following the generated reference can land on a different historical version of the code than the one actually shipped in the repo.
+  - That makes the API docs harder to audit and amplifies other documentation drift because the linked source is itself frozen at an older snapshot.
 
 ## Validation Notes
 

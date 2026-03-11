@@ -46,12 +46,17 @@ function createMockComponents(): SessionComponents {
         audioScrubEnabled: true,
         marks: [],
         currentSourceIndex: 0,
+        sourceAIndex: 0,
+        sourceBIndex: -1,
+        currentAB: 'A',
       }),
       setPlaybackState: vi.fn(),
       clearSources: vi.fn(),
       loadImage: vi.fn<(name: string, url: string) => Promise<void>>().mockResolvedValue(undefined),
       loadVideo: vi.fn<(name: string, url: string) => Promise<void>>().mockResolvedValue(undefined),
       loadFile: vi.fn<(file: File) => Promise<void>>().mockResolvedValue(undefined),
+      toSerializedGraph: vi.fn().mockReturnValue(null),
+      loadSerializedGraph: vi.fn().mockReturnValue([]),
       noteManager: {
         toSerializable: vi.fn().mockReturnValue([]),
         fromSerializable: vi.fn(),
@@ -222,25 +227,40 @@ describe('Issue #124: playback state restored even with zero media', () => {
 });
 
 // =================================================================
-// Issue #126: .orvproject save/load doesn't persist node graph (documented)
+// Issue #126: .orvproject save/load persists node graph
 // =================================================================
 
-describe('Issue #126: node graph not persisted in .orvproject', () => {
-  it('ISS-126-001: toJSON does not include a graph field', () => {
+describe('Issue #126: node graph persisted in .orvproject', () => {
+  it('ISS-126-001: toJSON includes graph when the session exposes serialized graph state', () => {
     const components = createMockComponents();
+    const serializedGraph = {
+      version: 1,
+      nodes: [{ id: 'TestSource_1', type: 'TestSource', name: 's1', properties: {}, inputIds: [] }],
+      outputNodeId: 'TestSource_1',
+      viewNodeId: 'TestSource_1',
+    };
+    (components.session as any).toSerializedGraph.mockReturnValue(serializedGraph);
+
     const state = SessionSerializer.toJSON(components, 'Test');
 
-    // The graph field should not be present (not yet wired)
-    expect(state).not.toHaveProperty('graph');
+    expect(state.graph).toEqual(serializedGraph);
   });
 
-  it('ISS-126-002: fromJSON does not fail when graph field is absent', async () => {
+  it('ISS-126-002: fromJSON restores graph and appends non-fatal graph warnings', async () => {
     const components = createMockComponents();
     const state = SessionSerializer.createEmpty();
+    state.graph = {
+      version: 1,
+      nodes: [{ id: 'TestSource_1', type: 'TestSource', name: 's1', properties: {}, inputIds: [] }],
+      outputNodeId: 'TestSource_1',
+      viewNodeId: 'TestSource_1',
+    };
+    (components.session as any).loadSerializedGraph.mockReturnValue(['Unknown node type "LegacyNode"']);
 
-    // Should not throw
     const result = await SessionSerializer.fromJSON(state, components);
-    expect(result).toBeDefined();
+
+    expect((components.session as any).loadSerializedGraph).toHaveBeenCalledWith(state.graph);
+    expect(result.warnings).toContain('Unknown node type "LegacyNode"');
   });
 });
 
@@ -311,23 +331,49 @@ describe('Issue #130: effects-tab gaps in getSerializationGaps', () => {
 });
 
 // =================================================================
-// Issue #132: A/B compare state gap documented
+// Issue #132: A/B compare assignment persisted
 // =================================================================
 
-describe('Issue #132: A/B compare assignment not persisted', () => {
-  it('ISS-132-001: wipe state is persisted in toJSON', () => {
+describe('Issue #132: A/B compare assignment persisted', () => {
+  it('ISS-132-001: toJSON persists A/B compare assignment in playback state', () => {
     const components = createMockComponents();
-    (components.viewer as any).getWipeState.mockReturnValue({ mode: 'horizontal', position: 0.3 });
+    (components.session as any).getPlaybackState.mockReturnValue({
+      currentFrame: 1,
+      fps: 24,
+      loopMode: 'loop',
+      playbackMode: 'realtime',
+      volume: 1,
+      muted: false,
+      preservesPitch: true,
+      audioScrubEnabled: true,
+      marks: [],
+      currentSourceIndex: 4,
+      sourceAIndex: 2,
+      sourceBIndex: 5,
+      currentAB: 'B',
+    });
 
     const state = SessionSerializer.toJSON(components, 'Test');
-    expect(state.wipe).toEqual({ mode: 'horizontal', position: 0.3 });
+    expect(state.playback.sourceAIndex).toBe(2);
+    expect(state.playback.sourceBIndex).toBe(5);
+    expect(state.playback.currentAB).toBe('B');
   });
 
-  it('ISS-132-002: no sourceAIndex or sourceBIndex in serialized state', () => {
+  it('ISS-132-002: fromJSON forwards persisted A/B compare assignment to session playback restore', async () => {
     const components = createMockComponents();
-    const state = SessionSerializer.toJSON(components, 'Test');
+    const state = SessionSerializer.createEmpty();
+    state.playback.sourceAIndex = 1;
+    state.playback.sourceBIndex = 3;
+    state.playback.currentAB = 'B';
 
-    expect(state).not.toHaveProperty('sourceAIndex');
-    expect(state).not.toHaveProperty('sourceBIndex');
+    await SessionSerializer.fromJSON(state, components);
+
+    expect((components.session as any).setPlaybackState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceAIndex: 1,
+        sourceBIndex: 3,
+        currentAB: 'B',
+      }),
+    );
   });
 });

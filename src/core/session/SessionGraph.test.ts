@@ -2,6 +2,34 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { SessionGraph } from './SessionGraph';
 import type { SessionGraphHost } from './SessionGraph';
 import type { SessionAnnotations } from './SessionAnnotations';
+import { IPNode } from '../../nodes/base/IPNode';
+import { BaseGroupNode } from '../../nodes/groups/BaseGroupNode';
+import { NodeFactory } from '../../nodes/base/NodeFactory';
+import type { EvalContext } from '../graph/Graph';
+import type { IPImage } from '../image/Image';
+
+class TestSourceNode extends IPNode {
+  constructor(name?: string) {
+    super('TestSource', name);
+  }
+
+  protected process(_context: EvalContext, _inputs: (IPImage | null)[]): IPImage | null {
+    return null;
+  }
+}
+
+class TestGroupNode extends BaseGroupNode {
+  constructor(name?: string) {
+    super('TestGroup', name ?? 'TestGroup');
+  }
+
+  getActiveInputIndex(): number {
+    return 0;
+  }
+}
+
+NodeFactory.register('TestSource', () => new TestSourceNode());
+NodeFactory.register('TestGroup', () => new TestGroupNode());
 
 describe('SessionGraph', () => {
   let graph: SessionGraph;
@@ -61,6 +89,60 @@ describe('SessionGraph', () => {
 
     it('SG-012: returns null for invalid address format', () => {
       expect(graph.resolveProperty('invalidAddress')).toBeNull();
+    });
+  });
+
+  describe('serialized graph persistence', () => {
+    it('SG-013: toSerializedGraph serializes live graph state', () => {
+      const sourceA = new TestSourceNode('sourceA');
+      const sourceB = new TestSourceNode('sourceB');
+      const group = new TestGroupNode('group');
+
+      const runtimeGraph = {
+        getAllNodes: () => [sourceA, sourceB, group],
+        getOutputNode: () => group,
+      };
+
+      (graph as any)._graph = runtimeGraph;
+      (graph as any)._graphParseResult = {
+        rootNode: sourceA,
+        sessionInfo: { viewNode: sourceA.id },
+      };
+
+      const serialized = graph.toSerializedGraph();
+
+      expect(serialized).not.toBeNull();
+      expect(serialized!.nodes).toHaveLength(3);
+      expect(serialized!.outputNodeId).toBe(group.id);
+      expect(serialized!.viewNodeId).toBe(sourceA.id);
+    });
+
+    it('SG-014: loadSerializedGraph restores graph topology', () => {
+      const warnings = graph.loadSerializedGraph({
+        version: 1,
+        nodes: [
+          { id: 'TestSource_1', type: 'TestSource', name: 'sourceA', properties: {}, inputIds: [] },
+          { id: 'TestSource_2', type: 'TestSource', name: 'sourceB', properties: {}, inputIds: [] },
+          {
+            id: 'TestGroup_3',
+            type: 'TestGroup',
+            name: 'group',
+            properties: {},
+            inputIds: ['TestSource_1', 'TestSource_2'],
+          },
+        ],
+        outputNodeId: 'TestGroup_3',
+        viewNodeId: 'TestSource_1',
+      });
+
+      expect(warnings).toEqual([]);
+      expect(graph.graph).not.toBeNull();
+      expect(graph.graph!.getAllNodes()).toHaveLength(3);
+      expect(graph.graph!.getOutputNode()!.id).toBe('TestGroup_3');
+      expect(graph.graphParseResult?.rootNode?.id).toBe('TestSource_1');
+
+      const restoredGroup = graph.graph!.getNode('TestGroup_3')!;
+      expect(restoredGroup.inputs.map((input) => input.id)).toEqual(['TestSource_1', 'TestSource_2']);
     });
   });
 

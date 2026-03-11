@@ -37,6 +37,7 @@ import { MARKER_COLORS, type Marker, type MarkerColor } from './MarkerManager';
 import type { NoteManager } from './NoteManager';
 import type { VersionManager } from './VersionManager';
 import type { StatusManager } from './StatusManager';
+import type { SerializedGraph } from './SessionManagerTypes';
 import { SessionAnnotations } from './SessionAnnotations';
 import { SessionGraph } from './SessionGraph';
 import { SessionMedia } from './SessionMedia';
@@ -435,6 +436,21 @@ export class Session extends EventEmitter<SessionEvents> {
 
   get gtoData(): GTOData | null {
     return this._sessionGraph.gtoData;
+  }
+
+  /**
+   * Serialize the current live node graph for .orvproject persistence.
+   */
+  toSerializedGraph(): SerializedGraph | null {
+    return this._sessionGraph.toSerializedGraph();
+  }
+
+  /**
+   * Restore a live node graph from .orvproject serialized graph data.
+   * Returns non-fatal warnings for skipped nodes or broken connections.
+   */
+  loadSerializedGraph(data: SerializedGraph): string[] {
+    return this._sessionGraph.loadSerializedGraph(data);
   }
 
   /**
@@ -1346,6 +1362,9 @@ export class Session extends EventEmitter<SessionEvents> {
     audioScrubEnabled: boolean;
     marks: Marker[];
     currentSourceIndex: number;
+    sourceAIndex: number;
+    sourceBIndex: number;
+    currentAB: 'A' | 'B';
   } {
     return {
       currentFrame: this._currentFrame,
@@ -1360,6 +1379,9 @@ export class Session extends EventEmitter<SessionEvents> {
       audioScrubEnabled: this._playback.audioScrubEnabled,
       marks: this._annotations.markerManager.toArray(),
       currentSourceIndex: this._currentSourceIndex,
+      sourceAIndex: this.sourceAIndex,
+      sourceBIndex: this.sourceBIndex,
+      currentAB: this.currentAB,
     };
   }
 
@@ -1380,6 +1402,9 @@ export class Session extends EventEmitter<SessionEvents> {
       audioScrubEnabled: boolean;
       marks: Marker[] | number[]; // Support both old and new format
       currentSourceIndex: number;
+      sourceAIndex: number;
+      sourceBIndex: number;
+      currentAB: 'A' | 'B';
     }>,
   ): void {
     if (state.fps !== undefined) this.fps = state.fps;
@@ -1398,10 +1423,22 @@ export class Session extends EventEmitter<SessionEvents> {
     if (state.marks) {
       this._annotations.markerManager.setFromArray(state.marks);
     }
-    // Restore current source selection (fix #122).
-    // Must be done after media is loaded, so this is applied last.
+    // Restore current source selection after media is loaded.
     if (state.currentSourceIndex !== undefined && state.currentSourceIndex >= 0) {
       this.setCurrentSource(state.currentSourceIndex);
+    }
+    if (state.sourceAIndex !== undefined && state.sourceAIndex >= 0) {
+      this.setSourceA(state.sourceAIndex);
+    }
+    if (state.sourceBIndex !== undefined) {
+      if (state.sourceBIndex >= 0) {
+        this.setSourceB(state.sourceBIndex);
+      } else {
+        this.clearSourceB();
+      }
+    }
+    if (state.currentAB === 'A' || state.currentAB === 'B') {
+      this.setCurrentAB(state.currentAB);
     }
   }
 

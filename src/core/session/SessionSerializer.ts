@@ -91,7 +91,6 @@ export class SessionSerializer {
   //   - Stereo align mode (off, grid, crosshair, difference, edges)
   //   - Compare state: difference matte (enabled, gain, heatmap)
   //   - Compare state: blend mode (mode, opacity, flicker frame)
-  //   - Compare state: A/B compare assignment (sourceAIndex, sourceBIndex, etc.) (fix #132)
   //   - Channel isolation mode (R/G/B/A/luminance)
   //
   // Effects-tab gaps (fix #130):
@@ -290,11 +289,6 @@ export class SessionSerializer {
       isActive: blendModeActive,
       impact: 'Blend mode comparison will revert to off on reload',
     });
-
-    // TODO(#132): A/B compare assignment state (sourceAIndex, sourceBIndex, etc.)
-    // is not persisted. Only wipe mode/position is saved via the wipe state.
-    // console.info('[SessionSerializer] A/B compare assignment state is not persisted in .orvproject files.');
-
     return gaps;
   }
 
@@ -323,6 +317,7 @@ export class SessionSerializer {
       frames: Record<number, Annotation[]>;
       effects: PaintEffects;
     };
+    const serializedGraph = typeof session.toSerializedGraph === 'function' ? session.toSerializedGraph() : null;
 
     // Get view state
     const pan = viewer.getPan();
@@ -366,10 +361,7 @@ export class SessionSerializer {
       par: viewer.getPARState(),
       backgroundPattern: viewer.getBackgroundPatternState(),
       ...(components.playlistManager ? { playlist: components.playlistManager.getState() } : {}),
-      // TODO(#126): The node graph serializer exists (SessionGTOExporter) but is not wired
-      // into .orvproject save/load. The `graph` field in SessionState schema is reserved for
-      // this purpose but requires careful design to avoid breaking existing projects.
-      // graph: undefined,
+      ...(serializedGraph ? { graph: serializedGraph } : {}),
       notes: session.noteManager.toSerializable(),
       versionGroups: session.versionManager.toSerializable(),
       statuses: session.statusManager.toSerializable(),
@@ -578,6 +570,10 @@ export class SessionSerializer {
         components.playlistManager.setLoopMode('none');
         components.playlistManager.setCurrentFrame(1);
       }
+    }
+
+    if (migrated.graph && typeof session.loadSerializedGraph === 'function') {
+      warnings.push(...session.loadSerializedGraph(migrated.graph));
     }
 
     // Restore paint/annotations

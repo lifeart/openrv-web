@@ -15,6 +15,10 @@ import type { PlaybackMode } from '../types/session';
 import type { UncropState } from '../types/transform';
 import { Logger } from '../../utils/Logger';
 import type { SessionAnnotations } from './SessionAnnotations';
+import type { SerializedGraph, SerializedGraphNode } from './SessionManagerTypes';
+import { NodeFactory } from '../../nodes/base/NodeFactory';
+import { resetNodeIdCounter, type IPNode } from '../../nodes/base/IPNode';
+import { Graph as RuntimeGraph } from '../graph/Graph';
 
 const log = new Logger('SessionGraph');
 
@@ -195,6 +199,118 @@ export class SessionGraph extends EventEmitter<SessionGraphEvents> {
    */
   setDisplayName(displayName: string): void {
     this.updateMetadata({ displayName });
+  }
+
+  /**
+   * Serialize the current live graph for .orvproject persistence.
+   */
+  toSerializedGraph(): SerializedGraph | null {
+    if (!this._graph) {
+      return null;
+    }
+
+    const allNodes = this._graph.getAllNodes();
+    const outputNode = this._graph.getOutputNode();
+    const viewNodeId = this._graphParseResult?.sessionInfo.viewNode ?? this._graphParseResult?.rootNode?.id ?? null;
+
+    const nodes: SerializedGraphNode[] = allNodes.map((node) => ({
+      id: node.id,
+      type: node.type,
+      name: node.name,
+      properties: node.properties.toPersistentJSON(),
+      inputIds: node.inputs.map((input) => input.id),
+    }));
+
+    return {
+      version: 1,
+      nodes,
+      outputNodeId: outputNode?.id ?? null,
+      viewNodeId,
+    };
+  }
+
+  /**
+   * Restore a live graph from .orvproject serialized graph data.
+   * Returns non-fatal warnings for skipped nodes or broken connections.
+   */
+  loadSerializedGraph(data: SerializedGraph): string[] {
+    const graph = new RuntimeGraph();
+    const warnings: string[] = [];
+    const nodeMap = new Map<string, IPNode>();
+    let maxIdSuffix = 0;
+
+    for (const serializedNode of data.nodes) {
+      const node = NodeFactory.create(serializedNode.type);
+      if (!node) {
+        warnings.push(`Unknown node type "${serializedNode.type}" (id: ${serializedNode.id}), skipping`);
+        continue;
+      }
+
+      (node as { id: string }).id = serializedNode.id;
+      node.name = serializedNode.name;
+
+      if (serializedNode.properties && Object.keys(serializedNode.properties).length > 0) {
+        node.properties.fromJSON(serializedNode.properties);
+      }
+
+      graph.addNode(node);
+      nodeMap.set(serializedNode.id, node);
+
+      const match = serializedNode.id.match(/_(\d+)$/);
+      if (match) {
+        maxIdSuffix = Math.max(maxIdSuffix, parseInt(match[1]!, 10));
+      }
+    }
+
+    for (const serializedNode of data.nodes) {
+      const node = nodeMap.get(serializedNode.id);
+      if (!node) {
+        continue;
+      }
+
+      for (const inputId of serializedNode.inputIds) {
+        const inputNode = nodeMap.get(inputId);
+        if (!inputNode) {
+          warnings.push(`Dangling input reference "${inputId}" in node "${serializedNode.id}", skipping`);
+          continue;
+        }
+        try {
+          graph.connect(inputNode, node);
+        } catch (err) {
+          warnings.push(`Failed to connect "${inputId}" -> "${serializedNode.id}": ${err}`);
+        }
+      }
+    }
+
+    const outputNode = data.outputNodeId ? nodeMap.get(data.outputNodeId) ?? null : null;
+    if (outputNode) {
+      graph.setOutputNode(outputNode);
+    }
+
+    const rootNode = (data.viewNodeId ? nodeMap.get(data.viewNodeId) : undefined) ?? outputNode ?? null;
+
+    this._graph = graph;
+    this._gtoData = null;
+    this._graphParseResult = {
+      graph,
+      nodes: nodeMap,
+      rootNode,
+      skippedNodes: [],
+      degradedModes: [],
+      sessionInfo: {
+        name: this._metadata.displayName,
+        ...(data.viewNodeId ? { viewNode: data.viewNodeId } : {}),
+      },
+    };
+
+    resetNodeIdCounter(maxIdSuffix);
+
+    for (const warning of warnings) {
+      console.warn(`[SessionGraph] ${warning}`);
+    }
+
+    this.emit('graphLoaded', this._graphParseResult);
+    return warnings;
   }
 
   /**

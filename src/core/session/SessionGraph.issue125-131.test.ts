@@ -188,3 +188,57 @@ describe('Issue #125: empty GTO metadata clears old data', () => {
     expect(host.loadVideoSourcesFromGraph).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('Issue #128: GTO marker notes and colors restore through SessionGraph', () => {
+  it('ISS-128-001: loadFromGTO passes marker notes and colors to marker restore', async () => {
+    const { annotations, host } = createMockHost();
+    const graph = new SessionGraph();
+    graph.setHost(host);
+
+    mockLoadGTOGraph.mockReturnValue({
+      graph: {} as any,
+      nodes: new Map(),
+      rootNode: null,
+      skippedNodes: [],
+      degradedModes: [],
+      sessionInfo: {
+        marks: [10, 20],
+        markerNotes: ['first', 'second'],
+        markerColors: ['#ff0000', '#00ff00'],
+        markerEndFrames: [-1, -1],
+      },
+    });
+
+    await graph.loadFromGTO('GTOa marker session');
+
+    expect(annotations.markerManager.setFromFrameNumbers).toHaveBeenCalledWith(
+      [10, 20],
+      ['first', 'second'],
+      ['#ff0000', '#00ff00'],
+      [-1, -1],
+    );
+  });
+});
+
+describe('Issue #129: GTO audio-scrub state restores through SessionGraph', () => {
+  it('ISS-129-001: loadFromGTO applies audioScrubEnabled to the host', async () => {
+    const { host } = createMockHost();
+    const graph = new SessionGraph();
+    graph.setHost(host);
+
+    mockLoadGTOGraph.mockReturnValue({
+      graph: {} as any,
+      nodes: new Map(),
+      rootNode: null,
+      skippedNodes: [],
+      degradedModes: [],
+      sessionInfo: {
+        audioScrubEnabled: false,
+      },
+    });
+
+    await graph.loadFromGTO('GTOa audio session');
+
+    expect(host.setAudioScrubEnabled).toHaveBeenCalledWith(false);
+  });
+});

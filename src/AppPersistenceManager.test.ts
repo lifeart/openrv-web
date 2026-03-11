@@ -86,12 +86,95 @@ function createMockContext(): PersistenceManagerContext & {
       getCropState: vi.fn(() => null),
       getChannelMode: vi.fn(() => 'rgb'),
       getStereoState: vi.fn(() => null),
+      getStereoEyeTransforms: vi.fn(() => ({
+        left: { flipH: false, flipV: false, rotation: 0, scale: 1, translateX: 0, translateY: 0 },
+        right: { flipH: false, flipV: false, rotation: 0, scale: 1, translateX: 0, translateY: 0 },
+        linked: false,
+      })),
+      getStereoAlignMode: vi.fn(() => 'off'),
       getNoiseReductionParams: vi.fn(() => null),
       getFilterSettings: vi.fn(() => null),
       getWipeState: vi.fn(() => ({ mode: 'off', position: 0.5, showOriginal: 'left' })),
       getWatermarkState: vi.fn(() => null),
       getPARState: vi.fn(() => null),
       getBackgroundPatternState: vi.fn(() => null),
+      getToneMappingState: vi.fn(() => ({ enabled: false, operator: 'off' })),
+      getGhostFrameState: vi.fn(() => ({
+        enabled: false,
+        framesBefore: 2,
+        framesAfter: 2,
+        opacityBase: 0.4,
+        opacityFalloff: 0.7,
+        colorTint: 'none',
+      })),
+      getDisplayColorState: vi.fn(() => ({
+        transferFunction: 'srgb',
+        displayGamma: 1,
+        displayBrightness: 1,
+        customGamma: 2.2,
+      })),
+      getGamutMappingState: vi.fn(() => ({
+        mode: 'off',
+        sourceGamut: 'srgb',
+        targetGamut: 'srgb',
+        highlightOutOfGamut: false,
+      })),
+      getCurves: vi.fn(() => ({
+        master: { points: [] },
+        red: { points: [] },
+        green: { points: [] },
+        blue: { points: [] },
+      })),
+      getDifferenceMatteState: vi.fn(() => ({ enabled: false, gain: 1, heatmap: false })),
+      getBlendModeState: vi.fn(() => ({
+        mode: 'off',
+        onionOpacity: 0.5,
+        flickerRate: 2,
+        blendRatio: 0.5,
+        flickerFrame: 0,
+      })),
+      getDeinterlaceParams: vi.fn(() => ({ enabled: false, method: 'bob', fieldOrder: 'tff' })),
+      getFilmEmulationParams: vi.fn(() => ({
+        enabled: false,
+        stock: 'kodak-portra-400',
+        intensity: 100,
+        grainIntensity: 30,
+      })),
+      getPerspectiveParams: vi.fn(() => ({
+        enabled: false,
+        topLeft: { x: 0, y: 0 },
+        topRight: { x: 1, y: 0 },
+        bottomRight: { x: 1, y: 1 },
+        bottomLeft: { x: 0, y: 1 },
+        quality: 'bilinear',
+      })),
+      getStabilizationParams: vi.fn(() => ({ enabled: false, smoothingStrength: 50, cropAmount: 10 })),
+      getUncropState: vi.fn(() => ({
+        enabled: false,
+        paddingMode: 'uniform',
+        padding: 0,
+        paddingTop: 0,
+        paddingRight: 0,
+        paddingBottom: 0,
+        paddingLeft: 0,
+      })),
+      setToneMappingState: vi.fn(),
+      setGhostFrameState: vi.fn(),
+      setDisplayColorState: vi.fn(),
+      setGamutMappingState: vi.fn(),
+      setColorInversion: vi.fn(),
+      setCurves: vi.fn(),
+      setChannelMode: vi.fn(),
+      setStereoState: vi.fn(),
+      setStereoEyeTransforms: vi.fn(),
+      setStereoAlignMode: vi.fn(),
+      setDifferenceMatteState: vi.fn(),
+      setBlendModeState: vi.fn(),
+      setDeinterlaceParams: vi.fn(),
+      setFilmEmulationParams: vi.fn(),
+      setPerspectiveParams: vi.fn(),
+      setStabilizationParams: vi.fn(),
+      setUncropState: vi.fn(),
     } as any,
     paintEngine: {
       toJSON: vi.fn(() => ({ nextId: 1, show: true, frames: {} })),
@@ -113,14 +196,39 @@ function createMockContext(): PersistenceManagerContext & {
     cdlControl: { setCDL: vi.fn() } as any,
     filterControl: { setSettings: vi.fn() } as any,
     transformControl: { setTransform: vi.fn() } as any,
-    cropControl: { setState: vi.fn() } as any,
+    cropControl: { setState: vi.fn(), setUncropState: vi.fn() } as any,
     lensControl: { setParams: vi.fn() } as any,
+    deinterlaceControl: { setParams: vi.fn() } as any,
+    filmEmulationControl: { setParams: vi.fn() } as any,
+    perspectiveCorrectionControl: { setParams: vi.fn() } as any,
+    stabilizationControl: { setParams: vi.fn() } as any,
     noiseReductionControl: { setParams: vi.fn() } as any,
     watermarkControl: { setState: vi.fn() } as any,
-    compareControl: { setWipeMode: vi.fn(), setWipePosition: vi.fn() } as any,
+    compareControl: {
+      setWipeMode: vi.fn(),
+      setWipePosition: vi.fn(),
+      setDifferenceMatteEnabled: vi.fn(),
+      setDifferenceMatteGain: vi.fn(),
+      setDifferenceMatteHeatmap: vi.fn(),
+      setBlendMode: vi.fn(),
+      setOnionOpacity: vi.fn(),
+      setFlickerRate: vi.fn(),
+      setBlendRatio: vi.fn(),
+    } as any,
     stackControl: { setLayers: vi.fn(), clearLayers: vi.fn(), getLayers: vi.fn(() => []) } as any,
     parControl: { setState: vi.fn() } as any,
     backgroundPatternControl: { setState: vi.fn() } as any,
+    toneMappingControl: { setState: vi.fn() } as any,
+    ghostFrameControl: { setState: vi.fn() } as any,
+    channelSelect: { setChannel: vi.fn() } as any,
+    stereoControl: { setState: vi.fn() } as any,
+    stereoEyeTransformControl: { setState: vi.fn() } as any,
+    stereoAlignControl: { setMode: vi.fn() } as any,
+    displayProfileControl: { setState: vi.fn() } as any,
+    ocioControl: { getState: vi.fn(() => ({ enabled: false, configName: 'aces_1.2' })), setState: vi.fn() } as any,
+    gamutMappingControl: { setState: vi.fn() } as any,
+    curvesControl: { setCurves: vi.fn() } as any,
+    colorInversionToggle: { setEnabled: vi.fn() } as any,
   };
 
   return {
@@ -165,6 +273,25 @@ describe('AppPersistenceManager', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(SessionSerializer.toJSON).mockImplementation(
+      () =>
+        ({
+          version: 1,
+          name: 'test',
+          savedAt: new Date().toISOString(),
+          color: { exposure: 0 },
+          cdl: null,
+          filters: null,
+          transform: null,
+          crop: null,
+          lens: null,
+          noiseReduction: null,
+          watermark: null,
+        }) as any,
+    );
+    vi.mocked(SessionSerializer.fromJSON).mockResolvedValue({ loadedMedia: 1, warnings: [] });
+    vi.mocked(SessionSerializer.saveToFile).mockResolvedValue(undefined);
+    vi.mocked(SessionSerializer.loadFromFile).mockResolvedValue({ version: 1, name: 'test' } as any);
     fullCtx = createMockContext();
     // Extract pure PersistenceManagerContext for the constructor
     const { _autoSaveManager: _a, _snapshotManager: _s, ...ctx } = fullCtx;
@@ -929,13 +1056,157 @@ describe('AppPersistenceManager', () => {
   });
 
   // -----------------------------------------------------------------------
-  // Issue #138: snapshot/auto-save use lossy serializer
+  // Issue #138: local snapshot/auto-save persistence captures viewer-only state
   // -----------------------------------------------------------------------
-  describe('issue #138: lossy serializer documentation', () => {
-    it('APM-138: createQuickSnapshot uses SessionSerializer.toJSON (lossy)', async () => {
-      await manager.createQuickSnapshot();
+  describe('issue #138: local persistence state', () => {
+    it('APM-138: markAutoSaveDirty captures local viewer state alongside SessionSerializer output', () => {
+      (fullCtx.viewer.getToneMappingState as ReturnType<typeof vi.fn>).mockReturnValue({
+        enabled: true,
+        operator: 'reinhard',
+        reinhardWhitePoint: 3,
+      });
+      (fullCtx.viewer.getChannelMode as ReturnType<typeof vi.fn>).mockReturnValue('alpha');
+      (fullCtx.viewer.getColorInversion as ReturnType<typeof vi.fn>).mockReturnValue(true);
+      (fullCtx.viewer.getDisplayColorState as ReturnType<typeof vi.fn>).mockReturnValue({
+        transferFunction: 'rec709',
+        displayGamma: 2.2,
+        displayBrightness: 1.1,
+        customGamma: 2.4,
+      });
+      (fullCtx.ocioControl!.getState as ReturnType<typeof vi.fn>).mockReturnValue({
+        enabled: true,
+        configName: 'aces_1.2',
+        customConfigPath: null,
+        inputColorSpace: 'ACEScg',
+        detectedColorSpace: null,
+        workingColorSpace: 'ACEScg',
+        display: 'sRGB',
+        view: 'ACES 1.0 SDR-video',
+        look: 'Filmic',
+        lookDirection: 'forward',
+      });
+
+      manager.markAutoSaveDirty();
+
+      const getter = fullCtx._autoSaveManager.markDirty.mock.calls[0]![0] as () => any;
+      const result = getter();
+
       expect(SessionSerializer.toJSON).toHaveBeenCalledTimes(1);
-      // The TODO(#138) comment documents that this is lossy
+      expect(result.localPersistence).toBeDefined();
+      expect(result.localPersistence.toneMappingState).toEqual({
+        enabled: true,
+        operator: 'reinhard',
+        reinhardWhitePoint: 3,
+      });
+      expect(result.localPersistence.channelMode).toBe('alpha');
+      expect(result.localPersistence.colorInversion).toBe(true);
+      expect(result.localPersistence.displayColorState).toEqual({
+        transferFunction: 'rec709',
+        displayGamma: 2.2,
+        displayBrightness: 1.1,
+        customGamma: 2.4,
+      });
+      expect(result.localPersistence.ocioState.look).toBe('Filmic');
+    });
+
+    it('APM-138b: restoreSnapshot reapplies local viewer state to viewer and controls', async () => {
+      const localState = {
+        version: 1,
+        name: 'snapshot',
+        color: {},
+        localPersistence: {
+          ocioState: {
+            enabled: true,
+            configName: 'aces_1.2',
+            customConfigPath: null,
+            inputColorSpace: 'ACEScg',
+            detectedColorSpace: null,
+            workingColorSpace: 'ACEScg',
+            display: 'sRGB',
+            view: 'ACES 1.0 SDR-video',
+            look: 'Filmic',
+            lookDirection: 'forward',
+          },
+          toneMappingState: { enabled: true, operator: 'reinhard', reinhardWhitePoint: 2.5 },
+          ghostFrameState: {
+            enabled: true,
+            framesBefore: 1,
+            framesAfter: 3,
+            opacityBase: 0.5,
+            opacityFalloff: 0.8,
+            colorTint: 'red-cyan',
+          },
+          displayColorState: {
+            transferFunction: 'rec709',
+            displayGamma: 2.2,
+            displayBrightness: 1.2,
+            customGamma: 2.4,
+          },
+          gamutMappingState: {
+            mode: 'compress',
+            sourceGamut: 'rec2020',
+            targetGamut: 'display-p3',
+            highlightOutOfGamut: true,
+          },
+          colorInversion: true,
+          curves: {
+            master: { points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
+            red: { points: [{ x: 0, y: 0 }, { x: 1, y: 0.9 }] },
+            green: { points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
+            blue: { points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
+          },
+          channelMode: 'alpha',
+          stereoState: { mode: 'anaglyph', eyeSwap: true, offset: 4 },
+          stereoEyeTransforms: {
+            left: { flipH: true, flipV: false, rotation: 1, scale: 1.1, translateX: 2, translateY: -1 },
+            right: { flipH: false, flipV: true, rotation: -1, scale: 0.9, translateX: -2, translateY: 1 },
+            linked: false,
+          },
+          stereoAlignMode: 'grid',
+          differenceMatteState: { enabled: true, gain: 2.2, heatmap: true },
+          blendModeState: { mode: 'blend', onionOpacity: 0.6, flickerRate: 5, blendRatio: 0.3, flickerFrame: 1 },
+          deinterlaceParams: { enabled: true, method: 'weave', fieldOrder: 'bff' },
+          filmEmulationParams: { enabled: true, stock: 'kodak-vision3-500t', intensity: 80, grainIntensity: 25 },
+          perspectiveParams: {
+            enabled: true,
+            topLeft: { x: 0.1, y: 0.2 },
+            topRight: { x: 0.9, y: 0.2 },
+            bottomRight: { x: 0.95, y: 0.9 },
+            bottomLeft: { x: 0.05, y: 0.9 },
+            quality: 'bicubic',
+          },
+          stabilizationParams: { enabled: true, smoothingStrength: 65, cropAmount: 14 },
+          uncropState: {
+            enabled: true,
+            paddingMode: 'uniform',
+            padding: 12,
+            paddingTop: 12,
+            paddingRight: 12,
+            paddingBottom: 12,
+            paddingLeft: 12,
+          },
+        },
+      };
+      fullCtx._snapshotManager.getSnapshot.mockResolvedValue(localState as any);
+      fullCtx._snapshotManager.getSnapshotMetadata.mockResolvedValue({ name: 'Test' } as any);
+
+      await manager.restoreSnapshot('snap-1');
+
+      expect(fullCtx.viewer.setToneMappingState).toHaveBeenCalledWith(localState.localPersistence.toneMappingState);
+      expect(fullCtx.toneMappingControl!.setState).toHaveBeenCalledWith(localState.localPersistence.toneMappingState);
+      expect(fullCtx.viewer.setDisplayColorState).toHaveBeenCalledWith(localState.localPersistence.displayColorState);
+      expect(fullCtx.displayProfileControl!.setState).toHaveBeenCalledWith(localState.localPersistence.displayColorState);
+      expect(fullCtx.viewer.setColorInversion).toHaveBeenCalledWith(true);
+      expect(fullCtx.colorInversionToggle!.setEnabled).toHaveBeenCalledWith(true);
+      expect(fullCtx.viewer.setChannelMode).toHaveBeenCalledWith('alpha');
+      expect(fullCtx.channelSelect!.setChannel).toHaveBeenCalledWith('alpha');
+      expect(fullCtx.viewer.setStereoState).toHaveBeenCalledWith(localState.localPersistence.stereoState);
+      expect(fullCtx.stereoControl!.setState).toHaveBeenCalledWith(localState.localPersistence.stereoState);
+      expect(fullCtx.viewer.setBlendModeState).toHaveBeenCalledWith(localState.localPersistence.blendModeState);
+      expect(fullCtx.compareControl!.setBlendMode).toHaveBeenCalledWith('blend');
+      expect(fullCtx.viewer.setUncropState).toHaveBeenCalledWith(localState.localPersistence.uncropState);
+      expect(fullCtx.cropControl.setUncropState).toHaveBeenCalledWith(localState.localPersistence.uncropState);
+      expect(fullCtx.ocioControl!.setState).toHaveBeenCalledWith(localState.localPersistence.ocioState);
     });
   });
 
