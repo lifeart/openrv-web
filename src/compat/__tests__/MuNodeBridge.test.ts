@@ -172,6 +172,86 @@ describe('MuNodeBridge', () => {
       const [inputs] = bridge.nodeConnections('color1');
       expect(inputs).toEqual([]);
     });
+
+    it('rolls back to original inputs when a later connection fails', () => {
+      // Setup: source1 -> color1 -> seq1 (from beforeEach)
+      // Adding extra nodes: src2 is valid, but connecting seq1 -> color1
+      // would create a cycle (color1 -> seq1 -> color1).
+      const src2 = new TestNode('RVSource', 'source2');
+      graph.addNode(src2);
+
+      // Verify original state
+      expect(bridge.nodeConnections('color1')[0]).toEqual(['source1']);
+
+      // Try to set inputs to [source2, seq1] — seq1 will cause a cycle
+      expect(() => bridge.setNodeInputs('color1', ['source2', 'seq1'])).toThrow('cycle');
+
+      // Original inputs should be restored
+      const [inputs] = bridge.nodeConnections('color1');
+      expect(inputs).toEqual(['source1']);
+
+      // Verify source2 is not left partially connected
+      const [, src2Outputs] = bridge.nodeConnections('source2');
+      expect(src2Outputs).toEqual([]);
+    });
+
+    it('successful rewire replaces all inputs', () => {
+      const src2 = new TestNode('RVSource', 'source2');
+      const src3 = new TestNode('RVSource', 'source3');
+      graph.addNode(src2);
+      graph.addNode(src3);
+
+      bridge.setNodeInputs('color1', ['source2', 'source3']);
+      const [inputs] = bridge.nodeConnections('color1');
+      expect(inputs).toEqual(['source2', 'source3']);
+
+      // Original source1 should no longer be an input
+      const [, src1Outputs] = bridge.nodeConnections('source1');
+      expect(src1Outputs).not.toContain('color1');
+    });
+
+    it('rolls back ALL original inputs when a later connection fails (multiple originals)', () => {
+      // Setup: connect both source1 AND source2 to color1
+      const src2 = new TestNode('RVSource', 'source2');
+      const src3 = new TestNode('RVSource', 'source3');
+      graph.addNode(src2);
+      graph.addNode(src3);
+      bridge.setNodeInputs('color1', ['source1', 'source2']);
+      expect(bridge.nodeConnections('color1')[0]).toEqual(['source1', 'source2']);
+
+      // Try to rewire to [source3, seq1] — seq1 causes a cycle
+      expect(() => bridge.setNodeInputs('color1', ['source3', 'seq1'])).toThrow('cycle');
+
+      // Both original inputs must be restored
+      const [inputs] = bridge.nodeConnections('color1');
+      expect(inputs).toEqual(['source1', 'source2']);
+
+      // source3 should not be left partially connected
+      const [, src3Outputs] = bridge.nodeConnections('source3');
+      expect(src3Outputs).toEqual([]);
+    });
+
+    it('rolls back when the FIRST connection in the new list fails', () => {
+      // seq1 is an output of color1 (color1 -> seq1), so connecting
+      // seq1 -> color1 creates a cycle.
+      expect(() => bridge.setNodeInputs('color1', ['seq1'])).toThrow('cycle');
+
+      // Original inputs should be restored
+      const [inputs] = bridge.nodeConnections('color1');
+      expect(inputs).toEqual(['source1']);
+    });
+
+    it('is idempotent when setting the same inputs that already exist', () => {
+      // color1 already has source1 as its only input
+      bridge.setNodeInputs('color1', ['source1']);
+
+      const [inputs] = bridge.nodeConnections('color1');
+      expect(inputs).toEqual(['source1']);
+
+      // source1 should still feed into color1
+      const [, src1Outputs] = bridge.nodeConnections('source1');
+      expect(src1Outputs).toContain('color1');
+    });
   });
 
   describe('testNodeInputs', () => {

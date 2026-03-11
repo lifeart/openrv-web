@@ -203,7 +203,7 @@ export class MuNodeBridge {
     const node = this._findNode(name);
     if (!node) throw new Error(`Node not found: "${name}"`);
 
-    // Resolve all input nodes first
+    // Resolve all input nodes first (before any mutations)
     const inputNodes: IPNode[] = [];
     for (const inputName of inputNames) {
       const inputNode = this._findNode(inputName);
@@ -211,12 +211,25 @@ export class MuNodeBridge {
       inputNodes.push(inputNode);
     }
 
+    // Save original inputs for rollback
+    const originalInputs = [...node.inputs];
+
     // Disconnect existing inputs
     node.disconnectAllInputs();
 
-    // Connect new inputs (Graph.connect checks for cycles)
-    for (const inputNode of inputNodes) {
-      this._graph.connect(inputNode, node);
+    // Connect new inputs atomically: roll back on failure
+    try {
+      for (const inputNode of inputNodes) {
+        this._graph.connect(inputNode, node);
+      }
+    } catch (error) {
+      // Undo partial connections
+      node.disconnectAllInputs();
+      // Restore original inputs
+      for (const original of originalInputs) {
+        this._graph.connect(original, node);
+      }
+      throw error;
     }
   }
 

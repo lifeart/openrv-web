@@ -2573,3 +2573,15 @@
 - **Regression Tests**: 3 new tests — fallback media is path (not name), fallback/local media consistency, empty-url fallback to name.
 - **Verification**: All 686 compat tests pass.
 - **Files Changed**: `src/api/MediaAPI.ts`, `src/compat/MuSourceBridge.ts`, `src/compat/__tests__/MuSourceBridge.test.ts`
+
+---
+
+### 269. Mu compat `setNodeInputs()` is not atomic and can leave a node partially rewired after a later connection failure
+
+- **Severity**: Medium
+- **Area**: Mu compatibility / node graph editing
+- **Root Cause**: `setNodeInputs()` disconnected all existing inputs before connecting new ones. If a later `Graph.connect()` threw (e.g., cycle detection), the node was left with partial new connections and no way to recover the original state.
+- **Fix**: Save `originalInputs` before disconnecting. Wrap the connect loop in try/catch. On failure, disconnect partial connections, restore all original inputs, then rethrow.
+- **Regression Tests**: 5 new tests — rollback on cycle (single original), rollback with multiple originals, first-input-fails rollback, successful multi-input rewire, idempotent same-inputs rewire.
+- **Verification**: All 691 compat tests pass.
+- **Files Changed**: `src/compat/MuNodeBridge.ts`, `src/compat/__tests__/MuNodeBridge.test.ts`
