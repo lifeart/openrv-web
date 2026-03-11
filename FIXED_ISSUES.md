@@ -2476,3 +2476,12 @@
 - **Regression Tests**: 11 new tests covering: localhost ws, 127.0.0.1 ws, explicit ws scheme, explicit wss scheme, http page → ws, https page → wss, file: page → wss, double-port prevention (wss), double-port prevention (ws), SSR default wss, and connection metadata correctness.
 - **Verification**: All 625 compat tests pass (8 files), TypeScript clean.
 - **Files Changed**: `src/compat/MuNetworkBridge.ts`, `src/compat/__tests__/MuEventBridge.test.ts`
+
+### 256. Mu compat hash-path property resolution is insertion-order dependent when multiple node names contain the same type token
+- **Severity**: Medium
+- **Area**: Mu compatibility / property system
+- **Root Cause**: `_resolveKey()` iterated `this._store.keys()` and returned the first key whose node name `includes(typeName)`, making resolution dependent on Map insertion order when multiple nodes matched — nondeterministic from the API user's perspective.
+- **Fix**: Replaced first-match-wins with a priority-ranked resolution: (1) exact node-name match (unchanged, highest priority), (2) suffix match — node name ends with `_TypeName` (matches OpenRV naming convention), (3) substring match — node name `includes(TypeName)`. Within each tier, candidates are sorted alphabetically by key for deterministic tiebreaking.
+- **Regression Tests**: 4 new tests covering: suffix preferred over substring (with insertion order proving it's not luck), alphabetical tiebreaking among equal-quality matches, insertion-order independence, and exact match still wins over suffix/substring.
+- **Verification**: All 629 compat tests pass (8 files), TypeScript clean.
+- **Files Changed**: `src/compat/MuPropertyBridge.ts`, `src/compat/__tests__/MuPropertyBridge.test.ts`

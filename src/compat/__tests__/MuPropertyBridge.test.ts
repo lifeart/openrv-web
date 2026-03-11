@@ -408,6 +408,50 @@ describe('MuPropertyBridge', () => {
       expect(info.name).toBe('RVColor.color.gamma');
       expect(info.type).toBe('float');
     });
+
+    it('prefers suffix match over substring match', () => {
+      // Insert substring match FIRST to prove it's not just insertion-order luck
+      bridge.newProperty('node_RVSourceGroup.comp.prop', MuPropertyType.Float, 1);
+      bridge.setFloatProperty('node_RVSourceGroup.comp.prop', [2.0]);
+      bridge.newProperty('node_RVSource.comp.prop', MuPropertyType.Float, 1);
+      bridge.setFloatProperty('node_RVSource.comp.prop', [1.0]);
+
+      // #RVSource should resolve to node_RVSource (suffix), not node_RVSourceGroup (substring)
+      expect(bridge.getFloatProperty('#RVSource.comp.prop')).toEqual([1.0]);
+    });
+
+    it('breaks ties alphabetically among equal-quality matches', () => {
+      bridge.newProperty('group002_Type.comp.prop', MuPropertyType.Float, 1);
+      bridge.setFloatProperty('group002_Type.comp.prop', [2.0]);
+      bridge.newProperty('group001_Type.comp.prop', MuPropertyType.Float, 1);
+      bridge.setFloatProperty('group001_Type.comp.prop', [1.0]);
+
+      // Both are suffix matches; alphabetically first (group001) wins
+      expect(bridge.getFloatProperty('#Type.comp.prop')).toEqual([1.0]);
+    });
+
+    it('resolves deterministically regardless of insertion order', () => {
+      // Insert in reverse alphabetical order
+      bridge.newProperty('zzz_Color.color.gamma', MuPropertyType.Float, 1);
+      bridge.setFloatProperty('zzz_Color.color.gamma', [3.0]);
+      bridge.newProperty('aaa_Color.color.gamma', MuPropertyType.Float, 1);
+      bridge.setFloatProperty('aaa_Color.color.gamma', [1.0]);
+      bridge.newProperty('mmm_Color.color.gamma', MuPropertyType.Float, 1);
+      bridge.setFloatProperty('mmm_Color.color.gamma', [2.0]);
+
+      // Should always resolve to alphabetically first
+      expect(bridge.getFloatProperty('#Color.color.gamma')).toEqual([1.0]);
+    });
+
+    it('exact match still wins over suffix and substring matches', () => {
+      bridge.newProperty('node_RVColor.color.gamma', MuPropertyType.Float, 1);
+      bridge.setFloatProperty('node_RVColor.color.gamma', [2.0]);
+      bridge.newProperty('RVColor.color.gamma', MuPropertyType.Float, 1);
+      bridge.setFloatProperty('RVColor.color.gamma', [1.0]);
+
+      // Exact match (RVColor) should win
+      expect(bridge.getFloatProperty('#RVColor.color.gamma')).toEqual([1.0]);
+    });
   });
 
   // ---- Quiet mode (no notifications) ----

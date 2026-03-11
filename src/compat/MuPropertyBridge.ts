@@ -413,14 +413,33 @@ export class MuPropertyBridge {
     const exact = `${typeName}${suffix}`;
     if (this._store.has(exact)) return exact;
 
-    // Otherwise search for any node containing the type name
+    // Collect all candidate keys whose node part matches the type name
+    const suffixMatches: string[] = [];
+    const substringMatches: string[] = [];
+
     for (const key of this._store.keys()) {
       if (key.endsWith(suffix)) {
         const nodePart = key.slice(0, key.length - suffix.length);
-        if (nodePart === typeName || nodePart.includes(typeName)) {
+        if (nodePart === typeName) {
+          // Exact node-name match (shouldn't reach here due to early return above,
+          // but included for safety)
           return key;
+        } else if (nodePart.endsWith(`_${typeName}`)) {
+          suffixMatches.push(key);
+        } else if (nodePart.includes(typeName)) {
+          substringMatches.push(key);
         }
       }
+    }
+
+    // Prefer suffix matches over substring matches; sort alphabetically for determinism
+    if (suffixMatches.length > 0) {
+      suffixMatches.sort();
+      return suffixMatches[0];
+    }
+    if (substringMatches.length > 0) {
+      substringMatches.sort();
+      return substringMatches[0];
     }
 
     return null;
