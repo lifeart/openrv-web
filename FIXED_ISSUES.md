@@ -2585,3 +2585,15 @@
 - **Regression Tests**: 5 new tests — rollback on cycle (single original), rollback with multiple originals, first-input-fails rollback, successful multi-input rewire, idempotent same-inputs rewire.
 - **Verification**: All 691 compat tests pass.
 - **Files Changed**: `src/compat/MuNodeBridge.ts`, `src/compat/__tests__/MuNodeBridge.test.ts`
+
+---
+
+### 270. Mu compat `nodeConnections(..., traverseGroups)` ignores the `traverseGroups` flag
+
+- **Severity**: Medium
+- **Area**: Mu compatibility / node graph queries
+- **Root Cause**: The `traverseGroups` parameter was prefixed with `_` and never read. The method always returned direct `node.inputs`/`node.outputs` regardless of the flag.
+- **Fix**: When `traverseGroups=true`, group nodes in the connections are recursively replaced by their non-group leaf members via `_resolveGroups()`/`_collectLeafNodes()`. Per-name visited sets prevent cycles while preserving duplicate connections.
+- **Regression Tests**: 7 new tests — false with groups, true replaces groups with leaves, true=false without groups, nested groups, duplicate preservation, output traversal, empty group passthrough.
+- **Verification**: All 698 compat tests pass.
+- **Files Changed**: `src/compat/MuNodeBridge.ts`, `src/compat/__tests__/MuNodeBridge.test.ts`

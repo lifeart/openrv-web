@@ -146,6 +146,112 @@ describe('MuNodeBridge', () => {
     it('throws for unknown node', () => {
       expect(() => bridge.nodeConnections('nope')).toThrow('Node not found');
     });
+
+    it('traverseGroups=false returns direct connections even when groups exist', () => {
+      // Make color1 a group containing source1
+      const group = new TestNode('RVGroup', 'group1');
+      graph.addNode(group);
+      graph.connect(group, graph.getAllNodes().find((n) => n.name === 'seq1')!);
+      bridge.addNodeToGroup('source1', 'group1');
+      bridge.addNodeToGroup('color1', 'group1');
+
+      // With traverseGroups=false, group1 appears as-is
+      const [inputs] = bridge.nodeConnections('seq1', false);
+      expect(inputs).toContain('color1');
+    });
+
+    it('traverseGroups=true replaces group nodes with their leaf members', () => {
+      // Build: source1 -> groupNode -> seq1
+      // groupNode contains leafA and leafB
+      const groupNode = new TestNode('RVGroup', 'groupNode');
+      const leafA = new TestNode('RVSource', 'leafA');
+      const leafB = new TestNode('RVSource', 'leafB');
+      graph.addNode(groupNode);
+      graph.addNode(leafA);
+      graph.addNode(leafB);
+
+      // Wire groupNode as input to seq1
+      bridge.setNodeInputs('seq1', ['groupNode']);
+      // Register leafA and leafB as members of groupNode
+      bridge.addNodeToGroup('leafA', 'groupNode');
+      bridge.addNodeToGroup('leafB', 'groupNode');
+
+      // traverseGroups=true should resolve groupNode -> [leafA, leafB]
+      const [inputs] = bridge.nodeConnections('seq1', true);
+      expect(inputs).not.toContain('groupNode');
+      expect(inputs).toContain('leafA');
+      expect(inputs).toContain('leafB');
+    });
+
+    it('traverseGroups=true returns same result as false when no groups in path', () => {
+      // source1 -> color1 -> seq1, none are groups
+      const [inputsF, outputsF] = bridge.nodeConnections('color1', false);
+      const [inputsT, outputsT] = bridge.nodeConnections('color1', true);
+      expect(inputsT).toEqual(inputsF);
+      expect(outputsT).toEqual(outputsF);
+    });
+
+    it('traverseGroups=true preserves duplicate leaf when it appears directly and via group', () => {
+      // seq1 has inputs: [leafA, groupNode]
+      // groupNode contains leafA
+      // With old shared visited set: leafA appears once (second via group is skipped)
+      // With per-name visited set: leafA appears twice (once direct, once via group)
+      const groupNode = new TestNode('RVGroup', 'groupNode');
+      const leafA = new TestNode('RVSource', 'leafA');
+      graph.addNode(groupNode);
+      graph.addNode(leafA);
+
+      bridge.setNodeInputs('seq1', ['leafA', 'groupNode']);
+      bridge.addNodeToGroup('leafA', 'groupNode');
+
+      const [inputs] = bridge.nodeConnections('seq1', true);
+      // leafA passes through as-is, groupNode resolves to leafA
+      expect(inputs).toEqual(['leafA', 'leafA']);
+    });
+
+    it('traverseGroups=true handles nested groups', () => {
+      // outerGroup contains innerGroup, innerGroup contains leaf
+      const outerGroup = new TestNode('RVGroup', 'outerGroup');
+      const innerGroup = new TestNode('RVGroup', 'innerGroup');
+      const leaf = new TestNode('RVSource', 'deepLeaf');
+      graph.addNode(outerGroup);
+      graph.addNode(innerGroup);
+      graph.addNode(leaf);
+
+      bridge.setNodeInputs('seq1', ['outerGroup']);
+      bridge.addNodeToGroup('innerGroup', 'outerGroup');
+      bridge.addNodeToGroup('deepLeaf', 'innerGroup');
+
+      const [inputs] = bridge.nodeConnections('seq1', true);
+      expect(inputs).toEqual(['deepLeaf']);
+    });
+
+    it('traverseGroups=true resolves groups in the outputs list', () => {
+      // source1 -> color1 -> groupOut (group containing leafOut)
+      const groupOut = new TestNode('RVGroup', 'groupOut');
+      const leafOut = new TestNode('RVSource', 'leafOut');
+      graph.addNode(groupOut);
+      graph.addNode(leafOut);
+
+      // Wire color1 -> groupOut via setNodeInputs on groupOut
+      bridge.setNodeInputs('groupOut', ['color1']);
+      bridge.addNodeToGroup('leafOut', 'groupOut');
+
+      const [, outputs] = bridge.nodeConnections('color1', true);
+      expect(outputs).not.toContain('groupOut');
+      expect(outputs).toContain('leafOut');
+    });
+
+    it('traverseGroups=true passes empty group through as leaf', () => {
+      const emptyGroup = new TestNode('RVGroup', 'emptyGroup');
+      graph.addNode(emptyGroup);
+
+      // Wire emptyGroup as input to seq1
+      bridge.setNodeInputs('seq1', ['emptyGroup']);
+
+      const [inputs] = bridge.nodeConnections('seq1', true);
+      expect(inputs).toContain('emptyGroup');
+    });
   });
 
   describe('setNodeInputs', () => {

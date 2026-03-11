@@ -182,15 +182,21 @@ export class MuNodeBridge {
    * Equivalent to Mu's `commands.nodeConnections(name, traverseGroups)`.
    *
    * @param name - Node name
-   * @param _traverseGroups - Whether to traverse into group nodes (currently ignored)
+   * @param traverseGroups - When true, group nodes in the connections are
+   *   recursively replaced by their non-group (leaf) members.
    * @returns Tuple of [inputNames, outputNames]
    */
-  nodeConnections(name: string, _traverseGroups = false): [string[], string[]] {
+  nodeConnections(name: string, traverseGroups = false): [string[], string[]] {
     const node = this._findNode(name);
     if (!node) throw new Error(`Node not found: "${name}"`);
     const inputs = node.inputs.map((n) => n.name);
     const outputs = node.outputs.map((n) => n.name);
-    return [inputs, outputs];
+
+    if (!traverseGroups) {
+      return [inputs, outputs];
+    }
+
+    return [this._resolveGroups(inputs), this._resolveGroups(outputs)];
   }
 
   /**
@@ -422,6 +428,41 @@ export class MuNodeBridge {
   }
 
   // ---- Internal helpers ----
+
+  /**
+   * Replace group nodes in `names` with their non-group leaf members,
+   * recursively. Non-group nodes pass through unchanged.
+   */
+  private _resolveGroups(names: string[]): string[] {
+    const result: string[] = [];
+    for (const name of names) {
+      const visited = new Set<string>();
+      this._collectLeafNodes(name, result, visited);
+    }
+    return result;
+  }
+
+  /**
+   * If `name` is a group node (has members), recurse into its children;
+   * otherwise append it to `result`. Uses `visited` to prevent infinite loops.
+   */
+  private _collectLeafNodes(
+    name: string,
+    result: string[],
+    visited: Set<string>,
+  ): void {
+    if (visited.has(name)) return;
+    visited.add(name);
+
+    const members = this.nodesInGroup(name);
+    if (members.length === 0) {
+      result.push(name);
+    } else {
+      for (const member of members) {
+        this._collectLeafNodes(member, result, visited);
+      }
+    }
+  }
 
   /**
    * Find a node by name (searches all graph nodes).
