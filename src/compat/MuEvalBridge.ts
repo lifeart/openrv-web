@@ -405,8 +405,13 @@ export class MuEvalBridge {
    * @param tag - Tag to match
    * @returns Array of 4 [x, y] corner pairs
    */
-  imageGeometryByTag(imageName: string, _tag: string): [number, number][] {
-    // Tags are not fully implemented; fall back to name-based lookup
+  imageGeometryByTag(imageName: string, tag: string): [number, number][] {
+    // Try exact match on both name and tag first
+    const tagMatch = this._renderedImages.find(
+      (i) => i.name === imageName && i.tag === tag,
+    );
+    if (tagMatch) return this._computeImageCorners(tagMatch);
+    // Fall back to name-only match for backward compatibility
     return this.imageGeometry(imageName);
   }
 

@@ -241,6 +241,8 @@ export interface RenderedImageInfo {
   height: number;
   /** Node name that produced this image */
   nodeName: string;
+  /** Optional metadata tag identifying a view variant (e.g. "main", "thumbnail") */
+  tag?: string;
 }
 
 // --- Phase 4: Source Management types ---

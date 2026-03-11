@@ -68,6 +68,7 @@ export interface OpenRVEventData {
       width: number;
       height: number;
       nodeName: string;
+      tag?: string;
     }>;
   };
   error: { message: string; code?: string };

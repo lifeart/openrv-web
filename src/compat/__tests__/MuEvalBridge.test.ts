@@ -498,8 +498,8 @@ describe('MuEvalBridge', () => {
       // Point (310, 260) is inside imgA but outside imgB
       const result = bridge.imagesAtPixel([310, 260]);
       expect(result).toHaveLength(1);
-      expect(result[0].name).toBe('imgA');
-      expect(result[0].inside).toBe(true);
+      expect(result[0]!.name).toBe('imgA');
+      expect(result[0]!.inside).toBe(true);
     });
 
     it('returns no images when point misses all rendered images', () => {
@@ -662,11 +662,38 @@ describe('MuEvalBridge', () => {
   // =====================================================================
 
   describe('imageGeometryByTag', () => {
-    it('falls back to name-based lookup', () => {
+    it('selects geometry matching the given tag', () => {
+      bridge.setViewTransform(defaultViewTransform());
+      const main = { ...makeRenderedImage('img1', 0, 100, 100), tag: 'main' };
+      const thumb = {
+        ...makeRenderedImage('img1', 1, 50, 50),
+        imageMin: [10, 10] as [number, number],
+        imageMax: [60, 60] as [number, number],
+        tag: 'thumbnail',
+      };
+      bridge.setRenderedImages([main, thumb]);
+      const corners = bridge.imageGeometryByTag('img1', 'thumbnail');
+      expect(corners).toHaveLength(4);
+      // Corners should reflect the thumbnail geometry, not the main one
+      const mainCorners = bridge.imageGeometryByTag('img1', 'main');
+      expect(corners).not.toEqual(mainCorners);
+    });
+
+    it('falls back to name-only match when tag does not exist', () => {
       bridge.setViewTransform(defaultViewTransform());
       bridge.setRenderedImages([makeRenderedImage('img1', 0, 100, 100)]);
-      const corners = bridge.imageGeometryByTag('img1', 'someTag');
+      const corners = bridge.imageGeometryByTag('img1', 'nonexistent');
       expect(corners).toHaveLength(4);
+      // Should equal name-only lookup
+      expect(corners).toEqual(bridge.imageGeometry('img1'));
+    });
+
+    it('returns name-only match when tag is empty string', () => {
+      bridge.setViewTransform(defaultViewTransform());
+      bridge.setRenderedImages([makeRenderedImage('img1', 0, 100, 100)]);
+      const corners = bridge.imageGeometryByTag('img1', '');
+      expect(corners).toHaveLength(4);
+      expect(corners).toEqual(bridge.imageGeometry('img1'));
     });
   });
 

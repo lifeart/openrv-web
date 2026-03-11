@@ -1579,52 +1579,23 @@
 
 ## Issue #152: Large parts of the unified preferences model are storage-only and never affect runtime behavior
 
-- **Severity**: Medium
-- **Area**: Preferences / dead user configuration
-- **Root Cause**: `ColorDefaults`, `ExportDefaults`, and most `GeneralPrefs` fields (`defaultFps`, `autoPlayOnLoad`, `showWelcome`) are persisted, exported, and imported by `PreferencesManager`, but no production code reads `getColorDefaults()` or `getExportDefaults()`, and the unused `GeneralPrefs` fields have no runtime consumers. Only `userName` is actually used (by NotePanel and NetworkControl).
-- **Fix**: Added TODO(#152) JSDoc to `ColorDefaults` and `ExportDefaults` interfaces, and per-field annotations on unused `GeneralPrefs` fields, documenting each as storage-only with no production consumer. Added one-time `console.info` in constructor (gated by static flag) referencing TODO(#152). No API changes — fields preserved for future wiring.
-- **TODO(#152) Partial**: Wired `autoPlayOnLoad` and `defaultFps` preferences. `handleSourceLoaded()` now accepts optional `autoPlayOnLoad` parameter; when true and source has >1 frame and not already playing, calls `session.play()`. `App` constructor reads `defaultFps` and sets `session.fps` after creation, ensuring all downstream fallbacks respect it. Remaining unwired: `showWelcome`, `ColorDefaults`, `ExportDefaults.frameburnEnabled/frameburnConfig`.
-- **Regression Tests**: CPRF-152-001 through 005 (unchanged), SLH-U060 through SLH-U064 (5 new: auto-play on/off, still image guard, already-playing guard, undefined guard).
-- **Files Changed**: `src/core/PreferencesManager.ts`, `src/handlers/sourceLoadedHandlers.ts`, `src/AppSessionBridge.ts`, `src/handlers/sourceLoadedHandlers.test.ts`
+- **TODO(#152) Resolved**: The tracker entry had gone stale. `defaultFps` and `autoPlayOnLoad` are already wired into app/session startup and source load behavior, and `ExportDefaults` are consumed live by `ExportControl`, `FrameburnSettingsMenu`, `KeyboardActionMap`, and `AppPlaybackWiring` for default export settings plus advanced frameburn. I removed the obsolete `TODO(#152)` storage-only warning/docs from `PreferencesManager` and kept regression coverage focused on the real remaining persisted-only fields (`ColorDefaults` and `showWelcome`) rather than the no-longer-true export/default-fps claims.
 
 ## Issue #153: Drag-and-drop GTO/RV session loading loses sidecar file resolution that the file picker preserves
 
-- **Severity**: High
-- **Area**: Session ingest / drag-and-drop parity
-- **Root Cause**: The header file-picker path built an `availableFiles` map from companion files and passed it to `loadFromGTO()`, enabling sidecar media/CDL resolution by basename. The viewer drag-and-drop path called `session.loadFromGTO(content)` without any `availableFiles` map, silently losing sidecar resolution.
-- **Fix**: In `ViewerInputHandler.ts`, moved session file detection (`.gto`/`.rv`) before sequence detection to match HeaderBar's priority order. When a session file is found among dropped files, builds an `availableFiles` `Map<string, File>` from all other dropped files (keyed by `file.name` basename), and passes it as the second argument to `session.loadFromGTO(content, availableFiles)`. Non-session drops are unaffected.
-- **Regression Tests**: SIDECAR-001 (GTO + companions builds map), SIDECAR-002 (GTO alone passes empty map), SIDECAR-003 (.rv extension works), SIDECAR-004 (multiple companions with correct basenames), SIDECAR-005 (non-session files fall through to loadFile), SIDECAR-006 (session file excluded from map).
-- **Verification**: All 48 ViewerInputHandler tests pass, TypeScript clean.
-- **Files Changed**: `src/ui/components/ViewerInputHandler.ts`, `src/ui/components/ViewerInputHandler.test.ts`
+- **TODO(#153) Resolved**: `ViewerInputHandler` already matches the file-picker path. Dropped `.gto` / `.rv` session files are detected before sequence loading, companion files are collected into an `availableFiles` map, and `session.loadFromGTO(content, availableFiles)` preserves sidecar media/CDL resolution. Current regression coverage is `SIDECAR-001` through `SIDECAR-006`.
 
 ## Issue #154: Drag-and-drop skips single-file sequence inference that the file picker supports
 
-- **Severity**: Medium
-- **Area**: Media ingest / sequence detection consistency
-- **Root Cause**: The header file-picker path called `inferSequenceFromSingleFile()` when exactly one image file was selected, promoting numbered frames to full sequences. The drag-and-drop path in `ViewerInputHandler.ts` only did sequence detection for multiple image files; a single numbered frame fell straight through to single-file loading.
-- **Fix**: Added `inferSequenceFromSingleFile(singleFile, fileArray)` call in the drag-and-drop handler when exactly one image file is dropped. If inference succeeds, loads as sequence via `session.loadSequence()`. If it returns null or throws, falls through to single-file `loadFile()` as before. Matches HeaderBar's pattern exactly.
-- **Regression Tests**: SEQ-INFER-001 (inference called with correct args), SEQ-INFER-002 (successful inference loads as sequence), SEQ-INFER-003 (null inference falls through to loadFile), SEQ-INFER-004 (multiple images still use existing getBestSequence — no regression), SEQ-INFER-005 (inference error falls through to loadFile).
-- **Verification**: All 53 ViewerInputHandler tests pass, TypeScript clean.
-- **Files Changed**: `src/ui/components/ViewerInputHandler.ts`, `src/ui/components/ViewerInputHandler.test.ts`
+- **TODO(#154) Resolved**: Single-image drops now call `inferSequenceFromSingleFile(singleFile, fileArray)` before falling back to `loadFile()`, so drag-and-drop and file-picker sequence inference behave the same way. Current regression coverage is `SEQ-INFER-001` through `SEQ-INFER-005`.
 
 ## Issue #156: Dropping a session bundle with multiple image files can ignore the session file completely
 
-- **Severity**: High
-- **Area**: Session ingest / drag-and-drop branch ordering
-- **Root Cause**: The drag-and-drop handler checked `imageFiles.length > 1` (sequence detection) before looking for `.rv`/`.gto` session files. When a session bundle was dropped with companion image files, the sequence detection fired first, loaded the images as a sequence, and returned — skipping the session file entirely.
-- **Fix**: Already resolved by Issue #153's fix. Session file detection (`.rv`/`.gto`) was moved before sequence detection in `ViewerInputHandler.onDrop()`. The session file now takes priority, and companion files are passed as `availableFiles` for sidecar resolution. The SIDECAR-004 test from Issue #153 explicitly covers the multi-file + session scenario.
-- **Verification**: Confirmed by code inspection — session detection at lines 742-764 runs before sequence detection at line 766+.
-- **Files Changed**: (same as Issue #153)
+- **TODO(#156) Resolved**: This was already fixed by the `#153` branch-order change. Session files are checked before multi-image sequence detection, so a dropped session bundle no longer gets short-circuited into image-sequence loading. `SIDECAR-004` covers the mixed session-plus-images case.
 
 ## Issue #155: Drag-and-drop treats `.rvedl` as media and routes it into the wrong loader
 
-- **Severity**: Medium
-- **Area**: Session ingest / EDL workflow
-- **Root Cause**: The drag-and-drop handler only special-cased `.rv`/`.gto` extensions. `.rvedl` files fell through to `session.loadFile()` which dispatches to image/video loading, and unknown extensions default to `'image'`. The header file-picker had a dedicated RVEDL parse path via `session.loadEDL(text)`.
-- **Fix**: Added `.rvedl` detection in the `ViewerInputHandler.onDrop()` handler, placed before the `.rv`/`.gto` check (matching HeaderBar ordering). When detected, reads the file as text via `file.text()` and calls `session.loadEDL(text)`. Shows info alert on success with source summary, warning if no entries found, and error alert on failure — all matching HeaderBar's pattern.
-- **Regression Tests**: EDL-DROP-001 (`.rvedl` drop calls loadEDL with correct text), EDL-DROP-002 (not routed through loadFile/loadFromGTO/loadSequence), EDL-DROP-003 (error handled gracefully), EDL-DROP-004 (`.rv`/`.gto` still works — no regression), EDL-DROP-005 (case-insensitive `.RVEDL` recognized).
-- **Verification**: All 58 ViewerInputHandler tests pass, TypeScript clean.
-- **Files Changed**: `src/ui/components/ViewerInputHandler.ts`, `src/ui/components/ViewerInputHandler.test.ts`
+- **TODO(#155) Resolved**: Dropped `.rvedl` files now take the dedicated EDL path instead of falling into generic media loading. `ViewerInputHandler` reads the file as text, calls `session.loadEDL(text)`, and keeps the same success / warning / error alert behavior as the file-picker path. Current regression coverage is `EDL-DROP-001` through `EDL-DROP-005`.
 
 ## Issue #157: Unsupported dropped files are deliberately misclassified as images instead of being rejected up front
 
@@ -2548,3 +2519,12 @@
 - **Regression Tests**: 4 new tests covering: selective filtering (point inside one image but not another), empty array for complete miss, edge pixel inclusion, and overlapping image multi-hit. Updated existing test that asserted old unfiltered behavior.
 - **Verification**: All 670 compat tests pass (8 files), TypeScript clean.
 - **Files Changed**: `src/compat/MuEvalBridge.ts`, `src/compat/__tests__/MuEvalBridge.test.ts`
+
+### 264. Mu compat imageGeometryByTag() ignores the tag argument entirely
+- **Severity**: Medium
+- **Area**: Mu compatibility / image-query scripting
+- **Root Cause**: `imageGeometryByTag(imageName, _tag)` explicitly commented that tags were not implemented and forwarded to `imageGeometry(imageName)`, making the tag parameter inert.
+- **Fix**: Added optional `tag` field to `RenderedImageInfo` type and `renderedImagesChanged` event data. `imageGeometryByTag()` now matches on both `name` and `tag` (exact string match), falling back to name-only lookup when no tag-specific match exists. Backward compatible — images without tags still match by name.
+- **Regression Tests**: 3 new tests covering: tag-specific geometry selection (different geometry per tag), tag mismatch falls back to name, and empty tag preserves backward compatibility.
+- **Verification**: All 672 compat tests pass (8 files), TypeScript clean.
+- **Files Changed**: `src/compat/MuEvalBridge.ts`, `src/compat/types.ts`, `src/api/EventsAPI.ts`, `src/compat/__tests__/MuEvalBridge.test.ts`
