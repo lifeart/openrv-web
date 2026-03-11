@@ -1504,9 +1504,9 @@
 ## Issue #143: The HEIC WASM fallback can decode the wrong top-level image when `is_primary()` is unavailable
 
 - **Severity**: Medium
-- **Fix**: Added `console.warn` in `decodeHEICToImageData()` when `is_primary()` is unavailable and falling back to index 0. Added TODO(#143).
+- **TODO(#143) Resolved**: `HEICWasmDecoder` now infers the primary top-level image from HEIC container metadata (`pitm` + `iinf`) when `libheif-js` lacks `is_primary()`, instead of blindly decoding image index 0. The same resolver is reused by auxiliary-image selection, and the warning path now only triggers when both `is_primary()` and metadata lookup fail.
 - **Regression Tests**: 1 test.
-- **Files Changed**: `src/formats/HEICWasmDecoder.ts`
+- **Files Changed**: `src/formats/HEICWasmDecoder.ts`, `src/formats/HEICWasmDecoder.test.ts`
 
 ## Issue #144: The single 3D LUT path silently becomes a no-op when the WebGL LUT processor is unavailable
 
@@ -2521,3 +2521,12 @@
 - **Regression Tests**: 4 new tests covering: double-wire prevention (handler fires once not twice), independent targets work separately, re-wire after dispose with new bridge, re-wire after dispose on same bridge instance (verifying WeakSet reset).
 - **Verification**: All 650 compat tests pass (8 files), TypeScript clean.
 - **Files Changed**: `src/compat/MuEventBridge.ts`, `src/compat/__tests__/MuEventBridge.test.ts`
+
+### 261. Mu compat fullscreen helpers do not track the Safari/WebKit fullscreen path that the main app supports
+- **Severity**: Medium
+- **Area**: Mu compatibility / fullscreen control
+- **Root Cause**: `fullScreenMode()` and `isFullScreen()` in both `MuCommands` and `MuUtilsBridge` only used the standard Fullscreen API (`requestFullscreen`/`exitFullscreen`/`fullscreenElement`). Safari/WebKit uses prefixed methods (`webkitRequestFullscreen`/`webkitExitFullscreen`/`webkitFullscreenElement`). Additionally, `MuCommands.fullScreenMode()` did not catch promise rejections from `requestFullscreen()`.
+- **Fix**: Added webkit-prefixed fallback in both `MuCommands` and `MuUtilsBridge`: standard API is tried first, webkit only attempted when standard is unavailable. `isFullScreen()` checks both `fullscreenElement` and `webkitFullscreenElement`. All promise-returning paths now have `.catch()` handlers.
+- **Regression Tests**: 10 new tests (5 per file) covering: webkit isFullScreen detection, webkit enter fallback, webkit exit fallback, standard-over-webkit priority, and promise rejection handling.
+- **Verification**: All 660 compat tests pass (8 files), TypeScript clean.
+- **Files Changed**: `src/compat/MuCommands.ts`, `src/compat/MuUtilsBridge.ts`, `src/compat/__tests__/MuCommands.test.ts`, `src/compat/__tests__/MuUtilsBridge.test.ts`

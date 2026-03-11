@@ -269,6 +269,73 @@ describe('MuUtilsBridge', () => {
 
   // ── Backward Compatibility ──
 
+  describe('fullscreen — webkit fallback', () => {
+    it('isFullScreen() detects webkitFullscreenElement', () => {
+      Object.defineProperty(document, 'webkitFullscreenElement', {
+        value: document.documentElement,
+        configurable: true,
+      });
+      expect(bridge.isFullScreen()).toBe(true);
+      Object.defineProperty(document, 'webkitFullscreenElement', {
+        value: undefined,
+        configurable: true,
+      });
+    });
+
+    it('fullScreenMode(true) falls back to webkitRequestFullscreen', () => {
+      const origRFS = document.documentElement.requestFullscreen;
+      const webkitMock = vi.fn();
+      (document.documentElement as any).requestFullscreen = undefined;
+      (document.documentElement as any).webkitRequestFullscreen = webkitMock;
+
+      bridge.fullScreenMode(true);
+      expect(webkitMock).toHaveBeenCalledOnce();
+
+      document.documentElement.requestFullscreen = origRFS;
+      delete (document.documentElement as any).webkitRequestFullscreen;
+    });
+
+    it('fullScreenMode(false) falls back to webkitExitFullscreen', () => {
+      const origEFS = document.exitFullscreen;
+      const webkitMock = vi.fn();
+      (document as any).exitFullscreen = undefined;
+      (document as any).webkitExitFullscreen = webkitMock;
+
+      bridge.fullScreenMode(false);
+      expect(webkitMock).toHaveBeenCalledOnce();
+
+      document.exitFullscreen = origEFS;
+      delete (document as any).webkitExitFullscreen;
+    });
+
+    it('fullScreenMode(true) prefers standard over webkit', () => {
+      const standardMock = vi.fn().mockResolvedValue(undefined);
+      const webkitMock = vi.fn();
+      const origRFS = document.documentElement.requestFullscreen;
+      document.documentElement.requestFullscreen = standardMock;
+      (document.documentElement as any).webkitRequestFullscreen = webkitMock;
+
+      bridge.fullScreenMode(true);
+      expect(standardMock).toHaveBeenCalledOnce();
+      expect(webkitMock).not.toHaveBeenCalled();
+
+      document.documentElement.requestFullscreen = origRFS;
+      delete (document.documentElement as any).webkitRequestFullscreen;
+    });
+
+    it('fullScreenMode(true) handles promise rejection', async () => {
+      const origRFS = document.documentElement.requestFullscreen;
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      document.documentElement.requestFullscreen = vi.fn().mockRejectedValue(new Error('denied'));
+
+      bridge.fullScreenMode(true);
+      await new Promise((r) => setTimeout(r, 0));
+
+      document.documentElement.requestFullscreen = origRFS;
+      warnSpy.mockRestore();
+    });
+  });
+
   describe('backward compat — setLoadCounters', () => {
     it('setLoadCounters still overrides counters directly', () => {
       bridge.setLoadCounters(10, 5);

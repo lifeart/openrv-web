@@ -504,6 +504,70 @@ describe('MuCommands', () => {
       expect(typeof cmd.isFullScreen()).toBe('boolean');
     });
 
+    it('isFullScreen() detects webkitFullscreenElement', () => {
+      Object.defineProperty(document, 'webkitFullscreenElement', {
+        value: document.documentElement,
+        configurable: true,
+      });
+      expect(cmd.isFullScreen()).toBe(true);
+      Object.defineProperty(document, 'webkitFullscreenElement', {
+        value: undefined,
+        configurable: true,
+      });
+    });
+
+    it('fullScreenMode(true) falls back to webkitRequestFullscreen', () => {
+      const origRFS = document.documentElement.requestFullscreen;
+      const webkitMock = vi.fn();
+      (document.documentElement as any).requestFullscreen = undefined;
+      (document.documentElement as any).webkitRequestFullscreen = webkitMock;
+
+      cmd.fullScreenMode(true);
+      expect(webkitMock).toHaveBeenCalledOnce();
+
+      document.documentElement.requestFullscreen = origRFS;
+      delete (document.documentElement as any).webkitRequestFullscreen;
+    });
+
+    it('fullScreenMode(false) falls back to webkitExitFullscreen', () => {
+      const origEFS = document.exitFullscreen;
+      const webkitMock = vi.fn();
+      (document as any).exitFullscreen = undefined;
+      (document as any).webkitExitFullscreen = webkitMock;
+
+      cmd.fullScreenMode(false);
+      expect(webkitMock).toHaveBeenCalledOnce();
+
+      document.exitFullscreen = origEFS;
+      delete (document as any).webkitExitFullscreen;
+    });
+
+    it('fullScreenMode(true) prefers standard requestFullscreen over webkit', () => {
+      const standardMock = vi.fn().mockResolvedValue(undefined);
+      const webkitMock = vi.fn();
+      const origRFS = document.documentElement.requestFullscreen;
+      document.documentElement.requestFullscreen = standardMock;
+      (document.documentElement as any).webkitRequestFullscreen = webkitMock;
+
+      cmd.fullScreenMode(true);
+      expect(standardMock).toHaveBeenCalledOnce();
+      expect(webkitMock).not.toHaveBeenCalled();
+
+      document.documentElement.requestFullscreen = origRFS;
+      delete (document.documentElement as any).webkitRequestFullscreen;
+    });
+
+    it('fullScreenMode(true) handles promise rejection', async () => {
+      const origRFS = document.documentElement.requestFullscreen;
+      document.documentElement.requestFullscreen = vi.fn().mockRejectedValue(new Error('denied'));
+
+      // Should not throw — rejection is caught internally
+      cmd.fullScreenMode(true);
+      await new Promise((r) => setTimeout(r, 0));
+
+      document.documentElement.requestFullscreen = origRFS;
+    });
+
     it('setWindowTitle() sets document.title', () => {
       const original = document.title;
       cmd.setWindowTitle('Test Title');

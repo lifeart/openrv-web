@@ -390,16 +390,25 @@ export class MuCommands {
   fullScreenMode(enable: boolean): void {
     if (typeof document === 'undefined') return;
     if (enable) {
-      document.documentElement.requestFullscreen?.();
+      const el = document.documentElement;
+      if (el.requestFullscreen) {
+        el.requestFullscreen().catch(() => {});
+      } else if ((el as any).webkitRequestFullscreen) {
+        (el as any).webkitRequestFullscreen();
+      }
     } else {
-      document.exitFullscreen?.();
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      } else if ((document as any).webkitExitFullscreen) {
+        (document as any).webkitExitFullscreen();
+      }
     }
   }
 
   /** Check if fullscreen is active. (Mu #35) */
   isFullScreen(): boolean {
     if (typeof document === 'undefined') return false;
-    return document.fullscreenElement !== null;
+    return !!(document.fullscreenElement ?? (document as any).webkitFullscreenElement);
   }
 
   // Note: center (#36) and close (#37) are N/A in browser -- Phase 8 stubs.

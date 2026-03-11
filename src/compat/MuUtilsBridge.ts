@@ -386,13 +386,22 @@ export class MuUtilsBridge {
    */
   fullScreenMode(enter: boolean): void {
     if (enter) {
-      document.documentElement.requestFullscreen?.().catch(() => {
-        console.warn('[MuUtilsBridge] Fullscreen request denied');
-      });
+      const el = document.documentElement;
+      if (el.requestFullscreen) {
+        el.requestFullscreen().catch(() => {
+          console.warn('[MuUtilsBridge] Fullscreen request denied');
+        });
+      } else if ((el as any).webkitRequestFullscreen) {
+        (el as any).webkitRequestFullscreen();
+      }
     } else {
-      document.exitFullscreen?.().catch(() => {
-        // May already be out of fullscreen
-      });
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {
+          // May already be out of fullscreen
+        });
+      } else if ((document as any).webkitExitFullscreen) {
+        (document as any).webkitExitFullscreen();
+      }
     }
   }
 
@@ -401,7 +410,7 @@ export class MuUtilsBridge {
    * Mu signature: isFullScreen(bool;)
    */
   isFullScreen(): boolean {
-    return document.fullscreenElement !== null;
+    return !!(document.fullscreenElement ?? (document as any).webkitFullscreenElement);
   }
 
   /**
@@ -424,9 +433,10 @@ export class MuUtilsBridge {
   // ── Private Helpers ──
 
   private getExtension(path: string): string {
-    const cleaned = path.split('?')[0].split('#')[0];
-    const lastDot = cleaned.lastIndexOf('.');
+    const cleaned = path.split('?')[0] ?? '';
+    const pathWithoutHash = cleaned.split('#')[0] ?? '';
+    const lastDot = pathWithoutHash.lastIndexOf('.');
     if (lastDot === -1) return '';
-    return cleaned.slice(lastDot + 1);
+    return pathWithoutHash.slice(lastDot + 1);
   }
 }
