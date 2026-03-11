@@ -435,11 +435,11 @@ export class MuPropertyBridge {
     // Prefer suffix matches over substring matches; sort alphabetically for determinism
     if (suffixMatches.length > 0) {
       suffixMatches.sort();
-      return suffixMatches[0];
+      return suffixMatches[0] ?? null;
     }
     if (substringMatches.length > 0) {
       substringMatches.sort();
-      return substringMatches[0];
+      return substringMatches[0] ?? null;
     }
 
     return null;

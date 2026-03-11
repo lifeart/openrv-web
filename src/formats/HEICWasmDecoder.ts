@@ -9,6 +9,59 @@
 
 import { validateImageDimensions } from './shared';
 import { DecoderError } from '../core/errors';
+import { readBoxType, findBox, parsePitm, parseIinf } from './AVIFGainmapDecoder';
+
+const HEIC_TOP_LEVEL_IMAGE_TYPES = new Set(['hvc1', 'grid', 'iden', 'iovl']);
+
+function inferPrimaryIndexFromMetadata(buffer: ArrayBuffer, decodedImageCount: number): number | null {
+  if (decodedImageCount <= 0 || buffer.byteLength < 16) return null;
+
+  const view = new DataView(buffer);
+  if (readBoxType(view, 4) !== 'ftyp') return null;
+
+  const ftypSize = view.getUint32(0);
+  if (ftypSize < 8 || ftypSize > buffer.byteLength) return null;
+
+  const meta = findBox(view, 'meta', ftypSize, buffer.byteLength, true);
+  if (!meta) return null;
+
+  const primaryItemId = parsePitm(view, meta.dataStart, meta.dataEnd);
+  if (primaryItemId === null) return null;
+
+  const imageItems = parseIinf(view, meta.dataStart, meta.dataEnd).filter((item) =>
+    HEIC_TOP_LEVEL_IMAGE_TYPES.has(item.type),
+  );
+  const primaryIndex = imageItems.findIndex((item) => item.id === primaryItemId);
+
+  if (primaryIndex < 0 || primaryIndex >= decodedImageCount) return null;
+  return primaryIndex;
+}
+
+function resolvePrimaryImageIndex(
+  buffer: ArrayBuffer,
+  images: import('libheif-js').HeifImage[],
+): number {
+  let primaryUnavailable = false;
+
+  try {
+    const primaryIndex = images.findIndex((img) => img.is_primary());
+    if (primaryIndex >= 0) return primaryIndex;
+  } catch {
+    primaryUnavailable = true;
+  }
+
+  const metadataIndex = inferPrimaryIndexFromMetadata(buffer, images.length);
+  if (metadataIndex !== null) return metadataIndex;
+
+  if (primaryUnavailable) {
+    console.warn(
+      '[HEICWasmDecoder] is_primary() unavailable in this libheif-js build, and HEIC metadata did not identify a primary image — ' +
+        'falling back to image index 0 which may not be the primary image.',
+    );
+  }
+
+  return 0;
+}
 
 /**
  * Shared internal function to decode a specific image from the decoded array.
@@ -60,7 +113,8 @@ async function decodeHEICItemAtIndex(
 
 /**
  * Decode a HEIC buffer to RGBA pixel data using libheif-js WASM.
- * Returns the primary image (via is_primary()), falling back to index 0.
+ * Returns the primary image, preferring libheif's is_primary() and otherwise
+ * inferring the item from HEIC container metadata before falling back to index 0.
  */
 export async function decodeHEICToImageData(
   buffer: ArrayBuffer,
@@ -73,22 +127,7 @@ export async function decodeHEICToImageData(
     throw new DecoderError('HEIC', 'libheif decoded no images from buffer');
   }
 
-  // is_primary() may not be available in all libheif-js builds (WASM binding missing)
-  let targetIndex = 0;
-  try {
-    const primaryIndex = images.findIndex((img) => img.is_primary());
-    if (primaryIndex >= 0) targetIndex = primaryIndex;
-  } catch {
-    // TODO(#143): Without is_primary() we fall back to index 0, which may not
-    // be the primary image in multi-image HEIC files. Consider using metadata
-    // hints or the pitm box to identify the primary item.
-    console.warn(
-      '[HEICWasmDecoder] is_primary() unavailable in this libheif-js build — ' +
-        'falling back to image index 0 which may not be the primary image.',
-    );
-  }
-
-  return decodeHEICItemAtIndex(images, targetIndex);
+  return decodeHEICItemAtIndex(images, resolvePrimaryImageIndex(buffer, images));
 }
 
 /**
@@ -127,16 +166,8 @@ export async function decodeHEICAuxImageData(
     throw new DecoderError('HEIC', 'No auxiliary image found (need at least 2 top-level images)');
   }
 
-  // Find primary index
-  let primaryIndex = 0;
-  try {
-    const idx = images.findIndex((img) => img.is_primary());
-    if (idx >= 0) primaryIndex = idx;
-  } catch {
-    // is_primary() not available — assume index 0
-  }
-
   // Pick first non-primary image
+  const primaryIndex = resolvePrimaryImageIndex(buffer, images);
   const auxIndex = primaryIndex === 0 ? 1 : 0;
 
   return decodeHEICItemAtIndex(images, auxIndex);

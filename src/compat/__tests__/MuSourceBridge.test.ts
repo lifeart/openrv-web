@@ -347,6 +347,56 @@ describe('MuSourceBridge', () => {
     });
   });
 
+  describe('sourceMedia / sourceMediaInfo respect active rep (Issue #262)', () => {
+    it('sourceMedia reflects active rep media paths', async () => {
+      const name = await bridge.addSourceVerbose(['/full.mov']);
+      bridge.addSourceMediaRep(name, 'full', ['/full.mov']);
+      bridge.addSourceMediaRep(name, 'proxy', ['/proxy.mov']);
+      bridge.setActiveSourceMediaRep(name, 'proxy');
+      expect(bridge.sourceMedia(name).media).toEqual(['/proxy.mov']);
+    });
+
+    it('sourceMediaInfo reflects active rep file path', async () => {
+      const name = await bridge.addSourceVerbose(['/full.mov']);
+      bridge.addSourceMediaRep(name, 'full', ['/full.mov']);
+      bridge.addSourceMediaRep(name, 'proxy', ['/proxy.mov']);
+      bridge.setActiveSourceMediaRep(name, 'proxy');
+      const info = bridge.sourceMediaInfo(name);
+      expect(info.file).toBe('/proxy.mov');
+    });
+
+    it('returns first-added rep media when auto-activated', async () => {
+      const name = await bridge.addSourceVerbose(['/base.mov']);
+      bridge.addSourceMediaRep(name, 'full', ['/full.mov']);
+      bridge.addSourceMediaRep(name, 'proxy', ['/proxy.mov']);
+      // activeRep is 'full' (first added), which has its own mediaPaths
+      expect(bridge.sourceMedia(name).media).toEqual(['/full.mov']);
+    });
+
+    it('returns base media when no rep is active (no reps added)', async () => {
+      const name = await bridge.addSourceVerbose(['/base.mov', '/layer.mov']);
+      // No addSourceMediaRep calls – fallback path in _getActiveMediaPaths
+      expect(bridge.sourceMedia(name).media).toEqual(['/base.mov', '/layer.mov']);
+    });
+
+    it('returns base media paths for default (no reps)', async () => {
+      const name = await bridge.addSourceVerbose(['/base.mov', '/layer.mov']);
+      expect(bridge.sourceMedia(name).media).toEqual(['/base.mov', '/layer.mov']);
+      expect(bridge.sourceMediaInfo(name).file).toBe('/base.mov');
+    });
+
+    it('switches back to base after clearing active rep', async () => {
+      const name = await bridge.addSourceVerbose(['/base.mov']);
+      bridge.addSourceMediaRep(name, 'full', ['/full.mov']);
+      bridge.addSourceMediaRep(name, 'proxy', ['/proxy.mov']);
+      bridge.setActiveSourceMediaRep(name, 'proxy');
+      expect(bridge.sourceMedia(name).media).toEqual(['/proxy.mov']);
+      bridge.setActiveSourceMediaRep(name, 'full');
+      expect(bridge.sourceMedia(name).media).toEqual(['/full.mov']);
+      expect(bridge.sourceMediaInfo(name).file).toBe('/full.mov');
+    });
+  });
+
   describe('sourceMediaInfoList', () => {
     it('returns info for all sources', async () => {
       await bridge.addSource(['/a.mov']);
@@ -1460,7 +1510,7 @@ describe('MuSourceBridge', () => {
 
       const imgA = { width: 10, height: 10 } as unknown as import('../../core/image/Image').IPImage;
       const imgB = { width: 20, height: 20 } as unknown as import('../../core/image/Image').IPImage;
-      const ctx = { frame: 0, fps: 24, stereoEye: 'left' } as import('../../core/graph/Graph').EvalContext;
+      const ctx = { frame: 0, fps: 24, stereoEye: 'left' } as unknown as import('../../core/graph/Graph').EvalContext;
 
       // activeInputIndex defaults to 0 → should return first input
       const result0 = (switchNode as unknown as { process(ctx: unknown, inputs: unknown[]): unknown }).process(ctx, [imgA, imgB]);

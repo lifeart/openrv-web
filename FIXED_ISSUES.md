@@ -1519,9 +1519,9 @@
 ## Issue #145: File / Look / Display LUT pipeline stages are dropped entirely when the GPU LUT chain is unavailable
 
 - **Severity**: High
-- **Fix**: Added `console.warn` in `Viewer.syncLUTPipeline()` when pipeline has active stages but no GPU chain. Added TODO(#145).
+- **TODO(#145) Resolved**: `Viewer.syncLUTPipeline()` now collapses active Pre-Cache, File, Look, and Display 3D LUT stages into a generated single 3D LUT when the multi-stage GPU chain is unavailable, then routes that baked result through the existing single-LUT path instead of dropping those stages. The old warn-only placeholder path was removed.
 - **Regression Tests**: 1 test.
-- **Files Changed**: `src/ui/components/Viewer.ts`
+- **Files Changed**: `src/ui/components/Viewer.ts`, `src/ui/components/ColorPipelineManager.ts`, `src/ui/components/Viewer.test.ts`
 
 ## Issue #146: The shipped LUT Pipeline panel does not persist through project save/load at all
 

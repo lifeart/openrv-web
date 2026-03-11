@@ -270,7 +270,7 @@ export class Viewer {
 
   // LUT indicator badge (UI element, remains in Viewer)
   private lutIndicator: HTMLElement | null = null;
-  private pipelinePrecacheLUTActive = false;
+  private pipelineSingleLUTActive = false;
 
   // A/B Compare indicator
   private abIndicator: HTMLElement | null = null;
@@ -2574,21 +2574,43 @@ export class Viewer {
     const sourceId = pipeline.getActiveSourceId() ?? 'default';
     const sourceConfig = pipeline.getSourceConfig(sourceId);
     const state = pipeline.getState();
+    const preCache = sourceConfig?.preCacheLUT;
+    const hasPreCache3D =
+      !!preCache?.lutData && isLUT3D(preCache.lutData) && preCache.enabled;
 
     const gpuChain = this.colorPipeline.gpuLUTChain;
     if (!gpuChain) {
-      // TODO(#145): File/Look/Display LUT pipeline stages are silently dropped
-      // when the GPU chain is unavailable. A CPU fallback or user warning in
-      // the UI should be implemented.
-      const hasActiveStages =
-        (sourceConfig?.fileLUT.lutData && sourceConfig.fileLUT.enabled) ||
-        (sourceConfig?.lookLUT.lutData && sourceConfig.lookLUT.enabled) ||
-        (state.displayLUT.lutData && state.displayLUT.enabled);
-      if (hasActiveStages) {
-        console.warn(
-          '[Viewer] LUT pipeline has active File/Look/Display stages but no GPU chain is available. ' +
-            'These stages will be silently dropped.',
-        );
+      const fallbackLUT = this.colorPipeline.compose3DLUTStages([
+        ...(preCache ? [{ label: 'Pre-Cache', stage: preCache }] : []),
+        ...(sourceConfig?.fileLUT ? [{ label: 'File', stage: sourceConfig.fileLUT }] : []),
+        ...(sourceConfig?.lookLUT ? [{ label: 'Look', stage: sourceConfig.lookLUT }] : []),
+        { label: 'Display', stage: state.displayLUT },
+      ]);
+
+      if (fallbackLUT) {
+        this.pipelineSingleLUTActive = true;
+        this.colorPipeline.setLUT(fallbackLUT);
+        this.colorPipeline.setLUTIntensity(1);
+        if (this.lutIndicator) {
+          this.lutIndicator.style.display = 'block';
+          this.lutIndicator.textContent = fallbackLUT.title ? `LUT: ${fallbackLUT.title}` : 'LUT';
+        }
+      } else if (this.pipelineSingleLUTActive) {
+        this.pipelineSingleLUTActive = false;
+        this.colorPipeline.setLUT(null);
+        this.colorPipeline.setLUTIntensity(1);
+        if (this.lutIndicator) {
+          this.lutIndicator.style.display = 'none';
+        }
+      }
+    } else {
+      if (this.pipelineSingleLUTActive && !hasPreCache3D) {
+        this.pipelineSingleLUTActive = false;
+        this.colorPipeline.setLUT(null);
+        this.colorPipeline.setLUTIntensity(1);
+        if (this.lutIndicator) {
+          this.lutIndicator.style.display = 'none';
+        }
       }
     }
     if (gpuChain) {
@@ -2609,20 +2631,16 @@ export class Viewer {
       gpuChain.setDisplayLUTIntensity(state.displayLUT.intensity);
     }
 
-    const preCache = sourceConfig?.preCacheLUT;
-    const hasPreCache3D =
-      !!preCache?.lutData && isLUT3D(preCache.lutData) && preCache.enabled && preCache.intensity > 0;
-
-    if (hasPreCache3D) {
-      this.pipelinePrecacheLUTActive = true;
+    if (gpuChain && hasPreCache3D && preCache!.intensity > 0) {
+      this.pipelineSingleLUTActive = true;
       this.colorPipeline.setLUT(preCache!.lutData);
       this.colorPipeline.setLUTIntensity(preCache!.intensity);
       if (this.lutIndicator) {
         this.lutIndicator.style.display = 'block';
         this.lutIndicator.textContent = preCache?.lutName ? `LUT: ${preCache.lutName}` : 'LUT';
       }
-    } else if (this.pipelinePrecacheLUTActive) {
-      this.pipelinePrecacheLUTActive = false;
+    } else if (gpuChain && this.pipelineSingleLUTActive) {
+      this.pipelineSingleLUTActive = false;
       this.colorPipeline.setLUT(null);
       this.colorPipeline.setLUTIntensity(1);
       if (this.lutIndicator) {

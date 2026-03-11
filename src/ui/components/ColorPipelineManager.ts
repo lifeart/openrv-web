@@ -12,6 +12,7 @@
 import { type ColorAdjustments, DEFAULT_COLOR_ADJUSTMENTS } from './ColorControls';
 import {
   type LUT3D,
+  isLUT3D,
   WebGLLUTProcessor,
   LUTPipeline,
   GPULUTChain,
@@ -24,7 +25,15 @@ import {
   DEFAULT_DISPLAY_COLOR_STATE,
   getSharedOCIOProcessor,
 } from '../../color/ColorProcessingFacade';
+import { applyLUT3D } from '../../color/LUTLoader';
+import { applyColorMatrix } from '../../color/LUTUtils';
+import type { LUTStageState } from '../../color/pipeline/LUTPipelineState';
 import { type ToneMappingState, DEFAULT_TONE_MAPPING_STATE } from './ToneMappingControl';
+
+interface NamedLUTStage {
+  label: string;
+  stage: LUTStageState;
+}
 
 /**
  * Snapshot of all color pipeline state, used by the Viewer to sync state
@@ -235,6 +244,71 @@ export class ColorPipelineManager {
 
   getGPULUTChain(): GPULUTChain | null {
     return this._gpuLUTChain;
+  }
+
+  compose3DLUTStages(stages: ReadonlyArray<NamedLUTStage>): LUT3D | null {
+    const activeStages = stages.filter(
+      ({ stage }) => stage.enabled && stage.lutData !== null && isLUT3D(stage.lutData),
+    ) as Array<{ label: string; stage: LUTStageState & { lutData: LUT3D } }>;
+
+    if (activeStages.length === 0) return null;
+
+    const size = Math.max(
+      2,
+      ...activeStages.map(({ stage }) => stage.lutData.size),
+    );
+    const denominator = Math.max(size - 1, 1);
+    const data = new Float32Array(size * size * size * 3);
+
+    for (let r = 0; r < size; r++) {
+      for (let g = 0; g < size; g++) {
+        for (let b = 0; b < size; b++) {
+          let color: [number, number, number] = [r / denominator, g / denominator, b / denominator];
+          for (const { stage } of activeStages) {
+            color = this.apply3DLUTStage(color, stage);
+          }
+
+          const idx = (r * size * size + g * size + b) * 3;
+          data[idx] = color[0];
+          data[idx + 1] = color[1];
+          data[idx + 2] = color[2];
+        }
+      }
+    }
+
+    const title = activeStages
+      .map(({ label, stage }) => stage.lutName ?? stage.lutData.title ?? label)
+      .join(' -> ');
+
+    return {
+      title: title || 'Pipeline LUT',
+      size,
+      domainMin: [0, 0, 0],
+      domainMax: [1, 1, 1],
+      data,
+    };
+  }
+
+  private apply3DLUTStage(
+    color: [number, number, number],
+    stage: LUTStageState & { lutData: LUT3D },
+  ): [number, number, number] {
+    const input = stage.inMatrix
+      ? applyColorMatrix(color[0], color[1], color[2], stage.inMatrix)
+      : color;
+    const sampled = applyLUT3D(stage.lutData, input[0], input[1], input[2]);
+    const intensity = Math.max(0, Math.min(1, stage.intensity));
+    let output: [number, number, number] = [
+      color[0] + (sampled[0] - color[0]) * intensity,
+      color[1] + (sampled[1] - color[1]) * intensity,
+      color[2] + (sampled[2] - color[2]) * intensity,
+    ];
+
+    if (stage.outMatrix) {
+      output = applyColorMatrix(output[0], output[1], output[2], stage.outMatrix);
+    }
+
+    return output;
   }
 
   // =========================================================================

@@ -215,7 +215,7 @@ export class MuSourceBridge {
     for (const [, src] of this._sources) {
       result.push({
         name: src.name,
-        media: src.mediaPaths[0] ?? '',
+        media: this._getActiveMediaPaths(src)[0] ?? '',
         tag: src.tag,
       });
     }
@@ -453,7 +453,7 @@ export class MuSourceBridge {
    */
   sourceMedia(sourceName: string): { media: string[] } {
     const source = this._getSource(sourceName);
-    return { media: [...source.mediaPaths] };
+    return { media: [...this._getActiveMediaPaths(source)] };
   }
 
   /**
@@ -481,9 +481,11 @@ export class MuSourceBridge {
       // openrv not available — use local state
     }
 
+    const activePaths = this._getActiveMediaPaths(source);
+
     return {
       name: sourceName,
-      file: source.mediaPaths[0] ?? '',
+      file: activePaths[0] ?? '',
       width,
       height,
       fps,
@@ -1008,6 +1010,23 @@ export class MuSourceBridge {
       throw new Error(`Source not found: "${name}"`);
     }
     return source;
+  }
+
+  /**
+   * Return the media paths for the currently active representation,
+   * falling back to the base source paths when no rep is active or the
+   * active rep has no media paths of its own.
+   */
+  private _getActiveMediaPaths(source: SourceRecord): string[] {
+    if (source.activeRep) {
+      const rep = source.representations.find(
+        (r) => r.name === source.activeRep,
+      );
+      if (rep && rep.mediaPaths.length > 0) {
+        return rep.mediaPaths;
+      }
+    }
+    return source.mediaPaths;
   }
 
   /**

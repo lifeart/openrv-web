@@ -1692,30 +1692,55 @@ describe('Viewer', () => {
   });
 
   // -----------------------------------------------------------------------
-  // Issue #145: LUT pipeline warns when no GPU chain
+  // Issue #145: LUT pipeline falls back to a generated single LUT when no GPU chain exists
   // -----------------------------------------------------------------------
-  describe('issue #145: LUT pipeline no GPU chain warning', () => {
-    it('VWR-145: syncLUTPipeline warns when active stages exist but no GPU chain', () => {
+  describe('issue #145: LUT pipeline no GPU chain fallback', () => {
+    it('VWR-145: syncLUTPipeline bakes active stages into the single-LUT path when no GPU chain exists', () => {
       const t = testable(viewer);
-      // Ensure no GPU chain
       t.colorPipeline['_gpuLUTChain'] = null;
-      // Register and configure a source with an active file LUT
+      t.colorPipeline['_lutProcessor'] = {
+        setLUT: vi.fn(),
+        applyLUTToCanvas: vi.fn(),
+        dispose: vi.fn(),
+      } as unknown as import('../../color/WebGLLUT').WebGLLUTProcessor;
       const pipeline = t.colorPipeline.lutPipeline;
       pipeline.registerSource('test');
       pipeline.setActiveSource('test');
       const config = pipeline.getSourceConfig('test');
       if (config) {
-        config.fileLUT.lutData = { title: 'Test', size: 2, domainMin: [0, 0, 0], domainMax: [1, 1, 1], data: new Float32Array(24) } as any;
+        const redLUTData = new Float32Array([
+          1, 0, 0,
+          1, 0, 0,
+          1, 0, 0,
+          1, 0, 0,
+          1, 0, 0,
+          1, 0, 0,
+          1, 0, 0,
+          1, 0, 0,
+        ]);
+        config.fileLUT.lutData = {
+          title: 'File LUT',
+          size: 2,
+          domainMin: [0, 0, 0],
+          domainMax: [1, 1, 1],
+          data: redLUTData,
+        };
+        config.fileLUT.lutName = 'file.cube';
         config.fileLUT.enabled = true;
+        config.fileLUT.intensity = 1;
       }
 
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       viewer.syncLUTPipeline();
 
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('no GPU chain is available'),
-      );
+      expect(warnSpy).not.toHaveBeenCalled();
+      expect(t.colorPipeline.currentLUT).not.toBeNull();
+      expect(t.colorPipeline.currentLUT?.title).toContain('file.cube');
+      expect(t.colorPipeline.currentLUT?.data[0]).toBe(1);
+      expect(t.colorPipeline.currentLUT?.data[1]).toBe(0);
+      expect(t.colorPipeline.currentLUT?.data[2]).toBe(0);
+      expect(viewer.getLUTIntensity()).toBe(1);
       warnSpy.mockRestore();
     });
   });

@@ -2190,30 +2190,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Synchronous uncaught exceptions do not get the centralized logger treatment the app bootstrap promises.
   - That weakens crash diagnostics in exactly the path meant to improve them, and it can mislead maintainers into thinking top-level error coverage is broader than it really is.
 
-### 203. The public `openrv.events` API advertises an `error` event that production never emits
-
-- Severity: Medium
-- Area: Public API / plugin automation
-- Evidence:
-  - `EventsAPI` exposes `error` as a valid public event name in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L15) and provides `emitError(...)` for internal producers in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L276).
-  - Production bootstrap wires that same `EventsAPI` instance into plugins through `pluginRegistry.setEventsAPI(window.openrv.events)` in [src/main.ts](/Users/lifeart/Repos/openrv-web/src/main.ts#L31).
-  - Production source search finds no runtime caller of `emitError(...)` outside `EventsAPI` itself and tests, even though multiple subsystems produce structured errors through their own event emitters.
-- Impact:
-  - Scripts and plugins can subscribe to `openrv.events.on('error', ...)` and receive nothing for real runtime failures.
-  - The API surface implies a centralized public error stream exists, but in the shipped app that channel is effectively inert.
-
-### 204. The public `openrv.events` API advertises `stop`, but production never emits it
-
-- Severity: Medium
-- Area: Public API / playback events
-- Evidence:
-  - `EventsAPI` declares `stop` as a valid public event name and payload type in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L15) and [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L37).
-  - The internal event wiring only translates `session.on('playbackChanged', ...)` into `play` or `pause` in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L199).
-  - Production source search finds no runtime `this.emit('stop', ...)` call in `EventsAPI` or elsewhere.
-- Impact:
-  - Scripts that wait for a distinct stop event never receive it, even when users trigger the app’s stop/pause behavior.
-  - The public event contract suggests more playback-state granularity than the shipped implementation actually provides.
-
 ### 205. `openrv.playback.step(n)` bypasses in/out-range and ping-pong rules for multi-frame steps
 
 - Severity: Medium
@@ -6691,6 +6667,45 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - A reader following the generated reference can land on a different historical version of the code than the one actually shipped in the repo.
   - That makes the API docs harder to audit and amplifies other documentation drift because the linked source is itself frozen at an older snapshot.
+
+### 564. The public marker API accepts non-integer frame numbers and stores them verbatim, so scripted markers can drift off the real playback frame grid
+
+- Severity: Medium
+- Area: Public API / markers / frame semantics
+- Evidence:
+  - `MarkersAPI.add()` validates only that `frame` is a positive number, then forwards it unchanged to `session.setMarker(...)` in [src/api/MarkersAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/MarkersAPI.ts#L40) through [src/api/MarkersAPI.ts#L63).
+  - The live session path also preserves that raw numeric value with no integer coercion in [src/core/session/SessionAnnotations.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionAnnotations.ts#L87) through [src/core/session/SessionAnnotations.ts#L88) and [src/core/session/MarkerManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MarkerManager.ts#L132) through [src/core/session/MarkerManager.ts#L141).
+  - Marker navigation then feeds that stored value back into playback via `this.currentFrame = frame` in [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L928) through [src/core/session/Session.ts#L940), while playback itself rounds frames to integers in [src/core/session/PlaybackEngine.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaybackEngine.ts#L220) through [src/core/session/PlaybackEngine.ts#L228).
+  - Even the current unit test name claims float input “rounds down,” but the assertion proves the opposite by expecting raw `10.7` to be forwarded in [src/api/OpenRVAPI.test.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.test.ts#L1469) through [src/api/OpenRVAPI.test.ts#L1471).
+- Impact:
+  - A script can create markers at fractional frames that the viewer can never actually hold as a playback position, so readback and navigation semantics diverge.
+  - That makes marker automation unreliable at the API boundary: `get(10)` and playback on frame `11` can disagree with a stored marker at `10.7`, even though the app is otherwise integer-frame based.
+
+### 565. The public loop-range API also accepts fractional frame numbers and preserves them as live in/out points, even though playback itself is integer-frame based
+
+- Severity: Medium
+- Area: Public API / playback range semantics
+- Evidence:
+  - `LoopAPI.setInPoint()` and `setOutPoint()` only reject non-numbers and `NaN`, then forward the raw value to the session in [src/api/LoopAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/LoopAPI.ts#L60) through [src/api/LoopAPI.ts#L92).
+  - The underlying playback engine clamps those values to bounds but does not round them to whole frames in [src/core/session/PlaybackEngine.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaybackEngine.ts#L689) through [src/core/session/PlaybackEngine.ts#L708).
+  - Those fractional in/out points are then emitted back out through `inOutChanged` and reused directly by playback-range logic in [src/core/session/PlaybackEngine.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaybackEngine.ts#L299), [src/core/session/PlaybackEngine.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaybackEngine.ts#L769) through [src/core/session/PlaybackEngine.ts#L770), and [src/core/session/PlaybackTimingController.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaybackTimingController.ts#L363) through [src/core/session/PlaybackTimingController.ts#L385).
+  - Actual frame positions are still rounded to integers by the playback engine in [src/core/session/PlaybackEngine.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaybackEngine.ts#L220) through [src/core/session/PlaybackEngine.ts#L228), and the public docs describe in/out points as 1-based frame numbers in [src/api/LoopAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/LoopAPI.ts#L53) through [src/api/LoopAPI.ts#L83).
+- Impact:
+  - Scripts can put the app into fractional playback ranges like `10.7-50.2`, which the viewer cannot actually display as discrete frames but the timing logic still treats as real boundaries.
+  - That makes range events and playback behavior semantically inconsistent at the API boundary, especially for looping, boundary checks, and exported/public in-out state.
+
+### 566. `openrv.playback.step(Infinity)` can poison playback state with `NaN` frames in looped modes because the public API rejects only `NaN`, not non-finite numbers
+
+- Severity: High
+- Area: Public API / playback navigation
+- Evidence:
+  - `PlaybackAPI.step()` validates only `typeof direction === 'number'` and `!isNaN(direction)`, so `Infinity` passes through as valid input in [src/api/PlaybackAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/PlaybackAPI.ts#L105) through [src/api/PlaybackAPI.ts#L110).
+  - In `loop` mode it then applies modular arithmetic to the infinite target frame, and in `pingpong` mode it normalizes `Infinity` with `%`, both of which produce `NaN` in JavaScript, before calling `session.goToFrame(targetFrame)` in [src/api/PlaybackAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/PlaybackAPI.ts#L124) through [src/api/PlaybackAPI.ts#L160).
+  - The playback engine frame setter rounds and clamps the incoming frame but does not defend against `NaN`; `Math.round(NaN)` and `clamp(NaN, ...)` stay `NaN`, and `_currentFrame` is then updated/emitted with that value in [src/core/session/PlaybackEngine.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaybackEngine.ts#L220) through [src/core/session/PlaybackEngine.ts#L228) and [src/utils/math.ts](/Users/lifeart/Repos/openrv-web/src/utils/math.ts#L18) through [src/utils/math.ts#L19).
+  - The existing public API tests explicitly lock in similarly loose non-finite validation for `seek(Infinity)` in [src/api/OpenRVAPI.test.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.test.ts#L624) through [src/api/OpenRVAPI.test.ts#L627), but there is no corresponding guard/test preventing the `step(Infinity)` path.
+- Impact:
+  - A script can drive the session into an invalid `currentFrame = NaN` state through a single public API call when looped stepping is active.
+  - Once frame state is `NaN`, downstream playback, event payloads, and any UI or automation that assumes integer frame numbers can misbehave unpredictably.
 
 ## Validation Notes
 

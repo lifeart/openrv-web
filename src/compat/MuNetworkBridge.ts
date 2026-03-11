@@ -117,7 +117,7 @@ export class MuNetworkBridge {
 
       // Extract the effective port from the constructed URL
       const portMatch = url.match(/:(\d+)$/);
-      const effectivePort = portMatch ? parseInt(portMatch[1], 10) : port;
+      const effectivePort = portMatch?.[1] ? parseInt(portMatch[1], 10) : port;
 
       const ws = new WebSocket(url);
 
