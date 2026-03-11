@@ -2530,3 +2530,12 @@
 - **Regression Tests**: 10 new tests (5 per file) covering: webkit isFullScreen detection, webkit enter fallback, webkit exit fallback, standard-over-webkit priority, and promise rejection handling.
 - **Verification**: All 660 compat tests pass (8 files), TypeScript clean.
 - **Files Changed**: `src/compat/MuCommands.ts`, `src/compat/MuUtilsBridge.ts`, `src/compat/__tests__/MuCommands.test.ts`, `src/compat/__tests__/MuUtilsBridge.test.ts`
+
+### 262. Mu compat active media-representation selection never changes what sourceMedia() or sourceMediaInfo() report
+- **Severity**: Medium
+- **Area**: Mu compatibility / source representations
+- **Root Cause**: `setActiveSourceMediaRep()` updated `source.activeRep` but neither `sourceMedia()`, `sourceMediaInfo()`, nor `sources()` checked it — they always returned the base source's `mediaPaths`. After switching to a proxy or alternate representation, all read APIs still reported the original media.
+- **Fix**: Added `_getActiveMediaPaths(source)` helper that returns the active rep's media paths when one is set (with non-empty paths), falling back to base `source.mediaPaths`. Wired `sourceMedia()`, `sourceMediaInfo()`, and `sources()` to use this helper instead of direct `source.mediaPaths` access.
+- **Regression Tests**: 7 new tests covering: sourceMedia reflects active rep, sourceMediaInfo reflects active rep, sources() reflects active rep, base media default with no reps, base media fallback with no reps added, first-rep auto-activation, and switching between representations.
+- **Verification**: All 667 compat tests pass (8 files), TypeScript clean.
+- **Files Changed**: `src/compat/MuSourceBridge.ts`, `src/compat/__tests__/MuSourceBridge.test.ts`

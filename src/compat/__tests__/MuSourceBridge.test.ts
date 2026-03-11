@@ -385,7 +385,15 @@ describe('MuSourceBridge', () => {
       expect(bridge.sourceMediaInfo(name).file).toBe('/base.mov');
     });
 
-    it('switches back to base after clearing active rep', async () => {
+    it('sources() reflects active rep media path', async () => {
+      const name = await bridge.addSourceVerbose(['/base.mov']);
+      bridge.addSourceMediaRep(name, 'proxy', ['/proxy.mov']);
+      bridge.setActiveSourceMediaRep(name, 'proxy');
+      const sources = bridge.sources();
+      expect(sources[0]!.media).toBe('/proxy.mov');
+    });
+
+    it('switches between representations', async () => {
       const name = await bridge.addSourceVerbose(['/base.mov']);
       bridge.addSourceMediaRep(name, 'full', ['/full.mov']);
       bridge.addSourceMediaRep(name, 'proxy', ['/proxy.mov']);
