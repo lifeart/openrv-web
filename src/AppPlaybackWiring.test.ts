@@ -4,6 +4,20 @@ import { wirePlaybackControls, type PlaybackWiringDeps } from './AppPlaybackWiri
 import type { AppWiringContext } from './AppWiringContext';
 import * as Modal from './ui/components/shared/Modal';
 
+const DEFAULT_EXPORT_PREFS: {
+  defaultFormat: 'png' | 'jpeg' | 'webp';
+  defaultQuality: number;
+  includeAnnotations: boolean;
+  frameburnEnabled: boolean;
+  frameburnConfig: Record<string, unknown> | null;
+} = {
+  defaultFormat: 'png',
+  defaultQuality: 0.92,
+  includeAnnotations: true,
+  frameburnEnabled: false,
+  frameburnConfig: null,
+};
+
 // ---------------------------------------------------------------------------
 // Module-level mocks for video export pipeline
 // ---------------------------------------------------------------------------
@@ -94,6 +108,8 @@ const showAlertSpy = vi.spyOn(Modal, 'showAlert').mockReturnValue(Promise.resolv
 const showConfirmSpy = vi.spyOn(Modal, 'showConfirm').mockResolvedValue(true);
 
 const mockPreferencesManager = {
+  getExportDefaults: vi.fn(() => ({ ...DEFAULT_EXPORT_PREFS })),
+  setExportDefaults: vi.fn(),
   exportAll: vi.fn(() => '{"version":1}'),
   importAll: vi.fn(),
   resetAll: vi.fn(),
@@ -858,6 +874,7 @@ describe('wirePlaybackControls — video export', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    mockPreferencesManager.getExportDefaults.mockReturnValue({ ...DEFAULT_EXPORT_PREFS });
     session = createMockSession();
     session.currentSource = { name: 'test-clip.mov' };
     session.frameCount = 100;
@@ -964,6 +981,39 @@ describe('wirePlaybackControls — video export', () => {
 
     await vi.waitFor(() => {
       expect(viewer.renderFrameToCanvas).toHaveBeenCalledWith(10, true);
+    });
+  });
+
+  it('PW-VE04b: passes configured advanced frameburn into rendered export frames', async () => {
+    mockPreferencesManager.getExportDefaults.mockReturnValue({
+      ...DEFAULT_EXPORT_PREFS,
+      frameburnEnabled: true,
+      frameburnConfig: {
+        enabled: true,
+        fields: [{ type: 'timecode' }, { type: 'shotName', label: 'Shot' }],
+        position: 'bottom-center',
+        fontSize: 20,
+      },
+    });
+
+    emitVideoExport(true);
+
+    await vi.waitFor(() => {
+      expect(viewer.renderFrameToCanvas).toHaveBeenCalledWith(
+        10,
+        true,
+        expect.objectContaining({
+          enabled: true,
+          position: 'bottom-center',
+          fields: [{ type: 'timecode' }, { type: 'shotName', label: 'Shot' }],
+        }),
+        expect.objectContaining({
+          currentFrame: 10,
+          shotName: 'test-clip',
+          width: 320,
+          height: 240,
+        }),
+      );
     });
   });
 
@@ -1099,7 +1149,7 @@ describe('wirePlaybackControls — video export', () => {
     const [, frameProvider] = mockEncodeFn.mock.calls[0]!;
 
     await frameProvider(11);
-    expect(viewer.renderFrameToCanvas).toHaveBeenCalledWith(11, true);
+    expect(viewer.renderFrameToCanvas).toHaveBeenCalledWith(11, true, null, null);
   });
 
   it('PW-VE15: registers cancel listener on progress dialog', async () => {

@@ -544,18 +544,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The UI presents OTIO export as a real interchange action, but the resulting file does not identify the underlying media locations.
   - That makes the exported timeline much less useful outside OpenRV, especially in pipelines that expect OTIO clips to carry resolvable source references.
 
-### 47. ShotGrid versions with frame-sequence paths are shown but cannot actually be loaded from the panel
-
-- Severity: Medium
-- Area: ShotGrid integration UI, media loading
-- Evidence:
-  - `ShotGridPanel.resolveMediaUrl()` only accepts uploaded-movie URLs or HTTP(S) movie paths in [src/ui/components/ShotGridPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ShotGridPanel.ts#L297).
-  - Rows with `sg_path_to_frames` but no movie URL are explicitly labeled `Frame sequence only` in [src/ui/components/ShotGridPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ShotGridPanel.ts#L457), but their `Load` button is still disabled because `mediaUrl` is `null` in [src/ui/components/ShotGridPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ShotGridPanel.ts#L475).
-  - The integration bridge then ignores `loadVersion` events with `null` media URLs in [src/integrations/ShotGridIntegrationBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/ShotGridIntegrationBridge.ts#L157).
-- Impact:
-  - The panel can successfully surface a ShotGrid version but still leave the user unable to load it if the version only exposes a frame sequence path.
-  - That is a real workflow hole for review pipelines that publish sequences instead of uploaded movies.
-
 ### 48. History can be cleared in one click with no confirmation, unlike other destructive review panels
 
 - Severity: Low
@@ -6202,6 +6190,96 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - ShotGrid versions that point at otherwise-supported containers can still be treated like image URLs and fail to load through the correct video path.
   - That makes ShotGrid media support narrower than the rest of the app, even for formats the main file-open flow can already classify as video.
+
+### 523. DCC media loading also uses a narrower hardcoded video-extension list than the rest of the app
+
+- Severity: Medium
+- Area: DCC integration / media type detection
+- Evidence:
+  - `AppDCCWiring` classifies video paths using `VIDEO_EXTENSIONS = ['mp4', 'webm', 'mov', 'avi', 'mkv', 'ogv']` in [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L85).
+  - The incoming `loadMedia` handler routes any extension outside that list into `session.loadImage(...)` in [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L184) through [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L221).
+  - The app’s broader supported video-extension set is wider and includes `m4v`, `3gp`, `3g2`, `qt`, `mk3d`, `ogg`, `ogm`, and `ogx` in [src/utils/media/SupportedMediaFormats.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SupportedMediaFormats.ts#L39) through [src/utils/media/SupportedMediaFormats.ts#L63), and `Session.loadSourceFromUrl(...)` likewise recognizes those extra extensions in [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L1141).
+- Impact:
+  - DCC clients can send clean, extension-bearing video paths that the main app would otherwise accept and still have them misrouted into the image path.
+  - That makes DCC media loading less capable than the normal URL/file workflows for several already-supported video containers.
+
+### 524. `.orvproject` restore reloads saved image URLs through `session.loadImage(...)`, so remote decoder-backed images do not round-trip through the project path
+
+- Severity: Medium
+- Area: Project persistence / URL-backed media restore
+- Evidence:
+  - During project load, `SessionSerializer.fromJSON(...)` restores every saved `ref.type === 'image'` entry by calling `await session.loadImage(ref.name, ref.path)` in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L510) through [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L513).
+  - `session.loadImage(...)` uses the plain `HTMLImageElement` URL path rather than the decoder-backed `FileSourceNode` pipeline, as shown in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L429) through [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L456).
+  - The decoder-backed image path lives in `loadImageFile(...)` / `FileSourceNode.loadFile(...)` instead in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L468) through [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L515).
+  - This is the same underlying capability gap already recorded for share-link and DCC URL loading in [ISSUES.md](/Users/lifeart/Repos/openrv-web/ISSUES.md#L5160), but project restore hardcodes that same weaker path inside the persistence layer.
+- Impact:
+  - A project file that references remote EXR, float TIFF, RAW-preview, or other decoder-backed image URLs can reopen through a different and weaker load path than the original session used.
+  - That makes `.orvproject` URL-backed media restore less faithful than users would expect from a save/load round-trip.
+
+### 525. The DCC `loadMedia` protocol advertises “file path or URL,” but the browser-side loader just forwards raw paths into `img.src` / `video.src`
+
+- Severity: Medium
+- Area: DCC integration / protocol contract
+- Evidence:
+  - The DCC protocol defines inbound `loadMedia.path` as a “File path or URL” in [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L38) through [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L43).
+  - `AppDCCWiring` forwards that `path` string directly into `session.loadVideo(name, path)` or `session.loadImage(name, path)` in [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L184) through [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L221).
+  - Those session URL loaders then assign the raw string to browser media elements, with `img.src = url` in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L429) through [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L456) and the corresponding video path in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L640) through [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L689).
+  - Elsewhere in the docs, the app already acknowledges the browser sandbox cannot directly access local filesystems, for example in [docs/guides/session-compatibility.md](/Users/lifeart/Repos/openrv-web/docs/guides/session-compatibility.md#L210).
+- Impact:
+  - A DCC tool that sends an ordinary host filesystem path can follow the advertised protocol and still fail because the browser cannot resolve that path as a meaningful media URL.
+  - That makes the live DCC load contract narrower than the protocol/type comments imply unless the sender converts paths into browser-reachable URLs first.
+
+### 526. The image-sequences guide still presents fixed `5`-frame preload and `20`-frame retention windows, but the live sequence stack now mixes multiple larger cache policies
+
+- Severity: Low
+- Area: Documentation / sequence memory behavior
+- Evidence:
+  - The image-sequences guide says the preload window is “5 frames ahead and behind” and the keep window is “up to 20 frames” in [docs/playback/image-sequences.md](/Users/lifeart/Repos/openrv-web/docs/playback/image-sequences.md#L66) through [docs/playback/image-sequences.md](/Users/lifeart/Repos/openrv-web/docs/playback/image-sequences.md#L72).
+  - The direct session/media sequence path does still use `preloadFrames(..., 5)` plus `releaseDistantFrames(..., 20)` during normal fetches in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L932) through [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L939) and [src/core/session/MediaManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaManager.ts#L842) through [src/core/session/MediaManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaManager.ts#L848).
+  - But the same runtime also does a wider initial preload of `10` frames on sequence load in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L771) and [src/core/session/MediaManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaManager.ts#L824).
+  - The node-graph sequence path uses `FramePreloadManager` defaults of `maxCacheSize: 100`, `preloadAhead: 30`, `preloadBehind: 5`, and `scrubWindow: 10` in [src/utils/media/FramePreloadManager.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/FramePreloadManager.ts#L24) through [src/utils/media/FramePreloadManager.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/FramePreloadManager.ts#L34).
+- Impact:
+  - The guide presents sequence caching as one simple fixed policy, but the shipped runtime now uses different preload/retention behaviors depending on the path and playback state.
+  - That can mislead anyone trying to reason about memory usage, hitching, or cache tuning from the docs alone.
+
+### 527. Sequence-style media representations can never use `SequenceRepresentationLoader`, because the live switch path never passes the `isSequence` flag to the loader factory
+
+- Severity: Medium
+- Area: Media representations / sequence variants
+- Evidence:
+  - `RepresentationLoaderFactory` can return `SequenceRepresentationLoader` for `kind === 'frames'`, but only when its third `isSequence` parameter is `true` in [src/core/session/loaders/RepresentationLoaderFactory.ts](/Users/lifeart/Repos/openrv-web/src/core/session/loaders/RepresentationLoaderFactory.ts#L24) through [src/core/session/loaders/RepresentationLoaderFactory.ts#L36).
+  - The live representation switch path calls `createRepresentationLoader(representation.kind, hdrResizeTier)` with no `isSequence` argument in [src/core/session/MediaRepresentationManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaRepresentationManager.ts#L182), so `frames` representations always get `FileRepresentationLoader`.
+  - `FileRepresentationLoader` requires a single `loaderConfig.file` and throws if one is not present in [src/core/session/loaders/FileRepresentationLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/loaders/FileRepresentationLoader.ts#L13) through [src/core/session/loaders/FileRepresentationLoader.ts#L20).
+  - The separate `SequenceRepresentationLoader` expects `loaderConfig.files` and constructs sequence metadata from that array in [src/core/session/loaders/SequenceRepresentationLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/loaders/SequenceRepresentationLoader.ts#L72) through [src/core/session/loaders/SequenceRepresentationLoader.ts#L89).
+- Impact:
+  - Any representation intended to model an alternate image-sequence variant is routed into the wrong loader and can fail before it ever gets sequence-aware handling.
+  - That leaves the representation system effectively biased toward single-file frame reps even though the codebase contains a dedicated sequence representation loader.
+
+### 528. Sequence representations also cannot round-trip through serialization, because the serialized loader config omits `files` while `SequenceRepresentationLoader` requires them
+
+- Severity: Medium
+- Area: Media representations / project persistence
+- Evidence:
+  - `RepresentationLoaderConfig` supports runtime-only `files?: File[]` for sequence representations in [src/core/types/representation.ts](/Users/lifeart/Repos/openrv-web/src/core/types/representation.ts#L64) through [src/core/types/representation.ts#L79).
+  - The serialized representation format explicitly omits `file` and `files` from `loaderConfig` in [src/core/types/representation.ts](/Users/lifeart/Repos/openrv-web/src/core/types/representation.ts#L93) through [src/core/types/representation.ts#L107).
+  - `SessionSerializer.fromJSON(...)` restores representations from that serialized loader config and passes it straight into `addRepresentationToSource(...)` in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L527) through [src/core/session/SessionSerializer.ts#L547).
+  - `SequenceRepresentationLoader` then throws `SequenceRepresentationLoader: no files provided` whenever `loaderConfig.files` is absent in [src/core/session/loaders/SequenceRepresentationLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/loaders/SequenceRepresentationLoader.ts#L72) through [src/core/session/loaders/SequenceRepresentationLoader.ts#L80).
+- Impact:
+  - Sequence-based alternate representations cannot be faithfully restored from saved project state.
+  - The representation serialization format carries enough metadata to look sequence-aware, but not enough runtime data for the actual sequence representation loader to work.
+
+### 529. The representation system still advertises a `streaming` kind, but the live loader factory throws for it
+
+- Severity: Medium
+- Area: Media representations / unsupported kind
+- Evidence:
+  - The shared representation model still defines `RepresentationKind = 'frames' | 'movie' | 'proxy' | 'streaming'` and documents representations as things like “full-res frames, proxy video, streaming URL” in [src/core/types/representation.ts](/Users/lifeart/Repos/openrv-web/src/core/types/representation.ts#L4) through [src/core/types/representation.ts#L12).
+  - `getDefaultPriority(...)` also treats `streaming` as a normal representation kind in [src/core/types/representation.ts](/Users/lifeart/Repos/openrv-web/src/core/types/representation.ts#L216) through [src/core/types/representation.ts#L227).
+  - The live loader factory throws `Streaming representations are not yet supported` for `kind === 'streaming'` in [src/core/session/loaders/RepresentationLoaderFactory.ts](/Users/lifeart/Repos/openrv-web/src/core/session/loaders/RepresentationLoaderFactory.ts#L38) through [src/core/session/loaders/RepresentationLoaderFactory.ts#L39).
+  - `MediaRepresentationManager.switchRepresentation(...)` calls that factory directly during normal representation activation in [src/core/session/MediaRepresentationManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaRepresentationManager.ts#L182) through [src/core/session/MediaRepresentationManager.ts#L197).
+- Impact:
+  - A representation kind that the shared model treats as valid still fails at the point of actual use.
+  - That leaves the representation contract broader than the shipped runtime and makes `streaming` look supported until activation time.
 
 ## Validation Notes
 

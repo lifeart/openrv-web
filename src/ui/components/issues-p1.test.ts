@@ -5,65 +5,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // ============================================================
-// Issue #93: FrameburnCompositor multi-field path unreachable
-// ============================================================
-import {
-  compositeFrameburn,
-  _frameburnGapState,
-  _resetFrameburnGapFlag,
-  type FrameburnConfig,
-  type FrameburnContext,
-} from './FrameburnCompositor';
-
-const baseContext: FrameburnContext = {
-  currentFrame: 48,
-  totalFrames: 240,
-  fps: 24,
-  shotName: 'vfx_010_020',
-  width: 1920,
-  height: 1080,
-};
-
-const enabledConfig: FrameburnConfig = {
-  enabled: true,
-  fields: [{ type: 'timecode' }],
-};
-
-function createCtx() {
-  const c = document.createElement('canvas');
-  c.width = 1920;
-  c.height = 1080;
-  return c.getContext('2d')!;
-}
-
-describe('Issue #93: FrameburnCompositor multi-field gap documentation', () => {
-  beforeEach(() => {
-    _resetFrameburnGapFlag();
-    vi.restoreAllMocks();
-  });
-
-  it('#93-1: compositeFrameburn logs console.info about unreachable path on first call', () => {
-    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
-    compositeFrameburn(createCtx(), 1920, 1080, enabledConfig, baseContext);
-    expect(spy).toHaveBeenCalledWith(
-      expect.stringContaining('multi-field frameburn overlay is implemented'),
-    );
-    expect(spy).toHaveBeenCalledWith(expect.stringContaining('#93'));
-  });
-
-  it('#93-2: console.info is logged only once across multiple calls', () => {
-    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
-    compositeFrameburn(createCtx(), 1920, 1080, enabledConfig, baseContext);
-    compositeFrameburn(createCtx(), 1920, 1080, enabledConfig, baseContext);
-    const matchingCalls = spy.mock.calls.filter((args) =>
-      String(args[0]).includes('#93'),
-    );
-    expect(matchingCalls).toHaveLength(1);
-    expect(_frameburnGapState.logged).toBe(true);
-  });
-});
-
-// ============================================================
 // Issue #94: Watermark image load failure feedback
 // ============================================================
 import { WatermarkControl } from './WatermarkControl';

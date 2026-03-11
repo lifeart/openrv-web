@@ -46,6 +46,27 @@ export interface FrameburnContext {
   date?: string;
 }
 
+const VALID_FRAMEBURN_POSITIONS: ReadonlySet<FrameburnPosition> = new Set([
+  'top-left',
+  'top-center',
+  'top-right',
+  'bottom-left',
+  'bottom-center',
+  'bottom-right',
+]);
+
+const VALID_FRAMEBURN_FIELD_TYPES: ReadonlySet<FrameburnField['type']> = new Set([
+  'timecode',
+  'frame',
+  'shotName',
+  'date',
+  'custom',
+  'resolution',
+  'fps',
+  'colorspace',
+  'codec',
+]);
+
 const FONT_SIZES: Record<TimecodeOverlayState['fontSize'], number> = {
   small: 14,
   medium: 18,
@@ -53,6 +74,17 @@ const FONT_SIZES: Record<TimecodeOverlayState['fontSize'], number> = {
 };
 
 const FONT_FAMILY = "'SF Mono', 'Fira Code', 'Consolas', monospace";
+
+export const DEFAULT_FRAMEBURN_CONFIG: FrameburnConfig = {
+  enabled: false,
+  fields: [{ type: 'timecode' }],
+  font: FONT_FAMILY,
+  fontSize: 16,
+  fontColor: '#ffffff',
+  backgroundColor: 'rgba(0, 0, 0, 0.6)',
+  backgroundPadding: 8,
+  position: 'bottom-left',
+};
 
 function getAnchorPosition(
   position: OverlayPosition | FrameburnPosition,
@@ -212,15 +244,57 @@ export function buildTextLines(fields: FrameburnField[], context: FrameburnConte
   return lines;
 }
 
-// TODO(#93): The multi-field frameburn config/context path (compositeFrameburn, buildTextLines)
-// is fully implemented but no production UI authors FrameburnConfig or FrameburnContext values.
-// Only the simpler compositeTimecodeFrameburn path is wired via ViewerExport.
-/** @internal Mutable state for the one-time console.info log */
-export const _frameburnGapState = { logged: false };
+export function sanitizeFrameburnConfig(value: unknown): FrameburnConfig | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return null;
+  }
 
-/** @internal Reset the one-time log flag (for testing) */
-export function _resetFrameburnGapFlag(): void {
-  _frameburnGapState.logged = false;
+  const record = value as Record<string, unknown>;
+  const config: FrameburnConfig = { ...DEFAULT_FRAMEBURN_CONFIG, fields: [] };
+
+  if (typeof record.enabled === 'boolean') {
+    config.enabled = record.enabled;
+  }
+  if (typeof record.font === 'string' && record.font.trim()) {
+    config.font = record.font;
+  }
+  if (typeof record.fontSize === 'number' && Number.isFinite(record.fontSize)) {
+    config.fontSize = Math.max(8, Math.min(72, Math.round(record.fontSize)));
+  }
+  if (typeof record.fontColor === 'string' && record.fontColor.trim()) {
+    config.fontColor = record.fontColor;
+  }
+  if (typeof record.backgroundColor === 'string' && record.backgroundColor.trim()) {
+    config.backgroundColor = record.backgroundColor;
+  }
+  if (typeof record.backgroundPadding === 'number' && Number.isFinite(record.backgroundPadding)) {
+    config.backgroundPadding = Math.max(0, Math.min(64, Math.round(record.backgroundPadding)));
+  }
+  if (typeof record.position === 'string' && VALID_FRAMEBURN_POSITIONS.has(record.position as FrameburnPosition)) {
+    config.position = record.position as FrameburnPosition;
+  }
+
+  if (Array.isArray(record.fields)) {
+    config.fields = record.fields.flatMap((field): FrameburnField[] => {
+      if (typeof field !== 'object' || field === null || Array.isArray(field)) {
+        return [];
+      }
+      const raw = field as Record<string, unknown>;
+      if (typeof raw.type !== 'string' || !VALID_FRAMEBURN_FIELD_TYPES.has(raw.type as FrameburnField['type'])) {
+        return [];
+      }
+      const sanitized: FrameburnField = { type: raw.type as FrameburnField['type'] };
+      if (typeof raw.label === 'string' && raw.label.trim()) {
+        sanitized.label = raw.label;
+      }
+      if (typeof raw.value === 'string' && raw.value.trim()) {
+        sanitized.value = raw.value;
+      }
+      return [sanitized];
+    });
+  }
+
+  return config;
 }
 
 /**
@@ -234,15 +308,6 @@ export function compositeFrameburn(
   context: FrameburnContext,
 ): void {
   if (!config.enabled || config.fields.length === 0) return;
-
-  // TODO(#93): Log once that multi-field frameburn is in use but has no production UI entry point
-  if (!_frameburnGapState.logged) {
-    _frameburnGapState.logged = true;
-    console.info(
-      '[FrameburnCompositor] The advanced multi-field frameburn overlay is implemented but ' +
-        'no production UI currently authors FrameburnConfig/FrameburnContext values. See issue #93.',
-    );
-  }
 
   const lines = buildTextLines(config.fields, context);
   if (lines.length === 0) return;

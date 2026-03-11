@@ -181,6 +181,54 @@ describe('MuSourceBridge', () => {
       expect(typeof name).toBe('string');
       await bridge.addSourceEnd();
     });
+
+    it('batched addSourceVerbose name resolves to a valid source record after commit', async () => {
+      bridge.addSourceBegin();
+      const name = await bridge.addSourceVerbose(['/a.mov'], 'mytag');
+      // Name returned but source not yet committed
+      expect(bridge.sourceCount()).toBe(0);
+      await bridge.addSourceEnd();
+      // After commit, the returned name must resolve
+      expect(bridge.sourceCount()).toBe(1);
+      const media = bridge.sourceMedia(name);
+      expect(media.media).toEqual(['/a.mov']);
+      const sources = bridge.sources();
+      expect(sources.some((s) => s.name === name)).toBe(true);
+    });
+
+    it('multiple batched addSourceVerbose calls all resolve correctly after commit', async () => {
+      bridge.addSourceBegin();
+      const name1 = await bridge.addSourceVerbose(['/a.mov'], 'tag1');
+      const name2 = await bridge.addSourceVerbose(['/b.mov'], 'tag2');
+      const name3 = await bridge.addSourceVerbose(['/c.mov'], 'tag3');
+      await bridge.addSourceEnd();
+      expect(bridge.sourceCount()).toBe(3);
+      // Each returned name must map to the correct media
+      expect(bridge.sourceMedia(name1).media).toEqual(['/a.mov']);
+      expect(bridge.sourceMedia(name2).media).toEqual(['/b.mov']);
+      expect(bridge.sourceMedia(name3).media).toEqual(['/c.mov']);
+    });
+
+    it('batched names are sequential and non-colliding', async () => {
+      bridge.addSourceBegin();
+      const name1 = await bridge.addSourceVerbose(['/a.mov']);
+      const name2 = await bridge.addSourceVerbose(['/b.mov']);
+      await bridge.addSourceEnd();
+      expect(name1).not.toBe(name2);
+      // Names follow sourceGroupNNNNNN pattern and are sequential
+      expect(name1).toMatch(/^sourceGroup\d{6}$/);
+      expect(name2).toMatch(/^sourceGroup\d{6}$/);
+      const idx1 = parseInt(name1.replace('sourceGroup', ''), 10);
+      const idx2 = parseInt(name2.replace('sourceGroup', ''), 10);
+      expect(idx2).toBe(idx1 + 1);
+    });
+
+    it('non-batch addSourceVerbose still works (backward compat)', async () => {
+      const name = await bridge.addSourceVerbose(['/a.mov'], 'direct');
+      expect(typeof name).toBe('string');
+      expect(bridge.sourceCount()).toBe(1);
+      expect(bridge.sourceMedia(name).media).toEqual(['/a.mov']);
+    });
   });
 
   // ==================================================================
@@ -1159,6 +1207,18 @@ describe('MuSourceBridge', () => {
       // Session calls were made for URL and movieproc but not local
       expect(mockOpenRV.media.addSourceFromURL).toHaveBeenCalledTimes(1);
       expect(mockOpenRV.media.loadMovieProc).toHaveBeenCalledTimes(1);
+    });
+
+    it('mixed addSource and addSourceVerbose in the same batch commit correctly', async () => {
+      bridge.addSourceBegin();
+      await bridge.addSource(['/a.mov'], 'plain');
+      const verboseName = await bridge.addSourceVerbose(['/b.mov'], 'verbose');
+      await bridge.addSource(['/c.mov'], 'plain2');
+      await bridge.addSourceEnd();
+
+      expect(bridge.sourceCount()).toBe(3);
+      // The verbose-returned name must resolve to the /b.mov source, not another
+      expect(bridge.sourceMedia(verboseName).media).toEqual(['/b.mov']);
     });
   });
 });

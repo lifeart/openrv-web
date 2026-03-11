@@ -146,7 +146,7 @@ export class MuSourceBridge {
   private _batchMode = false;
 
   /** Queued additions during batch mode */
-  private _batchQueue: Array<{ paths: string[]; tag: string }> = [];
+  private _batchQueue: Array<{ paths: string[]; tag: string; name?: string }> = [];
 
   /** In-memory image source pixel data */
   private _imageSources = new Map<string, ImageSourcePixels>();
@@ -283,8 +283,9 @@ export class MuSourceBridge {
       throw new TypeError('addSourceVerbose() requires a non-empty paths array');
     }
     if (this._batchMode) {
-      this._batchQueue.push({ paths, tag });
-      return this._generateSourceName();
+      const name = this._generateSourceName();
+      this._batchQueue.push({ paths, tag, name });
+      return name;
     }
     const record = this._createSourceRecord(paths, tag);
     await this._loadIntoSession(paths);
@@ -327,8 +328,8 @@ export class MuSourceBridge {
     this._batchMode = false;
     const queue = [...this._batchQueue];
     this._batchQueue = [];
-    for (const { paths, tag } of queue) {
-      this._createSourceRecord(paths, tag);
+    for (const { paths, tag, name } of queue) {
+      this._createSourceRecord(paths, tag, name);
       await this._loadIntoSession(paths);
     }
   }
@@ -872,8 +873,9 @@ export class MuSourceBridge {
   private _createSourceRecord(
     paths: string[],
     tag: string,
+    preGeneratedName?: string,
   ): SourceRecord {
-    const name = this._generateSourceName();
+    const name = preGeneratedName ?? this._generateSourceName();
     const record: SourceRecord = {
       name,
       tag,

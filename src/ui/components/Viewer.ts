@@ -3472,7 +3472,12 @@ export class Viewer {
    * Render a specific frame to a canvas (for sequence export)
    * Seeks to the frame, renders, and returns the canvas
    */
-  async renderFrameToCanvas(frame: number, includeAnnotations: boolean): Promise<HTMLCanvasElement | null> {
+  async renderFrameToCanvas(
+    frame: number,
+    includeAnnotations: boolean,
+    advancedFrameburnConfig?: import('./FrameburnCompositor').FrameburnConfig | null,
+    advancedFrameburnContext?: import('./FrameburnCompositor').FrameburnContext | null,
+  ): Promise<HTMLCanvasElement | null> {
     const cropRegion = this.cropManager.getExportCropRegion();
     const frameburnOptions = this.getExportFrameburnOptions(frame);
     const canvas = await renderFrameToCanvasUtil(
@@ -3486,6 +3491,8 @@ export class Viewer {
       cropRegion,
       undefined,
       frameburnOptions,
+      advancedFrameburnConfig,
+      advancedFrameburnContext,
     );
     if (canvas) {
       this.applyWatermarkToCanvas(canvas);

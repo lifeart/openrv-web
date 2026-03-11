@@ -35,6 +35,7 @@ import { downloadAnnotationsJSON, parseAnnotationsJSON, applyAnnotationsJSON } f
 import { exportAnnotationsPDF } from './utils/export/AnnotationPDFExporter';
 import { DisposableSubscriptionManager } from './utils/DisposableSubscriptionManager';
 import { isAudioScrubAvailable } from './utils/media/SourceUIState';
+import { sanitizeFrameburnConfig, type FrameburnConfig, type FrameburnContext } from './ui/components/FrameburnCompositor';
 
 /**
  * External references that the playback wiring needs but are not part of
@@ -595,6 +596,46 @@ function sanitizeFilenameBase(name: string): string {
   return sanitized.length > 0 ? sanitized : 'export';
 }
 
+function createFrameburnContext(
+  session: Session,
+  frame: number,
+  width: number,
+  height: number,
+): FrameburnContext | null {
+  const source = session.currentSource;
+  if (!source) {
+    return null;
+  }
+
+  const fileSourceNode = (source as { fileSourceNode?: { formatName?: string } }).fileSourceNode;
+  const codec = fileSourceNode?.formatName ?? (typeof source.type === 'string' ? source.type.toUpperCase() : undefined);
+
+  return {
+    currentFrame: frame,
+    totalFrames: session.frameCount,
+    fps: session.fps,
+    shotName: source.name?.replace(/\.[^/.]+$/, '') ?? 'shot',
+    width,
+    height,
+    codec,
+  };
+}
+
+function getAdvancedFrameburnConfig(): FrameburnConfig | null {
+  const defaults = getCorePreferencesManager().getExportDefaults();
+  if (!defaults.frameburnEnabled) {
+    return null;
+  }
+
+  const config = sanitizeFrameburnConfig(defaults.frameburnConfig);
+  if (!config || config.fields.length === 0) {
+    return null;
+  }
+
+  config.enabled = true;
+  return config;
+}
+
 function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -670,6 +711,7 @@ async function handleVideoExport(
   progressDialog.show();
 
   try {
+    const advancedFrameburnConfig = getAdvancedFrameburnConfig();
     let firstFrameCanvas = await viewer.renderFrameToCanvas(frameRange.startFrame, request.includeAnnotations);
     if (!firstFrameCanvas) {
       throw new Error(`Failed to render frame ${frameRange.startFrame}`);
@@ -679,6 +721,18 @@ async function handleVideoExport(
     const height = firstFrameCanvas.height;
     if (width <= 0 || height <= 0) {
       throw new Error('Invalid output dimensions');
+    }
+
+    if (advancedFrameburnConfig) {
+      firstFrameCanvas = await viewer.renderFrameToCanvas(
+        frameRange.startFrame,
+        request.includeAnnotations,
+        advancedFrameburnConfig,
+        createFrameburnContext(session, frameRange.startFrame, width, height),
+      );
+      if (!firstFrameCanvas) {
+        throw new Error(`Failed to render frame ${frameRange.startFrame}`);
+      }
     }
 
     const fps = Math.max(1, Math.round(session.fps || 24));
@@ -735,7 +789,12 @@ async function handleVideoExport(
           canvas = firstFrameCanvas;
           firstFrameCanvas = null;
         } else {
-          canvas = await viewer.renderFrameToCanvas(frame, request.includeAnnotations);
+          canvas = await viewer.renderFrameToCanvas(
+            frame,
+            request.includeAnnotations,
+            advancedFrameburnConfig,
+            advancedFrameburnConfig ? createFrameburnContext(session, frame, width, height) : null,
+          );
         }
 
         if (!canvas) {

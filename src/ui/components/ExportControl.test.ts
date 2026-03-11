@@ -528,6 +528,21 @@ describe('ExportControl keyboard accessibility', () => {
     expect(callback).toHaveBeenCalledWith(expect.objectContaining({ useInOutRange: true, includeAnnotations: true }));
   });
 
+  it('EXP-H10c-4: selecting Advanced Frameburn opens the settings menu', () => {
+    openDropdown();
+    const dropdown = getDropdown();
+    const frameburnItem = Array.from(dropdown.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Advanced Frameburn'),
+    ) as HTMLButtonElement | undefined;
+
+    expect(frameburnItem).toBeDefined();
+    frameburnItem!.click();
+
+    const menu = document.querySelector('.frameburn-settings-menu');
+    expect(menu).not.toBeNull();
+    expect(menu?.getAttribute('aria-label')).toBe('Frameburn settings');
+  });
+
   it('EXP-H10d: export button should have aria-haspopup="menu" attribute', () => {
     const button = getExportButton();
     expect(button.getAttribute('aria-haspopup')).toBe('menu');

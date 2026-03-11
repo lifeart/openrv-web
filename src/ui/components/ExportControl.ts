@@ -7,6 +7,7 @@ import {
   type ExportDefaults,
   getCorePreferencesManager,
 } from '../../core/PreferencesManager';
+import { FrameburnSettingsMenu } from './FrameburnSettingsMenu';
 
 export interface ExportRequest {
   format: ExportFormat;
@@ -54,6 +55,7 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
   private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
   private _cleanupA11yFocus: (() => void) | null = null;
   private readonly preferencesManager: PreferencesManager;
+  private readonly frameburnSettingsMenu: FrameburnSettingsMenu;
 
   /** Plugin exporter menu items keyed by "pluginId:name" */
   private pluginExporterItems = new Map<string, HTMLElement>();
@@ -65,6 +67,7 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
   constructor(preferencesManager?: PreferencesManager) {
     super();
     this.preferencesManager = preferencesManager ?? getCorePreferencesManager();
+    this.frameburnSettingsMenu = new FrameburnSettingsMenu(this.preferencesManager);
 
     // Create container
     this.container = document.createElement('div');
@@ -205,6 +208,7 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
     this.addSectionHeader('Video Export');
     this.addMenuItem('film', 'Export MP4 In/Out Range', () => this.exportVideo(true));
     this.addMenuItem('film', 'Export MP4 All Frames', () => this.exportVideo(false));
+    this.addMenuItem('film', 'Advanced Frameburn…', () => this.openFrameburnSettings());
 
     this.addSeparator();
 
@@ -476,9 +480,14 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
 
   private exportVideo(useInOutRange: boolean): void {
     this.emit('videoExportRequested', {
-      includeAnnotations: this.annotationsCheckbox?.checked ?? true,
+      includeAnnotations: this.getIncludeAnnotations(),
       useInOutRange,
     });
+  }
+
+  private openFrameburnSettings(): void {
+    const rect = this.exportButton.getBoundingClientRect();
+    this.frameburnSettingsMenu.show(rect.right + 4, rect.bottom + 4);
   }
 
   private exportRvSession(format: 'rv' | 'gto'): void {
@@ -646,6 +655,7 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
     document.removeEventListener('click', this.boundHandleDocumentClick);
     this._cleanupA11yFocus?.();
     this._cleanupA11yFocus = null;
+    this.frameburnSettingsMenu.dispose();
     // Remove body-mounted dropdown if present
     if (this.dropdown.parentNode) {
       this.dropdown.parentNode.removeChild(this.dropdown);

@@ -1075,9 +1075,14 @@
 ## Issue #93: The advanced multi-field frameburn export overlay is implemented but unreachable in production
 
 - **Severity**: Medium
-- **Fix**: Added TODO(#93) + one-time `console.info` in `FrameburnCompositor.compositeFrameburn()` documenting that the multi-field frameburn path has no production UI entry point.
-- **Regression Tests**: 2 tests.
-- **Files Changed**: `src/ui/components/FrameburnCompositor.ts`, `src/ui/components/issues-p1.test.ts`
+- **TODO(#93) Resolved**: Added a production `Advanced Frameburn...` entry to the export dropdown that opens a new `FrameburnSettingsMenu`, persisting `frameburnEnabled` and multi-field `frameburnConfig` into export defaults instead of leaving the feature API-only. The video export path in `AppPlaybackWiring` now sanitizes that config, builds per-frame export context (shot name, frame range, fps, resolution, codec), and forwards both config and context into `viewer.renderFrameToCanvas(...)` so the advanced frameburn is rendered into exported MP4 frames. `FrameburnCompositor` no longer carries the stale TODO/logging shim and now centrally sanitizes persisted frameburn configs.
+- **Regression Tests**:
+  - `FrameburnSettingsMenu.test.ts`: added coverage for menu rendering, export-default updates, and dismissal behavior
+  - `ExportControl.test.ts`: added coverage for opening the advanced frameburn settings surface from the shipped export menu
+  - `AppPlaybackWiring.test.ts`: added coverage for forwarding advanced frameburn config and derived context into rendered export frames
+  - `FrameburnCompositor.test.ts`: remains green with the sanitized multi-field compositor path
+- **Verification**: `FrameburnCompositor.test.ts` (16 tests), `FrameburnSettingsMenu.test.ts` (3 tests), `ExportControl.test.ts` (82 tests), and `AppPlaybackWiring.test.ts` (72 tests) pass. TypeScript clean.
+- **Files Changed**: `src/ui/components/FrameburnCompositor.ts`, `src/ui/components/FrameburnSettingsMenu.ts`, `src/ui/components/FrameburnSettingsMenu.test.ts`, `src/ui/components/ExportControl.ts`, `src/ui/components/ExportControl.test.ts`, `src/ui/components/Viewer.ts`, `src/AppPlaybackWiring.ts`, `src/AppPlaybackWiring.test.ts`, `src/ui/components/issues-p1.test.ts`
 
 ## Issue #94: Watermark image load failures are swallowed without any user-visible feedback
 
@@ -2317,3 +2322,13 @@
 - **Regression Tests**: 18 new tests covering: event subscription wiring, view transform updates, rendered image updates, coordinate conversion with live state, source switching emits correct data, viewport resize triggers update, dispose cleanup, reconnection, and backward compat for manual setters.
 - **Verification**: All 556 compat tests pass (8 files), TypeScript clean.
 - **Files Changed**: `src/compat/MuEvalBridge.ts`, `src/compat/__tests__/MuEvalBridge.test.ts`, `src/compat/index.ts`, `src/api/EventsAPI.ts`, `src/api/types.ts`, `src/ui/components/Viewer.ts`
+
+## Issue #246: Mu compat batched `addSourceVerbose()` returns source names that do not match the records created at commit time
+
+- **Severity**: Medium
+- **Area**: Mu compatibility / source management
+- **Root Cause**: In batch mode, `addSourceVerbose()` called `_generateSourceName()` to return a name immediately, then `addSourceEnd()` called `_createSourceRecord()` which called `_generateSourceName()` again — advancing the counter a second time. The name returned during batching never matched the committed source record.
+- **Fix**: (A) Extended batch queue entry type to include an optional `name` field. (B) In `addSourceVerbose()` batch path, the pre-generated name is saved with the queue entry. (C) `addSourceEnd()` passes the saved name through to `_createSourceRecord()`. (D) `_createSourceRecord()` accepts an optional `preGeneratedName` parameter and uses it instead of generating a new one when provided. Counter integrity is preserved — each name is generated exactly once.
+- **Regression Tests**: 5 new tests covering: single batch name resolves after commit, multiple batch names all resolve, sequential naming correctness, mixed `addSource`+`addSourceVerbose` in same batch, and non-batch backward compat.
+- **Verification**: All 561 compat tests pass (8 files), TypeScript clean.
+- **Files Changed**: `src/compat/MuSourceBridge.ts`, `src/compat/__tests__/MuSourceBridge.test.ts`
