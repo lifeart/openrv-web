@@ -226,7 +226,10 @@ export class MuSourceBridge {
         if (current) {
           // Register the discovered source so subsequent API calls can resolve it
           if (!this._sources.has(current.name)) {
-            this._createSourceRecord([current.name], 'default', current.name);
+            const record = this._createSourceRecord([current.name], 'default', current.name);
+            if (current.duration > 0) {
+              record.endFrame = current.duration;
+            }
           }
           result.push({
             name: current.name,
@@ -265,9 +268,16 @@ export class MuSourceBridge {
         if (current) {
           // Register the discovered source so subsequent API calls can resolve it
           if (!this._sources.has(current.name)) {
-            this._createSourceRecord([current.name], 'default', current.name);
+            const record = this._createSourceRecord([current.name], 'default', current.name);
+            if (current.duration > 0) {
+              record.endFrame = current.duration;
+            }
           }
-          active.push(current.name);
+          // Only include if the requested frame falls within the source's range
+          const record = this._sources.get(current.name)!;
+          if (frame >= record.startFrame && frame <= record.endFrame) {
+            active.push(current.name);
+          }
         }
       } catch {
         // openrv not available

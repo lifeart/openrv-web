@@ -2537,3 +2537,15 @@
 - **Regression Tests**: 3 new tests covering: useLocalCoords=false returns screen coords, useLocalCoords=true returns image-local coords, default (no flag) matches explicit false. Updated existing tests to pass explicit `true` for image-local assertions.
 - **Verification**: All 675 compat tests pass (8 files), TypeScript clean.
 - **Files Changed**: `src/compat/MuEvalBridge.ts`, `src/compat/__tests__/MuEvalBridge.test.ts`
+
+---
+
+### 266. Mu compat `sourcesAtFrame()` ignores the requested frame when it falls back to the current OpenRV source
+
+- **Severity**: Medium
+- **Area**: Mu compatibility / source queries
+- **Root Cause**: The fallback path in `sourcesAtFrame()` unconditionally returned the current OpenRV source without checking if the requested frame was within the source's valid range. Additionally, fallback source registration in both `sources()` and `sourcesAtFrame()` set `endFrame` to the default `1` instead of using the source's actual duration.
+- **Fix**: (1) When registering fallback sources, set `endFrame = current.duration` (if duration > 0). (2) In `sourcesAtFrame()` fallback, check `frame >= record.startFrame && frame <= record.endFrame` before including the source.
+- **Regression Tests**: 5 new tests — in-range frame returns fallback, out-of-range frame returns empty, upper boundary (endFrame=duration) returns fallback, duration-0 edge case (only frame 1 valid), local source frame filtering at boundaries.
+- **Verification**: All 680 compat tests pass.
+- **Files Changed**: `src/compat/MuSourceBridge.ts`, `src/compat/__tests__/MuSourceBridge.test.ts`

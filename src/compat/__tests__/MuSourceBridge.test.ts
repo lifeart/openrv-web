@@ -78,6 +78,54 @@ describe('MuSourceBridge', () => {
       expect(result).toContain('test-source');
     });
 
+    it('in-range frame returns fallback source (Issue #266)', () => {
+      // Mock duration is 100, so frame 50 should be in range [1, 100]
+      const result = bridge.sourcesAtFrame(50);
+      expect(result).toContain('test-source');
+    });
+
+    it('upper-boundary endFrame returns fallback source (Issue #266)', () => {
+      // Mock duration is 100, so endFrame = 100; frame 100 is still in range [1, 100]
+      const result = bridge.sourcesAtFrame(100);
+      expect(result).toContain('test-source');
+    });
+
+    it('duration-0 edge case uses default endFrame of 1 (Issue #266)', () => {
+      // Override mock to return duration: 0 so endFrame stays at default 1
+      mockOpenRV.media.getCurrentSource.mockReturnValue({
+        name: 'test-source',
+        type: 'video',
+        width: 1920,
+        height: 1080,
+        duration: 0,
+        fps: 24,
+      });
+
+      // Frame 1 is within [1, 1] (default endFrame)
+      expect(bridge.sourcesAtFrame(1)).toContain('test-source');
+      // Frame 2 is out of range
+      expect(bridge.sourcesAtFrame(2)).toEqual([]);
+    });
+
+    it('out-of-range frame returns empty array (Issue #266)', () => {
+      // Mock duration is 100, so frame 99999 is out of range
+      const result = bridge.sourcesAtFrame(99999);
+      expect(result).toEqual([]);
+    });
+
+    it('local source frame filtering still works (Issue #266)', async () => {
+      await bridge.addSource(['/clip.mov'], 'default');
+      const sources = bridge.sources();
+      const name = sources[0]!.name;
+      bridge.setSourceFrameRange(name, 10, 20);
+
+      expect(bridge.sourcesAtFrame(9)).not.toContain(name);
+      expect(bridge.sourcesAtFrame(10)).toContain(name);
+      expect(bridge.sourcesAtFrame(15)).toContain(name);
+      expect(bridge.sourcesAtFrame(20)).toContain(name);
+      expect(bridge.sourcesAtFrame(21)).not.toContain(name);
+    });
+
     it('returns sources whose frame range includes the given frame', async () => {
       await bridge.addSource(['/a.mov'], 'default');
       const sources = bridge.sources();
