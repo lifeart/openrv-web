@@ -110,6 +110,10 @@ export interface RemoteConnectionInfo {
   host: string;
   port: number;
   connected: boolean;
+  /** Peer's contact name received via handshake */
+  peerContactName?: string;
+  /** Peer's permission level received via handshake */
+  peerPermission?: number;
 }
 
 /** File kind constants (matching Mu's enum) */

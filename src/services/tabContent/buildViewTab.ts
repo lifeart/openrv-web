@@ -15,6 +15,7 @@ import { InfoStripSettingsMenu } from '../../ui/components/InfoStripSettingsMenu
 import { EXRWindowOverlaySettingsMenu } from '../../ui/components/EXRWindowOverlaySettingsMenu';
 import { BugOverlaySettingsMenu } from '../../ui/components/BugOverlaySettingsMenu';
 import { MatteOverlaySettingsMenu } from '../../ui/components/MatteOverlaySettingsMenu';
+import { ReferenceComparisonSettingsMenu } from '../../ui/components/ReferenceComparisonSettingsMenu';
 
 export interface BuildViewTabDeps {
   registry: AppControlRegistry;
@@ -119,10 +120,17 @@ export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
     () => {
       registry.referenceManager.toggle();
     },
-    { title: 'Toggle reference comparison (Ctrl+Shift+R)' },
+    { title: 'Toggle reference comparison (Ctrl+Shift+R) — Right-click for settings' },
   );
   toggleRefButton.dataset.testid = 'toggle-reference-btn';
   viewContent.appendChild(toggleRefButton);
+
+  const referenceComparisonSettingsMenu = new ReferenceComparisonSettingsMenu(registry.referenceManager);
+  toggleRefButton.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    referenceComparisonSettingsMenu.show(e.clientX, e.clientY);
+  });
+  addUnsubscriber(() => referenceComparisonSettingsMenu.dispose());
 
   addUnsubscriber(
     registry.referenceManager.on('stateChanged', (state) => {
@@ -140,7 +148,7 @@ export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
           }
           refImageData = new ImageData(u8, ref.width, ref.height);
         }
-        viewer.setReferenceImage(refImageData, state.viewMode, state.opacity);
+        viewer.setReferenceImage(refImageData, state.viewMode, state.opacity, state.wipePosition);
       } else {
         viewer.setReferenceImage(null, 'off', 0);
       }

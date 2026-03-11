@@ -5952,6 +5952,141 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The docs overstate how uniform the shipped decode pipeline really is.
   - Anyone reading the guide to understand memory behavior, plugin integration, or browser-native image handling will expect a Float32 decode stage that standard images do not actually use.
 
+### 504. The plain-AVIF docs promise a WASM fallback, but the shipped AVIF path is browser-native only
+
+- Severity: Low
+- Area: Documentation / AVIF support
+- Evidence:
+  - The file-format guide says plain AVIF uses “Browser-native decode via `createImageBitmap()` with WASM fallback (`avif.ts`)" in [docs/guides/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/guides/file-formats.md#L156).
+  - The actual `avif.ts` module only implements browser-native decode through `createImageBitmap(blob)` and contains no alternate WASM decoder path in [src/formats/avif.ts](/Users/lifeart/Repos/openrv-web/src/formats/avif.ts#L4) through [src/formats/avif.ts](/Users/lifeart/Repos/openrv-web/src/formats/avif.ts#L65).
+  - The live `FileSourceNode` path for non-HDR AVIF likewise checks gainmap/HDR markers and then falls back to a blob-backed `Image` load, not a WASM AVIF decoder, in [src/nodes/sources/FileSourceNode.ts](/Users/lifeart/Repos/openrv-web/src/nodes/sources/FileSourceNode.ts#L696) through [src/nodes/sources/FileSourceNode.ts](/Users/lifeart/Repos/openrv-web/src/nodes/sources/FileSourceNode.ts#L760).
+- Impact:
+  - The docs imply broader plain-AVIF compatibility than the shipped runtime actually provides on browsers without native AVIF support.
+  - Readers can expect a decode fallback path that production does not implement.
+
+### 505. The JPEG XL guide promises original color-space metadata, but the shipped SDR JXL decoder always reports `srgb` and only returns format/container metadata
+
+- Severity: Low
+- Area: Documentation / JPEG XL metadata
+- Evidence:
+  - The JPEG XL guide says JXL color space “Varies (sRGB, linear, Display P3, Rec.2020, etc.). Decoded to Float32 with metadata indicating the original color space” in [docs/guides/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/guides/file-formats.md#L113).
+  - The shipped SDR JXL decoder hardcodes `colorSpace: 'srgb'` in its return value in [src/formats/JXLDecoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/JXLDecoder.ts#L103) through [src/formats/JXLDecoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/JXLDecoder.ts#L109).
+  - The same decoder’s metadata payload only includes `format` and `container`, with no original color-space field, in [src/formats/JXLDecoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/JXLDecoder.ts#L105) through [src/formats/JXLDecoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/JXLDecoder.ts#L109).
+  - The runtime only parses JXL container color info for the separate HDR path in `FileSourceNode`, not for the normal SDR WASM decode in [src/nodes/sources/FileSourceNode.ts](/Users/lifeart/Repos/openrv-web/src/nodes/sources/FileSourceNode.ts#L765) through [src/nodes/sources/FileSourceNode.ts](/Users/lifeart/Repos/openrv-web/src/nodes/sources/FileSourceNode.ts#L788).
+- Impact:
+  - The docs overstate how much original JXL color-space metadata the shipped SDR decode path preserves.
+  - Users or integrators can expect richer color metadata from JXL loads than production currently exposes.
+
+### 506. The top-level file-format reference presents HEIC/HEIF as a pure WASM decode path, but the shipped runtime uses native Safari decode first and WASM only as fallback elsewhere
+
+- Severity: Low
+- Area: Documentation / HEIC support
+- Evidence:
+  - The top-level format table says `HEIC/HEIF | .heic, .heif | libheif WASM` in [docs/reference/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/reference/file-formats.md#L15).
+  - The deeper file-format guide says browser-native HEIC is used on Safari and WASM is the non-Safari fallback in [docs/guides/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/guides/file-formats.md#L195).
+  - The live `FileSourceNode` path matches the deeper guide: it first tries `tryLoadHEICNative(...)` and only then falls back to `loadHEICSDRWasm(...)` in [src/nodes/sources/FileSourceNode.ts](/Users/lifeart/Repos/openrv-web/src/nodes/sources/FileSourceNode.ts#L1993) through [src/nodes/sources/FileSourceNode.ts](/Users/lifeart/Repos/openrv-web/src/nodes/sources/FileSourceNode.ts#L2002).
+  - The HEIC WASM decoder itself is documented as a cross-browser fallback for Chrome/Firefox/Edge because Safari already has native HEIC support in [src/formats/HEICWasmDecoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/HEICWasmDecoder.ts#L2) through [src/formats/HEICWasmDecoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/HEICWasmDecoder.ts#L5).
+- Impact:
+  - The top-level reference misstates how HEIC actually loads in production.
+  - Readers can come away with the wrong performance and compatibility expectations for Safari versus other browsers.
+
+### 507. The file-format and image-sequence guides describe missing-frame playback as always “hold last frame,” but the shipped viewer exposes four modes and defaults to `show-frame`
+
+- Severity: Low
+- Area: Documentation / image-sequence playback behavior
+- Evidence:
+  - The file-format guide says that when a sequence has gaps, the viewer “Holds the last available frame during playback when a gap is encountered” in [docs/guides/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/guides/file-formats.md#L324) through [docs/guides/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/guides/file-formats.md#L326).
+  - The image-sequences guide makes the same fixed-behavior claim in [docs/playback/image-sequences.md](/Users/lifeart/Repos/openrv-web/docs/playback/image-sequences.md#L46).
+  - The shipped View tab exposes four selectable missing-frame modes, `Off`, `Frame`, `Hold`, and `Black`, in [src/services/tabContent/buildViewTab.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildViewTab.ts#L198) through [src/services/tabContent/buildViewTab.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildViewTab.ts#L208).
+  - The viewer’s live default is `show-frame`, not `hold`, in [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L311).
+  - The missing-frame render path branches by mode: `black` forces a black frame, `hold` reuses the previous frame, and the remaining modes use the current-frame path in [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L1522) through [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L1553).
+- Impact:
+  - The sequence docs present one fixed playback response to gaps, but the shipped app treats missing frames as a user-selectable viewer policy.
+  - Users reading those guides can expect hold-last-frame playback even when the default runtime behavior is different.
+
+### 508. The file-format guide still says RV/GTO import reconstructs the complete node graph, but the live importer remains lossy
+
+- Severity: Medium
+- Area: Documentation / RV-GTO compatibility
+- Evidence:
+  - The file-format guide says OpenRV Web can “load and reconstruct the complete node graph” from RV/GTO files in [docs/guides/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/guides/file-formats.md#L342).
+  - The same section presents “Graph reconstruction” as a supported capability in [docs/guides/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/guides/file-formats.md#L344).
+  - The live importer still records skipped nodes and degraded modes during RV/GTO load in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L396) through [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L412).
+  - `GTOGraphLoader` only maps a limited subset of node protocols, and unsupported-but-recognized nodes are explicitly skipped in [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L474) through [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L606).
+  - The current issue inventory already has concrete runtime losses from that path, including skipped mapped nodes in [ISSUES.md](/Users/lifeart/Repos/openrv-web/ISSUES.md#L227), downgraded stack modes in [ISSUES.md](/Users/lifeart/Repos/openrv-web/ISSUES.md#L279), and unsurfaced import diagnostics in [ISSUES.md](/Users/lifeart/Repos/openrv-web/ISSUES.md#L3425).
+- Impact:
+  - The guide overstates RV/GTO interchange fidelity and makes the import path sound lossless.
+  - Users can trust imported sessions more than the runtime actually warrants, especially when complex RV graphs are involved.
+
+### 509. The file-format guide still describes `.orvproject` as complete viewer state with node-graph topology, but the serializer tracks known gaps and leaves `graph` unwired
+
+- Severity: Medium
+- Area: Documentation / native session format
+- Evidence:
+  - The file-format guide says `.orvproject` is “a JSON-based file containing the complete viewer state” in [docs/guides/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/guides/file-formats.md#L367).
+  - The same section lists `node graph topology` in the serialized content in [docs/guides/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/guides/file-formats.md#L371).
+  - `SessionSerializer` explicitly tracks multiple viewer-state serialization gaps, including OCIO, display profile, gamut mapping, curves, tone mapping, stereo state, compare state, and several Effects-tab controls, in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L67) through [src/core/session/SessionSerializer.ts#L220).
+  - The live serializer also documents that the `graph` field exists in the schema but is still unwired in `.orvproject` save/load in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L328) through [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L333).
+  - The current issue inventory already contains the corresponding runtime defects: known serialization gaps in [ISSUES.md](/Users/lifeart/Repos/openrv-web/ISSUES.md#L3374), and missing graph persistence in [ISSUES.md](/Users/lifeart/Repos/openrv-web/ISSUES.md#L1467) and [ISSUES.md](/Users/lifeart/Repos/openrv-web/ISSUES.md#L3388).
+- Impact:
+  - The docs present `.orvproject` as a fuller fidelity format than the serializer actually implements.
+  - Users can save projects expecting complete state recovery, then reopen into a materially reduced session.
+
+### 510. The file-format guide still presents OTIO import as clips, gaps, transitions, and track mapping, but the live app flattens it to the first video track’s clip list
+
+- Severity: Medium
+- Area: Documentation / OTIO import fidelity
+- Evidence:
+  - The file-format guide says OTIO import supports “clips, gaps, and transitions” in [docs/guides/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/guides/file-formats.md#L359).
+  - The same section says “OTIO tracks map to sequence groups” in [docs/guides/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/guides/file-formats.md#L362).
+  - The shipped `parseOTIO(...)` helper is explicitly “single-track, backward-compatible” and “returns clips from the first video track only” in [src/utils/media/OTIOParser.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/OTIOParser.ts#L315) through [src/utils/media/OTIOParser.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/OTIOParser.ts#L333).
+  - The only production import path, `PlaylistManager.fromOTIO(...)`, consumes that single-track parse result and imports each clip via `addClip(...)` into a linear playlist in [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L671) through [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L703).
+  - The richer `parseOTIOMultiTrack(...)` path exists separately, but the live import path does not use it in [src/utils/media/OTIOParser.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/OTIOParser.ts#L340) through [src/utils/media/OTIOParser.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/OTIOParser.ts#L382).
+- Impact:
+  - The guide makes OTIO ingest sound structurally richer than the shipped import path actually is.
+  - Editorial users can expect gaps, transitions, and multi-track layout to survive import when production still collapses them into a simple clip sequence.
+
+### 511. The EXR docs still describe a WASM / compiled OpenEXR decoder, but the shipped `EXRDecoder.ts` is a pure TypeScript implementation with custom codec helpers
+
+- Severity: Low
+- Area: Documentation / EXR implementation details
+- Evidence:
+  - The file-format guide says EXR uses a “WebAssembly-compiled OpenEXR library (`EXRDecoder.ts`)" in [docs/guides/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/guides/file-formats.md#L25).
+  - The top-level format reference also labels EXR as a `WASM decoder` in [docs/reference/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/reference/file-formats.md#L16).
+  - The shipped EXR decoder file is a large TypeScript implementation that directly parses headers and decodes scanline/tiled data in [src/formats/EXRDecoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/EXRDecoder.ts#L1) through [src/formats/EXRDecoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/EXRDecoder.ts#L2420).
+  - Compression handling is provided by local TypeScript codec modules such as [src/formats/EXRPIZCodec.ts](/Users/lifeart/Repos/openrv-web/src/formats/EXRPIZCodec.ts) and [src/formats/EXRDWACodec.ts](/Users/lifeart/Repos/openrv-web/src/formats/EXRDWACodec.ts), not a compiled OpenEXR WASM module.
+  - The decoder registry imports `decodeEXR` directly from that TS path, unlike the JP2 path which explicitly acquires a WASM decoder instance in [src/formats/DecoderRegistry.ts](/Users/lifeart/Repos/openrv-web/src/formats/DecoderRegistry.ts#L487) and [src/formats/DecoderRegistry.ts](/Users/lifeart/Repos/openrv-web/src/formats/DecoderRegistry.ts#L753) through [src/formats/DecoderRegistry.ts](/Users/lifeart/Repos/openrv-web/src/formats/DecoderRegistry.ts#L754).
+- Impact:
+  - The docs misstate how EXR decode is implemented in production.
+  - That gives readers the wrong expectations about bundle composition, performance characteristics, and the decoder’s maintenance surface.
+
+### 512. The normal file-open/classification path omits JPEG 2000 and HTJ2K extensions, even though the decoder stack and docs claim support
+
+- Severity: Medium
+- Area: Media loading / file-type detection
+- Evidence:
+  - The shared supported-image extension list used by the normal media picker contains no `jp2`, `j2k`, `j2c`, `jph`, or `jhc` entries in [src/utils/media/SupportedMediaFormats.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SupportedMediaFormats.ts#L10) through [src/utils/media/SupportedMediaFormats.ts#L34).
+  - The normal `Open media file` input uses that shared accept string in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L219).
+  - The same shared detector classifies files by MIME first, then by the same extension sets, and returns `unknown` for anything outside them in [src/utils/media/SupportedMediaFormats.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SupportedMediaFormats.ts#L90) through [src/utils/media/SupportedMediaFormats.ts#L108).
+  - Both `SessionMedia.loadFile(...)` and `MediaManager.loadFile(...)` reject `unknown` types as unsupported in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L412) through [src/core/session/SessionMedia.ts#L418) and [src/core/session/MediaManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaManager.ts#L335) through [src/core/session/MediaManager.ts#L340).
+  - The actual format stack does advertise and branch for those extensions: the docs list JPEG 2000 / HTJ2K support in [docs/reference/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/reference/file-formats.md#L22) through [docs/reference/file-formats.md#L23), and `FileSourceNode` explicitly treats `jp2`, `j2k`, `j2c`, `jph`, and `jhc` as JPEG 2000 family inputs in [src/nodes/sources/FileSourceNode.ts](/Users/lifeart/Repos/openrv-web/src/nodes/sources/FileSourceNode.ts#L94) through [src/nodes/sources/FileSourceNode.ts#L98).
+- Impact:
+  - Local JPEG 2000 / HTJ2K files can fall through the normal file-open path as unsupported when the browser does not provide a helpful MIME type.
+  - That leaves decoder support present in the runtime while the primary user-facing load path still makes those formats hard or impossible to open reliably.
+
+### 513. The shared file-open/classification path also omits `.mxf`, so local MXF files can be rejected before the registered MXF parser ever runs
+
+- Severity: Medium
+- Area: Media loading / MXF ingestion
+- Evidence:
+  - The shared supported-video extension lists contain no `mxf` entry in [src/utils/media/SupportedMediaFormats.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SupportedMediaFormats.ts#L39) through [src/utils/media/SupportedMediaFormats.ts#L63).
+  - The normal media picker uses that same `SUPPORTED_MEDIA_ACCEPT` string in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L219).
+  - `detectMediaTypeFromFile(...)` therefore returns `unknown` for MIME-less `.mxf` files, and the normal load path rejects `unknown` types as unsupported in [src/utils/media/SupportedMediaFormats.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SupportedMediaFormats.ts#L90) through [src/utils/media/SupportedMediaFormats.ts#L108), [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L412) through [src/core/session/SessionMedia.ts#L418), and [src/core/session/MediaManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaManager.ts#L335) through [src/core/session/MediaManager.ts#L340).
+  - The decoder registry still registers an `mxf` parser adapter in [src/formats/DecoderRegistry.ts](/Users/lifeart/Repos/openrv-web/src/formats/DecoderRegistry.ts#L786) through [src/formats/DecoderRegistry.ts#L816), and the public docs still present MXF as a supported format in [docs/reference/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/reference/file-formats.md#L59).
+- Impact:
+  - A local MXF file can be rejected by the app’s primary file-open path before the metadata parser ever gets a chance to inspect it.
+  - That makes MXF support even narrower in practice than the already-limited metadata-only runtime path.
+
 ## Validation Notes
 
 - `pnpm typecheck`: passed

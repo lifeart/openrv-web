@@ -3884,7 +3884,7 @@ export class Viewer {
    * live image canvas using the given viewMode and opacity.
    * Pass `null` to disable the reference overlay.
    */
-  setReferenceImage(imageData: ImageData | null, viewMode: string, opacity: number): void {
+  setReferenceImage(imageData: ImageData | null, viewMode: string, opacity: number, wipePosition = 0.5): void {
     if (!imageData || viewMode === 'off') {
       // Hide the overlay canvas if present
       if (this._referenceCanvas) {
@@ -3930,8 +3930,7 @@ export class Viewer {
       ctx.drawImage(tmp, 0, 0, cw, ch);
       ctx.globalAlpha = 1;
     } else if (viewMode === 'split-h') {
-      // Left half shows reference
-      const splitX = Math.round(cw * 0.5);
+      const splitX = Math.round(cw * Math.max(0, Math.min(1, wipePosition)));
       ctx.save();
       ctx.beginPath();
       ctx.rect(0, 0, splitX, ch);
@@ -3939,8 +3938,7 @@ export class Viewer {
       ctx.drawImage(tmp, 0, 0, cw, ch);
       ctx.restore();
     } else if (viewMode === 'split-v') {
-      // Top half shows reference
-      const splitY = Math.round(ch * 0.5);
+      const splitY = Math.round(ch * Math.max(0, Math.min(1, wipePosition)));
       ctx.save();
       ctx.beginPath();
       ctx.rect(0, 0, cw, splitY);

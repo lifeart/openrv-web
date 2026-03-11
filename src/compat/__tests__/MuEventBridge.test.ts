@@ -1257,7 +1257,7 @@ describe('MuNetworkBridge wire protocol', () => {
     triggerOpen();
 
     expect(mockWs.send).toHaveBeenCalledTimes(1);
-    const handshake = JSON.parse(mockWs.send.mock.calls[0][0] as string);
+    const handshake = JSON.parse(mockWs.send.mock.calls[0]![0] as string);
     expect(handshake).toEqual({
       type: 'handshake',
       contactName: 'alice',
@@ -1270,7 +1270,7 @@ describe('MuNetworkBridge wire protocol', () => {
     network.remoteConnect('test-app', 'localhost', 9876);
     triggerOpen();
 
-    const handshake = JSON.parse(mockWs.send.mock.calls[0][0] as string);
+    const handshake = JSON.parse(mockWs.send.mock.calls[0]![0] as string);
     expect(handshake.contactName).toBe('anonymous');
   });
 
@@ -1278,7 +1278,7 @@ describe('MuNetworkBridge wire protocol', () => {
     network.remoteConnect('test-app', 'localhost', 9876);
     triggerOpen();
 
-    const handshake = JSON.parse(mockWs.send.mock.calls[0][0] as string);
+    const handshake = JSON.parse(mockWs.send.mock.calls[0]![0] as string);
     expect(handshake.permission).toBe(0);
   });
 
@@ -1291,7 +1291,7 @@ describe('MuNetworkBridge wire protocol', () => {
     network.remoteSendMessage('localhost:9876', ['hello', 'world']);
 
     expect(mockWs.send).toHaveBeenCalledTimes(1);
-    const msg = JSON.parse(mockWs.send.mock.calls[0][0] as string);
+    const msg = JSON.parse(mockWs.send.mock.calls[0]![0] as string);
     expect(msg.type).toBe('message');
     expect(msg.data).toEqual(['hello', 'world']);
     expect(msg.senderContactName).toBe('bob');
@@ -1306,7 +1306,7 @@ describe('MuNetworkBridge wire protocol', () => {
     network.remoteSendEvent('play', 'viewer', 'frame=1', ['mu']);
 
     expect(mockWs.send).toHaveBeenCalledTimes(1);
-    const msg = JSON.parse(mockWs.send.mock.calls[0][0] as string);
+    const msg = JSON.parse(mockWs.send.mock.calls[0]![0] as string);
     expect(msg.type).toBe('event');
     expect(msg.event).toBe('play');
     expect(msg.target).toBe('viewer');
@@ -1326,14 +1326,14 @@ describe('MuNetworkBridge wire protocol', () => {
 
     // header + binary = 2 sends
     expect(mockWs.send).toHaveBeenCalledTimes(2);
-    const header = JSON.parse(mockWs.send.mock.calls[0][0] as string);
+    const header = JSON.parse(mockWs.send.mock.calls[0]![0] as string);
     expect(header.type).toBe('dataEvent');
     expect(header.event).toBe('upload');
     expect(header.dataLength).toBe(4);
     expect(header.senderContactName).toBe('dave');
 
     // Second send is the binary data
-    expect(mockWs.send.mock.calls[1][0]).toEqual(binaryData);
+    expect(mockWs.send.mock.calls[1]![0]).toEqual(binaryData);
   });
 
   it('changing localContactName after connect affects subsequent messages', () => {
@@ -1343,12 +1343,12 @@ describe('MuNetworkBridge wire protocol', () => {
     mockWs.send.mockClear();
 
     network.remoteSendMessage('localhost:9876', ['msg1']);
-    const msg1 = JSON.parse(mockWs.send.mock.calls[0][0] as string);
+    const msg1 = JSON.parse(mockWs.send.mock.calls[0]![0] as string);
     expect(msg1.senderContactName).toBe('original');
 
     network.setRemoteLocalContactName('updated');
     network.remoteSendMessage('localhost:9876', ['msg2']);
-    const msg2 = JSON.parse(mockWs.send.mock.calls[1][0] as string);
+    const msg2 = JSON.parse(mockWs.send.mock.calls[1]![0] as string);
     expect(msg2.senderContactName).toBe('updated');
   });
 
@@ -1359,12 +1359,12 @@ describe('MuNetworkBridge wire protocol', () => {
     mockWs.send.mockClear();
 
     network.remoteSendMessage('localhost:9876', ['test']);
-    const msg = JSON.parse(mockWs.send.mock.calls[0][0] as string);
+    const msg = JSON.parse(mockWs.send.mock.calls[0]![0] as string);
     expect(msg.senderContactName).toBe('anonymous');
 
     mockWs.send.mockClear();
     network.remoteSendEvent('ev', 'tgt', 'body');
-    const evt = JSON.parse(mockWs.send.mock.calls[0][0] as string);
+    const evt = JSON.parse(mockWs.send.mock.calls[0]![0] as string);
     expect(evt.senderContactName).toBe('anonymous');
   });
 
@@ -1374,7 +1374,7 @@ describe('MuNetworkBridge wire protocol', () => {
     mockWs.send.mockClear();
 
     network.remoteSendEvent('play', 'viewer', 'frame=1', ['mu']);
-    const msg = JSON.parse(mockWs.send.mock.calls[0][0] as string);
+    const msg = JSON.parse(mockWs.send.mock.calls[0]![0] as string);
 
     // All original fields still present
     expect(msg).toHaveProperty('type', 'event');
@@ -1599,12 +1599,6 @@ describe('MuNetworkBridge dataEvent edge cases', () => {
   function triggerMessage(data: string | ArrayBuffer) {
     for (const h of mockWs.listeners['message'] ?? []) {
       h({ data } as MessageEvent);
-    }
-  }
-
-  function triggerClose() {
-    for (const h of mockWs.listeners['close'] ?? []) {
-      h();
     }
   }
 

@@ -142,9 +142,21 @@ function createTestDeps() {
       on: EventEmitter.prototype.on,
     }),
     referenceManager: Object.assign(new EventEmitter(), {
+      getState: vi.fn(() => ({
+        enabled: false,
+        referenceImage: null,
+        viewMode: 'split-h',
+        opacity: 0.5,
+        wipePosition: 0.5,
+      })),
+      hasReference: vi.fn(() => false),
       captureReference: vi.fn(),
+      clearReference: vi.fn(),
       enable: vi.fn(),
       toggle: vi.fn(),
+      setViewMode: vi.fn(),
+      setOpacity: vi.fn(),
+      setWipePosition: vi.fn(),
       on: EventEmitter.prototype.on,
     }),
     sphericalProjection: (() => {
@@ -278,6 +290,41 @@ describe('buildViewTab', () => {
     const menu = document.querySelector('.bug-overlay-settings-menu');
     expect(menu).not.toBeNull();
     expect(menu?.getAttribute('aria-label')).toBe('Bug Overlay settings');
+  });
+
+  it('opens the reference comparison settings menu on right-click', () => {
+    const deps = createTestDeps();
+
+    const result = buildViewTab(deps);
+    const button = result.element.querySelector<HTMLButtonElement>('[data-testid="toggle-reference-btn"]')!;
+
+    button.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 18, clientY: 28 }));
+
+    const menu = document.querySelector('.reference-comparison-settings-menu');
+    expect(menu).not.toBeNull();
+    expect(menu?.getAttribute('aria-label')).toBe('Reference Comparison settings');
+  });
+
+  it('passes comparison settings through to the viewer render path', () => {
+    const deps = createTestDeps();
+    buildViewTab(deps);
+
+    deps.registry.referenceManager.emit('stateChanged', {
+      enabled: true,
+      referenceImage: {
+        width: 2,
+        height: 1,
+        data: new Uint8ClampedArray([255, 0, 0, 255, 0, 255, 0, 255]),
+        channels: 4,
+        capturedAt: Date.now(),
+      },
+      viewMode: 'split-v',
+      opacity: 0.62,
+      wipePosition: 0.3,
+    });
+
+    expect(deps.viewer.setReferenceImage).toHaveBeenCalledTimes(1);
+    expect(deps.viewer.setReferenceImage).toHaveBeenCalledWith(expect.any(ImageData), 'split-v', 0.62, 0.3);
   });
 
   it('adds an info strip toggle button wired to the overlay', () => {

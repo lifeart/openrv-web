@@ -1032,9 +1032,14 @@
 ## Issue #89: Reference comparison exposes only capture/on-off while the real comparison modes stay inaccessible
 
 - **Severity**: Medium
-- **Fix**: Added TODO(#89) + one-time `console.info` on first enable documenting that viewMode, opacity, and wipePosition have no UI surface.
-- **Regression Tests**: 2 tests.
-- **Files Changed**: `src/ui/components/ReferenceManager.ts`, `src/ui/components/ReferenceManager.test.ts`
+- **TODO(#89) Resolved**: Added a production right-click settings menu to the View tab reference-comparison button so users can select the real comparison mode and adjust opacity plus wipe position directly. `ReferenceManager` no longer carries the stale TODO/logging shim, and the View-tab render path now forwards `wipePosition` into `Viewer.setReferenceImage(...)` so split comparisons actually honor the configured divider instead of staying fixed at 50%.
+- **Regression Tests**:
+  - `ReferenceComparisonSettingsMenu.test.ts`: added coverage for menu rendering, mode selection, opacity/wipe updates, and dismissal behavior
+  - `buildViewTab.test.ts`: added coverage for opening the reference settings menu and forwarding `viewMode`, `opacity`, and `wipePosition` into the viewer render path
+  - `ReferenceManager.test.ts`: removed obsolete logging-path tests while preserving manager behavior coverage
+  - `ReferenceManager.e2e.test.ts` and `referenceDisplayWiring.test.ts`: remain green with the shipped display path
+- **Verification**: `ReferenceManager.test.ts` (39 tests), `ReferenceComparisonSettingsMenu.test.ts` (4 tests), `buildViewTab.test.ts` (20 tests), `ReferenceManager.e2e.test.ts` (53 tests), `referenceDisplayWiring.test.ts` (15 tests), and `MuEventBridge.test.ts` (130 tests) pass. TypeScript clean.
+- **Files Changed**: `src/ui/components/ReferenceManager.ts`, `src/ui/components/ReferenceManager.test.ts`, `src/ui/components/ReferenceComparisonSettingsMenu.ts`, `src/ui/components/ReferenceComparisonSettingsMenu.test.ts`, `src/ui/components/Viewer.ts`, `src/services/tabContent/buildViewTab.ts`, `src/services/tabContent/buildViewTab.test.ts`, `src/__e2e__/ReferenceManager.e2e.test.ts`, `src/compat/__tests__/MuEventBridge.test.ts`
 
 ## Issue #90: Spotlight ships as a bare toggle while most of the tool's real controls are hidden
 
