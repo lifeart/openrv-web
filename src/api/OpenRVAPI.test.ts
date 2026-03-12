@@ -2233,6 +2233,14 @@ describe('Sub-API disposed guards', () => {
     expect(() => api.playback.getDroppedFrameCount()).toThrow(DISPOSED_MSG);
   });
 
+  it('API-U283a: playback.setPlayDirection() throws after dispose', () => {
+    expect(() => api.playback.setPlayDirection(-1)).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U283b: playback.getPlayDirection() throws after dispose', () => {
+    expect(() => api.playback.getPlayDirection()).toThrow(DISPOSED_MSG);
+  });
+
   // -- MediaAPI --
   it('API-U102: media.getCurrentSource() throws after dispose', () => {
     expect(() => api.media.getCurrentSource()).toThrow(DISPOSED_MSG);
@@ -2276,6 +2284,14 @@ describe('Sub-API disposed guards', () => {
 
   it('API-U218: media.clearSources() throws after dispose', () => {
     expect(() => api.media.clearSources()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U283c: media.getStartFrame() throws after dispose', () => {
+    expect(() => api.media.getStartFrame()).toThrow(DISPOSED_MSG);
+  });
+
+  it('API-U283d: media.setPlaybackFPS() throws after dispose', () => {
+    expect(() => api.media.setPlaybackFPS(48)).toThrow(DISPOSED_MSG);
   });
 
   // -- AudioAPI --
@@ -2413,6 +2429,10 @@ describe('Sub-API disposed guards', () => {
     expect(() => api.view.getBackgroundPattern()).toThrow(DISPOSED_MSG);
   });
 
+  it('API-U283e: view.getViewportSize() throws after dispose', () => {
+    expect(() => api.view.getViewportSize()).toThrow(DISPOSED_MSG);
+  });
+
   // -- ColorAPI --
   it('API-U139: color.setAdjustments() throws after dispose', () => {
     expect(() => api.color.setAdjustments({ exposure: 1 })).toThrow(DISPOSED_MSG);
@@ -2525,9 +2545,75 @@ describe('Sub-API disposed guards', () => {
     expect(() => api.plugins.unregister('test')).toThrow(DISPOSED_MSG);
   });
 
+  it('API-U283f: plugins.loadFromURL() throws after dispose', () => {
+    expect(() => api.plugins.loadFromURL('https://example.com/plugin.js')).toThrow(DISPOSED_MSG);
+  });
+
   // -- OpenRVAPI.isReady() returns false after dispose --
   it('API-U164: isReady() returns false after dispose', () => {
     expect(api.isReady()).toBe(false);
+  });
+});
+
+// ============================================================
+// Regression: OpenRVAPI.dispose() disposes ALL sub-APIs (#283)
+// ============================================================
+
+describe('OpenRVAPI.dispose() disposes all sub-API modules (Issue #283)', () => {
+  it('API-U283g: dispose() marks all sub-APIs as disposed', () => {
+    const config = createAPIConfig();
+    const api = new OpenRVAPI(config);
+
+    // Sanity: none are disposed before calling dispose()
+    expect(api.playback._disposed).toBe(false);
+    expect(api.media._disposed).toBe(false);
+    expect(api.audio._disposed).toBe(false);
+    expect(api.loop._disposed).toBe(false);
+    expect(api.view._disposed).toBe(false);
+    expect(api.color._disposed).toBe(false);
+    expect(api.markers._disposed).toBe(false);
+    expect(api.events._disposed).toBe(false);
+
+    api.dispose();
+
+    // All sub-APIs must be disposed
+    expect(api.playback._disposed).toBe(true);
+    expect(api.media._disposed).toBe(true);
+    expect(api.audio._disposed).toBe(true);
+    expect(api.loop._disposed).toBe(true);
+    expect(api.view._disposed).toBe(true);
+    expect(api.color._disposed).toBe(true);
+    expect(api.markers._disposed).toBe(true);
+    expect(api.events._disposed).toBe(true);
+
+    // Top-level isReady must also be false
+    expect(api.isReady()).toBe(false);
+  });
+
+  it('API-U283h: dispose() is idempotent — calling twice does not throw', () => {
+    const config = createAPIConfig();
+    const api = new OpenRVAPI(config);
+    api.dispose();
+    expect(() => api.dispose()).not.toThrow();
+    expect(api.isReady()).toBe(false);
+  });
+
+  it('API-U283i: after dispose, no sub-API method can mutate state', () => {
+    const config = createAPIConfig();
+    const api = new OpenRVAPI(config);
+    api.dispose();
+
+    // Sample one method from each sub-API to confirm the guard works end-to-end
+    const MSG = 'Cannot use API after dispose() has been called';
+    expect(() => api.playback.play()).toThrow(MSG);
+    expect(() => api.media.getCurrentSource()).toThrow(MSG);
+    expect(() => api.audio.setVolume(0.5)).toThrow(MSG);
+    expect(() => api.loop.setMode('loop')).toThrow(MSG);
+    expect(() => api.view.setZoom(2)).toThrow(MSG);
+    expect(() => api.color.getAdjustments()).toThrow(MSG);
+    expect(() => api.markers.getAll()).toThrow(MSG);
+    expect(() => api.events.on('frameChange', () => {})).toThrow(MSG);
+    expect(() => api.plugins.list()).toThrow(MSG);
   });
 });
 

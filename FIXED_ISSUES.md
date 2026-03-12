@@ -108,3 +108,12 @@ Removed dead contextual registrations from `App.ts`, updated UI hints in `Scopes
 - `docs/color/tone-mapping.md`
 - `docs/color/curves.md`
 - `src/api/OpenRVAPI.test.ts`
+
+## Issue #283: `openrv.dispose()` advertises the API as unusable afterward, but only the event module is torn down
+
+**Status**: Already fixed in codebase. `OpenRVAPI.dispose()` already calls `dispose()` on all sub-APIs, and all methods call `assertNotDisposed()`. Added regression test coverage to verify.
+
+**Tests added**: 9 regression tests verifying all sub-APIs are disposed, double-dispose is idempotent, and no method can mutate state after disposal.
+
+**Files changed**:
+- `src/api/OpenRVAPI.test.ts`
