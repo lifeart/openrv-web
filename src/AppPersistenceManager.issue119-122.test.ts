@@ -106,6 +106,11 @@ function createMockContext(overrides?: Partial<PersistenceManagerContext>): Pers
         getState: () => ({
           displayLUT: { lutData: null, enabled: false, intensity: 1 },
         }),
+        getSerializableState: () => ({
+          sources: {},
+          displayLUT: { enabled: false, lutName: null, intensity: 1, source: 'manual' },
+          activeSourceId: null,
+        }),
       }),
       setColorAdjustments: vi.fn(),
       setCDL: vi.fn(),
@@ -336,6 +341,11 @@ describe('SessionSerializer.fromJSON - issue #121: clears session before import'
         getState: () => ({
           displayLUT: { lutData: null, enabled: false, intensity: 1 },
         }),
+        getSerializableState: () => ({
+          sources: {},
+          displayLUT: { enabled: false, lutName: null, intensity: 1, source: 'manual' },
+          activeSourceId: null,
+        }),
       }),
       resetToneMappingState: vi.fn(),
       resetGhostFrameState: vi.fn(),
@@ -431,6 +441,11 @@ describe('Session.setPlaybackState - issue #122: restores currentSourceIndex', (
         }),
         getState: () => ({
           displayLUT: { lutData: null, enabled: false, intensity: 1 },
+        }),
+        getSerializableState: () => ({
+          sources: {},
+          displayLUT: { enabled: false, lutName: null, intensity: 1, source: 'manual' },
+          activeSourceId: null,
         }),
       }),
       resetToneMappingState: vi.fn(),

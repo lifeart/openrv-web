@@ -146,6 +146,11 @@ function createMockComponents(): SessionComponents {
         getState: vi.fn().mockReturnValue({
           displayLUT: { lutData: null, enabled: false, intensity: 1 },
         }),
+        getSerializableState: vi.fn().mockReturnValue({
+          sources: {},
+          displayLUT: { enabled: false, lutName: null, intensity: 1, source: 'manual' },
+          activeSourceId: null,
+        }),
       }),
     },
   } as any;
