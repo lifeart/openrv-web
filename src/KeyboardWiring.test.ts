@@ -127,7 +127,7 @@ describe('Conflicting shortcuts resolved via contextual keyboard manager', () =>
     ckm = new ContextualKeyboardManager(contextManager);
   });
 
-  // --- KeyR: timeline.resetInOut (global) vs paint.rectangle (paint) ---
+  // --- KeyR: timeline.resetInOut (global, no context restriction) vs paint.rectangle (paint) ---
 
   it('KW-010: KeyR resolves to timeline.resetInOut in global context', () => {
     ckm.register('timeline.resetInOut', { code: 'KeyR' }, vi.fn(), 'global');
@@ -145,7 +145,7 @@ describe('Conflicting shortcuts resolved via contextual keyboard manager', () =>
     expect(ckm.resolve({ code: 'KeyR' })?.action).toBe('paint.rectangle');
   });
 
-  // --- KeyO: timeline.setOutPoint (global) vs paint.ellipse (paint) ---
+  // --- KeyO: timeline.setOutPoint (global, no context restriction) vs paint.ellipse (paint) ---
 
   it('KW-012: KeyO resolves to timeline.setOutPoint in global context', () => {
     ckm.register('timeline.setOutPoint', { code: 'KeyO' }, vi.fn(), 'global');

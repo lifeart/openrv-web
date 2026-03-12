@@ -1,8 +1,8 @@
 /**
  * ActiveContextManager - Manages key binding context scoping
  *
- * Tracks which context is currently active (e.g., 'global', 'timeline', 'paint',
- * 'viewer', 'panel') so that key bindings can be resolved in a context-aware manner.
+ * Tracks which context is currently active (e.g., 'global', 'paint', 'viewer',
+ * 'panel', 'transform') so that key bindings can be resolved in a context-aware manner.
  *
  * When a key press occurs, bindings in the active context are checked first.
  * If no match is found in the active context, global bindings are used as fallback.
@@ -14,16 +14,21 @@ import { Signal } from '../../core/graph/Signal';
  * Known binding contexts.
  * - 'global': Always active; serves as a fallback for all other contexts.
  * - Other contexts are mutually exclusive: only one non-global context can be active at a time.
+ *
+ * Production tab-to-context mapping (see App.ts):
+ *   view tab      -> 'viewer'
+ *   color tab     -> 'global'
+ *   effects tab   -> 'global'
+ *   transform tab -> 'transform'
+ *   annotate tab  -> 'paint'
+ *   qc tab        -> 'panel'
  */
 export type BindingContext =
   | 'global'
-  | 'timeline'
   | 'paint'
   | 'viewer'
   | 'panel'
-  | 'channel'
-  | 'transform'
-  | 'annotate';
+  | 'transform';
 
 export class ActiveContextManager {
   private _activeContext: BindingContext = 'global';

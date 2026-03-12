@@ -7,10 +7,10 @@
  *   2. Fall back to global bindings if no active-context match is found
  *
  * This resolves key collisions like:
- *   - KeyR: timeline.resetInOut (timeline context) vs paint.rectangle (paint context)
- *   - KeyO: timeline.setOutPoint (timeline context) vs paint.ellipse (paint context)
+ *   - KeyR: timeline.resetInOut (global) vs paint.rectangle (paint context)
+ *   - KeyO: timeline.setOutPoint (global) vs paint.ellipse (paint context)
  *   - KeyG: panel.gamutDiagram (panel context) vs paint.toggleGhost (paint context)
- *   - Shift+KeyR: transform.rotateLeft (transform context) vs channel.red (channel context)
+ *   - Shift+KeyR: transform.rotateLeft (transform context) vs channel.red (viewer context)
  */
 
 import type { KeyCombination } from './KeyboardManager';

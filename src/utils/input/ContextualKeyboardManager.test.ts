@@ -60,10 +60,10 @@ describe('ContextualKeyboardManager', () => {
   describe('context resolution - collision scenarios', () => {
     it('CKM-010: KeyR resolves to paint.rectangle when paint context is active', () => {
       const paintHandler = vi.fn();
-      const timelineHandler = vi.fn();
+      const globalHandler = vi.fn();
 
       keyManager.register('paint.rectangle', { code: 'KeyR' }, paintHandler, 'paint');
-      keyManager.register('timeline.resetInOut', { code: 'KeyR' }, timelineHandler, 'timeline');
+      keyManager.register('timeline.resetInOut', { code: 'KeyR' }, globalHandler, 'global');
 
       contextManager.setContext('paint');
 
@@ -73,17 +73,17 @@ describe('ContextualKeyboardManager', () => {
 
       result!.handler();
       expect(paintHandler).toHaveBeenCalled();
-      expect(timelineHandler).not.toHaveBeenCalled();
+      expect(globalHandler).not.toHaveBeenCalled();
     });
 
-    it('CKM-011: KeyR resolves to timeline.resetInOut when timeline context is active', () => {
+    it('CKM-011: KeyR resolves to timeline.resetInOut in global context (fallback)', () => {
       const paintHandler = vi.fn();
-      const timelineHandler = vi.fn();
+      const globalHandler = vi.fn();
 
       keyManager.register('paint.rectangle', { code: 'KeyR' }, paintHandler, 'paint');
-      keyManager.register('timeline.resetInOut', { code: 'KeyR' }, timelineHandler, 'timeline');
+      keyManager.register('timeline.resetInOut', { code: 'KeyR' }, globalHandler, 'global');
 
-      contextManager.setContext('timeline');
+      contextManager.setContext('global');
 
       const result = keyManager.resolve({ code: 'KeyR' });
       expect(result).not.toBeNull();
@@ -92,10 +92,10 @@ describe('ContextualKeyboardManager', () => {
 
     it('CKM-012: KeyO resolves to paint.ellipse when paint context is active', () => {
       const paintHandler = vi.fn();
-      const timelineHandler = vi.fn();
+      const globalHandler = vi.fn();
 
       keyManager.register('paint.ellipse', { code: 'KeyO' }, paintHandler, 'paint');
-      keyManager.register('timeline.setOutPoint', { code: 'KeyO' }, timelineHandler, 'timeline');
+      keyManager.register('timeline.setOutPoint', { code: 'KeyO' }, globalHandler, 'global');
 
       contextManager.setContext('paint');
 
@@ -135,7 +135,7 @@ describe('ContextualKeyboardManager', () => {
       const channelHandler = vi.fn();
 
       keyManager.register('transform.rotateLeft', { code: 'KeyR', shift: true }, transformHandler, 'transform');
-      keyManager.register('channel.red', { code: 'KeyR', shift: true }, channelHandler, 'channel');
+      keyManager.register('channel.red', { code: 'KeyR', shift: true }, channelHandler, 'viewer');
 
       contextManager.setContext('transform');
 
@@ -143,14 +143,14 @@ describe('ContextualKeyboardManager', () => {
       expect(result!.action).toBe('transform.rotateLeft');
     });
 
-    it('CKM-016: Shift+KeyR resolves to channel.red in channel context', () => {
+    it('CKM-016: Shift+KeyR resolves to channel.red in viewer context', () => {
       const transformHandler = vi.fn();
       const channelHandler = vi.fn();
 
       keyManager.register('transform.rotateLeft', { code: 'KeyR', shift: true }, transformHandler, 'transform');
-      keyManager.register('channel.red', { code: 'KeyR', shift: true }, channelHandler, 'channel');
+      keyManager.register('channel.red', { code: 'KeyR', shift: true }, channelHandler, 'viewer');
 
-      contextManager.setContext('channel');
+      contextManager.setContext('viewer');
 
       const result = keyManager.resolve({ code: 'KeyR', shift: true });
       expect(result!.action).toBe('channel.red');
@@ -176,8 +176,8 @@ describe('ContextualKeyboardManager', () => {
       const handler = vi.fn();
       keyManager.register('edit.undo', { code: 'KeyZ', ctrl: true }, handler, 'global');
 
-      // Test in various contexts
-      const contexts: Array<'paint' | 'timeline' | 'viewer' | 'panel'> = ['paint', 'timeline', 'viewer', 'panel'];
+      // Test in all production contexts
+      const contexts: Array<'paint' | 'viewer' | 'panel' | 'transform'> = ['paint', 'viewer', 'panel', 'transform'];
       for (const ctx of contexts) {
         contextManager.setContext(ctx);
         const result = keyManager.resolve({ code: 'KeyZ', ctrl: true });
@@ -189,9 +189,9 @@ describe('ContextualKeyboardManager', () => {
     it('CKM-022: returns null when no binding matches at all', () => {
       keyManager.register('paint.rectangle', { code: 'KeyR' }, vi.fn(), 'paint');
 
-      contextManager.setContext('timeline');
+      contextManager.setContext('viewer');
 
-      // KeyR is only in paint context, and we're in timeline context
+      // KeyR is only in paint context, and we're in viewer context
       const result = keyManager.resolve({ code: 'KeyR' });
       expect(result).toBeNull();
     });
@@ -214,37 +214,37 @@ describe('ContextualKeyboardManager', () => {
   describe('context switching', () => {
     it('CKM-030: resolves differently after context change', () => {
       const paintHandler = vi.fn();
-      const timelineHandler = vi.fn();
+      const viewerHandler = vi.fn();
 
       keyManager.register('paint.rectangle', { code: 'KeyR' }, paintHandler, 'paint');
-      keyManager.register('timeline.resetInOut', { code: 'KeyR' }, timelineHandler, 'timeline');
+      keyManager.register('viewer.action', { code: 'KeyR' }, viewerHandler, 'viewer');
 
       // In paint context
       contextManager.setContext('paint');
       expect(keyManager.resolve({ code: 'KeyR' })!.action).toBe('paint.rectangle');
 
-      // Switch to timeline context
-      contextManager.setContext('timeline');
-      expect(keyManager.resolve({ code: 'KeyR' })!.action).toBe('timeline.resetInOut');
+      // Switch to viewer context
+      contextManager.setContext('viewer');
+      expect(keyManager.resolve({ code: 'KeyR' })!.action).toBe('viewer.action');
     });
 
     it('CKM-031: resolves correctly after push/pop', () => {
       const paintHandler = vi.fn();
-      const timelineHandler = vi.fn();
+      const viewerHandler = vi.fn();
 
       keyManager.register('paint.rectangle', { code: 'KeyR' }, paintHandler, 'paint');
-      keyManager.register('timeline.resetInOut', { code: 'KeyR' }, timelineHandler, 'timeline');
+      keyManager.register('viewer.action', { code: 'KeyR' }, viewerHandler, 'viewer');
 
-      contextManager.setContext('timeline');
-      expect(keyManager.resolve({ code: 'KeyR' })!.action).toBe('timeline.resetInOut');
+      contextManager.setContext('viewer');
+      expect(keyManager.resolve({ code: 'KeyR' })!.action).toBe('viewer.action');
 
       // Push paint context
       contextManager.pushContext('paint');
       expect(keyManager.resolve({ code: 'KeyR' })!.action).toBe('paint.rectangle');
 
-      // Pop back to timeline
+      // Pop back to viewer
       contextManager.popContext();
-      expect(keyManager.resolve({ code: 'KeyR' })!.action).toBe('timeline.resetInOut');
+      expect(keyManager.resolve({ code: 'KeyR' })!.action).toBe('viewer.action');
     });
   });
 
@@ -252,7 +252,7 @@ describe('ContextualKeyboardManager', () => {
     it('CKM-040: returns bindings for specific context', () => {
       keyManager.register('paint.rectangle', { code: 'KeyR' }, vi.fn(), 'paint');
       keyManager.register('paint.ellipse', { code: 'KeyO' }, vi.fn(), 'paint');
-      keyManager.register('timeline.resetInOut', { code: 'KeyR' }, vi.fn(), 'timeline');
+      keyManager.register('viewer.action', { code: 'KeyR' }, vi.fn(), 'viewer');
       keyManager.register('playback.toggle', { code: 'Space' }, vi.fn(), 'global');
 
       const paintBindings = keyManager.getBindingsForContext('paint');
@@ -265,7 +265,7 @@ describe('ContextualKeyboardManager', () => {
   describe('findAllMatches', () => {
     it('CKM-050: finds all bindings for a given key combo across contexts', () => {
       keyManager.register('paint.rectangle', { code: 'KeyR' }, vi.fn(), 'paint');
-      keyManager.register('timeline.resetInOut', { code: 'KeyR' }, vi.fn(), 'timeline');
+      keyManager.register('timeline.resetInOut', { code: 'KeyR' }, vi.fn(), 'global');
       keyManager.register('paint.ellipse', { code: 'KeyO' }, vi.fn(), 'paint');
 
       const matches = keyManager.findAllMatches({ code: 'KeyR' });

@@ -32,8 +32,8 @@ describe('ActiveContextManager', () => {
       const listener = vi.fn();
       manager.contextChanged.connect(listener);
 
-      manager.setContext('timeline');
-      expect(listener).toHaveBeenCalledWith('timeline', 'global');
+      manager.setContext('viewer');
+      expect(listener).toHaveBeenCalledWith('viewer', 'global');
     });
 
     it('ACM-005: does not emit if setting same context', () => {
@@ -46,7 +46,7 @@ describe('ActiveContextManager', () => {
     });
 
     it('ACM-006: supports all context types', () => {
-      const contexts: BindingContext[] = ['global', 'timeline', 'paint', 'viewer', 'panel', 'channel', 'transform'];
+      const contexts: BindingContext[] = ['global', 'paint', 'viewer', 'panel', 'transform'];
       for (const ctx of contexts) {
         manager.setContext(ctx);
         expect(manager.activeContext).toBe(ctx);
@@ -62,22 +62,22 @@ describe('ActiveContextManager', () => {
     });
 
     it('ACM-008: saves previous context on stack', () => {
-      manager.setContext('timeline');
+      manager.setContext('viewer');
       manager.pushContext('paint');
       expect(manager.activeContext).toBe('paint');
       expect(manager.stackDepth).toBe(1);
 
-      // Pop should restore timeline
+      // Pop should restore viewer
       manager.popContext();
-      expect(manager.activeContext).toBe('timeline');
+      expect(manager.activeContext).toBe('viewer');
     });
 
     it('ACM-009: supports nested pushes', () => {
-      manager.pushContext('timeline');
-      manager.pushContext('paint');
       manager.pushContext('viewer');
+      manager.pushContext('paint');
+      manager.pushContext('panel');
 
-      expect(manager.activeContext).toBe('viewer');
+      expect(manager.activeContext).toBe('panel');
       expect(manager.stackDepth).toBe(3);
     });
 
@@ -92,12 +92,12 @@ describe('ActiveContextManager', () => {
 
   describe('popContext', () => {
     it('ACM-011: restores previous context from stack', () => {
-      manager.setContext('timeline');
+      manager.setContext('viewer');
       manager.pushContext('paint');
 
       const restored = manager.popContext();
-      expect(restored).toBe('timeline');
-      expect(manager.activeContext).toBe('timeline');
+      expect(restored).toBe('viewer');
+      expect(manager.activeContext).toBe('viewer');
     });
 
     it('ACM-012: restores to global when stack is empty', () => {
@@ -110,12 +110,12 @@ describe('ActiveContextManager', () => {
     });
 
     it('ACM-013: handles multiple pops', () => {
-      manager.pushContext('timeline');
-      manager.pushContext('paint');
       manager.pushContext('viewer');
+      manager.pushContext('paint');
+      manager.pushContext('panel');
 
       expect(manager.popContext()).toBe('paint');
-      expect(manager.popContext()).toBe('timeline');
+      expect(manager.popContext()).toBe('viewer');
       expect(manager.popContext()).toBe('global');
     });
 
@@ -130,7 +130,7 @@ describe('ActiveContextManager', () => {
     });
 
     it('ACM-015: decrements stack depth', () => {
-      manager.pushContext('timeline');
+      manager.pushContext('viewer');
       manager.pushContext('paint');
       expect(manager.stackDepth).toBe(2);
 
@@ -149,7 +149,7 @@ describe('ActiveContextManager', () => {
       manager.setContext('paint');
       expect(manager.isContextActive('global')).toBe(true);
 
-      manager.pushContext('timeline');
+      manager.pushContext('viewer');
       expect(manager.isContextActive('global')).toBe(true);
     });
 
@@ -160,17 +160,17 @@ describe('ActiveContextManager', () => {
 
     it('ACM-018: returns false for non-active context', () => {
       manager.setContext('paint');
-      expect(manager.isContextActive('timeline')).toBe(false);
+      expect(manager.isContextActive('transform')).toBe(false);
       expect(manager.isContextActive('viewer')).toBe(false);
     });
 
     it('ACM-019: only checks current context, not stack', () => {
-      manager.pushContext('timeline');
+      manager.pushContext('viewer');
       manager.pushContext('paint');
 
       expect(manager.isContextActive('paint')).toBe(true);
-      // timeline is on the stack but not active
-      expect(manager.isContextActive('timeline')).toBe(false);
+      // viewer is on the stack but not active
+      expect(manager.isContextActive('viewer')).toBe(false);
     });
   });
 
@@ -182,9 +182,9 @@ describe('ActiveContextManager', () => {
     });
 
     it('ACM-021: clears the context stack', () => {
-      manager.pushContext('timeline');
-      manager.pushContext('paint');
       manager.pushContext('viewer');
+      manager.pushContext('paint');
+      manager.pushContext('panel');
 
       manager.reset();
       expect(manager.stackDepth).toBe(0);

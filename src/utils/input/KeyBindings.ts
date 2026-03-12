@@ -72,7 +72,6 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   },
   'timeline.setOutPoint': {
     code: 'KeyO',
-    context: 'timeline',
     description: 'Set out point',
   },
   'timeline.setOutPointAlt': {
@@ -103,7 +102,6 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   },
   'timeline.resetInOut': {
     code: 'KeyR',
-    context: 'timeline',
     description: 'Reset in/out points to full range',
   },
   'timeline.cycleLoopMode': {
@@ -636,8 +634,8 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   // Notes quick-add + navigation
   'notes.addNote': {
     code: 'KeyN',
-    context: 'annotate',
-    description: 'Add note at current frame',
+    context: 'paint',
+    description: 'Add note at current frame (active on Annotate tab)',
   },
   'notes.next': {
     code: 'BracketRight',

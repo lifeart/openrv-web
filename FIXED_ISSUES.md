@@ -22,3 +22,25 @@ Removed dead contextual registrations from `App.ts`, updated UI hints in `Scopes
 - `src/App.ts`
 - `src/ui/components/ScopesControl.ts`
 - `features/keyboard-shortcuts.md`
+
+## Issue #10: The context system has production-dead branches that tests and bindings still rely on
+
+**Root cause**: The `BindingContext` type included dead contexts (`timeline`, `channel`, `annotate`) that no production tab switching ever activated. Bindings referencing these contexts could never fire, and tests used them freely, diverging from real app behavior.
+
+**Fix**:
+- Removed `timeline`, `channel`, and `annotate` from the `BindingContext` type union
+- Removed dead `context: 'timeline'` from `timeline.setOutPoint` and `timeline.resetInOut` (they should work globally)
+- Changed `context: 'annotate'` to `context: 'paint'` on `notes.addNote` (Annotate tab maps to `paint` in production)
+- Updated all tests to use only production-valid contexts
+- Added documentation mapping production tabs to contexts
+
+**Tests added**: 5 regression tests (`KB-U090` through `KB-U094`) verifying no binding references a dead context and specific bindings have correct context restrictions.
+
+**Files changed**:
+- `src/utils/input/KeyBindings.ts`
+- `src/utils/input/ActiveContextManager.ts`
+- `src/utils/input/ContextualKeyboardManager.ts`
+- `src/utils/input/ActiveContextManager.test.ts`
+- `src/utils/input/ContextualKeyboardManager.test.ts`
+- `src/__e2e__/ActiveContextManager.e2e.test.ts`
+- `src/KeyboardWiring.test.ts`
