@@ -328,12 +328,16 @@ async function exposureCheck() {
   const issues = [];
 
   for (let frame = 1; frame <= duration; frame += 10) {
-    openrv.playback.seek(frame);
-
-    // Allow the frame to render
-    await new Promise(resolve => {
+    // Subscribe BEFORE seeking — seek() is synchronous, so the frameChange
+    // event fires before a post-seek subscription would be registered.
+    const frameReady = new Promise(resolve => {
       openrv.events.once('frameChange', resolve);
     });
+
+    openrv.playback.seek(frame);
+
+    // Wait for the frame to render
+    await frameReady;
 
     const adj = openrv.color.getAdjustments();
     // Log frames where exposure compensation is applied
@@ -385,14 +389,20 @@ Plugins follow a lifecycle of register, initialize, activate, deactivate, and di
 ```javascript
 // Example: register a plugin
 openrv.plugins.register({
-  id: 'my-custom-exporter',
-  name: 'Custom Exporter',
-  version: '1.0.0',
+  manifest: {
+    id: 'my-custom-exporter',
+    name: 'Custom Exporter',
+    version: '1.0.0',
+    contributes: ['exporter'],
+  },
   activate(context) {
-    context.registerExporter({
-      name: 'custom-pdf',
+    // registerExporter(name, exporter) — two separate arguments
+    context.registerExporter('custom-pdf', {
+      kind: 'text',
       label: 'Custom PDF Report',
-      export(state) { /* ... */ }
+      extensions: ['pdf'],
+      mimeType: 'application/pdf',
+      export(config) { /* ... return a string */ }
     });
   }
 });
@@ -404,25 +414,27 @@ Plugins can declare a `settingsSchema` in their manifest to expose configurable 
 
 ```javascript
 openrv.plugins.register({
-  id: 'com.example.overlay',
-  name: 'Overlay Plugin',
-  version: '1.0.0',
-  contributes: ['uiPanel'],
-  settingsSchema: {
-    settings: [
-      { key: 'opacity', label: 'Overlay Opacity', type: 'range', default: 0.8, min: 0, max: 1, step: 0.05 },
-      { key: 'color', label: 'Overlay Color', type: 'color', default: '#ff0000' },
-      { key: 'position', label: 'Position', type: 'select', default: 'top-right',
-        options: [
-          { value: 'top-left', label: 'Top Left' },
-          { value: 'top-right', label: 'Top Right' },
-          { value: 'bottom-left', label: 'Bottom Left' },
-          { value: 'bottom-right', label: 'Bottom Right' }
-        ]
-      },
-      { key: 'label', label: 'Display Label', type: 'string', default: 'Overlay', maxLength: 50 },
-      { key: 'enabled', label: 'Show Overlay', type: 'boolean', default: true }
-    ]
+  manifest: {
+    id: 'com.example.overlay',
+    name: 'Overlay Plugin',
+    version: '1.0.0',
+    contributes: ['uiPanel'],
+    settingsSchema: {
+      settings: [
+        { key: 'opacity', label: 'Overlay Opacity', type: 'range', default: 0.8, min: 0, max: 1, step: 0.05 },
+        { key: 'color', label: 'Overlay Color', type: 'color', default: '#ff0000' },
+        { key: 'position', label: 'Position', type: 'select', default: 'top-right',
+          options: [
+            { value: 'top-left', label: 'Top Left' },
+            { value: 'top-right', label: 'Top Right' },
+            { value: 'bottom-left', label: 'Bottom Left' },
+            { value: 'bottom-right', label: 'Bottom Right' }
+          ]
+        },
+        { key: 'label', label: 'Display Label', type: 'string', default: 'Overlay', maxLength: 50 },
+        { key: 'enabled', label: 'Show Overlay', type: 'boolean', default: true }
+      ]
+    },
   },
   activate(context) {
     // Read settings
@@ -451,10 +463,12 @@ Plugins can implement `getState()` and `restoreState()` to preserve state across
 
 ```javascript
 openrv.plugins.register({
-  id: 'com.example.annotations',
-  name: 'Annotations',
-  version: '1.0.0',
-  contributes: ['tool'],
+  manifest: {
+    id: 'com.example.annotations',
+    name: 'Annotations',
+    version: '1.0.0',
+    contributes: ['tool'],
+  },
 
   _annotations: [],
 
@@ -482,10 +496,12 @@ Plugins can communicate with each other via custom events. Events emitted with `
 ```javascript
 // Plugin A: emits events
 openrv.plugins.register({
-  id: 'com.example.analyzer',
-  name: 'Frame Analyzer',
-  version: '1.0.0',
-  contributes: ['processor'],
+  manifest: {
+    id: 'com.example.analyzer',
+    name: 'Frame Analyzer',
+    version: '1.0.0',
+    contributes: ['processor'],
+  },
   activate(context) {
     // Emitted as "com.example.analyzer:analysis-complete"
     context.events.emitPlugin('analysis-complete', {
@@ -497,10 +513,12 @@ openrv.plugins.register({
 
 // Plugin B: listens to Plugin A's events
 openrv.plugins.register({
-  id: 'com.example.dashboard',
-  name: 'Dashboard',
-  version: '1.0.0',
-  contributes: ['uiPanel'],
+  manifest: {
+    id: 'com.example.dashboard',
+    name: 'Dashboard',
+    version: '1.0.0',
+    contributes: ['uiPanel'],
+  },
   activate(context) {
     // Subscribe using the full namespaced event name
     context.events.onPlugin('com.example.analyzer:analysis-complete', (data) => {

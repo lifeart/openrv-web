@@ -97,11 +97,13 @@ The matte overlay applies an opaque or semi-transparent mask to simulate a deliv
 - **Opacity**: Control the darkness of the matte region, from fully transparent (0%) to fully opaque (100%)
 - **Center point**: Offset the matte from the image center for asymmetric framing evaluation
 
-The matte overlay is accessible via the API:
+The matte overlay is configured through the Overlays menu in the UI.
+
+> **Note:** The `openrv.matte` namespace is **not yet available** in the public scripting API. The example below shows the planned API shape for a future release. Currently, matte overlay settings can only be changed through the UI.
 
 ```javascript
-// Enable matte with 2.39:1 aspect and 80% opacity
-openrv.matte.enable({ aspect: 2.39, opacity: 0.8 });
+// PLANNED (not yet shipped) — Enable matte with 2.39:1 aspect and 80% opacity
+// openrv.matte.enable({ aspect: 2.39, opacity: 0.8 });
 ```
 
 Matte settings persist when changing frames and are saved with the session state.

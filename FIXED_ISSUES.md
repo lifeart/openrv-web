@@ -109,6 +109,23 @@ Removed dead contextual registrations from `App.ts`, updated UI hints in `Scopes
 - `docs/color/curves.md`
 - `src/api/OpenRVAPI.test.ts`
 
+## Issue #284: Overlays docs publish `openrv.matte.enable()` but it doesn't exist in public API
+
+**Fix**: Marked `openrv.matte` as planned/not yet shipped in `docs/advanced/overlays.md`.
+
+## Issue #285: Scripting guide's `exposureCheck()` can hang due to seek-before-subscribe race
+
+**Fix**: Rewrote example in `docs/advanced/scripting-api.md` to subscribe to `frameChange` before calling `seek()`.
+
+## Issue #286: Plugin examples don't match the actual plugin registration API shape
+
+**Fix**: Updated all 6 plugin examples to use `manifest: { ... }` wrapper and correct `registerExporter(name, exporter)` two-arg signature. Added 3 regression tests.
+
+**Files changed**:
+- `docs/advanced/overlays.md`
+- `docs/advanced/scripting-api.md`
+- `src/plugin/PluginRegistry.test.ts`
+
 ## Issue #283: `openrv.dispose()` advertises the API as unusable afterward, but only the event module is torn down
 
 **Status**: Already fixed in codebase. `OpenRVAPI.dispose()` already calls `dispose()` on all sub-APIs, and all methods call `assertNotDisposed()`. Added regression test coverage to verify.

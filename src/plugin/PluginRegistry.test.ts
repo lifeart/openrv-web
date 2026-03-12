@@ -968,4 +968,61 @@ describe('PluginRegistry', () => {
       expect(unregData[0]!.name).toBe('unreg-exp');
     });
   });
+
+  // -------------------------------------------------------------------------
+  // Doc accuracy: plugin shapes match scripting-api.md examples (Issues #284-#286)
+  // -------------------------------------------------------------------------
+
+  describe('doc pattern validation (Issues #284-#286)', () => {
+    it('PREG-052: plugin must use manifest wrapper — flat top-level fields are rejected', () => {
+      const flatPlugin = {
+        id: 'flat.plugin',
+        name: 'Flat',
+        version: '1.0.0',
+        contributes: ['decoder'],
+        activate: vi.fn(),
+      };
+      // Flat shape has no manifest property, so registration must throw
+      expect(() => registry.register(flatPlugin as unknown as Plugin)).toThrow('manifest is missing');
+    });
+
+    it('PREG-053: plugin with manifest wrapper registers successfully (doc-correct shape)', () => {
+      const plugin: Plugin = {
+        manifest: {
+          id: 'doc.correct.053',
+          name: 'Doc Correct',
+          version: '1.0.0',
+          contributes: ['exporter'],
+        },
+        activate: vi.fn(),
+      };
+      registry.register(plugin);
+      expect(registry.getState('doc.correct.053')).toBe('registered');
+    });
+
+    it('PREG-054: registerExporter requires (name, exporter) two-arg signature', async () => {
+      cleanupExporters.push('doc-exp');
+      const exporter: ExporterContribution = {
+        kind: 'text',
+        label: 'Doc Exporter',
+        extensions: ['txt'],
+        mimeType: 'text/plain',
+        export: vi.fn().mockResolvedValue('output'),
+      };
+      const plugin = createPlugin({
+        manifest: { id: 'doc.exp.054', contributes: ['exporter'] },
+        activate: (ctx: PluginContext) => {
+          // Correct two-arg call as documented: registerExporter(name, exporter)
+          ctx.registerExporter('doc-exp', exporter);
+        },
+      });
+      registry.register(plugin);
+      await registry.activate('doc.exp.054');
+
+      // The exporter is retrievable by its string name
+      expect(registry.getExporter('doc-exp')).toBe(exporter);
+      // The old single-object shape would key on "[object Object]", not the intended name
+      expect(registry.getExporter('[object Object]')).toBeUndefined();
+    });
+  });
 });
