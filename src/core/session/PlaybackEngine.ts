@@ -219,6 +219,8 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
   }
 
   set currentFrame(frame: number) {
+    // Belt-and-suspenders: reject NaN/Infinity to prevent poisoning playback state
+    if (!Number.isFinite(frame)) return;
     const duration = this._host?.getCurrentSource()?.duration ?? 1;
     const clamped = clamp(Math.round(frame), 1, duration);
     if (clamped !== this._currentFrame) {

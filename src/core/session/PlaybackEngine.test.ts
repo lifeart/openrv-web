@@ -57,6 +57,24 @@ describe('PlaybackEngine', () => {
       expect(listener).not.toHaveBeenCalled();
     });
 
+    it('PE-007b: currentFrame setter ignores NaN', () => {
+      engine.currentFrame = 5;
+      engine.currentFrame = NaN;
+      expect(engine.currentFrame).toBe(5);
+    });
+
+    it('PE-007c: currentFrame setter ignores Infinity', () => {
+      engine.currentFrame = 5;
+      engine.currentFrame = Infinity;
+      expect(engine.currentFrame).toBe(5);
+    });
+
+    it('PE-007d: currentFrame setter ignores -Infinity', () => {
+      engine.currentFrame = 5;
+      engine.currentFrame = -Infinity;
+      expect(engine.currentFrame).toBe(5);
+    });
+
     it('PE-008: currentFrame defaults to 1 when no host is set', () => {
       const noHostEngine = new PlaybackEngine();
       noHostEngine.currentFrame = 50;

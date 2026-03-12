@@ -82,7 +82,7 @@ export class PlaybackAPI extends DisposableAPI {
    */
   seek(frame: number): void {
     this.assertNotDisposed();
-    if (typeof frame !== 'number' || isNaN(frame)) {
+    if (typeof frame !== 'number' || !Number.isFinite(frame)) {
       throw new ValidationError('seek() requires a valid frame number');
     }
     this.session.goToFrame(frame);
@@ -104,7 +104,7 @@ export class PlaybackAPI extends DisposableAPI {
    */
   step(direction: number = 1): void {
     this.assertNotDisposed();
-    if (typeof direction !== 'number' || isNaN(direction)) {
+    if (typeof direction !== 'number' || !Number.isFinite(direction)) {
       throw new ValidationError('step() requires a valid number');
     }
     const steps = Math.round(direction);
