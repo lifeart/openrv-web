@@ -313,6 +313,35 @@ describe('PluginEventBus', () => {
     });
   });
 
+  describe('planned events (not yet active)', () => {
+    it('PEVT-070: app:stop can be subscribed to (forward-compatibility)', () => {
+      const sub = bus.createSubscription('test.plugin');
+      const cb = vi.fn();
+      const unsub = sub.onApp('app:stop', cb);
+
+      // The event is mapped and subscribable, even though it is not yet emitted in production
+      expect(mockAPI.on).toHaveBeenCalledWith('stop', expect.any(Function));
+      expect(typeof unsub).toBe('function');
+
+      // Verify it would work if emitted
+      mockAPI._emit('stop', undefined);
+      expect(cb).toHaveBeenCalledTimes(1);
+    });
+
+    it('PEVT-071: app:error can be subscribed to (forward-compatibility)', () => {
+      const sub = bus.createSubscription('test.plugin');
+      const cb = vi.fn();
+      const unsub = sub.onApp('app:error', cb);
+
+      expect(mockAPI.on).toHaveBeenCalledWith('error', expect.any(Function));
+      expect(typeof unsub).toBe('function');
+
+      // Verify it would work if emitted
+      mockAPI._emit('error', { message: 'test error', code: 'TEST' });
+      expect(cb).toHaveBeenCalledWith({ message: 'test error', code: 'TEST' });
+    });
+  });
+
   describe('bus dispose', () => {
     it('PEVT-060: dispose clears all subscriptions and emitters', () => {
       const sub = bus.createSubscription('test.plugin');

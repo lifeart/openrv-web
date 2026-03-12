@@ -98,21 +98,21 @@ Defined in: [plugin/PluginEventBus.ts](https://github.com/lifeart/openrv-web/blo
 
 Application events are prefixed with `app:` and map directly to the corresponding `OpenRVEventName` values from the public API:
 
-| Event | Data |
-|-------|------|
-| `app:frameChange` | `{ frame }` |
-| `app:play` | (none) |
-| `app:pause` | (none) |
-| `app:stop` | (none) |
-| `app:speedChange` | `{ speed }` |
-| `app:volumeChange` | `{ volume }` |
-| `app:muteChange` | `{ muted }` |
-| `app:audioScrubEnabledChange` | `{ enabled }` |
-| `app:loopModeChange` | `{ mode }` |
-| `app:inOutChange` | `{ inPoint, outPoint }` |
-| `app:markerChange` | `{ markers: [{ frame, note, color }] }` |
-| `app:sourceLoaded` | `{ name, type, width, height, duration, fps }` |
-| `app:error` | `{ message, code? }` |
+| Event | Data | Status |
+|-------|------|--------|
+| `app:frameChange` | `{ frame }` | Active |
+| `app:play` | (none) | Active |
+| `app:pause` | (none) | Active |
+| `app:stop` | (none) | **Planned — not yet emitted in production.** Retained for forward-compatibility. |
+| `app:speedChange` | `{ speed }` | Active |
+| `app:volumeChange` | `{ volume }` | Active |
+| `app:muteChange` | `{ muted }` | Active |
+| `app:audioScrubEnabledChange` | `{ enabled }` | Active |
+| `app:loopModeChange` | `{ mode }` | Active |
+| `app:inOutChange` | `{ inPoint, outPoint }` | Active |
+| `app:markerChange` | `{ markers: [{ frame, note, color }] }` | Active |
+| `app:sourceLoaded` | `{ name, type, width, height, duration, fps }` | Active |
+| `app:error` | `{ message, code? }` | **Planned — not yet reliably emitted via the plugin bridge.** Retained for forward-compatibility. |
 
 ### Plugin Lifecycle Events
 
@@ -155,7 +155,9 @@ Settings are validated against their declared type:
 
 ---
 
-## HotReloadManager
+## HotReloadManager (Dev-only / Internal)
+
+> **Warning:** This class is **not part of the public API**. It lives under `src/plugin/dev/` and is **not exported** from `src/api/index.ts`. It is intended for development-time use only and may change or be removed without notice. Do not depend on it in production plugin code.
 
 Development-time hot reload support for plugins. Allows reloading plugin modules without restarting the application, optionally preserving state across reloads via `getState()`/`restoreState()` lifecycle hooks.
 

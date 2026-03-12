@@ -126,6 +126,22 @@ Removed dead contextual registrations from `App.ts`, updated UI hints in `Scopes
 - `docs/advanced/scripting-api.md`
 - `src/plugin/PluginRegistry.test.ts`
 
+## Issue #295: Plugin `app:stop` and `app:error` events never fire
+
+**Fix**: Added JSDoc annotations to `PluginEventBus` marking `app:stop` and `app:error` as planned/not yet emitted. Updated `docs/api/index.md` with a Status column marking them as planned.
+
+## Issue #296: Generated API reference leaks dev-only `HotReloadManager`
+
+**Fix**: Marked HotReloadManager section as "Dev-only / Internal" in `docs/api/index.md` with a warning blockquote. Added test verifying it's not exported from the public API.
+
+**Tests added**: 2 forward-compatibility tests for plugin events + 1 export test for HotReloadManager.
+
+**Files changed**:
+- `src/plugin/PluginEventBus.ts`
+- `src/plugin/PluginEventBus.test.ts`
+- `src/api/exports.test.ts` (new)
+- `docs/api/index.md`
+
 ## Issue #292: Docs advertise `playlistEnded` event not exposed in public API
 
 **Root cause**: `PlaylistManager` emitted `playlistEnded` internally but it was never bridged to the public `EventsAPI`.
