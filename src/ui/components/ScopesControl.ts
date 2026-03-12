@@ -19,10 +19,10 @@ export interface ScopesControlEvents extends EventMap {
 }
 
 const SCOPE_CONFIG: { type: ScopeType; label: string; icon: IconName; shortcut: string }[] = [
-  { type: 'histogram', label: 'Histogram', icon: 'histogram', shortcut: 'Ctrl+Shift+H' },
-  { type: 'waveform', label: 'Waveform', icon: 'waveform', shortcut: 'Ctrl+Shift+W' },
+  { type: 'histogram', label: 'Histogram', icon: 'histogram', shortcut: 'h' },
+  { type: 'waveform', label: 'Waveform', icon: 'waveform', shortcut: 'w' },
   { type: 'vectorscope', label: 'Vectorscope', icon: 'vectorscope', shortcut: 'y' },
-  { type: 'gamutDiagram', label: 'CIE Diagram', icon: 'gamut', shortcut: 'Ctrl+Shift+G' },
+  { type: 'gamutDiagram', label: 'CIE Diagram', icon: 'gamut', shortcut: 'g' },
 ];
 
 export class ScopesControl extends EventEmitter<ScopesControlEvents> {
@@ -65,7 +65,7 @@ export class ScopesControl extends EventEmitter<ScopesControlEvents> {
     // Create button
     this.button = document.createElement('button');
     this.button.dataset.testid = 'scopes-control-button';
-    this.button.title = 'Video scopes (Ctrl+Shift+H: histogram, Ctrl+Shift+W: waveform, y: vectorscope, Ctrl+Shift+G: CIE diagram)';
+    this.button.title = 'Video scopes (h: histogram, w: waveform, y: vectorscope, g: CIE diagram) [QC tab]';
     this.button.setAttribute('aria-haspopup', 'menu');
     this.button.setAttribute('aria-expanded', 'false');
     this.button.setAttribute('aria-pressed', 'false');

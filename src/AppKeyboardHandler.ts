@@ -39,10 +39,13 @@ export class AppKeyboardHandler {
     'paint.textBold', // Ctrl+B - paint context only; avoid global registration
     'paint.textItalic', // Ctrl+I - paint context only; conflicts with color.toggleInversion globally
     'paint.textUnderline', // Ctrl+U - paint context only; avoid global registration
-    'navigation.gotoFrame', // G key - handled with paint/panel context variants
+    'navigation.gotoFrame', // G key - handled with paint/panel context variants (gotoFrame vs toggleGhost vs gamutDiagram)
     'paint.toggleGhost', // G key - handled with global/paint context variants
-    'view.fitToHeight', // H key - context-managed (fitToHeight vs flipHorizontal)
-    'view.fitToWidth', // W key - context-managed (fitToWidth vs cycleWipeMode)
+    'view.fitToHeight', // H key - context-managed (fitToHeight vs flipHorizontal vs histogram)
+    'view.fitToWidth', // W key - context-managed (fitToWidth vs cycleWipeMode vs waveform)
+    'panel.histogram', // H key - panel context (histogram scope toggle)
+    'panel.waveform', // W key - panel context (waveform scope toggle)
+    'panel.gamutDiagram', // G key - panel context (gamut diagram toggle)
     'channel.red', // Shift+R is reserved for transform.rotateLeft
     'channel.blue', // Shift+B is reserved for view.cycleBackgroundPattern
     'channel.none', // Shift+N is reserved for network.togglePanel

@@ -65,7 +65,7 @@ describe('Keyboard registration tests (M-25)', () => {
     expect(keyGBindings).toHaveLength(0);
   });
 
-  it('SK-M25k: fitToHeight (KeyH) is skipped but histogram (Ctrl+Shift+H) is directly registered', () => {
+  it('SK-M25k: fitToHeight (KeyH) and histogram (KeyH, panel context) are both skipped from direct registration', () => {
     const km = new KeyboardManager();
     const ckm = new CustomKeyBindingsManager();
     const actionHandlers = {
@@ -79,43 +79,34 @@ describe('Keyboard registration tests (M-25)', () => {
 
     registrationHandler.setup();
 
-    // Plain KeyH (fitToHeight) should be skipped from direct registration
-    // (it is managed by the contextual keyboard manager instead)
+    // Both use bare KeyH — both are context-managed, so neither should be directly registered
     const bareKeyHBindings = km.getBindings().filter(
       (binding) => binding.combo.code === 'KeyH' && !binding.combo.shift && !binding.combo.alt && !binding.combo.ctrl,
     );
     expect(bareKeyHBindings).toHaveLength(0);
-
-    // Ctrl+Shift+H (histogram) should be directly registered since it doesn't conflict
-    const ctrlShiftHBindings = km.getBindings().filter(
-      (binding) => binding.combo.code === 'KeyH' && binding.combo.ctrl && binding.combo.shift,
-    );
-    expect(ctrlShiftHBindings).toHaveLength(1);
   });
 
-  it('SK-M25l: histogram shortcut uses Ctrl+Shift+H and matches ScopesControl hint', () => {
-    // Verify the histogram binding uses Ctrl+Shift+H (same combo shown in ScopesControl UI)
+  it('SK-M25l: histogram shortcut uses bare H with panel context', () => {
+    // Verify the histogram binding uses bare KeyH with panel context
     const histogramBinding = DEFAULT_KEY_BINDINGS['panel.histogram'];
     expect(histogramBinding).toBeDefined();
     expect(histogramBinding!.code).toBe('KeyH');
-    expect(histogramBinding!.ctrl).toBe(true);
-    expect(histogramBinding!.shift).toBe(true);
-    // No context needed since Ctrl+Shift+H is unique and doesn't conflict
-    expect(histogramBinding!.context).toBeUndefined();
-    expect(describeKeyCombo({ code: histogramBinding!.code, ctrl: true, shift: true })).toBe('Ctrl+Shift+H');
+    expect(histogramBinding!.ctrl).toBeUndefined();
+    expect(histogramBinding!.shift).toBeUndefined();
+    expect(histogramBinding!.context).toBe('panel');
+    expect(describeKeyCombo({ code: histogramBinding!.code })).toBe('H');
   });
 
-  it('SK-M25m: histogram (Ctrl+Shift+H) and fitToHeight (H) no longer conflict', () => {
-    // panel.histogram uses Ctrl+Shift+H — a unique combo
+  it('SK-M25m: histogram (H, panel) and fitToHeight (H, global) are separated by context', () => {
+    // panel.histogram uses bare KeyH with panel context
     const histogramBinding = DEFAULT_KEY_BINDINGS['panel.histogram'];
     expect(histogramBinding!.code).toBe('KeyH');
-    expect(histogramBinding!.ctrl).toBe(true);
-    expect(histogramBinding!.shift).toBe(true);
-    // view.fitToHeight uses plain KeyH — no modifier overlap
+    expect(histogramBinding!.context).toBe('panel');
+    // view.fitToHeight uses bare KeyH (global context, managed by contextual resolver)
     const fitToHeightBinding = DEFAULT_KEY_BINDINGS['view.fitToHeight'];
     expect(fitToHeightBinding!.code).toBe('KeyH');
-    expect(fitToHeightBinding!.ctrl).toBeUndefined();
-    expect(fitToHeightBinding!.shift).toBeUndefined();
+    // They share the same key but are resolved by context (panel vs global)
+    expect(histogramBinding!.context).not.toBe(fitToHeightBinding!.context ?? 'global');
   });
 
   it('SK-M25n: Shift+L channel.luminance and lut.togglePanel are skipped from direct registration', () => {
@@ -160,69 +151,62 @@ describe('Scope shortcut regression tests (Issues #1, #2, #3)', () => {
     localStorageMock.clear();
   });
 
-  it('SCOPE-REG01: histogram binding uses Ctrl+Shift+H with no context restriction', () => {
+  it('SCOPE-REG01: histogram binding uses bare H with panel context', () => {
     const binding = DEFAULT_KEY_BINDINGS['panel.histogram'];
     expect(binding).toBeDefined();
     expect(binding!.code).toBe('KeyH');
-    expect(binding!.ctrl).toBe(true);
-    expect(binding!.shift).toBe(true);
-    expect(binding!.context).toBeUndefined();
+    expect(binding!.ctrl).toBeUndefined();
+    expect(binding!.shift).toBeUndefined();
+    expect(binding!.context).toBe('panel');
   });
 
-  it('SCOPE-REG02: waveform binding uses Ctrl+Shift+W with no context restriction', () => {
+  it('SCOPE-REG02: waveform binding uses bare W with panel context', () => {
     const binding = DEFAULT_KEY_BINDINGS['panel.waveform'];
     expect(binding).toBeDefined();
     expect(binding!.code).toBe('KeyW');
-    expect(binding!.ctrl).toBe(true);
-    expect(binding!.shift).toBe(true);
-    expect(binding!.context).toBeUndefined();
+    expect(binding!.ctrl).toBeUndefined();
+    expect(binding!.shift).toBeUndefined();
+    expect(binding!.context).toBe('panel');
   });
 
-  it('SCOPE-REG03: gamut diagram binding uses Ctrl+Shift+G with no context restriction', () => {
+  it('SCOPE-REG03: gamut diagram binding uses bare G with panel context', () => {
     const binding = DEFAULT_KEY_BINDINGS['panel.gamutDiagram'];
     expect(binding).toBeDefined();
     expect(binding!.code).toBe('KeyG');
-    expect(binding!.ctrl).toBe(true);
-    expect(binding!.shift).toBe(true);
-    expect(binding!.context).toBeUndefined();
+    expect(binding!.ctrl).toBeUndefined();
+    expect(binding!.shift).toBeUndefined();
+    expect(binding!.context).toBe('panel');
   });
 
-  it('SCOPE-REG04: histogram shortcut does not conflict with fitToHeight', () => {
+  it('SCOPE-REG04: histogram and fitToHeight share KeyH but differ by context', () => {
     const histogram = DEFAULT_KEY_BINDINGS['panel.histogram']!;
     const fitToHeight = DEFAULT_KEY_BINDINGS['view.fitToHeight']!;
-    // Both use KeyH but histogram has Ctrl+Shift modifiers
     expect(histogram.code).toBe('KeyH');
     expect(fitToHeight.code).toBe('KeyH');
-    // They differ in modifiers, so no conflict
-    const histHasCtrlShift = histogram.ctrl === true && histogram.shift === true;
-    const fitHasCtrlShift = fitToHeight.ctrl === true && fitToHeight.shift === true;
-    expect(histHasCtrlShift).toBe(true);
-    expect(fitHasCtrlShift).toBe(false);
+    // histogram is panel-context, fitToHeight is global (no context = global)
+    expect(histogram.context).toBe('panel');
+    expect(fitToHeight.context).toBeUndefined();
   });
 
-  it('SCOPE-REG05: waveform shortcut does not conflict with fitToWidth', () => {
+  it('SCOPE-REG05: waveform and fitToWidth share KeyW but differ by context', () => {
     const waveform = DEFAULT_KEY_BINDINGS['panel.waveform']!;
     const fitToWidth = DEFAULT_KEY_BINDINGS['view.fitToWidth']!;
     expect(waveform.code).toBe('KeyW');
     expect(fitToWidth.code).toBe('KeyW');
-    const waveHasCtrlShift = waveform.ctrl === true && waveform.shift === true;
-    const fitHasCtrlShift = fitToWidth.ctrl === true && fitToWidth.shift === true;
-    expect(waveHasCtrlShift).toBe(true);
-    expect(fitHasCtrlShift).toBe(false);
+    expect(waveform.context).toBe('panel');
+    expect(fitToWidth.context).toBeUndefined();
   });
 
-  it('SCOPE-REG06: gamut diagram shortcut does not conflict with gotoFrame', () => {
+  it('SCOPE-REG06: gamut diagram and gotoFrame share KeyG but differ by context', () => {
     const gamut = DEFAULT_KEY_BINDINGS['panel.gamutDiagram']!;
     const gotoFrame = DEFAULT_KEY_BINDINGS['navigation.gotoFrame']!;
     expect(gamut.code).toBe('KeyG');
     expect(gotoFrame.code).toBe('KeyG');
-    const gamutHasCtrlShift = gamut.ctrl === true && gamut.shift === true;
-    const gotoHasCtrlShift = gotoFrame.ctrl === true && gotoFrame.shift === true;
-    expect(gamutHasCtrlShift).toBe(true);
-    expect(gotoHasCtrlShift).toBe(false);
+    expect(gamut.context).toBe('panel');
+    expect(gotoFrame.context).toBeUndefined();
   });
 
-  it('SCOPE-REG07: scope shortcuts are directly registered (not skipped)', () => {
+  it('SCOPE-REG07: scope shortcuts are context-managed (skipped from direct registration)', () => {
     const km = new KeyboardManager();
     const ckm = new CustomKeyBindingsManager();
     const actionHandlers = {
@@ -238,45 +222,43 @@ describe('Scope shortcut regression tests (Issues #1, #2, #3)', () => {
     registrationHandler.setup();
 
     const bindings = km.getBindings();
-    // Ctrl+Shift+H should be registered for histogram
-    const histogramBindings = bindings.filter(
-      (b) => b.combo.code === 'KeyH' && b.combo.ctrl && b.combo.shift,
+    // Bare KeyH should NOT be directly registered (context-managed)
+    const hBindings = bindings.filter(
+      (b) => b.combo.code === 'KeyH' && !b.combo.ctrl && !b.combo.shift,
     );
-    expect(histogramBindings).toHaveLength(1);
+    expect(hBindings).toHaveLength(0);
 
-    // Ctrl+Shift+W should be registered for waveform
-    const waveformBindings = bindings.filter(
-      (b) => b.combo.code === 'KeyW' && b.combo.ctrl && b.combo.shift,
+    // Bare KeyW should NOT be directly registered (context-managed)
+    const wBindings = bindings.filter(
+      (b) => b.combo.code === 'KeyW' && !b.combo.ctrl && !b.combo.shift,
     );
-    expect(waveformBindings).toHaveLength(1);
+    expect(wBindings).toHaveLength(0);
 
-    // Ctrl+Shift+G should be registered for gamut diagram
-    const gamutBindings = bindings.filter(
-      (b) => b.combo.code === 'KeyG' && b.combo.ctrl && b.combo.shift,
+    // Bare KeyG should NOT be directly registered (context-managed)
+    const gBindings = bindings.filter(
+      (b) => b.combo.code === 'KeyG' && !b.combo.ctrl && !b.combo.shift,
     );
-    expect(gamutBindings).toHaveLength(1);
+    expect(gBindings).toHaveLength(0);
   });
 
   it('SCOPE-REG08: describeKeyCombo produces correct labels for scope shortcuts', () => {
-    expect(describeKeyCombo({ code: 'KeyH', ctrl: true, shift: true })).toBe('Ctrl+Shift+H');
-    expect(describeKeyCombo({ code: 'KeyW', ctrl: true, shift: true })).toBe('Ctrl+Shift+W');
-    expect(describeKeyCombo({ code: 'KeyG', ctrl: true, shift: true })).toBe('Ctrl+Shift+G');
+    expect(describeKeyCombo({ code: 'KeyH' })).toBe('H');
+    expect(describeKeyCombo({ code: 'KeyW' })).toBe('W');
+    expect(describeKeyCombo({ code: 'KeyG' })).toBe('G');
   });
 });
 
 describe('Scope UI hint regression tests (Issues #1, #2, #3)', () => {
-  it('SCOPE-UI01: ScopesControl shortcut hints match actual keybinding definitions', () => {
+  it('SCOPE-UI01: ScopesControl shortcut hints show bare keys for context-managed scopes', () => {
     const control = new ScopesControl();
     const el = control.render();
     const button = el.querySelector('[data-testid="scopes-control-button"]') as HTMLButtonElement;
 
-    // The button title should reference the new Ctrl+Shift shortcuts
-    expect(button.title).toContain('Ctrl+Shift+H');
-    expect(button.title).toContain('Ctrl+Shift+W');
-    expect(button.title).toContain('Ctrl+Shift+G');
-    // Should NOT reference bare H, w, or G for scopes that were changed
-    expect(button.title).not.toMatch(/[^+]H:/);
-    expect(button.title).not.toMatch(/[^+]G:/);
+    // The button title should reference bare keys (context-managed via panel context)
+    expect(button.title).toContain('h: histogram');
+    expect(button.title).toContain('w: waveform');
+    expect(button.title).toContain('g: CIE diagram');
+    expect(button.title).toContain('QC tab');
 
     control.dispose();
   });
@@ -293,14 +275,14 @@ describe('Scope UI hint regression tests (Issues #1, #2, #3)', () => {
     expect(dropdown).not.toBeNull();
 
     const options = dropdown.querySelectorAll('button');
-    // histogram option
-    expect(options[0].textContent).toContain('Ctrl+Shift+H');
-    // waveform option
-    expect(options[1].textContent).toContain('Ctrl+Shift+W');
+    // histogram option — bare h
+    expect(options[0].textContent).toContain('h');
+    // waveform option — bare w
+    expect(options[1].textContent).toContain('w');
     // vectorscope option (unchanged)
     expect(options[2].textContent).toContain('y');
-    // gamut diagram option
-    expect(options[3].textContent).toContain('Ctrl+Shift+G');
+    // gamut diagram option — bare g
+    expect(options[3].textContent).toContain('g');
 
     control.dispose();
   });

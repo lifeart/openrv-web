@@ -291,7 +291,7 @@ export class App {
       'Select line tool',
     );
 
-    // KeyG: navigation.gotoFrame (global) vs paint.toggleGhost (paint)
+    // KeyG: navigation.gotoFrame (global) vs paint.toggleGhost (paint) vs panel.gamutDiagram (panel)
     this.contextualKeyboardManager.register(
       'navigation.gotoFrame',
       { code: 'KeyG' },
@@ -307,7 +307,7 @@ export class App {
       'Toggle ghost mode',
     );
 
-    // KeyH: view.fitToHeight (global)
+    // KeyH: view.fitToHeight (global) vs panel.histogram (panel/QC)
     this.contextualKeyboardManager.register(
       'view.fitToHeight',
       { code: 'KeyH' },
@@ -315,14 +315,37 @@ export class App {
       'global',
       'Fit image height to window',
     );
+    this.contextualKeyboardManager.register(
+      'panel.histogram',
+      { code: 'KeyH' },
+      () => this.controls.scopesControl.toggleScope('histogram'),
+      'panel',
+      'Toggle histogram',
+    );
 
-    // KeyW: view.fitToWidth (global)
+    // KeyW: view.fitToWidth (global) vs panel.waveform (panel/QC)
     this.contextualKeyboardManager.register(
       'view.fitToWidth',
       { code: 'KeyW' },
       () => this.viewer.smoothFitToWidth(),
       'global',
       'Fit image width to window',
+    );
+    this.contextualKeyboardManager.register(
+      'panel.waveform',
+      { code: 'KeyW' },
+      () => this.controls.scopesControl.toggleScope('waveform'),
+      'panel',
+      'Toggle waveform scope',
+    );
+
+    // KeyG: navigation.gotoFrame (global) vs panel.gamutDiagram (panel/QC) — gotoFrame already registered above
+    this.contextualKeyboardManager.register(
+      'panel.gamutDiagram',
+      { code: 'KeyG' },
+      () => this.controls.scopesControl.toggleScope('gamutDiagram'),
+      'panel',
+      'Toggle CIE gamut diagram',
     );
 
     // Shift+R: transform.rotateLeft (global) vs channel.red (viewer/panel)
@@ -885,12 +908,21 @@ export class App {
    * Get configuration for the public scripting API (window.openrv)
    */
   getAPIConfig(): OpenRVAPIConfig {
+    const caps = this.displayCapabilities;
     return {
       session: this.session,
       viewer: this.viewer,
       colorControls: this.controls.colorControls,
       cdlControl: this.controls.cdlControl,
       curvesControl: this.controls.curvesControl,
+      lutProvider: this.viewer,
+      toneMappingProvider: this.viewer,
+      displayProvider: this.viewer,
+      displayCapabilitiesProvider: { getDisplayCapabilities: () => caps },
+      ocioProvider: {
+        getOCIOState: () => this.controls.ocioControl.getState(),
+        setOCIOState: (state) => this.controls.ocioControl.setState(state),
+      },
     };
   }
 

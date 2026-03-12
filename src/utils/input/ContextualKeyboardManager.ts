@@ -9,7 +9,9 @@
  * This resolves key collisions like:
  *   - KeyR: timeline.resetInOut (global) vs paint.rectangle (paint context)
  *   - KeyO: timeline.setOutPoint (global) vs paint.ellipse (paint context)
- *   - KeyG: panel.gamutDiagram (panel context) vs paint.toggleGhost (paint context)
+ *   - KeyG: navigation.gotoFrame (global) vs panel.gamutDiagram (panel) vs paint.toggleGhost (paint)
+ *   - KeyH: view.fitToHeight (global) vs panel.histogram (panel context)
+ *   - KeyW: view.fitToWidth (global) vs panel.waveform (panel context)
  *   - Shift+KeyR: transform.rotateLeft (transform context) vs channel.red (viewer context)
  */
 
