@@ -508,4 +508,41 @@ describe('KeyBindings', () => {
       expect(binding!.context).toBe('paint');
     });
   });
+
+  describe('save/export shortcut accuracy (Issue #300)', () => {
+    it('KB-U100: Ctrl+S is wired to frame export, not project save', () => {
+      const binding = DEFAULT_KEY_BINDINGS['export.quickExport'];
+      expect(binding).toBeDefined();
+      expect(binding!.code).toBe('KeyS');
+      expect(binding!.ctrl).toBe(true);
+      expect(binding!.shift).toBeUndefined();
+      expect(binding!.alt).toBeUndefined();
+    });
+
+    it('KB-U101: Ctrl+Shift+S is wired to snapshot creation, not project save', () => {
+      const binding = DEFAULT_KEY_BINDINGS['snapshot.create'];
+      expect(binding).toBeDefined();
+      expect(binding!.code).toBe('KeyS');
+      expect(binding!.ctrl).toBe(true);
+      expect(binding!.shift).toBe(true);
+      expect(binding!.alt).toBeUndefined();
+    });
+
+    it('KB-U102: no binding exists for project save', () => {
+      const saveBindings = Object.entries(DEFAULT_KEY_BINDINGS).filter(
+        ([action]) => action === 'project.save' || action === 'file.save' || action === 'session.save',
+      );
+      expect(saveBindings).toHaveLength(0);
+    });
+
+    it('KB-U103: Ctrl+S and Ctrl+Shift+S do not conflict (different modifier sets)', () => {
+      const ctrlS = DEFAULT_KEY_BINDINGS['export.quickExport']!;
+      const ctrlShiftS = DEFAULT_KEY_BINDINGS['snapshot.create']!;
+
+      // Same base key but different modifiers
+      expect(ctrlS.code).toBe(ctrlShiftS.code);
+      expect(ctrlS.shift).toBeUndefined();
+      expect(ctrlShiftS.shift).toBe(true);
+    });
+  });
 });

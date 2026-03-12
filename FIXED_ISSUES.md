@@ -126,6 +126,33 @@ Removed dead contextual registrations from `App.ts`, updated UI hints in `Scopes
 - `docs/advanced/scripting-api.md`
 - `src/plugin/PluginRegistry.test.ts`
 
+## Issue #297: Session docs overclaim `.orvproject` captures complete state
+
+**Fix**: Changed "captures every aspect" to "captures most of" and added Known Omissions section listing all 17 viewer states the serializer does not persist.
+
+## Issue #298: Session-compatibility guide claims graph persistence that doesn't exist
+
+**Fix**: Clarified that graph serialization is implemented but only present for multi-source/imported sessions, not simple single-file viewing.
+
+## Issue #299: `AutoSaveManager` emits `recoveryAvailable` but production never subscribes
+
+**Fix**: Added JSDoc annotation explaining the event is emitted but production uses polling instead. Updated docs to not reference the event as user-facing.
+
+## Issue #300: Save-project shortcut guidance is inconsistent
+
+**Fix**: Removed false `Ctrl+S`/`Ctrl+Shift+S` save-project claims from docs and header tooltip. No project-save shortcut exists — documented accurately.
+
+**Tests added**: 4 keybinding tests (KB-U100-103) + 1 header tooltip test (HDR-U201).
+
+**Files changed**:
+- `docs/advanced/session-management.md`
+- `docs/guides/session-compatibility.md`
+- `features/session-management.md`
+- `src/core/session/AutoSaveManager.ts`
+- `src/ui/components/layout/HeaderBar.ts`
+- `src/utils/input/KeyBindings.test.ts`
+- `src/ui/components/layout/HeaderBar.test.ts`
+
 ## Issue #295: Plugin `app:stop` and `app:error` events never fire
 
 **Fix**: Added JSDoc annotations to `PluginEventBus` marking `app:stop` and `app:error` as planned/not yet emitted. Updated `docs/api/index.md` with a Status column marking them as planned.

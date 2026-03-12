@@ -1,6 +1,6 @@
 # Session Management
 
-Session management in OpenRV Web preserves the complete state of a review session -- media references, color corrections, annotations, playback position, view configuration, and more. The system provides manual snapshots, automatic saving with crash recovery, and a portable session file format.
+Session management in OpenRV Web preserves most of a review session's state -- media references, color corrections, annotations, playback position, view configuration, and more. Some viewer states (such as OCIO configuration, tone mapping, stereo mode, and difference matte) are not yet serialized; see [Known Omissions](#known-omissions) for the full list. The system provides manual snapshots, automatic saving with crash recovery, and a portable session file format.
 
 This is the canonical reference for all session persistence features. For a brief overview of the `.orvproject` save/load workflow, see [Session Save and Load](../export/sessions.md).
 
@@ -8,7 +8,7 @@ This is the canonical reference for all session persistence features. For a brie
 
 ## The .orvproject Format
 
-OpenRV Web uses the `.orvproject` file format for session persistence. This is a JSON file containing a versioned schema that captures every aspect of the current viewer state.
+OpenRV Web uses the `.orvproject` file format for session persistence. This is a JSON file containing a versioned schema that captures most of the current viewer state. Some viewer states are not yet serialized; see [Known Omissions](#known-omissions) below.
 
 ### What Is Saved
 
@@ -27,8 +27,35 @@ OpenRV Web uses the `.orvproject` file format for session persistence. This is a
 | Wipe/Compare | Wipe mode, position, angle |
 | Layer stack | Layer blend modes and opacity |
 | LUT | LUT file path reference and blend intensity |
+| LUT pipeline | Per-source and display LUT stage assignments (names, enabled flags, intensities) |
 | Filters | Blur, sharpen settings |
 | Playlist | Clip list with in/out points and loop mode |
+| Node graph | Graph topology, node connections, and properties (when a graph is active) |
+
+### Known Omissions
+
+The following viewer states are **not** saved in `.orvproject` files. They revert to defaults when a project is reloaded. The serializer logs a console warning when any of these are actively non-default at save time.
+
+| Category | Omitted State |
+|----------|---------------|
+| Color pipeline | OCIO configuration (config name, color spaces, view, look) |
+| Color pipeline | Display profile (transfer function, display gamma) |
+| Color pipeline | Gamut mapping (mode, source/target gamut) |
+| Color pipeline | Color inversion |
+| Color pipeline | Curves (per-channel curve adjustments) |
+| View / Compare | Tone mapping (operator and parameters) |
+| View / Compare | Ghost frames (enabled, frame count, opacity, tint) |
+| View / Compare | Stereo mode (mode, eye swap, convergence offset) |
+| View / Compare | Stereo eye transforms (per-eye flip, rotation, scale, translate) |
+| View / Compare | Stereo align mode |
+| View / Compare | Difference matte (enabled, gain, heatmap) |
+| View / Compare | Blend mode (mode, opacity, flicker frame) |
+| View / Compare | Channel isolation mode (R/G/B/A/luminance) |
+| Effects | Deinterlace (enabled, mode) |
+| Effects | Film emulation (enabled, stock, intensity) |
+| Effects | Perspective correction (enabled, corner points, quality) |
+| Effects | Stabilization (enabled, smoothing, crop mode) |
+| Effects | Uncrop (active, dimensions, offset) |
 
 ### Schema Versioning
 
@@ -40,9 +67,10 @@ Each `.orvproject` file includes a `version` number. When the schema evolves in 
 
 Save the current session state using one of these methods:
 
-- Click the **Save** button in the header bar
+- Click the **Save** button (floppy disk icon) in the header bar
 - Use the Export menu and select **Save Project**
-- Press `Ctrl+S`
+
+> **Note:** There is no dedicated keyboard shortcut for project save. `Ctrl+S` is wired to frame export, and `Ctrl+Shift+S` creates a snapshot. Use the header bar Save button to save a `.orvproject` file.
 
 The browser downloads a `.orvproject` file named after the current project name.
 
@@ -165,7 +193,7 @@ On application startup, the auto-save manager checks for a clean shutdown flag:
 1. During normal operation, a "running" flag is set in IndexedDB
 2. On clean shutdown (tab close with beforeunload handler), the flag is cleared
 3. If the application starts and finds the "running" flag still set, a crash or unexpected closure occurred
-4. The system emits a `recoveryAvailable` event, and the UI offers to restore from the most recent auto-save entry
+4. The system detects that recovery data is available, and the UI offers to restore from the most recent auto-save entry
 
 Crash recovery restores the full session state, including media references (which may require file reloading for local files), color corrections, annotations, and playback position.
 

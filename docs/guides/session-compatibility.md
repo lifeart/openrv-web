@@ -165,7 +165,7 @@ The following table summarizes which desktop RV session features are supported w
 
 ## Session State Schema
 
-The `SessionState` interface (`src/core/session/SessionState.ts`) defines the complete serializable state at schema version 2:
+The `SessionState` interface (`src/core/session/SessionState.ts`) defines the serializable state at schema version 2. Note that some viewer states (OCIO, tone mapping, stereo, difference matte, curves, and others) are not yet included in the schema and revert to defaults on reload. See the [Known Omissions](../advanced/session-management.md#known-omissions) section in the session management docs for the full list.
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -242,7 +242,7 @@ The following features from the desktop session will need manual re-application:
 
 Once the session is verified, save it in the native format:
 
-1. Press **Ctrl+S** or click the Save button
+1. Click the **Save** button in the header bar (there is no keyboard shortcut for project save; `Ctrl+S` exports the current frame)
 2. The session is exported as an `.orvproject` JSON file
 3. Media references with blob URLs are marked with `requiresReload: true`
 4. Subsequent loads of the .orvproject will prompt for file re-selection
@@ -253,7 +253,7 @@ Once the session is verified, save it in the native format:
 
 ### .orvproject Format
 
-OpenRV Web's native session format is a JSON file containing the complete `SessionState`. The `SessionSerializer` handles:
+OpenRV Web's native session format is a JSON file containing the `SessionState`. Note that some viewer states are not yet included in the serialized output; see [Known Omissions](../advanced/session-management.md#known-omissions). The `SessionSerializer` handles:
 
 - **Save**: `toJSON()` collects state from the session, paint engine, and viewer. Blob URLs are detected and flagged with `requiresReload: true` to prevent saving invalid URLs
 - **Load**: `loadFromFile()` validates the JSON structure, checks the schema version, and applies migrations if needed. For media with `requiresReload: true`, a file reload dialog prompts the user to re-select each file
@@ -301,14 +301,14 @@ The `PlaylistManager` handles multi-clip editorial workflows:
 
 ### Session Graph Persistence
 
-Starting with schema version 2, the `.orvproject` format includes an optional `graph` field containing the serialized node graph topology. This preserves:
+Starting with schema version 2, the `.orvproject` format includes an optional `graph` field containing the serialized node graph topology. The graph is only present when a node graph has been explicitly constructed (e.g., multi-source sessions, imported RV sessions). Simple single-file viewing sessions typically do not produce a graph. When the `graph` field is present, it preserves:
 
 - Node types and IDs
 - Input/output connections between nodes
 - Property values for all nodes
 - The active output node
 
-When the `graph` field is absent (version 1 projects), OpenRV Web falls back to reconstructing a default graph from the media references and playback state.
+When the `graph` field is absent (version 1 projects or simple sessions without an explicit graph), OpenRV Web falls back to reconstructing a default graph from the media references and playback state.
 
 ### IndexedDB Storage Architecture
 

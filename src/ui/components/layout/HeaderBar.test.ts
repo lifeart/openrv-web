@@ -1942,6 +1942,15 @@ describe('HeaderBar', () => {
       const button = el.querySelector('[data-testid="save-button"]');
       expect(button).toBeInstanceOf(HTMLButtonElement);
     });
+
+    it('HDR-U201: save button tooltip does not advertise a keyboard shortcut (Issue #300)', () => {
+      const el = headerBar.render();
+      const button = el.querySelector('[data-testid="save-button"]') as HTMLButtonElement;
+      expect(button).toBeTruthy();
+      expect(button.title).toBe('Save project');
+      expect(button.title).not.toContain('Ctrl');
+      expect(button.title).not.toContain('Shift');
+    });
   });
 
   describe('aria-expanded on popup buttons (#73)', () => {

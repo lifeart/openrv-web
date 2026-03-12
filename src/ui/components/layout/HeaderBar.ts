@@ -235,7 +235,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     fileGroup.appendChild(this.createIconButton('folder', '', () => this.fileInput.click(), 'Open media file'));
 
     // Save Project button — icon-only
-    const saveButton = this.createIconButton('save', '', () => this.emit('saveProject', undefined), 'Save project (Ctrl+Shift+S)');
+    const saveButton = this.createIconButton('save', '', () => this.emit('saveProject', undefined), 'Save project');
     saveButton.dataset.testid = 'save-button';
     fileGroup.appendChild(saveButton);
 

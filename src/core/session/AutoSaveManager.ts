@@ -56,7 +56,15 @@ export interface AutoSaveEvents extends EventMap {
   saved: { entry: AutoSaveEntry };
   /** Emitted when save fails */
   error: { error: Error };
-  /** Emitted when recovery data is found */
+  /**
+   * Emitted when recovery data is found after a non-clean shutdown.
+   *
+   * NOTE: This event is emitted by `initialize()` but is not currently
+   * subscribed to in the production application flow. The production
+   * code uses a polling pattern via `getMostRecent()` instead.
+   * The event remains part of the public API for external consumers
+   * and future use.
+   */
   recoveryAvailable: { entries: AutoSaveEntry[] };
   /** Emitted when config changes */
   configChanged: AutoSaveConfig;
