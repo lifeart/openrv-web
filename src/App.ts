@@ -291,7 +291,7 @@ export class App {
       'Select line tool',
     );
 
-    // KeyG: navigation.gotoFrame (global) vs paint.toggleGhost (paint) vs panel.gamutDiagram (panel)
+    // KeyG: navigation.gotoFrame (global) vs paint.toggleGhost (paint)
     this.contextualKeyboardManager.register(
       'navigation.gotoFrame',
       { code: 'KeyG' },
@@ -306,15 +306,8 @@ export class App {
       'paint',
       'Toggle ghost mode',
     );
-    this.contextualKeyboardManager.register(
-      'panel.gamutDiagram',
-      { code: 'KeyG' },
-      () => this.controls.scopesControl.toggleScope('gamutDiagram'),
-      'panel',
-      'Toggle CIE gamut diagram',
-    );
 
-    // KeyH: view.fitToHeight (global) vs panel.histogram (panel)
+    // KeyH: view.fitToHeight (global)
     this.contextualKeyboardManager.register(
       'view.fitToHeight',
       { code: 'KeyH' },
@@ -322,28 +315,14 @@ export class App {
       'global',
       'Fit image height to window',
     );
-    this.contextualKeyboardManager.register(
-      'panel.histogram',
-      { code: 'KeyH' },
-      () => this.controls.scopesControl.toggleScope('histogram'),
-      'panel',
-      'Toggle histogram',
-    );
 
-    // KeyW: view.fitToWidth (global) vs panel.waveform (panel)
+    // KeyW: view.fitToWidth (global)
     this.contextualKeyboardManager.register(
       'view.fitToWidth',
       { code: 'KeyW' },
       () => this.viewer.smoothFitToWidth(),
       'global',
       'Fit image width to window',
-    );
-    this.contextualKeyboardManager.register(
-      'panel.waveform',
-      { code: 'KeyW' },
-      () => this.controls.scopesControl.toggleScope('waveform'),
-      'panel',
-      'Toggle waveform scope',
     );
 
     // Shift+R: transform.rotateLeft (global) vs channel.red (viewer/panel)

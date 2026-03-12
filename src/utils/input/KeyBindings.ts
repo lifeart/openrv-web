@@ -208,6 +208,8 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   },
   'panel.waveform': {
     code: 'KeyW',
+    ctrl: true,
+    shift: true,
     description: 'Toggle waveform scope',
   },
   'panel.vectorscope': {
@@ -216,7 +218,8 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   },
   'panel.gamutDiagram': {
     code: 'KeyG',
-    context: 'panel',
+    ctrl: true,
+    shift: true,
     description: 'Toggle CIE gamut diagram',
   },
   'view.fitToHeight': {
@@ -225,7 +228,8 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   },
   'panel.histogram': {
     code: 'KeyH',
-    context: 'panel',
+    ctrl: true,
+    shift: true,
     description: 'Toggle histogram',
   },
   'panel.ocio': {

@@ -110,7 +110,7 @@ The keyboard shortcuts feature is **fully implemented** with a comprehensive cen
 | view.fitToWindowAlt | Shift+F | Fit image to window (alternative) |
 | view.zoom50 | 0 | Zoom to 50% (when on View tab) |
 | view.cycleWipeMode | Shift+W | Cycle wipe mode |
-| view.toggleWaveform | W | Toggle waveform scope |
+| view.toggleWaveform | Ctrl+Shift+W | Toggle waveform scope (legacy alias) |
 | view.toggleAB | ` | Toggle A/B source compare |
 | view.toggleDifferenceMatte | Shift+D | Toggle difference matte mode |
 | view.toggleSplitScreen | Shift+Alt+S | Toggle split screen A/B comparison |
@@ -164,7 +164,9 @@ The keyboard shortcuts feature is **fully implemented** with a comprehensive cen
 | panel.effects | Shift+Alt+E | Toggle effects panel |
 | panel.curves | U | Toggle curves panel |
 | panel.crop | Shift+K | Toggle crop mode |
-| panel.histogram | H | Toggle histogram |
+| panel.histogram | Ctrl+Shift+H | Toggle histogram |
+| panel.waveform | Ctrl+Shift+W | Toggle waveform scope |
+| panel.gamutDiagram | Ctrl+Shift+G | Toggle CIE gamut diagram |
 | panel.vectorscope | Y | Toggle vectorscope |
 | panel.close | Escape | Close open panels |
 | panel.history | Shift+Alt+H | Toggle undo/redo history panel |
