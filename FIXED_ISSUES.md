@@ -277,3 +277,65 @@
 
 **Files changed**:
 - `src/api/OpenRVAPI.test.ts`
+
+## Issue #377: Crash-recovery detection leaves auto-save half-initialized
+
+**Root cause**: `AutoSaveManager.initialize()` returned early when recovery entries were found, skipping session arming (active marking, timer start, beforeunload handler).
+
+**Fix**: Extracted `armSession()` method. `initialize()` now always calls `armSession()` after recovery detection, ensuring auto-save is fully operational regardless of recovery state.
+
+**Tests added**: 7 regression tests in `AutoSaveManager.issue377.test.ts`.
+
+**Files changed**:
+- `src/core/session/AutoSaveManager.ts`
+- `src/core/session/AutoSaveManager.issue377.test.ts` (new)
+
+## Issue #379: Turning auto-save off does not actually stop writes
+
+**Root cause**: `markDirty()` scheduled a 2-second debounce save unconditionally; `saveWithGetter()`/`save()` didn't check `config.enabled`; disabling only stopped the interval timer.
+
+**Fix**: `markDirty()` checks `config.enabled` before scheduling. `saveWithGetter()` guards against disabled state. `setConfig()` clears debounce timer on disable.
+
+**Tests added**: 5 regression tests (AUTOSAVE-U035 through U039).
+
+**Files changed**:
+- `src/core/session/AutoSaveManager.ts`
+- `src/core/session/AutoSaveManager.test.ts`
+
+## Issue #566: `step(Infinity)` poisons playback with NaN frames
+
+**Root cause**: `PlaybackAPI.step()` and `seek()` used `!isNaN()` instead of `Number.isFinite()`, allowing Infinity through. Loop-mode modular arithmetic on Infinity produces NaN.
+
+**Fix**: Changed to `Number.isFinite()` in both `step()` and `seek()`. Added belt-and-suspenders guard in `PlaybackEngine.currentFrame` setter.
+
+**Tests added**: 5 regression tests (API-U026b, API-U029b update, PE-007b/c/d).
+
+**Files changed**:
+- `src/api/PlaybackAPI.ts`
+- `src/core/session/PlaybackEngine.ts`
+- `src/core/session/PlaybackEngine.test.ts`
+- `src/api/OpenRVAPI.test.ts`
+
+## Issue #567: `setZoom()`/`setPan()` accept non-finite numbers
+
+**Root cause**: `ViewAPI.setZoom()` and `setPan()` used `isNaN()` not `Number.isFinite()`, allowing Infinity into live transform state.
+
+**Fix**: Changed to `Number.isFinite()` in both methods.
+
+**Tests added**: 2 regression tests (API-U044b, API-U044c).
+
+**Files changed**:
+- `src/api/ViewAPI.ts`
+- `src/api/OpenRVAPI.test.ts`
+
+## Issue #568: `setCDL()` accepts non-finite values
+
+**Root cause**: `ColorAPI.setCDL()` validated with `isNaN()` not `Number.isFinite()`, allowing Infinity into CDL grading pipeline.
+
+**Fix**: Changed `validateRGB()` and saturation validation to use `Number.isFinite()`.
+
+**Tests added**: 4 regression tests (API-U069e-inf through API-U069h-inf).
+
+**Files changed**:
+- `src/api/ColorAPI.ts`
+- `src/api/OpenRVAPI.test.ts`

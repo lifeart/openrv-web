@@ -1338,18 +1338,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Users can trust auto-checkpoints to protect routine destructive actions that the shipped app never checkpoints.
   - That makes the documented safety net much narrower than it sounds, especially during active review/editing work where people are not explicitly loading projects.
 
-### 377. Crash-recovery detection leaves auto-save half-initialized, so normal auto-save is not re-armed after recovery is found
-
-- Severity: High
-- Area: Auto-save / crash recovery
-- Evidence:
-  - `AutoSaveManager.initialize()` returns early as soon as it finds recovery entries in [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L113) through [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L120).
-  - That early return skips the normal post-init path that marks the session active, starts the timer, and installs the `beforeunload` clean-shutdown handler in [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L123) through [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L132).
-  - The app consumes the boolean from `initialize()` and then immediately goes into recover/discard UI flow in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L448) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L487), but it never re-initializes or otherwise re-arms the manager afterward.
-- Impact:
-  - After any startup path that detects crash recovery, the session can continue without the normal auto-save timer and clean-shutdown bookkeeping fully restored.
-  - That weakens the very safety mechanism users depend on right after a crash, when another failure would be most costly.
-
 ### 378. Snapshot descriptions are searchable and displayable, but the shipped UI never lets users author or edit them
 
 - Severity: Low
@@ -1361,19 +1349,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - In normal production use, snapshot descriptions are effectively import-only metadata even though the panel treats them like a first-class searchable field.
   - That makes the description search/filter path much less useful for real in-app snapshot curation than the UI suggests.
-
-### 379. Turning auto-save off does not actually stop auto-save writes after state changes
-
-- Severity: High
-- Area: Auto-save / settings correctness
-- Evidence:
-  - The session-management guide presents `Enabled: On / Off` as a real auto-save configuration switch in [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L132) through [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L140), and the UI renders an `Enable auto-save` toggle plus `Auto-save off` disabled state in [src/ui/components/AutoSaveIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/AutoSaveIndicator.ts#L280) through [src/ui/components/AutoSaveIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/AutoSaveIndicator.ts#L286) and [src/ui/components/AutoSaveIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/AutoSaveIndicator.ts#L527).
-  - Disabling only stops the interval timer in [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L554) through [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L564).
-  - `markDirty(...)` still schedules a 2-second delayed save unconditionally in [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L276) through [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L290), and `saveWithGetter()` / `save()` do not check `config.enabled` in [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L232) through [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L237) and [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L296) through [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L335).
-  - Production marks the session dirty on ordinary review changes such as frame changes, marks, annotations, and effects in [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L36) through [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L39) and [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L781) through [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L784).
-- Impact:
-  - Users can disable auto-save in the UI, see an `Auto-save off` state, and still have new auto-save entries written a couple of seconds after ordinary edits.
-  - That makes the toggle misleading for privacy, storage, and workflow expectations, not just cosmetically wrong.
 
 ### 380. The auto-save interval setting is mostly bypassed by a hardcoded 2-second save path
 
@@ -3706,45 +3681,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Scripts can put the app into fractional playback ranges like `10.7-50.2`, which the viewer cannot actually display as discrete frames but the timing logic still treats as real boundaries.
   - That makes range events and playback behavior semantically inconsistent at the API boundary, especially for looping, boundary checks, and exported/public in-out state.
-
-### 566. `openrv.playback.step(Infinity)` can poison playback state with `NaN` frames in looped modes because the public API rejects only `NaN`, not non-finite numbers
-
-- Severity: High
-- Area: Public API / playback navigation
-- Evidence:
-  - `PlaybackAPI.step()` validates only `typeof direction === 'number'` and `!isNaN(direction)`, so `Infinity` passes through as valid input in [src/api/PlaybackAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/PlaybackAPI.ts#L105) through [src/api/PlaybackAPI.ts#L110).
-  - In `loop` mode it then applies modular arithmetic to the infinite target frame, and in `pingpong` mode it normalizes `Infinity` with `%`, both of which produce `NaN` in JavaScript, before calling `session.goToFrame(targetFrame)` in [src/api/PlaybackAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/PlaybackAPI.ts#L124) through [src/api/PlaybackAPI.ts#L160).
-  - The playback engine frame setter rounds and clamps the incoming frame but does not defend against `NaN`; `Math.round(NaN)` and `clamp(NaN, ...)` stay `NaN`, and `_currentFrame` is then updated/emitted with that value in [src/core/session/PlaybackEngine.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaybackEngine.ts#L220) through [src/core/session/PlaybackEngine.ts#L228) and [src/utils/math.ts](/Users/lifeart/Repos/openrv-web/src/utils/math.ts#L18) through [src/utils/math.ts#L19).
-  - The existing public API tests explicitly lock in similarly loose non-finite validation for `seek(Infinity)` in [src/api/OpenRVAPI.test.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.test.ts#L624) through [src/api/OpenRVAPI.test.ts#L627), but there is no corresponding guard/test preventing the `step(Infinity)` path.
-- Impact:
-  - A script can drive the session into an invalid `currentFrame = NaN` state through a single public API call when looped stepping is active.
-  - Once frame state is `NaN`, downstream playback, event payloads, and any UI or automation that assumes integer frame numbers can misbehave unpredictably.
-
-### 567. `openrv.view.setZoom()` and `setPan()` accept non-finite numbers and write them straight into live transform state
-
-- Severity: High
-- Area: Public API / viewer transform state
-- Evidence:
-  - `ViewAPI.setZoom()` rejects only non-numbers, `NaN`, and values `<= 0`, so `Infinity` is still accepted and forwarded to the viewer in [src/api/ViewAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/ViewAPI.ts#L47) through [src/api/ViewAPI.ts#L57).
-  - `ViewAPI.setPan()` similarly rejects only non-numbers and `NaN`, not non-finite coordinates, in [src/api/ViewAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/ViewAPI.ts#L139) through [src/api/ViewAPI.ts#L148).
-  - The concrete viewer path does not sanitize those values: `Viewer.setZoom()` / `setPan()` delegate straight into `TransformManager`, and `TransformManager.setZoom()` / `setPan()` store the raw numbers directly in `_zoom`, `_panX`, and `_panY` before notifying listeners in [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L1261) through [src/ui/components/Viewer.ts#L1262), [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L2387) through [src/ui/components/Viewer.ts#L2388), and [src/ui/components/TransformManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/TransformManager.ts#L146) through [src/ui/components/TransformManager.ts#L177).
-  - The current API tests cover `0`, negative, `NaN`, and wrong-type inputs for zoom/pan, but do not defend against `Infinity`, in [src/api/OpenRVAPI.test.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.test.ts#L984) through [src/api/OpenRVAPI.test.ts#L987) and [src/api/OpenRVAPI.test.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.test.ts#L1044) through [src/api/OpenRVAPI.test.ts#L1046).
-- Impact:
-  - A script can put the viewer into `zoom = Infinity` or infinite pan offsets with one public API call, and those values then propagate through view-change listeners and rendering math.
-  - That can destabilize visible navigation, derived `viewTransformChanged` payloads, and any consumer that assumes the public view state is finite geometry.
-
-### 568. `openrv.color.setCDL()` accepts non-finite values and pushes them directly into the live grading pipeline
-
-- Severity: High
-- Area: Public API / color pipeline / CDL
-- Evidence:
-  - `ColorAPI.setCDL()` validates CDL channel values and saturation with `isNaN(...)`, not `Number.isFinite(...)`, so `Infinity` and `-Infinity` pass as “valid numbers” in [src/api/ColorAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/ColorAPI.ts#L155) through [src/api/ColorAPI.ts#L236).
-  - The downstream control/pipeline layers do not sanitize them: `CDLControl.setCDL()` and `ColorPipelineManager.setCDL()` deep-copy and store the raw values directly in [src/ui/components/CDLControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/CDLControl.ts#L498) through [src/ui/components/CDLControl.ts#L518) and [src/ui/components/ColorPipelineManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ColorPipelineManager.ts#L350) through [src/ui/components/ColorPipelineManager.ts#L352).
-  - The actual CDL math then consumes those values without any finite-number guard. `applyCDLToValue()` multiplies and powers the incoming value with raw `slope`/`offset`/`power`, and `applySaturation()` applies raw `saturation`, in [src/color/CDL.ts](/Users/lifeart/Repos/openrv-web/src/color/CDL.ts#L57) through [src/color/CDL.ts#L75) and [src/color/CDL.ts](/Users/lifeart/Repos/openrv-web/src/color/CDL.ts#L83) through [src/color/CDL.ts#L100).
-  - The neighboring primary-adjustments path already treats `Infinity` as invalid and falls back to defaults in [src/ui/components/ColorControls.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ColorControls.ts#L746) through [src/ui/components/ColorControls.ts#L753), so this is a specific CDL gap rather than a deliberate global policy.
-- Impact:
-  - A script can inject non-finite CDL state into the live viewer, after which CPU and GPU grading paths may produce infinite or unstable pixel values.
-  - That makes the public color API internally inconsistent: primary adjustments defend against non-finite inputs, but CDL grading does not.
 
 ### 569. `openrv.markers.add()` accepts non-finite `frame` and `endFrame`, and the marker subsystem stores them as live marker state
 
