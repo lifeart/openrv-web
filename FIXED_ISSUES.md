@@ -126,6 +126,18 @@ Removed dead contextual registrations from `App.ts`, updated UI hints in `Scopes
 - `docs/advanced/scripting-api.md`
 - `src/plugin/PluginRegistry.test.ts`
 
+## Issue #288: Plugin scripting guide omits required `activate(id)` step
+
+**Fix**: Added `openrv.plugins.activate(id)` calls after every `register()` example in `docs/advanced/scripting-api.md`.
+
+## Issue #289: AI docs-generation templates use nonexistent API methods
+
+**Fix**: Replaced `media.loadFiles()`, `view.setCompareMode()`, `loop.setRange()`, `loop.enable()` with real API methods in `docs/scripts/lib/templates.ts`.
+
+**Files changed**:
+- `docs/advanced/scripting-api.md`
+- `docs/scripts/lib/templates.ts`
+
 ## Issue #290: Plugin `engineVersion` is declared but never enforced
 
 **Root cause**: `PluginRegistry.register()` never checked `manifest.engineVersion` against the host version.

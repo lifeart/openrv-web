@@ -187,7 +187,7 @@ Example of ideal output format:
 ### 1. Load the First Sequence
 
 \\\`\\\`\\\`typescript
-await window.openrv.media.loadFiles(sequence1Files);
+await window.openrv.media.addSourceFromURL('https://example.com/seq1/frame.0001.exr');
 \\\`\\\`\\\`
 
 You should see the first frame displayed in the viewport.
@@ -195,13 +195,13 @@ You should see the first frame displayed in the viewport.
 ### 2. Load the Second Sequence
 
 \\\`\\\`\\\`typescript
-await window.openrv.media.loadFiles(sequence2Files);
+await window.openrv.media.addSourceFromURL('https://example.com/seq2/frame.0001.exr');
 \\\`\\\`\\\`
 
-### 3. Enable Comparison Mode
+### 3. View the Alpha Channel
 
 \\\`\\\`\\\`typescript
-window.openrv.view.setCompareMode('wipe');
+window.openrv.view.setChannel('alpha');
 \\\`\\\`\\\`
 
 ## Troubleshooting
@@ -252,8 +252,9 @@ OpenRV Web supports any positive frame rate. Common rates: 23.976, 24, 25, 29.97
 ### How do I loop a specific range?
 
 \\\`\\\`\\\`typescript
-window.openrv.loop.setRange(100, 200);
-window.openrv.loop.enable();
+window.openrv.loop.setInPoint(100);
+window.openrv.loop.setOutPoint(200);
+window.openrv.loop.setMode('loop');
 \\\`\\\`\\\`
 
 This loops playback between frames 100 and 200.
