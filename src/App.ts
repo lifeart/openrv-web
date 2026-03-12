@@ -60,7 +60,6 @@ import { ClientMode } from './ui/components/ClientMode';
 import { ExternalPresentation } from './ui/components/ExternalPresentation';
 import { ActiveContextManager, type BindingContext } from './utils/input/ActiveContextManager';
 import { ContextualKeyboardManager } from './utils/input/ContextualKeyboardManager';
-import { AudioOrchestrator } from './services/AudioOrchestrator';
 import { DCCBridge } from './integrations/DCCBridge';
 import { MediaCacheManager } from './cache/MediaCacheManager';
 import { DisposableSubscriptionManager } from './utils/DisposableSubscriptionManager';
@@ -106,7 +105,6 @@ export class App {
   private externalPresentation: ExternalPresentation;
   private activeContextManager: ActiveContextManager;
   private cacheManager: MediaCacheManager;
-  private audioOrchestrator: AudioOrchestrator;
   private dccBridge: DCCBridge | null = null;
   private virtualSliderController: VirtualSliderController | null = null;
   private contextualKeyboardManager: ContextualKeyboardManager;
@@ -589,15 +587,6 @@ export class App {
       }),
     );
 
-    // Audio orchestrator (legacy — manages AudioMixer lifecycle and session wiring).
-    // The session's AudioCoordinator is the primary audio path; tell the
-    // orchestrator so it skips its own decode when the session path is active.
-    this.audioOrchestrator = new AudioOrchestrator({
-      session: this.session,
-      sessionAudioActive: () => this.session.audioPlaybackManager?.isUsingWebAudio ?? false,
-    });
-    this.audioOrchestrator.bindEvents();
-
     // Frame navigation service (playlist/annotation navigation)
     this.frameNavigation = new FrameNavigationService({
       session: this.session,
@@ -656,7 +645,6 @@ export class App {
       wirePlaybackControls(wiringCtx, {
         getKeyboardHandler: () => this.keyboardHandler,
         getFullscreenManager: () => this.fullscreenManager ?? undefined,
-        getAudioMixer: () => this.audioOrchestrator.getAudioMixer(),
         getShortcutCheatSheet: () => this.shortcutCheatSheet,
         getPluginRegistry: () => pluginRegistry,
       }),
@@ -720,9 +708,6 @@ export class App {
 
     this.bindEvents();
     this.renderLoop.start();
-
-    // Lazy-initialize AudioContext on first user interaction (browser policy)
-    this.audioOrchestrator.setupLazyInit();
 
     // Initialize OCIO pipeline from persisted state (if OCIO was enabled before page reload)
     updateOCIOPipeline(
@@ -964,7 +949,6 @@ export class App {
     this.shotGridBridge.dispose();
     this.clientMode.dispose();
     this.externalPresentation.dispose();
-    this.audioOrchestrator.dispose();
     this.frameNavigation.dispose();
     this.timelineEditorService.dispose();
     this.dccBridge?.dispose();

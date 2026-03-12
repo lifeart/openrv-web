@@ -2613,3 +2613,23 @@
 - **Regression Tests**: 8 new ColorControls tests (1D acceptance, event emission, file loading, 3D backward compat, error handling, label updates), 8 new WebGLLUT tests (1D setLUT/isReady, apply processing, uniforms, dispose cleanup, 3D→1D switching, null clearing, shader fallback, texture creation), 3 new ColorPipelineManager integration tests (1D setLUT/getLUT, null clearing, 1D↔3D switching).
 - **Verification**: All 9567 tests pass (2 pre-existing failures in unrelated issues-p1.test.ts).
 - **Files Changed**: `src/ui/components/ColorControls.ts`, `src/color/WebGLLUT.ts`, `src/ui/components/ColorPipelineManager.ts`, `src/ui/components/Viewer.ts`, `src/AppDCCWiring.ts`, `src/color/ColorProcessingFacade.ts`, `src/color/LUTLoader.ts`, `src/color/LUTFormats.ts`, `test/mocks.ts`, `src/ui/components/ColorControls.test.ts`, `src/color/WebGLLUT.test.ts`, `src/ui/components/ColorPipelineManager.test.ts`, plus type discriminant updates in 10+ test files
+
+---
+
+- **TODO(#152) Resolved**: Wired storage-only `ColorDefaults` preferences to runtime behavior. `defaultExposure` and `defaultGamma` are now applied on source load when current adjustments are at identity values (0 and 1 respectively). `defaultInputColorSpace` is used as fallback when no persisted color space exists and extension detection returns null (skipped when set to 'Auto'). Updated `ExportDefaults` documentation — `frameburnEnabled`/`frameburnConfig` were already consumed by ViewerExport. Removed stale `console.info` TODO(#152) warning from `PreferencesManager` constructor. `defaultCDLPreset` remains deferred (no CDL preset system exists). `showWelcome` remains deferred (no welcome dialog component exists).
+
+---
+
+- **TODO(audio-cleanup) Resolved**: Removed deprecated `AudioOrchestrator` service entirely. The primary audio path is `SessionPlayback`'s `AudioCoordinator`, which fully covers all active audio use-cases. AudioOrchestrator's decode path was already bypassed when `sessionAudioActive` was true. Removed: `AudioOrchestrator` class and its 34 tests, `getAudioMixer` from `PlaybackWiringDeps`, AudioMixer volume-forwarding calls in `AppPlaybackWiring`, AudioOrchestrator construction/wiring/disposal in `App.ts`, and 5 AudioMixer wiring tests (DCCFIX-015 through DCCFIX-019). `AudioMixer` itself is preserved for potential future multi-track/surround features.
+
+---
+
+- **TODO(#75) Resolved**: Added HDR source-data readback for PixelProbe. When "Source" mode is selected, the HDR path now samples pre-grade float values directly from the last rendered IPImage's typed array instead of always showing post-grade (rendered) values. Added `sampleFromIPImageSource()` to `PixelSamplingManager` with support for all data types (float32, uint8, uint16), channel counts (1/3/4), and NxN area averaging. Added `isSource` parameter to `PixelProbe.updateFromHDRValues()` to properly track when real source data is provided vs rendered fallback. VideoFrame-backed images (GPU VRAM only) gracefully fall back to the rendered path.
+
+---
+
+- **BlendModes dissolve/topmost TODOs Resolved**: Implemented the two remaining blend mode stubs. **Dissolve** uses deterministic per-pixel noise (sin-based hash of x,y coordinates) with threshold modulated by opacity — `noise < (1 - opacity)` keeps base pixel, otherwise uses top pixel, matching OpenRV's `InlineDissolve2.glsl` behavior. **Topmost** renders only the last visible layer in the stack: `compositeImageData()` treats it as replace (top overwrites base), `compositeMultipleLayers()` short-circuits to the last visible layer, and `StackGroupNode.compositeLayers()` finds the first visible entry from the top. Both modes now map directly from `stackCompositeToBlendMode()` without degradation fallback.
+
+---
+
+- **GPU processor parameter TODOs Resolved**: `GPUSharpenProcessor` and `GPUNoiseReductionProcessor` now read parameters from their owning node instead of using hardcoded values. Both accept a params provider interface at construction time (`SharpenParamsProvider` with `amount`, `NoiseReductionParamsProvider` with `strength/luminanceStrength/chromaStrength/radius`). The provider is structurally typed so nodes can be passed directly: `new GPUSharpenProcessor(node)`. Removed `@experimental` JSDoc and TODO comments.

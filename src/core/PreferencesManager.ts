@@ -48,9 +48,11 @@ export interface PluginSettingsProvider {
 export type ThemeMode = 'dark' | 'light' | 'auto';
 
 /**
- * TODO(#152): Storage-only — no production code reads `getColorDefaults()`.
- * These fields are persisted, exported, and imported, but not yet consumed
- * by any runtime behavior (e.g., renderer, color pipeline).
+ * Color defaults applied on source load.
+ * - `defaultInputColorSpace`: fallback when no persisted color space and extension detection returns null.
+ * - `defaultExposure`: applied when current exposure is at identity (0).
+ * - `defaultGamma`: applied when current gamma is at identity (1).
+ * - `defaultCDLPreset`: deferred — no CDL preset system exists yet.
  */
 export interface ColorDefaults {
   defaultInputColorSpace: string;
@@ -60,8 +62,8 @@ export interface ColorDefaults {
 }
 
 /**
- * Export default preferences consumed by ExportControl (see #175).
- * frameburnEnabled / frameburnConfig are still storage-only (TODO #152).
+ * Export defaults for snapshot/export operations.
+ * `frameburnEnabled` and `frameburnConfig` are consumed by ViewerExport.
  */
 export interface ExportDefaults {
   defaultFormat: 'png' | 'jpeg' | 'webp';
@@ -78,7 +80,7 @@ export interface GeneralPrefs {
   defaultFps: number;
   /** When true, sequences (frameCount > 1) auto-play on source load. Wired in handleSourceLoaded. */
   autoPlayOnLoad: boolean;
-  /** TODO(#152): Storage-only — not yet consumed by any production code. */
+  /** Deferred — no welcome dialog component exists yet. */
   showWelcome: boolean;
 }
 
@@ -324,20 +326,8 @@ export class PreferencesManager extends EventEmitter<CorePreferencesEvents> {
   private _subsystems: PreferencesSubsystems = {};
   private _pluginSettingsProvider: PluginSettingsProvider | null = null;
 
-  /** @internal Ensures the storage-only advisory is logged at most once. */
-  static _storageOnlyWarningEmitted = false;
-
   constructor(private readonly storage: StoragePreferencesManager = getPreferencesManager()) {
     super();
-    if (!PreferencesManager._storageOnlyWarningEmitted) {
-      PreferencesManager._storageOnlyWarningEmitted = true;
-      // TODO(#152): Remove this notice once these preference categories are wired to runtime behavior.
-      console.info(
-        '[PreferencesManager] Note: colorDefaults, exportDefaults, and several generalPrefs fields ' +
-          '(showWelcome, etc.) are persisted but not yet consumed by ' +
-          'production code. See TODO(#152).',
-      );
-    }
   }
 
   /**

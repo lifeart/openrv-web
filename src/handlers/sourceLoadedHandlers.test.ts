@@ -14,6 +14,17 @@ import {
 } from './sourceLoadedHandlers';
 import * as WebGLScopes from '../scopes/WebGLScopes';
 import type { SessionBridgeContext } from '../AppSessionBridge';
+import * as PreferencesManagerModule from '../core/PreferencesManager';
+
+vi.mock('../core/PreferencesManager', async (importOriginal) => {
+  const actual = await importOriginal<typeof PreferencesManagerModule>();
+  return {
+    ...actual,
+    getCorePreferencesManager: vi.fn(() => ({
+      getColorDefaults: () => ({ ...actual.DEFAULT_COLOR_DEFAULTS }),
+    })),
+  };
+});
 
 function createMockContext(
   overrides: {
@@ -52,9 +63,10 @@ function createMockContext(
     }),
     getState: vi.fn(() => ({ ...toneMappingState })),
   };
-  const colorAdjustments = { gamma: 1 };
+  const colorAdjustments = { exposure: 0, gamma: 1 };
   const colorControls = {
-    setAdjustments: vi.fn((adj: { gamma?: number }) => {
+    setAdjustments: vi.fn((adj: { exposure?: number; gamma?: number }) => {
+      if (adj.exposure !== undefined) colorAdjustments.exposure = adj.exposure;
       if (adj.gamma !== undefined) colorAdjustments.gamma = adj.gamma;
     }),
     getAdjustments: vi.fn(() => ({ ...colorAdjustments })),
@@ -118,6 +130,10 @@ describe('handleSourceLoaded', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    // Reset preferences mock to defaults
+    (PreferencesManagerModule.getCorePreferencesManager as ReturnType<typeof vi.fn>).mockReturnValue({
+      getColorDefaults: () => ({ ...PreferencesManagerModule.DEFAULT_COLOR_DEFAULTS }),
+    });
   });
 
   it('SLH-U001: calls updateInfoPanel', () => {
@@ -1151,6 +1167,184 @@ describe('handleSourceLoaded', () => {
     );
 
     expect((context.getSession() as any).play).not.toHaveBeenCalled();
+  });
+
+  // ---- Preference wiring: defaultExposure / defaultGamma ----
+
+  it('SLH-U070: applies defaultExposure from preferences when adjustments are at default', () => {
+    const mockGetCorePreferencesManager = PreferencesManagerModule.getCorePreferencesManager as ReturnType<typeof vi.fn>;
+    mockGetCorePreferencesManager.mockReturnValue({
+      getColorDefaults: () => ({
+        ...PreferencesManagerModule.DEFAULT_COLOR_DEFAULTS,
+        defaultExposure: 1.5,
+      }),
+    });
+
+    const context = createMockContext({
+      currentSource: { name: 'test.jpg', width: 100, height: 100 },
+    });
+
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
+
+    expect(context.getColorControls().setAdjustments).toHaveBeenCalledWith({ exposure: 1.5 });
+  });
+
+  it('SLH-U071: does NOT apply defaultExposure when adjustments are already non-default', () => {
+    const mockGetCorePreferencesManager = PreferencesManagerModule.getCorePreferencesManager as ReturnType<typeof vi.fn>;
+    mockGetCorePreferencesManager.mockReturnValue({
+      getColorDefaults: () => ({
+        ...PreferencesManagerModule.DEFAULT_COLOR_DEFAULTS,
+        defaultExposure: 1.5,
+      }),
+    });
+
+    const context = createMockContext({
+      currentSource: { name: 'test.jpg', width: 100, height: 100 },
+    });
+    // Pre-set exposure to a non-default value
+    context.getColorControls().setAdjustments({ exposure: 3.0 });
+    (context.getColorControls().setAdjustments as ReturnType<typeof vi.fn>).mockClear();
+
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
+
+    // Should NOT have been called with exposure
+    const exposureCalls = (context.getColorControls().setAdjustments as ReturnType<typeof vi.fn>).mock.calls.filter(
+      (call: unknown[]) => (call[0] as Record<string, unknown>).exposure !== undefined,
+    );
+    expect(exposureCalls).toHaveLength(0);
+  });
+
+  it('SLH-U072: applies defaultGamma from preferences when adjustments are at default', () => {
+    const mockGetCorePreferencesManager = PreferencesManagerModule.getCorePreferencesManager as ReturnType<typeof vi.fn>;
+    mockGetCorePreferencesManager.mockReturnValue({
+      getColorDefaults: () => ({
+        ...PreferencesManagerModule.DEFAULT_COLOR_DEFAULTS,
+        defaultGamma: 2.2,
+      }),
+    });
+
+    const context = createMockContext({
+      currentSource: { name: 'test.jpg', width: 100, height: 100 },
+    });
+
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
+
+    expect(context.getColorControls().setAdjustments).toHaveBeenCalledWith({ gamma: 2.2 });
+  });
+
+  it('SLH-U073: does NOT apply defaultGamma when adjustments are already non-default', () => {
+    const mockGetCorePreferencesManager = PreferencesManagerModule.getCorePreferencesManager as ReturnType<typeof vi.fn>;
+    mockGetCorePreferencesManager.mockReturnValue({
+      getColorDefaults: () => ({
+        ...PreferencesManagerModule.DEFAULT_COLOR_DEFAULTS,
+        defaultGamma: 2.2,
+      }),
+    });
+
+    const context = createMockContext({
+      currentSource: { name: 'test.jpg', width: 100, height: 100 },
+    });
+    // Pre-set gamma to a non-default value
+    context.getColorControls().setAdjustments({ gamma: 1.8 });
+    (context.getColorControls().setAdjustments as ReturnType<typeof vi.fn>).mockClear();
+
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
+
+    // Should NOT have been called with gamma
+    const gammaCalls = (context.getColorControls().setAdjustments as ReturnType<typeof vi.fn>).mock.calls.filter(
+      (call: unknown[]) => (call[0] as Record<string, unknown>).gamma !== undefined,
+    );
+    expect(gammaCalls).toHaveLength(0);
+  });
+
+  // ---- Preference wiring: defaultInputColorSpace ----
+
+  it('SLH-U074: uses defaultInputColorSpace as fallback when extension detection returns null', () => {
+    const mockGetCorePreferencesManager = PreferencesManagerModule.getCorePreferencesManager as ReturnType<typeof vi.fn>;
+    mockGetCorePreferencesManager.mockReturnValue({
+      getColorDefaults: () => ({
+        ...PreferencesManagerModule.DEFAULT_COLOR_DEFAULTS,
+        defaultInputColorSpace: 'ACEScg',
+      }),
+    });
+
+    const context = createMockContext({
+      currentSource: { name: 'test.exr', width: 100, height: 100 },
+    });
+    const processor = context.getOCIOControl().getProcessor();
+    (processor.detectColorSpaceFromExtension as ReturnType<typeof vi.fn>).mockReturnValue(null);
+
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
+
+    expect(processor.setSourceInputColorSpace).toHaveBeenCalledWith('test.exr', 'ACEScg');
+  });
+
+  it('SLH-U075: defaultInputColorSpace "Auto" is a no-op (does not set color space)', () => {
+    const mockGetCorePreferencesManager = PreferencesManagerModule.getCorePreferencesManager as ReturnType<typeof vi.fn>;
+    mockGetCorePreferencesManager.mockReturnValue({
+      getColorDefaults: () => ({
+        ...PreferencesManagerModule.DEFAULT_COLOR_DEFAULTS,
+        defaultInputColorSpace: 'Auto',
+      }),
+    });
+
+    const context = createMockContext({
+      currentSource: { name: 'test.exr', width: 100, height: 100 },
+    });
+    const processor = context.getOCIOControl().getProcessor();
+    (processor.detectColorSpaceFromExtension as ReturnType<typeof vi.fn>).mockReturnValue(null);
+
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
+
+    expect(processor.setSourceInputColorSpace).not.toHaveBeenCalled();
   });
 });
 

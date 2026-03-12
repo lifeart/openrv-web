@@ -7,6 +7,7 @@ import type { SessionBridgeContext } from '../AppSessionBridge';
 import type { EXRChannelRemapping } from '../formats/EXRDecoder';
 import { setScopesHDRAutoFit, setScopesHDRMode } from '../scopes/WebGLScopes';
 import { queryHDRHeadroom } from '../color/DisplayCapabilities';
+import { getCorePreferencesManager } from '../core/PreferencesManager';
 
 type HDRTransferPreset = 'hlg' | 'pq' | null;
 type AutoToneMappingPreset = { enabled: boolean; operator: 'off' | 'aces' };
@@ -184,6 +185,9 @@ export function handleSourceLoaded(
     const persistedColorSpace = processor.getSourceInputColorSpace(sourceId);
     processor.setActiveSource(sourceId);
 
+    // Fetch color defaults once for both color-space fallback and exposure/gamma wiring
+    const colorDefaults = getCorePreferencesManager().getColorDefaults();
+
     if (!persistedColorSpace) {
       // No persisted color space — detect from file extension
       const lastDot = source.name ? source.name.lastIndexOf('.') : -1;
@@ -191,7 +195,22 @@ export function handleSourceLoaded(
       const detectedFromExt = processor.detectColorSpaceFromExtension(ext);
       if (detectedFromExt) {
         processor.setSourceInputColorSpace(sourceId, detectedFromExt);
+      } else {
+        // Fallback to user-configured default input color space preference
+        if (colorDefaults.defaultInputColorSpace !== 'Auto') {
+          processor.setSourceInputColorSpace(sourceId, colorDefaults.defaultInputColorSpace);
+        }
       }
+    }
+
+    // Apply default exposure/gamma from preferences when adjustments are at identity
+    const colorControls = context.getColorControls();
+    const currentAdj = colorControls.getAdjustments();
+    if (colorDefaults.defaultExposure !== 0 && currentAdj.exposure === 0) {
+      colorControls.setAdjustments({ exposure: colorDefaults.defaultExposure });
+    }
+    if (colorDefaults.defaultGamma !== 1 && currentAdj.gamma === 1) {
+      colorControls.setAdjustments({ gamma: colorDefaults.defaultGamma });
     }
   }
   // Auto-configure display pipeline for HDR content.

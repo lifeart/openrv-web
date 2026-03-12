@@ -31,7 +31,9 @@ export type BlendMode =
   | 'screen' // Screen
   | 'overlay' // Overlay
   | 'difference' // Difference
-  | 'exclusion'; // Exclusion
+  | 'exclusion' // Exclusion
+  | 'dissolve' // Per-pixel noise dissolve (OpenRV InlineDissolve2.glsl)
+  | 'topmost'; // Show topmost layer only (OpenRV Replace + topmostOnly)
 
 export const BLEND_MODES: BlendMode[] = [
   'normal',
@@ -42,6 +44,8 @@ export const BLEND_MODES: BlendMode[] = [
   'overlay',
   'difference',
   'exclusion',
+  'dissolve',
+  'topmost',
 ];
 
 export const BLEND_MODE_LABELS: Record<BlendMode, string> = {
@@ -53,6 +57,8 @@ export const BLEND_MODE_LABELS: Record<BlendMode, string> = {
   overlay: 'Overlay',
   difference: 'Difference',
   exclusion: 'Exclusion',
+  dissolve: 'Dissolve',
+  topmost: 'Topmost',
 };
 
 /**
@@ -148,6 +154,38 @@ export function compositeImageData(
     const topG = topData[i + 1]!;
     const topB = topData[i + 2]!;
     const topA = (topData[i + 3]! / 255) * opacity;
+
+    // Dissolve: per-pixel noise decides whether to show base or top
+    if (mode === 'dissolve') {
+      const pixelIdx = i / 4;
+      const x = pixelIdx % width;
+      const y = Math.floor(pixelIdx / width);
+      const noise = (Math.sin(x * 12.9898 + y * 78.233) * 43758.5453) % 1;
+      const noiseAbs = Math.abs(noise);
+      if (noiseAbs < 1 - opacity) {
+        // Keep base pixel
+        outData[i] = baseR;
+        outData[i + 1] = baseG;
+        outData[i + 2] = baseB;
+        outData[i + 3] = baseData[i + 3]!;
+      } else {
+        // Use top pixel
+        outData[i] = topData[i]!;
+        outData[i + 1] = topData[i + 1]!;
+        outData[i + 2] = topData[i + 2]!;
+        outData[i + 3] = topData[i + 3]!;
+      }
+      continue;
+    }
+
+    // Topmost: top layer replaces base entirely (same as replace)
+    if (mode === 'topmost') {
+      outData[i] = topR;
+      outData[i + 1] = topG;
+      outData[i + 2] = topB;
+      outData[i + 3] = topData[i + 3]!;
+      continue;
+    }
 
     if (topA === 0) {
       // Top is fully transparent, use base
@@ -253,6 +291,23 @@ export function compositeMultipleLayers(
     result.data[i + 3] = 0;
   }
 
+  // Topmost: return only the last visible layer (topmost in the stack)
+  if (layers.length > 0 && layers[0]?.blendMode === 'topmost') {
+    for (let i = layers.length - 1; i >= 0; i--) {
+      const layer = layers[i]!;
+      if (layer.visible && layer.opacity > 0) {
+        let layerData = layer.imageData;
+        if (layerData.width !== width || layerData.height !== height) {
+          layerData = resizeImageData(layerData, width, height);
+        }
+        result.data.set(layerData.data);
+        return result;
+      }
+    }
+    // No visible layers
+    return result;
+  }
+
   // Composite each visible layer
   for (const layer of layers) {
     if (!layer.visible || layer.opacity === 0) continue;
@@ -292,17 +347,15 @@ export function compositeMultipleLayers(
  *
  * - 'dissolve': Maps to IPImage::Dissolve. In OpenRV, the InlineDissolve2.glsl
  *   shader randomly selects either input per-pixel based on a noise function
- *   with probability p=0.5. The blend mode at the GL level uses the same
- *   premultiplied-over blending as 'over'. Currently falls back to 'normal'
- *   because we lack the per-pixel noise implementation.
- *   TODO: Implement per-pixel noise dissolve to match OpenRV InlineDissolve2.glsl.
+ *   with probability p=0.5. Implemented as per-pixel deterministic noise:
+ *   noise < (1 - opacity) keeps base pixel, otherwise uses top pixel.
  *
  * - 'topmost': In OpenRV, this maps to IPImage::Replace at the blend mode level,
  *   but StackIPNode::evaluate() also sets `topmostOnly = true`, which causes it
  *   to evaluate only the FIRST input (breaking after `haveOneImage` is set).
  *   This means only the top-most layer is displayed, all others are skipped.
- *   Currently falls back to 'normal'.
- *   TODO: Implement topmost by evaluating only the first visible input.
+ *   In compositeImageData, topmost behaves as 'replace' (top overwrites base).
+ *   In compositeMultipleLayers, topmost returns only the last visible layer.
  *
  * - 'minus': OpenRV maps '-difference' to IPImage::ReverseDifference, which uses
  *   glBlendEquation(GL_FUNC_REVERSE_SUBTRACT). The ReverseDifference2.glsl
@@ -362,12 +415,10 @@ export function stackCompositeToBlendModeWithInfo(composite: StackCompositeType)
       return { mode: 'minus', degraded: false };
     case 'dissolve':
       // OpenRV: InlineDissolve2.glsl uses per-pixel noise to randomly pick input.
-      // Falling back to normal until per-pixel noise dissolve is implemented.
-      return { mode: 'normal', degraded: true, originalMode: 'dissolve' };
+      return { mode: 'dissolve', degraded: false };
     case 'topmost':
       // OpenRV: StackIPNode evaluates only the first input when topmost is set.
-      // Falling back to normal until topmost-only evaluation is implemented.
-      return { mode: 'normal', degraded: true, originalMode: 'topmost' };
+      return { mode: 'topmost', degraded: false };
     default:
       return { mode: 'normal', degraded: false };
   }

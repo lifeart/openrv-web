@@ -1541,3 +1541,72 @@ describe('PixelProbe rendered fallback indicator (Issue #75)', () => {
     });
   });
 });
+
+describe('PixelProbe HDR source mode', () => {
+  let pixelProbe: PixelProbe;
+
+  beforeEach(() => {
+    pixelProbe = new PixelProbe();
+  });
+
+  afterEach(() => {
+    pixelProbe.dispose();
+  });
+
+  it('HDR-SRC-001: updateFromHDRValues with isSource=true stores HDR floats normally', () => {
+    pixelProbe.enable();
+    pixelProbe.updateFromHDRValues(10, 20, 0.5, 0.6, 0.7, 1.0, 100, 100, true);
+
+    const state = pixelProbe.getState();
+    expect(state.x).toBe(10);
+    expect(state.y).toBe(20);
+    expect(state.rgb.r).toBe(Math.round(0.5 * 255));
+    expect(state.rgb.g).toBe(Math.round(0.6 * 255));
+    expect(state.rgb.b).toBe(Math.round(0.7 * 255));
+  });
+
+  it('HDR-SRC-002: updateFromHDRValues with isSource=false (default) works as before', () => {
+    pixelProbe.enable();
+    pixelProbe.updateFromHDRValues(10, 20, 0.5, 0.6, 0.7, 1.0, 100, 100);
+
+    const state = pixelProbe.getState();
+    expect(state.rgb.r).toBe(Math.round(0.5 * 255));
+    expect(state.rgb.g).toBe(Math.round(0.6 * 255));
+    expect(state.rgb.b).toBe(Math.round(0.7 * 255));
+  });
+
+  it('HDR-SRC-003: updateFromHDRValues with isSource=true handles HDR values > 1.0', () => {
+    pixelProbe.enable();
+    pixelProbe.updateFromHDRValues(5, 5, 1.5, 2.0, 0.3, 1.0, 100, 100, true);
+
+    const state = pixelProbe.getState();
+    // Clamped to 255 for legacy display
+    expect(state.rgb.r).toBe(255);
+    expect(state.rgb.g).toBe(255);
+    expect(state.rgb.b).toBe(Math.round(0.3 * 255));
+  });
+
+  it('HDR-SRC-004: isRenderedFallback is false when isSource=true and sourceMode is source', () => {
+    pixelProbe.enable();
+    pixelProbe.setSourceMode('source');
+    pixelProbe.updateFromHDRValues(5, 5, 0.5, 0.5, 0.5, 1.0, 100, 100, true);
+
+    expect(pixelProbe.isSourceFallbackActive()).toBe(false);
+  });
+
+  it('HDR-SRC-005: isRenderedFallback is true when isSource=false and sourceMode is source', () => {
+    pixelProbe.enable();
+    pixelProbe.setSourceMode('source');
+    pixelProbe.updateFromHDRValues(5, 5, 0.5, 0.5, 0.5, 1.0, 100, 100, false);
+
+    expect(pixelProbe.isSourceFallbackActive()).toBe(true);
+  });
+
+  it('HDR-SRC-006: isRenderedFallback is false when sourceMode is rendered (regardless of isSource)', () => {
+    pixelProbe.enable();
+    pixelProbe.setSourceMode('rendered');
+    pixelProbe.updateFromHDRValues(5, 5, 0.5, 0.5, 0.5, 1.0, 100, 100, false);
+
+    expect(pixelProbe.isSourceFallbackActive()).toBe(false);
+  });
+});

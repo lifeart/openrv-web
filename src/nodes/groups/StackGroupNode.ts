@@ -250,6 +250,18 @@ export class StackGroupNode extends BaseGroupNode {
     if (entries.length === 0) return null;
     if (entries.length === 1) return entries[0]!.image;
 
+    // Topmost: return only the first visible entry (top-most in the stack)
+    if (this.getCompositeType() === 'topmost') {
+      for (let i = entries.length - 1; i >= 0; i--) {
+        const entry = entries[i]!;
+        const settings = this.getLayerSettings(entry.originalIndex);
+        if (settings.visible && settings.opacity > 0) {
+          return entry.image;
+        }
+      }
+      return null;
+    }
+
     // Use the dimensions of the first (bottom) input as the output size
     const baseEntry = entries[0]!;
     const width = baseEntry.image.width;

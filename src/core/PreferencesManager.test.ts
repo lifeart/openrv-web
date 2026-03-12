@@ -828,34 +828,13 @@ describe('FPS Indicator Preferences', () => {
 // Issue #152 — storage-only advisory & regression
 // ---------------------------------------------------------------------------
 
-describe('Issue #152: storage-only preferences advisory', () => {
+describe('Issue #152: preferences wiring', () => {
   afterEach(() => {
     resetCorePreferencesManagerForTests();
     vi.restoreAllMocks();
   });
 
-  it('CPRF-152-001: constructor emits console.info advisory once', () => {
-    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
-    const { manager: _m1 } = createManager();
-    expect(spy).toHaveBeenCalledTimes(1);
-    expect(spy).toHaveBeenCalledWith(
-      expect.stringContaining('[PreferencesManager]'),
-    );
-    expect(spy).toHaveBeenCalledWith(
-      expect.stringContaining('TODO(#152)'),
-    );
-  });
-
-  it('CPRF-152-002: advisory is emitted only once across multiple instances', () => {
-    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
-    createManager();
-    createManager();
-    createManager();
-    expect(spy).toHaveBeenCalledTimes(1);
-  });
-
   it('CPRF-152-003: colorDefaults get/set/export/import remain functional', () => {
-    vi.spyOn(console, 'info').mockImplementation(() => {});
     const { manager } = createManager();
     manager.setColorDefaults({ defaultExposure: 7, defaultGamma: 1.8 });
     expect(manager.getColorDefaults().defaultExposure).toBe(7);
@@ -871,7 +850,6 @@ describe('Issue #152: storage-only preferences advisory', () => {
   });
 
   it('CPRF-152-004: exportDefaults get/set/export/import remain functional', () => {
-    vi.spyOn(console, 'info').mockImplementation(() => {});
     const { manager } = createManager();
     manager.setExportDefaults({ defaultFormat: 'webp', frameburnEnabled: true });
     expect(manager.getExportDefaults().defaultFormat).toBe('webp');
@@ -887,8 +865,7 @@ describe('Issue #152: storage-only preferences advisory', () => {
     expect(m2.getExportDefaults().frameburnEnabled).toBe(true);
   });
 
-  it('CPRF-152-005: unused generalPrefs fields get/set/export/import remain functional', () => {
-    vi.spyOn(console, 'info').mockImplementation(() => {});
+  it('CPRF-152-005: generalPrefs fields get/set/export/import remain functional', () => {
     const { manager } = createManager();
     manager.setGeneralPrefs({ autoPlayOnLoad: true, showWelcome: false, defaultFps: 60 });
     const prefs = manager.getGeneralPrefs();

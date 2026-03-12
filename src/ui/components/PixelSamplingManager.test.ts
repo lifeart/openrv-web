@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PixelSamplingManager, type PixelSamplingContext } from './PixelSamplingManager';
+import { IPImage } from '../../core/image/Image';
 
 describe('PixelSamplingManager', () => {
   let manager: PixelSamplingManager;
@@ -673,6 +674,301 @@ describe('PixelSamplingManager', () => {
       expect(result).not.toBeNull();
       expect(result!.floatData).not.toBeNull();
       expect(mockRenderer.renderForScopes).toHaveBeenCalled();
+    });
+  });
+
+  // ===========================================================================
+  // 7. HDR source mode readback
+  // ===========================================================================
+
+  describe('HDR source mode readback', () => {
+    function createMockIPImage(
+      width: number,
+      height: number,
+      channels: number,
+      dataType: 'float32' | 'uint8' | 'uint16',
+      fillValue: number,
+    ): IPImage {
+      const image = new IPImage({ width, height, channels, dataType });
+      const arr = image.getTypedArray();
+      for (let i = 0; i < arr.length; i++) {
+        arr[i] = fillValue;
+      }
+      return image;
+    }
+
+    it('PSM-060: HDR source mode samples from IPImage when available', () => {
+      // Create a 4x4 float32 RGBA image filled with known values
+      const image = createMockIPImage(4, 4, 4, 'float32', 0);
+      const arr = image.getTypedArray() as Float32Array;
+      // Set pixel at (2,2) to specific values
+      const idx = (2 * 4 + 2) * 4;
+      arr[idx] = 0.8;
+      arr[idx + 1] = 0.6;
+      arr[idx + 2] = 0.4;
+      arr[idx + 3] = 1.0;
+
+      mockPixelProbe.isEnabled.mockReturnValue(true);
+      mockPixelProbe.getSourceMode.mockReturnValue('source');
+      mockPixelProbe.getSampleSize.mockReturnValue(1);
+
+      const webglContext = {
+        ...mockContext,
+        pixelProbe: mockPixelProbe as any,
+        isHDRRenderActive: vi.fn(() => true),
+        isSDRWebGLRenderActive: vi.fn(() => false),
+        getGLRenderer: vi.fn(() => ({ readPixelFloat: vi.fn(() => new Float32Array([0.1, 0.1, 0.1, 1.0])) })) as any,
+        getLastHDRBlitFrame: vi.fn(() => null),
+        getLastRenderedImage: vi.fn(() => image),
+        getDisplayDimensions: vi.fn(() => ({ width: 4, height: 4 })),
+      };
+
+      const webglManager = new PixelSamplingManager(webglContext as any);
+
+      const renderedPixels = new Float32Array([0.1, 0.1, 0.1, 1.0]);
+      const position = { x: 2, y: 2 };
+      const mockEvent = { clientX: 200, clientY: 200 } as MouseEvent;
+
+      webglManager.handlePixelProbeData(renderedPixels, position, 1, 1, true, false, mockEvent);
+
+      // Should have called updateFromHDRValues with source data, not rendered data
+      expect(mockPixelProbe.updateFromHDRValues).toHaveBeenCalledTimes(1);
+      const args = mockPixelProbe.updateFromHDRValues.mock.calls[0]!;
+      expect(args[2]).toBeCloseTo(0.8, 5); // r from source
+      expect(args[3]).toBeCloseTo(0.6, 5); // g from source
+      expect(args[4]).toBeCloseTo(0.4, 5); // b from source
+      expect(args[5]).toBeCloseTo(1.0, 5); // a from source
+      expect(args[8]).toBe(true); // isSource flag
+    });
+
+    it('PSM-061: falls back to rendered values when IPImage unavailable', () => {
+      mockPixelProbe.isEnabled.mockReturnValue(true);
+      mockPixelProbe.getSourceMode.mockReturnValue('source');
+
+      const webglContext = {
+        ...mockContext,
+        pixelProbe: mockPixelProbe as any,
+        getLastRenderedImage: vi.fn(() => null),
+        getDisplayDimensions: vi.fn(() => ({ width: 800, height: 600 })),
+      };
+
+      const webglManager = new PixelSamplingManager(webglContext as any);
+
+      const renderedPixels = new Float32Array([0.3, 0.4, 0.5, 1.0]);
+      const position = { x: 100, y: 100 };
+      const mockEvent = { clientX: 100, clientY: 100 } as MouseEvent;
+
+      webglManager.handlePixelProbeData(renderedPixels, position, 1, 1, true, false, mockEvent);
+
+      expect(mockPixelProbe.updateFromHDRValues).toHaveBeenCalledTimes(1);
+      const args = mockPixelProbe.updateFromHDRValues.mock.calls[0]!;
+      expect(args[2]).toBeCloseTo(0.3, 5); // rendered r
+      expect(args[3]).toBeCloseTo(0.4, 5); // rendered g
+      expect(args[4]).toBeCloseTo(0.5, 5); // rendered b
+      // No isSource flag (default false)
+      expect(args[8]).toBeUndefined();
+    });
+
+    it('PSM-062: falls back to rendered when IPImage has no CPU data (VideoFrame-backed)', () => {
+      // Create an IPImage with zero-length data (simulates VideoFrame-only)
+      const image = new IPImage({
+        width: 4,
+        height: 4,
+        channels: 4,
+        dataType: 'float32',
+        data: new ArrayBuffer(0),
+      });
+
+      mockPixelProbe.isEnabled.mockReturnValue(true);
+      mockPixelProbe.getSourceMode.mockReturnValue('source');
+      mockPixelProbe.getSampleSize.mockReturnValue(1);
+
+      const webglContext = {
+        ...mockContext,
+        pixelProbe: mockPixelProbe as any,
+        getLastRenderedImage: vi.fn(() => image),
+        getDisplayDimensions: vi.fn(() => ({ width: 4, height: 4 })),
+      };
+
+      const webglManager = new PixelSamplingManager(webglContext as any);
+
+      const renderedPixels = new Float32Array([0.2, 0.3, 0.4, 1.0]);
+      const position = { x: 2, y: 2 };
+      const mockEvent = { clientX: 100, clientY: 100 } as MouseEvent;
+
+      webglManager.handlePixelProbeData(renderedPixels, position, 1, 1, true, false, mockEvent);
+
+      // Should fall back to rendered values
+      expect(mockPixelProbe.updateFromHDRValues).toHaveBeenCalledTimes(1);
+      const args = mockPixelProbe.updateFromHDRValues.mock.calls[0]!;
+      expect(args[2]).toBeCloseTo(0.2, 5);
+      expect(args[3]).toBeCloseTo(0.3, 5);
+    });
+
+    it('PSM-063: coordinate mapping from display to source image', () => {
+      // Source image is 100x100, display is 800x600
+      const image = createMockIPImage(100, 100, 4, 'float32', 0);
+      const arr = image.getTypedArray() as Float32Array;
+      // Set pixel at (50, 50) in source
+      const idx = (50 * 100 + 50) * 4;
+      arr[idx] = 0.9;
+      arr[idx + 1] = 0.8;
+      arr[idx + 2] = 0.7;
+      arr[idx + 3] = 1.0;
+
+      mockPixelProbe.isEnabled.mockReturnValue(true);
+      mockPixelProbe.getSourceMode.mockReturnValue('source');
+      mockPixelProbe.getSampleSize.mockReturnValue(1);
+
+      const webglContext = {
+        ...mockContext,
+        pixelProbe: mockPixelProbe as any,
+        getLastRenderedImage: vi.fn(() => image),
+        getDisplayDimensions: vi.fn(() => ({ width: 800, height: 600 })),
+      };
+
+      const webglManager = new PixelSamplingManager(webglContext as any);
+
+      // Display position (400, 300) should map to source (50, 50)
+      const renderedPixels = new Float32Array([0.1, 0.1, 0.1, 1.0]);
+      const position = { x: 400, y: 300 };
+      const mockEvent = { clientX: 400, clientY: 300 } as MouseEvent;
+
+      webglManager.handlePixelProbeData(renderedPixels, position, 1, 1, true, false, mockEvent);
+
+      const args = mockPixelProbe.updateFromHDRValues.mock.calls[0]!;
+      expect(args[2]).toBeCloseTo(0.9, 5);
+      expect(args[3]).toBeCloseTo(0.8, 5);
+      expect(args[4]).toBeCloseTo(0.7, 5);
+    });
+
+    it('PSM-064: single-channel image treats as grayscale', () => {
+      const image = createMockIPImage(4, 4, 1, 'float32', 0);
+      const arr = image.getTypedArray() as Float32Array;
+      arr[2 * 4 + 2] = 0.6; // pixel (2,2) single channel
+
+      mockPixelProbe.isEnabled.mockReturnValue(true);
+      mockPixelProbe.getSourceMode.mockReturnValue('source');
+      mockPixelProbe.getSampleSize.mockReturnValue(1);
+
+      const webglContext = {
+        ...mockContext,
+        pixelProbe: mockPixelProbe as any,
+        getLastRenderedImage: vi.fn(() => image),
+        getDisplayDimensions: vi.fn(() => ({ width: 4, height: 4 })),
+      };
+
+      const webglManager = new PixelSamplingManager(webglContext as any);
+
+      const renderedPixels = new Float32Array([0.1, 0.1, 0.1, 1.0]);
+      const position = { x: 2, y: 2 };
+      const mockEvent = { clientX: 100, clientY: 100 } as MouseEvent;
+
+      webglManager.handlePixelProbeData(renderedPixels, position, 1, 1, true, false, mockEvent);
+
+      const args = mockPixelProbe.updateFromHDRValues.mock.calls[0]!;
+      // All RGB channels should be equal (grayscale), alpha = 1
+      expect(args[2]).toBeCloseTo(0.6, 5);
+      expect(args[3]).toBeCloseTo(0.6, 5);
+      expect(args[4]).toBeCloseTo(0.6, 5);
+      expect(args[5]).toBeCloseTo(1.0, 5);
+    });
+
+    it('PSM-065: 3-channel image has alpha = 1', () => {
+      const image = createMockIPImage(4, 4, 3, 'float32', 0);
+      const arr = image.getTypedArray() as Float32Array;
+      const idx = (2 * 4 + 2) * 3;
+      arr[idx] = 0.5;
+      arr[idx + 1] = 0.6;
+      arr[idx + 2] = 0.7;
+
+      mockPixelProbe.isEnabled.mockReturnValue(true);
+      mockPixelProbe.getSourceMode.mockReturnValue('source');
+      mockPixelProbe.getSampleSize.mockReturnValue(1);
+
+      const webglContext = {
+        ...mockContext,
+        pixelProbe: mockPixelProbe as any,
+        getLastRenderedImage: vi.fn(() => image),
+        getDisplayDimensions: vi.fn(() => ({ width: 4, height: 4 })),
+      };
+
+      const webglManager = new PixelSamplingManager(webglContext as any);
+
+      const renderedPixels = new Float32Array([0.1, 0.1, 0.1, 1.0]);
+      const position = { x: 2, y: 2 };
+      const mockEvent = { clientX: 100, clientY: 100 } as MouseEvent;
+
+      webglManager.handlePixelProbeData(renderedPixels, position, 1, 1, true, false, mockEvent);
+
+      const args = mockPixelProbe.updateFromHDRValues.mock.calls[0]!;
+      expect(args[2]).toBeCloseTo(0.5, 5);
+      expect(args[3]).toBeCloseTo(0.6, 5);
+      expect(args[4]).toBeCloseTo(0.7, 5);
+      expect(args[5]).toBeCloseTo(1.0, 5); // alpha = 1 for 3-channel
+    });
+
+    it('PSM-066: uint8 data is normalised to 0-1', () => {
+      const image = createMockIPImage(4, 4, 4, 'uint8', 0);
+      const arr = image.getTypedArray() as Uint8Array;
+      const idx = (2 * 4 + 2) * 4;
+      arr[idx] = 128;
+      arr[idx + 1] = 255;
+      arr[idx + 2] = 0;
+      arr[idx + 3] = 255;
+
+      mockPixelProbe.isEnabled.mockReturnValue(true);
+      mockPixelProbe.getSourceMode.mockReturnValue('source');
+      mockPixelProbe.getSampleSize.mockReturnValue(1);
+
+      const webglContext = {
+        ...mockContext,
+        pixelProbe: mockPixelProbe as any,
+        getLastRenderedImage: vi.fn(() => image),
+        getDisplayDimensions: vi.fn(() => ({ width: 4, height: 4 })),
+      };
+
+      const webglManager = new PixelSamplingManager(webglContext as any);
+
+      const renderedPixels = new Float32Array([0.1, 0.1, 0.1, 1.0]);
+      const position = { x: 2, y: 2 };
+      const mockEvent = { clientX: 100, clientY: 100 } as MouseEvent;
+
+      webglManager.handlePixelProbeData(renderedPixels, position, 1, 1, true, false, mockEvent);
+
+      const args = mockPixelProbe.updateFromHDRValues.mock.calls[0]!;
+      expect(args[2]).toBeCloseTo(128 / 255, 3);
+      expect(args[3]).toBeCloseTo(1.0, 3);
+      expect(args[4]).toBeCloseTo(0.0, 3);
+    });
+
+    it('PSM-067: rendered mode does not sample from IPImage', () => {
+      const image = createMockIPImage(4, 4, 4, 'float32', 0.9);
+
+      mockPixelProbe.isEnabled.mockReturnValue(true);
+      mockPixelProbe.getSourceMode.mockReturnValue('rendered');
+      mockPixelProbe.getSampleSize.mockReturnValue(1);
+
+      const webglContext = {
+        ...mockContext,
+        pixelProbe: mockPixelProbe as any,
+        getLastRenderedImage: vi.fn(() => image),
+        getDisplayDimensions: vi.fn(() => ({ width: 4, height: 4 })),
+      };
+
+      const webglManager = new PixelSamplingManager(webglContext as any);
+
+      const renderedPixels = new Float32Array([0.3, 0.4, 0.5, 1.0]);
+      const position = { x: 2, y: 2 };
+      const mockEvent = { clientX: 100, clientY: 100 } as MouseEvent;
+
+      webglManager.handlePixelProbeData(renderedPixels, position, 1, 1, true, false, mockEvent);
+
+      // Should use rendered values, not source
+      const args = mockPixelProbe.updateFromHDRValues.mock.calls[0]!;
+      expect(args[2]).toBeCloseTo(0.3, 5);
+      expect(args[3]).toBeCloseTo(0.4, 5);
+      expect(args[4]).toBeCloseTo(0.5, 5);
     });
   });
 });

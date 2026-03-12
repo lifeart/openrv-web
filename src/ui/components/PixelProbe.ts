@@ -741,15 +741,16 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     a: number,
     displayWidth: number,
     displayHeight: number,
+    isSource = false,
   ): void {
     if (!this.state.enabled || this.state.locked) return;
 
     const px = clamp(Math.floor(x), 0, displayWidth - 1);
     const py = clamp(Math.floor(y), 0, displayHeight - 1);
 
-    // HDR path never has source image data, so if source mode is active it's always a fallback
+    // When isSource=true, we have real pre-grade data; otherwise it's a fallback
     const wantsSource = this.state.sourceMode === 'source';
-    this.isRenderedFallback = wantsSource;
+    this.isRenderedFallback = wantsSource && !isSource;
 
     if (this.isRenderedFallback && !this.renderedFallbackWarned) {
       console.warn(
