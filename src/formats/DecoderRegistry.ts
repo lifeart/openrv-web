@@ -28,8 +28,9 @@ export type BuiltinFormatName =
   | 'raw-preview'
   | 'hdr'
   | 'jxl'
-  | 'jp2'
-  | 'mxf';
+  | 'jp2';
+// Note: 'mxf' is intentionally excluded — MXF is a container format, not a
+// still-image format.  Use isMXFFile / parseMXFHeader from MXFDemuxer instead.
 /** Format name type: includes built-in names plus any string for plugin formats */
 export type FormatName = BuiltinFormatName | (string & {}) | null;
 
@@ -48,7 +49,6 @@ export interface DecoderOptionsMap {
   hdr: NoDecoderOptions;
   jxl: NoDecoderOptions;
   jp2: JP2DecodeOptions;
-  mxf: NoDecoderOptions;
 }
 
 /** Result returned by FormatDecoder.decode() and detectAndDecode() */

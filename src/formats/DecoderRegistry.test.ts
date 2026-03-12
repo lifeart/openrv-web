@@ -757,4 +757,44 @@ describe('DecoderRegistry', () => {
       expect(registry.getDecoder(buffer)).toBeNull();
     });
   });
+
+  // =========================================================================
+  // Issue #281: MXF must not produce fake 1x1 images via the decode path
+  // =========================================================================
+  describe('issue #281: MXF excluded from image decode path', () => {
+    it('DR-MXF-002: getDecoderByName returns null for mxf', () => {
+      const registry = new DecoderRegistry();
+      expect(registry.getDecoderByName('mxf')).toBeNull();
+    });
+
+    it('DR-MXF-003: detectAndDecode returns null for an MXF buffer', async () => {
+      const buffer = new ArrayBuffer(64);
+      const bytes = new Uint8Array(buffer);
+      // SMPTE UL prefix
+      bytes[0] = 0x06; bytes[1] = 0x0e; bytes[2] = 0x2b; bytes[3] = 0x34;
+      bytes[4] = 0x02; bytes[5] = 0x05; bytes[6] = 0x01; bytes[7] = 0x01;
+
+      const registry = new DecoderRegistry();
+      const result = await registry.detectAndDecode(buffer);
+      expect(result).toBeNull();
+    });
+
+    it('DR-MXF-004: decodeAs throws for mxf format', async () => {
+      const registry = new DecoderRegistry();
+      const buffer = new ArrayBuffer(64);
+      // decodeAs with 'mxf' (as a string) should throw because no decoder is registered
+      await expect(
+        decodeAs(registry, 'mxf' as keyof DecoderOptionsMap, buffer),
+      ).rejects.toThrow(/no decoder registered/i);
+    });
+
+    it('DR-MXF-005: mxf is not in BuiltinFormatName (type-level guard)', () => {
+      // Runtime check: the registry has no decoder with formatName 'mxf'
+      const registry = new DecoderRegistry();
+      const allFormats = (registry as unknown as { decoders: { formatName: string }[] }).decoders.map(
+        (d) => d.formatName,
+      );
+      expect(allFormats).not.toContain('mxf');
+    });
+  });
 });

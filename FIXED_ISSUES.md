@@ -78,3 +78,15 @@ Removed dead contextual registrations from `App.ts`, updated UI hints in `Scopes
 - `src/AppViewWiring.ts`
 - `src/AppViewWiring.test.ts`
 - `src/hdr-acceptance-criteria.test.ts`
+
+## Issue #281: MXF is still registered as a decoder even though the decode result is only a 1x1 placeholder
+
+**Root cause**: `'mxf'` was listed in the `BuiltinFormatName` type union and `DecoderOptionsMap` even though the MXF "decoder" only returned a dummy 1x1 image. This made `decodeAs('mxf')` compile but produce fake frames.
+
+**Fix**: Removed `'mxf'` from `BuiltinFormatName` and `DecoderOptionsMap`. MXF metadata parsing via `MXFDemuxer` (isMXFFile, parseMXFHeader, demuxMXF) remains fully functional.
+
+**Tests added**: 4 regression tests verifying MXF is excluded from the decode path.
+
+**Files changed**:
+- `src/formats/DecoderRegistry.ts`
+- `src/formats/DecoderRegistry.test.ts`
