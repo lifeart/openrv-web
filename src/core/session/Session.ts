@@ -1,5 +1,6 @@
 import { type GTODTO, type GTOData } from 'gto-js';
 import { EventEmitter } from '../../utils/EventEmitter';
+import { basename } from '../../utils/path';
 import type { RVEDLEntry } from '../../formats/RVEDLParser';
 import type { PatternName, GradientDirection } from '../../nodes/sources/ProceduralSourceNode';
 import type { HDRResizeTier } from '../../utils/media/HDRFrameResizer';
@@ -1151,8 +1152,7 @@ export class Session extends EventEmitter<SessionEvents> {
     }
 
     const pathname = new URL(url).pathname;
-    const rawName = pathname.split('/').pop() || pathname;
-    const name = decodeURIComponent(rawName);
+    const name = decodeURIComponent(basename(pathname));
     const ext = name.includes('.') ? name.split('.').pop()!.toLowerCase() : '';
     const videoExts = new Set(['mp4', 'm4v', '3gp', '3g2', 'mov', 'qt', 'mkv', 'mk3d', 'webm', 'ogg', 'ogv', 'ogm', 'ogx', 'avi']);
     if (videoExts.has(ext)) {

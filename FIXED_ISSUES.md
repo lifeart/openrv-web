@@ -44,3 +44,18 @@ Removed dead contextual registrations from `App.ts`, updated UI hints in `Scopes
 - `src/utils/input/ContextualKeyboardManager.test.ts`
 - `src/__e2e__/ActiveContextManager.e2e.test.ts`
 - `src/KeyboardWiring.test.ts`
+
+## Issue #17: DCC media loading derives the display name with POSIX-only path splitting
+## Issue #21: POSIX-only basename extraction also exists in the core source nodes
+
+**Root cause**: Path basename extraction used `.split('/').pop()` which doesn't handle Windows paths, URLs with query strings/fragments, or trailing separators.
+
+**Fix**: Enhanced the shared `basename()` utility in `src/utils/path.ts` to strip URL query/fragment, handle both POSIX and Windows separators, and skip trailing separators. Replaced remaining inline split patterns in `Session.ts` and `GTOGraphLoader.ts` with the shared utility.
+
+**Tests added**: 8 new tests in `src/utils/path.test.ts` covering Windows paths, URLs with query strings/fragments, trailing slashes, edge cases.
+
+**Files changed**:
+- `src/utils/path.ts`
+- `src/utils/path.test.ts`
+- `src/core/session/Session.ts`
+- `src/core/session/GTOGraphLoader.ts`

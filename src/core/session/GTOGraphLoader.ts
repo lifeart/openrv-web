@@ -14,6 +14,7 @@ import { VALID_STATUSES } from './StatusManager';
 import type { StatusEntry, ShotStatus } from './StatusManager';
 import type { IPNode } from '../../nodes/base/IPNode';
 import { stackCompositeToBlendModeWithInfo } from '../../composite/BlendModes';
+import { basename as basenameUtil } from '../../utils/path';
 import type { DegradedModeInfo } from '../../composite/BlendModes';
 
 /**
@@ -709,7 +710,7 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
           // If we have available files (user selected), check for name match
           if (availableFiles && availableFiles.size > 0) {
             // Extract basename from movie path (e.g., /path/to/video.mp4 -> video.mp4)
-            const basename = movie.split(/[/\\]/).pop();
+            const basename = basenameUtil(movie);
 
             if (basename && availableFiles.has(basename)) {
               // Found a match! Use the blob URL for loading
@@ -2008,7 +2009,7 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
 
         // Resolve CDL file from availableFiles if specified
         if (typeof file === 'string' && file && availableFiles && availableFiles.size > 0) {
-          const basename = file.split(/[/\\]/).pop();
+          const basename = basenameUtil(file);
           if (basename && availableFiles.has(basename)) {
             nodeInfo.properties.cdlFileResolved = availableFiles.get(basename)!;
           } else {
