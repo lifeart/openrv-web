@@ -95,7 +95,10 @@ function createMockContext() {
     setCurrentSourceIndex: vi.fn(),
   });
 
-  const toneMappingControl = new EventEmitter();
+  const toneMappingControl = Object.assign(new EventEmitter(), {
+    syncHDROutputMode: vi.fn(),
+    getHDROutputMode: vi.fn().mockReturnValue('sdr'),
+  });
   const ghostFrameControl = new EventEmitter();
   const parControl = new EventEmitter();
   const backgroundPatternControl = new EventEmitter();
@@ -276,19 +279,20 @@ describe('wireViewControls', () => {
   // VW-011
   it('VW-011: hdrModeChanged calls viewer.setHDROutputMode()', () => {
     viewer.setHDROutputMode.mockReturnValue(true);
-    (controls.toneMappingControl as EventEmitter).emit('hdrModeChanged', 'hlg');
+    (controls.toneMappingControl as EventEmitter).emit('hdrModeChanged', { mode: 'hlg', previousMode: 'sdr' });
     expect(viewer.setHDROutputMode).toHaveBeenCalledWith('hlg');
   });
 
   // VW-011b
-  it('VW-011b: hdrModeChanged emits console.warn when renderer rejects mode', () => {
+  it('VW-011b: hdrModeChanged emits console.warn and reverts UI when renderer rejects mode', () => {
     viewer.setHDROutputMode.mockReturnValue(false);
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    (controls.toneMappingControl as EventEmitter).emit('hdrModeChanged', 'pq');
+    (controls.toneMappingControl as EventEmitter).emit('hdrModeChanged', { mode: 'pq', previousMode: 'sdr' });
     expect(viewer.setHDROutputMode).toHaveBeenCalledWith('pq');
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining('rejected by the renderer'),
     );
+    expect(controls.toneMappingControl.syncHDROutputMode).toHaveBeenCalledWith('sdr');
     warnSpy.mockRestore();
   });
 
@@ -296,9 +300,16 @@ describe('wireViewControls', () => {
   it('VW-011c: hdrModeChanged does NOT warn when renderer accepts mode', () => {
     viewer.setHDROutputMode.mockReturnValue(true);
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    (controls.toneMappingControl as EventEmitter).emit('hdrModeChanged', 'hlg');
+    (controls.toneMappingControl as EventEmitter).emit('hdrModeChanged', { mode: 'hlg', previousMode: 'sdr' });
     expect(warnSpy).not.toHaveBeenCalled();
     warnSpy.mockRestore();
+  });
+
+  // VW-011d
+  it('VW-011d: hdrModeChanged does NOT call syncHDROutputMode when renderer accepts mode', () => {
+    viewer.setHDROutputMode.mockReturnValue(true);
+    (controls.toneMappingControl as EventEmitter).emit('hdrModeChanged', { mode: 'hlg', previousMode: 'sdr' });
+    expect(controls.toneMappingControl.syncHDROutputMode).not.toHaveBeenCalled();
   });
 
   // VW-012

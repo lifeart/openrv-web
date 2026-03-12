@@ -826,7 +826,7 @@ describe('Phase 2: HDR Extended Range Output', () => {
       const hlgBtn = document.body.querySelector('[data-testid="hdr-mode-hlg"]') as HTMLButtonElement;
       hlgBtn.click();
 
-      expect(listener).toHaveBeenCalledWith('hlg');
+      expect(listener).toHaveBeenCalledWith({ mode: 'hlg', previousMode: 'sdr' });
       expect(control.getHDROutputMode()).toBe('hlg');
       control.dispose();
     });
@@ -842,7 +842,7 @@ describe('Phase 2: HDR Extended Range Output', () => {
       const pqBtn = document.body.querySelector('[data-testid="hdr-mode-pq"]') as HTMLButtonElement;
       pqBtn.click();
 
-      expect(listener).toHaveBeenCalledWith('pq');
+      expect(listener).toHaveBeenCalledWith({ mode: 'pq', previousMode: 'sdr' });
       expect(control.getHDROutputMode()).toBe('pq');
       control.dispose();
     });
@@ -862,7 +862,7 @@ describe('Phase 2: HDR Extended Range Output', () => {
       const sdrBtn = document.body.querySelector('[data-testid="hdr-mode-sdr"]') as HTMLButtonElement;
       sdrBtn.click();
 
-      expect(listener).toHaveBeenCalledWith('sdr');
+      expect(listener).toHaveBeenCalledWith({ mode: 'sdr', previousMode: 'hlg' });
       expect(control.getHDROutputMode()).toBe('sdr');
       control.dispose();
     });
@@ -931,7 +931,7 @@ describe('Phase 2: HDR Extended Range Output', () => {
       control.setHDROutputMode('pq');
 
       expect(control.getHDROutputMode()).toBe('pq');
-      expect(listener).toHaveBeenCalledWith('pq');
+      expect(listener).toHaveBeenCalledWith({ mode: 'pq', previousMode: 'sdr' });
       control.dispose();
     });
 

@@ -59,3 +59,22 @@ Removed dead contextual registrations from `App.ts`, updated UI hints in `Scopes
 - `src/utils/path.test.ts`
 - `src/core/session/Session.ts`
 - `src/core/session/GTOGraphLoader.ts`
+
+## Issue #224: HDR output mode UI can claim a mode change even when the renderer rejects it
+
+**Root cause**: `ToneMappingControl.setHDROutputMode()` optimistically updated internal state and UI before emitting `hdrModeChanged`. The wiring logged a warning on renderer rejection but never reverted the UI.
+
+**Fix**: Changed `hdrModeChanged` event to include `previousMode`. Added `syncHDROutputMode()` method to ToneMappingControl (following existing `sync*` pattern). Wiring now reverts UI via `syncHDROutputMode(previousMode)` when the renderer rejects the mode.
+
+**Tests added**: 6 new ToneMappingControl tests + 1 new AppViewWiring test covering success/failure paths.
+
+## Issue #225: Changing HDR output mode does not schedule a viewer redraw
+
+**Status**: Already fixed in the codebase. `Viewer.setHDROutputMode()` already calls `scheduleRender()` on success. Verified by existing tests VWR-HDR-004 and VWR-HDR-005.
+
+**Files changed**:
+- `src/ui/components/ToneMappingControl.ts`
+- `src/ui/components/ToneMappingControl.test.ts`
+- `src/AppViewWiring.ts`
+- `src/AppViewWiring.test.ts`
+- `src/hdr-acceptance-criteria.test.ts`

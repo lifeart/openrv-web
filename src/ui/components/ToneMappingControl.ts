@@ -33,7 +33,7 @@ import { DEFAULT_TONE_MAPPING_STATE, TONE_MAPPING_OPERATORS } from '../../core/t
  */
 export interface ToneMappingControlEvents extends EventMap {
   stateChanged: ToneMappingState;
-  hdrModeChanged: HDROutputMode;
+  hdrModeChanged: { mode: HDROutputMode; previousMode: HDROutputMode };
 }
 
 /**
@@ -576,9 +576,20 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
    */
   setHDROutputMode(mode: HDROutputMode): void {
     if (this.hdrOutputMode === mode) return;
+    const previousMode = this.hdrOutputMode;
     this.hdrOutputMode = mode;
     this.updateHDRModeButtons();
-    this.emit('hdrModeChanged', mode);
+    this.emit('hdrModeChanged', { mode, previousMode });
+  }
+
+  /**
+   * Sync HDR output mode from external source without emitting events.
+   * Use this to revert the UI when the renderer rejects a mode change.
+   */
+  syncHDROutputMode(mode: HDROutputMode): void {
+    if (this.hdrOutputMode === mode) return;
+    this.hdrOutputMode = mode;
+    this.updateHDRModeButtons();
   }
 
   /**

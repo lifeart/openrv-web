@@ -1031,6 +1031,76 @@ describe('TONE_MAPPING_OPERATORS', () => {
   });
 });
 
+describe('ToneMappingControl HDR mode (issues #224/#225)', () => {
+  let control: ToneMappingControl;
+
+  beforeEach(() => {
+    control = new ToneMappingControl();
+  });
+
+  afterEach(() => {
+    control.dispose();
+  });
+
+  it('TONE-HDR-001: setHDROutputMode emits event with mode and previousMode', () => {
+    const listener = vi.fn();
+    control.on('hdrModeChanged', listener);
+
+    control.setHDROutputMode('hlg');
+
+    expect(listener).toHaveBeenCalledWith({ mode: 'hlg', previousMode: 'sdr' });
+  });
+
+  it('TONE-HDR-002: setHDROutputMode emits correct previousMode on successive changes', () => {
+    const listener = vi.fn();
+
+    control.setHDROutputMode('hlg');
+    control.on('hdrModeChanged', listener);
+    control.setHDROutputMode('pq');
+
+    expect(listener).toHaveBeenCalledWith({ mode: 'pq', previousMode: 'hlg' });
+  });
+
+  it('TONE-HDR-003: syncHDROutputMode updates state without emitting', () => {
+    const listener = vi.fn();
+    control.on('hdrModeChanged', listener);
+
+    control.syncHDROutputMode('pq');
+
+    expect(control.getHDROutputMode()).toBe('pq');
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('TONE-HDR-004: syncHDROutputMode is a no-op when mode is the same', () => {
+    control.setHDROutputMode('hlg');
+    const listener = vi.fn();
+    control.on('hdrModeChanged', listener);
+
+    control.syncHDROutputMode('hlg');
+
+    expect(control.getHDROutputMode()).toBe('hlg');
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('TONE-HDR-005: syncHDROutputMode reverts state after rejected mode change', () => {
+    // Simulate: UI sets mode to 'pq', then wiring reverts because renderer rejected
+    control.setHDROutputMode('pq');
+    expect(control.getHDROutputMode()).toBe('pq');
+
+    control.syncHDROutputMode('sdr');
+    expect(control.getHDROutputMode()).toBe('sdr');
+  });
+
+  it('TONE-HDR-006: setHDROutputMode does not emit when mode is unchanged', () => {
+    const listener = vi.fn();
+    control.on('hdrModeChanged', listener);
+
+    control.setHDROutputMode('sdr'); // already sdr
+
+    expect(listener).not.toHaveBeenCalled();
+  });
+});
+
 describe('DEFAULT_TONE_MAPPING_STATE', () => {
   it('TONE-U210: default state is disabled', () => {
     expect(DEFAULT_TONE_MAPPING_STATE.enabled).toBe(false);
