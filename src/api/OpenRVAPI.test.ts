@@ -622,6 +622,11 @@ describe('PlaybackAPI', () => {
     expect(() => playback.step('abc' as any)).toThrow();
   });
 
+  it('API-U026b: step() rejects Infinity and -Infinity', () => {
+    expect(() => playback.step(Infinity)).toThrow('step() requires a valid number');
+    expect(() => playback.step(-Infinity)).toThrow('step() requires a valid number');
+  });
+
   it('API-U027: step(3) steps forward 3 frames', () => {
     const before = playback.getCurrentFrame();
     playback.step(3);
@@ -642,9 +647,8 @@ describe('PlaybackAPI', () => {
   });
 
   it('API-U029b: seek() with Infinity throws', () => {
-    expect(() => playback.seek(Infinity)).not.toThrow();
-    // Infinity is a valid number; it gets clamped by the session
-    expect(session.goToFrame).toHaveBeenCalledWith(Infinity);
+    expect(() => playback.seek(Infinity)).toThrow('seek() requires a valid frame number');
+    expect(() => playback.seek(-Infinity)).toThrow('seek() requires a valid frame number');
   });
 
   it('API-U029c: getTotalFrames() returns 0 when no source', () => {
@@ -1089,6 +1093,18 @@ describe('ViewAPI', () => {
     expect(() => view.setPan(0, 'y' as any)).toThrow();
   });
 
+  it('API-U044b: setZoom() rejects Infinity', () => {
+    expect(() => view.setZoom(Infinity)).toThrow('finite positive number');
+    expect(() => view.setZoom(-Infinity)).toThrow('finite positive number');
+  });
+
+  it('API-U044c: setPan() rejects non-finite coordinates', () => {
+    expect(() => view.setPan(Infinity, 0)).toThrow('finite');
+    expect(() => view.setPan(0, -Infinity)).toThrow('finite');
+    expect(() => view.setPan(Infinity, Infinity)).toThrow('finite');
+    expect(() => view.setPan(-Infinity, -Infinity)).toThrow('finite');
+  });
+
   it('API-U045: fitToWidth() calls viewer.fitToWidth()', () => {
     view.fitToWidth();
     expect(viewer.fitToWidth).toHaveBeenCalledOnce();
@@ -1427,6 +1443,27 @@ describe('ColorAPI', () => {
 
   it('API-U069d: setCDL rejects invalid saturation', () => {
     expect(() => color.setCDL({ saturation: NaN })).toThrow(/saturation/);
+  });
+
+  it('API-U069e-inf: setCDL rejects Infinity in slope', () => {
+    expect(() => color.setCDL({ slope: { r: Infinity, g: 1, b: 1 } })).toThrow(/slope/);
+    expect(() => color.setCDL({ slope: { r: 1, g: -Infinity, b: 1 } })).toThrow(/slope/);
+    expect(() => color.setCDL({ slope: { r: 1, g: 1, b: Infinity } })).toThrow(/slope/);
+  });
+
+  it('API-U069f-inf: setCDL rejects Infinity in offset', () => {
+    expect(() => color.setCDL({ offset: { r: Infinity, g: 0, b: 0 } })).toThrow(/offset/);
+    expect(() => color.setCDL({ offset: { r: 0, g: -Infinity, b: 0 } })).toThrow(/offset/);
+  });
+
+  it('API-U069g-inf: setCDL rejects Infinity in power', () => {
+    expect(() => color.setCDL({ power: { r: Infinity, g: 1, b: 1 } })).toThrow(/power/);
+    expect(() => color.setCDL({ power: { r: 1, g: 1, b: -Infinity } })).toThrow(/power/);
+  });
+
+  it('API-U069h-inf: setCDL rejects Infinity in saturation', () => {
+    expect(() => color.setCDL({ saturation: Infinity })).toThrow(/saturation/);
+    expect(() => color.setCDL({ saturation: -Infinity })).toThrow(/saturation/);
   });
 
   it('API-U069e: setAdjustments does not allow prototype pollution via __proto__', () => {

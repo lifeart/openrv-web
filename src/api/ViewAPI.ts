@@ -42,7 +42,7 @@ export class ViewAPI extends DisposableAPI {
    * Set the zoom level of the viewport.
    *
    * @param level - Zoom level as a positive number (e.g., 1.0 = 100%, 2.0 = 200%).
-   * @throws {ValidationError} If `level` is not a positive number or is NaN.
+   * @throws {ValidationError} If `level` is not a finite positive number.
    *
    * @example
    * ```ts
@@ -51,8 +51,8 @@ export class ViewAPI extends DisposableAPI {
    */
   setZoom(level: number): void {
     this.assertNotDisposed();
-    if (typeof level !== 'number' || isNaN(level) || level <= 0) {
-      throw new ValidationError('setZoom() requires a positive number');
+    if (typeof level !== 'number' || !Number.isFinite(level) || level <= 0) {
+      throw new ValidationError('setZoom() requires a finite positive number');
     }
     this.viewer.setZoom(level);
   }
@@ -133,7 +133,7 @@ export class ViewAPI extends DisposableAPI {
    *
    * @param x - Horizontal pan offset in pixels (positive = right).
    * @param y - Vertical pan offset in pixels (positive = down).
-   * @throws {ValidationError} If `x` or `y` is not a valid number or is NaN.
+   * @throws {ValidationError} If `x` or `y` is not a finite number.
    *
    * @example
    * ```ts
@@ -142,8 +142,8 @@ export class ViewAPI extends DisposableAPI {
    */
   setPan(x: number, y: number): void {
     this.assertNotDisposed();
-    if (typeof x !== 'number' || typeof y !== 'number' || isNaN(x) || isNaN(y)) {
-      throw new ValidationError('setPan() requires valid x and y coordinates');
+    if (typeof x !== 'number' || typeof y !== 'number' || !Number.isFinite(x) || !Number.isFinite(y)) {
+      throw new ValidationError('setPan() requires finite x and y coordinates');
     }
     this.viewer.setPan(x, y);
   }

@@ -217,11 +217,11 @@ export class ColorAPI extends DisposableAPI {
     const record = obj as Record<string, unknown>;
     if (
       typeof record.r !== 'number' ||
-      isNaN(record.r) ||
+      !Number.isFinite(record.r) ||
       typeof record.g !== 'number' ||
-      isNaN(record.g) ||
+      !Number.isFinite(record.g) ||
       typeof record.b !== 'number' ||
-      isNaN(record.b)
+      !Number.isFinite(record.b)
     ) {
       throw new ValidationError(`setCDL() "${name}" must be an object with numeric r, g, b fields`);
     }
@@ -259,7 +259,7 @@ export class ColorAPI extends DisposableAPI {
     if (cdl.power !== undefined) {
       this.validateRGB(cdl.power, 'power');
     }
-    if (cdl.saturation !== undefined && (typeof cdl.saturation !== 'number' || isNaN(cdl.saturation))) {
+    if (cdl.saturation !== undefined && (typeof cdl.saturation !== 'number' || !Number.isFinite(cdl.saturation))) {
       throw new ValidationError('setCDL() "saturation" must be a number');
     }
 
