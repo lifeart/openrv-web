@@ -11,7 +11,7 @@
 
 import type { DCCBridge, SyncColorMessage } from './integrations/DCCBridge';
 import type { ColorAdjustments } from './core/types/color';
-import type { LUT3D } from './color/LUTLoader';
+import type { LUT } from './color/LUTLoader';
 import { isLUT3D } from './color/LUTLoader';
 import { parseLUT } from './color/LUTFormatDetect';
 import type { Annotation } from './paint/types';
@@ -39,14 +39,14 @@ export interface DCCWiringSession {
 /** Minimal viewer surface needed by DCC wiring. */
 export interface DCCWiringViewer {
   setColorAdjustments(adjustments: ColorAdjustments): void;
-  setLUT(lut: LUT3D | null): void;
+  setLUT(lut: LUT | null): void;
 }
 
 /** Minimal colorControls surface needed by DCC wiring. */
 export interface DCCWiringColorControls {
   setAdjustments(adjustments: Partial<ColorAdjustments>): void;
   getAdjustments(): ColorAdjustments;
-  setLUT(lut: LUT3D | null): void;
+  setLUT(lut: LUT | null): void;
   on(event: string, handler: (...args: any[]) => void): any;
 }
 
@@ -109,14 +109,9 @@ export async function fetchAndApplyLUT(
     const filename = basename(lutPath);
     const lut = parseLUT(filename, content);
 
-    if (!isLUT3D(lut)) {
-      log.warn(`LUT from "${lutPath}" is a 1D LUT; only 3D LUTs are supported via DCC sync.`);
-      return;
-    }
-
     colorControls.setLUT(lut);
     viewer.setLUT(lut);
-    log.info(`Applied LUT from DCC: "${lutPath}" (${lut.title}, ${lut.size}^3)`);
+    log.info(`Applied LUT from DCC: "${lutPath}" (${lut.title}, size ${lut.size}${isLUT3D(lut) ? '^3' : ''})`);
   } catch (err) {
     log.warn(`Failed to load LUT from "${lutPath}":`, err);
   }

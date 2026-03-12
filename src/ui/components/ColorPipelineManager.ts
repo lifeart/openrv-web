@@ -11,6 +11,7 @@
 
 import { type ColorAdjustments, DEFAULT_COLOR_ADJUSTMENTS } from './ColorControls';
 import {
+  type LUT,
   type LUT3D,
   isLUT3D,
   WebGLLUTProcessor,
@@ -44,7 +45,7 @@ export interface ColorPipelineSnapshot {
   colorInversionEnabled: boolean;
   cdlValues: CDLValues;
   curvesData: ColorCurvesData;
-  currentLUT: LUT3D | null;
+  currentLUT: LUT | null;
   lutIntensity: number;
   toneMappingState: ToneMappingState;
   displayColorState: DisplayColorState;
@@ -66,8 +67,8 @@ export class ColorPipelineManager {
   private _curvesData: ColorCurvesData = createDefaultCurvesData();
   private _curveLUTCache = new CurveLUTCache();
 
-  // --- LUT (single 3D LUT) ---
-  private _currentLUT: LUT3D | null = null;
+  // --- LUT (single LUT) ---
+  private _currentLUT: LUT | null = null;
   private _lutIntensity = 1.0;
   private _lutProcessor: WebGLLUTProcessor | null = null;
 
@@ -187,10 +188,10 @@ export class ColorPipelineManager {
   }
 
   // =========================================================================
-  // LUT (single 3D LUT)
+  // LUT (single LUT)
   // =========================================================================
 
-  get currentLUT(): LUT3D | null {
+  get currentLUT(): LUT | null {
     return this._currentLUT;
   }
 
@@ -202,7 +203,7 @@ export class ColorPipelineManager {
     return this._lutProcessor;
   }
 
-  setLUT(lut: LUT3D | null): void {
+  setLUT(lut: LUT | null): void {
     this._currentLUT = lut;
     if (this._lutProcessor) {
       this._lutProcessor.setLUT(lut);
@@ -214,7 +215,7 @@ export class ColorPipelineManager {
     }
   }
 
-  getLUT(): LUT3D | null {
+  getLUT(): LUT | null {
     return this._currentLUT;
   }
 

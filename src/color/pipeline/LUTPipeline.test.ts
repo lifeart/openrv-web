@@ -23,6 +23,7 @@ function createIdentityLUT3D(): LUT3D {
     }
   }
   return {
+    type: '3d',
     title: 'Identity',
     size,
     domainMin: [0, 0, 0],
@@ -46,6 +47,7 @@ function createWarmLUT3D(): LUT3D {
     }
   }
   return {
+    type: '3d',
     title: 'Warm',
     size,
     domainMin: [0, 0, 0],
@@ -69,6 +71,7 @@ function createInvertLUT3D(): LUT3D {
     }
   }
   return {
+    type: '3d',
     title: 'Invert',
     size,
     domainMin: [0, 0, 0],

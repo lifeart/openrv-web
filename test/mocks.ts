@@ -291,6 +291,8 @@ export function createMockWebGL2Context() {
     RGBA16F: 0x881a,
     RGBA8: 0x8058,
     RGB32F: 0x8815,
+    R32F: 0x822e,
+    RED: 0x1903,
     COMPLETION_STATUS_KHR: 0x91B1,
 
     getExtension: vi.fn((name: string) => {

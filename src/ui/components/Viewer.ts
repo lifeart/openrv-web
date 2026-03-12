@@ -21,6 +21,7 @@ import { DEFAULT_STABILIZATION_PARAMS } from '../../filters/StabilizeMotion';
 import { type CropState, type CropRegion, type UncropState } from './CropControl';
 import { CropManager } from './CropManager';
 import {
+  type LUT,
   type LUT3D,
   type LUTPipeline,
   type GPULUTChain,
@@ -2529,7 +2530,7 @@ export class Viewer {
   }
 
   // LUT methods
-  setLUT(lut: LUT3D | null): void {
+  setLUT(lut: LUT | null): void {
     this.colorPipeline.setLUT(lut);
 
     if (this.lutIndicator) {
@@ -2539,7 +2540,7 @@ export class Viewer {
     this.scheduleRender();
   }
 
-  getLUT(): LUT3D | null {
+  getLUT(): LUT | null {
     return this.colorPipeline.getLUT();
   }
 

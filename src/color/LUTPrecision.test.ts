@@ -30,6 +30,7 @@ function createIdentityLUT3D(size: number): LUT3D {
     }
   }
   return {
+    type: '3d',
     title: 'Identity',
     size,
     domainMin: [0, 0, 0],
@@ -54,6 +55,7 @@ function createGammaLUT3D(size: number, gamma: number): LUT3D {
     }
   }
   return {
+    type: '3d',
     title: 'Gamma LUT',
     size,
     domainMin: [0, 0, 0],

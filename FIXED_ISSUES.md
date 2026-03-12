@@ -2603,3 +2603,13 @@
 - **Regression Tests**: 8 new tests — init succeeds but put no-ops, no throws, no data written, no error events, get() reads pre-existing data, probe failure fallback, dispose+re-init re-probe, normal operation still works.
 - **Verification**: All 171 cache tests pass.
 - **Files Changed**: `src/cache/MediaCacheManager.ts`, `src/cache/MediaCacheManager.test.ts`
+
+## Issue #279: The main LUT load UI rejects 1D LUTs even though the app advertises them as supported formats
+
+- **Severity**: Medium
+- **Area**: Color pipeline / LUT UX
+- **Root Cause**: `ColorControls` unconditionally rejected non-3D LUTs with "1D LUTs are not supported" error, despite the underlying pipeline (`LUTStage`) already supporting generic LUT types and documentation advertising 1D LUT support.
+- **Fix**: Removed the 3D-only gate in `ColorControls.ts` and `AppDCCWiring.ts`. Widened `setLUT`/`getLUT` type signatures from `LUT3D` to `LUT` across `ColorControls`, `ColorPipelineManager`, and `Viewer`. Added dedicated 1D LUT fragment shader and texture handling in `WebGLLUT.ts` (size×3 2D texture with per-channel row sampling). Added `type: '1d' | '3d'` discriminant field to `LUT1D`/`LUT3D` interfaces to eliminate ambiguous size-1 overlap between `isLUT1D`/`isLUT3D`. Updated all 15 parser return sites and ~30 test mock sites.
+- **Regression Tests**: 8 new ColorControls tests (1D acceptance, event emission, file loading, 3D backward compat, error handling, label updates), 8 new WebGLLUT tests (1D setLUT/isReady, apply processing, uniforms, dispose cleanup, 3D→1D switching, null clearing, shader fallback, texture creation), 3 new ColorPipelineManager integration tests (1D setLUT/getLUT, null clearing, 1D↔3D switching).
+- **Verification**: All 9567 tests pass (2 pre-existing failures in unrelated issues-p1.test.ts).
+- **Files Changed**: `src/ui/components/ColorControls.ts`, `src/color/WebGLLUT.ts`, `src/ui/components/ColorPipelineManager.ts`, `src/ui/components/Viewer.ts`, `src/AppDCCWiring.ts`, `src/color/ColorProcessingFacade.ts`, `src/color/LUTLoader.ts`, `src/color/LUTFormats.ts`, `test/mocks.ts`, `src/ui/components/ColorControls.test.ts`, `src/color/WebGLLUT.test.ts`, `src/ui/components/ColorPipelineManager.test.ts`, plus type discriminant updates in 10+ test files

@@ -376,6 +376,7 @@ describe('Viewer', () => {
   describe('LUT handling', () => {
     it('VWR-021: setLUT stores LUT', () => {
       const mockLUT: LUT3D = {
+        type: '3d',
         title: 'Test',
         size: 17,
         data: new Float32Array(17 * 17 * 17 * 3),
@@ -388,6 +389,7 @@ describe('Viewer', () => {
 
     it('VWR-022: setLUT accepts null', () => {
       const mockLUT: LUT3D = {
+        type: '3d',
         title: 'Test',
         size: 17,
         data: new Float32Array(17 * 17 * 17 * 3),

@@ -13,6 +13,7 @@ import {
   DEFAULT_DISPLAY_COLOR_STATE,
   type DisplayColorState,
   type LUT3D,
+  type LUT1D,
 } from '../../color/ColorProcessingFacade';
 import { DEFAULT_TONE_MAPPING_STATE, type ToneMappingState } from './ToneMappingControl';
 
@@ -20,6 +21,7 @@ import { DEFAULT_TONE_MAPPING_STATE, type ToneMappingState } from './ToneMapping
 function createMockLUT(title = 'TestLUT'): LUT3D {
   const size = 2;
   return {
+    type: '3d',
     title,
     size,
     domainMin: [0, 0, 0],
@@ -192,6 +194,58 @@ describe('ColorPipelineManager', () => {
     it('CPM-U022: lutProcessor is null without WebGL init', () => {
       const manager = new ColorPipelineManager();
       expect(manager.lutProcessor).toBeNull();
+    });
+
+    it('CPM-U041: setLUT with 1D LUT stores and returns it', () => {
+      const manager = new ColorPipelineManager();
+      const lut1d: LUT1D = {
+        type: '1d',
+        title: 'Test 1D LUT',
+        size: 4,
+        domainMin: [0, 0, 0],
+        domainMax: [1, 1, 1],
+        data: new Float32Array(4 * 3),
+      };
+      manager.setLUT(lut1d);
+      expect(manager.getLUT()).toBe(lut1d);
+      expect(manager.currentLUT).toBe(lut1d);
+    });
+
+    it('CPM-U042: setLUT(null) clears a previously set 1D LUT', () => {
+      const manager = new ColorPipelineManager();
+      const lut1d: LUT1D = {
+        type: '1d',
+        title: 'Test 1D LUT',
+        size: 4,
+        domainMin: [0, 0, 0],
+        domainMax: [1, 1, 1],
+        data: new Float32Array(4 * 3),
+      };
+      manager.setLUT(lut1d);
+      manager.setLUT(null);
+      expect(manager.getLUT()).toBeNull();
+    });
+
+    it('CPM-U043: switching between 1D and 3D LUTs works', () => {
+      const manager = new ColorPipelineManager();
+      const lut1d: LUT1D = {
+        type: '1d',
+        title: '1D',
+        size: 4,
+        domainMin: [0, 0, 0],
+        domainMax: [1, 1, 1],
+        data: new Float32Array(4 * 3),
+      };
+      const lut3d = createMockLUT('3D');
+
+      manager.setLUT(lut1d);
+      expect(manager.getLUT()).toBe(lut1d);
+
+      manager.setLUT(lut3d);
+      expect(manager.getLUT()).toBe(lut3d);
+
+      manager.setLUT(lut1d);
+      expect(manager.getLUT()).toBe(lut1d);
     });
   });
 

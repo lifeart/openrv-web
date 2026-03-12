@@ -67,6 +67,7 @@ function createIdentityLUT3D(size: number): LUT3D {
     }
   }
   return {
+    type: '3d',
     title: 'Identity',
     size,
     domainMin: [0, 0, 0],
