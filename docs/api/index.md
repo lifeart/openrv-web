@@ -103,7 +103,7 @@ Application events are prefixed with `app:` and map directly to the correspondin
 | `app:frameChange` | `{ frame }` | Active |
 | `app:play` | (none) | Active |
 | `app:pause` | (none) | Active |
-| `app:stop` | (none) | **Planned — not yet emitted in production.** Retained for forward-compatibility. |
+| `app:stop` | (none) | Active |
 | `app:speedChange` | `{ speed }` | Active |
 | `app:volumeChange` | `{ volume }` | Active |
 | `app:muteChange` | `{ muted }` | Active |
@@ -112,7 +112,7 @@ Application events are prefixed with `app:` and map directly to the correspondin
 | `app:inOutChange` | `{ inPoint, outPoint }` | Active |
 | `app:markerChange` | `{ markers: [{ frame, note, color }] }` | Active |
 | `app:sourceLoaded` | `{ name, type, width, height, duration, fps }` | Active |
-| `app:error` | `{ message, code? }` | **Planned — not yet reliably emitted via the plugin bridge.** Retained for forward-compatibility. |
+| `app:error` | `{ message, code? }` | Active |
 
 ### Plugin Lifecycle Events
 

@@ -18,15 +18,12 @@ import type { PluginId } from './types';
 /**
  * Application event names available to plugins (prefixed with "app:").
  *
- * **Note on event availability:**
- * - `app:stop` — Planned but **not yet emitted** by the application. The underlying
- *   `EventsAPI` wires a `playbackStopped` session event, but no production code path
- *   currently triggers it. Subscriptions will silently receive no callbacks until this
- *   is fully wired. Retained for forward-compatibility.
- * - `app:error` — Planned but **not yet reliably emitted** via the plugin bridge. The
- *   `EventsAPI.emitError()` method exists and is called internally for audio/codec/decode
- *   errors, but the bridging path to plugins has not been validated end-to-end in
- *   production. Subscriptions may not fire as expected. Retained for forward-compatibility.
+ * All listed events are actively wired and emitted in production:
+ * - `app:stop` — Fires when `Session.stop()` is called (pause + return to start).
+ *   Wired via Session `playbackStopped` → EventsAPI `stop` → PluginEventBus `app:stop`.
+ * - `app:error` — Fires for audio errors, unsupported codecs, representation errors,
+ *   and frame decode timeouts. Wired via Session error events → EventsAPI `emitError()`
+ *   → PluginEventBus `app:error`.
  */
 export type AppEventName =
   | 'app:frameChange'
@@ -51,7 +48,6 @@ export interface AppEventDataMap {
   'app:frameChange': OpenRVEventData['frameChange'];
   'app:play': void;
   'app:pause': void;
-  /** @planned Not yet emitted in production — retained for forward-compatibility. */
   'app:stop': void;
   'app:speedChange': OpenRVEventData['speedChange'];
   'app:volumeChange': OpenRVEventData['volumeChange'];
@@ -61,7 +57,6 @@ export interface AppEventDataMap {
   'app:inOutChange': OpenRVEventData['inOutChange'];
   'app:markerChange': OpenRVEventData['markerChange'];
   'app:sourceLoaded': OpenRVEventData['sourceLoaded'];
-  /** @planned Not yet reliably emitted via the plugin bridge — retained for forward-compatibility. */
   'app:error': OpenRVEventData['error'];
   'plugin:activated': { id: PluginId };
   'plugin:deactivated': { id: PluginId };
@@ -94,7 +89,7 @@ const APP_EVENT_TO_API: Partial<Record<AppEventName, OpenRVEventName>> = {
   'app:frameChange': 'frameChange',
   'app:play': 'play',
   'app:pause': 'pause',
-  'app:stop': 'stop', // planned — not yet emitted in production
+  'app:stop': 'stop',
 
   'app:speedChange': 'speedChange',
   'app:volumeChange': 'volumeChange',
@@ -104,7 +99,7 @@ const APP_EVENT_TO_API: Partial<Record<AppEventName, OpenRVEventName>> = {
   'app:inOutChange': 'inOutChange',
   'app:markerChange': 'markerChange',
   'app:sourceLoaded': 'sourceLoaded',
-  'app:error': 'error', // planned — not yet reliably emitted via plugin bridge
+  'app:error': 'error',
 
 };
 

@@ -155,7 +155,11 @@ Removed dead contextual registrations from `App.ts`, updated UI hints in `Scopes
 
 ## Issue #295: Plugin `app:stop` and `app:error` events never fire
 
-**Fix**: Added JSDoc annotations to `PluginEventBus` marking `app:stop` and `app:error` as planned/not yet emitted. Updated `docs/api/index.md` with a Status column marking them as planned.
+**Root cause**: Both events ARE fully wired end-to-end in production — the original annotations were incorrect.
+- `app:stop`: PlaybackAPI.stop() → Session.stop() → emit('playbackStopped') → EventsAPI → PluginEventBus
+- `app:error`: SessionPlayback/Media/PlaybackEngine emit audioError/unsupportedCodec/representationError/frameDecodeTimeout → Session → EventsAPI.emitError() → PluginEventBus
+
+**Fix**: Removed all "planned/not yet emitted" annotations. Marked both events as Active in docs. Added 5 tests proving the full event chain works.
 
 ## Issue #296: Generated API reference leaks dev-only `HotReloadManager`
 
