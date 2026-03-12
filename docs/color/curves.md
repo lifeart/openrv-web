@@ -75,20 +75,16 @@ Click the **Export** button to save the current curves configuration as a JSON f
 
 Click the **Import** button and select a previously exported JSON file. The curves configuration is validated and applied immediately. Invalid files are silently rejected.
 
-> **Not yet available in the public API.** `exportCurvesJSON()` and `importCurvesJSON()` are planned but not yet exposed on `window.openrv.color`. Use the UI Export/Import buttons for now. For programmatic access, the available `getCurves()` and `setCurves()` methods provide equivalent functionality:
-
 ```javascript
-// --- Planned API (not yet implemented) ---
-// const json = window.openrv.color.exportCurvesJSON();
-// window.openrv.color.importCurvesJSON(jsonString);
+// Export curves to JSON
+const json = window.openrv.color.exportCurvesJSON();
 
-// Workaround: use getCurves/setCurves
+// Import curves from JSON
+window.openrv.color.importCurvesJSON(json);
+
+// Alternative: use getCurves/setCurves for manual manipulation
 const curvesData = window.openrv.color.getCurves();
-const json = JSON.stringify(curvesData);
-
-// To import:
-const imported = JSON.parse(json);
-window.openrv.color.setCurves(imported);
+window.openrv.color.setCurves(curvesData);
 ```
 
 ---
