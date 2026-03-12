@@ -6,12 +6,7 @@
 
 **Root cause**: `KeyH`, `KeyW`, and `KeyG` were assigned to both view actions (fit-to-height, fit-to-width, goto-frame) and scope toggles (histogram, waveform, gamut diagram). To avoid conflicts, the scope bindings were placed in a `panel` context that never activates in production, making them permanently dead. The UI still advertised the old single-key shortcuts.
 
-**Fix**: Assigned unique, non-conflicting `Ctrl+Shift` shortcuts:
-- Histogram: `Ctrl+Shift+H` (was `H` in dead `panel` context)
-- Waveform: `Ctrl+Shift+W` (was `W` in dead `panel` context)
-- Gamut diagram: `Ctrl+Shift+G` (was `G` in dead `panel` context)
-
-Removed dead contextual registrations from `App.ts`, updated UI hints in `ScopesControl.ts`, and updated documentation.
+**Fix**: Restored bare H/W/G shortcuts using the context-aware dispatch system. On the QC tab (panel context), H/W/G toggle scopes. On other tabs, H/W/G perform their original actions (fit-to-height/width, goto-frame). Registered in `ContextualKeyboardManager` alongside the existing global bindings.
 
 **Tests added**: 10 new regression tests in `AppKeyboardHandler.test.ts` covering binding definitions, conflict-free verification, direct registration, label generation, and UI hint accuracy.
 
