@@ -270,12 +270,12 @@ describe('AutoSaveManager', () => {
     });
 
     it('AUTOSAVE-D002: dispose clears the debounce timer from markDirty', async () => {
-      manager = new AutoSaveManager({ enabled: false });
+      manager = new AutoSaveManager({ enabled: true });
       const state = createMockSessionState();
 
       manager.markDirty(() => state);
 
-      // markDirty creates a 2-second debounce timer
+      // markDirty creates a 2-second debounce timer (only when enabled)
       expect(vi.getTimerCount()).toBeGreaterThan(0);
 
       await manager.dispose();
@@ -385,6 +385,113 @@ describe('AutoSaveManager', () => {
       // Should still just be marked dirty once, and getter not called yet (lazy)
       expect(manager.hasUnsavedChanges()).toBe(true);
       expect(stateGetter).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('disabled auto-save prevents writes (issue #379)', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('AUTOSAVE-U035: markDirty does not schedule debounce save when disabled', () => {
+      manager = new AutoSaveManager({ enabled: false });
+      const stateGetter = vi.fn().mockReturnValue(createMockSessionState());
+
+      manager.markDirty(stateGetter);
+
+      // Dirty flag should be set
+      expect(manager.hasUnsavedChanges()).toBe(true);
+
+      // No debounce timer should be scheduled
+      expect(vi.getTimerCount()).toBe(0);
+
+      // Advance well past the 2s debounce window
+      vi.advanceTimersByTime(5000);
+
+      // State getter should never have been called
+      expect(stateGetter).not.toHaveBeenCalled();
+    });
+
+    it('AUTOSAVE-U036: saveWithGetter is a no-op when auto-save is disabled', () => {
+      manager = new AutoSaveManager({ enabled: true });
+      const stateGetter = vi.fn().mockReturnValue(createMockSessionState());
+
+      // Mark dirty while enabled (schedules debounce)
+      manager.markDirty(stateGetter);
+
+      // Disable auto-save before debounce fires
+      manager.setConfig({ enabled: false });
+
+      // Advance past debounce window — the timer was cleared by setConfig
+      vi.advanceTimersByTime(5000);
+
+      // State getter should never have been called
+      expect(stateGetter).not.toHaveBeenCalled();
+    });
+
+    it('AUTOSAVE-U037: disabling auto-save cancels pending debounce timer', () => {
+      manager = new AutoSaveManager({ enabled: true });
+      const stateGetter = vi.fn().mockReturnValue(createMockSessionState());
+
+      manager.markDirty(stateGetter);
+
+      // There should be a debounce timer pending
+      expect(vi.getTimerCount()).toBeGreaterThan(0);
+
+      // Disable auto-save
+      manager.setConfig({ enabled: false });
+
+      // Debounce timer should have been cleared
+      expect(vi.getTimerCount()).toBe(0);
+
+      // Advance time — no save should happen
+      vi.advanceTimersByTime(5000);
+      expect(stateGetter).not.toHaveBeenCalled();
+    });
+
+    it('AUTOSAVE-U038: interval timer does not trigger saveWithGetter when disabled at runtime', () => {
+      manager = new AutoSaveManager({ enabled: true, interval: 1 });
+      const stateGetter = vi.fn().mockReturnValue(createMockSessionState());
+
+      // Start the interval timer
+      manager.setConfig({ enabled: true, interval: 1 });
+      manager.markDirty(stateGetter);
+
+      // Clear the debounce call
+      vi.advanceTimersByTime(2500);
+      stateGetter.mockClear();
+
+      // Now disable
+      manager.setConfig({ enabled: false });
+
+      // Mark dirty again
+      manager.markDirty(stateGetter);
+
+      // Advance past interval (1 minute)
+      vi.advanceTimersByTime(120_000);
+
+      // State getter should not have been called since disable
+      expect(stateGetter).not.toHaveBeenCalled();
+    });
+
+    it('AUTOSAVE-U039: re-enabling auto-save allows markDirty to schedule saves again', () => {
+      manager = new AutoSaveManager({ enabled: false });
+      const stateGetter = vi.fn().mockReturnValue(createMockSessionState());
+
+      // markDirty while disabled — no timer
+      manager.markDirty(stateGetter);
+      expect(vi.getTimerCount()).toBe(0);
+
+      // Re-enable auto-save
+      manager.setConfig({ enabled: true });
+
+      // markDirty again — should now schedule debounce
+      manager.markDirty(stateGetter);
+      expect(vi.getTimerCount()).toBeGreaterThan(0);
     });
   });
 
