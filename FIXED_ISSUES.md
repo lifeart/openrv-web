@@ -126,6 +126,19 @@ Removed dead contextual registrations from `App.ts`, updated UI hints in `Scopes
 - `docs/advanced/scripting-api.md`
 - `src/plugin/PluginRegistry.test.ts`
 
+## Issue #287: `openrv.isReady()` can return true before mount-time initialization has finished
+
+**Root cause**: `OpenRVAPI` constructor set `_ready = true` synchronously, while `App.mount()` is async with tail work (persistence init, URL bootstrap). `main.ts` didn't await mount.
+
+**Fix**: Constructor no longer sets `_ready`. Added `markReady()` method called after `app.mount()` completes. Added `onReady(callback)` for external consumers. Separated `_disposed` flag from readiness.
+
+**Tests added**: 9 regression tests covering the two-step lifecycle, onReady callbacks, dispose interaction, and sub-API usability before ready.
+
+**Files changed**:
+- `src/api/OpenRVAPI.ts`
+- `src/api/OpenRVAPI.test.ts`
+- `src/main.ts`
+
 ## Issue #283: `openrv.dispose()` advertises the API as unusable afterward, but only the event module is torn down
 
 **Status**: Already fixed in codebase. `OpenRVAPI.dispose()` already calls `dispose()` on all sub-APIs, and all methods call `assertNotDisposed()`. Added regression test coverage to verify.

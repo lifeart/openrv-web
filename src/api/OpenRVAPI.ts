@@ -117,12 +117,14 @@ export class OpenRVAPI {
   };
 
   private _ready = false;
+  private _disposed = false;
+  private _readyListeners: Array<() => void> = [];
 
   /**
    * Throw an `APIError` if the API has been disposed.
    */
   private assertNotDisposed(): void {
-    if (!this._ready) {
+    if (this._disposed) {
       throw new APIError('Cannot use API after dispose() has been called');
     }
   }
@@ -136,8 +138,41 @@ export class OpenRVAPI {
     this.color = new ColorAPI(config.colorControls, config.cdlControl, config.curvesControl);
     this.markers = new MarkersAPI(config.session);
     this.events = new EventsAPI(config.session, config.viewer);
+  }
 
+  /**
+   * Mark the API as ready for use.
+   *
+   * Called by the bootstrap sequence after all async mount-time initialization
+   * has completed (persistence, URL bootstrap, etc.). External consumers should
+   * not call this method directly.
+   */
+  markReady(): void {
+    if (this._disposed) return;
     this._ready = true;
+    for (const listener of this._readyListeners) {
+      listener();
+    }
+    this._readyListeners = [];
+  }
+
+  /**
+   * Register a one-time callback that fires when the API becomes ready.
+   * If the API is already ready, the callback fires synchronously.
+   *
+   * @param callback - Function to invoke when the API is ready.
+   *
+   * @example
+   * ```ts
+   * openrv.onReady(() => { openrv.playback.play(); });
+   * ```
+   */
+  onReady(callback: () => void): void {
+    if (this._ready) {
+      callback();
+    } else {
+      this._readyListeners.push(callback);
+    }
   }
 
   /**
@@ -165,6 +200,8 @@ export class OpenRVAPI {
    */
   dispose(): void {
     this._ready = false;
+    this._disposed = true;
+    this._readyListeners = [];
     this.playback.dispose();
     this.media.dispose();
     this.audio.dispose();

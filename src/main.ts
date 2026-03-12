@@ -14,7 +14,6 @@ import './nodes/CacheLUTNode';
 installGlobalErrorHandler();
 
 const app = new App();
-app.mount('#app');
 
 // Expose for e2e testing only in dev/test builds (never in production)
 if (import.meta.env.DEV || import.meta.env.VITE_EXPOSE_TESTING) {
@@ -42,3 +41,9 @@ pluginRegistry.setAllowedOrigins([window.location.origin]);
 
 // Wire plugin settings into the unified preferences backup flow
 getCorePreferencesManager().setPluginSettingsProvider(pluginRegistry.settingsStore);
+
+// Mount the app and mark the API as ready once all async initialization completes.
+// This ensures isReady() returns false until persistence and URL bootstrap are done.
+app.mount('#app').then(() => {
+  window.openrv?.markReady();
+});

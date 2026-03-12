@@ -415,6 +415,7 @@ describe('OpenRVAPI', () => {
   beforeEach(() => {
     config = createAPIConfig();
     api = new OpenRVAPI(config);
+    api.markReady();
   });
 
   it('API-U001: Constructor initializes all sub-modules', () => {
@@ -432,8 +433,12 @@ describe('OpenRVAPI', () => {
     expect(api.version).toMatch(/^\d+\.\d+\.\d+$/);
   });
 
-  it('API-U003: isReady() returns true after init', () => {
-    expect(api.isReady()).toBe(true);
+  it('API-U003: isReady() returns false before markReady(), true after', () => {
+    const freshApi = new OpenRVAPI(config);
+    expect(freshApi.isReady()).toBe(false);
+    freshApi.markReady();
+    expect(freshApi.isReady()).toBe(true);
+    freshApi.dispose();
   });
 
   it('API-U004: isReady() returns false after dispose', () => {
@@ -443,8 +448,10 @@ describe('OpenRVAPI', () => {
 
   it('API-U005: Initialization is idempotent (multiple constructions)', () => {
     const api2 = new OpenRVAPI(config);
+    api2.markReady();
     expect(api2.isReady()).toBe(true);
     expect(api2.version).toBe(api.version);
+    api2.dispose();
   });
 
   it('API-U006: dispose() is idempotent (double dispose)', () => {
@@ -2641,6 +2648,7 @@ describe('plugins.dispose() and plugins.unregister() via public API', () => {
 
   beforeEach(() => {
     api = new OpenRVAPI(createAPIConfig());
+    api.markReady();
   });
 
   afterEach(async () => {
@@ -2715,5 +2723,96 @@ describe('plugins.dispose() and plugins.unregister() via public API', () => {
     await api.plugins.dispose(PLUGIN_ID);
     await expect(api.plugins.dispose(PLUGIN_ID)).resolves.toBeUndefined();
     expect(api.plugins.getState(PLUGIN_ID)).toBe('disposed');
+  });
+});
+
+// ============================================================
+// Regression: isReady() must not return true before mount completes (#287)
+// ============================================================
+
+describe('OpenRVAPI readiness lifecycle (Issue #287)', () => {
+  let config: OpenRVAPIConfig;
+
+  beforeEach(() => {
+    config = createAPIConfig();
+  });
+
+  it('API-U287a: isReady() returns false immediately after construction', () => {
+    const api = new OpenRVAPI(config);
+    expect(api.isReady()).toBe(false);
+    api.dispose();
+  });
+
+  it('API-U287b: isReady() returns true after markReady()', () => {
+    const api = new OpenRVAPI(config);
+    expect(api.isReady()).toBe(false);
+    api.markReady();
+    expect(api.isReady()).toBe(true);
+    api.dispose();
+  });
+
+  it('API-U287c: isReady() returns false after dispose even if markReady was called', () => {
+    const api = new OpenRVAPI(config);
+    api.markReady();
+    expect(api.isReady()).toBe(true);
+    api.dispose();
+    expect(api.isReady()).toBe(false);
+  });
+
+  it('API-U287d: onReady() fires synchronously if already ready', () => {
+    const api = new OpenRVAPI(config);
+    api.markReady();
+    const cb = vi.fn();
+    api.onReady(cb);
+    expect(cb).toHaveBeenCalledTimes(1);
+    api.dispose();
+  });
+
+  it('API-U287e: onReady() fires when markReady() is called later', () => {
+    const api = new OpenRVAPI(config);
+    const cb = vi.fn();
+    api.onReady(cb);
+    expect(cb).not.toHaveBeenCalled();
+    api.markReady();
+    expect(cb).toHaveBeenCalledTimes(1);
+    api.dispose();
+  });
+
+  it('API-U287f: onReady() listeners are cleared after markReady()', () => {
+    const api = new OpenRVAPI(config);
+    const cb = vi.fn();
+    api.onReady(cb);
+    api.markReady();
+    expect(cb).toHaveBeenCalledTimes(1);
+    // Calling markReady again should not re-fire
+    api.markReady();
+    expect(cb).toHaveBeenCalledTimes(1);
+    api.dispose();
+  });
+
+  it('API-U287g: onReady() listeners are discarded on dispose before markReady()', () => {
+    const api = new OpenRVAPI(config);
+    const cb = vi.fn();
+    api.onReady(cb);
+    api.dispose();
+    // markReady after dispose should be a no-op
+    api.markReady();
+    expect(cb).not.toHaveBeenCalled();
+  });
+
+  it('API-U287h: markReady() is a no-op after dispose()', () => {
+    const api = new OpenRVAPI(config);
+    api.dispose();
+    api.markReady();
+    expect(api.isReady()).toBe(false);
+  });
+
+  it('API-U287i: sub-APIs are usable before markReady() (only isReady is gated)', () => {
+    const api = new OpenRVAPI(config);
+    // Sub-APIs should work before markReady — they are constructed and not disposed
+    expect(() => api.playback.isPlaying()).not.toThrow();
+    expect(() => api.media.hasMedia()).not.toThrow();
+    expect(() => api.audio.getVolume()).not.toThrow();
+    api.dispose();
   });
 });
