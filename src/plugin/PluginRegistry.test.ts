@@ -566,6 +566,26 @@ describe('PluginRegistry', () => {
       expect(registry.getRegisteredIds()).toEqual(['a', 'b']);
     });
 
+    it('PREG-031a: getRegisteredIds excludes disposed plugins', async () => {
+      registry.register(createPlugin({ manifest: { id: 'a', name: 'A', version: '1.0.0', contributes: ['decoder'] } }));
+      registry.register(createPlugin({ manifest: { id: 'b', name: 'B', version: '1.0.0', contributes: ['decoder'] } }));
+      await registry.dispose('a');
+      expect(registry.getRegisteredIds()).toEqual(['b']);
+    });
+
+    it('PREG-031b: getRegisteredIds includes registered (not yet activated) plugins', () => {
+      registry.register(createPlugin({ manifest: { id: 'a', name: 'A', version: '1.0.0', contributes: ['decoder'] } }));
+      expect(registry.getRegisteredIds()).toEqual(['a']);
+      expect(registry.getState('a')).toBe('registered');
+    });
+
+    it('PREG-031c: getRegisteredIds includes active plugins', async () => {
+      registry.register(createPlugin({ manifest: { id: 'a', name: 'A', version: '1.0.0', contributes: ['decoder'] } }));
+      await registry.activate('a');
+      expect(registry.getRegisteredIds()).toEqual(['a']);
+      expect(registry.getState('a')).toBe('active');
+    });
+
     it('PREG-032: getUIPanels returns copy of UI panel map', async () => {
       const panel: UIPanelContribution = { id: 'p1', label: 'P1', location: 'left', render: vi.fn() };
       const plugin = createPlugin({

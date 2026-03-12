@@ -326,7 +326,9 @@ export class PluginRegistry {
   }
 
   getRegisteredIds(): PluginId[] {
-    return Array.from(this.plugins.keys());
+    return Array.from(this.plugins.entries())
+      .filter(([, entry]) => entry.state !== 'disposed')
+      .map(([id]) => id);
   }
 
   getExporter(name: string): ExporterContribution | undefined {

@@ -126,6 +126,18 @@ Removed dead contextual registrations from `App.ts`, updated UI hints in `Scopes
 - `docs/advanced/scripting-api.md`
 - `src/plugin/PluginRegistry.test.ts`
 
+## Issue #293: `window.openrv.plugins.list()` includes disposed plugins
+
+**Root cause**: `getRegisteredIds()` returned all keys without filtering by state.
+
+**Fix**: Filter out entries with `state === 'disposed'` in `getRegisteredIds()`.
+
+**Tests added**: 3 regression tests (PREG-031a/b/c) for disposed, registered-only, and active plugins.
+
+**Files changed**:
+- `src/plugin/PluginRegistry.ts`
+- `src/plugin/PluginRegistry.test.ts`
+
 ## Issue #288: Plugin scripting guide omits required `activate(id)` step
 
 **Fix**: Added `openrv.plugins.activate(id)` calls after every `register()` example in `docs/advanced/scripting-api.md`.
