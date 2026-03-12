@@ -275,6 +275,18 @@ function createMockViewer() {
   viewer.getBackgroundPatternState = vi.fn(() => viewer._backgroundPatternState);
   viewer.getViewportSize = vi.fn(() => ({ width: 1280, height: 720 }));
 
+  viewer._matteSettings = {
+    show: false,
+    aspect: 1.78,
+    opacity: 0.66,
+    heightVisible: -1,
+    centerPoint: [0, 0],
+  };
+  viewer.getMatteSettings = vi.fn(() => ({ ...viewer._matteSettings }));
+  viewer.setMatteSettings = vi.fn((settings: any) => {
+    viewer._matteSettings = { ...viewer._matteSettings, ...settings };
+  });
+
   return viewer;
 }
 
@@ -1144,6 +1156,106 @@ describe('ViewAPI', () => {
   it('API-U056: getBackgroundPattern() throws after dispose', () => {
     view.dispose();
     expect(() => view.getBackgroundPattern()).toThrow();
+  });
+
+  // Matte overlay API tests
+  it('API-U060M: setMatte() enables matte and delegates to viewer', () => {
+    view.setMatte({ aspect: 2.39, opacity: 0.8 });
+    expect(viewer.setMatteSettings).toHaveBeenCalledWith({
+      show: true,
+      aspect: 2.39,
+      opacity: 0.8,
+    });
+  });
+
+  it('API-U061M: setMatte() with no options enables matte with defaults', () => {
+    view.setMatte();
+    expect(viewer.setMatteSettings).toHaveBeenCalledWith({ show: true });
+  });
+
+  it('API-U062M: setMatte() validates aspect is a positive number', () => {
+    expect(() => view.setMatte({ aspect: 0 })).toThrow(/positive number/);
+    expect(() => view.setMatte({ aspect: -1 })).toThrow(/positive number/);
+    expect(() => view.setMatte({ aspect: NaN })).toThrow(/positive number/);
+    expect(() => view.setMatte({ aspect: 'wide' as any })).toThrow(/positive number/);
+  });
+
+  it('API-U063M: setMatte() clamps aspect to valid range', () => {
+    view.setMatte({ aspect: 0.01 });
+    const call1 = viewer.setMatteSettings.mock.calls[0][0];
+    expect(call1.aspect).toBe(0.1);
+
+    view.setMatte({ aspect: 20 });
+    const call2 = viewer.setMatteSettings.mock.calls[1][0];
+    expect(call2.aspect).toBe(10);
+  });
+
+  it('API-U064M: setMatte() validates opacity range', () => {
+    expect(() => view.setMatte({ opacity: NaN })).toThrow(/number between 0 and 1/);
+    expect(() => view.setMatte({ opacity: 'half' as any })).toThrow(/number between 0 and 1/);
+  });
+
+  it('API-U065M: setMatte() clamps opacity to 0–1', () => {
+    view.setMatte({ opacity: -0.5 });
+    const call1 = viewer.setMatteSettings.mock.calls[0][0];
+    expect(call1.opacity).toBe(0);
+
+    view.setMatte({ opacity: 2.0 });
+    const call2 = viewer.setMatteSettings.mock.calls[1][0];
+    expect(call2.opacity).toBe(1);
+  });
+
+  it('API-U066M: setMatte() validates centerPoint', () => {
+    expect(() => view.setMatte({ centerPoint: [1] as any })).toThrow(/\[number, number\]/);
+    expect(() => view.setMatte({ centerPoint: 'center' as any })).toThrow(/\[number, number\]/);
+    expect(() => view.setMatte({ centerPoint: [1, 'a'] as any })).toThrow(/\[number, number\]/);
+  });
+
+  it('API-U067M: setMatte() accepts valid centerPoint', () => {
+    view.setMatte({ centerPoint: [0.5, -0.3] });
+    expect(viewer.setMatteSettings).toHaveBeenCalledWith({
+      show: true,
+      centerPoint: [0.5, -0.3],
+    });
+  });
+
+  it('API-U068M: clearMatte() disables matte overlay', () => {
+    view.clearMatte();
+    expect(viewer.setMatteSettings).toHaveBeenCalledWith({ show: false });
+  });
+
+  it('API-U069M: getMatte() returns current matte settings', () => {
+    const matte = view.getMatte();
+    expect(matte).toEqual({
+      show: false,
+      aspect: 1.78,
+      opacity: 0.66,
+      heightVisible: -1,
+      centerPoint: [0, 0],
+    });
+  });
+
+  it('API-U070M: getMatte() reflects changes from setMatte()', () => {
+    view.setMatte({ aspect: 2.39, opacity: 0.8 });
+    const matte = view.getMatte();
+    expect(matte.show).toBe(true);
+    expect(matte.aspect).toBe(2.39);
+    expect(matte.opacity).toBe(0.8);
+  });
+
+  it('API-U071M: setMatte() throws after dispose', () => {
+    view.dispose();
+    expect(() => view.setMatte()).toThrow();
+  });
+
+  it('API-U072M: clearMatte() throws after dispose', () => {
+    view.dispose();
+    expect(() => view.clearMatte()).toThrow();
+  });
+
+  it('API-U073M: getMatte() throws after dispose', () => {
+    view.dispose();
+    expect(() => view.getMatte()).toThrow();
   });
 });
 

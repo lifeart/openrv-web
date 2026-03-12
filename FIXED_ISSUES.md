@@ -111,7 +111,16 @@ Removed dead contextual registrations from `App.ts`, updated UI hints in `Scopes
 
 ## Issue #284: Overlays docs publish `openrv.matte.enable()` but it doesn't exist in public API
 
-**Fix**: Marked `openrv.matte` as planned/not yet shipped in `docs/advanced/overlays.md`.
+**Fix**: Implemented matte overlay API on `ViewAPI` with `setMatte()`, `clearMatte()`, `getMatte()` methods. Wired through Viewer to existing MatteOverlay. Updated docs with working examples.
+
+**Tests added**: 14 regression tests (API-U060M through API-U073M) covering enable/disable/query, validation, clamping, dispose.
+
+**Files changed**:
+- `src/api/ViewAPI.ts`
+- `src/api/types.ts`
+- `src/ui/components/Viewer.ts`
+- `src/api/OpenRVAPI.test.ts`
+- `docs/advanced/overlays.md`
 
 ## Issue #285: Scripting guide's `exposureCheck()` can hang due to seek-before-subscribe race
 

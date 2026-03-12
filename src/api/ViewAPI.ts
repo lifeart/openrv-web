@@ -8,6 +8,7 @@ import type { ViewerProvider } from './types';
 import type { ChannelMode } from '../core/types/color';
 import type { TextureFilterMode } from '../core/types/filter';
 import type { BackgroundPatternState } from '../core/types/background';
+import type { MatteSettings } from '../core/session/SessionTypes';
 import { ValidationError } from '../core/errors';
 import { DisposableAPI } from './Disposable';
 
@@ -281,5 +282,84 @@ export class ViewAPI extends DisposableAPI {
   getViewportSize(): { width: number; height: number } {
     this.assertNotDisposed();
     return this.viewer.getViewportSize();
+  }
+
+  /**
+   * Enable the matte overlay and optionally configure it.
+   *
+   * @param options - Optional partial matte settings to apply.
+   *   Supported keys: `aspect` (target aspect ratio, 0.1–10),
+   *   `opacity` (0–1), `centerPoint` ([x, y] normalized offsets).
+   * @throws {ValidationError} If `aspect` is not a positive number, `opacity` is out of range,
+   *   or `centerPoint` is not a two-element numeric array.
+   *
+   * @example
+   * ```ts
+   * openrv.view.setMatte({ aspect: 2.39, opacity: 0.8 });
+   * ```
+   */
+  setMatte(options?: Partial<Pick<MatteSettings, 'aspect' | 'opacity' | 'centerPoint'>>): void {
+    this.assertNotDisposed();
+    const merged: Partial<MatteSettings> = { show: true };
+
+    if (options) {
+      if (typeof options !== 'object') {
+        throw new ValidationError('setMatte() options must be an object');
+      }
+      if (options.aspect !== undefined) {
+        if (typeof options.aspect !== 'number' || isNaN(options.aspect) || options.aspect <= 0) {
+          throw new ValidationError('setMatte() aspect must be a positive number');
+        }
+        merged.aspect = Math.max(0.1, Math.min(10, options.aspect));
+      }
+      if (options.opacity !== undefined) {
+        if (typeof options.opacity !== 'number' || isNaN(options.opacity)) {
+          throw new ValidationError('setMatte() opacity must be a number between 0 and 1');
+        }
+        merged.opacity = Math.max(0, Math.min(1, options.opacity));
+      }
+      if (options.centerPoint !== undefined) {
+        if (
+          !Array.isArray(options.centerPoint) ||
+          options.centerPoint.length !== 2 ||
+          typeof options.centerPoint[0] !== 'number' ||
+          typeof options.centerPoint[1] !== 'number'
+        ) {
+          throw new ValidationError('setMatte() centerPoint must be a [number, number] array');
+        }
+        merged.centerPoint = options.centerPoint;
+      }
+    }
+
+    this.viewer.setMatteSettings(merged);
+  }
+
+  /**
+   * Disable the matte overlay.
+   *
+   * @example
+   * ```ts
+   * openrv.view.clearMatte();
+   * ```
+   */
+  clearMatte(): void {
+    this.assertNotDisposed();
+    this.viewer.setMatteSettings({ show: false });
+  }
+
+  /**
+   * Get the current matte overlay settings.
+   *
+   * @returns The matte settings including `show`, `aspect`, `opacity`, `heightVisible`, and `centerPoint`.
+   *
+   * @example
+   * ```ts
+   * const matte = openrv.view.getMatte();
+   * if (matte.show) console.log(`Matte active at ${matte.aspect}:1`);
+   * ```
+   */
+  getMatte(): MatteSettings {
+    this.assertNotDisposed();
+    return this.viewer.getMatteSettings();
   }
 }

@@ -1,4 +1,4 @@
-import { type Session } from '../../core/session/Session';
+import { type Session, type MatteSettings } from '../../core/session/Session';
 import { type PaintEngine } from '../../paint/PaintEngine';
 import { PaintRenderer } from '../../paint/PaintRenderer';
 import { PerfTrace } from '../../utils/PerfTrace';
@@ -3859,6 +3859,20 @@ export class Viewer {
    */
   getMatteOverlay(): MatteOverlay {
     return this.overlayManager.getMatteOverlay();
+  }
+
+  /**
+   * Get current matte overlay settings.
+   */
+  getMatteSettings(): MatteSettings {
+    return this.overlayManager.getMatteOverlay().getSettings();
+  }
+
+  /**
+   * Update matte overlay settings (partial merge).
+   */
+  setMatteSettings(settings: Partial<MatteSettings>): void {
+    this.overlayManager.getMatteOverlay().setSettings(settings);
   }
 
   /**
