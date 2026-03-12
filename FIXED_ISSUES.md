@@ -126,6 +126,20 @@ Removed dead contextual registrations from `App.ts`, updated UI hints in `Scopes
 - `docs/advanced/scripting-api.md`
 - `src/plugin/PluginRegistry.test.ts`
 
+## Issue #292: Docs advertise `playlistEnded` event not exposed in public API
+
+**Root cause**: `PlaylistManager` emitted `playlistEnded` internally but it was never bridged to the public `EventsAPI`.
+
+**Fix**: Added `playlistEnded` to `OpenRVEventName` type, `VALID_EVENTS` set, and `wireInternalEvents()`. Forwarded PlaylistManager event through Session to EventsAPI.
+
+**Tests added**: 6 regression tests (API-U292a-f) covering event name validity, subscribe/unsubscribe, firing, dispose cleanup, once().
+
+**Files changed**:
+- `src/api/EventsAPI.ts`
+- `src/api/OpenRVAPI.test.ts`
+- `src/core/session/SessionTypes.ts`
+- `src/AppPlaybackWiring.ts`
+
 ## Issue #294: `window.openrv.version` is hardcoded to `1.0.0`
 
 **Root cause**: `OpenRVAPI.version` was hardcoded `'1.0.0'` while `package.json` declares `0.1.0`.

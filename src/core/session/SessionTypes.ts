@@ -163,6 +163,8 @@ export interface SessionEvents extends EventMap {
   versionsChanged: void;
   // Playback stopped (pause + return to start)
   playbackStopped: void;
+  // Playlist reached end without looping
+  playlistEnded: void;
   statusChanged: { sourceIndex: number; status: string; previous: string };
   statusesChanged: void;
   // Range shifting events

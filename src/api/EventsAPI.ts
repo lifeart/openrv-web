@@ -30,6 +30,7 @@ export type OpenRVEventName =
   | 'sourceLoadFailed'
   | 'viewTransformChanged'
   | 'renderedImagesChanged'
+  | 'playlistEnded'
   | 'error';
 
 /**
@@ -71,6 +72,7 @@ export interface OpenRVEventData {
       tag?: string;
     }>;
   };
+  playlistEnded: void;
   error: { message: string; code?: string };
 }
 
@@ -93,6 +95,7 @@ const VALID_EVENTS: ReadonlySet<OpenRVEventName> = new Set([
   'sourceLoadFailed',
   'viewTransformChanged',
   'renderedImagesChanged',
+  'playlistEnded',
   'error',
 ]);
 
@@ -252,6 +255,12 @@ export class EventsAPI extends DisposableAPI {
       this.emit('stop', undefined as void);
     });
     this.internalUnsubscribers.push(unsubStop);
+
+    // Playlist ended (playhead reached end of playlist without looping)
+    const unsubPlaylistEnded = this.session.on('playlistEnded', () => {
+      this.emit('playlistEnded', undefined as void);
+    });
+    this.internalUnsubscribers.push(unsubPlaylistEnded);
 
     // Speed changes
     const unsubSpeed = this.session.on('playbackSpeedChanged', (speed) => {

@@ -972,6 +972,13 @@ function wirePlaylistRuntime(
     }),
   );
 
+  // Forward playlistEnded to Session so the public EventsAPI can bridge it
+  subs.add(
+    controls.playlistManager.on('playlistEnded', () => {
+      session.emit('playlistEnded', undefined as void);
+    }),
+  );
+
   subs.add(
     session.on('frameChanged', (frame) => {
       if (!controls.playlistManager.isEnabled() || runtime.syncing) {
