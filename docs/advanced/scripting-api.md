@@ -387,7 +387,7 @@ OpenRV Web includes a plugin registry that allows extending the application with
 Plugins follow a lifecycle of register, initialize, activate, deactivate, and dispose. Dependencies between plugins are resolved automatically with cycle detection. All registrations are scoped per-plugin and cleaned up on deactivation.
 
 ```javascript
-// Example: register a plugin
+// Example: register and activate a plugin
 openrv.plugins.register({
   manifest: {
     id: 'my-custom-exporter',
@@ -406,6 +406,9 @@ openrv.plugins.register({
     });
   }
 });
+
+// Registration alone does not start the plugin — you must activate it:
+openrv.plugins.activate('my-custom-exporter');
 ```
 
 ### Plugin Settings Schema
@@ -453,6 +456,9 @@ openrv.plugins.register({
     // context.settings.reset();
   }
 });
+
+// Activate the plugin after registration:
+openrv.plugins.activate('com.example.overlay');
 ```
 
 Supported setting types: `string`, `number`, `boolean`, `select`, `color`, `range`. See the [API reference](../api/index.md#plugin-settings-accessor) for full details.
@@ -487,6 +493,9 @@ openrv.plugins.register({
     // Re-render UI with restored data
   }
 });
+
+// Activate the plugin after registration:
+openrv.plugins.activate('com.example.annotations');
 ```
 
 ### Custom Plugin-to-Plugin Events
@@ -500,7 +509,7 @@ openrv.plugins.register({
     id: 'com.example.analyzer',
     name: 'Frame Analyzer',
     version: '1.0.0',
-    contributes: ['processor'],
+    contributes: ['node'],
   },
   activate(context) {
     // Emitted as "com.example.analyzer:analysis-complete"
@@ -510,6 +519,7 @@ openrv.plugins.register({
     });
   }
 });
+openrv.plugins.activate('com.example.analyzer');
 
 // Plugin B: listens to Plugin A's events
 openrv.plugins.register({
@@ -541,6 +551,7 @@ openrv.plugins.register({
     });
   }
 });
+openrv.plugins.activate('com.example.dashboard');
 ```
 
 All subscriptions created via `context.events` are automatically cleaned up when the plugin is deactivated.

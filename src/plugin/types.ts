@@ -43,7 +43,8 @@ export interface PluginManifest {
   settingsSchema?: import('./PluginSettingsStore').PluginSettingsSchema;
 }
 
-export type PluginContributionType = 'decoder' | 'node' | 'processor' | 'tool' | 'exporter' | 'blendMode' | 'uiPanel';
+// Note: 'processor' is planned for a future release but not yet implemented.
+export type PluginContributionType = 'decoder' | 'node' | 'tool' | 'exporter' | 'blendMode' | 'uiPanel';
 
 // ---------------------------------------------------------------------------
 // Plugin Lifecycle

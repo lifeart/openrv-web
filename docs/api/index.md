@@ -55,7 +55,7 @@ Events that can be subscribed to via the public API
 
 ### PluginContributionType
 
-> **PluginContributionType** = `"decoder"` \| `"node"` \| `"processor"` \| `"tool"` \| `"exporter"` \| `"blendMode"` \| `"uiPanel"`
+> **PluginContributionType** = `"decoder"` \| `"node"` \| `"tool"` \| `"exporter"` \| `"blendMode"` \| `"uiPanel"`
 
 Defined in: [plugin/types.ts:44](https://github.com/lifeart/openrv-web/blob/c0dd53144dcb872c686e6581e476322380198403/src/plugin/types.ts#L44)
 

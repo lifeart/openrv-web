@@ -126,6 +126,32 @@ Removed dead contextual registrations from `App.ts`, updated UI hints in `Scopes
 - `docs/advanced/scripting-api.md`
 - `src/plugin/PluginRegistry.test.ts`
 
+## Issue #290: Plugin `engineVersion` is declared but never enforced
+
+**Root cause**: `PluginRegistry.register()` never checked `manifest.engineVersion` against the host version.
+
+**Fix**: Added `ENGINE_VERSION` constant and `satisfiesMinVersion()` helper in new `src/plugin/version.ts`. Registration now rejects plugins requiring a newer host version.
+
+**Tests added**: 12 tests for semver parsing/comparison + 6 tests for engineVersion validation in registration.
+
+**Files changed**:
+- `src/plugin/version.ts` (new)
+- `src/plugin/version.test.ts` (new)
+- `src/plugin/PluginRegistry.ts`
+- `src/plugin/PluginRegistry.test.ts`
+- `src/plugin/index.ts`
+
+## Issue #291: Plugin `processor` contribution type has no registration path
+
+**Root cause**: `'processor'` was in `PluginContributionType` but `PluginContext` had no `registerProcessor()` method.
+
+**Fix**: Removed `'processor'` from the type union with a comment noting it's planned. Updated docs and examples.
+
+**Files changed**:
+- `src/plugin/types.ts`
+- `docs/api/index.md`
+- `docs/advanced/scripting-api.md`
+
 ## Issue #287: `openrv.isReady()` can return true before mount-time initialization has finished
 
 **Root cause**: `OpenRVAPI` constructor set `_ready = true` synchronously, while `App.mount()` is async with tail work (persistence init, URL bootstrap). `main.ts` didn't await mount.

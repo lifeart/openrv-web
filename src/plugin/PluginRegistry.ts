@@ -13,6 +13,7 @@
  * Plugins run in the same JavaScript context as the host application.
  */
 
+import { ENGINE_VERSION, satisfiesMinVersion } from './version';
 import { Signal } from '../core/graph/Signal';
 import { decoderRegistry } from '../formats/DecoderRegistry';
 import { NodeFactory } from '../nodes/base/NodeFactory';
@@ -143,6 +144,15 @@ export class PluginRegistry {
     }
     if (!Array.isArray(manifest.contributes) || manifest.contributes.length === 0) {
       throw new Error(`Plugin "${manifest.id}": manifest.contributes must be a non-empty array`);
+    }
+
+    // Validate engineVersion: reject if host version is older than required minimum
+    if (manifest.engineVersion) {
+      if (!satisfiesMinVersion(ENGINE_VERSION, manifest.engineVersion)) {
+        throw new Error(
+          `Plugin "${manifest.id}" requires engine version >=${manifest.engineVersion}, but host is ${ENGINE_VERSION}`,
+        );
+      }
     }
 
     const id = manifest.id;

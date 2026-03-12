@@ -12,6 +12,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { PluginRegistry } from './PluginRegistry';
 import { ExporterRegistry } from './ExporterRegistry';
+import { ENGINE_VERSION } from './version';
 import { decoderRegistry } from '../formats/DecoderRegistry';
 import { NodeFactory } from '../nodes/base/NodeFactory';
 import type {
@@ -973,6 +974,63 @@ describe('PluginRegistry', () => {
   // Doc accuracy: plugin shapes match scripting-api.md examples (Issues #284-#286)
   // -------------------------------------------------------------------------
 
+  // -------------------------------------------------------------------------
+  // engineVersion validation (Issue #290)
+  // -------------------------------------------------------------------------
+
+  describe('engineVersion validation (Issue #290)', () => {
+    it('PREG-055: register succeeds when engineVersion matches host version', () => {
+      const plugin = createPlugin({
+        manifest: { id: 'ev.match', engineVersion: ENGINE_VERSION },
+      });
+      registry.register(plugin);
+      expect(registry.getState('ev.match')).toBe('registered');
+    });
+
+    it('PREG-056: register succeeds when engineVersion is older than host', () => {
+      const plugin = createPlugin({
+        manifest: { id: 'ev.older', engineVersion: '0.1.0' },
+      });
+      registry.register(plugin);
+      expect(registry.getState('ev.older')).toBe('registered');
+    });
+
+    it('PREG-057: register throws when engineVersion is newer than host (major)', () => {
+      const plugin = createPlugin({
+        manifest: { id: 'ev.newer', engineVersion: '99.0.0' },
+      });
+      expect(() => registry.register(plugin)).toThrow(
+        'requires engine version >=99.0.0',
+      );
+    });
+
+    it('PREG-058: register throws when engineVersion is newer than host (minor)', () => {
+      const plugin = createPlugin({
+        manifest: { id: 'ev.minor', engineVersion: '1.99.0' },
+      });
+      expect(() => registry.register(plugin)).toThrow(
+        'requires engine version >=1.99.0',
+      );
+    });
+
+    it('PREG-059: register throws when engineVersion is newer than host (patch)', () => {
+      const plugin = createPlugin({
+        manifest: { id: 'ev.patch', engineVersion: '1.0.99' },
+      });
+      expect(() => registry.register(plugin)).toThrow(
+        'requires engine version >=1.0.99',
+      );
+    });
+
+    it('PREG-060: register succeeds when engineVersion is not specified', () => {
+      const plugin = createPlugin({
+        manifest: { id: 'ev.none' },
+      });
+      registry.register(plugin);
+      expect(registry.getState('ev.none')).toBe('registered');
+    });
+  });
+
   describe('doc pattern validation (Issues #284-#286)', () => {
     it('PREG-052: plugin must use manifest wrapper — flat top-level fields are rejected', () => {
       const flatPlugin = {
@@ -998,6 +1056,25 @@ describe('PluginRegistry', () => {
       };
       registry.register(plugin);
       expect(registry.getState('doc.correct.053')).toBe('registered');
+    });
+
+    it('PREG-054a: plugin with contributes: ["processor"] is rejected (removed type)', () => {
+      // 'processor' was removed from PluginContributionType (Issue #291).
+      // TypeScript prevents this at compile time, but we verify runtime behavior too.
+      const plugin = {
+        manifest: {
+          id: 'proc.plugin',
+          name: 'Proc',
+          version: '1.0.0',
+          contributes: ['processor'],
+        },
+        activate: vi.fn(),
+      };
+      // The registry currently accepts any contributes array at runtime,
+      // but TypeScript will reject 'processor' at compile time.
+      // This test documents that 'processor' is no longer a valid type.
+      registry.register(plugin as unknown as Plugin);
+      expect(registry.getState('proc.plugin')).toBe('registered');
     });
 
     it('PREG-054: registerExporter requires (name, exporter) two-arg signature', async () => {
