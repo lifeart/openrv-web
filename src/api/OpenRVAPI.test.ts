@@ -1263,17 +1263,86 @@ describe('ViewAPI', () => {
 // ColorAPI Tests
 // ============================================================
 
+function createMockLUTProvider() {
+  return {
+    _lut: null as any,
+    _intensity: 1.0,
+    setLUT: vi.fn(function (this: any, lut: any) { this._lut = lut; }),
+    getLUT: vi.fn(function (this: any) { return this._lut; }),
+    setLUTIntensity: vi.fn(function (this: any, intensity: number) { this._intensity = intensity; }),
+    getLUTIntensity: vi.fn(function (this: any) { return this._intensity; }),
+  };
+}
+
+function createMockToneMappingProvider() {
+  return {
+    _state: { enabled: false, operator: 'off' as const, reinhardWhitePoint: 4.0, filmicExposureBias: 2.0, filmicWhitePoint: 11.2, dragoBias: 0.85, dragoLwa: 0.2, dragoLmax: 1.5, dragoBrightness: 2.0 },
+    getToneMappingState: vi.fn(function (this: any) { return { ...this._state }; }),
+    setToneMappingState: vi.fn(function (this: any, state: any) { this._state = { ...state }; }),
+    resetToneMappingState: vi.fn(function (this: any) { this._state = { enabled: false, operator: 'off' }; }),
+  };
+}
+
+function createMockDisplayProvider() {
+  return {
+    _state: { transferFunction: 'srgb' as const, displayGamma: 1.0, displayBrightness: 1.0, customGamma: 2.2 },
+    getDisplayColorState: vi.fn(function (this: any) { return { ...this._state }; }),
+    setDisplayColorState: vi.fn(function (this: any, state: any) { this._state = { ...state }; }),
+    resetDisplayColorState: vi.fn(function (this: any) { this._state = { transferFunction: 'srgb', displayGamma: 1.0, displayBrightness: 1.0, customGamma: 2.2 }; }),
+  };
+}
+
+function createMockDisplayCapabilitiesProvider() {
+  return {
+    getDisplayCapabilities: vi.fn(() => ({
+      canvasP3: false, webglP3: false, displayGamut: 'srgb' as const, displayHDR: false,
+      webglHLG: false, webglPQ: false, canvasHLG: false, canvasFloat16: false,
+      webgpuAvailable: false, webgpuHDR: false, webglDrawingBufferStorage: false,
+      canvasExtendedHDR: false, heicDecode: false, videoFrameTexImage: false,
+      canvasHDRResize: false, canvasHDRResizeTier: 'none' as const,
+      activeColorSpace: 'srgb' as const, activeHDRMode: 'sdr' as const,
+    })),
+  };
+}
+
+function createMockOCIOProvider() {
+  return {
+    _state: { enabled: false, configName: 'aces_1.2', customConfigPath: null, inputColorSpace: 'Auto', detectedColorSpace: null, workingColorSpace: 'ACEScg', display: 'sRGB', view: 'ACES 1.0 SDR-video', look: 'None', lookDirection: 'forward' as const },
+    getOCIOState: vi.fn(function (this: any) { return { ...this._state }; }),
+    setOCIOState: vi.fn(function (this: any, state: any) { Object.assign(this._state, state); }),
+  };
+}
+
 describe('ColorAPI', () => {
   let color: ColorAPI;
   let colorControls: any;
   let cdlControl: any;
   let curvesControl: any;
+  let lutProvider: any;
+  let toneMappingProvider: any;
+  let displayProvider: any;
+  let displayCapabilitiesProvider: any;
+  let ocioProvider: any;
 
   beforeEach(() => {
     colorControls = createMockColorControls();
     cdlControl = createMockCDLControl();
     curvesControl = createMockCurvesControl();
-    color = new ColorAPI(colorControls as any, cdlControl as any, curvesControl as any);
+    lutProvider = createMockLUTProvider();
+    toneMappingProvider = createMockToneMappingProvider();
+    displayProvider = createMockDisplayProvider();
+    displayCapabilitiesProvider = createMockDisplayCapabilitiesProvider();
+    ocioProvider = createMockOCIOProvider();
+    color = new ColorAPI(
+      colorControls as any,
+      cdlControl as any,
+      curvesControl as any,
+      lutProvider,
+      toneMappingProvider,
+      displayProvider,
+      displayCapabilitiesProvider,
+      ocioProvider,
+    );
   });
 
   it('API-U060: setAdjustments() validates values', () => {
@@ -1447,37 +1516,30 @@ describe('ColorAPI', () => {
       'reset',
       'setCDL',
       'getCDL',
+      'resetCDL',
       'setCurves',
       'getCurves',
       'resetCurves',
-      'dispose',
-    ];
-
-    // Methods that docs previously claimed existed but are NOT implemented (#280, #282)
-    const undocumentedMethods = [
+      'exportCurvesJSON',
+      'importCurvesJSON',
       'loadLUT',
       'setLUTIntensity',
       'clearLUT',
       'applyLUTPreset',
-      'resetCDL',
+      'setToneMapping',
+      'getToneMapping',
       'setDisplayProfile',
+      'getDisplayProfile',
       'getDisplayCapabilities',
       'setOCIOState',
       'getOCIOState',
       'getAvailableConfigs',
-      'setToneMapping',
-      'exportCurvesJSON',
-      'importCurvesJSON',
+      'dispose',
     ];
 
     // All expected methods exist
     for (const method of expectedMethods) {
       expect(typeof (color as any)[method]).toBe('function');
-    }
-
-    // None of the documented-but-unimplemented methods exist
-    for (const method of undocumentedMethods) {
-      expect((color as any)[method]).toBeUndefined();
     }
   });
 
@@ -1512,6 +1574,237 @@ describe('ColorAPI', () => {
       { x: 0, y: 0 },
       { x: 1, y: 1 },
     ]);
+  });
+
+  // ============================================================
+  // Regression tests for #280 and #282: new methods
+  // ============================================================
+
+  // --- resetCDL ---
+  it('API-U280a: resetCDL() resets CDL to default values', () => {
+    color.setCDL({ slope: { r: 2.0, g: 2.0, b: 2.0 }, saturation: 0.5 });
+    cdlControl.setCDL.mockClear();
+    color.resetCDL();
+    expect(cdlControl.setCDL).toHaveBeenCalledTimes(1);
+    const arg = cdlControl.setCDL.mock.calls[0][0];
+    expect(arg.slope).toEqual({ r: 1.0, g: 1.0, b: 1.0 });
+    expect(arg.offset).toEqual({ r: 0.0, g: 0.0, b: 0.0 });
+    expect(arg.power).toEqual({ r: 1.0, g: 1.0, b: 1.0 });
+    expect(arg.saturation).toBe(1.0);
+  });
+
+  it('API-U280b: resetCDL() throws after dispose', () => {
+    color.dispose();
+    expect(() => color.resetCDL()).toThrow();
+  });
+
+  // --- exportCurvesJSON / importCurvesJSON ---
+  it('API-U280c: exportCurvesJSON() returns valid JSON string', () => {
+    const json = color.exportCurvesJSON();
+    expect(typeof json).toBe('string');
+    const parsed = JSON.parse(json);
+    expect(parsed.master).toBeDefined();
+    expect(parsed.red).toBeDefined();
+    expect(parsed.green).toBeDefined();
+    expect(parsed.blue).toBeDefined();
+  });
+
+  it('API-U280d: importCurvesJSON() applies imported curves', () => {
+    const curvesData = {
+      master: { enabled: true, points: [{ x: 0, y: 0.1 }, { x: 1, y: 0.9 }] },
+      red: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
+      green: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
+      blue: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
+    };
+    const json = JSON.stringify(curvesData);
+    curvesControl.setCurves.mockClear();
+    color.importCurvesJSON(json);
+    expect(curvesControl.setCurves).toHaveBeenCalledTimes(1);
+    const arg = curvesControl.setCurves.mock.calls[0][0];
+    expect(arg.master.points).toEqual([{ x: 0, y: 0.1 }, { x: 1, y: 0.9 }]);
+  });
+
+  it('API-U280e: importCurvesJSON() rejects invalid JSON', () => {
+    expect(() => color.importCurvesJSON('not json')).toThrow(/invalid/i);
+  });
+
+  it('API-U280f: importCurvesJSON() rejects non-string argument', () => {
+    expect(() => color.importCurvesJSON(123 as any)).toThrow(/string/);
+  });
+
+  it('API-U280g: exportCurvesJSON() roundtrips with importCurvesJSON()', () => {
+    color.setCurves({
+      red: { points: [{ x: 0, y: 0.2 }, { x: 0.5, y: 0.6 }, { x: 1, y: 0.8 }] },
+    });
+    const json = color.exportCurvesJSON();
+    curvesControl.setCurves.mockClear();
+    color.importCurvesJSON(json);
+    expect(curvesControl.setCurves).toHaveBeenCalledTimes(1);
+  });
+
+  // --- LUT methods ---
+  it('API-U280h: loadLUT() delegates to LUT provider', () => {
+    const fakeLut = { type: '3d', title: 'test', size: 2, domainMin: [0, 0, 0], domainMax: [1, 1, 1], data: new Float32Array(24) } as any;
+    color.loadLUT(fakeLut);
+    expect(lutProvider.setLUT).toHaveBeenCalledWith(fakeLut);
+  });
+
+  it('API-U280i: clearLUT() sets LUT to null', () => {
+    color.clearLUT();
+    expect(lutProvider.setLUT).toHaveBeenCalledWith(null);
+  });
+
+  it('API-U280j: setLUTIntensity() clamps and delegates', () => {
+    color.setLUTIntensity(0.75);
+    expect(lutProvider.setLUTIntensity).toHaveBeenCalledWith(0.75);
+  });
+
+  it('API-U280k: setLUTIntensity() clamps out-of-range values', () => {
+    color.setLUTIntensity(2.0);
+    expect(lutProvider.setLUTIntensity).toHaveBeenCalledWith(1.0);
+    color.setLUTIntensity(-1.0);
+    expect(lutProvider.setLUTIntensity).toHaveBeenCalledWith(0);
+  });
+
+  it('API-U280l: setLUTIntensity() rejects non-finite values', () => {
+    expect(() => color.setLUTIntensity(NaN)).toThrow();
+    expect(() => color.setLUTIntensity(Infinity)).toThrow();
+  });
+
+  it('API-U280m: applyLUTPreset() applies a known preset', () => {
+    color.applyLUTPreset('identity');
+    expect(lutProvider.setLUT).toHaveBeenCalledTimes(1);
+    const lut = lutProvider.setLUT.mock.calls[0][0];
+    expect(lut).not.toBeNull();
+    expect(lut.size).toBe(17);
+    expect(lut.data).toBeInstanceOf(Float32Array);
+  });
+
+  it('API-U280n: applyLUTPreset() rejects unknown preset', () => {
+    expect(() => color.applyLUTPreset('nonexistent-preset')).toThrow(/unknown preset/i);
+  });
+
+  it('API-U280o: LUT methods throw when no provider', () => {
+    const colorNoLut = new ColorAPI(colorControls, cdlControl, curvesControl);
+    expect(() => colorNoLut.loadLUT(null)).toThrow(/not available/i);
+    expect(() => colorNoLut.clearLUT()).toThrow(/not available/i);
+    expect(() => colorNoLut.setLUTIntensity(0.5)).toThrow(/not available/i);
+    expect(() => colorNoLut.applyLUTPreset('identity')).toThrow(/not available/i);
+  });
+
+  // --- Tone mapping ---
+  it('API-U282a: setToneMapping() merges partial state', () => {
+    color.setToneMapping({ enabled: true, operator: 'aces' });
+    expect(toneMappingProvider.setToneMappingState).toHaveBeenCalledTimes(1);
+    const arg = toneMappingProvider.setToneMappingState.mock.calls[0][0];
+    expect(arg.enabled).toBe(true);
+    expect(arg.operator).toBe('aces');
+  });
+
+  it('API-U282b: setToneMapping() rejects invalid operator', () => {
+    expect(() => color.setToneMapping({ operator: 'invalid' as any })).toThrow(/operator/);
+  });
+
+  it('API-U282c: setToneMapping() rejects non-object', () => {
+    expect(() => color.setToneMapping(null as any)).toThrow();
+    expect(() => color.setToneMapping('bad' as any)).toThrow();
+  });
+
+  it('API-U282d: getToneMapping() returns snapshot', () => {
+    const state = color.getToneMapping();
+    expect(state.operator).toBe('off');
+    expect(state.enabled).toBe(false);
+  });
+
+  it('API-U282e: tone mapping methods throw when no provider', () => {
+    const colorNoTM = new ColorAPI(colorControls, cdlControl, curvesControl);
+    expect(() => colorNoTM.setToneMapping({ enabled: true })).toThrow(/not available/i);
+    expect(() => colorNoTM.getToneMapping()).toThrow(/not available/i);
+  });
+
+  // --- Display profile ---
+  it('API-U282f: setDisplayProfile() merges partial state', () => {
+    color.setDisplayProfile({ transferFunction: 'rec709' as any });
+    expect(displayProvider.setDisplayColorState).toHaveBeenCalledTimes(1);
+    const arg = displayProvider.setDisplayColorState.mock.calls[0][0];
+    expect(arg.transferFunction).toBe('rec709');
+    expect(arg.displayGamma).toBe(1.0); // preserved from current
+  });
+
+  it('API-U282g: getDisplayProfile() returns snapshot', () => {
+    const profile = color.getDisplayProfile();
+    expect(profile.transferFunction).toBe('srgb');
+  });
+
+  it('API-U282h: display profile methods throw when no provider', () => {
+    const colorNoDisplay = new ColorAPI(colorControls, cdlControl, curvesControl);
+    expect(() => colorNoDisplay.setDisplayProfile({ transferFunction: 'srgb' as any })).toThrow(/not available/i);
+    expect(() => colorNoDisplay.getDisplayProfile()).toThrow(/not available/i);
+  });
+
+  // --- Display capabilities ---
+  it('API-U282i: getDisplayCapabilities() returns capabilities snapshot', () => {
+    const caps = color.getDisplayCapabilities();
+    expect(caps.displayGamut).toBe('srgb');
+    expect(caps.activeColorSpace).toBe('srgb');
+  });
+
+  it('API-U282j: getDisplayCapabilities() throws when no provider', () => {
+    const colorNoCaps = new ColorAPI(colorControls, cdlControl, curvesControl);
+    expect(() => colorNoCaps.getDisplayCapabilities()).toThrow(/not available/i);
+  });
+
+  // --- OCIO ---
+  it('API-U282k: setOCIOState() delegates to provider', () => {
+    color.setOCIOState({ enabled: true, configName: 'aces_1.2' });
+    expect(ocioProvider.setOCIOState).toHaveBeenCalledWith({ enabled: true, configName: 'aces_1.2' });
+  });
+
+  it('API-U282l: getOCIOState() returns snapshot', () => {
+    const state = color.getOCIOState();
+    expect(state.configName).toBe('aces_1.2');
+    expect(state.enabled).toBe(false);
+  });
+
+  it('API-U282m: setOCIOState() rejects non-object', () => {
+    expect(() => color.setOCIOState(null as any)).toThrow();
+    expect(() => color.setOCIOState([] as any)).toThrow();
+  });
+
+  it('API-U282n: getAvailableConfigs() returns configs array', () => {
+    const configs = color.getAvailableConfigs();
+    expect(Array.isArray(configs)).toBe(true);
+    expect(configs.length).toBeGreaterThan(0);
+    expect(configs[0]).toHaveProperty('name');
+    expect(configs[0]).toHaveProperty('description');
+  });
+
+  it('API-U282o: OCIO methods throw when no provider', () => {
+    const colorNoOCIO = new ColorAPI(colorControls, cdlControl, curvesControl);
+    expect(() => colorNoOCIO.setOCIOState({ enabled: true })).toThrow(/not available/i);
+    expect(() => colorNoOCIO.getOCIOState()).toThrow(/not available/i);
+    // getAvailableConfigs is static and does not need a provider
+    expect(() => colorNoOCIO.getAvailableConfigs()).not.toThrow();
+  });
+
+  // --- Disposal tests for new methods ---
+  it('API-U282p: new methods throw after dispose', () => {
+    color.dispose();
+    expect(() => color.resetCDL()).toThrow();
+    expect(() => color.exportCurvesJSON()).toThrow();
+    expect(() => color.importCurvesJSON('{}')).toThrow();
+    expect(() => color.loadLUT(null)).toThrow();
+    expect(() => color.clearLUT()).toThrow();
+    expect(() => color.setLUTIntensity(0.5)).toThrow();
+    expect(() => color.applyLUTPreset('identity')).toThrow();
+    expect(() => color.setToneMapping({ enabled: true })).toThrow();
+    expect(() => color.getToneMapping()).toThrow();
+    expect(() => color.setDisplayProfile({} as any)).toThrow();
+    expect(() => color.getDisplayProfile()).toThrow();
+    expect(() => color.getDisplayCapabilities()).toThrow();
+    expect(() => color.setOCIOState({ enabled: true })).toThrow();
+    expect(() => color.getOCIOState()).toThrow();
+    expect(() => color.getAvailableConfigs()).toThrow();
   });
 });
 

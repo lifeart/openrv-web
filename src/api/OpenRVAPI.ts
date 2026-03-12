@@ -12,7 +12,17 @@
  */
 
 import type { Session } from '../core/session/Session';
-import type { ViewerProvider, ColorAdjustmentProvider, CDLProvider, CurvesProvider } from './types';
+import type {
+  ViewerProvider,
+  ColorAdjustmentProvider,
+  CDLProvider,
+  CurvesProvider,
+  LUTProvider,
+  ToneMappingProvider,
+  DisplayProvider,
+  DisplayCapabilitiesProvider,
+  OCIOProvider,
+} from './types';
 
 import { PlaybackAPI } from './PlaybackAPI';
 import { MediaAPI } from './MediaAPI';
@@ -40,6 +50,16 @@ export interface OpenRVAPIConfig {
   colorControls: ColorAdjustmentProvider;
   cdlControl: CDLProvider;
   curvesControl: CurvesProvider;
+  /** Optional LUT provider for LUT load/clear/intensity control */
+  lutProvider?: LUTProvider;
+  /** Optional tone mapping provider for tone mapping state control */
+  toneMappingProvider?: ToneMappingProvider;
+  /** Optional display profile provider for display color management */
+  displayProvider?: DisplayProvider;
+  /** Optional display capabilities provider for querying display features */
+  displayCapabilitiesProvider?: DisplayCapabilitiesProvider;
+  /** Optional OCIO provider for OpenColorIO pipeline control */
+  ocioProvider?: OCIOProvider;
 }
 
 /**
@@ -136,7 +156,16 @@ export class OpenRVAPI {
     this.audio = new AudioAPI(config.session);
     this.loop = new LoopAPI(config.session);
     this.view = new ViewAPI(config.viewer);
-    this.color = new ColorAPI(config.colorControls, config.cdlControl, config.curvesControl);
+    this.color = new ColorAPI(
+      config.colorControls,
+      config.cdlControl,
+      config.curvesControl,
+      config.lutProvider,
+      config.toneMappingProvider,
+      config.displayProvider,
+      config.displayCapabilitiesProvider,
+      config.ocioProvider,
+    );
     this.markers = new MarkersAPI(config.session);
     this.events = new EventsAPI(config.session, config.viewer);
   }
