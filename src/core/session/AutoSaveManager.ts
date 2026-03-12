@@ -119,15 +119,30 @@ export class AutoSaveManager extends EventEmitter<AutoSaveEvents> {
     this.isInitialized = true;
 
     // Check for crash recovery
+    let hasRecovery = false;
     const wasCleanShutdown = await this.checkCleanShutdown();
     if (!wasCleanShutdown) {
       const entries = await this.listAutoSaves();
       if (entries.length > 0) {
         this.emit('recoveryAvailable', { entries });
-        return true;
+        hasRecovery = true;
       }
     }
 
+    // Always arm the session regardless of recovery state so that
+    // subsequent work is protected by auto-save (fix #377).
+    await this.armSession();
+
+    return hasRecovery;
+  }
+
+  /**
+   * Arm the auto-save session: mark active, start timer, install
+   * the beforeunload handler. Safe to call multiple times — the timer
+   * is reset and the listener is not duplicated because we remove
+   * before adding.
+   */
+  async armSession(): Promise<void> {
     // Mark as active session (not clean shutdown until dispose)
     await this.setCleanShutdown(false);
 
@@ -136,10 +151,10 @@ export class AutoSaveManager extends EventEmitter<AutoSaveEvents> {
       this.startTimer();
     }
 
-    // Listen for beforeunload to mark clean shutdown
+    // Listen for beforeunload to mark clean shutdown.
+    // Remove first to avoid duplicate listeners if called more than once.
+    window.removeEventListener('beforeunload', this.handleBeforeUnload);
     window.addEventListener('beforeunload', this.handleBeforeUnload);
-
-    return false;
   }
 
   /**
@@ -238,7 +253,7 @@ export class AutoSaveManager extends EventEmitter<AutoSaveEvents> {
    * Execute save using the stored state getter
    */
   private saveWithGetter(): void {
-    if (!this.stateGetter) return;
+    if (!this.stateGetter || !this.config.enabled) return;
     try {
       const state = this.stateGetter();
       this.save(state);
@@ -284,6 +299,11 @@ export class AutoSaveManager extends EventEmitter<AutoSaveEvents> {
   markDirty(stateGetter: () => SessionState): void {
     this.isDirty = true;
     this.stateGetter = stateGetter;
+
+    // Don't schedule a debounced save if auto-save is disabled
+    if (!this.config.enabled) {
+      return;
+    }
 
     // Debounce: if multiple changes happen rapidly, only save once after 2s of inactivity
     if (this.debounceTimer) {
@@ -564,6 +584,11 @@ export class AutoSaveManager extends EventEmitter<AutoSaveEvents> {
       this.startTimer();
     } else if (!this.config.enabled && prevEnabled) {
       this.stopTimer();
+      // Also cancel any pending debounced save
+      if (this.debounceTimer) {
+        clearTimeout(this.debounceTimer);
+        this.debounceTimer = null;
+      }
     } else if (this.config.enabled) {
       // Restart timer with new interval
       this.startTimer();
