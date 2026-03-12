@@ -25,6 +25,7 @@ import { EventsAPI } from './EventsAPI';
 import { pluginRegistry } from '../plugin/PluginRegistry';
 import type { Plugin, PluginId, PluginState } from '../plugin/types';
 import { APIError } from '../core/errors';
+import { ENGINE_VERSION } from '../plugin/version';
 
 /**
  * Configuration passed to initialize the API.
@@ -45,8 +46,8 @@ export interface OpenRVAPIConfig {
  * The main OpenRV public API
  */
 export class OpenRVAPI {
-  /** API version following semver */
-  readonly version: string = '1.0.0';
+  /** API version following semver, derived from package.json */
+  readonly version: string = ENGINE_VERSION;
 
   /** Playback control methods */
   readonly playback: PlaybackAPI;

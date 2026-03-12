@@ -126,6 +126,21 @@ Removed dead contextual registrations from `App.ts`, updated UI hints in `Scopes
 - `docs/advanced/scripting-api.md`
 - `src/plugin/PluginRegistry.test.ts`
 
+## Issue #294: `window.openrv.version` is hardcoded to `1.0.0`
+
+**Root cause**: `OpenRVAPI.version` was hardcoded `'1.0.0'` while `package.json` declares `0.1.0`.
+
+**Fix**: Both `ENGINE_VERSION` and `OpenRVAPI.version` now derive from `package.json` via `resolveJsonModule`. Single source of truth.
+
+**Tests added**: 1 regression test verifying ENGINE_VERSION matches package.json.
+
+**Files changed**:
+- `src/api/OpenRVAPI.ts`
+- `src/api/OpenRVAPI.test.ts`
+- `src/plugin/version.ts`
+- `src/plugin/version.test.ts`
+- `tsconfig.json`
+
 ## Issue #293: `window.openrv.plugins.list()` includes disposed plugins
 
 **Root cause**: `getRegisteredIds()` returned all keys without filtering by state.

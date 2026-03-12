@@ -19,6 +19,7 @@ import { EventsAPI } from './EventsAPI';
 import type { OpenRVAPIConfig } from './OpenRVAPI';
 import { pluginRegistry } from '../plugin/PluginRegistry';
 import type { Plugin } from '../plugin/types';
+import { version as packageVersion } from '../../package.json';
 
 // ============================================================
 // Mock Factories
@@ -474,7 +475,7 @@ describe('OpenRVAPI', () => {
 
   it('API-U008: version is a valid string', () => {
     expect(typeof api.version).toBe('string');
-    expect(api.version).toBe('1.0.0');
+    expect(api.version).toBe(packageVersion);
   });
 
   it('API-U009: hot-reload scenario - disposing old instance prevents duplicate event forwarding', () => {
@@ -2157,6 +2158,59 @@ describe('EventsAPI', () => {
     expect(point1).not.toHaveProperty('endFrame');
     expect(range!.endFrame).toBe(20);
     expect(point2).not.toHaveProperty('endFrame');
+  });
+
+  // -- Issue #292: playlistEnded event --
+
+  it('API-U292a: playlistEnded is a valid event name', () => {
+    const names = events.getEventNames();
+    expect(names).toContain('playlistEnded');
+  });
+
+  it('API-U292b: subscribing to playlistEnded works', () => {
+    const handler = vi.fn();
+    const unsub = events.on('playlistEnded', handler);
+    expect(typeof unsub).toBe('function');
+  });
+
+  it('API-U292c: playlistEnded fires when session emits playlistEnded', () => {
+    const handler = vi.fn();
+    events.on('playlistEnded', handler);
+
+    session.emit('playlistEnded', undefined);
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it('API-U292d: playlistEnded unsubscribe works', () => {
+    const handler = vi.fn();
+    const unsub = events.on('playlistEnded', handler);
+
+    session.emit('playlistEnded', undefined);
+    expect(handler).toHaveBeenCalledTimes(1);
+
+    unsub();
+    session.emit('playlistEnded', undefined);
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it('API-U292e: playlistEnded not forwarded after dispose()', () => {
+    const handler = vi.fn();
+    events.on('playlistEnded', handler);
+
+    events.dispose();
+
+    session.emit('playlistEnded', undefined);
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('API-U292f: once() works for playlistEnded event', () => {
+    const handler = vi.fn();
+    events.once('playlistEnded', handler);
+
+    session.emit('playlistEnded', undefined);
+    session.emit('playlistEnded', undefined);
+
+    expect(handler).toHaveBeenCalledTimes(1);
   });
 });
 

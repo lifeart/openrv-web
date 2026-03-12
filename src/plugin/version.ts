@@ -1,8 +1,10 @@
+import { version } from '../../package.json';
+
 /**
  * Host engine version for plugin compatibility checks.
- * Kept in sync with OpenRVAPI.version.
+ * Derived from package.json so it stays in sync automatically.
  */
-export const ENGINE_VERSION = '1.0.0';
+export const ENGINE_VERSION: string = version;
 
 /**
  * Parse a semver string into its numeric components.

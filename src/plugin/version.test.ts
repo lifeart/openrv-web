@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { parseSemVer, satisfiesMinVersion, ENGINE_VERSION } from './version';
+import { version as packageVersion } from '../../package.json';
 
 describe('parseSemVer', () => {
   it('parses standard semver string', () => {
@@ -52,5 +53,9 @@ describe('satisfiesMinVersion', () => {
 describe('ENGINE_VERSION', () => {
   it('is a valid semver string', () => {
     expect(() => parseSemVer(ENGINE_VERSION)).not.toThrow();
+  });
+
+  it('matches the version from package.json', () => {
+    expect(ENGINE_VERSION).toBe(packageVersion);
   });
 });
