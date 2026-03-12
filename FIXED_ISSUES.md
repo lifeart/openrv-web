@@ -90,3 +90,21 @@ Removed dead contextual registrations from `App.ts`, updated UI hints in `Scopes
 **Files changed**:
 - `src/formats/DecoderRegistry.ts`
 - `src/formats/DecoderRegistry.test.ts`
+
+## Issue #280: Published scripting docs expose `openrv.color` LUT methods that don't exist
+## Issue #282: Multiple shipped color scripting pages document methods that don't exist
+
+**Root cause**: Docs documented planned API methods (loadLUT, resetCDL, setDisplayProfile, setOCIOState, setToneMapping, exportCurvesJSON, etc.) as if they were available on `window.openrv.color`, but ColorAPI only exposes adjustments, CDL, and curves.
+
+**Fix**: Updated all 6 color doc files to clearly mark unimplemented methods as "Planned API (not yet available)" with banners, and added available methods lists and workarounds where possible.
+
+**Tests added**: 1 regression test verifying the exact public surface of ColorAPI (9 real methods exist, 13 documented-but-unimplemented are undefined).
+
+**Files changed**:
+- `docs/color/lut.md`
+- `docs/color/cdl.md`
+- `docs/color/display-profiles.md`
+- `docs/color/ocio.md`
+- `docs/color/tone-mapping.md`
+- `docs/color/curves.md`
+- `src/api/OpenRVAPI.test.ts`

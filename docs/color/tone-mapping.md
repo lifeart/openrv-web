@@ -121,7 +121,11 @@ When in doubt, start with **Reinhard** for a neutral preview, then switch to **A
 
 ## Scripting API
 
+> **Not yet available in the public API.** `setToneMapping()` is planned but not yet exposed on `window.openrv.color`. Tone mapping configuration is currently available only through the UI controls or keyboard shortcut (`Shift+Alt+J` to toggle).
+
 ```javascript
+// --- Planned API (not yet implemented) ---
+
 // Enable ACES tone mapping
 window.openrv.color.setToneMapping({
   operator: 'aces',
@@ -138,6 +142,12 @@ window.openrv.color.setToneMapping({
 // Disable tone mapping
 window.openrv.color.setToneMapping({ enabled: false });
 ```
+
+The following color methods are currently available via `window.openrv.color`:
+
+- `setAdjustments()` / `getAdjustments()` / `reset()` -- primary color adjustments
+- `setCDL()` / `getCDL()` -- CDL values
+- `setCurves()` / `getCurves()` / `resetCurves()` -- curves editing
 
 ---
 

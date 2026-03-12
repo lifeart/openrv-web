@@ -1318,6 +1318,49 @@ describe('ColorAPI', () => {
     expect(curves2.red.points[0]!.y).toBe(0);
   });
 
+  // Regression test for issues #280 and #282:
+  // Verify the exact public API surface of ColorAPI to catch doc/implementation drift.
+  it('API-U069m: ColorAPI exposes exactly the documented public methods', () => {
+    const expectedMethods = [
+      'setAdjustments',
+      'getAdjustments',
+      'reset',
+      'setCDL',
+      'getCDL',
+      'setCurves',
+      'getCurves',
+      'resetCurves',
+      'dispose',
+    ];
+
+    // Methods that docs previously claimed existed but are NOT implemented (#280, #282)
+    const undocumentedMethods = [
+      'loadLUT',
+      'setLUTIntensity',
+      'clearLUT',
+      'applyLUTPreset',
+      'resetCDL',
+      'setDisplayProfile',
+      'getDisplayCapabilities',
+      'setOCIOState',
+      'getOCIOState',
+      'getAvailableConfigs',
+      'setToneMapping',
+      'exportCurvesJSON',
+      'importCurvesJSON',
+    ];
+
+    // All expected methods exist
+    for (const method of expectedMethods) {
+      expect(typeof (color as any)[method]).toBe('function');
+    }
+
+    // None of the documented-but-unimplemented methods exist
+    for (const method of undocumentedMethods) {
+      expect((color as any)[method]).toBeUndefined();
+    }
+  });
+
   it('API-U069l: resetCurves() restores identity curves', () => {
     color.setCurves({
       master: {

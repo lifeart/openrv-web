@@ -121,7 +121,11 @@ For complex OCIO transforms that cannot be expressed as simple matrix + transfer
 
 ## Scripting API
 
+> **Not yet available in the public API.** The methods below (`setOCIOState`, `getOCIOState`, `getAvailableConfigs`) are planned but not yet exposed on `window.openrv.color`. OCIO configuration is currently available only through the UI panel (`Shift+O`).
+
 ```javascript
+// --- Planned API (not yet implemented) ---
+
 // Enable OCIO pipeline
 window.openrv.color.setOCIOState({
   enabled: true,
@@ -139,6 +143,12 @@ const state = window.openrv.color.getOCIOState();
 // List available configurations
 const configs = window.openrv.color.getAvailableConfigs();
 ```
+
+The following color methods are currently available via `window.openrv.color`:
+
+- `setAdjustments()` / `getAdjustments()` / `reset()` -- primary color adjustments
+- `setCDL()` / `getCDL()` -- CDL values
+- `setCurves()` / `getCurves()` / `resetCurves()` -- curves editing
 
 ---
 

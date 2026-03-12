@@ -133,7 +133,11 @@ Gamut mapping is applied at pipeline stage 7a, after tone mapping and before the
 
 ## Scripting API
 
+> **Not yet available in the public API.** The methods below (`setDisplayProfile`, `getDisplayCapabilities`) are planned but not yet exposed on `window.openrv.color`. Display profile configuration is currently available only through the UI controls.
+
 ```javascript
+// --- Planned API (not yet implemented) ---
+
 // Set display profile
 window.openrv.color.setDisplayProfile({
   transferFunction: 'rec709',
@@ -147,6 +151,12 @@ console.log(caps.displayGamut);    // 'srgb' | 'p3' | 'rec2020'
 console.log(caps.displayHDR);      // true | false
 console.log(caps.activeHDRMode);   // 'sdr' | 'hlg' | 'pq' | 'extended'
 ```
+
+The following color methods are currently available via `window.openrv.color`:
+
+- `setAdjustments()` / `getAdjustments()` / `reset()` -- primary color adjustments
+- `setCDL()` / `getCDL()` -- CDL values
+- `setCurves()` / `getCurves()` / `resetCurves()` -- curves editing
 
 ---
 

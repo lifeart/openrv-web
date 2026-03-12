@@ -112,7 +112,11 @@ Film emulation presets are selected from the LUT presets dropdown and applied as
 
 ## Scripting API
 
+> **Not yet available in the public API.** The methods below (`loadLUT`, `setLUTIntensity`, `clearLUT`, `applyLUTPreset`) are planned but not yet exposed on `window.openrv.color`. LUT operations are currently available only through the UI controls. See the [available ColorAPI methods](#available-colorapi-methods) below.
+
 ```javascript
+// --- Planned API (not yet implemented) ---
+
 // Load a LUT from a File object
 window.openrv.color.loadLUT(fileObject);
 
@@ -125,6 +129,14 @@ window.openrv.color.clearLUT();
 // Apply a film emulation preset
 window.openrv.color.applyLUTPreset('warm-film');
 ```
+
+### Available ColorAPI Methods
+
+The following color methods are currently available via `window.openrv.color`:
+
+- `setAdjustments()` / `getAdjustments()` / `reset()` -- primary color adjustments
+- `setCDL()` / `getCDL()` -- CDL values
+- `setCurves()` / `getCurves()` / `resetCurves()` -- curves editing
 
 ---
 
