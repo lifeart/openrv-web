@@ -1885,3 +1885,15 @@ Called from `fromJSON()` inside the existing `if (mediaIndexMap.size > 0)` block
 - `src/ui/components/SnapshotPanel.test.ts`
 - `src/AppPlaybackWiring.ts`
 - `src/AppPlaybackWiring.test.ts`
+
+## Issue #382: The session export docs say RV/GTO sessions are import-only, but the shipped Export menu still saves `.rv` and `.gto`
+
+**Root cause**: Documentation bug. `docs/export/sessions.md` incorrectly stated "GTO sessions are read-only imports -- they are not re-exported in GTO format." The shipped Export control has working "Save RV Session (.rv)" and "Save RV Session (.gto)" menu items wired to `persistenceManager.saveRvSession()`.
+
+**Fix**: Updated `docs/export/sessions.md` to accurately document both import and export capabilities for RV/GTO session formats.
+
+**Tests added**: 4 regression tests in `ExportControl.test.ts` (EXPORT-U080 through EXPORT-U083) verifying the RV/GTO export menu items exist and emit the correct events.
+
+**Files changed**:
+- `docs/export/sessions.md`
+- `src/ui/components/ExportControl.test.ts`

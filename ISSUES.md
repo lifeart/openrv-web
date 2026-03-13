@@ -570,18 +570,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Users can trust auto-checkpoints to protect routine destructive actions that the shipped app never checkpoints.
   - That makes the documented safety net much narrower than it sounds, especially during active review/editing work where people are not explicitly loading projects.
 
-### 382. The session export docs say RV/GTO sessions are import-only, but the shipped Export menu still saves `.rv` and `.gto`
-
-- Severity: Low
-- Area: Documentation / session export workflow
-- Evidence:
-  - The session export guide says, "GTO sessions are read-only imports -- they are not re-exported in GTO format. Session changes are saved as `.orvproject` files" in [docs/export/sessions.md](/Users/lifeart/Repos/openrv-web/docs/export/sessions.md#L47) through [docs/export/sessions.md](/Users/lifeart/Repos/openrv-web/docs/export/sessions.md#L56).
-  - The shipped Export control still adds `Save RV Session (.rv)` and `Save RV Session (.gto)` menu items in [src/ui/components/ExportControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ExportControl.ts#L200) through [src/ui/components/ExportControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ExportControl.ts#L201).
-  - Those menu actions are wired in production to `persistenceManager.saveRvSession(format)` in [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L248) through [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L250), and that path really writes `.rv` / `.gto` files in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L319) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L333).
-- Impact:
-  - Users reading the docs can conclude RV/GTO export is unavailable and miss a shipped workflow that the UI still exposes.
-  - That also makes the session-format story harder to trust because the docs and the export menu disagree on a basic capability boundary.
-
 ### 383. The file-reload docs promise a real Cancel path, but production treats close and Escape the same as Skip
 
 - Severity: Medium
