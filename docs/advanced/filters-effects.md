@@ -125,4 +125,4 @@ The Filters panel is accessible from the context toolbar. Each filter has an ena
 - [Transforms](transforms.md) -- Spatial transforms (rotation, crop, lens distortion)
 - [Session Management](session-management.md) -- Filter settings in session persistence
 - [Color Controls](../color/primary-controls.md) -- Primary color correction applied before filters
-- [Waveform](../scopes/waveform.md) -- verify filter impact on signal levels (`W`)
+- [Waveform](../scopes/waveform.md) -- verify filter impact on signal levels

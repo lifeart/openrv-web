@@ -6,7 +6,9 @@ The waveform monitor displays luminance or color values plotted against the hori
 
 ## Opening the Waveform
 
-Press `W` to toggle the waveform monitor. It appears as a floating overlay. Press `W` again or `Escape` to close it.
+Toggle the waveform monitor from the QC toolbar or by assigning a custom shortcut in the [Shortcut Editor](../reference/keyboard-shortcuts.md#shortcut-editor). It appears as a floating overlay. Press `Escape` to close it.
+
+> **Note:** The `W` key is assigned to fit-to-width by default. To use `W` for the waveform, set a custom binding in the Shortcut Editor.
 
 ## Display Modes
 

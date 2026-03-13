@@ -131,12 +131,9 @@ window.openrv.color.setToneMapping({
 // Set Reinhard with custom white point
 window.openrv.color.setToneMapping({
   operator: 'reinhard',
-  reinhardWhitePoint: 6.0,
+  whitePoint: 6.0,
   enabled: true
 });
-
-// Get current tone mapping state
-const tm = window.openrv.color.getToneMapping();
 
 // Disable tone mapping
 window.openrv.color.setToneMapping({ enabled: false });
@@ -151,4 +148,4 @@ window.openrv.color.setToneMapping({ enabled: false });
 - [Log Curve Presets](log-curves.md) -- input linearization for camera log footage
 - [OCIO Integration](ocio.md) -- ACES view transforms as an alternative to standalone tone mapping
 - [Rendering Pipeline](../guides/rendering-pipeline.md) -- tone mapping position in the full pipeline (stage 7)
-- [Histogram](../scopes/histogram.md) -- verify tonal distribution after tone mapping (`H`)
+- [Histogram](../scopes/histogram.md) -- verify tonal distribution after tone mapping

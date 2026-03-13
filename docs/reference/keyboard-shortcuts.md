@@ -65,14 +65,21 @@ This page lists all keyboard shortcuts available in OpenRV Web. Shortcuts are or
 | `Shift+Alt+S` | Toggle split screen (off / horizontal / vertical) |
 | `Shift+D` | Toggle difference matte |
 
+## Fit Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `H` | Fit image height to window |
+| `W` | Fit image width to window |
+
 ## Scopes
 
 | Shortcut | Action |
 |----------|--------|
-| `H` | Toggle histogram |
-| `W` | Toggle waveform monitor |
 | `Y` | Toggle vectorscope |
 | `Shift+I` | Toggle pixel probe |
+
+> **Note:** Histogram and waveform scopes do not have default keyboard shortcuts because `H` and `W` are assigned to fit-to-height and fit-to-width respectively. You can assign custom shortcuts for histogram and waveform via the [Shortcut Editor](#shortcut-editor).
 
 ## Exposure and Analysis
 
@@ -100,12 +107,13 @@ This page lists all keyboard shortcuts available in OpenRV Web. Shortcuts are or
 
 | Shortcut | Action |
 |----------|--------|
+| `Shift+R` | Red channel only |
 | `Shift+G` | Green channel only |
+| `Shift+B` | Blue channel only |
 | `Shift+A` | Alpha channel only |
-| `Shift+Y` | Luminance / Grayscale |
-| `Shift+L` | Toggle LUT pipeline panel |
-
-> **Note:** `Shift+R`, `Shift+B`, and `Shift+N` are defined as default channel shortcuts (red, blue, and reset) but are **not active** in the default configuration. They are reserved by higher-priority actions: `Shift+R` is used by Rotate Left (Transform), `Shift+B` by Cycle Background Pattern (View), and `Shift+N` by Toggle Network Sync Panel (Panels). Use the [Shortcut Editor](#shortcut-editor) to reassign these if needed.
+| `Shift+L` | Luminance / Grayscale |
+| `Shift+Y` | Grayscale (alias for Shift+L) |
+| `Shift+N` | Reset channel view (no isolation) |
 
 ## Color and Effects
 
@@ -187,7 +195,7 @@ Press `?` or open the Help menu to display the shortcut cheat sheet overlay. Thi
 
 ## Shortcut Editor
 
-OpenRV Web includes a dedicated shortcut editor UI for viewing and customizing keyboard shortcuts. Open it from the Help menu in the header bar by clicking **Custom Key Bindings**. The editor displays every registered shortcut with its current binding, default binding, and category. Click any shortcut row to record a new key combination.
+OpenRV Web includes a dedicated shortcut editor UI for viewing and customizing keyboard shortcuts. Open it from the Settings panel. The editor displays every registered shortcut with its current binding, default binding, and category. Click any shortcut row to record a new key combination.
 
 ### Customization Features
 

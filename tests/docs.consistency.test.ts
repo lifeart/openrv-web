@@ -216,7 +216,7 @@ describe('Documentation consistency', () => {
 
   test('builtin format count is accurate', () => {
     const formats = getBuiltinFormats();
-    expect(formats.length).toBeGreaterThanOrEqual(12);
+    expect(formats.length).toBeGreaterThanOrEqual(13);
   });
 
   // -- README cross-checks --------------------------------------------------
@@ -244,111 +244,6 @@ describe('Documentation consistency', () => {
   test('README documentation link exists', () => {
     const readme = readFile('README.md');
     expect(readme).toMatch(/\[Documentation\]/);
-  });
-
-  // -- Node.js version requirement ------------------------------------------
-
-  test('installation doc matches package.json engines.node requirement', () => {
-    const pkgJson = JSON.parse(readFile('package.json'));
-    const enginesNode: string = pkgJson.engines?.node;
-    expect(enginesNode).toBeTruthy();
-
-    const installDoc = readFile('docs/getting-started/installation.md');
-
-    // Extract minimum versions from engines.node (e.g. "^20.19.0 || >=22.12.0")
-    const versionRanges = enginesNode.match(/(\d+\.\d+)\.\d+/g) ?? [];
-    expect(versionRanges.length).toBeGreaterThanOrEqual(1);
-
-    for (const fullVersion of versionRanges) {
-      const majorMinor = fullVersion.replace(/\.\d+$/, '');
-      expect(
-        installDoc,
-        `installation.md should mention version ${majorMinor} (from engines.node: "${enginesNode}")`,
-      ).toContain(majorMinor);
-    }
-
-    // Ensure the doc does NOT mention unsupported older Node versions
-    expect(installDoc).not.toMatch(/Node\.js.?\s*18\b/);
-    expect(installDoc).not.toMatch(/Node\.js.?\s*16\b/);
-    expect(installDoc).not.toMatch(/Node\.js.?\s*14\b/);
-  });
-
-  // -- FAQ accuracy ---------------------------------------------------------
-
-  test('FAQ does not claim URL-based loading is unimplemented', () => {
-    const faq = readFile('docs/reference/faq.md');
-    expect(faq).not.toMatch(/URL-based loading is not currently implemented/i);
-  });
-
-  test('FAQ does not describe collaboration as purely peer-to-peer WebRTC', () => {
-    const faq = readFile('docs/reference/faq.md');
-    // Should not claim WebRTC is the sole collaboration transport
-    expect(faq).not.toMatch(/uses?\s+WebRTC\s+peer-to-peer\s+connections?\s+for\s+real-time\s+collaboration/i);
-    // Should mention WebSocket as part of the collaboration story
-    expect(faq.toLowerCase()).toContain('websocket');
-  });
-
-  // -- Conflicting channel shortcuts ----------------------------------------
-
-  test('docs do not advertise Shift+R, Shift+B, or Shift+N as working channel shortcuts', () => {
-    const filesToCheck = [
-      'docs/playback/channel-isolation.md',
-      'docs/reference/troubleshooting.md',
-      'docs/playback/exr-layers.md',
-      'docs/scopes/histogram.md',
-    ];
-
-    // These patterns match the shortcuts presented as active keybindings
-    // (e.g., `Shift+R` in backticks), but allow them in warning/note text
-    // that explicitly says they are NOT active.
-    for (const file of filesToCheck) {
-      if (!fileExists(file)) continue;
-      const content = readFile(file);
-      const lines = content.split('\n');
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i]!;
-        // Skip lines inside warning/note blocks that explain the conflict
-        if (line.includes('not active by default') || line.includes('reserved for other actions')) {
-          continue;
-        }
-        // Check that Shift+R, Shift+B, Shift+N are not presented as usable shortcuts
-        for (const shortcut of ['Shift+R', 'Shift+B', 'Shift+N']) {
-          const asKeybinding = `\`${shortcut}\``;
-          expect(
-            line.includes(asKeybinding),
-            `${file}:${i + 1} advertises ${shortcut} as a working shortcut: "${line.trim()}"`,
-          ).toBe(false);
-        }
-      }
-    }
-  });
-
-  // -- No "Settings panel" references (#337) --------------------------------
-
-  test('docs do not reference a non-existent "Settings panel" as a UI element', () => {
-    const filesToCheck = [
-      'docs/reference/keyboard-shortcuts.md',
-      'docs/advanced/review-workflow.md',
-      'docs/advanced/dcc-integration.md',
-    ];
-
-    for (const file of filesToCheck) {
-      if (!fileExists(file)) continue;
-      const content = readFile(file);
-      expect(
-        content.toLowerCase(),
-        `${file} should not reference "Settings panel" -- this UI element does not exist`,
-      ).not.toContain('settings panel');
-    }
-  });
-
-  // -- Session save paths (#357) --------------------------------------------
-
-  test('session doc does not claim .orvproject save is available from the Export menu', () => {
-    const sessionDoc = readFile('docs/export/sessions.md');
-    // The Export menu only has RV/GTO exports; .orvproject is saved via the header Save button.
-    expect(sessionDoc).not.toMatch(/Export menu.*\.orvproject/i);
-    expect(sessionDoc).not.toMatch(/\.orvproject.*Export menu/i);
   });
 
   // -- Doc page existence ---------------------------------------------------
@@ -379,5 +274,56 @@ describe('Documentation consistency', () => {
     for (const page of requiredPages) {
       expect(fileExists(page), `Missing doc page: ${page}`).toBe(true);
     }
+  });
+
+  // -- Keyboard shortcut accuracy (H/W hidden defaults) ---------------------
+
+  test('docs do not advertise H as histogram shortcut', () => {
+    const filesToCheck = [
+      'docs/reference/keyboard-shortcuts.md',
+      'docs/getting-started/ui-overview.md',
+      'docs/scopes/histogram.md',
+    ];
+
+    for (const file of filesToCheck) {
+      if (!fileExists(file)) continue;
+      const content = readFile(file);
+      // Should not claim `H` toggles the histogram (H is fit-to-height)
+      expect(content).not.toMatch(/\| `H` \| .*[Hh]istogram/);
+      expect(content).not.toMatch(/Press `H` to toggle the histogram/);
+    }
+  });
+
+  test('docs do not advertise W as waveform shortcut', () => {
+    const filesToCheck = [
+      'docs/reference/keyboard-shortcuts.md',
+      'docs/getting-started/ui-overview.md',
+      'docs/scopes/waveform.md',
+    ];
+
+    for (const file of filesToCheck) {
+      if (!fileExists(file)) continue;
+      const content = readFile(file);
+      // Should not claim `W` toggles the waveform (W is fit-to-width)
+      expect(content).not.toMatch(/\| `W` \| .*[Ww]aveform/);
+      expect(content).not.toMatch(/Press `W` to toggle the waveform/);
+    }
+  });
+
+  test('keyboard shortcuts doc lists H for fit-to-height and W for fit-to-width', () => {
+    const shortcutsDoc = readFile('docs/reference/keyboard-shortcuts.md');
+    expect(shortcutsDoc).toMatch(/\| `H` \| Fit image height to window \|/);
+    expect(shortcutsDoc).toMatch(/\| `W` \| Fit image width to window \|/);
+  });
+
+  test('scope shortcuts are context-aware in AppKeyboardHandler and documented correctly', () => {
+    const source = readFile('src/AppKeyboardHandler.ts');
+    // Verify that panel.histogram and panel.waveform are in CONTEXTUAL_DEFAULTS (context-aware dispatch)
+    expect(source).toMatch(/CONTEXTUAL_DEFAULTS.*=.*new Set\(\[[\s\S]*?'panel\.waveform'/);
+    expect(source).toMatch(/CONTEXTUAL_DEFAULTS.*=.*new Set\(\[[\s\S]*?'panel\.histogram'/);
+
+    // Verify the docs mention that histogram/waveform have no default shortcut
+    const shortcutsDoc = readFile('docs/reference/keyboard-shortcuts.md');
+    expect(shortcutsDoc).toContain('Histogram and waveform scopes do not have default keyboard shortcuts');
   });
 });

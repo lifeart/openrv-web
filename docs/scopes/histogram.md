@@ -4,7 +4,9 @@ The histogram displays the distribution of pixel values across the image, provid
 
 ## Opening the Histogram
 
-Press `H` to toggle the histogram panel. It appears as a floating overlay on the viewer. Press `H` again or `Escape` to close it.
+Toggle the histogram panel from the QC toolbar or by assigning a custom shortcut in the [Shortcut Editor](../reference/keyboard-shortcuts.md#shortcut-editor). The histogram appears as a floating overlay on the viewer. Press `Escape` to close it.
+
+> **Note:** The `H` key is assigned to fit-to-height by default. To use `H` for the histogram, set a custom binding in the Shortcut Editor.
 
 ## Display Modes
 
@@ -63,7 +65,7 @@ This overlay makes it immediately obvious which parts of the image have clipped 
 
 ## Channel Isolation Integration
 
-When a channel is isolated (e.g., `Shift+G` for green, or via the Channel Select dropdown for red/blue), the histogram updates to reflect the isolated channel data. The histogram always shows the distribution of what is currently visible in the viewer.
+When a channel is isolated (e.g., `Shift+R` for red only), the histogram updates to reflect the isolated channel data. The histogram always shows the distribution of what is currently visible in the viewer.
 
 ## GPU Acceleration
 

@@ -349,8 +349,8 @@ this.keyboardManager.register(DEFAULT_KEY_BINDINGS['playback.toggle'], () => {
 ### View Tab
 - `F` - Fit to window
 - `W` - Cycle wipe mode (off → horizontal → vertical)
-- `H` - Toggle histogram
-- `w` - Toggle waveform (lowercase)
+- `H` - Fit image height to window
+- `W` - Fit image width to window
 - `y` - Toggle vectorscope
 - `\`` - Toggle A/B source
 - `Shift+R/G/B/A/L/N` - Channel isolation (Red/Green/Blue/Alpha/Luma/Normal)
