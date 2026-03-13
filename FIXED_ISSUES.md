@@ -1848,3 +1848,23 @@ Called from `fromJSON()` inside the existing `if (mediaIndexMap.size > 0)` block
 - `src/ui/components/CacheIndicator.ts`
 - `src/ui/components/CacheIndicator.test.ts`
 - `src/cache/MediaCacheErrorSurfacing.test.ts` (new)
+
+## Issue #374: Snapshot creation is hardwired to anonymous quick-save behavior instead of the documented name-and-description flow
+
+**Root cause**: The Snapshot panel's `Create Snapshot` button emitted a bare `createRequested` event, wired directly to `createQuickSnapshot()` which auto-generated a timestamp name. No UI prompted the user for a name or description.
+
+**Fix**:
+- Added `showPrompt` dialog when clicking "Create Snapshot" in `SnapshotPanel`
+- Updated `createRequested` event payload to `{ name?: string; description?: string }`
+- Added `createSnapshot(name?, description?)` to `AppPersistenceManager`
+- Falls back to auto-generated timestamp name when user leaves name blank
+
+**Tests added**: 5 tests in `SnapshotPanel.test.ts` (SNAP-080 through SNAP-084), 4 tests in `AppPersistenceManager.test.ts` (APM-044 through APM-047), 2 tests in `AppPlaybackWiring.test.ts` (PW-050, PW-051).
+
+**Files changed**:
+- `src/ui/components/SnapshotPanel.ts`
+- `src/ui/components/SnapshotPanel.test.ts`
+- `src/AppPlaybackWiring.ts`
+- `src/AppPlaybackWiring.test.ts`
+- `src/AppPersistenceManager.ts`
+- `src/AppPersistenceManager.test.ts`

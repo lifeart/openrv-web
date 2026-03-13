@@ -557,19 +557,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Users following the docs can look for visible `Loop` / `Ping` / `Once` text in the header and instead find only a compact icon.
   - That makes the current mode less glanceable than the documentation implies, especially for users still learning the transport controls.
 
-### 374. Snapshot creation is hardwired to anonymous quick-save behavior instead of the documented name-and-description flow
-
-- Severity: Medium
-- Area: Snapshot workflow / documentation
-- Evidence:
-  - The session-management guide says users should click `Create Snapshot` and then "Provide a name and optional description" in [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L94).
-  - The shipped Snapshot panel’s `Create Snapshot` button only emits a bare `createRequested` event with no prompt UI or metadata form in [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L198) through [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L211).
-  - Production wiring maps that event directly to `persistenceManager.createQuickSnapshot()` in [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L327) through [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L329).
-  - `createQuickSnapshot()` auto-generates a timestamp name like `Snapshot 10:42:13 PM` and never supplies a description to `snapshotManager.createSnapshot(...)` in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L165) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L181).
-- Impact:
-  - Users cannot name or describe a snapshot at creation time even though the docs present that as the normal workflow.
-  - That makes the snapshot list harder to curate for real review sessions, especially when multiple checkpoints are created close together.
-
 ### 376. Auto-checkpoints are documented as broad safety nets before major operations, but production only creates them for restore and project-load flows
 
 - Severity: Medium
