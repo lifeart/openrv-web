@@ -827,6 +827,7 @@ export class Viewer {
       getImageCtx: () => this.imageCtx,
       getSession: () => this.session,
       getDisplayDimensions: () => ({ width: this.displayWidth, height: this.displayHeight }),
+      getSourceDimensions: () => ({ width: this.sourceWidth, height: this.sourceHeight }),
       getCanvasColorSpace: () => this.canvasColorSpace,
       getImageCanvasRect: () => this.getImageCanvasRect(),
       isViewerContentElement: (element: HTMLElement) => this.isViewerContentElement(element),

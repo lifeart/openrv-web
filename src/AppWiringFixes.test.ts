@@ -545,6 +545,78 @@ describe('DCCBridge loadMedia error reporting', () => {
     });
   });
 
+  it('DCCFIX-055: loadMedia with query-string video URL routes to loadVideo', async () => {
+    const { deps, dccBridge, session } = createDCCDeps();
+    wireDCCBridge(deps);
+
+    dccBridge.emit('loadMedia', {
+      type: 'loadMedia',
+      path: 'https://cdn.example.com/shot.mov?token=abc123&expires=999',
+    });
+
+    await vi.waitFor(() => {
+      expect(session.loadVideo).toHaveBeenCalledWith(
+        'shot.mov',
+        'https://cdn.example.com/shot.mov?token=abc123&expires=999',
+      );
+    });
+    expect(session.loadImage).not.toHaveBeenCalled();
+  });
+
+  it('DCCFIX-056: loadMedia with fragment video URL routes to loadVideo', async () => {
+    const { deps, dccBridge, session } = createDCCDeps();
+    wireDCCBridge(deps);
+
+    dccBridge.emit('loadMedia', {
+      type: 'loadMedia',
+      path: 'https://cdn.example.com/clip.mp4#t=10',
+    });
+
+    await vi.waitFor(() => {
+      expect(session.loadVideo).toHaveBeenCalledWith(
+        'clip.mp4',
+        'https://cdn.example.com/clip.mp4#t=10',
+      );
+    });
+    expect(session.loadImage).not.toHaveBeenCalled();
+  });
+
+  it('DCCFIX-057: loadMedia with query-string image URL routes to loadImage', async () => {
+    const { deps, dccBridge, session } = createDCCDeps();
+    wireDCCBridge(deps);
+
+    dccBridge.emit('loadMedia', {
+      type: 'loadMedia',
+      path: 'https://cdn.example.com/plate.exr?sig=xyz',
+    });
+
+    await vi.waitFor(() => {
+      expect(session.loadImage).toHaveBeenCalledWith(
+        'plate.exr',
+        'https://cdn.example.com/plate.exr?sig=xyz',
+      );
+    });
+    expect(session.loadVideo).not.toHaveBeenCalled();
+  });
+
+  it('DCCFIX-058: loadMedia with both query and fragment on video URL routes to loadVideo', async () => {
+    const { deps, dccBridge, session } = createDCCDeps();
+    wireDCCBridge(deps);
+
+    dccBridge.emit('loadMedia', {
+      type: 'loadMedia',
+      path: 'https://cdn.example.com/review.webm?token=abc#t=5',
+    });
+
+    await vi.waitFor(() => {
+      expect(session.loadVideo).toHaveBeenCalledWith(
+        'review.webm',
+        'https://cdn.example.com/review.webm?token=abc#t=5',
+      );
+    });
+    expect(session.loadImage).not.toHaveBeenCalled();
+  });
+
   it('DCCFIX-052: successful load does not send error', async () => {
     const { deps, dccBridge, session } = createDCCDeps();
     wireDCCBridge(deps);

@@ -96,7 +96,7 @@ function tryGetOpenRV(): OpenRVCompat | null {
 }
 
 /** Supported commands and their support status */
-const SUPPORT_MAP: Record<string, true | false | 'partial' | 'stub'> = {
+const SUPPORT_MAP: Record<string, true | false | 'partial'> = {
   // Playback - DIRECT
   play: true,
   stop: true,
@@ -130,7 +130,7 @@ const SUPPORT_MAP: Record<string, true | false | 'partial' | 'stub'> = {
   // View & Display
   redraw: true,
   viewSize: true,
-  setViewSize: 'stub',
+  setViewSize: 'partial',
   resizeFit: true,
   fullScreenMode: true,
   isFullScreen: true,
@@ -139,8 +139,8 @@ const SUPPORT_MAP: Record<string, true | false | 'partial' | 'stub'> = {
   getFiltering: true,
   setBGMethod: true,
   bgMethod: true,
-  setMargins: 'stub',
-  margins: 'stub',
+  setMargins: 'partial',
+  margins: 'partial',
   contentAspect: 'partial',
   devicePixelRatio: true,
   // Frame Marks
@@ -165,7 +165,7 @@ export class MuCommands {
    * Check whether a command is supported.
    * @returns `true`, `false`, or `'partial'`
    */
-  isSupported(name: string): boolean | 'partial' | 'stub' {
+  isSupported(name: string): boolean | 'partial' {
     return SUPPORT_MAP[name] ?? false;
   }
 

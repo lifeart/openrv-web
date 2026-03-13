@@ -211,6 +211,30 @@ export function getPixelCoordinates(
 }
 
 /**
+ * Convert display-canvas coordinates to source image coordinates.
+ * Display dimensions reflect the rendered canvas size (source * fitScale * zoom),
+ * so dividing by that scale maps back to the original source pixel grid.
+ */
+export function displayToSourceCoordinates(
+  displayX: number,
+  displayY: number,
+  displayWidth: number,
+  displayHeight: number,
+  sourceWidth: number,
+  sourceHeight: number,
+): { x: number; y: number } {
+  if (displayWidth <= 0 || displayHeight <= 0 || sourceWidth <= 0 || sourceHeight <= 0) {
+    return { x: 0, y: 0 };
+  }
+  const sx = Math.floor((displayX / displayWidth) * sourceWidth);
+  const sy = Math.floor((displayY / displayHeight) * sourceHeight);
+  return {
+    x: Math.max(0, Math.min(sourceWidth - 1, sx)),
+    y: Math.max(0, Math.min(sourceHeight - 1, sy)),
+  };
+}
+
+/**
  * Get pixel color from ImageData at given coordinates.
  * Returns null if coordinates are out of bounds.
  */

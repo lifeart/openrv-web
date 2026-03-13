@@ -25,6 +25,11 @@ describe('detectMediaTypeFromFile', () => {
       'photo.jxl',
       'photo.heic',
       'photo.heif',
+      'photo.jp2',
+      'photo.j2k',
+      'photo.j2c',
+      'photo.jph',
+      'photo.jhc',
       'photo.cr2',
       'photo.dng',
     ])('%s', (name) => {
@@ -33,7 +38,7 @@ describe('detectMediaTypeFromFile', () => {
   });
 
   describe('returns "video" for known video extensions', () => {
-    it.each(['clip.mp4', 'clip.mov', 'clip.mkv', 'clip.webm', 'clip.ogg', 'clip.avi'])('%s', (name) => {
+    it.each(['clip.mp4', 'clip.mov', 'clip.mkv', 'clip.webm', 'clip.ogg', 'clip.avi', 'clip.mxf'])('%s', (name) => {
       expect(detectMediaTypeFromFile(fakeFile(name))).toBe('video');
     });
   });
@@ -73,6 +78,30 @@ describe('detectMediaTypeFromFile', () => {
 
   it('returns "unknown" for files with empty MIME and unrecognized extension', () => {
     expect(detectMediaTypeFromFile(fakeFile('report.xlsx', ''))).toBe('unknown');
+  });
+
+  describe('JPEG 2000 / HTJ2K extensions are classified as image (issue #512)', () => {
+    it.each(['scan.jp2', 'scan.j2k', 'scan.j2c', 'scan.jph', 'scan.jhc'])('%s', (name) => {
+      expect(detectMediaTypeFromFile(fakeFile(name))).toBe('image');
+    });
+
+    it('JPEG 2000 file with no MIME is still classified by extension', () => {
+      expect(detectMediaTypeFromFile(fakeFile('plate.jp2', ''))).toBe('image');
+    });
+  });
+
+  describe('MXF files are classified as video (issue #513)', () => {
+    it('clip.mxf is classified as video by extension', () => {
+      expect(detectMediaTypeFromFile(fakeFile('clip.mxf'))).toBe('video');
+    });
+
+    it('MXF file with no MIME is still classified by extension', () => {
+      expect(detectMediaTypeFromFile(fakeFile('rushes.mxf', ''))).toBe('video');
+    });
+
+    it('MXF file with video MIME is classified by MIME', () => {
+      expect(detectMediaTypeFromFile(fakeFile('rushes.mxf', 'video/mxf'))).toBe('video');
+    });
   });
 
   it('MIME type takes priority over unrecognized extension', () => {

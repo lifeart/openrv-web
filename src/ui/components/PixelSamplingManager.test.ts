@@ -32,6 +32,7 @@ describe('PixelSamplingManager', () => {
     getImageCtx: vi.fn(() => ctx2d),
     getSession: vi.fn(() => ({ currentSource: null })) as any,
     getDisplayDimensions: vi.fn(() => ({ width: 800, height: 600 })),
+    getSourceDimensions: vi.fn(() => ({ width: 1920, height: 1080 })),
     getCanvasColorSpace: vi.fn(() => undefined),
     getImageCanvasRect: vi.fn(() => ({ left: 0, top: 0, width: 800, height: 600 }) as DOMRect),
     isViewerContentElement: vi.fn(() => true),
@@ -375,7 +376,7 @@ describe('PixelSamplingManager', () => {
       webglManager.onMouseMoveForPixelSampling(event);
 
       expect(readPixelFloat).not.toHaveBeenCalled();
-      expect(mockPixelProbe.updateFromHDRValues).toHaveBeenCalledWith(200, 150, 0.5, 0.25, 0.75, 1.0, 800, 600);
+      expect(mockPixelProbe.updateFromHDRValues).toHaveBeenCalledWith(200, 150, 0.5, 0.25, 0.75, 1.0, 800, 600, false, 1920, 1080);
       expect(callback).toHaveBeenCalledWith(
         { r: Math.round(0.5 * 255), g: Math.round(0.25 * 255), b: Math.round(0.75 * 255) },
         { x: 200, y: 150 },
@@ -721,6 +722,7 @@ describe('PixelSamplingManager', () => {
         getLastHDRBlitFrame: vi.fn(() => null),
         getLastRenderedImage: vi.fn(() => image),
         getDisplayDimensions: vi.fn(() => ({ width: 4, height: 4 })),
+        getSourceDimensions: vi.fn(() => ({ width: 4, height: 4 })),
       };
 
       const webglManager = new PixelSamplingManager(webglContext as any);
@@ -750,6 +752,7 @@ describe('PixelSamplingManager', () => {
         pixelProbe: mockPixelProbe as any,
         getLastRenderedImage: vi.fn(() => null),
         getDisplayDimensions: vi.fn(() => ({ width: 800, height: 600 })),
+        getSourceDimensions: vi.fn(() => ({ width: 1920, height: 1080 })),
       };
 
       const webglManager = new PixelSamplingManager(webglContext as any);
@@ -765,8 +768,10 @@ describe('PixelSamplingManager', () => {
       expect(args[2]).toBeCloseTo(0.3, 5); // rendered r
       expect(args[3]).toBeCloseTo(0.4, 5); // rendered g
       expect(args[4]).toBeCloseTo(0.5, 5); // rendered b
-      // No isSource flag (default false)
-      expect(args[8]).toBeUndefined();
+      // isSource=false, followed by source dimensions
+      expect(args[8]).toBe(false);
+      expect(args[9]).toBe(1920);
+      expect(args[10]).toBe(1080);
     });
 
     it('PSM-062: falls back to rendered when IPImage has no CPU data (VideoFrame-backed)', () => {
@@ -788,6 +793,7 @@ describe('PixelSamplingManager', () => {
         pixelProbe: mockPixelProbe as any,
         getLastRenderedImage: vi.fn(() => image),
         getDisplayDimensions: vi.fn(() => ({ width: 4, height: 4 })),
+        getSourceDimensions: vi.fn(() => ({ width: 4, height: 4 })),
       };
 
       const webglManager = new PixelSamplingManager(webglContext as any);
@@ -825,6 +831,7 @@ describe('PixelSamplingManager', () => {
         pixelProbe: mockPixelProbe as any,
         getLastRenderedImage: vi.fn(() => image),
         getDisplayDimensions: vi.fn(() => ({ width: 800, height: 600 })),
+        getSourceDimensions: vi.fn(() => ({ width: 1920, height: 1080 })),
       };
 
       const webglManager = new PixelSamplingManager(webglContext as any);
@@ -856,6 +863,7 @@ describe('PixelSamplingManager', () => {
         pixelProbe: mockPixelProbe as any,
         getLastRenderedImage: vi.fn(() => image),
         getDisplayDimensions: vi.fn(() => ({ width: 4, height: 4 })),
+        getSourceDimensions: vi.fn(() => ({ width: 4, height: 4 })),
       };
 
       const webglManager = new PixelSamplingManager(webglContext as any);
@@ -891,6 +899,7 @@ describe('PixelSamplingManager', () => {
         pixelProbe: mockPixelProbe as any,
         getLastRenderedImage: vi.fn(() => image),
         getDisplayDimensions: vi.fn(() => ({ width: 4, height: 4 })),
+        getSourceDimensions: vi.fn(() => ({ width: 4, height: 4 })),
       };
 
       const webglManager = new PixelSamplingManager(webglContext as any);
@@ -926,6 +935,7 @@ describe('PixelSamplingManager', () => {
         pixelProbe: mockPixelProbe as any,
         getLastRenderedImage: vi.fn(() => image),
         getDisplayDimensions: vi.fn(() => ({ width: 4, height: 4 })),
+        getSourceDimensions: vi.fn(() => ({ width: 4, height: 4 })),
       };
 
       const webglManager = new PixelSamplingManager(webglContext as any);
@@ -954,6 +964,7 @@ describe('PixelSamplingManager', () => {
         pixelProbe: mockPixelProbe as any,
         getLastRenderedImage: vi.fn(() => image),
         getDisplayDimensions: vi.fn(() => ({ width: 4, height: 4 })),
+        getSourceDimensions: vi.fn(() => ({ width: 4, height: 4 })),
       };
 
       const webglManager = new PixelSamplingManager(webglContext as any);

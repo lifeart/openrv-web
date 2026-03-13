@@ -8,6 +8,7 @@
  */
 
 import { type ZebraStripes } from './ZebraStripes';
+import { MAX_ZEBRA_THRESHOLD_IRE } from '../../core/types/effects';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { PANEL_WIDTHS, SHADOWS } from './shared/theme';
@@ -126,14 +127,14 @@ export class ZebraControl {
   }
 
   private createDropdownContent(): void {
-    // High Zebras section
+    // High Zebras section (upper bound supports HDR content above 100 IRE)
     const highSection = this.createZebraSection(
       'High Zebras',
       'Highlight overexposed areas (>95% luminance)',
       true,
       95,
       70,
-      100,
+      MAX_ZEBRA_THRESHOLD_IRE,
       (enabled) => this.zebraStripes.setState({ highEnabled: enabled, enabled: true }),
       (threshold) => this.zebraStripes.setHighThreshold(threshold),
     );
@@ -151,14 +152,14 @@ export class ZebraControl {
     `;
     this.dropdown.appendChild(divider);
 
-    // Low Zebras section
+    // Low Zebras section (upper bound supports HDR content above 100 IRE)
     const lowSection = this.createZebraSection(
       'Low Zebras',
       'Highlight underexposed areas (<5% luminance)',
       false,
       5,
       0,
-      30,
+      MAX_ZEBRA_THRESHOLD_IRE,
       (enabled) => this.zebraStripes.setState({ lowEnabled: enabled, enabled: true }),
       (threshold) => this.zebraStripes.setLowThreshold(threshold),
     );
@@ -269,6 +270,7 @@ export class ZebraControl {
     slider.type = 'range';
     slider.min = String(min);
     slider.max = String(max);
+    slider.step = '1';
     slider.value = String(defaultThreshold);
     slider.style.cssText = `
       flex: 1;

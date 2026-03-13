@@ -59,6 +59,7 @@ export interface PixelSamplingContext {
   getImageCtx(): CanvasRenderingContext2D;
   getSession(): Session;
   getDisplayDimensions(): { width: number; height: number };
+  getSourceDimensions(): { width: number; height: number };
   getCanvasColorSpace(): 'display-p3' | undefined;
   getImageCanvasRect(): DOMRect;
   isViewerContentElement(element: HTMLElement): boolean;
@@ -202,7 +203,8 @@ export class PixelSamplingManager {
         this.context.pixelProbe.setSourceImageData(null);
       }
 
-      this.context.pixelProbe.updateFromCanvas(position.x, position.y, imageData, displayWidth, displayHeight);
+      const { width: sourceWidth, height: sourceHeight } = this.context.getSourceDimensions();
+      this.context.pixelProbe.updateFromCanvas(position.x, position.y, imageData, displayWidth, displayHeight, sourceWidth, sourceHeight);
       this.context.pixelProbe.setOverlayPosition(e.clientX, e.clientY);
     }
 
@@ -372,6 +374,7 @@ export class PixelSamplingManager {
     e: MouseEvent,
   ): void {
     const { width: displayWidth, height: displayHeight } = this.context.getDisplayDimensions();
+    const { width: sourceWidth, height: sourceHeight } = this.context.getSourceDimensions();
 
     if (probeEnabled) {
       // Check if user wants source mode and we can provide pre-grade data
@@ -394,6 +397,8 @@ export class PixelSamplingManager {
               displayWidth,
               displayHeight,
               true, // isSource
+              sourceWidth,
+              sourceHeight,
             );
             usedSource = true;
           }
@@ -421,6 +426,9 @@ export class PixelSamplingManager {
           ta / count,
           displayWidth,
           displayHeight,
+          false,
+          sourceWidth,
+          sourceHeight,
         );
       }
       this.context.pixelProbe.setOverlayPosition(e.clientX, e.clientY);

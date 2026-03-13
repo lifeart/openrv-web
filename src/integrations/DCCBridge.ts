@@ -20,10 +20,10 @@ import type { ManagerBase } from '../core/ManagerBase';
 // ---------------------------------------------------------------------------
 
 /** All supported inbound message types */
-export type DCCInboundMessageType = 'loadMedia' | 'syncFrame' | 'syncColor' | 'ping';
+export type DCCInboundMessageType = 'loadMedia' | 'syncFrame' | 'syncColor' | 'ping' | 'pong';
 
 /** All supported outbound message types */
-export type DCCOutboundMessageType = 'frameChanged' | 'colorChanged' | 'annotationAdded' | 'pong' | 'error';
+export type DCCOutboundMessageType = 'frameChanged' | 'colorChanged' | 'annotationAdded' | 'ping' | 'pong' | 'error';
 
 /** Base message structure */
 export interface DCCMessage {
@@ -70,7 +70,7 @@ export interface PingMessage extends DCCMessage {
 }
 
 /** All inbound message types */
-export type DCCInboundMessage = LoadMediaMessage | SyncFrameMessage | SyncColorMessage | PingMessage;
+export type DCCInboundMessage = LoadMediaMessage | SyncFrameMessage | SyncColorMessage | PingMessage | PongMessage;
 
 /** Outbound: frame changed notification */
 export interface FrameChangedMessage extends DCCMessage {
@@ -113,6 +113,7 @@ export type DCCOutboundMessage =
   | FrameChangedMessage
   | ColorChangedMessage
   | AnnotationAddedMessage
+  | PingMessage
   | PongMessage
   | ErrorMessage;
 
@@ -129,6 +130,7 @@ export interface DCCBridgeEvents extends EventMap {
   syncFrame: SyncFrameMessage;
   syncColor: SyncColorMessage;
   ping: PingMessage;
+  pong: PongMessage;
   error: Error;
   messageReceived: DCCInboundMessage;
   messageSent: DCCOutboundMessage;
@@ -421,6 +423,9 @@ export class DCCBridge extends EventEmitter<DCCBridgeEvents> implements ManagerB
       case 'ping':
         this.handlePing(message as PingMessage);
         break;
+      case 'pong':
+        this.handlePong(message as PongMessage);
+        break;
       default:
         this.send({
           type: 'error',
@@ -462,8 +467,15 @@ export class DCCBridge extends EventEmitter<DCCBridgeEvents> implements ManagerB
 
   private handlePing(message: PingMessage): void {
     this._lastPongTime = Date.now();
+    this.resetHeartbeatTimeout();
     this.send({ type: 'pong', id: message.id });
     this.emit('ping', message);
+  }
+
+  private handlePong(_message: PongMessage): void {
+    this._lastPongTime = Date.now();
+    this.resetHeartbeatTimeout();
+    this.emit('pong', _message);
   }
 
   // ---------------------------------------------------------------------------
@@ -509,12 +521,40 @@ export class DCCBridge extends EventEmitter<DCCBridgeEvents> implements ManagerB
     if (this.config.heartbeatInterval <= 0) return;
 
     this.stopHeartbeat();
+    this._lastPongTime = Date.now();
 
     this.heartbeatTimer = setInterval(() => {
       if (this.ws?.readyState === WebSocket.OPEN) {
-        this.send({ type: 'pong' }); // We send a keepalive; the DCC tool should ping us
+        this.send({ type: 'ping' });
+        this.scheduleHeartbeatTimeout();
       }
     }, this.config.heartbeatInterval);
+  }
+
+  private scheduleHeartbeatTimeout(): void {
+    if (this.config.heartbeatTimeout <= 0) return;
+
+    // Clear any existing timeout before scheduling a new one
+    if (this.heartbeatTimeoutTimer !== null) {
+      clearTimeout(this.heartbeatTimeoutTimer);
+      this.heartbeatTimeoutTimer = null;
+    }
+
+    this.heartbeatTimeoutTimer = setTimeout(() => {
+      this.heartbeatTimeoutTimer = null;
+      this.emit('error', new Error('Heartbeat timeout: no response from DCC peer'));
+      // Force-close the connection so reconnect logic kicks in
+      if (this.ws) {
+        this.ws.close(4000, 'Heartbeat timeout');
+      }
+    }, this.config.heartbeatTimeout);
+  }
+
+  private resetHeartbeatTimeout(): void {
+    if (this.heartbeatTimeoutTimer !== null) {
+      clearTimeout(this.heartbeatTimeoutTimer);
+      this.heartbeatTimeoutTimer = null;
+    }
   }
 
   private stopHeartbeat(): void {

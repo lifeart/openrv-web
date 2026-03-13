@@ -12,10 +12,10 @@ import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { luminanceRec709 } from '../../color/ColorProcessingFacade';
 
 export type { ZebraState } from '../../core/types/effects';
-export { DEFAULT_ZEBRA_STATE } from '../../core/types/effects';
+export { DEFAULT_ZEBRA_STATE, MAX_ZEBRA_THRESHOLD_IRE } from '../../core/types/effects';
 
 import type { ZebraState } from '../../core/types/effects';
-import { DEFAULT_ZEBRA_STATE } from '../../core/types/effects';
+import { DEFAULT_ZEBRA_STATE, MAX_ZEBRA_THRESHOLD_IRE } from '../../core/types/effects';
 
 export interface ZebraStripesEvents extends EventMap {
   stateChanged: ZebraState;
@@ -74,17 +74,19 @@ export class ZebraStripes extends EventEmitter<ZebraStripesEvents> {
   }
 
   /**
-   * Set high threshold (0-100 IRE)
+   * Set high threshold (0-10000 IRE).
+   * SDR content uses 0-100; HDR content (PQ/HDR10) may need values above 100.
    */
   setHighThreshold(value: number): void {
-    this.setState({ highThreshold: Math.max(0, Math.min(100, value)) });
+    this.setState({ highThreshold: Math.max(0, Math.min(MAX_ZEBRA_THRESHOLD_IRE, value)) });
   }
 
   /**
-   * Set low threshold (0-100 IRE)
+   * Set low threshold (0-10000 IRE).
+   * SDR content uses 0-100; HDR content (PQ/HDR10) may need values above 100.
    */
   setLowThreshold(value: number): void {
-    this.setState({ lowThreshold: Math.max(0, Math.min(100, value)) });
+    this.setState({ lowThreshold: Math.max(0, Math.min(MAX_ZEBRA_THRESHOLD_IRE, value)) });
   }
 
   /**
@@ -220,8 +222,8 @@ export class ZebraStripes extends EventEmitter<ZebraStripesEvents> {
     });
     container.appendChild(highSection);
 
-    // High threshold slider
-    const highThresholdRow = this.createSliderRow('Threshold', this.state.highThreshold, 50, 100, '%', (value) => {
+    // High threshold slider (upper bound supports HDR content above 100 IRE)
+    const highThresholdRow = this.createSliderRow('Threshold', this.state.highThreshold, 50, MAX_ZEBRA_THRESHOLD_IRE, '%', (value) => {
       this.setHighThreshold(value);
       onUpdate();
     });
@@ -297,6 +299,7 @@ export class ZebraStripes extends EventEmitter<ZebraStripesEvents> {
     slider.type = 'range';
     slider.min = String(min);
     slider.max = String(max);
+    slider.step = '1';
     slider.value = String(value);
     slider.style.cssText = 'flex: 1; height: 4px; cursor: pointer; accent-color: var(--accent-primary);';
 

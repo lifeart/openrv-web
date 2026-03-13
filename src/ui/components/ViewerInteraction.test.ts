@@ -12,6 +12,7 @@ import {
   isViewerContentElement,
   getPixelCoordinates,
   getPixelColor,
+  displayToSourceCoordinates,
   easeOutCubic,
   interpolateZoom,
   type PointerState,
@@ -638,6 +639,78 @@ describe('ViewerInteraction', () => {
     it('works with large zoom ranges', () => {
       const result = interpolateZoom(0.1, 10.0, 1.0);
       expect(result).toBeCloseTo(10.0, 4);
+    });
+  });
+
+  // ===========================================================================
+  // Issue #496 – displayToSourceCoordinates
+  // ===========================================================================
+  describe('displayToSourceCoordinates (Issue #496)', () => {
+    it('DSC-001: maps display center to source center when display differs from source', () => {
+      // 1920x1080 source displayed at 800x600
+      const result = displayToSourceCoordinates(400, 300, 800, 600, 1920, 1080);
+      expect(result.x).toBe(960);
+      expect(result.y).toBe(540);
+    });
+
+    it('DSC-002: maps (0,0) to (0,0)', () => {
+      const result = displayToSourceCoordinates(0, 0, 800, 600, 1920, 1080);
+      expect(result.x).toBe(0);
+      expect(result.y).toBe(0);
+    });
+
+    it('DSC-003: maps bottom-right display pixel to near bottom-right source pixel', () => {
+      const result = displayToSourceCoordinates(799, 599, 800, 600, 1920, 1080);
+      expect(result.x).toBeLessThan(1920);
+      expect(result.y).toBeLessThan(1080);
+      expect(result.x).toBeGreaterThan(1900);
+      expect(result.y).toBeGreaterThan(1060);
+    });
+
+    it('DSC-004: identity mapping when display equals source', () => {
+      const result = displayToSourceCoordinates(100, 200, 1920, 1080, 1920, 1080);
+      expect(result.x).toBe(100);
+      expect(result.y).toBe(200);
+    });
+
+    it('DSC-005: handles downscaled display (zoomed out)', () => {
+      // Source 4000x3000 displayed at 400x300 (10x zoom out)
+      const result = displayToSourceCoordinates(40, 30, 400, 300, 4000, 3000);
+      expect(result.x).toBe(400);
+      expect(result.y).toBe(300);
+    });
+
+    it('DSC-006: handles upscaled display (zoomed in)', () => {
+      // Source 100x100 displayed at 1000x1000 (10x zoom in)
+      const result = displayToSourceCoordinates(500, 500, 1000, 1000, 100, 100);
+      expect(result.x).toBe(50);
+      expect(result.y).toBe(50);
+    });
+
+    it('DSC-007: clamps negative results to 0', () => {
+      // Should not produce negative values
+      const result = displayToSourceCoordinates(0, 0, 800, 600, 1920, 1080);
+      expect(result.x).toBeGreaterThanOrEqual(0);
+      expect(result.y).toBeGreaterThanOrEqual(0);
+    });
+
+    it('DSC-008: clamps to source bounds', () => {
+      // Even with max display coords, result should be < sourceWidth/sourceHeight
+      const result = displayToSourceCoordinates(799, 599, 800, 600, 1920, 1080);
+      expect(result.x).toBeLessThan(1920);
+      expect(result.y).toBeLessThan(1080);
+    });
+
+    it('DSC-009: returns (0,0) for zero display dimensions', () => {
+      const result = displayToSourceCoordinates(5, 5, 0, 0, 100, 100);
+      expect(result.x).toBe(0);
+      expect(result.y).toBe(0);
+    });
+
+    it('DSC-010: returns (0,0) for zero source dimensions', () => {
+      const result = displayToSourceCoordinates(5, 5, 100, 100, 0, 0);
+      expect(result.x).toBe(0);
+      expect(result.y).toBe(0);
     });
   });
 });

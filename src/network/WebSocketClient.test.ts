@@ -421,6 +421,137 @@ describe('WebSocketClient', () => {
     });
   });
 
+  describe('ping response', () => {
+    it('WSC-060: responds with pong when receiving a ping message', async () => {
+      client.setIdentity('user-1', 'room-1');
+      client.connect();
+      await vi.advanceTimersByTimeAsync(20);
+
+      const ws = mockWSInstances[0]!;
+      const initialCount = ws.sentMessages.length;
+
+      const pingMessage = JSON.stringify({
+        id: 'ping-1',
+        type: 'ping',
+        roomId: 'room-1',
+        userId: 'server-1',
+        timestamp: Date.now(),
+        payload: { sentAt: 1000 },
+      });
+
+      ws.simulateMessage(pingMessage);
+
+      const newMessages = ws.sentMessages.slice(initialCount);
+      expect(newMessages.length).toBe(1);
+
+      const pong = JSON.parse(newMessages[0]!);
+      expect(pong.type).toBe('pong');
+      expect(pong.roomId).toBe('room-1');
+      expect(pong.userId).toBe('user-1');
+      expect(pong.payload.sentAt).toBe(1000);
+      expect(typeof pong.payload.serverTime).toBe('number');
+    });
+
+    it('WSC-061: pong response preserves sentAt from the original ping', async () => {
+      client.setIdentity('user-1', 'room-1');
+      client.connect();
+      await vi.advanceTimersByTimeAsync(20);
+
+      const ws = mockWSInstances[0]!;
+      const initialCount = ws.sentMessages.length;
+
+      const sentAt = 1234567890;
+      const pingMessage = JSON.stringify({
+        id: 'ping-2',
+        type: 'ping',
+        roomId: 'room-1',
+        userId: 'server-1',
+        timestamp: Date.now(),
+        payload: { sentAt },
+      });
+
+      ws.simulateMessage(pingMessage);
+
+      const newMessages = ws.sentMessages.slice(initialCount);
+      const pong = JSON.parse(newMessages[0]!);
+      expect(pong.payload.sentAt).toBe(sentAt);
+    });
+
+    it('WSC-062: pong response handles ping with missing sentAt gracefully', async () => {
+      client.setIdentity('user-1', 'room-1');
+      client.connect();
+      await vi.advanceTimersByTimeAsync(20);
+
+      const ws = mockWSInstances[0]!;
+      const initialCount = ws.sentMessages.length;
+
+      const pingMessage = JSON.stringify({
+        id: 'ping-3',
+        type: 'ping',
+        roomId: 'room-1',
+        userId: 'server-1',
+        timestamp: Date.now(),
+        payload: {},
+      });
+
+      ws.simulateMessage(pingMessage);
+
+      const newMessages = ws.sentMessages.slice(initialCount);
+      expect(newMessages.length).toBe(1);
+
+      const pong = JSON.parse(newMessages[0]!);
+      expect(pong.type).toBe('pong');
+      expect(typeof pong.payload.sentAt).toBe('number');
+    });
+
+    it('WSC-063: ping message does not propagate to message listeners', async () => {
+      const handler = vi.fn();
+      client.on('message', handler);
+      client.connect();
+      await vi.advanceTimersByTimeAsync(20);
+
+      const pingMessage = JSON.stringify({
+        id: 'ping-4',
+        type: 'ping',
+        roomId: 'room-1',
+        userId: 'server-1',
+        timestamp: Date.now(),
+        payload: { sentAt: Date.now() },
+      });
+
+      mockWSInstances[0]!.simulateMessage(pingMessage);
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('WSC-064: ping resets heartbeat timeout', async () => {
+      client.connect();
+      await vi.advanceTimersByTimeAsync(20);
+
+      const disconnectHandler = vi.fn();
+      client.on('disconnected', disconnectHandler);
+
+      // Advance close to the heartbeat timeout (10000ms)
+      await vi.advanceTimersByTimeAsync(9000);
+
+      // Receive a ping, which should reset the timeout
+      const pingMessage = JSON.stringify({
+        id: 'ping-5',
+        type: 'ping',
+        roomId: 'room-1',
+        userId: 'server-1',
+        timestamp: Date.now(),
+        payload: { sentAt: Date.now() },
+      });
+      mockWSInstances[0]!.simulateMessage(pingMessage);
+
+      // Advance another 9 seconds - without the reset, we'd be at 18s (past 10s timeout)
+      await vi.advanceTimersByTimeAsync(9000);
+
+      // Should still be connected because the ping reset the timeout
+      expect(client.isConnected).toBe(true);
+    });
+  });
+
   describe('pong without sentAt', () => {
     it('WSC-054: handles pong with missing sentAt gracefully', async () => {
       const rttHandler = vi.fn();

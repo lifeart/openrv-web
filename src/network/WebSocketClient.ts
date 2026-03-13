@@ -11,7 +11,7 @@
 import { EventEmitter } from '../utils/EventEmitter';
 import type { SyncMessage, WebSocketClientEvents, NetworkSyncConfig } from './types';
 import { DEFAULT_NETWORK_SYNC_CONFIG } from './types';
-import { serializeMessage, deserializeMessage, createPingMessage } from './MessageProtocol';
+import { serializeMessage, deserializeMessage, createPingMessage, createPongMessage } from './MessageProtocol';
 
 export class WebSocketClient extends EventEmitter<WebSocketClientEvents> {
   private ws: WebSocket | null = null;
@@ -210,6 +210,10 @@ export class WebSocketClient extends EventEmitter<WebSocketClientEvents> {
 
     // Handle ping messages by responding with pong
     if (message.type === 'ping') {
+      const pingPayload = message.payload as { sentAt?: number };
+      const sentAt = typeof pingPayload?.sentAt === 'number' ? pingPayload.sentAt : Date.now();
+      const pongMessage = createPongMessage(this._roomId, this._userId, sentAt);
+      this.send(pongMessage);
       this.resetHeartbeatTimeout();
       return;
     }

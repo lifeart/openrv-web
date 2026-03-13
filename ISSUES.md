@@ -1220,18 +1220,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - A server/proxy that sends malformed or truncated sync payloads can cause missed collaboration updates with no toast, no error event, and no visible explanation.
   - That makes protocol corruption look like random state drift rather than a diagnosable network failure.
 
-### 435. Inbound WebSocket `ping` messages never send the `pong` response the protocol advertises
-
-- Severity: Medium
-- Area: Collaboration / WebSocket protocol compatibility
-- Evidence:
-  - The protocol layer defines a first-class `createPongMessage(...)` helper specifically “in response to a ping” in [src/network/MessageProtocol.ts](/Users/lifeart/Repos/openrv-web/src/network/MessageProtocol.ts#L275) through [src/network/MessageProtocol.ts#L281).
-  - `WebSocketClient.handleMessage(...)` also documents inbound `ping` handling as “responding with pong,” but the actual branch only calls `resetHeartbeatTimeout()` and returns in [src/network/WebSocketClient.ts](/Users/lifeart/Repos/openrv-web/src/network/WebSocketClient.ts#L205) through [src/network/WebSocketClient.ts#L214).
-  - A production source search finds no callsite that sends `createPongMessage(...)` from `WebSocketClient`.
-- Impact:
-  - Inference: any server or relay that expects the browser client to answer protocol `ping` messages with `pong` can treat the client as unhealthy even while the local UI thinks the socket is fine.
-  - At minimum, the shipped client behavior does not match its own protocol helper and inline comment, which makes cross-implementation interoperability brittle.
-
 ### 436. Outbound collaboration updates can be dropped silently when realtime transport send fails
 
 - Severity: Medium
@@ -1243,29 +1231,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - During transport flaps or serialization failures, local sync changes can be treated as sent even though neither WebSocket nor serverless peer transport accepted the message.
   - From the user’s perspective, collaboration can drift silently instead of surfacing an actionable transport failure.
-
-### 437. The auto-save failure alert points users to a nonexistent `File > Save Project` path
-
-- Severity: Low
-- Area: Persistence UX / recovery messaging
-- Evidence:
-  - When auto-save initialization fails, the app shows the alert text `You can still save manually via File > Save Project.` in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L486) through [src/AppPersistenceManager.ts#L493).
-  - The shipped UI exposes save as an icon button and header event, not through any `File` menu, in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L237) and [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L60).
-- Impact:
-  - In one of the app’s higher-stress failure modes, the fallback guidance points users to UI that does not exist.
-  - That makes the recovery message less useful exactly when the user most needs a clear manual-save path.
-
-### 438. DCC `loadMedia` misroutes signed or query-string video URLs through the image path
-
-- Severity: Medium
-- Area: DCC integration / media loading
-- Evidence:
-  - Inbound DCC `loadMedia` routing derives the extension with `path.split('.').pop()?.toLowerCase()` in [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L184) through [src/AppDCCWiring.ts#L190).
-  - That check does not strip query strings or hash fragments, so a URL like `shot.mov?token=abc` yields `mov?token=abc`, which fails the `VIDEO_EXTENSIONS` test in [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L79) and [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L190).
-  - The DCC protocol explicitly allows `path` to be a file path or URL in [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L35).
-- Impact:
-  - DCC tools that send signed review URLs or CDN URLs can have video media routed into `loadImage(...)` instead of `loadVideo(...)`.
-  - That makes DCC media loading less reliable for the exact URL-based workflows the protocol claims to support.
 
 ### 439. DCC LUT sync requests can apply out of order when multiple LUT URLs arrive quickly
 
@@ -1302,18 +1267,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - CDN or API-style video URLs such as `/media/12345`, `/stream/latest`, or signed routes without a terminal extension can be treated as still images and fail to load correctly.
   - The app's URL-based loading is weaker than its file-loading path in a way that is hard for integrators and share-link users to predict from the UI.
-
-### 442. The DCC bridge heartbeat timeout is effectively dead, and its keepalive path sends unsolicited `pong` messages instead
-
-- Severity: Medium
-- Area: DCC integration / connection health
-- Evidence:
-  - `DCCBridgeConfig` exposes both `heartbeatInterval` and `heartbeatTimeout`, and the bridge stores `heartbeatTimeoutTimer` plus `_lastPongTime` state in [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L141) through [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L198).
-  - The only runtime heartbeat loop just sends `{ type: 'pong' }` on an interval in [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L508) through [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L518).
-  - `handlePing(...)` updates `_lastPongTime` and replies with `pong` in [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L463) through [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L466), but production search finds no code that ever schedules `heartbeatTimeoutTimer` or evaluates `_lastPongTime` against `heartbeatTimeout`.
-- Impact:
-  - Inference: a DCC peer that stops responding at the protocol level can remain in a healthy-looking `connected` state until the browser WebSocket itself closes, because the bridge never enforces its own heartbeat timeout.
-  - The runtime behavior also does not match the advertised ping/pong health model, which makes cross-tool heartbeat expectations brittle.
 
 ### 443. Outbound DCC sync events can be dropped silently when the bridge is not writable
 
@@ -1885,18 +1838,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The guide teaches users to interpret ARRI false color differently from what the shipped palette actually displays.
   - That can produce wrong exposure conclusions during dailies if reviewers trust the docs over the on-screen legend.
 
-### 489. The zebra docs recommend raising HDR thresholds above 100 IRE, but the shipped zebra controls hard-stop at 100
-
-- Severity: Low
-- Area: Documentation / zebra controls
-- Evidence:
-  - The false-color/zebra guide says that for HDR dailies users may need to “raise the high zebra threshold” because HDR signals intentionally carry values above `100 IRE` in [docs/scopes/false-color-zebra.md](/Users/lifeart/Repos/openrv-web/docs/scopes/false-color-zebra.md#L94).
-  - The shipped zebra state clamps `highThreshold` and `lowThreshold` to `0-100` in [src/ui/components/ZebraStripes.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ZebraStripes.ts#L65) through [src/ui/components/ZebraStripes.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ZebraStripes.ts#L78).
-  - The shipped Zebra control also caps the high-threshold slider at `100` in [src/ui/components/ZebraControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ZebraControl.ts#L116) through [src/ui/components/ZebraControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ZebraControl.ts#L123).
-- Impact:
-  - The docs recommend an HDR workflow the shipped control cannot actually perform.
-  - Users can be told to “raise” the threshold beyond the SDR ceiling while the real UI enforces 100 as the maximum.
-
 ### 490. The histogram docs still say pixel analysis runs on the GPU, but the shipped histogram always computes bins on the CPU
 
 - Severity: Low
@@ -1958,31 +1899,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - The guide makes the gamut diagram sound like an explicit compliance checker when the shipped visualization is just an unclassified chromaticity scatter over multiple triangles.
   - Users can expect target-gamut diagnostics and out-of-gamut identification that the runtime does not provide.
-
-### 495. The pixel-probe docs say HDR probe values can exceed 100 IRE, but the shipped HDR probe clamps IRE to the 0-100 range
-
-- Severity: Low
-- Area: Documentation / pixel probe HDR readout
-- Evidence:
-  - The pixel-probe guide explicitly says `> 100 IRE` represents “Super-white / HDR values” in [docs/scopes/pixel-probe.md](/Users/lifeart/Repos/openrv-web/docs/scopes/pixel-probe.md#L55) through [docs/scopes/pixel-probe.md#L60).
-  - The shipped probe state defines `ire` as `0-100` in [src/ui/components/PixelProbe.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PixelProbe.ts#L42).
-  - In the HDR path, `updateFromHDRValues(...)` computes float luminance and then clamps it to `0..100` before storing and displaying it in [src/ui/components/PixelProbe.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PixelProbe.ts#L768) through [src/ui/components/PixelProbe.ts#L780).
-- Impact:
-  - The docs promise a probe readout that can expose HDR luminance above reference white, but the shipped IRE field cannot show that.
-  - Users relying on the probe for HDR verification can be misled into thinking values top out at 100 IRE even when the underlying float data is higher.
-
-### 496. The pixel-probe docs say the coordinate readout is in source image space, but the shipped probe reports display-canvas coordinates
-
-- Severity: Low
-- Area: Documentation / pixel probe coordinates
-- Evidence:
-  - The pixel-probe guide says the Coordinates row shows pixel position “in source image space” in [docs/scopes/pixel-probe.md](/Users/lifeart/Repos/openrv-web/docs/scopes/pixel-probe.md#L17).
-  - The live sampling path derives coordinates from `getPixelCoordinates(...)`, which maps browser pointer position into `displayWidth` / `displayHeight` canvas pixels, not source dimensions, in [src/ui/components/ViewerInteraction.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInteraction.ts#L189) through [src/ui/components/ViewerInteraction.ts#L210).
-  - `PixelSamplingManager` passes those display-space coordinates directly into `PixelProbe.updateFromCanvas(...)` and `updateFromHDRValues(...)` in [src/ui/components/PixelSamplingManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PixelSamplingManager.ts#L121), [src/ui/components/PixelSamplingManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PixelSamplingManager.ts#L205), and [src/ui/components/PixelSamplingManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PixelSamplingManager.ts#L310).
-  - `PixelProbe` then stores and displays those same values after clamping against `displayWidth` / `displayHeight`, not source width / height, in [src/ui/components/PixelProbe.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PixelProbe.ts#L666) through [src/ui/components/PixelProbe.ts#L726) and [src/ui/components/PixelProbe.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PixelProbe.ts#L742) through [src/ui/components/PixelProbe.ts#L780).
-- Impact:
-  - The docs make the probe sound source-referenced, but the runtime reports viewport-sampled coordinates instead.
-  - That can mislead users comparing probe positions against source-frame metadata, EXR pixel locations, or external shot notes.
 
 ### 497. The browser-compatibility guide overstates mobile support as “touch-optimized” even though parts of the shipped UI still depend on hover-only or non-touch interaction models
 
@@ -2181,33 +2097,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - The docs misstate how EXR decode is implemented in production.
   - That gives readers the wrong expectations about bundle composition, performance characteristics, and the decoder’s maintenance surface.
-
-### 512. The normal file-open/classification path omits JPEG 2000 and HTJ2K extensions, even though the decoder stack and docs claim support
-
-- Severity: Medium
-- Area: Media loading / file-type detection
-- Evidence:
-  - The shared supported-image extension list used by the normal media picker contains no `jp2`, `j2k`, `j2c`, `jph`, or `jhc` entries in [src/utils/media/SupportedMediaFormats.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SupportedMediaFormats.ts#L10) through [src/utils/media/SupportedMediaFormats.ts#L34).
-  - The normal `Open media file` input uses that shared accept string in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L219).
-  - The same shared detector classifies files by MIME first, then by the same extension sets, and returns `unknown` for anything outside them in [src/utils/media/SupportedMediaFormats.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SupportedMediaFormats.ts#L90) through [src/utils/media/SupportedMediaFormats.ts#L108).
-  - Both `SessionMedia.loadFile(...)` and `MediaManager.loadFile(...)` reject `unknown` types as unsupported in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L412) through [src/core/session/SessionMedia.ts#L418) and [src/core/session/MediaManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaManager.ts#L335) through [src/core/session/MediaManager.ts#L340).
-  - The actual format stack does advertise and branch for those extensions: the docs list JPEG 2000 / HTJ2K support in [docs/reference/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/reference/file-formats.md#L22) through [docs/reference/file-formats.md#L23), and `FileSourceNode` explicitly treats `jp2`, `j2k`, `j2c`, `jph`, and `jhc` as JPEG 2000 family inputs in [src/nodes/sources/FileSourceNode.ts](/Users/lifeart/Repos/openrv-web/src/nodes/sources/FileSourceNode.ts#L94) through [src/nodes/sources/FileSourceNode.ts#L98).
-- Impact:
-  - Local JPEG 2000 / HTJ2K files can fall through the normal file-open path as unsupported when the browser does not provide a helpful MIME type.
-  - That leaves decoder support present in the runtime while the primary user-facing load path still makes those formats hard or impossible to open reliably.
-
-### 513. The shared file-open/classification path also omits `.mxf`, so local MXF files can be rejected before the registered MXF parser ever runs
-
-- Severity: Medium
-- Area: Media loading / MXF ingestion
-- Evidence:
-  - The shared supported-video extension lists contain no `mxf` entry in [src/utils/media/SupportedMediaFormats.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SupportedMediaFormats.ts#L39) through [src/utils/media/SupportedMediaFormats.ts#L63).
-  - The normal media picker uses that same `SUPPORTED_MEDIA_ACCEPT` string in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L219).
-  - `detectMediaTypeFromFile(...)` therefore returns `unknown` for MIME-less `.mxf` files, and the normal load path rejects `unknown` types as unsupported in [src/utils/media/SupportedMediaFormats.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SupportedMediaFormats.ts#L90) through [src/utils/media/SupportedMediaFormats.ts#L108), [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L412) through [src/core/session/SessionMedia.ts#L418), and [src/core/session/MediaManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaManager.ts#L335) through [src/core/session/MediaManager.ts#L340).
-  - The decoder registry still registers an `mxf` parser adapter in [src/formats/DecoderRegistry.ts](/Users/lifeart/Repos/openrv-web/src/formats/DecoderRegistry.ts#L786) through [src/formats/DecoderRegistry.ts#L816), and the public docs still present MXF as a supported format in [docs/reference/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/reference/file-formats.md#L59).
-- Impact:
-  - A local MXF file can be rejected by the app’s primary file-open path before the metadata parser ever gets a chance to inspect it.
-  - That makes MXF support even narrower in practice than the already-limited metadata-only runtime path.
 
 ### 514. The image-sequence workflow only recognizes a narrow legacy extension subset, even though the docs say sequences can use any supported image format
 
@@ -2675,20 +2564,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Automation or external review tools querying `openrv.playback` during playlist review get per-clip frame numbers and durations even while the UI/timeline is operating in playlist-global frame space.
   - That makes scripting against playlist sessions fundamentally ambiguous: external code cannot reconstruct the same frame position the user is actually seeing from the public API alone.
-
-### 555. Mu compat `commands.isSupported()` can return `'stub'`, even though the documented/type contract only allows `true`, `false`, or `'partial'`
-
-- Severity: Medium
-- Area: Mu compatibility / command introspection
-- Evidence:
-  - `MuCommands` marks several commands as `'stub'` in its live support map, including `setViewSize`, `setMargins`, and `margins`, in [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L85) through [src/compat/MuCommands.ts#L129).
-  - `MuCommands.isSupported(name)` explicitly returns `boolean | 'partial' | 'stub'` in [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L155) through [src/compat/MuCommands.ts#L157).
-  - The shared compat type `CommandSupportStatus` still excludes `'stub'`, allowing only `true | false | 'partial'`, in [src/compat/types.ts](/Users/lifeart/Repos/openrv-web/src/compat/types.ts#L82).
-  - The published compat docs also tell users that `isSupported` returns only `true | false | 'partial'` and that `getSupportedCommands()` is `Array<[name, true | false | 'partial']>` in [docs/advanced/mu-compat.md](/Users/lifeart/Repos/openrv-web/docs/advanced/mu-compat.md#L37) through [docs/advanced/mu-compat.md#L41) and [docs/advanced/mu-compat.md](/Users/lifeart/Repos/openrv-web/docs/advanced/mu-compat.md#L515) through [docs/advanced/mu-compat.md#L526).
-  - The tests lock in the `'stub'` runtime behavior by asserting that `cmd.isSupported('setViewSize')` and `cmd.isSupported('setMargins')` return `'stub'` in [src/compat/__tests__/MuCommands.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuCommands.test.ts#L449) through [src/compat/__tests__/MuCommands.test.ts#L450) and [src/compat/__tests__/MuCommands.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuCommands.test.ts#L533) through [src/compat/__tests__/MuCommands.test.ts#L535).
-- Impact:
-  - Callers using the documented or typed contract can treat `'stub'` as impossible and mis-handle the real runtime result.
-  - That makes command introspection unreliable exactly where scripts are supposed to branch around unsupported versus partially supported functionality.
 
 ### 556. The generated public API reference under-documents the live event surface by omitting several valid `openrv.events` names
 

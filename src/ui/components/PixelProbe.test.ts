@@ -1609,4 +1609,151 @@ describe('PixelProbe HDR source mode', () => {
 
     expect(pixelProbe.isSourceFallbackActive()).toBe(false);
   });
+
+  it('HDR-IRE-001: HDR IRE values can exceed 100 for super-white content', () => {
+    pixelProbe.enable();
+    // Pure white at 2.0 linear => luminance = 2.0, IRE = 200
+    pixelProbe.updateFromHDRValues(5, 5, 2.0, 2.0, 2.0, 1.0, 100, 100);
+
+    const state = pixelProbe.getState();
+    expect(state.ire).toBe(200);
+  });
+
+  it('HDR-IRE-002: HDR IRE values reflect actual luminance for bright highlights', () => {
+    pixelProbe.enable();
+    // Rec.709 luminance: 0.2126*3.0 + 0.7152*2.5 + 0.0722*1.0 = 0.6378 + 1.788 + 0.0722 = 2.498
+    pixelProbe.updateFromHDRValues(5, 5, 3.0, 2.5, 1.0, 1.0, 100, 100);
+
+    const state = pixelProbe.getState();
+    // Should be ~250 IRE, well above the old 100 clamp
+    expect(state.ire).toBeGreaterThan(100);
+    expect(state.ire).toBe(Math.round(2.498 * 100));
+  });
+
+  it('HDR-IRE-003: HDR IRE is still 0 for pure black', () => {
+    pixelProbe.enable();
+    pixelProbe.updateFromHDRValues(5, 5, 0, 0, 0, 1.0, 100, 100);
+
+    const state = pixelProbe.getState();
+    expect(state.ire).toBe(0);
+  });
+
+  it('HDR-IRE-004: HDR IRE is 100 for reference white (1.0, 1.0, 1.0)', () => {
+    pixelProbe.enable();
+    pixelProbe.updateFromHDRValues(5, 5, 1.0, 1.0, 1.0, 1.0, 100, 100);
+
+    const state = pixelProbe.getState();
+    expect(state.ire).toBe(100);
+  });
+
+  it('HDR-IRE-005: negative luminance values are clamped to 0 IRE', () => {
+    pixelProbe.enable();
+    pixelProbe.updateFromHDRValues(5, 5, -0.5, -0.5, -0.5, 1.0, 100, 100);
+
+    const state = pixelProbe.getState();
+    expect(state.ire).toBe(0);
+  });
+});
+
+// =============================================================================
+// Issue #496 – Probe reports source-space coordinates, not display-canvas coords
+// =============================================================================
+describe('PixelProbe source-space coordinates (Issue #496)', () => {
+  let pixelProbe: PixelProbe;
+
+  beforeEach(() => {
+    pixelProbe = new PixelProbe();
+    pixelProbe.enable();
+  });
+
+  afterEach(() => {
+    pixelProbe.dispose();
+  });
+
+  it('COORD-001: updateFromCanvas reports source coords when source differs from display', () => {
+    // 1920x1080 source displayed at 800x600
+    const imageData = new ImageData(800, 600);
+    // display coordinate (400, 300) should map to source (960, 540)
+    pixelProbe.updateFromCanvas(400, 300, imageData, 800, 600, 1920, 1080);
+
+    const state = pixelProbe.getState();
+    expect(state.x).toBe(960);
+    expect(state.y).toBe(540);
+  });
+
+  it('COORD-002: updateFromCanvas reports display coords when no source dims provided', () => {
+    const imageData = new ImageData(800, 600);
+    pixelProbe.updateFromCanvas(400, 300, imageData, 800, 600);
+
+    const state = pixelProbe.getState();
+    expect(state.x).toBe(400);
+    expect(state.y).toBe(300);
+  });
+
+  it('COORD-003: updateFromCanvas reports same coords when source equals display', () => {
+    const imageData = new ImageData(800, 600);
+    pixelProbe.updateFromCanvas(100, 200, imageData, 800, 600, 800, 600);
+
+    const state = pixelProbe.getState();
+    expect(state.x).toBe(100);
+    expect(state.y).toBe(200);
+  });
+
+  it('COORD-004: updateFromHDRValues reports source coords when source differs from display', () => {
+    // 1920x1080 source displayed at 800x600
+    pixelProbe.updateFromHDRValues(400, 300, 0.5, 0.5, 0.5, 1.0, 800, 600, false, 1920, 1080);
+
+    const state = pixelProbe.getState();
+    expect(state.x).toBe(960);
+    expect(state.y).toBe(540);
+  });
+
+  it('COORD-005: updateFromHDRValues reports display coords when no source dims provided', () => {
+    pixelProbe.updateFromHDRValues(400, 300, 0.5, 0.5, 0.5, 1.0, 800, 600);
+
+    const state = pixelProbe.getState();
+    expect(state.x).toBe(400);
+    expect(state.y).toBe(300);
+  });
+
+  it('COORD-006: zoomed-in display maps correctly to source space', () => {
+    // Source 100x100 displayed at 1000x1000 (10x zoom)
+    const imageData = new ImageData(1000, 1000);
+    pixelProbe.updateFromCanvas(500, 500, imageData, 1000, 1000, 100, 100);
+
+    const state = pixelProbe.getState();
+    expect(state.x).toBe(50);
+    expect(state.y).toBe(50);
+  });
+
+  it('COORD-007: zoomed-out display maps correctly to source space', () => {
+    // Source 4000x3000 displayed at 400x300 (10x zoom out)
+    const imageData = new ImageData(400, 300);
+    pixelProbe.updateFromCanvas(40, 30, imageData, 400, 300, 4000, 3000);
+
+    const state = pixelProbe.getState();
+    expect(state.x).toBe(400);
+    expect(state.y).toBe(300);
+  });
+
+  it('COORD-008: origin maps to source origin', () => {
+    const imageData = new ImageData(800, 600);
+    pixelProbe.updateFromCanvas(0, 0, imageData, 800, 600, 1920, 1080);
+
+    const state = pixelProbe.getState();
+    expect(state.x).toBe(0);
+    expect(state.y).toBe(0);
+  });
+
+  it('COORD-009: source coords are clamped within source bounds', () => {
+    const imageData = new ImageData(800, 600);
+    // Max display coord 799 should map to < 1920
+    pixelProbe.updateFromCanvas(799, 599, imageData, 800, 600, 1920, 1080);
+
+    const state = pixelProbe.getState();
+    expect(state.x).toBeLessThan(1920);
+    expect(state.y).toBeLessThan(1080);
+    expect(state.x).toBeGreaterThanOrEqual(0);
+    expect(state.y).toBeGreaterThanOrEqual(0);
+  });
 });

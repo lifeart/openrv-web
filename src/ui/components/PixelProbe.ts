@@ -19,6 +19,7 @@ import { clamp } from '../../utils/math';
 import { rgbToHsl as rgbToHslFloat } from '../../utils/color';
 import { luminanceRec709 } from '../../color/ColorProcessingFacade';
 import { showAlert } from './shared/Modal';
+import { displayToSourceCoordinates } from './ViewerInteraction';
 
 export interface PixelProbeEvents extends EventMap {
   stateChanged: PixelProbeState;
@@ -39,7 +40,7 @@ export interface PixelProbeState {
   rgb: { r: number; g: number; b: number };
   alpha: number; // Alpha channel value 0-255
   hsl: { h: number; s: number; l: number };
-  ire: number; // Luminance in IRE units (0-100)
+  ire: number; // Luminance in IRE units (0-100 for SDR, can exceed 100 for HDR)
   format: 'rgb' | 'rgb01' | 'hsl' | 'hex' | 'ire';
   sampleSize: SampleSize;
   sourceMode: SourceMode;
@@ -665,12 +666,19 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     imageData: ImageData | null,
     displayWidth: number,
     displayHeight: number,
+    sourceWidth?: number,
+    sourceHeight?: number,
   ): void {
     if (!this.state.enabled || this.state.locked) return;
 
-    // Clamp coordinates
+    // Clamp display coordinates (used for pixel sampling from canvas)
     const px = clamp(Math.floor(x), 0, displayWidth - 1);
     const py = clamp(Math.floor(y), 0, displayHeight - 1);
+
+    // Convert to source image coordinates for display
+    const srcW = sourceWidth ?? displayWidth;
+    const srcH = sourceHeight ?? displayHeight;
+    const src = displayToSourceCoordinates(px, py, displayWidth, displayHeight, srcW, srcH);
 
     // Choose image data based on source mode
     const wantsSource = this.state.sourceMode === 'source';
@@ -714,9 +722,9 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     const luminance = luminanceRec709(r, g, b);
     const ire = Math.round((luminance / 255) * 100);
 
-    // Update state
-    this.state.x = px;
-    this.state.y = py;
+    // Update state with source-space coordinates
+    this.state.x = src.x;
+    this.state.y = src.y;
     this.state.rgb = { r, g, b };
     this.state.alpha = a;
     this.state.hsl = this.rgbToHsl(r, g, b);
@@ -742,11 +750,18 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     displayWidth: number,
     displayHeight: number,
     isSource = false,
+    sourceWidth?: number,
+    sourceHeight?: number,
   ): void {
     if (!this.state.enabled || this.state.locked) return;
 
     const px = clamp(Math.floor(x), 0, displayWidth - 1);
     const py = clamp(Math.floor(y), 0, displayHeight - 1);
+
+    // Convert to source image coordinates for display
+    const srcW = sourceWidth ?? displayWidth;
+    const srcH = sourceHeight ?? displayHeight;
+    const src = displayToSourceCoordinates(px, py, displayWidth, displayHeight, srcW, srcH);
 
     // When isSource=true, we have real pre-grade data; otherwise it's a fallback
     const wantsSource = this.state.sourceMode === 'source';
@@ -767,11 +782,13 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     const a255 = Math.round(clamp(a * 255, 0, 255));
 
     // Calculate luminance in IRE units using float values
+    // HDR content can exceed 100 IRE (super-white), so only clamp the lower bound
     const luminanceFloat = luminanceRec709(r, g, b);
-    const ire = Math.round(clamp(luminanceFloat * 100, 0, 100));
+    const ire = Math.round(Math.max(luminanceFloat * 100, 0));
 
-    this.state.x = px;
-    this.state.y = py;
+    // Store source-space coordinates
+    this.state.x = src.x;
+    this.state.y = src.y;
     this.state.rgb = { r: r255, g: g255, b: b255 };
     this.state.alpha = a255;
     this.state.hsl = this.rgbToHsl(r255, g255, b255);

@@ -144,6 +144,32 @@ describe('MuCommands', () => {
       expect(cmd.isSupported('nonExistentCommand')).toBe(false);
     });
 
+    it('isSupported never returns stub for any command (#555)', () => {
+      // Regression: isSupported used to return 'stub' for some commands,
+      // which violates the CommandSupportStatus type contract (true | false | 'partial').
+      const allCommands = ['play', 'stop', 'isPlaying', 'setFrame', 'frame', 'frameEnd',
+        'fps', 'setRealtime', 'isRealtime', 'setPlayMode', 'playMode', 'inPoint', 'outPoint',
+        'setInPoint', 'setOutPoint', 'frameStart', 'setFPS', 'realFPS', 'setInc', 'inc',
+        'skipped', 'isCurrentFrameIncomplete', 'isCurrentFrameError', 'isBuffering', 'mbps',
+        'resetMbps', 'scrubAudio', 'redraw', 'viewSize', 'setViewSize', 'resizeFit',
+        'fullScreenMode', 'isFullScreen', 'setWindowTitle', 'setFiltering', 'getFiltering',
+        'setBGMethod', 'bgMethod', 'setMargins', 'margins', 'contentAspect', 'devicePixelRatio',
+        'markFrame', 'isMarked', 'markedFrames'];
+      for (const name of allCommands) {
+        const status = cmd.isSupported(name);
+        expect(status).not.toBe('stub');
+        expect([true, false, 'partial']).toContain(status);
+      }
+    });
+
+    it('isSupported marks stub-like commands as partial, not stub (#555)', () => {
+      // These commands exist but only provide local-only behavior,
+      // so they are 'partial' rather than the previously-used 'stub'.
+      expect(cmd.isSupported('setViewSize')).toBe('partial');
+      expect(cmd.isSupported('setMargins')).toBe('partial');
+      expect(cmd.isSupported('margins')).toBe('partial');
+    });
+
     it('isAsync returns true for async commands', () => {
       expect(cmd.isAsync('fullScreenMode')).toBe(true);
     });
@@ -477,8 +503,8 @@ describe('MuCommands', () => {
       spy.mockRestore();
     });
 
-    it('setViewSize() is marked as stub', () => {
-      expect(cmd.isSupported('setViewSize')).toBe('stub');
+    it('setViewSize() is marked as partial', () => {
+      expect(cmd.isSupported('setViewSize')).toBe('partial');
     });
 
     it('setViewSize() validates arguments but does not modify DOM', () => {
@@ -684,9 +710,9 @@ describe('MuCommands', () => {
       expect(() => cmd.setBGMethod(123 as unknown as string)).toThrow(TypeError);
     });
 
-    it('setMargins/margins are marked as stub, not supported', () => {
-      expect(cmd.isSupported('setMargins')).toBe('stub');
-      expect(cmd.isSupported('margins')).toBe('stub');
+    it('setMargins/margins are marked as partial, not fully supported', () => {
+      expect(cmd.isSupported('setMargins')).toBe('partial');
+      expect(cmd.isSupported('margins')).toBe('partial');
     });
 
     it('setMargins() / margins() manage viewport margins (local-only stub)', () => {

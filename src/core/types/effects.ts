@@ -105,6 +105,13 @@ export const DEFAULT_ZEBRA_STATE: ZebraState = {
   lowThreshold: 5,
 };
 
+/**
+ * Maximum IRE threshold for zebra controls.
+ * HDR content (PQ/HDR10) can carry signal levels well above 100 IRE,
+ * so the controls must allow thresholds up to 10 000 IRE.
+ */
+export const MAX_ZEBRA_THRESHOLD_IRE = 10000;
+
 export interface HighlightsShadowsState {
   highlights: number;
   shadows: number;

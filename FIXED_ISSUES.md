@@ -1151,3 +1151,131 @@
 - `src/ui/components/layout/HeaderBar.ts`
 - `src/ui/components/ViewerInputHandler.ts`
 - `src/AppPersistenceManager.ts`
+
+## Issue #435: Inbound WebSocket `ping` messages never send the `pong` response
+
+**Root cause**: `handleMessage()` in WebSocketClient had a comment saying "responding with pong" but only called `resetHeartbeatTimeout()` without actually sending a pong. `createPongMessage()` existed but was never imported/called.
+
+**Fix**: Added import of `createPongMessage`, extracted `sentAt` from ping payload, created and sent pong message before resetting heartbeat timeout.
+
+**Tests added**: 5 new regression tests (WSC-060 through WSC-064) covering pong response, sentAt preservation, missing sentAt handling, non-propagation, and timeout reset.
+
+**Files changed**:
+- `src/network/WebSocketClient.ts`
+- `src/network/WebSocketClient.test.ts`
+
+## Issue #437: Auto-save failure alert points to nonexistent `File > Save Project` path
+
+**Root cause**: The auto-save init failure catch block logged to console but showed no user-facing alert. The error message referenced a nonexistent menu path.
+
+**Fix**: Added `showAlert()` call with correct guidance referencing the toolbar Save button.
+
+**Tests added**: 5 new tests (ISS-437-001 through ISS-437-005) in AppPersistenceManager.issue437.test.ts.
+
+**Files changed**:
+- `src/AppPersistenceManager.ts`
+- `src/AppPersistenceManager.issue437.test.ts`
+
+## Issue #438: DCC `loadMedia` misroutes signed or query-string video URLs through the image path
+
+**Root cause**: Extension extraction used `path.split('.').pop()` which doesn't strip URL query strings or fragments. `shot.mov?token=abc` yields extension `mov?token=abc` which fails VIDEO_EXTENSIONS check.
+
+**Fix**: Strip query strings and fragments before extension extraction; preserve full URL for actual loading.
+
+**Tests added**: 4 new tests (DCCFIX-055 through DCCFIX-058) in AppWiringFixes.test.ts.
+
+**Files changed**:
+- `src/AppDCCWiring.ts`
+- `src/AppWiringFixes.test.ts`
+
+## Issue #442: DCC bridge heartbeat timeout dead + unsolicited pong
+
+**Root cause**: Heartbeat timer sent `pong` instead of `ping`. No timeout mechanism existed to detect dead connections.
+
+**Fix**: Changed keepalive to send `ping`. Added inbound `pong` handling. Added heartbeat timeout that fires when no response received, emitting error and closing WebSocket.
+
+**Tests added**: 6 new tests (DCC-HB-001 through DCC-HB-006).
+
+**Files changed**:
+- `src/integrations/DCCBridge.ts`
+- `src/integrations/DCCBridge.test.ts`
+
+## Issue #489: Zebra controls hard-stop at 100 IRE for HDR
+
+**Root cause**: Threshold setters used `Math.min(100, value)` and slider max was hardcoded to 100. HDR content needs values up to 10000 IRE.
+
+**Fix**: Added `MAX_ZEBRA_THRESHOLD_IRE = 10000` constant. Updated clamping and slider max. Added step=1 for usable granularity.
+
+**Tests added**: Updated existing tests + 5 new HDR-specific tests (ZEB-U045/U046, ZEBRA-U055/U056/U057).
+
+**Files changed**:
+- `src/core/types/effects.ts`
+- `src/ui/components/ZebraStripes.ts`
+- `src/ui/components/ZebraStripes.test.ts`
+- `src/ui/components/ZebraControl.ts`
+- `src/ui/components/ZebraControl.test.ts`
+
+## Issue #495: HDR pixel probe clamps IRE to 0-100 range
+
+**Root cause**: `updateFromHDRValues` used `clamp(luminanceFloat * 100, 0, 100)` which capped IRE at 100, but HDR content can exceed 100 IRE.
+
+**Fix**: Changed to `Math.max(luminanceFloat * 100, 0)` removing upper clamp while keeping lower bound at 0.
+
+**Tests added**: 5 new tests (HDR-IRE-001 through HDR-IRE-005).
+
+**Files changed**:
+- `src/ui/components/PixelProbe.ts`
+- `src/ui/components/PixelProbe.test.ts`
+
+## Issue #496: Pixel probe reports display-canvas coordinates instead of source image space
+
+**Root cause**: Both `updateFromCanvas` and `updateFromHDRValues` stored display-canvas coordinates directly as displayed X/Y without transforming to source image space.
+
+**Fix**: Added `displayToSourceCoordinates()` utility. Updated both methods to accept optional source dimensions and convert reported coordinates. Pixel sampling still uses display coordinates.
+
+**Tests added**: 10 tests for displayToSourceCoordinates (DSC-001 through DSC-010), 9 tests for PixelProbe integration (COORD-001 through COORD-009).
+
+**Files changed**:
+- `src/ui/components/ViewerInteraction.ts`
+- `src/ui/components/ViewerInteraction.test.ts`
+- `src/ui/components/PixelProbe.ts`
+- `src/ui/components/PixelProbe.test.ts`
+- `src/ui/components/PixelSamplingManager.ts`
+- `src/ui/components/PixelSamplingManager.test.ts`
+- `src/ui/components/Viewer.ts`
+
+## Issue #512: File classification omits JPEG 2000 / HTJ2K extensions
+
+**Root cause**: `SUPPORTED_IMAGE_EXTENSIONS` was missing `jp2`, `j2k`, `j2c`, `jph`, `jhc` even though the decoder stack handles them.
+
+**Fix**: Added all five extensions to the supported extensions array.
+
+**Tests added**: Extended existing test + 6 new JPEG 2000-specific regression tests.
+
+**Files changed**:
+- `src/utils/media/SupportedMediaFormats.ts`
+- `src/utils/media/SupportedMediaFormats.test.ts`
+
+## Issue #513: File classification omits `.mxf` extension
+
+**Root cause**: `MEDIABUNNY_VIDEO_EXTENSIONS` was missing `mxf`, causing MXF files to be classified as unknown/rejected.
+
+**Fix**: Added `mxf` to the video extensions array.
+
+**Tests added**: Extended existing test + 3 MXF-specific regression tests.
+
+**Files changed**:
+- `src/utils/media/SupportedMediaFormats.ts`
+- `src/utils/media/SupportedMediaFormats.test.ts`
+
+## Issue #555: `isSupported()` returns `'stub'` outside type contract
+
+**Root cause**: `SUPPORT_MAP` included `'stub'` values for `setViewSize`, `setMargins`, `margins`, but the documented type contract only allows `true`, `false`, or `'partial'`.
+
+**Fix**: Changed `'stub'` to `'partial'` (semantically correct since these commands exist but provide local-only behavior). Removed `'stub'` from types.
+
+**Tests added**: 2 new regression tests verifying no command returns `'stub'`.
+
+**Files changed**:
+- `src/compat/MuCommands.ts`
+- `src/compat/__tests__/MuCommands.test.ts`

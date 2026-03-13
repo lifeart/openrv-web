@@ -29,6 +29,12 @@ export const SUPPORTED_IMAGE_EXTENSIONS = [
   'jxl',
   'heic',
   'heif',
+  // JPEG 2000 / HTJ2K
+  'jp2',
+  'j2k',
+  'j2c',
+  'jph',
+  'jhc',
   // RAW formats (TIFF-based preview extraction only)
   'cr2',
   'nef',
@@ -61,6 +67,8 @@ export const MEDIABUNNY_VIDEO_EXTENSIONS = [
   'ogv',
   'ogm',
   'ogx',
+  // MXF (Material Exchange Format)
+  'mxf',
 ] as const;
 
 /**
@@ -124,6 +132,6 @@ export const SUPPORTED_MEDIA_ACCEPT = ['image/*', 'video/*', ...acceptExtensions
  * Viewer placeholder support lines (rendered as multiline helper text).
  */
 export const VIEWER_PLACEHOLDER_SUPPORT_LINES = [
-  'Images: EXR, DPX/CIN, HDR, AVIF, JXL, HEIC, RAW, PNG/JPEG/WebP/TIFF',
-  'Video: MP4/M4V/3GP, MOV/QT, MKV/WebM, OGG/OGV (AVI fallback)',
+  'Images: EXR, DPX/CIN, HDR, AVIF, JXL, HEIC, JP2/HTJ2K, RAW, PNG/JPEG/WebP/TIFF',
+  'Video: MP4/M4V/3GP, MOV/QT, MKV/WebM, OGG/OGV, MXF (AVI fallback)',
 ] as const;

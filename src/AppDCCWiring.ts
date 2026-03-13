@@ -180,8 +180,12 @@ export function wireDCCBridge(deps: DCCWiringDeps): DCCWiringState {
   subs.add(
     dccBridge.on('loadMedia', (msg) => {
       const path = msg.path;
-      const ext = path.split('.').pop()?.toLowerCase() ?? '';
-      const name = basename(path);
+      // Strip query strings and fragments before extracting the extension
+      // so that URLs like "shot.mov?token=abc" or "clip.mp4#t=10" are
+      // correctly recognised as video.
+      const cleanPath = path.split('?')[0]!.split('#')[0]!;
+      const ext = cleanPath.split('.').pop()?.toLowerCase() ?? '';
+      const name = basename(cleanPath);
       if (VIDEO_EXTENSIONS.includes(ext)) {
         session
           .loadVideo(name, path)

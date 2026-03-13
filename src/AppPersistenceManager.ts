@@ -444,6 +444,10 @@ export class AppPersistenceManager {
       }
     } catch (err) {
       console.error('Auto-save initialization failed:', err);
+      showAlert(
+        `Auto-save failed to initialize: ${err instanceof Error ? err.message : err}. You can still save manually using the Save button in the toolbar.`,
+        { type: 'warning', title: 'Auto-Save Unavailable' },
+      );
     }
   }
 

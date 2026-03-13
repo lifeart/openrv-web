@@ -447,4 +447,149 @@ describe('DCCBridge', () => {
       bridge.dispose();
     });
   });
+
+  describe('heartbeat keepalive', () => {
+    it('DCC-HB-001: heartbeat timer sends ping (not pong) messages', async () => {
+      vi.useFakeTimers();
+      const { bridge, ws } = await createConnectedBridge({
+        heartbeatInterval: 5000,
+        heartbeatTimeout: 10000,
+      });
+
+      // Advance past one heartbeat interval
+      vi.advanceTimersByTime(5000);
+
+      // Should have sent a ping, not a pong
+      expect(ws.sentMessages.length).toBe(1);
+      const msg = parseSent(ws, 0);
+      expect(msg.type).toBe('ping');
+
+      bridge.dispose();
+    });
+
+    it('DCC-HB-002: heartbeat timeout fires when no pong is received', async () => {
+      vi.useFakeTimers();
+      // Use a timeout shorter than the interval so the timeout fires before
+      // the next interval tick reschedules it.
+      const { bridge, ws } = await createConnectedBridge({
+        heartbeatInterval: 5000,
+        heartbeatTimeout: 3000,
+        autoReconnect: false,
+      });
+
+      const errorListener = vi.fn();
+      bridge.on('error', errorListener);
+
+      // Trigger first heartbeat ping at 5000ms
+      vi.advanceTimersByTime(5000);
+
+      // Should have sent a ping
+      const pingMessages = ws.sentMessages.filter((m) => JSON.parse(m).type === 'ping');
+      expect(pingMessages.length).toBe(1);
+
+      // Advance past the heartbeat timeout (3000ms from when ping was sent)
+      // but before the next interval tick (at 10000ms)
+      vi.advanceTimersByTime(3001);
+
+      // Should have emitted a heartbeat timeout error
+      expect(errorListener).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining('Heartbeat timeout') }),
+      );
+
+      bridge.dispose();
+    });
+
+    it('DCC-HB-003: inbound pong resets the heartbeat timeout', async () => {
+      vi.useFakeTimers();
+      const { bridge, ws } = await createConnectedBridge({
+        heartbeatInterval: 5000,
+        heartbeatTimeout: 3000,
+        autoReconnect: false,
+      });
+
+      const errorListener = vi.fn();
+      bridge.on('error', errorListener);
+
+      // Trigger heartbeat ping at 5000ms (timeout would fire at 8000ms)
+      vi.advanceTimersByTime(5000);
+      expect(parseSent(ws, 0).type).toBe('ping');
+
+      // Respond with pong before timeout (at 6500ms)
+      vi.advanceTimersByTime(1500);
+      ws.simulateMessage(JSON.stringify({ type: 'pong' }));
+
+      // Advance past the original timeout deadline (8000ms) — should NOT fire
+      vi.advanceTimersByTime(2000);
+
+      expect(errorListener).not.toHaveBeenCalled();
+      expect(bridge.lastPongTime).toBeGreaterThan(0);
+
+      bridge.dispose();
+    });
+
+    it('DCC-HB-004: inbound pong updates lastPongTime', async () => {
+      vi.useFakeTimers();
+      const { bridge, ws } = await createConnectedBridge({
+        heartbeatInterval: 5000,
+        heartbeatTimeout: 10000,
+      });
+
+      const pongListener = vi.fn();
+      bridge.on('pong', pongListener);
+
+      // Trigger heartbeat ping
+      vi.advanceTimersByTime(5000);
+
+      // Respond with pong
+      ws.simulateMessage(JSON.stringify({ type: 'pong' }));
+
+      expect(pongListener).toHaveBeenCalledTimes(1);
+      expect(bridge.lastPongTime).toBeGreaterThan(0);
+
+      bridge.dispose();
+    });
+
+    it('DCC-HB-005: inbound ping also resets the heartbeat timeout', async () => {
+      vi.useFakeTimers();
+      const { bridge, ws } = await createConnectedBridge({
+        heartbeatInterval: 5000,
+        heartbeatTimeout: 3000,
+        autoReconnect: false,
+      });
+
+      const errorListener = vi.fn();
+      bridge.on('error', errorListener);
+
+      // Trigger heartbeat ping at 5000ms (timeout would fire at 8000ms)
+      vi.advanceTimersByTime(5000);
+
+      // Peer sends a ping (instead of pong) at 6500ms — bridge should still consider the connection alive
+      vi.advanceTimersByTime(1500);
+      ws.simulateMessage(JSON.stringify({ type: 'ping' }));
+
+      // Advance past original timeout deadline (8000ms) — should NOT fire
+      vi.advanceTimersByTime(2000);
+
+      expect(errorListener).not.toHaveBeenCalled();
+
+      bridge.dispose();
+    });
+
+    it('DCC-HB-006: heartbeat timeout closes the WebSocket', async () => {
+      vi.useFakeTimers();
+      const { bridge, ws } = await createConnectedBridge({
+        heartbeatInterval: 5000,
+        heartbeatTimeout: 3000,
+        autoReconnect: false,
+      });
+
+      // Trigger heartbeat ping at 5000ms, timeout fires at 8000ms
+      vi.advanceTimersByTime(8001);
+
+      // The WebSocket should have been closed
+      expect(ws.readyState).toBe(MockWebSocket.CLOSED);
+
+      bridge.dispose();
+    });
+  });
 });
