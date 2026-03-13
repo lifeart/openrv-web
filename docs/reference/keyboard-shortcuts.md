@@ -107,13 +107,12 @@ This page lists all keyboard shortcuts available in OpenRV Web. Shortcuts are or
 
 | Shortcut | Action |
 |----------|--------|
-| `Shift+R` | Red channel only |
 | `Shift+G` | Green channel only |
-| `Shift+B` | Blue channel only |
 | `Shift+A` | Alpha channel only |
 | `Shift+L` | Luminance / Grayscale |
 | `Shift+Y` | Grayscale (alias for Shift+L) |
-| `Shift+N` | Reset channel view (no isolation) |
+
+> **Note:** Red (`Shift+R`), Blue (`Shift+B`), and Reset (`Shift+N`) channel shortcuts are context-only — they are available when the View tab's channel dropdown is focused but are not globally active because their key combos are assigned to other actions (Rotate Left, Cycle Background Pattern, and Toggle Network Panel respectively).
 
 ## Color and Effects
 

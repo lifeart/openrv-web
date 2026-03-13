@@ -51,6 +51,8 @@ export interface PersistenceManagerContext {
   watermarkControl?: WatermarkControl;
   playlistManager?: PlaylistManager;
   cacheManager?: MediaCacheManager;
+  parControl?: { setState: (state: any) => void };
+  backgroundPatternControl?: { setState: (state: any) => void };
 }
 
 export class AppPersistenceManager {
@@ -101,6 +103,16 @@ export class AppPersistenceManager {
   }
 
   /**
+   * Derive a session label from displayName, source name, or 'Untitled'.
+   */
+  private getSessionLabel(): string {
+    const { session } = this.ctx;
+    const displayName = (session as any).metadata?.displayName;
+    if (displayName) return displayName;
+    return session.currentSource?.name || 'Untitled';
+  }
+
+  /**
    * Mark the session as having unsaved changes for auto-save.
    * Uses lazy evaluation - state is only serialized when actually saving.
    */
@@ -116,7 +128,7 @@ export class AppPersistenceManager {
           playlistManager: this.ctx.playlistManager,
           cacheManager: this.ctx.cacheManager,
         },
-        session.currentSource?.name || 'Untitled',
+        this.getSessionLabel(),
       ),
     );
     autoSaveIndicator.markUnsaved();
@@ -136,7 +148,7 @@ export class AppPersistenceManager {
           playlistManager: this.ctx.playlistManager,
           cacheManager: this.ctx.cacheManager,
         },
-        session.currentSource?.name || 'Untitled',
+        this.getSessionLabel(),
       );
       autoSaveManager.saveNow(state);
     } catch (err) {
@@ -159,7 +171,7 @@ export class AppPersistenceManager {
           playlistManager: this.ctx.playlistManager,
           cacheManager: this.ctx.cacheManager,
         },
-        session.currentSource?.name || 'Untitled',
+        this.getSessionLabel(),
       );
       const resolvedName = name || `Snapshot ${new Date().toLocaleTimeString()}`;
       await snapshotManager.createSnapshot(resolvedName, state, description);
@@ -178,9 +190,10 @@ export class AppPersistenceManager {
   }
 
   /**
-   * Create an auto-checkpoint before major operations
+   * Create an auto-checkpoint before major operations.
+   * Returns true on success, false on failure.
    */
-  async createAutoCheckpoint(event: string): Promise<void> {
+  async createAutoCheckpoint(event: string): Promise<boolean> {
     const { session, paintEngine, viewer, snapshotManager } = this.ctx;
     try {
       const state = SessionSerializer.toJSON(
@@ -191,12 +204,45 @@ export class AppPersistenceManager {
           playlistManager: this.ctx.playlistManager,
           cacheManager: this.ctx.cacheManager,
         },
-        session.currentSource?.name || 'Untitled',
+        this.getSessionLabel(),
       );
       await snapshotManager.createAutoCheckpoint(event, state);
+      return true;
     } catch (err) {
       console.error('Failed to create auto-checkpoint:', err);
+      return false;
     }
+  }
+
+  /**
+   * Sync UI controls from a restored session state.
+   * Handles PAR and background pattern controls in addition to
+   * the standard color/CDL/filter/transform/crop/lens controls.
+   */
+  private syncControlsFromState(state: any): void {
+    const {
+      colorControls,
+      cdlControl,
+      filterControl,
+      transformControl,
+      cropControl,
+      lensControl,
+      noiseReductionControl,
+      watermarkControl,
+      parControl,
+      backgroundPatternControl,
+    } = this.ctx;
+
+    if (state.color) colorControls.setAdjustments(state.color);
+    if (state.cdl) cdlControl.setCDL(state.cdl);
+    if (state.filters) filterControl.setSettings(state.filters);
+    if (state.transform) transformControl.setTransform(state.transform);
+    if (state.crop) cropControl.setState(state.crop);
+    if (state.lens) lensControl.setParams(state.lens);
+    if (state.noiseReduction && noiseReductionControl) noiseReductionControl.setParams(state.noiseReduction);
+    if (state.watermark && watermarkControl) watermarkControl.setState(state.watermark);
+    if (state.par && parControl) parControl.setState(state.par);
+    if (state.backgroundPattern && backgroundPatternControl) backgroundPatternControl.setState(state.backgroundPattern);
   }
 
   /**
@@ -209,14 +255,6 @@ export class AppPersistenceManager {
       viewer,
       snapshotManager,
       snapshotPanel,
-      colorControls,
-      cdlControl,
-      filterControl,
-      transformControl,
-      cropControl,
-      lensControl,
-      noiseReductionControl,
-      watermarkControl,
     } = this.ctx;
     try {
       const state = await snapshotManager.getSnapshot(id);
@@ -226,7 +264,13 @@ export class AppPersistenceManager {
       }
 
       // Create auto-checkpoint before restore
-      await this.createAutoCheckpoint('Before Restore');
+      const checkpointOk = await this.createAutoCheckpoint('Before Restore');
+      if (!checkpointOk) {
+        showAlert(
+          'No rollback checkpoint could be created. The restore will proceed, but you will not be able to undo it.',
+          { type: 'warning', title: 'Checkpoint Warning' },
+        );
+      }
 
       // Restore the session state
       await SessionSerializer.fromJSON(state, {
@@ -238,14 +282,7 @@ export class AppPersistenceManager {
       });
 
       // Update UI controls with restored state
-      if (state.color) colorControls.setAdjustments(state.color);
-      if (state.cdl) cdlControl.setCDL(state.cdl);
-      if (state.filters) filterControl.setSettings(state.filters);
-      if (state.transform) transformControl.setTransform(state.transform);
-      if (state.crop) cropControl.setState(state.crop);
-      if (state.lens) lensControl.setParams(state.lens);
-      if (state.noiseReduction && noiseReductionControl) noiseReductionControl.setParams(state.noiseReduction);
-      if (state.watermark && watermarkControl) watermarkControl.setState(state.watermark);
+      this.syncControlsFromState(state);
 
       // Close the panel
       snapshotPanel.hide();
@@ -259,11 +296,50 @@ export class AppPersistenceManager {
   }
 
   /**
+   * Detect active serialization gaps and return warning messages.
+   */
+  private getSerializationGapWarnings(): string[] {
+    const { viewer } = this.ctx;
+    const warnings: string[] = [];
+
+    try {
+      const toneMapping = (viewer as any).getToneMappingState?.();
+      if (toneMapping && toneMapping.enabled && toneMapping.operator !== 'off') {
+        warnings.push('Tone mapping settings are active but may not be fully preserved in the saved project.');
+      }
+    } catch {
+      // ignore
+    }
+
+    try {
+      const ocio = (viewer as any).isOCIOEnabled?.();
+      if (ocio) {
+        warnings.push('OCIO color management is active but cannot be serialized.');
+      }
+    } catch {
+      // ignore
+    }
+
+    try {
+      const displayColor = (viewer as any).getDisplayColorState?.();
+      if (displayColor && displayColor.transferFunction && displayColor.transferFunction !== 'srgb' && displayColor.transferFunction !== 'sRGB') {
+        warnings.push('Custom display color settings may not be fully preserved.');
+      }
+    } catch {
+      // ignore
+    }
+
+    return warnings;
+  }
+
+  /**
    * Save project to file
    */
   async saveProject(): Promise<void> {
     const { session, paintEngine, viewer } = this.ctx;
     try {
+      const displayName = (session as any).metadata?.displayName;
+      const name = displayName || 'project';
       const state = SessionSerializer.toJSON(
         {
           session,
@@ -272,9 +348,19 @@ export class AppPersistenceManager {
           playlistManager: this.ctx.playlistManager,
           cacheManager: this.ctx.cacheManager,
         },
-        'project',
+        name,
       );
-      await SessionSerializer.saveToFile(state, 'project.orvproject');
+
+      // Check for serialization gaps and warn
+      const gapWarnings = this.getSerializationGapWarnings();
+      if (gapWarnings.length > 0) {
+        showAlert(
+          `The following settings are active but may not be fully saved:\n\n${gapWarnings.join('\n')}`,
+          { type: 'warning', title: 'Save Warning' },
+        );
+      }
+
+      await SessionSerializer.saveToFile(state, `${name}.orvproject`);
     } catch (err) {
       showAlert(`Failed to save project: ${err}`, { type: 'error', title: 'Save Error' });
     }
@@ -286,8 +372,9 @@ export class AppPersistenceManager {
   async saveRvSession(format: 'rv' | 'gto'): Promise<void> {
     const { session, paintEngine } = this.ctx;
     try {
+      const displayName = (session as any).metadata?.displayName;
       const sourceName = session.currentSource?.name;
-      const base = sourceName ? sourceName : 'session';
+      const base = displayName || sourceName || 'session';
       const filename = `${base}.${format}`;
 
       if (this.gtoStore) {
@@ -309,7 +396,13 @@ export class AppPersistenceManager {
 
     try {
       // Create auto-checkpoint before loading new project
-      await this.createAutoCheckpoint('Before Project Load');
+      const checkpointOk = await this.createAutoCheckpoint('Before Project Load');
+      if (!checkpointOk) {
+        showAlert(
+          'No rollback checkpoint could be created. The load will proceed, but you will not be able to undo it.',
+          { type: 'warning', title: 'Checkpoint Warning' },
+        );
+      }
 
       if (ext === 'orvproject') {
         const state = await SessionSerializer.loadFromFile(file);
@@ -370,7 +463,7 @@ export class AppPersistenceManager {
    * Initialize auto-save system and handle crash recovery
    */
   private async initAutoSave(): Promise<void> {
-    const { autoSaveManager } = this.ctx;
+    const { autoSaveManager, autoSaveIndicator } = this.ctx;
     try {
       // Listen for storage warnings
       autoSaveManager.on('storageWarning', (info) => {
@@ -380,10 +473,34 @@ export class AppPersistenceManager {
         );
       });
 
+      // Subscribe to recoveryAvailable event before calling initialize
+      autoSaveManager.on('recoveryAvailable', async (data: { entries: any[] }) => {
+        const mostRecent = data.entries[0];
+        if (!mostRecent) return;
+
+        const savedTime = new Date(mostRecent.savedAt).toLocaleString();
+
+        const recover = await showConfirm(
+          `A previous session "${mostRecent.name}" was found from ${savedTime}. Would you like to recover it?`,
+          {
+            title: 'Recover Session',
+            confirmText: 'Recover',
+            cancelText: 'Discard',
+          },
+        );
+
+        if (recover) {
+          await this.recoverAutoSave(mostRecent.id);
+        } else {
+          await autoSaveManager.clearAll();
+        }
+      });
+
       const hasRecovery = await autoSaveManager.initialize();
 
       if (hasRecovery) {
-        // Show recovery prompt
+        // Show recovery prompt via the legacy path (for AutoSaveManagers
+        // that don't use the recoveryAvailable event)
         const entries = await autoSaveManager.listAutoSaves();
         const mostRecent = entries[0];
         if (mostRecent) {
@@ -408,6 +525,14 @@ export class AppPersistenceManager {
       }
     } catch (err) {
       console.error('Auto-save initialization failed:', err);
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      showAlert(
+        `Auto-save could not be initialized: ${errorMessage}. Your work will not be automatically saved. Use the Save button in the toolbar to save manually.`,
+        { type: 'warning', title: 'Auto-Save Unavailable' },
+      );
+      if (typeof (autoSaveIndicator as any).setStatus === 'function') {
+        (autoSaveIndicator as any).setStatus('disabled');
+      }
     }
   }
 

@@ -192,6 +192,30 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
       background: var(--bg-tertiary);
     `;
 
+    const importBtn = document.createElement('button');
+    importBtn.textContent = 'Import';
+    importBtn.dataset.testid = 'import-snapshot-btn';
+    importBtn.style.cssText = `
+      flex: 1;
+      padding: 8px;
+      border: 1px solid var(--border-primary);
+      border-radius: 4px;
+      background: transparent;
+      color: var(--text-secondary);
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.12s ease;
+    `;
+    importBtn.addEventListener('click', () => this.handleImport());
+    importBtn.addEventListener('pointerenter', () => {
+      importBtn.style.background = 'var(--bg-hover)';
+    });
+    importBtn.addEventListener('pointerleave', () => {
+      importBtn.style.background = 'transparent';
+    });
+    applyA11yFocus(importBtn);
+    footer.appendChild(importBtn);
+
     const clearAllBtn = document.createElement('button');
     clearAllBtn.textContent = 'Clear All';
     clearAllBtn.style.cssText = `
@@ -600,6 +624,26 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
         await showAlert('Failed to delete snapshot', { type: 'error', title: 'Error' });
       }
     }
+  }
+
+  private handleImport(): void {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.addEventListener('change', async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        await this.snapshotManager.importSnapshot(text);
+        await this.loadSnapshots();
+      } catch (err) {
+        console.error('Failed to import snapshot:', err);
+        const msg = err instanceof Error ? err.message : String(err);
+        await showAlert(`Failed to import snapshot: ${msg}`, { type: 'error', title: 'Import Error' });
+      }
+    });
+    input.click();
   }
 
   private async handleClearAll(): Promise<void> {

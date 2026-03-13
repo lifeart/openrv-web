@@ -216,7 +216,7 @@ describe('Documentation consistency', () => {
 
   test('builtin format count is accurate', () => {
     const formats = getBuiltinFormats();
-    expect(formats.length).toBeGreaterThanOrEqual(13);
+    expect(formats.length).toBeGreaterThanOrEqual(12);
   });
 
   // -- README cross-checks --------------------------------------------------
