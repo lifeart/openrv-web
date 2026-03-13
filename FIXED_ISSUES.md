@@ -1897,3 +1897,19 @@ Called from `fromJSON()` inside the existing `if (mediaIndexMap.size > 0)` block
 **Files changed**:
 - `docs/export/sessions.md`
 - `src/ui/components/ExportControl.test.ts`
+
+## Issue #348: The shortcut docs still advertise `H` and `W` for histogram and waveform even though those defaults are hidden by conflicts
+## Issue #464: The UI overview still teaches `H` and `W` as direct Histogram/Waveform shortcuts even though those defaults are hidden by conflicts
+
+**Root cause**: Documentation bug across multiple doc files. After Issues #1-3 moved H/W/G to context-aware dispatch, the docs still advertised H/W as direct scope shortcuts.
+
+**Fix**: Updated 8 documentation files to remove incorrect H/W scope shortcut references:
+- `docs/reference/keyboard-shortcuts.md` — removed H/W from scopes table, added fit shortcuts section
+- `docs/getting-started/ui-overview.md` — changed to "*(none by default)*"
+- `docs/scopes/histogram.md`, `docs/scopes/waveform.md` — updated toggle instructions
+- `docs/color/primary-controls.md`, `docs/color/tone-mapping.md`, `docs/advanced/filters-effects.md` — removed parenthetical shortcuts
+- `UI.md` — updated shortcut table
+
+**Tests added**: 4 documentation consistency tests in `tests/docs.consistency.test.ts`.
+
+**Files changed**: 8 doc files + `tests/docs.consistency.test.ts`

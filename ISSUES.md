@@ -385,20 +385,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - That makes the accessibility overview materially overstate what is currently announced at runtime.
 
 
-### 348. The shortcut docs still advertise `H` and `W` for histogram and waveform even though those defaults are hidden by conflicts
-
-- Severity: Medium
-- Area: Documentation / scopes workflow
-- Evidence:
-  - The shortcut reference lists `H` for histogram and `W` for waveform in [docs/reference/keyboard-shortcuts.md](/Users/lifeart/Repos/openrv-web/docs/reference/keyboard-shortcuts.md#L72) through [docs/reference/keyboard-shortcuts.md](/Users/lifeart/Repos/openrv-web/docs/reference/keyboard-shortcuts.md#L73).
-  - The getting-started UI overview repeats those same shortcuts for the panels in [docs/getting-started/ui-overview.md](/Users/lifeart/Repos/openrv-web/docs/getting-started/ui-overview.md#L203) through [docs/getting-started/ui-overview.md](/Users/lifeart/Repos/openrv-web/docs/getting-started/ui-overview.md#L204).
-  - In production, `AppKeyboardHandler` marks both `panel.histogram` and `panel.waveform` as conflicting defaults because `H` and `W` are taken by fit-to-height and fit-to-width behavior in [src/AppKeyboardHandler.ts](/Users/lifeart/Repos/openrv-web/src/AppKeyboardHandler.ts#L41) through [src/AppKeyboardHandler.ts](/Users/lifeart/Repos/openrv-web/src/AppKeyboardHandler.ts#L47).
-  - The scopes actions still exist in `KeyboardActionMap`, but the conflict handling means the docs are describing shortcuts that are not normally registered for direct use in [src/services/KeyboardActionMap.ts](/Users/lifeart/Repos/openrv-web/src/services/KeyboardActionMap.ts#L442) through [src/services/KeyboardActionMap.ts](/Users/lifeart/Repos/openrv-web/src/services/KeyboardActionMap.ts#L445).
-- Impact:
-  - Users can follow the official shortcut docs, press `H` or `W`, and get a different viewer action than the scopes panel they were promised.
-  - That keeps the scopes area looking broken even when the underlying panels themselves still work through buttons or custom bindings.
-
-
 ### 351. The format-support reference overstates several partially supported formats as if they were fully usable
 
 - Severity: Medium
@@ -1079,18 +1065,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - The getting-started docs make the Info panel sound far more useful than it is in the shipped app.
   - Users can open that panel expecting source/frame metadata and instead get a mostly cursor-color readout.
-
-### 464. The UI overview still teaches `H` and `W` as direct Histogram/Waveform shortcuts even though those defaults are hidden by conflicts
-
-- Severity: Low
-- Area: Documentation / keyboard shortcuts
-- Evidence:
-  - The UI overview panel table still lists `Histogram | H` and `Waveform | W` in [docs/getting-started/ui-overview.md](/Users/lifeart/Repos/openrv-web/docs/getting-started/ui-overview.md#L200) through [docs/getting-started/ui-overview.md#L205).
-  - In production, those direct defaults are hidden from registration because `H` and `W` are reserved by other actions in [src/AppKeyboardHandler.ts](/Users/lifeart/Repos/openrv-web/src/AppKeyboardHandler.ts#L43) through [src/AppKeyboardHandler.ts](/Users/lifeart/Repos/openrv-web/src/AppKeyboardHandler.ts#L45).
-  - The underlying runtime conflict is already confirmed in issues `1` and `2`.
-- Impact:
-  - New users can learn broken shortcuts directly from the getting-started overview page.
-  - That increases first-use friction for scopes and makes the UI overview less trustworthy as a quick reference.
 
 ### 465. The EDL/OTIO guide overstates the main-app import/export paths; those workflows are still mostly confined to the Playlist panel
 
