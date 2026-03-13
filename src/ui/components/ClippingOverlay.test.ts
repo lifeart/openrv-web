@@ -67,6 +67,7 @@ describe('ClippingOverlay', () => {
         showShadows: true,
         highlightColor: { r: 255, g: 0, b: 0 },
         shadowColor: { r: 0, g: 100, b: 255 },
+        bothColor: { r: 250, g: 204, b: 21 },
         opacity: 0.7,
         shadowThreshold: 0.0,
         highlightThreshold: 1.0,
@@ -655,24 +656,117 @@ describe('ClippingOverlay', () => {
     });
   });
 
-  describe('highlight priority over shadow', () => {
-    it('CLIP-U100: highlight takes priority when both could apply', () => {
-      // This is an edge case - a pixel that's pure white (255,255,255)
-      // could theoretically match both highlight (any channel >= 254)
-      // and shadow (all channels <= 1) detection, but since the values
-      // are 255, only highlight should apply
+  describe('both-clipped detection', () => {
+    it('CLIP-U100: both-clipped pixel gets bothColor when thresholds overlap', () => {
+      // With wide thresholds, a pixel can be both highlight- and shadow-clipped
       clippingOverlay.enable();
-      clippingOverlay.setState({ opacity: 1.0 });
+      clippingOverlay.setState({
+        opacity: 1.0,
+        shadowThreshold: 0.5,    // shadowLimit = floor(0.5 * 253 + 1) = 127
+        highlightThreshold: 0.3, // highlightLimit = ceil(0.3 * 253 + 1) = 77
+      });
 
-      const imageData = createImageDataWithPixels(1, 1, [{ x: 0, y: 0, r: 255, g: 255, b: 255 }]);
+      // Pixel with value 100: all channels <= 127 (shadow) AND any channel >= 77 (highlight)
+      const imageData = createImageDataWithPixels(1, 1, [{ x: 0, y: 0, r: 100, g: 100, b: 100 }]);
 
       clippingOverlay.apply(imageData);
 
       const pixel = getPixel(imageData, 0, 0);
-      // Should be highlight color (red), not shadow color (blue)
+      // Should be bothColor (yellow: 250, 204, 21), not highlight or shadow
+      expect(pixel.r).toBe(250);
+      expect(pixel.g).toBe(204);
+      expect(pixel.b).toBe(21);
+    });
+
+    it('CLIP-U101: only-highlight pixel gets highlightColor', () => {
+      clippingOverlay.enable();
+      clippingOverlay.setState({ opacity: 1.0 });
+
+      const imageData = createImageDataWithPixels(1, 1, [{ x: 0, y: 0, r: 255, g: 100, b: 100 }]);
+
+      clippingOverlay.apply(imageData);
+
+      const pixel = getPixel(imageData, 0, 0);
       expect(pixel.r).toBe(255);
       expect(pixel.g).toBe(0);
       expect(pixel.b).toBe(0);
+    });
+
+    it('CLIP-U102: only-shadow pixel gets shadowColor', () => {
+      clippingOverlay.enable();
+      clippingOverlay.setState({ opacity: 1.0 });
+
+      const imageData = createImageDataWithPixels(1, 1, [{ x: 0, y: 0, r: 0, g: 0, b: 0 }]);
+
+      clippingOverlay.apply(imageData);
+
+      const pixel = getPixel(imageData, 0, 0);
+      expect(pixel.r).toBe(0);
+      expect(pixel.g).toBe(100);
+      expect(pixel.b).toBe(255);
+    });
+
+    it('CLIP-U103: bothColor can be customized via setBothColor', () => {
+      clippingOverlay.enable();
+      clippingOverlay.setBothColor({ r: 255, g: 255, b: 255 });
+      clippingOverlay.setState({
+        opacity: 1.0,
+        shadowThreshold: 0.5,
+        highlightThreshold: 0.3,
+      });
+
+      const imageData = createImageDataWithPixels(1, 1, [{ x: 0, y: 0, r: 100, g: 100, b: 100 }]);
+
+      clippingOverlay.apply(imageData);
+
+      const pixel = getPixel(imageData, 0, 0);
+      expect(pixel.r).toBe(255);
+      expect(pixel.g).toBe(255);
+      expect(pixel.b).toBe(255);
+    });
+
+    it('CLIP-U104: bothColor can be customized via setState', () => {
+      clippingOverlay.enable();
+      clippingOverlay.setState({
+        bothColor: { r: 128, g: 0, b: 128 },
+        opacity: 1.0,
+        shadowThreshold: 0.5,
+        highlightThreshold: 0.3,
+      });
+
+      const imageData = createImageDataWithPixels(1, 1, [{ x: 0, y: 0, r: 100, g: 100, b: 100 }]);
+
+      clippingOverlay.apply(imageData);
+
+      const pixel = getPixel(imageData, 0, 0);
+      expect(pixel.r).toBe(128);
+      expect(pixel.g).toBe(0);
+      expect(pixel.b).toBe(128);
+    });
+
+    it('CLIP-U105: default bothColor is included in state', () => {
+      const state = clippingOverlay.getState();
+      expect(state.bothColor).toEqual({ r: 250, g: 204, b: 21 });
+    });
+
+    it('CLIP-U106: setBothColor is idempotent', () => {
+      const handler = vi.fn();
+      clippingOverlay.on('stateChanged', handler);
+
+      clippingOverlay.setBothColor({ r: 250, g: 204, b: 21 }); // Same as default
+      expect(handler).toHaveBeenCalledTimes(0);
+
+      clippingOverlay.setBothColor({ r: 100, g: 100, b: 100 });
+      clippingOverlay.setBothColor({ r: 100, g: 100, b: 100 });
+      expect(handler).toHaveBeenCalledTimes(1);
+    });
+
+    it('CLIP-U107: reset restores default bothColor', () => {
+      clippingOverlay.setBothColor({ r: 0, g: 0, b: 0 });
+      clippingOverlay.reset();
+
+      const state = clippingOverlay.getState();
+      expect(state.bothColor).toEqual({ r: 250, g: 204, b: 21 });
     });
   });
 });

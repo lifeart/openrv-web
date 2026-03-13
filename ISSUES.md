@@ -1212,17 +1212,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The docs promise a more flexible broadcast-safe workflow than the runtime actually supports.
   - Users can look for user-defined percentages or color-coded zones that simply are not part of the shipped overlay model.
 
-### 484. The overlays guide says “both clipping” gets its own distinct highlight, but the shipped clipping overlay only chooses highlight-or-shadow coloring
-
-- Severity: Low
-- Area: Documentation / clipping overlay
-- Evidence:
-  - The overlays guide says pixels that clip in all channels simultaneously receive “a distinct highlight” in [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L48) through [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L52).
-  - The shipped `ClippingOverlay` only checks two branches: highlight-clipped pixels are blended with `highlightColor`, otherwise shadow-clipped pixels are blended with `shadowColor`, in [src/ui/components/ClippingOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ClippingOverlay.ts#L63) through [src/ui/components/ClippingOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ClippingOverlay.ts#L79).
-  - There is no third “both clipped” state or separate color in `ClippingOverlayState`, which only carries highlight and shadow colors in [src/ui/components/ClippingOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ClippingOverlay.ts#L12) through [src/ui/components/ClippingOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ClippingOverlay.ts#L29).
-- Impact:
-  - The docs describe a richer clipping diagnostic than the shipped overlay can render.
-  - Users can expect a special simultaneous-clipping signal, but production collapses that case into the ordinary highlight path.
 
 ### 485. The overlays guide says overlay states are preserved in session files and snapshots, but the `.orvproject` serializer only persists watermark among the viewer overlays
 

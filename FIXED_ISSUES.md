@@ -2084,3 +2084,24 @@ Called from `fromJSON()` inside the existing `if (mediaIndexMap.size > 0)` block
 **Files changed**:
 - `src/ui/components/ClippingOverlay.ts`
 - `src/ui/components/ClippingOverlay.test.ts`
+
+## Issue #484: Clipping overlay has no "both clipped" distinct highlight color
+
+**Root cause**: The overlay only had two branches (highlight → highlightColor, shadow → shadowColor). Pixels clipped in both directions got the highlight color, with no way to distinguish them.
+
+**Fix**:
+- Added `bothColor` to `ClippingOverlayState` (default: yellow `{ r: 250, g: 204, b: 21 }`)
+- Added `setBothColor()` setter with idempotency check
+- Updated `apply()` detection priority: both-clipped > highlight-clipped > shadow-clipped
+- Backward compatible: existing highlight/shadow behavior unchanged
+
+**Tests added**: 8 regression tests (CLIP-U100 through CLIP-U107):
+- Both-clipped pixel gets bothColor
+- Highlight-only and shadow-only still get correct colors
+- bothColor customizable via setter and setState
+- Default included in state
+- Idempotency and reset behavior
+
+**Files changed**:
+- `src/ui/components/ClippingOverlay.ts`
+- `src/ui/components/ClippingOverlay.test.ts`
