@@ -106,6 +106,7 @@ function createMockContext(
     autoSaveIndicator: {
       markUnsaved: vi.fn(),
       markSaved: vi.fn(),
+      setStatus: vi.fn(),
     } as any,
     snapshotManager: {
       initialize: vi.fn(async () => {}),
@@ -151,7 +152,7 @@ describe('Issue #437 – auto-save failure alert references correct save mechani
     await mgr.init();
 
     expect(showAlert).toHaveBeenCalledWith(
-      expect.stringContaining('Auto-save failed to initialize'),
+      expect.stringContaining('Auto-save could not be initialized'),
       expect.objectContaining({ type: 'warning', title: 'Auto-Save Unavailable' }),
     );
   });
@@ -179,7 +180,7 @@ describe('Issue #437 – auto-save failure alert references correct save mechani
     await mgr.init();
 
     const alertMessage = (showAlert as ReturnType<typeof vi.fn>).mock.calls.find(
-      (call: unknown[]) => typeof call[0] === 'string' && (call[0] as string).includes('Auto-save failed'),
+      (call: unknown[]) => typeof call[0] === 'string' && (call[0] as string).includes('Auto-save could not be initialized'),
     );
     expect(alertMessage).toBeDefined();
     const message = alertMessage![0] as string;
@@ -202,7 +203,7 @@ describe('Issue #437 – auto-save failure alert references correct save mechani
     // showAlert may be called for other reasons (snapshot init, etc.)
     // but NOT for auto-save failure
     const autoSaveAlerts = (showAlert as ReturnType<typeof vi.fn>).mock.calls.filter(
-      (call: unknown[]) => typeof call[0] === 'string' && (call[0] as string).includes('Auto-save failed'),
+      (call: unknown[]) => typeof call[0] === 'string' && (call[0] as string).includes('Auto-save could not be initialized'),
     );
     expect(autoSaveAlerts).toHaveLength(0);
   });

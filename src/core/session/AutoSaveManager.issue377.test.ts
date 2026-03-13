@@ -164,23 +164,33 @@ describe('AutoSaveManager issue #377 — auto-save armed after recovery', () => 
     expect(entry!.name).toBe('Post-Recovery Work');
   });
 
-  it('AUTOSAVE-377-004: markDirty triggers save via debounce after recovery initialization', async () => {
+  it('AUTOSAVE-377-004: markDirty triggers save via interval after recovery initialization', async () => {
     await simulateCrash();
 
-    manager = createManager();
+    manager = createManager({ interval: 1 }); // 1-minute interval
     await manager.initialize();
 
-    const savedSpy = vi.fn();
-    manager.on('saved', savedSpy);
+    const saveSpy = vi.spyOn(manager, 'save');
 
-    // markDirty + wait for debounce (2s)
-    manager.markDirty(() => createMockSessionState('Dirty State'));
+    // After initialization the interval timer is running with real timers.
+    // Re-arm with fake timers so we can advance time deterministically.
+    vi.useFakeTimers();
+    try {
+      // Restart the timer under fake-timer control
+      await manager.armSession();
 
-    // Wait for debounce timer to fire (2s debounce)
-    await new Promise((resolve) => setTimeout(resolve, 2500));
+      // markDirty flags session as dirty; the interval timer will pick it up
+      manager.markDirty(() => createMockSessionState('Dirty State'));
 
-    expect(savedSpy).toHaveBeenCalled();
-  }, 10000);
+      // Advance past the 1-minute interval so the timer fires
+      vi.advanceTimersByTime(60_000);
+
+      // The interval callback calls saveWithGetter which calls save
+      expect(saveSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   it('AUTOSAVE-377-005: recoveryAvailable event is still emitted when recovery data exists', async () => {
     await simulateCrash();

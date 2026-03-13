@@ -95,7 +95,6 @@ export class AutoSaveManager extends EventEmitter<AutoSaveEvents> {
   private stateGetter: (() => SessionState) | null = null;
   private isSaving = false;
   private isDisposing = false;
-
   constructor(config: Partial<AutoSaveConfig> = {}) {
     super();
     this.config = { ...DEFAULT_AUTO_SAVE_CONFIG, ...config };
@@ -111,27 +110,23 @@ export class AutoSaveManager extends EventEmitter<AutoSaveEvents> {
       this.isInitialized = true;
 
       // Check for crash recovery
+      let hasRecovery = false;
       const wasCleanShutdown = await this.checkCleanShutdown();
       if (!wasCleanShutdown) {
         const entries = await this.listAutoSaves();
         if (entries.length > 0) {
           this.emit('recoveryAvailable', { entries });
-          return true;
+          hasRecovery = true;
         }
       }
 
       // Mark as active session (not clean shutdown until dispose)
       await this.setCleanShutdown(false);
 
-      // Start auto-save timer if enabled
-      if (this.config.enabled) {
-        this.startTimer();
-      }
+      // Arm session: start timer + install beforeunload handler
+      this.armSessionInternal();
 
-      // Listen for beforeunload to mark clean shutdown
-      window.addEventListener('beforeunload', this.handleBeforeUnload);
-
-      return false;
+      return hasRecovery;
     } catch (err) {
       console.error('AutoSaveManager initialization failed:', err);
       return false;
@@ -215,6 +210,28 @@ export class AutoSaveManager extends EventEmitter<AutoSaveEvents> {
       request.onsuccess = () => resolve();
       request.onerror = () => reject(request.error);
     });
+  }
+
+  /**
+   * Arm the session — starts the auto-save timer and installs the
+   * beforeunload handler.  Idempotent: safe to call multiple times.
+   */
+  async armSession(): Promise<void> {
+    this.armSessionInternal();
+  }
+
+  /**
+   * Internal arming logic (sync, used by both initialize and armSession).
+   */
+  private armSessionInternal(): void {
+    // Start auto-save timer if enabled
+    if (this.config.enabled) {
+      this.startTimer(); // startTimer calls stopTimer first, so no duplicates
+    }
+
+    // Remove then re-add to guarantee no duplicate listeners
+    window.removeEventListener('beforeunload', this.handleBeforeUnload);
+    window.addEventListener('beforeunload', this.handleBeforeUnload);
   }
 
   /**

@@ -25,6 +25,8 @@ import type { CropControl } from './ui/components/CropControl';
 import type { LensControl } from './ui/components/LensControl';
 import type { NoiseReductionControl } from './ui/components/NoiseReductionControl';
 import type { WatermarkControl } from './ui/components/WatermarkControl';
+import type { PARControl } from './ui/components/PARControl';
+import type { BackgroundPatternControl } from './ui/components/BackgroundPatternControl';
 import type { PlaylistManager } from './core/session/PlaylistManager';
 import type { MediaCacheManager } from './cache/MediaCacheManager';
 import { showAlert, showConfirm } from './ui/components/shared/Modal';
@@ -49,6 +51,8 @@ export interface PersistenceManagerContext {
   lensControl: LensControl;
   noiseReductionControl?: NoiseReductionControl;
   watermarkControl?: WatermarkControl;
+  parControl?: PARControl;
+  backgroundPatternControl?: BackgroundPatternControl;
   playlistManager?: PlaylistManager;
   cacheManager?: MediaCacheManager;
 }
@@ -200,8 +204,8 @@ export class AppPersistenceManager {
   /**
    * Create an auto-checkpoint before major operations
    */
-  async createAutoCheckpoint(event: string): Promise<void> {
-    if (!this._snapshotBackendAvailable) return;
+  async createAutoCheckpoint(event: string): Promise<boolean> {
+    if (!this._snapshotBackendAvailable) return false;
     const { session, paintEngine, viewer, snapshotManager } = this.ctx;
     try {
       const state = SessionSerializer.toJSON(
@@ -215,8 +219,10 @@ export class AppPersistenceManager {
         this.getSessionLabel(),
       );
       await snapshotManager.createAutoCheckpoint(event, state);
+      return true;
     } catch (err) {
       console.error('Failed to create auto-checkpoint:', err);
+      return false;
     }
   }
 
@@ -254,7 +260,13 @@ export class AppPersistenceManager {
       }
 
       // Create auto-checkpoint before restore
-      await this.createAutoCheckpoint('Before Restore');
+      const checkpointOk = await this.createAutoCheckpoint('Before Restore');
+      if (!checkpointOk) {
+        showAlert(
+          'No rollback checkpoint could be created before restoring. If something goes wrong, you may not be able to undo this operation.',
+          { type: 'warning', title: 'Checkpoint Warning' },
+        );
+      }
 
       // Restore the session state
       await SessionSerializer.fromJSON(state, {
@@ -292,6 +304,7 @@ export class AppPersistenceManager {
   async saveProject(): Promise<void> {
     const { session, paintEngine, viewer } = this.ctx;
     try {
+      const label = session.metadata?.displayName || 'project';
       const state = SessionSerializer.toJSON(
         {
           session,
@@ -300,9 +313,21 @@ export class AppPersistenceManager {
           playlistManager: this.ctx.playlistManager,
           cacheManager: this.ctx.cacheManager,
         },
-        'project',
+        label,
       );
-      await SessionSerializer.saveToFile(state, 'project.orvproject');
+
+      // Check for active serialization gaps and warn the user
+      const gaps = SessionSerializer.getSerializationGaps(viewer);
+      const activeGaps = gaps.filter((g) => g.isActive);
+      if (activeGaps.length > 0) {
+        const names = activeGaps.map((g) => g.name).join(', ');
+        showAlert(
+          `The following active settings will not be saved: ${names}. These will revert to defaults when the project is reloaded.`,
+          { type: 'warning', title: 'Save Warning' },
+        );
+      }
+
+      await SessionSerializer.saveToFile(state, `${label}.orvproject`);
     } catch (err) {
       showAlert(`Failed to save project: ${err}`, { type: 'error', title: 'Save Error' });
     }
@@ -337,7 +362,13 @@ export class AppPersistenceManager {
 
     try {
       // Create auto-checkpoint before loading new project
-      await this.createAutoCheckpoint('Before Project Load');
+      const checkpointOk = await this.createAutoCheckpoint('Before Project Load');
+      if (!checkpointOk) {
+        showAlert(
+          'No rollback checkpoint could be created before loading. If something goes wrong, you may not be able to undo this operation.',
+          { type: 'warning', title: 'Checkpoint Warning' },
+        );
+      }
 
       if (ext === 'orvproject') {
         const state = await SessionSerializer.loadFromFile(file);
@@ -444,8 +475,9 @@ export class AppPersistenceManager {
       }
     } catch (err) {
       console.error('Auto-save initialization failed:', err);
+      this.ctx.autoSaveIndicator.setStatus('disabled');
       showAlert(
-        `Auto-save failed to initialize: ${err instanceof Error ? err.message : err}. You can still save manually using the Save button in the toolbar.`,
+        `Auto-save could not be initialized: ${err instanceof Error ? err.message : err}. You can still save manually using the Save button in the toolbar.`,
         { type: 'warning', title: 'Auto-Save Unavailable' },
       );
     }
@@ -517,6 +549,37 @@ export class AppPersistenceManager {
         type: 'error',
       });
     }
+  }
+
+  /**
+   * Sync UI controls from a restored session state object.
+   * Handles PAR and background-pattern controls in addition to the
+   * standard color/CDL/filter/transform/crop/lens controls.
+   */
+  private syncControlsFromState(state: Record<string, any>): void {
+    const {
+      colorControls,
+      cdlControl,
+      filterControl,
+      transformControl,
+      cropControl,
+      lensControl,
+      noiseReductionControl,
+      watermarkControl,
+      parControl,
+      backgroundPatternControl,
+    } = this.ctx;
+
+    if (state.color) colorControls.setAdjustments(state.color);
+    if (state.cdl) cdlControl.setCDL(state.cdl);
+    if (state.filters) filterControl.setSettings(state.filters);
+    if (state.transform) transformControl.setTransform(state.transform);
+    if (state.crop) cropControl.setState(state.crop);
+    if (state.lens) lensControl.setParams(state.lens);
+    if (state.noiseReduction && noiseReductionControl) noiseReductionControl.setParams(state.noiseReduction);
+    if (state.watermark && watermarkControl) watermarkControl.setState(state.watermark);
+    if (state.par && parControl) parControl.setState(state.par);
+    if (state.backgroundPattern && backgroundPatternControl) backgroundPatternControl.setState(state.backgroundPattern);
   }
 
   dispose(): void {

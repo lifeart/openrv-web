@@ -77,14 +77,6 @@ export class EXRWindowOverlay extends CanvasOverlay<EXRWindowOverlayEvents> {
     this.dataWindow = { ...dataWindow };
     this.displayWindow = { ...displayWindow };
 
-    // Auto-enable when windows differ, auto-disable when they match
-    const mismatched =
-      dataWindow.xMin !== displayWindow.xMin ||
-      dataWindow.yMin !== displayWindow.yMin ||
-      dataWindow.xMax !== displayWindow.xMax ||
-      dataWindow.yMax !== displayWindow.yMax;
-    this.state = { ...this.state, enabled: mismatched };
-
     this.updateCanvasDisplay();
     this.render();
     this.emit('stateChanged', { ...this.state });
@@ -96,7 +88,6 @@ export class EXRWindowOverlay extends CanvasOverlay<EXRWindowOverlayEvents> {
   clearWindows(): void {
     this.dataWindow = null;
     this.displayWindow = null;
-    this.state = { ...this.state, enabled: false };
     this.updateCanvasDisplay();
     this.render();
     this.emit('stateChanged', { ...this.state });

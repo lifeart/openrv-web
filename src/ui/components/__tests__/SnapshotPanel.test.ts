@@ -84,10 +84,10 @@ describe('SnapshotPanel', () => {
       const importBtn = el.querySelector('[data-testid="import-snapshot-btn"]') as HTMLElement;
 
       // Spy on document.createElement to capture the file input
-      const originalCreateElement = document.createElement.bind(document);
+      const realCreateElement = Document.prototype.createElement.bind(document);
       let fileInput: HTMLInputElement | null = null;
       const createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
-        const element = originalCreateElement(tag);
+        const element = realCreateElement(tag);
         if (tag === 'input' && !fileInput) {
           fileInput = element as HTMLInputElement;
           // Prevent actual click from opening file picker
@@ -120,10 +120,10 @@ describe('SnapshotPanel', () => {
       const file = new File([snapshotJson], 'snapshot.json', { type: 'application/json' });
 
       // Spy on createElement to intercept the file input
-      const originalCreateElement = document.createElement.bind(document);
+      const realCreateElement = Document.prototype.createElement.bind(document);
       let fileInput: HTMLInputElement | null = null;
       const createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
-        const element = originalCreateElement(tag);
+        const element = realCreateElement(tag);
         if (tag === 'input' && !fileInput) {
           fileInput = element as HTMLInputElement;
           vi.spyOn(fileInput, 'click').mockImplementation(() => {});
@@ -168,10 +168,10 @@ describe('SnapshotPanel', () => {
       const file = new File(['invalid'], 'bad.json', { type: 'application/json' });
 
       // Spy on createElement to intercept the file input
-      const originalCreateElement = document.createElement.bind(document);
+      const realCreateElement = Document.prototype.createElement.bind(document);
       let fileInput: HTMLInputElement | null = null;
       const createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
-        const element = originalCreateElement(tag);
+        const element = realCreateElement(tag);
         if (tag === 'input' && !fileInput) {
           fileInput = element as HTMLInputElement;
           vi.spyOn(fileInput, 'click').mockImplementation(() => {});

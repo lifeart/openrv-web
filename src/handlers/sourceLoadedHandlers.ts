@@ -307,17 +307,8 @@ export function handleSourceLoaded(
   const attrs = ipImage?.metadata?.attributes;
   if (attrs && attrs.dataWindow && attrs.displayWindow) {
     exrOverlay.setWindows(attrs.dataWindow, attrs.displayWindow);
-    // Auto-enable overlay when data and display windows differ
-    const dw = attrs.dataWindow;
-    const dispW = attrs.displayWindow;
-    if (dw.xMin !== dispW.xMin || dw.yMin !== dispW.yMin || dw.xMax !== dispW.xMax || dw.yMax !== dispW.yMax) {
-      exrOverlay.enable();
-    } else {
-      exrOverlay.disable();
-    }
   } else {
     exrOverlay.clearWindows();
-    exrOverlay.disable();
   }
 
   // Auto-play sequences when the preference is enabled.
