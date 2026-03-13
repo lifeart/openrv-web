@@ -66,6 +66,7 @@ function createMockComponents(): SessionComponents {
       loadSequence: vi.fn<(files: File[]) => Promise<void>>().mockResolvedValue(undefined),
       toSerializedGraph: vi.fn().mockReturnValue(null),
       loadSerializedGraph: vi.fn().mockReturnValue([]),
+      setEdlEntries: vi.fn(),
       noteManager: {
         toSerializable: vi.fn().mockReturnValue([]),
         fromSerializable: vi.fn(),
