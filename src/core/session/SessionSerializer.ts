@@ -24,7 +24,8 @@ import { DEFAULT_NOISE_REDUCTION_PARAMS } from '../../filters/NoiseReduction';
 import { DEFAULT_WATERMARK_STATE } from '../../ui/components/WatermarkOverlay';
 import type { Annotation, PaintEffects } from '../../paint/types';
 import { DEFAULT_PAINT_EFFECTS } from '../../paint/types';
-import { showFileReloadPrompt } from '../../ui/components/shared/Modal';
+import { showFileReloadPrompt, showSequenceReloadPrompt } from '../../ui/components/shared/Modal';
+import { SUPPORTED_MEDIA_ACCEPT } from '../../utils/media/SupportedMediaFormats';
 import type { MediaCacheManager } from '../../cache/MediaCacheManager';
 import { serializeRepresentation } from '../types/representation';
 import type { AddRepresentationConfig } from '../types/representation';
@@ -430,7 +431,28 @@ export class SessionSerializer {
       try {
         // Handle files that require user to reload (originally blob URLs)
         if (ref.requiresReload) {
-          // Attempt to load from OPFS cache first
+          // Sequences need multi-file picker and the sequence-loading path
+          if (ref.type === 'sequence') {
+            const files = await showSequenceReloadPrompt(ref.name, {
+              title: 'Reload Sequence',
+              accept: SUPPORTED_MEDIA_ACCEPT,
+            });
+
+            if (files && files.length > 0) {
+              try {
+                await session.loadSequence(files);
+                mediaIndexMap.set(refIndex, nextSourceIndex++);
+                loadedMedia++;
+              } catch (_loadErr) {
+                warnings.push(`Failed to reload sequence: ${ref.name}`);
+              }
+            } else {
+              warnings.push(`Skipped reload: ${ref.name}`);
+            }
+            continue;
+          }
+
+          // Attempt to load from OPFS cache first (images and videos only)
           if (ref.opfsCacheKey && components.cacheManager) {
             try {
               const cached = await components.cacheManager.get(ref.opfsCacheKey);
@@ -448,7 +470,7 @@ export class SessionSerializer {
             }
           }
 
-          const accept = ref.type === 'video' ? 'video/*' : 'image/*';
+          const accept = ref.type === 'video' ? 'video/*' : SUPPORTED_MEDIA_ACCEPT;
           const file = await showFileReloadPrompt(ref.name, {
             title: 'Reload File',
             accept,
@@ -489,8 +511,23 @@ export class SessionSerializer {
           mediaIndexMap.set(refIndex, nextSourceIndex++);
           loadedMedia++;
         } else if (ref.type === 'sequence') {
-          // Sequences require file selection - emit warning
-          warnings.push(`Sequence "${ref.name}" requires manual file selection`);
+          // Non-blob sequences: prompt user for sequence files
+          const files = await showSequenceReloadPrompt(ref.name, {
+            title: 'Reload Sequence',
+            accept: SUPPORTED_MEDIA_ACCEPT,
+          });
+
+          if (files && files.length > 0) {
+            try {
+              await session.loadSequence(files);
+              mediaIndexMap.set(refIndex, nextSourceIndex++);
+              loadedMedia++;
+            } catch (_loadErr) {
+              warnings.push(`Failed to reload sequence: ${ref.name}`);
+            }
+          } else {
+            warnings.push(`Skipped reload: ${ref.name}`);
+          }
         }
       } catch (_err) {
         warnings.push(`Failed to load: ${ref.name}`);
@@ -533,6 +570,36 @@ export class SessionSerializer {
             `Failed to restore active representation "${ref.activeRepresentationId}" for "${ref.name}"`,
           );
         }
+      }
+    }
+
+    // Remap playback source indices through mediaIndexMap (fix #410).
+    // When sources are skipped during partial restore, the saved indices no longer
+    // correspond to the correct live sources.
+    if (mediaIndexMap.size > 0) {
+      const remapIndex = (saved: number | undefined): number | undefined => {
+        if (saved === undefined || saved < 0) return saved;
+        const mapped = mediaIndexMap.get(saved);
+        if (mapped !== undefined) return mapped;
+        // Original source was skipped — clamp to nearest valid index or 0
+        const validIndices = [...mediaIndexMap.values()].sort((a, b) => a - b);
+        if (validIndices.length === 0) return 0;
+        // Find the closest valid index to the original saved index
+        let closest = validIndices[0]!;
+        for (const idx of validIndices) {
+          if (Math.abs(idx - saved) < Math.abs(closest - saved)) {
+            closest = idx;
+          }
+        }
+        return closest;
+      };
+
+      migrated.playback.currentSourceIndex = remapIndex(migrated.playback.currentSourceIndex) ?? 0;
+      if (migrated.playback.sourceAIndex !== undefined) {
+        migrated.playback.sourceAIndex = remapIndex(migrated.playback.sourceAIndex) ?? 0;
+      }
+      if (migrated.playback.sourceBIndex !== undefined && migrated.playback.sourceBIndex >= 0) {
+        migrated.playback.sourceBIndex = remapIndex(migrated.playback.sourceBIndex) ?? -1;
       }
     }
 
