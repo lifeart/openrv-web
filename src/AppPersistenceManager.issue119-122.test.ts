@@ -285,6 +285,7 @@ describe('SessionSerializer.fromJSON - issue #121: clears session before import'
       noteManager: { fromSerializable: vi.fn() },
       versionManager: { fromSerializable: vi.fn() },
       statusManager: { fromSerializable: vi.fn() },
+      setEdlEntries: vi.fn(),
       setCurrentSource: vi.fn(),
     } as any;
 
@@ -387,6 +388,7 @@ describe('Session.setPlaybackState - issue #122: restores currentSourceIndex', (
       noteManager: { fromSerializable: vi.fn() },
       versionManager: { fromSerializable: vi.fn() },
       statusManager: { fromSerializable: vi.fn() },
+      setEdlEntries: vi.fn(),
       setCurrentSource: vi.fn(),
     } as any;
 

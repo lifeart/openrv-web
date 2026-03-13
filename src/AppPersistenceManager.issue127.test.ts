@@ -96,6 +96,9 @@ function createMockContext(overrides: Partial<PersistenceManagerContext> = {}): 
         getState: () => ({
           displayLUT: { lutData: null, enabled: false, intensity: 1 },
         }),
+        getSerializableState: () => ({
+          displayLUT: { lutData: null, enabled: false, intensity: 1 },
+        }),
       }),
       setColorAdjustments: vi.fn(),
       setCDL: vi.fn(),

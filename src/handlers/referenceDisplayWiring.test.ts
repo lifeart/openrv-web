@@ -46,7 +46,7 @@ function createMockContext(
   };
   const ocioControl = { getProcessor: () => ocioProcessor };
   const toneMappingControl = { setState: vi.fn() };
-  const colorControls = { setAdjustments: vi.fn() };
+  const colorControls = { setAdjustments: vi.fn(), getAdjustments: vi.fn(() => ({ exposure: 0, gamma: 1 })) };
   const persistenceManager = { setGTOStore: vi.fn(), syncGTOStore: vi.fn() };
   const exrWindowOverlay = { setWindows: vi.fn(), clearWindows: vi.fn() };
   const viewer = {

@@ -67,6 +67,7 @@ export class InfoPanel extends EventEmitter<InfoPanelEvents> {
   private fields: InfoPanelFields = { ...DEFAULT_FIELDS };
   private currentData: InfoPanelData = {};
   private subs = new DisposableSubscriptionManager();
+  private _unwiredHintLogged = false;
 
   constructor() {
     super();
@@ -116,6 +117,13 @@ export class InfoPanel extends EventEmitter<InfoPanelEvents> {
     this.render();
     this.emit('visibilityChanged', true);
     this.emitStateChanged();
+    if (!this._unwiredHintLogged) {
+      this._unwiredHintLogged = true;
+      console.info(
+        'Most fields in InfoPanel are not yet wired to live data. ' +
+        'See issue #101 for the tracking list of remaining connections.',
+      );
+    }
   }
 
   /**
