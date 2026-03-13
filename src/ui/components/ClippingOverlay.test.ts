@@ -68,6 +68,8 @@ describe('ClippingOverlay', () => {
         highlightColor: { r: 255, g: 0, b: 0 },
         shadowColor: { r: 0, g: 100, b: 255 },
         opacity: 0.7,
+        shadowThreshold: 0.0,
+        highlightThreshold: 1.0,
       });
     });
 
@@ -490,6 +492,149 @@ describe('ClippingOverlay', () => {
     });
   });
 
+  describe('configurable thresholds', () => {
+    it('CLIP-U110: default thresholds match existing hardcoded behavior', () => {
+      const state = clippingOverlay.getState();
+      expect(state.shadowThreshold).toBe(0.0);
+      expect(state.highlightThreshold).toBe(1.0);
+    });
+
+    it('CLIP-U111: custom shadow threshold flags more pixels', () => {
+      clippingOverlay.enable();
+      clippingOverlay.setShadowThreshold(0.05);
+      clippingOverlay.setState({ opacity: 1.0 });
+
+      // With threshold 0.05: shadowLimit = floor(0.05 * 253 + 1) = floor(13.65) = 13
+      // Pixel with value 10 should now be flagged as shadow-clipped
+      const imageData = createImageDataWithPixels(2, 1, [
+        { x: 0, y: 0, r: 10, g: 10, b: 10 }, // Should be clipped with 0.05 threshold
+        { x: 1, y: 0, r: 20, g: 20, b: 20 }, // Should NOT be clipped
+      ]);
+
+      clippingOverlay.apply(imageData);
+
+      const pixel0 = getPixel(imageData, 0, 0);
+      const pixel1 = getPixel(imageData, 1, 0);
+
+      // Pixel 0 should be tinted with shadow color (blue)
+      expect(pixel0.b).toBe(255); // Full opacity shadow color blue=255
+      // Pixel 1 should be unchanged
+      expect(pixel1.r).toBe(20);
+      expect(pixel1.g).toBe(20);
+      expect(pixel1.b).toBe(20);
+    });
+
+    it('CLIP-U112: custom highlight threshold flags more pixels', () => {
+      clippingOverlay.enable();
+      clippingOverlay.setHighlightThreshold(0.95);
+      clippingOverlay.setState({ opacity: 1.0 });
+
+      // With threshold 0.95: highlightLimit = ceil(0.95 * 253 + 1) = ceil(241.35) = 242
+      // Pixel with value 245 should now be flagged as highlight-clipped
+      const imageData = createImageDataWithPixels(2, 1, [
+        { x: 0, y: 0, r: 245, g: 100, b: 100 }, // Should be clipped with 0.95 threshold
+        { x: 1, y: 0, r: 230, g: 100, b: 100 }, // Should NOT be clipped
+      ]);
+
+      clippingOverlay.apply(imageData);
+
+      const pixel0 = getPixel(imageData, 0, 0);
+      const pixel1 = getPixel(imageData, 1, 0);
+
+      // Pixel 0 should be tinted with highlight color (red)
+      expect(pixel0.r).toBe(255); // Full opacity highlight color red=255
+      // Pixel 1 should be unchanged
+      expect(pixel1.r).toBe(230);
+    });
+
+    it('CLIP-U113: shadow threshold clamped to 0-1 range', () => {
+      clippingOverlay.setShadowThreshold(-0.5);
+      expect(clippingOverlay.getState().shadowThreshold).toBe(0);
+
+      clippingOverlay.setShadowThreshold(1.5);
+      expect(clippingOverlay.getState().shadowThreshold).toBe(1);
+
+      clippingOverlay.setShadowThreshold(0.1);
+      expect(clippingOverlay.getState().shadowThreshold).toBe(0.1);
+    });
+
+    it('CLIP-U114: highlight threshold clamped to 0-1 range', () => {
+      clippingOverlay.setHighlightThreshold(-0.5);
+      expect(clippingOverlay.getState().highlightThreshold).toBe(0);
+
+      clippingOverlay.setHighlightThreshold(1.5);
+      expect(clippingOverlay.getState().highlightThreshold).toBe(1);
+
+      clippingOverlay.setHighlightThreshold(0.9);
+      expect(clippingOverlay.getState().highlightThreshold).toBe(0.9);
+    });
+
+    it('CLIP-U115: setShadowThreshold is idempotent', () => {
+      const handler = vi.fn();
+      clippingOverlay.on('stateChanged', handler);
+
+      clippingOverlay.setShadowThreshold(0.1);
+      clippingOverlay.setShadowThreshold(0.1);
+
+      expect(handler).toHaveBeenCalledTimes(1);
+    });
+
+    it('CLIP-U116: setHighlightThreshold is idempotent', () => {
+      const handler = vi.fn();
+      clippingOverlay.on('stateChanged', handler);
+
+      clippingOverlay.setHighlightThreshold(0.9);
+      clippingOverlay.setHighlightThreshold(0.9);
+
+      expect(handler).toHaveBeenCalledTimes(1);
+    });
+
+    it('CLIP-U117: state includes threshold values after setState', () => {
+      clippingOverlay.setState({
+        shadowThreshold: 0.05,
+        highlightThreshold: 0.95,
+      });
+
+      const state = clippingOverlay.getState();
+      expect(state.shadowThreshold).toBe(0.05);
+      expect(state.highlightThreshold).toBe(0.95);
+    });
+
+    it('CLIP-U118: reset restores default thresholds', () => {
+      clippingOverlay.setShadowThreshold(0.1);
+      clippingOverlay.setHighlightThreshold(0.9);
+
+      clippingOverlay.reset();
+
+      const state = clippingOverlay.getState();
+      expect(state.shadowThreshold).toBe(0.0);
+      expect(state.highlightThreshold).toBe(1.0);
+    });
+
+    it('CLIP-U119: default thresholds produce same detection as original hardcoded values', () => {
+      clippingOverlay.enable();
+      clippingOverlay.setState({ opacity: 1.0 });
+
+      // Shadow: value 1 should be clipped, value 2 should not
+      const shadowData = createImageDataWithPixels(2, 1, [
+        { x: 0, y: 0, r: 1, g: 1, b: 1 },
+        { x: 1, y: 0, r: 2, g: 2, b: 2 },
+      ]);
+      clippingOverlay.apply(shadowData);
+      expect(getPixel(shadowData, 0, 0).b).toBe(255); // shadow-clipped
+      expect(getPixel(shadowData, 1, 0).r).toBe(2); // unchanged
+
+      // Highlight: value 254 should be clipped, value 253 should not
+      const highlightData = createImageDataWithPixels(2, 1, [
+        { x: 0, y: 0, r: 254, g: 100, b: 100 },
+        { x: 1, y: 0, r: 253, g: 100, b: 100 },
+      ]);
+      clippingOverlay.apply(highlightData);
+      expect(getPixel(highlightData, 0, 0).r).toBe(255); // highlight-clipped
+      expect(getPixel(highlightData, 1, 0).r).toBe(253); // unchanged
+    });
+  });
+
   describe('dispose', () => {
     it('CLIP-U090: dispose removes all listeners', () => {
       const handler = vi.fn();
@@ -530,5 +675,4 @@ describe('ClippingOverlay', () => {
       expect(pixel.b).toBe(0);
     });
   });
-
 });

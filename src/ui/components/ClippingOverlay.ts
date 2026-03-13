@@ -18,6 +18,10 @@ export interface ClippingOverlayState {
   highlightColor: { r: number; g: number; b: number };
   shadowColor: { r: number; g: number; b: number };
   opacity: number;
+  /** Shadow threshold in normalized 0.0-1.0 range (default 0.0, maps to <= 1 in 0-255 space) */
+  shadowThreshold: number;
+  /** Highlight threshold in normalized 0.0-1.0 range (default 1.0, maps to >= 254 in 0-255 space) */
+  highlightThreshold: number;
 }
 
 export const DEFAULT_CLIPPING_OVERLAY_STATE: ClippingOverlayState = {
@@ -27,6 +31,8 @@ export const DEFAULT_CLIPPING_OVERLAY_STATE: ClippingOverlayState = {
   highlightColor: { r: 255, g: 0, b: 0 }, // Red for highlights
   shadowColor: { r: 0, g: 100, b: 255 }, // Blue for shadows
   opacity: 0.7,
+  shadowThreshold: 0.0,
+  highlightThreshold: 1.0,
 };
 
 export interface ClippingOverlayEvents extends EventMap {
@@ -50,12 +56,18 @@ export class ClippingOverlay extends EventEmitter<ClippingOverlayEvents> {
     if (!this.state.enabled) return;
 
     const data = imageData.data;
-    const { showHighlights, showShadows, highlightColor, shadowColor, opacity } = this.state;
+    const { showHighlights, showShadows, highlightColor, shadowColor, opacity, shadowThreshold, highlightThreshold } =
+      this.state;
     const len = data.length;
 
     // Pre-calculate blended colors
     const blendFactor = opacity;
     const invBlend = 1 - blendFactor;
+
+    // Convert normalized thresholds (0.0-1.0) to 0-255 space
+    // Shadow default 0.0 maps to 1 (floor(0.0 * 253 + 1) = 1), highlight default 1.0 maps to 254 (ceil(1.0 * 253 + 1) = 254)
+    const shadowLimit = Math.floor(shadowThreshold * 253 + 1);
+    const highlightLimit = Math.ceil(highlightThreshold * 253 + 1);
 
     for (let i = 0; i < len; i += 4) {
       const r = data[i]!;
@@ -65,11 +77,12 @@ export class ClippingOverlay extends EventEmitter<ClippingOverlayEvents> {
       // Calculate luminance to detect clipping
       const luma = luminanceRec709(r, g, b);
 
-      // Check for highlight clipping (any channel at max)
-      const isHighlightClipped = showHighlights && (r >= 254 || g >= 254 || b >= 254 || luma >= 254);
+      // Check for highlight clipping (any channel at or above highlight limit)
+      const isHighlightClipped =
+        showHighlights && (r >= highlightLimit || g >= highlightLimit || b >= highlightLimit || luma >= highlightLimit);
 
-      // Check for shadow clipping (all channels at min)
-      const isShadowClipped = showShadows && r <= 1 && g <= 1 && b <= 1;
+      // Check for shadow clipping (all channels at or below shadow limit)
+      const isShadowClipped = showShadows && r <= shadowLimit && g <= shadowLimit && b <= shadowLimit;
 
       if (isHighlightClipped) {
         // Blend with highlight color (red)
@@ -158,6 +171,30 @@ export class ClippingOverlay extends EventEmitter<ClippingOverlayEvents> {
     const clamped = Math.max(0, Math.min(1, opacity));
     if (this.state.opacity === clamped) return;
     this.state.opacity = clamped;
+    this.emit('stateChanged', { ...this.state });
+  }
+
+  /**
+   * Set shadow threshold (0.0-1.0 normalized)
+   * 0.0 = only flag pixels with channels <= 1 (default)
+   * Higher values flag more pixels as shadow-clipped
+   */
+  setShadowThreshold(threshold: number): void {
+    const clamped = Math.max(0, Math.min(1, threshold));
+    if (this.state.shadowThreshold === clamped) return;
+    this.state.shadowThreshold = clamped;
+    this.emit('stateChanged', { ...this.state });
+  }
+
+  /**
+   * Set highlight threshold (0.0-1.0 normalized)
+   * 1.0 = only flag pixels with channels >= 254 (default)
+   * Lower values flag more pixels as highlight-clipped
+   */
+  setHighlightThreshold(threshold: number): void {
+    const clamped = Math.max(0, Math.min(1, threshold));
+    if (this.state.highlightThreshold === clamped) return;
+    this.state.highlightThreshold = clamped;
     this.emit('stateChanged', { ...this.state });
   }
 

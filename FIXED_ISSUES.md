@@ -2061,3 +2061,26 @@ Called from `fromJSON()` inside the existing `if (mediaIndexMap.size > 0)` block
 **Files changed**:
 - `src/AppDCCWiring.ts`
 - `src/AppDCCWiring.test.ts` (new)
+
+## Issue #477: Clipping overlay hardcodes trigger values instead of allowing configurable thresholds
+
+**Root cause**: `ClippingOverlayState` had no threshold fields. Shadow detection was hardcoded to `<= 1` and highlight detection to `>= 254` in 0-255 space, with no way to adjust.
+
+**Fix**:
+- Added `shadowThreshold` (default 0.0) and `highlightThreshold` (default 1.0) to `ClippingOverlayState` as normalized 0.0-1.0 values
+- Updated `apply()` to compute pixel limits from thresholds: `floor(t * 253 + 1)` for shadow, `ceil(t * 253 + 1)` for highlight
+- Added `setShadowThreshold()` and `setHighlightThreshold()` setters with 0-1 clamping
+- Default thresholds produce identical detection to original hardcoded values (backward compatible)
+
+**Tests added**: 10 regression tests (CLIP-U110 through CLIP-U119):
+- Default thresholds match existing behavior
+- Custom thresholds detect near-clipping pixels
+- Threshold clamping to 0-1 range
+- Setter idempotency
+- setState with thresholds
+- Reset restores defaults
+- Backward compatibility equivalence
+
+**Files changed**:
+- `src/ui/components/ClippingOverlay.ts`
+- `src/ui/components/ClippingOverlay.test.ts`

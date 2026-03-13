@@ -1136,17 +1136,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The docs promise a richer review overlay than the shipped implementation actually provides.
   - Users expecting both session and embedded source timecode on screen will only get a single timecode readout.
 
-### 477. The overlays guide documents adjustable clipping thresholds, but the shipped clipping overlay hardcodes its trigger values
-
-- Severity: Low
-- Area: Documentation / clipping overlay
-- Evidence:
-  - The overlays guide says clipping thresholds can be adjusted away from the default `0.0/1.0` positions and gives `0.95` as a practical example in [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L56) through [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L58).
-  - The shipped `ClippingOverlayState` has no threshold fields; it only carries enable/show-highlights/show-shadows/color/opacity in [src/ui/components/ClippingOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ClippingOverlay.ts#L12) through [src/ui/components/ClippingOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ClippingOverlay.ts#L29).
-  - The actual clip checks are hardcoded to `r/g/b <= 1` for shadows and `r/g/b >= 254` or `luma >= 254` for highlights in [src/ui/components/ClippingOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ClippingOverlay.ts#L63) through [src/ui/components/ClippingOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ClippingOverlay.ts#L72).
-- Impact:
-  - The docs present an early-warning threshold workflow that the shipped overlay simply cannot perform.
-  - Users looking for configurable near-clipping detection will find only a fixed binary implementation.
 
 ### 478. The overlays guide describes a single “missing frame indicator” behavior, but production ships multiple modes and the default does not replace the viewer content
 
