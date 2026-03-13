@@ -1829,3 +1829,22 @@ Called from `fromJSON()` inside the existing `if (mediaIndexMap.size > 0)` block
 **Files changed**:
 - `src/AppNetworkBridge.ts`
 - `src/AppNetworkBridge.test.ts`
+
+## Issue #306: Media-cache failures are emitted internally, but the shipped app never surfaces them
+
+**Root cause**: `MediaCacheManager` emits `error` events for OPFS cache failures during init, writes, and clearing. The app only fire-and-forget initialized the cache with a debug log. No production subscriber existed for cache error events.
+
+**Fix**:
+- Subscribed to `cacheManager.on('error')` in `App.ts` wiring
+- Routes errors to `CacheIndicator.showError()` for visual display in the cache bar
+- Shows `showAlert` warning dialog for init failures (caching unavailable)
+- Logs all cache errors to `console.warn`
+- Added `showError(message)` method to `CacheIndicator` with error/clear state
+
+**Tests added**: 5 regression tests in `CacheIndicator.test.ts` (CACHE-U120 through CACHE-U124) + 8 tests in new `MediaCacheErrorSurfacing.test.ts`.
+
+**Files changed**:
+- `src/App.ts`
+- `src/ui/components/CacheIndicator.ts`
+- `src/ui/components/CacheIndicator.test.ts`
+- `src/cache/MediaCacheErrorSurfacing.test.ts` (new)

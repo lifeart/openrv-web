@@ -56,18 +56,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - This is another silent semantic mismatch because callers can vary the tag and receive the same answer every time.
 
 
-### 306. Media-cache failures are emitted internally, but the shipped app never surfaces them
-
-- Severity: Medium
-- Area: Media cache / degraded-runtime visibility
-- Evidence:
-  - `MediaCacheManager` advertises evented cache lifecycle/error reporting and emits `error`, `entryAdded`, and `cleared` from initialization, write, and clear paths in [src/cache/MediaCacheManager.ts](/Users/lifeart/Repos/openrv-web/src/cache/MediaCacheManager.ts#L1) through [src/cache/MediaCacheManager.ts](/Users/lifeart/Repos/openrv-web/src/cache/MediaCacheManager.ts#L9), [src/cache/MediaCacheManager.ts](/Users/lifeart/Repos/openrv-web/src/cache/MediaCacheManager.ts#L118) through [src/cache/MediaCacheManager.ts](/Users/lifeart/Repos/openrv-web/src/cache/MediaCacheManager.ts#L121), [src/cache/MediaCacheManager.ts](/Users/lifeart/Repos/openrv-web/src/cache/MediaCacheManager.ts#L182) through [src/cache/MediaCacheManager.ts](/Users/lifeart/Repos/openrv-web/src/cache/MediaCacheManager.ts#L187), and [src/cache/MediaCacheManager.ts](/Users/lifeart/Repos/openrv-web/src/cache/MediaCacheManager.ts#L252) through [src/cache/MediaCacheManager.ts](/Users/lifeart/Repos/openrv-web/src/cache/MediaCacheManager.ts#L255).
-  - The app constructs the cache manager and only fire-and-forget initializes it with a debug log fallback in [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L710) through [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L713).
-  - A production-code search finds no `cacheManager.on(...)` subscriber, and the only fuller cache UI (`CacheManagementPanel`) is itself documented as not mounted in production in [src/ui/components/CacheManagementPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/CacheManagementPanel.ts#L1) through [src/ui/components/CacheManagementPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/CacheManagementPanel.ts#L12).
-- Impact:
-  - If OPFS caching fails during init, writes, or cache clearing, the shipped app provides no user-facing signal that the cache is unavailable or malfunctioning.
-  - That makes cache-backed reload/resilience behavior harder to trust or diagnose than the internal event model suggests.
-
 ### 307. The adaptive `FrameCacheController` subsystem is fully implemented but never instantiated in production
 
 - Severity: Medium
