@@ -149,7 +149,7 @@ export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
           }
           refImageData = new ImageData(u8, ref.width, ref.height);
         }
-        viewer.setReferenceImage(refImageData, state.viewMode, state.opacity, state.wipePosition);
+        viewer.setReferenceImage(refImageData, state.viewMode, state.opacity, state.wipePosition, state.showingReference);
       } else {
         viewer.setReferenceImage(null, 'off', 0);
       }

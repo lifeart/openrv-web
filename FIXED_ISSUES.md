@@ -1982,3 +1982,33 @@ Called from `fromJSON()` inside the existing `if (mediaIndexMap.size > 0)` block
 - `src/core/session/StatusManager.test.ts`
 - `src/integrations/ShotGridBridge.test.ts`
 - `docs/advanced/review-workflow.md`
+
+## Issue #333: Reference `toggle` mode doesn't actually toggle between live and reference
+
+**Root cause**: `ReferenceManager` had no toggle state mechanism. The Viewer's toggle mode branch unconditionally drew the reference image over the full frame, making it a permanent replacement rather than a switchable comparison.
+
+**Fix**:
+- Added `showingReference: boolean` to `ReferenceState` (defaults to `false`, showing live)
+- Added `toggleView()` method (guarded: only works in toggle mode) and `isShowingReference()` getter
+- `disable()` and `setViewMode()` reset `showingReference` to `false`
+- Viewer's `setReferenceImage()` gains a 5th `showingReference` parameter (default `true` for backward compat)
+- Toggle mode now only draws reference when `showingReference` is true; otherwise live frame shows through
+- `buildViewTab.ts` passes `state.showingReference` through to the Viewer
+
+**Tests added**: 10 regression tests (REF-030 through REF-039) covering:
+- Initial state is false (showing live)
+- toggleView() flips state in toggle mode
+- Multiple toggles alternate correctly
+- setViewMode resets showingReference
+- toggleView() emits stateChanged
+- State exposed in getState()
+- No-op after dispose
+- Switching modes and back resets state
+- toggleView() is no-op in non-toggle modes
+- disable() resets showingReference
+
+**Files changed**:
+- `src/ui/components/ReferenceManager.ts`
+- `src/ui/components/ReferenceManager.test.ts`
+- `src/ui/components/Viewer.ts`
+- `src/services/tabContent/buildViewTab.ts`

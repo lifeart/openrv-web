@@ -3988,7 +3988,7 @@ export class Viewer {
    * live image canvas using the given viewMode and opacity.
    * Pass `null` to disable the reference overlay.
    */
-  setReferenceImage(imageData: ImageData | null, viewMode: string, opacity: number, wipePosition = 0.5): void {
+  setReferenceImage(imageData: ImageData | null, viewMode: string, opacity: number, wipePosition = 0.5, showingReference = true): void {
     if (!imageData || viewMode === 'off') {
       // Hide the overlay canvas if present
       if (this._referenceCanvas) {
@@ -4053,8 +4053,10 @@ export class Viewer {
       // Draw reference in left half, live in right half (just draw ref)
       ctx.drawImage(tmp, 0, 0, Math.round(cw / 2), ch);
     } else if (viewMode === 'toggle') {
-      // Full replacement
-      ctx.drawImage(tmp, 0, 0, cw, ch);
+      // Draw reference only when showingReference is true; otherwise live frame shows through
+      if (showingReference) {
+        ctx.drawImage(tmp, 0, 0, cw, ch);
+      }
     }
 
     this.scheduleRender();
