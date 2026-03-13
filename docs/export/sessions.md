@@ -8,9 +8,7 @@ This page provides an overview of session persistence. For detailed coverage of 
 
 ## Saving a Session
 
-Click the **Save** button in the header bar (or press **Ctrl+S**) to save the current session. The browser downloads a `.orvproject` file containing a JSON representation of the session state.
-
-To export the session in RV/GTO format instead, use the **Export** menu's **Session** section, which offers "Save RV Session (.rv)" and "Save RV Session (.gto)".
+Click the Save button in the header bar or use the Export menu to save the current session. The browser downloads a `.orvproject` file containing a JSON representation of the session state.
 
 ### What Is Saved
 
@@ -48,14 +46,20 @@ A filename mismatch warning appears if the selected file differs from the expect
 
 ## RV/GTO Session Files
 
-OpenRV Web also loads original OpenRV `.rv` and `.gto` session files. The GTO parser reconstructs the node graph and restores:
+OpenRV Web imports and exports original OpenRV `.rv` and `.gto` session files.
+
+### Importing
+
+The GTO parser reconstructs the node graph and restores:
 
 - Playback ranges
 - Channel selection
 - Scope configurations
 - Paint effects and annotations
 
-GTO sessions can also be exported from the Export menu's Session section.
+### Exporting
+
+The Export menu includes **Save RV Session (.rv)** and **Save RV Session (.gto)** options. These write the current session state back to the original OpenRV format using the GTO serializer. The `.rv` variant writes a text-based GTO file while `.gto` writes a binary GTO file. If the session was originally loaded from a GTO file, the stored GTO graph is updated and saved; otherwise a new GTO graph is generated from the current session and paint state.
 
 ## Migration
 

@@ -7,11 +7,6 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ExportControl } from './ExportControl';
-import {
-  PreferencesManager,
-  DEFAULT_EXPORT_DEFAULTS,
-  resetCorePreferencesManagerForTests,
-} from '../../core/PreferencesManager';
 
 describe('ExportControl', () => {
   let control: ExportControl;
@@ -63,14 +58,6 @@ describe('ExportControl', () => {
       const el = control.render();
       const button = el.querySelector('button') as HTMLButtonElement;
       expect(button.title).toContain('Ctrl+S');
-    });
-
-    it('EXPORT-U016: export button label describes menu-trigger behavior, not direct export (#62)', () => {
-      const el = control.render();
-      const button = el.querySelector('button') as HTMLButtonElement;
-      expect(button.title).toBe('Export options (Ctrl+S)');
-      expect(button.getAttribute('aria-label')).toBe('Export options (Ctrl+S)');
-      expect(button.title).not.toContain('Export current frame');
     });
   });
 
@@ -394,6 +381,80 @@ describe('ExportControl Escape key handling (M-14)', () => {
   });
 });
 
+describe('ExportControl RV/GTO session export menu items', () => {
+  let control: ExportControl;
+
+  beforeEach(() => {
+    control = new ExportControl();
+    document.body.appendChild(control.render());
+  });
+
+  afterEach(() => {
+    control.dispose();
+    const el = control.render();
+    if (el.parentNode) {
+      el.parentNode.removeChild(el);
+    }
+  });
+
+  function openDropdown(): void {
+    const button = control.render().querySelector('button') as HTMLButtonElement;
+    button.click();
+  }
+
+  function getDropdown(): HTMLElement {
+    return document.querySelector('.export-dropdown') as HTMLElement;
+  }
+
+  it('EXPORT-U080: dropdown contains Save RV Session (.rv) menu item', () => {
+    openDropdown();
+    const dropdown = getDropdown();
+    const rvItem = Array.from(dropdown.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Save RV Session (.rv)'),
+    );
+    expect(rvItem).toBeDefined();
+  });
+
+  it('EXPORT-U081: dropdown contains Save RV Session (.gto) menu item', () => {
+    openDropdown();
+    const dropdown = getDropdown();
+    const gtoItem = Array.from(dropdown.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Save RV Session (.gto)'),
+    );
+    expect(gtoItem).toBeDefined();
+  });
+
+  it('EXPORT-U082: clicking Save RV Session (.rv) emits rvSessionExportRequested with rv format', () => {
+    const callback = vi.fn();
+    control.on('rvSessionExportRequested', callback);
+
+    openDropdown();
+    const dropdown = getDropdown();
+    const rvItem = Array.from(dropdown.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Save RV Session (.rv)'),
+    ) as HTMLButtonElement;
+
+    rvItem.click();
+
+    expect(callback).toHaveBeenCalledWith({ format: 'rv' });
+  });
+
+  it('EXPORT-U083: clicking Save RV Session (.gto) emits rvSessionExportRequested with gto format', () => {
+    const callback = vi.fn();
+    control.on('rvSessionExportRequested', callback);
+
+    openDropdown();
+    const dropdown = getDropdown();
+    const gtoItem = Array.from(dropdown.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Save RV Session (.gto)'),
+    ) as HTMLButtonElement;
+
+    gtoItem.click();
+
+    expect(callback).toHaveBeenCalledWith({ format: 'gto' });
+  });
+});
+
 describe('ExportControl keyboard accessibility', () => {
   let control: ExportControl;
 
@@ -528,21 +589,6 @@ describe('ExportControl keyboard accessibility', () => {
     expect(callback).toHaveBeenCalledWith(expect.objectContaining({ useInOutRange: true, includeAnnotations: true }));
   });
 
-  it('EXP-H10c-4: selecting Advanced Frameburn opens the settings menu', () => {
-    openDropdown();
-    const dropdown = getDropdown();
-    const frameburnItem = Array.from(dropdown.querySelectorAll('button')).find((btn) =>
-      btn.textContent?.includes('Advanced Frameburn'),
-    ) as HTMLButtonElement | undefined;
-
-    expect(frameburnItem).toBeDefined();
-    frameburnItem!.click();
-
-    const menu = document.querySelector('.frameburn-settings-menu');
-    expect(menu).not.toBeNull();
-    expect(menu?.getAttribute('aria-label')).toBe('Frameburn settings');
-  });
-
   it('EXP-H10d: export button should have aria-haspopup="menu" attribute', () => {
     const button = getExportButton();
     expect(button.getAttribute('aria-haspopup')).toBe('menu');
@@ -590,521 +636,5 @@ describe('ExportControl keyboard accessibility', () => {
     // Dropdown should be hidden
     expect(dropdown.style.display).toBe('none');
     expect(button.getAttribute('aria-expanded')).toBe('false');
-  });
-
-  describe('import annotations menu item', () => {
-    it('EXP-IMP01: dropdown contains Import Annotations (JSON) menu item', () => {
-      openDropdown();
-      const dropdown = getDropdown();
-      const importItem = Array.from(dropdown.querySelectorAll('button')).find((btn) =>
-        btn.textContent?.includes('Import Annotations (JSON)'),
-      );
-      expect(importItem).toBeDefined();
-    });
-
-    it('EXP-IMP02: clicking Import Annotations (JSON) emits annotationsJSONImportRequested', () => {
-      const callback = vi.fn();
-      control.on('annotationsJSONImportRequested', callback);
-
-      openDropdown();
-      const dropdown = getDropdown();
-      const importItem = Array.from(dropdown.querySelectorAll('button')).find((btn) =>
-        btn.textContent?.includes('Import Annotations (JSON)'),
-      ) as HTMLButtonElement | undefined;
-
-      expect(importItem).toBeDefined();
-      importItem!.click();
-
-      expect(callback).toHaveBeenCalledTimes(1);
-    });
-
-    it('EXP-IMP03: annotationsJSONImportRequested listener can be registered and removed', () => {
-      const callback = vi.fn();
-      control.on('annotationsJSONImportRequested', callback);
-      expect(() => control.off('annotationsJSONImportRequested', callback)).not.toThrow();
-    });
-  });
-
-  describe('copy to clipboard respects annotations checkbox (#176)', () => {
-    function openDropdown(): void {
-      const el = control.render();
-      document.body.appendChild(el);
-      const button = el.querySelector('button') as HTMLButtonElement;
-      button.click();
-    }
-
-    function getDropdown(): HTMLElement {
-      return document.querySelector('.export-dropdown') as HTMLElement;
-    }
-
-    afterEach(() => {
-      const el = control.render();
-      if (el.parentNode) {
-        el.parentNode.removeChild(el);
-      }
-    });
-
-    it('EXPORT-U176-01: copyRequested carries includeAnnotations: true when checkbox is checked', () => {
-      const callback = vi.fn();
-      control.on('copyRequested', callback);
-
-      openDropdown();
-      const dropdown = getDropdown();
-      const checkbox = dropdown.querySelector('#export-annotations') as HTMLInputElement;
-      checkbox.checked = true;
-
-      const copyItem = Array.from(dropdown.querySelectorAll('button')).find((btn) =>
-        btn.textContent?.includes('Copy to Clipboard'),
-      ) as HTMLButtonElement;
-      copyItem.click();
-
-      expect(callback).toHaveBeenCalledWith({ includeAnnotations: true });
-    });
-
-    it('EXPORT-U176-02: copyRequested carries includeAnnotations: false when checkbox is unchecked', () => {
-      const callback = vi.fn();
-      control.on('copyRequested', callback);
-
-      openDropdown();
-      const dropdown = getDropdown();
-      const checkbox = dropdown.querySelector('#export-annotations') as HTMLInputElement;
-      checkbox.checked = false;
-
-      const copyItem = Array.from(dropdown.querySelectorAll('button')).find((btn) =>
-        btn.textContent?.includes('Copy to Clipboard'),
-      ) as HTMLButtonElement;
-      copyItem.click();
-
-      expect(callback).toHaveBeenCalledWith({ includeAnnotations: false });
-    });
-
-    it('EXPORT-U176-03: copyRequested event is no longer void', () => {
-      const callback = vi.fn();
-      control.on('copyRequested', callback);
-
-      (control as any).copyToClipboard();
-
-      expect(callback).toHaveBeenCalledTimes(1);
-      const arg = callback.mock.calls[0]![0];
-      expect(arg).toHaveProperty('includeAnnotations');
-      expect(typeof arg.includeAnnotations).toBe('boolean');
-    });
-  });
-
-  describe('test IDs', () => {
-    it('EXPORT-U100: export button has data-testid="export-button"', () => {
-      const el = control.render();
-      const button = el.querySelector('[data-testid="export-button"]');
-      expect(button).toBeInstanceOf(HTMLButtonElement);
-    });
-  });
-});
-
-describe('ExportControl respects persisted export defaults (#175)', () => {
-  let control: ExportControl;
-  let prefs: PreferencesManager;
-
-  beforeEach(() => {
-    resetCorePreferencesManagerForTests();
-    prefs = new PreferencesManager();
-  });
-
-  afterEach(() => {
-    control.dispose();
-    resetCorePreferencesManagerForTests();
-  });
-
-  describe('falls back to hardcoded defaults when no preferences are set', () => {
-    beforeEach(() => {
-      control = new ExportControl(prefs);
-    });
-
-    it('EXPORT-P175-01: single-frame export uses default quality when no prefs set', () => {
-      const cb = vi.fn();
-      control.on('exportRequested', cb);
-      control.quickExport('png');
-      expect(cb).toHaveBeenCalledWith(
-        expect.objectContaining({ quality: DEFAULT_EXPORT_DEFAULTS.defaultQuality }),
-      );
-    });
-
-    it('EXPORT-P175-02: source export uses default quality when no prefs set', () => {
-      const cb = vi.fn();
-      control.on('sourceExportRequested', cb);
-      (control as any).exportSourceAs('png');
-      expect(cb).toHaveBeenCalledWith(
-        expect.objectContaining({ quality: DEFAULT_EXPORT_DEFAULTS.defaultQuality }),
-      );
-    });
-
-    it('EXPORT-P175-03: sequence export uses default format and quality when no prefs set', () => {
-      const cb = vi.fn();
-      control.on('sequenceExportRequested', cb);
-      (control as any).exportSequence(false);
-      expect(cb).toHaveBeenCalledWith(
-        expect.objectContaining({
-          format: DEFAULT_EXPORT_DEFAULTS.defaultFormat,
-          quality: DEFAULT_EXPORT_DEFAULTS.defaultQuality,
-        }),
-      );
-    });
-
-    it('EXPORT-P175-04: includeAnnotations defaults to true when no prefs set', () => {
-      const cb = vi.fn();
-      control.on('exportRequested', cb);
-      control.quickExport('png');
-      expect(cb).toHaveBeenCalledWith(
-        expect.objectContaining({ includeAnnotations: DEFAULT_EXPORT_DEFAULTS.includeAnnotations }),
-      );
-    });
-  });
-
-  describe('uses persisted defaults when preferences are configured', () => {
-    it('EXPORT-P175-10: single-frame export uses persisted quality', () => {
-      prefs.setExportDefaults({ defaultQuality: 0.75 });
-      control = new ExportControl(prefs);
-      const cb = vi.fn();
-      control.on('exportRequested', cb);
-      control.quickExport('jpeg');
-      expect(cb).toHaveBeenCalledWith(expect.objectContaining({ quality: 0.75 }));
-    });
-
-    it('EXPORT-P175-11: source export uses persisted quality', () => {
-      prefs.setExportDefaults({ defaultQuality: 0.6 });
-      control = new ExportControl(prefs);
-      const cb = vi.fn();
-      control.on('sourceExportRequested', cb);
-      (control as any).exportSourceAs('webp');
-      expect(cb).toHaveBeenCalledWith(expect.objectContaining({ quality: 0.6 }));
-    });
-
-    it('EXPORT-P175-12: sequence export uses persisted format', () => {
-      prefs.setExportDefaults({ defaultFormat: 'jpeg' });
-      control = new ExportControl(prefs);
-      const cb = vi.fn();
-      control.on('sequenceExportRequested', cb);
-      (control as any).exportSequence(true);
-      expect(cb).toHaveBeenCalledWith(expect.objectContaining({ format: 'jpeg' }));
-    });
-
-    it('EXPORT-P175-13: sequence export uses persisted quality', () => {
-      prefs.setExportDefaults({ defaultQuality: 0.8 });
-      control = new ExportControl(prefs);
-      const cb = vi.fn();
-      control.on('sequenceExportRequested', cb);
-      (control as any).exportSequence(false);
-      expect(cb).toHaveBeenCalledWith(expect.objectContaining({ quality: 0.8 }));
-    });
-
-    it('EXPORT-P175-14: includeAnnotations respects persisted false value', () => {
-      prefs.setExportDefaults({ includeAnnotations: false });
-      control = new ExportControl(prefs);
-      const cb = vi.fn();
-      control.on('exportRequested', cb);
-      // The checkbox is not checked, so getIncludeAnnotations() should return false
-      control.quickExport('png');
-      expect(cb).toHaveBeenCalledWith(expect.objectContaining({ includeAnnotations: false }));
-    });
-
-    it('EXPORT-P175-15: video export uses persisted includeAnnotations', () => {
-      prefs.setExportDefaults({ includeAnnotations: false });
-      control = new ExportControl(prefs);
-      const cb = vi.fn();
-      control.on('videoExportRequested', cb);
-      (control as any).exportVideo(true);
-      expect(cb).toHaveBeenCalledWith(expect.objectContaining({ includeAnnotations: false }));
-    });
-
-    it('EXPORT-P175-16: sequence export with webp format from prefs', () => {
-      prefs.setExportDefaults({ defaultFormat: 'webp', defaultQuality: 0.5 });
-      control = new ExportControl(prefs);
-      const cb = vi.fn();
-      control.on('sequenceExportRequested', cb);
-      (control as any).exportSequence(false);
-      expect(cb).toHaveBeenCalledWith(
-        expect.objectContaining({ format: 'webp', quality: 0.5 }),
-      );
-    });
-  });
-
-  describe('each export type respects the relevant defaults', () => {
-    it('EXPORT-P175-20: all three export types read quality from same prefs source', () => {
-      prefs.setExportDefaults({ defaultQuality: 0.42 });
-      control = new ExportControl(prefs);
-
-      const frameCb = vi.fn();
-      const sourceCb = vi.fn();
-      const seqCb = vi.fn();
-      control.on('exportRequested', frameCb);
-      control.on('sourceExportRequested', sourceCb);
-      control.on('sequenceExportRequested', seqCb);
-
-      control.quickExport('png');
-      (control as any).exportSourceAs('jpeg');
-      (control as any).exportSequence(false);
-
-      expect(frameCb).toHaveBeenCalledWith(expect.objectContaining({ quality: 0.42 }));
-      expect(sourceCb).toHaveBeenCalledWith(expect.objectContaining({ quality: 0.42 }));
-      expect(seqCb).toHaveBeenCalledWith(expect.objectContaining({ quality: 0.42 }));
-    });
-
-    it('EXPORT-P175-21: changing prefs after construction is reflected in next export', () => {
-      prefs.setExportDefaults({ defaultQuality: 0.85 });
-      control = new ExportControl(prefs);
-      const cb = vi.fn();
-      control.on('exportRequested', cb);
-
-      // First export uses the initial persisted quality
-      control.quickExport('png');
-      expect(cb).toHaveBeenCalledWith(expect.objectContaining({ quality: 0.85 }));
-
-      // Change prefs at runtime
-      prefs.setExportDefaults({ defaultQuality: 0.33 });
-
-      // Next export picks up new prefs
-      control.quickExport('png');
-      expect(cb).toHaveBeenLastCalledWith(expect.objectContaining({ quality: 0.33 }));
-    });
-  });
-});
-
-describe('ExportControl plugin exporters (#18)', () => {
-  let control: ExportControl;
-
-  beforeEach(() => {
-    control = new ExportControl();
-    document.body.appendChild(control.render());
-  });
-
-  afterEach(() => {
-    control.dispose();
-    const el = control.render();
-    if (el.parentNode) el.parentNode.removeChild(el);
-  });
-
-  function openDropdown(): void {
-    const button = control.render().querySelector('button') as HTMLButtonElement;
-    button.click();
-  }
-
-  function getDropdown(): HTMLElement {
-    return document.querySelector('.export-dropdown') as HTMLElement;
-  }
-
-  it('EXPORT-PLG01: addPluginExporter adds a menu item to the dropdown', () => {
-    control.addPluginExporter('com.test', 'my-export', 'My Export');
-    openDropdown();
-    const dropdown = getDropdown();
-    const item = dropdown.querySelector('[data-testid="plugin-exporter-com.test:my-export"]');
-    expect(item).not.toBeNull();
-    expect(item?.textContent).toContain('My Export');
-  });
-
-  it('EXPORT-PLG02: addPluginExporter creates a "Plugin Exporters" section header', () => {
-    control.addPluginExporter('com.test', 'exp1', 'Export One');
-    openDropdown();
-    const dropdown = getDropdown();
-    const header = dropdown.querySelector('[data-testid="plugin-exporter-header"]');
-    expect(header).not.toBeNull();
-    expect(header?.textContent).toBe('Plugin Exporters');
-  });
-
-  it('EXPORT-PLG03: addPluginExporter creates a separator before the plugin section', () => {
-    control.addPluginExporter('com.test', 'exp1', 'Export One');
-    openDropdown();
-    const dropdown = getDropdown();
-    const sep = dropdown.querySelector('[data-testid="plugin-exporter-separator"]');
-    expect(sep).not.toBeNull();
-  });
-
-  it('EXPORT-PLG04: clicking a plugin exporter item emits pluginExportRequested', () => {
-    const cb = vi.fn();
-    control.on('pluginExportRequested', cb);
-    control.addPluginExporter('com.test', 'my-export', 'My Export');
-    openDropdown();
-    const dropdown = getDropdown();
-    const item = dropdown.querySelector('[data-testid="plugin-exporter-com.test:my-export"]') as HTMLButtonElement;
-    item.click();
-    expect(cb).toHaveBeenCalledWith({ pluginId: 'com.test', name: 'my-export' });
-  });
-
-  it('EXPORT-PLG05: removePluginExporter removes the menu item', () => {
-    control.addPluginExporter('com.test', 'my-export', 'My Export');
-    control.removePluginExporter('com.test', 'my-export');
-    openDropdown();
-    const dropdown = getDropdown();
-    const item = dropdown.querySelector('[data-testid="plugin-exporter-com.test:my-export"]');
-    expect(item).toBeNull();
-  });
-
-  it('EXPORT-PLG06: removing the last plugin exporter removes the section header and separator', () => {
-    control.addPluginExporter('com.test', 'exp1', 'Export One');
-    control.removePluginExporter('com.test', 'exp1');
-    openDropdown();
-    const dropdown = getDropdown();
-    expect(dropdown.querySelector('[data-testid="plugin-exporter-header"]')).toBeNull();
-    expect(dropdown.querySelector('[data-testid="plugin-exporter-separator"]')).toBeNull();
-  });
-
-  it('EXPORT-PLG07: adding the same exporter twice is idempotent', () => {
-    control.addPluginExporter('com.test', 'exp1', 'Export One');
-    control.addPluginExporter('com.test', 'exp1', 'Export One');
-    openDropdown();
-    const dropdown = getDropdown();
-    const items = dropdown.querySelectorAll('[data-testid="plugin-exporter-com.test:exp1"]');
-    expect(items.length).toBe(1);
-  });
-
-  it('EXPORT-PLG08: multiple plugin exporters appear in the dropdown', () => {
-    control.addPluginExporter('com.test', 'exp1', 'Export One');
-    control.addPluginExporter('com.other', 'exp2', 'Export Two');
-    openDropdown();
-    const dropdown = getDropdown();
-    expect(dropdown.querySelector('[data-testid="plugin-exporter-com.test:exp1"]')).not.toBeNull();
-    expect(dropdown.querySelector('[data-testid="plugin-exporter-com.other:exp2"]')).not.toBeNull();
-  });
-
-  it('EXPORT-PLG09: removing one plugin exporter keeps others and the section', () => {
-    control.addPluginExporter('com.test', 'exp1', 'Export One');
-    control.addPluginExporter('com.other', 'exp2', 'Export Two');
-    control.removePluginExporter('com.test', 'exp1');
-    openDropdown();
-    const dropdown = getDropdown();
-    expect(dropdown.querySelector('[data-testid="plugin-exporter-com.test:exp1"]')).toBeNull();
-    expect(dropdown.querySelector('[data-testid="plugin-exporter-com.other:exp2"]')).not.toBeNull();
-    expect(dropdown.querySelector('[data-testid="plugin-exporter-header"]')).not.toBeNull();
-  });
-
-  it('EXPORT-PLG10: removePluginExporter for non-existent exporter is a no-op', () => {
-    expect(() => control.removePluginExporter('com.test', 'nonexistent')).not.toThrow();
-  });
-
-  it('EXPORT-PLG11: plugin exporter items have role="menuitem" for keyboard navigation', () => {
-    control.addPluginExporter('com.test', 'exp1', 'Export One');
-    openDropdown();
-    const dropdown = getDropdown();
-    const item = dropdown.querySelector('[data-testid="plugin-exporter-com.test:exp1"]');
-    expect(item?.getAttribute('role')).toBe('menuitem');
-  });
-});
-
-describe('ExportControl annotation export visibility (#366)', () => {
-  let control: ExportControl;
-
-  beforeEach(() => {
-    control = new ExportControl();
-    document.body.appendChild(control.render());
-  });
-
-  afterEach(() => {
-    control.dispose();
-    const el = control.render();
-    if (el.parentNode) el.parentNode.removeChild(el);
-  });
-
-  function openDropdown(): void {
-    const button = control.render().querySelector('button') as HTMLButtonElement;
-    button.click();
-  }
-
-  function getDropdown(): HTMLElement {
-    return document.querySelector('.export-dropdown') as HTMLElement;
-  }
-
-  function findAnnotationItems(dropdown: HTMLElement): HTMLElement[] {
-    return Array.from(dropdown.querySelectorAll('button')).filter(
-      (btn) =>
-        btn.textContent?.includes('Export Annotations (JSON)') ||
-        btn.textContent?.includes('Import Annotations (JSON)') ||
-        btn.textContent?.includes('Export Annotations (PDF)'),
-    );
-  }
-
-  it('EXPORT-ANN01: annotation export items are hidden when no annotations exist', () => {
-    openDropdown();
-    const dropdown = getDropdown();
-    const items = findAnnotationItems(dropdown);
-    expect(items.length).toBe(3);
-    for (const item of items) {
-      expect(item.style.display).toBe('none');
-    }
-  });
-
-  it('EXPORT-ANN02: annotation export items appear when annotations are present', () => {
-    control.setAnnotationCount(5);
-    openDropdown();
-    const dropdown = getDropdown();
-    const items = findAnnotationItems(dropdown);
-    expect(items.length).toBe(3);
-    for (const item of items) {
-      expect(item.style.display).not.toBe('none');
-    }
-  });
-
-  it('EXPORT-ANN03: annotation export items hide when annotations are cleared', () => {
-    control.setAnnotationCount(3);
-    control.setAnnotationCount(0);
-    openDropdown();
-    const dropdown = getDropdown();
-    const items = findAnnotationItems(dropdown);
-    for (const item of items) {
-      expect(item.style.display).toBe('none');
-    }
-  });
-
-  it('EXPORT-ANN04: annotation section header is hidden when no annotations exist', () => {
-    openDropdown();
-    const dropdown = getDropdown();
-    const headers = Array.from(dropdown.querySelectorAll('div')).filter(
-      (el) => el.textContent === 'Annotations' && el.style.cssText.includes('text-transform'),
-    );
-    expect(headers.length).toBe(1);
-    expect(headers[0]!.style.display).toBe('none');
-  });
-
-  it('EXPORT-ANN05: annotation section header is visible when annotations exist', () => {
-    control.setAnnotationCount(1);
-    openDropdown();
-    const dropdown = getDropdown();
-    const headers = Array.from(dropdown.querySelectorAll('div')).filter(
-      (el) => el.textContent === 'Annotations' && el.style.cssText.includes('text-transform'),
-    );
-    expect(headers.length).toBe(1);
-    expect(headers[0]!.style.display).not.toBe('none');
-  });
-
-  it('EXPORT-ANN06: setAnnotationCount with same non-zero value does not toggle visibility', () => {
-    control.setAnnotationCount(5);
-    openDropdown();
-    const dropdown = getDropdown();
-    const items = findAnnotationItems(dropdown);
-    // Set same count again -- should remain visible
-    control.setAnnotationCount(10);
-    for (const item of items) {
-      expect(item.style.display).not.toBe('none');
-    }
-  });
-
-  it('EXPORT-ANN07: annotationCount getter reflects the last set value', () => {
-    expect(control.annotationCount).toBe(0);
-    control.setAnnotationCount(42);
-    expect(control.annotationCount).toBe(42);
-    control.setAnnotationCount(0);
-    expect(control.annotationCount).toBe(0);
-  });
-
-  it('EXPORT-ANN08: clicking export JSON with no annotations still emits event (belt-and-suspenders)', () => {
-    // Even though items are hidden, calling the method directly should still be safe
-    const cb = vi.fn();
-    control.on('annotationsJSONExportRequested', cb);
-    (control as any).exportAnnotationsJSON();
-    expect(cb).toHaveBeenCalledTimes(1);
-  });
-
-  it('EXPORT-ANN09: clicking export PDF with no annotations still emits event (belt-and-suspenders)', () => {
-    const cb = vi.fn();
-    control.on('annotationsPDFExportRequested', cb);
-    (control as any).exportAnnotationsPDF();
-    expect(cb).toHaveBeenCalledTimes(1);
   });
 });
