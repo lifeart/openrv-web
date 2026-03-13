@@ -521,6 +521,30 @@ describe('MuPropertyBridge', () => {
       // Exact match (RVColor) should win
       expect(bridge.getFloatProperty('#RVColor.color.gamma')).toEqual([1.0]);
     });
+
+    // ---- Issue #256: insertion-order independence regression ----
+
+    it('resolves #RVLinearize deterministically when b_ is inserted before a_ (Issue #256)', () => {
+      // Insert b_ first, then a_ — reverse alphabetical insertion order
+      bridge.newProperty('b_RVLinearize.component.prop', MuPropertyType.Float, 1);
+      bridge.setFloatProperty('b_RVLinearize.component.prop', [2.0]);
+      bridge.newProperty('a_RVLinearize.component.prop', MuPropertyType.Float, 1);
+      bridge.setFloatProperty('a_RVLinearize.component.prop', [1.0]);
+
+      // a_RVLinearize is alphabetically first — must always win regardless of insertion order
+      expect(bridge.getFloatProperty('#RVLinearize.component.prop')).toEqual([1.0]);
+    });
+
+    it('resolves #RVLinearize deterministically when a_ is inserted before b_ (Issue #256)', () => {
+      // Insert a_ first, then b_ — alphabetical insertion order
+      bridge.newProperty('a_RVLinearize.component.prop', MuPropertyType.Float, 1);
+      bridge.setFloatProperty('a_RVLinearize.component.prop', [1.0]);
+      bridge.newProperty('b_RVLinearize.component.prop', MuPropertyType.Float, 1);
+      bridge.setFloatProperty('b_RVLinearize.component.prop', [2.0]);
+
+      // a_RVLinearize is alphabetically first — same result as reversed insertion order
+      expect(bridge.getFloatProperty('#RVLinearize.component.prop')).toEqual([1.0]);
+    });
   });
 
   // ---- Quiet mode (no notifications) ----
