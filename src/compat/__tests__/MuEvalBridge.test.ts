@@ -386,6 +386,35 @@ describe('MuEvalBridge', () => {
       expect(result).toHaveLength(2);
     });
 
+    it('returns only depth-1 match when another branch has a match at depth 3', () => {
+      // Branch1: shallow(X) -> end(Z)                        (depth 1)
+      // Branch2: deep(X) -> m2(Y) -> m1(Y) -> end(Z)        (depth 3)
+      // Only shallow should be returned
+      const g = new Graph();
+      const shallow = new TestNode('TypeX', 'shallow');
+      const deep = new TestNode('TypeX', 'deep');
+      const m1 = new TestNode('TypeY', 'm1');
+      const m2 = new TestNode('TypeY', 'm2');
+      const end = new TestNode('TypeZ', 'end');
+
+      g.addNode(shallow);
+      g.addNode(deep);
+      g.addNode(m1);
+      g.addNode(m2);
+      g.addNode(end);
+
+      g.connect(shallow, end);
+      g.connect(m1, end);
+      g.connect(m2, m1);
+      g.connect(deep, m2);
+
+      const nb = new MuNodeBridge(g);
+      const b = new MuEvalBridge(g, nb);
+
+      const result = b.closestNodesOfType('end', 'TypeX');
+      expect(result).toEqual(['shallow']);
+    });
+
     it('returns empty array when no upstream nodes match the type', () => {
       // Chain with no TypeX: a(Y) -> b(Z) -> end(W)
       const g = new Graph();
