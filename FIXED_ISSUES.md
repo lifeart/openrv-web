@@ -2125,6 +2125,27 @@ Called from `fromJSON()` inside the existing `if (mediaIndexMap.size > 0)` block
 - `src/formats/avif.ts`
 - `src/formats/avif.test.ts`
 
+## Issue #538: Switching representations while playing pauses playback and never resumes it
+
+**Root cause**: `SessionMedia.switchRepresentation()` paused playback before delegating to the representation manager, but never resumed it after a successful switch. No production subscriber on representation events restarted playback either.
+
+**Fix**:
+- Save `wasPlaying` state before pausing in `switchRepresentation()`
+- After a successful switch (`switchRepresentation` returns `true`), call `this._host!.play()` to resume
+- Added `play(): void` to `SessionMediaHost` interface and wired it in `Session.ts`
+- If the switch fails (returns `false`) or throws, playback stays paused
+
+**Tests added**: 4 regression tests in `SessionMedia.test.ts` (SM-048 through SM-051):
+- SM-048: Resumes playback after successful switch when was playing
+- SM-049: Does not resume playback after failed switch
+- SM-050: Does not resume playback when was not playing before switch
+- SM-051: Does not resume playback when switch throws an error
+
+**Files changed**:
+- `src/core/session/SessionMedia.ts`
+- `src/core/session/Session.ts`
+- `src/core/session/SessionMedia.test.ts`
+
 ## Issue #522: ShotGrid media loading only recognizes `mp4|mov|webm|mkv` as video
 ## Issue #523: DCC media loading uses a narrower hardcoded video-extension list than the rest of the app
 

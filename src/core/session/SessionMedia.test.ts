@@ -36,6 +36,7 @@ function createMockHost(): SessionMediaHost {
     setOutPoint: vi.fn(),
     setCurrentFrame: vi.fn(),
     pause: vi.fn(),
+    play: vi.fn(),
     getIsPlaying: vi.fn().mockReturnValue(false),
     getMuted: vi.fn().mockReturnValue(false),
     getEffectiveVolume: vi.fn().mockReturnValue(0.7),
@@ -1100,6 +1101,54 @@ describe('SessionMedia', () => {
       media.emit('sourceLoadFailed', { name: 'broken.exr' });
 
       expect(listener).toHaveBeenCalledWith({ name: 'broken.exr' });
+    });
+  });
+
+  describe('switchRepresentation playback resume (#538)', () => {
+    it('SM-048: resumes playback after successful switch when was playing', async () => {
+      (host.getIsPlaying as ReturnType<typeof vi.fn>).mockReturnValue(true);
+      const switchMock = vi.fn().mockResolvedValue(true);
+      vi.spyOn(media.representationManager, 'switchRepresentation').mockImplementation(switchMock);
+
+      const result = await media.switchRepresentation(0, 'rep-1');
+
+      expect(result).toBe(true);
+      expect(host.pause).toHaveBeenCalled();
+      expect(host.play).toHaveBeenCalled();
+    });
+
+    it('SM-049: does not resume playback after failed switch', async () => {
+      (host.getIsPlaying as ReturnType<typeof vi.fn>).mockReturnValue(true);
+      vi.spyOn(media.representationManager, 'switchRepresentation').mockResolvedValue(false);
+
+      const result = await media.switchRepresentation(0, 'rep-1');
+
+      expect(result).toBe(false);
+      expect(host.pause).toHaveBeenCalled();
+      expect(host.play).not.toHaveBeenCalled();
+    });
+
+    it('SM-050: does not resume playback when was not playing', async () => {
+      (host.getIsPlaying as ReturnType<typeof vi.fn>).mockReturnValue(false);
+      vi.spyOn(media.representationManager, 'switchRepresentation').mockResolvedValue(true);
+
+      const result = await media.switchRepresentation(0, 'rep-1');
+
+      expect(result).toBe(true);
+      expect(host.pause).not.toHaveBeenCalled();
+      expect(host.play).not.toHaveBeenCalled();
+    });
+
+    it('SM-051: does not resume playback when switch throws', async () => {
+      (host.getIsPlaying as ReturnType<typeof vi.fn>).mockReturnValue(true);
+      vi.spyOn(media.representationManager, 'switchRepresentation').mockRejectedValue(
+        new Error('load failed'),
+      );
+
+      await expect(media.switchRepresentation(0, 'rep-1')).rejects.toThrow('load failed');
+
+      expect(host.pause).toHaveBeenCalled();
+      expect(host.play).not.toHaveBeenCalled();
     });
   });
 });

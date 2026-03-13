@@ -1770,18 +1770,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - After removing the last active representation, the source can still hold legacy pointers to a node that has already been disposed.
   - That leaves the app in a stale half-switched state instead of clearly falling back or clearly clearing the active media variant.
 
-### 538. Switching representations while playing pauses playback and never resumes it
-
-- Severity: Medium
-- Area: Media representations / playback interaction
-- Evidence:
-  - `SessionMedia.switchRepresentation(...)` unconditionally pauses the host when playback is active before delegating to the representation manager in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L1153) through [src/core/session/SessionMedia.ts#L1164).
-  - The rest of the representation-switch path only changes the active representation and emits representation events; there is no matching resume call in [src/core/session/MediaRepresentationManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaRepresentationManager.ts#L133) through [src/core/session/MediaRepresentationManager.ts#L229).
-  - A repo search finds no production subscriber on `representationChanged` or `fallbackActivated` that restarts playback after a successful switch.
-- Impact:
-  - A user who changes representation during playback can end up unexpectedly paused even when the switch succeeds.
-  - That makes representation changes disrupt review flow instead of behaving like a transparent quality/source swap.
-
 ### 539. Video representations are not promoted to full video sources, so they lose the `HTMLVideoElement` and audio wiring that normal video playback paths still rely on
 
 - Severity: High

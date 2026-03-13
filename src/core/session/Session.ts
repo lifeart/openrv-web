@@ -382,6 +382,7 @@ export class Session extends EventEmitter<SessionEvents> {
         this._currentFrame = v;
       },
       pause: () => this.pause(),
+      play: () => this.play(),
       getIsPlaying: () => this._isPlaying,
       getMuted: () => this._playback._volumeManager.muted,
       getEffectiveVolume: () => this._playback._volumeManager.getEffectiveVolume(),

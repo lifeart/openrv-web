@@ -70,6 +70,8 @@ export interface SessionMediaHost {
   setCurrentFrame(value: number): void;
   /** Pause playback (when adding source) */
   pause(): void;
+  /** Resume playback */
+  play(): void;
   /** Check if playing */
   getIsPlaying(): boolean;
   /** Get muted state for video element init */
@@ -1155,12 +1157,22 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
     repId: string,
     options?: SwitchRepresentationOptions,
   ): Promise<boolean> {
+    // Save playing state before pausing so we can resume after switch
+    const wasPlaying = this._host?.getIsPlaying() ?? false;
+
     // Pause playback before switching to avoid stale state
-    if (this._host?.getIsPlaying()) {
-      this._host.pause();
+    if (wasPlaying) {
+      this._host!.pause();
     }
 
-    return this._representationManager.switchRepresentation(sourceIndex, repId, options);
+    const success = await this._representationManager.switchRepresentation(sourceIndex, repId, options);
+
+    // Resume playback if it was playing before the switch and the switch succeeded
+    if (wasPlaying && success) {
+      this._host!.play();
+    }
+
+    return success;
   }
 
   /**
