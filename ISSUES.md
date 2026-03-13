@@ -570,18 +570,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Users can trust auto-checkpoints to protect routine destructive actions that the shipped app never checkpoints.
   - That makes the documented safety net much narrower than it sounds, especially during active review/editing work where people are not explicitly loading projects.
 
-### 378. Snapshot descriptions are searchable and displayable, but the shipped UI never lets users author or edit them
-
-- Severity: Low
-- Area: Snapshot workflow / UI completeness
-- Evidence:
-  - The Snapshot panel supports searching by description and renders description text on cards in [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L130) through [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L145) and [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L385) through [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L398).
-  - The shipped actions only expose create, import, restore, rename, export, delete, and clear-all in [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L197) through [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L260) and [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L540) through [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L569).
-  - The underlying manager does have an `updateDescription(...)` API in [src/core/session/SnapshotManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SnapshotManager.ts#L405) through [src/core/session/SnapshotManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SnapshotManager.ts#L420), but a production-code search finds no live caller for it.
-- Impact:
-  - In normal production use, snapshot descriptions are effectively import-only metadata even though the panel treats them like a first-class searchable field.
-  - That makes the description search/filter path much less useful for real in-app snapshot curation than the UI suggests.
-
 ### 382. The session export docs say RV/GTO sessions are import-only, but the shipped Export menu still saves `.rv` and `.gto`
 
 - Severity: Low

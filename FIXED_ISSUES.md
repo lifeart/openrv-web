@@ -1868,3 +1868,20 @@ Called from `fromJSON()` inside the existing `if (mediaIndexMap.size > 0)` block
 - `src/AppPlaybackWiring.test.ts`
 - `src/AppPersistenceManager.ts`
 - `src/AppPersistenceManager.test.ts`
+
+## Issue #378: Snapshot descriptions are searchable and displayable, but the shipped UI never lets users author or edit them
+
+**Root cause**: The Snapshot panel supports searching by description and renders description text on cards, but no "edit description" action existed. `SnapshotManager.updateDescription()` had no live caller.
+
+**Fix**:
+- Added "Edit Description" button (note icon) to each snapshot card's action row
+- Shows `showPrompt` dialog pre-populated with current description
+- Emits `descriptionUpdated` event wired to `snapshotManager.updateDescription()`
+
+**Tests added**: 4 tests in `SnapshotPanel.test.ts` (SNAP-044 through SNAP-047) covering edit prompt, cancellation, empty description, and unchanged description.
+
+**Files changed**:
+- `src/ui/components/SnapshotPanel.ts`
+- `src/ui/components/SnapshotPanel.test.ts`
+- `src/AppPlaybackWiring.ts`
+- `src/AppPlaybackWiring.test.ts`
