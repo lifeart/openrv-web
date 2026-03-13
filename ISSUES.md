@@ -4,18 +4,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 
 ## Confirmed Issues
 
-### 251. Mu compat `metaEvaluateClosestByType()` chooses the first depth-first match, not the actual closest match in branched graphs
-
-- Severity: Medium
-- Area: Mu compatibility / graph evaluation
-- Evidence:
-  - `metaEvaluateClosestByType(...)` delegates to `_traverseEvalChainUntilType(...)`, which performs a depth-first recursive walk over `node.inputs` and returns as soon as any branch finds the target type in [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L139) through [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L151) and [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L471) through [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L505).
-  - In a branched graph, that means the returned path depends on input iteration order, not on which matching node is actually topologically closest to the start node.
-  - The existing tests exercise only a single linear chain, so they confirm “first encountered in DFS” behavior rather than true closest-match behavior in [src/compat/__tests__/MuEvalBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuEvalBridge.test.ts#L135) through [src/compat/__tests__/MuEvalBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuEvalBridge.test.ts#L159).
-- Impact:
-  - Mu-compatible scripts can get a path to the wrong matching node when multiple upstream branches contain the requested type.
-  - That makes “closest by type” unstable across graph shapes and input ordering, which is a logic bug rather than just an approximation.
-
 ### 257. Mu compat playback-health commands are marked supported but only expose hardcoded or never-updated local state
 
 - Severity: Medium
@@ -42,32 +30,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Mu-compatible scripts can receive plausible source-representation node names and then fail when they try to use them as real node identities.
   - That is especially misleading because the API shape implies graph-backed media-rep wiring, but the returned node IDs are only local placeholders.
 
-### 259. Mu compat event-table BBox `tag` is accepted and stored but never participates in dispatch
-
-- Severity: Medium
-- Area: Mu compatibility / event dispatch
-- Evidence:
-  - `setEventTableBBox(tableName, tag, x, y, w, h)` stores the supplied `tag` alongside the bounding box in [src/compat/ModeManager.ts](/Users/lifeart/Repos/openrv-web/src/compat/ModeManager.ts#L142) through [src/compat/ModeManager.ts](/Users/lifeart/Repos/openrv-web/src/compat/ModeManager.ts#L150).
-  - `dispatchEvent(...)` only checks the numeric rectangle and never reads or compares `bbox.tag` in [src/compat/ModeManager.ts](/Users/lifeart/Repos/openrv-web/src/compat/ModeManager.ts#L204) through [src/compat/ModeManager.ts](/Users/lifeart/Repos/openrv-web/src/compat/ModeManager.ts#L210).
-  - `MuEventBridge.setEventTableBBox(...)` exposes that same `tag` parameter directly in [src/compat/MuEventBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEventBridge.ts#L158) through [src/compat/MuEventBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEventBridge.ts#L166).
-  - The tests only verify inside/outside rectangle filtering and never exercise tag semantics in [src/compat/__tests__/MuEventBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuEventBridge.test.ts#L273) through [src/compat/__tests__/MuEventBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuEventBridge.test.ts#L310).
-- Impact:
-  - Mu-compatible code can pass a tag expecting tag-scoped hit testing and get no behavioral difference at all.
-  - That makes the API misleading for any integration that relies on tagged regions rather than a single bare rectangle per event table.
-
-### 261. Mu compat fullscreen helpers do not track the Safari/WebKit fullscreen path that the main app supports
-
-- Severity: Medium
-- Area: Mu compatibility / fullscreen control
-- Evidence:
-  - `MuCommands.fullScreenMode(...)` only calls the standard `requestFullscreen` / `exitFullscreen` methods and does not catch rejected fullscreen promises in [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L391) through [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L399).
-  - `MuCommands.isFullScreen()` checks only `document.fullscreenElement` in [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L401) through [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L405).
-  - `MuUtilsBridge.fullScreenMode(...)` at least catches promise rejection, but it also uses only the standard API and `MuUtilsBridge.isFullScreen()` likewise checks only `document.fullscreenElement` in [src/compat/MuUtilsBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuUtilsBridge.ts#L312) through [src/compat/MuUtilsBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuUtilsBridge.ts#L329).
-  - The shipped app’s real fullscreen manager explicitly supports the WebKit-prefixed path and state via `webkitRequestFullscreen`, `webkitExitFullscreen`, and `webkitFullscreenElement` in [src/utils/ui/FullscreenManager.ts](/Users/lifeart/Repos/openrv-web/src/utils/ui/FullscreenManager.ts#L62) through [src/utils/ui/FullscreenManager.ts](/Users/lifeart/Repos/openrv-web/src/utils/ui/FullscreenManager.ts#L110).
-- Impact:
-  - Mu-compatible scripts can fail to enter fullscreen, or incorrectly think fullscreen is off, in Safari-like environments where the main app itself still handles fullscreen correctly.
-  - On the `MuCommands` path, denied fullscreen can also surface as an unhandled promise rejection instead of a contained warning.
-
 ### 262. Mu compat active media-representation selection never changes what `sourceMedia()` or `sourceMediaInfo()` report
 
 - Severity: Medium
@@ -93,54 +55,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Mu-compatible scripts cannot query per-tag image geometry even though the command surface suggests they can.
   - This is another silent semantic mismatch because callers can vary the tag and receive the same answer every time.
 
-### 265. Mu compat `eventToImageSpace()` ignores its `useLocalCoords` flag
-
-- Severity: Medium
-- Area: Mu compatibility / coordinate transforms
-- Evidence:
-  - The method signature includes `_useLocalCoords = false` and the documentation describes it as controlling whether local coordinates are used in [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L313) through [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L319).
-  - The implementation never branches on `_useLocalCoords`; it follows the same code path regardless of the flag value in [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L320) through [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L333).
-  - There is no compat test covering differing outputs for `useLocalCoords = true` versus `false`.
-- Impact:
-  - Mu-compatible tools that expect local-coordinate conversion can pass `true` and still get the global/default coordinate behavior.
-  - That can break overlay or node-local interaction logic because the flag is accepted but semantically inert.
-
-### 270. Mu compat `nodeConnections(..., traverseGroups)` ignores the `traverseGroups` flag
-
-- Severity: Medium
-- Area: Mu compatibility / node graph queries
-- Evidence:
-  - The API signature exposes `nodeConnections(name, traverseGroups)` and documents the second parameter as controlling whether group nodes are traversed in [src/compat/MuNodeBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuNodeBridge.ts#L152) through [src/compat/MuNodeBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuNodeBridge.ts#L159).
-  - The implementation names that parameter `_traverseGroups` and never branches on it in [src/compat/MuNodeBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuNodeBridge.ts#L160) through [src/compat/MuNodeBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuNodeBridge.ts#L165).
-  - So the method always returns the direct `node.inputs` and `node.outputs` lists, regardless of the caller’s traversal request.
-  - The existing tests only cover the default direct-connection behavior and do not exercise `traverseGroups = true` in [src/compat/__tests__/MuNodeBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuNodeBridge.test.ts#L134) through [src/compat/__tests__/MuNodeBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuNodeBridge.test.ts#L148).
-- Impact:
-  - Mu-compatible scripts cannot use this API to flatten or traverse through group nodes even though the flag suggests they can.
-  - That creates another silent semantic mismatch, because callers can pass `true` and receive the exact same answer as `false`.
-
-### 271. Mu compat `imagesAtPixel()` ignores its `useStencil` flag
-
-- Severity: Medium
-- Area: Mu compatibility / image-query scripting
-- Evidence:
-  - The API signature exposes `imagesAtPixel(point, viewNodeName, useStencil)` and documents `useStencil` as controlling precise hit testing in [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L226) through [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L234).
-  - The implementation names the parameter `_useStencil` and never branches on it anywhere in [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L235) through [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L266).
-  - There is no compat test covering different behavior for `useStencil = true`.
-- Impact:
-  - Mu-compatible scripts can request stencil-accurate hit testing and still receive the same coarse projected result as the default path.
-  - That is another silent no-op flag in the image-query API surface.
-
-### 272. Mu compat `eventToCameraSpace()` ignores the supplied view-node argument
-
-- Severity: Medium
-- Area: Mu compatibility / coordinate transforms
-- Evidence:
-  - The method signature is `eventToCameraSpace(viewNodeName, eventPoint)` in [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L336) through [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L345).
-  - The implementation names the parameter `_viewNodeName` and computes camera coordinates solely from the global `_viewTransform` in [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L346) through [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L355).
-  - There is no branch that resolves or uses the named view node, and the tests call the method with an empty string rather than validating per-view-node behavior in [src/compat/__tests__/MuEvalBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuEvalBridge.test.ts#L489) through [src/compat/__tests__/MuEvalBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuEvalBridge.test.ts#L518).
-- Impact:
-  - Mu-compatible tools cannot query camera-space coordinates relative to a specific view node even though the method signature suggests they can.
-  - In multi-view or graph-aware contexts, that makes the returned coordinates depend only on whatever global transform was last injected.
 
 ### 301. RV/GTO import diagnostics for skipped nodes and degraded modes are emitted internally but never surfaced to users
 
@@ -514,18 +428,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Users trying to follow documentation for shortcut customization, client-mode enablement, or ShotGrid authentication can look for a settings panel that does not exist in the shipped UI.
   - That turns several otherwise-implemented workflows into trial-and-error discovery problems and makes the docs materially less trustworthy.
 
-### 338. The review workflow tells users to press `F` for fullscreen, but the shipped fullscreen shortcut is `F11`
-
-- Severity: Medium
-- Area: Documentation / keyboard workflow
-- Evidence:
-  - The review workflow says "Press `F` for fullscreen mode" before enabling presentation mode in [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L141) through [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L143).
-  - The actual default fullscreen binding is `F11` in [src/utils/input/KeyBindings.ts](/Users/lifeart/Repos/openrv-web/src/utils/input/KeyBindings.ts#L662) through [src/utils/input/KeyBindings.ts](/Users/lifeart/Repos/openrv-web/src/utils/input/KeyBindings.ts#L665).
-  - The shipped header button tooltip also advertises `Fullscreen (F11)` in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L408) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L415).
-  - Other user-facing docs agree with `F11`, including [docs/getting-started/ui-overview.md](/Users/lifeart/Repos/openrv-web/docs/getting-started/ui-overview.md#L228) and [docs/reference/keyboard-shortcuts.md](/Users/lifeart/Repos/openrv-web/docs/reference/keyboard-shortcuts.md#L36).
-- Impact:
-  - Users following the review workflow can press the wrong key and conclude fullscreen/presentation entry is broken.
-  - That is especially confusing because presentation mode is documented as a two-step fullscreen-first workflow.
 
 ### 339. The session-management guide gives the snapshot panel the history panel's shortcut
 
@@ -848,17 +750,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Users can read the docs and expect the annotation export entries to appear only after creating annotations, but the shipped menu always contains them.
   - That weakens the docs as a guide to real UI state and makes the menu behavior look inconsistent with the documented workflow.
 
-### 367. The FAQ still tells users plain `L` cycles loop mode, but the real shortcut is `Ctrl+L`
-
-- Severity: Low
-- Area: Documentation / playback shortcuts
-- Evidence:
-  - The FAQ says, "Press `L` to cycle between" loop modes in [docs/reference/faq.md](/Users/lifeart/Repos/openrv-web/docs/reference/faq.md#L67) through [docs/reference/faq.md#L69).
-  - The canonical keyboard shortcuts page documents `Ctrl+L` for loop-mode cycling in [docs/reference/keyboard-shortcuts.md](/Users/lifeart/Repos/openrv-web/docs/reference/keyboard-shortcuts.md#L52).
-  - The shipped header tooltip also advertises `Cycle loop mode (Ctrl+L)` in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L325) through [src/ui/components/layout/HeaderBar.ts#L326).
-- Impact:
-  - Users following the FAQ can press plain `L`, change playback speed instead of loop mode, and conclude the app ignored the documented shortcut.
-  - That creates avoidable confusion in a basic playback workflow that already has an overloaded key space.
 
 ### 368. The review docs promise a shot-status badge in the header, but production has no such header status UI
 
@@ -1045,17 +936,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Users can get different rollback safety and different post-load UI truthfulness for the same session file based solely on which affordance they clicked.
   - That makes session import behavior less predictable than it should be and increases the chance of subtle “works one way but not the other” reports.
 
-### 400. Selecting an `.rvedl` together with media files still loads only the EDL and ignores the accompanying media selection
-
-- Severity: Medium
-- Area: EDL import / file-open workflow
-- Evidence:
-  - The header file-picker path checks for `.rvedl` first and returns immediately after loading just that file in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1383) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1416).
-  - The viewer drag-and-drop path uses the same precedence and also returns immediately after EDL load in [src/ui/components/ViewerInputHandler.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInputHandler.ts#L710) through [src/ui/components/ViewerInputHandler.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInputHandler.ts#L739).
-  - Both flows explicitly tell the user to `Load the corresponding media files to resolve them` in the EDL success alert even when those media files were already part of the same selection in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1399) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1405) and [src/ui/components/ViewerInputHandler.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInputHandler.ts#L724) through [src/ui/components/ViewerInputHandler.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInputHandler.ts#L730).
-- Impact:
-  - Users cannot do a one-shot “EDL plus matching source files” import even when they select or drop everything together.
-  - That makes the EDL workflow less useful in the exact relinking scenario where bulk selection would be most helpful.
 
 ### 401. Multi-select session import from `Open media file` only honors the first `.rv` / `.gto` file and silently demotes the rest to sidecars
 
@@ -1080,30 +960,7 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Selecting or dropping an EDL together with the RV/GTO session it belongs to does not give the user both pieces of the workflow; the session file is silently skipped.
   - That makes mixed review-bundle imports less predictable and increases the chance that users think they opened a full session when they only imported cut metadata.
 
-### 406. Restored playlist playhead position is effectively ignored because enablement sync runs before `currentFrame` restore
 
-- Severity: Medium
-- Area: Playlist persistence / restore behavior
-- Evidence:
-  - `SessionSerializer.fromJSON(...)` restores session playback state first and only then calls `playlistManager.setState(migrated.playlist)` in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L566) through [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L574).
-  - Inside `PlaylistManager.setState(...)`, enabling playlist mode happens before `currentFrame` is assigned back from saved state in [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L562) through [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L566).
-  - The production `enabledChanged` handler immediately syncs the runtime to a target global frame derived from the current session source/frame or the first clip, not from the saved playlist `currentFrame`, in [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L764) through [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L793).
-  - After `currentFrame` is finally assigned inside `PlaylistManager.setState(...)`, no follow-up event or resync is triggered.
-- Impact:
-  - A restored project/snapshot/auto-save can bring playlist mode back enabled without reopening at the saved global playlist position.
-  - That makes playlist persistence incomplete in a user-visible way: the clip list comes back, but the review position within it does not reliably resume.
-
-### 408. Restored playlist transitions do not trigger a redraw, so the timeline/panel can open in a stale cut-only state
-
-- Severity: Medium
-- Area: Playlist persistence / UI sync
-- Evidence:
-  - `PlaylistManager.setState(...)` emits `clipsChanged` before it restores transitions through `transitionManager.setState(...)` in [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L547) through [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L573).
-  - `TransitionManager.setState(...)` replaces internal state silently and does not emit `transitionChanged` or `transitionsReset` in [src/core/session/TransitionManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/TransitionManager.ts#L265) through [src/core/session/TransitionManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/TransitionManager.ts#L267).
-  - The visible playlist panel redraws from `clipsChanged` and `transitionChanged` only in [src/ui/components/PlaylistPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PlaylistPanel.ts#L309) and [src/ui/components/PlaylistPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PlaylistPanel.ts#L868) through [src/ui/components/PlaylistPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PlaylistPanel.ts#L871), while the timeline redraws from `clipsChanged`, `enabledChanged`, `transitionChanged`, and `transitionsReset` in [src/ui/components/Timeline.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Timeline.ts#L338) through [src/ui/components/Timeline.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Timeline.ts#L341).
-- Impact:
-  - Loading a project/snapshot with saved transitions can initially show the playlist/timeline as if cuts have no transitions until some later user action forces a redraw.
-  - That makes restored transition state look unreliable even when it exists in memory.
 
 ### 411. Partial project/snapshot restore replays source-indexed review state without remapping it to surviving sources
 
@@ -1117,40 +974,8 @@ This file tracks findings from exploratory review and targeted validation runs.
   - If a restore comes back with missing or skipped media, playlists, notes, version groups, and statuses can end up attached to the wrong surviving source indices.
   - That turns partial recovery into data reassociation, not just data loss: review context can move to the wrong shot without any warning that indices drifted.
 
-### 412. Auto-save, snapshot, and checkpoint labels are derived from the current source name instead of the session name
 
-- Severity: Medium
-- Area: Persistence UX / recovery labeling
-- Evidence:
-  - The auto-save dirty path names saved state with `session.currentSource?.name || 'Untitled'` in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L121) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L133).
-  - Manual retry, quick snapshot creation, and auto-checkpoint creation reuse that same source-name fallback in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L139) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L185) and [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L194) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L208).
-  - Recovery UI then presents those stored names back to the user, for example `A previous session "${mostRecent.name}" was found...` in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L461) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L470).
-- Impact:
-  - Recovery entries are labeled by whichever source happened to be current, not by the actual session title the user sees in the header.
-  - In multi-source or manually renamed sessions, that makes snapshots and crash-recovery prompts materially harder to identify and trust.
 
-### 413. RV/GTO export filenames are derived from the current source, not the session identity being saved
-
-- Severity: Medium
-- Area: RV/GTO export / session naming
-- Evidence:
-  - `saveRvSession(...)` picks `session.currentSource?.name` as the filename base and falls back to literal `session` in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L319) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L330).
-  - That export path ignores `session.metadata.displayName`, even though the app exposes editable session naming in the header and the GTO exporter itself writes `metadata.displayName` into the embedded RV session root name in [src/core/session/SessionGTOExporter.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGTOExporter.ts#L1502) through [src/core/session/SessionGTOExporter.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGTOExporter.ts#L1505).
-- Impact:
-  - A renamed review session can export under a different current-source filename than the session name stored inside the file.
-  - In multi-source sessions, users get export filenames that reflect whichever source happened to be active rather than the session they think they are saving.
-
-### 414. RV/GTO companion-file resolution silently collapses duplicate basenames
-
-- Severity: Medium
-- Area: RV/GTO import / companion-file resolution
-- Evidence:
-  - `openProject(...)` builds `availableFiles` as a `Map<string, File>` keyed only by `f.name` in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L396) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L403).
-  - The RV/GTO loader then resolves referenced movie/CDL sidecars purely by basename with `movie.split(/[/\\\\]/).pop()` and `file.split(/[/\\\\]/).pop()` in [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L710) through [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L716) and [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L2009) through [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L2013).
-  - When two companion files share the same basename, the later `Map.set(f.name, f)` silently overwrites the earlier one before import even starts.
-- Impact:
-  - Session bundles that include same-named media or same-named CDL files from different directories can resolve to the wrong companion file with no warning.
-  - That makes basename-based RV/GTO recovery brittle for real production packages, where duplicate filenames across shots or plates are common.
 
 ### 416. RV/GTO settings parsing extracts `linearize`, `outOfRange`, and `channelSwizzle`, but production never applies them
 

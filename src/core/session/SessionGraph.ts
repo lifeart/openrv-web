@@ -380,7 +380,7 @@ export class SessionGraph extends EventEmitter<SessionGraphEvents> {
    * Load and parse a GTO file, applying session info to playback state
    * via host callbacks, and emitting graph/session events.
    */
-  async loadFromGTO(data: ArrayBuffer | string, availableFiles?: Map<string, File>): Promise<void> {
+  async loadFromGTO(data: ArrayBuffer | string, availableFiles?: Map<string, File[]>): Promise<void> {
     // Fix #402: Reset metadata before parsing so that a GTO with no
     // title/comment doesn't inherit stale values from the previous session.
     this._metadata = {

@@ -392,7 +392,9 @@ export class MuUtilsBridge {
           console.warn('[MuUtilsBridge] Fullscreen request denied');
         });
       } else if ((el as any).webkitRequestFullscreen) {
-        (el as any).webkitRequestFullscreen();
+        Promise.resolve((el as any).webkitRequestFullscreen()).catch(() => {
+          console.warn('[MuUtilsBridge] Fullscreen request denied (webkit)');
+        });
       }
     } else {
       if (document.exitFullscreen) {
@@ -400,7 +402,9 @@ export class MuUtilsBridge {
           // May already be out of fullscreen
         });
       } else if ((document as any).webkitExitFullscreen) {
-        (document as any).webkitExitFullscreen();
+        Promise.resolve((document as any).webkitExitFullscreen()).catch(() => {
+          // May already be out of fullscreen (webkit)
+        });
       }
     }
   }

@@ -567,6 +567,40 @@ describe('MuCommands', () => {
       document.documentElement.requestFullscreen = origRFS;
     });
 
+    it('fullScreenMode(false) handles exit fullscreen promise rejection', async () => {
+      const origEFS = document.exitFullscreen;
+      document.exitFullscreen = vi.fn().mockRejectedValue(new Error('not in fullscreen'));
+
+      // Should not throw — rejection is caught internally
+      await cmd.fullScreenMode(false);
+
+      document.exitFullscreen = origEFS;
+    });
+
+    it('fullScreenMode(true) handles webkit promise rejection', async () => {
+      const origRFS = document.documentElement.requestFullscreen;
+      (document.documentElement as any).requestFullscreen = undefined;
+      (document.documentElement as any).webkitRequestFullscreen = vi.fn().mockRejectedValue(new Error('webkit denied'));
+
+      // Should not throw — rejection is caught internally
+      await cmd.fullScreenMode(true);
+
+      document.documentElement.requestFullscreen = origRFS;
+      delete (document.documentElement as any).webkitRequestFullscreen;
+    });
+
+    it('fullScreenMode(false) handles webkit exit promise rejection', async () => {
+      const origEFS = document.exitFullscreen;
+      (document as any).exitFullscreen = undefined;
+      (document as any).webkitExitFullscreen = vi.fn().mockRejectedValue(new Error('webkit exit denied'));
+
+      // Should not throw — rejection is caught internally
+      await cmd.fullScreenMode(false);
+
+      document.exitFullscreen = origEFS;
+      delete (document as any).webkitExitFullscreen;
+    });
+
     it('fullScreenMode returns a Promise', () => {
       const result = cmd.fullScreenMode(true);
       expect(result).toBeInstanceOf(Promise);

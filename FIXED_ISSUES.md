@@ -965,3 +965,189 @@
 - `src/AppNetworkBridge.test.ts`
 - `src/ui/components/NetworkControl.ts`
 - `src/ui/components/NetworkControl.test.ts`
+
+## Issue #261: Mu compat fullscreen helpers do not track the Safari/WebKit fullscreen path that the main app supports
+
+**Root cause**: `MuCommands.fullScreenMode()` and `MuUtilsBridge.fullScreenMode()` only used the standard `requestFullscreen`/`exitFullscreen` APIs without WebKit-prefixed fallbacks. `isFullScreen()` only checked `document.fullscreenElement`. The main app's `FullscreenManager` already handled `webkitRequestFullscreen`, `webkitExitFullscreen`, and `webkitFullscreenElement`. Additionally, `MuCommands.fullScreenMode()` did not catch rejected fullscreen promises.
+
+**Fix**:
+- Added WebKit-prefixed fallback paths (`webkitRequestFullscreen`, `webkitExitFullscreen`) to both `MuCommands.fullScreenMode()` and `MuUtilsBridge.fullScreenMode()`
+- Updated `isFullScreen()` in both classes to check `document.webkitFullscreenElement` via nullish coalescing
+- Wrapped all fullscreen calls in proper error handling (try/catch in MuCommands, Promise.resolve().catch() in MuUtilsBridge)
+
+**Tests added**: 11 new regression tests across both test files covering WebKit enter/exit fullscreen, WebKit isFullScreen state detection, standard-over-WebKit preference, and rejection handling for both standard and WebKit APIs.
+
+**Files changed**:
+- `src/compat/MuCommands.ts`
+- `src/compat/MuUtilsBridge.ts`
+- `src/compat/__tests__/MuCommands.test.ts`
+- `src/compat/__tests__/MuUtilsBridge.test.ts`
+
+## Issue #251: Mu compat `metaEvaluateClosestByType()` chooses DFS match instead of closest match in branched graphs
+
+**Root cause**: `_traverseEvalChainUntilType()` used a depth-first recursive walk over `node.inputs`, returning as soon as any branch found the target type. In branched graphs this meant the result depended on input iteration order, not on which matching node was topologically closest to the start node.
+
+**Fix**: Replaced the DFS traversal with a BFS (breadth-first search) implementation that explores nodes level by level. The BFS uses a visited set and a parent-pointer map to find the truly closest match, then reconstructs the path from start to the matched node. When no match is found, falls back to collecting all reachable nodes (preserving existing behavior).
+
+**Tests added**: Regression test for branched graph verifying that the near-branch target (depth 1) is returned instead of the deep-branch target (depth 3). Additional test for correct path reconstruction from start to target across a multi-node chain.
+
+**Files changed**:
+- `src/compat/MuEvalBridge.ts`
+- `src/compat/__tests__/MuEvalBridge.test.ts`
+
+## Issue #265: Mu compat `eventToImageSpace()` ignores its `useLocalCoords` flag
+
+**Root cause**: The method parameter was named `_useLocalCoords` (underscore prefix) and the implementation never branched on it, following the same code path regardless of the flag value. Callers passing `true` still received global/default coordinate behavior.
+
+**Fix**: Renamed the parameter to `useLocalCoords` and added conditional logic: when `false` (default), the method returns the raw screen-space event coordinates directly; when `true`, it looks up the named image in the rendered-images list and converts screen coordinates to image-local pixel coordinates via `_screenToImage()`, falling back to `_screenToImageCoords()` if the image is not found.
+
+**Tests added**: 7 regression tests covering screen-center-to-image-center conversion, top-left corner mapping, scaled-view handling, fallback for unknown images, `useLocalCoords=false` returning screen coordinates, `useLocalCoords=true` returning image-local coordinates, and default (no flag) matching `false` behavior.
+
+**Files changed**:
+- `src/compat/MuEvalBridge.ts`
+- `src/compat/__tests__/MuEvalBridge.test.ts`
+
+## Issue #270: Mu compat `nodeConnections(..., traverseGroups)` ignores the `traverseGroups` flag
+
+**Root cause**: The method parameter was named `_traverseGroups` (underscore prefix) and the implementation never branched on it, always returning the direct `node.inputs` and `node.outputs` lists regardless of the caller's traversal request.
+
+**Fix**: Renamed the parameter to `traverseGroups` and added conditional logic: when `false` (default), returns direct connections as before; when `true`, passes connection names through `_resolveGroups()`, which recursively replaces group nodes with their non-group leaf members via `_collectLeafNodes()`. Each top-level name gets its own visited set to correctly handle duplicates that appear both directly and via a group.
+
+**Tests added**: 7 regression tests covering `traverseGroups=false` preserving group nodes, `traverseGroups=true` replacing groups with leaf members, identity behavior when no groups exist, duplicate leaf preservation (direct + via group), nested group resolution, group resolution in the outputs list, and empty group pass-through as leaf.
+
+**Files changed**:
+- `src/compat/MuNodeBridge.ts`
+- `src/compat/__tests__/MuNodeBridge.test.ts`
+
+## Issue #259: Mu compat event-table BBox `tag` is accepted and stored but never participates in dispatch
+
+**Root cause**: `dispatchEvent(...)` in `ModeManager.ts` only checked the numeric bounding-box rectangle for pointer events but never read or compared `bbox.tag`, so the `tag` parameter passed to `setEventTableBBox()` had no effect on event filtering.
+
+**Fix**: Added tag-scoped hit-testing logic inside the BBox constraint check in `dispatchEvent()`: after the rectangle test passes, if the bbox has a non-empty `tag`, the event must carry a matching `tag` or dispatch is skipped. Also added an optional `tag` field to the `MuEvent` interface in `types.ts`.
+
+**Tests added**: 4 regression tests in `MuEventBridge.test.ts` covering: BBox tag matches event tag (fires), BBox tag mismatches event tag (blocks), no-tag BBox matches any event (backward compat), and no-tag event does not match tagged BBox (blocks).
+
+**Files changed**:
+- `src/compat/ModeManager.ts`
+- `src/compat/types.ts`
+- `src/compat/__tests__/MuEventBridge.test.ts`
+
+## Issue #271: Mu compat `imagesAtPixel()` ignores its `useStencil` flag
+**Root cause**: The `useStencil` parameter was prefixed with an underscore (`_useStencil`) and never branched on. The method always performed geometry-only hit testing regardless of the flag value, making stencil-accurate hit testing a silent no-op.
+
+**Fix**: Renamed `_useStencil` to `useStencil` and added stencil-based alpha testing. When `useStencil` is true and a `PixelReadbackProvider` is available, `imagesAtPixel()` reads the source pixel alpha at the hit coordinate and skips fully transparent images (alpha <= 0). Falls back to geometry-only when no provider is set or the provider returns null.
+
+**Tests added**: 9 tests in `MuEvalBridge.test.ts` covering: geometry-only default, explicit false, opaque pixel inclusion, transparent pixel exclusion, fallback when no provider, fallback when provider returns null, per-image independent filtering, correct image-local coordinate forwarding, alpha just above zero, point outside geometry, and useStencil=false ignoring provider.
+
+**Files changed**:
+- `src/compat/MuEvalBridge.ts`
+- `src/compat/__tests__/MuEvalBridge.test.ts`
+
+## Issue #272: Mu compat `eventToCameraSpace()` ignores the supplied view-node argument
+**Root cause**: The `viewNodeName` parameter was prefixed with an underscore (`_viewNodeName`) and the implementation computed camera coordinates solely from the global `_viewTransform`, ignoring any per-node transform even when one was registered.
+
+**Fix**: Renamed `_viewNodeName` to `viewNodeName` and added per-node transform lookup via `_viewNodeTransforms` map. When `viewNodeName` is non-empty and a matching transform exists, that transform is used; otherwise falls back to the global view transform. Also added `setViewNodeTransform()`, `clearViewNodeTransform()`, and `getViewNodeTransform()` methods to manage per-node transforms.
+
+**Tests added**: 7 tests in `MuEvalBridge.test.ts` covering: global transform for empty name, per-node transform when name matches, fallback to global for unknown name, multiple independent view nodes, clearViewNodeTransform causing fallback, and integration with resetState clearing all node transforms.
+
+**Files changed**:
+- `src/compat/MuEvalBridge.ts`
+- `src/compat/__tests__/MuEvalBridge.test.ts`
+
+## Issue #338: Doc says F for fullscreen, real is F11
+
+**Root cause**: The review workflow doc (`docs/advanced/review-workflow.md`) told users to press `F` for fullscreen, but the shipped fullscreen binding is `F11` (matching the header tooltip and keyboard-shortcuts reference).
+
+**Fix**: Updated the review workflow doc to say `F11` instead of `F`.
+
+**Tests added**: None (documentation-only change).
+
+**Files changed**:
+- `docs/advanced/review-workflow.md`
+
+## Issue #367: FAQ says L for loop, real is Ctrl+L
+
+**Root cause**: The FAQ (`docs/reference/faq.md`) and quick-start guide (`docs/getting-started/quick-start.md`) told users to press plain `L` to cycle loop modes, but the real binding is `Ctrl+L`.
+
+**Fix**: Updated the FAQ and quick-start guide to use `Ctrl+L`.
+
+**Tests added**: None (documentation-only change).
+
+**Files changed**:
+- `docs/reference/faq.md`
+- `docs/getting-started/quick-start.md`
+
+## Issue #400: Selecting .rvedl with media files ignores the media
+
+**Root cause**: Both the header file-picker and the viewer drag-and-drop paths checked for `.rvedl` first and returned immediately after loading just the EDL, discarding any accompanying media files the user had also selected.
+
+**Fix**: Removed the early return after EDL loading in both `HeaderBar.ts` and `ViewerInputHandler.ts`. After loading the EDL, remaining non-EDL files are now filtered out of the array and passed through to the normal media-loading path. The success alert dynamically indicates whether accompanying media files will also be loaded.
+
+**Tests added**: None (behavioral fix in UI wiring; EDL + media co-selection now falls through to normal file loading).
+
+**Files changed**:
+- `src/ui/components/layout/HeaderBar.ts`
+- `src/ui/components/ViewerInputHandler.ts`
+
+## Issue #406: Restored playlist playhead position ignored
+
+**Root cause**: In `PlaylistManager.setState()`, enabling playlist mode (`setEnabled`) was called before `currentFrame` was assigned. The production `enabledChanged` handler in `AppPlaybackWiring.ts` then synced the runtime to a frame derived from the current session state instead of the saved playlist position.
+
+**Fix**: Reordered `setState()` so that `currentFrame` is restored before `setEnabled()` is called, ensuring the `enabledChanged` handler sees the correct saved playhead position.
+
+**Tests added**: 1 regression test in `PlaylistManager.test.ts` verifying that `currentFrame` is set before the `enabledChanged` event fires during `setState()`.
+
+**Files changed**:
+- `src/core/session/PlaylistManager.ts`
+- `src/core/session/PlaylistManager.test.ts`
+
+## Issue #408: Restored playlist transitions don't trigger redraw
+
+**Root cause**: `TransitionManager.setState()` replaced internal state silently without emitting any event. The playlist panel and timeline only redraw from `transitionChanged` or `transitionsReset` events, so restored transitions were invisible until an unrelated action forced a repaint.
+
+**Fix**: Added `this.emit('transitionsReset', undefined)` at the end of `TransitionManager.setState()`.
+
+**Tests added**: 2 tests in `TransitionManager.test.ts` verifying that `setState()` emits `transitionsReset` for both populated and empty transition arrays.
+
+**Files changed**:
+- `src/core/session/TransitionManager.ts`
+- `src/core/session/TransitionManager.test.ts`
+
+## Issue #412: Auto-save labels use source name not session name
+
+**Root cause**: Auto-save, snapshot, and checkpoint labels were derived from `session.currentSource?.name` instead of the session's display name, so recovery entries were labeled by whichever source happened to be active.
+
+**Fix**: Introduced a private `getSessionLabel()` method in `AppPersistenceManager` that prefers `session.metadata?.displayName`, falls back to `session.currentSource?.name`, then to `'Untitled'`. All save-label call sites now use this method.
+
+**Tests added**: Dedicated test file `AppPersistenceManager.issue412.test.ts` verifying that auto-save, snapshot, and checkpoint labels reflect the session display name when set.
+
+**Files changed**:
+- `src/AppPersistenceManager.ts`
+- `src/AppPersistenceManager.issue412.test.ts`
+
+## Issue #413: RV/GTO export filenames use source name not session name
+
+**Root cause**: `saveRvSession()` used `session.currentSource?.name` as the export filename base, ignoring the user-visible session display name even though the GTO exporter itself wrote `metadata.displayName` into the file.
+
+**Fix**: Changed `saveRvSession()` to use the shared `getSessionLabel()` method, so the exported filename matches the session identity.
+
+**Tests added**: Dedicated test file `AppPersistenceManager.issue413.test.ts` verifying that RV/GTO export filenames use the session display name.
+
+**Files changed**:
+- `src/AppPersistenceManager.ts`
+- `src/AppPersistenceManager.issue413.test.ts`
+
+## Issue #414: RV/GTO companion-file resolution silently collapses duplicate basenames
+
+**Root cause**: `openProject()` built `availableFiles` as a `Map<string, File>` keyed by `f.name`, so when two companion files shared the same basename (common in production packages with per-shot directories), the later entry silently overwrote the earlier one. The `resolveAvailableFile()` helper then had no way to distinguish them.
+
+**Fix**: Changed the map type to `Map<string, File[]>`, grouping all files that share a basename. Updated `resolveAvailableFile()` to pick the best match by longest path-suffix overlap with the original GTO reference path, and to emit a `console.warn` when multiple candidates exist. Updated all call sites in `HeaderBar.ts`, `ViewerInputHandler.ts`, and `GTOGraphLoader.ts`.
+
+**Tests added**: 8 tests in `GTOGraphLoader.test.ts` under the `resolveAvailableFile` describe block, covering single match, missing basename, empty map, multiple distinct basenames, duplicate basename with path-suffix disambiguation, warning emission, single-candidate no-warning, and Windows-style path handling.
+
+**Files changed**:
+- `src/core/session/GTOGraphLoader.ts`
+- `src/core/session/GTOGraphLoader.test.ts`
+- `src/ui/components/layout/HeaderBar.ts`
+- `src/ui/components/ViewerInputHandler.ts`
+- `src/AppPersistenceManager.ts`

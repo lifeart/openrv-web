@@ -66,7 +66,7 @@ Audio is automatically muted during reverse playback because reversed audio does
 
 ### What loop modes are available?
 
-Three loop modes are available: **Loop** (continuous repetition), **Ping-pong** (reverse at boundaries), and **Once** (stop at boundary). Press `L` to cycle between them.
+Three loop modes are available: **Loop** (continuous repetition), **Ping-pong** (reverse at boundaries), and **Once** (stop at boundary). Press `Ctrl+L` to cycle between them.
 
 ## Collaboration
 

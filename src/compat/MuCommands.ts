@@ -389,19 +389,24 @@ export class MuCommands {
   /** Enter or exit fullscreen mode. (Mu #34) */
   async fullScreenMode(enable: boolean): Promise<void> {
     if (typeof document === 'undefined') return;
-    if (enable) {
-      const el = document.documentElement;
-      if (el.requestFullscreen) {
-        await el.requestFullscreen().catch(() => {});
-      } else if ((el as any).webkitRequestFullscreen) {
-        (el as any).webkitRequestFullscreen();
+    try {
+      if (enable) {
+        const el = document.documentElement;
+        if (el.requestFullscreen) {
+          await el.requestFullscreen();
+        } else if ((el as any).webkitRequestFullscreen) {
+          await (el as any).webkitRequestFullscreen();
+        }
+      } else {
+        if (document.exitFullscreen) {
+          await document.exitFullscreen();
+        } else if ((document as any).webkitExitFullscreen) {
+          await (document as any).webkitExitFullscreen();
+        }
       }
-    } else {
-      if (document.exitFullscreen) {
-        await document.exitFullscreen().catch(() => {});
-      } else if ((document as any).webkitExitFullscreen) {
-        (document as any).webkitExitFullscreen();
-      }
+    } catch {
+      // Contain rejected fullscreen promises (e.g. user gesture requirement,
+      // already in/out of fullscreen, or browser policy denial).
     }
   }
 

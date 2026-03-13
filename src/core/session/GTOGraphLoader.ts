@@ -201,12 +201,70 @@ const PROTOCOL_TO_NODE_TYPE: Record<string, string> = {
 };
 
 /**
+ * Resolve a file from the availableFiles map by matching the original path.
+ *
+ * When multiple files share the same basename, the resolver picks the one
+ * whose `webkitRelativePath` (or falling back to `name`) shares the longest
+ * common suffix of path segments with the original GTO path. If the
+ * candidates are still ambiguous a console warning is emitted.
+ *
+ * @internal Exported for testing only.
+ */
+export function resolveAvailableFile(
+  originalPath: string,
+  availableFiles: Map<string, File[]>,
+): File | undefined {
+  const base = basenameUtil(originalPath);
+  if (!base) return undefined;
+  const candidates = availableFiles.get(base);
+  if (!candidates || candidates.length === 0) return undefined;
+  if (candidates.length === 1) return candidates[0];
+
+  // Normalise the original path segments (lowercase for case-insensitive FS)
+  const origSegments = originalPath.split(/[/\\]/).filter(Boolean).map(s => s.toLowerCase());
+
+  let bestFile: File = candidates[0]!;
+  let bestScore = -1;
+
+  for (const file of candidates) {
+    // Use webkitRelativePath if available (folder-drop gives relative paths),
+    // otherwise fall back to name (just the basename).
+    const filePath = file.webkitRelativePath || file.name;
+    const fileSegments = filePath.split(/[/\\]/).filter(Boolean).map(s => s.toLowerCase());
+
+    // Count matching suffix segments (from the end)
+    let score = 0;
+    let oi = origSegments.length - 1;
+    let fi = fileSegments.length - 1;
+    while (oi >= 0 && fi >= 0 && origSegments[oi] === fileSegments[fi]) {
+      score++;
+      oi--;
+      fi--;
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestFile = file;
+    }
+  }
+
+  // Warn when disambiguation was needed
+  console.warn(
+    `Duplicate basename "${base}": ${candidates.length} files share this name. ` +
+    `Resolved "${originalPath}" to "${bestFile.webkitRelativePath || bestFile.name}" ` +
+    `by longest path-suffix match.`,
+  );
+
+  return bestFile;
+}
+
+/**
  * Load node graph from an already-parsed GTODTO
  *
  * @param dto - Pre-parsed GTODTO object
  * @returns Parsed graph result with nodes and connections
  */
-export function loadGTOGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOParseResult {
+export function loadGTOGraph(dto: GTODTO, availableFiles?: Map<string, File[]>): GTOParseResult {
   try {
     return parseGTOToGraph(dto, availableFiles);
   } catch (err) {
@@ -218,7 +276,7 @@ export function loadGTOGraph(dto: GTODTO, availableFiles?: Map<string, File>): G
 /**
  * Parse GTODTO into a Graph
  */
-function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOParseResult {
+function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File[]>): GTOParseResult {
   const graph = new Graph();
   const nodes = new Map<string, IPNode>();
   const skippedNodes: SkippedNodeInfo[] = [];
@@ -709,12 +767,10 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
 
           // If we have available files (user selected), check for name match
           if (availableFiles && availableFiles.size > 0) {
-            // Extract basename from movie path (e.g., /path/to/video.mp4 -> video.mp4)
-            const basename = basenameUtil(movie);
+            const file = resolveAvailableFile(movie, availableFiles);
 
-            if (basename && availableFiles.has(basename)) {
+            if (file) {
               // Found a match! Use the blob URL for loading
-              const file = availableFiles.get(basename)!;
               const blobUrl = URL.createObjectURL(file);
 
               nodeInfo.properties.url = blobUrl;
@@ -2009,9 +2065,9 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
 
         // Resolve CDL file from availableFiles if specified
         if (typeof file === 'string' && file && availableFiles && availableFiles.size > 0) {
-          const basename = basenameUtil(file);
-          if (basename && availableFiles.has(basename)) {
-            nodeInfo.properties.cdlFileResolved = availableFiles.get(basename)!;
+          const resolved = resolveAvailableFile(file, availableFiles);
+          if (resolved) {
+            nodeInfo.properties.cdlFileResolved = resolved;
           } else {
             console.warn(`CDL file "${file}" not found in available files, using inline CDL values`);
           }

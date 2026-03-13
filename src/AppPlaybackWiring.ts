@@ -923,15 +923,29 @@ function wirePlaylistRuntime(
         // cross-clip behavior while playlist mode is active.
         session.loopMode = 'loop';
 
-        const currentClip = findClipForSourceFrame(
-          controls.playlistManager.getClips(),
-          session.currentSourceIndex,
-          session.currentFrame,
-        );
-        const firstClip = controls.playlistManager.getClipByIndex(0);
-        const targetGlobalFrame = currentClip
-          ? currentClip.clip.globalStartFrame + (session.currentFrame - currentClip.clip.inPoint)
-          : firstClip?.globalStartFrame;
+        // During session restore, PlaylistManager.currentFrame is already set to
+        // the saved position before enablement fires.  Prefer that saved frame when
+        // it maps to a valid clip so the restored playhead position is honoured.
+        const savedPlaylistFrame = controls.playlistManager.getCurrentFrame();
+        const savedMapping =
+          savedPlaylistFrame > 1
+            ? controls.playlistManager.getClipAtFrame(savedPlaylistFrame)
+            : null;
+
+        let targetGlobalFrame: number | undefined;
+        if (savedMapping) {
+          targetGlobalFrame = savedPlaylistFrame;
+        } else {
+          const currentClip = findClipForSourceFrame(
+            controls.playlistManager.getClips(),
+            session.currentSourceIndex,
+            session.currentFrame,
+          );
+          const firstClip = controls.playlistManager.getClipByIndex(0);
+          targetGlobalFrame = currentClip
+            ? currentClip.clip.globalStartFrame + (session.currentFrame - currentClip.clip.inPoint)
+            : firstClip?.globalStartFrame;
+        }
 
         if (targetGlobalFrame !== undefined) {
           runtime.syncing = true;

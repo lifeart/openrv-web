@@ -63,6 +63,16 @@ export class AppPersistenceManager {
   }
 
   /**
+   * Derive a human-readable label for the current session.
+   * Prefers the user-visible session display name, falls back to the
+   * current source file name, then to 'Untitled'.
+   */
+  private getSessionLabel(): string {
+    const { session } = this.ctx;
+    return session.metadata?.displayName || session.currentSource?.name || 'Untitled';
+  }
+
+  /**
    * Whether the snapshot backend initialized successfully.
    * When false, snapshot create/restore operations will show a clear error
    * instead of failing unexpectedly at use time.
@@ -126,7 +136,7 @@ export class AppPersistenceManager {
           playlistManager: this.ctx.playlistManager,
           cacheManager: this.ctx.cacheManager,
         },
-        session.currentSource?.name || 'Untitled',
+        this.getSessionLabel(),
       ),
     );
     autoSaveIndicator.markUnsaved();
@@ -146,7 +156,7 @@ export class AppPersistenceManager {
           playlistManager: this.ctx.playlistManager,
           cacheManager: this.ctx.cacheManager,
         },
-        session.currentSource?.name || 'Untitled',
+        this.getSessionLabel(),
       );
       autoSaveManager.saveNow(state);
     } catch (err) {
@@ -175,7 +185,7 @@ export class AppPersistenceManager {
           playlistManager: this.ctx.playlistManager,
           cacheManager: this.ctx.cacheManager,
         },
-        session.currentSource?.name || 'Untitled',
+        this.getSessionLabel(),
       );
       const now = new Date();
       const name = `Snapshot ${now.toLocaleTimeString()}`;
@@ -202,7 +212,7 @@ export class AppPersistenceManager {
           playlistManager: this.ctx.playlistManager,
           cacheManager: this.ctx.cacheManager,
         },
-        session.currentSource?.name || 'Untitled',
+        this.getSessionLabel(),
       );
       await snapshotManager.createAutoCheckpoint(event, state);
     } catch (err) {
@@ -304,8 +314,8 @@ export class AppPersistenceManager {
   async saveRvSession(format: 'rv' | 'gto'): Promise<void> {
     const { session, paintEngine } = this.ctx;
     try {
-      const sourceName = session.currentSource?.name;
-      const base = sourceName ? sourceName : 'session';
+      const label = this.getSessionLabel();
+      const base = label === 'Untitled' ? 'session' : label;
       const filename = `${base}.${format}`;
 
       if (this.gtoStore) {

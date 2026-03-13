@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { loadGTOGraph, getGraphSummary, formatSkippedNodesWarning, formatDegradedModesWarning } from './GTOGraphLoader';
+import { loadGTOGraph, getGraphSummary, formatSkippedNodesWarning, formatDegradedModesWarning, resolveAvailableFile } from './GTOGraphLoader';
 import type { GTOParseResult, SkippedNodeInfo } from './GTOGraphLoader';
 import type { DegradedModeInfo } from '../../composite/BlendModes';
 import type { GTODTO } from 'gto-js';
@@ -600,10 +600,10 @@ describe('GTOGraphLoader', () => {
         ],
       });
 
-      const availableFiles = new Map<string, File>();
+      const availableFiles = new Map<string, File[]>();
       // @ts-ignore
       const mockFile = { name: 'myvideo.mp4' } as File;
-      availableFiles.set('myvideo.mp4', mockFile);
+      availableFiles.set('myvideo.mp4', [mockFile]);
 
       loadGTOGraph(dto as never, availableFiles);
 
@@ -2488,6 +2488,117 @@ describe('GTOGraphLoader', () => {
       expect(msg).toContain('2 composite mode(s) were degraded');
       expect(msg).toContain('"dissolve"');
       expect(msg).toContain('"topmost"');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // resolveAvailableFile — duplicate basename resolution (#414)
+  // -------------------------------------------------------------------------
+  describe('resolveAvailableFile', () => {
+    it('RESOLVE-001: returns the single file when basename matches', () => {
+      const file = new File(['data'], 'video.mp4');
+      const map = new Map<string, File[]>();
+      map.set('video.mp4', [file]);
+
+      const result = resolveAvailableFile('/projects/shot01/video.mp4', map);
+      expect(result).toBe(file);
+    });
+
+    it('RESOLVE-002: returns undefined when basename is not in the map', () => {
+      const map = new Map<string, File[]>();
+      map.set('other.mp4', [new File(['x'], 'other.mp4')]);
+
+      const result = resolveAvailableFile('/path/to/video.mp4', map);
+      expect(result).toBeUndefined();
+    });
+
+    it('RESOLVE-003: returns undefined for empty map', () => {
+      const map = new Map<string, File[]>();
+      const result = resolveAvailableFile('/path/to/video.mp4', map);
+      expect(result).toBeUndefined();
+    });
+
+    it('RESOLVE-004: two files with different basenames both resolve correctly', () => {
+      const fileA = new File(['a'], 'shot_a.exr');
+      const fileB = new File(['b'], 'shot_b.exr');
+      const map = new Map<string, File[]>();
+      map.set('shot_a.exr', [fileA]);
+      map.set('shot_b.exr', [fileB]);
+
+      expect(resolveAvailableFile('/renders/shot_a.exr', map)).toBe(fileA);
+      expect(resolveAvailableFile('/renders/shot_b.exr', map)).toBe(fileB);
+    });
+
+    it('RESOLVE-005: duplicate basenames — picks file with longest matching path suffix', () => {
+      // Simulate two files with the same basename but different relative paths
+      const fileFromShotA = new File(['a'], 'plate.exr');
+      Object.defineProperty(fileFromShotA, 'webkitRelativePath', {
+        value: 'project/shotA/plate.exr',
+      });
+
+      const fileFromShotB = new File(['b'], 'plate.exr');
+      Object.defineProperty(fileFromShotB, 'webkitRelativePath', {
+        value: 'project/shotB/plate.exr',
+      });
+
+      const map = new Map<string, File[]>();
+      map.set('plate.exr', [fileFromShotA, fileFromShotB]);
+
+      // Original GTO path references shotB
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const result = resolveAvailableFile('/mnt/renders/project/shotB/plate.exr', map);
+      expect(result).toBe(fileFromShotB);
+
+      // Should have warned about duplicate
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Duplicate basename "plate.exr"'),
+      );
+      warnSpy.mockRestore();
+    });
+
+    it('RESOLVE-006: duplicate basenames — emits warning with count', () => {
+      const file1 = new File(['a'], 'grade.cdl');
+      const file2 = new File(['b'], 'grade.cdl');
+      const map = new Map<string, File[]>();
+      map.set('grade.cdl', [file1, file2]);
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      resolveAvailableFile('/some/path/grade.cdl', map);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('2 files share this name'),
+      );
+      warnSpy.mockRestore();
+    });
+
+    it('RESOLVE-007: single candidate does not emit a warning', () => {
+      const file = new File(['data'], 'video.mp4');
+      const map = new Map<string, File[]>();
+      map.set('video.mp4', [file]);
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      resolveAvailableFile('/path/video.mp4', map);
+      expect(warnSpy).not.toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+
+    it('RESOLVE-008: Windows-style original path resolves correctly against webkitRelativePath', () => {
+      const fileA = new File(['a'], 'plate.exr');
+      Object.defineProperty(fileA, 'webkitRelativePath', {
+        value: 'project/shotA/plate.exr',
+      });
+      const fileB = new File(['b'], 'plate.exr');
+      Object.defineProperty(fileB, 'webkitRelativePath', {
+        value: 'project/shotB/plate.exr',
+      });
+
+      const map = new Map<string, File[]>();
+      map.set('plate.exr', [fileA, fileB]);
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      // Windows-style path in the GTO
+      const result = resolveAvailableFile('C:\\renders\\project\\shotA\\plate.exr', map);
+      expect(result).toBe(fileA);
+      warnSpy.mockRestore();
     });
   });
 });

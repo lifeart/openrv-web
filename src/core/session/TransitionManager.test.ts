@@ -625,6 +625,28 @@ describe('TransitionManager', () => {
 
       expect(manager.getTransitions()).toEqual([]);
     });
+
+    it('should emit transitionsReset after state restore', () => {
+      const callback = vi.fn();
+      manager.on('transitionsReset', callback);
+
+      manager.setState([
+        { type: 'crossfade', durationFrames: 12 },
+        null,
+        { type: 'wipe-left', durationFrames: 8 },
+      ]);
+
+      expect(callback).toHaveBeenCalledTimes(1);
+    });
+
+    it('should emit transitionsReset even for empty state restore', () => {
+      const callback = vi.fn();
+      manager.on('transitionsReset', callback);
+
+      manager.setState([]);
+
+      expect(callback).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('dispose', () => {

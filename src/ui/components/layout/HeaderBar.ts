@@ -1382,6 +1382,8 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     // Check for .rvedl files in the selection
     const edlFile = fileArray.find((f) => f.name.toLowerCase().endsWith('.rvedl'));
     if (edlFile) {
+      // Remove the EDL file from the array so remaining media files can still be loaded
+      const remainingFiles = fileArray.filter((f) => f !== edlFile);
       try {
         const text = await edlFile.text();
         const entries = this.session.loadEDL(text);
@@ -1396,12 +1398,16 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
           );
           const sourceList = Array.from(uniqueSources).slice(0, 5).join(', ');
           const moreCount = uniqueSources.size > 5 ? ` and ${uniqueSources.size - 5} more` : '';
+          const mediaHint =
+            remainingFiles.length > 0
+              ? `\n\n${remainingFiles.length} accompanying media ${remainingFiles.length === 1 ? 'file' : 'files'} will also be loaded.`
+              : `\n\nSource paths are local filesystem references. ` +
+                `Load the corresponding media files to resolve them.`;
           showAlert(
             `Loaded ${entries.length} EDL ${entries.length === 1 ? 'entry' : 'entries'} ` +
               `from ${edlFile.name} referencing ${uniqueSources.size} ` +
-              `${uniqueSources.size === 1 ? 'source' : 'sources'}: ${sourceList}${moreCount}.\n\n` +
-              `Source paths are local filesystem references. ` +
-              `Load the corresponding media files to resolve them.`,
+              `${uniqueSources.size === 1 ? 'source' : 'sources'}: ${sourceList}${moreCount}.` +
+              mediaHint,
             { type: 'info', title: 'EDL Loaded' },
           );
           this.emit('fileLoaded', undefined);
@@ -1412,8 +1418,14 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
         console.error('Failed to load RVEDL file:', err);
         showAlert(`Failed to load ${edlFile.name}: ${err}`, { type: 'error', title: 'Load Error' });
       }
-      input.value = '';
-      return;
+      // If no remaining media files, we're done
+      if (remainingFiles.length === 0) {
+        input.value = '';
+        return;
+      }
+      // Continue to load remaining media files below
+      fileArray.length = 0;
+      fileArray.push(...remainingFiles);
     }
 
     // Check for .rv or .gto files in the selection
@@ -1423,10 +1435,16 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
 
     if (sessionFile) {
       // If we have a session file, treat other files as potential media sources
-      const availableFiles = new Map<string, File>();
+      const availableFiles = new Map<string, File[]>();
       for (const file of fileArray) {
         if (file !== sessionFile) {
-          availableFiles.set(file.name, file);
+          const key = file.name;
+          const existing = availableFiles.get(key);
+          if (existing) {
+            existing.push(file);
+          } else {
+            availableFiles.set(key, [file]);
+          }
         }
       }
 

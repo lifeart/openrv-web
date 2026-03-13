@@ -953,7 +953,7 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   // Session loading — delegated to SessionGraph
-  async loadFromGTO(data: ArrayBuffer | string, availableFiles?: Map<string, File>): Promise<void> {
+  async loadFromGTO(data: ArrayBuffer | string, availableFiles?: Map<string, File[]>): Promise<void> {
     return this._sessionGraph.loadFromGTO(data, availableFiles);
   }
 

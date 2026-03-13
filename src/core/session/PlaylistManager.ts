@@ -620,11 +620,11 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
       }
       this.emit('clipsChanged', { clips: [...this.clips] });
     }
-    if (state.enabled !== undefined) {
-      this.setEnabled(state.enabled);
-    }
     if (state.currentFrame !== undefined) {
       this.currentFrame = state.currentFrame;
+    }
+    if (state.enabled !== undefined) {
+      this.setEnabled(state.enabled);
     }
     if (state.loopMode !== undefined) {
       this.setLoopMode(state.loopMode);

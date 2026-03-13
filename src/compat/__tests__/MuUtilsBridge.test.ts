@@ -332,7 +332,42 @@ describe('MuUtilsBridge', () => {
       bridge.fullScreenMode(true);
       await new Promise((r) => setTimeout(r, 0));
 
+      expect(warnSpy).toHaveBeenCalledWith('[MuUtilsBridge] Fullscreen request denied');
+
       document.documentElement.requestFullscreen = origRFS;
+      warnSpy.mockRestore();
+    });
+
+    it('fullScreenMode(true) catches webkit promise rejection', async () => {
+      const origRFS = document.documentElement.requestFullscreen;
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      (document.documentElement as any).requestFullscreen = undefined;
+      (document.documentElement as any).webkitRequestFullscreen = vi.fn().mockRejectedValue(new Error('webkit denied'));
+
+      bridge.fullScreenMode(true);
+      await new Promise((r) => setTimeout(r, 0));
+
+      expect(warnSpy).toHaveBeenCalledWith('[MuUtilsBridge] Fullscreen request denied (webkit)');
+
+      document.documentElement.requestFullscreen = origRFS;
+      delete (document.documentElement as any).webkitRequestFullscreen;
+      warnSpy.mockRestore();
+    });
+
+    it('fullScreenMode(false) catches webkit exit promise rejection', async () => {
+      const origEFS = document.exitFullscreen;
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      (document as any).exitFullscreen = undefined;
+      (document as any).webkitExitFullscreen = vi.fn().mockRejectedValue(new Error('webkit exit denied'));
+
+      bridge.fullScreenMode(false);
+      await new Promise((r) => setTimeout(r, 0));
+
+      // Should not surface as unhandled rejection
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Fullscreen request denied'));
+
+      document.exitFullscreen = origEFS;
+      delete (document as any).webkitExitFullscreen;
       warnSpy.mockRestore();
     });
   });
