@@ -210,6 +210,7 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
 
     this.clips = nextClips;
     this.transitionManager?.resizeToClips(this.clips.length);
+    this.recalculateGlobalFrames();
 
     const totalDuration = this.getTotalDuration();
     this.currentFrame = Math.max(1, Math.min(this.currentFrame, totalDuration || 1));
@@ -576,6 +577,7 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
   clear(): void {
     this.clips = [];
     this.currentFrame = 1;
+    this.transitionManager?.clear();
     this.emit('clipsChanged', { clips: [] });
   }
 
@@ -628,8 +630,12 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
       this.setLoopMode(state.loopMode);
     }
     // Restore transitions when transition manager is set
-    if (this.transitionManager && state.transitions) {
-      this.transitionManager.setState(state.transitions);
+    if (this.transitionManager) {
+      if (state.transitions) {
+        this.transitionManager.setState(state.transitions);
+      } else {
+        this.transitionManager.clear();
+      }
     }
   }
 

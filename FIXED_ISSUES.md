@@ -714,3 +714,125 @@
 **Files changed**:
 - `src/api/ColorAPI.ts`
 - `src/api/OpenRVAPI.test.ts`
+
+## Issue #372: Production 360 auto-detection throws away spherical metadata and falls back to aspect ratio only
+
+**Root cause**: `LayoutOrchestrator` called `detect360Content({}, width, height)` with an empty metadata object, ignoring `isSpherical` and `projectionType` metadata on the loaded source.
+
+**Fix**: Added `isSpherical` and `projectionType` fields to the `MediaSource` interface. Updated `LayoutOrchestrator.onSourceLoaded360` to extract and forward these metadata fields to `detect360Content()`.
+
+**Tests added**: 3 regression tests (LO-044 through LO-046) covering metadata-based 360 detection, projectionType detection, and metadata override of aspect-ratio heuristic.
+
+**Files changed**:
+- `src/core/session/SessionTypes.ts`
+- `src/services/LayoutOrchestrator.ts`
+- `src/services/LayoutOrchestrator.test.ts`
+
+## Issue #373: Plain media loads leave the header title at `Untitled` unless the user manually renames the session
+
+**Root cause**: The `sourceLoaded` handler never assigned a display name from the loaded source. Fresh sessions stayed at `Untitled` until manually renamed.
+
+**Fix**: Added auto-naming in `handleSourceLoaded()` — when the session has no display name and the loaded source has a name, the session display name is set from the source name. Manually set names are never overridden.
+
+**Tests added**: 3 regression tests (SLH-DN001 through SLH-DN003) covering auto-naming, manual name preservation, and nameless source handling.
+
+**Files changed**:
+- `src/handlers/sourceLoadedHandlers.ts`
+- `src/handlers/sourceLoadedHandlers.test.ts`
+
+## Issue #392: Auto-save failure feedback self-clears after five seconds even when the failure is unresolved
+
+**Root cause**: `AutoSaveIndicator` scheduled a 5-second auto-reset from error state back to idle, removing the retry affordance before the failure was resolved.
+
+**Fix**: Removed the `scheduleStatusReset('idle', 5000)` call from the error handler. Error state now persists until a successful save occurs or a retry succeeds.
+
+**Tests added**: 3 regression tests (AUTOSAVE-UI-060 through AUTOSAVE-UI-062) covering error persistence, clearing on subsequent save, and clearing on successful retry.
+
+**Files changed**:
+- `src/ui/components/AutoSaveIndicator.ts`
+- `src/ui/components/AutoSaveIndicator.test.ts`
+
+## Issue #396: Discarding crash recovery wipes the entire auto-save history, not just the recovered entry
+
+**Root cause**: On discard, `AppPersistenceManager` called `autoSaveManager.clearAll()` instead of deleting just the prompted entry.
+
+**Fix**: Changed to `autoSaveManager.deleteAutoSave(mostRecent.id)` to only remove the specific entry the user was asked about.
+
+**Tests added**: 2 regression tests (APM-396a, APM-396b) verifying only the prompted entry is deleted and other entries survive.
+
+**Files changed**:
+- `src/AppPersistenceManager.ts`
+- `src/AppPersistenceManager.test.ts`
+
+## Issue #397: Clean auto-save recovery has no success state when the recovered session contains no media
+
+**Root cause**: `recoverAutoSave()` only showed a success alert when `loadedMedia > 0`, with no feedback for state-only recovery.
+
+**Fix**: Added an else branch showing an info alert "Session recovered (no media files — state only)" for zero-media recoveries, matching the pattern used by project load and snapshot restore.
+
+**Tests added**: 2 regression tests (APM-397a, APM-397b) covering state-only and media recovery feedback.
+
+**Files changed**:
+- `src/AppPersistenceManager.ts`
+- `src/AppPersistenceManager.test.ts`
+
+## Issue #398: `SnapshotManager` advertises an `error` event, but production never emits it
+
+**Root cause**: `SnapshotManagerEvents` declared an `error` event but no code ever called `emit('error', ...)`. Errors were only logged or thrown.
+
+**Fix**: In `notifySnapshotsChanged()`, the catch block now emits `error` event after logging, with the caught value normalized to an `Error` instance. This is the only place where errors are swallowed without being thrown to callers.
+
+**Tests added**: 3 regression tests (SNAP-ERR001 through SNAP-ERR003) covering error emission on snapshot list refresh failure, non-Error wrapping, and auto-checkpoint paths.
+
+**Files changed**:
+- `src/core/session/SnapshotManager.ts`
+- `src/core/session/SnapshotManager.test.ts`
+
+## Issue #402: GTO import can keep the previous session title/comment when the new file leaves them blank
+
+**Root cause**: `SessionGraph.loadFromGTO()` did not reset `_metadata` before parsing, so a GTO file with no title/comment inherited stale metadata from the previous session.
+
+**Fix**: Added metadata reset to default values at the beginning of `loadFromGTO()`, before any GTO parsing occurs.
+
+**Tests added**: 4 regression tests (ISS-402-001 through ISS-402-004) covering metadata clearing, setting, sequential loads, and reset-on-failure.
+
+**Files changed**:
+- `src/core/session/SessionGraph.ts`
+- `src/core/session/SessionGraph.issue402.test.ts` (new)
+
+## Issue #404: Project/snapshot restore can leave stale playlist transitions active when the incoming state has none
+
+**Root cause**: `PlaylistManager.clear()` didn't clear the linked `TransitionManager`, and `setState()` didn't clear transitions when the incoming state had none.
+
+**Fix**: Added `transitionManager?.clear()` call in `clear()`. Changed `setState()` to call `transitionManager.clear()` when no transitions are provided, and `transitionManager.setState()` when they are.
+
+**Tests added**: 5 regression tests covering clear-with-transitions, setState-without-transitions, setState-with-undefined-transitions, setState-with-transitions, and transition replacement.
+
+**Files changed**:
+- `src/core/session/PlaylistManager.ts`
+- `src/core/session/PlaylistManager.issue404.test.ts` (new)
+
+## Issue #409: Timeline/EDL edits that rebuild the playlist ignore transition-adjusted clip start frames
+
+**Root cause**: `PlaylistManager.replaceClips()` rebuilt clips with sequential `globalStartFrame` values but never called `recalculateGlobalFrames()` to apply transition overlap adjustments.
+
+**Fix**: Added `recalculateGlobalFrames()` call in `replaceClips()` after assigning clips and resizing the transition manager, but before clamping `currentFrame` and emitting `clipsChanged`.
+
+**Tests added**: 5 regression tests covering single transition overlap, multiple transitions, no-transition-manager path, total duration correctness, and currentFrame clamping.
+
+**Files changed**:
+- `src/core/session/PlaylistManager.ts`
+- `src/core/session/PlaylistManager.issue409.test.ts` (new)
+
+## Issue #415: RV/GTO import cannot explicitly restore the "all scopes off" state
+
+**Root cause**: `parseScopes()` returned `null` when all four scopes were `false`, making it impossible to distinguish "GTO has scopes with all off" from "GTO has no scopes data". The `settingsLoaded` handler only acted when `settings.scopes` existed.
+
+**Fix**: Changed `parseScopes()` to track whether any scope protocol node exists in the GTO data and return the `ScopesState` object (even with all `false` values) when at least one node is found.
+
+**Tests added**: 5 regression tests (3 in Session.graph.test.ts, 2 in persistenceHandlers.test.ts) covering all-off with nodes, nodes with no active property, no scope nodes, handler hiding all scopes, and handler skipping when no scopes property.
+
+**Files changed**:
+- `src/core/session/GTOSettingsParser.ts`
+- `src/core/session/Session.graph.test.ts`
+- `src/handlers/persistenceHandlers.test.ts`

@@ -34,6 +34,7 @@ function createMockContext(
     currentSourceIndex?: number;
     frameCount?: number;
     isPlaying?: boolean;
+    displayName?: string;
   } = {},
 ): SessionBridgeContext {
   const cropControl = { setSourceDimensions: vi.fn() };
@@ -85,6 +86,7 @@ function createMockContext(
   const infoPanel = { update: vi.fn() };
   const histogram = { setHDRMode: vi.fn(), setHDRAutoFit: vi.fn() };
 
+  const metadata = { displayName: overrides.displayName ?? '', comment: '', version: 2, origin: 'openrv-web' };
   const session = {
     currentSource: overrides.currentSource !== undefined ? overrides.currentSource : null,
     gtoData: overrides.gtoData ?? null,
@@ -93,6 +95,10 @@ function createMockContext(
     frameCount: overrides.frameCount ?? 1,
     isPlaying: overrides.isPlaying ?? false,
     play: vi.fn(),
+    metadata,
+    setDisplayName: vi.fn((name: string) => {
+      metadata.displayName = name;
+    }),
   };
 
   return {
@@ -1345,6 +1351,69 @@ describe('handleSourceLoaded', () => {
     );
 
     expect(processor.setSourceInputColorSpace).not.toHaveBeenCalled();
+  });
+
+  // --- Session display name auto-set (#373) ---
+
+  it('SLH-DN001: sets session displayName from source name when displayName is empty', () => {
+    const context = createMockContext({
+      currentSource: { name: 'my_video.mp4', width: 1920, height: 1080 },
+    });
+
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
+
+    const session = context.getSession() as ReturnType<typeof createMockContext extends (...a: any) => infer R ? R extends { getSession: () => infer S } ? () => S : never : never> extends () => infer S ? S : never;
+    expect((session as any).setDisplayName).toHaveBeenCalledWith('my_video.mp4');
+    expect((session as any).metadata.displayName).toBe('my_video.mp4');
+  });
+
+  it('SLH-DN002: does NOT override a manually set session displayName', () => {
+    const context = createMockContext({
+      currentSource: { name: 'other_file.exr', width: 4096, height: 2160 },
+      displayName: 'My Custom Session',
+    });
+
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
+
+    const session = context.getSession() as any;
+    expect(session.setDisplayName).not.toHaveBeenCalled();
+    expect(session.metadata.displayName).toBe('My Custom Session');
+  });
+
+  it('SLH-DN003: does not set displayName when source has no name', () => {
+    const context = createMockContext({
+      currentSource: { width: 1920, height: 1080 },
+    });
+
+    handleSourceLoaded(
+      context,
+      updateInfoPanel,
+      updateStackCtrl,
+      updateEXR,
+      updateHistogram,
+      updateWaveform,
+      updateVectorscope,
+    );
+
+    const session = context.getSession() as any;
+    expect(session.setDisplayName).not.toHaveBeenCalled();
+    expect(session.metadata.displayName).toBe('');
   });
 });
 

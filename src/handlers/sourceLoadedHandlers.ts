@@ -172,6 +172,15 @@ export function handleSourceLoaded(
   // Use the source from the event if provided; fall back to session.currentSource
   // which may differ after A/B compare auto-assignment.
   const source = loadedSource ?? session.currentSource;
+
+  // Auto-set session display name from the loaded source when no name has been
+  // set yet (fresh / default session). This avoids the header staying at "Untitled"
+  // after a plain media load. If the user has manually renamed the session we
+  // leave their chosen name untouched.
+  if (source?.name && !session.metadata.displayName) {
+    session.setDisplayName(source.name);
+  }
+
   if (source) {
     context.getCropControl().setSourceDimensions(source.width, source.height);
 

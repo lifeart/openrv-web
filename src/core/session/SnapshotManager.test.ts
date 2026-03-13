@@ -500,6 +500,86 @@ describe('SnapshotManager', () => {
     });
   });
 
+  describe('error event emission', () => {
+    it('SNAP-ERR001: emits error event when snapshot list refresh fails', async () => {
+      const openRequest = (indexedDB as any).open();
+      openRequest.onsuccess?.();
+
+      const errorListener = vi.fn();
+      manager.on('error', errorListener);
+
+      const listError = new Error('IndexedDB read failure');
+      vi.spyOn(manager as any, 'putSnapshot').mockResolvedValue(undefined);
+      vi.spyOn(manager as any, 'pruneSnapshots').mockResolvedValue(undefined);
+      vi.spyOn(manager, 'listSnapshots').mockRejectedValue(listError);
+
+      // Force initialization so createSnapshot can proceed
+      (manager as any).isInitialized = true;
+      (manager as any).db = mockDB;
+
+      const mockState = { version: SESSION_STATE_VERSION } as any;
+      await manager.createSnapshot('Test', mockState);
+
+      // notifySnapshotsChanged is called asynchronously, wait for it
+      await vi.waitFor(() => {
+        expect(errorListener).toHaveBeenCalledTimes(1);
+      });
+
+      expect(errorListener).toHaveBeenCalledWith({ error: listError });
+    });
+
+    it('SNAP-ERR002: error event contains an Error instance even for non-Error throws', async () => {
+      const openRequest = (indexedDB as any).open();
+      openRequest.onsuccess?.();
+
+      const errorListener = vi.fn();
+      manager.on('error', errorListener);
+
+      vi.spyOn(manager as any, 'putSnapshot').mockResolvedValue(undefined);
+      vi.spyOn(manager as any, 'pruneSnapshots').mockResolvedValue(undefined);
+      vi.spyOn(manager, 'listSnapshots').mockRejectedValue('string error');
+
+      (manager as any).isInitialized = true;
+      (manager as any).db = mockDB;
+
+      const mockState = { version: SESSION_STATE_VERSION } as any;
+      await manager.createSnapshot('Test', mockState);
+
+      await vi.waitFor(() => {
+        expect(errorListener).toHaveBeenCalledTimes(1);
+      });
+
+      const emittedError = errorListener.mock.calls[0]![0].error;
+      expect(emittedError).toBeInstanceOf(Error);
+      expect(emittedError.message).toBe('string error');
+    });
+
+    it('SNAP-ERR003: error event is emitted on auto-checkpoint snapshot list refresh failure', async () => {
+      const openRequest = (indexedDB as any).open();
+      openRequest.onsuccess?.();
+
+      const errorListener = vi.fn();
+      manager.on('error', errorListener);
+
+      const listError = new Error('Database connection lost');
+      vi.spyOn(manager as any, 'putSnapshot').mockResolvedValue(undefined);
+      vi.spyOn(manager as any, 'pruneSnapshots').mockResolvedValue(undefined);
+      vi.spyOn(manager, 'listSnapshots').mockRejectedValue(listError);
+
+      (manager as any).isInitialized = true;
+      (manager as any).db = mockDB;
+
+      const mockState = { version: SESSION_STATE_VERSION } as any;
+      await manager.createAutoCheckpoint('source-change', mockState);
+
+      await vi.waitFor(() => {
+        expect(errorListener).toHaveBeenCalledTimes(1);
+      });
+
+      expect(errorListener).toHaveBeenCalledWith({ error: listError });
+    });
+  });
+
   describe('notifyRestored', () => {
     it('SNAP-E001: notifyRestored emits snapshotRestored with the given snapshot', () => {
       const listener = vi.fn();

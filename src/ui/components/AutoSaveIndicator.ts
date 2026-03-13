@@ -158,7 +158,6 @@ export class AutoSaveIndicator {
       },
       error: () => {
         this.setStatus('error');
-        this.scheduleStatusReset('idle', 5000);
       },
       configChanged: (config) => {
         if (!config.enabled) {

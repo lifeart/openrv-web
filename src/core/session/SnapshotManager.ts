@@ -563,7 +563,9 @@ export class SnapshotManager extends EventEmitter<SnapshotManagerEvents> {
       const snapshots = await this.listSnapshots();
       this.emit('snapshotsChanged', { snapshots });
     } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
       console.error('Failed to notify snapshots changed:', err);
+      this.emit('error', { error });
     }
   }
 

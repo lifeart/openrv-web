@@ -981,31 +981,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Users following the docs can look for visible `Loop` / `Ping` / `Once` text in the header and instead find only a compact icon.
   - That makes the current mode less glanceable than the documentation implies, especially for users still learning the transport controls.
 
-### 372. Production 360 auto-detection throws away spherical metadata and falls back to aspect ratio only
-
-- Severity: Medium
-- Area: Viewer / spherical projection
-- Evidence:
-  - The viewer-navigation guide says 360 detection works via metadata or 2:1 aspect ratio in [docs/playback/viewer-navigation.md](/Users/lifeart/Repos/openrv-web/docs/playback/viewer-navigation.md#L90) through [docs/playback/viewer-navigation.md](/Users/lifeart/Repos/openrv-web/docs/playback/viewer-navigation.md#L97).
-  - The detection helper does support explicit `isSpherical` and `projectionType === 'equirectangular'` metadata in [src/render/SphericalProjection.ts](/Users/lifeart/Repos/openrv-web/src/render/SphericalProjection.ts#L320) through [src/render/SphericalProjection.ts](/Users/lifeart/Repos/openrv-web/src/render/SphericalProjection.ts#L333).
-  - But the production source-load path calls `detect360Content({}, width, height)` with an empty metadata object in [src/services/LayoutOrchestrator.ts](/Users/lifeart/Repos/openrv-web/src/services/LayoutOrchestrator.ts#L409) through [src/services/LayoutOrchestrator.ts](/Users/lifeart/Repos/openrv-web/src/services/LayoutOrchestrator.ts#L417).
-- Impact:
-  - Metadata-tagged 360 content that is not close to 2:1 will not auto-enable spherical viewing even though the underlying detector supports that path.
-  - Explicit non-spherical metadata also cannot suppress 2:1 false positives, because production never forwards the metadata to the detector.
-
-### 373. Plain media loads leave the header title at `Untitled` unless the user manually renames the session
-
-- Severity: Medium
-- Area: Header UI / session context
-- Evidence:
-  - Fresh session metadata starts with an empty `displayName` in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L60) through [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L66).
-  - The header’s main title renders `metadata.displayName || 'Untitled'` in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L590) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L597).
-  - The normal `sourceLoaded` handler updates info panels, crop dimensions, OCIO state, and HDR behavior, but it never assigns a display name from the loaded source in [src/handlers/sourceLoadedHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/sourceLoadedHandlers.ts#L166) through [src/handlers/sourceLoadedHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/sourceLoadedHandlers.ts#L190).
-  - A production-code search finds `setDisplayName(...)` only in the manual rename path and session-metadata internals, not in the standard file-load flow, as shown by [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L587).
-- Impact:
-  - After loading ordinary media from a clean session, the header’s primary label can still say `Untitled` instead of reflecting the file the user is reviewing.
-  - That removes a basic piece of glanceable context from the main chrome and makes docs that talk about header-adjacent source context feel more misleading than they need to.
-
 ### 374. Snapshot creation is hardwired to anonymous quick-save behavior instead of the documented name-and-description flow
 
 - Severity: Medium
@@ -1131,19 +1106,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The app can boot with a broken snapshot backend while still presenting snapshots as an available feature.
   - That delays failure until the user actually tries to rely on snapshots, which is worse than disabling or clearly marking the feature unavailable up front.
 
-### 392. Auto-save failure feedback self-clears after five seconds even when the failure is unresolved
-
-- Severity: Medium
-- Area: Auto-save status UI
-- Evidence:
-  - On `error`, the indicator switches to `Save failed` but immediately schedules an automatic reset back to `idle` after five seconds in [src/ui/components/AutoSaveIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/AutoSaveIndicator.ts#L159) through [src/ui/components/AutoSaveIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/AutoSaveIndicator.ts#L161).
-  - The visible error state itself is the retry affordance described by `Save failed` and `Auto-save failed - click to retry` in [src/ui/components/AutoSaveIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/AutoSaveIndicator.ts#L514) through [src/ui/components/AutoSaveIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/AutoSaveIndicator.ts#L520).
-  - After that reset, the same control falls back to the generic idle/unsaved messaging in [src/ui/components/AutoSaveIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/AutoSaveIndicator.ts#L532) through [src/ui/components/AutoSaveIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/AutoSaveIndicator.ts#L546), even though no successful save happened.
-  - The docs only describe `Save failed` as the error state and do not mention that it auto-dismisses on its own in [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L153) through [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L159).
-- Impact:
-  - A persistent auto-save failure can look transient and effectively disappear from the header without user action.
-  - That makes the indicator less trustworthy exactly when users need it to remain explicit about data-loss risk.
-
 ### 393. The `Open media file` control is also a session and EDL importer, not just a media picker
 
 - Severity: Low
@@ -1180,42 +1142,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Users can get different rollback safety and different post-load UI truthfulness for the same session file based solely on which affordance they clicked.
   - That makes session import behavior less predictable than it should be and increases the chance of subtle “works one way but not the other” reports.
-
-### 396. Discarding crash recovery wipes the entire auto-save history, not just the recovered entry
-
-- Severity: Medium
-- Area: Auto-save recovery / destructive actions
-- Evidence:
-  - Startup recovery only asks about the single most recent entry in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L462) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L478).
-  - If the user chooses `Discard`, the app immediately calls `autoSaveManager.clearAll()` in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L479) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L481).
-  - `clearAll()` removes the entire auto-save store, not just the one prompt-driving entry, in [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L479) through [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L495).
-- Impact:
-  - Declining one recovery prompt also erases older auto-save history that the user was never asked about individually.
-  - That makes the recovery discard path more destructive than the UI wording suggests and can destroy fallback restore points unexpectedly.
-
-### 397. Clean auto-save recovery has no success state when the recovered session contains no media
-
-- Severity: Low
-- Area: Auto-save recovery feedback
-- Evidence:
-  - `recoverAutoSave(...)` deletes the recovered entry after a clean restore in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L527) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L529).
-  - It only shows a success alert inside the `if (loadedMedia > 0)` branch in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L531) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L535), with no `else` branch for state-only recovery.
-  - The same persistence manager does provide explicit `state only` feedback for project load and snapshot restore in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L265) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L268) and [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L380) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L383).
-- Impact:
-  - A clean recovery of settings, annotations, or other state-only work can complete and delete the auto-save entry without telling the user it succeeded.
-  - That makes state-only recovery look like a no-op even though the app has already consumed the only recovery record.
-
-### 398. `SnapshotManager` advertises an `error` event, but production never emits it
-
-- Severity: Low
-- Area: Snapshot API contract
-- Evidence:
-  - `SnapshotManagerEvents` declares an `error` event in [src/core/session/SnapshotManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SnapshotManager.ts#L43) through [src/core/session/SnapshotManager.ts#L56](/Users/lifeart/Repos/openrv-web/src/core/session/SnapshotManager.ts#L56).
-  - A production-code search finds no `emit('error', ...)` call anywhere in `src` for `SnapshotManager`; the class only throws, rejects, or logs on failure.
-  - For example, initialization failures are rethrown from [src/core/session/SnapshotManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SnapshotManager.ts#L80) through [src/core/session/SnapshotManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SnapshotManager.ts#L87), and snapshot-list refresh failures are only logged in [src/core/session/SnapshotManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SnapshotManager.ts#L532) through [src/core/session/SnapshotManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SnapshotManager.ts#L536).
-- Impact:
-  - Runtime code written against the advertised snapshot-manager event surface cannot observe snapshot backend failures through the documented event channel.
-  - That makes the snapshot event contract less trustworthy than the create/delete/rename paths, which do emit their corresponding events.
 
 ### 399. Startup recovery can degrade into a silent no-op if the chosen auto-save entry disappears before load
 
@@ -1254,18 +1180,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Selecting multiple RV/GTO sessions does not import multiple sessions or ask the user which one to open; only the first one wins.
   - The remaining session files are silently treated like companion assets, which makes the multi-select affordance misleading and can hide user error during session import.
 
-### 402. GTO import can keep the previous session title/comment when the new file leaves them blank
-
-- Severity: Medium
-- Area: RV/GTO import / session metadata restore
-- Evidence:
-  - `SessionGraph.loadFromGTO(...)` does not reset `_metadata` before parsing a new GTO file in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L267) through [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L299).
-  - The GTO parser only assigns `sessionInfo.displayName` and `sessionInfo.comment` when the root values are non-empty strings in [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L408) through [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L418).
-  - Metadata is only reapplied when at least one parsed metadata field is truthy or explicitly defined in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L374) through [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L397).
-- Impact:
-  - Importing a second RV/GTO session that intentionally leaves the session name/comment blank can keep the previous session’s title/comment in the running app.
-  - That makes GTO session import non-idempotent for core session identity, not just for review data.
-
 ### 403. Mixed `.rvedl` plus `.rv` or `.gto` selections always load only the EDL and silently ignore the session file
 
 - Severity: Medium
@@ -1276,19 +1190,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Selecting or dropping an EDL together with the RV/GTO session it belongs to does not give the user both pieces of the workflow; the session file is silently skipped.
   - That makes mixed review-bundle imports less predictable and increases the chance that users think they opened a full session when they only imported cut metadata.
-
-### 404. Project/snapshot restore can leave stale playlist transitions active when the incoming state has none
-
-- Severity: Medium
-- Area: Playlist persistence / transition state restore
-- Evidence:
-  - `SessionSerializer.fromJSON(...)` restores playlist state via `playlistManager.setState(migrated.playlist)` when present, or clears only the playlist manager when absent in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L571) through [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L579).
-  - `PlaylistManager.setState(...)` only pushes transitions into the separate `TransitionManager` when `state.transitions` exists in [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L547) through [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L573).
-  - `PlaylistManager.clear()` removes clips but does not clear the linked `TransitionManager` in [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L523) through [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L527), and `TransitionManager` has its own independent state plus explicit `clear()` API in [src/core/session/TransitionManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/TransitionManager.ts#L229) through [src/core/session/TransitionManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/TransitionManager.ts#L234).
-  - Both playlist duration math and panel export/rendering read that separate transition state through [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L432) through [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L433) and [src/ui/components/PlaylistPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PlaylistPanel.ts#L779) through [src/ui/components/PlaylistPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PlaylistPanel.ts#L798).
-- Impact:
-  - Loading a project/snapshot with no playlist transitions can inherit overlap behavior from a previous session’s transitions.
-  - That makes restored playlist timing and later playlist edits/export less trustworthy because transition state is not actually replaced with the incoming state.
 
 ### 406. Restored playlist playhead position is effectively ignored because enablement sync runs before `currentFrame` restore
 
@@ -1314,18 +1215,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Loading a project/snapshot with saved transitions can initially show the playlist/timeline as if cuts have no transitions until some later user action forces a redraw.
   - That makes restored transition state look unreliable even when it exists in memory.
-
-### 409. Timeline/EDL edits that rebuild the playlist ignore transition-adjusted clip start frames
-
-- Severity: High
-- Area: Playlist editing / transition correctness
-- Evidence:
-  - `PlaylistManager.replaceClips(...)` rebuilds clips with sequential `globalStartFrame` values and emits `clipsChanged`, but never calls `recalculateGlobalFrames()` afterward in [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L156) through [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L184).
-  - That method is the path that actually applies overlap-adjusted clip positions when a `TransitionManager` exists in [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L411) through [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L416).
-  - The main production caller is `TimelineEditorService.applyEditsToPlaylist(...)`, which uses `playlistManager.replaceClips(clips)` after timeline/EDL edits in [src/services/TimelineEditorService.ts](/Users/lifeart/Repos/openrv-web/src/services/TimelineEditorService.ts#L368) through [src/services/TimelineEditorService.ts](/Users/lifeart/Repos/openrv-web/src/services/TimelineEditorService.ts#L382).
-- Impact:
-  - Editing/reapplying the playlist through the timeline can snap clip start frames back to cut-style sequential positions even when transitions still exist.
-  - That makes transition-enabled timelines drift after edit operations: transition configs remain, but the clip layout they are supposed to overlap is rebuilt incorrectly.
 
 ### 411. Partial project/snapshot restore replays source-indexed review state without remapping it to surviving sources
 
@@ -1373,18 +1262,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Session bundles that include same-named media or same-named CDL files from different directories can resolve to the wrong companion file with no warning.
   - That makes basename-based RV/GTO recovery brittle for real production packages, where duplicate filenames across shots or plates are common.
-
-### 415. RV/GTO import cannot explicitly restore the “all scopes off” state
-
-- Severity: Medium
-- Area: RV/GTO import / scope visibility restore
-- Evidence:
-  - `parseScopes(...)` builds a full `ScopesState`, but returns it only when at least one scope is `true`; if all four scopes are off, it returns `null` in [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L667) through [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L699).
-  - `parseInitialSettings(...)` only includes `settings.scopes` when `parseScopes(dto)` returned a value in [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L65) through [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L68).
-  - The live `settingsLoaded` handler only hides/shows scopes when `settings.scopes` exists in [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L134) through [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L171).
-- Impact:
-  - Importing an RV/GTO session with no scopes enabled cannot actively close scopes that were already open in the current app session.
-  - That leaves QC scope visibility dependent on prior local state instead of the imported session’s state.
 
 ### 416. RV/GTO settings parsing extracts `linearize`, `outOfRange`, and `channelSwizzle`, but production never applies them
 

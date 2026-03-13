@@ -66,6 +66,8 @@ function createMockContext(
     gtoData: overrides.gtoData ?? null,
     allSources: overrides.allSources ?? [],
     currentSourceIndex: overrides.currentSourceIndex ?? 0,
+    metadata: { displayName: '' },
+    setDisplayName: vi.fn(),
   };
 
   return {

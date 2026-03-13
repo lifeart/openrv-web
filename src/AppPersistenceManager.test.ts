@@ -1356,4 +1356,101 @@ describe('AppPersistenceManager', () => {
       expect(fullCtx._autoSaveManager.deleteAutoSave).toHaveBeenCalledWith('save-1');
     });
   });
+
+  // -----------------------------------------------------------------------
+  // Issue #396: discard only removes the prompted entry, not all entries
+  // -----------------------------------------------------------------------
+  describe('issue #396: discard removes only prompted entry', () => {
+    it('APM-396a: discarding removes only the most recent entry, not all entries', async () => {
+      fullCtx._autoSaveManager.initialize.mockResolvedValue(true);
+      fullCtx._autoSaveManager.listAutoSaves.mockResolvedValue([
+        { id: 'save-recent', name: 'Recent Session', savedAt: new Date().toISOString() } as any,
+        { id: 'save-old', name: 'Old Session', savedAt: new Date(Date.now() - 86400000).toISOString() } as any,
+      ]);
+      // User chooses "Discard"
+      vi.mocked(showConfirm).mockResolvedValue(false);
+
+      await manager.init();
+
+      // Should delete only the specific entry the user was prompted about
+      expect(fullCtx._autoSaveManager.deleteAutoSave).toHaveBeenCalledWith('save-recent');
+      expect(fullCtx._autoSaveManager.deleteAutoSave).toHaveBeenCalledTimes(1);
+      // clearAll must NOT be called
+      expect(fullCtx._autoSaveManager.clearAll).not.toHaveBeenCalled();
+    });
+
+    it('APM-396b: other auto-save entries survive a discard', async () => {
+      fullCtx._autoSaveManager.initialize.mockResolvedValue(true);
+      fullCtx._autoSaveManager.listAutoSaves.mockResolvedValue([
+        { id: 'save-A', name: 'Session A', savedAt: new Date().toISOString() } as any,
+        { id: 'save-B', name: 'Session B', savedAt: new Date(Date.now() - 86400000).toISOString() } as any,
+        { id: 'save-C', name: 'Session C', savedAt: new Date(Date.now() - 172800000).toISOString() } as any,
+      ]);
+      // User chooses "Discard"
+      vi.mocked(showConfirm).mockResolvedValue(false);
+
+      await manager.init();
+
+      // Only the first (most recent) entry should be deleted
+      expect(fullCtx._autoSaveManager.deleteAutoSave).toHaveBeenCalledWith('save-A');
+      expect(fullCtx._autoSaveManager.deleteAutoSave).not.toHaveBeenCalledWith('save-B');
+      expect(fullCtx._autoSaveManager.deleteAutoSave).not.toHaveBeenCalledWith('save-C');
+      expect(fullCtx._autoSaveManager.clearAll).not.toHaveBeenCalled();
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Issue #397: state-only auto-save recovery shows success feedback
+  // -----------------------------------------------------------------------
+  describe('issue #397: state-only auto-save recovery feedback', () => {
+    it('APM-397a: state-only recovery (0 media) shows info alert', async () => {
+      fullCtx._autoSaveManager.initialize.mockResolvedValue(true);
+      fullCtx._autoSaveManager.listAutoSaves.mockResolvedValue([
+        { id: 'save-1', name: 'Session', savedAt: new Date().toISOString() } as any,
+      ]);
+      fullCtx._autoSaveManager.getAutoSave.mockResolvedValue({
+        version: 1, name: 'test', color: {},
+      } as any);
+      vi.mocked(showConfirm).mockResolvedValue(true);
+      vi.mocked(SessionSerializer.fromJSON).mockResolvedValue({
+        loadedMedia: 0,
+        warnings: [],
+      });
+
+      await manager.init();
+
+      // Entry should be deleted (clean recovery)
+      expect(fullCtx._autoSaveManager.deleteAutoSave).toHaveBeenCalledWith('save-1');
+      // Should show state-only info alert
+      expect(showAlert).toHaveBeenCalledWith(
+        'Session recovered (no media files — state only)',
+        expect.objectContaining({ type: 'info', title: 'Recovery Complete' }),
+      );
+    });
+
+    it('APM-397b: recovery with media still shows success alert', async () => {
+      fullCtx._autoSaveManager.initialize.mockResolvedValue(true);
+      fullCtx._autoSaveManager.listAutoSaves.mockResolvedValue([
+        { id: 'save-1', name: 'Session', savedAt: new Date().toISOString() } as any,
+      ]);
+      fullCtx._autoSaveManager.getAutoSave.mockResolvedValue({
+        version: 1, name: 'test', color: {},
+      } as any);
+      vi.mocked(showConfirm).mockResolvedValue(true);
+      vi.mocked(SessionSerializer.fromJSON).mockResolvedValue({
+        loadedMedia: 3,
+        warnings: [],
+      });
+
+      await manager.init();
+
+      // Entry should be deleted (clean recovery)
+      expect(fullCtx._autoSaveManager.deleteAutoSave).toHaveBeenCalledWith('save-1');
+      // Should show media-count success alert
+      expect(showAlert).toHaveBeenCalledWith(
+        'Session recovered successfully with 3 media file(s).',
+        expect.objectContaining({ type: 'success', title: 'Recovery Complete' }),
+      );
+    });
+  });
 });

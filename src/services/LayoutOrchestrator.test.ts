@@ -894,4 +894,58 @@ describe('LayoutOrchestrator', () => {
     expect(colorBtn.getAttribute('data-panel')).toBe('color');
     expect(colorBtn.style.display).toBe('none');
   });
+
+  // -------------------------------------------------------------------------
+  // LO-044: 360 metadata-based detection — isSpherical
+  // -------------------------------------------------------------------------
+  it('LO-044: enables spherical projection when source has isSpherical=true metadata (non-2:1)', () => {
+    orchestrator.createLayout();
+
+    d.mocks.controls.sphericalProjection.enabled = false;
+    // Non-2:1 aspect ratio but explicit spherical metadata
+    d.mocks.session._emit('sourceLoaded', {
+      name: 'pano.jpg',
+      width: 1920,
+      height: 1080,
+      isSpherical: true,
+    });
+
+    expect(d.mocks.controls.sphericalProjection.enable).toHaveBeenCalled();
+  });
+
+  // -------------------------------------------------------------------------
+  // LO-045: 360 metadata-based detection — projectionType
+  // -------------------------------------------------------------------------
+  it('LO-045: enables spherical projection when source has projectionType=equirectangular', () => {
+    orchestrator.createLayout();
+
+    d.mocks.controls.sphericalProjection.enabled = false;
+    // Non-2:1 aspect ratio but explicit projection type
+    d.mocks.session._emit('sourceLoaded', {
+      name: 'sphere.mp4',
+      width: 1920,
+      height: 1080,
+      projectionType: 'equirectangular',
+    });
+
+    expect(d.mocks.controls.sphericalProjection.enable).toHaveBeenCalled();
+  });
+
+  // -------------------------------------------------------------------------
+  // LO-046: isSpherical=false overrides 2:1 aspect ratio
+  // -------------------------------------------------------------------------
+  it('LO-046: disables spherical projection when isSpherical=false despite 2:1 ratio', () => {
+    orchestrator.createLayout();
+
+    d.mocks.controls.sphericalProjection.enabled = true;
+    // 2:1 aspect ratio but explicitly NOT spherical
+    d.mocks.session._emit('sourceLoaded', {
+      name: 'flat.jpg',
+      width: 4096,
+      height: 2048,
+      isSpherical: false,
+    });
+
+    expect(d.mocks.controls.sphericalProjection.disable).toHaveBeenCalled();
+  });
 });

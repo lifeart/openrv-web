@@ -381,6 +381,20 @@ export class SessionGraph extends EventEmitter<SessionGraphEvents> {
    * via host callbacks, and emitting graph/session events.
    */
   async loadFromGTO(data: ArrayBuffer | string, availableFiles?: Map<string, File>): Promise<void> {
+    // Fix #402: Reset metadata before parsing so that a GTO with no
+    // title/comment doesn't inherit stale values from the previous session.
+    this._metadata = {
+      displayName: '',
+      comment: '',
+      version: 2,
+      origin: 'openrv-web',
+      creationContext: 0,
+      clipboard: 0,
+      membershipContains: [],
+      realtime: 0,
+      bgColor: [0.18, 0.18, 0.18, 1.0],
+    };
+
     const reader = new SimpleReader();
 
     try {

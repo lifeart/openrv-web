@@ -342,6 +342,39 @@ describe('bindPersistenceHandlers', () => {
     expect(context.getScopesControl().setScopeVisible).toHaveBeenCalledWith('gamutDiagram', undefined);
   });
 
+  it('PERH-U035: settingsLoaded with all scopes off hides all scopes', () => {
+    handlers.settingsLoaded!({
+      scopes: { histogram: false, waveform: false, vectorscope: false, gamutDiagram: false },
+    } as any);
+
+    expect(context.getHistogram().hide).toHaveBeenCalled();
+    expect(context.getWaveform().hide).toHaveBeenCalled();
+    expect(context.getVectorscope().hide).toHaveBeenCalled();
+    expect(context.getGamutDiagram().hide).toHaveBeenCalled();
+    expect(context.getScopesControl().setScopeVisible).toHaveBeenCalledWith('histogram', false);
+    expect(context.getScopesControl().setScopeVisible).toHaveBeenCalledWith('waveform', false);
+    expect(context.getScopesControl().setScopeVisible).toHaveBeenCalledWith('vectorscope', false);
+    expect(context.getScopesControl().setScopeVisible).toHaveBeenCalledWith('gamutDiagram', false);
+    // Ensure no show() was called
+    expect(context.getHistogram().show).not.toHaveBeenCalled();
+    expect(context.getWaveform().show).not.toHaveBeenCalled();
+    expect(context.getVectorscope().show).not.toHaveBeenCalled();
+    expect(context.getGamutDiagram().show).not.toHaveBeenCalled();
+  });
+
+  it('PERH-U036: settingsLoaded without scopes property does not touch scopes', () => {
+    handlers.settingsLoaded!({} as any);
+
+    expect(context.getHistogram().show).not.toHaveBeenCalled();
+    expect(context.getHistogram().hide).not.toHaveBeenCalled();
+    expect(context.getWaveform().show).not.toHaveBeenCalled();
+    expect(context.getWaveform().hide).not.toHaveBeenCalled();
+    expect(context.getVectorscope().show).not.toHaveBeenCalled();
+    expect(context.getVectorscope().hide).not.toHaveBeenCalled();
+    expect(context.getGamutDiagram().show).not.toHaveBeenCalled();
+    expect(context.getGamutDiagram().hide).not.toHaveBeenCalled();
+  });
+
   it('PERH-U030: settingsLoaded syncs GTO store after applying settings', () => {
     handlers.settingsLoaded!({ colorAdjustments: { gamma: 1.0 } } as any);
 

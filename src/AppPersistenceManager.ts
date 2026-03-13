@@ -537,8 +537,8 @@ export class AppPersistenceManager {
           if (recover) {
             await this.recoverAutoSave(mostRecent.id);
           } else {
-            // Clear old auto-saves if user discards
-            await autoSaveManager.clearAll();
+            // Only delete the specific entry the user was prompted about (fix #396)
+            await autoSaveManager.deleteAutoSave(mostRecent.id);
           }
         }
       }
@@ -592,6 +592,11 @@ export class AppPersistenceManager {
             showAlert(`Session recovered successfully with ${loadedMedia} media file(s).`, {
               title: 'Recovery Complete',
               type: 'success',
+            });
+          } else {
+            showAlert('Session recovered (no media files — state only)', {
+              title: 'Recovery Complete',
+              type: 'info',
             });
           }
         }

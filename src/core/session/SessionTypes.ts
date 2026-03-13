@@ -211,6 +211,12 @@ export interface MediaSource {
   // OPFS cache key (set after successful cache put)
   opfsCacheKey?: string;
 
+  // --- Spherical / 360 metadata ---
+  /** True if the source is tagged as spherical (e.g. XMP SphericalVideo) */
+  isSpherical?: boolean;
+  /** Projection type from container metadata (e.g. 'equirectangular') */
+  projectionType?: 'equirectangular' | 'cubemap';
+
   // --- Multiple Media Representations (MMR) ---
   /** All available representations for this source. Undefined or empty array = legacy mode. */
   representations?: MediaRepresentation[];

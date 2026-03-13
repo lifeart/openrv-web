@@ -87,6 +87,41 @@ describe('Session', () => {
       expect(s.parseScopes(createMockDTO({}))).toBeNull();
     });
 
+    it('parseScopes returns state when all scopes are off (GTO has scope nodes with active=0)', () => {
+      const s = session as any;
+      const dto = createMockDTO({
+        Histogram: [{ node: { active: 0 } }],
+        Waveform: [{ node: { active: 0 } }],
+        Vectorscope: [{ node: { active: 0 } }],
+        GamutDiagram: [{ node: { active: 0 } }],
+      });
+      const scopes = s.parseScopes(dto);
+      expect(scopes).not.toBeNull();
+      expect(scopes.histogram).toBe(false);
+      expect(scopes.waveform).toBe(false);
+      expect(scopes.vectorscope).toBe(false);
+      expect(scopes.gamutDiagram).toBe(false);
+    });
+
+    it('parseScopes returns state when scope nodes exist but have no active property', () => {
+      const s = session as any;
+      // Node exists but no 'active' property — scope data is present in GTO
+      const dto = createMockDTO({
+        Histogram: [{ node: {} }],
+      });
+      const scopes = s.parseScopes(dto);
+      expect(scopes).not.toBeNull();
+      expect(scopes.histogram).toBe(false);
+    });
+
+    it('parseScopes returns null when no scope protocol nodes exist', () => {
+      const s = session as any;
+      const dto = createMockDTO({
+        RVColor: [{ color: { exposure: 1.0 } }],
+      });
+      expect(s.parseScopes(dto)).toBeNull();
+    });
+
     it('parseInitialSettings handles various components', () => {
       const dto = createMockDTO({
         RVColor: [

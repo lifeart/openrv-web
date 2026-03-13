@@ -410,8 +410,17 @@ export class LayoutOrchestrator {
     // Auto-detect 360 equirectangular content on source load
     const onSourceLoaded360 = (source: unknown) => {
       const sp = controls.sphericalProjection;
-      const s = source as { width?: number; height?: number };
-      const is360 = detect360Content({}, s.width ?? 0, s.height ?? 0);
+      const s = source as {
+        width?: number;
+        height?: number;
+        isSpherical?: boolean;
+        projectionType?: 'equirectangular' | 'cubemap';
+      };
+      const is360 = detect360Content(
+        { isSpherical: s.isSpherical, projectionType: s.projectionType },
+        s.width ?? 0,
+        s.height ?? 0,
+      );
       if (is360 && !sp.enabled) {
         sp.enable();
       } else if (!is360 && sp.enabled) {

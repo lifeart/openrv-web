@@ -672,9 +672,12 @@ export function parseScopes(dto: GTODTO): ScopesState | null {
     gamutDiagram: false,
   };
 
+  let foundAnyNode = false;
+
   const applyScope = (protocol: string, key: keyof ScopesState): void => {
     const nodes = dto.byProtocol(protocol);
     if (nodes.length === 0) return;
+    foundAnyNode = true;
     const node = nodes.first();
     const nodeComp = node.component('node');
     const active = nodeComp?.exists() ? getNumberValue(nodeComp.property('active').value()) : undefined;
@@ -692,7 +695,7 @@ export function parseScopes(dto: GTODTO): ScopesState | null {
   applyScope('GamutDiagram', 'gamutDiagram');
   applyScope('RVGamutDiagram', 'gamutDiagram');
 
-  if (scopes.histogram || scopes.waveform || scopes.vectorscope || scopes.gamutDiagram) {
+  if (foundAnyNode) {
     return scopes;
   }
 
