@@ -40,6 +40,9 @@ export interface PlaylistClipInput {
   outPoint: number;
 }
 
+/** Loop modes supported by the playlist */
+export type PlaylistLoopMode = 'none' | 'single' | 'all' | 'pingpong';
+
 /** Playlist state for serialization */
 export interface PlaylistState {
   /** List of clips */
@@ -48,8 +51,8 @@ export interface PlaylistState {
   enabled: boolean;
   /** Current playhead position (global frame) */
   currentFrame: number;
-  /** Loop mode: none, single (current clip), all */
-  loopMode: 'none' | 'single' | 'all';
+  /** Loop mode: none, single (current clip), all, or pingpong (bounce) */
+  loopMode: PlaylistLoopMode;
   /** Transitions between clips (optional, gap-indexed) */
   transitions?: (TransitionConfig | null)[];
 }
@@ -71,7 +74,7 @@ export interface PlaylistManagerEvents extends EventMap {
   /** Emitted when current clip changes */
   clipChanged: { clip: PlaylistClip | null; index: number };
   /** Emitted when loop mode changes */
-  loopModeChanged: { mode: 'none' | 'single' | 'all' };
+  loopModeChanged: { mode: PlaylistLoopMode };
   /** Emitted when playhead reaches end */
   playlistEnded: void;
 }
@@ -101,7 +104,9 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
   private clips: PlaylistClip[] = [];
   private enabled = false;
   private currentFrame = 1;
-  private loopMode: 'none' | 'single' | 'all' = 'none';
+  private loopMode: PlaylistLoopMode = 'none';
+  /** Playback direction for pingpong mode: 1 = forward, -1 = reverse */
+  private pingpongDirection: 1 | -1 = 1;
   private nextClipId = 1;
   private _unresolvedClips: UnresolvedOTIOClip[] = [];
   private nextUnresolvedId = 1;
@@ -323,6 +328,13 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
           return { frame: 1, clipChanged: true };
         }
 
+        if (this.loopMode === 'pingpong') {
+          // Reverse direction and step backward
+          this.pingpongDirection = -1;
+          const prev = this.getPreviousFrame(currentGlobal);
+          return prev;
+        }
+
         // End of playlist, no loop
         this.emit('playlistEnded', undefined);
         return { frame: currentGlobal, clipChanged: false };
@@ -344,6 +356,11 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
       if (this.loopMode === 'all' && this.clips.length > 0) {
         const totalDuration = this.getTotalDuration();
         return { frame: totalDuration, clipChanged: true };
+      }
+      if (this.loopMode === 'pingpong' && this.clips.length > 0) {
+        // Reverse direction and step forward
+        this.pingpongDirection = 1;
+        return this.getNextFrame(currentGlobal);
       }
       return { frame: 1, clipChanged: false };
     }
@@ -382,7 +399,7 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
     }
 
     // At last clip
-    if (this.loopMode === 'all') {
+    if (this.loopMode === 'all' || this.loopMode === 'pingpong') {
       const firstClip = this.clips[0]!;
       return { frame: firstClip.globalStartFrame, clip: firstClip };
     }
@@ -393,7 +410,7 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
   /**
    * Jump to the start of the previous clip, or start of current clip if mid-clip.
    * If already at the start of a clip (within 1 frame), goes to previous clip.
-   * Wraps to last clip when loopMode='all'.
+   * Wraps to last clip when loopMode='all' or 'pingpong'.
    * Returns null if at beginning with no loop, or if playlist is empty.
    */
   goToPreviousClip(currentGlobalFrame: number): { frame: number; clip: PlaylistClip } | null {
@@ -419,7 +436,7 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
     }
 
     // At first clip
-    if (this.loopMode === 'all') {
+    if (this.loopMode === 'all' || this.loopMode === 'pingpong') {
       const lastClip = this.clips[this.clips.length - 1]!;
       return { frame: lastClip.globalStartFrame, clip: lastClip };
     }
@@ -514,9 +531,12 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
   /**
    * Set loop mode
    */
-  setLoopMode(mode: 'none' | 'single' | 'all'): void {
+  setLoopMode(mode: PlaylistLoopMode): void {
     if (this.loopMode !== mode) {
       this.loopMode = mode;
+      if (mode !== 'pingpong') {
+        this.pingpongDirection = 1;
+      }
       this.emit('loopModeChanged', { mode });
     }
   }
@@ -524,8 +544,16 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
   /**
    * Get current loop mode
    */
-  getLoopMode(): 'none' | 'single' | 'all' {
+  getLoopMode(): PlaylistLoopMode {
     return this.loopMode;
+  }
+
+  /**
+   * Get the current pingpong playback direction.
+   * Returns 1 for forward, -1 for reverse.
+   */
+  getPingpongDirection(): 1 | -1 {
+    return this.pingpongDirection;
   }
 
   /**

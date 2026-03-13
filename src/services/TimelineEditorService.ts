@@ -75,7 +75,7 @@ export interface TimelinePlaylistManager {
   getClipByIndex(index: number): TimelinePlaylistClip | undefined;
   replaceClips(clips: { sourceIndex: number; sourceName: string; inPoint: number; outPoint: number }[]): void;
   getLoopMode(): string;
-  setLoopMode(mode: 'none' | 'single' | 'all'): void;
+  setLoopMode(mode: 'none' | 'single' | 'all' | 'pingpong'): void;
   setCurrentFrame(frame: number): void;
   on(event: string, handler: (...args: unknown[]) => void): () => void;
 }
@@ -407,12 +407,12 @@ export class TimelineEditorService {
     } else {
       // Multi-cut timelines use playlist runtime for cross-cut playback.
       if (!playlistEnabled) {
-        const mappedMode = this.session.loopMode === 'once' ? 'none' : 'all';
-        this.playlistManager.setLoopMode(mappedMode as 'none' | 'single' | 'all');
+        const mappedMode = this.mapSessionLoopToPlaylist(this.session.loopMode);
+        this.playlistManager.setLoopMode(mappedMode);
         this.playlistManager.setEnabled(true);
       } else if (this.playlistManager.getLoopMode() === 'none' && this.session.loopMode !== 'once') {
         // Preserve expected looping when user loop mode is not "once".
-        this.playlistManager.setLoopMode('all');
+        this.playlistManager.setLoopMode(this.mapSessionLoopToPlaylist(this.session.loopMode));
       }
     }
 
@@ -443,6 +443,23 @@ export class TimelineEditorService {
     this.timelineEditor.loadFromEDL(normalizedEDL);
     this.timeline.refresh();
     this.persistenceManager.syncGTOStore();
+  }
+
+  /**
+   * Map a session loop mode to the corresponding playlist loop mode.
+   * Session modes: 'once' | 'loop' | 'pingpong'
+   * Playlist modes: 'none' | 'single' | 'all' | 'pingpong'
+   */
+  private mapSessionLoopToPlaylist(sessionMode: string): 'none' | 'single' | 'all' | 'pingpong' {
+    switch (sessionMode) {
+      case 'once':
+        return 'none';
+      case 'pingpong':
+        return 'pingpong';
+      case 'loop':
+      default:
+        return 'all';
+    }
   }
 
   /** Release all event subscriptions. */
