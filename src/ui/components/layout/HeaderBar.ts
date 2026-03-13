@@ -32,13 +32,10 @@ export interface HeaderBarEvents extends EventMap {
   showCustomKeyBindings: void;
   fileLoaded: void;
   saveProject: void;
-  openProject: File[];
+  openProject: File;
   fullscreenToggle: void;
   presentationToggle: void;
   externalPresentation: void;
-  exportPreferences: void;
-  importPreferences: void;
-  resetPreferences: void;
 }
 
 export class HeaderBar extends EventEmitter<HeaderBarEvents> {
@@ -225,8 +222,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     // Hidden file input for project files
     this.projectInput = document.createElement('input');
     this.projectInput.type = 'file';
-    this.projectInput.accept = '.orvproject,.rv,.gto,.rvedl';
-    this.projectInput.multiple = true;
+    this.projectInput.accept = '.orvproject';
     this.projectInput.style.display = 'none';
     this.projectInput.addEventListener('change', (e) => this.handleProjectOpen(e));
     this.container.appendChild(this.projectInput);
@@ -235,9 +231,9 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     fileGroup.appendChild(this.createIconButton('folder', '', () => this.fileInput.click(), 'Open media file'));
 
     // Save Project button — icon-only
-    const saveButton = this.createIconButton('save', '', () => this.emit('saveProject', undefined), 'Save project');
-    saveButton.dataset.testid = 'save-button';
-    fileGroup.appendChild(saveButton);
+    fileGroup.appendChild(
+      this.createIconButton('save', '', () => this.emit('saveProject', undefined), 'Save project (Ctrl+Shift+S)'),
+    );
 
     // Open Project button — icon-only
     fileGroup.appendChild(this.createIconButton('layers', '', () => this.projectInput.click(), 'Open project'));
@@ -265,15 +261,11 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     ]);
     const sourcesButton = this.createCompactButton(
       'Sources',
-      () => {
-        this._sourcesMenu!.toggle(sourcesButton);
-        sourcesButton.setAttribute('aria-expanded', String(this._sourcesMenu!.isVisible()));
-      },
+      () => this._sourcesMenu!.toggle(sourcesButton),
       'Load procedural test pattern',
       'image',
     );
     sourcesButton.setAttribute('aria-haspopup', 'menu');
-    sourcesButton.setAttribute('aria-expanded', 'false');
     fileGroup.appendChild(sourcesButton);
 
     this.container.appendChild(fileGroup);
@@ -323,7 +315,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     );
 
     // Loop mode button
-    this.loopButton = this.createCompactButton('', () => this.cycleLoopMode(), 'Cycle loop mode (Ctrl+L)');
+    this.loopButton = this.createCompactButton('', () => this.cycleLoopMode(), 'Cycle loop mode (L)');
     this.loopButton.style.minWidth = '28px';
     this.loopButton.style.marginLeft = '8px';
     playbackGroup.appendChild(this.loopButton);
@@ -438,7 +430,6 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     );
     this.helpButton.dataset.testid = 'help-menu-button';
     this.helpButton.setAttribute('aria-haspopup', 'menu');
-    this.helpButton.setAttribute('aria-expanded', 'false');
     this.helpButton.style.marginLeft = '8px';
     utilityGroup.appendChild(this.helpButton);
 
@@ -628,8 +619,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     button.dataset.testid = 'playback-speed-button';
     button.title =
       'Playback speed: Click to cycle forward, Shift+Click to cycle backward, Right-click or Shift+Enter for menu (J/K/L keys)';
-    button.setAttribute('aria-description', 'Right-click or Shift+Enter for speed menu');
-    button.setAttribute('aria-expanded', 'false');
+    button.setAttribute('aria-haspopup', 'menu');
     button.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
@@ -775,7 +765,6 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   private showSpeedMenu(anchor: HTMLElement): void {
     // Close any other open header menus
     this.closeAllHeaderMenus();
-    anchor.setAttribute('aria-expanded', 'true');
     const existingMenu = document.getElementById('speed-preset-menu');
     if (existingMenu) {
       existingMenu.remove();
@@ -939,7 +928,9 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
           break;
         }
         case 'Tab': {
+          e.preventDefault();
           removeMenu();
+          anchor.focus();
           break;
         }
       }
@@ -963,7 +954,6 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       menu.remove();
       document.removeEventListener('click', closeMenu);
       this._activeSpeedMenuCleanup = null;
-      anchor.setAttribute('aria-expanded', 'false');
       anchor.focus();
     };
 
@@ -982,7 +972,6 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   private showHelpMenu(anchor: HTMLElement): void {
     // Close any other open header menus
     this.closeAllHeaderMenus();
-    anchor.setAttribute('aria-expanded', 'true');
 
     const menu = document.createElement('div');
     menu.id = 'help-menu';
@@ -999,27 +988,13 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       min-width: 180px;
     `;
 
-    const items: { icon: string; label: string; action: () => void; separator?: boolean }[] = [
+    const items: { icon: string; label: string; action: () => void }[] = [
       { icon: 'help', label: 'Keyboard Shortcuts', action: () => this.emit('showShortcuts', undefined) },
       { icon: 'keyboard', label: 'Custom Key Bindings', action: () => this.emit('showCustomKeyBindings', undefined) },
       { icon: 'book-open', label: 'Documentation', action: () => window.open('./docs/', '_blank') },
-      { icon: 'download', label: 'Export Preferences', action: () => this.emit('exportPreferences', undefined), separator: true },
-      { icon: 'upload', label: 'Import Preferences', action: () => this.emit('importPreferences', undefined) },
-      { icon: 'reset', label: 'Reset All Preferences', action: () => this.emit('resetPreferences', undefined) },
     ];
 
-    for (const { icon, label, action, separator } of items) {
-      if (separator) {
-        const sep = document.createElement('div');
-        sep.dataset.testid = 'help-menu-separator';
-        sep.setAttribute('role', 'separator');
-        sep.style.cssText = `
-          height: 1px;
-          background: var(--border-primary);
-          margin: 4px 0;
-        `;
-        menu.appendChild(sep);
-      }
+    for (const { icon, label, action } of items) {
       const item = document.createElement('button');
       item.setAttribute('role', 'menuitem');
       item.dataset.testid = `help-menu-${icon}`;
@@ -1087,14 +1062,11 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
           menuItems[prevIndex]?.focus();
           break;
         }
-        case 'Escape': {
+        case 'Escape':
+        case 'Tab': {
           e.preventDefault();
           removeMenu();
           anchor.focus();
-          break;
-        }
-        case 'Tab': {
-          removeMenu();
           break;
         }
       }
@@ -1118,7 +1090,6 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       menu.remove();
       document.removeEventListener('click', closeMenu);
       this._activeHelpMenuCleanup = null;
-      anchor.setAttribute('aria-expanded', 'false');
       anchor.focus();
     };
 
@@ -1234,14 +1205,11 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
           items[prevIndex]?.focus();
           break;
         }
-        case 'Escape': {
+        case 'Escape':
+        case 'Tab': {
           e.preventDefault();
           removeMenu();
           anchor.focus();
-          break;
-        }
-        case 'Tab': {
-          removeMenu();
           break;
         }
       }
@@ -1354,10 +1322,16 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       loop: 'Loop',
       pingpong: 'Ping',
     };
+    const tooltips: Record<LoopMode, string> = {
+      once: 'Play Once — Cycle loop mode (L)',
+      loop: 'Loop — Cycle loop mode (L)',
+      pingpong: 'Ping-Pong — Cycle loop mode (L)',
+    };
     const iconName = icons[this.session.loopMode];
     const label = labels[this.session.loopMode];
     this.loopButton.innerHTML = getIconSvg(iconName, 'sm');
     this.loopButton.setAttribute('aria-label', `${label} — Cycle loop mode`);
+    this.loopButton.title = tooltips[this.session.loopMode];
   }
 
   private updateDirectionButton(): void {
@@ -1382,8 +1356,6 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     // Check for .rvedl files in the selection
     const edlFile = fileArray.find((f) => f.name.toLowerCase().endsWith('.rvedl'));
     if (edlFile) {
-      // Remove the EDL file from the array so remaining media files can still be loaded
-      const remainingFiles = fileArray.filter((f) => f !== edlFile);
       try {
         const text = await edlFile.text();
         const entries = this.session.loadEDL(text);
@@ -1398,16 +1370,12 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
           );
           const sourceList = Array.from(uniqueSources).slice(0, 5).join(', ');
           const moreCount = uniqueSources.size > 5 ? ` and ${uniqueSources.size - 5} more` : '';
-          const mediaHint =
-            remainingFiles.length > 0
-              ? `\n\n${remainingFiles.length} accompanying media ${remainingFiles.length === 1 ? 'file' : 'files'} will also be loaded.`
-              : `\n\nSource paths are local filesystem references. ` +
-                `Load the corresponding media files to resolve them.`;
           showAlert(
             `Loaded ${entries.length} EDL ${entries.length === 1 ? 'entry' : 'entries'} ` +
               `from ${edlFile.name} referencing ${uniqueSources.size} ` +
-              `${uniqueSources.size === 1 ? 'source' : 'sources'}: ${sourceList}${moreCount}.` +
-              mediaHint,
+              `${uniqueSources.size === 1 ? 'source' : 'sources'}: ${sourceList}${moreCount}.\n\n` +
+              `Source paths are local filesystem references. ` +
+              `Load the corresponding media files to resolve them.`,
             { type: 'info', title: 'EDL Loaded' },
           );
           this.emit('fileLoaded', undefined);
@@ -1418,14 +1386,8 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
         console.error('Failed to load RVEDL file:', err);
         showAlert(`Failed to load ${edlFile.name}: ${err}`, { type: 'error', title: 'Load Error' });
       }
-      // If no remaining media files, we're done
-      if (remainingFiles.length === 0) {
-        input.value = '';
-        return;
-      }
-      // Continue to load remaining media files below
-      fileArray.length = 0;
-      fileArray.push(...remainingFiles);
+      input.value = '';
+      return;
     }
 
     // Check for .rv or .gto files in the selection
@@ -1435,16 +1397,10 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
 
     if (sessionFile) {
       // If we have a session file, treat other files as potential media sources
-      const availableFiles = new Map<string, File[]>();
+      const availableFiles = new Map<string, File>();
       for (const file of fileArray) {
         if (file !== sessionFile) {
-          const key = file.name;
-          const existing = availableFiles.get(key);
-          if (existing) {
-            existing.push(file);
-          } else {
-            availableFiles.set(key, [file]);
-          }
+          availableFiles.set(file.name, file);
         }
       }
 
@@ -1520,9 +1476,9 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
 
   private handleProjectOpen(e: Event): void {
     const input = e.target as HTMLInputElement;
-    const files = input.files;
-    if (files && files.length > 0) {
-      this.emit('openProject', Array.from(files));
+    const file = input.files?.[0];
+    if (file) {
+      this.emit('openProject', file);
     }
     input.value = '';
   }

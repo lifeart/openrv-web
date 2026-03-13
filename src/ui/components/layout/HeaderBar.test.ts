@@ -145,14 +145,14 @@ describe('HeaderBar', () => {
       expect(inputs.length).toBe(2);
     });
 
-    it('HDR-U024: project file input accepts all supported project formats', () => {
+    it('HDR-U024: project file input accepts .orvproject files', () => {
       const el = headerBar.render();
       const inputs = el.querySelectorAll('input[type="file"]');
       const projectInput = Array.from(inputs).find(
-        (input) => (input as HTMLInputElement).accept.includes('.orvproject'),
+        (input) => (input as HTMLInputElement).accept === '.orvproject',
       ) as HTMLInputElement;
       expect(projectInput).not.toBeNull();
-      expect(projectInput.accept).toBe('.orvproject,.rv,.gto,.rvedl');
+      expect(projectInput.accept).toBe('.orvproject');
     });
   });
 
@@ -307,15 +307,6 @@ describe('HeaderBar', () => {
       expect(session.loopMode).toBe('loop');
     });
 
-    it('HDR-U052: loop button tooltip shows Ctrl+L shortcut', () => {
-      const el = headerBar.render();
-      const buttons = el.querySelectorAll('button');
-      const loopBtn = Array.from(buttons).find((btn) => btn.title?.includes('loop mode')) as HTMLButtonElement;
-
-      expect(loopBtn.title).toBe('Cycle loop mode (Ctrl+L)');
-      expect(loopBtn.title).not.toContain('(L)');
-    });
-
     it('HDR-U051: loop button shows current mode via aria-label', () => {
       const el = headerBar.render();
       const buttons = el.querySelectorAll('button');
@@ -324,6 +315,45 @@ describe('HeaderBar', () => {
       ) as HTMLButtonElement;
 
       expect(loopBtn.getAttribute('aria-label')).toContain('Loop');
+    });
+
+    it('HDR-U052: loop button tooltip reflects current mode', () => {
+      const el = headerBar.render();
+      const buttons = el.querySelectorAll('button');
+      const loopBtn = Array.from(buttons).find((btn) => btn.title?.includes('loop mode')) as HTMLButtonElement;
+
+      // Default mode is loop
+      expect(loopBtn.title).toBe('Loop — Cycle loop mode (L)');
+
+      // Cycle to pingpong
+      loopBtn.click();
+      expect(loopBtn.title).toBe('Ping-Pong — Cycle loop mode (L)');
+
+      // Cycle to once
+      loopBtn.click();
+      expect(loopBtn.title).toBe('Play Once — Cycle loop mode (L)');
+
+      // Cycle back to loop
+      loopBtn.click();
+      expect(loopBtn.title).toBe('Loop — Cycle loop mode (L)');
+    });
+
+    it('HDR-U053: loop button tooltip updates on loopModeChanged event', () => {
+      const el = headerBar.render();
+      const buttons = el.querySelectorAll('button');
+      const loopBtn = Array.from(buttons).find((btn) => btn.title?.includes('loop mode')) as HTMLButtonElement;
+
+      session.loopMode = 'pingpong';
+      session.emit('loopModeChanged', 'pingpong');
+      expect(loopBtn.title).toBe('Ping-Pong — Cycle loop mode (L)');
+
+      session.loopMode = 'once';
+      session.emit('loopModeChanged', 'once');
+      expect(loopBtn.title).toBe('Play Once — Cycle loop mode (L)');
+
+      session.loopMode = 'loop';
+      session.emit('loopModeChanged', 'loop');
+      expect(loopBtn.title).toBe('Loop — Cycle loop mode (L)');
     });
   });
 
@@ -481,95 +511,6 @@ describe('HeaderBar', () => {
       const dropdown = document.querySelector('[data-testid="help-menu-dropdown"]');
       const keyBindingsItem = dropdown!.querySelector('[data-testid="help-menu-keyboard"]') as HTMLButtonElement;
       keyBindingsItem.click();
-
-      expect(callback).toHaveBeenCalled();
-    });
-
-    it('HDR-U092b: help dropdown has preferences separator', () => {
-      const el = headerBar.render();
-      const helpBtn = el.querySelector('[data-testid="help-menu-button"]') as HTMLButtonElement;
-      helpBtn.click();
-
-      const dropdown = document.querySelector('[data-testid="help-menu-dropdown"]');
-      const separator = dropdown!.querySelector('[data-testid="help-menu-separator"]');
-      expect(separator).not.toBeNull();
-      expect(separator!.getAttribute('role')).toBe('separator');
-    });
-
-    it('HDR-U092c: help dropdown has Export Preferences option', () => {
-      const el = headerBar.render();
-      const helpBtn = el.querySelector('[data-testid="help-menu-button"]') as HTMLButtonElement;
-      helpBtn.click();
-
-      const dropdown = document.querySelector('[data-testid="help-menu-dropdown"]');
-      const item = dropdown!.querySelector('[data-testid="help-menu-download"]');
-      expect(item).not.toBeNull();
-      expect(item!.textContent).toContain('Export Preferences');
-    });
-
-    it('HDR-U092d: help dropdown has Import Preferences option', () => {
-      const el = headerBar.render();
-      const helpBtn = el.querySelector('[data-testid="help-menu-button"]') as HTMLButtonElement;
-      helpBtn.click();
-
-      const dropdown = document.querySelector('[data-testid="help-menu-dropdown"]');
-      const item = dropdown!.querySelector('[data-testid="help-menu-upload"]');
-      expect(item).not.toBeNull();
-      expect(item!.textContent).toContain('Import Preferences');
-    });
-
-    it('HDR-U092e: help dropdown has Reset All Preferences option', () => {
-      const el = headerBar.render();
-      const helpBtn = el.querySelector('[data-testid="help-menu-button"]') as HTMLButtonElement;
-      helpBtn.click();
-
-      const dropdown = document.querySelector('[data-testid="help-menu-dropdown"]');
-      const item = dropdown!.querySelector('[data-testid="help-menu-reset"]');
-      expect(item).not.toBeNull();
-      expect(item!.textContent).toContain('Reset All Preferences');
-    });
-
-    it('HDR-U092f: clicking Export Preferences emits exportPreferences event', () => {
-      const callback = vi.fn();
-      headerBar.on('exportPreferences', callback);
-
-      const el = headerBar.render();
-      const helpBtn = el.querySelector('[data-testid="help-menu-button"]') as HTMLButtonElement;
-      helpBtn.click();
-
-      const dropdown = document.querySelector('[data-testid="help-menu-dropdown"]');
-      const item = dropdown!.querySelector('[data-testid="help-menu-download"]') as HTMLButtonElement;
-      item.click();
-
-      expect(callback).toHaveBeenCalled();
-    });
-
-    it('HDR-U092g: clicking Import Preferences emits importPreferences event', () => {
-      const callback = vi.fn();
-      headerBar.on('importPreferences', callback);
-
-      const el = headerBar.render();
-      const helpBtn = el.querySelector('[data-testid="help-menu-button"]') as HTMLButtonElement;
-      helpBtn.click();
-
-      const dropdown = document.querySelector('[data-testid="help-menu-dropdown"]');
-      const item = dropdown!.querySelector('[data-testid="help-menu-upload"]') as HTMLButtonElement;
-      item.click();
-
-      expect(callback).toHaveBeenCalled();
-    });
-
-    it('HDR-U092h: clicking Reset All Preferences emits resetPreferences event', () => {
-      const callback = vi.fn();
-      headerBar.on('resetPreferences', callback);
-
-      const el = headerBar.render();
-      const helpBtn = el.querySelector('[data-testid="help-menu-button"]') as HTMLButtonElement;
-      helpBtn.click();
-
-      const dropdown = document.querySelector('[data-testid="help-menu-dropdown"]');
-      const item = dropdown!.querySelector('[data-testid="help-menu-reset"]') as HTMLButtonElement;
-      item.click();
 
       expect(callback).toHaveBeenCalled();
     });
@@ -775,7 +716,7 @@ describe('HeaderBar', () => {
       const el = headerBar.render();
       const inputs = el.querySelectorAll('input[type="file"]');
       const projectInput = Array.from(inputs).find(
-        (input) => (input as HTMLInputElement).accept.includes('.orvproject'),
+        (input) => (input as HTMLInputElement).accept === '.orvproject',
       ) as HTMLInputElement;
 
       // Create a mock file and dispatch change event
@@ -783,7 +724,7 @@ describe('HeaderBar', () => {
       Object.defineProperty(projectInput, 'files', { value: [file] });
       projectInput.dispatchEvent(new Event('change'));
 
-      expect(callback).toHaveBeenCalledWith([file]);
+      expect(callback).toHaveBeenCalledWith(file);
     });
   });
 
@@ -1699,10 +1640,10 @@ describe('HeaderBar', () => {
       document.body.removeChild(el);
     });
 
-    it('SPD-M22a-haspopup: speed button should NOT have aria-haspopup="menu" (primary activation cycles speed)', () => {
+    it('SPD-M22a-haspopup: speed button should have aria-haspopup="menu"', () => {
       const el = headerBar.render();
       const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLButtonElement;
-      expect(speedBtn.getAttribute('aria-haspopup')).toBeNull();
+      expect(speedBtn.getAttribute('aria-haspopup')).toBe('menu');
     });
 
     it('SPD-M22b: Speed menu container should have role="menu"', () => {
@@ -1933,184 +1874,6 @@ describe('HeaderBar', () => {
       });
 
       loadEDLSpy.mockRestore();
-    });
-  });
-
-  describe('test IDs', () => {
-    it('HDR-U200: save button has data-testid="save-button"', () => {
-      const el = headerBar.render();
-      const button = el.querySelector('[data-testid="save-button"]');
-      expect(button).toBeInstanceOf(HTMLButtonElement);
-    });
-
-    it('HDR-U201: save button tooltip does not advertise a keyboard shortcut (Issue #300)', () => {
-      const el = headerBar.render();
-      const button = el.querySelector('[data-testid="save-button"]') as HTMLButtonElement;
-      expect(button).toBeTruthy();
-      expect(button.title).toBe('Save project');
-      expect(button.title).not.toContain('Ctrl');
-      expect(button.title).not.toContain('Shift');
-    });
-  });
-
-  describe('aria-expanded on popup buttons (#73)', () => {
-    it('HDR-U210: sources button has aria-expanded="false" initially', () => {
-      const el = headerBar.render();
-      const sourcesBtn = Array.from(el.querySelectorAll('button')).find(
-        (b) => b.textContent?.includes('Sources'),
-      );
-      expect(sourcesBtn).toBeTruthy();
-      expect(sourcesBtn!.getAttribute('aria-expanded')).toBe('false');
-    });
-
-    it('HDR-U211: help button has aria-expanded="false" initially', () => {
-      const el = headerBar.render();
-      const helpBtn = el.querySelector('[data-testid="help-menu-button"]') as HTMLElement;
-      expect(helpBtn).toBeTruthy();
-      expect(helpBtn.getAttribute('aria-expanded')).toBe('false');
-    });
-
-    it('HDR-U212: speed button has aria-expanded="false" initially', () => {
-      const el = headerBar.render();
-      const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLElement;
-      expect(speedBtn).toBeTruthy();
-      expect(speedBtn.getAttribute('aria-expanded')).toBe('false');
-    });
-
-    it('HDR-U213: help button sets aria-expanded="true" when menu opens', () => {
-      const el = headerBar.render();
-      const helpBtn = el.querySelector('[data-testid="help-menu-button"]') as HTMLButtonElement;
-
-      helpBtn.click();
-
-      expect(helpBtn.getAttribute('aria-expanded')).toBe('true');
-      // Verify menu exists
-      expect(document.getElementById('help-menu')).not.toBeNull();
-    });
-
-    it('HDR-U214: speed button sets aria-expanded="true" when menu opens', () => {
-      const el = headerBar.render();
-      const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLButtonElement;
-
-      // Right-click opens the speed menu
-      speedBtn.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
-
-      expect(speedBtn.getAttribute('aria-expanded')).toBe('true');
-      expect(document.getElementById('speed-preset-menu')).not.toBeNull();
-    });
-  });
-
-  describe('Issue #71: speed button ARIA semantics', () => {
-    it('HDR-U220: speed button does NOT have aria-haspopup="menu"', () => {
-      const el = headerBar.render();
-      const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLElement;
-      expect(speedBtn.getAttribute('aria-haspopup')).toBeNull();
-    });
-
-    it('HDR-U221: speed button has aria-description mentioning menu access method', () => {
-      const el = headerBar.render();
-      const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLElement;
-      const desc = speedBtn.getAttribute('aria-description');
-      expect(desc).toBeTruthy();
-      expect(desc).toContain('Right-click');
-      expect(desc).toContain('Shift+Enter');
-    });
-  });
-
-  describe('Issue #74: Tab key in menus does not trap focus', () => {
-    it('HDR-U230: Tab in speed menu closes menu without preventDefault', () => {
-      const el = headerBar.render();
-      document.body.appendChild(el);
-      const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLButtonElement;
-
-      // Open speed menu via right-click
-      speedBtn.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
-      const menu = document.getElementById('speed-preset-menu');
-      expect(menu).not.toBeNull();
-
-      // Dispatch Tab key on the menu
-      const tabEvent = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
-      menu!.dispatchEvent(tabEvent);
-
-      // Menu should be closed
-      expect(document.getElementById('speed-preset-menu')).toBeNull();
-      // preventDefault should NOT have been called
-      expect(tabEvent.defaultPrevented).toBe(false);
-
-      document.body.removeChild(el);
-    });
-
-    it('HDR-U231: Tab in help menu closes menu without preventDefault', () => {
-      const el = headerBar.render();
-      document.body.appendChild(el);
-      const helpBtn = el.querySelector('[data-testid="help-menu-button"]') as HTMLButtonElement;
-
-      // Open help menu
-      helpBtn.click();
-      const menu = document.getElementById('help-menu');
-      expect(menu).not.toBeNull();
-
-      // Dispatch Tab key on the menu
-      const tabEvent = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
-      menu!.dispatchEvent(tabEvent);
-
-      // Menu should be closed
-      expect(document.getElementById('help-menu')).toBeNull();
-      // preventDefault should NOT have been called
-      expect(tabEvent.defaultPrevented).toBe(false);
-
-      document.body.removeChild(el);
-    });
-
-    it('HDR-U232: Tab in layout menu closes menu without preventDefault', () => {
-      const presets: Pick<LayoutPreset, 'id' | 'label'>[] = [
-        { id: 'default', label: 'Default' },
-        { id: 'color', label: 'Color' },
-      ];
-      headerBar.setLayoutPresets(presets, vi.fn());
-      headerBar.setActiveLayoutPreset('default');
-
-      const el = headerBar.render();
-      document.body.appendChild(el);
-      const layoutBtn = el.querySelector('[data-testid="layout-menu-button"]') as HTMLButtonElement;
-
-      // Open layout menu
-      layoutBtn.click();
-      const menu = document.getElementById('layout-preset-menu');
-      expect(menu).not.toBeNull();
-
-      // Dispatch Tab key on the menu
-      const tabEvent = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
-      menu!.dispatchEvent(tabEvent);
-
-      // Menu should be closed
-      expect(document.getElementById('layout-preset-menu')).toBeNull();
-      // preventDefault should NOT have been called
-      expect(tabEvent.defaultPrevented).toBe(false);
-
-      document.body.removeChild(el);
-    });
-
-    it('HDR-U233: Escape in menu still calls preventDefault and focuses anchor', () => {
-      const el = headerBar.render();
-      document.body.appendChild(el);
-      const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLButtonElement;
-
-      // Open speed menu via right-click
-      speedBtn.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
-      const menu = document.getElementById('speed-preset-menu');
-      expect(menu).not.toBeNull();
-
-      // Dispatch Escape key on the menu
-      const escEvent = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
-      menu!.dispatchEvent(escEvent);
-
-      // Menu should be closed
-      expect(document.getElementById('speed-preset-menu')).toBeNull();
-      // preventDefault SHOULD have been called for Escape
-      expect(escEvent.defaultPrevented).toBe(true);
-
-      document.body.removeChild(el);
     });
   });
 });

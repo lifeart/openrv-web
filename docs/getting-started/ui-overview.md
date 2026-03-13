@@ -81,7 +81,7 @@ The playback control group includes:
 - **Go to end** (`End`) -- jump to last frame or out point
 - **Direction toggle** (`Up Arrow`) -- switch between forward and reverse playback
 - **Speed button** -- displays current speed (e.g., "1x"); click to cycle presets, right-click for speed menu
-- **Loop mode** -- displays current mode (Loop, Ping, Once); click to cycle
+- **Loop mode** -- icon-only button; hover tooltip shows current mode (Loop, Ping-Pong, Play Once); click to cycle
 
 ### Utilities (Right)
 
@@ -200,8 +200,8 @@ Floating panels provide detailed controls without permanently consuming screen s
 | Curves | `U` | Master/R/G/B channel curve editor |
 | Color wheels | `Shift+Alt+W` | Lift/Gamma/Gain three-way correction |
 | HSL Qualifier | `Shift+H` | Secondary color selection |
-| Histogram | *(none by default)* | RGB/luminance histogram |
-| Waveform | *(none by default)* | Luma/RGB/Parade/YCbCr waveform |
+| Histogram | `H` | RGB/luminance histogram |
+| Waveform | `W` | Luma/RGB/Parade/YCbCr waveform |
 | Vectorscope | `Y` | Color vector display |
 | Pixel probe | `Shift+I` | Real-time pixel value readout |
 | Markers | `Shift+Alt+M` | Marker list with notes and colors |
