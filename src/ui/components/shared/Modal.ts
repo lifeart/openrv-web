@@ -770,3 +770,184 @@ export function showFileReloadPrompt(filename: string, options: FileReloadOption
     document.addEventListener('keydown', handleKeydown);
   });
 }
+
+/**
+ * Show a dialog prompting the user to reload sequence files.
+ * Returns the selected Files array or null if skipped.
+ */
+export function showSequenceReloadPrompt(
+  sequenceName: string,
+  options: FileReloadOptions = {},
+): Promise<File[] | null> {
+  return new Promise((resolve) => {
+    cleanupCustomModalEscapeHandler();
+    const {
+      title = 'Reload Sequence',
+      accept = 'image/*',
+      browseText = 'Browse...',
+      skipText = 'Skip',
+      onClose,
+    } = options;
+
+    const container = getModalContainer();
+    container.innerHTML = '';
+
+    const modal = createModalBase({
+      ...options,
+      title,
+      onClose: () => {
+        onClose?.();
+        resolve(null);
+      },
+    });
+    modal.setAttribute('data-testid', 'sequence-reload-dialog');
+
+    // Content
+    const content = document.createElement('div');
+    content.style.cssText = `
+      padding: 16px;
+      color: var(--text-primary);
+      font-size: 13px;
+      line-height: 1.5;
+    `;
+
+    const messageP = document.createElement('p');
+    messageP.style.margin = '0 0 8px 0';
+    messageP.textContent = 'The following image sequence needs to be reloaded. Please select all sequence files:';
+    content.appendChild(messageP);
+
+    // Expected sequence name display
+    const expectedFile = document.createElement('div');
+    expectedFile.style.cssText = `
+      padding: 8px 12px;
+      background: rgba(var(--accent-primary-rgb), 0.15);
+      border: 1px solid var(--accent-primary);
+      border-radius: 4px;
+      color: var(--accent-primary);
+      font-size: 13px;
+      font-family: monospace;
+      margin-bottom: 12px;
+      word-break: break-all;
+    `;
+    expectedFile.textContent = sequenceName;
+    content.appendChild(expectedFile);
+
+    const hintP = document.createElement('p');
+    hintP.style.cssText = 'margin: 0 0 12px 0; color: var(--text-muted); font-size: 12px;';
+    hintP.textContent = 'Select multiple image files that form the sequence.';
+    content.appendChild(hintP);
+
+    // Hidden file input with multiple
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = accept;
+    fileInput.multiple = true;
+    fileInput.style.display = 'none';
+
+    let selectedFiles: File[] = [];
+
+    // File selection display
+    const fileDisplay = document.createElement('div');
+    fileDisplay.style.cssText = `
+      padding: 8px 12px;
+      background: var(--bg-hover);
+      border: 1px solid var(--bg-active);
+      border-radius: 4px;
+      color: var(--text-muted);
+      font-size: 12px;
+    `;
+    fileDisplay.textContent = 'No files selected';
+
+    fileInput.addEventListener('change', () => {
+      const files = fileInput.files;
+      if (files && files.length > 0) {
+        selectedFiles = Array.from(files);
+        fileDisplay.textContent = `Selected: ${selectedFiles.length} file(s)`;
+        fileDisplay.style.color = 'var(--success)';
+        fileDisplay.style.borderColor = 'var(--success)';
+
+        // Enable load button when files are selected and focus it
+        loadBtn.disabled = false;
+        loadBtn.style.opacity = '1';
+        loadBtn.focus();
+      }
+    });
+
+    content.appendChild(fileInput);
+    content.appendChild(fileDisplay);
+    modal.appendChild(content);
+
+    // Footer
+    const footer = document.createElement('div');
+    footer.style.cssText = `
+      display: flex;
+      justify-content: flex-end;
+      padding: 12px 16px;
+      border-top: 1px solid var(--border-primary);
+      gap: 8px;
+    `;
+
+    // Keyboard handling
+    const handleKeydown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        hideContainer();
+        onClose?.();
+        resolve(null);
+        document.removeEventListener('keydown', handleKeydown);
+      } else if (e.key === 'Enter' && selectedFiles.length > 0 && !loadBtn.disabled) {
+        hideContainer();
+        onClose?.();
+        resolve(selectedFiles);
+        document.removeEventListener('keydown', handleKeydown);
+      }
+    };
+
+    const skipBtn = createButton(
+      skipText,
+      () => {
+        hideContainer();
+        onClose?.();
+        resolve(null);
+        document.removeEventListener('keydown', handleKeydown);
+      },
+      { variant: 'default', minWidth: '80px' },
+    );
+    skipBtn.setAttribute('data-testid', 'sequence-reload-skip');
+
+    const browseBtn = createButton(
+      browseText,
+      () => {
+        fileInput.click();
+      },
+      { variant: 'default', minWidth: '100px' },
+    );
+    browseBtn.setAttribute('data-testid', 'sequence-reload-browse');
+
+    const loadBtn = createButton(
+      'Load',
+      () => {
+        hideContainer();
+        onClose?.();
+        resolve(selectedFiles);
+        document.removeEventListener('keydown', handleKeydown);
+      },
+      { variant: 'primary', minWidth: '80px' },
+    );
+    loadBtn.setAttribute('data-testid', 'sequence-reload-load');
+
+    // Disable load button until files are selected
+    loadBtn.disabled = true;
+    loadBtn.style.opacity = '0.5';
+
+    footer.appendChild(skipBtn);
+    footer.appendChild(browseBtn);
+    footer.appendChild(loadBtn);
+    modal.appendChild(footer);
+
+    container.appendChild(modal);
+    showContainer();
+
+    // Register keyboard handler
+    document.addEventListener('keydown', handleKeydown);
+  });
+}

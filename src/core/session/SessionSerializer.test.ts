@@ -17,10 +17,12 @@ import { DEFAULT_BLEND_MODE_STATE } from '../../ui/components/ComparisonManager'
 import { createDefaultCurvesData } from '../../color/ColorCurves';
 import { DEFAULT_STEREO_EYE_TRANSFORM_STATE, DEFAULT_STEREO_ALIGN_MODE } from '../../stereo/StereoRenderer';
 import { LUTPipeline } from '../../color/pipeline/LUTPipeline';
+import { SUPPORTED_MEDIA_ACCEPT } from '../../utils/media/SupportedMediaFormats';
 
 // Mock the showFileReloadPrompt dialog
 vi.mock('../../ui/components/shared/Modal', () => ({
   showFileReloadPrompt: vi.fn(),
+  showSequenceReloadPrompt: vi.fn(),
 }));
 
 import { showFileReloadPrompt } from '../../ui/components/shared/Modal';
@@ -560,7 +562,7 @@ describe('SessionSerializer', () => {
       expect(showFileReloadPrompt).toHaveBeenNthCalledWith(
         1,
         'image1.png',
-        expect.objectContaining({ accept: 'image/*' }),
+        expect.objectContaining({ accept: SUPPORTED_MEDIA_ACCEPT }),
       );
       expect(showFileReloadPrompt).toHaveBeenNthCalledWith(
         2,
@@ -570,7 +572,7 @@ describe('SessionSerializer', () => {
       expect(showFileReloadPrompt).toHaveBeenNthCalledWith(
         3,
         'image2.png',
-        expect.objectContaining({ accept: 'image/*' }),
+        expect.objectContaining({ accept: SUPPORTED_MEDIA_ACCEPT }),
       );
 
       // Verify loadFile was called for files 1 and 3 (not 2 which was skipped)
