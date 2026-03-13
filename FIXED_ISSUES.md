@@ -2012,3 +2012,30 @@ Called from `fromJSON()` inside the existing `if (mediaIndexMap.size > 0)` block
 - `src/ui/components/ReferenceManager.test.ts`
 - `src/ui/components/Viewer.ts`
 - `src/services/tabContent/buildViewTab.ts`
+
+## Issue #434: Malformed WebSocket sync messages are dropped silently with no error path
+
+**Root cause**: `WebSocketClient.handleMessage()` silently returned when `deserializeMessage()` failed, with no event emission. `NetworkSyncManager` never learned about protocol corruption, so users saw random state drift with no explanation.
+
+**Fix**:
+- Added `warning` event to `WebSocketClientEvents` (separate from `error` to avoid triggering reconnection)
+- `handleMessage()` now calls `emitMalformedMessageWarning()` which emits a `warning` with code `MALFORMED_MESSAGE`, descriptive message, and truncated raw data preview (max 120 chars)
+- Rate-limited to 5 warnings per 10-second window to prevent flooding
+- Rate-limit counters reset on disconnect and reconnect (`cleanup()` and `onopen`)
+- `NetworkSyncManager` subscribes to `warning` and forwards it as a `toastMessage` for user visibility
+
+**Tests added**: 7 regression tests across WebSocketClient.test.ts and NetworkSyncManager.test.ts:
+- Warning emitted on malformed JSON and structurally invalid messages
+- Warning payload includes code, message, and truncated detail
+- Long messages truncated in detail field
+- Rate limiting at boundary (5 of 10 messages emit)
+- Rate limit resets after time window elapses
+- Rate limit resets after disconnect/reconnect cycle
+- NetworkSyncManager forwards warning as toastMessage
+
+**Files changed**:
+- `src/network/types.ts`
+- `src/network/WebSocketClient.ts`
+- `src/network/WebSocketClient.test.ts`
+- `src/network/NetworkSyncManager.ts`
+- `src/network/NetworkSyncManager.test.ts`

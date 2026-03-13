@@ -382,6 +382,7 @@ export interface WebSocketClientEvents extends EventMap {
   disconnected: { code: number; reason: string };
   message: SyncMessage;
   error: Error;
+  warning: { code: string; message: string; detail?: string };
   reconnecting: { attempt: number; maxAttempts: number };
   reconnected: void;
   reconnectFailed: void;

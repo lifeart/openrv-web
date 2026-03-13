@@ -736,17 +736,7 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Opening a media-bearing share link while you already have anything loaded can apply the sender's frame/view/compare state to the wrong local media instead of the shared media.
   - That makes share links context-sensitive: the same link behaves differently depending on whether the recipient opens it in a fresh app state or not.
 
-### 434. Malformed WebSocket sync messages are dropped silently with no error path
 
-- Severity: Medium
-- Area: Collaboration / WebSocket protocol handling
-- Evidence:
-  - `WebSocketClient.handleMessage(...)` deserializes incoming strings and immediately returns when `deserializeMessage(...)` fails, under the explicit comment `Reject malformed messages silently`, in [src/network/WebSocketClient.ts](/Users/lifeart/Repos/openrv-web/src/network/WebSocketClient.ts#L196) through [src/network/WebSocketClient.ts#L203).
-  - `NetworkSyncManager` depends on the client's `message` and `error` events for protocol handling and user-facing error propagation in [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L759) through [src/network/NetworkSyncManager.ts#L806).
-  - The current tests codify the silent-drop behavior by asserting malformed messages do not reach any handler in [src/network/WebSocketClient.test.ts](/Users/lifeart/Repos/openrv-web/src/network/WebSocketClient.test.ts#L194) through [src/network/WebSocketClient.test.ts#L205).
-- Impact:
-  - A server/proxy that sends malformed or truncated sync payloads can cause missed collaboration updates with no toast, no error event, and no visible explanation.
-  - That makes protocol corruption look like random state drift rather than a diagnosable network failure.
 
 ### 436. Outbound collaboration updates can be dropped silently when realtime transport send fails
 

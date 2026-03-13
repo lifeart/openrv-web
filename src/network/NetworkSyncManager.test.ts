@@ -401,6 +401,26 @@ describe('NetworkSyncManager', () => {
     });
   });
 
+  describe('warning forwarding', () => {
+    it('NSM-092: forwards WebSocketClient warning as toastMessage', () => {
+      const toastHandler = vi.fn();
+      manager.on('toastMessage', toastHandler);
+
+      const wsClient = (manager as any).wsClient;
+      wsClient.emit('warning', {
+        code: 'MALFORMED_MESSAGE',
+        message: 'Received malformed sync message (1 in current window)',
+        detail: 'not valid json',
+      });
+
+      expect(toastHandler).toHaveBeenCalledTimes(1);
+      expect(toastHandler).toHaveBeenCalledWith({
+        message: 'Received malformed sync message (1 in current window)',
+        type: 'warning',
+      });
+    });
+  });
+
   describe('dispose', () => {
     it('NSM-050: cleans up subscriptions', () => {
       manager._applyLocalRoomCreation();

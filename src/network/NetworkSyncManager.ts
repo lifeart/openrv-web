@@ -806,7 +806,12 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
       this.emit('error', { code: 'WS_ERROR', message: err.message });
     });
 
-    this._unsubscribers.push(unsub0, unsub1, unsub2, unsub3, unsub4, unsub5, unsub6, unsub7);
+    const unsub8 = this.wsClient.on('warning', (warning) => {
+      log.warn(`[${warning.code}] ${warning.message}`, warning.detail);
+      this.emit('toastMessage', { message: warning.message, type: 'warning' });
+    });
+
+    this._unsubscribers.push(unsub0, unsub1, unsub2, unsub3, unsub4, unsub5, unsub6, unsub7, unsub8);
   }
 
   private handleMessage(message: SyncMessage, transport: 'websocket' | 'webrtc' = 'websocket'): void {
