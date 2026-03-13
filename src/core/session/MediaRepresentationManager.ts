@@ -62,14 +62,26 @@ export class MediaRepresentationManager extends EventEmitter<RepresentationManag
     if (!representations) return null;
 
     const representation = createRepresentation(config);
+
+    // Capture the currently active representation object before sort
+    const activeIndex = this._accessor.getActiveRepresentationIndex(sourceIndex);
+    const previouslyActive = activeIndex >= 0 && activeIndex < representations.length
+      ? representations[activeIndex]
+      : null;
+
     representations.push(representation);
 
     // Sort by priority (lower = preferred)
     representations.sort((a, b) => a.priority - b.priority);
 
-    // If no representation is currently active and this one is ready, activate it
-    const activeIndex = this._accessor.getActiveRepresentationIndex(sourceIndex);
-    if (activeIndex === -1 && representation.status === 'ready') {
+    // If there was an active representation, remap its index after sort
+    if (previouslyActive) {
+      const remappedIndex = representations.indexOf(previouslyActive);
+      if (remappedIndex !== activeIndex) {
+        this._accessor.setActiveRepresentationIndex(sourceIndex, remappedIndex);
+      }
+    } else if (activeIndex === -1 && representation.status === 'ready') {
+      // If no representation was previously active and this one is ready, activate it
       const newIndex = representations.indexOf(representation);
       this._accessor.setActiveRepresentationIndex(sourceIndex, newIndex);
       this._accessor.applyRepresentationShim(sourceIndex, representation);

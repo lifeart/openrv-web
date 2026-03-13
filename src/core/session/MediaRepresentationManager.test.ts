@@ -161,6 +161,77 @@ describe('MediaRepresentationManager', () => {
       expect(accessor.applyRepresentationShim).toHaveBeenCalled();
     });
 
+    it('should update activeRepresentationIndex when sort moves the active representation', () => {
+      const sourceNode = createMockSourceNode();
+      const { accessor, representations, getActiveIndex } = createMockAccessor();
+      manager.setAccessor(accessor);
+
+      // Add representation A (priority 10) — auto-activated because it's ready
+      const repA = manager.addRepresentation(0, {
+        kind: 'movie',
+        priority: 10,
+        resolution: { width: 1920, height: 1080 },
+        loaderConfig: {},
+        sourceNode,
+      });
+      expect(repA).not.toBeNull();
+      expect(getActiveIndex()).toBe(0); // A is at index 0, and active
+
+      // Add representation B (priority 5) — sort moves A from index 0 to index 1
+      const repB = manager.addRepresentation(0, {
+        kind: 'proxy',
+        priority: 5,
+        resolution: { width: 960, height: 540 },
+        loaderConfig: {},
+      });
+      expect(repB).not.toBeNull();
+
+      // After sort: B (priority 5) at index 0, A (priority 10) at index 1
+      expect(representations[0]?.priority).toBe(5);
+      expect(representations[1]?.priority).toBe(10);
+
+      // activeRepresentationIndex must track A's new position
+      expect(getActiveIndex()).toBe(1);
+    });
+
+    it('should not corrupt activeRepresentationIndex when adding multiple representations', () => {
+      const sourceNode = createMockSourceNode();
+      const { accessor, representations, getActiveIndex } = createMockAccessor();
+      manager.setAccessor(accessor);
+
+      // Add C (priority 20) — auto-activated
+      manager.addRepresentation(0, {
+        kind: 'movie',
+        priority: 20,
+        resolution: { width: 1920, height: 1080 },
+        loaderConfig: {},
+        sourceNode,
+      });
+      expect(getActiveIndex()).toBe(0);
+
+      // Add A (priority 5) — pushes C to index 1
+      manager.addRepresentation(0, {
+        kind: 'frames',
+        priority: 5,
+        resolution: { width: 4096, height: 2160 },
+        loaderConfig: {},
+      });
+      expect(getActiveIndex()).toBe(1);
+
+      // Add B (priority 10) — inserts between A and C, C moves to index 2
+      manager.addRepresentation(0, {
+        kind: 'proxy',
+        priority: 10,
+        resolution: { width: 960, height: 540 },
+        loaderConfig: {},
+      });
+      expect(representations.length).toBe(3);
+      expect(representations[0]?.priority).toBe(5);
+      expect(representations[1]?.priority).toBe(10);
+      expect(representations[2]?.priority).toBe(20);
+      expect(getActiveIndex()).toBe(2);
+    });
+
     it('should use default priorities based on kind', () => {
       const { accessor, representations } = createMockAccessor();
       manager.setAccessor(accessor);
