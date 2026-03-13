@@ -246,6 +246,48 @@ describe('Documentation consistency', () => {
     expect(readme).toMatch(/\[Documentation\]/);
   });
 
+  // -- Node.js version requirement ------------------------------------------
+
+  test('installation doc matches package.json engines.node requirement', () => {
+    const pkgJson = JSON.parse(readFile('package.json'));
+    const enginesNode: string = pkgJson.engines?.node;
+    expect(enginesNode).toBeTruthy();
+
+    const installDoc = readFile('docs/getting-started/installation.md');
+
+    // Extract minimum versions from engines.node (e.g. "^20.19.0 || >=22.12.0")
+    const versionRanges = enginesNode.match(/(\d+\.\d+)\.\d+/g) ?? [];
+    expect(versionRanges.length).toBeGreaterThanOrEqual(1);
+
+    for (const fullVersion of versionRanges) {
+      const majorMinor = fullVersion.replace(/\.\d+$/, '');
+      expect(
+        installDoc,
+        `installation.md should mention version ${majorMinor} (from engines.node: "${enginesNode}")`,
+      ).toContain(majorMinor);
+    }
+
+    // Ensure the doc does NOT mention unsupported older Node versions
+    expect(installDoc).not.toMatch(/Node\.js.?\s*18\b/);
+    expect(installDoc).not.toMatch(/Node\.js.?\s*16\b/);
+    expect(installDoc).not.toMatch(/Node\.js.?\s*14\b/);
+  });
+
+  // -- FAQ accuracy ---------------------------------------------------------
+
+  test('FAQ does not claim URL-based loading is unimplemented', () => {
+    const faq = readFile('docs/reference/faq.md');
+    expect(faq).not.toMatch(/URL-based loading is not currently implemented/i);
+  });
+
+  test('FAQ does not describe collaboration as purely peer-to-peer WebRTC', () => {
+    const faq = readFile('docs/reference/faq.md');
+    // Should not claim WebRTC is the sole collaboration transport
+    expect(faq).not.toMatch(/uses?\s+WebRTC\s+peer-to-peer\s+connections?\s+for\s+real-time\s+collaboration/i);
+    // Should mention WebSocket as part of the collaboration story
+    expect(faq.toLowerCase()).toContain('websocket');
+  });
+
   // -- Doc page existence ---------------------------------------------------
 
   test('key doc pages exist', () => {

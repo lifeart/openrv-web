@@ -101,15 +101,22 @@ const STANDARD_PALETTE: ColorRange[] = [
 ];
 
 // ARRI-style false color palette
+// Follows the ARRI false color standard used in cinematography:
+//   Black/near-black → purple/blue
+//   Shadows → blue/cyan
+//   Skin tones (~38-50 IRE) → GREEN (the defining ARRI false color feature)
+//   Upper midtones → pink/light
+//   Highlights → yellow/orange
+//   Overexposed → red
 const ARRI_PALETTE: ColorRange[] = [
   { min: 0, max: 8, color: [128, 0, 255], label: 'Black' },
   { min: 9, max: 20, color: [0, 0, 192], label: 'Near black' },
   { min: 21, max: 51, color: [0, 64, 255], label: 'Shadows' },
   { min: 52, max: 77, color: [0, 192, 255], label: 'Dark tones' },
-  { min: 78, max: 102, color: [0, 255, 128], label: 'Low-mid' },
-  { min: 103, max: 128, color: [128, 128, 128], label: 'Middle grey' },
-  { min: 129, max: 153, color: [255, 255, 0], label: 'High-mid' },
-  { min: 154, max: 179, color: [255, 192, 0], label: 'Bright' },
+  { min: 78, max: 89, color: [0, 200, 128], label: 'Low-mid' },
+  { min: 90, max: 128, color: [0, 185, 0], label: 'Skin tones' },
+  { min: 129, max: 153, color: [255, 160, 200], label: 'High-mid' },
+  { min: 154, max: 179, color: [255, 255, 0], label: 'Bright' },
   { min: 180, max: 204, color: [255, 128, 0], label: 'Very bright' },
   { min: 205, max: 230, color: [255, 64, 0], label: 'Highlight' },
   { min: 231, max: 255, color: [255, 0, 128], label: 'Clipped' },

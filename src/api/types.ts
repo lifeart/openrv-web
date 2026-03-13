@@ -49,7 +49,7 @@ export interface ViewerProvider {
   /** Subscribe to view changes (pan/zoom). Returns an unsubscribe function. */
   addViewChangeListener?(callback: (panX: number, panY: number, zoom: number) => void): () => void;
   /** Get the native source image dimensions. */
-  getSourceDimensions?(): { width: number; height: number };
+  getSourceDimensions?(): { width: number; height: number; pixelAspect?: number };
 }
 
 /**

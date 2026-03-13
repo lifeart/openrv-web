@@ -15,6 +15,8 @@ import { applyA11yFocus } from './shared/Button';
 import { showPrompt, showConfirm, showAlert } from './shared/Modal';
 
 export interface SnapshotPanelEvents extends EventMap {
+  /** Emitted when user wants to create a snapshot, optionally with a name */
+  createRequested: { name: string };
   /** Emitted when user wants to restore a snapshot */
   restoreRequested: { id: string };
   /** Emitted when panel visibility changes */
@@ -41,6 +43,9 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
   private exclusivePanel: ExclusivePanel | null = null;
   private _disabled = false;
   private _disabledReason = '';
+  private createSection: HTMLElement;
+  private nameInput: HTMLInputElement;
+  private snapshotCounter = 0;
 
   constructor(snapshotManager: SnapshotManager) {
     super();
@@ -172,6 +177,101 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
     toolbar.appendChild(filterSelect);
 
     this.container.appendChild(toolbar);
+
+    // Create snapshot section
+    this.createSection = document.createElement('div');
+    this.createSection.dataset.testid = 'snapshot-create-section';
+    this.createSection.style.cssText = `
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border-primary);
+    `;
+
+    const createBtn = document.createElement('button');
+    createBtn.textContent = 'Create Snapshot';
+    createBtn.dataset.testid = 'create-snapshot-btn';
+    createBtn.style.cssText = `
+      width: 100%;
+      padding: 8px;
+      border: 1px solid var(--accent-primary);
+      border-radius: 4px;
+      background: rgba(var(--accent-primary-rgb), 0.1);
+      color: var(--accent-primary);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.12s ease;
+    `;
+    createBtn.addEventListener('click', () => this.showNameInput());
+    createBtn.addEventListener('pointerenter', () => {
+      createBtn.style.background = 'rgba(var(--accent-primary-rgb), 0.2)';
+    });
+    createBtn.addEventListener('pointerleave', () => {
+      createBtn.style.background = 'rgba(var(--accent-primary-rgb), 0.1)';
+    });
+    applyA11yFocus(createBtn);
+    this.createSection.appendChild(createBtn);
+
+    // Inline name input (hidden by default)
+    const nameInputRow = document.createElement('div');
+    nameInputRow.dataset.testid = 'snapshot-name-input-row';
+    nameInputRow.style.cssText = `
+      display: none;
+      gap: 6px;
+      align-items: center;
+    `;
+
+    this.nameInput = document.createElement('input');
+    this.nameInput.type = 'text';
+    this.nameInput.placeholder = 'Snapshot name (optional)';
+    this.nameInput.dataset.testid = 'snapshot-name-input';
+    this.nameInput.style.cssText = `
+      flex: 1;
+      padding: 6px 10px;
+      border: 1px solid var(--border-primary);
+      border-radius: 4px;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-size: 12px;
+      outline: none;
+    `;
+    this.nameInput.addEventListener('focus', () => {
+      this.nameInput.style.borderColor = 'var(--accent-primary)';
+    });
+    this.nameInput.addEventListener('blur', () => {
+      this.nameInput.style.borderColor = 'var(--border-primary)';
+    });
+    this.nameInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        this.confirmCreate();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        this.confirmCreate(); // Escape still creates with default name
+      }
+    });
+    nameInputRow.appendChild(this.nameInput);
+
+    const confirmBtn = document.createElement('button');
+    confirmBtn.textContent = 'Save';
+    confirmBtn.dataset.testid = 'snapshot-confirm-btn';
+    confirmBtn.style.cssText = `
+      padding: 6px 12px;
+      border: 1px solid var(--accent-primary);
+      border-radius: 4px;
+      background: var(--accent-primary);
+      color: var(--bg-primary);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.12s ease;
+    `;
+    confirmBtn.addEventListener('click', () => this.confirmCreate());
+    applyA11yFocus(confirmBtn);
+    nameInputRow.appendChild(confirmBtn);
+
+    this.createSection.appendChild(nameInputRow);
+    this.container.appendChild(this.createSection);
 
     // List container
     this.listContainer = document.createElement('div');
@@ -548,6 +648,30 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  private showNameInput(): void {
+    const createBtn = this.createSection.querySelector('[data-testid="create-snapshot-btn"]') as HTMLElement;
+    const nameInputRow = this.createSection.querySelector('[data-testid="snapshot-name-input-row"]') as HTMLElement;
+    createBtn.style.display = 'none';
+    nameInputRow.style.display = 'flex';
+    this.nameInput.value = '';
+    this.nameInput.focus();
+  }
+
+  private hideNameInput(): void {
+    const createBtn = this.createSection.querySelector('[data-testid="create-snapshot-btn"]') as HTMLElement;
+    const nameInputRow = this.createSection.querySelector('[data-testid="snapshot-name-input-row"]') as HTMLElement;
+    nameInputRow.style.display = 'none';
+    createBtn.style.display = '';
+  }
+
+  private confirmCreate(): void {
+    const inputName = this.nameInput.value.trim();
+    this.snapshotCounter++;
+    const name = inputName || `Snapshot ${this.snapshotCounter}`;
+    this.hideNameInput();
+    this.emit('createRequested', { name });
   }
 
   private async handleRename(snapshot: Snapshot): Promise<void> {

@@ -1279,3 +1279,176 @@
 **Files changed**:
 - `src/compat/MuCommands.ts`
 - `src/compat/__tests__/MuCommands.test.ts`
+
+## Issue #339: The session-management guide gives the snapshot panel the history panel's shortcut
+
+**Root cause**: The session-management guide (`docs/advanced/session-management.md`) documented `Shift+Alt+H` as the Snapshot Panel shortcut, but that key combo is actually mapped to `panel.history`. The real Snapshot Panel shortcut is `Ctrl+Shift+Alt+S` as defined in `KeyBindings.ts`.
+
+**Fix**: Updated `docs/advanced/session-management.md` to use the correct shortcut `Ctrl+Shift+Alt+S` for the Snapshot Panel. Verified all other doc files already had the correct shortcuts.
+
+**Tests added**: 3 new regression tests in `KeyBindings.test.ts`:
+- KB-U104: Asserts `panel.snapshots` shortcut is `Ctrl+Shift+Alt+S`
+- KB-U105: Asserts `panel.history` shortcut is `Shift+Alt+H`
+- KB-U106: Asserts the two panel shortcuts are different from each other
+
+**Files changed**:
+- `docs/advanced/session-management.md`
+- `src/utils/input/KeyBindings.test.ts`
+
+## Issue #343: The stereo documentation disagrees with itself and with the shipped mode list
+
+**Root cause**: The practical stereo guide (`docs/advanced/stereo-3d.md`) claimed 7 active modes + Off (8 total), omitting `left-only` and `right-only`. The technical guide (`docs/guides/stereo-3d-viewing.md`) correctly stated 10 modes. The runtime has exactly 10 `StereoMode` values including `off`.
+
+**Fix**: Updated `docs/advanced/stereo-3d.md` to consistently reference 10 total modes (9 active + Off). Added `Left Only` and `Right Only` to the mode descriptions, keyboard cycle list, and comparison table.
+
+**Tests added**: 5 new regression tests in `StereoControl.test.ts`:
+- STEREO-REG001: Verifies exactly 10 stereo modes via cycle traversal
+- STEREO-REG002: Verifies `left-only` and `right-only` are valid active modes
+- STEREO-REG003: Verifies offset slider HTML attributes (min=-20, max=20, step=0.5)
+- STEREO-REG004: Verifies `setOffset` clamps to -20..+20
+- STEREO-REG005: Verifies dropdown contains exactly 10 mode options in correct order
+
+**Files changed**:
+- `docs/advanced/stereo-3d.md`
+- `docs/guides/stereo-3d-viewing.md`
+- `src/ui/components/StereoControl.test.ts`
+
+## Issue #344: The stereo guides publish the wrong convergence-offset range for the shipped UI
+
+**Root cause**: `docs/guides/stereo-3d-viewing.md` documented the convergence offset range as `-50 to +50`, but the shipped `StereoControl.ts` slider is clamped to `-20` through `20` with `0.5` steps.
+
+**Fix**: Updated the convergence offset range in `docs/guides/stereo-3d-viewing.md` to `-20 to +20 with a step size of 0.5`.
+
+**Tests added**: Covered by STEREO-REG003 and STEREO-REG004 above.
+
+**Files changed**:
+- `docs/guides/stereo-3d-viewing.md`
+- `src/ui/components/StereoControl.test.ts`
+
+## Issue #455: The installation guide still says Node 18+ is enough, but the current toolchain declares Node 20.19+ or 22.12+
+
+**Root cause**: The installation guide (`docs/getting-started/installation.md`) listed "Node.js 18 or later" as a prerequisite, but `package.json` `engines.node` was updated to `^20.19.0 || >=22.12.0` when the toolchain (Vite 7, Vitest 4) was upgraded.
+
+**Fix**: Updated `docs/getting-started/installation.md` to state "Node.js 20.19+ or 22.12+" matching the actual `package.json` engines constraint.
+
+**Tests added**: 1 new regression test in `tests/docs.consistency.test.ts` that reads `engines.node` from `package.json`, extracts version numbers, and verifies the installation doc mentions them while not mentioning outdated versions (14, 16, 18).
+
+**Files changed**:
+- `docs/getting-started/installation.md`
+- `tests/docs.consistency.test.ts`
+
+## Issue #450: The FAQ still says URL-based loading is not implemented, but production already loads media from `sourceUrl` share links
+
+**Root cause**: The FAQ answer to "Can I load files from a URL?" stated "URL-based loading is not currently implemented", but `SessionURLService` already serializes `sourceUrl` into shared state and `session.loadSourceFromUrl()` works in share-link/bootstrap flows.
+
+**Fix**: Updated the FAQ answer in `docs/reference/faq.md` to accurately describe the current `sourceUrl` share-link loading capability, noting there's no standalone "paste a URL" UI yet.
+
+**Tests added**: 1 regression test in `tests/docs.consistency.test.ts` asserting the FAQ doesn't claim URL loading is unimplemented.
+
+**Files changed**:
+- `docs/reference/faq.md`
+- `tests/docs.consistency.test.ts`
+
+## Issue #451: The FAQ describes collaboration as peer-to-peer WebRTC, but the normal room lifecycle is WebSocket-based
+
+**Root cause**: The FAQ described collaboration as using "peer-to-peer WebRTC connections" in multiple places, but the actual primary transport is WebSocket (via `WebSocketClient`) for room create/join and sync. WebRTC is an optional additional channel.
+
+**Fix**: Updated three sections in `docs/reference/faq.md` to accurately describe WebSocket as the primary collaboration transport with WebRTC as an optional peer-to-peer channel.
+
+**Tests added**: 1 regression test in `tests/docs.consistency.test.ts` verifying the FAQ mentions WebSocket and doesn't describe collaboration as purely WebRTC.
+
+**Files changed**:
+- `docs/reference/faq.md`
+- `tests/docs.consistency.test.ts`
+
+## Issue #320: Dailies reports flatten notes to raw text and lose per-note frame/timecode context
+
+**Root cause**: `buildReportRows()` in `ReportExporter.ts` only extracted `n.text` from notes, discarding frame ranges, authors, statuses, and timecodes. CSV and HTML exports serialized notes as flat text strings with no per-note context.
+
+**Fix**: 
+- Added `StructuredNote` interface carrying `text`, `author`, `status`, `frameStart`, `frameEnd`, `timecodeStart`, `timecodeEnd`
+- Extended `ReportRow` with `structuredNotes: StructuredNote[]` alongside existing `notes: string[]` (backward-compatible)
+- Updated `buildReportRows()` to populate structured notes with frame/timecode/author context
+- Updated CSV export to render `[TC_START-TC_END] author: text` format
+- Updated HTML export with styled timecode spans and bold authors
+
+**Tests added**: 17 new tests in `ReportExporter.test.ts` covering structured notes with frames, without frames, multiple notes, author info, CSV/HTML output formatting, and XSS escaping.
+
+**Files changed**:
+- `src/export/ReportExporter.ts`
+- `src/export/ReportExporter.test.ts`
+
+## Issue #366: The annotation-export docs say the export items appear only when annotations exist, but the shipped menu shows them all the time
+
+**Root cause**: `ExportControl` built annotation export menu items (`Export Annotations (JSON)`, `Export Annotations (PDF)`) unconditionally with no visibility guard based on annotation count.
+
+**Fix**:
+- Added `annotationSectionElements` tracking for annotation section DOM elements
+- Added `setAnnotationCount(count)` public method and `annotationCount` getter
+- Added `updateAnnotationSectionVisibility()` that shows/hides annotation section based on count > 0
+- Updated `docs/annotations/export.md` to describe the correct conditional behavior
+
+**Tests added**: 9 new tests in `ExportControl.test.ts` (EXPORT-ANN01 through EXPORT-ANN09) covering hidden/visible states, transitions, header visibility, and edge cases.
+
+**Files changed**:
+- `src/ui/components/ExportControl.ts`
+- `src/ui/components/ExportControl.test.ts`
+- `docs/annotations/export.md`
+
+## Issue #488: The false-color docs say ARRI skin tones appear green, but the shipped ARRI palette maps that range to grey/yellow instead
+
+**Root cause**: The ARRI false color palette in `FalseColor.ts` incorrectly mapped the 40-50 IRE range (skin tones) to grey instead of green. The ARRI false color standard universally maps skin tones to green.
+
+**Fix**: Restructured the ARRI palette entries:
+- 78-89 (~30-35 IRE): teal-green "Low-mid"
+- 90-128 (~35-50 IRE): green "Skin tones" — now correctly covers the skin tone range
+- 129-153 (50-60 IRE): pink "High-mid" — matches ARRI's pink for upper midtones
+- 154-179 (60-70 IRE): yellow "Bright" — yellow moved to highlights where it belongs
+
+**Tests added**: 7 new tests in `FalseColor.test.ts` (FC-110 through FC-116) verifying skin tone IRE range maps to green, legend includes "Skin tones" label, LUT consistency across the range, and non-ARRI palettes unaffected.
+
+**Files changed**:
+- `src/ui/components/FalseColor.ts`
+- `src/ui/components/FalseColor.test.ts`
+
+## Issue #551: Public `viewTransformChanged` always reports `pixelAspect: 1`, even though non-square-pixel workflows exist and compat consumers use that field
+
+**Root cause**: `EventsAPI` hardcoded `pixelAspect: 1` in every `viewTransformChanged` payload, ignoring the viewer's actual pixel aspect ratio state.
+
+**Fix**:
+- Extended `ViewerProvider.getSourceDimensions()` return type in `src/api/types.ts` to include optional `pixelAspect`
+- Updated `Viewer.getSourceDimensions()` to return `pixelAspect: this.parState.par`
+- Replaced hardcoded `pixelAspect: 1` in `EventsAPI.ts` with `pixelAspect: source.pixelAspect ?? 1`
+
+**Tests added**: 3 new tests in `OpenRVAPI.test.ts`:
+- API-U064d: Square pixels (1.0) emits correctly
+- API-U064e: Anamorphic source (2.0) emits correct value
+- API-U064f: Missing pixelAspect defaults to 1
+
+**Files changed**:
+- `src/api/EventsAPI.ts`
+- `src/api/types.ts`
+- `src/ui/components/Viewer.ts`
+- `src/api/OpenRVAPI.test.ts`
+
+## Issue #471: The UI overview advertises snapshots as named captures, but the shipped create flow does not prompt for a snapshot name
+
+**Root cause**: The `SnapshotPanel` had no create button with a naming flow — `createRequested` event carried no name payload. Users couldn't name snapshots during creation.
+
+**Fix**:
+- Added "Create Snapshot" button and inline name input row to `SnapshotPanel`
+- Input appears when button is clicked, with placeholder "Snapshot name (optional)"
+- Enter/Save creates with entered name; Escape creates with auto-generated name
+- Auto-generated names use "Snapshot N" pattern with incrementing counter
+- Updated `createRequested` event to carry `{ name: string }`
+- Updated `AppPlaybackWiring` and `AppPersistenceManager` to pass name through to `createQuickSnapshot()`
+
+**Tests added**: 8 new tests in `SnapshotPanel.test.ts` (SNAP-090 through SNAP-097) covering inline input flow, custom names, auto-generated names, Enter/Escape/Save key handling, name display, and counter incrementing.
+
+**Files changed**:
+- `src/ui/components/SnapshotPanel.ts`
+- `src/ui/components/SnapshotPanel.test.ts`
+- `src/AppPlaybackWiring.ts`
+- `src/AppPlaybackWiring.test.ts`
+- `src/AppPersistenceManager.ts`
+- `src/services/KeyboardActionMap.ts`

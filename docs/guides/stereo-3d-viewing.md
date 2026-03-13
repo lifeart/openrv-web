@@ -102,7 +102,7 @@ In OpenRV Web, separate stereo sources are combined as layers in a stack view, w
 
 ### Convergence Offset
 
-The convergence offset controls the horizontal displacement between the left and right eye images, expressed as a percentage of image width. The range is **-50 to +50** (stored as the `offset` field in `StereoState`).
+The convergence offset controls the horizontal displacement between the left and right eye images, expressed as a percentage of image width. The range is **-20 to +20** with a step size of **0.5** (stored as the `offset` field in `StereoState`).
 
 - **Positive offset**: Pushes the stereo window further away from the viewer (increases screen-plane depth)
 - **Negative offset**: Pulls the stereo window closer to the viewer (objects appear to float in front of the screen)

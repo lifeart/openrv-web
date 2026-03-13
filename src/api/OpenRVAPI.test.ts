@@ -2374,6 +2374,90 @@ describe('EventsAPI', () => {
     localEvents.dispose();
   });
 
+  it('API-U064d: viewTransformChanged emits pixelAspect from source (square pixels)', () => {
+    // When getSourceDimensions returns pixelAspect: 1.0 (square pixels), the event should carry 1
+    let registeredListener: ((panX: number, panY: number, zoom: number) => void) | null = null;
+    const squarePixelViewer: any = {
+      ...viewer,
+      addViewChangeListener: vi.fn((cb: any) => {
+        registeredListener = cb;
+        return () => { registeredListener = null; };
+      }),
+      getViewportSize: vi.fn(() => ({ width: 800, height: 600 })),
+      getSourceDimensions: vi.fn(() => ({ width: 1920, height: 1080, pixelAspect: 1.0 })),
+    };
+
+    const localEvents = new EventsAPI(session, squarePixelViewer);
+    const handler = vi.fn();
+    localEvents.on('viewTransformChanged', handler);
+
+    registeredListener!(10, 20, 2);
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({
+      pixelAspect: 1.0,
+    }));
+
+    localEvents.dispose();
+  });
+
+  it('API-U064e: viewTransformChanged emits non-1.0 pixelAspect for anamorphic sources', () => {
+    // When getSourceDimensions returns a non-square pixelAspect (e.g., 2.0 for anamorphic),
+    // the event should carry that value instead of hardcoded 1
+    let registeredListener: ((panX: number, panY: number, zoom: number) => void) | null = null;
+    const anamorphicViewer: any = {
+      ...viewer,
+      addViewChangeListener: vi.fn((cb: any) => {
+        registeredListener = cb;
+        return () => { registeredListener = null; };
+      }),
+      getViewportSize: vi.fn(() => ({ width: 800, height: 600 })),
+      getSourceDimensions: vi.fn(() => ({ width: 1920, height: 1080, pixelAspect: 2.0 })),
+    };
+
+    const localEvents = new EventsAPI(session, anamorphicViewer);
+    const handler = vi.fn();
+    localEvents.on('viewTransformChanged', handler);
+
+    registeredListener!(0, 0, 1);
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({
+      pixelAspect: 2.0,
+      imageWidth: 1920,
+      imageHeight: 1080,
+    }));
+
+    localEvents.dispose();
+  });
+
+  it('API-U064f: viewTransformChanged defaults pixelAspect to 1 when source omits it', () => {
+    // When getSourceDimensions does not include pixelAspect, the event should default to 1
+    let registeredListener: ((panX: number, panY: number, zoom: number) => void) | null = null;
+    const legacyViewer: any = {
+      ...viewer,
+      addViewChangeListener: vi.fn((cb: any) => {
+        registeredListener = cb;
+        return () => { registeredListener = null; };
+      }),
+      getViewportSize: vi.fn(() => ({ width: 800, height: 600 })),
+      getSourceDimensions: vi.fn(() => ({ width: 1920, height: 1080 })),
+    };
+
+    const localEvents = new EventsAPI(session, legacyViewer);
+    const handler = vi.fn();
+    localEvents.on('viewTransformChanged', handler);
+
+    registeredListener!(0, 0, 1);
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({
+      pixelAspect: 1,
+    }));
+
+    localEvents.dispose();
+  });
+
   it('API-U065: error event can be emitted', () => {
     const handler = vi.fn();
     events.on('error', handler);

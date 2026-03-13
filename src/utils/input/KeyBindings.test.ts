@@ -545,4 +545,24 @@ describe('KeyBindings', () => {
       expect(ctrlShiftS.shift).toBe(true);
     });
   });
+
+  describe('snapshot vs history panel shortcut distinction (Issue #339)', () => {
+    it('KB-U104: panel.snapshots shortcut is Ctrl+Shift+Alt+S', () => {
+      const binding = DEFAULT_KEY_BINDINGS['panel.snapshots'];
+      expect(binding).toBeDefined();
+      expect(describeKeyCombo(binding!)).toBe('Ctrl+Shift+Alt+S');
+    });
+
+    it('KB-U105: panel.history shortcut is Shift+Alt+H', () => {
+      const binding = DEFAULT_KEY_BINDINGS['panel.history'];
+      expect(binding).toBeDefined();
+      expect(describeKeyCombo(binding!)).toBe('Shift+Alt+H');
+    });
+
+    it('KB-U106: snapshot and history panels have different shortcuts', () => {
+      const snapshotBinding = DEFAULT_KEY_BINDINGS['panel.snapshots']!;
+      const historyBinding = DEFAULT_KEY_BINDINGS['panel.history']!;
+      expect(describeKeyCombo(snapshotBinding)).not.toBe(describeKeyCombo(historyBinding));
+    });
+  });
 });

@@ -412,7 +412,7 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
 
   // Snapshot panel restore & create
   subs.add(controls.snapshotPanel.on('restoreRequested', ({ id }) => persistenceManager.restoreSnapshot(id)));
-  subs.add(controls.snapshotPanel.on('createRequested', () => persistenceManager.createQuickSnapshot()));
+  subs.add(controls.snapshotPanel.on('createRequested', ({ name }) => persistenceManager.createQuickSnapshot(name)));
 
   // Note panel events
   subs.add(

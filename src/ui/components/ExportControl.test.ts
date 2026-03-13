@@ -987,3 +987,124 @@ describe('ExportControl plugin exporters (#18)', () => {
     expect(item?.getAttribute('role')).toBe('menuitem');
   });
 });
+
+describe('ExportControl annotation export visibility (#366)', () => {
+  let control: ExportControl;
+
+  beforeEach(() => {
+    control = new ExportControl();
+    document.body.appendChild(control.render());
+  });
+
+  afterEach(() => {
+    control.dispose();
+    const el = control.render();
+    if (el.parentNode) el.parentNode.removeChild(el);
+  });
+
+  function openDropdown(): void {
+    const button = control.render().querySelector('button') as HTMLButtonElement;
+    button.click();
+  }
+
+  function getDropdown(): HTMLElement {
+    return document.querySelector('.export-dropdown') as HTMLElement;
+  }
+
+  function findAnnotationItems(dropdown: HTMLElement): HTMLElement[] {
+    return Array.from(dropdown.querySelectorAll('button')).filter(
+      (btn) =>
+        btn.textContent?.includes('Export Annotations (JSON)') ||
+        btn.textContent?.includes('Import Annotations (JSON)') ||
+        btn.textContent?.includes('Export Annotations (PDF)'),
+    );
+  }
+
+  it('EXPORT-ANN01: annotation export items are hidden when no annotations exist', () => {
+    openDropdown();
+    const dropdown = getDropdown();
+    const items = findAnnotationItems(dropdown);
+    expect(items.length).toBe(3);
+    for (const item of items) {
+      expect(item.style.display).toBe('none');
+    }
+  });
+
+  it('EXPORT-ANN02: annotation export items appear when annotations are present', () => {
+    control.setAnnotationCount(5);
+    openDropdown();
+    const dropdown = getDropdown();
+    const items = findAnnotationItems(dropdown);
+    expect(items.length).toBe(3);
+    for (const item of items) {
+      expect(item.style.display).not.toBe('none');
+    }
+  });
+
+  it('EXPORT-ANN03: annotation export items hide when annotations are cleared', () => {
+    control.setAnnotationCount(3);
+    control.setAnnotationCount(0);
+    openDropdown();
+    const dropdown = getDropdown();
+    const items = findAnnotationItems(dropdown);
+    for (const item of items) {
+      expect(item.style.display).toBe('none');
+    }
+  });
+
+  it('EXPORT-ANN04: annotation section header is hidden when no annotations exist', () => {
+    openDropdown();
+    const dropdown = getDropdown();
+    const headers = Array.from(dropdown.querySelectorAll('div')).filter(
+      (el) => el.textContent === 'Annotations' && el.style.cssText.includes('text-transform'),
+    );
+    expect(headers.length).toBe(1);
+    expect(headers[0]!.style.display).toBe('none');
+  });
+
+  it('EXPORT-ANN05: annotation section header is visible when annotations exist', () => {
+    control.setAnnotationCount(1);
+    openDropdown();
+    const dropdown = getDropdown();
+    const headers = Array.from(dropdown.querySelectorAll('div')).filter(
+      (el) => el.textContent === 'Annotations' && el.style.cssText.includes('text-transform'),
+    );
+    expect(headers.length).toBe(1);
+    expect(headers[0]!.style.display).not.toBe('none');
+  });
+
+  it('EXPORT-ANN06: setAnnotationCount with same non-zero value does not toggle visibility', () => {
+    control.setAnnotationCount(5);
+    openDropdown();
+    const dropdown = getDropdown();
+    const items = findAnnotationItems(dropdown);
+    // Set same count again -- should remain visible
+    control.setAnnotationCount(10);
+    for (const item of items) {
+      expect(item.style.display).not.toBe('none');
+    }
+  });
+
+  it('EXPORT-ANN07: annotationCount getter reflects the last set value', () => {
+    expect(control.annotationCount).toBe(0);
+    control.setAnnotationCount(42);
+    expect(control.annotationCount).toBe(42);
+    control.setAnnotationCount(0);
+    expect(control.annotationCount).toBe(0);
+  });
+
+  it('EXPORT-ANN08: clicking export JSON with no annotations still emits event (belt-and-suspenders)', () => {
+    // Even though items are hidden, calling the method directly should still be safe
+    const cb = vi.fn();
+    control.on('annotationsJSONExportRequested', cb);
+    (control as any).exportAnnotationsJSON();
+    expect(cb).toHaveBeenCalledTimes(1);
+  });
+
+  it('EXPORT-ANN09: clicking export PDF with no annotations still emits event (belt-and-suspenders)', () => {
+    const cb = vi.fn();
+    control.on('annotationsPDFExportRequested', cb);
+    (control as any).exportAnnotationsPDF();
+    expect(cb).toHaveBeenCalledTimes(1);
+  });
+});

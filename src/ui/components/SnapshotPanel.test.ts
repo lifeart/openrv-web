@@ -613,6 +613,168 @@ describe('SnapshotPanel', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // Snapshot creation with name (#471)
+  // ---------------------------------------------------------------------------
+  describe('snapshot creation with name', () => {
+    it('SNAP-090: clicking "Create Snapshot" shows inline name input', () => {
+      document.body.appendChild(panel.render());
+      panel.show();
+
+      const createBtn = panel.render().querySelector('[data-testid="create-snapshot-btn"]') as HTMLElement;
+      expect(createBtn).not.toBeNull();
+      createBtn.click();
+
+      const nameInput = panel.render().querySelector('[data-testid="snapshot-name-input"]') as HTMLInputElement;
+      const nameInputRow = panel.render().querySelector('[data-testid="snapshot-name-input-row"]') as HTMLElement;
+      expect(nameInputRow.style.display).toBe('flex');
+      expect(nameInput).not.toBeNull();
+
+      document.body.removeChild(panel.render());
+    });
+
+    it('SNAP-091: entering a name and pressing Enter emits createRequested with that name', () => {
+      const handler = vi.fn();
+      panel.on('createRequested', handler);
+      document.body.appendChild(panel.render());
+      panel.show();
+
+      const createBtn = panel.render().querySelector('[data-testid="create-snapshot-btn"]') as HTMLElement;
+      createBtn.click();
+
+      const nameInput = panel.render().querySelector('[data-testid="snapshot-name-input"]') as HTMLInputElement;
+      nameInput.value = 'My Custom Snapshot';
+      nameInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+      expect(handler).toHaveBeenCalledWith({ name: 'My Custom Snapshot' });
+
+      document.body.removeChild(panel.render());
+    });
+
+    it('SNAP-092: leaving name empty and pressing Enter emits createRequested with auto-generated name', () => {
+      const handler = vi.fn();
+      panel.on('createRequested', handler);
+      document.body.appendChild(panel.render());
+      panel.show();
+
+      const createBtn = panel.render().querySelector('[data-testid="create-snapshot-btn"]') as HTMLElement;
+      createBtn.click();
+
+      const nameInput = panel.render().querySelector('[data-testid="snapshot-name-input"]') as HTMLInputElement;
+      nameInput.value = '';
+      nameInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect((handler.mock.calls[0]![0] as { name: string }).name).toMatch(/^Snapshot \d+$/);
+
+      document.body.removeChild(panel.render());
+    });
+
+    it('SNAP-093: pressing Escape still creates snapshot with auto-generated name', () => {
+      const handler = vi.fn();
+      panel.on('createRequested', handler);
+      document.body.appendChild(panel.render());
+      panel.show();
+
+      const createBtn = panel.render().querySelector('[data-testid="create-snapshot-btn"]') as HTMLElement;
+      createBtn.click();
+
+      const nameInput = panel.render().querySelector('[data-testid="snapshot-name-input"]') as HTMLInputElement;
+      nameInput.value = '';
+      nameInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect((handler.mock.calls[0]![0] as { name: string }).name).toMatch(/^Snapshot \d+$/);
+
+      document.body.removeChild(panel.render());
+    });
+
+    it('SNAP-094: clicking Save button creates snapshot with the entered name', () => {
+      const handler = vi.fn();
+      panel.on('createRequested', handler);
+      document.body.appendChild(panel.render());
+      panel.show();
+
+      const createBtn = panel.render().querySelector('[data-testid="create-snapshot-btn"]') as HTMLElement;
+      createBtn.click();
+
+      const nameInput = panel.render().querySelector('[data-testid="snapshot-name-input"]') as HTMLInputElement;
+      nameInput.value = 'Named via button';
+
+      const confirmBtn = panel.render().querySelector('[data-testid="snapshot-confirm-btn"]') as HTMLElement;
+      confirmBtn.click();
+
+      expect(handler).toHaveBeenCalledWith({ name: 'Named via button' });
+
+      document.body.removeChild(panel.render());
+    });
+
+    it('SNAP-095: name input row hides after creation and create button reappears', () => {
+      panel.on('createRequested', vi.fn());
+      document.body.appendChild(panel.render());
+      panel.show();
+
+      const createBtn = panel.render().querySelector('[data-testid="create-snapshot-btn"]') as HTMLElement;
+      createBtn.click();
+
+      // Name input row should be visible
+      const nameInputRow = panel.render().querySelector('[data-testid="snapshot-name-input-row"]') as HTMLElement;
+      expect(nameInputRow.style.display).toBe('flex');
+
+      // Confirm creation
+      const confirmBtn = panel.render().querySelector('[data-testid="snapshot-confirm-btn"]') as HTMLElement;
+      confirmBtn.click();
+
+      // Name input row should be hidden, create button visible
+      expect(nameInputRow.style.display).toBe('none');
+      expect(createBtn.style.display).not.toBe('none');
+
+      document.body.removeChild(panel.render());
+    });
+
+    it('SNAP-096: custom name is displayed in snapshot list after creation', async () => {
+      document.body.appendChild(panel.render());
+      panel.show();
+
+      // Simulate snapshotsChanged with a named snapshot
+      manager.emit('snapshotsChanged', {
+        snapshots: [createMockSnapshot({ id: 'snap-named', name: 'My Named Snapshot' })],
+      });
+
+      await vi.waitFor(() => {
+        expect(panel.render().textContent).toContain('My Named Snapshot');
+      });
+
+      document.body.removeChild(panel.render());
+    });
+
+    it('SNAP-097: auto-generated name increments on successive unnamed creations', () => {
+      const handler = vi.fn();
+      panel.on('createRequested', handler);
+      document.body.appendChild(panel.render());
+      panel.show();
+
+      // First creation with empty name
+      const createBtn = panel.render().querySelector('[data-testid="create-snapshot-btn"]') as HTMLElement;
+      createBtn.click();
+      const nameInput = panel.render().querySelector('[data-testid="snapshot-name-input"]') as HTMLInputElement;
+      nameInput.value = '';
+      nameInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      const name1 = (handler.mock.calls[0]![0] as { name: string }).name;
+
+      // Second creation with empty name
+      createBtn.click();
+      nameInput.value = '';
+      nameInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      const name2 = (handler.mock.calls[1]![0] as { name: string }).name;
+
+      // Names should be different (incrementing counter)
+      expect(name1).not.toBe(name2);
+
+      document.body.removeChild(panel.render());
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // Disabled / error state (#391)
   // ---------------------------------------------------------------------------
   describe('disabled state', () => {

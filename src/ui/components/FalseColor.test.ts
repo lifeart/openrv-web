@@ -180,7 +180,7 @@ describe('FalseColor', () => {
       // Labels should be different for ARRI preset
       const arriLabels = arriLegend.map((l) => l.label);
       expect(arriLabels).toContain('Black');
-      expect(arriLabels).toContain('Middle grey');
+      expect(arriLabels).toContain('Skin tones');
     });
 
     it('FC-031: RED preset has different legend', () => {
@@ -453,6 +453,100 @@ describe('FalseColor', () => {
       for (let i = 0; i < standardLUT.length; i++) {
         expect(backToStandard[i]).toBe(standardLUT[i]);
       }
+    });
+  });
+
+  describe('ARRI palette skin tone regression (#488)', () => {
+    // The ARRI false color standard maps skin tones (~38-50 IRE) to green.
+    // This regression test ensures the palette doesn't drift from that convention.
+
+    it('FC-110: ARRI skin tone range (40 IRE / value 102) maps to green', () => {
+      falseColor.setPreset('arri');
+      falseColor.enable();
+
+      // 40 IRE ≈ 102 in 0-255 scale
+      const imageData = createTestImageData(1, 1, { r: 102, g: 102, b: 102, a: 255 });
+      falseColor.apply(imageData);
+
+      // Green channel should dominate — this is the ARRI skin tone green
+      expect(imageData.data[1]).toBeGreaterThan(imageData.data[0]); // G > R
+      expect(imageData.data[1]).toBeGreaterThan(imageData.data[2]); // G > B
+    });
+
+    it('FC-111: ARRI skin tone range (45 IRE / value 115) maps to green', () => {
+      falseColor.setPreset('arri');
+      falseColor.enable();
+
+      // 45 IRE ≈ 115 in 0-255 scale
+      const imageData = createTestImageData(1, 1, { r: 115, g: 115, b: 115, a: 255 });
+      falseColor.apply(imageData);
+
+      // Green channel should dominate
+      expect(imageData.data[1]).toBeGreaterThan(imageData.data[0]); // G > R
+      expect(imageData.data[1]).toBeGreaterThan(imageData.data[2]); // G > B
+    });
+
+    it('FC-112: ARRI skin tone range (50 IRE / value 128) maps to green', () => {
+      falseColor.setPreset('arri');
+      falseColor.enable();
+
+      // 50 IRE ≈ 128 in 0-255 scale
+      const imageData = createTestImageData(1, 1, { r: 128, g: 128, b: 128, a: 255 });
+      falseColor.apply(imageData);
+
+      // Green channel should dominate
+      expect(imageData.data[1]).toBeGreaterThan(imageData.data[0]); // G > R
+      expect(imageData.data[1]).toBeGreaterThan(imageData.data[2]); // G > B
+    });
+
+    it('FC-113: ARRI palette legend includes Skin tones label', () => {
+      falseColor.setPreset('arri');
+      const legend = falseColor.getLegend();
+      const labels = legend.map((l) => l.label);
+      expect(labels).toContain('Skin tones');
+    });
+
+    it('FC-114: ARRI entire 40-50 IRE range (values 102-128) consistently maps to green', () => {
+      falseColor.setPreset('arri');
+      falseColor.enable();
+
+      const lut = falseColor.getColorLUT();
+
+      for (let value = 102; value <= 128; value++) {
+        const r = lut[value * 3]!;
+        const g = lut[value * 3 + 1]!;
+        const b = lut[value * 3 + 2]!;
+
+        expect(g, `value ${value}: G(${g}) should be > R(${r})`).toBeGreaterThan(r);
+        expect(g, `value ${value}: G(${g}) should be > B(${b})`).toBeGreaterThan(b);
+      }
+    });
+
+    it('FC-115: standard palette is NOT affected by ARRI palette fix', () => {
+      // Standard palette mid grey (116-128) should remain grey, not green
+      falseColor.setPreset('standard');
+      falseColor.enable();
+
+      const imageData = createTestImageData(1, 1, { r: 120, g: 120, b: 120, a: 255 });
+      falseColor.apply(imageData);
+
+      // Standard mid grey should be grey (128, 128, 128)
+      expect(imageData.data[0]).toBe(128);
+      expect(imageData.data[1]).toBe(128);
+      expect(imageData.data[2]).toBe(128);
+    });
+
+    it('FC-116: RED palette is NOT affected by ARRI palette fix', () => {
+      falseColor.setPreset('red');
+      falseColor.enable();
+
+      // RED middle grey range (116-140) should still be grey
+      const imageData = createTestImageData(1, 1, { r: 130, g: 130, b: 130, a: 255 });
+      falseColor.apply(imageData);
+
+      expect(imageData.data[0]).toBe(128);
+      expect(imageData.data[1]).toBe(128);
+      expect(imageData.data[2]).toBe(128);
     });
   });
 

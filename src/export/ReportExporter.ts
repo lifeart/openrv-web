@@ -14,11 +14,27 @@ import { frameToTimecode, formatTimecode } from '../ui/components/TimecodeDispla
 // Data Model
 // ---------------------------------------------------------------------------
 
+/**
+ * Structured note data preserving per-note frame/timecode context.
+ */
+export interface StructuredNote {
+  text: string;
+  author: string;
+  status: string;
+  frameStart: number | null;
+  frameEnd: number | null;
+  timecodeStart: string;
+  timecodeEnd: string;
+}
+
 export interface ReportRow {
   shotName: string;
   versionLabel: string;
   status: ShotStatus;
+  /** Plain text notes (backward-compatible) */
   notes: string[];
+  /** Structured notes with per-note frame/timecode context */
+  structuredNotes: StructuredNote[];
   frameRange: string;
   timecodeIn: string;
   timecodeOut: string;
@@ -49,7 +65,13 @@ export interface ReportSource {
 }
 
 export interface ReportNoteManager {
-  getNotesForSource(sourceIndex: number): { text: string }[];
+  getNotesForSource(sourceIndex: number): {
+    text: string;
+    author?: string;
+    status?: string;
+    frameStart?: number;
+    frameEnd?: number;
+  }[];
 }
 
 export interface ReportStatusManager {
@@ -134,8 +156,25 @@ export function buildReportRows(
     const setBy = statusEntry?.setBy ?? '';
     const setAt = statusEntry?.setAt ?? '';
 
-    // Notes
-    const notes = noteManager.getNotesForSource(i).map((n) => n.text);
+    // Notes — build both plain-text (backward-compat) and structured arrays
+    const rawNotes = noteManager.getNotesForSource(i);
+    const notes = rawNotes.map((n) => n.text);
+    const structuredNotes: StructuredNote[] = rawNotes.map((n) => {
+      const hasFrameData = n.frameStart !== undefined && n.frameEnd !== undefined;
+      const frameStart = hasFrameData ? n.frameStart! : null;
+      const frameEnd = hasFrameData ? n.frameEnd! : null;
+      const timecodeStart = frameStart !== null ? formatTimecode(frameToTimecode(frameStart, fps, 0)) : '';
+      const timecodeEnd = frameEnd !== null ? formatTimecode(frameToTimecode(frameEnd, fps, 0)) : '';
+      return {
+        text: n.text,
+        author: n.author ?? '',
+        status: n.status ?? '',
+        frameStart,
+        frameEnd,
+        timecodeStart,
+        timecodeEnd,
+      };
+    });
 
     // Frame range using editorial start frame
     const startFrame = source.startFrame ?? 1;
@@ -155,6 +194,7 @@ export function buildReportRows(
       versionLabel,
       status,
       notes,
+      structuredNotes,
       frameRange,
       timecodeIn: tcIn,
       timecodeOut: tcOut,
@@ -184,6 +224,33 @@ function buildCSVHeaders(options: ReportOptions): string[] {
 }
 
 /**
+ * Format a single structured note for CSV output.
+ * Includes frame range / timecode and author when available.
+ */
+function formatStructuredNoteForCSV(note: StructuredNote): string {
+  const parts: string[] = [];
+  if (note.frameStart !== null && note.frameEnd !== null) {
+    if (note.timecodeStart && note.timecodeEnd) {
+      parts.push(`[${note.timecodeStart}-${note.timecodeEnd}]`);
+    } else {
+      parts.push(`[${note.frameStart}-${note.frameEnd}]`);
+    }
+  }
+  if (note.author) {
+    parts.push(`${note.author}:`);
+  }
+  parts.push(note.text);
+  return parts.join(' ');
+}
+
+/**
+ * Format all structured notes for a CSV notes field.
+ */
+function formatNotesForCSV(notes: StructuredNote[]): string {
+  return notes.map(formatStructuredNoteForCSV).join('; ');
+}
+
+/**
  * Generate a CSV string from report rows. Uses CRLF line endings per RFC 4180.
  */
 export function generateCSV(rows: ReportRow[], options: ReportOptions): string {
@@ -197,7 +264,7 @@ export function generateCSV(rows: ReportRow[], options: ReportOptions): string {
     const fields: string[] = [row.shotName];
     if (options.includeVersions) fields.push(row.versionLabel);
     fields.push(row.status);
-    if (options.includeNotes) fields.push(row.notes.join('; '));
+    if (options.includeNotes) fields.push(formatNotesForCSV(row.structuredNotes));
     if (options.includeTimecodes) {
       fields.push(
         row.frameRange.split('-')[0] ?? '',
@@ -227,6 +294,32 @@ function buildHTMLHeaders(options: ReportOptions): string {
   return ths.join('');
 }
 
+/**
+ * Format a single structured note as HTML with frame/timecode context.
+ */
+function formatStructuredNoteHTML(note: StructuredNote): string {
+  const parts: string[] = [];
+  if (note.frameStart !== null && note.frameEnd !== null) {
+    const range = note.timecodeStart && note.timecodeEnd
+      ? `${escapeHTML(note.timecodeStart)}-${escapeHTML(note.timecodeEnd)}`
+      : `${note.frameStart}-${note.frameEnd}`;
+    parts.push(`<span style="color:#6366f1;font-size:0.85em;font-family:monospace;">[${range}]</span>`);
+  }
+  if (note.author) {
+    parts.push(`<strong>${escapeHTML(note.author)}</strong>:`);
+  }
+  parts.push(escapeHTML(note.text));
+  return parts.join(' ');
+}
+
+/**
+ * Format all structured notes for an HTML table cell.
+ */
+function formatNotesForHTML(notes: StructuredNote[]): string {
+  if (notes.length === 0) return '';
+  return notes.map(formatStructuredNoteHTML).join('<br>');
+}
+
 function statusBadgeHTML(status: ShotStatus): string {
   const color = STATUS_COLORS[status] ?? '#94a3b8';
   return `<span style="display:inline-block;padding:2px 8px;border-radius:4px;background:${color};color:#fff;font-weight:600;font-size:0.85em;">${escapeHTML(status)}</span>`;
@@ -254,7 +347,7 @@ export function generateHTML(rows: ReportRow[], options: ReportOptions): string 
       const cells: string[] = [`<td>${escapeHTML(row.shotName)}</td>`];
       if (options.includeVersions) cells.push(`<td>${escapeHTML(row.versionLabel)}</td>`);
       cells.push(`<td>${statusBadgeHTML(row.status)}</td>`);
-      if (options.includeNotes) cells.push(`<td>${row.notes.map((n) => escapeHTML(n)).join('<br>')}</td>`);
+      if (options.includeNotes) cells.push(`<td>${formatNotesForHTML(row.structuredNotes)}</td>`);
       if (options.includeTimecodes) {
         cells.push(
           `<td>${escapeHTML(row.frameRange)}</td>`,

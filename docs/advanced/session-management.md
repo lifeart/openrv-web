@@ -125,7 +125,7 @@ Snapshots can also be created automatically. Auto-checkpoints are generated befo
 
 ### Snapshot Panel
 
-Open the Snapshot Panel from the header bar button or with the keyboard shortcut `Shift+Alt+H`.
+Open the Snapshot Panel from the header bar button or with the keyboard shortcut `Ctrl+Shift+Alt+S`.
 
 The panel provides:
 

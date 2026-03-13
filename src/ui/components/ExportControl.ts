@@ -64,6 +64,11 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
   /** Section header for plugin exporters */
   private pluginExporterHeader: HTMLElement | null = null;
 
+  /** Elements that belong to the annotations export section (header, items, separator) */
+  private annotationSectionElements: HTMLElement[] = [];
+  /** Current annotation count; controls visibility of the annotation export section */
+  private _annotationCount = 0;
+
   constructor(preferencesManager?: PreferencesManager) {
     super();
     this.preferencesManager = preferencesManager ?? getCorePreferencesManager();
@@ -219,13 +224,21 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
 
     this.addSeparator();
 
-    // Annotations export section
+    // Annotations export section (conditionally visible based on annotation count)
+    this.annotationSectionElements = [];
     this.addSectionHeader('Annotations');
+    this.annotationSectionElements.push(this.dropdown.lastElementChild as HTMLElement);
     this.addMenuItem('download', 'Export Annotations (JSON)', () => this.exportAnnotationsJSON());
+    this.annotationSectionElements.push(this.dropdown.lastElementChild as HTMLElement);
     this.addMenuItem('upload', 'Import Annotations (JSON)', () => this.importAnnotationsJSON());
+    this.annotationSectionElements.push(this.dropdown.lastElementChild as HTMLElement);
     this.addMenuItem('download', 'Export Annotations (PDF)', () => this.exportAnnotationsPDF());
-
+    this.annotationSectionElements.push(this.dropdown.lastElementChild as HTMLElement);
     this.addSeparator();
+    this.annotationSectionElements.push(this.dropdown.lastElementChild as HTMLElement);
+
+    // Hide annotation section initially (no annotations)
+    this.updateAnnotationSectionVisibility();
 
     // Report export section
     this.addSectionHeader('Reports');
@@ -508,6 +521,30 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
 
   private exportReport(format: 'csv' | 'html'): void {
     this.emit('reportExportRequested', { format });
+  }
+
+  /**
+   * Update the annotation count. When the count transitions between zero and
+   * non-zero the annotation export section is shown or hidden accordingly.
+   */
+  setAnnotationCount(count: number): void {
+    const prev = this._annotationCount;
+    this._annotationCount = count;
+    if ((prev === 0) !== (count === 0)) {
+      this.updateAnnotationSectionVisibility();
+    }
+  }
+
+  /** Current annotation count exposed for tests and external consumers. */
+  get annotationCount(): number {
+    return this._annotationCount;
+  }
+
+  private updateAnnotationSectionVisibility(): void {
+    const visible = this._annotationCount > 0;
+    for (const el of this.annotationSectionElements) {
+      el.style.display = visible ? '' : 'none';
+    }
   }
 
   /**

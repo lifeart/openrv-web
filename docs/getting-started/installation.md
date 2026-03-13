@@ -24,7 +24,7 @@ For studios, teams, or individuals who prefer to host their own instance, OpenRV
 
 Before building OpenRV Web, ensure the following tools are installed:
 
-- **Node.js** 18 or later -- download from [nodejs.org](https://nodejs.org)
+- **Node.js** 20.19+ or 22.12+ -- download from [nodejs.org](https://nodejs.org)
 - **pnpm** package manager -- install via `npm install -g pnpm`
 - **Git** -- for cloning the repository
 

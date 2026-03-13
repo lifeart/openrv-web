@@ -12,7 +12,7 @@ Yes. OpenRV Web is released under the MIT license. It is free to use, modify, an
 
 ### Does OpenRV Web send my files to a server?
 
-No. All processing happens locally in the browser. Files loaded through drag-and-drop or the file picker never leave the machine. There is no server-side component. Even the collaborative review features use peer-to-peer WebRTC connections.
+No. All processing happens locally in the browser. Files loaded through drag-and-drop or the file picker never leave the machine. Collaborative review sessions use WebSocket connections for room management and real-time sync, with optional WebRTC as an additional peer-to-peer channel. No media data passes through any server.
 
 ### What is the relationship to the original OpenRV?
 
@@ -38,7 +38,7 @@ Frame-accurate video playback requires the WebCodecs API, which is available in 
 
 ### Can I load files from a URL?
 
-URL-based loading is not currently implemented. Files must be loaded from the local filesystem through drag-and-drop or the file picker.
+Yes. URL-based loading is supported through share links that include a `sourceUrl` parameter. When you open a share link containing a media URL, OpenRV Web fetches and loads the file automatically via `session.loadSourceFromUrl()`. There is no standalone "paste a URL" input in the UI yet, but the share-link bootstrap flow provides full URL-based loading.
 
 ## Color Management
 
@@ -72,11 +72,11 @@ Three loop modes are available: **Loop** (continuous repetition), **Ping-pong** 
 
 ### How does collaborative review work?
 
-OpenRV Web uses WebRTC peer-to-peer connections for real-time collaboration. Create a room, share the room code with other viewers, and sync playback position, zoom, color adjustments, annotations, and cursor position. PIN-based encryption secures the session.
+OpenRV Web uses WebSocket connections as the primary transport for real-time collaboration. Create a room, share the room code with other viewers, and sync playback position, zoom, color adjustments, annotations, and cursor position. WebRTC is available as an optional additional peer-to-peer channel. PIN-based encryption secures the session.
 
 ### Is a server required for collaboration?
 
-A signaling server is needed to establish the initial WebRTC connection. OpenRV Web uses public STUN/TURN servers (Google, Cloudflare, OpenRelay) by default. URL-based signaling provides a serverless P2P alternative. No media passes through any server -- all data flows directly between peers.
+A WebSocket server is used for room creation, joining, and real-time sync transport. OpenRV Web can also use WebRTC as an optional peer-to-peer channel, with public STUN/TURN servers (Google, Cloudflare, OpenRelay) for connection establishment. URL-based signaling provides a serverless P2P alternative for WebRTC. No media data passes through any server.
 
 ## Export
 

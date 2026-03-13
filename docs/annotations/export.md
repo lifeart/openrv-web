@@ -79,13 +79,14 @@ The PDF is generated using the browser's built-in print dialog, so it can be sav
 
 ## Export with No Annotations
 
-Exporting when no annotations exist produces a valid but empty JSON file (with zero statistics) or an empty PDF report. No error is shown.
+When no annotations exist in the session, the annotation export menu items are hidden from the Export dropdown. They appear automatically once annotations are added, and are hidden again if all annotations are removed.
 
 ## Access from Export Menu
 
-Both export options appear in the Export dropdown menu in the header bar when annotations exist in the session:
+Both export options appear in the Export dropdown menu in the header bar only when annotations exist in the session:
 
 - **Export Annotations (JSON)** -- downloads JSON file
+- **Import Annotations (JSON)** -- imports annotations from a previously exported JSON file
 - **Export Annotations (PDF)** -- opens print dialog
 
 ---

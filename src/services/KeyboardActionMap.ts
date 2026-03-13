@@ -190,7 +190,7 @@ export interface ActionShortcutCheatSheet {
 }
 
 export interface ActionPersistenceManager {
-  createQuickSnapshot(): void;
+  createQuickSnapshot(name?: string): void;
 }
 
 export interface ActionSessionBridge {

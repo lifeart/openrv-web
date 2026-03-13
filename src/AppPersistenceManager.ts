@@ -171,7 +171,7 @@ export class AppPersistenceManager {
   /**
    * Create a quick snapshot with auto-generated name
    */
-  async createQuickSnapshot(): Promise<void> {
+  async createQuickSnapshot(name?: string): Promise<void> {
     if (!this._snapshotBackendAvailable) {
       showAlert('Snapshot storage is unavailable. The snapshot backend failed to initialize.', {
         type: 'error',
@@ -191,10 +191,9 @@ export class AppPersistenceManager {
         },
         this.getSessionLabel(),
       );
-      const now = new Date();
-      const name = `Snapshot ${now.toLocaleTimeString()}`;
-      await snapshotManager.createSnapshot(name, state);
-      showAlert(`Snapshot "${name}" created`, { type: 'success', title: 'Snapshot Created' });
+      const snapshotName = name || `Snapshot ${new Date().toLocaleTimeString()}`;
+      await snapshotManager.createSnapshot(snapshotName, state);
+      showAlert(`Snapshot "${snapshotName}" created`, { type: 'success', title: 'Snapshot Created' });
     } catch (err) {
       console.error('Failed to create snapshot:', err);
       showAlert(`Failed to create snapshot: ${err}`, { type: 'error', title: 'Snapshot Error' });

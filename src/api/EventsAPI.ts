@@ -388,7 +388,7 @@ export class EventsAPI extends DisposableAPI {
           translation: [panX, panY],
           imageWidth: source.width,
           imageHeight: source.height,
-          pixelAspect: 1,
+          pixelAspect: source.pixelAspect ?? 1,
         });
         // Also update rendered images on view change (same source, new transform)
         if (this._lastLoadedSource) {

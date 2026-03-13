@@ -833,8 +833,8 @@ describe('wirePlaybackControls', () => {
   });
 
   it('PW-016: snapshotPanel createRequested calls persistenceManager.createQuickSnapshot()', () => {
-    controls.snapshotPanel.emit('createRequested', undefined);
-    expect(persistenceManager.createQuickSnapshot).toHaveBeenCalled();
+    controls.snapshotPanel.emit('createRequested', { name: 'My Snapshot' });
+    expect(persistenceManager.createQuickSnapshot).toHaveBeenCalledWith('My Snapshot');
   });
 
   it('PW-017: snapshotPanel restoreRequested calls persistenceManager.restoreSnapshot()', () => {

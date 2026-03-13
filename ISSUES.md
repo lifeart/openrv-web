@@ -216,18 +216,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Exported dailies reports cannot capture who ran the session, what project it belonged to, or any category-based review statistics.
   - That makes the generated reports much less useful for real production circulation than the workflow suggests.
 
-### 320. Dailies reports flatten notes to raw text and lose per-note frame/timecode context
-
-- Severity: Medium
-- Area: Reports / notes export
-- Evidence:
-  - The workflow describes note exports as formatted reports with “timecodes and note text” in [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L83) through [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L89).
-  - `buildReportRows(...)` only reads `noteManager.getNotesForSource(i).map((n) => n.text)` in [src/export/ReportExporter.ts](/Users/lifeart/Repos/openrv-web/src/export/ReportExporter.ts#L137) through [src/export/ReportExporter.ts#L139), so note frame ranges, authors, timestamps, and threading never enter the report model.
-  - CSV and HTML export then serialize those notes as a single joined text field per source in [src/export/ReportExporter.ts](/Users/lifeart/Repos/openrv-web/src/export/ReportExporter.ts#L196) through [src/export/ReportExporter.ts#L210) and [src/export/ReportExporter.ts](/Users/lifeart/Repos/openrv-web/src/export/ReportExporter.ts#L252) through [src/export/ReportExporter.ts#L269).
-- Impact:
-  - The exported report cannot tell artists which exact frame or timecode a specific note belongs to once multiple notes exist on the same source.
-  - That reduces the report from a timecoded review artifact to a per-shot text dump, which is much less actionable in production.
-
 ### 321. Version-manager navigation is a no-op at runtime because active-version changes never switch the session source
 
 - Severity: Medium
@@ -429,19 +417,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - That turns several otherwise-implemented workflows into trial-and-error discovery problems and makes the docs materially less trustworthy.
 
 
-### 339. The session-management guide gives the snapshot panel the history panel's shortcut
-
-- Severity: Medium
-- Area: Documentation / session workflow
-- Evidence:
-  - The session-management guide says "Open the Snapshot Panel ... with the keyboard shortcut `Shift+Alt+H`" in [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L98) through [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L100).
-  - The same guide later uses `Shift+Alt+H` for the History Panel in [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L192).
-  - The shipped keymap assigns `Shift+Alt+H` to `panel.history` in [src/utils/input/KeyBindings.ts](/Users/lifeart/Repos/openrv-web/src/utils/input/KeyBindings.ts#L562) through [src/utils/input/KeyBindings.ts](/Users/lifeart/Repos/openrv-web/src/utils/input/KeyBindings.ts#L566), while the snapshots panel is actually `Ctrl+Shift+Alt+S` in [src/utils/input/KeyBindings.ts](/Users/lifeart/Repos/openrv-web/src/utils/input/KeyBindings.ts#L572) through [src/utils/input/KeyBindings.ts](/Users/lifeart/Repos/openrv-web/src/utils/input/KeyBindings.ts#L580).
-  - The keyboard shortcut reference agrees with the keymap and lists `Shift+Alt+H` for history, not snapshots, in [docs/reference/keyboard-shortcuts.md](/Users/lifeart/Repos/openrv-web/docs/reference/keyboard-shortcuts.md#L161) and [docs/reference/keyboard-shortcuts.md](/Users/lifeart/Repos/openrv-web/docs/reference/keyboard-shortcuts.md#L166).
-- Impact:
-  - Users following the session-management guide can open the wrong panel when trying to work with snapshots.
-  - That is especially confusing because the same guide reuses the same shortcut for two different panels.
-
 ### 340. The session-management guide describes the History panel as snapshot/autosave recovery, but the shipped panel is only undo/redo action history
 
 - Severity: Medium
@@ -479,30 +454,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Users cannot rely on the header control to distinguish a sync conflict from ordinary disconnection/reconnection states the way the docs describe.
   - That weakens trust in the collaboration status indicator during remote review, because one of the documented states is not actually expressible in the shipped UI.
-
-### 343. The stereo documentation disagrees with itself and with the shipped mode list
-
-- Severity: Medium
-- Area: Documentation / stereo workflow
-- Evidence:
-  - The practical stereo guide says users get "seven primary display modes," then "seven stereo display modes plus the default Off state," and later says the dropdown contains "all eight options" in [docs/advanced/stereo-3d.md](/Users/lifeart/Repos/openrv-web/docs/advanced/stereo-3d.md#L3), [docs/advanced/stereo-3d.md](/Users/lifeart/Repos/openrv-web/docs/advanced/stereo-3d.md#L11), and [docs/advanced/stereo-3d.md](/Users/lifeart/Repos/openrv-web/docs/advanced/stereo-3d.md#L55).
-  - The technical stereo guide instead says OpenRV Web supports "ten stereo display modes" and includes `left-only` and `right-only` in the cycle order in [docs/guides/stereo-3d-viewing.md](/Users/lifeart/Repos/openrv-web/docs/guides/stereo-3d-viewing.md#L9), [docs/guides/stereo-3d-viewing.md](/Users/lifeart/Repos/openrv-web/docs/guides/stereo-3d-viewing.md#L17), and [docs/guides/stereo-3d-viewing.md](/Users/lifeart/Repos/openrv-web/docs/guides/stereo-3d-viewing.md#L125).
-  - The shipped runtime exposes exactly ten total `StereoMode` values including `off`, with `left-only` and `right-only` present in both the core type and the actual dropdown order in [src/core/types/stereo.ts](/Users/lifeart/Repos/openrv-web/src/core/types/stereo.ts#L1) through [src/core/types/stereo.ts](/Users/lifeart/Repos/openrv-web/src/core/types/stereo.ts#L11) and [src/ui/components/StereoControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/StereoControl.ts#L19) through [src/ui/components/StereoControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/StereoControl.ts#L30).
-- Impact:
-  - Users cannot trust the stereo guides to tell them how many modes actually exist or which ones `Shift+3` will cycle through.
-  - That makes the stereo feature set look unstable even though the runtime behavior is deterministic.
-
-### 344. The stereo guides publish the wrong convergence-offset range for the shipped UI
-
-- Severity: Medium
-- Area: Documentation / stereo control contract
-- Evidence:
-  - The technical stereo guide says the convergence offset range is `-50 to +50` in [docs/guides/stereo-3d-viewing.md](/Users/lifeart/Repos/openrv-web/docs/guides/stereo-3d-viewing.md#L105).
-  - The practical stereo guide describes the control as an offset slider and uses example values, but the shipped slider is explicitly clamped to `-20` through `20` with `0.5` steps in [src/ui/components/StereoControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/StereoControl.ts#L213) through [src/ui/components/StereoControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/StereoControl.ts#L219).
-  - The same stereo control is the production entry point for mode/offset changes; there is no separate wider-range UI path in the shipped component.
-- Impact:
-  - Users following the docs can expect correction headroom that the actual control cannot provide.
-  - That is especially misleading for stereo review/calibration workflows where the numeric offset range matters.
 
 ### 345. Multi-view EXR and alternate stereo-input workflows are documented as integrated, but production hardcodes side-by-side stereo
 
@@ -737,19 +688,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Users trying to free storage via the documented panel cannot actually remove auto-save entries there, because that panel only manages snapshots and auto-checkpoints.
   - That makes a concrete maintenance workflow in the docs impossible to complete from the named UI.
-
-### 366. The annotation-export docs say the export items appear only when annotations exist, but the shipped menu shows them all the time
-
-- Severity: Low
-- Area: Documentation / export menu behavior
-- Evidence:
-  - The annotation export page says "Both export options appear in the Export dropdown menu ... when annotations exist in the session" in [docs/annotations/export.md](/Users/lifeart/Repos/openrv-web/docs/annotations/export.md#L84) through [docs/annotations/export.md#L89).
-  - The shipped `ExportControl` builds `Export Annotations (JSON)` and `Export Annotations (PDF)` as unconditional menu items in [src/ui/components/ExportControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ExportControl.ts#L205) through [src/ui/components/ExportControl.ts#L209).
-  - There is no production visibility guard around those menu items based on current annotation count; the control builds the same menu structure up front.
-- Impact:
-  - Users can read the docs and expect the annotation export entries to appear only after creating annotations, but the shipped menu always contains them.
-  - That weakens the docs as a guide to real UI state and makes the menu behavior look inconsistent with the documented workflow.
-
 
 ### 368. The review docs promise a shot-status badge in the header, but production has no such header status UI
 
@@ -1355,32 +1293,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Cursor-sharing traffic can flow over the collaboration stack without producing any visible or actionable result in the shipped app.
   - Users and integrators can expect shared remote cursors from the advertised feature set, but production stops at transport/state bookkeeping.
 
-### 450. The FAQ still says URL-based loading is not implemented, but production already loads media from `sourceUrl` share links
-
-- Severity: Low
-- Area: Documentation / URL-loading feature scope
-- Evidence:
-  - The FAQ answer to "Can I load files from a URL?" says "URL-based loading is not currently implemented" in [docs/reference/faq.md](/Users/lifeart/Repos/openrv-web/docs/reference/faq.md#L39) through [docs/reference/faq.md](/Users/lifeart/Repos/openrv-web/docs/reference/faq.md#L41).
-  - The session URL flow serializes a `sourceUrl` into shared state in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L122) through [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L145).
-  - On a clean session, `SessionURLService.applySessionURLState(...)` attempts `session.loadSourceFromUrl(state.sourceUrl)` before applying the rest of the shared state in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L148) through [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L164).
-  - The app-level network bootstrap mirrors the same behavior in [src/AppNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppNetworkBridge.ts#L1091) through [src/AppNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppNetworkBridge.ts#L1101).
-- Impact:
-  - The documentation understates a real runtime capability that already exists in share-link/bootstrap flows.
-  - Users and integrators reading the FAQ can conclude URL-based review links are impossible, even though the app does support a narrower live `sourceUrl` path today.
-
-### 451. The FAQ describes collaboration as peer-to-peer WebRTC, but the normal room lifecycle is WebSocket-based
-
-- Severity: Low
-- Area: Documentation / collaboration architecture
-- Evidence:
-  - The FAQ says collaborative review features "use peer-to-peer WebRTC connections" and that collaboration "uses WebRTC peer-to-peer connections for real-time collaboration" in [docs/reference/faq.md](/Users/lifeart/Repos/openrv-web/docs/reference/faq.md#L15) and [docs/reference/faq.md](/Users/lifeart/Repos/openrv-web/docs/reference/faq.md#L73) through [docs/reference/faq.md](/Users/lifeart/Repos/openrv-web/docs/reference/faq.md#L75).
-  - The collaboration types and main transport are explicitly defined as WebSocket-based in [src/network/types.ts](/Users/lifeart/Repos/openrv-web/src/network/types.ts#L1) through [src/network/types.ts](/Users/lifeart/Repos/openrv-web/src/network/types.ts#L5) and [src/network/WebSocketClient.ts](/Users/lifeart/Repos/openrv-web/src/network/WebSocketClient.ts#L2) through [src/network/WebSocketClient.ts](/Users/lifeart/Repos/openrv-web/src/network/WebSocketClient.ts#L16).
-  - Normal `createRoom(...)` and `joinRoom(...)` both connect `wsClient` first and only then send `room.create` / `room.join` in [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L380) through [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L395) and [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L401) through [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L426).
-  - The network guide itself describes WebSocket as the primary sync transport and WebRTC as an additional path in [docs/advanced/network-sync.md](/Users/lifeart/Repos/openrv-web/docs/advanced/network-sync.md#L82) through [docs/advanced/network-sync.md](/Users/lifeart/Repos/openrv-web/docs/advanced/network-sync.md#L115).
-- Impact:
-  - The FAQ makes collaboration sound like a pure WebRTC system even though production normally depends on a WebSocket room service for create/join and sync transport.
-  - Operators reading only the FAQ can underestimate the server/runtime dependencies of the shipped collaboration flow.
-
 ### 452. The FAQ says collaboration data stays peer-to-peer, but production falls back to WebSocket for state and media transfer
 
 - Severity: Medium
@@ -1419,18 +1331,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - The deployment docs make the full app sound entirely static-hosted even though the advertised collaboration feature still has external signaling/runtime dependencies in normal operation.
   - Self-hosters can deploy the static app successfully and still be surprised when collaborative review is unavailable or misconfigured.
-
-### 455. The installation guide still says Node 18+ is enough, but the current toolchain declares Node 20.19+ or 22.12+
-
-- Severity: Medium
-- Area: Documentation / local build prerequisites
-- Evidence:
-  - The installation guide still lists "Node.js 18 or later" as the prerequisite in [docs/getting-started/installation.md](/Users/lifeart/Repos/openrv-web/docs/getting-started/installation.md#L21) through [docs/getting-started/installation.md](/Users/lifeart/Repos/openrv-web/docs/getting-started/installation.md#L27).
-  - The repository now declares `engines.node` as `^20.19.0 || >=22.12.0` in [package.json](/Users/lifeart/Repos/openrv-web/package.json#L119) through [package.json](/Users/lifeart/Repos/openrv-web/package.json#L121).
-  - The locked toolchain reflects that newer floor as well, with `vite@7.3.1` requiring `^20.19.0 || >=22.12.0` and `vitest@4.0.18` requiring Node 20+ in [pnpm-lock.yaml](/Users/lifeart/Repos/openrv-web/pnpm-lock.yaml#L2209) through [pnpm-lock.yaml](/Users/lifeart/Repos/openrv-web/pnpm-lock.yaml#L2211) and [pnpm-lock.yaml](/Users/lifeart/Repos/openrv-web/pnpm-lock.yaml#L2261) through [pnpm-lock.yaml](/Users/lifeart/Repos/openrv-web/pnpm-lock.yaml#L2263).
-- Impact:
-  - A developer following the published installation guide can start from a supported-looking Node 18 setup and still fail during install/build.
-  - The prerequisite docs no longer match the actual package/toolchain contract the repo enforces.
 
 ### 456. The browser-requirements guide says Presentation Mode depends on the Fullscreen API, but the runtime mode is separate
 
@@ -1617,18 +1517,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Importing OTIO into the shipped app silently degrades the editorial timeline into a much simpler playlist model.
   - Gaps, transitions, markers, and metadata context can disappear without any explicit warning that the import was lossy.
-
-### 471. The UI overview advertises snapshots as named captures, but the shipped create flow does not prompt for a snapshot name
-
-- Severity: Low
-- Area: Documentation / snapshot workflow
-- Evidence:
-  - The UI overview panel table describes `Snapshots` as `Named session snapshots` in [docs/getting-started/ui-overview.md](/Users/lifeart/Repos/openrv-web/docs/getting-started/ui-overview.md#L208) through [docs/getting-started/ui-overview.md#L211).
-  - The shipped Snapshot panel's create button only emits a bare `createRequested` event with no naming or description prompt in [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L198) through [src/ui/components/SnapshotPanel.ts#L211).
-  - Snapshot descriptions are effectively import-only metadata in the current UI, as already captured in issue `380`.
-- Impact:
-  - The getting-started docs make manual snapshot naming sound like a first-class part of the shipped capture workflow.
-  - Users opening the panel can expect a naming step that never appears during normal snapshot creation.
 
 ### 472. The advanced-compare docs present Quad View as a shipped feature, but the live UI itself marks it as preview-only and unwired
 
@@ -1825,18 +1713,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - The docs promise a studio-customizable false-color workflow that the shipped app does not implement.
   - Users can look for custom mapping controls or APIs that simply are not present in production.
-
-### 488. The false-color docs say ARRI skin tones appear green, but the shipped ARRI palette maps that range to grey/yellow instead
-
-- Severity: Low
-- Area: Documentation / false-color interpretation
-- Evidence:
-  - The guide says skin tones should appear green on the ARRI scale, approximately `40-50 IRE`, in [docs/scopes/false-color-zebra.md](/Users/lifeart/Repos/openrv-web/docs/scopes/false-color-zebra.md#L46) and [docs/scopes/false-color-zebra.md](/Users/lifeart/Repos/openrv-web/docs/scopes/false-color-zebra.md#L90).
-  - The shipped ARRI legend maps `78-102` to greenish low-mid tones, but `103-128` to grey and `129-153` to yellow in [src/ui/components/FalseColor.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/FalseColor.ts#L104) through [src/ui/components/FalseColor.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/FalseColor.ts#L116).
-  - The False Color control renders its legend directly from that palette in [src/ui/components/FalseColor.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/FalseColor.ts#L278) through [src/ui/components/FalseColor.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/FalseColor.ts#L285) and [src/ui/components/FalseColorControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/FalseColorControl.ts#L288) through [src/ui/components/FalseColorControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/FalseColorControl.ts#L324).
-- Impact:
-  - The guide teaches users to interpret ARRI false color differently from what the shipped palette actually displays.
-  - That can produce wrong exposure conclusions during dailies if reviewers trust the docs over the on-screen legend.
 
 ### 490. The histogram docs still say pixel analysis runs on the GPU, but the shipped histogram always computes bins on the CPU
 
@@ -2528,17 +2404,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Public/compat consumers can be told there is exactly one rendered image even when the viewer is in compare or other multi-image states.
   - That makes the rendered-image event payload a lossy approximation of viewer output rather than a trustworthy description of the current render graph.
-
-### 551. Public `viewTransformChanged` always reports `pixelAspect: 1`, even though non-square-pixel workflows exist and compat consumers use that field
-
-- Severity: Medium
-- Area: Public API / view transform accuracy
-- Evidence:
-  - `EventsAPI` hardcodes `pixelAspect: 1` in every emitted `viewTransformChanged` payload in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L369) through [src/api/EventsAPI.ts#L382).
-  - The broader app and compat layers do carry and use pixel-aspect information, for example `MuEvalBridge` uses `vt.pixelAspect` in screen/image coordinate conversions in [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L490) through [src/compat/MuEvalBridge.ts#L522), and the app supports PAR / pixel-aspect state elsewhere in [src/core/session/SessionGTOExporter.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGTOExporter.ts#L1375) and [src/transform/LensDistortion.ts](/Users/lifeart/Repos/openrv-web/src/transform/LensDistortion.ts#L230) through [src/transform/LensDistortion.ts#L262).
-- Impact:
-  - Public/compat consumers can receive geometrically wrong view-transform data for anamorphic or other non-square-pixel cases.
-  - That makes external coordinate reasoning less accurate than the event contract suggests, especially in tools that rely on `pixelAspect` for hit testing or screen-space mapping.
 
 ### 552. Mu compat `remoteContacts()` returns the locally supplied connection labels instead of the peer contact names received on handshake
 

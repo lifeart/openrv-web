@@ -2433,8 +2433,8 @@ export class Viewer {
   /**
    * Get the native source image dimensions.
    */
-  getSourceDimensions(): { width: number; height: number } {
-    return { width: this.sourceWidth, height: this.sourceHeight };
+  getSourceDimensions(): { width: number; height: number; pixelAspect?: number } {
+    return { width: this.sourceWidth, height: this.sourceHeight, pixelAspect: this.parState.par };
   }
 
   setColorAdjustments(adjustments: ColorAdjustments): void {
