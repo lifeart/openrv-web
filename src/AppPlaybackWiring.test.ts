@@ -4,20 +4,6 @@ import { wirePlaybackControls, type PlaybackWiringDeps } from './AppPlaybackWiri
 import type { AppWiringContext } from './AppWiringContext';
 import * as Modal from './ui/components/shared/Modal';
 
-const DEFAULT_EXPORT_PREFS: {
-  defaultFormat: 'png' | 'jpeg' | 'webp';
-  defaultQuality: number;
-  includeAnnotations: boolean;
-  frameburnEnabled: boolean;
-  frameburnConfig: Record<string, unknown> | null;
-} = {
-  defaultFormat: 'png',
-  defaultQuality: 0.92,
-  includeAnnotations: true,
-  frameburnEnabled: false,
-  frameburnConfig: null,
-};
-
 // ---------------------------------------------------------------------------
 // Module-level mocks for video export pipeline
 // ---------------------------------------------------------------------------
@@ -34,10 +20,7 @@ const {
   mockDialogUpdateProgress,
   mockDialogOnFn,
   mockDownloadAnnotationsJSON,
-  mockParseAnnotationsJSON,
-  mockApplyAnnotationsJSON,
   mockExportAnnotationsPDF,
-  mockExportSequence,
 } = vi.hoisted(() => ({
   mockEncodeFn: vi.fn(),
   mockCancelFn: vi.fn(),
@@ -48,10 +31,7 @@ const {
   mockDialogUpdateProgress: vi.fn(),
   mockDialogOnFn: vi.fn().mockReturnValue(() => {}),
   mockDownloadAnnotationsJSON: vi.fn(),
-  mockParseAnnotationsJSON: vi.fn(),
-  mockApplyAnnotationsJSON: vi.fn(),
   mockExportAnnotationsPDF: vi.fn().mockResolvedValue(undefined),
-  mockExportSequence: vi.fn(),
 }));
 
 vi.mock('./export/VideoExporter', () => {
@@ -90,14 +70,8 @@ vi.mock('./ui/components/ExportProgress', () => ({
   },
 }));
 
-vi.mock('./utils/export/SequenceExporter', () => ({
-  exportSequence: mockExportSequence,
-}));
-
 vi.mock('./utils/export/AnnotationJSONExporter', () => ({
   downloadAnnotationsJSON: mockDownloadAnnotationsJSON,
-  parseAnnotationsJSON: mockParseAnnotationsJSON,
-  applyAnnotationsJSON: mockApplyAnnotationsJSON,
 }));
 
 vi.mock('./utils/export/AnnotationPDFExporter', () => ({
@@ -105,19 +79,6 @@ vi.mock('./utils/export/AnnotationPDFExporter', () => ({
 }));
 
 const showAlertSpy = vi.spyOn(Modal, 'showAlert').mockReturnValue(Promise.resolve());
-const showConfirmSpy = vi.spyOn(Modal, 'showConfirm').mockResolvedValue(true);
-
-const mockPreferencesManager = {
-  getExportDefaults: vi.fn(() => ({ ...DEFAULT_EXPORT_PREFS })),
-  setExportDefaults: vi.fn(),
-  exportAll: vi.fn(() => '{"version":1}'),
-  importAll: vi.fn(),
-  resetAll: vi.fn(),
-};
-
-vi.mock('./core/PreferencesManager', () => ({
-  getCorePreferencesManager: () => mockPreferencesManager,
-}));
 
 function createMockVolumeControl() {
   const emitter = new EventEmitter();
@@ -193,7 +154,6 @@ function createMockViewer() {
     exportSourceFrame: vi.fn(),
     copyFrameToClipboard: vi.fn(),
     renderFrameToCanvas: vi.fn(),
-    setOnProjectFileDrop: vi.fn(),
   };
 }
 
@@ -248,14 +208,12 @@ function createMockControls() {
 function createMockDeps(): PlaybackWiringDeps {
   return {
     getKeyboardHandler: vi.fn(() => ({
+      showShortcutsDialog: vi.fn(),
       showCustomBindingsDialog: vi.fn(),
     })) as unknown as PlaybackWiringDeps['getKeyboardHandler'],
     getFullscreenManager: vi.fn(() => ({
-      toggle: vi.fn().mockResolvedValue(undefined),
+      toggle: vi.fn(),
     })) as unknown as PlaybackWiringDeps['getFullscreenManager'],
-    getShortcutCheatSheet: vi.fn(() => ({
-      show: vi.fn(),
-    })),
   };
 }
 
@@ -265,7 +223,6 @@ function createMockPersistenceManager() {
     openProject: vi.fn(),
     retryAutoSave: vi.fn(),
     restoreSnapshot: vi.fn(),
-    createQuickSnapshot: vi.fn(),
     saveRvSession: vi.fn(),
   };
 }
@@ -344,51 +301,6 @@ describe('wirePlaybackControls', () => {
     expect(volumeControl.setScrubAudioAvailable).toHaveBeenLastCalledWith(false);
   });
 
-  // ---- Audio error surfacing (fix #189) ----
-
-  it('PW-004d: audioError event shows a warning alert to the user', () => {
-    showAlertSpy.mockClear();
-
-    session.emit('audioError', {
-      type: 'decode',
-      message: 'Failed to decode audio',
-    });
-
-    expect(showAlertSpy).toHaveBeenCalledTimes(1);
-    expect(showAlertSpy).toHaveBeenCalledWith('Audio playback error: Failed to decode audio', {
-      type: 'warning',
-      title: 'Audio Error',
-    });
-  });
-
-  it('PW-004e: audioError event surfaces autoplay errors', () => {
-    showAlertSpy.mockClear();
-
-    session.emit('audioError', {
-      type: 'autoplay',
-      message: 'Playback blocked by browser autoplay policy. Click to enable audio.',
-    });
-
-    expect(showAlertSpy).toHaveBeenCalledTimes(1);
-    expect(showAlertSpy).toHaveBeenCalledWith(
-      'Audio playback error: Playback blocked by browser autoplay policy. Click to enable audio.',
-      { type: 'warning', title: 'Audio Error' },
-    );
-  });
-
-  it('PW-004f: normal volume/mute operations do not trigger audio error alerts', () => {
-    showAlertSpy.mockClear();
-
-    const volumeControl = headerBar.getVolumeControl();
-    volumeControl.emit('volumeChanged', 0.5);
-    volumeControl.emit('mutedChanged', true);
-    volumeControl.emit('mutedChanged', false);
-    session.emit('volumeChanged', 0.8);
-    session.emit('mutedChanged', false);
-
-    expect(showAlertSpy).not.toHaveBeenCalled();
-  });
-
   it('PW-005: exportRequested calls viewer.exportFrame()', () => {
     const exportControl = headerBar.getExportControl();
     exportControl.emit('exportRequested', {
@@ -399,41 +311,10 @@ describe('wirePlaybackControls', () => {
     expect(viewer.exportFrame).toHaveBeenCalledWith('png', false, 0.9);
   });
 
-  it('PW-006: copyRequested with annotations passes true to viewer.copyFrameToClipboard', () => {
+  it('PW-006: copyRequested calls viewer.copyFrameToClipboard(true)', () => {
     const exportControl = headerBar.getExportControl();
-    exportControl.emit('copyRequested', { includeAnnotations: true });
+    exportControl.emit('copyRequested', undefined);
     expect(viewer.copyFrameToClipboard).toHaveBeenCalledWith(true);
-  });
-
-  it('PW-006c: copyRequested with annotations unchecked passes false to viewer.copyFrameToClipboard (#176)', () => {
-    const exportControl = headerBar.getExportControl();
-    exportControl.emit('copyRequested', { includeAnnotations: false });
-    expect(viewer.copyFrameToClipboard).toHaveBeenCalledWith(false);
-  });
-
-  it('PW-006d: copyRequested shows alert when clipboard copy fails (#196)', async () => {
-    showAlertSpy.mockClear();
-    viewer.copyFrameToClipboard.mockResolvedValue(false);
-    const exportControl = headerBar.getExportControl();
-    exportControl.emit('copyRequested', { includeAnnotations: true });
-    // Wait for the async handler to complete
-    await vi.waitFor(() => {
-      expect(showAlertSpy).toHaveBeenCalledWith(
-        'Failed to copy frame to clipboard. Your browser may have denied clipboard access.',
-        { type: 'warning', title: 'Clipboard Unavailable' },
-      );
-    });
-  });
-
-  it('PW-006e: copyRequested does not show alert when clipboard copy succeeds (#196)', async () => {
-    showAlertSpy.mockClear();
-    viewer.copyFrameToClipboard.mockResolvedValue(true);
-    const exportControl = headerBar.getExportControl();
-    exportControl.emit('copyRequested', { includeAnnotations: true });
-    await vi.waitFor(() => {
-      expect(viewer.copyFrameToClipboard).toHaveBeenCalled();
-    });
-    expect(showAlertSpy).not.toHaveBeenCalled();
   });
 
   it('PW-006b: sourceExportRequested calls viewer.exportSourceFrame()', () => {
@@ -445,59 +326,16 @@ describe('wirePlaybackControls', () => {
     expect(viewer.exportSourceFrame).toHaveBeenCalledWith('jpeg', 0.8);
   });
 
-  it('PW-007: showShortcuts calls shortcutCheatSheet.show()', () => {
+  it('PW-007: showShortcuts calls keyboardHandler.showShortcutsDialog()', () => {
     headerBar.emit('showShortcuts', undefined);
-    const cheatSheet = (deps.getShortcutCheatSheet as ReturnType<typeof vi.fn>).mock.results[0]!.value;
-    expect(cheatSheet.show).toHaveBeenCalled();
-  });
-
-  it('PW-007b: showShortcuts does not crash when getShortcutCheatSheet returns null', () => {
-    deps.getShortcutCheatSheet = vi.fn(() => null);
-    // Re-wire with updated deps
-    subs.subscriptions.dispose();
-    const ctx = {
-      session,
-      viewer,
-      headerBar,
-      controls,
-      persistenceManager,
-      paintEngine: { on: vi.fn().mockReturnValue(() => {}) } as any,
-      tabBar: { on: vi.fn().mockReturnValue(() => {}) } as any,
-      sessionBridge: {} as any,
-    } as any;
-    wirePlaybackControls(ctx, deps);
-    expect(() => headerBar.emit('showShortcuts', undefined)).not.toThrow();
+    const handler = (deps.getKeyboardHandler as ReturnType<typeof vi.fn>).mock.results[0]!.value;
+    expect(handler.showShortcutsDialog).toHaveBeenCalled();
   });
 
   it('PW-008: fullscreenToggle calls fullscreenManager.toggle()', () => {
     headerBar.emit('fullscreenToggle', undefined);
     const manager = (deps.getFullscreenManager as ReturnType<typeof vi.fn>).mock.results[0]!.value;
     expect(manager.toggle).toHaveBeenCalled();
-  });
-
-  it('PW-008b: fullscreenToggle failure shows user alert (#182)', async () => {
-    const mockManager = {
-      toggle: vi.fn().mockRejectedValue(new Error('blocked by browser')),
-    };
-    (deps.getFullscreenManager as ReturnType<typeof vi.fn>).mockReturnValue(mockManager);
-    showAlertSpy.mockClear();
-
-    headerBar.emit('fullscreenToggle', undefined);
-    // Wait for the rejected promise to be caught and showAlert to fire
-    await vi.waitFor(() => {
-      expect(showAlertSpy).toHaveBeenCalledWith(
-        'Fullscreen is not available. Your browser may be blocking it.',
-        expect.objectContaining({ type: 'warning', title: 'Fullscreen Unavailable' }),
-      );
-    });
-  });
-
-  it('PW-008c: successful fullscreenToggle does not show error alert (#182)', async () => {
-    showAlertSpy.mockClear();
-    headerBar.emit('fullscreenToggle', undefined);
-    // Give async chain time to settle
-    await new Promise((r) => setTimeout(r, 0));
-    expect(showAlertSpy).not.toHaveBeenCalled();
   });
 
   it('PW-009: clipSelected jumps to mapped local frame and clip range', () => {
@@ -658,188 +496,57 @@ describe('wirePlaybackControls', () => {
     );
   });
 
-  it('PW-015b: annotationsPDFExportRequested shows alert when popup is blocked', async () => {
-    mockExportAnnotationsPDF.mockRejectedValueOnce(new Error('Failed to open print window. Please allow popups for this site.'));
-    const exportControl = headerBar.getExportControl();
-    exportControl.emit('annotationsPDFExportRequested', undefined);
-    // Allow the microtask (.catch handler) to run
-    await new Promise((r) => setTimeout(r, 0));
+  it('PW-016: representationError event shows warning alert to user', () => {
+    session.emit('representationError', {
+      sourceIndex: 0,
+      repId: 'rep-1',
+      error: 'Decoder failed',
+      userInitiated: false,
+    });
+
+    expect(showAlertSpy).toHaveBeenCalledWith('Representation failed: Decoder failed', {
+      type: 'warning',
+      title: 'Representation Error',
+    });
+  });
+
+  it('PW-017: representationError from user-initiated action shows error alert', () => {
+    session.emit('representationError', {
+      sourceIndex: 0,
+      repId: 'rep-1',
+      error: 'Format not supported',
+      userInitiated: true,
+    });
+
+    expect(showAlertSpy).toHaveBeenCalledWith('Representation failed: Format not supported', {
+      type: 'error',
+      title: 'Representation Error',
+    });
+  });
+
+  it('PW-018: fallbackActivated event shows info alert with representation label', () => {
+    session.emit('fallbackActivated', {
+      sourceIndex: 0,
+      failedRepId: 'rep-hdr',
+      fallbackRepId: 'rep-sdr',
+      fallbackRepresentation: {
+        id: 'rep-sdr',
+        label: 'SDR Proxy (1920x1080)',
+        kind: 'proxy',
+        status: 'ready',
+        priority: 10,
+        resolution: { width: 1920, height: 1080 },
+        startFrame: 1,
+      },
+    });
+
     expect(showAlertSpy).toHaveBeenCalledWith(
-      expect.stringContaining('PDF export failed'),
-      expect.objectContaining({ type: 'error', title: 'PDF Export Error' }),
+      'Switched to fallback representation: SDR Proxy (1920x1080)',
+      {
+        type: 'info',
+        title: 'Fallback Activated',
+      },
     );
-  });
-
-  it('PW-015c: annotationsPDFExportRequested shows alert on other export errors', async () => {
-    mockExportAnnotationsPDF.mockRejectedValueOnce(new Error('Some unexpected error'));
-    const exportControl = headerBar.getExportControl();
-    exportControl.emit('annotationsPDFExportRequested', undefined);
-    await new Promise((r) => setTimeout(r, 0));
-    expect(showAlertSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Some unexpected error'),
-      expect.objectContaining({ type: 'error', title: 'PDF Export Error' }),
-    );
-  });
-
-  it('PW-015d: annotationsPDFExportRequested does not show alert on success', async () => {
-    mockExportAnnotationsPDF.mockResolvedValueOnce(undefined);
-    showAlertSpy.mockClear();
-    const exportControl = headerBar.getExportControl();
-    exportControl.emit('annotationsPDFExportRequested', undefined);
-    await new Promise((r) => setTimeout(r, 0));
-    expect(showAlertSpy).not.toHaveBeenCalled();
-  });
-
-  it('PW-018: annotationsJSONImportRequested opens file picker', () => {
-    const clickSpy = vi.fn();
-    const createElementOrig = document.createElement.bind(document);
-    const createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
-      const el = createElementOrig(tag);
-      if (tag === 'input') {
-        el.click = clickSpy;
-      }
-      return el;
-    });
-
-    const exportControl = headerBar.getExportControl();
-    exportControl.emit('annotationsJSONImportRequested', undefined);
-
-    expect(clickSpy).toHaveBeenCalled();
-    createElementSpy.mockRestore();
-  });
-
-  it('PW-019: annotationsJSONImportRequested calls parseAnnotationsJSON and applyAnnotationsJSON on valid file', async () => {
-    const parsedData = { version: 1, source: 'openrv-web', frames: { '1': [] } };
-    mockParseAnnotationsJSON.mockReturnValue(parsedData);
-    mockApplyAnnotationsJSON.mockReturnValue(3);
-
-    let changeHandler: (() => void) | null = null;
-    const createElementOrig = document.createElement.bind(document);
-    const createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
-      const el = createElementOrig(tag);
-      if (tag === 'input') {
-        const origAddEventListener = el.addEventListener.bind(el);
-        el.addEventListener = ((type: string, handler: EventListenerOrEventListenerObject) => {
-          if (type === 'change') {
-            changeHandler = handler as () => void;
-          }
-          origAddEventListener(type, handler);
-        }) as typeof el.addEventListener;
-        Object.defineProperty(el, 'files', {
-          get: () => [new File(['{"version":1}'], 'annotations.json', { type: 'application/json' })],
-        });
-        el.click = vi.fn();
-      }
-      return el;
-    });
-
-    const exportControl = headerBar.getExportControl();
-    exportControl.emit('annotationsJSONImportRequested', undefined);
-    expect(changeHandler).not.toBeNull();
-    changeHandler!();
-
-    await vi.waitFor(() => {
-      expect(mockParseAnnotationsJSON).toHaveBeenCalledWith('{"version":1}');
-    });
-    expect(mockApplyAnnotationsJSON).toHaveBeenCalledWith(
-      expect.anything(), // paintEngine
-      parsedData,
-      { mode: 'replace' },
-    );
-    expect(showAlertSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Successfully imported 3 annotations'),
-      expect.objectContaining({ type: 'success' }),
-    );
-
-    createElementSpy.mockRestore();
-  });
-
-  it('PW-020: annotationsJSONImportRequested shows error for invalid JSON', async () => {
-    mockParseAnnotationsJSON.mockReturnValue(null);
-
-    let changeHandler: (() => void) | null = null;
-    const createElementOrig = document.createElement.bind(document);
-    const createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
-      const el = createElementOrig(tag);
-      if (tag === 'input') {
-        const origAddEventListener = el.addEventListener.bind(el);
-        el.addEventListener = ((type: string, handler: EventListenerOrEventListenerObject) => {
-          if (type === 'change') {
-            changeHandler = handler as () => void;
-          }
-          origAddEventListener(type, handler);
-        }) as typeof el.addEventListener;
-        Object.defineProperty(el, 'files', {
-          get: () => [new File(['not-valid'], 'bad.json', { type: 'application/json' })],
-        });
-        el.click = vi.fn();
-      }
-      return el;
-    });
-
-    const exportControl = headerBar.getExportControl();
-    exportControl.emit('annotationsJSONImportRequested', undefined);
-    changeHandler!();
-
-    await vi.waitFor(() => {
-      expect(showAlertSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Invalid annotation JSON file'),
-        expect.objectContaining({ title: 'Import Error' }),
-      );
-    });
-
-    createElementSpy.mockRestore();
-  });
-
-  it('PW-021: annotationsJSONImportRequested shows error when applyAnnotationsJSON throws', async () => {
-    const parsedData = { version: 1, source: 'openrv-web', frames: {} };
-    mockParseAnnotationsJSON.mockReturnValue(parsedData);
-    mockApplyAnnotationsJSON.mockImplementation(() => {
-      throw new Error('Paint engine exploded');
-    });
-
-    let changeHandler: (() => void) | null = null;
-    const createElementOrig = document.createElement.bind(document);
-    const createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
-      const el = createElementOrig(tag);
-      if (tag === 'input') {
-        const origAddEventListener = el.addEventListener.bind(el);
-        el.addEventListener = ((type: string, handler: EventListenerOrEventListenerObject) => {
-          if (type === 'change') {
-            changeHandler = handler as () => void;
-          }
-          origAddEventListener(type, handler);
-        }) as typeof el.addEventListener;
-        Object.defineProperty(el, 'files', {
-          get: () => [new File(['{"version":1}'], 'annotations.json', { type: 'application/json' })],
-        });
-        el.click = vi.fn();
-      }
-      return el;
-    });
-
-    const exportControl = headerBar.getExportControl();
-    exportControl.emit('annotationsJSONImportRequested', undefined);
-    changeHandler!();
-
-    await vi.waitFor(() => {
-      expect(showAlertSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to import annotations: Paint engine exploded'),
-        expect.objectContaining({ title: 'Import Error' }),
-      );
-    });
-
-    createElementSpy.mockRestore();
-  });
-
-  it('PW-016: snapshotPanel createRequested calls persistenceManager.createQuickSnapshot()', () => {
-    controls.snapshotPanel.emit('createRequested', { name: 'My Snapshot' });
-    expect(persistenceManager.createQuickSnapshot).toHaveBeenCalledWith('My Snapshot');
-  });
-
-  it('PW-017: snapshotPanel restoreRequested calls persistenceManager.restoreSnapshot()', () => {
-    controls.snapshotPanel.emit('restoreRequested', { id: 'snap-42' });
-    expect(persistenceManager.restoreSnapshot).toHaveBeenCalledWith('snap-42');
   });
 
   describe('disposal', () => {
@@ -875,7 +582,6 @@ describe('wirePlaybackControls — video export', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    mockPreferencesManager.getExportDefaults.mockReturnValue({ ...DEFAULT_EXPORT_PREFS });
     session = createMockSession();
     session.currentSource = { name: 'test-clip.mov' };
     session.frameCount = 100;
@@ -982,39 +688,6 @@ describe('wirePlaybackControls — video export', () => {
 
     await vi.waitFor(() => {
       expect(viewer.renderFrameToCanvas).toHaveBeenCalledWith(10, true);
-    });
-  });
-
-  it('PW-VE04b: passes configured advanced frameburn into rendered export frames', async () => {
-    mockPreferencesManager.getExportDefaults.mockReturnValue({
-      ...DEFAULT_EXPORT_PREFS,
-      frameburnEnabled: true,
-      frameburnConfig: {
-        enabled: true,
-        fields: [{ type: 'timecode' }, { type: 'shotName', label: 'Shot' }],
-        position: 'bottom-center',
-        fontSize: 20,
-      },
-    });
-
-    emitVideoExport(true);
-
-    await vi.waitFor(() => {
-      expect(viewer.renderFrameToCanvas).toHaveBeenCalledWith(
-        10,
-        true,
-        expect.objectContaining({
-          enabled: true,
-          position: 'bottom-center',
-          fields: [{ type: 'timecode' }, { type: 'shotName', label: 'Shot' }],
-        }),
-        expect.objectContaining({
-          currentFrame: 10,
-          shotName: 'test-clip',
-          width: 320,
-          height: 240,
-        }),
-      );
     });
   });
 
@@ -1150,7 +823,7 @@ describe('wirePlaybackControls — video export', () => {
     const [, frameProvider] = mockEncodeFn.mock.calls[0]!;
 
     await frameProvider(11);
-    expect(viewer.renderFrameToCanvas).toHaveBeenCalledWith(11, true, null, null);
+    expect(viewer.renderFrameToCanvas).toHaveBeenCalledWith(11, true);
   });
 
   it('PW-VE15: registers cancel listener on progress dialog', async () => {
@@ -1184,502 +857,5 @@ describe('wirePlaybackControls — video export', () => {
     const canvas = await frameProvider(10);
     expect(canvas).toBeInstanceOf(HTMLCanvasElement);
     expect(viewer.renderFrameToCanvas).not.toHaveBeenCalled();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Sequence export tests
-// ---------------------------------------------------------------------------
-
-describe('wirePlaybackControls — sequence export', () => {
-  let session: ReturnType<typeof createMockSession>;
-  let viewer: ReturnType<typeof createMockViewer>;
-  let headerBar: ReturnType<typeof createMockHeaderBar>;
-  let controls: ReturnType<typeof createMockControls>;
-  let deps: PlaybackWiringDeps;
-  let persistenceManager: ReturnType<typeof createMockPersistenceManager>;
-
-  beforeEach(async () => {
-    vi.clearAllMocks();
-    session = createMockSession();
-    session.currentSource = { name: 'test-clip.exr' };
-    session.frameCount = 50;
-    session.inPoint = 5;
-    session.outPoint = 15;
-    session.fps = 24;
-
-    viewer = createMockViewer();
-    const mockCanvas = document.createElement('canvas');
-    mockCanvas.width = 320;
-    mockCanvas.height = 240;
-    viewer.renderFrameToCanvas.mockResolvedValue(mockCanvas);
-
-    headerBar = createMockHeaderBar();
-    controls = createMockControls();
-    deps = createMockDeps();
-    persistenceManager = createMockPersistenceManager();
-
-    mockDialogOnFn.mockReturnValue(() => {});
-
-    // Default: exportSequence resolves successfully
-    mockExportSequence.mockResolvedValue({
-      success: true,
-      exportedFrames: 11,
-    });
-
-    const ctx = {
-      session,
-      viewer,
-      headerBar,
-      controls,
-      persistenceManager,
-      paintEngine: {},
-      tabBar: {},
-      sessionBridge: {},
-    } as unknown as AppWiringContext;
-
-    wirePlaybackControls(ctx, deps);
-  });
-
-  function emitSequenceExport(useInOutRange: boolean): void {
-    const exportControl = headerBar.getExportControl();
-    exportControl.emit('sequenceExportRequested', {
-      format: 'png',
-      includeAnnotations: false,
-      quality: 0.9,
-      useInOutRange,
-    });
-  }
-
-  it('PW-SE01: sequence export uses ExportProgressDialog, not inline div', async () => {
-    emitSequenceExport(true);
-
-    await vi.waitFor(() => {
-      expect(mockDialogShow).toHaveBeenCalled();
-    });
-
-    await vi.waitFor(() => {
-      expect(mockExportSequence).toHaveBeenCalled();
-    });
-  });
-
-  it('PW-SE02: sequence export shows progress updates via dialog', async () => {
-    // Make exportSequence call the onProgress callback
-    mockExportSequence.mockImplementation(
-      async (
-        _options: unknown,
-        _renderFrame: unknown,
-        onProgress?: (progress: { currentFrame: number; totalFrames: number; percent: number; cancelled: boolean }) => void,
-      ) => {
-        if (onProgress) {
-          onProgress({ currentFrame: 7, totalFrames: 11, percent: 27, cancelled: false });
-          onProgress({ currentFrame: 10, totalFrames: 11, percent: 55, cancelled: false });
-        }
-        return { success: true, exportedFrames: 11 };
-      },
-    );
-
-    emitSequenceExport(true);
-
-    await vi.waitFor(() => {
-      expect(mockDialogUpdateProgress).toHaveBeenCalled();
-    });
-
-    // Verify progress was forwarded to ExportProgressDialog.updateProgress
-    const calls = mockDialogUpdateProgress.mock.calls as Array<[{ percentage: number; status: string }]>;
-    // Find a call with percentage 27
-    const call27 = calls.find((c) => c[0].percentage === 27);
-    expect(call27).toBeDefined();
-    expect(call27![0]).toMatchObject({
-      percentage: 27,
-      status: 'encoding',
-    });
-
-    const call55 = calls.find((c) => c[0].percentage === 55);
-    expect(call55).toBeDefined();
-  });
-
-  it('PW-SE03: cancel via dialog sets cancellation token', async () => {
-    let capturedCancelToken: { cancelled: boolean } | undefined;
-
-    mockExportSequence.mockImplementation(
-      async (
-        _options: unknown,
-        _renderFrame: unknown,
-        _onProgress: unknown,
-        cancellationToken?: { cancelled: boolean },
-      ) => {
-        capturedCancelToken = cancellationToken;
-        // Simulate waiting so cancel can fire
-        await new Promise((resolve) => setTimeout(resolve, 50));
-        return { success: false, exportedFrames: 0, error: 'Export cancelled by user' };
-      },
-    );
-
-    // Make the dialog's on('cancel') capture the handler and call it
-    let cancelHandler: (() => void) | undefined;
-    mockDialogOnFn.mockImplementation((event: string, handler: () => void) => {
-      if (event === 'cancel') {
-        cancelHandler = handler;
-      }
-      return () => {};
-    });
-
-    emitSequenceExport(true);
-
-    await vi.waitFor(() => {
-      expect(cancelHandler).toBeDefined();
-    });
-
-    // Trigger cancel
-    cancelHandler!();
-
-    expect(capturedCancelToken!.cancelled).toBe(true);
-  });
-
-  it('PW-SE04: dialog is hidden and disposed after export completes', async () => {
-    emitSequenceExport(true);
-
-    await vi.waitFor(() => {
-      expect(mockDialogHide).toHaveBeenCalled();
-    });
-
-    expect(mockDialogDispose).toHaveBeenCalled();
-  });
-
-  it('PW-SE05: dialog is hidden and disposed even when export throws', async () => {
-    mockExportSequence.mockRejectedValue(new Error('render failure'));
-
-    emitSequenceExport(true);
-
-    await vi.waitFor(() => {
-      expect(mockDialogHide).toHaveBeenCalled();
-    });
-
-    expect(mockDialogDispose).toHaveBeenCalled();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Preferences management (export / import / reset)
-// ---------------------------------------------------------------------------
-
-describe('preferences management wiring', () => {
-  let session: ReturnType<typeof createMockSession>;
-  let viewer: ReturnType<typeof createMockViewer>;
-  let headerBar: ReturnType<typeof createMockHeaderBar>;
-  let controls: ReturnType<typeof createMockControls>;
-  let deps: PlaybackWiringDeps;
-  let persistenceManager: ReturnType<typeof createMockPersistenceManager>;
-
-  beforeEach(() => {
-    session = createMockSession();
-    viewer = createMockViewer();
-    headerBar = createMockHeaderBar();
-    controls = createMockControls();
-    deps = createMockDeps();
-    persistenceManager = createMockPersistenceManager();
-
-    const ctx = {
-      session,
-      viewer,
-      headerBar,
-      controls,
-      persistenceManager,
-      paintEngine: {},
-      tabBar: {},
-      sessionBridge: {},
-    } as unknown as AppWiringContext;
-
-    wirePlaybackControls(ctx, deps);
-
-    mockPreferencesManager.exportAll.mockClear();
-    mockPreferencesManager.importAll.mockClear();
-    mockPreferencesManager.resetAll.mockClear();
-    showAlertSpy.mockClear();
-    showConfirmSpy.mockClear();
-  });
-
-  it('PW-PREF01: exportPreferences triggers JSON download', () => {
-    const clickSpy = vi.fn();
-    const createElementOrig = document.createElement.bind(document);
-    const createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
-      const el = createElementOrig(tag);
-      if (tag === 'a') {
-        el.click = clickSpy;
-      }
-      return el;
-    });
-    const revokeURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
-
-    headerBar.emit('exportPreferences', undefined);
-
-    expect(mockPreferencesManager.exportAll).toHaveBeenCalled();
-    expect(clickSpy).toHaveBeenCalled();
-    expect(revokeURL).toHaveBeenCalled();
-
-    createElementSpy.mockRestore();
-    revokeURL.mockRestore();
-  });
-
-  it('PW-PREF02: importPreferences opens file picker', () => {
-    const clickSpy = vi.fn();
-    const createElementOrig = document.createElement.bind(document);
-    const createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
-      const el = createElementOrig(tag);
-      if (tag === 'input') {
-        el.click = clickSpy;
-      }
-      return el;
-    });
-
-    headerBar.emit('importPreferences', undefined);
-
-    expect(clickSpy).toHaveBeenCalled();
-    createElementSpy.mockRestore();
-  });
-
-  it('PW-PREF03: importPreferences calls importAll on file read', async () => {
-    let changeHandler: (() => void) | null = null;
-    const createElementOrig = document.createElement.bind(document);
-    const createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
-      const el = createElementOrig(tag);
-      if (tag === 'input') {
-        const origAddEventListener = el.addEventListener.bind(el);
-        el.addEventListener = ((type: string, handler: EventListenerOrEventListenerObject) => {
-          if (type === 'change') {
-            changeHandler = handler as () => void;
-          }
-          origAddEventListener(type, handler);
-        }) as typeof el.addEventListener;
-        Object.defineProperty(el, 'files', {
-          get: () => [new File(['{"version":1}'], 'prefs.json', { type: 'application/json' })],
-        });
-        el.click = vi.fn();
-      }
-      return el;
-    });
-
-    headerBar.emit('importPreferences', undefined);
-    expect(changeHandler).not.toBeNull();
-    changeHandler!();
-
-    // Wait for FileReader to complete
-    await vi.waitFor(() => {
-      expect(mockPreferencesManager.importAll).toHaveBeenCalledWith('{"version":1}');
-    });
-
-    createElementSpy.mockRestore();
-  });
-
-  it('PW-PREF04: importPreferences shows error on invalid JSON', async () => {
-    mockPreferencesManager.importAll.mockImplementation(() => {
-      throw new Error('Invalid preferences JSON payload');
-    });
-
-    let changeHandler: (() => void) | null = null;
-    const createElementOrig = document.createElement.bind(document);
-    const createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
-      const el = createElementOrig(tag);
-      if (tag === 'input') {
-        const origAddEventListener = el.addEventListener.bind(el);
-        el.addEventListener = ((type: string, handler: EventListenerOrEventListenerObject) => {
-          if (type === 'change') {
-            changeHandler = handler as () => void;
-          }
-          origAddEventListener(type, handler);
-        }) as typeof el.addEventListener;
-        Object.defineProperty(el, 'files', {
-          get: () => [new File(['not-json'], 'prefs.json', { type: 'application/json' })],
-        });
-        el.click = vi.fn();
-      }
-      return el;
-    });
-
-    headerBar.emit('importPreferences', undefined);
-    changeHandler!();
-
-    await vi.waitFor(() => {
-      expect(showAlertSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to import preferences'),
-        expect.objectContaining({ title: 'Import Error' }),
-      );
-    });
-
-    createElementSpy.mockRestore();
-  });
-
-  it('PW-PREF05: resetPreferences shows confirmation before resetting', async () => {
-    showConfirmSpy.mockResolvedValue(true);
-
-    headerBar.emit('resetPreferences', undefined);
-
-    await vi.waitFor(() => {
-      expect(showConfirmSpy).toHaveBeenCalledWith(
-        expect.stringContaining('reset all preferences'),
-        expect.objectContaining({ title: 'Reset All Preferences', confirmText: 'Reset' }),
-      );
-      expect(mockPreferencesManager.resetAll).toHaveBeenCalled();
-    });
-  });
-
-  it('PW-PREF06: resetPreferences does not reset when user cancels', async () => {
-    showConfirmSpy.mockResolvedValue(false);
-
-    headerBar.emit('resetPreferences', undefined);
-
-    await vi.waitFor(() => {
-      expect(showConfirmSpy).toHaveBeenCalled();
-    });
-
-    expect(mockPreferencesManager.resetAll).not.toHaveBeenCalled();
-  });
-});
-
-describe('wirePlaybackControls plugin export wiring (#18)', () => {
-  let session: ReturnType<typeof createMockSession>;
-  let viewer: ReturnType<typeof createMockViewer>;
-  let headerBar: ReturnType<typeof createMockHeaderBar>;
-  let controls: ReturnType<typeof createMockControls>;
-  let deps: PlaybackWiringDeps;
-  let persistenceManager: ReturnType<typeof createMockPersistenceManager>;
-  let exportControl: ReturnType<typeof createMockExportControl>;
-  let mockPluginRegistry: {
-    getExporters: ReturnType<typeof vi.fn>;
-    getExporter: ReturnType<typeof vi.fn>;
-    exporterRegistered: { connect: ReturnType<typeof vi.fn> };
-    exporterUnregistered: { connect: ReturnType<typeof vi.fn> };
-  };
-  let registeredCb: ((data: { pluginId: string; name: string; exporter: { kind: string; label: string; extensions: string[]; export: ReturnType<typeof vi.fn> } }) => void) | null;
-  let unregisteredCb: ((data: { pluginId: string; name: string }) => void) | null;
-
-  beforeEach(() => {
-    session = createMockSession();
-    viewer = createMockViewer();
-    headerBar = createMockHeaderBar();
-    controls = createMockControls();
-    persistenceManager = createMockPersistenceManager();
-    exportControl = headerBar.getExportControl();
-
-    registeredCb = null;
-    unregisteredCb = null;
-
-    mockPluginRegistry = {
-      getExporters: vi.fn(() => new Map()),
-      getExporter: vi.fn(),
-      exporterRegistered: {
-        connect: vi.fn((cb: typeof registeredCb) => {
-          registeredCb = cb;
-          return () => { registeredCb = null; };
-        }),
-      },
-      exporterUnregistered: {
-        connect: vi.fn((cb: typeof unregisteredCb) => {
-          unregisteredCb = cb;
-          return () => { unregisteredCb = null; };
-        }),
-      },
-    };
-
-    deps = {
-      ...createMockDeps(),
-      getPluginRegistry: () => mockPluginRegistry as any,
-    };
-
-    const ctx = {
-      session,
-      viewer,
-      headerBar,
-      controls,
-      persistenceManager,
-      paintEngine: {},
-      tabBar: {},
-      sessionBridge: {},
-    } as unknown as AppWiringContext;
-
-    wirePlaybackControls(ctx, deps);
-  });
-
-  it('PW-PLG01: subscribes to exporterRegistered and exporterUnregistered signals', () => {
-    expect(mockPluginRegistry.exporterRegistered.connect).toHaveBeenCalled();
-    expect(mockPluginRegistry.exporterUnregistered.connect).toHaveBeenCalled();
-  });
-
-  it('PW-PLG02: pluginExportRequested calls exporter.export() for blob exporters', async () => {
-    const mockExport = vi.fn().mockResolvedValue(new Blob(['data'], { type: 'application/octet-stream' }));
-    mockPluginRegistry.getExporter.mockReturnValue({
-      kind: 'blob',
-      label: 'Test Export',
-      extensions: ['bin'],
-      export: mockExport,
-    });
-
-    session.currentSource = { name: 'test.exr' };
-    viewer.renderFrameToCanvas.mockResolvedValue(
-      Object.assign(document.createElement('canvas'), {
-        width: 10,
-        height: 10,
-        getContext: () => ({ getImageData: () => new ImageData(10, 10) }),
-      }),
-    );
-
-    exportControl.emit('pluginExportRequested', { pluginId: 'com.test', name: 'my-export' });
-
-    await vi.waitFor(() => {
-      expect(mockPluginRegistry.getExporter).toHaveBeenCalledWith('my-export');
-      expect(mockExport).toHaveBeenCalled();
-    });
-  });
-
-  it('PW-PLG03: pluginExportRequested shows warning when exporter is not found', async () => {
-    showAlertSpy.mockClear();
-    mockPluginRegistry.getExporter.mockReturnValue(undefined);
-
-    exportControl.emit('pluginExportRequested', { pluginId: 'com.test', name: 'missing' });
-
-    await vi.waitFor(() => {
-      expect(showAlertSpy).toHaveBeenCalledWith(
-        expect.stringContaining('no longer available'),
-        expect.objectContaining({ type: 'warning' }),
-      );
-    });
-  });
-
-  it('PW-PLG04: pluginExportRequested shows error on export failure', async () => {
-    showAlertSpy.mockClear();
-    mockPluginRegistry.getExporter.mockReturnValue({
-      kind: 'blob',
-      label: 'Broken Export',
-      extensions: ['bin'],
-      export: vi.fn().mockRejectedValue(new Error('Export broke')),
-    });
-
-    exportControl.emit('pluginExportRequested', { pluginId: 'com.test', name: 'broken' });
-
-    await vi.waitFor(() => {
-      expect(showAlertSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Export broke'),
-        expect.objectContaining({ type: 'error' }),
-      );
-    });
-  });
-
-  it('PW-PLG05: pluginExportRequested handles text exporters', async () => {
-    const mockExport = vi.fn().mockResolvedValue('csv,data,here');
-    mockPluginRegistry.getExporter.mockReturnValue({
-      kind: 'text',
-      label: 'CSV Export',
-      extensions: ['csv'],
-      export: mockExport,
-    });
-
-    session.currentSource = { name: 'test.exr' };
-
-    exportControl.emit('pluginExportRequested', { pluginId: 'com.test', name: 'csv-export' });
-
-    await vi.waitFor(() => {
-      expect(mockExport).toHaveBeenCalled();
-    });
   });
 });

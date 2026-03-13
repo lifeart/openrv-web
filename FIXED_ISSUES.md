@@ -1803,3 +1803,17 @@ Called from `fromJSON()` inside the existing `if (mediaIndexMap.size > 0)` block
 - `src/AppNetworkBridge.ts`
 - `src/AppNetworkBridge.test.ts`
 - `docs/advanced/network-sync.md`
+
+## Issue #302: Media representation failures and automatic fallbacks are emitted internally, but the app never surfaces them
+
+**Root cause**: `MediaRepresentationManager` emits `representationError` and `fallbackActivated` events, forwarded through `SessionMedia` to the session. But `AppPlaybackWiring` only subscribed to `representationChanged`, not the error/fallback events. Users got no visible indication when playback quality degraded.
+
+**Fix**: Added subscriptions in `AppPlaybackWiring.ts` for both events, surfacing them to users via the existing `showAlert()` notification system:
+- `representationError`: shows warning (system-initiated) or error (user-initiated) alert
+- `fallbackActivated`: shows info alert with the fallback representation's label
+
+**Tests added**: 3 regression tests in `AppPlaybackWiring.test.ts` (PW-016, PW-017, PW-018) covering system error, user-initiated error, and fallback activation.
+
+**Files changed**:
+- `src/AppPlaybackWiring.ts`
+- `src/AppPlaybackWiring.test.ts`

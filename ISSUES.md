@@ -56,18 +56,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - This is another silent semantic mismatch because callers can vary the tag and receive the same answer every time.
 
 
-### 302. Media representation failures and automatic fallbacks are emitted internally, but the app never surfaces them
-
-- Severity: Medium
-- Area: Media representations / degraded-runtime visibility
-- Evidence:
-  - `MediaRepresentationManager` emits `representationError` when a representation load/switch fails and `fallbackActivated` when it silently moves to another representation in [src/core/session/MediaRepresentationManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaRepresentationManager.ts#L212) through [src/core/session/MediaRepresentationManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaRepresentationManager.ts#L223) and [src/core/session/MediaRepresentationManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaRepresentationManager.ts#L252) through [src/core/session/MediaRepresentationManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaRepresentationManager.ts#L263).
-  - `SessionMedia` forwards both events onto the session in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L139) through [src/core/session/SessionMedia.ts#L146](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L146).
-  - Production code subscribes to `representationChanged`, but a search finds no non-test subscriber for `representationError` or `fallbackActivated`; the live app hooks only `representationChanged` in [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L124) and [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L185).
-- Impact:
-  - If a preferred representation fails and the app falls back to another one, users get no visible indication that playback quality or source selection degraded.
-  - That makes proxy/original/HDR representation problems harder to detect and diagnose than the underlying event model would allow.
-
 ### 305. `NetworkSyncManager` emits toast-style collaboration feedback, but the production app never consumes it
 
 - Severity: Medium

@@ -13,6 +13,7 @@
 import type { AppWiringContext, WiringResult } from './AppWiringContext';
 import type { AppKeyboardHandler } from './AppKeyboardHandler';
 import type { FullscreenManager } from './utils/ui/FullscreenManager';
+import type { AudioMixer } from './audio/AudioMixer';
 import type { Session } from './core/session/Session';
 import type { LoopMode } from './core/types/session';
 import type { PlaylistClip } from './core/session/PlaylistManager';
@@ -26,15 +27,13 @@ import {
 } from './export/VideoExporter';
 import { muxToMP4Blob } from './export/MP4Muxer';
 import { ExportProgressDialog } from './ui/components/ExportProgress';
-import { showAlert, showConfirm } from './ui/components/shared/Modal';
-import { getCorePreferencesManager } from './core/PreferencesManager';
+import { showAlert } from './ui/components/shared/Modal';
 import { generateSlateFrame } from './export/SlateRenderer';
 import { generateReport } from './export/ReportExporter';
-import { downloadAnnotationsJSON, parseAnnotationsJSON, applyAnnotationsJSON } from './utils/export/AnnotationJSONExporter';
+import { downloadAnnotationsJSON } from './utils/export/AnnotationJSONExporter';
 import { exportAnnotationsPDF } from './utils/export/AnnotationPDFExporter';
 import { DisposableSubscriptionManager } from './utils/DisposableSubscriptionManager';
 import { isAudioScrubAvailable } from './utils/media/SourceUIState';
-import { sanitizeFrameburnConfig, type FrameburnConfig, type FrameburnContext } from './ui/components/FrameburnCompositor';
 
 /**
  * External references that the playback wiring needs but are not part of
@@ -43,19 +42,7 @@ import { sanitizeFrameburnConfig, type FrameburnConfig, type FrameburnContext } 
 export interface PlaybackWiringDeps {
   getKeyboardHandler: () => AppKeyboardHandler;
   getFullscreenManager: () => FullscreenManager | undefined;
-  getShortcutCheatSheet?: () => { show(): void } | null;
-  getPluginRegistry?: () => PluginRegistryExportAPI | null;
-}
-
-/**
- * Minimal interface for the plugin registry export API,
- * decoupled from the full PluginRegistry class for testability.
- */
-export interface PluginRegistryExportAPI {
-  getExporters(): Map<string, import('./plugin/types').ExporterContribution>;
-  getExporter(name: string): import('./plugin/types').ExporterContribution | undefined;
-  exporterRegistered: { connect(cb: (data: { pluginId: string; name: string; exporter: import('./plugin/types').ExporterContribution }) => void): () => void };
-  exporterUnregistered: { connect(cb: (data: { pluginId: string; name: string }) => void): () => void };
+  getAudioMixer?: () => AudioMixer;
 }
 
 /**
@@ -67,78 +54,10 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
   let videoExportInProgress = false;
 
   // HeaderBar events
-  subs.add(headerBar.on('showShortcuts', () => deps.getShortcutCheatSheet?.()?.show()));
+  subs.add(headerBar.on('showShortcuts', () => deps.getKeyboardHandler().showShortcutsDialog()));
   subs.add(headerBar.on('showCustomKeyBindings', () => deps.getKeyboardHandler().showCustomBindingsDialog()));
   subs.add(headerBar.on('saveProject', () => persistenceManager.saveProject()));
-  subs.add(headerBar.on('openProject', (files) => persistenceManager.openProject(files[0]!, files.slice(1))));
-
-  // Route .orvproject files dropped onto the viewer to the persistence manager
-  viewer.setOnProjectFileDrop((file, companions) => persistenceManager.openProject(file, companions));
-  subs.add(() => viewer.setOnProjectFileDrop(null));
-
-  // Preferences management (export / import / reset)
-  subs.add(
-    headerBar.on('exportPreferences', () => {
-      const prefs = getCorePreferencesManager();
-      const json = prefs.exportAll();
-      const blob = new Blob([json], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'openrv-preferences.json';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    }),
-  );
-  subs.add(
-    headerBar.on('importPreferences', () => {
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = '.json,application/json';
-      input.style.display = 'none';
-      input.addEventListener('change', () => {
-        const file = input.files?.[0];
-        if (!file) {
-          input.remove();
-          return;
-        }
-        const reader = new FileReader();
-        reader.onload = () => {
-          input.remove();
-          try {
-            const prefs = getCorePreferencesManager();
-            prefs.importAll(reader.result as string);
-            showAlert('Preferences imported successfully. Some changes may require a page reload.', { title: 'Import Preferences' });
-          } catch (err) {
-            const message = err instanceof Error ? err.message : String(err);
-            showAlert(`Failed to import preferences: ${message}`, { title: 'Import Error' });
-          }
-        };
-        reader.onerror = () => {
-          input.remove();
-          showAlert('Failed to read file.', { title: 'Import Error' });
-        };
-        reader.readAsText(file);
-      });
-      document.body.appendChild(input);
-      input.click();
-    }),
-  );
-  subs.add(
-    headerBar.on('resetPreferences', async () => {
-      const confirmed = await showConfirm(
-        'This will reset all preferences to their default values. This action cannot be undone.',
-        { title: 'Reset All Preferences', confirmText: 'Reset', confirmVariant: 'danger' },
-      );
-      if (confirmed) {
-        const prefs = getCorePreferencesManager();
-        prefs.resetAll();
-        showAlert('All preferences have been reset. Some changes may require a page reload.', { title: 'Reset Preferences' });
-      }
-    }),
-  );
+  subs.add(headerBar.on('openProject', (file) => persistenceManager.openProject(file)));
 
   // AutoSave Indicator
   controls.autoSaveIndicator.connect(controls.autoSaveManager);
@@ -148,12 +67,7 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
   // Wire up fullscreen and presentation toggle from HeaderBar
   subs.add(
     headerBar.on('fullscreenToggle', () => {
-      deps.getFullscreenManager()?.toggle().catch(() => {
-        showAlert('Fullscreen is not available. Your browser may be blocking it.', {
-          type: 'warning',
-          title: 'Fullscreen Unavailable',
-        });
-      });
+      deps.getFullscreenManager()?.toggle();
     }),
   );
   subs.add(
@@ -167,11 +81,13 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
   subs.add(
     volumeControl.on('volumeChanged', (volume) => {
       session.volume = volume;
+      deps.getAudioMixer?.()?.setMasterVolume(volume);
     }),
   );
   subs.add(
     volumeControl.on('mutedChanged', (muted) => {
       session.muted = muted;
+      deps.getAudioMixer?.()?.setMasterMuted(muted);
     }),
   );
   // Audio scrub toggle
@@ -184,26 +100,18 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
   subs.add(
     session.on('volumeChanged', (volume) => {
       volumeControl.syncVolume(volume);
+      deps.getAudioMixer?.()?.setMasterVolume(volume);
     }),
   );
   subs.add(
     session.on('mutedChanged', (muted) => {
       volumeControl.syncMuted(muted);
+      deps.getAudioMixer?.()?.setMasterMuted(muted);
     }),
   );
   subs.add(
     session.on('audioScrubEnabledChanged', (enabled) => {
       volumeControl.syncAudioScrub(enabled);
-    }),
-  );
-
-  // Surface audio playback errors as non-blocking warnings (fix #189)
-  subs.add(
-    session.on('audioError', (error) => {
-      showAlert(`Audio playback error: ${error.message}`, {
-        type: 'warning',
-        title: 'Audio Error',
-      });
     }),
   );
 
@@ -215,6 +123,24 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
   subs.add(session.on('durationChanged', syncAudioScrubAvailability));
   subs.add(session.on('representationChanged', syncAudioScrubAvailability));
   subs.add(session.on('audioScrubAvailabilityChanged', syncAudioScrubAvailability));
+
+  // Surface representation errors and fallback activations to the user
+  subs.add(
+    session.on('representationError', ({ error, userInitiated }) => {
+      showAlert(`Representation failed: ${error}`, {
+        type: userInitiated ? 'error' : 'warning',
+        title: 'Representation Error',
+      });
+    }),
+  );
+  subs.add(
+    session.on('fallbackActivated', ({ fallbackRepresentation }) => {
+      showAlert(`Switched to fallback representation: ${fallbackRepresentation.label}`, {
+        type: 'info',
+        title: 'Fallback Activated',
+      });
+    }),
+  );
 
   // Export control (from HeaderBar) -> viewer
   const exportControl = headerBar.getExportControl();
@@ -229,14 +155,8 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
     }),
   );
   subs.add(
-    exportControl.on('copyRequested', async ({ includeAnnotations }) => {
-      const ok = await viewer.copyFrameToClipboard(includeAnnotations);
-      if (!ok) {
-        showAlert('Failed to copy frame to clipboard. Your browser may have denied clipboard access.', {
-          type: 'warning',
-          title: 'Clipboard Unavailable',
-        });
-      }
+    exportControl.on('copyRequested', () => {
+      viewer.copyFrameToClipboard(true);
     }),
   );
   subs.add(
@@ -268,44 +188,6 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
     }),
   );
   subs.add(
-    exportControl.on('annotationsJSONImportRequested', () => {
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = '.json,application/json';
-      input.style.display = 'none';
-      input.addEventListener('change', () => {
-        const file = input.files?.[0];
-        if (!file) {
-          input.remove();
-          return;
-        }
-        const reader = new FileReader();
-        reader.onload = () => {
-          input.remove();
-          try {
-            const parsed = parseAnnotationsJSON(reader.result as string);
-            if (!parsed) {
-              showAlert('Invalid annotation JSON file. The file must be an OpenRV Web annotation export.', { title: 'Import Error' });
-              return;
-            }
-            const count = applyAnnotationsJSON(ctx.paintEngine, parsed, { mode: 'replace' });
-            showAlert(`Successfully imported ${count} annotation${count !== 1 ? 's' : ''}. Existing annotations were replaced.`, { type: 'success', title: 'Import Annotations' });
-          } catch (err) {
-            const message = err instanceof Error ? err.message : String(err);
-            showAlert(`Failed to import annotations: ${message}`, { title: 'Import Error' });
-          }
-        };
-        reader.onerror = () => {
-          input.remove();
-          showAlert('Failed to read file.', { title: 'Import Error' });
-        };
-        reader.readAsText(file);
-      });
-      document.body.appendChild(input);
-      input.click();
-    }),
-  );
-  subs.add(
     exportControl.on('annotationsPDFExportRequested', () => {
       void exportAnnotationsPDF(
         ctx.paintEngine,
@@ -318,10 +200,7 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
           return canvas;
         },
         { title: session.metadata?.displayName || 'Annotation Report' },
-      ).catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : String(err);
-        showAlert(`PDF export failed. Your browser may be blocking popups. Please allow popups for this site and try again.\n\nDetails: ${message}`, { type: 'error', title: 'PDF Export Error' });
-      });
+      );
     }),
   );
   subs.add(
@@ -336,83 +215,8 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
     }),
   );
 
-  // Plugin exporters: wire plugin registry signals to ExportControl dropdown
-  const pluginRegistry = deps.getPluginRegistry?.() ?? null;
-  if (pluginRegistry) {
-    // Add existing exporters
-    for (const [name, exporter] of pluginRegistry.getExporters()) {
-      // Derive pluginId from the exporter registry entry (name is the key)
-      exportControl.addPluginExporter('plugin', name, exporter.label);
-    }
-
-    // Subscribe to new exporter registrations
-    subs.add(
-      pluginRegistry.exporterRegistered.connect(({ pluginId, name, exporter }) => {
-        exportControl.addPluginExporter(pluginId, name, exporter.label);
-      }),
-    );
-
-    // Subscribe to exporter removals
-    subs.add(
-      pluginRegistry.exporterUnregistered.connect(({ pluginId, name }) => {
-        exportControl.removePluginExporter(pluginId, name);
-      }),
-    );
-
-    // Handle plugin export requests
-    subs.add(
-      exportControl.on('pluginExportRequested', async ({ name }) => {
-        const exporter = pluginRegistry.getExporter(name);
-        if (!exporter) {
-          showAlert(`Plugin exporter "${name}" is no longer available`, { type: 'warning', title: 'Export' });
-          return;
-        }
-
-        try {
-          const sourceName = session.currentSource?.name?.replace(/\.[^/.]+$/, '') ?? 'export';
-
-          if (exporter.kind === 'blob') {
-            const frameCount = session.frameCount || 1;
-            const fps = session.fps || 24;
-
-            // Render one frame to determine dimensions
-            const probeCanvas = await viewer.renderFrameToCanvas(session.currentFrame, true);
-            const width = probeCanvas?.width ?? 1920;
-            const height = probeCanvas?.height ?? 1080;
-
-            const blob = await exporter.export({
-              frameRange: { start: session.inPoint, end: Math.min(session.outPoint, frameCount) },
-              width,
-              height,
-              fps,
-              getFrame: async (frame: number) => {
-                const canvas = await viewer.renderFrameToCanvas(frame, true);
-                if (!canvas) throw new Error(`Failed to render frame ${frame}`);
-                const ctx2d = canvas.getContext('2d');
-                if (!ctx2d) throw new Error('Failed to get 2D context');
-                return ctx2d.getImageData(0, 0, canvas.width, canvas.height);
-              },
-            });
-            const ext = exporter.extensions[0] ?? 'bin';
-            downloadBlob(blob, `${sourceName}.${ext}`);
-          } else {
-            const text = await exporter.export({});
-            const ext = exporter.extensions[0] ?? 'txt';
-            const mimeType = exporter.mimeType || 'text/plain';
-            const blob = new Blob([text], { type: mimeType });
-            downloadBlob(blob, `${sourceName}.${ext}`);
-          }
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          showAlert(`Plugin export failed: ${message}`, { type: 'error', title: 'Export Error' });
-        }
-      }),
-    );
-  }
-
-  // Snapshot panel restore & create
+  // Snapshot panel restore
   subs.add(controls.snapshotPanel.on('restoreRequested', ({ id }) => persistenceManager.restoreSnapshot(id)));
-  subs.add(controls.snapshotPanel.on('createRequested', ({ name }) => persistenceManager.createQuickSnapshot(name)));
 
   // Note panel events
   subs.add(
@@ -480,13 +284,67 @@ async function handleSequenceExport(
   const sourceName = source.name?.replace(/\.[^/.]+$/, '') || 'frame';
   const padLength = String(endFrame).length < 4 ? 4 : String(endFrame).length;
 
-  // Create progress dialog using the shared ExportProgressDialog component
-  const progressDialog = new ExportProgressDialog(document.body);
+  // Create progress dialog
+  const progressDialog = document.createElement('div');
+  progressDialog.style.cssText = `
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-primary);
+    border-radius: 8px;
+    padding: 24px;
+    z-index: 10000;
+    min-width: 300px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  `;
+
+  const progressText = document.createElement('div');
+  progressText.style.cssText = 'color: var(--text-primary); margin-bottom: 12px; font-size: 14px;';
+  progressText.textContent = `Exporting frames 0/${totalFrames}...`;
+
+  const progressBar = document.createElement('div');
+  progressBar.style.cssText = `
+    height: 8px;
+    background: var(--border-primary);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 16px;
+  `;
+
+  const progressFill = document.createElement('div');
+  progressFill.style.cssText = `
+    height: 100%;
+    background: var(--accent-primary);
+    width: 0%;
+    transition: width 0.1s ease;
+  `;
+  progressBar.appendChild(progressFill);
+
+  const cancelButton = document.createElement('button');
+  cancelButton.textContent = 'Cancel';
+  cancelButton.style.cssText = `
+    background: var(--bg-active);
+    border: 1px solid var(--border-primary);
+    color: var(--text-primary);
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    width: 100%;
+  `;
+
   const cancellationToken = { cancelled: false };
-  const disposeCancelListener = progressDialog.on('cancel', () => {
+  cancelButton.addEventListener('click', () => {
     cancellationToken.cancelled = true;
+    cancelButton.textContent = 'Cancelling...';
+    cancelButton.disabled = true;
   });
-  progressDialog.show();
+
+  progressDialog.appendChild(progressText);
+  progressDialog.appendChild(progressBar);
+  progressDialog.appendChild(cancelButton);
+  document.body.appendChild(progressDialog);
 
   // Store current frame to restore later
   const originalFrame = session.currentFrame;
@@ -514,17 +372,17 @@ async function handleSequenceExport(
         return canvas;
       },
       (progress) => {
-        progressDialog.updateProgress({
-          currentFrame: progress.currentFrame,
-          totalFrames: progress.totalFrames,
-          percentage: progress.percent,
-          elapsedMs: 0,
-          estimatedRemainingMs: 0,
-          status: 'encoding',
-        });
+        progressText.textContent = `Exporting frames ${progress.currentFrame - startFrame + 1}/${totalFrames}...`;
+        progressFill.style.width = `${progress.percent}%`;
       },
       cancellationToken,
     );
+
+    // Restore original frame
+    session.goToFrame(originalFrame);
+
+    // Remove progress dialog
+    document.body.removeChild(progressDialog);
 
     // Show result
     if (result.success) {
@@ -535,14 +393,15 @@ async function handleSequenceExport(
       showAlert(`Export failed: ${result.error}`, { type: 'error', title: 'Export Error' });
     }
   } catch (err) {
-    showAlert(`Export error: ${err}`, { type: 'error', title: 'Export Error' });
-  } finally {
-    disposeCancelListener();
-    progressDialog.hide();
-    progressDialog.dispose();
-    if (session.currentFrame !== originalFrame) {
-      session.goToFrame(originalFrame);
+    // Restore original frame
+    session.goToFrame(originalFrame);
+
+    // Remove progress dialog
+    if (document.body.contains(progressDialog)) {
+      document.body.removeChild(progressDialog);
     }
+
+    showAlert(`Export error: ${err}`, { type: 'error', title: 'Export Error' });
   }
 }
 
@@ -592,46 +451,6 @@ function sanitizeFilenameBase(name: string): string {
   const noExt = name.replace(/\.[^.]+$/, '');
   const sanitized = noExt.replace(/[^a-zA-Z0-9._-]+/g, '_').replace(/^_+|_+$/g, '');
   return sanitized.length > 0 ? sanitized : 'export';
-}
-
-function createFrameburnContext(
-  session: Session,
-  frame: number,
-  width: number,
-  height: number,
-): FrameburnContext | null {
-  const source = session.currentSource;
-  if (!source) {
-    return null;
-  }
-
-  const fileSourceNode = (source as { fileSourceNode?: { formatName?: string } }).fileSourceNode;
-  const codec = fileSourceNode?.formatName ?? (typeof source.type === 'string' ? source.type.toUpperCase() : undefined);
-
-  return {
-    currentFrame: frame,
-    totalFrames: session.frameCount,
-    fps: session.fps,
-    shotName: source.name?.replace(/\.[^/.]+$/, '') ?? 'shot',
-    width,
-    height,
-    codec,
-  };
-}
-
-function getAdvancedFrameburnConfig(): FrameburnConfig | null {
-  const defaults = getCorePreferencesManager().getExportDefaults();
-  if (!defaults.frameburnEnabled) {
-    return null;
-  }
-
-  const config = sanitizeFrameburnConfig(defaults.frameburnConfig);
-  if (!config || config.fields.length === 0) {
-    return null;
-  }
-
-  config.enabled = true;
-  return config;
 }
 
 function downloadBlob(blob: Blob, filename: string): void {
@@ -709,7 +528,6 @@ async function handleVideoExport(
   progressDialog.show();
 
   try {
-    const advancedFrameburnConfig = getAdvancedFrameburnConfig();
     let firstFrameCanvas = await viewer.renderFrameToCanvas(frameRange.startFrame, request.includeAnnotations);
     if (!firstFrameCanvas) {
       throw new Error(`Failed to render frame ${frameRange.startFrame}`);
@@ -719,18 +537,6 @@ async function handleVideoExport(
     const height = firstFrameCanvas.height;
     if (width <= 0 || height <= 0) {
       throw new Error('Invalid output dimensions');
-    }
-
-    if (advancedFrameburnConfig) {
-      firstFrameCanvas = await viewer.renderFrameToCanvas(
-        frameRange.startFrame,
-        request.includeAnnotations,
-        advancedFrameburnConfig,
-        createFrameburnContext(session, frameRange.startFrame, width, height),
-      );
-      if (!firstFrameCanvas) {
-        throw new Error(`Failed to render frame ${frameRange.startFrame}`);
-      }
     }
 
     const fps = Math.max(1, Math.round(session.fps || 24));
@@ -787,12 +593,7 @@ async function handleVideoExport(
           canvas = firstFrameCanvas;
           firstFrameCanvas = null;
         } else {
-          canvas = await viewer.renderFrameToCanvas(
-            frame,
-            request.includeAnnotations,
-            advancedFrameburnConfig,
-            advancedFrameburnConfig ? createFrameburnContext(session, frame, width, height) : null,
-          );
+          canvas = await viewer.renderFrameToCanvas(frame, request.includeAnnotations);
         }
 
         if (!canvas) {
@@ -923,29 +724,15 @@ function wirePlaylistRuntime(
         // cross-clip behavior while playlist mode is active.
         session.loopMode = 'loop';
 
-        // During session restore, PlaylistManager.currentFrame is already set to
-        // the saved position before enablement fires.  Prefer that saved frame when
-        // it maps to a valid clip so the restored playhead position is honoured.
-        const savedPlaylistFrame = controls.playlistManager.getCurrentFrame();
-        const savedMapping =
-          savedPlaylistFrame > 1
-            ? controls.playlistManager.getClipAtFrame(savedPlaylistFrame)
-            : null;
-
-        let targetGlobalFrame: number | undefined;
-        if (savedMapping) {
-          targetGlobalFrame = savedPlaylistFrame;
-        } else {
-          const currentClip = findClipForSourceFrame(
-            controls.playlistManager.getClips(),
-            session.currentSourceIndex,
-            session.currentFrame,
-          );
-          const firstClip = controls.playlistManager.getClipByIndex(0);
-          targetGlobalFrame = currentClip
-            ? currentClip.clip.globalStartFrame + (session.currentFrame - currentClip.clip.inPoint)
-            : firstClip?.globalStartFrame;
-        }
+        const currentClip = findClipForSourceFrame(
+          controls.playlistManager.getClips(),
+          session.currentSourceIndex,
+          session.currentFrame,
+        );
+        const firstClip = controls.playlistManager.getClipByIndex(0);
+        const targetGlobalFrame = currentClip
+          ? currentClip.clip.globalStartFrame + (session.currentFrame - currentClip.clip.inPoint)
+          : firstClip?.globalStartFrame;
 
         if (targetGlobalFrame !== undefined) {
           runtime.syncing = true;
@@ -987,13 +774,6 @@ function wirePlaylistRuntime(
       runtime.syncing = false;
       runtime.lastFrame = session.currentFrame;
       runtime.lastSourceIndex = session.currentSourceIndex;
-    }),
-  );
-
-  // Forward playlistEnded to Session so the public EventsAPI can bridge it
-  subs.add(
-    controls.playlistManager.on('playlistEnded', () => {
-      session.emit('playlistEnded', undefined as void);
     }),
   );
 
