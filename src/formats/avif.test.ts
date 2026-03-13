@@ -29,6 +29,69 @@ function createAVIFMagic(brand = 'avif'): ArrayBuffer {
   return buffer;
 }
 
+// Utility helpers for building ISOBMFF test buffers
+function uint32BE(value: number): number[] {
+  return [(value >> 24) & 0xff, (value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff];
+}
+
+function strBytes(str: string): number[] {
+  const result: number[] = [];
+  for (let i = 0; i < str.length; i++) result.push(str.charCodeAt(i));
+  return result;
+}
+
+/**
+ * Build a minimal AVIF buffer with an ISOBMFF meta box containing an auxC
+ * gainmap property (urn:com:photo:aux:hdrgainmap) in ipco.
+ * Structure: ftyp + meta(iprp/ipco/auxC)
+ */
+function createGainmapAVIFBuffer(brand = 'avif'): ArrayBuffer {
+  const parts: number[] = [];
+
+  // --- ftyp box (16 bytes) ---
+  parts.push(...uint32BE(16));
+  parts.push(...strBytes('ftyp'));
+  parts.push(...strBytes(brand));
+  parts.push(...uint32BE(0));
+
+  // --- Build ipco content with auxC gainmap box ---
+  const urn = 'urn:com:photo:aux:hdrgainmap';
+  const auxCSize = 4 + 4 + 4 + urn.length + 1; // size + type + ver+flags + urn + null
+  const ipcoContent: number[] = [];
+  ipcoContent.push(...uint32BE(auxCSize));
+  ipcoContent.push(...strBytes('auxC'));
+  ipcoContent.push(0, 0, 0, 0); // version=0, flags=0
+  for (let i = 0; i < urn.length; i++) ipcoContent.push(urn.charCodeAt(i));
+  ipcoContent.push(0); // null terminator
+
+  const ipcoSize = 8 + ipcoContent.length;
+
+  // --- iprp box containing ipco ---
+  const iprpSize = 8 + ipcoSize;
+  const iprp: number[] = [];
+  iprp.push(...uint32BE(iprpSize));
+  iprp.push(...strBytes('iprp'));
+  iprp.push(...uint32BE(ipcoSize));
+  iprp.push(...strBytes('ipco'));
+  iprp.push(...ipcoContent);
+
+  // --- meta box (FullBox) containing iprp ---
+  const metaContentSize = iprp.length;
+  const metaSize = 12 + metaContentSize; // 12 = size(4) + type(4) + ver+flags(4)
+  parts.push(...uint32BE(metaSize));
+  parts.push(...strBytes('meta'));
+  parts.push(0, 0, 0, 0); // version + flags
+  parts.push(...iprp);
+
+  // Convert to ArrayBuffer
+  const buf = new ArrayBuffer(parts.length);
+  const uint8 = new Uint8Array(buf);
+  for (let i = 0; i < parts.length; i++) {
+    uint8[i] = parts[i]!;
+  }
+  return buf;
+}
+
 describe('isAvifFile', () => {
   it('should detect AVIF file with avif brand', () => {
     expect(isAvifFile(createAVIFMagic('avif'))).toBe(true);
@@ -63,6 +126,21 @@ describe('isAvifFile', () => {
     view.setUint8(5, 0x64); // 'd'
     view.setUint8(6, 0x61); // 'a'
     view.setUint8(7, 0x74); // 't'
+    expect(isAvifFile(buffer)).toBe(false);
+  });
+
+  it('should reject gainmap AVIF with avif brand', () => {
+    const buffer = createGainmapAVIFBuffer('avif');
+    expect(isAvifFile(buffer)).toBe(false);
+  });
+
+  it('should reject gainmap AVIF with avis brand', () => {
+    const buffer = createGainmapAVIFBuffer('avis');
+    expect(isAvifFile(buffer)).toBe(false);
+  });
+
+  it('should reject gainmap AVIF with mif1 brand', () => {
+    const buffer = createGainmapAVIFBuffer('mif1');
     expect(isAvifFile(buffer)).toBe(false);
   });
 });

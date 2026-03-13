@@ -2105,3 +2105,22 @@ Called from `fromJSON()` inside the existing `if (mediaIndexMap.size > 0)` block
 **Files changed**:
 - `src/ui/components/ClippingOverlay.ts`
 - `src/ui/components/ClippingOverlay.test.ts`
+
+## Issue #518: `isAvifFile()` returns true for gainmap AVIFs, relying on registry ordering
+
+**Root cause**: `isAvifFile()` only checked the ftyp brand and returned true for all AVIF files including gainmap AVIFs. Correct behavior depended on decoder registry ordering (gainmap decoder placed first), not the detector itself.
+
+**Fix**:
+- Imported `isGainmapAVIF` from `AVIFGainmapDecoder.ts` into `avif.ts`
+- After brand check passes, calls `isGainmapAVIF(buffer)` and returns false if it matches
+- The detector is now self-contained and correct regardless of registry ordering
+- No circular dependency (one-way import)
+
+**Tests added**: 3 regression tests in `avif.test.ts`:
+- Gainmap AVIF (avif brand) returns false
+- Gainmap AVIF (avis brand) returns false
+- Gainmap AVIF (mif1 brand) returns false
+
+**Files changed**:
+- `src/formats/avif.ts`
+- `src/formats/avif.test.ts`

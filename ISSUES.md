@@ -1562,18 +1562,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The guide describes an older or different sequence-frame memory model than the one the shipped app actually uses.
   - That can mislead anyone debugging sequence memory behavior or trying to understand the current loader’s lifecycle costs.
 
-### 518. The plain-AVIF docs say detection excludes gainmap AVIFs, but `isAvifFile(...)` still returns `true` for any AVIF-brand file and relies on registry ordering instead
-
-- Severity: Low
-- Area: Documentation / AVIF detection semantics
-- Evidence:
-  - The file-format guide says plain AVIF detection is an `ftyp` box with AVIF brands “without gain map auxiliary items” in [docs/guides/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/guides/file-formats.md#L157).
-  - The same section separately says gainmap AVIFs are matched first because the plain AVIF decoder is placed later in the registry chain in [docs/guides/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/guides/file-formats.md#L158).
-  - The shipped `isAvifFile(...)` implementation explicitly says it “Returns true for any AVIF file, including gainmap AVIFs” in [src/formats/avif.ts](/Users/lifeart/Repos/openrv-web/src/formats/avif.ts#L13) and only checks the `ftyp` brand in [src/formats/avif.ts](/Users/lifeart/Repos/openrv-web/src/formats/avif.ts#L16) through [src/formats/avif.ts](/Users/lifeart/Repos/openrv-web/src/formats/avif.ts#L25).
-  - The registry comment matches the implementation: plain AVIF is placed after `avifGainmapDecoder` so ordering, not the detector itself, prevents misclassification in [src/formats/DecoderRegistry.ts](/Users/lifeart/Repos/openrv-web/src/formats/DecoderRegistry.ts#L825).
-- Impact:
-  - The docs describe the plain AVIF detector as semantically stricter than it really is.
-  - That can mislead anyone reasoning about format identification or trying to reuse `isAvifFile(...)` outside the exact registry ordering the app depends on.
 
 ### 519. ShotGrid frame-sequence paths are still routed through `session.loadImage(...)`, so `shot.####.exr` is treated like a single image URL instead of a sequence
 
