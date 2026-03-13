@@ -203,6 +203,53 @@ describe('ShotGridIntegrationBridge', () => {
     });
   });
 
+  it('SG-INT-004b: loadVersion recognises extended video formats (#522)', async () => {
+    configUI.emit('connect', {
+      serverUrl: 'https://studio.shotgrid.autodesk.com',
+      scriptName: 'test',
+      apiKey: 'key',
+      projectId: 42,
+    });
+
+    await vi.waitFor(() => {
+      expect(configUI.setState).toHaveBeenCalledWith('connected');
+    });
+
+    for (const ext of ['mkv', 'webm', 'ogv', 'mxf', 'm4v', '3gp']) {
+      session.loadVideo.mockClear();
+      panel.emit('loadVersion', {
+        version: makeVersion(),
+        mediaUrl: `https://s3.example.com/clip.${ext}`,
+      });
+
+      await vi.waitFor(() => {
+        expect(session.loadVideo).toHaveBeenCalledTimes(1);
+      });
+    }
+  });
+
+  it('SG-INT-004c: loadVersion strips query string before extension check (#523)', async () => {
+    configUI.emit('connect', {
+      serverUrl: 'https://studio.shotgrid.autodesk.com',
+      scriptName: 'test',
+      apiKey: 'key',
+      projectId: 42,
+    });
+
+    await vi.waitFor(() => {
+      expect(configUI.setState).toHaveBeenCalledWith('connected');
+    });
+
+    panel.emit('loadVersion', {
+      version: makeVersion(),
+      mediaUrl: 'https://s3.example.com/movie.mov?token=abc123',
+    });
+
+    await vi.waitFor(() => {
+      expect(session.loadVideo).toHaveBeenCalledWith('shot010_comp_v003', 'https://s3.example.com/movie.mov?token=abc123');
+    });
+  });
+
   it('SG-INT-005: loadVersion calls session.loadImage for non-video URLs', async () => {
     configUI.emit('connect', {
       serverUrl: 'https://studio.shotgrid.autodesk.com',

@@ -18,6 +18,7 @@ import type { Annotation } from './paint/types';
 import { Logger } from './utils/Logger';
 import { DisposableSubscriptionManager } from './utils/DisposableSubscriptionManager';
 import { basename } from './utils/path';
+import { isVideoExtension } from './utils/media/SupportedMediaFormats';
 import { showAlert } from './ui/components/shared/Modal';
 
 const log = new Logger('AppDCCWiring');
@@ -79,12 +80,6 @@ export interface DCCWiringState {
   /** Generation counter for "latest LUT request wins" ordering. */
   lutGeneration: number;
 }
-
-// ---------------------------------------------------------------------------
-// Video extension list (shared constant)
-// ---------------------------------------------------------------------------
-
-export const VIDEO_EXTENSIONS = ['mp4', 'webm', 'mov', 'avi', 'mkv', 'ogv'];
 
 // ---------------------------------------------------------------------------
 // LUT loading helper
@@ -207,7 +202,7 @@ export function wireDCCBridge(deps: DCCWiringDeps): DCCWiringState {
       const cleanPath = path.split('?')[0]!.split('#')[0]!;
       const ext = cleanPath.split('.').pop()?.toLowerCase() ?? '';
       const name = basename(cleanPath);
-      if (VIDEO_EXTENSIONS.includes(ext)) {
+      if (isVideoExtension(ext)) {
         session
           .loadVideo(name, path)
           .then(() => {

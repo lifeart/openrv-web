@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { detectMediaTypeFromFile } from './SupportedMediaFormats';
+import { detectMediaTypeFromFile, isVideoExtension, SUPPORTED_VIDEO_EXTENSIONS } from './SupportedMediaFormats';
 
 describe('detectMediaTypeFromFile', () => {
   // Helper to create a minimal file-like object
@@ -107,5 +107,40 @@ describe('detectMediaTypeFromFile', () => {
   it('MIME type takes priority over unrecognized extension', () => {
     // A file with .pdf extension but image/png MIME should be classified as image
     expect(detectMediaTypeFromFile(fakeFile('weird.pdf', 'image/png'))).toBe('image');
+  });
+});
+
+describe('isVideoExtension (single source of truth — issues #522/#523)', () => {
+  it('SMF-V001: returns true for all SUPPORTED_VIDEO_EXTENSIONS', () => {
+    for (const ext of SUPPORTED_VIDEO_EXTENSIONS) {
+      expect(isVideoExtension(ext)).toBe(true);
+    }
+  });
+
+  it('SMF-V002: returns true for common video extensions', () => {
+    for (const ext of ['mp4', 'mov', 'mkv', 'webm', 'avi', 'mxf', 'ogv', 'm4v', '3gp']) {
+      expect(isVideoExtension(ext)).toBe(true);
+    }
+  });
+
+  it('SMF-V003: returns false for image extensions', () => {
+    for (const ext of ['png', 'jpg', 'exr', 'dpx', 'tiff', 'avif']) {
+      expect(isVideoExtension(ext)).toBe(false);
+    }
+  });
+
+  it('SMF-V004: returns false for non-media extensions', () => {
+    for (const ext of ['pdf', 'txt', 'zip', 'js', 'html']) {
+      expect(isVideoExtension(ext)).toBe(false);
+    }
+  });
+
+  it('SMF-V005: returns false for empty string', () => {
+    expect(isVideoExtension('')).toBe(false);
+  });
+
+  it('SMF-V006: is case-sensitive (expects lowercase input)', () => {
+    expect(isVideoExtension('MP4')).toBe(false);
+    expect(isVideoExtension('mp4')).toBe(true);
   });
 });

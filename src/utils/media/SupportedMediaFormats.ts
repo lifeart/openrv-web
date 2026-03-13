@@ -82,6 +82,14 @@ const IMAGE_EXTENSION_SET = new Set<string>(SUPPORTED_IMAGE_EXTENSIONS);
 const VIDEO_EXTENSION_SET = new Set<string>(SUPPORTED_VIDEO_EXTENSIONS);
 const VIDEO_MIME_ALIASES = new Set<string>(['application/ogg']);
 
+/**
+ * Check whether an extension (lowercase, no dot) is a recognized video extension.
+ * This is the single source of truth for video-extension classification.
+ */
+export function isVideoExtension(ext: string): boolean {
+  return VIDEO_EXTENSION_SET.has(ext);
+}
+
 function getFileExtension(filename: string): string {
   const dotIdx = filename.lastIndexOf('.');
   if (dotIdx === -1 || dotIdx === filename.length - 1) {

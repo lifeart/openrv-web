@@ -1602,30 +1602,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Sequence-specific metadata is written into project files without contributing anything to real restore behavior.
   - That makes the saved project format look more sequence-aware than the load path actually is and leaves dead state in the schema that users cannot benefit from.
 
-### 522. ShotGrid media loading only recognizes `mp4|mov|webm|mkv` as video, so other otherwise-supported containers are misrouted into `loadImage(...)`
-
-- Severity: Medium
-- Area: ShotGrid integration / media type detection
-- Evidence:
-  - `ShotGridIntegrationBridge` decides whether a version URL is video using `\\.(mp4|mov|webm|mkv)(\\?|$)` in [src/integrations/ShotGridIntegrationBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/ShotGridIntegrationBridge.ts#L170).
-  - Every non-matching URL is routed into `this.session.loadImage(...)` in [src/integrations/ShotGridIntegrationBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/ShotGridIntegrationBridge.ts#L171) through [src/integrations/ShotGridIntegrationBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/ShotGridIntegrationBridge.ts#L174).
-  - The app’s broader supported video-extension set is materially wider and includes `m4v`, `3gp`, `3g2`, `qt`, `mk3d`, `ogg`, `ogv`, `ogm`, `ogx`, and `avi` in [src/utils/media/SupportedMediaFormats.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SupportedMediaFormats.ts#L39) through [src/utils/media/SupportedMediaFormats.ts#L63).
-- Impact:
-  - ShotGrid versions that point at otherwise-supported containers can still be treated like image URLs and fail to load through the correct video path.
-  - That makes ShotGrid media support narrower than the rest of the app, even for formats the main file-open flow can already classify as video.
-
-### 523. DCC media loading also uses a narrower hardcoded video-extension list than the rest of the app
-
-- Severity: Medium
-- Area: DCC integration / media type detection
-- Evidence:
-  - `AppDCCWiring` classifies video paths using `VIDEO_EXTENSIONS = ['mp4', 'webm', 'mov', 'avi', 'mkv', 'ogv']` in [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L85).
-  - The incoming `loadMedia` handler routes any extension outside that list into `session.loadImage(...)` in [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L184) through [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L221).
-  - The app’s broader supported video-extension set is wider and includes `m4v`, `3gp`, `3g2`, `qt`, `mk3d`, `ogg`, `ogm`, and `ogx` in [src/utils/media/SupportedMediaFormats.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SupportedMediaFormats.ts#L39) through [src/utils/media/SupportedMediaFormats.ts#L63), and `Session.loadSourceFromUrl(...)` likewise recognizes those extra extensions in [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L1141).
-- Impact:
-  - DCC clients can send clean, extension-bearing video paths that the main app would otherwise accept and still have them misrouted into the image path.
-  - That makes DCC media loading less capable than the normal URL/file workflows for several already-supported video containers.
-
 ### 524. `.orvproject` restore reloads saved image URLs through `session.loadImage(...)`, so remote decoder-backed images do not round-trip through the project path
 
 - Severity: Medium

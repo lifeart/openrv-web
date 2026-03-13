@@ -2124,3 +2124,24 @@ Called from `fromJSON()` inside the existing `if (mediaIndexMap.size > 0)` block
 **Files changed**:
 - `src/formats/avif.ts`
 - `src/formats/avif.test.ts`
+
+## Issue #522: ShotGrid media loading only recognizes `mp4|mov|webm|mkv` as video
+## Issue #523: DCC media loading uses a narrower hardcoded video-extension list than the rest of the app
+
+**Root cause**: Both `ShotGridIntegrationBridge` and `AppDCCWiring` had their own hardcoded video extension lists (a regex and a constant array respectively) instead of using the canonical `SupportedMediaFormats` module. This meant supported video containers like `.m4v`, `.3gp`, `.ogv`, `.mxf`, etc. were misrouted into `loadImage()`.
+
+**Fix**:
+- Added `isVideoExtension(ext)` to `SupportedMediaFormats.ts` as the single source of truth for video extension classification
+- Replaced the hardcoded regex in `ShotGridIntegrationBridge.ts` with extension extraction + `isVideoExtension()`, also adding query string/fragment stripping
+- Removed the `VIDEO_EXTENSIONS` constant from `AppDCCWiring.ts` and replaced `VIDEO_EXTENSIONS.includes(ext)` with `isVideoExtension(ext)`
+
+**Tests added**: 8 new tests:
+- 6 in `SupportedMediaFormats.test.ts` (SMF-V001 through SMF-V006): exhaustive coverage of `isVideoExtension()`
+- 2 in `ShotGridIntegrationBridge.test.ts` (SG-INT-004b, SG-INT-004c): extended format recognition and query string stripping
+
+**Files changed**:
+- `src/utils/media/SupportedMediaFormats.ts`
+- `src/utils/media/SupportedMediaFormats.test.ts`
+- `src/integrations/ShotGridIntegrationBridge.ts`
+- `src/integrations/ShotGridIntegrationBridge.test.ts`
+- `src/AppDCCWiring.ts`
