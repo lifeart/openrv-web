@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { buildActionHandlers, type KeyboardActionDeps } from './KeyboardActionMap';
-import * as Modal from '../ui/components/shared/Modal';
 
 // ---------------------------------------------------------------------------
 // Mock getThemeManager (module-level singleton)
@@ -11,14 +10,10 @@ vi.mock('../utils/ui/ThemeManager', () => ({
   getThemeManager: () => mockThemeManager,
 }));
 
-const mockPreferencesManager = {
-  getExportDefaults: vi.fn().mockReturnValue({ includeAnnotations: true, defaultFormat: 'png', defaultQuality: 0.92 }),
-};
-vi.mock('../core/PreferencesManager', () => ({
-  getCorePreferencesManager: () => mockPreferencesManager,
+const mockShowAlert = vi.fn().mockResolvedValue(undefined);
+vi.mock('../ui/components/shared/Modal', () => ({
+  showAlert: (...args: unknown[]) => mockShowAlert(...args),
 }));
-
-const showAlertSpy = vi.spyOn(Modal, 'showAlert').mockReturnValue(Promise.resolve());
 
 // ---------------------------------------------------------------------------
 // Helpers to build lightweight test doubles
@@ -61,7 +56,7 @@ function createMockViewer() {
     smoothSetZoom: vi.fn(),
     smoothSetPixelRatio: vi.fn(),
     refresh: vi.fn(),
-    copyFrameToClipboard: vi.fn(),
+    copyFrameToClipboard: vi.fn().mockResolvedValue(true),
     getPixelProbe: vi.fn().mockReturnValue({ toggle: vi.fn() }),
     getFalseColor: vi.fn().mockReturnValue({ toggle: vi.fn() }),
     getTimecodeOverlay: vi.fn().mockReturnValue({ toggle: vi.fn() }),
@@ -145,7 +140,6 @@ function createMockControls() {
       hidePanel: vi.fn(),
     },
     stereoAlignControl: { handleKeyboard: vi.fn() },
-    textFormattingToolbar: { handleKeyboard: vi.fn().mockReturnValue(true) },
     safeAreasControl: { getOverlay: vi.fn().mockReturnValue({ toggle: vi.fn() }) },
     lutPipelinePanel: {
       toggle: vi.fn(),
@@ -372,16 +366,20 @@ describe('buildActionHandlers', () => {
     expect(deps.controls.channelSelect.handleKeyboard).toHaveBeenCalledWith('A', true);
   });
 
-  it('channel.luminance always calls channelSelect.handleKeyboard with L', () => {
+  it('channel.luminance toggles LUT pipeline panel when on color tab', () => {
+    deps.tabBar.activeTab = 'color';
+    // Rebuild handlers so the closure captures the updated tab
+    handlers = buildActionHandlers(deps);
+    handlers['channel.luminance']!();
+    expect(deps.controls.lutPipelinePanel.toggle).toHaveBeenCalledOnce();
+    expect(deps.controls.channelSelect.handleKeyboard).not.toHaveBeenCalled();
+  });
+
+  it('channel.luminance calls channelSelect.handleKeyboard when not on color tab', () => {
+    deps.tabBar.activeTab = 'view';
     handlers['channel.luminance']!();
     expect(deps.controls.channelSelect.handleKeyboard).toHaveBeenCalledWith('L', true);
     expect(deps.controls.lutPipelinePanel.toggle).not.toHaveBeenCalled();
-  });
-
-  it('lut.togglePanel calls lutPipelinePanel.toggle', () => {
-    handlers['lut.togglePanel']!();
-    expect(deps.controls.lutPipelinePanel.toggle).toHaveBeenCalledOnce();
-    expect(deps.controls.channelSelect.handleKeyboard).not.toHaveBeenCalled();
   });
 
   // -- View modes --------------------------------------------------------
@@ -580,33 +578,24 @@ describe('buildActionHandlers', () => {
     expect(mockQuickExport).toHaveBeenCalledWith('png');
   });
 
-  it('export.copyFrame reads includeAnnotations from preferences (#176)', () => {
-    mockPreferencesManager.getExportDefaults.mockReturnValue({ includeAnnotations: true, defaultFormat: 'png', defaultQuality: 0.92 });
-    handlers['export.copyFrame']!();
+  it('export.copyFrame calls viewer.copyFrameToClipboard with true', async () => {
+    await handlers['export.copyFrame']!();
     expect(deps.viewer.copyFrameToClipboard).toHaveBeenCalledWith(true);
   });
 
-  it('export.copyFrame passes false when preferences have includeAnnotations=false (#176)', () => {
-    mockPreferencesManager.getExportDefaults.mockReturnValue({ includeAnnotations: false, defaultFormat: 'png', defaultQuality: 0.92 });
-    handlers['export.copyFrame']!();
-    expect(deps.viewer.copyFrameToClipboard).toHaveBeenCalledWith(false);
-  });
-
-  it('export.copyFrame shows alert when clipboard copy fails (#196)', async () => {
-    showAlertSpy.mockClear();
+  it('export.copyFrame shows error alert when clipboard copy fails', async () => {
     deps.viewer.copyFrameToClipboard.mockResolvedValue(false);
     await handlers['export.copyFrame']!();
-    expect(showAlertSpy).toHaveBeenCalledWith(
-      'Failed to copy frame to clipboard. Your browser may have denied clipboard access.',
-      { type: 'warning', title: 'Clipboard Unavailable' },
+    expect(mockShowAlert).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to copy frame to clipboard'),
+      expect.objectContaining({ type: 'error', title: 'Clipboard Error' }),
     );
   });
 
-  it('export.copyFrame does not show alert when clipboard copy succeeds (#196)', async () => {
-    showAlertSpy.mockClear();
+  it('export.copyFrame does not show alert when clipboard copy succeeds', async () => {
     deps.viewer.copyFrameToClipboard.mockResolvedValue(true);
     await handlers['export.copyFrame']!();
-    expect(showAlertSpy).not.toHaveBeenCalled();
+    expect(mockShowAlert).not.toHaveBeenCalled();
   });
 
   // -- Undo/Redo ---------------------------------------------------------
@@ -722,23 +711,6 @@ describe('buildActionHandlers', () => {
   it('paint.eraser delegates to paintToolbar with e', () => {
     handlers['paint.eraser']!();
     expect(deps.controls.paintToolbar.handleKeyboard).toHaveBeenCalledWith('e');
-  });
-
-  // -- Text formatting (Ctrl+B/I/U) (#105) ----------------------------
-
-  it('KAM-105a: paint.textBold calls textFormattingToolbar.handleKeyboard with b, true', () => {
-    handlers['paint.textBold']!();
-    expect(deps.controls.textFormattingToolbar!.handleKeyboard).toHaveBeenCalledWith('b', true);
-  });
-
-  it('KAM-105b: paint.textItalic calls textFormattingToolbar.handleKeyboard with i, true', () => {
-    handlers['paint.textItalic']!();
-    expect(deps.controls.textFormattingToolbar!.handleKeyboard).toHaveBeenCalledWith('i', true);
-  });
-
-  it('KAM-105c: paint.textUnderline calls textFormattingToolbar.handleKeyboard with u, true', () => {
-    handlers['paint.textUnderline']!();
-    expect(deps.controls.textFormattingToolbar!.handleKeyboard).toHaveBeenCalledWith('u', true);
   });
 
   // =================================================================
@@ -869,98 +841,5 @@ describe('buildActionHandlers', () => {
   it('view.zoom1to8 calls viewer.smoothSetPixelRatio(0.125)', () => {
     handlers['view.zoom1to8']!();
     expect(deps.viewer.smoothSetPixelRatio).toHaveBeenCalledWith(0.125);
-  });
-
-  // =========================================================================
-  // Client mode action gating (#195)
-  // =========================================================================
-
-  describe('client mode action gating (#195)', () => {
-    it('without clientMode, all actions execute normally', () => {
-      // Default deps have no clientMode
-      handlers['edit.undo']!();
-      expect(deps.paintEngine.undo).toHaveBeenCalledOnce();
-    });
-
-    it('with clientMode, allowed actions execute normally', () => {
-      const clientMode = {
-        isActionAllowed: vi.fn().mockImplementation((action: string) => action.startsWith('playback.')),
-      };
-      deps.clientMode = clientMode;
-      const gatedHandlers = buildActionHandlers(deps);
-
-      gatedHandlers['playback.toggle']!();
-      expect(deps.session.togglePlayback).toHaveBeenCalledOnce();
-      expect(clientMode.isActionAllowed).toHaveBeenCalledWith('playback.toggle');
-    });
-
-    it('with clientMode, blocked actions are silently ignored', () => {
-      const clientMode = {
-        isActionAllowed: vi.fn().mockImplementation((action: string) => action.startsWith('playback.')),
-      };
-      deps.clientMode = clientMode;
-      const gatedHandlers = buildActionHandlers(deps);
-
-      // edit.undo is not a playback action, so it should be blocked
-      gatedHandlers['edit.undo']!();
-      expect(deps.paintEngine.undo).not.toHaveBeenCalled();
-      expect(clientMode.isActionAllowed).toHaveBeenCalledWith('edit.undo');
-    });
-
-    it('with clientMode, paint actions are blocked', () => {
-      const clientMode = {
-        isActionAllowed: vi.fn().mockReturnValue(false),
-      };
-      deps.clientMode = clientMode;
-      const gatedHandlers = buildActionHandlers(deps);
-
-      gatedHandlers['paint.pen']!();
-      expect(deps.controls.paintToolbar.handleKeyboard).not.toHaveBeenCalled();
-    });
-
-    it('with clientMode, view actions pass through when allowed', () => {
-      const clientMode = {
-        isActionAllowed: vi.fn().mockReturnValue(true),
-      };
-      deps.clientMode = clientMode;
-      const gatedHandlers = buildActionHandlers(deps);
-
-      gatedHandlers['view.fitToWindow']!();
-      expect(deps.viewer.smoothFitToWindow).toHaveBeenCalledOnce();
-    });
-
-    it('with clientMode=null, all actions execute normally', () => {
-      deps.clientMode = null;
-      const gatedHandlers = buildActionHandlers(deps);
-
-      gatedHandlers['edit.undo']!();
-      expect(deps.paintEngine.undo).toHaveBeenCalledOnce();
-    });
-
-    it('blocked handler does not throw (silent no-op)', () => {
-      const clientMode = {
-        isActionAllowed: vi.fn().mockReturnValue(false),
-      };
-      deps.clientMode = clientMode;
-      const gatedHandlers = buildActionHandlers(deps);
-
-      expect(() => gatedHandlers['edit.undo']!()).not.toThrow();
-      expect(() => gatedHandlers['paint.pen']!()).not.toThrow();
-      expect(() => gatedHandlers['color.toggleColorWheels']!()).not.toThrow();
-    });
-
-    it('normal mode (no client mode) is unaffected', () => {
-      // deps.clientMode is undefined by default
-      const normalHandlers = buildActionHandlers(deps);
-
-      normalHandlers['edit.undo']!();
-      expect(deps.paintEngine.undo).toHaveBeenCalledOnce();
-
-      normalHandlers['paint.pen']!();
-      expect(deps.controls.paintToolbar.handleKeyboard).toHaveBeenCalledWith('p');
-
-      normalHandlers['playback.toggle']!();
-      expect(deps.session.togglePlayback).toHaveBeenCalledOnce();
-    });
   });
 });

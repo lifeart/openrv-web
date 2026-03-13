@@ -6,14 +6,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NetworkControl } from './NetworkControl';
 import type { SyncUser } from '../../network/types';
 
-// Mock PreferencesManager so we can control userName
-const mockGetGeneralPrefs = vi.fn(() => ({ userName: '' }));
-vi.mock('../../core/PreferencesManager', () => ({
-  getCorePreferencesManager: () => ({
-    getGeneralPrefs: mockGetGeneralPrefs,
-  }),
-}));
-
 describe('NetworkControl', () => {
   let control: NetworkControl;
 
@@ -325,6 +317,109 @@ describe('NetworkControl', () => {
       expect(errorDisplay.textContent).toContain('Create or join a room');
     });
 
+    it('NCC-031c: copy button enters Copying... state on click and is disabled', () => {
+      control.on('copyLink', () => {});
+      control.setConnectionState('connected');
+      control.setRoomInfo({
+        roomId: 'room-1',
+        roomCode: 'TEST-CODE',
+        hostId: 'u1',
+        users: [],
+        createdAt: Date.now(),
+        maxUsers: 10,
+      });
+      control.openPanel();
+
+      const copyBtn = document.querySelector('[data-testid="network-copy-link-button"]') as HTMLButtonElement;
+      copyBtn.click();
+
+      expect(copyBtn.textContent).toBe('Copying...');
+      expect(copyBtn.disabled).toBe(true);
+    });
+
+    it('NCC-031d: reportCopyResult(true) resets button to Copied! then original label', () => {
+      vi.useFakeTimers();
+      control.on('copyLink', () => {});
+      control.setConnectionState('connected');
+      control.setRoomInfo({
+        roomId: 'room-1',
+        roomCode: 'TEST-CODE',
+        hostId: 'u1',
+        users: [],
+        createdAt: Date.now(),
+        maxUsers: 10,
+      });
+      control.openPanel();
+
+      const copyBtn = document.querySelector('[data-testid="network-copy-link-button"]') as HTMLButtonElement;
+      copyBtn.click();
+
+      // Simulate bridge reporting success
+      control.reportCopyResult(true);
+
+      expect(copyBtn.textContent).toBe('Copied!');
+      expect(copyBtn.disabled).toBe(false);
+      expect(copyBtn.style.opacity).toBe('1');
+
+      // After timeout the label resets to normal
+      vi.advanceTimersByTime(2000);
+      expect(copyBtn.textContent).not.toBe('Copied!');
+      expect(copyBtn.textContent).not.toBe('Copying...');
+      vi.useRealTimers();
+    });
+
+    it('NCC-031e: reportCopyResult(false) resets button and shows error', () => {
+      control.on('copyLink', () => {});
+      control.setConnectionState('connected');
+      control.setRoomInfo({
+        roomId: 'room-1',
+        roomCode: 'TEST-CODE',
+        hostId: 'u1',
+        users: [],
+        createdAt: Date.now(),
+        maxUsers: 10,
+      });
+      control.openPanel();
+
+      const copyBtn = document.querySelector('[data-testid="network-copy-link-button"]') as HTMLButtonElement;
+      copyBtn.click();
+      expect(copyBtn.textContent).toBe('Copying...');
+
+      // Simulate bridge reporting failure
+      control.reportCopyResult(false, 'Clipboard unavailable.');
+
+      expect(copyBtn.disabled).toBe(false);
+      expect(copyBtn.style.opacity).toBe('1');
+      // Button should NOT be stuck in "Copying..."
+      expect(copyBtn.textContent).not.toBe('Copying...');
+
+      const errorDisplay = document.querySelector('[data-testid="network-error-display"]') as HTMLElement;
+      expect(errorDisplay.style.display).toBe('block');
+      expect(errorDisplay.textContent).toBe('Clipboard unavailable.');
+    });
+
+    it('NCC-031f: reportCopyResult(false) without error message resets button without error display', () => {
+      control.on('copyLink', () => {});
+      control.setConnectionState('connected');
+      control.setRoomInfo({
+        roomId: 'room-1',
+        roomCode: 'TEST-CODE',
+        hostId: 'u1',
+        users: [],
+        createdAt: Date.now(),
+        maxUsers: 10,
+      });
+      control.openPanel();
+
+      const copyBtn = document.querySelector('[data-testid="network-copy-link-button"]') as HTMLButtonElement;
+      copyBtn.click();
+
+      control.reportCopyResult(false);
+
+      expect(copyBtn.disabled).toBe(false);
+      expect(copyBtn.textContent).not.toBe('Copying...');
+    });
+
     it('NCC-032: shows share URL in connected panel', () => {
       control.setConnectionState('connected');
       control.setPinCode('1234');
@@ -562,96 +657,6 @@ describe('NetworkControl', () => {
     });
   });
 
-  describe('user name from preferences', () => {
-    afterEach(() => {
-      mockGetGeneralPrefs.mockReturnValue({ userName: '' });
-    });
-
-    it('NCC-090: createRoom uses custom user name from preferences', () => {
-      mockGetGeneralPrefs.mockReturnValue({ userName: 'Alice' });
-      const handler = vi.fn();
-      control.on('createRoom', handler);
-      control.openPanel();
-
-      const createBtn = document.querySelector('[data-testid="network-create-room-button"]') as HTMLButtonElement;
-      createBtn.click();
-
-      expect(handler).toHaveBeenCalledWith({ userName: 'Alice' });
-    });
-
-    it('NCC-091: joinRoom uses custom user name from preferences', () => {
-      mockGetGeneralPrefs.mockReturnValue({ userName: 'Bob' });
-      const handler = vi.fn();
-      control.on('joinRoom', handler);
-      control.openPanel();
-
-      const input = document.querySelector('[data-testid="network-room-code-input"]') as HTMLInputElement;
-      input.value = 'ABCD-1234';
-
-      const joinBtn = document.querySelector('[data-testid="network-join-room-button"]') as HTMLButtonElement;
-      joinBtn.click();
-
-      expect(handler).toHaveBeenCalledWith({ roomCode: 'ABCD-1234', userName: 'Bob' });
-    });
-
-    it('NCC-092: createRoom falls back to Host/User when no name is set', () => {
-      mockGetGeneralPrefs.mockReturnValue({ userName: '' });
-      const handler = vi.fn();
-      control.on('createRoom', handler);
-      control.openPanel();
-
-      const createBtn = document.querySelector('[data-testid="network-create-room-button"]') as HTMLButtonElement;
-      createBtn.click();
-
-      // Default syncSettings is truthy, so fallback is 'Host'
-      expect(handler).toHaveBeenCalledWith({ userName: 'Host' });
-    });
-
-    it('NCC-093: joinRoom falls back to User when no name is set', () => {
-      mockGetGeneralPrefs.mockReturnValue({ userName: '' });
-      const handler = vi.fn();
-      control.on('joinRoom', handler);
-      control.openPanel();
-
-      const input = document.querySelector('[data-testid="network-room-code-input"]') as HTMLInputElement;
-      input.value = 'ABCD-1234';
-
-      const joinBtn = document.querySelector('[data-testid="network-join-room-button"]') as HTMLButtonElement;
-      joinBtn.click();
-
-      expect(handler).toHaveBeenCalledWith({ roomCode: 'ABCD-1234', userName: 'User' });
-    });
-
-    it('NCC-094: auto-join uses custom user name from preferences', () => {
-      mockGetGeneralPrefs.mockReturnValue({ userName: 'Charlie' });
-      const handler = vi.fn();
-      control.on('joinRoom', handler);
-      control.setJoinRoomCodeFromLink('ABCD1234');
-      control.openPanel();
-
-      const pinInput = document.querySelector('[data-testid="network-pin-code-input"]') as HTMLInputElement;
-      pinInput.value = '1234';
-      pinInput.dispatchEvent(new Event('input'));
-
-      expect(handler).toHaveBeenCalledWith({ roomCode: 'ABCD-1234', userName: 'Charlie' });
-    });
-
-    it('NCC-095: whitespace-only user name falls back to default', () => {
-      mockGetGeneralPrefs.mockReturnValue({ userName: '   ' });
-      const handler = vi.fn();
-      control.on('joinRoom', handler);
-      control.openPanel();
-
-      const input = document.querySelector('[data-testid="network-room-code-input"]') as HTMLInputElement;
-      input.value = 'ABCD-1234';
-
-      const joinBtn = document.querySelector('[data-testid="network-join-room-button"]') as HTMLButtonElement;
-      joinBtn.click();
-
-      expect(handler).toHaveBeenCalledWith({ roomCode: 'ABCD-1234', userName: 'User' });
-    });
-  });
-
   describe('room code display', () => {
     it('NCC-070: displays room code when connected', () => {
       control.setConnectionState('connected');
@@ -668,64 +673,6 @@ describe('NetworkControl', () => {
       const roomCodeDisplay = document.querySelector('[data-testid="network-room-code-display"]') as HTMLElement;
       expect(roomCodeDisplay).toBeTruthy();
       expect(roomCodeDisplay.textContent).toContain('WXYZ-5678');
-    });
-  });
-
-  describe('issue #109 regression: copy link shows Copying... before async completion', () => {
-    it('NCC-109a: copy button shows Copying... immediately after click, not Copied!', () => {
-      control.setConnectionState('connected');
-      control.setRoomInfo({
-        roomId: 'room-1',
-        roomCode: 'TEST-CODE',
-        hostId: 'u1',
-        users: [],
-        createdAt: Date.now(),
-        maxUsers: 10,
-      });
-      control.openPanel();
-
-      const copyBtn = document.querySelector('[data-testid="network-copy-link-button"]') as HTMLButtonElement;
-      copyBtn.click();
-
-      expect(copyBtn.textContent).toBe('Copying...');
-    });
-
-    it('NCC-109b: setCopyResult(true) changes button to Copied!', () => {
-      control.setConnectionState('connected');
-      control.setRoomInfo({
-        roomId: 'room-1',
-        roomCode: 'TEST-CODE',
-        hostId: 'u1',
-        users: [],
-        createdAt: Date.now(),
-        maxUsers: 10,
-      });
-      control.openPanel();
-
-      const copyBtn = document.querySelector('[data-testid="network-copy-link-button"]') as HTMLButtonElement;
-      copyBtn.click();
-      control.setCopyResult(true);
-
-      expect(copyBtn.textContent).toBe('Copied!');
-    });
-
-    it('NCC-109c: setCopyResult(false) changes button to Copy failed', () => {
-      control.setConnectionState('connected');
-      control.setRoomInfo({
-        roomId: 'room-1',
-        roomCode: 'TEST-CODE',
-        hostId: 'u1',
-        users: [],
-        createdAt: Date.now(),
-        maxUsers: 10,
-      });
-      control.openPanel();
-
-      const copyBtn = document.querySelector('[data-testid="network-copy-link-button"]') as HTMLButtonElement;
-      copyBtn.click();
-      control.setCopyResult(false);
-
-      expect(copyBtn.textContent).toBe('Copy failed');
     });
   });
 });

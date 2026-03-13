@@ -20,6 +20,18 @@ import { DisposableSubscriptionManager } from './utils/DisposableSubscriptionMan
 import { withSideEffects, type WiringSideEffects } from './utils/WiringHelpers';
 
 /**
+ * Derive meaningful labels for A/B compare overlays from session source names.
+ * Falls back to 'A'/'B' when source names are unavailable.
+ */
+export function deriveCompareLabels(session: AppWiringContext['session']): { labelA: string; labelB: string } {
+  const sourceA = session.sourceA;
+  const sourceB = session.sourceB;
+  const labelA = sourceA?.name || 'A';
+  const labelB = sourceB?.name || 'B';
+  return { labelA, labelB };
+}
+
+/**
  * Wire all view-related controls to the viewer and bridges.
  */
 export function wireViewControls(ctx: AppWiringContext): WiringResult {
@@ -92,6 +104,11 @@ export function wireViewControls(ctx: AppWiringContext): WiringResult {
         position: controls.compareControl.getWipePosition(),
         showOriginal: mode === 'horizontal' ? 'left' : 'top',
       });
+      // Update overlay labels from source names when compare mode activates
+      if (mode !== 'off') {
+        const { labelA, labelB } = deriveCompareLabels(session);
+        viewer.setWipeLabels(labelA, labelB);
+      }
     }),
   );
   subs.add(

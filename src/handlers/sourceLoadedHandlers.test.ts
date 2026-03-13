@@ -73,7 +73,7 @@ function createMockContext(
     getAdjustments: vi.fn(() => ({ ...colorAdjustments })),
   };
   const persistenceManager = { setGTOStore: vi.fn(), syncGTOStore: vi.fn() };
-  const exrWindowOverlay = { setWindows: vi.fn(), clearWindows: vi.fn() };
+  const exrWindowOverlay = { setWindows: vi.fn(), clearWindows: vi.fn(), enable: vi.fn(), disable: vi.fn() };
   const viewer = {
     initPrerenderBuffer: vi.fn(),
     refresh: vi.fn(),

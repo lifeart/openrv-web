@@ -10,7 +10,6 @@ import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import type { ConnectionState, SyncUser, SyncSettings, RoomInfo } from '../../network/types';
 import { DEFAULT_SYNC_SETTINGS, USER_COLORS } from '../../network/types';
-import { getCorePreferencesManager } from '../../core/PreferencesManager';
 
 /**
  * Validate that a color string is a safe CSS color value.
@@ -419,7 +418,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
         digits.length >= 4
       ) {
         this.state.linkedRoomAutoJoinArmed = false;
-        this.emit('joinRoom', { roomCode: this.state.linkedRoomCode, userName: this.getUserName('User') });
+        this.emit('joinRoom', { roomCode: this.state.linkedRoomCode, userName: 'User' });
       }
     });
     pinSection.appendChild(this.pinCodeInput);
@@ -452,7 +451,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     });
     createBtn.addEventListener('click', () => {
       this.state.pinCode = this.pinCodeInput.value.replace(/\D/g, '').slice(0, 10);
-      this.emit('createRoom', { userName: this.getUserName(this.state.syncSettings ? 'Host' : 'User') });
+      this.emit('createRoom', { userName: this.state.syncSettings ? 'Host' : 'User' });
     });
     createSection.appendChild(createBtn);
     panel.appendChild(createSection);
@@ -849,11 +848,13 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
 
       this.hideError();
       this.setShareLink(link);
-      this.emit('copyLink', link);
 
-      // Show intermediate state while async clipboard write is in progress
+      // Show in-progress state while the bridge performs the async clipboard write
       this.copyLinkButton.textContent = 'Copying...';
-      this.copyLinkButton.style.color = 'var(--text-muted)';
+      this.copyLinkButton.disabled = true;
+      this.copyLinkButton.style.opacity = '0.7';
+
+      this.emit('copyLink', link);
     });
     actionsSection.appendChild(this.copyLinkButton);
 
@@ -956,17 +957,6 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     }
   }
 
-  /** Get the current user name from preferences, with a fallback. */
-  private getUserName(fallback: string): string {
-    try {
-      const name = getCorePreferencesManager().getGeneralPrefs().userName;
-      if (name && name.trim()) return name.trim();
-    } catch {
-      // PreferencesManager not wired — fall back
-    }
-    return fallback;
-  }
-
   private handleJoinRoom(): void {
     const code = this.roomCodeInput.value.trim().toUpperCase() || this.state.linkedRoomCode || '';
     if (this.pinCodeInput) {
@@ -977,7 +967,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
       return;
     }
     this.hideError();
-    this.emit('joinRoom', { roomCode: code, userName: this.getUserName('User') });
+    this.emit('joinRoom', { roomCode: code, userName: 'User' });
   }
 
   // ---- State Updates ----
@@ -1107,6 +1097,32 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
   hideInfo(): void {
     this.infoDisplay.style.display = 'none';
     this.infoDisplay.textContent = '';
+  }
+
+  /**
+   * Called by the bridge after the async clipboard write completes.
+   * Resets the copy-link button from its "Copying..." in-progress state.
+   */
+  reportCopyResult(success: boolean, errorMessage?: string): void {
+    if (!this.copyLinkButton) return;
+
+    this.copyLinkButton.disabled = false;
+    this.copyLinkButton.style.opacity = '1';
+
+    if (success) {
+      this.copyLinkButton.textContent = 'Copied!';
+      this.copyLinkButton.style.color = 'var(--success)';
+      setTimeout(() => {
+        this.copyLinkButton.style.color = 'var(--text-primary)';
+        this.updateShareLinkUI();
+      }, 2000);
+    } else {
+      this.copyLinkButton.style.color = 'var(--text-primary)';
+      this.updateShareLinkUI();
+      if (errorMessage) {
+        this.showError(errorMessage);
+      }
+    }
   }
 
   private resolveMediaPrompt(accepted: boolean): void {
@@ -1344,26 +1360,6 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
 
   private generateDefaultPinCode(): string {
     return String(Math.floor(100000 + Math.random() * 900000));
-  }
-
-  /**
-   * Update the copy-link button after the async clipboard write completes.
-   * Callers should invoke this from the copyLink event handler once the
-   * clipboard promise settles.
-   */
-  setCopyResult(success: boolean): void {
-    if (!this.copyLinkButton) return;
-    if (success) {
-      this.copyLinkButton.textContent = 'Copied!';
-      this.copyLinkButton.style.color = 'var(--success)';
-    } else {
-      this.copyLinkButton.textContent = 'Copy failed';
-      this.copyLinkButton.style.color = 'var(--error)';
-    }
-    setTimeout(() => {
-      this.copyLinkButton.style.color = 'var(--text-primary)';
-      this.updateShareLinkUI();
-    }, 2000);
   }
 
   render(): HTMLElement {

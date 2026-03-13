@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EventEmitter } from './utils/EventEmitter';
-import { wireViewControls } from './AppViewWiring';
+import { wireViewControls, deriveCompareLabels } from './AppViewWiring';
 import type { AppWiringContext } from './AppWiringContext';
 
 /**
@@ -34,12 +34,15 @@ function createMockContext() {
     getStereoState: vi.fn(() => ({ mode: 'off' })),
     getStereoPair: vi.fn(() => null),
     getPixelCoordinatesFromClient: vi.fn(() => null) as ReturnType<typeof vi.fn>,
+    setWipeLabels: vi.fn(),
   };
 
   const session = Object.assign(new EventEmitter(), {
     setCurrentAB: vi.fn(),
     sourceCount: 1,
     currentSourceIndex: 0,
+    sourceA: null as { name: string } | null,
+    sourceB: null as { name: string } | null,
   });
 
   const sessionBridge = {
@@ -572,5 +575,49 @@ describe('wireViewControls', () => {
       (controls.zoomControl as EventEmitter).emit('zoomChanged', 'fit');
       expect(viewer.smoothFitToWindow).not.toHaveBeenCalled();
     });
+  });
+
+  // VW-332-001: wipeModeChanged updates labels from source names
+  it('VW-332-001: wipeModeChanged sets wipe labels from session sources when mode activates', () => {
+    session.sourceA = { name: 'hero_v2.exr' };
+    session.sourceB = { name: 'hero_v1.exr' };
+    viewer.setWipeLabels.mockClear();
+    (controls.compareControl as EventEmitter).emit('wipeModeChanged', 'horizontal');
+    expect(viewer.setWipeLabels).toHaveBeenCalledWith('hero_v2.exr', 'hero_v1.exr');
+  });
+
+  // VW-332-002: wipeModeChanged does not set labels when mode is 'off'
+  it('VW-332-002: wipeModeChanged does not set wipe labels when mode is off', () => {
+    session.sourceA = { name: 'a.exr' };
+    session.sourceB = { name: 'b.exr' };
+    viewer.setWipeLabels.mockClear();
+    (controls.compareControl as EventEmitter).emit('wipeModeChanged', 'off');
+    expect(viewer.setWipeLabels).not.toHaveBeenCalled();
+  });
+
+  // VW-332-003: labels fall back to A/B when sources are null
+  it('VW-332-003: wipeModeChanged falls back to A/B labels when sources are null', () => {
+    session.sourceA = null;
+    session.sourceB = null;
+    viewer.setWipeLabels.mockClear();
+    (controls.compareControl as EventEmitter).emit('wipeModeChanged', 'vertical');
+    expect(viewer.setWipeLabels).toHaveBeenCalledWith('A', 'B');
+  });
+});
+
+describe('deriveCompareLabels', () => {
+  it('VW-332-004: returns source names when both sources are present', () => {
+    const session = { sourceA: { name: 'shot01.exr' }, sourceB: { name: 'shot02.exr' } } as any;
+    expect(deriveCompareLabels(session)).toEqual({ labelA: 'shot01.exr', labelB: 'shot02.exr' });
+  });
+
+  it('VW-332-005: returns A/B defaults when sources are null', () => {
+    const session = { sourceA: null, sourceB: null } as any;
+    expect(deriveCompareLabels(session)).toEqual({ labelA: 'A', labelB: 'B' });
+  });
+
+  it('VW-332-006: returns A/B defaults when sources are undefined', () => {
+    const session = {} as any;
+    expect(deriveCompareLabels(session)).toEqual({ labelA: 'A', labelB: 'B' });
   });
 });

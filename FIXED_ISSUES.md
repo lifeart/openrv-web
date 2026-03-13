@@ -836,3 +836,132 @@
 - `src/core/session/GTOSettingsParser.ts`
 - `src/core/session/Session.graph.test.ts`
 - `src/handlers/persistenceHandlers.test.ts`
+
+## Issue #303: Network Sync ignores `roomLeft`, so disconnect-driven room exits can leave stale room info in the panel
+
+**Root cause**: `AppNetworkBridge` subscribed to `connectionStateChanged`, `roomCreated`, `roomJoined`, `usersChanged`, `error`, and `rttUpdated` from `NetworkSyncManager`, but not `roomLeft`. When a room ended due to a remote/serverless disconnect (not the local "Leave" button), the Network Sync UI retained stale room code, users, and share-link state while showing a disconnected connection state.
+
+**Fix**: Added a `roomLeft` event subscription in `AppNetworkBridge.setup()` that clears all room-related UI state in `NetworkControl` when fired — setting connection to `disconnected`, clearing host flag, share link kind, response token, room info, users list, hiding the info panel, and clearing `paintEngine.idPrefix`. This mirrors exactly what the manual `leaveRoom` click handler does.
+
+**Tests added**: 5 regression tests (ANB-130 through ANB-134) covering: event subscription verification, full room state clearing on `roomLeft`, paint engine prefix clearing, manual `leaveRoom` independence, and post-dispose safety.
+
+**Files changed**:
+- `src/AppNetworkBridge.ts`
+- `src/AppNetworkBridge.test.ts`
+
+## Issue #363: Shortcut cheat sheet has no outside-click dismissal despite docs promising it
+
+**Root cause**: The `ShortcutCheatSheet` component only supported dismissal via the Escape key path in `KeyboardActionMap`. It had no click-outside/backdrop-dismiss handler, so clicking outside the overlay content had no effect.
+
+**Fix**: Added an outside-click dismiss handler to `ShortcutCheatSheet`. When `show()` is called, a `mousedown` listener is registered on `document`. The `onClickOutside()` method checks if the click target is inside `.cheatsheet-columns` (the content area) — if yes, does nothing; if no (click on backdrop), calls `hide()`. The listener is cleaned up in `hide()` and `dispose()`.
+
+**Tests added**: 6 regression tests (CS-023 through CS-028) covering: outside-click dismissal, inside-click non-dismissal, backdrop click dismissal, re-show after dismissal, listener cleanup on hide, and listener cleanup on dispose.
+
+**Files changed**:
+- `src/ui/components/ShortcutCheatSheet.ts`
+- `src/ui/components/ShortcutCheatSheet.test.ts`
+
+## Issue #304: Playback buffering and decode-timeout diagnostics not surfaced to users
+
+**Root cause**: `PlaybackEngine` emits `buffering` and `frameDecodeTimeout` events (forwarded by `SessionPlayback` onto the session), but `AppSessionBridge` never subscribed to them, so users got no feedback during playback stalls or decode timeouts.
+
+**Fix**: Added `buffering` and `frameDecodeTimeout` subscriptions in `AppSessionBridge.bindSessionEvents()`. Created new `bufferingHandlers.ts` module with: `handleBufferingChanged(isBuffering)` that shows/hides a fixed-position overlay with spinner and "Buffering..." label (with ARIA accessibility), and `handleFrameDecodeTimeout(frame)` that shows a warning alert via the existing Modal system.
+
+**Tests added**: 17 tests — 5 in AppSessionBridge.test.ts (ASB-007 through ASB-009, ASB-048, ASB-049) verifying event subscription/forwarding/unsubscription, and 12 in bufferingHandlers.test.ts covering overlay show/hide, idempotency, cycle behavior, decode timeout alerts, and cleanup.
+
+**Files changed**:
+- `src/AppSessionBridge.ts`
+- `src/AppSessionBridge.test.ts`
+- `src/handlers/bufferingHandlers.ts` (new)
+- `src/handlers/bufferingHandlers.test.ts` (new)
+
+## Issue #332: Compare overlays show hardcoded A/B labels instead of real source names
+
+**Root cause**: Split-screen overlay hardcoded labels to `A`/`B`, wipe overlay hardcoded to `Original`/`Graded`. The existing `setWipeLabels()` API existed on Viewer but was never called from runtime wiring. Source names were available but never passed through.
+
+**Fix**: Added `deriveCompareLabels(session)` helper in `AppViewWiring.ts` that reads `session.sourceA?.name` and `session.sourceB?.name`, falling back to `A`/`B` when unavailable. Wired label updates into the `wipeModeChanged` handler. Extended `WipeManager.setLabels()` to set labels on both wipe and split-screen elements simultaneously, added `getSplitScreenLabels()` method.
+
+**Tests added**: 14 tests — 10 in AppViewWiring.test.ts (VW-030 through VW-039) covering source name labels, fallbacks, all compare modes, partial availability, and `deriveCompareLabels` unit tests; 4 in WipeManager.test.ts (WM-U016 through WM-U019) verifying split-screen label propagation.
+
+**Files changed**:
+- `src/AppViewWiring.ts`
+- `src/AppViewWiring.test.ts`
+- `src/ui/components/WipeManager.ts`
+- `src/ui/components/WipeManager.test.ts`
+
+## Issue #353: EXR window overlay doesn't auto-activate on mismatched data/display windows
+
+**Root cause**: On source load, production called `setWindows()` to store EXR data/display window bounds but never called `enable()`. The overlay defaulted to `enabled: false` and required manual toggle. The documentation promised auto-activation on mismatched windows.
+
+**Fix**: Added mismatch detection in `EXRWindowOverlay.setWindows()` — compares all four bounds (xMin, yMin, xMax, yMax) and auto-enables when they differ, auto-disables when they match. `clearWindows()` now also sets `enabled: false`. Added explicit `enable()`/`disable()` calls in `sourceLoadedHandlers.ts` for defense-in-depth.
+
+**Tests added**: 6 regression tests (EXR-120 through EXR-125) covering auto-enable on mismatch, stays disabled on match, disables on clear, stateChanged events, and mismatch-to-match transitions.
+
+**Files changed**:
+- `src/ui/components/EXRWindowOverlay.ts`
+- `src/ui/components/EXRWindowOverlay.test.ts`
+- `src/handlers/sourceLoadedHandlers.ts`
+
+## Issue #358: Clipboard denial during frame export shows no error message to users
+
+**Root cause**: `FrameExporter.copyToClipboard()` caught clipboard errors, logged them, and returned `false`. The keyboard action handler in `KeyboardActionMap` did not check the return value, so clipboard failures were silent.
+
+**Fix**: Updated the `export.copyFrame` handler in `KeyboardActionMap` to `await` the clipboard result. When it returns `false`, shows a user-visible error alert via `showAlert()` with "Clipboard Error" title explaining access was denied.
+
+**Tests added**: 2 tests verifying: failed clipboard copy triggers `showAlert` with error type, successful copy does not show any alert.
+
+**Files changed**:
+- `src/services/KeyboardActionMap.ts`
+- `src/services/KeyboardActionMap.test.ts`
+
+## Issue #380: Auto-save interval setting bypassed by hardcoded 2-second debounce
+
+**Root cause**: `AutoSaveManager.markDirty()` contained a hardcoded `2000ms` debounce that directly called `saveWithGetter()`, completely bypassing the user-configured auto-save interval (1-30 minutes). Every routine interaction triggered saves every ~2 seconds regardless of configuration.
+
+**Fix**: Removed the hardcoded 2-second debounce from `markDirty()`. It now only sets `isDirty = true` and stores the `stateGetter`, letting the configured interval timer handle saves. Removed the `debounceTimer` field and cleanup code from `saveNow()` and `dispose()`.
+
+**Tests added**: 6 regression tests (AUTOSAVE-R001 through AUTOSAVE-R006) verifying: no immediate save on markDirty, interval is respected, rapid marks are batched, data saved within configured interval, no save when not dirty, and no timer creation from markDirty.
+
+**Files changed**:
+- `src/core/session/AutoSaveManager.ts`
+- `src/core/session/AutoSaveManager.test.ts`
+
+## Issue #391: Snapshot backend initialization failures swallowed while snapshot UI stays enabled
+
+**Root cause**: When `snapshotManager.initialize()` failed, the error was caught and only logged. The snapshot panel and all actions remained fully enabled, causing confusing failures at use time when users tried to create or restore snapshots.
+
+**Fix**: Added `_snapshotBackendAvailable` flag to `AppPersistenceManager`. On init failure: sets flag to false, calls `snapshotPanel.setDisabled()` with a reason, and shows a user-visible warning alert. `createQuickSnapshot()` and `restoreSnapshot()` check the flag and show clear error alerts instead of proceeding. `createAutoCheckpoint()` silently returns early (best-effort). Added `setDisabled(reason)` and `renderDisabledState()` to `SnapshotPanel`.
+
+**Tests added**: 11 tests — 7 in AppPersistenceManager.test.ts (init failure warning, flag states, create/restore/checkpoint guards) and 4 in SnapshotPanel.test.ts (disabled state, rendering, open/close behavior).
+
+**Files changed**:
+- `src/AppPersistenceManager.ts`
+- `src/AppPersistenceManager.test.ts`
+- `src/ui/components/SnapshotPanel.ts`
+- `src/ui/components/SnapshotPanel.test.ts`
+
+## Issue #399: Auto-save recovery silently fails if chosen entry disappears before load
+
+**Root cause**: `recoverAutoSave()` only handled the `if (state)` branch when reading an auto-save entry. When `getAutoSave()` returned `null` (entry vanished between listing and loading), nothing happened — no alert, no retry. By contrast, snapshot restore already showed a "Snapshot not found" error for the same condition.
+
+**Fix**: Added an `else` branch in `recoverAutoSave()` that calls `showAlert()` with "Auto-save entry not found. Recovery data may have been lost." using error type and "Recovery Error" title, following the snapshot restore pattern.
+
+**Tests added**: 3 regression tests (APM-100 through APM-102) verifying: normal recovery works, missing entry shows error alert, error message is user-friendly.
+
+**Files changed**:
+- `src/AppPersistenceManager.ts`
+- `src/AppPersistenceManager.test.ts`
+
+## Issue #548: Network Sync copy-link button stuck in "Copying..." state
+
+**Root cause**: When the copy-link button was clicked, `NetworkControl` changed to "Copying..." state. The clipboard operation in `AppNetworkBridge` performed the copy but never reported success/failure back to the control, leaving the button stuck.
+
+**Fix**: Added `reportCopyResult(success, errorMessage?)` method to `NetworkControl` that resets button state on success (with brief "Copied!" feedback) or shows error on failure. Updated `AppNetworkBridge` clipboard operations to call `reportCopyResult(true)` on success and `reportCopyResult(false, message)` on failure.
+
+**Tests added**: ~10 tests across AppNetworkBridge.test.ts and NetworkControl.test.ts verifying: successful copy resets state, failed copy resets and shows error, button never stays stuck.
+
+**Files changed**:
+- `src/AppNetworkBridge.ts`
+- `src/AppNetworkBridge.test.ts`
+- `src/ui/components/NetworkControl.ts`
+- `src/ui/components/NetworkControl.test.ts`

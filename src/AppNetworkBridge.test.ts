@@ -4,7 +4,6 @@ import { EventEmitter } from './utils/EventEmitter';
 import { PaintEngine } from './paint/PaintEngine';
 import { NoteManager } from './core/session/NoteManager';
 import { encodeSessionState } from './core/session/SessionURLManager';
-import * as PinEncryption from './network/PinEncryption';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -57,7 +56,6 @@ class MockNetworkSyncManager extends EventEmitter {
   isConnected = true;
   sendPlaybackSync = vi.fn();
   sendFrameSync = vi.fn();
-  sendViewSync = vi.fn();
   sendAnnotationSync = vi.fn();
   sendColorSync = vi.fn();
   sendNoteSync = vi.fn();
@@ -67,10 +65,6 @@ class MockNetworkSyncManager extends EventEmitter {
   leaveRoom = vi.fn();
   setSyncSettings = vi.fn();
   requestMediaSync = vi.fn(() => '');
-  sendMediaResponse = vi.fn();
-  sendMediaOffer = vi.fn();
-  sendMediaChunk = vi.fn();
-  sendMediaComplete = vi.fn();
   roomInfo = null;
   isHost = false;
   userId = 'test-user-id';
@@ -134,17 +128,13 @@ function createMockNetworkControl() {
     showInfo: vi.fn(),
     hideInfo: vi.fn(),
     setRTT: vi.fn(),
+    reportCopyResult: vi.fn(),
   };
 }
 
 function createMockViewer() {
   return {
     setZoom: vi.fn(),
-    setPan: vi.fn(),
-    getPan: vi.fn(() => ({ x: 0, y: 0 })),
-    getChannelMode: vi.fn(() => 'rgb'),
-    setChannelMode: vi.fn(),
-    setOnViewChanged: vi.fn(),
     getColorAdjustments: vi.fn(() => ({
       exposure: 0,
       gamma: 1,
@@ -1183,6 +1173,100 @@ describe('AppNetworkBridge', () => {
   });
 
   // -----------------------------------------------------------------------
+  // roomLeft event handling
+  // -----------------------------------------------------------------------
+  describe('roomLeft event', () => {
+    it('ANB-130: roomLeft event is subscribed to during setup', () => {
+      bridge.setup();
+
+      ctx._networkSyncManager.emit('roomLeft', undefined);
+
+      expect(ctx._networkControl.setConnectionState).toHaveBeenCalledWith('disconnected');
+    });
+
+    it('ANB-131: roomLeft clears room info and users', () => {
+      bridge.setup();
+
+      ctx._networkSyncManager.emit('roomCreated', {
+        roomId: 'r1',
+        roomCode: 'ABCD-1234',
+        hostId: 'h1',
+        users: [{ userId: 'u1', userName: 'Alice', color: '#ff0000' }],
+        createdAt: Date.now(),
+        maxUsers: 10,
+      });
+
+      ctx._networkControl.setConnectionState.mockClear();
+      ctx._networkControl.setIsHost.mockClear();
+      ctx._networkControl.setShareLinkKind.mockClear();
+      ctx._networkControl.setResponseToken.mockClear();
+      ctx._networkControl.setRoomInfo.mockClear();
+      ctx._networkControl.setUsers.mockClear();
+      ctx._networkControl.hideInfo.mockClear();
+
+      ctx._networkSyncManager.emit('roomLeft', undefined);
+
+      expect(ctx._networkControl.setConnectionState).toHaveBeenCalledWith('disconnected');
+      expect(ctx._networkControl.setIsHost).toHaveBeenCalledWith(false);
+      expect(ctx._networkControl.setShareLinkKind).toHaveBeenCalledWith('generic');
+      expect(ctx._networkControl.setResponseToken).toHaveBeenCalledWith('');
+      expect(ctx._networkControl.setRoomInfo).toHaveBeenCalledWith(null);
+      expect(ctx._networkControl.setUsers).toHaveBeenCalledWith([]);
+      expect(ctx._networkControl.hideInfo).toHaveBeenCalled();
+    });
+
+    it('ANB-132: roomLeft clears paintEngine id prefix', () => {
+      bridge.setup();
+
+      ctx._networkSyncManager.emit('roomCreated', {
+        roomId: 'r1',
+        roomCode: 'ABCD-1234',
+        hostId: 'h1',
+        users: [],
+        createdAt: Date.now(),
+        maxUsers: 10,
+      });
+      expect(ctx._paintEngine.idPrefix).toBe('test-user-id');
+
+      ctx._networkSyncManager.emit('roomLeft', undefined);
+
+      expect(ctx._paintEngine.idPrefix).toBe('');
+    });
+
+    it('ANB-133: manual leaveRoom still works independently of roomLeft handler', () => {
+      bridge.setup();
+
+      const leaveRoomCall = (ctx._networkControl.on as ReturnType<typeof vi.fn>).mock.calls.find(
+        (call: unknown[]) => call[0] === 'leaveRoom',
+      );
+      expect(leaveRoomCall).toBeDefined();
+
+      const leaveRoomHandler = leaveRoomCall![1] as unknown as () => void;
+      leaveRoomHandler();
+
+      expect(ctx._networkSyncManager.leaveRoom).toHaveBeenCalled();
+      expect(ctx._networkControl.setConnectionState).toHaveBeenCalledWith('disconnected');
+      expect(ctx._networkControl.setRoomInfo).toHaveBeenCalledWith(null);
+      expect(ctx._networkControl.setUsers).toHaveBeenCalledWith([]);
+    });
+
+    it('ANB-134: roomLeft after dispose does not call networkControl methods', () => {
+      bridge.setup();
+      bridge.dispose();
+
+      ctx._networkControl.setConnectionState.mockClear();
+      ctx._networkControl.setRoomInfo.mockClear();
+      ctx._networkControl.setUsers.mockClear();
+
+      ctx._networkSyncManager.emit('roomLeft', undefined);
+
+      expect(ctx._networkControl.setConnectionState).not.toHaveBeenCalled();
+      expect(ctx._networkControl.setRoomInfo).not.toHaveBeenCalled();
+      expect(ctx._networkControl.setUsers).not.toHaveBeenCalled();
+    });
+  });
+
+  // -----------------------------------------------------------------------
   // Annotations/notes in full state sync
   // -----------------------------------------------------------------------
   describe('annotations/notes in state sync', () => {
@@ -1361,7 +1445,7 @@ describe('AppNetworkBridge', () => {
       });
 
       const notes = [
-        { id: 'n1', sourceIndex: 0, frameStart: 1, frameEnd: 5, text: 'synced note', author: 'peer', status: 'open', createdAt: '2026-01-01T00:00:00Z', modifiedAt: '2026-01-01T00:00:00Z', parentId: null, color: '#fbbf24' },
+        { id: 'n1', sourceIndex: 0, frameStart: 1, frameEnd: 5, text: 'synced note', author: 'peer', status: 'open' },
       ];
 
       ctx._networkSyncManager.emit('sessionStateReceived', {
@@ -1382,828 +1466,79 @@ describe('AppNetworkBridge', () => {
   });
 
   // -----------------------------------------------------------------------
-  // Color adjustments in initial state transfer
+  // copyLink / clipboard reporting
   // -----------------------------------------------------------------------
-  describe('color adjustments in initial state transfer', () => {
-    it('ANB-126: sessionStateRequested sends color adjustments via sendColorSync', async () => {
-      bridge.setup();
-      ctx._networkSyncManager.isHost = true;
+  describe('copyLink clipboard reporting', () => {
+    /** Extract the handler registered for a given event name on the mock control. */
+    function getCopyLinkHandler(): ((baseLink: string) => Promise<void>) | undefined {
+      const calls = ctx._networkControl.on.mock.calls as unknown as Array<[string, (...args: any[]) => any]>;
+      const match = calls.find(([event]) => event === 'copyLink');
+      return match?.[1] as ((baseLink: string) => Promise<void>) | undefined;
+    }
 
-      ctx._networkSyncManager.emit('sessionStateRequested', {
-        requestId: 'req-1',
-        requesterUserId: 'user-2',
+    it('ANB-130: successful clipboard write calls reportCopyResult(true)', async () => {
+      // Provide clipboard mock
+      Object.assign(navigator, {
+        clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
       });
-
-      await vi.waitFor(() => {
-        expect(ctx._networkSyncManager.sendSessionStateResponse).toHaveBeenCalled();
-      });
-
-      expect(ctx._networkSyncManager.sendColorSync).toHaveBeenCalledTimes(1);
-      expect(ctx._networkSyncManager.sendColorSync).toHaveBeenCalledWith({
-        exposure: 0,
-        gamma: 1,
-        saturation: 1,
-        contrast: 1,
-        temperature: 0,
-        tint: 0,
-        brightness: 0,
-      });
-    });
-
-    it('ANB-127: sessionStateRequested sends current viewer color state, not defaults', async () => {
-      bridge.setup();
-      ctx._networkSyncManager.isHost = true;
-
-      // Simulate the host having non-default color adjustments
-      ctx._viewer.getColorAdjustments.mockReturnValue({
-        exposure: 1.5,
-        gamma: 2.2,
-        saturation: 0.8,
-        vibrance: 0,
-        vibranceSkinProtection: false,
-        contrast: 1.3,
-        clarity: 0,
-        hueRotation: 0,
-        temperature: -500,
-        tint: 10,
-        brightness: 0.2,
-        highlights: 0,
-        shadows: 0,
-        whites: 0,
-        blacks: 0,
-      });
-
-      ctx._networkSyncManager.emit('sessionStateRequested', {
-        requestId: 'req-2',
-        requesterUserId: 'user-3',
-      });
-
-      await vi.waitFor(() => {
-        expect(ctx._networkSyncManager.sendSessionStateResponse).toHaveBeenCalled();
-      });
-
-      expect(ctx._networkSyncManager.sendColorSync).toHaveBeenCalledTimes(1);
-      expect(ctx._networkSyncManager.sendColorSync).toHaveBeenCalledWith({
-        exposure: 1.5,
-        gamma: 2.2,
-        saturation: 0.8,
-        contrast: 1.3,
-        temperature: -500,
-        tint: 10,
-        brightness: 0.2,
-      });
-    });
-
-    it('ANB-128: sessionStateRequested sends color even when no adjustments have changed', async () => {
-      bridge.setup();
-      ctx._networkSyncManager.isHost = true;
-
-      // No adjustmentsChanged events fired — just the initial state request
-      ctx._networkSyncManager.emit('sessionStateRequested', {
-        requestId: 'req-3',
-        requesterUserId: 'user-4',
-      });
-
-      await vi.waitFor(() => {
-        expect(ctx._networkSyncManager.sendSessionStateResponse).toHaveBeenCalled();
-      });
-
-      // Color sync should still be sent even though no adjustments event occurred
-      expect(ctx._networkSyncManager.sendColorSync).toHaveBeenCalledTimes(1);
-    });
-
-    it('ANB-129: sessionStateRequested sends color sync in encrypted path', async () => {
-      // Give networkControl a getPinCode returning a valid PIN
-      (ctx._networkControl as any).getPinCode = vi.fn(() => '1234');
-
-      const fakeEncrypted = {
-        version: 1 as const,
-        algorithm: 'AES-GCM' as const,
-        salt: 'fakesalt',
-        iv: 'fakeiv',
-        ciphertext: 'fakeciphertext',
-      };
-
-      // Stub encryptSessionStateWithPin to return a canned value
-      const encryptSpy = vi
-        .spyOn(PinEncryption, 'encryptSessionStateWithPin')
-        .mockResolvedValue(fakeEncrypted);
 
       bridge.setup();
-      ctx._networkSyncManager.isHost = true;
+      const handler = getCopyLinkHandler();
+      expect(handler).toBeDefined();
 
-      ctx._networkSyncManager.emit('sessionStateRequested', {
-        requestId: 'req-enc',
-        requesterUserId: 'user-enc',
-      });
+      await handler!('http://localhost/?room=ROOM');
 
-      await vi.waitFor(() => {
-        expect(ctx._networkSyncManager.sendSessionStateResponse).toHaveBeenCalled();
-      });
-
-      // Encryption path was used
-      expect(encryptSpy).toHaveBeenCalled();
-      expect(ctx._networkSyncManager.sendSessionStateResponse).toHaveBeenCalledWith(
-        'req-enc',
-        'user-enc',
-        expect.objectContaining({ encryptedSessionState: fakeEncrypted }),
-      );
-
-      // Color sync still fires after the encrypted response
-      expect(ctx._networkSyncManager.sendColorSync).toHaveBeenCalledTimes(1);
-
-      encryptSpy.mockRestore();
+      expect(ctx._networkControl.reportCopyResult).toHaveBeenCalledWith(true);
+      expect(ctx._networkControl.showError).not.toHaveBeenCalled();
     });
 
-    it('ANB-129b: sessionStateRequested skips color sync when encryption fails', async () => {
-      (ctx._networkControl as any).getPinCode = vi.fn(() => '5678');
-
-      const encryptSpy = vi
-        .spyOn(PinEncryption, 'encryptSessionStateWithPin')
-        .mockRejectedValue(new Error('crypto failure'));
-
-      bridge.setup();
-      ctx._networkSyncManager.isHost = true;
-
-      ctx._networkSyncManager.emit('sessionStateRequested', {
-        requestId: 'req-fail',
-        requesterUserId: 'user-fail',
-      });
-
-      await vi.waitFor(() => {
-        expect(ctx._networkControl.showError).toHaveBeenCalled();
-      });
-
-      // Session state response should NOT have been sent
-      expect(ctx._networkSyncManager.sendSessionStateResponse).not.toHaveBeenCalled();
-
-      // Color sync should NOT be sent when encryption failed
-      expect(ctx._networkSyncManager.sendColorSync).not.toHaveBeenCalled();
-
-      encryptSpy.mockRestore();
-    });
-  });
-
-  // -----------------------------------------------------------------------
-  // View sync
-  // -----------------------------------------------------------------------
-  describe('view sync', () => {
-    it('ANB-130: incoming syncView applies zoom, pan, and channelMode', () => {
-      bridge.setup();
-
-      ctx._networkSyncManager.emit('syncView', {
-        panX: 100,
-        panY: -50,
-        zoom: 2.5,
-        channelMode: 'red',
-      });
-
-      expect(ctx._viewer.setZoom).toHaveBeenCalledWith(2.5);
-      expect(ctx._viewer.setPan).toHaveBeenCalledWith(100, -50);
-      expect(ctx._viewer.setChannelMode).toHaveBeenCalledWith('red');
-    });
-
-    it('ANB-131: incoming syncView wraps changes in beginApplyRemote/endApplyRemote', () => {
-      bridge.setup();
-
-      const sm = ctx._networkSyncManager.getSyncStateManager();
-
-      ctx._networkSyncManager.emit('syncView', {
-        panX: 0,
-        panY: 0,
-        zoom: 1,
-        channelMode: 'rgb',
-      });
-
-      expect(sm.beginApplyRemote).toHaveBeenCalled();
-      expect(sm.endApplyRemote).toHaveBeenCalled();
-    });
-
-    it('ANB-132: local view change triggers sendViewSync', () => {
-      bridge.setup();
-
-      // Capture the callback registered via setOnViewChanged
-      const viewChangedCallback = ctx._viewer.setOnViewChanged.mock.calls[0]?.[0];
-      expect(viewChangedCallback).toBeDefined();
-
-      // Simulate a local view change
-      viewChangedCallback(10, -20, 3.0);
-
-      expect(ctx._networkSyncManager.sendViewSync).toHaveBeenCalledTimes(1);
-      expect(ctx._networkSyncManager.sendViewSync).toHaveBeenCalledWith(
-        expect.objectContaining({
-          panX: 10,
-          panY: -20,
-          zoom: 3.0,
-          channelMode: 'rgb',
-        }),
-      );
-    });
-
-    it('ANB-133: outgoing view sync skipped during remote apply', () => {
-      bridge.setup();
-
-      const sm = ctx._networkSyncManager.getSyncStateManager();
-      sm.isApplyingRemoteState = true;
-
-      const viewChangedCallback = ctx._viewer.setOnViewChanged.mock.calls[0]?.[0];
-      viewChangedCallback(10, -20, 3.0);
-
-      expect(ctx._networkSyncManager.sendViewSync).not.toHaveBeenCalled();
-
-      sm.isApplyingRemoteState = false;
-    });
-
-    it('ANB-134: outgoing view sync skipped when not connected', () => {
-      bridge.setup();
-
-      ctx._networkSyncManager.isConnected = false;
-
-      const viewChangedCallback = ctx._viewer.setOnViewChanged.mock.calls[0]?.[0];
-      viewChangedCallback(10, -20, 3.0);
-
-      expect(ctx._networkSyncManager.sendViewSync).not.toHaveBeenCalled();
-
-      ctx._networkSyncManager.isConnected = true;
-    });
-
-    it('ANB-136: incoming syncView without channelMode skips setChannelMode', () => {
-      bridge.setup();
-
-      ctx._networkSyncManager.emit('syncView', {
-        panX: 50,
-        panY: -25,
-        zoom: 1.5,
-        // channelMode intentionally omitted
-      });
-
-      expect(ctx._viewer.setZoom).toHaveBeenCalledWith(1.5);
-      expect(ctx._viewer.setPan).toHaveBeenCalledWith(50, -25);
-      expect(ctx._viewer.setChannelMode).not.toHaveBeenCalled();
-    });
-
-    it('ANB-137: incoming syncView with zero pan/zoom values applies correctly', () => {
-      bridge.setup();
-
-      ctx._networkSyncManager.emit('syncView', {
-        panX: 0,
-        panY: 0,
-        zoom: 0,
-        channelMode: 'rgb',
-      });
-
-      expect(ctx._viewer.setZoom).toHaveBeenCalledWith(0);
-      expect(ctx._viewer.setPan).toHaveBeenCalledWith(0, 0);
-      expect(ctx._viewer.setChannelMode).toHaveBeenCalledWith('rgb');
-    });
-
-    it('ANB-138: incoming syncView calls endApplyRemote even if setZoom throws', () => {
-      bridge.setup();
-
-      const sm = ctx._networkSyncManager.getSyncStateManager();
-      ctx._viewer.setZoom.mockImplementationOnce(() => {
-        throw new Error('zoom error');
-      });
-
-      // The EventEmitter may swallow the error, but endApplyRemote
-      // must still be called thanks to the try/finally block.
-      try {
-        ctx._networkSyncManager.emit('syncView', {
-          panX: 0,
-          panY: 0,
-          zoom: 1,
-          channelMode: 'rgb',
-        });
-      } catch {
-        // Error may or may not propagate depending on EventEmitter implementation
-      }
-
-      // endApplyRemote must still be called (try/finally)
-      expect(sm.endApplyRemote).toHaveBeenCalled();
-    });
-
-    it('ANB-135: dispose clears the view changed callback', () => {
-      bridge.setup();
-      bridge.dispose();
-
-      // setOnViewChanged should have been called twice: once during setup, once with null during dispose
-      expect(ctx._viewer.setOnViewChanged).toHaveBeenCalledTimes(2);
-      expect(ctx._viewer.setOnViewChanged).toHaveBeenLastCalledWith(null);
-    });
-  });
-
-  // -----------------------------------------------------------------------
-  // Throttled view sync
-  // -----------------------------------------------------------------------
-  describe('throttled view sync', () => {
-    beforeEach(() => {
-      vi.useFakeTimers();
-    });
-
-    afterEach(() => {
-      vi.useRealTimers();
-    });
-
-    it('ANB-140: rapid view changes are throttled', () => {
-      bridge.setup();
-
-      const viewChangedCallback = ctx._viewer.setOnViewChanged.mock.calls[0]?.[0];
-
-      // First call fires immediately (leading edge)
-      viewChangedCallback(10, -20, 2.0);
-      expect(ctx._networkSyncManager.sendViewSync).toHaveBeenCalledTimes(1);
-
-      // Second call within interval is batched
-      viewChangedCallback(20, -40, 3.0);
-      expect(ctx._networkSyncManager.sendViewSync).toHaveBeenCalledTimes(1);
-
-      // After interval, trailing fires
-      vi.advanceTimersByTime(100);
-      expect(ctx._networkSyncManager.sendViewSync).toHaveBeenCalledTimes(2);
-      expect(ctx._networkSyncManager.sendViewSync).toHaveBeenLastCalledWith(
-        expect.objectContaining({ panX: 20, panY: -40, zoom: 3.0 }),
-      );
-    });
-
-    it('ANB-141: dispose cancels pending throttled view sync', () => {
-      bridge.setup();
-
-      const viewChangedCallback = ctx._viewer.setOnViewChanged.mock.calls[0]?.[0];
-
-      viewChangedCallback(10, -20, 2.0);
-      viewChangedCallback(20, -40, 3.0);
-
-      bridge.dispose();
-      vi.advanceTimersByTime(200);
-
-      // Only the leading call should have fired, not the trailing
-      expect(ctx._networkSyncManager.sendViewSync).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  // -----------------------------------------------------------------------
-  // sourceUrl consumption in network bridge (Issue #149)
-  // -----------------------------------------------------------------------
-
-  describe('sourceUrl consumption via network bridge', () => {
-    it('ANB-150: applyCapturedSessionURLState loads from sourceUrl when session is empty', async () => {
-      const loadSourceFromUrl = vi.fn().mockResolvedValue(undefined);
-      ctx._session.sourceCount = 0;
-      (ctx._session as any).loadSourceFromUrl = loadSourceFromUrl;
-
-      bridge = new AppNetworkBridge({
-        session: ctx.session,
-        viewer: ctx.viewer,
-        paintEngine: ctx.paintEngine,
-        colorControls: ctx.colorControls,
-        networkSyncManager: ctx.networkSyncManager,
-        networkControl: ctx.networkControl,
-        headerBar: ctx.headerBar,
-      });
-      bridge.setup();
-
-      const state = encodeSessionState({
-        frame: 10,
-        fps: 24,
-        sourceIndex: 0,
-        sourceUrl: 'https://example.com/review.exr',
-      });
-
-      ctx._networkSyncManager.emit('sessionStateReceived', {
-        sessionState: state,
-        senderUserId: 'host',
-      });
-
-      // Allow async handlers to resolve
-      await vi.waitFor(() => {
-        expect(loadSourceFromUrl).toHaveBeenCalledWith('https://example.com/review.exr');
-      });
-    });
-
-    it('ANB-151: applyCapturedSessionURLState skips sourceUrl when session has media', async () => {
-      const loadSourceFromUrl = vi.fn().mockResolvedValue(undefined);
-      ctx._session.sourceCount = 2;
-      (ctx._session as any).loadSourceFromUrl = loadSourceFromUrl;
-
-      bridge = new AppNetworkBridge({
-        session: ctx.session,
-        viewer: ctx.viewer,
-        paintEngine: ctx.paintEngine,
-        colorControls: ctx.colorControls,
-        networkSyncManager: ctx.networkSyncManager,
-        networkControl: ctx.networkControl,
-        headerBar: ctx.headerBar,
-      });
-      bridge.setup();
-
-      const state = encodeSessionState({
-        frame: 10,
-        fps: 24,
-        sourceIndex: 0,
-        sourceUrl: 'https://example.com/review.exr',
-      });
-
-      ctx._networkSyncManager.emit('sessionStateReceived', {
-        sessionState: state,
-        senderUserId: 'host',
-      });
-
-      // Allow async handlers to resolve
-      await new Promise((r) => setTimeout(r, 10));
-
-      expect(loadSourceFromUrl).not.toHaveBeenCalled();
-    });
-
-    it('ANB-152: applyCapturedSessionURLState handles sourceUrl load failure gracefully', async () => {
-      const loadSourceFromUrl = vi.fn().mockRejectedValue(new Error('404 not found'));
-      ctx._session.sourceCount = 0;
-      (ctx._session as any).loadSourceFromUrl = loadSourceFromUrl;
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-      bridge = new AppNetworkBridge({
-        session: ctx.session,
-        viewer: ctx.viewer,
-        paintEngine: ctx.paintEngine,
-        colorControls: ctx.colorControls,
-        networkSyncManager: ctx.networkSyncManager,
-        networkControl: ctx.networkControl,
-        headerBar: ctx.headerBar,
-      });
-      bridge.setup();
-
-      const state = encodeSessionState({
-        frame: 10,
-        fps: 24,
-        sourceIndex: 0,
-        sourceUrl: 'https://example.com/missing.exr',
-      });
-
-      ctx._networkSyncManager.emit('sessionStateReceived', {
-        sessionState: state,
-        senderUserId: 'host',
-      });
-
-      // Allow async handlers to resolve
-      await vi.waitFor(() => {
-        expect(warnSpy).toHaveBeenCalled();
-      });
-
-      // View state should still be applied
-      expect(ctx._session.goToFrame).toHaveBeenCalledWith(10);
-
-      warnSpy.mockRestore();
-    });
-
-    it('ANB-153: applyCapturedSessionURLState skips when sourceUrl is missing', async () => {
-      const loadSourceFromUrl = vi.fn().mockResolvedValue(undefined);
-      ctx._session.sourceCount = 0;
-      (ctx._session as any).loadSourceFromUrl = loadSourceFromUrl;
-
-      bridge = new AppNetworkBridge({
-        session: ctx.session,
-        viewer: ctx.viewer,
-        paintEngine: ctx.paintEngine,
-        colorControls: ctx.colorControls,
-        networkSyncManager: ctx.networkSyncManager,
-        networkControl: ctx.networkControl,
-        headerBar: ctx.headerBar,
-      });
-      bridge.setup();
-
-      const state = encodeSessionState({
-        frame: 10,
-        fps: 24,
-        sourceIndex: 0,
-        // No sourceUrl
-      });
-
-      ctx._networkSyncManager.emit('sessionStateReceived', {
-        sessionState: state,
-        senderUserId: 'host',
-      });
-
-      // Allow async handlers to resolve
-      await new Promise((r) => setTimeout(r, 10));
-
-      expect(loadSourceFromUrl).not.toHaveBeenCalled();
-    });
-
-    it('ANB-154: applySessionURLState callback path also consumes sourceUrl', async () => {
-      const loadSourceFromUrl = vi.fn().mockResolvedValue(undefined);
-      const applySessionURLState = vi.fn();
-      ctx._session.sourceCount = 0;
-      (ctx._session as any).loadSourceFromUrl = loadSourceFromUrl;
-
-      bridge = new AppNetworkBridge({
-        session: ctx.session,
-        viewer: ctx.viewer,
-        paintEngine: ctx.paintEngine,
-        colorControls: ctx.colorControls,
-        networkSyncManager: ctx.networkSyncManager,
-        networkControl: ctx.networkControl,
-        headerBar: ctx.headerBar,
-        applySessionURLState,
-      });
-      bridge.setup();
-
-      const state = encodeSessionState({
-        frame: 10,
-        fps: 24,
-        sourceIndex: 0,
-        sourceUrl: 'https://example.com/review.exr',
-      });
-
-      ctx._networkSyncManager.emit('sessionStateReceived', {
-        sessionState: state,
-        senderUserId: 'host',
-      });
-
-      // When applySessionURLState callback is provided, it is used instead
-      await vi.waitFor(() => {
-        expect(applySessionURLState).toHaveBeenCalled();
-      });
-
-      // The loadSourceFromUrl should NOT be called by the bridge directly
-      // because the callback path is used (the callback is responsible for loading)
-      expect(loadSourceFromUrl).not.toHaveBeenCalled();
-    });
-  });
-
-  // -----------------------------------------------------------------------
-  // Issue #186 & #187 regressions
-  // -----------------------------------------------------------------------
-  describe('media sync join flow (#186 / #187)', () => {
-    it('ANB-186a: media sync is requested even when guest has existing sources', async () => {
-      ctx._session.sourceCount = 2; // guest already has media
-      ctx._networkSyncManager.requestMediaSync.mockReturnValue('transfer-1');
-
-      bridge.setup();
-
-      const state = encodeSessionState({
-        frame: 5,
-        fps: 24,
-        sourceIndex: 1,
-      });
-
-      ctx._networkSyncManager.emit('sessionStateReceived', {
-        sessionState: state,
-        senderUserId: 'host-user',
-      });
-
-      await new Promise((r) => setTimeout(r, 10));
-
-      expect(ctx._networkSyncManager.requestMediaSync).toHaveBeenCalledWith('host-user');
-    });
-
-    it('ANB-187a: host state is NOT applied when media transfer is declined', async () => {
-      ctx._session.sourceCount = 0;
-      ctx._networkSyncManager.requestMediaSync.mockReturnValue('transfer-decline');
-
-      bridge.setup();
-
-      const state = encodeSessionState({
-        frame: 42,
-        fps: 30,
-        sourceIndex: 0,
-      });
-
-      ctx._networkSyncManager.emit('sessionStateReceived', {
-        sessionState: state,
-        senderUserId: 'host-user',
-      });
-
-      await new Promise((r) => setTimeout(r, 10));
-
-      // State should NOT have been applied yet (deferred until media transfer completes)
-      expect(ctx._session.goToFrame).not.toHaveBeenCalled();
-
-      // Simulate the offer arriving and guest declining
-      ctx._networkSyncManager.emit('mediaSyncOffered', {
-        transferId: 'transfer-decline',
-        senderUserId: 'host-user',
-        totalBytes: 1000,
-        files: [{ id: 'f1', name: 'test.exr', type: 'image/x-exr', size: 1000, lastModified: 1 }],
-        sources: [{ kind: 'image', fileIds: ['f1'], fps: 24 }],
-      });
-
-      // The confirm dialog — mock showConfirm to decline
-      const showConfirmModule = await import('./ui/components/shared/Modal');
-      vi.spyOn(showConfirmModule, 'showConfirm').mockResolvedValue(false);
-
-      // Re-emit after the mock is in place
-      ctx._session.goToFrame.mockClear();
-      ctx._networkSyncManager.emit('mediaSyncOffered', {
-        transferId: 'transfer-decline',
-        senderUserId: 'host-user',
-        totalBytes: 1000,
-        files: [{ id: 'f1', name: 'test.exr', type: 'image/x-exr', size: 1000, lastModified: 1 }],
-        sources: [{ kind: 'image', fileIds: ['f1'], fps: 24 }],
-      });
-
-      await new Promise((r) => setTimeout(r, 50));
-
-      // State should NOT be applied after decline
-      expect(ctx._session.goToFrame).not.toHaveBeenCalled();
-    });
-
-    it('ANB-187b: host state is NOT applied when media import fails', async () => {
-      ctx._session.sourceCount = 0;
-      ctx._networkSyncManager.requestMediaSync.mockReturnValue('transfer-fail');
-
-      bridge.setup();
-
-      const state = encodeSessionState({
-        frame: 99,
-        fps: 24,
-        sourceIndex: 0,
-      });
-
-      ctx._networkSyncManager.emit('sessionStateReceived', {
-        sessionState: state,
-        senderUserId: 'host-user',
-      });
-
-      await new Promise((r) => setTimeout(r, 10));
-
-      // State should NOT have been applied yet
-      expect(ctx._session.goToFrame).not.toHaveBeenCalled();
-
-      // Simulate mediaSyncCompleted with an incomplete transfer that will throw
-      // (no files set up, so importIncomingMediaTransfer will fail)
-      const incompleteFiles = new Map();
-      incompleteFiles.set('f1', {
-        descriptor: { id: 'f1', name: 'test.exr', type: 'image/x-exr', size: 100, lastModified: 1 },
-        chunks: new Map(),
-        totalChunks: 1, // expects 1 chunk but none provided → will throw
-      });
-
-      // Manually set up the incoming transfer map via the bridge's private field
-      (bridge as any).incomingMediaTransfers.set('transfer-fail', {
-        senderUserId: 'host-user',
-        files: incompleteFiles,
-        sources: [{ kind: 'image', fileIds: ['f1'], fps: 24 }],
-        totalBytes: 100,
-      });
-
-      ctx._networkSyncManager.emit('mediaSyncCompleted', {
-        transferId: 'transfer-fail',
-        senderUserId: 'host-user',
-      });
-
-      await new Promise((r) => setTimeout(r, 50));
-
-      // State should NOT be applied after import failure
-      expect(ctx._session.goToFrame).not.toHaveBeenCalled();
-      // Error should be shown
-      expect(ctx._networkControl.showError).toHaveBeenCalled();
-    });
-
-    it('ANB-187c: successful media transfer applies pending state', async () => {
-      ctx._session.sourceCount = 0;
-      ctx._networkSyncManager.requestMediaSync.mockReturnValue('transfer-ok');
-
-      const loadFile = vi.fn().mockResolvedValue(undefined);
-      (ctx._session as any).loadFile = loadFile;
-
-      bridge.setup();
-
-      const state = encodeSessionState({
-        frame: 15,
-        fps: 24,
-        sourceIndex: 0,
-      });
-
-      ctx._networkSyncManager.emit('sessionStateReceived', {
-        sessionState: state,
-        senderUserId: 'host-user',
-      });
-
-      await new Promise((r) => setTimeout(r, 10));
-
-      // State should NOT have been applied yet
-      expect(ctx._session.goToFrame).not.toHaveBeenCalled();
-
-      // Build a valid transfer with proper chunk data
-      const testData = new Uint8Array([1, 2, 3, 4]);
-      let binary = '';
-      for (let i = 0; i < testData.length; i++) {
-        binary += String.fromCharCode(testData[i]!);
-      }
-      const base64Data = btoa(binary);
-
-      const validFiles = new Map();
-      validFiles.set('f1', {
-        descriptor: { id: 'f1', name: 'test.exr', type: 'image/x-exr', size: 4, lastModified: 1 },
-        chunks: new Map([[0, base64Data]]),
-        totalChunks: 1,
-      });
-
-      (bridge as any).incomingMediaTransfers.set('transfer-ok', {
-        senderUserId: 'host-user',
-        files: validFiles,
-        sources: [{ kind: 'image', fileIds: ['f1'], fps: 24 }],
-        totalBytes: 4,
-      });
-
-      ctx._networkSyncManager.emit('mediaSyncCompleted', {
-        transferId: 'transfer-ok',
-        senderUserId: 'host-user',
-      });
-
-      await vi.waitFor(() => {
-        expect(loadFile).toHaveBeenCalled();
-      });
-
-      // State should be applied after successful import
-      await vi.waitFor(() => {
-        expect(ctx._session.goToFrame).toHaveBeenCalledWith(15);
-      });
-    });
-
-    it('ANB-186b: shouldRequestMediaSync returns true regardless of guest sourceCount', async () => {
-      // Access the private method for direct verification
-      const bridge2 = new AppNetworkBridge({
-        session: ctx.session,
-        viewer: ctx.viewer,
-        paintEngine: ctx.paintEngine,
-        colorControls: ctx.colorControls,
-        networkSyncManager: ctx.networkSyncManager,
-        networkControl: ctx.networkControl,
-        headerBar: ctx.headerBar,
-      });
-
-      // With sourceCount = 0 and sourceIndex >= 0
-      ctx._session.sourceCount = 0;
-      expect((bridge2 as any).shouldRequestMediaSync({ sourceIndex: 0 })).toBe(true);
-
-      // With sourceCount > 0 and sourceIndex >= 0
-      ctx._session.sourceCount = 3;
-      expect((bridge2 as any).shouldRequestMediaSync({ sourceIndex: 1 })).toBe(true);
-
-      // With sourceIndex < 0 (host has no media)
-      expect((bridge2 as any).shouldRequestMediaSync({ sourceIndex: -1 })).toBe(false);
-    });
-
-    it('ANB-187d: pending annotations and notes are not applied on decline', async () => {
-      ctx._session.sourceCount = 0;
-      ctx._networkSyncManager.requestMediaSync.mockReturnValue('transfer-ann');
-      const loadSpy = vi.spyOn(ctx._paintEngine, 'loadFromAnnotations');
-
-      bridge.setup();
-
-      const state = encodeSessionState({ frame: 1, fps: 24, sourceIndex: 0 });
-
-      const annotations = [
-        {
-          type: 'pen',
-          id: 'a1',
-          frame: 1,
-          user: 'host',
-          color: [1, 0, 0, 1],
-          width: 2,
-          brush: 0,
-          points: [{ x: 0.5, y: 0.5 }],
-          join: 3,
-          cap: 2,
-          splat: false,
-          mode: 0,
-          startFrame: 1,
-          duration: 0,
+    it('ANB-131: clipboard failure calls reportCopyResult(false, ...) with clipboard message', async () => {
+      Object.assign(navigator, {
+        clipboard: {
+          writeText: vi.fn().mockRejectedValue(new Error('Clipboard write failed')),
         },
-      ];
-
-      ctx._networkSyncManager.emit('sessionStateReceived', {
-        sessionState: state,
-        senderUserId: 'host-user',
-        annotations,
-        notes: [{ id: 'n1', frame: 1, text: 'test', status: 'open', color: 'yellow' }],
       });
 
-      await new Promise((r) => setTimeout(r, 10));
+      bridge.setup();
+      const handler = getCopyLinkHandler();
+      expect(handler).toBeDefined();
 
-      // Annotations should not have been applied yet
-      expect(loadSpy).not.toHaveBeenCalled();
+      await handler!('http://localhost/?room=ROOM');
 
-      // Decline - directly set pendingState for the transfer then call decline path
-      // Simulate decline via mediaSyncOffered
-      const showConfirmModule = await import('./ui/components/shared/Modal');
-      vi.spyOn(showConfirmModule, 'showConfirm').mockResolvedValue(false);
+      expect(ctx._networkControl.reportCopyResult).toHaveBeenCalledWith(
+        false,
+        'Clipboard unavailable. Copy Share URL from the Network Sync panel.',
+      );
+    });
 
-      ctx._networkSyncManager.emit('mediaSyncOffered', {
-        transferId: 'transfer-ann',
-        senderUserId: 'host-user',
-        totalBytes: 100,
-        files: [{ id: 'f1', name: 'test.exr', type: 'image/x-exr', size: 100, lastModified: 1 }],
-        sources: [{ kind: 'image', fileIds: ['f1'], fps: 24 }],
+    it('ANB-132: non-clipboard error calls reportCopyResult(false, ...) with error message', async () => {
+      Object.assign(navigator, {
+        clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
       });
 
-      await new Promise((r) => setTimeout(r, 50));
+      // Make buildShareURL throw by providing a getSessionURLState that throws
+      bridge = new AppNetworkBridge({
+        session: ctx.session,
+        viewer: ctx.viewer,
+        paintEngine: ctx.paintEngine,
+        colorControls: ctx.colorControls,
+        networkSyncManager: ctx.networkSyncManager,
+        networkControl: ctx.networkControl,
+        headerBar: ctx.headerBar,
+        getSessionURLState: () => {
+          throw new Error('State capture boom');
+        },
+      });
+      bridge.setup();
+      const handler = getCopyLinkHandler();
+      expect(handler).toBeDefined();
 
-      // Annotations and notes should NOT have been applied after decline
-      expect(loadSpy).not.toHaveBeenCalled();
-      expect(ctx._session.noteManager.toSerializable()).toEqual([]);
+      await handler!('http://localhost/?room=ROOM');
 
-      loadSpy.mockRestore();
+      expect(ctx._networkControl.reportCopyResult).toHaveBeenCalledWith(
+        false,
+        'Failed to generate share URL: State capture boom',
+      );
     });
   });
 });

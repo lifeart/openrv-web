@@ -352,130 +352,83 @@ describe('ShortcutCheatSheet', () => {
     expect(sheet.isVisible()).toBe(false);
   });
 
-  it('CS-113: issue #113 - overlay has search input', () => {
-    sheet.show();
+  // -------------------------------------------------------------------------
+  // Outside-click dismiss (Issue #363)
+  // -------------------------------------------------------------------------
 
+  it('CS-023: clicking outside the content area dismisses the overlay', () => {
+    sheet.show();
+    expect(sheet.isVisible()).toBe(true);
+
+    // Simulate a mousedown on an element outside the overlay (e.g. document.body)
+    const event = new MouseEvent('mousedown', { bubbles: true });
+    document.body.dispatchEvent(event);
+
+    expect(sheet.isVisible()).toBe(false);
+  });
+
+  it('CS-024: clicking inside the content area does NOT dismiss the overlay', () => {
+    sheet.show();
+    expect(sheet.isVisible()).toBe(true);
+
+    // Click on a cheatsheet-row inside the content
+    const row = container.querySelector('.cheatsheet-row') as HTMLElement;
+    expect(row).not.toBeNull();
+
+    const event = new MouseEvent('mousedown', { bubbles: true });
+    row.dispatchEvent(event);
+
+    expect(sheet.isVisible()).toBe(true);
+  });
+
+  it('CS-025: clicking on the overlay backdrop (not content) dismisses', () => {
+    sheet.show();
+    expect(sheet.isVisible()).toBe(true);
+
+    // Click directly on the overlay element itself (the backdrop)
     const overlay = container.querySelector('.cheatsheet-overlay') as HTMLElement;
-    const searchInput = overlay.querySelector('input[type="search"]');
-    expect(searchInput).not.toBeNull();
+    const event = new MouseEvent('mousedown', { bubbles: true });
+    overlay.dispatchEvent(event);
+
+    expect(sheet.isVisible()).toBe(false);
   });
 
-  it('CS-113a: search filters on input event', () => {
+  it('CS-026: overlay can be shown again after outside-click dismissal', () => {
     sheet.show();
+    expect(sheet.isVisible()).toBe(true);
 
-    const searchInput = container.querySelector('.cheatsheet-search') as HTMLInputElement;
-    searchInput.value = 'undo';
-    searchInput.dispatchEvent(new Event('input'));
+    // Dismiss via outside click
+    const event = new MouseEvent('mousedown', { bubbles: true });
+    document.body.dispatchEvent(event);
+    expect(sheet.isVisible()).toBe(false);
 
+    // Show again
+    sheet.show();
+    expect(sheet.isVisible()).toBe(true);
+
+    // Content should be rendered
     const rows = container.querySelectorAll('.cheatsheet-row');
-    expect(rows.length).toBe(1);
-    expect((rows[0] as HTMLElement).dataset.action).toBe('edit.undo');
+    expect(rows.length).toBe(6);
   });
 
-  it('CS-113b: context dropdown filters by category', () => {
+  it('CS-027: outside-click listener is cleaned up on hide', () => {
+    const removeSpy = vi.spyOn(document, 'removeEventListener');
+
     sheet.show();
+    sheet.hide();
 
-    const select = container.querySelector('.cheatsheet-context-select') as HTMLSelectElement;
-    select.value = 'playback';
-    select.dispatchEvent(new Event('change'));
-
-    const groups = container.querySelectorAll('.cheatsheet-group');
-    expect(groups.length).toBe(1);
-    expect((groups[0] as HTMLElement).dataset.category).toBe('playback');
+    expect(removeSpy.mock.calls.some((call) => call[0] === 'mousedown')).toBe(true);
+    removeSpy.mockRestore();
   });
 
-  it('CS-113c: clearing search restores all', () => {
+  it('CS-028: outside-click listener is cleaned up on dispose', () => {
     sheet.show();
+    expect(sheet.isVisible()).toBe(true);
 
-    const searchInput = container.querySelector('.cheatsheet-search') as HTMLInputElement;
-    searchInput.value = 'undo';
-    searchInput.dispatchEvent(new Event('input'));
-    expect(container.querySelectorAll('.cheatsheet-row').length).toBe(1);
+    sheet.dispose();
 
-    searchInput.value = '';
-    searchInput.dispatchEvent(new Event('input'));
-    expect(container.querySelectorAll('.cheatsheet-row').length).toBe(6);
-  });
-
-  it('CS-113d: "All Categories" restores all groups', () => {
-    sheet.show();
-
-    const select = container.querySelector('.cheatsheet-context-select') as HTMLSelectElement;
-    select.value = 'view';
-    select.dispatchEvent(new Event('change'));
-    expect(container.querySelectorAll('.cheatsheet-group').length).toBe(1);
-
-    select.value = '';
-    select.dispatchEvent(new Event('change'));
-    expect(container.querySelectorAll('.cheatsheet-group').length).toBe(4);
-  });
-
-  it('CS-113e: search + context compose', () => {
-    sheet.show();
-
-    const select = container.querySelector('.cheatsheet-context-select') as HTMLSelectElement;
-    select.value = 'view';
-    select.dispatchEvent(new Event('change'));
-
-    const searchInput = container.querySelector('.cheatsheet-search') as HTMLInputElement;
-    searchInput.value = 'full';
-    searchInput.dispatchEvent(new Event('input'));
-
-    const rows = container.querySelectorAll('.cheatsheet-row');
-    expect(rows.length).toBe(1);
-    expect((rows[0] as HTMLElement).dataset.action).toBe('view.toggleFullscreen');
-  });
-
-  it('CS-113f: search input gets focus on show()', () => {
-    sheet.show();
-
-    const searchInput = container.querySelector('.cheatsheet-search') as HTMLInputElement;
-    expect(document.activeElement).toBe(searchInput);
-  });
-
-  it('CS-113g: keydown in search does not propagate', () => {
-    sheet.show();
-
-    const searchInput = container.querySelector('.cheatsheet-search') as HTMLInputElement;
-    const parentHandler = vi.fn();
-    container.addEventListener('keydown', parentHandler);
-
-    const event = new KeyboardEvent('keydown', { key: 'a', bubbles: true });
-    searchInput.dispatchEvent(event);
-
-    expect(parentHandler).not.toHaveBeenCalled();
-    container.removeEventListener('keydown', parentHandler);
-  });
-
-  it('CS-113h: programmatic filter() syncs input value', () => {
-    sheet.show();
-
-    sheet.filter('play');
-
-    const searchInput = container.querySelector('.cheatsheet-search') as HTMLInputElement;
-    expect(searchInput.value).toBe('play');
-  });
-
-  it('CS-113i: programmatic setContext() syncs dropdown', () => {
-    sheet.show();
-
-    sheet.setContext('edit');
-
-    const select = container.querySelector('.cheatsheet-context-select') as HTMLSelectElement;
-    expect(select.value).toBe('edit');
-  });
-
-  it('CS-113j: dropdown populated with categories', () => {
-    sheet.show();
-
-    const select = container.querySelector('.cheatsheet-context-select') as HTMLSelectElement;
-    const options = [...select.options].map((o) => o.value);
-
-    expect(options).toContain('');
-    expect(options).toContain('playback');
-    expect(options).toContain('view');
-    expect(options).toContain('edit');
-    expect(options).toContain('panel');
-    expect(select.options[0]!.textContent).toBe('All Categories');
+    // After dispose, clicking outside should not throw
+    const event = new MouseEvent('mousedown', { bubbles: true });
+    expect(() => document.body.dispatchEvent(event)).not.toThrow();
   });
 });

@@ -3,25 +3,20 @@
  *
  * Features:
  * - List view with timestamps, names, descriptions
- * - Actions: Preview, Restore, Export, Import, Delete, Rename
+ * - Actions: Preview, Restore, Export, Delete, Rename
  * - Filter/search functionality
  * - Distinct styling for auto-checkpoints vs manual snapshots
  */
 
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { type SnapshotManager, type Snapshot, type SnapshotPreview } from '../../core/session/SnapshotManager';
-import type { SessionState } from '../../core/session/SessionState';
 import { getIconSvg, type IconName } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { showPrompt, showConfirm, showAlert } from './shared/Modal';
 
 export interface SnapshotPanelEvents extends EventMap {
-  /** Emitted when user wants to preview a snapshot */
-  previewRequested: { id: string };
   /** Emitted when user wants to restore a snapshot */
   restoreRequested: { id: string };
-  /** Emitted when user wants to create a new snapshot */
-  createRequested: void;
   /** Emitted when panel visibility changes */
   visibilityChanged: { open: boolean };
   /** Emitted when panel is closed */
@@ -44,6 +39,8 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
   private snapshotSubscription: (() => void) | null = null;
   private isVisible = false;
   private exclusivePanel: ExclusivePanel | null = null;
+  private _disabled = false;
+  private _disabledReason = '';
 
   constructor(snapshotManager: SnapshotManager) {
     super();
@@ -195,60 +192,6 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
       background: var(--bg-tertiary);
     `;
 
-    const createBtn = document.createElement('button');
-    createBtn.textContent = 'Create Snapshot';
-    createBtn.dataset.testid = 'create-snapshot-btn';
-    createBtn.style.cssText = `
-      flex: 1;
-      padding: 8px;
-      border: 1px solid var(--accent-primary);
-      border-radius: 4px;
-      background: transparent;
-      color: var(--accent-primary);
-      font-size: 12px;
-      cursor: pointer;
-      transition: all 0.12s ease;
-    `;
-    createBtn.addEventListener('click', () => this.emit('createRequested', undefined));
-    createBtn.addEventListener('pointerenter', () => {
-      createBtn.style.background = 'rgba(var(--accent-primary-rgb), 0.1)';
-    });
-    createBtn.addEventListener('pointerleave', () => {
-      createBtn.style.background = 'transparent';
-    });
-    applyA11yFocus(createBtn);
-    footer.appendChild(createBtn);
-
-    const importBtn = document.createElement('button');
-    importBtn.textContent = 'Import';
-    importBtn.dataset.testid = 'import-snapshot-btn';
-    importBtn.style.cssText = `
-      padding: 8px;
-      border: 1px solid var(--border-primary);
-      border-radius: 4px;
-      background: transparent;
-      color: var(--text-secondary);
-      font-size: 12px;
-      cursor: pointer;
-      transition: all 0.12s ease;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 4px;
-    `;
-    importBtn.innerHTML = `${getIconSvg('upload', 'sm')}<span>Import</span>`;
-    importBtn.addEventListener('click', () => this.handleImport());
-    importBtn.addEventListener('pointerenter', () => {
-      importBtn.style.background = 'var(--bg-hover)';
-      importBtn.style.borderColor = 'var(--border-hover)';
-    });
-    importBtn.addEventListener('pointerleave', () => {
-      importBtn.style.background = 'transparent';
-      importBtn.style.borderColor = 'var(--border-primary)';
-    });
-    applyA11yFocus(importBtn);
-    footer.appendChild(importBtn);
-
     const clearAllBtn = document.createElement('button');
     clearAllBtn.textContent = 'Clear All';
     clearAllBtn.style.cssText = `
@@ -287,19 +230,6 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
       this.renderList();
     } catch (err) {
       console.error('Failed to load snapshots:', err);
-
-      // Show inline error message in the panel
-      this.listContainer.innerHTML = '';
-      const errorDiv = document.createElement('div');
-      errorDiv.dataset.testid = 'snapshot-load-error';
-      errorDiv.style.cssText = `
-        text-align: center;
-        padding: 24px 16px;
-        color: var(--text-danger, #ef4444);
-        font-size: 12px;
-      `;
-      errorDiv.textContent = 'Failed to load snapshots. Try again.';
-      this.listContainer.appendChild(errorDiv);
     }
   }
 
@@ -333,7 +263,7 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
       emptyState.innerHTML = `
         ${getIconSvg('history', 'lg')}
         <p style="margin-top: 12px;">No snapshots found</p>
-        <p style="margin-top: 4px; font-size: 11px;">Create a snapshot to save your session state (Ctrl+Shift+S)</p>
+        <p style="margin-top: 4px; font-size: 11px;">Create a snapshot to save your session state</p>
       `;
       this.listContainer.appendChild(emptyState);
       return;
@@ -459,11 +389,6 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
       gap: 4px;
       margin-top: 8px;
     `;
-
-    const previewBtn = this.createActionButton('Preview', 'eye', () => {
-      this.handlePreview(snapshot);
-    });
-    actions.appendChild(previewBtn);
 
     const restoreBtn = this.createActionButton('Restore', 'restore', () => {
       this.emit('restoreRequested', { id: snapshot.id });
@@ -601,161 +526,6 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
 
-  private async handlePreview(snapshot: Snapshot): Promise<void> {
-    try {
-      const state = await this.snapshotManager.getSnapshot(snapshot.id);
-      if (!state) {
-        console.warn(`Preview failed: snapshot "${snapshot.id}" not found`);
-        return;
-      }
-      this.showPreviewDetail(snapshot, state);
-      this.emit('previewRequested', { id: snapshot.id });
-    } catch (err) {
-      console.warn('Preview failed:', err);
-    }
-  }
-
-  private showPreviewDetail(snapshot: Snapshot, state: SessionState): void {
-    this.listContainer.innerHTML = '';
-
-    const detail = document.createElement('div');
-    detail.dataset.testid = 'snapshot-preview-detail';
-    detail.style.cssText = 'padding: 8px;';
-
-    // Header with snapshot name
-    const header = document.createElement('div');
-    header.style.cssText = `
-      font-weight: 500;
-      font-size: 14px;
-      color: var(--text-primary);
-      margin-bottom: 12px;
-      padding-bottom: 8px;
-      border-bottom: 1px solid var(--border-primary);
-    `;
-    header.textContent = snapshot.name;
-    detail.appendChild(header);
-
-    // Helper to add a section
-    const addSection = (title: string, items: Array<{ label: string; value: string }>) => {
-      if (items.length === 0) return;
-      const section = document.createElement('div');
-      section.style.cssText = 'margin-bottom: 12px;';
-
-      const sectionTitle = document.createElement('div');
-      sectionTitle.style.cssText = `
-        font-size: 11px;
-        font-weight: 500;
-        color: var(--text-muted);
-        text-transform: uppercase;
-        margin-bottom: 4px;
-      `;
-      sectionTitle.textContent = title;
-      section.appendChild(sectionTitle);
-
-      for (const { label, value } of items) {
-        const row = document.createElement('div');
-        row.style.cssText = `
-          display: flex;
-          justify-content: space-between;
-          font-size: 12px;
-          padding: 2px 0;
-          color: var(--text-secondary);
-        `;
-        const labelEl = document.createElement('span');
-        labelEl.textContent = label;
-        const valueEl = document.createElement('span');
-        valueEl.style.color = 'var(--text-primary)';
-        valueEl.textContent = value;
-        row.appendChild(labelEl);
-        row.appendChild(valueEl);
-        section.appendChild(row);
-      }
-
-      detail.appendChild(section);
-    };
-
-    // Media sources
-    const mediaItems: Array<{ label: string; value: string }> = [];
-    if (state.media) {
-      for (const m of state.media) {
-        mediaItems.push({ label: m.name, value: m.type });
-      }
-    }
-    addSection('Media Sources', mediaItems);
-
-    // Playback state
-    if (state.playback) {
-      const pb = state.playback;
-      addSection('Playback', [
-        { label: 'Frame', value: `${pb.currentFrame}` },
-        { label: 'In/Out', value: `${pb.inPoint} - ${pb.outPoint}` },
-        { label: 'FPS', value: `${pb.fps}` },
-        { label: 'Loop', value: `${pb.loopMode}` },
-      ]);
-    }
-
-    // Color adjustments
-    if (state.color) {
-      const c = state.color;
-      const colorItems: Array<{ label: string; value: string }> = [];
-      if (c.exposure !== 0) colorItems.push({ label: 'Exposure', value: `${c.exposure}` });
-      if (c.brightness !== 0) colorItems.push({ label: 'Brightness', value: `${c.brightness}` });
-      if (c.contrast !== 0) colorItems.push({ label: 'Contrast', value: `${c.contrast}` });
-      if (c.saturation !== 0) colorItems.push({ label: 'Saturation', value: `${c.saturation}` });
-      if (c.gamma !== 1) colorItems.push({ label: 'Gamma', value: `${c.gamma}` });
-      addSection('Color', colorItems);
-    }
-
-    // Annotations count
-    let annotationCount = 0;
-    if (state.paint?.frames) {
-      for (const frameAnnotations of Object.values(state.paint.frames)) {
-        annotationCount += frameAnnotations.length;
-      }
-    }
-    if (annotationCount > 0) {
-      addSection('Annotations', [{ label: 'Count', value: `${annotationCount}` }]);
-    }
-
-    // View state
-    if (state.view) {
-      addSection('View', [
-        { label: 'Zoom', value: `${state.view.zoom}` },
-        { label: 'Pan', value: `${state.view.panX}, ${state.view.panY}` },
-      ]);
-    }
-
-    // Back button
-    const backBtn = document.createElement('button');
-    backBtn.textContent = 'Back';
-    backBtn.dataset.testid = 'preview-back-btn';
-    backBtn.style.cssText = `
-      width: 100%;
-      padding: 8px;
-      margin-top: 8px;
-      border: 1px solid var(--border-primary);
-      border-radius: 4px;
-      background: transparent;
-      color: var(--text-secondary);
-      font-size: 12px;
-      cursor: pointer;
-      transition: all 0.12s ease;
-    `;
-    backBtn.addEventListener('click', () => this.renderList());
-    backBtn.addEventListener('pointerenter', () => {
-      backBtn.style.background = 'var(--bg-hover)';
-      backBtn.style.borderColor = 'var(--border-hover)';
-    });
-    backBtn.addEventListener('pointerleave', () => {
-      backBtn.style.background = 'transparent';
-      backBtn.style.borderColor = 'var(--border-primary)';
-    });
-    applyA11yFocus(backBtn);
-    detail.appendChild(backBtn);
-
-    this.listContainer.appendChild(detail);
-  }
-
   private async handleRename(snapshot: Snapshot): Promise<void> {
     const newName = await showPrompt('Enter new name:', {
       title: 'Rename Snapshot',
@@ -793,39 +563,6 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
       console.error('Failed to export snapshot:', err);
       await showAlert('Failed to export snapshot', { type: 'error', title: 'Export Error' });
     }
-  }
-
-  private async handleImport(): Promise<void> {
-    const fileInput = document.createElement('input');
-    fileInput.type = 'file';
-    fileInput.accept = '.json,application/json';
-    fileInput.style.display = 'none';
-    fileInput.dataset.testid = 'import-snapshot-file-input';
-    document.body.appendChild(fileInput);
-
-    fileInput.addEventListener('change', async () => {
-      try {
-        const file = fileInput.files?.[0];
-        if (!file) return;
-
-        const json = await file.text();
-        await this.snapshotManager.importSnapshot(json);
-        await this.loadSnapshots();
-      } catch (err) {
-        console.error('Failed to import snapshot:', err);
-        const message = err instanceof Error ? err.message : 'Unknown error';
-        await showAlert(`Failed to import snapshot: ${message}`, { type: 'error', title: 'Import Error' });
-      } finally {
-        document.body.removeChild(fileInput);
-      }
-    });
-
-    // Handle case where user cancels the file picker
-    fileInput.addEventListener('cancel', () => {
-      document.body.removeChild(fileInput);
-    });
-
-    fileInput.click();
   }
 
   private async handleDelete(snapshot: Snapshot): Promise<void> {
@@ -867,6 +604,38 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
     this.exclusivePanel = panel;
   }
 
+  /**
+   * Disable the panel with an error message.
+   * When disabled, show() renders the error state instead of the snapshot list.
+   */
+  setDisabled(reason: string): void {
+    this._disabled = true;
+    this._disabledReason = reason;
+  }
+
+  /** Whether the panel is in a disabled/error state */
+  isDisabled(): boolean {
+    return this._disabled;
+  }
+
+  private renderDisabledState(): void {
+    this.listContainer.innerHTML = '';
+    const errorState = document.createElement('div');
+    errorState.dataset.testid = 'snapshot-panel-disabled';
+    errorState.style.cssText = `
+      text-align: center;
+      padding: 32px 16px;
+      color: var(--text-warning, #f0ad4e);
+      font-size: 12px;
+    `;
+    errorState.innerHTML = `
+      ${getIconSvg('warning', 'lg')}
+      <p style="margin-top: 12px; font-weight: 500;">Snapshots Unavailable</p>
+      <p style="margin-top: 4px; font-size: 11px; color: var(--text-muted);">${this._disabledReason}</p>
+    `;
+    this.listContainer.appendChild(errorState);
+  }
+
   show(): void {
     // Close the exclusive panel if it is open
     if (this.exclusivePanel?.isOpen()) {
@@ -878,7 +647,11 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
     this.container.style.display = 'flex';
     this.isVisible = true;
     this.emit('visibilityChanged', { open: true });
-    this.loadSnapshots();
+    if (this._disabled) {
+      this.renderDisabledState();
+    } else {
+      this.loadSnapshots();
+    }
   }
 
   hide(): void {

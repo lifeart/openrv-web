@@ -76,8 +76,18 @@ export class EXRWindowOverlay extends CanvasOverlay<EXRWindowOverlayEvents> {
   setWindows(dataWindow: EXRBox2i, displayWindow: EXRBox2i): void {
     this.dataWindow = { ...dataWindow };
     this.displayWindow = { ...displayWindow };
+
+    // Auto-enable when windows differ, auto-disable when they match
+    const mismatched =
+      dataWindow.xMin !== displayWindow.xMin ||
+      dataWindow.yMin !== displayWindow.yMin ||
+      dataWindow.xMax !== displayWindow.xMax ||
+      dataWindow.yMax !== displayWindow.yMax;
+    this.state = { ...this.state, enabled: mismatched };
+
     this.updateCanvasDisplay();
     this.render();
+    this.emit('stateChanged', { ...this.state });
   }
 
   /**
@@ -86,8 +96,10 @@ export class EXRWindowOverlay extends CanvasOverlay<EXRWindowOverlayEvents> {
   clearWindows(): void {
     this.dataWindow = null;
     this.displayWindow = null;
+    this.state = { ...this.state, enabled: false };
     this.updateCanvasDisplay();
     this.render();
+    this.emit('stateChanged', { ...this.state });
   }
 
   /**
@@ -120,18 +132,7 @@ export class EXRWindowOverlay extends CanvasOverlay<EXRWindowOverlayEvents> {
   }
 
   setState(partial: Partial<EXRWindowOverlayState>): void {
-    const nextState = { ...partial };
-    if (typeof nextState.lineWidth === 'number') {
-      nextState.lineWidth = Math.max(1, Math.min(12, nextState.lineWidth));
-    }
-    if (nextState.dashPattern) {
-      nextState.dashPattern = [
-        Math.max(1, Math.min(32, nextState.dashPattern[0])),
-        Math.max(0, Math.min(32, nextState.dashPattern[1])),
-      ];
-    }
-
-    this.state = { ...this.state, ...nextState };
+    this.state = { ...this.state, ...partial };
     this.updateCanvasDisplay();
     this.render();
     this.emit('stateChanged', { ...this.state });
@@ -175,18 +176,6 @@ export class EXRWindowOverlay extends CanvasOverlay<EXRWindowOverlayEvents> {
 
   setDisplayWindowColor(color: string): void {
     this.setState({ displayWindowColor: color });
-  }
-
-  setLineWidth(lineWidth: number): void {
-    this.setState({ lineWidth });
-  }
-
-  setDashPattern(dashPattern: [number, number]): void {
-    this.setState({ dashPattern });
-  }
-
-  setShowLabels(show: boolean): void {
-    this.setState({ showLabels: show });
   }
 
   // -------------------------------------------------------------------------

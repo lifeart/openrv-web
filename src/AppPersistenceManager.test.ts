@@ -75,7 +75,6 @@ function createMockContext(): PersistenceManagerContext & {
       loadFile: vi.fn(async () => {}),
       loadFromGTO: vi.fn(async () => {}),
       loadEDL: vi.fn(() => []),
-      clearSources: vi.fn(),
     } as any,
     viewer: {
       getColorAdjustments: vi.fn(() => ({})),
@@ -86,95 +85,7 @@ function createMockContext(): PersistenceManagerContext & {
       getCropState: vi.fn(() => null),
       getChannelMode: vi.fn(() => 'rgb'),
       getStereoState: vi.fn(() => null),
-      getStereoEyeTransforms: vi.fn(() => ({
-        left: { flipH: false, flipV: false, rotation: 0, scale: 1, translateX: 0, translateY: 0 },
-        right: { flipH: false, flipV: false, rotation: 0, scale: 1, translateX: 0, translateY: 0 },
-        linked: false,
-      })),
-      getStereoAlignMode: vi.fn(() => 'off'),
       getNoiseReductionParams: vi.fn(() => null),
-      getFilterSettings: vi.fn(() => null),
-      getWipeState: vi.fn(() => ({ mode: 'off', position: 0.5, showOriginal: 'left' })),
-      getWatermarkState: vi.fn(() => null),
-      getPARState: vi.fn(() => null),
-      getBackgroundPatternState: vi.fn(() => null),
-      getToneMappingState: vi.fn(() => ({ enabled: false, operator: 'off' })),
-      getGhostFrameState: vi.fn(() => ({
-        enabled: false,
-        framesBefore: 2,
-        framesAfter: 2,
-        opacityBase: 0.4,
-        opacityFalloff: 0.7,
-        colorTint: 'none',
-      })),
-      getDisplayColorState: vi.fn(() => ({
-        transferFunction: 'srgb',
-        displayGamma: 1,
-        displayBrightness: 1,
-        customGamma: 2.2,
-      })),
-      getGamutMappingState: vi.fn(() => ({
-        mode: 'off',
-        sourceGamut: 'srgb',
-        targetGamut: 'srgb',
-        highlightOutOfGamut: false,
-      })),
-      getCurves: vi.fn(() => ({
-        master: { points: [] },
-        red: { points: [] },
-        green: { points: [] },
-        blue: { points: [] },
-      })),
-      getDifferenceMatteState: vi.fn(() => ({ enabled: false, gain: 1, heatmap: false })),
-      getBlendModeState: vi.fn(() => ({
-        mode: 'off',
-        onionOpacity: 0.5,
-        flickerRate: 2,
-        blendRatio: 0.5,
-        flickerFrame: 0,
-      })),
-      getDeinterlaceParams: vi.fn(() => ({ enabled: false, method: 'bob', fieldOrder: 'tff' })),
-      getFilmEmulationParams: vi.fn(() => ({
-        enabled: false,
-        stock: 'kodak-portra-400',
-        intensity: 100,
-        grainIntensity: 30,
-      })),
-      getPerspectiveParams: vi.fn(() => ({
-        enabled: false,
-        topLeft: { x: 0, y: 0 },
-        topRight: { x: 1, y: 0 },
-        bottomRight: { x: 1, y: 1 },
-        bottomLeft: { x: 0, y: 1 },
-        quality: 'bilinear',
-      })),
-      getStabilizationParams: vi.fn(() => ({ enabled: false, smoothingStrength: 50, cropAmount: 10 })),
-      getUncropState: vi.fn(() => ({
-        enabled: false,
-        paddingMode: 'uniform',
-        padding: 0,
-        paddingTop: 0,
-        paddingRight: 0,
-        paddingBottom: 0,
-        paddingLeft: 0,
-      })),
-      setToneMappingState: vi.fn(),
-      setGhostFrameState: vi.fn(),
-      setDisplayColorState: vi.fn(),
-      setGamutMappingState: vi.fn(),
-      setColorInversion: vi.fn(),
-      setCurves: vi.fn(),
-      setChannelMode: vi.fn(),
-      setStereoState: vi.fn(),
-      setStereoEyeTransforms: vi.fn(),
-      setStereoAlignMode: vi.fn(),
-      setDifferenceMatteState: vi.fn(),
-      setBlendModeState: vi.fn(),
-      setDeinterlaceParams: vi.fn(),
-      setFilmEmulationParams: vi.fn(),
-      setPerspectiveParams: vi.fn(),
-      setStabilizationParams: vi.fn(),
-      setUncropState: vi.fn(),
     } as any,
     paintEngine: {
       toJSON: vi.fn(() => ({ nextId: 1, show: true, frames: {} })),
@@ -183,11 +94,11 @@ function createMockContext(): PersistenceManagerContext & {
     autoSaveIndicator: {
       markUnsaved: vi.fn(),
       markSaved: vi.fn(),
-      setStatus: vi.fn(),
     } as any,
     snapshotManager: snapshotManager as any,
     snapshotPanel: {
       hide: vi.fn(),
+      setDisabled: vi.fn(),
     } as any,
     scopesControl: {
       getState: vi.fn(() => ({ histogram: true, waveform: false, vectorscope: false, gamutDiagram: false })),
@@ -196,39 +107,10 @@ function createMockContext(): PersistenceManagerContext & {
     cdlControl: { setCDL: vi.fn() } as any,
     filterControl: { setSettings: vi.fn() } as any,
     transformControl: { setTransform: vi.fn() } as any,
-    cropControl: { setState: vi.fn(), setUncropState: vi.fn() } as any,
+    cropControl: { setState: vi.fn() } as any,
     lensControl: { setParams: vi.fn() } as any,
-    deinterlaceControl: { setParams: vi.fn() } as any,
-    filmEmulationControl: { setParams: vi.fn() } as any,
-    perspectiveCorrectionControl: { setParams: vi.fn() } as any,
-    stabilizationControl: { setParams: vi.fn() } as any,
     noiseReductionControl: { setParams: vi.fn() } as any,
     watermarkControl: { setState: vi.fn() } as any,
-    compareControl: {
-      setWipeMode: vi.fn(),
-      setWipePosition: vi.fn(),
-      setDifferenceMatteEnabled: vi.fn(),
-      setDifferenceMatteGain: vi.fn(),
-      setDifferenceMatteHeatmap: vi.fn(),
-      setBlendMode: vi.fn(),
-      setOnionOpacity: vi.fn(),
-      setFlickerRate: vi.fn(),
-      setBlendRatio: vi.fn(),
-    } as any,
-    stackControl: { setLayers: vi.fn(), clearLayers: vi.fn(), getLayers: vi.fn(() => []) } as any,
-    parControl: { setState: vi.fn() } as any,
-    backgroundPatternControl: { setState: vi.fn() } as any,
-    toneMappingControl: { setState: vi.fn() } as any,
-    ghostFrameControl: { setState: vi.fn() } as any,
-    channelSelect: { setChannel: vi.fn() } as any,
-    stereoControl: { setState: vi.fn() } as any,
-    stereoEyeTransformControl: { setState: vi.fn() } as any,
-    stereoAlignControl: { setMode: vi.fn() } as any,
-    displayProfileControl: { setState: vi.fn() } as any,
-    ocioControl: { getState: vi.fn(() => ({ enabled: false, configName: 'aces_1.2' })), setState: vi.fn() } as any,
-    gamutMappingControl: { setState: vi.fn() } as any,
-    curvesControl: { setCurves: vi.fn() } as any,
-    colorInversionToggle: { setEnabled: vi.fn() } as any,
   };
 
   return {
@@ -259,7 +141,6 @@ function createMockSnapshotManager() {
     createAutoCheckpoint: vi.fn(async () => {}),
     getSnapshot: vi.fn(async () => null),
     getSnapshotMetadata: vi.fn(async () => null),
-    notifyRestored: vi.fn(),
     dispose: vi.fn(),
   };
 }
@@ -274,25 +155,6 @@ describe('AppPersistenceManager', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(SessionSerializer.toJSON).mockImplementation(
-      () =>
-        ({
-          version: 1,
-          name: 'test',
-          savedAt: new Date().toISOString(),
-          color: { exposure: 0 },
-          cdl: null,
-          filters: null,
-          transform: null,
-          crop: null,
-          lens: null,
-          noiseReduction: null,
-          watermark: null,
-        }) as any,
-    );
-    vi.mocked(SessionSerializer.fromJSON).mockResolvedValue({ loadedMedia: 1, warnings: [] });
-    vi.mocked(SessionSerializer.saveToFile).mockResolvedValue(undefined);
-    vi.mocked(SessionSerializer.loadFromFile).mockResolvedValue({ version: 1, name: 'test' } as any);
     fullCtx = createMockContext();
     // Extract pure PersistenceManagerContext for the constructor
     const { _autoSaveManager: _a, _snapshotManager: _s, ...ctx } = fullCtx;
@@ -435,6 +297,34 @@ describe('AppPersistenceManager', () => {
       await expect(manager.init()).resolves.not.toThrow();
     });
 
+    it('APM-034a: init() shows warning and disables panel on snapshot init failure', async () => {
+      fullCtx._snapshotManager.initialize.mockRejectedValue(new Error('IndexedDB not available'));
+
+      await manager.init();
+
+      expect(showAlert).toHaveBeenCalledWith(
+        expect.stringContaining('Snapshot system failed to initialize'),
+        expect.objectContaining({ type: 'warning', title: 'Snapshot Unavailable' }),
+      );
+      expect(fullCtx.snapshotPanel.setDisabled).toHaveBeenCalledWith(
+        expect.stringContaining('Snapshot storage is unavailable'),
+      );
+    });
+
+    it('APM-034b: snapshotBackendAvailable is false after snapshot init failure', async () => {
+      fullCtx._snapshotManager.initialize.mockRejectedValue(new Error('IndexedDB not available'));
+
+      await manager.init();
+
+      expect(manager.snapshotBackendAvailable).toBe(false);
+    });
+
+    it('APM-034c: snapshotBackendAvailable is true after successful init', async () => {
+      await manager.init();
+
+      expect(manager.snapshotBackendAvailable).toBe(true);
+    });
+
     it('APM-035: init() handles autoSave initialization failure gracefully', async () => {
       fullCtx._autoSaveManager.initialize.mockRejectedValue(new Error('DB error'));
 
@@ -484,6 +374,22 @@ describe('AppPersistenceManager', () => {
 
       expect(SessionSerializer.toJSON).toHaveBeenCalledWith(expect.anything(), 'Untitled');
     });
+
+    it('APM-044: createQuickSnapshot shows error when backend unavailable', async () => {
+      // Simulate failed init
+      fullCtx._snapshotManager.initialize.mockRejectedValue(new Error('DB error'));
+      await manager.init();
+      vi.clearAllMocks();
+
+      await manager.createQuickSnapshot();
+
+      expect(fullCtx._snapshotManager.createSnapshot).not.toHaveBeenCalled();
+      expect(SessionSerializer.toJSON).not.toHaveBeenCalled();
+      expect(showAlert).toHaveBeenCalledWith(
+        expect.stringContaining('Snapshot storage is unavailable'),
+        expect.objectContaining({ type: 'error', title: 'Snapshot Unavailable' }),
+      );
+    });
   });
 
   // -----------------------------------------------------------------------
@@ -505,6 +411,17 @@ describe('AppPersistenceManager', () => {
 
       expect(consoleSpy).toHaveBeenCalledWith('Failed to create auto-checkpoint:', expect.any(Error));
       consoleSpy.mockRestore();
+    });
+
+    it('APM-052: createAutoCheckpoint silently skips when backend unavailable', async () => {
+      fullCtx._snapshotManager.initialize.mockRejectedValue(new Error('DB error'));
+      await manager.init();
+      vi.clearAllMocks();
+
+      await manager.createAutoCheckpoint('test');
+
+      expect(fullCtx._snapshotManager.createAutoCheckpoint).not.toHaveBeenCalled();
+      expect(SessionSerializer.toJSON).not.toHaveBeenCalled();
     });
   });
 
@@ -549,11 +466,6 @@ describe('AppPersistenceManager', () => {
         lens: { distortion: 0.1 },
         noiseReduction: { strength: 0.5 },
         watermark: { text: 'test' },
-        wipe: { mode: 'horizontal', position: 0.3, showOriginal: 'left' },
-        stack: [
-          { id: 'layer_1', name: 'BG', visible: true, opacity: 1, blendMode: 'normal', sourceIndex: 0 },
-          { id: 'layer_2', name: 'FG', visible: true, opacity: 0.8, blendMode: 'multiply', sourceIndex: 1 },
-        ],
       };
       fullCtx._snapshotManager.getSnapshot.mockResolvedValue(mockState as any);
       fullCtx._snapshotManager.getSnapshotMetadata.mockResolvedValue({ name: 'My Snapshot' } as any);
@@ -568,11 +480,6 @@ describe('AppPersistenceManager', () => {
       expect(fullCtx.transformControl.setTransform).toHaveBeenCalledWith(mockState.transform);
       expect(fullCtx.cropControl.setState).toHaveBeenCalledWith(mockState.crop);
       expect(fullCtx.lensControl.setParams).toHaveBeenCalledWith(mockState.lens);
-      // Compare / wipe control sync
-      expect(fullCtx.compareControl!.setWipeMode).toHaveBeenCalledWith('horizontal');
-      expect(fullCtx.compareControl!.setWipePosition).toHaveBeenCalledWith(0.3);
-      // Stack control sync
-      expect(fullCtx.stackControl!.setLayers).toHaveBeenCalledWith(mockState.stack);
       expect(fullCtx.snapshotPanel.hide).toHaveBeenCalledTimes(1);
       expect(showAlert).toHaveBeenCalledWith(
         expect.stringContaining('My Snapshot'),
@@ -603,34 +510,93 @@ describe('AppPersistenceManager', () => {
       consoleSpy.mockRestore();
     });
 
-    it('APM-083: restoreSnapshot emits snapshotRestored with correct snapshot metadata', async () => {
-      const mockState = { version: 1, name: 'test', color: { exposure: 0 } };
-      const mockMetadata = { id: 'snap-1', name: 'My Snapshot', createdAt: '2025-01-01T00:00:00Z', isAutoCheckpoint: false, version: 1, size: 100 };
-      fullCtx._snapshotManager.getSnapshot.mockResolvedValue(mockState as any);
-      fullCtx._snapshotManager.getSnapshotMetadata.mockResolvedValue(mockMetadata as any);
+    it('APM-083: restoreSnapshot shows error when backend unavailable', async () => {
+      fullCtx._snapshotManager.initialize.mockRejectedValue(new Error('DB error'));
+      await manager.init();
+      vi.clearAllMocks();
 
       await manager.restoreSnapshot('snap-1');
 
-      expect(fullCtx._snapshotManager.notifyRestored).toHaveBeenCalledTimes(1);
-      expect(fullCtx._snapshotManager.notifyRestored).toHaveBeenCalledWith(mockMetadata);
+      expect(fullCtx._snapshotManager.getSnapshot).not.toHaveBeenCalled();
+      expect(SessionSerializer.fromJSON).not.toHaveBeenCalled();
+      expect(showAlert).toHaveBeenCalledWith(
+        expect.stringContaining('Snapshot storage is unavailable'),
+        expect.objectContaining({ type: 'error', title: 'Snapshot Unavailable' }),
+      );
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // recoverAutoSave (via init flow)
+  // -----------------------------------------------------------------------
+  describe('recoverAutoSave', () => {
+    const autoSaveEntry = {
+      id: 'save-1',
+      name: 'Test Session',
+      savedAt: new Date().toISOString(),
+      cleanShutdown: false,
+      version: 1,
+      size: 1024,
+    };
+
+    const mockState = {
+      version: 1,
+      name: 'test',
+      savedAt: new Date().toISOString(),
+      color: { exposure: 0.5 },
+      cdl: { slope: [1, 1, 1] },
+      filters: { sharpen: 1 },
+      transform: { rotation: 90 },
+      crop: { x: 0, y: 0 },
+      lens: { distortion: 0.1 },
+      noiseReduction: null,
+      watermark: null,
+    };
+
+    it('APM-100: recovery works normally when auto-save entry exists', async () => {
+      fullCtx._autoSaveManager.initialize.mockResolvedValue(true);
+      fullCtx._autoSaveManager.listAutoSaves.mockResolvedValue([autoSaveEntry as any]);
+      fullCtx._autoSaveManager.getAutoSave.mockResolvedValue(mockState as any);
+      vi.mocked(showConfirm).mockResolvedValue(true);
+
+      await manager.init();
+
+      expect(fullCtx._autoSaveManager.getAutoSave).toHaveBeenCalledWith('save-1');
+      expect(SessionSerializer.fromJSON).toHaveBeenCalledTimes(1);
+      expect(fullCtx._autoSaveManager.deleteAutoSave).toHaveBeenCalledWith('save-1');
     });
 
-    it('APM-084: restoreSnapshot does NOT emit snapshotRestored when snapshot not found', async () => {
-      fullCtx._snapshotManager.getSnapshot.mockResolvedValue(null);
+    it('APM-101: shows error alert when auto-save entry is missing/null', async () => {
+      fullCtx._autoSaveManager.initialize.mockResolvedValue(true);
+      fullCtx._autoSaveManager.listAutoSaves.mockResolvedValue([autoSaveEntry as any]);
+      fullCtx._autoSaveManager.getAutoSave.mockResolvedValue(null);
+      vi.mocked(showConfirm).mockResolvedValue(true);
 
-      await manager.restoreSnapshot('missing-id');
+      await manager.init();
 
-      expect(fullCtx._snapshotManager.notifyRestored).not.toHaveBeenCalled();
+      expect(fullCtx._autoSaveManager.getAutoSave).toHaveBeenCalledWith('save-1');
+      expect(SessionSerializer.fromJSON).not.toHaveBeenCalled();
+      expect(showAlert).toHaveBeenCalledWith(
+        'Auto-save entry not found. Recovery data may have been lost.',
+        expect.objectContaining({ type: 'error', title: 'Recovery Error' }),
+      );
     });
 
-    it('APM-084b: restoreSnapshot does NOT emit snapshotRestored when restore throws', async () => {
-      fullCtx._snapshotManager.getSnapshot.mockRejectedValue(new Error('DB read error'));
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    it('APM-102: error message is user-friendly and actionable', async () => {
+      fullCtx._autoSaveManager.initialize.mockResolvedValue(true);
+      fullCtx._autoSaveManager.listAutoSaves.mockResolvedValue([autoSaveEntry as any]);
+      fullCtx._autoSaveManager.getAutoSave.mockResolvedValue(null);
+      vi.mocked(showConfirm).mockResolvedValue(true);
 
-      await manager.restoreSnapshot('snap-err');
+      await manager.init();
 
-      expect(fullCtx._snapshotManager.notifyRestored).not.toHaveBeenCalled();
-      consoleSpy.mockRestore();
+      const alertCall = vi.mocked(showAlert).mock.calls.find(
+        (call) => typeof call[0] === 'string' && call[0].includes('Auto-save'),
+      );
+      expect(alertCall).toBeDefined();
+      const message = alertCall![0] as string;
+      expect(message).toContain('not found');
+      expect(message).toContain('lost');
     });
   });
 
@@ -667,7 +633,7 @@ describe('AppPersistenceManager', () => {
 
       await manager.openProject(file);
 
-      expect(fullCtx.session.loadFromGTO).toHaveBeenCalledWith(expect.any(ArrayBuffer), undefined);
+      expect(fullCtx.session.loadFromGTO).toHaveBeenCalledWith(expect.any(ArrayBuffer));
       expect(SessionSerializer.loadFromFile).not.toHaveBeenCalled();
       expect(fullCtx.session.loadFile).not.toHaveBeenCalled();
     });
@@ -677,7 +643,7 @@ describe('AppPersistenceManager', () => {
 
       await manager.openProject(file);
 
-      expect(fullCtx.session.loadFromGTO).toHaveBeenCalledWith(expect.any(ArrayBuffer), undefined);
+      expect(fullCtx.session.loadFromGTO).toHaveBeenCalledWith(expect.any(ArrayBuffer));
       expect(fullCtx.session.loadFile).not.toHaveBeenCalled();
     });
 
@@ -686,7 +652,7 @@ describe('AppPersistenceManager', () => {
 
       await manager.openProject(file);
 
-      expect(fullCtx.session.loadFromGTO).toHaveBeenCalledWith(expect.any(ArrayBuffer), undefined);
+      expect(fullCtx.session.loadFromGTO).toHaveBeenCalledWith(expect.any(ArrayBuffer));
     });
 
     it('APM-090a: openProject loads .rvedl file via session.loadEDL', async () => {
@@ -711,192 +677,6 @@ describe('AppPersistenceManager', () => {
         expect.stringContaining('.xyz'),
         expect.objectContaining({ type: 'warning' }),
       );
-    });
-
-    it('APM-161a: openProject creates auto-checkpoint for .orvproject files', async () => {
-      const spy = vi.spyOn(manager, 'createAutoCheckpoint').mockResolvedValue(true);
-      const file = new File(['{}'], 'scene.orvproject');
-      await manager.openProject(file);
-
-      expect(spy).toHaveBeenCalledWith('Before Project Load');
-    });
-
-    it('APM-161b: openProject creates auto-checkpoint for .rv files', async () => {
-      const spy = vi.spyOn(manager, 'createAutoCheckpoint').mockResolvedValue(true);
-      const file = new File([new ArrayBuffer(8)], 'scene.rv');
-      await manager.openProject(file);
-
-      expect(spy).toHaveBeenCalledWith('Before Project Load');
-    });
-
-    it('APM-161c: openProject creates auto-checkpoint for .gto files', async () => {
-      const spy = vi.spyOn(manager, 'createAutoCheckpoint').mockResolvedValue(true);
-      const file = new File([new ArrayBuffer(8)], 'scene.gto');
-      await manager.openProject(file);
-
-      expect(spy).toHaveBeenCalledWith('Before Project Load');
-    });
-
-    it('APM-161d: openProject does NOT create auto-checkpoint for .rvedl import', async () => {
-      const spy = vi.spyOn(manager, 'createAutoCheckpoint').mockResolvedValue(true);
-      const file = new File(['EDL content'], 'timeline.rvedl');
-      await manager.openProject(file);
-
-      expect(spy).not.toHaveBeenCalled();
-    });
-
-    it('APM-161e: openProject does NOT create auto-checkpoint for unsupported file types', async () => {
-      const spy = vi.spyOn(manager, 'createAutoCheckpoint').mockResolvedValue(true);
-      const file = new File(['data'], 'image.png');
-      await manager.openProject(file);
-
-      expect(spy).not.toHaveBeenCalled();
-    });
-  });
-
-  // -----------------------------------------------------------------------
-  // Issue #160: GTO load syncs controls
-  // -----------------------------------------------------------------------
-  describe('issue #160: GTO load syncs compare/stack controls', () => {
-    it('APM-160a: openProject .rv file syncs compare control from viewer wipe state', async () => {
-      (fullCtx.viewer as any).getWipeState.mockReturnValue({
-        mode: 'horizontal',
-        position: 0.3,
-        showOriginal: 'left',
-      });
-      const file = new File(['rv-data'], 'session.rv');
-
-      await manager.openProject(file);
-
-      expect(fullCtx.session.loadFromGTO).toHaveBeenCalled();
-      expect(fullCtx.compareControl!.setWipeMode).toHaveBeenCalledWith('horizontal');
-      expect(fullCtx.compareControl!.setWipePosition).toHaveBeenCalledWith(0.3);
-    });
-
-    it('APM-160b: openProject .gto file syncs compare control from viewer wipe state', async () => {
-      (fullCtx.viewer as any).getWipeState.mockReturnValue({
-        mode: 'vertical',
-        position: 0.7,
-        showOriginal: 'right',
-      });
-      const file = new File(['gto-data'], 'session.gto');
-
-      await manager.openProject(file);
-
-      expect(fullCtx.session.loadFromGTO).toHaveBeenCalled();
-      expect(fullCtx.compareControl!.setWipeMode).toHaveBeenCalledWith('vertical');
-      expect(fullCtx.compareControl!.setWipePosition).toHaveBeenCalledWith(0.7);
-    });
-
-    it('APM-160c: openProject .rv file does NOT re-sync color controls (handled by settingsLoaded)', async () => {
-      const mockColor = { exposure: 1.5, brightness: 0.2 };
-      (fullCtx.viewer as any).getColorAdjustments.mockReturnValue(mockColor);
-      const file = new File(['rv-data'], 'session.rv');
-
-      await manager.openProject(file);
-
-      // Color controls are synced by the settingsLoaded event handler, not by openProject
-      expect(fullCtx.colorControls.setAdjustments).not.toHaveBeenCalled();
-    });
-
-    it('APM-160d: openProject .gto file only syncs controls not covered by settingsLoaded', async () => {
-      const mockWatermark = { text: 'DRAFT' };
-      const mockPAR = { ratio: 2.0 };
-      const mockBgPattern = { type: 'checkerboard' };
-
-      (fullCtx.viewer as any).getWatermarkState.mockReturnValue(mockWatermark);
-      (fullCtx.viewer as any).getWipeState.mockReturnValue({ mode: 'horizontal', position: 0.4, showOriginal: 'left' });
-      (fullCtx.viewer as any).getPARState.mockReturnValue(mockPAR);
-      (fullCtx.viewer as any).getBackgroundPatternState.mockReturnValue(mockBgPattern);
-
-      const file = new File(['gto-data'], 'session.gto');
-      await manager.openProject(file);
-
-      // Controls synced by openProject (settingsLoaded does NOT handle these)
-      expect(fullCtx.watermarkControl!.setState).toHaveBeenCalledWith(mockWatermark);
-      expect(fullCtx.compareControl!.setWipeMode).toHaveBeenCalledWith('horizontal');
-      expect(fullCtx.compareControl!.setWipePosition).toHaveBeenCalledWith(0.4);
-      expect(fullCtx.parControl!.setState).toHaveBeenCalledWith(mockPAR);
-      expect(fullCtx.backgroundPatternControl!.setState).toHaveBeenCalledWith(mockBgPattern);
-
-      // Controls NOT synced by openProject (handled by settingsLoaded event)
-      expect(fullCtx.colorControls.setAdjustments).not.toHaveBeenCalled();
-      expect(fullCtx.cdlControl.setCDL).not.toHaveBeenCalled();
-      expect(fullCtx.filterControl.setSettings).not.toHaveBeenCalled();
-      expect(fullCtx.transformControl.setTransform).not.toHaveBeenCalled();
-      expect(fullCtx.cropControl.setState).not.toHaveBeenCalled();
-      expect(fullCtx.lensControl.setParams).not.toHaveBeenCalled();
-      expect(fullCtx.noiseReductionControl!.setParams).not.toHaveBeenCalled();
-    });
-
-    it('APM-160e: openProject .rv file works when compareControl is not provided', async () => {
-      const { _autoSaveManager: _a, _snapshotManager: _s, ...ctx } = fullCtx;
-      const minCtx = { ...ctx, compareControl: undefined, stackControl: undefined };
-      const minManager = new AppPersistenceManager(minCtx);
-
-      const file = new File(['rv-data'], 'session.rv');
-
-      // Should not throw even without compare/stack controls
-      await expect(minManager.openProject(file)).resolves.not.toThrow();
-      expect(fullCtx.session.loadFromGTO).toHaveBeenCalled();
-    });
-
-  });
-
-  // -----------------------------------------------------------------------
-  // Issue #162: openProject passes companion files for .rv/.gto
-  // -----------------------------------------------------------------------
-  describe('issue #162: openProject companion files for .rv/.gto', () => {
-    it('APM-162a: openProject .rv with companion files builds availableFiles map', async () => {
-      const sessionFile = new File(['rv-data'], 'session.rv');
-      const mediaFile1 = new File(['img1'], 'shot01.exr');
-      const mediaFile2 = new File(['cdl1'], 'grade.cdl');
-
-      await manager.openProject(sessionFile, [mediaFile1, mediaFile2]);
-
-      const expectedMap = new Map<string, File>();
-      expectedMap.set('shot01.exr', mediaFile1);
-      expectedMap.set('grade.cdl', mediaFile2);
-
-      expect(fullCtx.session.loadFromGTO).toHaveBeenCalledWith(expect.any(ArrayBuffer), expectedMap);
-    });
-
-    it('APM-162b: openProject .gto with companion files builds availableFiles map', async () => {
-      const sessionFile = new File(['gto-data'], 'session.gto');
-      const mediaFile = new File(['img'], 'plate.dpx');
-
-      await manager.openProject(sessionFile, [mediaFile]);
-
-      const expectedMap = new Map<string, File>();
-      expectedMap.set('plate.dpx', mediaFile);
-
-      expect(fullCtx.session.loadFromGTO).toHaveBeenCalledWith(expect.any(ArrayBuffer), expectedMap);
-    });
-
-    it('APM-162c: openProject .rv with no companion files passes undefined', async () => {
-      const sessionFile = new File(['rv-data'], 'session.rv');
-
-      await manager.openProject(sessionFile);
-
-      expect(fullCtx.session.loadFromGTO).toHaveBeenCalledWith(expect.any(ArrayBuffer), undefined);
-    });
-
-    it('APM-162d: openProject .rv with empty companion array passes undefined', async () => {
-      const sessionFile = new File(['rv-data'], 'session.rv');
-
-      await manager.openProject(sessionFile, []);
-
-      expect(fullCtx.session.loadFromGTO).toHaveBeenCalledWith(expect.any(ArrayBuffer), undefined);
-    });
-
-    it('APM-162e: openProject .orvproject ignores companion files', async () => {
-      const projectFile = new File(['{"version":1}'], 'test.orvproject', { type: 'application/json' });
-      const companionFile = new File(['media'], 'shot.exr');
-
-      await manager.openProject(projectFile, [companionFile]);
-
-      expect(SessionSerializer.loadFromFile).toHaveBeenCalledWith(projectFile);
-      expect(fullCtx.session.loadFromGTO).not.toHaveBeenCalled();
     });
   });
 
@@ -954,122 +734,6 @@ describe('AppPersistenceManager', () => {
   });
 
   // -----------------------------------------------------------------------
-  // Control sync regression tests (Issue #26)
-  // -----------------------------------------------------------------------
-  describe('control sync on restore', () => {
-    const fullState = {
-      version: 1,
-      name: 'sync-test',
-      savedAt: new Date().toISOString(),
-      color: { exposure: 1.5 },
-      cdl: { slope: [1.1, 1, 1] },
-      filters: { sharpen: 2 },
-      transform: { rotation: 180 },
-      crop: { x: 10, y: 20 },
-      lens: { distortion: 0.5 },
-      noiseReduction: { strength: 0.8 },
-      watermark: { text: 'DRAFT' },
-      wipe: { mode: 'vertical', position: 0.7, showOriginal: 'right' },
-      stack: [
-        { id: 'layer_1', name: 'Base', visible: true, opacity: 1, blendMode: 'normal', sourceIndex: 0 },
-      ],
-    };
-
-    it('APM-100: openProject syncs compare control wipe state', async () => {
-      vi.mocked(SessionSerializer.loadFromFile).mockResolvedValue(fullState as any);
-      const file = new File(['{}'], 'test.orvproject', { type: 'application/json' });
-
-      await manager.openProject(file);
-
-      expect(fullCtx.compareControl!.setWipeMode).toHaveBeenCalledWith('vertical');
-      expect(fullCtx.compareControl!.setWipePosition).toHaveBeenCalledWith(0.7);
-    });
-
-    it('APM-101: openProject syncs stack control layers', async () => {
-      vi.mocked(SessionSerializer.loadFromFile).mockResolvedValue(fullState as any);
-      const file = new File(['{}'], 'test.orvproject', { type: 'application/json' });
-
-      await manager.openProject(file);
-
-      expect(fullCtx.stackControl!.setLayers).toHaveBeenCalledWith(fullState.stack);
-    });
-
-    it('APM-102: openProject clears stack control when state has empty stack', async () => {
-      const stateNoStack = { ...fullState, stack: [] };
-      vi.mocked(SessionSerializer.loadFromFile).mockResolvedValue(stateNoStack as any);
-      const file = new File(['{}'], 'test.orvproject', { type: 'application/json' });
-
-      await manager.openProject(file);
-
-      expect(fullCtx.stackControl!.clearLayers).toHaveBeenCalled();
-      expect(fullCtx.stackControl!.setLayers).not.toHaveBeenCalled();
-    });
-
-    it('APM-103: auto-save recovery syncs compare and stack controls', async () => {
-      // Set up auto-save with recovery data
-      fullCtx._autoSaveManager.initialize.mockResolvedValue(true);
-      fullCtx._autoSaveManager.listAutoSaves.mockResolvedValue([
-        { id: 'save-1', name: 'Session', savedAt: new Date().toISOString() } as any,
-      ]);
-      fullCtx._autoSaveManager.getAutoSave.mockResolvedValue(fullState as any);
-      vi.mocked(showConfirm).mockResolvedValue(true);
-
-      await manager.init();
-
-      expect(fullCtx.compareControl!.setWipeMode).toHaveBeenCalledWith('vertical');
-      expect(fullCtx.compareControl!.setWipePosition).toHaveBeenCalledWith(0.7);
-      expect(fullCtx.stackControl!.setLayers).toHaveBeenCalledWith(fullState.stack);
-    });
-
-    it('APM-104: snapshot restore syncs all controls including compare and stack', async () => {
-      fullCtx._snapshotManager.getSnapshot.mockResolvedValue(fullState as any);
-      fullCtx._snapshotManager.getSnapshotMetadata.mockResolvedValue({ name: 'Test' } as any);
-
-      await manager.restoreSnapshot('snap-1');
-
-      // Verify all controls are synced
-      expect(fullCtx.colorControls.setAdjustments).toHaveBeenCalledWith(fullState.color);
-      expect(fullCtx.cdlControl.setCDL).toHaveBeenCalledWith(fullState.cdl);
-      expect(fullCtx.filterControl.setSettings).toHaveBeenCalledWith(fullState.filters);
-      expect(fullCtx.transformControl.setTransform).toHaveBeenCalledWith(fullState.transform);
-      expect(fullCtx.cropControl.setState).toHaveBeenCalledWith(fullState.crop);
-      expect(fullCtx.lensControl.setParams).toHaveBeenCalledWith(fullState.lens);
-      expect(fullCtx.noiseReductionControl!.setParams).toHaveBeenCalledWith(fullState.noiseReduction);
-      expect(fullCtx.watermarkControl!.setState).toHaveBeenCalledWith(fullState.watermark);
-      expect(fullCtx.compareControl!.setWipeMode).toHaveBeenCalledWith('vertical');
-      expect(fullCtx.compareControl!.setWipePosition).toHaveBeenCalledWith(0.7);
-      expect(fullCtx.stackControl!.setLayers).toHaveBeenCalledWith(fullState.stack);
-    });
-
-    it('APM-105: restore works gracefully when compareControl is not provided', async () => {
-      // Create manager without compareControl or stackControl
-      const { _autoSaveManager: _a, _snapshotManager: _s, ...ctx } = fullCtx;
-      const minCtx = { ...ctx, compareControl: undefined, stackControl: undefined };
-      const minManager = new AppPersistenceManager(minCtx);
-
-      fullCtx._snapshotManager.getSnapshot.mockResolvedValue(fullState as any);
-      fullCtx._snapshotManager.getSnapshotMetadata.mockResolvedValue({ name: 'Test' } as any);
-
-      // Should not throw
-      await minManager.restoreSnapshot('snap-1');
-
-      // Other controls still synced
-      expect(fullCtx.colorControls.setAdjustments).toHaveBeenCalledWith(fullState.color);
-    });
-
-    it('APM-106: restore with no wipe state does not call compareControl', async () => {
-      const stateNoWipe = { ...fullState, wipe: undefined };
-      fullCtx._snapshotManager.getSnapshot.mockResolvedValue(stateNoWipe as any);
-      fullCtx._snapshotManager.getSnapshotMetadata.mockResolvedValue({ name: 'Test' } as any);
-
-      await manager.restoreSnapshot('snap-1');
-
-      expect(fullCtx.compareControl!.setWipeMode).not.toHaveBeenCalled();
-      expect(fullCtx.compareControl!.setWipePosition).not.toHaveBeenCalled();
-    });
-  });
-
-  // -----------------------------------------------------------------------
   // dispose
   // -----------------------------------------------------------------------
   describe('dispose', () => {
@@ -1083,374 +747,6 @@ describe('AppPersistenceManager', () => {
         manager.dispose();
         manager.dispose();
       }).not.toThrow();
-    });
-  });
-
-  // -----------------------------------------------------------------------
-  // Issue #138: local snapshot/auto-save persistence captures viewer-only state
-  // -----------------------------------------------------------------------
-  describe('issue #138: local persistence state', () => {
-    it('APM-138: markAutoSaveDirty captures local viewer state alongside SessionSerializer output', () => {
-      (fullCtx.viewer.getToneMappingState as ReturnType<typeof vi.fn>).mockReturnValue({
-        enabled: true,
-        operator: 'reinhard',
-        reinhardWhitePoint: 3,
-      });
-      (fullCtx.viewer.getChannelMode as ReturnType<typeof vi.fn>).mockReturnValue('alpha');
-      (fullCtx.viewer.getColorInversion as ReturnType<typeof vi.fn>).mockReturnValue(true);
-      (fullCtx.viewer.getDisplayColorState as ReturnType<typeof vi.fn>).mockReturnValue({
-        transferFunction: 'rec709',
-        displayGamma: 2.2,
-        displayBrightness: 1.1,
-        customGamma: 2.4,
-      });
-      (fullCtx.ocioControl!.getState as ReturnType<typeof vi.fn>).mockReturnValue({
-        enabled: true,
-        configName: 'aces_1.2',
-        customConfigPath: null,
-        inputColorSpace: 'ACEScg',
-        detectedColorSpace: null,
-        workingColorSpace: 'ACEScg',
-        display: 'sRGB',
-        view: 'ACES 1.0 SDR-video',
-        look: 'Filmic',
-        lookDirection: 'forward',
-      });
-
-      manager.markAutoSaveDirty();
-
-      const getter = fullCtx._autoSaveManager.markDirty.mock.calls[0]![0] as () => any;
-      const result = getter();
-
-      expect(SessionSerializer.toJSON).toHaveBeenCalledTimes(1);
-      expect(result.localPersistence).toBeDefined();
-      expect(result.localPersistence.toneMappingState).toEqual({
-        enabled: true,
-        operator: 'reinhard',
-        reinhardWhitePoint: 3,
-      });
-      expect(result.localPersistence.channelMode).toBe('alpha');
-      expect(result.localPersistence.colorInversion).toBe(true);
-      expect(result.localPersistence.displayColorState).toEqual({
-        transferFunction: 'rec709',
-        displayGamma: 2.2,
-        displayBrightness: 1.1,
-        customGamma: 2.4,
-      });
-      expect(result.localPersistence.ocioState.look).toBe('Filmic');
-    });
-
-    it('APM-138b: restoreSnapshot reapplies local viewer state to viewer and controls', async () => {
-      const localState = {
-        version: 1,
-        name: 'snapshot',
-        color: {},
-        localPersistence: {
-          ocioState: {
-            enabled: true,
-            configName: 'aces_1.2',
-            customConfigPath: null,
-            inputColorSpace: 'ACEScg',
-            detectedColorSpace: null,
-            workingColorSpace: 'ACEScg',
-            display: 'sRGB',
-            view: 'ACES 1.0 SDR-video',
-            look: 'Filmic',
-            lookDirection: 'forward',
-          },
-          toneMappingState: { enabled: true, operator: 'reinhard', reinhardWhitePoint: 2.5 },
-          ghostFrameState: {
-            enabled: true,
-            framesBefore: 1,
-            framesAfter: 3,
-            opacityBase: 0.5,
-            opacityFalloff: 0.8,
-            colorTint: 'red-cyan',
-          },
-          displayColorState: {
-            transferFunction: 'rec709',
-            displayGamma: 2.2,
-            displayBrightness: 1.2,
-            customGamma: 2.4,
-          },
-          gamutMappingState: {
-            mode: 'compress',
-            sourceGamut: 'rec2020',
-            targetGamut: 'display-p3',
-            highlightOutOfGamut: true,
-          },
-          colorInversion: true,
-          curves: {
-            master: { points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
-            red: { points: [{ x: 0, y: 0 }, { x: 1, y: 0.9 }] },
-            green: { points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
-            blue: { points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
-          },
-          channelMode: 'alpha',
-          stereoState: { mode: 'anaglyph', eyeSwap: true, offset: 4 },
-          stereoEyeTransforms: {
-            left: { flipH: true, flipV: false, rotation: 1, scale: 1.1, translateX: 2, translateY: -1 },
-            right: { flipH: false, flipV: true, rotation: -1, scale: 0.9, translateX: -2, translateY: 1 },
-            linked: false,
-          },
-          stereoAlignMode: 'grid',
-          differenceMatteState: { enabled: true, gain: 2.2, heatmap: true },
-          blendModeState: { mode: 'blend', onionOpacity: 0.6, flickerRate: 5, blendRatio: 0.3, flickerFrame: 1 },
-          deinterlaceParams: { enabled: true, method: 'weave', fieldOrder: 'bff' },
-          filmEmulationParams: { enabled: true, stock: 'kodak-vision3-500t', intensity: 80, grainIntensity: 25 },
-          perspectiveParams: {
-            enabled: true,
-            topLeft: { x: 0.1, y: 0.2 },
-            topRight: { x: 0.9, y: 0.2 },
-            bottomRight: { x: 0.95, y: 0.9 },
-            bottomLeft: { x: 0.05, y: 0.9 },
-            quality: 'bicubic',
-          },
-          stabilizationParams: { enabled: true, smoothingStrength: 65, cropAmount: 14 },
-          uncropState: {
-            enabled: true,
-            paddingMode: 'uniform',
-            padding: 12,
-            paddingTop: 12,
-            paddingRight: 12,
-            paddingBottom: 12,
-            paddingLeft: 12,
-          },
-        },
-      };
-      fullCtx._snapshotManager.getSnapshot.mockResolvedValue(localState as any);
-      fullCtx._snapshotManager.getSnapshotMetadata.mockResolvedValue({ name: 'Test' } as any);
-
-      await manager.restoreSnapshot('snap-1');
-
-      expect(fullCtx.viewer.setToneMappingState).toHaveBeenCalledWith(localState.localPersistence.toneMappingState);
-      expect(fullCtx.toneMappingControl!.setState).toHaveBeenCalledWith(localState.localPersistence.toneMappingState);
-      expect(fullCtx.viewer.setDisplayColorState).toHaveBeenCalledWith(localState.localPersistence.displayColorState);
-      expect(fullCtx.displayProfileControl!.setState).toHaveBeenCalledWith(localState.localPersistence.displayColorState);
-      expect(fullCtx.viewer.setColorInversion).toHaveBeenCalledWith(true);
-      expect(fullCtx.colorInversionToggle!.setEnabled).toHaveBeenCalledWith(true);
-      expect(fullCtx.viewer.setChannelMode).toHaveBeenCalledWith('alpha');
-      expect(fullCtx.channelSelect!.setChannel).toHaveBeenCalledWith('alpha');
-      expect(fullCtx.viewer.setStereoState).toHaveBeenCalledWith(localState.localPersistence.stereoState);
-      expect(fullCtx.stereoControl!.setState).toHaveBeenCalledWith(localState.localPersistence.stereoState);
-      expect(fullCtx.viewer.setBlendModeState).toHaveBeenCalledWith(localState.localPersistence.blendModeState);
-      expect(fullCtx.compareControl!.setBlendMode).toHaveBeenCalledWith('blend');
-      expect(fullCtx.viewer.setUncropState).toHaveBeenCalledWith(localState.localPersistence.uncropState);
-      expect(fullCtx.cropControl.setUncropState).toHaveBeenCalledWith(localState.localPersistence.uncropState);
-      expect(fullCtx.ocioControl!.setState).toHaveBeenCalledWith(localState.localPersistence.ocioState);
-    });
-  });
-
-  // -----------------------------------------------------------------------
-  // Issue #139: snapshot restore clears session first
-  // -----------------------------------------------------------------------
-  describe('issue #139: snapshot restore clears session', () => {
-    it('APM-139: restoreSnapshot calls clearSources before fromJSON', async () => {
-      const mockState = { version: 1, name: 'test', color: {} };
-      fullCtx._snapshotManager.getSnapshot.mockResolvedValue(mockState as any);
-      fullCtx._snapshotManager.getSnapshotMetadata.mockResolvedValue({ name: 'Test' } as any);
-
-      // Add clearSources to the session mock
-      (fullCtx.session as any).clearSources = vi.fn();
-
-      // Re-create manager with updated context
-      const { _autoSaveManager: _a, _snapshotManager: _s, ...ctx } = fullCtx;
-      const mgr = new AppPersistenceManager(ctx);
-
-      await mgr.restoreSnapshot('snap-1');
-
-      expect((fullCtx.session as any).clearSources).toHaveBeenCalled();
-      expect(SessionSerializer.fromJSON).toHaveBeenCalled();
-
-      // Verify clearSources was called before fromJSON
-      const clearOrder = (fullCtx.session as any).clearSources.mock.invocationCallOrder[0];
-      const fromJSONOrder = vi.mocked(SessionSerializer.fromJSON).mock.invocationCallOrder[0];
-      expect(clearOrder).toBeLessThan(fromJSONOrder!);
-    });
-  });
-
-  // -----------------------------------------------------------------------
-  // Issue #140: snapshot restore surfaces warnings
-  // -----------------------------------------------------------------------
-  describe('issue #140: snapshot restore surfaces warnings', () => {
-    it('APM-140: restoreSnapshot shows warning alert when fromJSON returns warnings', async () => {
-      const mockState = { version: 1, name: 'test', color: {} };
-      fullCtx._snapshotManager.getSnapshot.mockResolvedValue(mockState as any);
-      fullCtx._snapshotManager.getSnapshotMetadata.mockResolvedValue({ name: 'Snap' } as any);
-      vi.mocked(SessionSerializer.fromJSON).mockResolvedValue({
-        loadedMedia: 1,
-        warnings: ['LUT "test" needs reload'],
-      });
-
-      await manager.restoreSnapshot('snap-1');
-
-      expect(showAlert).toHaveBeenCalledWith(
-        expect.stringContaining('warning'),
-        expect.objectContaining({ type: 'warning' }),
-      );
-    });
-
-    it('APM-140b: restoreSnapshot shows info when loadedMedia is 0', async () => {
-      const mockState = { version: 1, name: 'test', color: {} };
-      fullCtx._snapshotManager.getSnapshot.mockResolvedValue(mockState as any);
-      fullCtx._snapshotManager.getSnapshotMetadata.mockResolvedValue({ name: 'Snap' } as any);
-      vi.mocked(SessionSerializer.fromJSON).mockResolvedValue({
-        loadedMedia: 0,
-        warnings: [],
-      });
-
-      await manager.restoreSnapshot('snap-1');
-
-      expect(showAlert).toHaveBeenCalledWith(
-        expect.stringContaining('no media'),
-        expect.objectContaining({ type: 'info' }),
-      );
-    });
-  });
-
-  // -----------------------------------------------------------------------
-  // Issue #141: auto-save recovery preserves entry on warnings
-  // -----------------------------------------------------------------------
-  describe('issue #141: auto-save recovery entry preservation', () => {
-    it('APM-141: recovery with warnings keeps auto-save entry', async () => {
-      fullCtx._autoSaveManager.initialize.mockResolvedValue(true);
-      fullCtx._autoSaveManager.listAutoSaves.mockResolvedValue([
-        { id: 'save-1', name: 'Session', savedAt: new Date().toISOString() } as any,
-      ]);
-      fullCtx._autoSaveManager.getAutoSave.mockResolvedValue({
-        version: 1, name: 'test', color: {},
-      } as any);
-      vi.mocked(showConfirm).mockResolvedValue(true);
-      vi.mocked(SessionSerializer.fromJSON).mockResolvedValue({
-        loadedMedia: 1,
-        warnings: ['Skipped reload: file.exr'],
-      });
-
-      await manager.init();
-
-      // Entry should NOT be deleted when there are warnings
-      expect(fullCtx._autoSaveManager.deleteAutoSave).not.toHaveBeenCalled();
-      expect(showAlert).toHaveBeenCalledWith(
-        expect.stringContaining('preserved'),
-        expect.objectContaining({ type: 'warning' }),
-      );
-    });
-
-    it('APM-141b: recovery without warnings deletes auto-save entry', async () => {
-      fullCtx._autoSaveManager.initialize.mockResolvedValue(true);
-      fullCtx._autoSaveManager.listAutoSaves.mockResolvedValue([
-        { id: 'save-1', name: 'Session', savedAt: new Date().toISOString() } as any,
-      ]);
-      fullCtx._autoSaveManager.getAutoSave.mockResolvedValue({
-        version: 1, name: 'test', color: {},
-      } as any);
-      vi.mocked(showConfirm).mockResolvedValue(true);
-      vi.mocked(SessionSerializer.fromJSON).mockResolvedValue({
-        loadedMedia: 1,
-        warnings: [],
-      });
-
-      await manager.init();
-
-      // Entry should be deleted when recovery is clean
-      expect(fullCtx._autoSaveManager.deleteAutoSave).toHaveBeenCalledWith('save-1');
-    });
-  });
-
-  // -----------------------------------------------------------------------
-  // Issue #396: discard only removes the prompted entry, not all entries
-  // -----------------------------------------------------------------------
-  describe('issue #396: discard removes only prompted entry', () => {
-    it('APM-396a: discarding removes only the most recent entry, not all entries', async () => {
-      fullCtx._autoSaveManager.initialize.mockResolvedValue(true);
-      fullCtx._autoSaveManager.listAutoSaves.mockResolvedValue([
-        { id: 'save-recent', name: 'Recent Session', savedAt: new Date().toISOString() } as any,
-        { id: 'save-old', name: 'Old Session', savedAt: new Date(Date.now() - 86400000).toISOString() } as any,
-      ]);
-      // User chooses "Discard"
-      vi.mocked(showConfirm).mockResolvedValue(false);
-
-      await manager.init();
-
-      // Should delete only the specific entry the user was prompted about
-      expect(fullCtx._autoSaveManager.deleteAutoSave).toHaveBeenCalledWith('save-recent');
-      expect(fullCtx._autoSaveManager.deleteAutoSave).toHaveBeenCalledTimes(1);
-      // clearAll must NOT be called
-      expect(fullCtx._autoSaveManager.clearAll).not.toHaveBeenCalled();
-    });
-
-    it('APM-396b: other auto-save entries survive a discard', async () => {
-      fullCtx._autoSaveManager.initialize.mockResolvedValue(true);
-      fullCtx._autoSaveManager.listAutoSaves.mockResolvedValue([
-        { id: 'save-A', name: 'Session A', savedAt: new Date().toISOString() } as any,
-        { id: 'save-B', name: 'Session B', savedAt: new Date(Date.now() - 86400000).toISOString() } as any,
-        { id: 'save-C', name: 'Session C', savedAt: new Date(Date.now() - 172800000).toISOString() } as any,
-      ]);
-      // User chooses "Discard"
-      vi.mocked(showConfirm).mockResolvedValue(false);
-
-      await manager.init();
-
-      // Only the first (most recent) entry should be deleted
-      expect(fullCtx._autoSaveManager.deleteAutoSave).toHaveBeenCalledWith('save-A');
-      expect(fullCtx._autoSaveManager.deleteAutoSave).not.toHaveBeenCalledWith('save-B');
-      expect(fullCtx._autoSaveManager.deleteAutoSave).not.toHaveBeenCalledWith('save-C');
-      expect(fullCtx._autoSaveManager.clearAll).not.toHaveBeenCalled();
-    });
-  });
-
-  // -----------------------------------------------------------------------
-  // Issue #397: state-only auto-save recovery shows success feedback
-  // -----------------------------------------------------------------------
-  describe('issue #397: state-only auto-save recovery feedback', () => {
-    it('APM-397a: state-only recovery (0 media) shows info alert', async () => {
-      fullCtx._autoSaveManager.initialize.mockResolvedValue(true);
-      fullCtx._autoSaveManager.listAutoSaves.mockResolvedValue([
-        { id: 'save-1', name: 'Session', savedAt: new Date().toISOString() } as any,
-      ]);
-      fullCtx._autoSaveManager.getAutoSave.mockResolvedValue({
-        version: 1, name: 'test', color: {},
-      } as any);
-      vi.mocked(showConfirm).mockResolvedValue(true);
-      vi.mocked(SessionSerializer.fromJSON).mockResolvedValue({
-        loadedMedia: 0,
-        warnings: [],
-      });
-
-      await manager.init();
-
-      // Entry should be deleted (clean recovery)
-      expect(fullCtx._autoSaveManager.deleteAutoSave).toHaveBeenCalledWith('save-1');
-      // Should show state-only info alert
-      expect(showAlert).toHaveBeenCalledWith(
-        'Session recovered (no media files — state only)',
-        expect.objectContaining({ type: 'info', title: 'Recovery Complete' }),
-      );
-    });
-
-    it('APM-397b: recovery with media still shows success alert', async () => {
-      fullCtx._autoSaveManager.initialize.mockResolvedValue(true);
-      fullCtx._autoSaveManager.listAutoSaves.mockResolvedValue([
-        { id: 'save-1', name: 'Session', savedAt: new Date().toISOString() } as any,
-      ]);
-      fullCtx._autoSaveManager.getAutoSave.mockResolvedValue({
-        version: 1, name: 'test', color: {},
-      } as any);
-      vi.mocked(showConfirm).mockResolvedValue(true);
-      vi.mocked(SessionSerializer.fromJSON).mockResolvedValue({
-        loadedMedia: 3,
-        warnings: [],
-      });
-
-      await manager.init();
-
-      // Entry should be deleted (clean recovery)
-      expect(fullCtx._autoSaveManager.deleteAutoSave).toHaveBeenCalledWith('save-1');
-      // Should show media-count success alert
-      expect(showAlert).toHaveBeenCalledWith(
-        'Session recovered successfully with 3 media file(s).',
-        expect.objectContaining({ type: 'success', title: 'Recovery Complete' }),
-      );
     });
   });
 });

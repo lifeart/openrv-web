@@ -21,46 +21,13 @@ import type { ColorControls } from './ui/components/ColorControls';
 import type { CDLControl } from './ui/components/CDLControl';
 import type { FilterControl } from './ui/components/FilterControl';
 import type { TransformControl } from './ui/components/TransformControl';
-import type { CropControl, UncropState } from './ui/components/CropControl';
+import type { CropControl } from './ui/components/CropControl';
 import type { LensControl } from './ui/components/LensControl';
 import type { NoiseReductionControl } from './ui/components/NoiseReductionControl';
-import type { DeinterlaceControl } from './ui/components/DeinterlaceControl';
-import type { FilmEmulationControl } from './ui/components/FilmEmulationControl';
-import type { PerspectiveCorrectionControl } from './ui/components/PerspectiveCorrectionControl';
-import type { StabilizationControl } from './ui/components/StabilizationControl';
 import type { WatermarkControl } from './ui/components/WatermarkControl';
-import type { CompareControl } from './ui/components/CompareControl';
-import type { StackControl } from './ui/components/StackControl';
-import type { PARControl } from './ui/components/PARControl';
-import type { BackgroundPatternControl } from './ui/components/BackgroundPatternControl';
-import type { ToneMappingControl } from './ui/components/ToneMappingControl';
-import type { GhostFrameControl, GhostFrameState } from './ui/components/GhostFrameControl';
-import type { ChannelSelect } from './ui/components/ChannelSelect';
-import type { StereoControl } from './ui/components/StereoControl';
-import type { StereoEyeTransformControl } from './ui/components/StereoEyeTransformControl';
-import type { StereoAlignControl } from './ui/components/StereoAlignControl';
-import type { DisplayProfileControl } from './ui/components/DisplayProfileControl';
-import type { OCIOControl } from './ui/components/OCIOControl';
-import type { GamutMappingControl } from './ui/components/GamutMappingControl';
-import type { CurvesControl } from './ui/components/CurvesControl';
-import type { ColorInversionToggle } from './ui/components/ColorInversionToggle';
 import type { PlaylistManager } from './core/session/PlaylistManager';
 import type { MediaCacheManager } from './cache/MediaCacheManager';
 import { showAlert, showConfirm } from './ui/components/shared/Modal';
-import type { OCIOState } from './color/OCIOConfig';
-import type { ToneMappingState, GamutMappingState } from './core/types/effects';
-import type { DisplayColorState } from './color/DisplayTransfer';
-import type { ColorCurvesData } from './color/ColorCurves';
-import type { ChannelMode } from './core/types/color';
-import type { StereoState } from './core/types/stereo';
-import type { StereoEyeTransformState, StereoAlignMode } from './stereo/StereoRenderer';
-import type { DifferenceMatteState } from './ui/components/DifferenceMatteControl';
-import type { BlendModeState } from './ui/components/ComparisonManager';
-import type { DeinterlaceParams } from './filters/Deinterlace';
-import type { FilmEmulationParams } from './filters/FilmEmulation';
-import type { PerspectiveCorrectionParams } from './transform/PerspectiveCorrection';
-import type { StabilizationParams } from './filters/StabilizeMotion';
-import type { SessionState } from './core/session/SessionState';
 
 /**
  * Context interface for dependencies needed by the persistence manager.
@@ -80,60 +47,28 @@ export interface PersistenceManagerContext {
   transformControl: TransformControl;
   cropControl: CropControl;
   lensControl: LensControl;
-  deinterlaceControl?: DeinterlaceControl;
-  filmEmulationControl?: FilmEmulationControl;
-  perspectiveCorrectionControl?: PerspectiveCorrectionControl;
-  stabilizationControl?: StabilizationControl;
   noiseReductionControl?: NoiseReductionControl;
   watermarkControl?: WatermarkControl;
-  compareControl?: CompareControl;
-  stackControl?: StackControl;
-  parControl?: PARControl;
-  backgroundPatternControl?: BackgroundPatternControl;
-  toneMappingControl?: ToneMappingControl;
-  ghostFrameControl?: GhostFrameControl;
-  channelSelect?: ChannelSelect;
-  stereoControl?: StereoControl;
-  stereoEyeTransformControl?: StereoEyeTransformControl;
-  stereoAlignControl?: StereoAlignControl;
-  displayProfileControl?: DisplayProfileControl;
-  ocioControl?: OCIOControl;
-  gamutMappingControl?: GamutMappingControl;
-  curvesControl?: CurvesControl;
-  colorInversionToggle?: ColorInversionToggle;
   playlistManager?: PlaylistManager;
   cacheManager?: MediaCacheManager;
 }
 
-interface LocalPersistenceState {
-  ocioState?: OCIOState;
-  toneMappingState: ToneMappingState;
-  ghostFrameState: GhostFrameState;
-  displayColorState: DisplayColorState;
-  gamutMappingState: GamutMappingState;
-  colorInversion: boolean;
-  curves: ColorCurvesData;
-  channelMode: ChannelMode;
-  stereoState: StereoState;
-  stereoEyeTransforms: StereoEyeTransformState;
-  stereoAlignMode: StereoAlignMode;
-  differenceMatteState: DifferenceMatteState;
-  blendModeState: BlendModeState & { flickerFrame?: 0 | 1 };
-  deinterlaceParams: DeinterlaceParams;
-  filmEmulationParams: FilmEmulationParams;
-  perspectiveParams: PerspectiveCorrectionParams;
-  stabilizationParams: StabilizationParams;
-  uncropState: UncropState;
-}
-
-type AppPersistenceState = SessionState & { localPersistence?: LocalPersistenceState };
-
 export class AppPersistenceManager {
   private ctx: PersistenceManagerContext;
   private gtoStore: SessionGTOStore | null = null;
+  private _snapshotBackendAvailable = true;
 
   constructor(ctx: PersistenceManagerContext) {
     this.ctx = ctx;
+  }
+
+  /**
+   * Whether the snapshot backend initialized successfully.
+   * When false, snapshot create/restore operations will show a clear error
+   * instead of failing unexpectedly at use time.
+   */
+  get snapshotBackendAvailable(): boolean {
+    return this._snapshotBackendAvailable;
   }
 
   /**
@@ -175,59 +110,25 @@ export class AppPersistenceManager {
     this.markAutoSaveDirty();
   }
 
-  private serializeBaseState(projectName: string): SessionState {
-    const { session, paintEngine, viewer } = this.ctx;
-    return SessionSerializer.toJSON(
-      {
-        session,
-        paintEngine,
-        viewer,
-        playlistManager: this.ctx.playlistManager,
-        cacheManager: this.ctx.cacheManager,
-      },
-      projectName,
-    );
-  }
-
-  private serializeLocalPersistenceState(projectName: string): AppPersistenceState {
-    return {
-      ...this.serializeBaseState(projectName),
-      localPersistence: this.captureLocalPersistenceState(),
-    };
-  }
-
-  private captureLocalPersistenceState(): LocalPersistenceState {
-    const { viewer, ocioControl } = this.ctx;
-    return {
-      ...(ocioControl ? { ocioState: ocioControl.getState() } : {}),
-      toneMappingState: viewer.getToneMappingState(),
-      ghostFrameState: viewer.getGhostFrameState(),
-      displayColorState: viewer.getDisplayColorState(),
-      gamutMappingState: viewer.getGamutMappingState(),
-      colorInversion: viewer.getColorInversion(),
-      curves: viewer.getCurves(),
-      channelMode: viewer.getChannelMode(),
-      stereoState: viewer.getStereoState(),
-      stereoEyeTransforms: viewer.getStereoEyeTransforms(),
-      stereoAlignMode: viewer.getStereoAlignMode(),
-      differenceMatteState: viewer.getDifferenceMatteState(),
-      blendModeState: viewer.getBlendModeState(),
-      deinterlaceParams: viewer.getDeinterlaceParams(),
-      filmEmulationParams: viewer.getFilmEmulationParams(),
-      perspectiveParams: viewer.getPerspectiveParams(),
-      stabilizationParams: viewer.getStabilizationParams(),
-      uncropState: viewer.getUncropState(),
-    };
-  }
-
   /**
    * Mark the session as having unsaved changes for auto-save.
    * Uses lazy evaluation - state is only serialized when actually saving.
    */
   markAutoSaveDirty(): void {
-    const { session, autoSaveManager, autoSaveIndicator } = this.ctx;
+    const { session, paintEngine, viewer, autoSaveManager, autoSaveIndicator } = this.ctx;
     // Pass a getter function for lazy evaluation - serialization only happens when saving
-    autoSaveManager.markDirty(() => this.serializeLocalPersistenceState(session.currentSource?.name || 'Untitled'));
+    autoSaveManager.markDirty(() =>
+      SessionSerializer.toJSON(
+        {
+          session,
+          paintEngine,
+          viewer,
+          playlistManager: this.ctx.playlistManager,
+          cacheManager: this.ctx.cacheManager,
+        },
+        session.currentSource?.name || 'Untitled',
+      ),
+    );
     autoSaveIndicator.markUnsaved();
   }
 
@@ -235,9 +136,18 @@ export class AppPersistenceManager {
    * Retry auto-save after a failure
    */
   retryAutoSave(): void {
-    const { session, autoSaveManager } = this.ctx;
+    const { session, paintEngine, viewer, autoSaveManager } = this.ctx;
     try {
-      const state = this.serializeLocalPersistenceState(session.currentSource?.name || 'Untitled');
+      const state = SessionSerializer.toJSON(
+        {
+          session,
+          paintEngine,
+          viewer,
+          playlistManager: this.ctx.playlistManager,
+          cacheManager: this.ctx.cacheManager,
+        },
+        session.currentSource?.name || 'Untitled',
+      );
       autoSaveManager.saveNow(state);
     } catch (err) {
       console.error('Failed to retry auto-save:', err);
@@ -248,9 +158,25 @@ export class AppPersistenceManager {
    * Create a quick snapshot with auto-generated name
    */
   async createQuickSnapshot(): Promise<void> {
-    const { session, snapshotManager } = this.ctx;
+    if (!this._snapshotBackendAvailable) {
+      showAlert('Snapshot storage is unavailable. The snapshot backend failed to initialize.', {
+        type: 'error',
+        title: 'Snapshot Unavailable',
+      });
+      return;
+    }
+    const { session, paintEngine, viewer, snapshotManager } = this.ctx;
     try {
-      const state = this.serializeLocalPersistenceState(session.currentSource?.name || 'Untitled');
+      const state = SessionSerializer.toJSON(
+        {
+          session,
+          paintEngine,
+          viewer,
+          playlistManager: this.ctx.playlistManager,
+          cacheManager: this.ctx.cacheManager,
+        },
+        session.currentSource?.name || 'Untitled',
+      );
       const now = new Date();
       const name = `Snapshot ${now.toLocaleTimeString()}`;
       await snapshotManager.createSnapshot(name, state);
@@ -264,15 +190,23 @@ export class AppPersistenceManager {
   /**
    * Create an auto-checkpoint before major operations
    */
-  async createAutoCheckpoint(event: string): Promise<boolean> {
-    const { session, snapshotManager } = this.ctx;
+  async createAutoCheckpoint(event: string): Promise<void> {
+    if (!this._snapshotBackendAvailable) return;
+    const { session, paintEngine, viewer, snapshotManager } = this.ctx;
     try {
-      const state = this.serializeLocalPersistenceState(session.currentSource?.name || 'Untitled');
+      const state = SessionSerializer.toJSON(
+        {
+          session,
+          paintEngine,
+          viewer,
+          playlistManager: this.ctx.playlistManager,
+          cacheManager: this.ctx.cacheManager,
+        },
+        session.currentSource?.name || 'Untitled',
+      );
       await snapshotManager.createAutoCheckpoint(event, state);
-      return true;
     } catch (err) {
       console.error('Failed to create auto-checkpoint:', err);
-      return false;
     }
   }
 
@@ -280,29 +214,40 @@ export class AppPersistenceManager {
    * Restore a snapshot by ID
    */
   async restoreSnapshot(id: string): Promise<void> {
-    const { session, paintEngine, viewer, snapshotManager, snapshotPanel } = this.ctx;
+    if (!this._snapshotBackendAvailable) {
+      showAlert('Snapshot storage is unavailable. The snapshot backend failed to initialize.', {
+        type: 'error',
+        title: 'Snapshot Unavailable',
+      });
+      return;
+    }
+    const {
+      session,
+      paintEngine,
+      viewer,
+      snapshotManager,
+      snapshotPanel,
+      colorControls,
+      cdlControl,
+      filterControl,
+      transformControl,
+      cropControl,
+      lensControl,
+      noiseReductionControl,
+      watermarkControl,
+    } = this.ctx;
     try {
-      const state = (await snapshotManager.getSnapshot(id)) as AppPersistenceState | null;
+      const state = await snapshotManager.getSnapshot(id);
       if (!state) {
         showAlert('Snapshot not found', { type: 'error', title: 'Restore Error' });
         return;
       }
 
       // Create auto-checkpoint before restore
-      const checkpointOk = await this.createAutoCheckpoint('Before Restore');
-      if (!checkpointOk) {
-        showAlert(
-          'Could not create a safety checkpoint before restore. No rollback will be available if you need to undo this operation.',
-          { type: 'warning', title: 'Checkpoint Warning' },
-        );
-      }
-
-      // Clear existing session before restore so we replace rather than
-      // append onto the current session (fix #139).
-      session.clearSources();
+      await this.createAutoCheckpoint('Before Restore');
 
       // Restore the session state
-      const result = await SessionSerializer.fromJSON(state, {
+      await SessionSerializer.fromJSON(state, {
         session,
         paintEngine,
         viewer,
@@ -310,34 +255,21 @@ export class AppPersistenceManager {
         cacheManager: this.ctx.cacheManager,
       });
 
-      // Update all UI controls with restored state
-      this.syncControlsFromState(state);
+      // Update UI controls with restored state
+      if (state.color) colorControls.setAdjustments(state.color);
+      if (state.cdl) cdlControl.setCDL(state.cdl);
+      if (state.filters) filterControl.setSettings(state.filters);
+      if (state.transform) transformControl.setTransform(state.transform);
+      if (state.crop) cropControl.setState(state.crop);
+      if (state.lens) lensControl.setParams(state.lens);
+      if (state.noiseReduction && noiseReductionControl) noiseReductionControl.setParams(state.noiseReduction);
+      if (state.watermark && watermarkControl) watermarkControl.setState(state.watermark);
 
       // Close the panel
       snapshotPanel.hide();
 
       const metadata = await snapshotManager.getSnapshotMetadata(id);
-      const snapName = metadata?.name || 'snapshot';
-
-      // Emit snapshotRestored event so listeners know restore succeeded (fix #390).
-      if (metadata) {
-        snapshotManager.notifyRestored(metadata);
-      }
-
-      // Surface warnings from restore rather than always reporting success (fix #140).
-      if (result.warnings.length > 0) {
-        showAlert(
-          `Restored "${snapName}" with ${result.warnings.length} warning(s):\n${result.warnings.join('\n')}`,
-          { type: 'warning', title: 'Snapshot Restored' },
-        );
-      } else if (result.loadedMedia === 0) {
-        showAlert(`Restored "${snapName}" (no media files — state only)`, {
-          type: 'info',
-          title: 'Snapshot Restored',
-        });
-      } else {
-        showAlert(`Restored "${snapName}"`, { type: 'success', title: 'Snapshot Restored' });
-      }
+      showAlert(`Restored "${metadata?.name || 'snapshot'}"`, { type: 'success', title: 'Snapshot Restored' });
     } catch (err) {
       console.error('Failed to restore snapshot:', err);
       showAlert(`Failed to restore snapshot: ${err}`, { type: 'error', title: 'Restore Error' });
@@ -348,26 +280,19 @@ export class AppPersistenceManager {
    * Save project to file
    */
   async saveProject(): Promise<void> {
-    const { session, viewer } = this.ctx;
+    const { session, paintEngine, viewer } = this.ctx;
     try {
-      // Fix #127: Use session display name instead of hardcoded 'project'
-      const displayName = session.metadata?.displayName?.trim() || 'project';
-      const state = this.serializeBaseState(displayName);
-
-      // Surface serialization gaps to the user (fix #119).
-      // SessionSerializer.toJSON() logs active gaps to the console, but the user
-      // never sees them. Match the load path which already surfaces warnings.
-      const gaps = SessionSerializer.getSerializationGaps(viewer);
-      const activeGaps = gaps.filter((g) => g.isActive);
-      if (activeGaps.length > 0) {
-        const details = activeGaps.map((g) => `• ${g.name}: ${g.impact}`).join('\n');
-        showAlert(
-          `The following active states are NOT saved in the project file and will revert to defaults on reload:\n\n${details}`,
-          { type: 'warning', title: 'Save Warning' },
-        );
-      }
-
-      await SessionSerializer.saveToFile(state, `${displayName}.orvproject`);
+      const state = SessionSerializer.toJSON(
+        {
+          session,
+          paintEngine,
+          viewer,
+          playlistManager: this.ctx.playlistManager,
+          cacheManager: this.ctx.cacheManager,
+        },
+        'project',
+      );
+      await SessionSerializer.saveToFile(state, 'project.orvproject');
     } catch (err) {
       showAlert(`Failed to save project: ${err}`, { type: 'error', title: 'Save Error' });
     }
@@ -394,26 +319,17 @@ export class AppPersistenceManager {
   }
 
   /**
-   * Open project from file.
-   *
-   * For `.rv`/`.gto` sessions, optional `companionFiles` are built into an
-   * `availableFiles` map so that `loadFromGTO` can resolve referenced media
-   * and CDL files by basename.
+   * Open project from file
    */
-  async openProject(file: File, companionFiles?: File[]): Promise<void> {
+  async openProject(file: File): Promise<void> {
     const { session, paintEngine, viewer } = this.ctx;
     const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
 
     try {
+      // Create auto-checkpoint before loading new project
+      await this.createAutoCheckpoint('Before Project Load');
+
       if (ext === 'orvproject') {
-        // Create auto-checkpoint before replacing session state
-        const checkpointOk = await this.createAutoCheckpoint('Before Project Load');
-        if (!checkpointOk) {
-          showAlert(
-            'Could not create a safety checkpoint before loading. No rollback will be available if you need to undo this operation.',
-            { type: 'warning', title: 'Checkpoint Warning' },
-          );
-        }
         const state = await SessionSerializer.loadFromFile(file);
         const result = await SessionSerializer.fromJSON(state, {
           session,
@@ -422,9 +338,6 @@ export class AppPersistenceManager {
           playlistManager: this.ctx.playlistManager,
           cacheManager: this.ctx.cacheManager,
         });
-
-        // Update all UI controls with restored state
-        this.syncControlsFromState(state);
 
         if (result.warnings.length > 0) {
           showAlert(`Project loaded with warnings:\n${result.warnings.join('\n')}`, {
@@ -443,39 +356,8 @@ export class AppPersistenceManager {
           });
         }
       } else if (ext === 'rv' || ext === 'gto') {
-        // Create auto-checkpoint before replacing session state
-        const checkpointOk2 = await this.createAutoCheckpoint('Before Project Load');
-        if (!checkpointOk2) {
-          showAlert(
-            'Could not create a safety checkpoint before loading. No rollback will be available if you need to undo this operation.',
-            { type: 'warning', title: 'Checkpoint Warning' },
-          );
-        }
         const content = await file.arrayBuffer();
-
-        // Build availableFiles map from companion files so loadFromGTO can
-        // resolve referenced media/CDL files by basename (fix #162).
-        let availableFiles: Map<string, File> | undefined;
-        if (companionFiles && companionFiles.length > 0) {
-          availableFiles = new Map<string, File>();
-          for (const f of companionFiles) {
-            availableFiles.set(f.name, f);
-          }
-        }
-
-        await session.loadFromGTO(content, availableFiles);
-
-        // Sync UI controls that the settingsLoaded event handler does NOT cover (fix #160).
-        // GTO loading fires settingsLoaded which already syncs color, CDL, filter,
-        // transform, crop, lens, and noiseReduction controls. We only need to sync
-        // wipe/compare, stack, PAR, backgroundPattern, and watermark here.
-        const wipeState = viewer.getWipeState();
-        this.syncControlsFromState({
-          watermark: viewer.getWatermarkState(),
-          wipe: { mode: wipeState.mode, position: wipeState.position },
-          par: viewer.getPARState(),
-          backgroundPattern: viewer.getBackgroundPatternState(),
-        });
+        await session.loadFromGTO(content);
       } else if (ext === 'rvedl') {
         const text = await file.text();
         session.loadEDL(text);
@@ -499,6 +381,14 @@ export class AppPersistenceManager {
       await this.ctx.snapshotManager.initialize();
     } catch (err) {
       console.error('Snapshot manager initialization failed:', err);
+      this._snapshotBackendAvailable = false;
+      this.ctx.snapshotPanel.setDisabled(
+        'Snapshot storage is unavailable. Snapshots cannot be created or restored.',
+      );
+      showAlert(
+        `Snapshot system failed to initialize: ${err instanceof Error ? err.message : err}. Snapshots will be unavailable this session.`,
+        { type: 'warning', title: 'Snapshot Unavailable' },
+      );
     }
   }
 
@@ -537,20 +427,13 @@ export class AppPersistenceManager {
           if (recover) {
             await this.recoverAutoSave(mostRecent.id);
           } else {
-            // Only delete the specific entry the user was prompted about (fix #396)
-            await autoSaveManager.deleteAutoSave(mostRecent.id);
+            // Clear old auto-saves if user discards
+            await autoSaveManager.clearAll();
           }
         }
       }
     } catch (err) {
       console.error('Auto-save initialization failed:', err);
-      // Surface the failure to the user and disable the indicator so it
-      // does not look active when the backend never came up (fix #192).
-      this.ctx.autoSaveIndicator.setStatus('disabled');
-      showAlert(
-        'Auto-save could not be initialized. Your work will not be automatically saved. You can still save manually via File > Save Project.',
-        { type: 'warning', title: 'Auto-Save Unavailable' },
-      );
     }
   }
 
@@ -558,9 +441,22 @@ export class AppPersistenceManager {
    * Recover session from auto-save
    */
   private async recoverAutoSave(id: string): Promise<void> {
-    const { autoSaveManager, session, paintEngine, viewer } = this.ctx;
+    const {
+      autoSaveManager,
+      session,
+      paintEngine,
+      viewer,
+      colorControls,
+      cdlControl,
+      filterControl,
+      transformControl,
+      cropControl,
+      lensControl,
+      noiseReductionControl,
+      watermarkControl,
+    } = this.ctx;
     try {
-      const state = (await autoSaveManager.getAutoSave(id)) as AppPersistenceState | null;
+      const state = await autoSaveManager.getAutoSave(id);
       if (state) {
         const { loadedMedia, warnings } = await SessionSerializer.fromJSON(state, {
           session,
@@ -570,195 +466,42 @@ export class AppPersistenceManager {
           cacheManager: this.ctx.cacheManager,
         });
 
-        // Update all UI controls with restored state
-        this.syncControlsFromState(state);
+        // Update UI controls with restored state
+        colorControls.setAdjustments(state.color);
+        cdlControl.setCDL(state.cdl);
+        filterControl.setSettings(state.filters);
+        transformControl.setTransform(state.transform);
+        cropControl.setState(state.crop);
+        lensControl.setParams(state.lens);
+        if (state.noiseReduction && noiseReductionControl) noiseReductionControl.setParams(state.noiseReduction);
+        if (state.watermark && watermarkControl) watermarkControl.setState(state.watermark);
+        // Note: wipe state is restored via viewer.setWipeState in SessionSerializer.fromJSON
 
         if (warnings.length > 0) {
-          // Keep the auto-save entry when recovery has warnings so the user
-          // can attempt recovery again if needed (fix #141).
-          showAlert(
-            `Session recovered with ${warnings.length} warning(s):\n${warnings.join('\n')}\n\n` +
-              `The auto-save entry has been preserved in case you need to retry recovery.`,
-            {
-              title: 'Recovery Warnings',
-              type: 'warning',
-            },
-          );
-        } else {
-          // Only delete the entry when recovery completes cleanly (fix #141).
-          await autoSaveManager.deleteAutoSave(id);
-
-          if (loadedMedia > 0) {
-            showAlert(`Session recovered successfully with ${loadedMedia} media file(s).`, {
-              title: 'Recovery Complete',
-              type: 'success',
-            });
-          } else {
-            showAlert('Session recovered (no media files — state only)', {
-              title: 'Recovery Complete',
-              type: 'info',
-            });
-          }
+          showAlert(`Session recovered with ${warnings.length} warning(s):\n${warnings.join('\n')}`, {
+            title: 'Recovery Warnings',
+            type: 'warning',
+          });
+        } else if (loadedMedia > 0) {
+          showAlert(`Session recovered successfully with ${loadedMedia} media file(s).`, {
+            title: 'Recovery Complete',
+            type: 'success',
+          });
         }
+
+        // Clear the recovered entry
+        await autoSaveManager.deleteAutoSave(id);
+      } else {
+        showAlert('Auto-save entry not found. Recovery data may have been lost.', {
+          type: 'error',
+          title: 'Recovery Error',
+        });
       }
     } catch (err) {
       showAlert(`Failed to recover session: ${err}`, {
         title: 'Recovery Failed',
         type: 'error',
       });
-    }
-  }
-
-  /**
-   * Synchronize all UI controls with the given restored session state.
-   *
-   * SessionSerializer.fromJSON pushes state into the Viewer (the rendering backend),
-   * but UI controls (sliders, panels, dropdowns) maintain their own copies of state.
-   * This method bridges that gap so controls reflect the restored values.
-   */
-  private syncControlsFromState(state: {
-    color?: any;
-    cdl?: any;
-    filters?: any;
-    transform?: any;
-    crop?: any;
-    lens?: any;
-    noiseReduction?: any;
-    watermark?: any;
-    wipe?: any;
-    stack?: any;
-    par?: any;
-    backgroundPattern?: any;
-    localPersistence?: LocalPersistenceState;
-  }): void {
-    const {
-      viewer,
-      colorControls,
-      cdlControl,
-      filterControl,
-      transformControl,
-      cropControl,
-      lensControl,
-      deinterlaceControl,
-      filmEmulationControl,
-      perspectiveCorrectionControl,
-      stabilizationControl,
-      noiseReductionControl,
-      watermarkControl,
-      compareControl,
-      stackControl,
-      parControl,
-      backgroundPatternControl,
-      toneMappingControl,
-      ghostFrameControl,
-      channelSelect,
-      stereoControl,
-      stereoEyeTransformControl,
-      stereoAlignControl,
-      displayProfileControl,
-      ocioControl,
-      gamutMappingControl,
-      curvesControl,
-      colorInversionToggle,
-    } = this.ctx;
-
-    // Color / grading controls
-    if (state.color) colorControls.setAdjustments(state.color);
-    if (state.cdl) cdlControl.setCDL(state.cdl);
-    if (state.filters) filterControl.setSettings(state.filters);
-    if (state.transform) transformControl.setTransform(state.transform);
-    if (state.crop) cropControl.setState(state.crop);
-    if (state.lens) lensControl.setParams(state.lens);
-    if (state.noiseReduction && noiseReductionControl) noiseReductionControl.setParams(state.noiseReduction);
-    if (state.watermark && watermarkControl) watermarkControl.setState(state.watermark);
-
-    // Compare / wipe controls
-    if (state.wipe && compareControl) {
-      compareControl.setWipeMode(state.wipe.mode);
-      compareControl.setWipePosition(state.wipe.position);
-    }
-
-    // Stack layer control
-    if (stackControl) {
-      if (state.stack && state.stack.length > 0) {
-        stackControl.setLayers(state.stack);
-      } else {
-        stackControl.clearLayers();
-      }
-    }
-
-    // PAR control (fix #120)
-    if (state.par && parControl) {
-      parControl.setState(state.par);
-    }
-
-    // Background pattern control (fix #120)
-    if (state.backgroundPattern && backgroundPatternControl) {
-      backgroundPatternControl.setState(state.backgroundPattern);
-    }
-
-    const local = state.localPersistence;
-    if (!local) return;
-
-    viewer.setToneMappingState(local.toneMappingState);
-    if (toneMappingControl) toneMappingControl.setState(local.toneMappingState);
-
-    viewer.setGhostFrameState(local.ghostFrameState);
-    if (ghostFrameControl) ghostFrameControl.setState(local.ghostFrameState);
-
-    viewer.setDisplayColorState(local.displayColorState);
-    if (displayProfileControl) displayProfileControl.setState(local.displayColorState);
-
-    viewer.setGamutMappingState(local.gamutMappingState);
-    if (gamutMappingControl) gamutMappingControl.setState(local.gamutMappingState);
-
-    viewer.setColorInversion(local.colorInversion);
-    if (colorInversionToggle) colorInversionToggle.setEnabled(local.colorInversion);
-
-    viewer.setCurves(local.curves);
-    if (curvesControl) curvesControl.setCurves(local.curves);
-
-    viewer.setChannelMode(local.channelMode);
-    if (channelSelect) channelSelect.setChannel(local.channelMode);
-
-    viewer.setStereoState(local.stereoState);
-    if (stereoControl) stereoControl.setState(local.stereoState);
-
-    viewer.setStereoEyeTransforms(local.stereoEyeTransforms);
-    if (stereoEyeTransformControl) stereoEyeTransformControl.setState(local.stereoEyeTransforms);
-
-    viewer.setStereoAlignMode(local.stereoAlignMode);
-    if (stereoAlignControl) stereoAlignControl.setMode(local.stereoAlignMode);
-
-    viewer.setDifferenceMatteState(local.differenceMatteState);
-    viewer.setBlendModeState(local.blendModeState);
-    if (compareControl) {
-      compareControl.setDifferenceMatteEnabled(local.differenceMatteState.enabled);
-      compareControl.setDifferenceMatteGain(local.differenceMatteState.gain);
-      compareControl.setDifferenceMatteHeatmap(local.differenceMatteState.heatmap);
-      compareControl.setBlendMode(local.blendModeState.mode);
-      compareControl.setOnionOpacity(local.blendModeState.onionOpacity);
-      compareControl.setFlickerRate(local.blendModeState.flickerRate);
-      compareControl.setBlendRatio(local.blendModeState.blendRatio);
-    }
-
-    viewer.setDeinterlaceParams(local.deinterlaceParams);
-    if (deinterlaceControl) deinterlaceControl.setParams(local.deinterlaceParams);
-
-    viewer.setFilmEmulationParams(local.filmEmulationParams);
-    if (filmEmulationControl) filmEmulationControl.setParams(local.filmEmulationParams);
-
-    viewer.setPerspectiveParams(local.perspectiveParams);
-    if (perspectiveCorrectionControl) perspectiveCorrectionControl.setParams(local.perspectiveParams);
-
-    viewer.setStabilizationParams(local.stabilizationParams);
-    if (stabilizationControl) stabilizationControl.setParams(local.stabilizationParams);
-
-    viewer.setUncropState(local.uncropState);
-    cropControl.setUncropState(local.uncropState);
-
-    if (local.ocioState && ocioControl) {
-      ocioControl.setState(local.ocioState);
     }
   }
 

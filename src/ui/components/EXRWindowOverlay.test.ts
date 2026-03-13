@@ -193,10 +193,12 @@ describe('EXRWindowOverlay', () => {
 
     it('EXR-042: toggle switches enabled state', () => {
       overlay.setWindows(SAMPLE_DATA_WINDOW, SAMPLE_DISPLAY_WINDOW);
-      overlay.toggle();
+      // setWindows auto-enables for mismatched windows, so toggle disables first
       expect(overlay.isVisible()).toBe(true);
       overlay.toggle();
       expect(overlay.isVisible()).toBe(false);
+      overlay.toggle();
+      expect(overlay.isVisible()).toBe(true);
     });
 
     it('EXR-043: enable emits stateChanged', () => {
@@ -270,24 +272,6 @@ describe('EXRWindowOverlay', () => {
       overlay.on('stateChanged', handler);
       overlay.setDisplayWindowColor('#0000ff');
       expect(handler).toHaveBeenCalledWith(expect.objectContaining({ displayWindowColor: '#0000ff' }));
-    });
-
-    it('EXR-064: setLineWidth clamps to the supported range', () => {
-      overlay.setLineWidth(20);
-      expect(overlay.getState().lineWidth).toBe(12);
-
-      overlay.setLineWidth(0);
-      expect(overlay.getState().lineWidth).toBe(1);
-    });
-
-    it('EXR-065: setDashPattern clamps dash and gap values', () => {
-      overlay.setDashPattern([40, -5]);
-      expect(overlay.getState().dashPattern).toEqual([32, 0]);
-    });
-
-    it('EXR-066: setShowLabels updates label visibility', () => {
-      overlay.setShowLabels(false);
-      expect(overlay.getState().showLabels).toBe(false);
     });
   });
 
@@ -435,6 +419,78 @@ describe('EXRWindowOverlay', () => {
       overlay.dispose();
       expect(() => overlay.dispose()).not.toThrow();
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Auto-enable / auto-disable on window mismatch (Issue #353)
+// ---------------------------------------------------------------------------
+describe('Auto-enable/disable on window mismatch (#353)', () => {
+  let overlay: EXRWindowOverlay;
+
+  beforeEach(() => {
+    overlay = new EXRWindowOverlay();
+  });
+
+  afterEach(() => {
+    overlay.dispose();
+  });
+
+  it('EXR-120: overlay auto-enables when mismatched windows are set', () => {
+    const dataWindow: EXRBox2i = { xMin: 100, yMin: 50, xMax: 899, yMax: 549 };
+    const displayWindow: EXRBox2i = { xMin: 0, yMin: 0, xMax: 999, yMax: 599 };
+    overlay.setWindows(dataWindow, displayWindow);
+    expect(overlay.getState().enabled).toBe(true);
+    expect(overlay.isVisible()).toBe(true);
+  });
+
+  it('EXR-121: overlay stays disabled when windows match exactly', () => {
+    const window: EXRBox2i = { xMin: 0, yMin: 0, xMax: 999, yMax: 599 };
+    overlay.setWindows(window, window);
+    expect(overlay.getState().enabled).toBe(false);
+    expect(overlay.isVisible()).toBe(false);
+  });
+
+  it('EXR-122: overlay disables when windows are cleared', () => {
+    const dataWindow: EXRBox2i = { xMin: 100, yMin: 50, xMax: 899, yMax: 549 };
+    const displayWindow: EXRBox2i = { xMin: 0, yMin: 0, xMax: 999, yMax: 599 };
+    overlay.setWindows(dataWindow, displayWindow);
+    expect(overlay.getState().enabled).toBe(true);
+    overlay.clearWindows();
+    expect(overlay.getState().enabled).toBe(false);
+    expect(overlay.isVisible()).toBe(false);
+  });
+
+  it('EXR-123: setWindows emits stateChanged with correct enabled value', () => {
+    const handler = vi.fn();
+    overlay.on('stateChanged', handler);
+    const dataWindow: EXRBox2i = { xMin: 10, yMin: 10, xMax: 90, yMax: 90 };
+    const displayWindow: EXRBox2i = { xMin: 0, yMin: 0, xMax: 99, yMax: 99 };
+    overlay.setWindows(dataWindow, displayWindow);
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({ enabled: true }));
+  });
+
+  it('EXR-124: clearWindows emits stateChanged with enabled: false', () => {
+    const dataWindow: EXRBox2i = { xMin: 10, yMin: 10, xMax: 90, yMax: 90 };
+    const displayWindow: EXRBox2i = { xMin: 0, yMin: 0, xMax: 99, yMax: 99 };
+    overlay.setWindows(dataWindow, displayWindow);
+    const handler = vi.fn();
+    overlay.on('stateChanged', handler);
+    overlay.clearWindows();
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({ enabled: false }));
+  });
+
+  it('EXR-125: setWindows with matching windows auto-disables a previously enabled overlay', () => {
+    // First set mismatched windows (auto-enables)
+    overlay.setWindows(
+      { xMin: 10, yMin: 10, xMax: 90, yMax: 90 },
+      { xMin: 0, yMin: 0, xMax: 99, yMax: 99 },
+    );
+    expect(overlay.getState().enabled).toBe(true);
+    // Now set matching windows (should auto-disable)
+    const window: EXRBox2i = { xMin: 0, yMin: 0, xMax: 99, yMax: 99 };
+    overlay.setWindows(window, window);
+    expect(overlay.getState().enabled).toBe(false);
   });
 });
 

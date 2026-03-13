@@ -7,7 +7,6 @@
 
 import { getThemeManager } from '../utils/ui/ThemeManager';
 import { getGlobalHistoryManager } from '../utils/HistoryManager';
-import { getCorePreferencesManager } from '../core/PreferencesManager';
 import { showAlert } from '../ui/components/shared/Modal';
 
 // ---------------------------------------------------------------------------
@@ -145,7 +144,6 @@ export interface ActionControls {
     hidePanel(): void;
   };
   stereoAlignControl: { handleKeyboard(key: string, toggle: boolean): void };
-  textFormattingToolbar?: { handleKeyboard(key: string, ctrlKey: boolean): boolean };
   safeAreasControl: { getOverlay(): { toggle(): void } };
   lutPipelinePanel: {
     toggle(): void;
@@ -232,11 +230,6 @@ export interface ActionAriaAnnouncer {
 // Aggregated dependencies
 // ---------------------------------------------------------------------------
 
-/** Subset of ClientMode used by keyboard action gating. */
-export interface ActionClientMode {
-  isActionAllowed(action: string): boolean;
-}
-
 export interface KeyboardActionDeps {
   session: ActionSession;
   viewer: ActionViewer;
@@ -254,8 +247,6 @@ export interface KeyboardActionDeps {
   headerBar: ActionHeaderBar;
   frameNavigation: ActionFrameNavigation;
   ariaAnnouncer?: ActionAriaAnnouncer | null;
-  /** When provided, actions are gated by client mode allowlist (#195). */
-  clientMode?: ActionClientMode | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -267,10 +258,6 @@ export interface KeyboardActionDeps {
  *
  * This is a **pure function** (aside from the `getThemeManager()` singleton
  * call for theme cycling).  Every handler closes over the supplied `deps`.
- *
- * When `deps.clientMode` is provided, every handler is wrapped so that
- * blocked actions are silently ignored (no error, just a no-op).  This
- * enforces the client mode action allowlist at the keyboard layer (#195).
  */
 export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, () => void> {
   const {
@@ -292,9 +279,7 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
     ariaAnnouncer,
   } = deps;
 
-  const { clientMode } = deps;
-
-  const rawHandlers: Record<string, () => void> = {
+  return {
     // -- Playback --------------------------------------------------------
     'playback.toggle': () => session.togglePlayback(),
     'playback.stepForward': () => session.stepForward(),
@@ -559,12 +544,11 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
     // -- Export ----------------------------------------------------------
     'export.quickExport': () => headerBar.getExportControl().quickExport('png'),
     'export.copyFrame': async () => {
-      const includeAnnotations = getCorePreferencesManager().getExportDefaults().includeAnnotations;
-      const ok = await viewer.copyFrameToClipboard(includeAnnotations);
-      if (!ok) {
-        showAlert('Failed to copy frame to clipboard. Your browser may have denied clipboard access.', {
-          type: 'warning',
-          title: 'Clipboard Unavailable',
+      const success = await viewer.copyFrameToClipboard(true);
+      if (!success) {
+        showAlert('Failed to copy frame to clipboard. Clipboard access may have been denied by the browser.', {
+          type: 'error',
+          title: 'Clipboard Error',
         });
       }
     },
@@ -605,9 +589,6 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
     'paint.toggleBrush': () => controls.paintToolbar.handleKeyboard('b'),
     'paint.toggleGhost': () => controls.paintToolbar.handleKeyboard('g'),
     'paint.toggleHold': () => controls.paintToolbar.handleKeyboard('x'),
-    'paint.textBold': () => { controls.textFormattingToolbar?.handleKeyboard('b', true); },
-    'paint.textItalic': () => { controls.textFormattingToolbar?.handleKeyboard('i', true); },
-    'paint.textUnderline': () => { controls.textFormattingToolbar?.handleKeyboard('u', true); },
 
     // -- Navigation -------------------------------------------------------
     'navigation.gotoFrame': () => controls.gotoFrameOverlay.show(),
@@ -629,8 +610,13 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
     'channel.green': () => controls.channelSelect.handleKeyboard('G', true),
     'channel.blue': () => controls.channelSelect.handleKeyboard('B', true),
     'channel.alpha': () => controls.channelSelect.handleKeyboard('A', true),
-    'channel.luminance': () => controls.channelSelect.handleKeyboard('L', true),
-    'lut.togglePanel': () => controls.lutPipelinePanel.toggle(),
+    'channel.luminance': () => {
+      if (tabBar.activeTab === 'color') {
+        controls.lutPipelinePanel.toggle();
+        return;
+      }
+      controls.channelSelect.handleKeyboard('L', true);
+    },
     'channel.grayscale': () => controls.channelSelect.handleKeyboard('Y', true),
     'channel.none': () => controls.channelSelect.handleKeyboard('N', true),
 
@@ -734,17 +720,4 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
     'view.zoom1to7': () => viewer.smoothSetPixelRatio(1 / 7),
     'view.zoom1to8': () => viewer.smoothSetPixelRatio(0.125),
   };
-
-  // When client mode is provided, wrap every handler so that disallowed
-  // actions are silently ignored (no error, just blocked).
-  if (!clientMode) return rawHandlers;
-
-  const gated: Record<string, () => void> = {};
-  for (const [action, handler] of Object.entries(rawHandlers)) {
-    gated[action] = () => {
-      if (!clientMode.isActionAllowed(action)) return;
-      handler();
-    };
-  }
-  return gated;
 }

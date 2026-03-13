@@ -20,7 +20,6 @@ import type {
   AnnotationSyncPayload,
   NoteSyncPayload,
   ColorSyncPayload,
-  ViewSyncPayload,
 } from './network/types';
 import {
   buildShareURL,
@@ -74,20 +73,17 @@ export interface NetworkBridgeContext {
   networkControl: NetworkControl;
   headerBar: HeaderBar;
   getSessionURLState?: () => SessionURLState;
-  applySessionURLState?: (state: SessionURLState) => void | Promise<void>;
+  applySessionURLState?: (state: SessionURLState) => void;
 }
 
 export class AppNetworkBridge {
   private ctx: NetworkBridgeContext;
   private unsubscribers: (() => void)[] = [];
   private pendingStateByTransferId = new Map<string, SessionURLState>();
-  private pendingAnnotationsByTransferId = new Map<string, unknown[] | undefined>();
-  private pendingNotesByTransferId = new Map<string, unknown[] | undefined>();
   private outgoingMediaTransfers = new Map<string, OutgoingMediaTransfer>();
   private incomingMediaTransfers = new Map<string, IncomingMediaTransfer>();
   private colorSyncThrottle: Throttled<[ColorSyncPayload]> | null = null;
   private frameSyncThrottle: Throttled<[number]> | null = null;
-  private viewSyncThrottle: Throttled<[ViewSyncPayload]> | null = null;
   private lastPlaybackSyncFrame = -1;
   private lastPlaybackSyncTime = 0;
 
@@ -167,12 +163,14 @@ export class AppNetworkBridge {
             controlWithShare.setShareLink?.(shareLink);
           }
           await navigator.clipboard.writeText(shareLink);
+          networkControl.reportCopyResult(true);
         } catch (error) {
           if (error instanceof Error && /clipboard/i.test(error.message)) {
-            networkControl.showError('Clipboard unavailable. Copy Share URL from the Network Sync panel.');
+            networkControl.reportCopyResult(false, 'Clipboard unavailable. Copy Share URL from the Network Sync panel.');
             return;
           }
-          networkControl.showError(
+          networkControl.reportCopyResult(
+            false,
             `Failed to generate share URL: ${error instanceof Error ? error.message : 'unknown error'}`,
           );
         }
@@ -217,30 +215,18 @@ export class AppNetworkBridge {
               annotations,
               notes,
             });
+            return;
           } catch (error) {
             networkControl.showError(
               `Failed to encrypt session state for transfer: ${error instanceof Error ? error.message : 'unknown error'}`,
             );
-            return;
           }
-        } else {
-          networkSyncManager.sendSessionStateResponse(requestId, requesterUserId, {
-            sessionState: encodedState,
-            annotations,
-            notes,
-          });
         }
 
-        // Send current color adjustments so the joiner inherits the host's color state
-        const colorAdj = viewer.getColorAdjustments();
-        networkSyncManager.sendColorSync({
-          exposure: colorAdj.exposure,
-          gamma: colorAdj.gamma,
-          saturation: colorAdj.saturation,
-          contrast: colorAdj.contrast,
-          temperature: colorAdj.temperature,
-          tint: colorAdj.tint,
-          brightness: colorAdj.brightness,
+        networkSyncManager.sendSessionStateResponse(requestId, requesterUserId, {
+          sessionState: encodedState,
+          annotations,
+          notes,
         });
       }),
     );
@@ -277,13 +263,13 @@ export class AppNetworkBridge {
           const transferId = networkSyncManager.requestMediaSync(payload.senderUserId);
           if (transferId) {
             this.pendingStateByTransferId.set(transferId, decoded);
-            this.pendingAnnotationsByTransferId.set(transferId, payload.annotations);
-            this.pendingNotesByTransferId.set(transferId, payload.notes);
+            this.applySharedSessionState(decoded);
+            this.applyReceivedAnnotationsAndNotes(payload.annotations, payload.notes);
             return;
           }
         }
 
-        await this.applySharedSessionState(decoded);
+        this.applySharedSessionState(decoded);
         this.applyReceivedAnnotationsAndNotes(payload.annotations, payload.notes);
       }),
     );
@@ -330,9 +316,11 @@ export class AppNetworkBridge {
         networkSyncManager.sendMediaResponse(transferId, senderUserId, accepted);
 
         if (!accepted) {
-          this.pendingStateByTransferId.delete(transferId);
-          this.pendingAnnotationsByTransferId.delete(transferId);
-          this.pendingNotesByTransferId.delete(transferId);
+          const pendingState = this.pendingStateByTransferId.get(transferId);
+          if (pendingState) {
+            this.applySharedSessionState(pendingState);
+            this.pendingStateByTransferId.delete(transferId);
+          }
           return;
         }
 
@@ -391,17 +379,10 @@ export class AppNetworkBridge {
       networkSyncManager.on('mediaSyncCompleted', async ({ transferId, senderUserId }) => {
         const transfer = this.incomingMediaTransfers.get(transferId);
         const pendingState = this.pendingStateByTransferId.get(transferId);
-        const pendingAnnotations = this.pendingAnnotationsByTransferId.get(transferId);
-        const pendingNotes = this.pendingNotesByTransferId.get(transferId);
 
         try {
           if (transfer && transfer.senderUserId === senderUserId) {
             await this.importIncomingMediaTransfer(transfer);
-          }
-
-          if (pendingState) {
-            await this.applySharedSessionState(pendingState);
-            this.applyReceivedAnnotationsAndNotes(pendingAnnotations, pendingNotes);
           }
         } catch (error) {
           networkControl.showError(
@@ -410,8 +391,10 @@ export class AppNetworkBridge {
         } finally {
           this.incomingMediaTransfers.delete(transferId);
           this.pendingStateByTransferId.delete(transferId);
-          this.pendingAnnotationsByTransferId.delete(transferId);
-          this.pendingNotesByTransferId.delete(transferId);
+        }
+
+        if (pendingState) {
+          this.applySharedSessionState(pendingState);
         }
       }),
     );
@@ -471,6 +454,19 @@ export class AppNetworkBridge {
       }),
     );
 
+    this.unsubscribers.push(
+      networkSyncManager.on('roomLeft', () => {
+        networkControl.setConnectionState('disconnected');
+        networkControl.setIsHost(false);
+        networkControl.setShareLinkKind('generic');
+        networkControl.setResponseToken('');
+        networkControl.setRoomInfo(null);
+        networkControl.setUsers([]);
+        networkControl.hideInfo();
+        this.ctx.paintEngine?.setIdPrefix('');
+      }),
+    );
+
     // Wire incoming sync events to Session/Viewer
     this.unsubscribers.push(
       networkSyncManager.on('syncPlayback', (payload) => {
@@ -517,10 +513,6 @@ export class AppNetworkBridge {
         sm.beginApplyRemote();
         try {
           viewer.setZoom(payload.zoom);
-          viewer.setPan(payload.panX, payload.panY);
-          if (payload.channelMode) {
-            viewer.setChannelMode(payload.channelMode as Parameters<typeof viewer.setChannelMode>[0]);
-          }
         } finally {
           sm.endApplyRemote();
         }
@@ -573,22 +565,6 @@ export class AppNetworkBridge {
         }),
       );
     }
-
-    // Wire outgoing view sync when local pan/zoom changes
-    this.viewSyncThrottle = createThrottle((payload: ViewSyncPayload) => {
-      networkSyncManager.sendViewSync(payload);
-    }, 100);
-
-    viewer.setOnViewChanged((panX: number, panY: number, zoom: number) => {
-      if (networkSyncManager.isConnected && !networkSyncManager.getSyncStateManager().isApplyingRemoteState) {
-        this.viewSyncThrottle!.call({
-          panX,
-          panY,
-          zoom,
-          channelMode: viewer.getChannelMode(),
-        });
-      }
-    });
 
     // Wire incoming annotation sync
     const paintEngine = this.ctx.paintEngine;
@@ -836,16 +812,16 @@ export class AppNetworkBridge {
     }
   }
 
-  private async applySharedSessionState(state: SessionURLState): Promise<void> {
+  private applySharedSessionState(state: SessionURLState): void {
     if (this.ctx.applySessionURLState) {
-      await this.ctx.applySessionURLState(state);
+      this.ctx.applySessionURLState(state);
       return;
     }
-    await this.applyCapturedSessionURLState(state);
+    this.applyCapturedSessionURLState(state);
   }
 
   private shouldRequestMediaSync(state: SessionURLState): boolean {
-    return state.sourceIndex >= 0;
+    return this.ctx.session.sourceCount === 0 && state.sourceIndex >= 0;
   }
 
   private async confirmMediaSync(totalBytes: number, fileCount: number): Promise<boolean> {
@@ -1085,23 +1061,8 @@ export class AppNetworkBridge {
     };
   }
 
-  private async applyCapturedSessionURLState(state: SessionURLState): Promise<void> {
+  private applyCapturedSessionURLState(state: SessionURLState): void {
     const { session, viewer, networkSyncManager } = this.ctx;
-
-    // When the session has no media loaded and sourceUrl is available,
-    // attempt to load media from the shared URL before applying view state.
-    if (session.sourceCount === 0 && state.sourceUrl) {
-      try {
-        console.info(`[AppNetworkBridge] Loading media from share link: ${state.sourceUrl}`);
-        await session.loadSourceFromUrl(state.sourceUrl);
-      } catch (err) {
-        console.warn(
-          '[AppNetworkBridge] Failed to load media from share link sourceUrl, continuing with view state:',
-          err,
-        );
-      }
-    }
-
     const sm = networkSyncManager.getSyncStateManager();
     sm.beginApplyRemote();
     try {
@@ -1155,12 +1116,7 @@ export class AppNetworkBridge {
     this.colorSyncThrottle = null;
     this.frameSyncThrottle?.cancel();
     this.frameSyncThrottle = null;
-    this.viewSyncThrottle?.cancel();
-    this.viewSyncThrottle = null;
-    this.ctx.viewer.setOnViewChanged(null);
     this.pendingStateByTransferId.clear();
-    this.pendingAnnotationsByTransferId.clear();
-    this.pendingNotesByTransferId.clear();
     this.outgoingMediaTransfers.clear();
     this.incomingMediaTransfers.clear();
   }

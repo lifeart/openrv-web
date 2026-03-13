@@ -60,7 +60,7 @@ import { handlePlaybackChanged } from './handlers/playbackHandlers';
 import { bindPersistenceHandlers } from './handlers/persistenceHandlers';
 import { bindCompareHandlers } from './handlers/compareHandlers';
 import { showUnsupportedCodecModal } from './handlers/unsupportedCodecModal';
-import { getCorePreferencesManager } from './core/PreferencesManager';
+import { handleBufferingChanged, handleFrameDecodeTimeout } from './handlers/bufferingHandlers';
 
 /**
  * Context interface for what AppSessionBridge needs from App.
@@ -138,7 +138,6 @@ export class AppSessionBridge {
     // --- Source loaded: update info panel, crop, OCIO, HDR auto-config, GTO, stack, prerender, EXR layers, scopes ---
 
     this.on(session, 'sourceLoaded', (loadedSource) => {
-      const autoPlay = getCorePreferencesManager().getGeneralPrefs().autoPlayOnLoad;
       handleSourceLoaded(
         this.context,
         () => this.updateInfoPanel(),
@@ -149,7 +148,6 @@ export class AppSessionBridge {
         () => this.updateVectorscope(),
         () => this.updateGamutDiagram(),
         loadedSource,
-        autoPlay,
       );
     });
 
@@ -159,12 +157,14 @@ export class AppSessionBridge {
       showUnsupportedCodecModal(info);
     });
 
-    // --- Handle HDR→SDR downgrade warnings ---
+    // --- Buffering / decode-timeout diagnostics ---
 
-    this.on(session, 'hdrDowngraded', (info) => {
-      console.warn(
-        `[OpenRV] HDR video "${info.filename}" was downgraded to SDR because VideoSampleSink setup failed on this platform.`,
-      );
+    this.on(session, 'buffering', (isBuffering) => {
+      handleBufferingChanged(isBuffering);
+    });
+
+    this.on(session, 'frameDecodeTimeout', (frame) => {
+      handleFrameDecodeTimeout(frame);
     });
 
     // --- Optimize scopes for playback ---

@@ -166,30 +166,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - If a preferred representation fails and the app falls back to another one, users get no visible indication that playback quality or source selection degraded.
   - That makes proxy/original/HDR representation problems harder to detect and diagnose than the underlying event model would allow.
 
-### 303. Network Sync ignores `roomLeft`, so disconnect-driven room exits can leave stale room info in the panel
-
-- Severity: Medium
-- Area: Network sync / UI state truthfulness
-- Evidence:
-  - `NetworkSyncManager` emits `roomLeft` both on normal room exit and when a guest-side serverless/WebRTC peer disconnect tears the room down in [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L438) through [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L447) and [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L1348) through [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L1355).
-  - `AppNetworkBridge` subscribes to `connectionStateChanged`, `roomCreated`, `roomJoined`, `usersChanged`, `error`, and `rttUpdated`, but not `roomLeft`, in [src/AppNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppNetworkBridge.ts#L414) through [src/AppNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppNetworkBridge.ts#L466).
-  - The only place that explicitly clears room info and users in the UI is the direct `leaveRoom` click handler in [src/AppNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppNetworkBridge.ts#L119) through [src/AppNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppNetworkBridge.ts#L129), while `NetworkControl.setConnectionState(...)` does not clear `roomInfo` or `users` in [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L985) through [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L999) and [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L1070) through [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L1085).
-- Impact:
-  - If the room ends because of a remote/serverless disconnect instead of the local `Leave` button, the Network Sync UI can stay populated with stale room code, users, and share-link state while showing a disconnected connection state.
-  - That makes collaboration teardown harder to understand and can mislead users into thinking they are still attached to the previous room context.
-
-### 304. Playback buffering and decode-timeout diagnostics are emitted internally, but the app never surfaces them
-
-- Severity: Medium
-- Area: Playback / degraded-runtime visibility
-- Evidence:
-  - `PlaybackEngine` emits `buffering` and `frameDecodeTimeout` during starvation handling, and the code explicitly comments that buffering is emitted “so UI shows a loading indicator” in [src/core/session/PlaybackEngine.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaybackEngine.ts#L813) through [src/core/session/PlaybackEngine.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaybackEngine.ts#L824).
-  - `SessionPlayback` forwards both events onto the session in [src/core/session/SessionPlayback.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionPlayback.ts#L603) through [src/core/session/SessionPlayback.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionPlayback.ts#L612).
-  - The main session-event bridge only wires `frameChanged`, `sourceLoaded`, `unsupportedCodec`, and `playbackChanged`-driven updates in [src/AppSessionBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppSessionBridge.ts#L124) through [src/AppSessionBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppSessionBridge.ts#L180), and a production-code search finds no non-test subscriber for `buffering` or `frameDecodeTimeout`.
-- Impact:
-  - When playback stalls waiting for frames or skips an undecodable frame after a timeout, the app has no built-in loading/timeout feedback even though the engine already computes that state.
-  - Users can experience frozen or degraded playback with no explanation beyond the image not advancing as expected.
-
 ### 305. `NetworkSyncManager` emits toast-style collaboration feedback, but the production app never consumes it
 
 - Severity: Medium
@@ -473,19 +449,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Users cannot author the frame-range notes that the review workflow describes from the shipped UI.
   - Range support currently exists only in imported data or programmatic paths, which makes multi-frame feedback much less practical in real review sessions.
 
-### 332. Compare overlays never show real version/source labels, even though the review workflow says they do
-
-- Severity: Medium
-- Area: Compare UI / review workflow clarity
-- Evidence:
-  - The review workflow docs explicitly say that when comparing versions, "The version labels appear in the comparison overlay" in [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L42) through [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L44).
-  - The split-screen overlay hardcodes its on-canvas labels to plain `A` and `B` in [src/ui/components/ViewerSplitScreen.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerSplitScreen.ts#L72) through [src/ui/components/ViewerSplitScreen.ts#L97).
-  - The wipe overlay hardcodes its labels to `Original` and `Graded` in [src/ui/components/ViewerWipe.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerWipe.ts#L8) through [src/ui/components/ViewerWipe.ts#L10) and [src/ui/components/ViewerWipe.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerWipe.ts#L37) through [src/ui/components/ViewerWipe.ts#L59).
-  - Production compare wiring only forwards wipe mode/position and A/B source selection into the viewer in [src/AppViewWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppViewWiring.ts#L87) through [src/AppViewWiring.ts#L110), while the viewer's explicit `setWipeLabels(...)` API exists but is not part of that runtime wiring in [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L2664) through [src/ui/components/Viewer.ts#L2669).
-- Impact:
-  - Users comparing two shot versions in wipe or split-screen mode cannot tell from the on-image overlay which actual version/source is on each side.
-  - That makes the shipped compare HUD materially less useful in review sessions than the documentation promises, especially when filenames or version numbers matter more than abstract `A/B` labels.
-
 ### 333. Reference `toggle` mode is documented as a switch between live and reference, but the renderer only replaces the frame
 
 - Severity: Medium
@@ -746,18 +709,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Users following the overlays guide can waste time looking for a centralized menu and bulk-clear action that do not exist in the shipped app.
   - That also obscures the real control layout, because the actual overlay toggles are distributed across separate toolbar buttons and panels.
 
-### 353. The overlays guide says EXR window overlay auto-activates on mismatched windows, but production only loads the bounds and leaves it disabled
-
-- Severity: Medium
-- Area: Documentation / EXR overlay behavior
-- Evidence:
-  - The overlays guide says the EXR window overlay "activates automatically when an EXR file with mismatched data/display windows is detected" in [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L86).
-  - The runtime default state is still `enabled: false`, and visibility only changes through `toggle()`, `enable()`, or direct state updates in [src/ui/components/EXRWindowOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/EXRWindowOverlay.ts#L44) through [src/ui/components/EXRWindowOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/EXRWindowOverlay.ts#L53) and [src/ui/components/EXRWindowOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/EXRWindowOverlay.ts#L140) through [src/ui/components/EXRWindowOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/EXRWindowOverlay.ts#L158).
-  - On source load, production only calls `setWindows(...)` or `clearWindows()` and never enables the overlay in [src/handlers/sourceLoadedHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/sourceLoadedHandlers.ts#L273) through [src/handlers/sourceLoadedHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/sourceLoadedHandlers.ts#L283).
-- Impact:
-  - Users can load an EXR with mismatched windows and see no overlay until they manually toggle it, even though the docs present that case as automatic.
-  - That makes EXR overscan/data-window review look broken when the actual problem is a bad documentation contract.
-
 ### 354. The overlays guide documents a viewer note overlay, but production `NoteOverlay` is only a timeline note-bar helper
 
 - Severity: Medium
@@ -809,18 +760,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Users following the session docs can open the Export menu looking for `.orvproject` save and find only RV/GTO export commands.
   - That makes the primary session-save workflow look missing or mislabeled even though it still exists in the header.
 
-### 358. The frame-export docs promise an error message on clipboard denial, but production clipboard export only logs and returns `false`
-
-- Severity: Medium
-- Area: Documentation / frame export feedback
-- Evidence:
-  - The frame-export guide says that if clipboard access is denied, "an error message appears" in [docs/export/frame-export.md](/Users/lifeart/Repos/openrv-web/docs/export/frame-export.md#L40) through [docs/export/frame-export.md](/Users/lifeart/Repos/openrv-web/docs/export/frame-export.md#L42).
-  - The actual clipboard helper catches errors, logs `Failed to copy to clipboard`, and only returns `false` in [src/utils/export/FrameExporter.ts](/Users/lifeart/Repos/openrv-web/src/utils/export/FrameExporter.ts#L152) through [src/utils/export/FrameExporter.ts](/Users/lifeart/Repos/openrv-web/src/utils/export/FrameExporter.ts#L163).
-  - `Viewer.copyFrameToClipboard(...)` just forwards that boolean result in [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L3361) through [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L3365), and the keyboard/export action path does not surface any alert for a `false` result in [src/services/KeyboardActionMap.ts](/Users/lifeart/Repos/openrv-web/src/services/KeyboardActionMap.ts#L545) through [src/services/KeyboardActionMap.ts](/Users/lifeart/Repos/openrv-web/src/services/KeyboardActionMap.ts#L549).
-- Impact:
-  - Users can follow the frame-export docs, hit a browser clipboard denial, and receive no user-visible explanation even though the docs promise one.
-  - That makes clipboard export failures look random and silent instead of a permissions issue the user can act on.
-
 ### 359. The network-sync guide overstates generic one-click joining from share URLs
 
 - Severity: Medium
@@ -870,18 +809,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Users following the guide can look for an on-viewer status readout that never appears.
   - That makes profile cycling feel less observable than the docs imply, especially when using only the keyboard shortcut.
-
-### 363. The shortcut-cheat-sheet docs promise outside-click dismissal, but the shipped overlay has no such path
-
-- Severity: Low
-- Area: Documentation / shortcut help UI
-- Evidence:
-  - The keyboard-shortcuts guide says the shortcut cheat sheet "is dismissed by pressing `Escape` or clicking outside the panel" in [docs/reference/keyboard-shortcuts.md](/Users/lifeart/Repos/openrv-web/docs/reference/keyboard-shortcuts.md#L185) through [docs/reference/keyboard-shortcuts.md#L187).
-  - The shipped `ShortcutCheatSheet` component only exposes `show()`, `hide()`, `toggle()`, and `isVisible()` around a bare overlay element in [src/ui/components/ShortcutCheatSheet.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ShortcutCheatSheet.ts#L31) through [src/ui/components/ShortcutCheatSheet.ts#L70); it does not register any outside-click or backdrop-dismiss listener.
-  - Production dismissal is wired through the global `panel.close` Escape path, which explicitly hides the cheat sheet when visible in [src/services/KeyboardActionMap.ts](/Users/lifeart/Repos/openrv-web/src/services/KeyboardActionMap.ts#L462) through [src/services/KeyboardActionMap.ts#L466).
-- Impact:
-  - Users can follow the docs, click outside the `?` overlay, and get no dismissal even though the guide says that interaction should work.
-  - That makes the shortcut-help surface feel stuck or inconsistent unless the user already knows the keyboard-only exit path.
 
 ### 364. The annotation-import docs promise merge and frame-offset workflows, but the shipped UI always replaces in place
 
@@ -1019,19 +946,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - In normal production use, snapshot descriptions are effectively import-only metadata even though the panel treats them like a first-class searchable field.
   - That makes the description search/filter path much less useful for real in-app snapshot curation than the UI suggests.
 
-### 380. The auto-save interval setting is mostly bypassed by a hardcoded 2-second save path
-
-- Severity: Medium
-- Area: Auto-save timing semantics
-- Evidence:
-  - The session-management guide says the system saves "at the configured interval" after state becomes dirty in [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L142) through [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L147).
-  - `AutoSaveManager` does have an interval timer keyed off the configured minutes value in [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L219) through [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L226).
-  - But every `markDirty(...)` call also starts a separate hardcoded `2000ms` debounce that directly saves the session in [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L276) through [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L290).
-  - Production invokes that dirty-mark path for routine review interactions like frame changes, marks, annotations, and effects in [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L36) through [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L39) and [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L781) through [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L784).
-- Impact:
-  - In normal use, the selected interval is not the real cadence users get; most changes are saved after about two seconds of inactivity instead.
-  - That makes the interval control misleading and changes the storage/performance tradeoff users think they are configuring.
-
 ### 382. The session export docs say RV/GTO sessions are import-only, but the shipped Export menu still saves `.rv` and `.gto`
 
 - Severity: Low
@@ -1094,18 +1008,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The project-opening affordance bundles a timeline-import format that behaves fundamentally differently from a real project/session load.
   - That makes the button’s semantics fuzzy and increases the chance that users expect a session replacement when they are really just importing an edit list.
 
-### 391. Snapshot backend initialization failures are swallowed while the snapshot UI stays enabled
-
-- Severity: Medium
-- Area: Snapshot workflow / startup robustness
-- Evidence:
-  - Snapshot manager startup errors are caught and only logged in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L437) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L442).
-  - The snapshot panel is still created as a normal shipped control in [src/services/controls/createPanelControls.ts](/Users/lifeart/Repos/openrv-web/src/services/controls/createPanelControls.ts#L75) and remains wired to create/restore actions in [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L328) through [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L329).
-  - Those actions only fail later, at use time, when `createQuickSnapshot()` calls `snapshotManager.createSnapshot(...)` in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L165) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L184), or when panel loads hit the inline error path.
-- Impact:
-  - The app can boot with a broken snapshot backend while still presenting snapshots as an available feature.
-  - That delays failure until the user actually tries to rely on snapshots, which is worse than disabling or clearly marking the feature unavailable up front.
-
 ### 393. The `Open media file` control is also a session and EDL importer, not just a media picker
 
 - Severity: Low
@@ -1142,19 +1044,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Users can get different rollback safety and different post-load UI truthfulness for the same session file based solely on which affordance they clicked.
   - That makes session import behavior less predictable than it should be and increases the chance of subtle “works one way but not the other” reports.
-
-### 399. Startup recovery can degrade into a silent no-op if the chosen auto-save entry disappears before load
-
-- Severity: Low
-- Area: Auto-save recovery edge cases
-- Evidence:
-  - The startup recovery flow prompts against the most recent entry and then calls `recoverAutoSave(mostRecent.id)` in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L462) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L478).
-  - `AutoSaveManager.getAutoSave(...)` explicitly returns `null` when the entry is missing in [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L427) through [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L444).
-  - But `recoverAutoSave(...)` only handles the `if (state)` branch in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L503) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L537), with no `else` alert or retry path when the entry is gone.
-  - By contrast, snapshot restore does surface the same missing-record condition with `Snapshot not found` in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L222) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L224).
-- Impact:
-  - A user can accept crash recovery and see nothing happen if the selected auto-save entry vanished or became unreadable between listing and loading.
-  - That makes one of the most safety-critical recovery paths fail more quietly than the equivalent snapshot workflow.
 
 ### 400. Selecting an `.rvedl` together with media files still loads only the EDL and ignores the accompanying media selection
 
@@ -2901,18 +2790,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Script/plugin authors can be told when representation switching fails, but they have no first-class way to observe when the active variant changes successfully or silently falls back.
   - That makes representation-aware automation asymmetric and forces consumers to infer state changes indirectly from other stale or incomplete signals.
-
-### 548. The Network Sync copy-link button can get stuck in `Copying...` because the production bridge never reports clipboard completion back to the control
-
-- Severity: Medium
-- Area: Collaboration UI / copy-link flow
-- Evidence:
-  - `NetworkControl` emits `copyLink`, immediately switches the button into a transient `Copying...` state, and documents that callers should invoke `setCopyResult(...)` once the async clipboard write settles in [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L843) through [src/ui/components/NetworkControl.ts#L856) and [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L1349) through [src/ui/components/NetworkControl.ts#L1366).
-  - The production `AppNetworkBridge` does subscribe to `copyLink`, builds the share URL, and calls `navigator.clipboard.writeText(...)`, but it never calls `networkControl.setCopyResult(true|false)` on either success or failure in [src/AppNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppNetworkBridge.ts#L142) through [src/AppNetworkBridge.ts#L178).
-  - A repo search finds no other production caller of `setCopyResult(...)`; outside tests, the method is effectively unused.
-- Impact:
-  - The copy-link button can remain stuck in its in-progress visual state instead of resolving to `Copied!`, `Copy failed`, or resetting cleanly.
-  - That makes the collaboration share flow feel hung even when the actual clipboard operation already finished or failed.
 
 ### 549. URL/session sharing has no representation awareness, so active alternate variants cannot round-trip through share links or collaboration state
 

@@ -9,7 +9,8 @@
  * Viewer because it needs deep session/canvas coupling.
  */
 
-import { DEFAULT_WIPE_STATE, type WipeState, type WipeMode, type StencilBox } from '../../core/types/wipe';
+import { DEFAULT_WIPE_STATE } from '../../core/types/wipe';
+import type { WipeState, WipeMode, StencilBox } from '../../core/types/wipe';
 import {
   createWipeUIElements,
   updateWipeLinePosition,
@@ -122,6 +123,10 @@ export class WipeManager {
     if (this._wipeElements) {
       setWipeLabelsUtil(this._wipeElements, labelA, labelB);
     }
+    if (this._splitScreenElements) {
+      this._splitScreenElements.labelA.textContent = labelA;
+      this._splitScreenElements.labelB.textContent = labelB;
+    }
   }
 
   getLabels(): { labelA: string; labelB: string } {
@@ -129,6 +134,16 @@ export class WipeManager {
       return getWipeLabelsUtil(this._wipeElements);
     }
     return { labelA: DEFAULT_WIPE_LABEL_A, labelB: DEFAULT_WIPE_LABEL_B };
+  }
+
+  getSplitScreenLabels(): { labelA: string; labelB: string } {
+    if (this._splitScreenElements) {
+      return {
+        labelA: this._splitScreenElements.labelA.textContent || 'A',
+        labelB: this._splitScreenElements.labelB.textContent || 'B',
+      };
+    }
+    return { labelA: 'A', labelB: 'B' };
   }
 
   // =========================================================================

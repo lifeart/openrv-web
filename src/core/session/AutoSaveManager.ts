@@ -56,15 +56,7 @@ export interface AutoSaveEvents extends EventMap {
   saved: { entry: AutoSaveEntry };
   /** Emitted when save fails */
   error: { error: Error };
-  /**
-   * Emitted when recovery data is found after a non-clean shutdown.
-   *
-   * NOTE: This event is emitted by `initialize()` but is not currently
-   * subscribed to in the production application flow. The production
-   * code uses a polling pattern via `getMostRecent()` instead.
-   * The event remains part of the public API for external consumers
-   * and future use.
-   */
+  /** Emitted when recovery data is found */
   recoveryAvailable: { entries: AutoSaveEntry[] };
   /** Emitted when config changes */
   configChanged: AutoSaveConfig;
@@ -97,7 +89,6 @@ export class AutoSaveManager extends EventEmitter<AutoSaveEvents> {
   private db: IDBDatabase | null = null;
   private config: AutoSaveConfig;
   private saveTimer: ReturnType<typeof setInterval> | null = null;
-  private debounceTimer: ReturnType<typeof setTimeout> | null = null;
   private lastSaveTime: Date | null = null;
   private isDirty = false;
   private isInitialized = false;
@@ -115,46 +106,36 @@ export class AutoSaveManager extends EventEmitter<AutoSaveEvents> {
    * Returns true if recovery data is available
    */
   async initialize(): Promise<boolean> {
-    await this.openDatabase();
-    this.isInitialized = true;
+    try {
+      await this.openDatabase();
+      this.isInitialized = true;
 
-    // Check for crash recovery
-    let hasRecovery = false;
-    const wasCleanShutdown = await this.checkCleanShutdown();
-    if (!wasCleanShutdown) {
-      const entries = await this.listAutoSaves();
-      if (entries.length > 0) {
-        this.emit('recoveryAvailable', { entries });
-        hasRecovery = true;
+      // Check for crash recovery
+      const wasCleanShutdown = await this.checkCleanShutdown();
+      if (!wasCleanShutdown) {
+        const entries = await this.listAutoSaves();
+        if (entries.length > 0) {
+          this.emit('recoveryAvailable', { entries });
+          return true;
+        }
       }
+
+      // Mark as active session (not clean shutdown until dispose)
+      await this.setCleanShutdown(false);
+
+      // Start auto-save timer if enabled
+      if (this.config.enabled) {
+        this.startTimer();
+      }
+
+      // Listen for beforeunload to mark clean shutdown
+      window.addEventListener('beforeunload', this.handleBeforeUnload);
+
+      return false;
+    } catch (err) {
+      console.error('AutoSaveManager initialization failed:', err);
+      return false;
     }
-
-    // Always arm the session regardless of recovery state so that
-    // subsequent work is protected by auto-save (fix #377).
-    await this.armSession();
-
-    return hasRecovery;
-  }
-
-  /**
-   * Arm the auto-save session: mark active, start timer, install
-   * the beforeunload handler. Safe to call multiple times — the timer
-   * is reset and the listener is not duplicated because we remove
-   * before adding.
-   */
-  async armSession(): Promise<void> {
-    // Mark as active session (not clean shutdown until dispose)
-    await this.setCleanShutdown(false);
-
-    // Start auto-save timer if enabled
-    if (this.config.enabled) {
-      this.startTimer();
-    }
-
-    // Listen for beforeunload to mark clean shutdown.
-    // Remove first to avoid duplicate listeners if called more than once.
-    window.removeEventListener('beforeunload', this.handleBeforeUnload);
-    window.addEventListener('beforeunload', this.handleBeforeUnload);
   }
 
   /**
@@ -253,7 +234,7 @@ export class AutoSaveManager extends EventEmitter<AutoSaveEvents> {
    * Execute save using the stored state getter
    */
   private saveWithGetter(): void {
-    if (!this.stateGetter || !this.config.enabled) return;
+    if (!this.stateGetter) return;
     try {
       const state = this.stateGetter();
       this.save(state);
@@ -293,29 +274,13 @@ export class AutoSaveManager extends EventEmitter<AutoSaveEvents> {
 
   /**
    * Mark session as dirty (needs save)
-   * Call this whenever session state changes
+   * Call this whenever session state changes.
+   * The dirty flag is picked up by the next interval-based save cycle.
    * @param stateGetter - A function that returns the current state (lazy evaluation)
    */
   markDirty(stateGetter: () => SessionState): void {
     this.isDirty = true;
     this.stateGetter = stateGetter;
-
-    // Don't schedule a debounced save if auto-save is disabled
-    if (!this.config.enabled) {
-      return;
-    }
-
-    // Debounce: if multiple changes happen rapidly, only save once after 2s of inactivity
-    if (this.debounceTimer) {
-      clearTimeout(this.debounceTimer);
-    }
-
-    this.debounceTimer = setTimeout(() => {
-      if (this.isDirty && this.stateGetter) {
-        this.saveWithGetter();
-      }
-      this.debounceTimer = null;
-    }, 2000);
   }
 
   /**
@@ -584,11 +549,6 @@ export class AutoSaveManager extends EventEmitter<AutoSaveEvents> {
       this.startTimer();
     } else if (!this.config.enabled && prevEnabled) {
       this.stopTimer();
-      // Also cancel any pending debounced save
-      if (this.debounceTimer) {
-        clearTimeout(this.debounceTimer);
-        this.debounceTimer = null;
-      }
     } else if (this.config.enabled) {
       // Restart timer with new interval
       this.startTimer();
@@ -622,12 +582,6 @@ export class AutoSaveManager extends EventEmitter<AutoSaveEvents> {
    * Force an immediate save
    */
   async saveNow(state: SessionState): Promise<AutoSaveEntry | null> {
-    // Clear debounce timer
-    if (this.debounceTimer) {
-      clearTimeout(this.debounceTimer);
-      this.debounceTimer = null;
-    }
-
     return this.save(state);
   }
 
@@ -640,10 +594,6 @@ export class AutoSaveManager extends EventEmitter<AutoSaveEvents> {
 
     // Stop timers
     this.stopTimer();
-    if (this.debounceTimer) {
-      clearTimeout(this.debounceTimer);
-      this.debounceTimer = null;
-    }
 
     // Remove event listener
     window.removeEventListener('beforeunload', this.handleBeforeUnload);

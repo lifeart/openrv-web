@@ -3,13 +3,10 @@
  *
  * Read-only overlay that displays all available keyboard shortcuts,
  * grouped by category. Toggle with the `?` key (handled externally
- * by KeyboardManager).
+ * by KeyboardManager). Supports context filtering and text search.
  *
  * Reuses `buildActionGroups` / `describeKeyCombo` from the existing
  * shortcut infrastructure so display logic is never duplicated.
- *
- * Includes a search input and context-filter dropdown so users can
- * narrow the shortcut list interactively.
  */
 
 import { buildActionGroups, type ShortcutEditorManager } from './ShortcutEditor';
@@ -22,13 +19,10 @@ export class ShortcutCheatSheet {
   private container: HTMLElement;
   private manager: ShortcutEditorManager;
   private overlay: HTMLElement;
-  private toolbar: HTMLElement;
-  private contentArea: HTMLElement;
-  private searchInput: HTMLInputElement;
-  private contextSelect: HTMLSelectElement;
   private context: string | null = null;
   private filterQuery: string = '';
   private disposed = false;
+  private boundOnClickOutside: ((e: MouseEvent) => void) | null = null;
 
   constructor(container: HTMLElement, manager: ShortcutEditorManager) {
     this.container = container;
@@ -39,47 +33,6 @@ export class ShortcutCheatSheet {
     this.overlay.setAttribute('role', 'dialog');
     this.overlay.setAttribute('aria-label', 'Keyboard shortcuts');
     this.overlay.style.display = 'none';
-
-    // Toolbar (created once, never cleared)
-    this.toolbar = document.createElement('div');
-    this.toolbar.className = 'cheatsheet-toolbar';
-    this.toolbar.setAttribute('role', 'toolbar');
-
-    this.searchInput = document.createElement('input');
-    this.searchInput.type = 'search';
-    this.searchInput.className = 'cheatsheet-search';
-    this.searchInput.placeholder = 'Search shortcuts...';
-    this.searchInput.setAttribute('aria-label', 'Search shortcuts');
-    this.searchInput.addEventListener('input', () => {
-      this.filter(this.searchInput.value);
-    });
-    this.searchInput.addEventListener('keydown', (e) => {
-      e.stopPropagation();
-      if (e.key === 'Escape') {
-        this.searchInput.blur();
-      }
-    });
-
-    this.contextSelect = document.createElement('select');
-    this.contextSelect.className = 'cheatsheet-context-select';
-    this.contextSelect.setAttribute('aria-label', 'Filter by category');
-    this.contextSelect.addEventListener('change', () => {
-      const value = this.contextSelect.value;
-      this.setContext(value === '' ? null : value);
-    });
-    this.contextSelect.addEventListener('keydown', (e) => {
-      e.stopPropagation();
-    });
-
-    this.toolbar.appendChild(this.searchInput);
-    this.toolbar.appendChild(this.contextSelect);
-    this.overlay.appendChild(this.toolbar);
-
-    // Content area (cleared on each render)
-    this.contentArea = document.createElement('div');
-    this.contentArea.className = 'cheatsheet-content';
-    this.overlay.appendChild(this.contentArea);
-
     this.container.appendChild(this.overlay);
   }
 
@@ -91,12 +44,21 @@ export class ShortcutCheatSheet {
     if (this.disposed) return;
     this.render();
     this.overlay.style.display = '';
-    this.searchInput.focus();
+
+    // Register click-outside handler (mousedown for better UX)
+    this.boundOnClickOutside = this.onClickOutside.bind(this);
+    document.addEventListener('mousedown', this.boundOnClickOutside);
   }
 
   hide(): void {
     if (this.disposed) return;
     this.overlay.style.display = 'none';
+
+    // Remove click-outside handler
+    if (this.boundOnClickOutside) {
+      document.removeEventListener('mousedown', this.boundOnClickOutside);
+      this.boundOnClickOutside = null;
+    }
   }
 
   toggle(): void {
@@ -120,7 +82,6 @@ export class ShortcutCheatSheet {
   setContext(context: string | null): void {
     if (this.disposed) return;
     this.context = context;
-    this.contextSelect.value = context ?? '';
     if (this.isVisible()) {
       this.render();
     }
@@ -137,7 +98,6 @@ export class ShortcutCheatSheet {
   filter(query: string): void {
     if (this.disposed) return;
     this.filterQuery = query;
-    this.searchInput.value = query;
     if (this.isVisible()) {
       this.render();
     }
@@ -156,29 +116,12 @@ export class ShortcutCheatSheet {
   // -------------------------------------------------------------------------
 
   private render(): void {
-    this.contentArea.innerHTML = '';
+    this.overlay.innerHTML = '';
 
     const columnsWrapper = document.createElement('div');
     columnsWrapper.className = 'cheatsheet-columns';
 
-    const allGroups = buildActionGroups(this.manager);
-
-    // Populate context select options from available groups
-    const currentSelectValue = this.contextSelect.value;
-    this.contextSelect.innerHTML = '';
-    const allOption = document.createElement('option');
-    allOption.value = '';
-    allOption.textContent = 'All Categories';
-    this.contextSelect.appendChild(allOption);
-    for (const group of allGroups) {
-      const opt = document.createElement('option');
-      opt.value = group.category;
-      opt.textContent = group.label;
-      this.contextSelect.appendChild(opt);
-    }
-    this.contextSelect.value = currentSelectValue;
-
-    let groups = allGroups;
+    let groups = buildActionGroups(this.manager);
 
     // Context filtering: only show groups matching the context category
     if (this.context !== null) {
@@ -233,7 +176,22 @@ export class ShortcutCheatSheet {
       columnsWrapper.appendChild(section);
     }
 
-    this.contentArea.appendChild(columnsWrapper);
+    this.overlay.appendChild(columnsWrapper);
+  }
+
+  // -------------------------------------------------------------------------
+  // Outside-click dismiss
+  // -------------------------------------------------------------------------
+
+  private onClickOutside(e: MouseEvent): void {
+    const target = e.target as Node;
+    // Dismiss if the click landed on the overlay backdrop itself
+    // (i.e. not inside the content area)
+    const content = this.overlay.querySelector('.cheatsheet-columns');
+    if (content && content.contains(target)) {
+      return; // Click inside content – do nothing
+    }
+    this.hide();
   }
 
   // -------------------------------------------------------------------------

@@ -127,6 +127,31 @@ describe('WipeManager', () => {
       mgr.setLabels('X', 'Y');
       expect(mgr.getLabels()).toEqual({ labelA: 'Original', labelB: 'Graded' });
     });
+
+    it('WM-U016: setLabels updates split screen labels too', () => {
+      const container = document.createElement('div');
+      mgr.initUI(container);
+      mgr.setLabels('hero_v2.exr', 'hero_v1.exr');
+      expect(mgr.getSplitScreenLabels()).toEqual({ labelA: 'hero_v2.exr', labelB: 'hero_v1.exr' });
+    });
+
+    it('WM-U017: getSplitScreenLabels returns defaults before initUI', () => {
+      expect(mgr.getSplitScreenLabels()).toEqual({ labelA: 'A', labelB: 'B' });
+    });
+
+    it('WM-U018: getSplitScreenLabels returns A/B defaults after initUI with no setLabels', () => {
+      const container = document.createElement('div');
+      mgr.initUI(container);
+      expect(mgr.getSplitScreenLabels()).toEqual({ labelA: 'A', labelB: 'B' });
+    });
+
+    it('WM-U019: setLabels updates both wipe and split screen labels simultaneously', () => {
+      const container = document.createElement('div');
+      mgr.initUI(container);
+      mgr.setLabels('Source A', 'Source B');
+      expect(mgr.getLabels()).toEqual({ labelA: 'Source A', labelB: 'Source B' });
+      expect(mgr.getSplitScreenLabels()).toEqual({ labelA: 'Source A', labelB: 'Source B' });
+    });
   });
 
   // ===========================================================================
