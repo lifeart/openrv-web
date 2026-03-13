@@ -106,7 +106,7 @@ OpenRV Web integrates with Autodesk ShotGrid (formerly Shotgun) for production t
 - **Status updates**: Change version status (e.g., mark as "Approved" or "Revisions Needed") directly from the viewer. Status changes are written back to ShotGrid via the API.
 - **Playlist sync**: ShotGrid playlists can be imported into OpenRV Web as review playlists, maintaining clip order and metadata.
 
-ShotGrid integration requires a valid API key configured in the OpenRV Web settings panel. Authentication uses the ShotGrid REST API with token-based access.
+ShotGrid integration requires a valid API key configured in the ShotGrid panel's config section. Authentication uses the ShotGrid REST API with token-based access.
 
 ---
 

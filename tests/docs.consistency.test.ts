@@ -288,6 +288,69 @@ describe('Documentation consistency', () => {
     expect(faq.toLowerCase()).toContain('websocket');
   });
 
+  // -- Conflicting channel shortcuts ----------------------------------------
+
+  test('docs do not advertise Shift+R, Shift+B, or Shift+N as working channel shortcuts', () => {
+    const filesToCheck = [
+      'docs/playback/channel-isolation.md',
+      'docs/reference/troubleshooting.md',
+      'docs/playback/exr-layers.md',
+      'docs/scopes/histogram.md',
+    ];
+
+    // These patterns match the shortcuts presented as active keybindings
+    // (e.g., `Shift+R` in backticks), but allow them in warning/note text
+    // that explicitly says they are NOT active.
+    for (const file of filesToCheck) {
+      if (!fileExists(file)) continue;
+      const content = readFile(file);
+      const lines = content.split('\n');
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i]!;
+        // Skip lines inside warning/note blocks that explain the conflict
+        if (line.includes('not active by default') || line.includes('reserved for other actions')) {
+          continue;
+        }
+        // Check that Shift+R, Shift+B, Shift+N are not presented as usable shortcuts
+        for (const shortcut of ['Shift+R', 'Shift+B', 'Shift+N']) {
+          const asKeybinding = `\`${shortcut}\``;
+          expect(
+            line.includes(asKeybinding),
+            `${file}:${i + 1} advertises ${shortcut} as a working shortcut: "${line.trim()}"`,
+          ).toBe(false);
+        }
+      }
+    }
+  });
+
+  // -- No "Settings panel" references (#337) --------------------------------
+
+  test('docs do not reference a non-existent "Settings panel" as a UI element', () => {
+    const filesToCheck = [
+      'docs/reference/keyboard-shortcuts.md',
+      'docs/advanced/review-workflow.md',
+      'docs/advanced/dcc-integration.md',
+    ];
+
+    for (const file of filesToCheck) {
+      if (!fileExists(file)) continue;
+      const content = readFile(file);
+      expect(
+        content.toLowerCase(),
+        `${file} should not reference "Settings panel" -- this UI element does not exist`,
+      ).not.toContain('settings panel');
+    }
+  });
+
+  // -- Session save paths (#357) --------------------------------------------
+
+  test('session doc does not claim .orvproject save is available from the Export menu', () => {
+    const sessionDoc = readFile('docs/export/sessions.md');
+    // The Export menu only has RV/GTO exports; .orvproject is saved via the header Save button.
+    expect(sessionDoc).not.toMatch(/Export menu.*\.orvproject/i);
+    expect(sessionDoc).not.toMatch(/\.orvproject.*Export menu/i);
+  });
+
   // -- Doc page existence ---------------------------------------------------
 
   test('key doc pages exist', () => {

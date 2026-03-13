@@ -1,7 +1,7 @@
 /**
  * Grayscale Toggle E2E Tests
  *
- * Tests for grayscale (luminance) viewing mode via Shift+Y or Shift+L.
+ * Tests for grayscale (luminance) viewing mode via Shift+Y.
  * Grayscale uses Rec.709 luminance coefficients.
  */
 
@@ -13,13 +13,13 @@ test.describe('Grayscale Toggle', () => {
     await page.goto('/');
   });
 
-  test('GRAY-001: Shift+L toggles grayscale/luminance mode', async ({ page }) => {
+  test('GRAY-001: Shift+Y toggles grayscale/luminance mode', async ({ page }) => {
     await loadImageFile(page);
 
     const colorScreenshot = await captureViewerScreenshot(page);
 
-    // Toggle grayscale with Shift+L
-    await page.keyboard.press('Shift+L');
+    // Toggle grayscale with Shift+Y
+    await page.keyboard.press('Shift+Y');
 
     const grayScreenshot = await captureViewerScreenshot(page);
 
@@ -31,7 +31,7 @@ test.describe('Grayscale Toggle', () => {
     expect(state.channelMode).toBe('luminance');
   });
 
-  test('GRAY-002: Shift+Y also toggles grayscale mode (alias)', async ({ page }) => {
+  test('GRAY-002: Shift+Y toggles grayscale mode', async ({ page }) => {
     await loadImageFile(page);
 
     const colorScreenshot = await captureViewerScreenshot(page);
@@ -55,7 +55,7 @@ test.describe('Grayscale Toggle', () => {
     const original = await captureViewerScreenshot(page);
 
     // Enable grayscale
-    await page.keyboard.press('Shift+L');
+    await page.keyboard.press('Shift+Y');
     await page.waitForFunction(
       () => window.__OPENRV_TEST__?.getViewerState()?.channelMode === 'luminance',
       { timeout: 5000 }
@@ -118,37 +118,22 @@ test.describe('Grayscale Toggle', () => {
     const initialStyle = await button.evaluate(el => el.style.borderColor);
 
     // Enable grayscale
-    await page.keyboard.press('Shift+L');
+    await page.keyboard.press('Shift+Y');
 
     // Button should have accent styling when active
     const activeStyle = await button.evaluate(el => el.style.borderColor);
     expect(activeStyle).toContain('accent');
   });
 
-  test('GRAY-007: Shift+Y and Shift+L produce same result', async ({ page }) => {
+  test('GRAY-007: Shift+L opens LUT panel (not luminance)', async ({ page }) => {
     await loadImageFile(page);
 
-    // Use Shift+L
+    // Shift+L should open the LUT pipeline panel, not toggle luminance
     await page.keyboard.press('Shift+L');
-    const screenshotL = await captureViewerScreenshot(page);
 
-    // Reset to RGB via channel dropdown
-    await page.click('[data-testid="channel-select-button"]');
-    await expect(page.locator('[data-testid="channel-dropdown"]')).toBeVisible();
-    await page.click('[data-testid="channel-dropdown"] button:has-text("RGB")');
-    await page.waitForFunction(
-      () => window.__OPENRV_TEST__?.getViewerState()?.channelMode === 'rgb',
-      { timeout: 5000 }
-    );
-
-    // Use Shift+Y
-    await page.keyboard.press('Shift+Y');
-    const screenshotY = await captureViewerScreenshot(page);
-
-    // Both should produce the same grayscale result
-    // (Note: exact pixel comparison may have tolerance issues)
-    expect(screenshotL.length).toBeGreaterThan(0);
-    expect(screenshotY.length).toBeGreaterThan(0);
+    // Verify channel mode is NOT luminance (Shift+L no longer toggles luminance)
+    const state = await getViewerState(page);
+    expect(state.channelMode).not.toBe('luminance');
   });
 
   // Deleted GRAY-008 stub (empty body, no assertions - requires test video)

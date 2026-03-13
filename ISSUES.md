@@ -56,17 +56,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - This is another silent semantic mismatch because callers can vary the tag and receive the same answer every time.
 
 
-### 301. RV/GTO import diagnostics for skipped nodes and degraded modes are emitted internally but never surfaced to users
-
-- Severity: Medium
-- Area: Session import / diagnostic visibility
-- Evidence:
-  - `SessionGraph` emits `skippedNodes` and `degradedModes` when RV/GTO import drops nodes or downgrades composite modes in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L396) through [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L412).
-  - The production persistence handlers only subscribe to `annotationsLoaded`, `sessionLoaded`, `frameChanged`, `inOutChanged`, `marksChanged`, `fpsChanged`, `paintEffectsLoaded`, `matteChanged`, `metadataChanged`, and `settingsLoaded` in [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L14) through [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L65).
-  - The RV/GTO open path in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L371) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L398) loads the session and resyncs some controls, but shows no success/warning summary for skipped nodes or degraded modes.
-- Impact:
-  - Users can import an RV/GTO session with known dropped nodes or downgraded blend modes and receive no UI-level indication that the import was lossy.
-  - That makes session interchange failures harder to detect than they need to be, even though the loader already computes the exact diagnostics.
 
 ### 302. Media representation failures and automatic fallbacks are emitted internally, but the app never surfaces them
 
@@ -302,17 +291,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - A DCC tool cannot rely on OpenRV Web to push review-status changes back over the live bridge, even though that workflow is presented as supported.
   - Any pipeline expecting browser-driven approval or needs-revision updates to flow back into a DCC-side review context will silently get nothing.
 
-### 328. The shipped note workflow only exports JSON, despite the UI/docs presenting HTML and CSV note exports
-
-- Severity: Medium
-- Area: Notes / export workflow
-- Evidence:
-  - The review-workflow guide says notes can be exported as HTML, CSV, and JSON in [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L83) through [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L89).
-  - The actual `NotePanel` only exposes `Export` / `Import` buttons for JSON and its export implementation is explicitly “Export all notes to a JSON file download” in [src/ui/components/NotePanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NotePanel.ts#L159) through [src/ui/components/NotePanel.ts#L177) and [src/ui/components/NotePanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NotePanel.ts#L841) through [src/ui/components/NotePanel.ts#L862).
-  - The main Export menu’s CSV/HTML options are dailies reports, not note exports, in [src/ui/components/ExportControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ExportControl.ts#L213) through [src/ui/components/ExportControl.ts#L216).
-- Impact:
-  - Users looking for note export in spreadsheet/report formats will only find JSON in the actual note workflow.
-  - HTML/CSV exports are currently a different report feature with different scope and structure, so the note-export contract is misleading in production.
 
 ### 329. Dailies reports include only the current version label, not the version history they advertise
 
@@ -338,18 +316,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - A threaded review conversation or resolved/won’t-fix state in OpenRV Web cannot survive a ShotGrid sync round-trip as equivalent structured review data.
   - The integration reduces richer local note workflows to a flat list of plain comments, which weakens production review traceability.
 
-### 331. The shipped note UI cannot create or edit frame-range notes even though the note system supports them
-
-- Severity: Medium
-- Area: Notes / review workflow
-- Evidence:
-  - The review-workflow guide says “Notes with frame ranges can be created by setting a start and end frame” in [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L62) through [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L69).
-  - The note model itself supports `frameStart` and `frameEnd` in [src/core/session/NoteManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/NoteManager.ts#L11) through [src/core/session/NoteManager.ts#L23).
-  - The shipped `NotePanel` add flow always creates notes with `frameStart === frameEnd === currentFrame` in [src/ui/components/NotePanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NotePanel.ts#L332) through [src/ui/components/NotePanel.ts#L348).
-  - `NoteManager.updateNote(...)` only edits `text`, `status`, or `color`, and the panel never exposes any UI for changing a note’s frame start/end after creation in [src/core/session/NoteManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/NoteManager.ts#L98) through [src/core/session/NoteManager.ts#L120) and [src/ui/components/NotePanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NotePanel.ts#L808) through [src/ui/components/NotePanel.ts#L818).
-- Impact:
-  - Users cannot author the frame-range notes that the review workflow describes from the shipped UI.
-  - Range support currently exists only in imported data or programmatic paths, which makes multi-frame feedback much less practical in real review sessions.
 
 ### 333. Reference `toggle` mode is documented as a switch between live and reference, but the renderer only replaces the frame
 
@@ -389,32 +355,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Users entering presentation mode get hidden chrome and cursor auto-hide, but not the transient play/pause plus frame-counter HUD the review workflow promises.
   - That makes playback-state feedback weaker than documented in screening-room or client-review usage, especially once normal UI chrome is hidden.
-
-### 336. The documentation repeatedly sends users to a `View menu` that the shipped app does not actually have
-
-- Severity: Medium
-- Area: UI discoverability / documentation contract
-- Evidence:
-  - Multiple user guides instruct users to access features from the `View menu`, including presentation mode in [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L143), playlist in [docs/advanced/playlist.md](/Users/lifeart/Repos/openrv-web/docs/advanced/playlist.md#L11), stereo display modes in [docs/guides/stereo-3d-viewing.md](/Users/lifeart/Repos/openrv-web/docs/guides/stereo-3d-viewing.md#L17), spherical projection in [docs/playback/viewer-navigation.md](/Users/lifeart/Repos/openrv-web/docs/playback/viewer-navigation.md#L97), and stereo alignment in [docs/advanced/stereo-3d.md](/Users/lifeart/Repos/openrv-web/docs/advanced/stereo-3d.md#L117).
-  - The shipped header utility area exposes layout, presentation, external presentation, fullscreen, volume, theme, and docs buttons, but no `View` menu control, in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L372) through [src/ui/components/layout/HeaderBar.ts#L425).
-  - In production those features are generally surfaced through the View tab/context toolbar or direct header buttons, not a menu structure matching the docs.
-- Impact:
-  - Users following the docs can waste time looking for a top-level `View menu` that does not exist in the shipped interface.
-  - That makes multiple otherwise-real features harder to discover, because the guidance points to the wrong UI affordance class.
-
-### 337. The documentation also relies on a non-existent `Settings panel` for several real workflows
-
-- Severity: Medium
-- Area: UI discoverability / configuration workflow
-- Evidence:
-  - The docs tell users to open the shortcut editor from the `Settings panel` in [docs/reference/keyboard-shortcuts.md](/Users/lifeart/Repos/openrv-web/docs/reference/keyboard-shortcuts.md#L191).
-  - The review workflow tells users to enable client mode from the `Settings panel` in [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L131) through [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L133), while the live client-mode implementation explicitly keys off the URL parameter path in [src/ui/components/ClientMode.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ClientMode.ts#L185) through [src/ui/components/ClientMode.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ClientMode.ts#L190).
-  - The DCC/ShotGrid docs say API-key auth is configured in the `OpenRV Web settings panel` in [docs/advanced/dcc-integration.md](/Users/lifeart/Repos/openrv-web/docs/advanced/dcc-integration.md#L109), but the shipped ShotGrid UI actually embeds configuration inside the ShotGrid panel’s disconnected config section in [src/ui/components/ShotGridPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ShotGridPanel.ts#L127) through [src/ui/components/ShotGridPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ShotGridPanel.ts#L130).
-  - The keyboard handler only exposes shortcut management through help-driven dialogs, and its own code comments note that the richer shortcut-editor path is not what production currently opens in [src/AppKeyboardHandler.ts](/Users/lifeart/Repos/openrv-web/src/AppKeyboardHandler.ts#L481) through [src/AppKeyboardHandler.ts](/Users/lifeart/Repos/openrv-web/src/AppKeyboardHandler.ts#L487).
-  - A production UI search finds no actual `Settings panel` control surface matching those docs.
-- Impact:
-  - Users trying to follow documentation for shortcut customization, client-mode enablement, or ShotGrid authentication can look for a settings panel that does not exist in the shipped UI.
-  - That turns several otherwise-implemented workflows into trial-and-error discovery problems and makes the docs materially less trustworthy.
 
 
 ### 340. The session-management guide describes the History panel as snapshot/autosave recovery, but the shipped panel is only undo/redo action history
@@ -481,18 +421,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Assistive-technology users can rely on the docs for a level of navigation feedback that the shipped app does not consistently provide.
   - That makes the accessibility overview materially overstate what is currently announced at runtime.
 
-### 347. The channel-isolation docs still advertise `Shift+L` as the normal luminance shortcut even though production routes that combo elsewhere
-
-- Severity: Medium
-- Area: Documentation / channel-isolation workflow
-- Evidence:
-  - The channel-isolation guide tells users luminance is on `Shift+L` or `Shift+Y`, and specifically instructs them to switch to luminance with `Shift+L`, in [docs/playback/channel-isolation.md](/Users/lifeart/Repos/openrv-web/docs/playback/channel-isolation.md#L18) and [docs/playback/channel-isolation.md](/Users/lifeart/Repos/openrv-web/docs/playback/channel-isolation.md#L63).
-  - The shortcut reference also lists `Shift+L` as `Luminance / Grayscale` and `Shift+Y` as its alias in [docs/reference/keyboard-shortcuts.md](/Users/lifeart/Repos/openrv-web/docs/reference/keyboard-shortcuts.md#L107) and [docs/reference/keyboard-shortcuts.md](/Users/lifeart/Repos/openrv-web/docs/reference/keyboard-shortcuts.md#L108).
-  - In the shipped keymap, `Shift+L` is a conflict between `channel.luminance` and `lut.togglePanel` in [src/utils/input/KeyBindings.ts](/Users/lifeart/Repos/openrv-web/src/utils/input/KeyBindings.ts#L418) through [src/utils/input/KeyBindings.ts](/Users/lifeart/Repos/openrv-web/src/utils/input/KeyBindings.ts#L428).
-  - `AppKeyboardHandler` explicitly treats `channel.luminance` as a conflicting default and does not register it like a normal direct shortcut, while `channel.grayscale` (`Shift+Y`) remains separately listed in the channel section in [src/AppKeyboardHandler.ts](/Users/lifeart/Repos/openrv-web/src/AppKeyboardHandler.ts#L48), [src/AppKeyboardHandler.ts](/Users/lifeart/Repos/openrv-web/src/AppKeyboardHandler.ts#L205) through [src/AppKeyboardHandler.ts](/Users/lifeart/Repos/openrv-web/src/AppKeyboardHandler.ts#L213), and [src/utils/input/KeyBindings.ts](/Users/lifeart/Repos/openrv-web/src/utils/input/KeyBindings.ts#L430) through [src/utils/input/KeyBindings.ts](/Users/lifeart/Repos/openrv-web/src/utils/input/KeyBindings.ts#L434).
-- Impact:
-  - Users following the docs can press `Shift+L` and land in LUT-panel behavior instead of luminance view, then conclude channel isolation is unreliable.
-  - The only robust documented shortcut here is effectively the alias, not the primary combo the docs emphasize.
 
 ### 348. The shortcut docs still advertise `H` and `W` for histogram and waveform even though those defaults are hidden by conflicts
 
@@ -507,31 +435,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Users can follow the official shortcut docs, press `H` or `W`, and get a different viewer action than the scopes panel they were promised.
   - That keeps the scopes area looking broken even when the underlying panels themselves still work through buttons or custom bindings.
 
-### 349. The published shortcut reference assigns several key combos to different actions in the same table
-
-- Severity: Medium
-- Area: Documentation / keyboard reference integrity
-- Evidence:
-  - The shortcut reference lists `Shift+B` both for background pattern cycling and for blue-channel isolation in [docs/reference/keyboard-shortcuts.md](/Users/lifeart/Repos/openrv-web/docs/reference/keyboard-shortcuts.md#L38) and [docs/reference/keyboard-shortcuts.md](/Users/lifeart/Repos/openrv-web/docs/reference/keyboard-shortcuts.md#L105).
-  - The same reference lists `Shift+R` both for red-channel isolation and for rotate-left in [docs/reference/keyboard-shortcuts.md](/Users/lifeart/Repos/openrv-web/docs/reference/keyboard-shortcuts.md#L103) and [docs/reference/keyboard-shortcuts.md](/Users/lifeart/Repos/openrv-web/docs/reference/keyboard-shortcuts.md#L127).
-  - It also lists `Shift+N` both for resetting channel view and for opening network sync in [docs/reference/keyboard-shortcuts.md](/Users/lifeart/Repos/openrv-web/docs/reference/keyboard-shortcuts.md#L109) and [docs/reference/keyboard-shortcuts.md](/Users/lifeart/Repos/openrv-web/docs/reference/keyboard-shortcuts.md#L163).
-  - Those collisions match the production conflict list in `AppKeyboardHandler`, which explicitly notes `Shift+R`, `Shift+B`, and `Shift+N` are reserved by other actions in [src/AppKeyboardHandler.ts](/Users/lifeart/Repos/openrv-web/src/AppKeyboardHandler.ts#L43) through [src/AppKeyboardHandler.ts](/Users/lifeart/Repos/openrv-web/src/AppKeyboardHandler.ts#L45).
-- Impact:
-  - Users cannot treat the published shortcut table as a reliable source of truth because it contradicts itself before they even try the app.
-  - That also makes support/debugging harder, since two different official pages can both appear "correct" while describing the same key differently.
-
-### 350. Multiple docs still teach `Shift+R` / `Shift+B` / `Shift+N` channel shortcuts that production reserves for other actions
-
-- Severity: Medium
-- Area: Documentation / channel-isolation workflow
-- Evidence:
-  - The channel-isolation guide still tells users to use `Shift+R`, `Shift+B`, and `Shift+N` for red, blue, and reset in [docs/playback/channel-isolation.md](/Users/lifeart/Repos/openrv-web/docs/playback/channel-isolation.md#L13) through [docs/playback/channel-isolation.md](/Users/lifeart/Repos/openrv-web/docs/playback/channel-isolation.md#L17) and [docs/playback/channel-isolation.md](/Users/lifeart/Repos/openrv-web/docs/playback/channel-isolation.md#L71).
-  - Other docs repeat those same combos as if they are normal live shortcuts, including troubleshooting, EXR-layer review, and histogram guidance in [docs/reference/troubleshooting.md](/Users/lifeart/Repos/openrv-web/docs/reference/troubleshooting.md#L49), [docs/playback/exr-layers.md](/Users/lifeart/Repos/openrv-web/docs/playback/exr-layers.md#L102), and [docs/scopes/histogram.md](/Users/lifeart/Repos/openrv-web/docs/scopes/histogram.md#L66).
-  - In the shipped keyboard layer, those three channel actions are explicitly marked as conflicting defaults because `Shift+R`, `Shift+B`, and `Shift+N` are already taken by rotate-left, background-pattern cycling, and network sync in [src/AppKeyboardHandler.ts](/Users/lifeart/Repos/openrv-web/src/AppKeyboardHandler.ts#L43) through [src/AppKeyboardHandler.ts](/Users/lifeart/Repos/openrv-web/src/AppKeyboardHandler.ts#L45).
-  - The channel actions still exist in `KeyboardActionMap`, but the conflict handling means the docs are publishing shortcuts that are not the normal production path in [src/services/KeyboardActionMap.ts](/Users/lifeart/Repos/openrv-web/src/services/KeyboardActionMap.ts#L603) through [src/services/KeyboardActionMap.ts](/Users/lifeart/Repos/openrv-web/src/services/KeyboardActionMap.ts#L611).
-- Impact:
-  - Users following the docs for EXR QC, histogram analysis, or basic troubleshooting can keep pressing keys that are consumed by unrelated actions instead of changing channels.
-  - That turns several otherwise-valid workflows into false bug reports because the official docs are teaching shortcuts that production intentionally does not expose as defaults.
 
 ### 351. The format-support reference overstates several partially supported formats as if they were fully usable
 
@@ -601,17 +504,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Users are taught to look for one configurable perspective-grid feature, but the shipped app splits part of that into Safe Areas and omits the rest entirely.
   - That makes both the composition-guide workflow and the perspective-correction workflow harder to discover because the docs collapse them into a feature model the UI does not match.
 
-### 357. The session export docs tell users to save `.orvproject` files from the Export menu, but production only exposes RV/GTO exports there
-
-- Severity: Medium
-- Area: Documentation / session save workflow
-- Evidence:
-  - The session save/load guide says users can "Click the Save button in the header bar or use the Export menu to save the current session" in [docs/export/sessions.md](/Users/lifeart/Repos/openrv-web/docs/export/sessions.md#L9) through [docs/export/sessions.md](/Users/lifeart/Repos/openrv-web/docs/export/sessions.md#L11).
-  - The shipped export dropdown's `Session` section contains only `Save RV Session (.rv)` and `Save RV Session (.gto)` items, not `.orvproject` save, in [src/ui/components/ExportControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ExportControl.ts#L198) through [src/ui/components/ExportControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ExportControl.ts#L201).
-  - Production `.orvproject` save is triggered from the header save button wiring, not from `ExportControl`, in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L237) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L240) and [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L59).
-- Impact:
-  - Users following the session docs can open the Export menu looking for `.orvproject` save and find only RV/GTO export commands.
-  - That makes the primary session-save workflow look missing or mislabeled even though it still exists in the header.
 
 ### 359. The network-sync guide overstates generic one-click joining from share URLs
 
@@ -625,18 +517,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Users can rely on the docs for generic one-click join behavior that only works for narrower URL shapes than the guide implies.
   - When a copied link does not auto-join or a malformed invite opens silently, the app appears unreliable instead of merely under-documented.
-
-### 360. The crash-recovery docs say the UI offers restore on `recoveryAvailable`, but production never consumes that event
-
-- Severity: Medium
-- Area: Documentation / crash recovery workflow
-- Evidence:
-  - The session-management guide says startup crash detection emits `recoveryAvailable` and "the UI offers to restore from the most recent auto-save entry" in [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L163) through [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L170).
-  - `AutoSaveManager` does define and emit that event during startup recovery detection in [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L60) and [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L119).
-  - A production-code search finds no `on('recoveryAvailable', ...)` subscriber outside tests, so there is no live UI hook for the event.
-- Impact:
-  - Users following the crash-recovery docs can expect an automatic restore prompt that the shipped app does not actually wire from the emitted event.
-  - That makes recovery behavior feel inconsistent and harder to trust after an unclean shutdown.
 
 ### 361. The stabilization docs describe controls and viewer progress UI that the shipped stabilization panel does not provide
 

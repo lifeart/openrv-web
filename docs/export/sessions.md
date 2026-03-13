@@ -8,7 +8,9 @@ This page provides an overview of session persistence. For detailed coverage of 
 
 ## Saving a Session
 
-Click the Save button in the header bar or use the Export menu to save the current session. The browser downloads a `.orvproject` file containing a JSON representation of the session state.
+Click the **Save** button in the header bar (or press **Ctrl+S**) to save the current session. The browser downloads a `.orvproject` file containing a JSON representation of the session state.
+
+To export the session in RV/GTO format instead, use the **Export** menu's **Session** section, which offers "Save RV Session (.rv)" and "Save RV Session (.gto)".
 
 ### What Is Saved
 
@@ -53,7 +55,7 @@ OpenRV Web also loads original OpenRV `.rv` and `.gto` session files. The GTO pa
 - Scope configurations
 - Paint effects and annotations
 
-GTO sessions are read-only imports -- they are not re-exported in GTO format. Session changes are saved as `.orvproject` files.
+GTO sessions can also be exported from the Export menu's Session section.
 
 ## Migration
 

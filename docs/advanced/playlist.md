@@ -8,7 +8,7 @@ OpenRV Web supports multi-clip playlists for reviewing sequences of shots in a d
 
 ## Creating a Playlist
 
-Open the Playlist panel by pressing `Shift+Alt+P` or selecting it from the View menu. The panel provides controls for building and managing the clip list.
+Open the Playlist panel by pressing `Shift+Alt+P`. The panel provides controls for building and managing the clip list.
 
 To start a new playlist:
 

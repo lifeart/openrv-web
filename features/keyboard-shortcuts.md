@@ -122,8 +122,7 @@ The keyboard shortcuts feature is **fully implemented** with a comprehensive cen
 | channel.green | Shift+G | Select green channel |
 | channel.blue | Shift+B | Select blue channel |
 | channel.alpha | Shift+A | Select alpha channel |
-| channel.luminance | Shift+L | Select luminance channel |
-| channel.grayscale | Shift+Y | Toggle grayscale mode |
+| channel.grayscale | Shift+Y | Toggle grayscale/luminance mode |
 | channel.none | Shift+N | Select no channel (RGB) |
 
 #### Transform Controls

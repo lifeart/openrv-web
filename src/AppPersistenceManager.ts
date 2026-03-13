@@ -12,7 +12,7 @@ import type { PaintEngine } from './paint/PaintEngine';
 import { SessionSerializer } from './core/session/SessionSerializer';
 import { SessionGTOExporter } from './core/session/SessionGTOExporter';
 import type { SessionGTOStore } from './core/session/SessionGTOStore';
-import type { AutoSaveManager } from './core/session/AutoSaveManager';
+import type { AutoSaveManager, AutoSaveEntry } from './core/session/AutoSaveManager';
 import type { AutoSaveIndicator } from './ui/components/AutoSaveIndicator';
 import type { SnapshotManager } from './core/session/SnapshotManager';
 import type { SnapshotPanel } from './ui/components/SnapshotPanel';
@@ -446,30 +446,34 @@ export class AppPersistenceManager {
         );
       });
 
-      const hasRecovery = await autoSaveManager.initialize();
+      // Subscribe to recoveryAvailable before initialize() so the event
+      // (emitted synchronously during startup recovery detection) is captured.
+      const recovery: { entries: AutoSaveEntry[] | null } = { entries: null };
+      autoSaveManager.on('recoveryAvailable', ({ entries }) => {
+        recovery.entries = entries;
+      });
 
-      if (hasRecovery) {
-        // Show recovery prompt
-        const entries = await autoSaveManager.listAutoSaves();
-        const mostRecent = entries[0];
-        if (mostRecent) {
-          const savedTime = new Date(mostRecent.savedAt).toLocaleString();
+      await autoSaveManager.initialize();
 
-          const recover = await showConfirm(
-            `A previous session "${mostRecent.name}" was found from ${savedTime}. Would you like to recover it?`,
-            {
-              title: 'Recover Session',
-              confirmText: 'Recover',
-              cancelText: 'Discard',
-            },
-          );
+      if (recovery.entries && recovery.entries.length > 0) {
+        // Show recovery prompt using the entries from the event
+        const mostRecent = recovery.entries[0]!;
+        const savedTime = new Date(mostRecent.savedAt).toLocaleString();
 
-          if (recover) {
-            await this.recoverAutoSave(mostRecent.id);
-          } else {
-            // Clear old auto-saves if user discards
-            await autoSaveManager.clearAll();
-          }
+        const recover = await showConfirm(
+          `A previous session "${mostRecent.name}" was found from ${savedTime}. Would you like to recover it?`,
+          {
+            title: 'Recover Session',
+            confirmText: 'Recover',
+            cancelText: 'Discard',
+          },
+        );
+
+        if (recover) {
+          await this.recoverAutoSave(mostRecent.id);
+        } else {
+          // Clear old auto-saves if user discards
+          await autoSaveManager.clearAll();
         }
       }
     } catch (err) {

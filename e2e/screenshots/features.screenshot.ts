@@ -62,8 +62,8 @@ test.describe('Feature Screenshots', () => {
     await initWithVideo(page);
     await switchTab(page, 'view');
 
-    // Shift+L selects luminance channel
-    await page.keyboard.press('Shift+l');
+    // Shift+Y selects luminance channel
+    await page.keyboard.press('Shift+y');
     await page.waitForTimeout(300);
     await waitForCanvasStable(page, 2000);
 

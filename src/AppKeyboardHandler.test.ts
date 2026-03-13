@@ -109,11 +109,10 @@ describe('Keyboard registration tests (M-25)', () => {
     expect(histogramBinding!.context).not.toBe(fitToHeightBinding!.context ?? 'global');
   });
 
-  it('SK-M25n: Shift+L channel.luminance and lut.togglePanel are skipped from direct registration', () => {
+  it('SK-M25n: Shift+L is only registered for lut.togglePanel (no conflict with channel.luminance)', () => {
     const km = new KeyboardManager();
     const ckm = new CustomKeyBindingsManager();
     const actionHandlers = {
-      'channel.luminance': () => undefined,
       'lut.togglePanel': () => undefined,
     };
     const registrationHandler = new AppKeyboardHandler(km, ckm, {
@@ -123,26 +122,28 @@ describe('Keyboard registration tests (M-25)', () => {
 
     registrationHandler.setup();
 
-    // Both Shift+KeyL actions should be skipped from direct registration
-    // (they are managed by the contextual keyboard manager instead)
+    // Shift+L should be registered exactly once for lut.togglePanel
     const shiftLBindings = km.getBindings().filter(
       (binding) => binding.combo.code === 'KeyL' && binding.combo.shift,
     );
-    expect(shiftLBindings).toHaveLength(0);
+    expect(shiftLBindings).toHaveLength(1);
   });
 
-  it('SK-M25o: channel.luminance has viewer context and lut.togglePanel has global context', () => {
+  it('SK-M25o: channel.luminance has no default binding; lut.togglePanel owns Shift+L', () => {
     const luminanceBinding = DEFAULT_KEY_BINDINGS['channel.luminance'];
-    expect(luminanceBinding).toBeDefined();
-    expect(luminanceBinding!.code).toBe('KeyL');
-    expect(luminanceBinding!.shift).toBe(true);
-    expect(luminanceBinding!.context).toBe('viewer');
+    expect(luminanceBinding).toBeUndefined();
 
     const lutBinding = DEFAULT_KEY_BINDINGS['lut.togglePanel'];
     expect(lutBinding).toBeDefined();
     expect(lutBinding!.code).toBe('KeyL');
     expect(lutBinding!.shift).toBe(true);
-    expect(lutBinding!.context).toBe('global');
+  });
+
+  it('SK-M25p: channel.grayscale (Shift+Y) is the working shortcut for luminance', () => {
+    const grayscaleBinding = DEFAULT_KEY_BINDINGS['channel.grayscale'];
+    expect(grayscaleBinding).toBeDefined();
+    expect(grayscaleBinding!.code).toBe('KeyY');
+    expect(grayscaleBinding!.shift).toBe(true);
   });
 });
 

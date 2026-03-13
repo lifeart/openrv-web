@@ -432,16 +432,9 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     shift: true,
     description: 'Select alpha channel',
   },
-  'channel.luminance': {
-    code: 'KeyL',
-    shift: true,
-    context: 'viewer',
-    description: 'Select luminance channel',
-  },
   'lut.togglePanel': {
     code: 'KeyL',
     shift: true,
-    context: 'global',
     description: 'Toggle LUT pipeline panel',
   },
   'channel.grayscale': {

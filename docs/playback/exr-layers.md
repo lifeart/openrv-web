@@ -99,7 +99,7 @@ A typical AOV inspection workflow:
 1. Load a multi-layer EXR file
 2. Start with the beauty pass (usually the default layer)
 3. Select different layers from the dropdown to inspect render passes
-4. Use channel isolation (`Shift+R`, `Shift+G`, `Shift+B`) to examine individual channels within a layer
+4. Use channel isolation (e.g., `Shift+G` for green, or the Channel Select dropdown for red/blue) to examine individual channels within a layer
 5. Use the pixel probe (`Shift+I`) to read exact Float32 values
 6. Compare layers with the A/B switching or wipe tools
 

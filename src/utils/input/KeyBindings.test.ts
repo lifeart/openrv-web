@@ -546,6 +546,123 @@ describe('KeyBindings', () => {
     });
   });
 
+  describe('shortcut reference doc has no duplicate key assignments (Issue #349)', () => {
+    it('KB-U107: keyboard-shortcuts.md does not list the same shortcut for two different actions in the same section', async () => {
+      const fs = await import('fs');
+      const path = await import('path');
+      const docPath = path.resolve(__dirname, '../../../docs/reference/keyboard-shortcuts.md');
+      const content = fs.readFileSync(docPath, 'utf-8');
+
+      // Split into sections by ## headings
+      const sections = content.split(/^## /m).slice(1); // skip preamble before first ##
+      const duplicates: string[] = [];
+
+      // Annotations section uses bare keys that overlap with global shortcuts on purpose
+      // (context-dependent). We check for duplicates within each section.
+      for (const section of sections) {
+        const sectionName = section.split('\n')[0].trim();
+        const shortcutRowRegex = /^\|\s*`([^`]+)`\s*\|(.+)\|$/gm;
+        const seen = new Map<string, string>();
+
+        let match;
+        while ((match = shortcutRowRegex.exec(section)) !== null) {
+          const shortcut = match[1].trim();
+          const action = match[2].trim();
+
+          // Skip header rows
+          if (shortcut === 'Shortcut' || shortcut === 'Action') continue;
+
+          if (seen.has(shortcut)) {
+            duplicates.push(
+              `[${sectionName}] "${shortcut}" is assigned to both "${seen.get(shortcut)}" and "${action}"`,
+            );
+          } else {
+            seen.set(shortcut, action);
+          }
+        }
+      }
+
+      expect(
+        duplicates,
+        `Duplicate shortcut assignments found in keyboard-shortcuts.md:\n${duplicates.join('\n')}`,
+      ).toHaveLength(0);
+    });
+
+    it('KB-U109: keyboard-shortcuts.md has no cross-section duplicates for modifier shortcuts', async () => {
+      const fs = await import('fs');
+      const path = await import('path');
+      const docPath = path.resolve(__dirname, '../../../docs/reference/keyboard-shortcuts.md');
+      const content = fs.readFileSync(docPath, 'utf-8');
+
+      // Modifier shortcuts (Shift+X, Ctrl+X, Alt+X) should not appear in multiple sections.
+      // Bare single-key shortcuts (R, O, L, etc.) are allowed to repeat across sections
+      // because they are context-dependent (e.g., Annotations tab vs global).
+      const sections = content.split(/^## /m).slice(1);
+      const modifierShortcuts = new Map<string, string>(); // shortcut -> "section: action"
+      const duplicates: string[] = [];
+
+      for (const section of sections) {
+        const sectionName = section.split('\n')[0].trim();
+        // Skip Mouse Controls section (different table format)
+        if (sectionName === 'Mouse Controls') continue;
+
+        const shortcutRowRegex = /^\|\s*`([^`]+)`\s*\|(.+)\|$/gm;
+        let match;
+        while ((match = shortcutRowRegex.exec(section)) !== null) {
+          const shortcut = match[1].trim();
+          const action = match[2].trim();
+          if (shortcut === 'Shortcut' || shortcut === 'Action') continue;
+
+          // Only check shortcuts with modifiers (Shift+, Ctrl+, Alt+)
+          if (!shortcut.includes('+')) continue;
+
+          const key = shortcut;
+          if (modifierShortcuts.has(key)) {
+            duplicates.push(
+              `"${key}" appears in [${modifierShortcuts.get(key)}] and [${sectionName}: ${action}]`,
+            );
+          } else {
+            modifierShortcuts.set(key, `${sectionName}: ${action}`);
+          }
+        }
+      }
+
+      expect(
+        duplicates,
+        `Cross-section duplicate modifier shortcuts in keyboard-shortcuts.md:\n${duplicates.join('\n')}`,
+      ).toHaveLength(0);
+    });
+
+    it('KB-U108: CONTEXTUAL_DEFAULTS channel shortcuts are not listed as active in the doc', async () => {
+      const fs = await import('fs');
+      const path = await import('path');
+      const docPath = path.resolve(__dirname, '../../../docs/reference/keyboard-shortcuts.md');
+      const content = fs.readFileSync(docPath, 'utf-8');
+
+      // These channel shortcuts are suppressed in production by CONTEXTUAL_DEFAULTS
+      // They should NOT appear as active table rows in the doc
+      const suppressedShortcuts = [
+        { combo: 'Shift+R', action: 'channel.red', label: 'Red channel' },
+        { combo: 'Shift+B', action: 'channel.blue', label: 'Blue channel' },
+        { combo: 'Shift+N', action: 'channel.none', label: 'channel reset' },
+      ];
+
+      // Extract shortcuts from the Channel View section table rows only
+      const channelSectionMatch = content.match(/## Channel View\s*\n([\s\S]*?)(?=\n## |\n>|$)/);
+      expect(channelSectionMatch).not.toBeNull();
+
+      const channelSection = channelSectionMatch![1];
+
+      for (const { combo, label } of suppressedShortcuts) {
+        const rowPattern = new RegExp(`^\\|\\s*\`${combo.replace('+', '\\+')}\`\\s*\\|`, 'm');
+        expect(
+          rowPattern.test(channelSection),
+          `"${combo}" (${label}) should not appear as an active shortcut in the Channel View table — it is suppressed by CONTEXTUAL_DEFAULTS`,
+        ).toBe(false);
+      }
+    });
+  });
+
   describe('snapshot vs history panel shortcut distinction (Issue #339)', () => {
     it('KB-U104: panel.snapshots shortcut is Ctrl+Shift+Alt+S', () => {
       const binding = DEFAULT_KEY_BINDINGS['panel.snapshots'];

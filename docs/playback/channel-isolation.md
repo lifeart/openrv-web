@@ -10,12 +10,16 @@ OpenRV Web provides six channel viewing modes:
 
 | Mode | Shortcut | Description |
 |------|----------|-------------|
-| RGB (Normal) | `Shift+N` | Full-color display (default) |
-| Red | `Shift+R` | Red channel displayed as grayscale |
+| RGB (Normal) | *(toolbar or custom binding)* | Full-color display (default) |
+| Red | *(toolbar or custom binding)* | Red channel displayed as grayscale |
 | Green | `Shift+G` | Green channel displayed as grayscale |
-| Blue | `Shift+B` | Blue channel displayed as grayscale |
+| Blue | *(toolbar or custom binding)* | Blue channel displayed as grayscale |
 | Alpha | `Shift+A` | Alpha channel displayed as grayscale (fully opaque) |
-| Luminance | `Shift+L` or `Shift+Y` | Rec.709 luminance (0.2126R + 0.7152G + 0.0722B) |
+| Luminance | `Shift+Y` | Rec.709 luminance (0.2126R + 0.7152G + 0.0722B) |
+
+::: warning Shortcut Availability
+`Shift+R`, `Shift+B`, and `Shift+N` are reserved for other actions (rotate-left, background-pattern cycling, and network sync respectively) and are **not active by default** for channel isolation. Use the Channel Select dropdown in the toolbar to switch to Red, Blue, or RGB mode, or assign custom shortcuts via the shortcut editor.
+:::
 
 ## Channel Select Dropdown
 
@@ -60,7 +64,7 @@ Channel packing is common in VFX pipelines -- for example, packing a utility mat
 - **Render pass review**: Isolate channels to check for artifacts or unexpected values in specific color planes.
 - **Noise analysis**: View individual channels to identify which channel carries the most noise in an image.
 - **Color balance**: Compare the Red, Green, and Blue channels to evaluate overall color balance and identify color casts.
-- **Luminance evaluation**: Switch to luminance (`Shift+L`) to assess the tonal range without color influence.
+- **Luminance evaluation**: Switch to luminance (`Shift+Y`) to assess the tonal range without color influence.
 
 ## Scope Integration
 
@@ -68,7 +72,7 @@ When channel isolation is active, scopes (Histogram, Waveform, Vectorscope) upda
 
 ## State Persistence
 
-The selected channel mode persists across frame changes and tab switches. Switching tabs does not reset the channel selection. To return to normal full-color display, press `Shift+N`.
+The selected channel mode persists across frame changes and tab switches. Switching tabs does not reset the channel selection. To return to normal full-color display, use the Channel Select dropdown in the toolbar or assign a custom shortcut for the RGB (Normal) mode.
 
 ---
 

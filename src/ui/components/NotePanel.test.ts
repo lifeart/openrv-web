@@ -392,6 +392,121 @@ describe('NotePanel', () => {
     });
   });
 
+  describe('frame range editing', () => {
+    it('renders frame range inputs when editing a note', () => {
+      const note = session.noteManager.addNote(0, 10, 20, 'Range note', 'Alice');
+      panel.show();
+
+      // Click edit button
+      const editBtn = panel.getElement().querySelector(`[data-testid="note-edit-${note.id}"]`) as HTMLElement;
+      editBtn.click();
+
+      // Frame range inputs should appear
+      const frameRangeRow = panel.getElement().querySelector(`[data-testid="note-frame-range-${note.id}"]`);
+      expect(frameRangeRow).not.toBeNull();
+
+      const startInput = panel.getElement().querySelector(`[data-testid="note-frame-start-${note.id}"]`) as HTMLInputElement;
+      const endInput = panel.getElement().querySelector(`[data-testid="note-frame-end-${note.id}"]`) as HTMLInputElement;
+      expect(startInput).not.toBeNull();
+      expect(endInput).not.toBeNull();
+      expect(startInput.value).toBe('10');
+      expect(endInput.value).toBe('20');
+    });
+
+    it('frame range inputs shown when creating a new note', () => {
+      panel.show();
+
+      const addBtn = panel.getElement().querySelector('[data-testid="note-add-btn"]') as HTMLElement;
+      addBtn.click();
+
+      const notes = session.noteManager.getNotes();
+      const noteId = notes[0]!.id;
+
+      const startInput = panel.getElement().querySelector(`[data-testid="note-frame-start-${noteId}"]`) as HTMLInputElement;
+      const endInput = panel.getElement().querySelector(`[data-testid="note-frame-end-${noteId}"]`) as HTMLInputElement;
+      expect(startInput).not.toBeNull();
+      expect(endInput).not.toBeNull();
+    });
+
+    it('saving edit with changed frame range updates the note', () => {
+      const note = session.noteManager.addNote(0, 10, 10, 'Single frame', 'Alice');
+      panel.show();
+
+      // Click edit button
+      const editBtn = panel.getElement().querySelector(`[data-testid="note-edit-${note.id}"]`) as HTMLElement;
+      editBtn.click();
+
+      // Change frame range
+      const startInput = panel.getElement().querySelector(`[data-testid="note-frame-start-${note.id}"]`) as HTMLInputElement;
+      const endInput = panel.getElement().querySelector(`[data-testid="note-frame-end-${note.id}"]`) as HTMLInputElement;
+      startInput.value = '5';
+      startInput.dispatchEvent(new Event('input', { bubbles: true }));
+      endInput.value = '25';
+      endInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+      // Save with Ctrl+Enter
+      const textarea = panel.getElement().querySelector(`[data-testid="note-edit-textarea-${note.id}"]`) as HTMLTextAreaElement;
+      textarea.value = 'Updated range';
+      textarea.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Enter',
+          ctrlKey: true,
+          bubbles: true,
+        }),
+      );
+
+      const updated = session.noteManager.getNote(note.id);
+      expect(updated?.frameStart).toBe(5);
+      expect(updated?.frameEnd).toBe(25);
+      expect(updated?.text).toBe('Updated range');
+    });
+
+    it('creating note with default frame range preserves backward compat', () => {
+      panel.show();
+      const addBtn = panel.getElement().querySelector('[data-testid="note-add-btn"]') as HTMLElement;
+      addBtn.click();
+
+      const notes = session.noteManager.getNotes();
+      expect(notes.length).toBe(1);
+      // Both frameStart and frameEnd should equal currentFrame
+      expect(notes[0]?.frameStart).toBe(session.currentFrame);
+      expect(notes[0]?.frameEnd).toBe(session.currentFrame);
+    });
+
+    it('creating note with modified frame range creates a range note', () => {
+      panel.show();
+      const addBtn = panel.getElement().querySelector('[data-testid="note-add-btn"]') as HTMLElement;
+      addBtn.click();
+
+      const notes = session.noteManager.getNotes();
+      const noteId = notes[0]!.id;
+
+      // Change frame range inputs
+      const startInput = panel.getElement().querySelector(`[data-testid="note-frame-start-${noteId}"]`) as HTMLInputElement;
+      const endInput = panel.getElement().querySelector(`[data-testid="note-frame-end-${noteId}"]`) as HTMLInputElement;
+      startInput.value = '1';
+      startInput.dispatchEvent(new Event('input', { bubbles: true }));
+      endInput.value = '50';
+      endInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+      // Save
+      const textarea = panel.getElement().querySelector(`[data-testid="note-edit-textarea-${noteId}"]`) as HTMLTextAreaElement;
+      textarea.value = 'Range note';
+      textarea.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Enter',
+          ctrlKey: true,
+          bubbles: true,
+        }),
+      );
+
+      const updated = session.noteManager.getNote(noteId);
+      expect(updated?.frameStart).toBe(1);
+      expect(updated?.frameEnd).toBe(50);
+      expect(updated?.text).toBe('Range note');
+    });
+  });
+
   describe('close button', () => {
     it('close button hides panel', () => {
       panel.show();
@@ -547,11 +662,31 @@ describe('NotePanel', () => {
   });
 
   describe('export/import', () => {
-    it('export button exists in header', () => {
+    it('export button exists in header with dropdown indicator', () => {
       panel.show();
       const btn = panel.getElement().querySelector('[data-testid="note-export-btn"]');
       expect(btn).not.toBeNull();
-      expect(btn?.textContent).toBe('Export');
+      expect(btn?.textContent).toContain('Export');
+    });
+
+    it('export dropdown menu has JSON, CSV, and HTML options', () => {
+      panel.show();
+      const menu = panel.getElement().querySelector('[data-testid="note-export-menu"]');
+      expect(menu).not.toBeNull();
+      expect(menu?.querySelector('[data-testid="note-export-json"]')).not.toBeNull();
+      expect(menu?.querySelector('[data-testid="note-export-csv"]')).not.toBeNull();
+      expect(menu?.querySelector('[data-testid="note-export-html"]')).not.toBeNull();
+    });
+
+    it('export dropdown toggles visibility on button click', () => {
+      panel.show();
+      const btn = panel.getElement().querySelector('[data-testid="note-export-btn"]') as HTMLElement;
+      const menu = panel.getElement().querySelector('[data-testid="note-export-menu"]') as HTMLElement;
+      expect(menu.style.display).toBe('none');
+      btn.click();
+      expect(menu.style.display).toBe('block');
+      btn.click();
+      expect(menu.style.display).toBe('none');
     });
 
     it('import button exists in header', () => {
@@ -570,10 +705,94 @@ describe('NotePanel', () => {
       const revokeURLSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
       const createURLSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mock');
 
-      const exportBtn = panel.getElement().querySelector('[data-testid="note-export-btn"]') as HTMLElement;
-      exportBtn.click();
+      // Click JSON option in the export dropdown
+      const jsonBtn = panel.getElement().querySelector('[data-testid="note-export-json"]') as HTMLElement;
+      jsonBtn.click();
 
       // Find the anchor element that was created for download
+      const anchorCalls = createElementSpy.mock.calls.filter((c) => c[0] === 'a');
+      expect(anchorCalls.length).toBeGreaterThan(0);
+
+      createElementSpy.mockRestore();
+      createURLSpy.mockRestore();
+      revokeURLSpy.mockRestore();
+    });
+
+    it('CSV export produces valid CSV with correct headers and data', () => {
+      session.noteManager.addNote(0, 10, 20, 'Fix lighting', 'Alice');
+      session.noteManager.addNote(0, 30, 30, 'Roto edge, needs "cleanup"', 'Bob');
+      panel.show();
+
+      // Access the private method via any cast
+      const notes = session.noteManager.toSerializable();
+      const csv = (panel as any).notesToCSV(notes) as string;
+
+      const lines = csv.split('\n');
+      // Header row
+      expect(lines[0]).toBe('frame,frameEnd,author,status,text,color');
+      // Data rows
+      expect(lines.length).toBe(3); // header + 2 notes
+      expect(lines[1]).toContain('10,20,Alice,open,Fix lighting,');
+      // Quotes and commas in text should be escaped
+      expect(lines[2]).toContain('Bob');
+      expect(lines[2]).toContain('30,30');
+      // Text with quotes should be double-quoted
+      expect(lines[2]).toContain('"Roto edge, needs ""cleanup"""');
+    });
+
+    it('HTML export produces valid HTML with note data', () => {
+      session.noteManager.addNote(0, 10, 20, 'Fix lighting', 'Alice');
+      panel.show();
+
+      const notes = session.noteManager.toSerializable();
+      const html = (panel as any).notesToHTML(notes) as string;
+
+      expect(html).toContain('<!DOCTYPE html>');
+      expect(html).toContain('<table>');
+      expect(html).toContain('<th>Frame</th>');
+      expect(html).toContain('<th>Author</th>');
+      expect(html).toContain('<th>Status</th>');
+      expect(html).toContain('<th>Text</th>');
+      expect(html).toContain('<td>10</td>');
+      expect(html).toContain('<td>20</td>');
+      expect(html).toContain('<td>Alice</td>');
+      expect(html).toContain('<td>Fix lighting</td>');
+    });
+
+    it('HTML export escapes special characters', () => {
+      session.noteManager.addNote(0, 5, 5, '<script>alert("xss")</script>', 'O\'Brien');
+      panel.show();
+
+      const notes = session.noteManager.toSerializable();
+      const html = (panel as any).notesToHTML(notes) as string;
+
+      expect(html).not.toContain('<script>');
+      expect(html).toContain('&lt;script&gt;');
+    });
+
+    it('CSV export with empty notes produces header only', () => {
+      panel.show();
+
+      const notes = session.noteManager.toSerializable();
+      const csv = (panel as any).notesToCSV(notes) as string;
+
+      const lines = csv.split('\n');
+      expect(lines.length).toBe(1);
+      expect(lines[0]).toBe('frame,frameEnd,author,status,text,color');
+    });
+
+    it('JSON export still works (backward compat)', () => {
+      session.noteManager.addNote(0, 10, 20, 'Export me', 'Alice');
+      panel.show();
+
+      const createElementSpy = vi.spyOn(document, 'createElement');
+      const revokeURLSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+      const createURLSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mock');
+
+      // Click the JSON option in the dropdown
+      const jsonBtn = panel.getElement().querySelector('[data-testid="note-export-json"]') as HTMLElement;
+      jsonBtn.click();
+
       const anchorCalls = createElementSpy.mock.calls.filter((c) => c[0] === 'a');
       expect(anchorCalls.length).toBeGreaterThan(0);
 

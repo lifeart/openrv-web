@@ -102,13 +102,15 @@ export class NoteManager {
    * Update an existing note's text, status, or color.
    * Returns the updated note copy, or null if not found.
    */
-  updateNote(noteId: string, updates: Partial<Pick<Note, 'text' | 'status' | 'color'>>): Note | null {
+  updateNote(noteId: string, updates: Partial<Pick<Note, 'text' | 'status' | 'color' | 'frameStart' | 'frameEnd'>>): Note | null {
     const note = this._notes.get(noteId);
     if (!note) return null;
 
     if (updates.text !== undefined) note.text = updates.text;
     if (updates.status !== undefined) note.status = updates.status;
     if (updates.color !== undefined) note.color = updates.color;
+    if (updates.frameStart !== undefined) note.frameStart = updates.frameStart;
+    if (updates.frameEnd !== undefined) note.frameEnd = updates.frameEnd;
     note.modifiedAt = new Date().toISOString();
 
     this.notifyChange();

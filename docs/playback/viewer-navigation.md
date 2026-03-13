@@ -94,7 +94,7 @@ OpenRV Web supports equirectangular (lat/long) panoramic image viewing. When 360
 | Look around | Click and drag on the canvas |
 | Zoom (field of view) | Scroll wheel |
 
-The spherical projection uses yaw/pitch rotation with configurable field of view. Detection is automatic for files with spherical metadata, or can be enabled manually from the View menu.
+The spherical projection uses yaw/pitch rotation with configurable field of view. Detection is automatic for files with spherical metadata, or can be enabled manually using the **360 View** button in the View tab toolbar.
 
 ---
 

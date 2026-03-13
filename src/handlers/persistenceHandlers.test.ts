@@ -10,6 +10,13 @@ import { bindPersistenceHandlers } from './persistenceHandlers';
 import type { SessionBridgeContext } from '../AppSessionBridge';
 import type { Session, SessionEvents } from '../core/session/Session';
 import { createMockSessionBridgeContext } from '../../test/mocks';
+import { showAlert } from '../ui/components/shared/Modal';
+import type { SkippedNodeInfo } from '../core/session/GTOGraphLoader';
+import type { DegradedModeInfo } from '../composite/BlendModes';
+
+vi.mock('../ui/components/shared/Modal', () => ({
+  showAlert: vi.fn(),
+}));
 
 type EventHandlers = Partial<Record<keyof SessionEvents, (data: any) => void>>;
 
@@ -373,6 +380,52 @@ describe('bindPersistenceHandlers', () => {
     expect(context.getVectorscope().hide).not.toHaveBeenCalled();
     expect(context.getGamutDiagram().show).not.toHaveBeenCalled();
     expect(context.getGamutDiagram().hide).not.toHaveBeenCalled();
+  });
+
+  it('PERH-U037: skippedNodes event triggers a user notification with skipped node names', () => {
+    expect(handlers.skippedNodes).toBeDefined();
+    const skipped: SkippedNodeInfo[] = [
+      { name: 'node1', protocol: 'RVColor', mappedType: 'color', reason: 'unregistered_type' },
+      { name: 'node2', protocol: 'RVTransform2D', mappedType: 'transform', reason: 'unregistered_type' },
+    ];
+    handlers.skippedNodes!(skipped);
+
+    expect(showAlert).toHaveBeenCalledWith(
+      expect.stringContaining('2 node(s) were skipped'),
+      expect.objectContaining({ type: 'warning', title: 'RV/GTO Import Warning' }),
+    );
+  });
+
+  it('PERH-U038: degradedModes event triggers a user notification with degraded mode info', () => {
+    expect(handlers.degradedModes).toBeDefined();
+    const degraded: DegradedModeInfo[] = [
+      { nodeName: 'stack1', originalMode: 'dissolve', fallbackMode: 'over' },
+    ];
+    handlers.degradedModes!(degraded);
+
+    expect(showAlert).toHaveBeenCalledWith(
+      expect.stringContaining('1 composite mode(s) were degraded'),
+      expect.objectContaining({ type: 'warning', title: 'RV/GTO Import Warning' }),
+    );
+  });
+
+  it('PERH-U039: skippedNodes with only unmapped_protocol nodes shows no warning', () => {
+    vi.mocked(showAlert).mockClear();
+    const skipped: SkippedNodeInfo[] = [
+      { name: 'node1', protocol: 'RVUnknown', mappedType: null, reason: 'unmapped_protocol' },
+    ];
+    handlers.skippedNodes!(skipped);
+
+    expect(showAlert).not.toHaveBeenCalled();
+  });
+
+  it('PERH-U040: normal import with no diagnostics shows no warning', () => {
+    vi.mocked(showAlert).mockClear();
+    // Neither skippedNodes nor degradedModes handlers are called during normal import
+    // Verify the handlers are registered but showAlert is not called when no events fire
+    expect(handlers.skippedNodes).toBeDefined();
+    expect(handlers.degradedModes).toBeDefined();
+    expect(showAlert).not.toHaveBeenCalled();
   });
 
   it('PERH-U030: settingsLoaded syncs GTO store after applying settings', () => {

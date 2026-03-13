@@ -122,7 +122,7 @@ When reviewing stereo content, vertical misalignment between the two eyes is a c
 To use the alignment overlay:
 
 1. Enable a stereo mode (anaglyph modes work best for alignment checks)
-2. Activate the alignment overlay from the View menu
+2. Activate the alignment overlay from the View tab toolbar
 3. Look for vertical offset between corresponding features in the left and right eyes
 4. Note any rotation differences (features that are level in one eye but tilted in the other)
 

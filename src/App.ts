@@ -394,29 +394,6 @@ export class App {
       'Select blue channel',
     );
 
-    // Shift+L: lut.togglePanel (global) vs channel.luminance (viewer/panel)
-    this.contextualKeyboardManager.register(
-      'lut.togglePanel',
-      { code: 'KeyL', shift: true },
-      () => this.controls.lutPipelinePanel.toggle(),
-      'global',
-      'Toggle LUT pipeline panel',
-    );
-    this.contextualKeyboardManager.register(
-      'channel.luminance',
-      { code: 'KeyL', shift: true },
-      () => this.controls.channelSelect.handleKeyboard('L', true),
-      'viewer',
-      'Select luminance channel',
-    );
-    this.contextualKeyboardManager.register(
-      'channel.luminance.panel',
-      { code: 'KeyL', shift: true },
-      () => this.controls.channelSelect.handleKeyboard('L', true),
-      'panel',
-      'Select luminance channel',
-    );
-
     // Shift+N: network.togglePanel (global) vs channel.none (viewer/panel)
     this.contextualKeyboardManager.register(
       'network.togglePanel',

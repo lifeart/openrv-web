@@ -6,6 +6,8 @@
 import type { Session, SessionEvents } from '../core/session/Session';
 import { SessionGTOStore } from '../core/session/SessionGTOStore';
 import type { SessionBridgeContext } from '../AppSessionBridge';
+import { formatSkippedNodesWarning, formatDegradedModesWarning } from '../core/session/GTOGraphLoader';
+import { showAlert } from '../ui/components/shared/Modal';
 
 /**
  * Bind all GTO persistence and session settings event handlers.
@@ -62,6 +64,21 @@ export function bindPersistenceHandlers(
   // Settings loaded from GTO session
   on(session, 'settingsLoaded', (settings) => {
     handleSettingsLoaded(context, settings, updateHistogram, updateWaveform, updateVectorscope, updateGamutDiagram);
+  });
+
+  // Surface import diagnostics to user
+  on(session, 'skippedNodes', (skippedNodes) => {
+    const message = formatSkippedNodesWarning(skippedNodes);
+    if (message) {
+      showAlert(message, { type: 'warning', title: 'RV/GTO Import Warning' });
+    }
+  });
+
+  on(session, 'degradedModes', (degradedModes) => {
+    const message = formatDegradedModesWarning(degradedModes);
+    if (message) {
+      showAlert(message, { type: 'warning', title: 'RV/GTO Import Warning' });
+    }
   });
 }
 

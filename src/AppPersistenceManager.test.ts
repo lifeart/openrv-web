@@ -122,8 +122,14 @@ function createMockContext(): PersistenceManagerContext & {
 }
 
 function createMockAutoSaveManager() {
-  return {
-    on: vi.fn(() => vi.fn()),
+  // Track event handlers so we can simulate event emission during initialize()
+  const handlers: Record<string, Array<(data: any) => void>> = {};
+  const mgr = {
+    on: vi.fn((event: string, handler: (data: any) => void) => {
+      if (!handlers[event]) handlers[event] = [];
+      handlers[event]!.push(handler);
+      return vi.fn();
+    }),
     initialize: vi.fn(async () => false),
     markDirty: vi.fn(),
     saveNow: vi.fn(),
@@ -132,7 +138,13 @@ function createMockAutoSaveManager() {
     deleteAutoSave: vi.fn(async () => {}),
     clearAll: vi.fn(async () => {}),
     dispose: vi.fn(),
+    /** Emit a mock event to registered handlers */
+    _emit(event: string, data: any) {
+      for (const h of handlers[event] ?? []) h(data);
+    },
+    _handlers: handlers,
   };
+  return mgr;
 }
 
 function createMockSnapshotManager() {
@@ -271,17 +283,18 @@ describe('AppPersistenceManager', () => {
     });
 
     it('APM-033: init() shows recovery prompt when auto-save data exists', async () => {
-      fullCtx._autoSaveManager.initialize.mockResolvedValue(true);
-      fullCtx._autoSaveManager.listAutoSaves.mockResolvedValue([
-        {
-          id: 'save-1',
-          name: 'Test Session',
-          savedAt: new Date().toISOString(),
-          cleanShutdown: false,
-          version: 1,
-          size: 1024,
-        } as any,
-      ]);
+      const entry = {
+        id: 'save-1',
+        name: 'Test Session',
+        savedAt: new Date().toISOString(),
+        cleanShutdown: false,
+        version: 1,
+        size: 1024,
+      };
+      fullCtx._autoSaveManager.initialize.mockImplementation(async () => {
+        fullCtx._autoSaveManager._emit('recoveryAvailable', { entries: [entry] });
+        return true;
+      });
       vi.mocked(showConfirm).mockResolvedValue(false);
 
       await manager.init();
@@ -555,8 +568,10 @@ describe('AppPersistenceManager', () => {
     };
 
     it('APM-100: recovery works normally when auto-save entry exists', async () => {
-      fullCtx._autoSaveManager.initialize.mockResolvedValue(true);
-      fullCtx._autoSaveManager.listAutoSaves.mockResolvedValue([autoSaveEntry as any]);
+      fullCtx._autoSaveManager.initialize.mockImplementation(async () => {
+        fullCtx._autoSaveManager._emit('recoveryAvailable', { entries: [autoSaveEntry] });
+        return true;
+      });
       fullCtx._autoSaveManager.getAutoSave.mockResolvedValue(mockState as any);
       vi.mocked(showConfirm).mockResolvedValue(true);
 
@@ -568,8 +583,10 @@ describe('AppPersistenceManager', () => {
     });
 
     it('APM-101: shows error alert when auto-save entry is missing/null', async () => {
-      fullCtx._autoSaveManager.initialize.mockResolvedValue(true);
-      fullCtx._autoSaveManager.listAutoSaves.mockResolvedValue([autoSaveEntry as any]);
+      fullCtx._autoSaveManager.initialize.mockImplementation(async () => {
+        fullCtx._autoSaveManager._emit('recoveryAvailable', { entries: [autoSaveEntry] });
+        return true;
+      });
       fullCtx._autoSaveManager.getAutoSave.mockResolvedValue(null);
       vi.mocked(showConfirm).mockResolvedValue(true);
 
@@ -584,8 +601,10 @@ describe('AppPersistenceManager', () => {
     });
 
     it('APM-102: error message is user-friendly and actionable', async () => {
-      fullCtx._autoSaveManager.initialize.mockResolvedValue(true);
-      fullCtx._autoSaveManager.listAutoSaves.mockResolvedValue([autoSaveEntry as any]);
+      fullCtx._autoSaveManager.initialize.mockImplementation(async () => {
+        fullCtx._autoSaveManager._emit('recoveryAvailable', { entries: [autoSaveEntry] });
+        return true;
+      });
       fullCtx._autoSaveManager.getAutoSave.mockResolvedValue(null);
       vi.mocked(showConfirm).mockResolvedValue(true);
 

@@ -135,6 +135,35 @@ describe('NoteManager', () => {
       expect(updated!.status).toBe('wontfix');
       expect(updated!.color).toBe('#ff0000');
     });
+
+    it('updates frameStart and frameEnd', () => {
+      const note = manager.addNote(0, 10, 10, 'Single frame', 'Alice');
+      const updated = manager.updateNote(note.id, { frameStart: 5, frameEnd: 25 });
+      expect(updated).not.toBeNull();
+      expect(updated!.frameStart).toBe(5);
+      expect(updated!.frameEnd).toBe(25);
+    });
+
+    it('updates frameStart only, preserving frameEnd', () => {
+      const note = manager.addNote(0, 10, 20, 'Range note', 'Alice');
+      const updated = manager.updateNote(note.id, { frameStart: 5 });
+      expect(updated!.frameStart).toBe(5);
+      expect(updated!.frameEnd).toBe(20);
+    });
+
+    it('updates frameEnd only, preserving frameStart', () => {
+      const note = manager.addNote(0, 10, 20, 'Range note', 'Alice');
+      const updated = manager.updateNote(note.id, { frameEnd: 30 });
+      expect(updated!.frameStart).toBe(10);
+      expect(updated!.frameEnd).toBe(30);
+    });
+
+    it('frame range update is reflected in getNotesForFrame', () => {
+      const note = manager.addNote(0, 10, 10, 'Single frame', 'Alice');
+      expect(manager.getNotesForFrame(0, 15).length).toBe(0);
+      manager.updateNote(note.id, { frameStart: 5, frameEnd: 20 });
+      expect(manager.getNotesForFrame(0, 15).length).toBe(1);
+    });
   });
 
   describe('resolveNote', () => {

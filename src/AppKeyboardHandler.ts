@@ -49,8 +49,6 @@ export class AppKeyboardHandler {
     'channel.red', // Shift+R is reserved for transform.rotateLeft
     'channel.blue', // Shift+B is reserved for view.cycleBackgroundPattern
     'channel.none', // Shift+N is reserved for network.togglePanel
-    'channel.luminance', // Shift+L - handled with viewer/panel context (luminance channel) vs global (LUT panel)
-    'lut.togglePanel', // Shift+L - handled with global context (LUT panel) vs viewer/panel (luminance channel)
   ]);
   private static readonly HIDDEN_DEFAULTS = new Set([
     'view.toggleWaveform', // W key - legacy duplicate of panel.waveform

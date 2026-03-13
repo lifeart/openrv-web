@@ -63,7 +63,7 @@ This overlay makes it immediately obvious which parts of the image have clipped 
 
 ## Channel Isolation Integration
 
-When a channel is isolated (e.g., `Shift+R` for red only), the histogram updates to reflect the isolated channel data. The histogram always shows the distribution of what is currently visible in the viewer.
+When a channel is isolated (e.g., `Shift+G` for green, or via the Channel Select dropdown for red/blue), the histogram updates to reflect the isolated channel data. The histogram always shows the distribution of what is currently visible in the viewer.
 
 ## GPU Acceleration
 

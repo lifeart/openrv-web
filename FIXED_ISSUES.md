@@ -1452,3 +1452,184 @@
 - `src/AppPlaybackWiring.test.ts`
 - `src/AppPersistenceManager.ts`
 - `src/services/KeyboardActionMap.ts`
+
+## Issue #331: The shipped note UI cannot create or edit frame-range notes even though the note system supports them
+
+**Root cause**: `NotePanel.addNoteAtCurrentFrame()` always created notes with `frameStart === frameEnd === currentFrame`. `NoteManager.updateNote()` only accepted `text`, `status`, and `color` updates — frame range fields were not updatable.
+
+**Fix**:
+- Extended `NoteManager.updateNote()` to accept `frameStart` and `frameEnd` in the updates parameter
+- Added frame range input fields (start/end) to the NotePanel's note editing UI
+- When editing a note, frame range inputs are pre-populated with the note's current values
+- When creating a note, frame range defaults to current frame (preserving backward compat) but can be modified
+
+**Tests added**: 9 new tests — 4 in `NoteManager.test.ts` (updateNote with frameStart/frameEnd) and 5 in `NotePanel.test.ts` (frame range UI rendering, editing, creation).
+
+**Files changed**:
+- `src/core/session/NoteManager.ts`
+- `src/core/session/NoteManager.test.ts`
+- `src/ui/components/NotePanel.ts`
+- `src/ui/components/NotePanel.test.ts`
+- `docs/advanced/review-workflow.md`
+
+## Issue #328: The shipped note workflow only exports JSON, despite the UI/docs presenting HTML and CSV note exports
+
+**Root cause**: `NotePanel` had a single "Export" button hardcoded to JSON serialization. The review-workflow docs promised HTML, CSV, and JSON export formats.
+
+**Fix**:
+- Replaced the single Export button with a dropdown menu offering JSON, CSV, and HTML export options
+- Added `notesToCSV()` method with proper RFC 4180 escaping (commas, quotes, newlines)
+- Added `notesToHTML()` method producing a styled HTML table with XSS-safe content escaping
+- Updated review-workflow docs to describe the export dropdown and each format
+
+**Tests added**: 8 new tests covering dropdown menu rendering, CSV format/escaping, HTML format/escaping, empty notes, and backward compatibility.
+
+**Files changed**:
+- `src/ui/components/NotePanel.ts`
+- `src/ui/components/NotePanel.test.ts`
+- `docs/advanced/review-workflow.md`
+
+## Issue #360: The crash-recovery docs say the UI offers restore on `recoveryAvailable`, but production never consumes that event
+
+**Root cause**: `AutoSaveManager` emitted `recoveryAvailable` during startup recovery detection, but `AppPersistenceManager.initAutoSave()` never subscribed to it. Instead it used a separate `listAutoSaves()` call that was disconnected from the event flow.
+
+**Fix**:
+- Wired `recoveryAvailable` event subscription in `AppPersistenceManager.initAutoSave()` before calling `initialize()`
+- The event handler captures auto-save entries and shows the recovery prompt to the user
+- When accepted, restores from the most recent auto-save entry
+- When declined, clears all auto-save data
+
+**Tests added**: 6 new regression tests in `AppPersistenceManager.issue360.test.ts` covering event subscription ordering, prompt display, restore flow, dismiss flow, no-data case, and most-recent-entry selection.
+
+**Files changed**:
+- `src/AppPersistenceManager.ts`
+- `src/AppPersistenceManager.test.ts`
+- `src/AppPersistenceManager.issue360.test.ts`
+
+## Issue #301: RV/GTO import diagnostics for skipped nodes and degraded modes are emitted internally but never surfaced to users
+
+**Root cause**: `SessionGraph` emitted `skippedNodes` and `degradedModes` events during RV/GTO import, but `persistenceHandlers.ts` never subscribed to them. Users received no UI indication of lossy imports.
+
+**Fix**:
+- Added `skippedNodes` and `degradedModes` event subscriptions in `bindPersistenceHandlers()`
+- Uses existing `formatSkippedNodesWarning()` and `formatDegradedModesWarning()` from `GTOGraphLoader.ts` to format messages
+- Shows warning alerts via `showAlert()` (filters out `unmapped_protocol` nodes which are expected)
+
+**Tests added**: 4 new tests covering skipped nodes notification, degraded modes notification, filtered unmapped_protocol nodes, and clean import (no warnings).
+
+**Files changed**:
+- `src/handlers/persistenceHandlers.ts`
+- `src/handlers/persistenceHandlers.test.ts`
+
+## Issue #347: The channel-isolation docs still advertise `Shift+L` as the normal luminance shortcut even though production routes that combo to the LUT panel
+
+**Root cause**: `Shift+L` was assigned to both `channel.luminance` and `lut.togglePanel`, creating a conflict. `AppKeyboardHandler` treated both as contextual defaults, so neither was registered normally.
+
+**Fix**:
+- Removed `channel.luminance` from default key bindings entirely (redundant with `channel.grayscale` at `Shift+Y`)
+- `Shift+L` now exclusively owned by `lut.togglePanel`, registered without context restriction
+- Simplified `channel.luminance` handler and added explicit `lut.togglePanel` handler
+- Removed contextual keyboard manager registrations for the Shift+L conflict from `App.ts`
+
+**Tests added/updated**: Updated tests in `AppKeyboardHandler.test.ts` and `KeyboardActionMap.test.ts` to verify conflict resolution. Updated E2E tests to use `Shift+Y`.
+
+**Files changed**:
+- `src/utils/input/KeyBindings.ts`
+- `src/AppKeyboardHandler.ts`
+- `src/services/KeyboardActionMap.ts`
+- `src/App.ts`
+- `src/AppKeyboardHandler.test.ts`
+- `src/services/KeyboardActionMap.test.ts`
+- `docs/playback/channel-isolation.md`
+- `docs/reference/keyboard-shortcuts.md`
+- `features/channel-isolation.md`
+- `features/keyboard-shortcuts.md`
+- `e2e/grayscale.spec.ts`
+- `e2e/channel-select.spec.ts`
+- `e2e/screenshots/features.screenshot.ts`
+
+## Issue #349: The published shortcut reference assigns several key combos to different actions in the same table
+
+**Root cause**: The shortcut reference doc listed `Shift+B`, `Shift+R`, and `Shift+N` for channel actions even though those combos are owned by background cycling, rotate-left, and network sync respectively. The channel actions are suppressed by `AppKeyboardHandler.CONTEXTUAL_DEFAULTS`.
+
+**Fix**:
+- Removed the three conflicting channel shortcuts from the Channel View table in the shortcut reference
+- Added an explanatory note directing users to the Shortcut Editor for reassignment
+
+**Tests added**: 3 new tests in `KeyBindings.test.ts` verifying no duplicate assignments within doc sections, suppressed shortcuts not listed as active, and no cross-section modifier key collisions.
+
+**Files changed**:
+- `docs/reference/keyboard-shortcuts.md`
+- `src/utils/input/KeyBindings.test.ts`
+
+## Issue #350: Multiple docs still teach `Shift+R` / `Shift+B` / `Shift+N` channel shortcuts that production reserves for other actions
+
+**Root cause**: Channel-isolation, troubleshooting, EXR-layers, and histogram docs all referenced `Shift+R`, `Shift+B`, and `Shift+N` as working channel shortcuts, but these are reserved by rotate-left, background-pattern cycling, and network sync.
+
+**Fix**:
+- Updated `channel-isolation.md`: replaced dead shortcuts with "toolbar or custom binding", added warning block
+- Updated `troubleshooting.md`: replaced `Shift+N` with Channel Select dropdown reference
+- Updated `exr-layers.md`: replaced `Shift+R`/`Shift+B` with `Shift+G` and Channel Select dropdown
+- Updated `histogram.md`: replaced `Shift+R` with `Shift+G` and Channel Select dropdown
+
+**Tests added**: 1 new test in `docs.consistency.test.ts` scanning the four doc files for the conflicting shortcuts.
+
+**Files changed**:
+- `docs/playback/channel-isolation.md`
+- `docs/reference/troubleshooting.md`
+- `docs/playback/exr-layers.md`
+- `docs/scopes/histogram.md`
+- `tests/docs.consistency.test.ts`
+
+## Issue #336: The documentation repeatedly sends users to a `View menu` that the shipped app does not actually have
+
+**Root cause**: Multiple docs referenced a "View menu" for accessing presentation mode, playlist, stereo modes, spherical projection, and stereo alignment. The shipped app has no View menu — these features are accessed via the View tab toolbar or header buttons.
+
+**Fix**:
+- `review-workflow.md`: "View menu" → "Presentation Mode button in the header bar"
+- `playlist.md`: removed "selecting it from the View menu"
+- `stereo-3d-viewing.md`: "View menu" → "Stereo dropdown in the View tab toolbar"
+- `viewer-navigation.md`: "View menu" → "360 View button in the View tab toolbar"
+- `stereo-3d.md`: "View menu" → "View tab toolbar"
+
+**Tests added**: 5 new tests in `docs-ui-references.test.ts` verifying each doc file doesn't reference "View menu".
+
+**Files changed**:
+- `docs/advanced/review-workflow.md`
+- `docs/advanced/playlist.md`
+- `docs/guides/stereo-3d-viewing.md`
+- `docs/playback/viewer-navigation.md`
+- `docs/advanced/stereo-3d.md`
+- `src/docs-ui-references.test.ts`
+
+## Issue #337: The documentation also relies on a non-existent `Settings panel` for several real workflows
+
+**Root cause**: Docs referenced a "Settings panel" for shortcut editing, client mode enablement, and ShotGrid API key configuration. No such panel exists in the shipped UI.
+
+**Fix**:
+- `keyboard-shortcuts.md`: "Settings panel" → "Help menu in the header bar by clicking Custom Key Bindings"
+- `review-workflow.md`: removed "from the Settings panel or" (client mode uses URL parameter)
+- `dcc-integration.md`: "OpenRV Web settings panel" → "ShotGrid panel's config section"
+
+**Tests added**: 1 new test in `docs.consistency.test.ts` verifying the three doc files don't reference "Settings panel".
+
+**Files changed**:
+- `docs/reference/keyboard-shortcuts.md`
+- `docs/advanced/review-workflow.md`
+- `docs/advanced/dcc-integration.md`
+- `tests/docs.consistency.test.ts`
+
+## Issue #357: The session export docs tell users to save `.orvproject` files from the Export menu, but production only exposes RV/GTO exports there
+
+**Root cause**: `docs/export/sessions.md` said users could save sessions from the Export menu, but the Export dropdown only has RV/GTO options. `.orvproject` save is triggered from the header Save button.
+
+**Fix**:
+- Clarified that `.orvproject` save uses the header Save button (or Ctrl+S)
+- Clarified that RV/GTO exports use the Export menu's Session section
+- Removed false claim that GTO sessions are read-only imports
+
+**Tests added**: 1 new test in `docs.consistency.test.ts` verifying the doc doesn't claim `.orvproject` is in the Export menu.
+
+**Files changed**:
+- `docs/export/sessions.md`
+- `tests/docs.consistency.test.ts`

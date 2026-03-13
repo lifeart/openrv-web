@@ -14,7 +14,7 @@ This guide covers every stereo display mode, the supported input formats, conver
 
 ## Stereo Display Modes
 
-OpenRV Web supports ten stereo display modes, selectable from the View menu or by pressing **Shift+3** to cycle through them. The modes are defined by the `StereoMode` type in the viewer core:
+OpenRV Web supports ten stereo display modes, selectable from the **Stereo** dropdown in the View tab toolbar or by pressing **Shift+3** to cycle through them. The modes are defined by the `StereoMode` type in the viewer core:
 
 ### Off
 

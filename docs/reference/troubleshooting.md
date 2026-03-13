@@ -46,7 +46,7 @@ This guide addresses common issues encountered when using OpenRV Web. Each secti
 
 4. **Wrong transfer function** -- The display transfer function may not match the content. Check the display color management settings. sRGB content should use the sRGB transfer function.
 
-5. **Channel isolation active** -- A single channel may be isolated, showing a grayscale image. Press `Shift+N` to return to normal RGB display.
+5. **Channel isolation active** -- A single channel may be isolated, showing a grayscale image. Use the Channel Select dropdown in the View tab toolbar to return to normal RGB display.
 
 6. **Tone mapping active** -- An enabled tone mapping operator (Reinhard, Filmic, ACES) alters the image appearance. Toggle tone mapping off if unwanted.
 

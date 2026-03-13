@@ -366,20 +366,14 @@ describe('buildActionHandlers', () => {
     expect(deps.controls.channelSelect.handleKeyboard).toHaveBeenCalledWith('A', true);
   });
 
-  it('channel.luminance toggles LUT pipeline panel when on color tab', () => {
-    deps.tabBar.activeTab = 'color';
-    // Rebuild handlers so the closure captures the updated tab
-    handlers = buildActionHandlers(deps);
-    handlers['channel.luminance']!();
-    expect(deps.controls.lutPipelinePanel.toggle).toHaveBeenCalledOnce();
-    expect(deps.controls.channelSelect.handleKeyboard).not.toHaveBeenCalled();
-  });
-
-  it('channel.luminance calls channelSelect.handleKeyboard when not on color tab', () => {
-    deps.tabBar.activeTab = 'view';
+  it('channel.luminance always calls channelSelect.handleKeyboard with L', () => {
     handlers['channel.luminance']!();
     expect(deps.controls.channelSelect.handleKeyboard).toHaveBeenCalledWith('L', true);
-    expect(deps.controls.lutPipelinePanel.toggle).not.toHaveBeenCalled();
+  });
+
+  it('lut.togglePanel calls lutPipelinePanel.toggle', () => {
+    handlers['lut.togglePanel']!();
+    expect(deps.controls.lutPipelinePanel.toggle).toHaveBeenCalledOnce();
   });
 
   // -- View modes --------------------------------------------------------
