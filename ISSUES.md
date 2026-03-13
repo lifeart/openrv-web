@@ -750,17 +750,7 @@ This file tracks findings from exploratory review and targeted validation runs.
   - During transport flaps or serialization failures, local sync changes can be treated as sent even though neither WebSocket nor serverless peer transport accepted the message.
   - From the user’s perspective, collaboration can drift silently instead of surfacing an actionable transport failure.
 
-### 439. DCC LUT sync requests can apply out of order when multiple LUT URLs arrive quickly
 
-- Severity: Medium
-- Area: DCC integration / color sync ordering
-- Evidence:
-  - Each inbound `syncColor` with `lutPath` kicks off `fetchAndApplyLUT(...)` without awaiting or cancelling prior requests in [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L228) through [src/AppDCCWiring.ts#L242).
-  - `fetchAndApplyLUT(...)` is asynchronous and applies its result directly to `colorControls.setLUT(...)` and `viewer.setLUT(...)` when the fetch/parse completes in [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L95) through [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L119).
-  - There is no generation token, cancellation, or “latest request wins” check anywhere in the DCC LUT-sync path.
-- Impact:
-  - Inference: if a slower older LUT request resolves after a newer one, it can overwrite the newer DCC color state and leave the viewer on stale LUT content.
-  - That makes rapid DCC-driven look switching race-sensitive instead of deterministic.
 
 ### 440. URL-based media loading bypasses the app's decoder stack and breaks remote EXR or other decoder-backed images
 

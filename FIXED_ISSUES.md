@@ -2039,3 +2039,25 @@ Called from `fromJSON()` inside the existing `if (mediaIndexMap.size > 0)` block
 - `src/network/WebSocketClient.test.ts`
 - `src/network/NetworkSyncManager.ts`
 - `src/network/NetworkSyncManager.test.ts`
+
+## Issue #439: DCC LUT sync requests can apply out of order when multiple LUT URLs arrive quickly
+
+**Root cause**: `fetchAndApplyLUT()` was async with no ordering mechanism. Multiple concurrent calls could complete in any order, and a slow old request could overwrite a newer LUT.
+
+**Fix**: Added "latest request wins" pattern using a `lutGeneration` counter on `DCCWiringState`:
+- Each `fetchAndApplyLUT()` call increments `state.lutGeneration` at start
+- After each `await`, checks if generation still matches before proceeding
+- Stale results are logged and discarded
+- No changes to existing interfaces or caller signatures (only added a `state` parameter to `fetchAndApplyLUT`)
+
+**Tests added**: 6 regression tests in `AppDCCWiring.test.ts`:
+- Single request applies normally
+- Slow first request discarded when fast second completes
+- Three rapid requests — only last applies
+- Fetch failure doesn't apply LUT
+- HTTP error doesn't apply LUT
+- Generation counter starts at 0
+
+**Files changed**:
+- `src/AppDCCWiring.ts`
+- `src/AppDCCWiring.test.ts` (new)

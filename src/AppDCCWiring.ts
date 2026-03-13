@@ -76,6 +76,8 @@ export interface DCCWiringDeps {
 export interface DCCWiringState {
   suppressFrameSync: boolean;
   subscriptions: DisposableSubscriptionManager;
+  /** Generation counter for "latest LUT request wins" ordering. */
+  lutGeneration: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -90,6 +92,8 @@ export const VIDEO_EXTENSIONS = ['mp4', 'webm', 'mov', 'avi', 'mkv', 'ogv'];
 
 /**
  * Fetch a LUT file from a URL/path, parse it, and apply it to the viewer.
+ * Uses a generation counter from `state` to implement "latest request wins":
+ * if a newer request starts before this one completes, the stale result is discarded.
  * Failures are logged as warnings and never propagate to break the sync handler.
  */
 export async function fetchAndApplyLUT(
@@ -97,15 +101,32 @@ export async function fetchAndApplyLUT(
   fetchFn: typeof globalThis.fetch,
   colorControls: DCCWiringColorControls,
   viewer: DCCWiringViewer,
+  state: DCCWiringState,
 ): Promise<void> {
+  const generation = ++state.lutGeneration;
+
   try {
     const response = await fetchFn(lutPath);
+
+    // Discard stale result if a newer request has started
+    if (state.lutGeneration !== generation) {
+      log.info(`Discarding stale LUT response for "${lutPath}" (generation ${generation}, current ${state.lutGeneration})`);
+      return;
+    }
+
     if (!response.ok) {
       log.warn(`Failed to fetch LUT from "${lutPath}": HTTP ${response.status}`);
       return;
     }
 
     const content = await response.text();
+
+    // Check again after second await
+    if (state.lutGeneration !== generation) {
+      log.info(`Discarding stale LUT response for "${lutPath}" (generation ${generation}, current ${state.lutGeneration})`);
+      return;
+    }
+
     const filename = basename(lutPath);
     const lut = parseLUT(filename, content);
 
@@ -145,7 +166,7 @@ export function wireDCCBridge(deps: DCCWiringDeps): DCCWiringState {
 
   const subs = new DisposableSubscriptionManager();
 
-  const state: DCCWiringState = { suppressFrameSync: false, subscriptions: subs };
+  const state: DCCWiringState = { suppressFrameSync: false, subscriptions: subs, lutGeneration: 0 };
 
   // Error event: surface DCC bridge errors to the user with throttling
   const ERROR_THROTTLE_MS = 5_000;
@@ -237,7 +258,7 @@ export function wireDCCBridge(deps: DCCWiringDeps): DCCWiringState {
 
       // Handle LUT path: fetch, parse, and apply
       if (typeof msg.lutPath === 'string' && msg.lutPath.length > 0) {
-        fetchAndApplyLUT(msg.lutPath, fetchFn, colorControls, viewer);
+        fetchAndApplyLUT(msg.lutPath, fetchFn, colorControls, viewer, state);
       }
     }),
   );
