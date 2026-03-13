@@ -10,14 +10,16 @@ Each media source loaded into OpenRV Web can be assigned a status that reflects 
 
 ### Status Values
 
-| Status | Color | Meaning |
-|--------|-------|---------|
-| Pending | Gray | Not yet reviewed |
-| In Review | Blue | Currently being evaluated |
-| Revisions Needed | Orange | Feedback provided, artist needs to address notes |
-| Approved | Green | Accepted for delivery or next stage |
-| Final | Gold | Locked, no further changes expected |
-| On Hold | Red | Work paused, awaiting decision |
+| Status | Code | Color | Meaning |
+|--------|------|-------|---------|
+| Pending | `pending` | Gray | Not yet reviewed |
+| In Review | `in-review` | Blue | Currently being evaluated |
+| Approved | `approved` | Green | Accepted for delivery or next stage |
+| Revisions Needed | `needs-work` | Orange | Feedback provided, artist needs to address notes |
+| Could Be Better | `cbb` | Yellow | Acceptable but could be improved |
+| Final | `final` | Gold | Locked, no further changes expected |
+| On Hold | `on-hold` | Red | Work paused, awaiting decision |
+| Omit | `omit` | Slate | Excluded from delivery |
 
 Status is assigned from the Review panel or via the context menu on a source. When connected to ShotGrid or another production tracking system, status changes are propagated automatically.
 
@@ -66,7 +68,7 @@ The notes system provides a structured way to capture review feedback tied to sp
 3. Enter the note text describing the feedback
 4. Optionally assign a priority (low, medium, high, critical) and category (comp, lighting, anim, roto, paint, editorial)
 
-Notes with frame ranges can be created by setting a start and end frame in the frame range inputs that appear in the note editing area, covering a duration of screen time rather than a single moment. If the frame range fields are left at their defaults, the note is attached to the current frame only.
+Notes with frame ranges can be created by setting a start and end frame, covering a duration of screen time rather than a single moment.
 
 ### Reviewing Notes
 
@@ -82,11 +84,11 @@ Click any note to navigate to its associated frame. Notes with frame ranges high
 
 ### Exporting Notes
 
-Notes can be exported in several formats via the **Export** dropdown in the Notes panel:
+Notes can be exported in several formats:
 
-- **JSON**: Machine-readable format for session state exchange and re-import into OpenRV Web
-- **CSV**: Spreadsheet-compatible format with columns for frame, frameEnd, author, status, text, and color -- suitable for production management and import into tracking systems
-- **HTML**: A styled HTML table with the same data, viewable in any browser and suitable for distribution to artists and supervisors
+- **HTML report**: A formatted document with timecodes and note text for distribution to artists and supervisors, viewable in any browser
+- **CSV**: Spreadsheet-compatible format for production management and import into tracking systems
+- **JSON**: Machine-readable format for session state exchange
 
 ---
 
@@ -130,7 +132,7 @@ Client mode simplifies the OpenRV Web interface for external stakeholders who ne
 
 ### Activating Client Mode
 
-Enable client mode by appending `?mode=client` to the application URL. Client mode can be pre-configured for shared review links so that external reviewers receive a streamlined experience without manual setup.
+Enable client mode from the Settings panel or by appending `?mode=client` to the application URL. Client mode can be pre-configured for shared review links so that external reviewers receive a streamlined experience without manual setup.
 
 ---
 
@@ -140,7 +142,7 @@ Presentation mode maximizes the viewer area by hiding all toolbars, panels, and 
 
 ### Entering Presentation Mode
 
-Press `F11` for fullscreen mode, then press `Ctrl+Shift+P` to activate presentation mode. Alternatively, click the **Presentation Mode** button in the header bar.
+Press `F` for fullscreen mode, then press `Ctrl+Shift+P` to activate presentation mode. Alternatively, select **Presentation Mode** from the View menu.
 
 In presentation mode:
 

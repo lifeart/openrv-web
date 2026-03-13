@@ -1,14 +1,14 @@
 /**
  * Shot Status Tracking for review workflows.
  *
- * Tracks per-source status (approved, needs-work, cbb, omit, pending).
+ * Tracks per-source status (pending, in-review, approved, needs-work, cbb, final, on-hold, omit).
  * Status shows in playlist panel and exports in reports.
  */
 
 /**
  * Status values for shots in a review session
  */
-export type ShotStatus = 'pending' | 'approved' | 'needs-work' | 'cbb' | 'omit';
+export type ShotStatus = 'pending' | 'in-review' | 'approved' | 'needs-work' | 'cbb' | 'final' | 'on-hold' | 'omit';
 
 /**
  * A status entry for a single source
@@ -25,16 +25,19 @@ export interface StatusEntry {
  */
 export const STATUS_COLORS: Record<ShotStatus, string> = {
   pending: '#94a3b8', // slate-400
+  'in-review': '#3b82f6', // blue-500
   approved: '#22c55e', // green-500
   'needs-work': '#f97316', // orange-500
   cbb: '#eab308', // yellow-500
-  omit: '#ef4444', // red-500
+  final: '#d97706', // amber-600 (gold)
+  'on-hold': '#ef4444', // red-500
+  omit: '#64748b', // slate-500
 };
 
 /**
  * All valid status values
  */
-export const VALID_STATUSES: ShotStatus[] = ['pending', 'approved', 'needs-work', 'cbb', 'omit'];
+export const VALID_STATUSES: ShotStatus[] = ['pending', 'in-review', 'approved', 'needs-work', 'cbb', 'final', 'on-hold', 'omit'];
 
 /**
  * Callback interface for StatusManager to notify Session of changes
@@ -130,9 +133,12 @@ export class StatusManager {
   getStatusCounts(totalSources?: number): Record<ShotStatus, number> {
     const counts: Record<ShotStatus, number> = {
       pending: 0,
+      'in-review': 0,
       approved: 0,
       'needs-work': 0,
       cbb: 0,
+      final: 0,
+      'on-hold': 0,
       omit: 0,
     };
 
@@ -178,7 +184,11 @@ export class StatusManager {
   fromSerializable(entries: StatusEntry[]): void {
     this._statuses.clear();
     for (const entry of entries) {
-      this._statuses.set(entry.sourceIndex, { ...entry });
+      // Validate status against VALID_STATUSES; default unknown values to 'pending'
+      const validatedStatus = (VALID_STATUSES as readonly string[]).includes(entry.status)
+        ? entry.status
+        : 'pending';
+      this._statuses.set(entry.sourceIndex, { ...entry, status: validatedStatus as ShotStatus });
     }
     this.notifyChange();
   }

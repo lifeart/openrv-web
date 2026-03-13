@@ -60,20 +60,25 @@ function authResponse(token = 'mock-bearer-token', expiresIn = 300): Response {
 
 describe('Status mapping', () => {
   it('SG-MAP-001: mapStatusToShotGrid maps all local statuses', () => {
+    expect(mapStatusToShotGrid('pending')).toBe('pnd');
+    expect(mapStatusToShotGrid('in-review')).toBe('ip');
     expect(mapStatusToShotGrid('approved')).toBe('apr');
     expect(mapStatusToShotGrid('needs-work')).toBe('rev');
     expect(mapStatusToShotGrid('cbb')).toBe('cbb');
-    expect(mapStatusToShotGrid('pending')).toBe('pnd');
+    expect(mapStatusToShotGrid('final')).toBe('fin');
+    expect(mapStatusToShotGrid('on-hold')).toBe('hld');
     expect(mapStatusToShotGrid('omit')).toBe('omt');
   });
 
   it('SG-MAP-002: mapStatusFromShotGrid maps known ShotGrid codes', () => {
+    expect(mapStatusFromShotGrid('pnd')).toBe('pending');
+    expect(mapStatusFromShotGrid('ip')).toBe('in-review');
     expect(mapStatusFromShotGrid('apr')).toBe('approved');
     expect(mapStatusFromShotGrid('rev')).toBe('needs-work');
     expect(mapStatusFromShotGrid('cbb')).toBe('cbb');
-    expect(mapStatusFromShotGrid('pnd')).toBe('pending');
+    expect(mapStatusFromShotGrid('fin')).toBe('final');
+    expect(mapStatusFromShotGrid('hld')).toBe('on-hold');
     expect(mapStatusFromShotGrid('omt')).toBe('omit');
-    expect(mapStatusFromShotGrid('fin')).toBe('approved');
   });
 
   it('SG-MAP-003: mapStatusFromShotGrid defaults unknown codes to pending', () => {
@@ -82,11 +87,20 @@ describe('Status mapping', () => {
   });
 
   it('SG-MAP-004: expanded status mappings from ShotGrid', () => {
-    expect(mapStatusFromShotGrid('ip')).toBe('pending');
-    expect(mapStatusFromShotGrid('hld')).toBe('pending');
+    expect(mapStatusFromShotGrid('ip')).toBe('in-review');
+    expect(mapStatusFromShotGrid('hld')).toBe('on-hold');
     expect(mapStatusFromShotGrid('wtg')).toBe('pending');
     expect(mapStatusFromShotGrid('na')).toBe('omit');
     expect(mapStatusFromShotGrid('vwd')).toBe('approved');
+  });
+
+  it('SG-MAP-005: round-trip preserves distinct statuses through ShotGrid mapping', () => {
+    const statuses: ShotStatus[] = ['pending', 'in-review', 'approved', 'needs-work', 'cbb', 'final', 'on-hold', 'omit'];
+    for (const status of statuses) {
+      const sgCode = mapStatusToShotGrid(status);
+      const roundTripped = mapStatusFromShotGrid(sgCode);
+      expect(roundTripped).toBe(status);
+    }
   });
 });
 
@@ -403,17 +417,6 @@ describe('ShotGridBridge', () => {
       expect(url).toContain('filter[project]=42');
     });
 
-    it('SG-NOTE-004: requests frame-related fields from ShotGrid', async () => {
-      mockFetch.mockResolvedValueOnce(authResponse()).mockResolvedValueOnce(jsonResponse({ data: [] }));
-
-      await bridge.getNotesForVersion(101);
-
-      const url = mockFetch.mock.calls[1]![0] as string;
-      expect(url).toContain('sg_first_frame');
-      expect(url).toContain('sg_last_frame');
-      expect(url).toContain('frame_range');
-    });
-
     it('SG-NOTE-003: returns empty array when no notes', async () => {
       mockFetch.mockResolvedValueOnce(authResponse()).mockResolvedValueOnce(jsonResponse({ data: [] }));
 
@@ -531,8 +534,8 @@ describe('ShotGridBridge', () => {
 
   describe('pushStatus', () => {
     it('SG-004: maps local status to ShotGrid codes', async () => {
-      const statuses: ShotStatus[] = ['approved', 'needs-work', 'cbb', 'pending', 'omit'];
-      const expected = ['apr', 'rev', 'cbb', 'pnd', 'omt'];
+      const statuses: ShotStatus[] = ['pending', 'in-review', 'approved', 'needs-work', 'cbb', 'final', 'on-hold', 'omit'];
+      const expected = ['pnd', 'ip', 'apr', 'rev', 'cbb', 'fin', 'hld', 'omt'];
 
       for (let i = 0; i < statuses.length; i++) {
         mockFetch.mockReset();

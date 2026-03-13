@@ -82,23 +82,30 @@ export interface PushNoteOptions {
 // ---------------------------------------------------------------------------
 
 const LOCAL_TO_SG: Record<ShotStatus, string> = {
+  pending: 'pnd',
+  // ShotGrid's "In Progress" (ip) is the closest match for "in-review".
+  // Studios with custom statuses may need to override this mapping.
+  'in-review': 'ip',
   approved: 'apr',
   'needs-work': 'rev',
   cbb: 'cbb',
-  pending: 'pnd',
+  final: 'fin',
+  'on-hold': 'hld',
   omit: 'omt',
 };
 
 const SG_TO_LOCAL: Record<string, ShotStatus> = {
+  pnd: 'pending',
+  // ShotGrid's "In Progress" is the closest match for local "in-review";
+  // studios may need to customize this if they use a dedicated review status.
+  ip: 'in-review',
   apr: 'approved',
   rev: 'needs-work',
   cbb: 'cbb',
-  pnd: 'pending',
-  omt: 'omit',
-  fin: 'approved', // 'final' maps to approved
-  ip: 'pending', // 'in progress' maps to pending
-  hld: 'pending', // 'on hold' maps to pending
+  fin: 'final', // 'final' maps to final
+  hld: 'on-hold', // 'on hold' maps to on-hold
   wtg: 'pending', // 'waiting to start' maps to pending
+  omt: 'omit',
   na: 'omit', // 'not applicable' maps to omit
   vwd: 'approved', // 'viewed' maps to approved
 };

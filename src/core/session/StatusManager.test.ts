@@ -248,6 +248,122 @@ describe('StatusManager', () => {
     });
   });
 
+  describe('new status values (issue #317)', () => {
+    it('STATUS-317-001: in-review status can be set and retrieved', () => {
+      const entry = manager.setStatus(0, 'in-review', 'Alice');
+      expect(entry.status).toBe('in-review');
+      expect(manager.getStatus(0)).toBe('in-review');
+    });
+
+    it('STATUS-317-002: final status can be set and retrieved', () => {
+      const entry = manager.setStatus(0, 'final', 'Alice');
+      expect(entry.status).toBe('final');
+      expect(manager.getStatus(0)).toBe('final');
+    });
+
+    it('STATUS-317-003: on-hold status can be set and retrieved', () => {
+      const entry = manager.setStatus(0, 'on-hold', 'Alice');
+      expect(entry.status).toBe('on-hold');
+      expect(manager.getStatus(0)).toBe('on-hold');
+    });
+
+    it('STATUS-317-004: status counts include new values', () => {
+      manager.setStatus(0, 'in-review', 'Alice');
+      manager.setStatus(1, 'final', 'Bob');
+      manager.setStatus(2, 'on-hold', 'Charlie');
+      manager.setStatus(3, 'approved', 'Dave');
+
+      const counts = manager.getStatusCounts(6);
+      expect(counts['in-review']).toBe(1);
+      expect(counts.final).toBe(1);
+      expect(counts['on-hold']).toBe(1);
+      expect(counts.approved).toBe(1);
+      expect(counts.pending).toBe(2); // 6 total - 4 explicit
+    });
+
+    it('STATUS-317-005: serialization round-trips new status values', () => {
+      manager.setStatus(0, 'in-review', 'Alice');
+      manager.setStatus(1, 'final', 'Bob');
+      manager.setStatus(2, 'on-hold', 'Charlie');
+
+      const serialized = manager.toSerializable();
+      const json = JSON.stringify(serialized);
+      const parsed = JSON.parse(json) as StatusEntry[];
+
+      const manager2 = new StatusManager();
+      manager2.fromSerializable(parsed);
+
+      expect(manager2.getStatus(0)).toBe('in-review');
+      expect(manager2.getStatus(1)).toBe('final');
+      expect(manager2.getStatus(2)).toBe('on-hold');
+      expect(manager2.getStatusEntry(0)!.setBy).toBe('Alice');
+      expect(manager2.getStatusEntry(1)!.setBy).toBe('Bob');
+      expect(manager2.getStatusEntry(2)!.setBy).toBe('Charlie');
+
+      manager2.dispose();
+    });
+
+    it('STATUS-317-006: colors are defined for all status values', () => {
+      for (const status of VALID_STATUSES) {
+        const color = STATUS_COLORS[status];
+        expect(color).toBeTruthy();
+        expect(color).toMatch(/^#[0-9a-fA-F]{6}$/);
+      }
+    });
+
+    it('STATUS-317-007: VALID_STATUSES includes all eight values', () => {
+      expect(VALID_STATUSES).toHaveLength(8);
+      expect(VALID_STATUSES).toContain('pending');
+      expect(VALID_STATUSES).toContain('in-review');
+      expect(VALID_STATUSES).toContain('approved');
+      expect(VALID_STATUSES).toContain('needs-work');
+      expect(VALID_STATUSES).toContain('cbb');
+      expect(VALID_STATUSES).toContain('final');
+      expect(VALID_STATUSES).toContain('on-hold');
+      expect(VALID_STATUSES).toContain('omit');
+    });
+  });
+
+  describe('old-schema migration', () => {
+    it('STATUS-317-008: deserializes data with only old 5-status values correctly', () => {
+      // Simulate a saved session from before #317 that only used the original 5 statuses
+      const oldEntries: StatusEntry[] = [
+        { sourceIndex: 0, status: 'pending', setBy: 'Alice', setAt: '2025-01-01T00:00:00.000Z' },
+        { sourceIndex: 1, status: 'approved', setBy: 'Bob', setAt: '2025-01-01T00:00:00.000Z' },
+        { sourceIndex: 2, status: 'needs-work', setBy: 'Charlie', setAt: '2025-01-01T00:00:00.000Z' },
+        { sourceIndex: 3, status: 'cbb', setBy: 'Dave', setAt: '2025-01-01T00:00:00.000Z' },
+        { sourceIndex: 4, status: 'omit', setBy: 'Eve', setAt: '2025-01-01T00:00:00.000Z' },
+      ];
+
+      const manager2 = new StatusManager();
+      manager2.fromSerializable(oldEntries);
+
+      expect(manager2.getStatus(0)).toBe('pending');
+      expect(manager2.getStatus(1)).toBe('approved');
+      expect(manager2.getStatus(2)).toBe('needs-work');
+      expect(manager2.getStatus(3)).toBe('cbb');
+      expect(manager2.getStatus(4)).toBe('omit');
+
+      manager2.dispose();
+    });
+
+    it('STATUS-317-009: unknown status values default to pending on deserialization', () => {
+      // Simulate corrupted or future data with an unrecognized status
+      const badEntries = [
+        { sourceIndex: 0, status: 'bogus-status' as ShotStatus, setBy: 'Alice', setAt: '2025-01-01T00:00:00.000Z' },
+        { sourceIndex: 1, status: 'approved', setBy: 'Bob', setAt: '2025-01-01T00:00:00.000Z' },
+      ];
+
+      const manager2 = new StatusManager();
+      manager2.fromSerializable(badEntries);
+
+      expect(manager2.getStatus(0)).toBe('pending');
+      expect(manager2.getStatus(1)).toBe('approved');
+
+      manager2.dispose();
+    });
+  });
+
   describe('edge cases', () => {
     it('toSerializable returns empty array on empty manager', () => {
       expect(manager.toSerializable()).toEqual([]);

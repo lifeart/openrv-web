@@ -1954,3 +1954,31 @@ Called from `fromJSON()` inside the existing `if (mediaIndexMap.size > 0)` block
 - `src/compat/types.ts`
 - `src/compat/MuEvalBridge.ts`
 - `src/compat/__tests__/MuEvalBridge.test.ts`
+
+## Issue #317: Review-status semantics are lossy: several documented production states collapse into unrelated local values
+
+**Root cause**: `ShotStatus` type only had 5 values (`pending`, `approved`, `needs-work`, `cbb`, `omit`), while the review workflow required 8 distinct states. ShotGrid integration collapsed `fin -> approved`, `ip -> pending`, `hld -> pending`, making statuses lossy across round-trips.
+
+**Fix**:
+- Extended `ShotStatus` from 5 to 8 values: added `in-review`, `final`, `on-hold`
+- Added colors: blue for `in-review`, amber/gold for `final`, red for `on-hold`; moved `omit` from red to slate
+- Fixed ShotGrid mappings: `fin -> final`, `ip -> in-review`, `hld -> on-hold` (with reverse mappings)
+- Added `fromSerializable` validation: unknown statuses default to `pending`
+- Updated `VALID_STATUSES` array and `getStatusCounts` initializer
+- Updated review-workflow docs to list all 8 statuses
+
+**Tests added**: 9 regression tests across StatusManager.test.ts and ShotGridBridge.test.ts:
+- New status values can be set/retrieved/counted
+- All 8 statuses survive ShotGrid round-trip (`local -> SG -> local`)
+- Colors defined for all 8 statuses
+- VALID_STATUSES has correct length
+- Old 5-status serialized data loads correctly (migration test)
+- Unknown/corrupted statuses default to `pending` on deserialization
+- ShotGrid mapping updated for all new statuses
+
+**Files changed**:
+- `src/core/session/StatusManager.ts`
+- `src/integrations/ShotGridBridge.ts`
+- `src/core/session/StatusManager.test.ts`
+- `src/integrations/ShotGridBridge.test.ts`
+- `docs/advanced/review-workflow.md`
