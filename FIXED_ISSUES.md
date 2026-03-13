@@ -1913,3 +1913,20 @@ Called from `fromJSON()` inside the existing `if (mediaIndexMap.size > 0)` block
 **Tests added**: 4 documentation consistency tests in `tests/docs.consistency.test.ts`.
 
 **Files changed**: 8 doc files + `tests/docs.consistency.test.ts`
+
+## Issue #371: The playback docs describe a labeled loop-mode button, but production renders an icon-only compact control
+
+**Root cause**: Docs described a 70px wide button with visible "Loop"/"Ping"/"Once" labels. The shipped button is intentionally compact (28px, icon-only) with mode name only in aria-label.
+
+**Fix**:
+- Added `title` attribute (tooltip) to loop button showing current mode name on hover
+- Updated `docs/playback/loop-modes-stepping.md` to describe icon-only control with tooltip
+- Updated `docs/getting-started/ui-overview.md` to match
+
+**Tests added**: 2 regression tests in `HeaderBar.test.ts` (HDR-U052, HDR-U053) verifying tooltip text updates across all loop modes.
+
+**Files changed**:
+- `src/ui/components/layout/HeaderBar.ts`
+- `src/ui/components/layout/HeaderBar.test.ts`
+- `docs/playback/loop-modes-stepping.md`
+- `docs/getting-started/ui-overview.md`

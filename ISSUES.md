@@ -530,19 +530,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Users following the review docs can look for a persistent header-level status readout that never appears in the shipped app.
   - That makes shot-status tracking feel partially missing even before users hit the deeper limitation that there is no real production status-management UI.
 
-### 371. The playback docs describe a labeled loop-mode button, but production renders an icon-only compact control
-
-- Severity: Low
-- Area: Documentation / playback controls
-- Evidence:
-  - The loop-mode guide says the header button "shows an icon and label (e.g., `Loop`, `Ping`, `Once`) and has a minimum width of 70px" in [docs/playback/loop-modes-stepping.md](/Users/lifeart/Repos/openrv-web/docs/playback/loop-modes-stepping.md#L39).
-  - The UI overview likewise says the loop control "displays current mode (Loop, Ping, Once)" in [docs/getting-started/ui-overview.md](/Users/lifeart/Repos/openrv-web/docs/getting-started/ui-overview.md#L84).
-  - The shipped header creates the loop button with a `28px` minimum width in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L325) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L328).
-  - Runtime updates replace the button contents with SVG only and move the text label into `aria-label`, not visible UI, in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1346) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1360).
-- Impact:
-  - Users following the docs can look for visible `Loop` / `Ping` / `Once` text in the header and instead find only a compact icon.
-  - That makes the current mode less glanceable than the documentation implies, especially for users still learning the transport controls.
-
 ### 376. Auto-checkpoints are documented as broad safety nets before major operations, but production only creates them for restore and project-load flows
 
 - Severity: Medium
