@@ -42,7 +42,7 @@ Invalid or non-existent room codes produce an error message. If the room has rea
 
 When connected to a room, all participants are visible in the connection panel and as avatar overlays in the viewer.
 
-- The **connection panel** shows a list of connected users with their names and roles. The host is labeled "You (Host)."
+- The **connection panel** shows a list of connected users with their names and roles. Your own entry is labeled "You (Host)" if you are the host, or "You" otherwise. Other host users are labeled "Host."
 - **Presence avatars** appear in the top-right corner of the viewer as colored circles with user initials. Each user is assigned a distinct color. Hovering over an avatar shows the user name.
 - The **network button badge** displays the current participant count.
 

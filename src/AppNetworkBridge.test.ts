@@ -128,6 +128,7 @@ function createMockNetworkControl() {
     showInfo: vi.fn(),
     hideInfo: vi.fn(),
     setRTT: vi.fn(),
+    setLocalUserId: vi.fn(),
     reportCopyResult: vi.fn(),
   };
 }

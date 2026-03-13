@@ -413,6 +413,7 @@ export class AppNetworkBridge {
 
     this.unsubscribers.push(
       networkSyncManager.on('roomCreated', (info) => {
+        networkControl.setLocalUserId(networkSyncManager.userId);
         networkControl.setIsHost(true);
         networkControl.setShareLinkKind('invite');
         networkControl.setResponseToken('');
@@ -426,6 +427,7 @@ export class AppNetworkBridge {
 
     this.unsubscribers.push(
       networkSyncManager.on('roomJoined', (info) => {
+        networkControl.setLocalUserId(networkSyncManager.userId);
         networkControl.setIsHost(networkSyncManager.isHost);
         networkControl.setShareLinkKind(networkSyncManager.isHost ? 'invite' : 'generic');
         networkControl.setRoomInfo(info);
@@ -456,6 +458,7 @@ export class AppNetworkBridge {
 
     this.unsubscribers.push(
       networkSyncManager.on('roomLeft', () => {
+        networkControl.setLocalUserId(null);
         networkControl.setConnectionState('disconnected');
         networkControl.setIsHost(false);
         networkControl.setShareLinkKind('generic');

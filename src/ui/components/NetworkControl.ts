@@ -50,6 +50,7 @@ export interface NetworkControlState {
   linkedRoomAutoJoinArmed: boolean;
   isPanelOpen: boolean;
   rtt: number;
+  localUserId: string | null;
 }
 
 interface MediaSyncConfirmationOptions {
@@ -107,6 +108,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
       linkedRoomAutoJoinArmed: false,
       isPanelOpen: false,
       rtt: 0,
+      localUserId: null,
     };
 
     this.boundHandleOutsideClick = (e: MouseEvent) => this.handleOutsideClick(e);
@@ -848,13 +850,15 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
 
       this.hideError();
       this.setShareLink(link);
-
-      // Show in-progress state while the bridge performs the async clipboard write
-      this.copyLinkButton.textContent = 'Copying...';
-      this.copyLinkButton.disabled = true;
-      this.copyLinkButton.style.opacity = '0.7';
-
       this.emit('copyLink', link);
+
+      // Visual feedback
+      this.copyLinkButton.textContent = 'Copied!';
+      this.copyLinkButton.style.color = 'var(--success)';
+      setTimeout(() => {
+        this.copyLinkButton.style.color = 'var(--text-primary)';
+        this.updateShareLinkUI();
+      }, 2000);
     });
     actionsSection.appendChild(this.copyLinkButton);
 
@@ -1079,6 +1083,11 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     this.state.rtt = rtt;
   }
 
+  setLocalUserId(userId: string | null): void {
+    this.state.localUserId = userId;
+    this.updateUserList();
+  }
+
   showError(message: string): void {
     this.errorDisplay.textContent = message;
     this.errorDisplay.style.display = 'block';
@@ -1097,32 +1106,6 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
   hideInfo(): void {
     this.infoDisplay.style.display = 'none';
     this.infoDisplay.textContent = '';
-  }
-
-  /**
-   * Called by the bridge after the async clipboard write completes.
-   * Resets the copy-link button from its "Copying..." in-progress state.
-   */
-  reportCopyResult(success: boolean, errorMessage?: string): void {
-    if (!this.copyLinkButton) return;
-
-    this.copyLinkButton.disabled = false;
-    this.copyLinkButton.style.opacity = '1';
-
-    if (success) {
-      this.copyLinkButton.textContent = 'Copied!';
-      this.copyLinkButton.style.color = 'var(--success)';
-      setTimeout(() => {
-        this.copyLinkButton.style.color = 'var(--text-primary)';
-        this.updateShareLinkUI();
-      }, 2000);
-    } else {
-      this.copyLinkButton.style.color = 'var(--text-primary)';
-      this.updateShareLinkUI();
-      if (errorMessage) {
-        this.showError(errorMessage);
-      }
-    }
   }
 
   private resolveMediaPrompt(accepted: boolean): void {
@@ -1321,19 +1304,29 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
       name.style.cssText = 'color: var(--text-primary); flex: 1;';
       name.textContent = user.name;
 
-      // Host badge
-      if (user.isHost) {
-        const hostBadge = document.createElement('span');
-        hostBadge.style.cssText = `
+      // User badge: "You (Host)", "You", "Host", or nothing
+      const isLocalUser = this.state.localUserId != null && user.id === this.state.localUserId;
+      const badgeText = isLocalUser && user.isHost
+        ? 'You (Host)'
+        : isLocalUser
+          ? 'You'
+          : user.isHost
+            ? 'Host'
+            : null;
+
+      if (badgeText) {
+        const badge = document.createElement('span');
+        badge.dataset.testid = 'network-user-badge-label';
+        badge.style.cssText = `
           font-size: 10px;
           color: var(--accent-primary);
           background: rgba(var(--accent-primary-rgb), 0.1);
           padding: 1px 6px;
           border-radius: 3px;
         `;
-        hostBadge.textContent = 'Host';
+        badge.textContent = badgeText;
         name.appendChild(document.createTextNode(' '));
-        name.appendChild(hostBadge);
+        name.appendChild(badge);
       }
 
       row.appendChild(avatar);

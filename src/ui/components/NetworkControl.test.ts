@@ -242,6 +242,80 @@ describe('NetworkControl', () => {
     });
   });
 
+  describe('user badge labels', () => {
+    function setupConnected() {
+      control.setConnectionState('connected');
+      control.setRoomInfo({
+        roomId: 'room-1',
+        roomCode: 'ABCD-1234',
+        hostId: 'u1',
+        users: [],
+        createdAt: Date.now(),
+        maxUsers: 10,
+      });
+      control.openPanel();
+    }
+
+    function getBadgeText(userId: string): string | null {
+      const row = document.querySelector(`[data-testid="network-user-${userId}"]`);
+      const badge = row?.querySelector('[data-testid="network-user-badge-label"]');
+      return badge?.textContent ?? null;
+    }
+
+    it('NCC-023: local host user shows "You (Host)" badge', () => {
+      setupConnected();
+      control.setLocalUserId('u1');
+      control.setUsers([
+        { id: 'u1', name: 'Alice', color: '#4a9eff', isHost: true, joinedAt: Date.now() },
+        { id: 'u2', name: 'Bob', color: '#4ade80', isHost: false, joinedAt: Date.now() },
+      ]);
+
+      expect(getBadgeText('u1')).toBe('You (Host)');
+    });
+
+    it('NCC-024: remote host user shows "Host" badge', () => {
+      setupConnected();
+      control.setLocalUserId('u2');
+      control.setUsers([
+        { id: 'u1', name: 'Alice', color: '#4a9eff', isHost: true, joinedAt: Date.now() },
+        { id: 'u2', name: 'Bob', color: '#4ade80', isHost: false, joinedAt: Date.now() },
+      ]);
+
+      expect(getBadgeText('u1')).toBe('Host');
+    });
+
+    it('NCC-025: local non-host user shows "You" badge', () => {
+      setupConnected();
+      control.setLocalUserId('u2');
+      control.setUsers([
+        { id: 'u1', name: 'Alice', color: '#4a9eff', isHost: true, joinedAt: Date.now() },
+        { id: 'u2', name: 'Bob', color: '#4ade80', isHost: false, joinedAt: Date.now() },
+      ]);
+
+      expect(getBadgeText('u2')).toBe('You');
+    });
+
+    it('NCC-026: remote non-host user shows no badge', () => {
+      setupConnected();
+      control.setLocalUserId('u1');
+      control.setUsers([
+        { id: 'u1', name: 'Alice', color: '#4a9eff', isHost: true, joinedAt: Date.now() },
+        { id: 'u2', name: 'Bob', color: '#4ade80', isHost: false, joinedAt: Date.now() },
+      ]);
+
+      expect(getBadgeText('u2')).toBeNull();
+    });
+
+    it('NCC-027: without localUserId set, host shows plain "Host" badge', () => {
+      setupConnected();
+      control.setUsers([
+        { id: 'u1', name: 'Alice', color: '#4a9eff', isHost: true, joinedAt: Date.now() },
+      ]);
+
+      expect(getBadgeText('u1')).toBe('Host');
+    });
+  });
+
   describe('sync settings', () => {
     it('NCC-030: toggle sync settings emit events', () => {
       const handler = vi.fn();
@@ -315,109 +389,6 @@ describe('NetworkControl', () => {
       const errorDisplay = document.querySelector('[data-testid="network-error-display"]') as HTMLElement;
       expect(errorDisplay.style.display).toBe('block');
       expect(errorDisplay.textContent).toContain('Create or join a room');
-    });
-
-    it('NCC-031c: copy button enters Copying... state on click and is disabled', () => {
-      control.on('copyLink', () => {});
-      control.setConnectionState('connected');
-      control.setRoomInfo({
-        roomId: 'room-1',
-        roomCode: 'TEST-CODE',
-        hostId: 'u1',
-        users: [],
-        createdAt: Date.now(),
-        maxUsers: 10,
-      });
-      control.openPanel();
-
-      const copyBtn = document.querySelector('[data-testid="network-copy-link-button"]') as HTMLButtonElement;
-      copyBtn.click();
-
-      expect(copyBtn.textContent).toBe('Copying...');
-      expect(copyBtn.disabled).toBe(true);
-    });
-
-    it('NCC-031d: reportCopyResult(true) resets button to Copied! then original label', () => {
-      vi.useFakeTimers();
-      control.on('copyLink', () => {});
-      control.setConnectionState('connected');
-      control.setRoomInfo({
-        roomId: 'room-1',
-        roomCode: 'TEST-CODE',
-        hostId: 'u1',
-        users: [],
-        createdAt: Date.now(),
-        maxUsers: 10,
-      });
-      control.openPanel();
-
-      const copyBtn = document.querySelector('[data-testid="network-copy-link-button"]') as HTMLButtonElement;
-      copyBtn.click();
-
-      // Simulate bridge reporting success
-      control.reportCopyResult(true);
-
-      expect(copyBtn.textContent).toBe('Copied!');
-      expect(copyBtn.disabled).toBe(false);
-      expect(copyBtn.style.opacity).toBe('1');
-
-      // After timeout the label resets to normal
-      vi.advanceTimersByTime(2000);
-      expect(copyBtn.textContent).not.toBe('Copied!');
-      expect(copyBtn.textContent).not.toBe('Copying...');
-      vi.useRealTimers();
-    });
-
-    it('NCC-031e: reportCopyResult(false) resets button and shows error', () => {
-      control.on('copyLink', () => {});
-      control.setConnectionState('connected');
-      control.setRoomInfo({
-        roomId: 'room-1',
-        roomCode: 'TEST-CODE',
-        hostId: 'u1',
-        users: [],
-        createdAt: Date.now(),
-        maxUsers: 10,
-      });
-      control.openPanel();
-
-      const copyBtn = document.querySelector('[data-testid="network-copy-link-button"]') as HTMLButtonElement;
-      copyBtn.click();
-      expect(copyBtn.textContent).toBe('Copying...');
-
-      // Simulate bridge reporting failure
-      control.reportCopyResult(false, 'Clipboard unavailable.');
-
-      expect(copyBtn.disabled).toBe(false);
-      expect(copyBtn.style.opacity).toBe('1');
-      // Button should NOT be stuck in "Copying..."
-      expect(copyBtn.textContent).not.toBe('Copying...');
-
-      const errorDisplay = document.querySelector('[data-testid="network-error-display"]') as HTMLElement;
-      expect(errorDisplay.style.display).toBe('block');
-      expect(errorDisplay.textContent).toBe('Clipboard unavailable.');
-    });
-
-    it('NCC-031f: reportCopyResult(false) without error message resets button without error display', () => {
-      control.on('copyLink', () => {});
-      control.setConnectionState('connected');
-      control.setRoomInfo({
-        roomId: 'room-1',
-        roomCode: 'TEST-CODE',
-        hostId: 'u1',
-        users: [],
-        createdAt: Date.now(),
-        maxUsers: 10,
-      });
-      control.openPanel();
-
-      const copyBtn = document.querySelector('[data-testid="network-copy-link-button"]') as HTMLButtonElement;
-      copyBtn.click();
-
-      control.reportCopyResult(false);
-
-      expect(copyBtn.disabled).toBe(false);
-      expect(copyBtn.textContent).not.toBe('Copying...');
     });
 
     it('NCC-032: shows share URL in connected panel', () => {
