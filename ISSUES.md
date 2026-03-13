@@ -43,17 +43,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Mu-compatible scripts can switch a source to `proxy` or another representation and still have follow-up media queries report the old base media.
   - That breaks representation-aware workflows because the bridge advertises rep switching while its own read APIs continue to describe a different source state.
 
-### 264. Mu compat `imageGeometryByTag()` ignores the tag argument entirely
-
-- Severity: Medium
-- Area: Mu compatibility / image-query scripting
-- Evidence:
-  - `imageGeometryByTag(imageName, _tag)` explicitly comments that tags are not implemented and simply forwards to `imageGeometry(imageName)` in [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L305) through [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L307).
-  - That means the `tag` parameter never influences the selected geometry, even though the API name and signature imply tag-based selection.
-  - The current test only verifies that the method falls back to name-based lookup and does not check any tag distinction in [src/compat/__tests__/MuEvalBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuEvalBridge.test.ts#L420) through [src/compat/__tests__/MuEvalBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuEvalBridge.test.ts#L426).
-- Impact:
-  - Mu-compatible scripts cannot query per-tag image geometry even though the command surface suggests they can.
-  - This is another silent semantic mismatch because callers can vary the tag and receive the same answer every time.
 
 
 ### 307. The adaptive `FrameCacheController` subsystem is fully implemented but never instantiated in production

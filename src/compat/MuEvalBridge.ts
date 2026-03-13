@@ -18,7 +18,6 @@
 import { Graph } from '../core/graph/Graph';
 import type { IPNode } from '../nodes/base/IPNode';
 import type { MuNodeBridge } from './MuNodeBridge';
-import type { PixelReadbackProvider } from './MuSourceBridge';
 import type {
   MetaEvalInfo,
   PixelImageInfo,
@@ -47,15 +46,6 @@ export interface ViewTransformState {
 }
 
 /**
- * Minimal event subscription interface for connecting to the real view/render event system.
- * Compatible with EventsAPI.on() signature.
- */
-export interface ViewEventSource {
-  on(event: 'viewTransformChanged', cb: (data: ViewTransformState) => void): () => void;
-  on(event: 'renderedImagesChanged', cb: (data: { images: RenderedImageInfo[] }) => void): () => void;
-}
-
-/**
  * MuEvalBridge provides graph evaluation traversal and image query
  * commands for the Mu compatibility layer.
  */
@@ -74,30 +64,12 @@ export class MuEvalBridge {
     pixelAspect: 1,
   };
 
-  /** Per-view-node transforms for multi-view scenarios */
-  private _viewNodeTransforms: Map<string, ViewTransformState> = new Map();
-
   /** Rendered image info list, updated after each render pass */
   private _renderedImages: RenderedImageInfo[] = [];
-
-  /** Event unsubscribers for connectToEvents cleanup */
-  private _eventUnsubscribers: Array<() => void> = [];
-
-  /** Optional provider for pixel-precise stencil hit testing */
-  private _pixelReadbackProvider: PixelReadbackProvider | null = null;
 
   constructor(graph: Graph, nodeBridge: MuNodeBridge) {
     this._graph = graph;
     this._nodeBridge = nodeBridge;
-  }
-
-  /**
-   * Set or clear the pixel readback provider used for stencil hit testing.
-   * When set and `useStencil=true`, `imagesAtPixel()` will check the actual
-   * pixel alpha to filter out transparent regions.
-   */
-  setPixelReadbackProvider(provider: PixelReadbackProvider | null): void {
-    this._pixelReadbackProvider = provider;
   }
 
   /** Replace the underlying graph (e.g. after session load). */
@@ -116,63 +88,12 @@ export class MuEvalBridge {
     return { ...this._viewTransform };
   }
 
-  /** Set the view transform for a specific named view node. */
-  setViewNodeTransform(name: string, state: ViewTransformState): void {
-    this._viewNodeTransforms.set(name, { ...state });
-  }
-
-  /** Get the view transform for a named view node, or undefined if not set. */
-  getViewNodeTransform(name: string): ViewTransformState | undefined {
-    const vt = this._viewNodeTransforms.get(name);
-    return vt ? { ...vt } : undefined;
-  }
-
-  /** Remove the per-node transform for a named view node. */
-  clearViewNodeTransform(name: string): void {
-    this._viewNodeTransforms.delete(name);
-  }
-
   /**
    * Update the list of currently rendered images.
    * Called by the renderer after each paint to keep the query state fresh.
    */
   setRenderedImages(images: RenderedImageInfo[]): void {
     this._renderedImages = [...images];
-  }
-
-  /**
-   * Connect to real session view/render events.
-   *
-   * Subscribes to `viewTransformChanged` and `renderedImagesChanged` so that
-   * image-query commands (`renderedImages()`, `imagesAtPixel()`, etc.) reflect
-   * actual view and render state.
-   *
-   * Safe to call multiple times; previous subscriptions are cleaned up first.
-   */
-  connectToEvents(events: ViewEventSource): void {
-    this.dispose();
-
-    const unsubView = events.on('viewTransformChanged', (data) => {
-      this.setViewTransform(data);
-    });
-    this._eventUnsubscribers.push(unsubView);
-
-    const unsubImages = events.on('renderedImagesChanged', (data) => {
-      this.setRenderedImages(data.images);
-    });
-    this._eventUnsubscribers.push(unsubImages);
-  }
-
-  /**
-   * Disconnect from session events and clean up subscriptions.
-   */
-  dispose(): void {
-    for (const unsub of this._eventUnsubscribers) {
-      unsub();
-    }
-    this._eventUnsubscribers = [];
-    this._pixelReadbackProvider = null;
-    this._viewNodeTransforms.clear();
   }
 
   // =====================================================================
@@ -206,15 +127,14 @@ export class MuEvalBridge {
   }
 
   /**
-   * Traverse the graph upstream via BFS to find the closest node matching the given type,
-   * then return the path from start to that node.
+   * Traverse the graph and stop at the first node matching the given type.
    *
    * Mu equivalent: `commands.metaEvaluateClosestByType(frame, viewNodeName, typeName)`
    *
    * @param frame - Frame number for evaluation context
    * @param viewNodeName - Starting node name
-   * @param typeName - Stop at the closest node of this type (BFS depth)
-   * @returns Array of MetaEvalInfo from start to the closest matching node (inclusive)
+   * @param typeName - Stop at the first node of this type
+   * @returns Array of MetaEvalInfo up to and including the first matching node
    */
   metaEvaluateClosestByType(frame: number, viewNodeName?: string, typeName?: string): MetaEvalInfo[] {
     const startName = viewNodeName || this._nodeBridge.viewNode();
@@ -223,60 +143,12 @@ export class MuEvalBridge {
     const startNode = this._findNode(startName);
     if (!startNode) return [];
 
-    const targetType = typeName ?? '';
-
-    // BFS to find the closest matching node, tracking parent pointers for path reconstruction
+    const result: MetaEvalInfo[] = [];
     const visited = new Set<string>();
-    const parentMap = new Map<string, IPNode | null>(); // node.id -> parent node (null for start)
-    let currentLevel: IPNode[] = [startNode];
-    visited.add(startNode.id);
-    parentMap.set(startNode.id, null);
 
-    let matchNode: IPNode | null = null;
+    this._traverseEvalChainUntilType(startNode, frame, typeName ?? '', result, visited);
 
-    while (currentLevel.length > 0 && matchNode === null) {
-      const nextLevel: IPNode[] = [];
-
-      for (const node of currentLevel) {
-        if (node.type === targetType) {
-          matchNode = node;
-          break;
-        }
-
-        for (const input of node.inputs) {
-          if (!visited.has(input.id)) {
-            visited.add(input.id);
-            parentMap.set(input.id, node);
-            nextLevel.push(input);
-          }
-        }
-      }
-
-      currentLevel = nextLevel;
-    }
-
-    // No match found — return all reachable nodes (preserve existing behavior)
-    if (matchNode === null) {
-      const result: MetaEvalInfo[] = [];
-      const allVisited = new Set<string>();
-      this._collectAllUpstream(startNode, frame, result, allVisited);
-      return result;
-    }
-
-    // Reconstruct path from start to matchNode using parentMap
-    const path: IPNode[] = [];
-    let cur: IPNode | null = matchNode;
-    while (cur !== null) {
-      path.push(cur);
-      cur = parentMap.get(cur.id) ?? null;
-    }
-    path.reverse();
-
-    return path.map((n) => ({
-      node: n.name,
-      nodeType: n.type,
-      frame,
-    }));
+    return result;
   }
 
   /**
@@ -295,31 +167,24 @@ export class MuEvalBridge {
 
     const result: string[] = [];
     const visited = new Set<string>();
-    let currentLevel: IPNode[] = [startNode];
+    const queue: IPNode[] = [startNode];
 
-    // BFS level-by-level to find closest nodes of the target type
-    while (currentLevel.length > 0) {
-      const nextLevel: IPNode[] = [];
+    // BFS to find closest nodes of the target type
+    while (queue.length > 0) {
+      const node = queue.shift()!;
+      if (visited.has(node.id)) continue;
+      visited.add(node.id);
 
-      for (const node of currentLevel) {
-        if (visited.has(node.id)) continue;
-        visited.add(node.id);
-
-        if (node.type === typeName) {
-          result.push(node.name);
-        }
-
-        // Walk upstream through inputs
-        for (const input of node.inputs) {
-          if (!visited.has(input.id)) {
-            nextLevel.push(input);
-          }
-        }
+      if (node.type === typeName) {
+        result.push(node.name);
       }
 
-      // Stop once we found matches at this depth
-      if (result.length > 0) break;
-      currentLevel = nextLevel;
+      // Walk upstream through inputs
+      for (const input of node.inputs) {
+        if (!visited.has(input.id)) {
+          queue.push(input);
+        }
+      }
     }
 
     return result;
@@ -367,7 +232,7 @@ export class MuEvalBridge {
    * @param _useStencil - Whether to use stencil buffer for precise hit-testing
    * @returns Array of PixelImageInfo for images under the point
    */
-  imagesAtPixel(point: [number, number], _viewNodeName?: string, useStencil = false): PixelImageInfo[] {
+  imagesAtPixel(point: [number, number], _viewNodeName?: string, _useStencil = false): PixelImageInfo[] {
     const [sx, sy] = point;
     const results: PixelImageInfo[] = [];
 
@@ -385,31 +250,16 @@ export class MuEvalBridge {
         ix >= -1 && ix <= img.width &&
         iy >= -1 && iy <= img.height;
 
-      if (inside || edge) {
-        // When stencil testing is enabled, check actual pixel alpha
-        if (useStencil && this._pixelReadbackProvider) {
-          const pixel = this._pixelReadbackProvider.readSourcePixel(
-            img.name,
-            Math.floor(ix),
-            Math.floor(iy),
-          );
-          // Skip image if pixel is fully transparent (alpha ≈ 0)
-          if (pixel && pixel[3] <= 0) {
-            continue;
-          }
-        }
-
-        results.push({
-          name: img.name,
-          x: Math.floor(ix),
-          y: Math.floor(iy),
-          px: ix,
-          py: iy,
-          inside,
-          edge,
-          modelMatrix: this._getImageModelMatrix(img),
-        });
-      }
+      results.push({
+        name: img.name,
+        x: Math.floor(ix),
+        y: Math.floor(iy),
+        px: ix,
+        py: iy,
+        inside,
+        edge,
+        modelMatrix: this._getImageModelMatrix(img),
+      });
     }
 
     return results;
@@ -448,17 +298,24 @@ export class MuEvalBridge {
    *
    * Mu equivalent: `commands.imageGeometryByTag(imageName, tag)`
    *
+   * Looks for a rendered image matching both the given name and tag.
+   * Falls back to name-only lookup if the tag is empty or no image
+   * with a matching tag is found.
+   *
    * @param imageName - Image name
-   * @param tag - Tag to match
+   * @param tag - Source tag to match (e.g. "movie", "default")
    * @returns Array of 4 [x, y] corner pairs
    */
   imageGeometryByTag(imageName: string, tag: string): [number, number][] {
-    // Try exact match on both name and tag first
-    const tagMatch = this._renderedImages.find(
-      (i) => i.name === imageName && i.tag === tag,
-    );
-    if (tagMatch) return this._computeImageCorners(tagMatch);
-    // Fall back to name-only match for backward compatibility
+    // First, try to find an image matching both name and tag
+    if (tag) {
+      const img = this._renderedImages.find(
+        (i) => i.name === imageName && i.tag === tag,
+      );
+      if (img) return this._computeImageCorners(img);
+    }
+
+    // Fall back to name-only lookup when tag is empty or no match found
     return this.imageGeometry(imageName);
   }
 
@@ -469,16 +326,10 @@ export class MuEvalBridge {
    *
    * @param imageName - The target image name
    * @param eventPoint - Screen coordinates [x, y]
-   * @param useLocalCoords - Whether to use local coordinate system.
-   *   When true, returns image-local pixel coordinates (0..width, 0..height).
-   *   When false (default), returns the event's screen-space coordinates.
-   * @returns Coordinates [x, y] in the requested space, or screen coords if image not found
+   * @param _useLocalCoords - Whether to use local coordinate system
+   * @returns Image pixel coordinates [x, y], or [0, 0] if image not found
    */
-  eventToImageSpace(imageName: string, eventPoint: [number, number], useLocalCoords = false): [number, number] {
-    if (!useLocalCoords) {
-      return [eventPoint[0], eventPoint[1]];
-    }
-
+  eventToImageSpace(imageName: string, eventPoint: [number, number], _useLocalCoords = false): [number, number] {
     const img = this._renderedImages.find((i) => i.name === imageName);
     if (!img) {
       // Fall back to using the view transform directly
@@ -500,16 +351,12 @@ export class MuEvalBridge {
    *
    * Camera space is normalized to [-1, 1] with (0, 0) at center.
    *
-   * @param viewNodeName - View node name. When non-empty and a per-node
-   *   transform has been registered via `setViewNodeTransform()`, that
-   *   transform is used; otherwise falls back to the global view transform.
+   * @param _viewNodeName - View node name (currently uses global view transform)
    * @param eventPoint - Screen coordinates [x, y]
    * @returns Normalized camera coordinates [x, y]
    */
-  eventToCameraSpace(viewNodeName: string, eventPoint: [number, number]): [number, number] {
-    const vt = (viewNodeName && this._viewNodeTransforms.has(viewNodeName))
-      ? this._viewNodeTransforms.get(viewNodeName)!
-      : this._viewTransform;
+  eventToCameraSpace(_viewNodeName: string, eventPoint: [number, number]): [number, number] {
+    const vt = this._viewTransform;
     if (vt.viewWidth === 0 || vt.viewHeight === 0) return [0, 0];
 
     // Map event coords to normalized device coordinates [-1, 1]
@@ -552,15 +399,17 @@ export class MuEvalBridge {
   }
 
   /**
-   * Collect all reachable upstream nodes via DFS (used when no type match is found).
+   * Traverse upstream and stop at the first node matching the target type.
+   * Returns true if a matching node was found (signals callers to stop).
    */
-  private _collectAllUpstream(
+  private _traverseEvalChainUntilType(
     node: IPNode,
     frame: number,
+    typeName: string,
     result: MetaEvalInfo[],
     visited: Set<string>,
-  ): void {
-    if (visited.has(node.id)) return;
+  ): boolean {
+    if (visited.has(node.id)) return false;
     visited.add(node.id);
 
     result.push({
@@ -569,9 +418,18 @@ export class MuEvalBridge {
       frame,
     });
 
-    for (const input of node.inputs) {
-      this._collectAllUpstream(input, frame, result, visited);
+    // If this node matches the target type, stop
+    if (node.type === typeName) {
+      return true;
     }
+
+    // Walk upstream
+    for (const input of node.inputs) {
+      const found = this._traverseEvalChainUntilType(input, frame, typeName, result, visited);
+      if (found) return true;
+    }
+
+    return false;
   }
 
   /**

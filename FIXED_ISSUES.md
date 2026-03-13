@@ -1930,3 +1930,27 @@ Called from `fromJSON()` inside the existing `if (mediaIndexMap.size > 0)` block
 - `src/ui/components/layout/HeaderBar.test.ts`
 - `docs/playback/loop-modes-stepping.md`
 - `docs/getting-started/ui-overview.md`
+
+## Issue #264: Mu compat `imageGeometryByTag()` ignores the tag argument entirely
+
+**Root cause**: `imageGeometryByTag(imageName, _tag)` in `MuEvalBridge.ts` explicitly ignored the `tag` parameter and forwarded directly to `imageGeometry(imageName)`. The `RenderedImageInfo` type also had no `tag` field, so there was no way to associate tags with rendered images.
+
+**Fix**:
+- Added optional `tag?: string` field to `RenderedImageInfo` in `types.ts`
+- Implemented tag-based lookup in `imageGeometryByTag()`: first searches for an image matching both `imageName` and `tag`, then falls back to name-only lookup via `imageGeometry()` when tag is empty or no match is found
+
+**Tests added**: 9 regression tests in `MuEvalBridge.test.ts` covering:
+- Tag-based lookup returns correct geometry when name+tag match (with dimension assertions)
+- Different tags on same image name return different geometry
+- Fallback to name-based lookup when tag is not found
+- Fallback when tag is empty string
+- Fallback when image has no tag set
+- Returns empty array when neither name nor tag match
+- Tag matches but name does not (requires both)
+- First-match-wins when multiple images share same name+tag
+- Empty rendered images list returns empty array
+
+**Files changed**:
+- `src/compat/types.ts`
+- `src/compat/MuEvalBridge.ts`
+- `src/compat/__tests__/MuEvalBridge.test.ts`

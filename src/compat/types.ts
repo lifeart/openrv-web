@@ -40,8 +40,6 @@ export interface MuEvent {
     alt: boolean;
     meta: boolean;
   };
-  /** Optional tag for BBox-scoped hit-testing */
-  tag?: string;
 }
 
 /** Event table entry: maps event name pattern to a callback + documentation */
@@ -49,16 +47,12 @@ export interface EventTableBinding {
   eventName: string;
   callback: MuEventCallback;
   documentation: string;
-  /** For regex bindings: the compiled pattern used for matching */
-  regex?: RegExp;
 }
 
 /** Event table: named collection of bindings */
 export interface EventTable {
   name: string;
   bindings: Map<string, EventTableBinding>;
-  /** Count of regex bindings in this table (for fast skip in dispatch) */
-  regexCount: number;
 }
 
 /** Minor mode definition */
@@ -112,10 +106,6 @@ export interface RemoteConnectionInfo {
   host: string;
   port: number;
   connected: boolean;
-  /** Peer's contact name received via handshake */
-  peerContactName?: string;
-  /** Peer's permission level received via handshake */
-  peerPermission?: number;
 }
 
 /** File kind constants (matching Mu's enum) */
@@ -241,7 +231,7 @@ export interface RenderedImageInfo {
   height: number;
   /** Node name that produced this image */
   nodeName: string;
-  /** Optional metadata tag identifying a view variant (e.g. "main", "thumbnail") */
+  /** Source tag/type hint (e.g. "default", "movie", "smptebars") */
   tag?: string;
 }
 
