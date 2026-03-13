@@ -360,19 +360,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - A caller can use the official introspection path, conclude that `fullScreenMode` is awaitable, and then receive `undefined` instead of a promise.
   - That makes the async-command contract unreliable exactly where the docs tell callers to depend on it.
 
-### 277. Unified preferences import/reset writes storage but does not apply the live theme/layout/keybinding/OCIO subsystems
-
-- Severity: High
-- Area: Preferences / runtime state application
-- Evidence:
-  - Production wires live subsystem references into the unified facade in [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L430) through [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L436).
-  - `PreferencesManager` stores those subsystem references behind getters, but `importAll(...)` and `resetAll()` only write/remove storage keys and emit facade events; they never call `this.theme`, `this.layout`, `this.keyBindings`, or `this.ocio` in [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L290) through [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L320) and [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L383) through [src/core/PreferencesManager.ts](/Users/lifeart/Repos/openrv-web/src/core/PreferencesManager.ts#L481).
-  - The live subsystems all load persisted state only during their own construction or direct setters: `ThemeManager` reads storage in its constructor and applies changes only through `setMode(...)` in [src/utils/ui/ThemeManager.ts](/Users/lifeart/Repos/openrv-web/src/utils/ui/ThemeManager.ts#L128) through [src/utils/ui/ThemeManager.ts](/Users/lifeart/Repos/openrv-web/src/utils/ui/ThemeManager.ts#L165), `CustomKeyBindingsManager` loads storage only in its constructor in [src/utils/input/CustomKeyBindingsManager.ts](/Users/lifeart/Repos/openrv-web/src/utils/input/CustomKeyBindingsManager.ts#L25) through [src/utils/input/CustomKeyBindingsManager.ts](/Users/lifeart/Repos/openrv-web/src/utils/input/CustomKeyBindingsManager.ts#L29) and [src/utils/input/CustomKeyBindingsManager.ts](/Users/lifeart/Repos/openrv-web/src/utils/input/CustomKeyBindingsManager.ts#L153) through [src/utils/input/CustomKeyBindingsManager.ts](/Users/lifeart/Repos/openrv-web/src/utils/input/CustomKeyBindingsManager.ts#L189), `OCIOStateManager` loads persisted state only in its constructor in [src/ui/components/OCIOStateManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/OCIOStateManager.ts#L61) through [src/ui/components/OCIOStateManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/OCIOStateManager.ts#L79), and `LayoutStore` loads storage only in its constructor in [src/ui/layout/LayoutStore.ts](/Users/lifeart/Repos/openrv-web/src/ui/layout/LayoutStore.ts#L150) through [src/ui/layout/LayoutStore.ts](/Users/lifeart/Repos/openrv-web/src/ui/layout/LayoutStore.ts#L159).
-  - In the current tree, `fpsIndicatorPrefsChanged` is the only unified-preferences event with a clear production subscriber; the rest of the imported/reset state is left to storage.
-- Impact:
-  - Importing or resetting unified preferences can leave the live app showing the old theme, panel layout, keybindings, and OCIO state until a reload or manual subsystem-specific action.
-  - That makes the facade behave like an offline storage editor instead of a true runtime preferences system.
-
 ### 278. `MediaCacheManager` claims graceful OPFS fallback, but browsers without `createWritable()` still initialize and then fail writes noisily
 
 - Severity: Medium
@@ -1400,19 +1387,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Users cannot actually cancel the whole restore/reload flow from that dialog even though the docs say they can.
   - Dismissing the prompt can silently degrade the restored session instead of aborting the operation, which is materially different from a true cancel action.
 
-### 384. Reloading a saved local image sequence can collapse it into a single image
-
-- Severity: High
-- Area: Session restore / sequence media
-- Evidence:
-  - The session-management guide says that when locally loaded media needs reload after restart, the user re-selects the original files and "the session resumes with all ... playback state intact" in [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L174).
-  - Sequence media is serialized as `type: 'sequence'` with its pattern/range metadata in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L391) through [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L414).
-  - On reload, `requiresReload` media uses a single-file prompt with `accept = 'image/*'` for any non-video type, including sequences, in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L472) through [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L476).
-  - If the user supplies that file, the restore path calls `session.loadFile(file)` in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L479) through [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L484), but `loadFile(...)` only dispatches to image/video loaders and has no sequence inference path in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L379) through [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L393).
-- Impact:
-  - A saved local image sequence can come back from recovery or project load as a single still image instead of the original sequence.
-  - That breaks playback, frame-range semantics, and review continuity in one of the exact workflows the reload prompt is supposed to rescue.
-
 ### 385. The restore-time file picker narrows non-video reloads to `image/*` instead of the app's full supported media set
 
 - Severity: Medium
@@ -1659,19 +1633,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Loading a project/snapshot with no playlist transitions can inherit overlap behavior from a previous session’s transitions.
   - That makes restored playlist timing and later playlist edits/export less trustworthy because transition state is not actually replaced with the incoming state.
 
-### 405. Changing playlist transitions does not recalculate clip global start frames used by playback/navigation
-
-- Severity: High
-- Area: Playlist transitions / playback correctness
-- Evidence:
-  - `PlaylistManager` only stores the `TransitionManager` reference in `setTransitionManager(...)` and never subscribes to `transitionChanged` or `transitionsReset` in [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L117) through [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L119).
-  - Transition edits in the shipped UI mutate `TransitionManager` directly via `tm.setTransition(...)` in [src/ui/components/PlaylistPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PlaylistPanel.ts#L728) through [src/ui/components/PlaylistPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PlaylistPanel.ts#L750).
-  - `PlaylistManager` playback/navigation methods still rely on stored `clip.globalStartFrame` values in [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L240) through [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L289), while overlap-adjusted recalculation only happens inside `recalculateGlobalFrames()` when clips themselves change in [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L411) through [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L416).
-  - The runtime playback wiring also maps between source-local and playlist-global frames using those stored `globalStartFrame` values in [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L788) through [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L790), [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L870) through [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L871), and [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L973) through [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L974).
-- Impact:
-  - After adding or changing a crossfade/dissolve, the app can keep navigating and syncing playback against stale clip boundaries.
-  - That makes transition-enabled playlists internally inconsistent: duration/transition math sees overlaps, while several core playback paths still use pre-transition clip positions.
-
 ### 406. Restored playlist playhead position is effectively ignored because enablement sync runs before `currentFrame` restore
 
 - Severity: Medium
@@ -1684,19 +1645,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - A restored project/snapshot/auto-save can bring playlist mode back enabled without reopening at the saved global playlist position.
   - That makes playlist persistence incomplete in a user-visible way: the clip list comes back, but the review position within it does not reliably resume.
-
-### 407. Removing or replacing playlist clips can leave hidden stale transitions still shortening the playlist duration
-
-- Severity: High
-- Area: Playlist transitions / duration correctness
-- Evidence:
-  - `TransitionManager` has an explicit `resizeToClips()` helper to trim/pad transitions to `clipCount - 1`, but production source search finds no runtime caller outside tests in [src/core/session/TransitionManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/TransitionManager.ts#L237) through [src/core/session/TransitionManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/TransitionManager.ts#L253).
-  - Clip-changing paths such as `replaceClips(...)`, `removeClip(...)`, and `moveClip(...)` update playlist clips and recalculate clip frames, but they never clear or resize the linked `TransitionManager` in [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L156) through [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L195) and [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L202) through [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L233).
-  - Playlist duration still subtracts the total overlap from every non-cut transition entry in the separate manager, regardless of whether those entries still correspond to real clip gaps, in [src/core/session/TransitionManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/TransitionManager.ts#L183) through [src/core/session/TransitionManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/TransitionManager.ts#L195) and [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L430) through [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L434).
-  - The playlist UI only renders transition controls for visible adjacent clips in [src/ui/components/PlaylistPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PlaylistPanel.ts#L379), so stale extra transition entries can become invisible rather than obviously wrong.
-- Impact:
-  - After removing/replacing clips, playlist duration and overlap-aware playback can stay shortened by old transitions that no longer have a real gap in the UI.
-  - That creates a hidden state bug: the user can no longer see or edit the stale transition, but it still affects timing.
 
 ### 408. Restored playlist transitions do not trigger a redraw, so the timeline/panel can open in a stale cut-only state
 
@@ -1721,19 +1669,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Editing/reapplying the playlist through the timeline can snap clip start frames back to cut-style sequential positions even when transitions still exist.
   - That makes transition-enabled timelines drift after edit operations: transition configs remain, but the clip layout they are supposed to overlap is rebuilt incorrectly.
-
-### 410. Partial project/snapshot restore never remaps `currentSourceIndex`, so the active source can land on the wrong media after skipped loads
-
-- Severity: High
-- Area: Persistence / partial restore / active-source correctness
-- Evidence:
-  - `SessionSerializer.fromJSON(...)` builds a `mediaIndexMap` while loading media refs so it can track which serialized sources actually became live sources in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L450) through [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L525).
-  - That remap table is only used for representation restore in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L527) through [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L563).
-  - Playback restore still applies the saved `currentSourceIndex` verbatim via `session.setPlaybackState(migrated.playback)` in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L566) through [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L568).
-  - `Session.setPlaybackState(...)` then applies that raw index directly with `setCurrentSource(state.currentSourceIndex)` in [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L1394) through [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L1398).
-- Impact:
-  - If some media are skipped, fail, or require manual reload during restore, the reopened session can focus the wrong surviving source or no source at all.
-  - That makes partial recovery especially misleading in multi-source sessions, because the app restores “an active source” without ensuring it is the same logical source the user saved.
 
 ### 411. Partial project/snapshot restore replays source-indexed review state without remapping it to surviving sources
 

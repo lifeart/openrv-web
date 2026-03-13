@@ -339,3 +339,57 @@
 **Files changed**:
 - `src/api/ColorAPI.ts`
 - `src/api/OpenRVAPI.test.ts`
+
+## Issue #277: Unified preferences import/reset doesn't apply live subsystems
+
+**Status**: Already fixed in codebase (commit `5943340`). `importAll()` calls `applySubsystemsFromStorage()`, `resetAll()` calls `resetSubsystems()`. Each subsystem has `reloadFromStorage()`. Verified with 10 regression tests.
+
+## Issue #384: Reloading a saved local image sequence collapses to single image
+
+**Root cause**: Reload path used single-file picker with `accept='image/*'` and `loadFile()` for all non-video types, including sequences.
+
+**Fix**: Sequence media now uses multi-file picker (`showSequenceReloadPrompt()`) and `loadSequence()`. Accept filter uses `SUPPORTED_MEDIA_ACCEPT` for all non-video reloads.
+
+**Tests added**: 7 regression tests + 1 updated existing test.
+
+**Files changed**:
+- `src/core/session/SessionSerializer.ts`
+- `src/ui/components/shared/Modal.ts`
+- `src/core/session/SessionSerializer.test.ts`
+- `src/core/session/SessionSerializer.issue384.test.ts` (new)
+
+## Issue #405: Changing playlist transitions doesn't recalculate clip global start frames
+
+**Root cause**: `PlaylistManager.setTransitionManager()` never subscribed to transition events, so `recalculateGlobalFrames()` never ran when transitions changed.
+
+**Fix**: Subscribe to `transitionChanged` and `transitionsReset` in `setTransitionManager()`, recalculate frames and emit `clipsChanged`. Clean up old subscriptions on reassignment.
+
+**Tests added**: 9 regression tests.
+
+**Files changed**:
+- `src/core/session/PlaylistManager.ts`
+- `src/core/session/PlaylistManager.issue405.test.ts` (new)
+
+## Issue #407: Removing/replacing clips leaves stale transitions shortening duration
+
+**Root cause**: Clip-changing methods never called `transitionManager.resizeToClips()` to trim excess transitions.
+
+**Fix**: Call `resizeToClips(this.clips.length)` in `addClip()`, `replaceClips()`, `removeClip()`, and `moveClip()`.
+
+**Tests added**: 9 regression tests.
+
+**Files changed**:
+- `src/core/session/PlaylistManager.ts`
+- `src/core/session/PlaylistManager.issue407.test.ts` (new)
+
+## Issue #410: Partial restore doesn't remap currentSourceIndex
+
+**Root cause**: `fromJSON()` built `mediaIndexMap` but only used it for representation restore. Playback state applied saved `currentSourceIndex` verbatim.
+
+**Fix**: Remap `currentSourceIndex`, `sourceAIndex`, `sourceBIndex` through `mediaIndexMap`. Falls back to nearest valid index when saved source was skipped. Preserves `-1` sentinel values.
+
+**Tests added**: 6 regression tests.
+
+**Files changed**:
+- `src/core/session/SessionSerializer.ts`
+- `src/core/session/SessionSerializer.issue410.test.ts` (new)
