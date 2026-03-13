@@ -580,29 +580,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Users following the review docs can look for a persistent header-level status readout that never appears in the shipped app.
   - That makes shot-status tracking feel partially missing even before users hit the deeper limitation that there is no real production status-management UI.
 
-### 369. The network-sync docs say the header badge shows participant count, but production hides it for a one-person room
-
-- Severity: Low
-- Area: Documentation / collaboration header UI
-- Evidence:
-  - The network-sync guide says, "The network button badge displays the current participant count" in [docs/advanced/network-sync.md](/Users/lifeart/Repos/openrv-web/docs/advanced/network-sync.md#L45) through [docs/advanced/network-sync.md#L47).
-  - The shipped `NetworkControl` only shows the badge when `count > 1`; for a solo host or solo reconnect state it explicitly hides the badge in [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L1151) through [src/ui/components/NetworkControl.ts#L1158).
-- Impact:
-  - Users following the docs can expect a visible `1` badge after creating a room, but the shipped header shows no participant count until someone else joins.
-  - That makes the header control less informative than the docs imply during the common “host waiting for others” state.
-
-### 370. The network-sync docs say the host is labeled `You (Host)`, but production only shows a plain `Host` badge
-
-- Severity: Low
-- Area: Documentation / collaboration participant list
-- Evidence:
-  - The network-sync guide says the connection panel labels the host as `You (Host)` in [docs/advanced/network-sync.md](/Users/lifeart/Repos/openrv-web/docs/advanced/network-sync.md#L45).
-  - The shipped user-list renderer shows `user.name` and, when `user.isHost`, appends a badge whose text is just `Host` in [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L1303) through [src/ui/components/NetworkControl.ts#L1320).
-  - There is no production self/other distinction in that label path, so the host never gets a literal `You (Host)` treatment.
-- Impact:
-  - Users following the guide can expect a self-aware host label in the participant list and instead see only a generic host badge.
-  - That makes the participant list slightly less clear in collaborative sessions, especially when the stored display name is also generic.
-
 ### 371. The playback docs describe a labeled loop-mode button, but production renders an icon-only compact control
 
 - Severity: Low

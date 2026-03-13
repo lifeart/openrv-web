@@ -1780,3 +1780,26 @@ Called from `fromJSON()` inside the existing `if (mediaIndexMap.size > 0)` block
 **Files changed**:
 - `src/core/session/SessionSerializer.ts`
 - `src/core/session/SessionSerializer.issue411.test.ts` (new)
+
+## Issue #369: Network badge hidden for solo host
+## Issue #370: Host labeled "Host" instead of "You (Host)"
+
+**Root cause (369)**: `NetworkControl.updateBadge()` used `count > 1` to show the badge, hiding it when only the host was in the room (count=1). The docs said it should always show participant count.
+
+**Root cause (370)**: `NetworkControl.updateUserList()` only checked `user.isHost` to show a "Host" badge, with no concept of which user is the local user. The docs said the local host should be labeled "You (Host)".
+
+**Fix**:
+- Changed badge visibility condition from `count > 1` to `count >= 1`
+- Added `localUserId` tracking to `NetworkControlState`
+- Added `setLocalUserId()` method to `NetworkControl`
+- Rewrote badge logic: local host → "You (Host)", local non-host → "You", remote host → "Host"
+- Wired `setLocalUserId()` in `AppNetworkBridge` on `roomCreated`, `roomJoined`, and `roomLeft` events
+
+**Tests added**: 6 new regression tests in `NetworkControl.test.ts` (NCC-022b, NCC-022c, NCC-023 through NCC-027) covering solo host badge, empty user badge, and all four "You/Host" badge combinations. Updated `AppNetworkBridge.test.ts` mock.
+
+**Files changed**:
+- `src/ui/components/NetworkControl.ts`
+- `src/ui/components/NetworkControl.test.ts`
+- `src/AppNetworkBridge.ts`
+- `src/AppNetworkBridge.test.ts`
+- `docs/advanced/network-sync.md`
