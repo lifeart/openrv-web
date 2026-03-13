@@ -333,21 +333,9 @@ export class TimelineEditorService {
       return;
     }
 
-    const clips = this.playlistManager.getClips();
-    if (clips.length > 0) {
-      this.timelineEditor.loadFromEDL(
-        clips.map((clip) => ({
-          frame: clip.globalStartFrame,
-          source: clip.sourceIndex,
-          inPoint: clip.inPoint,
-          outPoint: clip.outPoint,
-        })),
-        clips.map((clip) => clip.sourceName),
-      );
-      return;
-    }
-
-    // RVEDL import: convert parsed EDL entries into timeline cuts
+    // RVEDL import: convert parsed EDL entries into timeline cuts.
+    // RVEDL entries take precedence over playlist clips because they represent
+    // an explicit user import (Issue #312).
     const rvedlEntries = this.session.edlEntries;
     if (rvedlEntries.length > 0) {
       const result = this.buildEDLFromRVEDLEntries(rvedlEntries);
@@ -360,6 +348,20 @@ export class TimelineEditorService {
         this.timelineEditor.loadFromEDL(result.edl, result.labels);
         return;
       }
+    }
+
+    const clips = this.playlistManager.getClips();
+    if (clips.length > 0) {
+      this.timelineEditor.loadFromEDL(
+        clips.map((clip) => ({
+          frame: clip.globalStartFrame,
+          source: clip.sourceIndex,
+          inPoint: clip.inPoint,
+          outPoint: clip.outPoint,
+        })),
+        clips.map((clip) => clip.sourceName),
+      );
+      return;
     }
 
     const fallback = this.buildFallbackEDLFromSources();

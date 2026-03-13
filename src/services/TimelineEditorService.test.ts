@@ -677,21 +677,22 @@ describe('TimelineEditorService', () => {
       );
     });
 
-    it('TLE-044: RVEDL entries are lower priority than playlist clips', () => {
+    it('TLE-044: RVEDL entries take precedence over playlist clips (Issue #312)', () => {
       const clips = [
         makePlaylistClip({ globalStartFrame: 1, sourceIndex: 0, inPoint: 1, outPoint: 30, sourceName: 'A' }),
       ];
       deps.playlistManager.getClips.mockReturnValue(clips);
+      deps.session.allSources = [{ name: 'shot.exr', duration: 100 }];
       deps.session.edlEntries = [
         { sourcePath: '/path/shot.exr', inFrame: 1, outFrame: 100 },
       ];
 
       service.syncFromGraph();
 
-      // Should use playlist clips, not RVEDL entries
+      // Should use RVEDL entries, not playlist clips
       expect(deps.timelineEditor.loadFromEDL).toHaveBeenCalledWith(
-        [{ frame: 1, source: 0, inPoint: 1, outPoint: 30 }],
-        ['A'],
+        [{ frame: 1, source: 0, inPoint: 1, outPoint: 100 }],
+        ['shot.exr'],
       );
     });
 
@@ -738,6 +739,67 @@ describe('TimelineEditorService', () => {
       // Should use RVEDL entries (inPoint=10), not fallback (inPoint=1)
       const call = deps.timelineEditor.loadFromEDL.mock.calls[0];
       expect(call![0][0].inPoint).toBe(10);
+    });
+
+    it('TLE-052: playlist-only case still works when no RVEDL entries (Issue #312 regression)', () => {
+      const clips = [
+        makePlaylistClip({ globalStartFrame: 1, sourceIndex: 0, inPoint: 1, outPoint: 30, sourceName: 'ClipA' }),
+        makePlaylistClip({ globalStartFrame: 31, sourceIndex: 1, inPoint: 5, outPoint: 25, sourceName: 'ClipB' }),
+      ];
+      deps.playlistManager.getClips.mockReturnValue(clips);
+      deps.session.edlEntries = []; // no RVEDL entries
+
+      service.syncFromGraph();
+
+      expect(deps.timelineEditor.loadFromEDL).toHaveBeenCalledWith(
+        [
+          { frame: 1, source: 0, inPoint: 1, outPoint: 30 },
+          { frame: 31, source: 1, inPoint: 5, outPoint: 25 },
+        ],
+        ['ClipA', 'ClipB'],
+      );
+    });
+
+    it('TLE-053: RVEDL-only case still works when no playlist clips (Issue #312 regression)', () => {
+      deps.playlistManager.getClips.mockReturnValue([]);
+      deps.session.allSources = [{ name: 'render.exr', duration: 200 }];
+      deps.session.edlEntries = [
+        { sourcePath: '/out/render.exr', inFrame: 10, outFrame: 80 },
+      ];
+
+      service.syncFromGraph();
+
+      expect(deps.timelineEditor.loadFromEDL).toHaveBeenCalledWith(
+        [{ frame: 1, source: 0, inPoint: 10, outPoint: 80 }],
+        ['render.exr'],
+      );
+    });
+
+    it('TLE-054: RVEDL wins over playlist clips with multiple entries (Issue #312 regression)', () => {
+      // Both playlist clips and RVEDL entries present
+      const clips = [
+        makePlaylistClip({ globalStartFrame: 1, sourceIndex: 0, inPoint: 1, outPoint: 50, sourceName: 'PlaylistClip' }),
+      ];
+      deps.playlistManager.getClips.mockReturnValue(clips);
+      deps.session.allSources = [
+        { name: 'a.exr', duration: 100 },
+        { name: 'b.exr', duration: 100 },
+      ];
+      deps.session.edlEntries = [
+        { sourcePath: '/path/a.exr', inFrame: 5, outFrame: 30 },
+        { sourcePath: '/path/b.exr', inFrame: 10, outFrame: 60 },
+      ];
+
+      service.syncFromGraph();
+
+      // RVEDL should win — verify we got RVEDL-derived EDL, not playlist clips
+      expect(deps.timelineEditor.loadFromEDL).toHaveBeenCalledWith(
+        [
+          { frame: 1, source: 0, inPoint: 5, outPoint: 30 },
+          { frame: 27, source: 1, inPoint: 10, outPoint: 60 },
+        ],
+        ['a.exr', 'b.exr'],
+      );
     });
 
     it('TLE-046: edlLoaded event triggers syncFromGraph', () => {
