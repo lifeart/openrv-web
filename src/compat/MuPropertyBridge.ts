@@ -309,12 +309,39 @@ export class MuPropertyBridge {
     if (isHashPath) {
       const typeName = nodeName.slice(1);
       if (!typeName) return result;
+
+      // Collect matching node names using the same priority as _resolveKey():
+      // 1. Exact name match, 2. Suffix match (_TypeName), 3. Substring match
+      const exactNodes = new Set<string>();
+      const suffixNodes = new Set<string>();
+      const substringNodes = new Set<string>();
+
       for (const key of this._store.keys()) {
-        // Extract the node portion (everything before the first dot)
         const firstDot = key.indexOf('.');
         if (firstDot === -1) continue;
         const nodePart = key.slice(0, firstDot);
-        if (nodePart === typeName || nodePart.includes(typeName)) {
+        if (nodePart === typeName) {
+          exactNodes.add(nodePart);
+        } else if (nodePart.endsWith(`_${typeName}`)) {
+          suffixNodes.add(nodePart);
+        } else if (nodePart.includes(typeName)) {
+          substringNodes.add(nodePart);
+        }
+      }
+
+      // Use the highest-priority tier that has matches;
+      // if exact matches exist use only those, otherwise suffix, otherwise substring
+      const matchingNodes = exactNodes.size > 0
+        ? exactNodes
+        : suffixNodes.size > 0
+          ? suffixNodes
+          : substringNodes;
+
+      for (const key of this._store.keys()) {
+        const firstDot = key.indexOf('.');
+        if (firstDot === -1) continue;
+        const nodePart = key.slice(0, firstDot);
+        if (matchingNodes.has(nodePart)) {
           result.push(key);
         }
       }

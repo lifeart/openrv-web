@@ -194,14 +194,83 @@ describe('MuPropertyBridge', () => {
       expect(bridge.properties('#')).toEqual([]);
     });
 
-    it('substring over-matching: #RVSource matches both RVSource and RVSourceGroup nodes', () => {
+    it('suffix match takes priority: #RVSource matches _RVSource but not _RVSourceGroup', () => {
       bridge.newProperty('node1_RVSource.media.url', MuPropertyType.String, 1);
       bridge.newProperty('node2_RVSourceGroup.source.media', MuPropertyType.String, 1);
 
+      // Suffix match (_RVSource) takes priority over substring match (_RVSourceGroup)
+      const props = bridge.properties('#RVSource');
+      expect(props).toHaveLength(1);
+      expect(props).toContain('node1_RVSource.media.url');
+    });
+
+    it('falls back to substring match when no exact or suffix match exists', () => {
+      bridge.newProperty('node2_RVSourceGroup.source.media', MuPropertyType.String, 1);
+      bridge.newProperty('node3_RVSourceGroup.color.gamma', MuPropertyType.Float, 1);
+
+      // No exact or suffix match for RVSource, so substring matches are used
       const props = bridge.properties('#RVSource');
       expect(props).toHaveLength(2);
-      expect(props).toContain('node1_RVSource.media.url');
       expect(props).toContain('node2_RVSourceGroup.source.media');
+      expect(props).toContain('node3_RVSourceGroup.color.gamma');
+    });
+  });
+
+  // ---- Issue #253: properties() hash-path consistency with _resolveKey() ----
+
+  describe('properties() hash-path resolution consistency (Issue #253)', () => {
+    it('properties(#RVLinearize) uses suffix matching consistent with _resolveKey', () => {
+      bridge.newProperty('myRVLinearize_color.component.prop', MuPropertyType.Float, 1);
+      bridge.newProperty('other_color.component.prop', MuPropertyType.Float, 1);
+      bridge.newProperty('src_RVLinearize.component.prop', MuPropertyType.Float, 1);
+      bridge.newProperty('src_RVLinearize.component.other', MuPropertyType.Float, 1);
+
+      // Suffix match: src_RVLinearize ends with _RVLinearize
+      // myRVLinearize_color is a substring match (contains RVLinearize but not as suffix)
+      // Suffix matches should take priority
+      const props = bridge.properties('#RVLinearize');
+      expect(props).toHaveLength(2);
+      expect(props).toContain('src_RVLinearize.component.prop');
+      expect(props).toContain('src_RVLinearize.component.other');
+      // Substring match should NOT be included when suffix matches exist
+      expect(props).not.toContain('myRVLinearize_color.component.prop');
+    });
+
+    it('properties(#RVLinearize) result is consistent with _resolveKey(#RVLinearize.component.prop)', () => {
+      bridge.newProperty('myRVLinearize_color.component.prop', MuPropertyType.Float, 1);
+      bridge.setFloatProperty('myRVLinearize_color.component.prop', [99]);
+      bridge.newProperty('src_RVLinearize.component.prop', MuPropertyType.Float, 1);
+      bridge.setFloatProperty('src_RVLinearize.component.prop', [42]);
+
+      // _resolveKey should resolve to src_RVLinearize (suffix match wins)
+      expect(bridge.getFloatProperty('#RVLinearize.component.prop')).toEqual([42]);
+
+      // properties should return only the suffix-matched node's properties
+      const props = bridge.properties('#RVLinearize');
+      expect(props).toContain('src_RVLinearize.component.prop');
+      expect(props).not.toContain('myRVLinearize_color.component.prop');
+    });
+
+    it('properties(#TypeName) exact match excludes suffix and substring matches', () => {
+      bridge.newProperty('RVLinearize.comp.a', MuPropertyType.Float, 1);
+      bridge.newProperty('src_RVLinearize.comp.b', MuPropertyType.Float, 1);
+      bridge.newProperty('myRVLinearize_extra.comp.c', MuPropertyType.Float, 1);
+
+      const props = bridge.properties('#RVLinearize');
+      expect(props).toHaveLength(1);
+      expect(props).toContain('RVLinearize.comp.a');
+    });
+
+    it('properties(#TypeName) returns all properties from multiple suffix-matched nodes', () => {
+      bridge.newProperty('group000_RVColor.color.gamma', MuPropertyType.Float, 1);
+      bridge.newProperty('group001_RVColor.color.gamma', MuPropertyType.Float, 1);
+      bridge.newProperty('group000_RVColor.color.exposure', MuPropertyType.Float, 1);
+
+      const props = bridge.properties('#RVColor');
+      expect(props).toHaveLength(3);
+      expect(props).toContain('group000_RVColor.color.gamma');
+      expect(props).toContain('group001_RVColor.color.gamma');
+      expect(props).toContain('group000_RVColor.color.exposure');
     });
   });
 
