@@ -393,3 +393,139 @@
 **Files changed**:
 - `src/core/session/SessionSerializer.ts`
 - `src/core/session/SessionSerializer.issue410.test.ts` (new)
+
+## Issue #249: Mu compat ND properties lose their declared shape after any set or insert operation
+
+**Status**: Already fixed in codebase. Write paths (`setStringProperty`, `_setNumericProperty`, insert helpers) now preserve the original `prop.dimensions` instead of flattening to `[values.length]`.
+
+**Tests added**: Regression tests verifying ND property shape is preserved after set and insert operations.
+
+**Files changed**:
+- `src/compat/MuPropertyBridge.ts`
+- `src/compat/__tests__/MuPropertyBridge.test.ts`
+
+## Issue #250: Mu compat `closestNodesOfType()` returns farther matches too
+
+**Status**: Already fixed in codebase. BFS now stops at the first matching depth, excluding farther-depth matches. Regression test added.
+
+**Tests added**: 1 regression test verifying farther-depth matches are excluded in branched graphs.
+
+**Files changed**:
+- `src/compat/__tests__/MuEvalBridge.test.ts`
+
+## Issue #252: Mu compat source-list fallbacks can return phantom source names
+
+**Status**: Already fixed with `_ensureFallbackSourceRegistered`. Fallback sources from `sources()` and `sourcesAtFrame()` are now registered in the local `_sources` map so follow-up source queries can resolve them.
+
+**Tests added**: Regression tests verifying fallback source names are resolvable by other source API methods.
+
+**Files changed**:
+- `src/compat/MuSourceBridge.ts`
+- `src/compat/__tests__/MuSourceBridge.test.ts`
+
+## Issue #253: Mu compat `properties('#TypeName')` does not honor hash-path semantics
+
+**Root cause**: `properties(nodeName)` stripped `#` and did `key.startsWith(prefix + '.')` instead of using `_resolveKey()` three-tier priority logic (exact match, type-token match, substring match).
+
+**Fix**: Aligned `properties('#TypeName')` with the same resolution logic used by `get*`, `propertyInfo`, and `propertyExists`.
+
+**Tests added**: Regression tests covering `properties('#TypeName')` resolution with exact, type-token, and substring matches.
+
+**Files changed**:
+- `src/compat/MuPropertyBridge.ts`
+- `src/compat/__tests__/MuPropertyBridge.test.ts`
+
+## Issue #256: Mu compat hash-path property resolution is insertion-order dependent
+
+**Status**: Already fixed with deterministic sorting. When multiple node names contain the same type token, resolution now uses stable ordering instead of depending on `Map` insertion order.
+
+**Tests added**: Regression tests verifying deterministic hash-path resolution across insertion orders.
+
+**Files changed**:
+- `src/compat/__tests__/MuPropertyBridge.test.ts`
+
+## Issue #310: Editing a multi-cut timeline collapses session pingpong looping
+
+**Root cause**: `PlaylistManager` only supported `none`, `single`, and `all` loop modes. `TimelineEditorService` mapped `pingpong` to `all`, silently losing the bounce behavior.
+
+**Fix**: Added `pingpong` to `PlaylistManager`'s loop mode type and implementation. Updated `TimelineEditorService` to pass `pingpong` through.
+
+**Tests added**: Regression tests in `PlaylistManager.issue310.test.ts` and `TimelineEditorService.issue310.test.ts`.
+
+**Files changed**:
+- `src/core/session/PlaylistManager.ts`
+- `src/core/session/PlaylistManager.issue310.test.ts` (new)
+- `src/services/TimelineEditorService.ts`
+- `src/services/TimelineEditorService.issue310.test.ts` (new)
+
+## Issue #311: RVEDL entries with unmatched source paths are silently rebound to loaded source 0
+
+**Root cause**: `buildEDLFromRVEDLEntries()` fell back to `sourceIndex = 0` for unmatched paths without any warning, making the timeline look resolved when it was not.
+
+**Fix**: Return `unresolvedPaths` array from the builder and log warnings for each unresolved RVEDL source path.
+
+**Tests added**: Regression tests verifying unresolved paths are surfaced and logged.
+
+**Files changed**:
+- `src/services/TimelineEditorService.ts`
+- `src/services/TimelineEditorService.test.ts`
+
+## Issue #312: Imported RVEDL cuts are ignored whenever the session already has playlist clips
+
+**Root cause**: `syncFromGraph()` checked playlist clips before RVEDL entries. If any playlist clips existed, the RVEDL branch was unreachable.
+
+**Fix**: Reordered `syncFromGraph()` to check RVEDL entries before playlist clips, giving imported EDLs priority.
+
+**Tests added**: Regression tests verifying RVEDL entries take precedence over existing playlist clips.
+
+**Files changed**:
+- `src/services/TimelineEditorService.ts`
+- `src/services/TimelineEditorService.test.ts`
+
+## Issue #315: Project restore does not clear old RVEDL state when the new project has no EDL entries
+
+**Root cause**: `fromJSON()` only called `session.setEdlEntries()` when the saved project had entries (`length > 0`). Loading a project with no EDL after one that had EDL left stale entries in session state.
+
+**Fix**: Unconditionally call `setEdlEntries()` during restore, passing an empty array when the project has no EDL data.
+
+**Tests added**: Regression tests verifying EDL state is cleared on restore.
+
+**Files changed**:
+- `src/core/session/SessionSerializer.ts`
+- `src/core/session/SessionSerializer.test.ts`
+
+## Issue #534: Representation fallback and removal can change active media without emitting representationChanged
+
+**Root cause**: `removeRepresentation()` picked the next ready representation but emitted no `representationChanged` event. Error fallback emitted only `fallbackActivated`, not `representationChanged`.
+
+**Fix**: Emit `representationChanged` event in both the removal fallback and error fallback paths.
+
+**Tests added**: Regression tests verifying the event is emitted on both removal and error fallback.
+
+**Files changed**:
+- `src/core/session/MediaRepresentationManager.ts`
+- `src/core/session/MediaRepresentationManager.test.ts`
+
+## Issue #541: Adding a new representation corrupts activeRepresentationIndex after priority sort
+
+**Root cause**: `addRepresentation()` sorted representations by priority but never remapped the existing `activeRepresentationIndex` to track the same representation object.
+
+**Fix**: After sorting, remap `activeRepresentationIndex` to the new position of the previously active representation.
+
+**Tests added**: Regression tests verifying active representation identity is preserved after sort.
+
+**Files changed**:
+- `src/core/session/MediaRepresentationManager.ts`
+- `src/core/session/MediaRepresentationManager.test.ts`
+
+## Issue #553: Public `openrv.media.getStartFrame()` coerces 0 to 1
+
+**Root cause**: `MediaAPI.getStartFrame()` used `return startFrame || 1`, which treated `0` as falsy and replaced it with `1`.
+
+**Fix**: Changed to explicit null check (`startFrame != null ? startFrame : 1`) so legitimate frame-0 media is preserved.
+
+**Tests added**: Regression tests verifying `getStartFrame()` returns `0` for 0-based media.
+
+**Files changed**:
+- `src/api/MediaAPI.ts`
+- `src/api/OpenRVAPI.test.ts`

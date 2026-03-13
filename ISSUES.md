@@ -4,30 +4,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 
 ## Confirmed Issues
 
-### 249. Mu compat ND properties lose their declared shape after any set or insert operation
-
-- Severity: Medium
-- Area: Mu compatibility / property system
-- Evidence:
-  - `newNDProperty(...)` correctly stores the declared multi-dimensional shape in `prop.dimensions` when the property is created in [src/compat/MuPropertyBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuPropertyBridge.ts#L236) through [src/compat/MuPropertyBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuPropertyBridge.ts#L254).
-  - Every write path then overwrites that metadata with a flat one-dimensional shape: `setStringProperty(...)` sets `prop.dimensions = [values.length]` in [src/compat/MuPropertyBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuPropertyBridge.ts#L154) through [src/compat/MuPropertyBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuPropertyBridge.ts#L165), `_setNumericProperty(...)` does the same in [src/compat/MuPropertyBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuPropertyBridge.ts#L397) through [src/compat/MuPropertyBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuPropertyBridge.ts#L410), and both insert helpers flatten dimensions in [src/compat/MuPropertyBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuPropertyBridge.ts#L177) through [src/compat/MuPropertyBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuPropertyBridge.ts#L189) and [src/compat/MuPropertyBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuPropertyBridge.ts#L412) through [src/compat/MuPropertyBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuPropertyBridge.ts#L431).
-  - The tests only verify that `newNDProperty(...)` starts with the right `[4, 4]` dimensions in [src/compat/__tests__/MuPropertyBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuPropertyBridge.test.ts#L78) through [src/compat/__tests__/MuPropertyBridge.test.ts#L85); there is no coverage for writing to an ND property and preserving its shape metadata.
-- Impact:
-  - Mu-compatible scripts can create a matrix- or tensor-shaped property and have its metadata silently collapse to a flat vector after the first update.
-  - That breaks any downstream logic that relies on `propertyInfo().dimensions` to understand the property's declared structure.
-
-### 250. Mu compat `closestNodesOfType()` returns farther matches too, instead of only the nearest layer of matches
-
-- Severity: Medium
-- Area: Mu compatibility / graph evaluation
-- Evidence:
-  - `closestNodesOfType(...)` uses BFS, but it keeps traversing upstream even after it finds a node of the target type, collecting every later match into the result array in [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L164) through [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L190).
-  - Because the search does not stop at the first matching depth, a branched graph with both near and far matches will return the far ones too, despite the API name and docs saying “closest nodes of a given type.”
-  - The current tests only cover single-depth or same-depth cases and explicitly accept multiple returned matches without checking that farther-depth matches are excluded in [src/compat/__tests__/MuEvalBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuEvalBridge.test.ts#L166) through [src/compat/__tests__/MuEvalBridge.test.ts#L196).
-- Impact:
-  - Mu-compatible scripts asking for the nearest upstream nodes of a type can receive a broader set that includes non-nearest ancestors.
-  - That changes graph-query semantics in a way that can select the wrong control or source node when scripts expect the first matching layer only.
-
 ### 251. Mu compat `metaEvaluateClosestByType()` chooses the first depth-first match, not the actual closest match in branched graphs
 
 - Severity: Medium
@@ -39,32 +15,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Mu-compatible scripts can get a path to the wrong matching node when multiple upstream branches contain the requested type.
   - That makes “closest by type” unstable across graph shapes and input ordering, which is a logic bug rather than just an approximation.
-
-### 252. Mu compat source-list fallbacks can return phantom source names that the rest of the source API cannot resolve
-
-- Severity: Medium
-- Area: Mu compatibility / source management
-- Evidence:
-  - When there are no local source records, `sources()` fabricates an entry from `openrv.media.getCurrentSource()` and returns its `name` as a source identifier in [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L124) through [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L147).
-  - `sourcesAtFrame(...)` does the same fallback and returns `current.name` even though no corresponding local `SourceRecord` exists in [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L158) through [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L179).
-  - Almost every other source command resolves through `_getSource(...)`, which only looks in the local `_sources` map and throws if the name is absent in [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L785) through [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L790).
-  - The fallback tests explicitly validate that `sources()` and `sourcesAtFrame()` return the OpenRV current source name `test-source` when no local sources exist in [src/compat/__tests__/MuSourceBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuSourceBridge.test.ts#L43) through [src/compat/__tests__/MuSourceBridge.test.ts#L48) and [src/compat/__tests__/MuSourceBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuSourceBridge.test.ts#L71) through [src/compat/__tests__/MuSourceBridge.test.ts#L74), but there is no test that follow-up source queries can actually use that returned name.
-- Impact:
-  - Mu-compatible scripts can enumerate a source name from `sources()` or `sourcesAtFrame()` and then immediately fail when calling `sourceMedia(...)`, `sourceMediaInfo(...)`, `sourceAttributes(...)`, or other source methods on that same name.
-  - This also makes the bridge internally inconsistent, because source discovery can report a source while `hasSource(...)` and `sourceCount()` still say there are no local sources.
-
-### 253. Mu compat `properties('#TypeName')` does not honor the documented hash-path semantics
-
-- Severity: Medium
-- Area: Mu compatibility / property system
-- Evidence:
-  - The `properties(nodeName)` API is documented as accepting either a node name or `#TypeName` in [src/compat/MuPropertyBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuPropertyBridge.ts#L270) through [src/compat/MuPropertyBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuPropertyBridge.ts#L285).
-  - Its implementation does not use `_resolveKey(...)` or any hash resolution logic; it merely strips `#` and does `key.startsWith(prefix + '.')` in [src/compat/MuPropertyBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuPropertyBridge.ts#L276) through [src/compat/MuPropertyBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuPropertyBridge.ts#L284).
-  - That behavior is inconsistent with the rest of the hash-path API, where `_resolveKey(...)` matches exact names or node names containing the type token for `#TypeName.component.property` lookups in [src/compat/MuPropertyBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuPropertyBridge.ts#L343) through [src/compat/MuPropertyBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuPropertyBridge.ts#L380).
-  - The tests cover normal `properties('myNode')` usage and hash-path resolution for `get*`, `propertyInfo`, and `propertyExists`, but there is no coverage for `properties('#TypeName')` in [src/compat/__tests__/MuPropertyBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuPropertyBridge.test.ts#L134) through [src/compat/__tests__/MuPropertyBridge.test.ts#L151) and [src/compat/__tests__/MuPropertyBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuPropertyBridge.test.ts#L331) through [src/compat/__tests__/MuPropertyBridge.test.ts#L356).
-- Impact:
-  - Mu-compatible scripts can successfully use `#TypeName.component.property` in point lookups and then get a contradictory empty or incomplete result when they try to list properties with `properties('#TypeName')`.
-  - That inconsistency makes hash-based property discovery unreliable and can break tooling that first enumerates properties by type and then reads them individually.
 
 ### 254. Mu compat `fileKind()` misclassifies normal signed or query-string media URLs as unknown files
 
@@ -90,19 +40,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Mu-compatible scripts cannot connect to a valid non-local RV peer that is exposed over plain WebSocket, even in environments where that is expected and allowed.
   - This is a logic bug in connection setup rather than a browser limitation, because the bridge chooses the scheme before the connection attempt even starts.
-
-### 256. Mu compat hash-path property resolution is insertion-order dependent when multiple node names contain the same type token
-
-- Severity: Medium
-- Area: Mu compatibility / property system
-- Evidence:
-  - For hash paths like `#TypeName.component.property`, `_resolveKey(...)` first checks an exact node-name match and then returns the first stored key whose node name merely `includes(typeName)` in [src/compat/MuPropertyBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuPropertyBridge.ts#L360) through [src/compat/MuPropertyBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuPropertyBridge.ts#L378).
-  - Because the fallback search iterates `this._store.keys()` directly, the chosen property depends on insertion order when multiple node names contain the same token and share the same component/property suffix.
-  - There is no disambiguation by actual node type, graph structure, or strongest match beyond exact node-name equality.
-  - The current tests cover only a single matching hash target at a time in [src/compat/__tests__/MuPropertyBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuPropertyBridge.test.ts#L331) through [src/compat/__tests__/MuPropertyBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuPropertyBridge.test.ts#L356), so ambiguous multi-match behavior is unverified.
-- Impact:
-  - Mu-compatible scripts can read or overwrite the wrong property when multiple nodes happen to contain the same type token in their names.
-  - That makes hash-path access nondeterministic at the API level, because the result depends on property insertion order rather than a stable graph identity rule.
 
 ### 257. Mu compat playback-health commands are marked supported but only expose hardcoded or never-updated local state
 
@@ -481,42 +418,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The repo carries a documented graph-mutation/view-history service that is effectively test-only in the shipped app.
   - That makes the published session architecture ahead of production wiring for any future graph-browser or view-history workflows that would depend on this manager.
 
-### 310. Editing a multi-cut timeline collapses session `pingpong` looping into plain playlist looping
-
-- Severity: Medium
-- Area: Timeline editing / playback loop semantics
-- Evidence:
-  - Core session playback supports `once`, `loop`, and `pingpong` loop modes in [src/core/types/session.ts](/Users/lifeart/Repos/openrv-web/src/core/types/session.ts#L1) and [src/core/session/PlaybackEngine.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaybackEngine.ts#L850) through [src/core/session/PlaybackEngine.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaybackEngine.ts#L943).
-  - When `TimelineEditorService` applies edits that produce multiple cuts, it hands playback over to `PlaylistManager` and maps the session loop mode with `const mappedMode = this.session.loopMode === 'once' ? 'none' : 'all'` in [src/services/TimelineEditorService.ts](/Users/lifeart/Repos/openrv-web/src/services/TimelineEditorService.ts#L410) through [src/services/TimelineEditorService.ts](/Users/lifeart/Repos/openrv-web/src/services/TimelineEditorService.ts#L412).
-  - `PlaylistManager` only supports `none`, `single`, and `all` in [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L52) and [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L486).
-- Impact:
-  - If a user is in `pingpong` loop mode and then edits or creates a multi-cut timeline, playback silently degrades to simple wraparound looping.
-  - That changes loop behavior as a side effect of editing structure, not of any explicit loop-mode choice by the user.
-
-### 311. RVEDL entries with unmatched source paths are silently rebound to loaded source `0`
-
-- Severity: Medium
-- Area: RVEDL import / timeline source mapping
-- Evidence:
-  - `TimelineEditorService.buildEDLFromRVEDLEntries(...)` resolves RVEDL source paths by basename against loaded sources in [src/services/TimelineEditorService.ts](/Users/lifeart/Repos/openrv-web/src/services/TimelineEditorService.ts#L220) through [src/services/TimelineEditorService.ts](/Users/lifeart/Repos/openrv-web/src/services/TimelineEditorService.ts#L249).
-  - When no match is found, it explicitly falls back to `sourceIndex = 0` “so the cut structure is still visible” in [src/services/TimelineEditorService.ts](/Users/lifeart/Repos/openrv-web/src/services/TimelineEditorService.ts#L251) through [src/services/TimelineEditorService.ts](/Users/lifeart/Repos/openrv-web/src/services/TimelineEditorService.ts#L252).
-  - The resulting mapped EDL is then loaded straight into the timeline editor as if it were resolved successfully in [src/services/TimelineEditorService.ts](/Users/lifeart/Repos/openrv-web/src/services/TimelineEditorService.ts#L348) through [src/services/TimelineEditorService.ts](/Users/lifeart/Repos/openrv-web/src/services/TimelineEditorService.ts#L353).
-- Impact:
-  - An RVEDL that references media the app cannot actually match will still render a timeline, but those cuts can point at the wrong loaded source instead of remaining visibly unresolved.
-  - That makes timeline review look superficially successful while silently corrupting clip-to-media mapping.
-
-### 312. Imported RVEDL cuts are ignored whenever the session already has playlist clips
-
-- Severity: Medium
-- Area: RVEDL import / timeline precedence
-- Evidence:
-  - `SessionGraph.loadEDL(...)` stores RVEDL entries and emits `edlLoaded` in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L244) through [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L259).
-  - `TimelineEditorService.syncFromGraph()` checks playlist clips before it checks `session.edlEntries`; if any playlist clips exist, it immediately loads those and returns in [src/services/TimelineEditorService.ts](/Users/lifeart/Repos/openrv-web/src/services/TimelineEditorService.ts#L334) through [src/services/TimelineEditorService.ts](/Users/lifeart/Repos/openrv-web/src/services/TimelineEditorService.ts#L345).
-  - The RVEDL branch only runs afterward, in [src/services/TimelineEditorService.ts](/Users/lifeart/Repos/openrv-web/src/services/TimelineEditorService.ts#L348) through [src/services/TimelineEditorService.ts](/Users/lifeart/Repos/openrv-web/src/services/TimelineEditorService.ts#L353).
-- Impact:
-  - If a user imports an RVEDL into a session that already has playlist clips, the timeline editor continues to show the old playlist structure instead of the newly imported edit list.
-  - That makes RVEDL import feel ineffective or broken in exactly the scenarios where users are likely comparing or replacing an existing cut structure.
-
 ### 313. Shot status tracking exists in session/export code, but the shipped app exposes no real status UI
 
 - Severity: Medium
@@ -542,19 +443,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Version groups can exist in saved state and reports, but the production app never auto-detects them from filenames and never exposes navigation or selection controls.
   - That makes version management effectively a persistence/export-only subsystem instead of a usable review feature.
-
-### 315. Project restore does not clear old RVEDL state when the new project has no EDL entries
-
-- Severity: Medium
-- Area: Project restore / RVEDL state
-- Evidence:
-  - `.orvproject` save only serializes `edlEntries` when the current session has at least one entry in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L372) through [src/core/session/SessionSerializer.ts#L375).
-  - Project load clears media with `session.clearSources()` in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L446) through [src/core/session/SessionSerializer.ts#L447), but `Session.clearSources()` only delegates to media clearing in [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L1208) through [src/core/session/Session.ts#L1214) and does not reset `edlEntries`.
-  - Restore only calls `session.setEdlEntries(...)` when `migrated.edlEntries.length > 0` in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L584) through [src/core/session/SessionSerializer.ts#L587).
-  - The underlying session graph explicitly stores RVEDL state separately in `_edlEntries` and only clears it when its own `clear()` path runs in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L202) through [src/core/session/SessionGraph.ts#L221).
-- Impact:
-  - Loading a project with no RVEDL data after a session that had imported EDL cuts can leave the old edit list hanging around in session state.
-  - That creates another stale-state path where the newly loaded project does not fully replace the previous editorial context.
 
 ### 316. Review notes do not support priority or category, so the richer dailies workflow is impossible in the shipped app
 
@@ -3219,19 +3107,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Switching between representations with different start-frame offsets can leave playback on the wrong relative frame even though the type/model explicitly promises frame-accurate switching.
   - That is especially damaging for EXR-vs-proxy editorial workflows, where the whole point of the stored offset is to preserve shot alignment across representation changes.
 
-### 534. Representation fallback and removal can change the active media without emitting the `representationChanged` event that the rest of the app relies on
-
-- Severity: Medium
-- Area: Media representations / app-state synchronization
-- Evidence:
-  - Removing the active representation immediately picks the next ready one and reapplies the shim, but `removeRepresentation(...)` emits no `representationChanged` event afterward in [src/core/session/MediaRepresentationManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaRepresentationManager.ts#L88) through [src/core/session/MediaRepresentationManager.ts#L116).
-  - Error fallback does something similar for ready fallbacks: it updates `activeRepresentationIndex`, applies the shim, and emits only `fallbackActivated`, not `representationChanged`, in [src/core/session/MediaRepresentationManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaRepresentationManager.ts#L241) through [src/core/session/MediaRepresentationManager.ts#L265).
-  - Production app code listens to `representationChanged` to resync timecode offsets and audio-scrub availability in [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L194) through [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L199) and [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L212) through [src/AppPlaybackWiring.ts#L219).
-  - A repo search finds no equivalent live subscriber for `fallbackActivated`; it is forwarded by `SessionMedia`, but not consumed by the app shell in production.
-- Impact:
-  - The real active media can change after a representation failure or removal while the rest of the app still behaves as if the old representation were active.
-  - That can leave derived UI state such as timecode offsets and scrub-audio availability stale until some other unrelated event forces a refresh.
-
 ### 535. Even if a sequence representation loaded successfully, the shim path would still discard the sequence metadata that the rest of the app expects
 
 - Severity: Medium
@@ -3306,19 +3181,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - After switching to a proxy or alternate file/video representation, the app can still present, serialize, and reason about the base source identity instead of the actually active media variant.
   - That makes public media info, exports, and on-screen source labeling drift away from what the viewer is really showing.
-
-### 541. Adding a new representation can silently corrupt `activeRepresentationIndex` because the list is re-sorted without remapping the existing active slot
-
-- Severity: Medium
-- Area: Media representations / active-state integrity
-- Evidence:
-  - `MediaRepresentationManager.addRepresentation(...)` pushes the new representation and immediately sorts the array by priority in [src/core/session/MediaRepresentationManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaRepresentationManager.ts#L59) through [src/core/session/MediaRepresentationManager.ts#L68).
-  - The active representation is stored only as an index on the source via `source.activeRepresentationIndex` in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L127) through [src/core/session/SessionMedia.ts#L135).
-  - After sorting, `addRepresentation(...)` only handles the special case where no active representation exists; it never remaps a pre-existing active index to the same representation object in [src/core/session/MediaRepresentationManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaRepresentationManager.ts#L70) through [src/core/session/MediaRepresentationManager.ts#L76).
-  - The current tests cover sorting and auto-activation, but there is no case asserting that an existing active representation remains the active one after a later insertion changes ordering in [src/core/session/MediaRepresentationManager.test.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaRepresentationManager.test.ts#L119) through [src/core/session/MediaRepresentationManager.test.ts#L181).
-- Impact:
-  - Adding a higher-priority representation after one is already active can make `activeRepresentationIndex` point at a different entry than before, without any explicit switch.
-  - That can make subsequent playback, save/load, and UI state treat the wrong representation as active even though the user never changed it.
 
 ### 542. Async idle-fallbacks are reported as successful before they actually load, so callers can miss real representation-restore failures
 
@@ -3452,19 +3314,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Mu-compatible scripts asking for remote contacts get back whatever local label was passed into `remoteConnect(...)`, not the actual contact names advertised by the remote peers.
   - That makes peer identity unreliable for collaboration/integration code that needs to distinguish real remote users from local aliases.
-
-### 553. Public `openrv.media.getStartFrame()` cannot represent legitimate frame-0 media because it coerces `0` to `1`
-
-- Severity: Medium
-- Area: Public API / media metadata
-- Evidence:
-  - `getCurrentSourceStartFrame(...)` returns the active representation start frame or sequence start frame, defaulting to `0`, in [src/utils/media/SourceUIState.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SourceUIState.ts#L20) through [src/utils/media/SourceUIState.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SourceUIState.ts#L29).
-  - `MediaAPI.getStartFrame()` then does `return startFrame || 1`, which rewrites any legitimate `0` value to `1`, in [src/api/MediaAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/MediaAPI.ts#L171) through [src/api/MediaAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/MediaAPI.ts#L177).
-  - The codebase does treat `0` as a valid start frame elsewhere, including sequence/representation fixtures in [src/core/session/SessionSerializer.test.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.test.ts#L1102) through [src/core/session/SessionSerializer.test.ts#L1255) and [src/utils/media/SourceUIState.test.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SourceUIState.test.ts#L7) through [src/utils/media/SourceUIState.test.ts#L18).
-  - Mu compat `frameStart()` delegates directly to this API in [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L189) through [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L191), so the coercion leaks into the Mu layer too.
-- Impact:
-  - Scripts and integrations cannot distinguish a real frame-0 source from the default “no metadata” fallback.
-  - That shifts downstream frame-range, timecode-offset, and sequence-origin calculations by one frame for 0-based media.
 
 ### 554. The public playback/event API stays clip-local in playlist mode and never exposes the global playlist timeline the UI is actually using
 
