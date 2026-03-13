@@ -222,6 +222,11 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
     ),
   );
   subs.add(controls.snapshotPanel.on('restoreRequested', ({ id }) => persistenceManager.restoreSnapshot(id)));
+  subs.add(
+    controls.snapshotPanel.on('descriptionUpdated', ({ snapshotId, description }) =>
+      controls.snapshotManager.updateDescription(snapshotId, description),
+    ),
+  );
 
   // Note panel events
   subs.add(

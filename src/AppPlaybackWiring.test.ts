@@ -186,6 +186,9 @@ function createMockControls() {
       toggle: vi.fn(),
     }),
     snapshotPanel: new EventEmitter(),
+    snapshotManager: {
+      updateDescription: vi.fn(),
+    },
     notePanel: new EventEmitter(),
     playlistPanel: Object.assign(new EventEmitter(), {
       setFps: vi.fn(),

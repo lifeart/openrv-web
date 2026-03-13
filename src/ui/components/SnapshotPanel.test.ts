@@ -29,6 +29,7 @@ class StubSnapshotManager extends EventEmitter<SnapshotManagerEvents> {
   listSnapshots = vi.fn().mockResolvedValue([]);
   deleteSnapshot = vi.fn().mockResolvedValue(undefined);
   renameSnapshot = vi.fn().mockResolvedValue(undefined);
+  updateDescription = vi.fn().mockResolvedValue(undefined);
   exportSnapshot = vi.fn().mockResolvedValue('{"metadata":{},"state":{}}');
   clearAll = vi.fn().mockResolvedValue(undefined);
 }
@@ -363,6 +364,114 @@ describe('SnapshotPanel', () => {
       document.body.removeChild(panel.render());
     });
 
+    it('SNAP-044: edit description button calls showPrompt and emits descriptionUpdated', async () => {
+      const snapshots = [createMockSnapshot({ id: 'snap-desc', name: 'Desc Test', description: 'Old desc' })];
+      manager.listSnapshots.mockResolvedValue(snapshots);
+      vi.mocked(showPrompt).mockResolvedValue('New description');
+
+      document.body.appendChild(panel.render());
+      panel.show();
+
+      const handler = vi.fn();
+      panel.on('descriptionUpdated', handler);
+
+      await vi.waitFor(() => {
+        const descBtn = panel.render().querySelector('button[title="Edit Description"]');
+        expect(descBtn).not.toBeNull();
+        (descBtn as HTMLButtonElement).click();
+      });
+
+      await vi.waitFor(() => {
+        expect(showPrompt).toHaveBeenCalledWith('Enter description:', {
+          title: 'Edit Description',
+          defaultValue: 'Old desc',
+          confirmText: 'Save',
+        });
+        expect(handler).toHaveBeenCalledWith({ snapshotId: 'snap-desc', description: 'New description' });
+      });
+
+      document.body.removeChild(panel.render());
+    });
+
+    it('SNAP-045: edit description does not emit when user cancels prompt', async () => {
+      const snapshots = [createMockSnapshot({ id: 'snap-cancel-desc', name: 'Cancel Desc' })];
+      manager.listSnapshots.mockResolvedValue(snapshots);
+      vi.mocked(showPrompt).mockResolvedValue(null);
+
+      document.body.appendChild(panel.render());
+      panel.show();
+
+      const handler = vi.fn();
+      panel.on('descriptionUpdated', handler);
+
+      await vi.waitFor(() => {
+        const descBtn = panel.render().querySelector('button[title="Edit Description"]');
+        expect(descBtn).not.toBeNull();
+        (descBtn as HTMLButtonElement).click();
+      });
+
+      // Give async operation time to resolve
+      await new Promise((r) => setTimeout(r, 10));
+
+      expect(handler).not.toHaveBeenCalled();
+
+      document.body.removeChild(panel.render());
+    });
+
+    it('SNAP-046: edit description pre-populates with empty string when no existing description', async () => {
+      const snapshots = [createMockSnapshot({ id: 'snap-no-desc', name: 'No Desc' })];
+      manager.listSnapshots.mockResolvedValue(snapshots);
+      vi.mocked(showPrompt).mockResolvedValue('Brand new description');
+
+      document.body.appendChild(panel.render());
+      panel.show();
+
+      const handler = vi.fn();
+      panel.on('descriptionUpdated', handler);
+
+      await vi.waitFor(() => {
+        const descBtn = panel.render().querySelector('button[title="Edit Description"]');
+        expect(descBtn).not.toBeNull();
+        (descBtn as HTMLButtonElement).click();
+      });
+
+      await vi.waitFor(() => {
+        expect(showPrompt).toHaveBeenCalledWith('Enter description:', {
+          title: 'Edit Description',
+          defaultValue: '',
+          confirmText: 'Save',
+        });
+        expect(handler).toHaveBeenCalledWith({ snapshotId: 'snap-no-desc', description: 'Brand new description' });
+      });
+
+      document.body.removeChild(panel.render());
+    });
+
+    it('SNAP-047: edit description does not emit when description unchanged', async () => {
+      const snapshots = [createMockSnapshot({ id: 'snap-same', name: 'Same Desc', description: 'Same text' })];
+      manager.listSnapshots.mockResolvedValue(snapshots);
+      vi.mocked(showPrompt).mockResolvedValue('Same text');
+
+      document.body.appendChild(panel.render());
+      panel.show();
+
+      const handler = vi.fn();
+      panel.on('descriptionUpdated', handler);
+
+      await vi.waitFor(() => {
+        const descBtn = panel.render().querySelector('button[title="Edit Description"]');
+        expect(descBtn).not.toBeNull();
+        (descBtn as HTMLButtonElement).click();
+      });
+
+      // Give async operation time to resolve
+      await new Promise((r) => setTimeout(r, 10));
+
+      expect(handler).not.toHaveBeenCalled();
+
+      document.body.removeChild(panel.render());
+    });
+
     it('SNAP-043: delete does not proceed when user cancels confirmation', async () => {
       const snapshots = [createMockSnapshot({ id: 'snap-cancel', name: 'Keep Me' })];
       manager.listSnapshots.mockResolvedValue(snapshots);
@@ -644,95 +753,6 @@ describe('SnapshotPanel', () => {
       panel.show();
 
       expect(mockPlaylistPanel.hide).not.toHaveBeenCalled();
-
-      document.body.removeChild(panel.render());
-    });
-  });
-
-  // ---------------------------------------------------------------------------
-  // Create Snapshot (Issue #374)
-  // ---------------------------------------------------------------------------
-  describe('create snapshot', () => {
-    it('SNAP-080: Create Snapshot button exists in panel footer', () => {
-      document.body.appendChild(panel.render());
-      panel.show();
-
-      const createBtn = panel.render().querySelector('[data-testid="create-snapshot-btn"]');
-      expect(createBtn).not.toBeNull();
-      expect(createBtn!.textContent).toBe('Create Snapshot');
-
-      document.body.removeChild(panel.render());
-    });
-
-    it('SNAP-081: clicking Create Snapshot shows a prompt for the name', async () => {
-      vi.mocked(showPrompt).mockResolvedValue(null); // user cancels
-      document.body.appendChild(panel.render());
-      panel.show();
-
-      const createBtn = panel.render().querySelector('[data-testid="create-snapshot-btn"]') as HTMLButtonElement;
-      createBtn.click();
-
-      await vi.waitFor(() => {
-        expect(showPrompt).toHaveBeenCalledWith(
-          expect.stringContaining('name'),
-          expect.objectContaining({ title: 'Create Snapshot', confirmText: 'Create' }),
-        );
-      });
-
-      document.body.removeChild(panel.render());
-    });
-
-    it('SNAP-082: emits createRequested with user-provided name', async () => {
-      vi.mocked(showPrompt).mockResolvedValue('My Snapshot');
-      const handler = vi.fn();
-      panel.on('createRequested', handler);
-
-      document.body.appendChild(panel.render());
-      panel.show();
-
-      const createBtn = panel.render().querySelector('[data-testid="create-snapshot-btn"]') as HTMLButtonElement;
-      createBtn.click();
-
-      await vi.waitFor(() => {
-        expect(handler).toHaveBeenCalledWith({ name: 'My Snapshot', description: undefined });
-      });
-
-      document.body.removeChild(panel.render());
-    });
-
-    it('SNAP-083: emits createRequested with undefined name when user leaves input blank', async () => {
-      vi.mocked(showPrompt).mockResolvedValue('');
-      const handler = vi.fn();
-      panel.on('createRequested', handler);
-
-      document.body.appendChild(panel.render());
-      panel.show();
-
-      const createBtn = panel.render().querySelector('[data-testid="create-snapshot-btn"]') as HTMLButtonElement;
-      createBtn.click();
-
-      await vi.waitFor(() => {
-        expect(handler).toHaveBeenCalledWith({ name: undefined, description: undefined });
-      });
-
-      document.body.removeChild(panel.render());
-    });
-
-    it('SNAP-084: does not emit createRequested when user cancels the prompt', async () => {
-      vi.mocked(showPrompt).mockResolvedValue(null);
-      const handler = vi.fn();
-      panel.on('createRequested', handler);
-
-      document.body.appendChild(panel.render());
-      panel.show();
-
-      const createBtn = panel.render().querySelector('[data-testid="create-snapshot-btn"]') as HTMLButtonElement;
-      createBtn.click();
-
-      // Wait for the prompt to resolve
-      await new Promise((r) => setTimeout(r, 10));
-
-      expect(handler).not.toHaveBeenCalled();
 
       document.body.removeChild(panel.render());
     });

@@ -15,10 +15,10 @@ import { applyA11yFocus } from './shared/Button';
 import { showPrompt, showConfirm, showAlert } from './shared/Modal';
 
 export interface SnapshotPanelEvents extends EventMap {
-  /** Emitted when user wants to create a snapshot with optional name and description */
-  createRequested: { name?: string; description?: string };
   /** Emitted when user wants to restore a snapshot */
   restoreRequested: { id: string };
+  /** Emitted when user updates a snapshot description */
+  descriptionUpdated: { snapshotId: string; description: string };
   /** Emitted when panel visibility changes */
   visibilityChanged: { open: boolean };
   /** Emitted when panel is closed */
@@ -191,30 +191,6 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
       border-top: 1px solid var(--border-primary);
       background: var(--bg-tertiary);
     `;
-
-    const createBtn = document.createElement('button');
-    createBtn.textContent = 'Create Snapshot';
-    createBtn.dataset.testid = 'create-snapshot-btn';
-    createBtn.style.cssText = `
-      flex: 1;
-      padding: 8px;
-      border: 1px solid var(--accent-primary);
-      border-radius: 4px;
-      background: transparent;
-      color: var(--accent-primary);
-      font-size: 12px;
-      cursor: pointer;
-      transition: all 0.12s ease;
-    `;
-    createBtn.addEventListener('click', () => this.handleCreate());
-    createBtn.addEventListener('pointerenter', () => {
-      createBtn.style.background = 'rgba(var(--accent-primary-rgb), 0.1)';
-    });
-    createBtn.addEventListener('pointerleave', () => {
-      createBtn.style.background = 'transparent';
-    });
-    applyA11yFocus(createBtn);
-    footer.appendChild(createBtn);
 
     const clearAllBtn = document.createElement('button');
     clearAllBtn.textContent = 'Clear All';
@@ -425,6 +401,11 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
     });
     actions.appendChild(renameBtn);
 
+    const descBtn = this.createActionButton('Edit Description', 'note', () => {
+      this.handleEditDescription(snapshot);
+    });
+    actions.appendChild(descBtn);
+
     const exportBtn = this.createActionButton('Export', 'download', () => {
       this.handleExport(snapshot);
     });
@@ -550,21 +531,6 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
 
-  private async handleCreate(): Promise<void> {
-    const name = await showPrompt('Enter a name for this snapshot:', {
-      title: 'Create Snapshot',
-      placeholder: 'Snapshot name (leave blank for auto-generated)',
-      confirmText: 'Create',
-    });
-    // showPrompt returns null when user cancels
-    if (name === null) return;
-
-    this.emit('createRequested', {
-      name: name || undefined,
-      description: undefined,
-    });
-  }
-
   private async handleRename(snapshot: Snapshot): Promise<void> {
     const newName = await showPrompt('Enter new name:', {
       title: 'Rename Snapshot',
@@ -577,6 +543,22 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
       } catch (err) {
         console.error('Failed to rename snapshot:', err);
         await showAlert('Failed to rename snapshot', { type: 'error', title: 'Error' });
+      }
+    }
+  }
+
+  private async handleEditDescription(snapshot: Snapshot): Promise<void> {
+    const newDescription = await showPrompt('Enter description:', {
+      title: 'Edit Description',
+      defaultValue: snapshot.description ?? '',
+      confirmText: 'Save',
+    });
+    if (newDescription !== null && newDescription !== snapshot.description) {
+      try {
+        this.emit('descriptionUpdated', { snapshotId: snapshot.id, description: newDescription });
+      } catch (err) {
+        console.error('Failed to update description:', err);
+        await showAlert('Failed to update description', { type: 'error', title: 'Error' });
       }
     }
   }
