@@ -248,6 +248,35 @@ describe('MediaRepresentationManager', () => {
       expect(accessor.applyRepresentationShim).toHaveBeenCalled();
     });
 
+    it('should emit representationChanged when removing the active representation and falling back', () => {
+      const rep1 = createMockRepresentation({
+        id: 'rep-1',
+        priority: 0,
+        status: 'ready',
+        sourceNode: createMockSourceNode(),
+      });
+      const rep2 = createMockRepresentation({
+        id: 'rep-2',
+        priority: 1,
+        status: 'ready',
+        sourceNode: createMockSourceNode(),
+      });
+      const { accessor } = createMockAccessor([rep1, rep2], 0);
+      manager.setAccessor(accessor);
+
+      const changedEvents: unknown[] = [];
+      manager.on('representationChanged', (data) => changedEvents.push(data));
+
+      manager.removeRepresentation(0, 'rep-1');
+
+      expect(changedEvents.length).toBe(1);
+      const event = changedEvents[0] as { sourceIndex: number; previousRepId: string; newRepId: string; representation: MediaRepresentation };
+      expect(event.sourceIndex).toBe(0);
+      expect(event.previousRepId).toBe('rep-1');
+      expect(event.newRepId).toBe('rep-2');
+      expect(event.representation).toBe(rep2);
+    });
+
     it('should adjust active index when removing a representation before it', () => {
       const rep1 = createMockRepresentation({ id: 'rep-1', priority: 0, status: 'ready' });
       const rep2 = createMockRepresentation({ id: 'rep-2', priority: 1, status: 'ready' });
@@ -409,6 +438,33 @@ describe('MediaRepresentationManager', () => {
       const result = manager.handleRepresentationError(0, 'rep-1');
       expect(result).toBe(true);
       expect(fallbackEvents.length).toBe(1);
+    });
+
+    it('should emit representationChanged alongside fallbackActivated when falling back to a ready representation', () => {
+      const rep1 = createMockRepresentation({ id: 'rep-1', status: 'error', priority: 0 });
+      const rep2 = createMockRepresentation({
+        id: 'rep-2',
+        status: 'ready',
+        priority: 1,
+        sourceNode: createMockSourceNode(),
+      });
+      const { accessor } = createMockAccessor([rep1, rep2]);
+      manager.setAccessor(accessor);
+
+      const fallbackEvents: unknown[] = [];
+      const changedEvents: unknown[] = [];
+      manager.on('fallbackActivated', (data) => fallbackEvents.push(data));
+      manager.on('representationChanged', (data) => changedEvents.push(data));
+
+      const result = manager.handleRepresentationError(0, 'rep-1');
+      expect(result).toBe(true);
+      expect(fallbackEvents.length).toBe(1);
+      expect(changedEvents.length).toBe(1);
+      const event = changedEvents[0] as { sourceIndex: number; previousRepId: string; newRepId: string; representation: MediaRepresentation };
+      expect(event.sourceIndex).toBe(0);
+      expect(event.previousRepId).toBe('rep-1');
+      expect(event.newRepId).toBe('rep-2');
+      expect(event.representation).toBe(rep2);
     });
 
     it('should return false if all representations are in error', () => {

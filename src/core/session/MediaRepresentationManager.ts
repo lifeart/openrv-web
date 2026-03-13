@@ -111,6 +111,13 @@ export class MediaRepresentationManager extends EventEmitter<RepresentationManag
       if (nextReady !== -1 && nextRep) {
         this._accessor.setActiveRepresentationIndex(sourceIndex, nextReady);
         this._accessor.applyRepresentationShim(sourceIndex, nextRep);
+
+        this.emit('representationChanged', {
+          sourceIndex,
+          previousRepId: repId,
+          newRepId: nextRep.id,
+          representation: nextRep,
+        });
       } else {
         this._accessor.setActiveRepresentationIndex(sourceIndex, -1);
       }
@@ -260,6 +267,13 @@ export class MediaRepresentationManager extends EventEmitter<RepresentationManag
         failedRepId,
         fallbackRepId: readyFallback.id,
         fallbackRepresentation: readyFallback,
+      });
+
+      this.emit('representationChanged', {
+        sourceIndex,
+        previousRepId: failedRepId,
+        newRepId: readyFallback.id,
+        representation: readyFallback,
       });
 
       return true;
