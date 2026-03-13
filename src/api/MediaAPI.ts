@@ -173,9 +173,11 @@ export class MediaAPI extends DisposableAPI {
   getStartFrame(): number {
     this.assertNotDisposed();
     const source = this.session.currentSource;
-    const startFrame = getCurrentSourceStartFrame(source);
-    // Default to 1 (the standard first frame) when no source metadata is available
-    return startFrame || 1;
+    if (!source) {
+      // Default to 1 (the standard first frame) when no source is loaded
+      return 1;
+    }
+    return getCurrentSourceStartFrame(source);
   }
 
   /**

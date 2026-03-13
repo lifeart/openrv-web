@@ -777,8 +777,21 @@ describe('MediaAPI', () => {
     expect(source1).not.toBe(source2); // different object references
   });
 
-  it('API-U040: getStartFrame() returns 1 by default (no sequence info)', () => {
-    expect(media.getStartFrame()).toBe(1);
+  it('API-U040: getStartFrame() returns 0 by default (no sequence info)', () => {
+    expect(media.getStartFrame()).toBe(0);
+  });
+
+  it('API-U040b: getStartFrame() returns 0 when source start frame is explicitly 0', () => {
+    session._currentSource = {
+      name: 'shot.0000.exr',
+      type: 'sequence',
+      width: 1920,
+      height: 1080,
+      duration: 100,
+      fps: 24,
+      sequenceInfo: { startFrame: 0, endFrame: 99, padding: 4, pattern: 'shot.%04d.exr' },
+    };
+    expect(media.getStartFrame()).toBe(0);
   });
 
   it('API-U041: getStartFrame() returns sequence start frame from sequenceInfo', () => {
