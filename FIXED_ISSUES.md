@@ -1817,3 +1817,15 @@ Called from `fromJSON()` inside the existing `if (mediaIndexMap.size > 0)` block
 **Files changed**:
 - `src/AppPlaybackWiring.ts`
 - `src/AppPlaybackWiring.test.ts`
+
+## Issue #305: `NetworkSyncManager` emits toast-style collaboration feedback, but the production app never consumes it
+
+**Root cause**: `NetworkSyncManager` emits `toastMessage` events for state-sync timeouts, reconnect progress, peer join/leave, etc. `AppNetworkBridge` only subscribed to `connectionStateChanged`, `roomCreated`, `roomJoined`, `usersChanged`, `error`, and `rttUpdated` — never `toastMessage`.
+
+**Fix**: Added `toastMessage` event subscription in `AppNetworkBridge.ts` that routes messages to `networkControl.showError()` (for error type) or `networkControl.showInfo()` (for info/success/warning types).
+
+**Tests added**: 4 regression tests in `AppNetworkBridge.test.ts` (ANB-140 through ANB-143) covering info, success, error types and disposal cleanup.
+
+**Files changed**:
+- `src/AppNetworkBridge.ts`
+- `src/AppNetworkBridge.test.ts`

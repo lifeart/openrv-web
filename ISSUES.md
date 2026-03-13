@@ -56,18 +56,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - This is another silent semantic mismatch because callers can vary the tag and receive the same answer every time.
 
 
-### 305. `NetworkSyncManager` emits toast-style collaboration feedback, but the production app never consumes it
-
-- Severity: Medium
-- Area: Network sync / user feedback
-- Evidence:
-  - `NetworkSyncManager` emits `toastMessage` for state-sync timeouts, reconnect progress/outcomes, peer join/leave activity, and other collaboration feedback in [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L632) through [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L635), [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L764) through [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L794), and [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L958) through [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L980).
-  - `AppNetworkBridge` only subscribes to `connectionStateChanged`, `roomCreated`, `roomJoined`, `usersChanged`, `error`, and `rttUpdated` in [src/AppNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppNetworkBridge.ts#L414) through [src/AppNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppNetworkBridge.ts#L466).
-  - A production-code search finds no non-test subscriber for `toastMessage`, `userJoined`, or `userLeft`.
-- Impact:
-  - The collaboration stack generates useful runtime feedback like “connection lost,” “reconnected,” and “user joined,” but the shipped app drops it.
-  - Users only see the low-level panel state mutate, with no transient explanation for reconnects, sync failures, or peer activity.
-
 ### 306. Media-cache failures are emitted internally, but the shipped app never surfaces them
 
 - Severity: Medium
