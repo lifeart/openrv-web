@@ -23,7 +23,7 @@ import { AppNetworkBridge } from './AppNetworkBridge';
 import { AppPersistenceManager } from './AppPersistenceManager';
 import { wirePlaybackControls } from './AppPlaybackWiring';
 import { AppSessionBridge } from './AppSessionBridge';
-import { detectDisplayCapabilities, watchDisplayChanges, type DisplayCapabilities } from './color/DisplayCapabilities';
+import { detectDisplayCapabilities, type DisplayCapabilities } from './color/DisplayCapabilities';
 import { Session } from './core/session/Session';
 import { Viewer } from './ui/components/Viewer';
 import { Timeline } from './ui/components/Timeline';
@@ -60,12 +60,13 @@ import { ClientMode } from './ui/components/ClientMode';
 import { ExternalPresentation } from './ui/components/ExternalPresentation';
 import { ActiveContextManager, type BindingContext } from './utils/input/ActiveContextManager';
 import { ContextualKeyboardManager } from './utils/input/ContextualKeyboardManager';
+import { AudioOrchestrator } from './services/AudioOrchestrator';
 import { DCCBridge } from './integrations/DCCBridge';
 import { MediaCacheManager } from './cache/MediaCacheManager';
+import { showAlert } from './ui/components/shared/Modal';
 import { DisposableSubscriptionManager } from './utils/DisposableSubscriptionManager';
 import { VirtualSliderController } from './ui/components/VirtualSliderController';
 import { getCurrentSourceStartFrame } from './utils/media/SourceUIState';
-import { pluginRegistry } from './plugin/PluginRegistry';
 
 const log = new Logger('App');
 
@@ -105,6 +106,7 @@ export class App {
   private externalPresentation: ExternalPresentation;
   private activeContextManager: ActiveContextManager;
   private cacheManager: MediaCacheManager;
+  private audioOrchestrator: AudioOrchestrator;
   private dccBridge: DCCBridge | null = null;
   private virtualSliderController: VirtualSliderController | null = null;
   private contextualKeyboardManager: ContextualKeyboardManager;
@@ -125,16 +127,6 @@ export class App {
     // Detect display capabilities at startup (P3, HDR, WebGPU)
     this.displayCapabilities = detectDisplayCapabilities();
 
-    // Watch for display changes (window moved between SDR/HDR monitors)
-    this.wiringSubscriptions.add(
-      watchDisplayChanges(this.displayCapabilities, () => {
-        // Propagate updated capabilities to Viewer (triggers HDR headroom re-query + render)
-        this.viewer.updateDisplayCapabilities(this.displayCapabilities);
-        // Update session HDR resize tier (display-dependent)
-        this.session.setHDRResizeTier(this.displayCapabilities.canvasHDRResizeTier);
-      }),
-    );
-
     // Bind event handlers for proper cleanup
     this.boundHandleResize = () => this.viewer.resize();
     this.boundHandleVisibilityChange = this.handleVisibilityChange.bind(this);
@@ -149,7 +141,6 @@ export class App {
 
     // Create core components
     this.session = new Session();
-    this.session.fps = getCorePreferencesManager().getGeneralPrefs().defaultFps;
     this.session.setHDRResizeTier(this.displayCapabilities.canvasHDRResizeTier);
     this.paintEngine = new PaintEngine();
     this.viewer = new Viewer({
@@ -166,9 +157,8 @@ export class App {
     // Wire magnifier toggle button on main timeline
     this.timeline.setMagnifierToggle(() => this.timelineMagnifier.toggle());
 
-    // Create OPFS media cache manager and wire to session media
+    // Create OPFS media cache manager
     this.cacheManager = new MediaCacheManager();
-    this.session.media.setCacheManager(this.cacheManager);
 
     // Create all UI controls via the registry
     this.controls = new AppControlRegistry({
@@ -176,7 +166,6 @@ export class App {
       viewer: this.viewer,
       paintEngine: this.paintEngine,
       displayCapabilities: this.displayCapabilities,
-      cacheManager: this.cacheManager,
     });
 
     // Wire NoteOverlay into timeline for note visualization
@@ -215,7 +204,7 @@ export class App {
           annotate: 'paint',
           transform: 'transform',
           view: 'viewer',
-          qc: 'panel',
+          qc: 'viewer',
         };
         this.activeContextManager.setContext(contextMap[tabId] ?? 'global');
       }),
@@ -306,40 +295,6 @@ export class App {
       'paint',
       'Toggle ghost mode',
     );
-
-    // KeyH: view.fitToHeight (global) vs panel.histogram (panel/QC)
-    this.contextualKeyboardManager.register(
-      'view.fitToHeight',
-      { code: 'KeyH' },
-      () => this.viewer.smoothFitToHeight(),
-      'global',
-      'Fit image height to window',
-    );
-    this.contextualKeyboardManager.register(
-      'panel.histogram',
-      { code: 'KeyH' },
-      () => this.controls.scopesControl.toggleScope('histogram'),
-      'panel',
-      'Toggle histogram',
-    );
-
-    // KeyW: view.fitToWidth (global) vs panel.waveform (panel/QC)
-    this.contextualKeyboardManager.register(
-      'view.fitToWidth',
-      { code: 'KeyW' },
-      () => this.viewer.smoothFitToWidth(),
-      'global',
-      'Fit image width to window',
-    );
-    this.contextualKeyboardManager.register(
-      'panel.waveform',
-      { code: 'KeyW' },
-      () => this.controls.scopesControl.toggleScope('waveform'),
-      'panel',
-      'Toggle waveform scope',
-    );
-
-    // KeyG: navigation.gotoFrame (global) vs panel.gamutDiagram (panel/QC) — gotoFrame already registered above
     this.contextualKeyboardManager.register(
       'panel.gamutDiagram',
       { code: 'KeyG' },
@@ -348,7 +303,7 @@ export class App {
       'Toggle CIE gamut diagram',
     );
 
-    // Shift+R: transform.rotateLeft (global) vs channel.red (viewer/panel)
+    // Shift+R: transform.rotateLeft (global) vs channel.red (channel)
     this.contextualKeyboardManager.register(
       'transform.rotateLeft',
       { code: 'KeyR', shift: true },
@@ -360,18 +315,11 @@ export class App {
       'channel.red',
       { code: 'KeyR', shift: true },
       () => this.controls.channelSelect.handleKeyboard('R', true),
-      'viewer',
-      'Select red channel',
-    );
-    this.contextualKeyboardManager.register(
-      'channel.red.panel',
-      { code: 'KeyR', shift: true },
-      () => this.controls.channelSelect.handleKeyboard('R', true),
-      'panel',
+      'channel',
       'Select red channel',
     );
 
-    // Shift+B: view.cycleBackgroundPattern (global) vs channel.blue (viewer/panel)
+    // Shift+B: view.cycleBackgroundPattern (global) vs channel.blue (channel)
     this.contextualKeyboardManager.register(
       'view.cycleBackgroundPattern',
       { code: 'KeyB', shift: true },
@@ -383,18 +331,11 @@ export class App {
       'channel.blue',
       { code: 'KeyB', shift: true },
       () => this.controls.channelSelect.handleKeyboard('B', true),
-      'viewer',
-      'Select blue channel',
-    );
-    this.contextualKeyboardManager.register(
-      'channel.blue.panel',
-      { code: 'KeyB', shift: true },
-      () => this.controls.channelSelect.handleKeyboard('B', true),
-      'panel',
+      'channel',
       'Select blue channel',
     );
 
-    // Shift+N: network.togglePanel (global) vs channel.none (viewer/panel)
+    // Shift+N: network.togglePanel (global) vs channel.none (channel)
     this.contextualKeyboardManager.register(
       'network.togglePanel',
       { code: 'KeyN', shift: true },
@@ -406,14 +347,7 @@ export class App {
       'channel.none',
       { code: 'KeyN', shift: true },
       () => this.controls.channelSelect.handleKeyboard('N', true),
-      'viewer',
-      'Select no channel',
-    );
-    this.contextualKeyboardManager.register(
-      'channel.none.panel',
-      { code: 'KeyN', shift: true },
-      () => this.controls.channelSelect.handleKeyboard('N', true),
-      'panel',
+      'channel',
       'Select no channel',
     );
 
@@ -441,24 +375,8 @@ export class App {
       transformControl: this.controls.transformControl,
       cropControl: this.controls.cropControl,
       lensControl: this.controls.lensControl,
-      deinterlaceControl: this.controls.deinterlaceControl,
-      filmEmulationControl: this.controls.filmEmulationControl,
-      perspectiveCorrectionControl: this.controls.perspectiveCorrectionControl,
-      stabilizationControl: this.controls.stabilizationControl,
       noiseReductionControl: this.controls.noiseReductionControl,
       watermarkControl: this.controls.watermarkControl,
-      toneMappingControl: this.controls.toneMappingControl,
-      ghostFrameControl: this.controls.ghostFrameControl,
-      channelSelect: this.controls.channelSelect,
-      compareControl: this.controls.compareControl,
-      stereoControl: this.controls.stereoControl,
-      stereoEyeTransformControl: this.controls.stereoEyeTransformControl,
-      stereoAlignControl: this.controls.stereoAlignControl,
-      displayProfileControl: this.controls.displayProfileControl,
-      ocioControl: this.controls.ocioControl,
-      gamutMappingControl: this.controls.gamutMappingControl,
-      curvesControl: this.controls.curvesControl,
-      colorInversionToggle: this.controls.colorInversionToggle,
       playlistManager: this.controls.playlistManager,
       cacheManager: this.cacheManager,
     });
@@ -566,6 +484,10 @@ export class App {
       }),
     );
 
+    // Audio orchestrator (manages AudioMixer lifecycle and session wiring)
+    this.audioOrchestrator = new AudioOrchestrator({ session: this.session });
+    this.audioOrchestrator.bindEvents();
+
     // Frame navigation service (playlist/annotation navigation)
     this.frameNavigation = new FrameNavigationService({
       session: this.session,
@@ -595,7 +517,6 @@ export class App {
         session: this.session,
         viewer: this.viewer,
         colorControls: this.controls.colorControls,
-        paintEngine: this.paintEngine,
       });
       this.wiringSubscriptions.add(() => dccState?.subscriptions?.dispose());
 
@@ -624,8 +545,7 @@ export class App {
       wirePlaybackControls(wiringCtx, {
         getKeyboardHandler: () => this.keyboardHandler,
         getFullscreenManager: () => this.fullscreenManager ?? undefined,
-        getShortcutCheatSheet: () => this.shortcutCheatSheet,
-        getPluginRegistry: () => pluginRegistry,
+        getAudioMixer: () => this.audioOrchestrator.getAudioMixer(),
       }),
       wireStackControls(wiringCtx),
     ];
@@ -673,9 +593,6 @@ export class App {
     });
     this.layoutOrchestrator.createLayout();
 
-    // Wire plugin-contributed UI panels into the panel toggles area
-    this.wirePluginPanels();
-
     // Mount goto-frame overlay into the viewer slot (position: relative parent)
     this.layoutManager.getViewerSlot().appendChild(this.gotoFrameOverlay.getElement());
 
@@ -687,6 +604,9 @@ export class App {
 
     this.bindEvents();
     this.renderLoop.start();
+
+    // Lazy-initialize AudioContext on first user interaction (browser policy)
+    this.audioOrchestrator.setupLazyInit();
 
     // Initialize OCIO pipeline from persisted state (if OCIO was enabled before page reload)
     updateOCIOPipeline(
@@ -705,6 +625,24 @@ export class App {
 
     // Initialize display profile from persisted state
     this.viewer.setDisplayColorState(this.controls.displayProfileControl.getState());
+
+    // Subscribe to cache error events so failures are visible to the user
+    this.wiringSubscriptions.add(
+      this.cacheManager.on('error', (event) => {
+        console.warn('[OpenRV] Media cache error:', event.message);
+
+        // Surface error in the CacheIndicator UI
+        this.controls.cacheIndicator.showError(event.message);
+
+        const isInitFailure = event.message.startsWith('Initialization failed');
+        if (isInitFailure) {
+          showAlert('Media caching is unavailable. Playback may be slower without frame caching.', {
+            title: 'Cache Unavailable',
+            type: 'warning',
+          });
+        }
+      }),
+    );
 
     // Initialize OPFS media cache (fire-and-forget; no-op if unavailable)
     this.cacheManager.initialize().catch((err) => {
@@ -764,50 +702,6 @@ export class App {
         this.sessionBridge.updateVectorscope();
       }
     }
-  }
-
-  /**
-   * Wire plugin-contributed UI panels so they appear in the panel toggles area
-   * and are mountable via toggle buttons.
-   */
-  private wirePluginPanels(): void {
-    const panelToggles = this.controls.panelTogglesResult;
-    if (!panelToggles) return;
-
-    const viewerContainer = this.viewer.getContainer();
-    const pluginPanelContainers = new Map<string, HTMLElement>();
-
-    // Mount a single plugin panel
-    const mountPanel = (panelId: string, panel: import('./plugin/types').UIPanelContribution) => {
-      const { button, container } = panelToggles.addPluginPanel(panelId, panel.label, panel.icon);
-      // Create a context stub for render (plugin panels receive PluginContext during registration,
-      // but the render call from layout just needs the container)
-      panel.render(container, undefined as unknown as import('./plugin/types').PluginContext);
-      viewerContainer.appendChild(container);
-      pluginPanelContainers.set(panelId, container);
-      // Position the container relative to the button
-      button.style.position = 'relative';
-    };
-
-    // Mount any panels already registered
-    for (const [panelId, panel] of pluginRegistry.getUIPanels()) {
-      mountPanel(panelId, panel);
-    }
-
-    // Listen for new panels
-    pluginRegistry.uiPanelRegistered.connect(({ panel }) => {
-      mountPanel(panel.id, panel);
-    });
-
-    // Listen for panel removal
-    pluginRegistry.uiPanelUnregistered.connect(({ panelId }) => {
-      panelToggles.removePluginPanel(panelId);
-      const container = pluginPanelContainers.get(panelId);
-      if (container) {
-        container.remove();
-        pluginPanelContainers.delete(panelId);
-      }
-    });
   }
 
   private bindEvents(): void {
@@ -870,7 +764,6 @@ export class App {
       externalPresentation: this.externalPresentation,
       headerBar: this.headerBar,
       frameNavigation: this.frameNavigation,
-      clientMode: this.clientMode,
     });
   }
 
@@ -878,28 +771,18 @@ export class App {
     const startFrame = getCurrentSourceStartFrame(this.session.currentSource);
     this.gotoFrameOverlay.setStartFrame(startFrame);
     this.headerBar.getTimecodeDisplay().setStartFrame(startFrame);
-    this.viewer.getTimecodeOverlay().setStartFrame(startFrame);
   }
 
   /**
    * Get configuration for the public scripting API (window.openrv)
    */
   getAPIConfig(): OpenRVAPIConfig {
-    const caps = this.displayCapabilities;
     return {
       session: this.session,
       viewer: this.viewer,
       colorControls: this.controls.colorControls,
       cdlControl: this.controls.cdlControl,
       curvesControl: this.controls.curvesControl,
-      lutProvider: this.viewer,
-      toneMappingProvider: this.viewer,
-      displayProvider: this.viewer,
-      displayCapabilitiesProvider: { getDisplayCapabilities: () => caps },
-      ocioProvider: {
-        getOCIOState: () => this.controls.ocioControl.getState(),
-        setOCIOState: (state) => this.controls.ocioControl.setState(state),
-      },
     };
   }
 
@@ -937,6 +820,7 @@ export class App {
     this.shotGridBridge.dispose();
     this.clientMode.dispose();
     this.externalPresentation.dispose();
+    this.audioOrchestrator.dispose();
     this.frameNavigation.dispose();
     this.timelineEditorService.dispose();
     this.dccBridge?.dispose();

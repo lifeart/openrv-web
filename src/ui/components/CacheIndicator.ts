@@ -28,7 +28,6 @@ export interface CacheIndicatorState {
 export interface CacheIndicatorEvents extends EventMap {
   visibilityChanged: boolean;
   clearRequested: void;
-  effectsClearRequested: void;
 }
 
 export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
@@ -36,7 +35,6 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
   private barContainer: HTMLElement;
   private infoContainer: HTMLElement;
   private clearButton: HTMLButtonElement;
-  private clearEffectsButton: HTMLButtonElement;
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private session: Session;
@@ -47,6 +45,7 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
   private inPoint = 1;
   private outPoint = 1;
   private prerenderStatsSpan: HTMLSpanElement | null = null;
+  private errorMessage: string | null = null;
   private subs = new DisposableSubscriptionManager();
 
   // Colors for cache states - resolved from CSS variables at runtime
@@ -146,7 +145,7 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
 
     this.clearButton = document.createElement('button');
     this.clearButton.dataset.testid = 'cache-indicator-clear';
-    this.clearButton.textContent = 'Clear Video Cache';
+    this.clearButton.textContent = 'Clear';
     this.clearButton.style.cssText = `
       background: transparent;
       border: 1px solid var(--border-secondary);
@@ -172,40 +171,9 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
       this.scheduleUpdate();
     });
 
-    // Clear Effects Cache button
-    this.clearEffectsButton = document.createElement('button');
-    this.clearEffectsButton.dataset.testid = 'cache-indicator-clear-effects';
-    this.clearEffectsButton.textContent = 'Clear Effects Cache';
-    this.clearEffectsButton.style.cssText = `
-      background: transparent;
-      border: 1px solid var(--border-secondary);
-      color: var(--text-muted);
-      padding: 1px 6px;
-      font-size: 10px;
-      border-radius: 3px;
-      cursor: pointer;
-      transition: all 0.12s ease;
-      flex-shrink: 0;
-      display: none;
-    `;
-    this.clearEffectsButton.addEventListener('pointerenter', () => {
-      this.clearEffectsButton.style.background = 'var(--bg-hover)';
-      this.clearEffectsButton.style.color = 'var(--text-primary)';
-    });
-    this.clearEffectsButton.addEventListener('pointerleave', () => {
-      this.clearEffectsButton.style.background = 'transparent';
-      this.clearEffectsButton.style.color = 'var(--text-muted)';
-    });
-    this.clearEffectsButton.addEventListener('click', () => {
-      this.viewer?.clearPrerenderCache();
-      this.emit('effectsClearRequested', undefined);
-      this.scheduleUpdate();
-    });
-
     this.infoContainer.appendChild(statsSpan);
     this.infoContainer.appendChild(this.prerenderStatsSpan);
     this.infoContainer.appendChild(this.clearButton);
-    this.infoContainer.appendChild(this.clearEffectsButton);
 
     this.container.appendChild(this.barContainer);
     this.container.appendChild(this.infoContainer);
@@ -355,13 +323,19 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
     // Update stats display
     const statsSpan = this.infoContainer.querySelector('.cache-stats') as HTMLSpanElement;
     if (statsSpan) {
-      // Use accurate memory from stats when available (e.g. HDR resized frames),
-      // otherwise estimate from source dimensions
-      const memorySizeMB = stats?.memorySizeMB ?? this.calculateMemorySizeMB(cachedFrames.size);
-      const memoryStr = this.formatMemorySize(memorySizeMB);
-      statsSpan.textContent = `Cache: ${cachedFrames.size} / ${this.totalFrames} frames (${memoryStr})`;
-      if (stats && pendingFrames.size > 0) {
-        statsSpan.textContent += ` [${pendingFrames.size} loading]`;
+      if (this.errorMessage) {
+        statsSpan.textContent = `Cache error: ${this.errorMessage}`;
+        statsSpan.style.color = 'var(--error, #ef4444)';
+      } else {
+        statsSpan.style.color = '';
+        // Use accurate memory from stats when available (e.g. HDR resized frames),
+        // otherwise estimate from source dimensions
+        const memorySizeMB = stats?.memorySizeMB ?? this.calculateMemorySizeMB(cachedFrames.size);
+        const memoryStr = this.formatMemorySize(memorySizeMB);
+        statsSpan.textContent = `Cache: ${cachedFrames.size} / ${this.totalFrames} frames (${memoryStr})`;
+        if (stats && pendingFrames.size > 0) {
+          statsSpan.textContent += ` [${pendingFrames.size} loading]`;
+        }
       }
     }
 
@@ -380,7 +354,6 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
 
     if (!this.viewer) {
       this.prerenderStatsSpan.textContent = '';
-      this.clearEffectsButton.style.display = 'none';
       return;
     }
 
@@ -388,7 +361,6 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
     // Hide stats when nothing to show (no cache and no activity)
     if (!stats || (stats.cacheSize === 0 && stats.pendingRequests === 0 && stats.activeRequests === 0)) {
       this.prerenderStatsSpan.textContent = '';
-      this.clearEffectsButton.style.display = 'none';
       return;
     }
 
@@ -401,9 +373,6 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
     }
 
     this.prerenderStatsSpan.textContent = text;
-
-    // Show clear effects button when there are cached effects
-    this.clearEffectsButton.style.display = stats.cacheSize > 0 ? '' : 'none';
   }
 
   /**
@@ -417,6 +386,15 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
     this.viewer = viewer;
     // Register for prerender cache updates
     this.viewer.setOnPrerenderCacheUpdate(() => this.scheduleUpdate());
+    this.scheduleUpdate();
+  }
+
+  /**
+   * Display a cache error message in the indicator.
+   * Pass `null` to clear the error state.
+   */
+  showError(message: string | null): void {
+    this.errorMessage = message;
     this.scheduleUpdate();
   }
 

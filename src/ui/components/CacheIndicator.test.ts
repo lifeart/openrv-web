@@ -250,13 +250,6 @@ describe('CacheIndicator', () => {
   });
 
   describe('clear button', () => {
-    it('CACHE-U039: clear button label says "Clear Video Cache"', () => {
-      const el = indicator.getElement();
-      const clearBtn = el.querySelector('[data-testid="cache-indicator-clear"]') as HTMLButtonElement;
-
-      expect(clearBtn.textContent).toBe('Clear Video Cache');
-    });
-
     it('CACHE-U040: clear button calls session.clearVideoCache', () => {
       const el = indicator.getElement();
       const clearBtn = el.querySelector('[data-testid="cache-indicator-clear"]') as HTMLButtonElement;
@@ -366,7 +359,6 @@ describe('CacheIndicator', () => {
             : null,
         ),
         setOnPrerenderCacheUpdate: vi.fn(),
-        clearPrerenderCache: vi.fn(),
       };
     };
 
@@ -602,95 +594,6 @@ describe('CacheIndicator', () => {
 
       expect(scheduleSpy).toHaveBeenCalled();
     });
-
-    it('CACHE-U119: effects clear button label says "Clear Effects Cache"', () => {
-      const el = indicator.getElement();
-      const clearEffectsBtn = el.querySelector('[data-testid="cache-indicator-clear-effects"]') as HTMLButtonElement;
-      expect(clearEffectsBtn.textContent).toBe('Clear Effects Cache');
-    });
-
-    it('CACHE-U120: effects clear button exists in DOM', () => {
-      const el = indicator.getElement();
-      const clearEffectsBtn = el.querySelector('[data-testid="cache-indicator-clear-effects"]');
-      expect(clearEffectsBtn).not.toBeNull();
-    });
-
-    it('CACHE-U121: effects clear button hidden when no viewer', () => {
-      const el = indicator.getElement();
-      vi.advanceTimersByTime(16);
-      const clearEffectsBtn = el.querySelector('[data-testid="cache-indicator-clear-effects"]') as HTMLButtonElement;
-      expect(clearEffectsBtn.style.display).toBe('none');
-    });
-
-    it('CACHE-U122: effects clear button shown when viewer has cached effects', () => {
-      const mockViewer = createMockViewer({
-        cacheSize: 10,
-        totalFrames: 100,
-        memorySizeMB: 20,
-      });
-
-      indicator.setViewer(mockViewer as any);
-      vi.advanceTimersByTime(16);
-
-      const el = indicator.getElement();
-      const clearEffectsBtn = el.querySelector('[data-testid="cache-indicator-clear-effects"]') as HTMLButtonElement;
-      expect(clearEffectsBtn.style.display).not.toBe('none');
-    });
-
-    it('CACHE-U123: effects clear button calls viewer.clearPrerenderCache() on click', () => {
-      const mockViewer = createMockViewer({
-        cacheSize: 10,
-        totalFrames: 100,
-        memorySizeMB: 20,
-      });
-
-      indicator.setViewer(mockViewer as any);
-      vi.advanceTimersByTime(16);
-
-      const el = indicator.getElement();
-      const clearEffectsBtn = el.querySelector('[data-testid="cache-indicator-clear-effects"]') as HTMLButtonElement;
-      clearEffectsBtn.click();
-
-      expect(mockViewer.clearPrerenderCache).toHaveBeenCalled();
-    });
-
-    it('CACHE-U124: effects clear button emits effectsClearRequested event', () => {
-      const mockViewer = createMockViewer({
-        cacheSize: 10,
-        totalFrames: 100,
-        memorySizeMB: 20,
-      });
-
-      indicator.setViewer(mockViewer as any);
-      vi.advanceTimersByTime(16);
-
-      const callback = vi.fn();
-      indicator.on('effectsClearRequested', callback);
-
-      const el = indicator.getElement();
-      const clearEffectsBtn = el.querySelector('[data-testid="cache-indicator-clear-effects"]') as HTMLButtonElement;
-      clearEffectsBtn.click();
-
-      expect(callback).toHaveBeenCalled();
-    });
-
-    it('CACHE-U125: effects clear button hidden when effects cache is empty', () => {
-      const mockViewer = createMockViewer({
-        cacheSize: 0,
-        totalFrames: 100,
-        pendingRequests: 0,
-        activeRequests: 3,
-        memorySizeMB: 0,
-      });
-
-      indicator.setViewer(mockViewer as any);
-      vi.advanceTimersByTime(16);
-
-      const el = indicator.getElement();
-      const clearEffectsBtn = el.querySelector('[data-testid="cache-indicator-clear-effects"]') as HTMLButtonElement;
-      // Even though there are active requests, button is hidden because cacheSize is 0
-      expect(clearEffectsBtn.style.display).toBe('none');
-    });
   });
 });
 
@@ -870,6 +773,74 @@ describe('CacheIndicator theme changes', () => {
     const infoCss = info.style.cssText;
     expect(infoCss).not.toContain('#666666');
     expect(infoCss).not.toContain('#e0e0e0');
+  });
+});
+
+describe('CacheIndicator showError', () => {
+  let indicator: CacheIndicator;
+  let mockSession: ReturnType<typeof createMockSession>;
+
+  beforeEach(() => {
+    mockSession = createMockSession();
+    indicator = new CacheIndicator(mockSession as any);
+  });
+
+  afterEach(() => {
+    indicator.dispose();
+    vi.clearAllTimers();
+  });
+
+  it('CACHE-U120: showError displays error message in stats span', () => {
+    indicator.showError('Initialization failed: OPFS unavailable');
+    vi.advanceTimersByTime(16);
+
+    const el = indicator.getElement();
+    const stats = el.querySelector('[data-testid="cache-indicator-stats"]') as HTMLSpanElement;
+    expect(stats.textContent).toContain('Cache error:');
+    expect(stats.textContent).toContain('Initialization failed: OPFS unavailable');
+  });
+
+  it('CACHE-U121: showError sets error color on stats span', () => {
+    indicator.showError('put failed: disk full');
+    vi.advanceTimersByTime(16);
+
+    const el = indicator.getElement();
+    const stats = el.querySelector('[data-testid="cache-indicator-stats"]') as HTMLSpanElement;
+    expect(stats.style.color).toContain('--error');
+  });
+
+  it('CACHE-U122: showError(null) clears the error state', () => {
+    indicator.showError('some error');
+    vi.advanceTimersByTime(16);
+
+    indicator.showError(null);
+    vi.advanceTimersByTime(16);
+
+    const el = indicator.getElement();
+    const stats = el.querySelector('[data-testid="cache-indicator-stats"]') as HTMLSpanElement;
+    expect(stats.textContent).not.toContain('Cache error:');
+    expect(stats.style.color).toBe('');
+  });
+
+  it('CACHE-U123: showError(null) restores normal cache stats display', () => {
+    indicator.showError('some error');
+    vi.advanceTimersByTime(16);
+
+    indicator.showError(null);
+    vi.advanceTimersByTime(16);
+
+    const el = indicator.getElement();
+    const stats = el.querySelector('[data-testid="cache-indicator-stats"]') as HTMLSpanElement;
+    expect(stats.textContent).toContain('Cache:');
+    expect(stats.textContent).toContain('frames');
+  });
+
+  it('CACHE-U124: showError schedules an update', () => {
+    const scheduleSpy = vi.spyOn(indicator, 'scheduleUpdate');
+    scheduleSpy.mockClear();
+
+    indicator.showError('test error');
+    expect(scheduleSpy).toHaveBeenCalled();
   });
 });
 
