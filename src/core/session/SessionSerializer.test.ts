@@ -1454,24 +1454,24 @@ describe('SessionSerializer', () => {
       ]);
     });
 
-    it('SER-EDL-004: fromJSON does not call setEdlEntries when edlEntries is absent', async () => {
+    it('SER-EDL-004: fromJSON calls setEdlEntries with empty array when edlEntries is absent (fix #315)', async () => {
       const components = createMockComponents();
       const state = SessionSerializer.createEmpty('NoEDL');
       // edlEntries is undefined by default
 
       await SessionSerializer.fromJSON(state, components);
 
-      expect((components.session as any).setEdlEntries).not.toHaveBeenCalled();
+      expect((components.session as any).setEdlEntries).toHaveBeenCalledWith([]);
     });
 
-    it('SER-EDL-005: fromJSON does not call setEdlEntries when edlEntries is empty array', async () => {
+    it('SER-EDL-005: fromJSON calls setEdlEntries with empty array when edlEntries is empty (fix #315)', async () => {
       const components = createMockComponents();
       const state = SessionSerializer.createEmpty('EmptyEDL');
       state.edlEntries = [];
 
       await SessionSerializer.fromJSON(state, components);
 
-      expect((components.session as any).setEdlEntries).not.toHaveBeenCalled();
+      expect((components.session as any).setEdlEntries).toHaveBeenCalledWith([]);
     });
 
     it('SER-EDL-006: setEdlEntries triggers edlLoaded event (via SessionGraph)', async () => {
@@ -1516,6 +1516,23 @@ describe('SessionSerializer', () => {
       await SessionSerializer.fromJSON(state, restoreComponents);
 
       expect((restoreComponents.session as any).setEdlEntries).toHaveBeenCalledWith(edlEntries);
+    });
+
+    it('SER-EDL-009: restoring project with no EDL clears old EDL entries (fix #315)', async () => {
+      const components = createMockComponents();
+      // Simulate pre-existing EDL entries from a previous session
+      (components.session as any).edlEntries = [
+        { sourcePath: '/old/clip.mov', inFrame: 1, outFrame: 500 },
+      ];
+
+      // Restore a project that has no EDL entries
+      const state = SessionSerializer.createEmpty('NoEDLProject');
+      // edlEntries is undefined — simulates a project saved without EDL data
+
+      await SessionSerializer.fromJSON(state, components);
+
+      // setEdlEntries must be called with [] to clear stale entries
+      expect((components.session as any).setEdlEntries).toHaveBeenCalledWith([]);
     });
   });
 });

@@ -672,9 +672,8 @@ export class SessionSerializer {
     }
 
     // Restore EDL entries (fix #164: persist RVEDL state in .orvproject)
-    if (migrated.edlEntries && migrated.edlEntries.length > 0) {
-      session.setEdlEntries(migrated.edlEntries);
-    }
+    // Always call setEdlEntries to clear stale state (fix #315)
+    session.setEdlEntries(migrated.edlEntries ?? []);
 
     // LUT must be loaded separately (file reference) — binary LUT data is not
     // embedded in the project file, so the user needs to re-apply the LUT manually.
