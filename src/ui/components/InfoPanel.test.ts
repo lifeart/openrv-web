@@ -491,15 +491,22 @@ describe('InfoPanel', () => {
     it('INFO-U130: does not log customization hint (settings menu now available)', () => {
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
       panel.enable();
-      expect(infoSpy).toHaveBeenCalledTimes(0);
+      // No customization hint should be logged; only the #101 unwired-fields hint is allowed
+      const customizationCalls = infoSpy.mock.calls.filter((args) =>
+        String(args[0]).includes('customiz'),
+      );
+      expect(customizationCalls).toHaveLength(0);
     });
 
-    it('INFO-U131: no console.info across multiple enable/disable cycles', () => {
+    it('INFO-U131: no customization hint across multiple enable/disable cycles', () => {
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
       panel.enable();
       panel.disable();
       panel.enable();
-      expect(infoSpy).toHaveBeenCalledTimes(0);
+      const customizationCalls = infoSpy.mock.calls.filter((args) =>
+        String(args[0]).includes('customiz'),
+      );
+      expect(customizationCalls).toHaveLength(0);
     });
   });
 });
