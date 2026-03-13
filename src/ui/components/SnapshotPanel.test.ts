@@ -613,216 +613,6 @@ describe('SnapshotPanel', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // Snapshot creation with name (#471)
-  // ---------------------------------------------------------------------------
-  describe('snapshot creation with name', () => {
-    it('SNAP-090: clicking "Create Snapshot" shows inline name input', () => {
-      document.body.appendChild(panel.render());
-      panel.show();
-
-      const createBtn = panel.render().querySelector('[data-testid="create-snapshot-btn"]') as HTMLElement;
-      expect(createBtn).not.toBeNull();
-      createBtn.click();
-
-      const nameInput = panel.render().querySelector('[data-testid="snapshot-name-input"]') as HTMLInputElement;
-      const nameInputRow = panel.render().querySelector('[data-testid="snapshot-name-input-row"]') as HTMLElement;
-      expect(nameInputRow.style.display).toBe('flex');
-      expect(nameInput).not.toBeNull();
-
-      document.body.removeChild(panel.render());
-    });
-
-    it('SNAP-091: entering a name and pressing Enter emits createRequested with that name', () => {
-      const handler = vi.fn();
-      panel.on('createRequested', handler);
-      document.body.appendChild(panel.render());
-      panel.show();
-
-      const createBtn = panel.render().querySelector('[data-testid="create-snapshot-btn"]') as HTMLElement;
-      createBtn.click();
-
-      const nameInput = panel.render().querySelector('[data-testid="snapshot-name-input"]') as HTMLInputElement;
-      nameInput.value = 'My Custom Snapshot';
-      nameInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-
-      expect(handler).toHaveBeenCalledWith({ name: 'My Custom Snapshot' });
-
-      document.body.removeChild(panel.render());
-    });
-
-    it('SNAP-092: leaving name empty and pressing Enter emits createRequested with auto-generated name', () => {
-      const handler = vi.fn();
-      panel.on('createRequested', handler);
-      document.body.appendChild(panel.render());
-      panel.show();
-
-      const createBtn = panel.render().querySelector('[data-testid="create-snapshot-btn"]') as HTMLElement;
-      createBtn.click();
-
-      const nameInput = panel.render().querySelector('[data-testid="snapshot-name-input"]') as HTMLInputElement;
-      nameInput.value = '';
-      nameInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-
-      expect(handler).toHaveBeenCalledTimes(1);
-      expect((handler.mock.calls[0]![0] as { name: string }).name).toMatch(/^Snapshot \d+$/);
-
-      document.body.removeChild(panel.render());
-    });
-
-    it('SNAP-093: pressing Escape still creates snapshot with auto-generated name', () => {
-      const handler = vi.fn();
-      panel.on('createRequested', handler);
-      document.body.appendChild(panel.render());
-      panel.show();
-
-      const createBtn = panel.render().querySelector('[data-testid="create-snapshot-btn"]') as HTMLElement;
-      createBtn.click();
-
-      const nameInput = panel.render().querySelector('[data-testid="snapshot-name-input"]') as HTMLInputElement;
-      nameInput.value = '';
-      nameInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-
-      expect(handler).toHaveBeenCalledTimes(1);
-      expect((handler.mock.calls[0]![0] as { name: string }).name).toMatch(/^Snapshot \d+$/);
-
-      document.body.removeChild(panel.render());
-    });
-
-    it('SNAP-094: clicking Save button creates snapshot with the entered name', () => {
-      const handler = vi.fn();
-      panel.on('createRequested', handler);
-      document.body.appendChild(panel.render());
-      panel.show();
-
-      const createBtn = panel.render().querySelector('[data-testid="create-snapshot-btn"]') as HTMLElement;
-      createBtn.click();
-
-      const nameInput = panel.render().querySelector('[data-testid="snapshot-name-input"]') as HTMLInputElement;
-      nameInput.value = 'Named via button';
-
-      const confirmBtn = panel.render().querySelector('[data-testid="snapshot-confirm-btn"]') as HTMLElement;
-      confirmBtn.click();
-
-      expect(handler).toHaveBeenCalledWith({ name: 'Named via button' });
-
-      document.body.removeChild(panel.render());
-    });
-
-    it('SNAP-095: name input row hides after creation and create button reappears', () => {
-      panel.on('createRequested', vi.fn());
-      document.body.appendChild(panel.render());
-      panel.show();
-
-      const createBtn = panel.render().querySelector('[data-testid="create-snapshot-btn"]') as HTMLElement;
-      createBtn.click();
-
-      // Name input row should be visible
-      const nameInputRow = panel.render().querySelector('[data-testid="snapshot-name-input-row"]') as HTMLElement;
-      expect(nameInputRow.style.display).toBe('flex');
-
-      // Confirm creation
-      const confirmBtn = panel.render().querySelector('[data-testid="snapshot-confirm-btn"]') as HTMLElement;
-      confirmBtn.click();
-
-      // Name input row should be hidden, create button visible
-      expect(nameInputRow.style.display).toBe('none');
-      expect(createBtn.style.display).not.toBe('none');
-
-      document.body.removeChild(panel.render());
-    });
-
-    it('SNAP-096: custom name is displayed in snapshot list after creation', async () => {
-      document.body.appendChild(panel.render());
-      panel.show();
-
-      // Simulate snapshotsChanged with a named snapshot
-      manager.emit('snapshotsChanged', {
-        snapshots: [createMockSnapshot({ id: 'snap-named', name: 'My Named Snapshot' })],
-      });
-
-      await vi.waitFor(() => {
-        expect(panel.render().textContent).toContain('My Named Snapshot');
-      });
-
-      document.body.removeChild(panel.render());
-    });
-
-    it('SNAP-097: auto-generated name increments on successive unnamed creations', () => {
-      const handler = vi.fn();
-      panel.on('createRequested', handler);
-      document.body.appendChild(panel.render());
-      panel.show();
-
-      // First creation with empty name
-      const createBtn = panel.render().querySelector('[data-testid="create-snapshot-btn"]') as HTMLElement;
-      createBtn.click();
-      const nameInput = panel.render().querySelector('[data-testid="snapshot-name-input"]') as HTMLInputElement;
-      nameInput.value = '';
-      nameInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-      const name1 = (handler.mock.calls[0]![0] as { name: string }).name;
-
-      // Second creation with empty name
-      createBtn.click();
-      nameInput.value = '';
-      nameInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-      const name2 = (handler.mock.calls[1]![0] as { name: string }).name;
-
-      // Names should be different (incrementing counter)
-      expect(name1).not.toBe(name2);
-
-      document.body.removeChild(panel.render());
-    });
-  });
-
-  // ---------------------------------------------------------------------------
-  // Disabled / error state (#391)
-  // ---------------------------------------------------------------------------
-  describe('disabled state', () => {
-    it('SNAP-080: setDisabled marks panel as disabled', () => {
-      panel.setDisabled('Storage unavailable');
-
-      expect(panel.isDisabled()).toBe(true);
-    });
-
-    it('SNAP-081: panel is not disabled by default', () => {
-      expect(panel.isDisabled()).toBe(false);
-    });
-
-    it('SNAP-082: show() renders disabled state instead of loading snapshots', () => {
-      panel.setDisabled('Storage unavailable');
-      document.body.appendChild(panel.render());
-      panel.show();
-
-      // Should NOT try to load snapshots
-      expect(manager.listSnapshots).not.toHaveBeenCalled();
-
-      // Should show disabled message
-      const el = panel.render();
-      expect(el.textContent).toContain('Snapshots Unavailable');
-      expect(el.textContent).toContain('Storage unavailable');
-
-      // Should have disabled testid
-      const disabledEl = el.querySelector('[data-testid="snapshot-panel-disabled"]');
-      expect(disabledEl).not.toBeNull();
-
-      document.body.removeChild(panel.render());
-    });
-
-    it('SNAP-083: disabled panel still opens and closes normally', () => {
-      panel.setDisabled('Backend error');
-      document.body.appendChild(panel.render());
-
-      panel.show();
-      expect(panel.isOpen()).toBe(true);
-
-      panel.hide();
-      expect(panel.isOpen()).toBe(false);
-
-      document.body.removeChild(panel.render());
-    });
-  });
-
-  // ---------------------------------------------------------------------------
   // Mutual exclusion (L-48)
   // ---------------------------------------------------------------------------
   describe('mutual exclusion', () => {
@@ -854,6 +644,95 @@ describe('SnapshotPanel', () => {
       panel.show();
 
       expect(mockPlaylistPanel.hide).not.toHaveBeenCalled();
+
+      document.body.removeChild(panel.render());
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Create Snapshot (Issue #374)
+  // ---------------------------------------------------------------------------
+  describe('create snapshot', () => {
+    it('SNAP-080: Create Snapshot button exists in panel footer', () => {
+      document.body.appendChild(panel.render());
+      panel.show();
+
+      const createBtn = panel.render().querySelector('[data-testid="create-snapshot-btn"]');
+      expect(createBtn).not.toBeNull();
+      expect(createBtn!.textContent).toBe('Create Snapshot');
+
+      document.body.removeChild(panel.render());
+    });
+
+    it('SNAP-081: clicking Create Snapshot shows a prompt for the name', async () => {
+      vi.mocked(showPrompt).mockResolvedValue(null); // user cancels
+      document.body.appendChild(panel.render());
+      panel.show();
+
+      const createBtn = panel.render().querySelector('[data-testid="create-snapshot-btn"]') as HTMLButtonElement;
+      createBtn.click();
+
+      await vi.waitFor(() => {
+        expect(showPrompt).toHaveBeenCalledWith(
+          expect.stringContaining('name'),
+          expect.objectContaining({ title: 'Create Snapshot', confirmText: 'Create' }),
+        );
+      });
+
+      document.body.removeChild(panel.render());
+    });
+
+    it('SNAP-082: emits createRequested with user-provided name', async () => {
+      vi.mocked(showPrompt).mockResolvedValue('My Snapshot');
+      const handler = vi.fn();
+      panel.on('createRequested', handler);
+
+      document.body.appendChild(panel.render());
+      panel.show();
+
+      const createBtn = panel.render().querySelector('[data-testid="create-snapshot-btn"]') as HTMLButtonElement;
+      createBtn.click();
+
+      await vi.waitFor(() => {
+        expect(handler).toHaveBeenCalledWith({ name: 'My Snapshot', description: undefined });
+      });
+
+      document.body.removeChild(panel.render());
+    });
+
+    it('SNAP-083: emits createRequested with undefined name when user leaves input blank', async () => {
+      vi.mocked(showPrompt).mockResolvedValue('');
+      const handler = vi.fn();
+      panel.on('createRequested', handler);
+
+      document.body.appendChild(panel.render());
+      panel.show();
+
+      const createBtn = panel.render().querySelector('[data-testid="create-snapshot-btn"]') as HTMLButtonElement;
+      createBtn.click();
+
+      await vi.waitFor(() => {
+        expect(handler).toHaveBeenCalledWith({ name: undefined, description: undefined });
+      });
+
+      document.body.removeChild(panel.render());
+    });
+
+    it('SNAP-084: does not emit createRequested when user cancels the prompt', async () => {
+      vi.mocked(showPrompt).mockResolvedValue(null);
+      const handler = vi.fn();
+      panel.on('createRequested', handler);
+
+      document.body.appendChild(panel.render());
+      panel.show();
+
+      const createBtn = panel.render().querySelector('[data-testid="create-snapshot-btn"]') as HTMLButtonElement;
+      createBtn.click();
+
+      // Wait for the prompt to resolve
+      await new Promise((r) => setTimeout(r, 10));
+
+      expect(handler).not.toHaveBeenCalled();
 
       document.body.removeChild(panel.render());
     });

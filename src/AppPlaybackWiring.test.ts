@@ -222,6 +222,7 @@ function createMockPersistenceManager() {
     saveProject: vi.fn(),
     openProject: vi.fn(),
     retryAutoSave: vi.fn(),
+    createSnapshot: vi.fn(),
     restoreSnapshot: vi.fn(),
     saveRvSession: vi.fn(),
   };
@@ -857,5 +858,18 @@ describe('wirePlaybackControls — video export', () => {
     const canvas = await frameProvider(10);
     expect(canvas).toBeInstanceOf(HTMLCanvasElement);
     expect(viewer.renderFrameToCanvas).not.toHaveBeenCalled();
+  });
+
+  // -------------------------------------------------------------------------
+  // Snapshot panel create wiring (Issue #374)
+  // -------------------------------------------------------------------------
+  it('PW-050: createRequested on snapshotPanel calls persistenceManager.createSnapshot with name and description', () => {
+    controls.snapshotPanel.emit('createRequested', { name: 'My Snapshot', description: 'Test desc' });
+    expect(persistenceManager.createSnapshot).toHaveBeenCalledWith('My Snapshot', 'Test desc');
+  });
+
+  it('PW-051: createRequested with no name passes undefined to persistenceManager.createSnapshot', () => {
+    controls.snapshotPanel.emit('createRequested', { name: undefined, description: undefined });
+    expect(persistenceManager.createSnapshot).toHaveBeenCalledWith(undefined, undefined);
   });
 });

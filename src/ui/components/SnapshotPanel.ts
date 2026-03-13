@@ -15,8 +15,8 @@ import { applyA11yFocus } from './shared/Button';
 import { showPrompt, showConfirm, showAlert } from './shared/Modal';
 
 export interface SnapshotPanelEvents extends EventMap {
-  /** Emitted when user wants to create a snapshot, optionally with a name */
-  createRequested: { name: string };
+  /** Emitted when user wants to create a snapshot with optional name and description */
+  createRequested: { name?: string; description?: string };
   /** Emitted when user wants to restore a snapshot */
   restoreRequested: { id: string };
   /** Emitted when panel visibility changes */
@@ -41,11 +41,6 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
   private snapshotSubscription: (() => void) | null = null;
   private isVisible = false;
   private exclusivePanel: ExclusivePanel | null = null;
-  private _disabled = false;
-  private _disabledReason = '';
-  private createSection: HTMLElement;
-  private nameInput: HTMLInputElement;
-  private snapshotCounter = 0;
 
   constructor(snapshotManager: SnapshotManager) {
     super();
@@ -178,101 +173,6 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
 
     this.container.appendChild(toolbar);
 
-    // Create snapshot section
-    this.createSection = document.createElement('div');
-    this.createSection.dataset.testid = 'snapshot-create-section';
-    this.createSection.style.cssText = `
-      padding: 8px 12px;
-      border-bottom: 1px solid var(--border-primary);
-    `;
-
-    const createBtn = document.createElement('button');
-    createBtn.textContent = 'Create Snapshot';
-    createBtn.dataset.testid = 'create-snapshot-btn';
-    createBtn.style.cssText = `
-      width: 100%;
-      padding: 8px;
-      border: 1px solid var(--accent-primary);
-      border-radius: 4px;
-      background: rgba(var(--accent-primary-rgb), 0.1);
-      color: var(--accent-primary);
-      font-size: 12px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.12s ease;
-    `;
-    createBtn.addEventListener('click', () => this.showNameInput());
-    createBtn.addEventListener('pointerenter', () => {
-      createBtn.style.background = 'rgba(var(--accent-primary-rgb), 0.2)';
-    });
-    createBtn.addEventListener('pointerleave', () => {
-      createBtn.style.background = 'rgba(var(--accent-primary-rgb), 0.1)';
-    });
-    applyA11yFocus(createBtn);
-    this.createSection.appendChild(createBtn);
-
-    // Inline name input (hidden by default)
-    const nameInputRow = document.createElement('div');
-    nameInputRow.dataset.testid = 'snapshot-name-input-row';
-    nameInputRow.style.cssText = `
-      display: none;
-      gap: 6px;
-      align-items: center;
-    `;
-
-    this.nameInput = document.createElement('input');
-    this.nameInput.type = 'text';
-    this.nameInput.placeholder = 'Snapshot name (optional)';
-    this.nameInput.dataset.testid = 'snapshot-name-input';
-    this.nameInput.style.cssText = `
-      flex: 1;
-      padding: 6px 10px;
-      border: 1px solid var(--border-primary);
-      border-radius: 4px;
-      background: var(--bg-primary);
-      color: var(--text-primary);
-      font-size: 12px;
-      outline: none;
-    `;
-    this.nameInput.addEventListener('focus', () => {
-      this.nameInput.style.borderColor = 'var(--accent-primary)';
-    });
-    this.nameInput.addEventListener('blur', () => {
-      this.nameInput.style.borderColor = 'var(--border-primary)';
-    });
-    this.nameInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        this.confirmCreate();
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        this.confirmCreate(); // Escape still creates with default name
-      }
-    });
-    nameInputRow.appendChild(this.nameInput);
-
-    const confirmBtn = document.createElement('button');
-    confirmBtn.textContent = 'Save';
-    confirmBtn.dataset.testid = 'snapshot-confirm-btn';
-    confirmBtn.style.cssText = `
-      padding: 6px 12px;
-      border: 1px solid var(--accent-primary);
-      border-radius: 4px;
-      background: var(--accent-primary);
-      color: var(--bg-primary);
-      font-size: 12px;
-      font-weight: 500;
-      cursor: pointer;
-      white-space: nowrap;
-      transition: all 0.12s ease;
-    `;
-    confirmBtn.addEventListener('click', () => this.confirmCreate());
-    applyA11yFocus(confirmBtn);
-    nameInputRow.appendChild(confirmBtn);
-
-    this.createSection.appendChild(nameInputRow);
-    this.container.appendChild(this.createSection);
-
     // List container
     this.listContainer = document.createElement('div');
     this.listContainer.style.cssText = `
@@ -292,29 +192,29 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
       background: var(--bg-tertiary);
     `;
 
-    const importBtn = document.createElement('button');
-    importBtn.textContent = 'Import';
-    importBtn.dataset.testid = 'import-snapshot-btn';
-    importBtn.style.cssText = `
+    const createBtn = document.createElement('button');
+    createBtn.textContent = 'Create Snapshot';
+    createBtn.dataset.testid = 'create-snapshot-btn';
+    createBtn.style.cssText = `
       flex: 1;
       padding: 8px;
-      border: 1px solid var(--border-primary);
+      border: 1px solid var(--accent-primary);
       border-radius: 4px;
       background: transparent;
-      color: var(--text-secondary);
+      color: var(--accent-primary);
       font-size: 12px;
       cursor: pointer;
       transition: all 0.12s ease;
     `;
-    importBtn.addEventListener('click', () => this.handleImport());
-    importBtn.addEventListener('pointerenter', () => {
-      importBtn.style.background = 'var(--bg-hover)';
+    createBtn.addEventListener('click', () => this.handleCreate());
+    createBtn.addEventListener('pointerenter', () => {
+      createBtn.style.background = 'rgba(var(--accent-primary-rgb), 0.1)';
     });
-    importBtn.addEventListener('pointerleave', () => {
-      importBtn.style.background = 'transparent';
+    createBtn.addEventListener('pointerleave', () => {
+      createBtn.style.background = 'transparent';
     });
-    applyA11yFocus(importBtn);
-    footer.appendChild(importBtn);
+    applyA11yFocus(createBtn);
+    footer.appendChild(createBtn);
 
     const clearAllBtn = document.createElement('button');
     clearAllBtn.textContent = 'Clear All';
@@ -650,28 +550,19 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
 
-  private showNameInput(): void {
-    const createBtn = this.createSection.querySelector('[data-testid="create-snapshot-btn"]') as HTMLElement;
-    const nameInputRow = this.createSection.querySelector('[data-testid="snapshot-name-input-row"]') as HTMLElement;
-    createBtn.style.display = 'none';
-    nameInputRow.style.display = 'flex';
-    this.nameInput.value = '';
-    this.nameInput.focus();
-  }
+  private async handleCreate(): Promise<void> {
+    const name = await showPrompt('Enter a name for this snapshot:', {
+      title: 'Create Snapshot',
+      placeholder: 'Snapshot name (leave blank for auto-generated)',
+      confirmText: 'Create',
+    });
+    // showPrompt returns null when user cancels
+    if (name === null) return;
 
-  private hideNameInput(): void {
-    const createBtn = this.createSection.querySelector('[data-testid="create-snapshot-btn"]') as HTMLElement;
-    const nameInputRow = this.createSection.querySelector('[data-testid="snapshot-name-input-row"]') as HTMLElement;
-    nameInputRow.style.display = 'none';
-    createBtn.style.display = '';
-  }
-
-  private confirmCreate(): void {
-    const inputName = this.nameInput.value.trim();
-    this.snapshotCounter++;
-    const name = inputName || `Snapshot ${this.snapshotCounter}`;
-    this.hideNameInput();
-    this.emit('createRequested', { name });
+    this.emit('createRequested', {
+      name: name || undefined,
+      description: undefined,
+    });
   }
 
   private async handleRename(snapshot: Snapshot): Promise<void> {
@@ -729,25 +620,6 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
     }
   }
 
-  private handleImport(): void {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json';
-    input.addEventListener('change', async () => {
-      const file = input.files?.[0];
-      if (!file) return;
-      try {
-        const text = await file.text();
-        await this.snapshotManager.importSnapshot(text);
-        await this.loadSnapshots();
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        await showAlert(message, { type: 'error', title: 'Import Error' });
-      }
-    });
-    input.click();
-  }
-
   private async handleClearAll(): Promise<void> {
     const confirmed = await showConfirm('Delete all snapshots? This cannot be undone.', {
       title: 'Clear All Snapshots',
@@ -771,38 +643,6 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
     this.exclusivePanel = panel;
   }
 
-  /**
-   * Disable the panel with an error message.
-   * When disabled, show() renders the error state instead of the snapshot list.
-   */
-  setDisabled(reason: string): void {
-    this._disabled = true;
-    this._disabledReason = reason;
-  }
-
-  /** Whether the panel is in a disabled/error state */
-  isDisabled(): boolean {
-    return this._disabled;
-  }
-
-  private renderDisabledState(): void {
-    this.listContainer.innerHTML = '';
-    const errorState = document.createElement('div');
-    errorState.dataset.testid = 'snapshot-panel-disabled';
-    errorState.style.cssText = `
-      text-align: center;
-      padding: 32px 16px;
-      color: var(--text-warning, #f0ad4e);
-      font-size: 12px;
-    `;
-    errorState.innerHTML = `
-      ${getIconSvg('warning', 'lg')}
-      <p style="margin-top: 12px; font-weight: 500;">Snapshots Unavailable</p>
-      <p style="margin-top: 4px; font-size: 11px; color: var(--text-muted);">${this._disabledReason}</p>
-    `;
-    this.listContainer.appendChild(errorState);
-  }
-
   show(): void {
     // Close the exclusive panel if it is open
     if (this.exclusivePanel?.isOpen()) {
@@ -814,11 +654,7 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
     this.container.style.display = 'flex';
     this.isVisible = true;
     this.emit('visibilityChanged', { open: true });
-    if (this._disabled) {
-      this.renderDisabledState();
-    } else {
-      this.loadSnapshots();
-    }
+    this.loadSnapshots();
   }
 
   hide(): void {

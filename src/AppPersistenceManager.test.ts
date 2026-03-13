@@ -94,12 +94,10 @@ function createMockContext(): PersistenceManagerContext & {
     autoSaveIndicator: {
       markUnsaved: vi.fn(),
       markSaved: vi.fn(),
-      setStatus: vi.fn(),
     } as any,
     snapshotManager: snapshotManager as any,
     snapshotPanel: {
       hide: vi.fn(),
-      setDisabled: vi.fn(),
     } as any,
     scopesControl: {
       getState: vi.fn(() => ({ histogram: true, waveform: false, vectorscope: false, gamutDiagram: false })),
@@ -122,14 +120,8 @@ function createMockContext(): PersistenceManagerContext & {
 }
 
 function createMockAutoSaveManager() {
-  // Track event handlers so we can simulate event emission during initialize()
-  const handlers: Record<string, Array<(data: any) => void>> = {};
-  const mgr = {
-    on: vi.fn((event: string, handler: (data: any) => void) => {
-      if (!handlers[event]) handlers[event] = [];
-      handlers[event]!.push(handler);
-      return vi.fn();
-    }),
+  return {
+    on: vi.fn(() => vi.fn()),
     initialize: vi.fn(async () => false),
     markDirty: vi.fn(),
     saveNow: vi.fn(),
@@ -138,13 +130,7 @@ function createMockAutoSaveManager() {
     deleteAutoSave: vi.fn(async () => {}),
     clearAll: vi.fn(async () => {}),
     dispose: vi.fn(),
-    /** Emit a mock event to registered handlers */
-    _emit(event: string, data: any) {
-      for (const h of handlers[event] ?? []) h(data);
-    },
-    _handlers: handlers,
   };
-  return mgr;
 }
 
 function createMockSnapshotManager() {
@@ -283,18 +269,17 @@ describe('AppPersistenceManager', () => {
     });
 
     it('APM-033: init() shows recovery prompt when auto-save data exists', async () => {
-      const entry = {
-        id: 'save-1',
-        name: 'Test Session',
-        savedAt: new Date().toISOString(),
-        cleanShutdown: false,
-        version: 1,
-        size: 1024,
-      };
-      fullCtx._autoSaveManager.initialize.mockImplementation(async () => {
-        fullCtx._autoSaveManager._emit('recoveryAvailable', { entries: [entry] });
-        return true;
-      });
+      fullCtx._autoSaveManager.initialize.mockResolvedValue(true);
+      fullCtx._autoSaveManager.listAutoSaves.mockResolvedValue([
+        {
+          id: 'save-1',
+          name: 'Test Session',
+          savedAt: new Date().toISOString(),
+          cleanShutdown: false,
+          version: 1,
+          size: 1024,
+        } as any,
+      ]);
       vi.mocked(showConfirm).mockResolvedValue(false);
 
       await manager.init();
@@ -311,34 +296,6 @@ describe('AppPersistenceManager', () => {
       await expect(manager.init()).resolves.not.toThrow();
     });
 
-    it('APM-034a: init() shows warning and disables panel on snapshot init failure', async () => {
-      fullCtx._snapshotManager.initialize.mockRejectedValue(new Error('IndexedDB not available'));
-
-      await manager.init();
-
-      expect(showAlert).toHaveBeenCalledWith(
-        expect.stringContaining('Snapshot system failed to initialize'),
-        expect.objectContaining({ type: 'warning', title: 'Snapshot Unavailable' }),
-      );
-      expect(fullCtx.snapshotPanel.setDisabled).toHaveBeenCalledWith(
-        expect.stringContaining('Snapshot storage is unavailable'),
-      );
-    });
-
-    it('APM-034b: snapshotBackendAvailable is false after snapshot init failure', async () => {
-      fullCtx._snapshotManager.initialize.mockRejectedValue(new Error('IndexedDB not available'));
-
-      await manager.init();
-
-      expect(manager.snapshotBackendAvailable).toBe(false);
-    });
-
-    it('APM-034c: snapshotBackendAvailable is true after successful init', async () => {
-      await manager.init();
-
-      expect(manager.snapshotBackendAvailable).toBe(true);
-    });
-
     it('APM-035: init() handles autoSave initialization failure gracefully', async () => {
       fullCtx._autoSaveManager.initialize.mockRejectedValue(new Error('DB error'));
 
@@ -347,10 +304,10 @@ describe('AppPersistenceManager', () => {
   });
 
   // -----------------------------------------------------------------------
-  // createQuickSnapshot
+  // createSnapshot / createQuickSnapshot
   // -----------------------------------------------------------------------
-  describe('createQuickSnapshot', () => {
-    it('APM-040: createQuickSnapshot serializes state and creates snapshot', async () => {
+  describe('createSnapshot', () => {
+    it('APM-040: createQuickSnapshot serializes state and creates snapshot with auto name', async () => {
       await manager.createQuickSnapshot();
 
       expect(SessionSerializer.toJSON).toHaveBeenCalledTimes(1);
@@ -358,6 +315,7 @@ describe('AppPersistenceManager', () => {
       expect(fullCtx._snapshotManager.createSnapshot).toHaveBeenCalledWith(
         expect.stringContaining('Snapshot'),
         expect.anything(),
+        undefined,
       );
     });
 
@@ -389,19 +347,47 @@ describe('AppPersistenceManager', () => {
       expect(SessionSerializer.toJSON).toHaveBeenCalledWith(expect.anything(), 'Untitled');
     });
 
-    it('APM-044: createQuickSnapshot shows error when backend unavailable', async () => {
-      // Simulate failed init
-      fullCtx._snapshotManager.initialize.mockRejectedValue(new Error('DB error'));
-      await manager.init();
-      vi.clearAllMocks();
+    it('APM-044: createSnapshot with user-provided name uses that name', async () => {
+      await manager.createSnapshot('My Named Snapshot');
 
-      await manager.createQuickSnapshot();
-
-      expect(fullCtx._snapshotManager.createSnapshot).not.toHaveBeenCalled();
-      expect(SessionSerializer.toJSON).not.toHaveBeenCalled();
+      expect(fullCtx._snapshotManager.createSnapshot).toHaveBeenCalledWith(
+        'My Named Snapshot',
+        expect.anything(),
+        undefined,
+      );
       expect(showAlert).toHaveBeenCalledWith(
-        expect.stringContaining('Snapshot storage is unavailable'),
-        expect.objectContaining({ type: 'error', title: 'Snapshot Unavailable' }),
+        expect.stringContaining('My Named Snapshot'),
+        expect.objectContaining({ type: 'success' }),
+      );
+    });
+
+    it('APM-045: createSnapshot with name and description passes both', async () => {
+      await manager.createSnapshot('Review Checkpoint', 'Before final color pass');
+
+      expect(fullCtx._snapshotManager.createSnapshot).toHaveBeenCalledWith(
+        'Review Checkpoint',
+        expect.anything(),
+        'Before final color pass',
+      );
+    });
+
+    it('APM-046: createSnapshot with empty name falls back to auto-generated timestamp', async () => {
+      await manager.createSnapshot('');
+
+      expect(fullCtx._snapshotManager.createSnapshot).toHaveBeenCalledWith(
+        expect.stringContaining('Snapshot'),
+        expect.anything(),
+        undefined,
+      );
+    });
+
+    it('APM-047: createSnapshot with undefined name falls back to auto-generated timestamp', async () => {
+      await manager.createSnapshot(undefined);
+
+      expect(fullCtx._snapshotManager.createSnapshot).toHaveBeenCalledWith(
+        expect.stringContaining('Snapshot'),
+        expect.anything(),
+        undefined,
       );
     });
   });
@@ -425,17 +411,6 @@ describe('AppPersistenceManager', () => {
 
       expect(consoleSpy).toHaveBeenCalledWith('Failed to create auto-checkpoint:', expect.any(Error));
       consoleSpy.mockRestore();
-    });
-
-    it('APM-052: createAutoCheckpoint silently skips when backend unavailable', async () => {
-      fullCtx._snapshotManager.initialize.mockRejectedValue(new Error('DB error'));
-      await manager.init();
-      vi.clearAllMocks();
-
-      await manager.createAutoCheckpoint('test');
-
-      expect(fullCtx._snapshotManager.createAutoCheckpoint).not.toHaveBeenCalled();
-      expect(SessionSerializer.toJSON).not.toHaveBeenCalled();
     });
   });
 
@@ -522,101 +497,6 @@ describe('AppPersistenceManager', () => {
         expect.objectContaining({ type: 'error' }),
       );
       consoleSpy.mockRestore();
-    });
-
-    it('APM-083: restoreSnapshot shows error when backend unavailable', async () => {
-      fullCtx._snapshotManager.initialize.mockRejectedValue(new Error('DB error'));
-      await manager.init();
-      vi.clearAllMocks();
-
-      await manager.restoreSnapshot('snap-1');
-
-      expect(fullCtx._snapshotManager.getSnapshot).not.toHaveBeenCalled();
-      expect(SessionSerializer.fromJSON).not.toHaveBeenCalled();
-      expect(showAlert).toHaveBeenCalledWith(
-        expect.stringContaining('Snapshot storage is unavailable'),
-        expect.objectContaining({ type: 'error', title: 'Snapshot Unavailable' }),
-      );
-    });
-  });
-
-  // -----------------------------------------------------------------------
-  // recoverAutoSave (via init flow)
-  // -----------------------------------------------------------------------
-  describe('recoverAutoSave', () => {
-    const autoSaveEntry = {
-      id: 'save-1',
-      name: 'Test Session',
-      savedAt: new Date().toISOString(),
-      cleanShutdown: false,
-      version: 1,
-      size: 1024,
-    };
-
-    const mockState = {
-      version: 1,
-      name: 'test',
-      savedAt: new Date().toISOString(),
-      color: { exposure: 0.5 },
-      cdl: { slope: [1, 1, 1] },
-      filters: { sharpen: 1 },
-      transform: { rotation: 90 },
-      crop: { x: 0, y: 0 },
-      lens: { distortion: 0.1 },
-      noiseReduction: null,
-      watermark: null,
-    };
-
-    it('APM-100: recovery works normally when auto-save entry exists', async () => {
-      fullCtx._autoSaveManager.initialize.mockImplementation(async () => {
-        fullCtx._autoSaveManager._emit('recoveryAvailable', { entries: [autoSaveEntry] });
-        return true;
-      });
-      fullCtx._autoSaveManager.getAutoSave.mockResolvedValue(mockState as any);
-      vi.mocked(showConfirm).mockResolvedValue(true);
-
-      await manager.init();
-
-      expect(fullCtx._autoSaveManager.getAutoSave).toHaveBeenCalledWith('save-1');
-      expect(SessionSerializer.fromJSON).toHaveBeenCalledTimes(1);
-      expect(fullCtx._autoSaveManager.deleteAutoSave).toHaveBeenCalledWith('save-1');
-    });
-
-    it('APM-101: shows error alert when auto-save entry is missing/null', async () => {
-      fullCtx._autoSaveManager.initialize.mockImplementation(async () => {
-        fullCtx._autoSaveManager._emit('recoveryAvailable', { entries: [autoSaveEntry] });
-        return true;
-      });
-      fullCtx._autoSaveManager.getAutoSave.mockResolvedValue(null);
-      vi.mocked(showConfirm).mockResolvedValue(true);
-
-      await manager.init();
-
-      expect(fullCtx._autoSaveManager.getAutoSave).toHaveBeenCalledWith('save-1');
-      expect(SessionSerializer.fromJSON).not.toHaveBeenCalled();
-      expect(showAlert).toHaveBeenCalledWith(
-        'Auto-save entry not found. Recovery data may have been lost.',
-        expect.objectContaining({ type: 'error', title: 'Recovery Error' }),
-      );
-    });
-
-    it('APM-102: error message is user-friendly and actionable', async () => {
-      fullCtx._autoSaveManager.initialize.mockImplementation(async () => {
-        fullCtx._autoSaveManager._emit('recoveryAvailable', { entries: [autoSaveEntry] });
-        return true;
-      });
-      fullCtx._autoSaveManager.getAutoSave.mockResolvedValue(null);
-      vi.mocked(showConfirm).mockResolvedValue(true);
-
-      await manager.init();
-
-      const alertCall = vi.mocked(showAlert).mock.calls.find(
-        (call) => typeof call[0] === 'string' && call[0].includes('Auto-save'),
-      );
-      expect(alertCall).toBeDefined();
-      const message = alertCall![0] as string;
-      expect(message).toContain('not found');
-      expect(message).toContain('lost');
     });
   });
 
