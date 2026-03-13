@@ -70,7 +70,10 @@ export class LoopAPI extends DisposableAPI {
     if (typeof frame !== 'number' || isNaN(frame)) {
       throw new ValidationError('setInPoint() requires a valid frame number');
     }
-    this.session.setInPoint(frame);
+    if (!isFinite(frame)) {
+      throw new ValidationError('setInPoint() requires a finite frame number');
+    }
+    this.session.setInPoint(Math.round(frame));
   }
 
   /**
@@ -89,7 +92,10 @@ export class LoopAPI extends DisposableAPI {
     if (typeof frame !== 'number' || isNaN(frame)) {
       throw new ValidationError('setOutPoint() requires a valid frame number');
     }
-    this.session.setOutPoint(frame);
+    if (!isFinite(frame)) {
+      throw new ValidationError('setOutPoint() requires a finite frame number');
+    }
+    this.session.setOutPoint(Math.round(frame));
   }
 
   /**

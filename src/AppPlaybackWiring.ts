@@ -72,6 +72,10 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
   subs.add(headerBar.on('saveProject', () => persistenceManager.saveProject()));
   subs.add(headerBar.on('openProject', (files) => persistenceManager.openProject(files[0]!, files.slice(1))));
 
+  // Route .orvproject files dropped onto the viewer to the persistence manager
+  viewer.setOnProjectFileDrop((file, companions) => persistenceManager.openProject(file, companions));
+  subs.add(() => viewer.setOnProjectFileDrop(null));
+
   // Preferences management (export / import / reset)
   subs.add(
     headerBar.on('exportPreferences', () => {

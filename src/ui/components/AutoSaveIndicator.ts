@@ -317,7 +317,7 @@ export class AutoSaveIndicator {
     const versionsSlider = document.createElement('input');
     versionsSlider.type = 'range';
     versionsSlider.min = '1';
-    versionsSlider.max = '50';
+    versionsSlider.max = '100';
     versionsSlider.value = String(config.maxVersions);
     versionsSlider.dataset.testid = 'autosave-versions-slider';
     versionsSlider.style.cssText = 'width: 100%;';

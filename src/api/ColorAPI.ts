@@ -115,12 +115,12 @@ export class ColorAPI extends DisposableAPI {
    * Set color adjustments (partial update - merges with current values).
    *
    * Only the provided keys are updated; the rest retain their current values.
-   * Non-numeric or NaN values for a key are silently ignored.
    *
    * @param adjustments - An object with one or more color adjustment fields to update.
    *   Valid keys: exposure, gamma, saturation, contrast, hueRotation, temperature,
    *   tint, brightness, highlights, shadows, whites, blacks.
-   * @throws {ValidationError} If `adjustments` is not a plain object.
+   * @throws {ValidationError} If `adjustments` is not a plain object, or if any
+   *   provided numeric field is not a finite number.
    *
    * @example
    * ```ts
@@ -155,9 +155,10 @@ export class ColorAPI extends DisposableAPI {
     for (const key of validKeys) {
       if (Object.prototype.hasOwnProperty.call(adjustments, key)) {
         const value = adjustments[key];
-        if (typeof value === 'number' && !isNaN(value)) {
-          (merged as unknown as Record<string, unknown>)[key] = value;
+        if (typeof value !== 'number' || !Number.isFinite(value)) {
+          throw new ValidationError(`setAdjustments() "${key}" must be a finite number`);
         }
+        (merged as unknown as Record<string, unknown>)[key] = value;
       }
     }
 

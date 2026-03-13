@@ -1003,6 +1003,24 @@ describe('LoopAPI', () => {
     expect(() => loop.setOutPoint(NaN)).toThrow();
     expect(() => loop.setOutPoint('50' as any)).toThrow();
   });
+
+  it('API-U064: setInPoint() rounds fractional frames to integer', () => {
+    loop.setInPoint(10.7);
+    expect(loop.getInPoint()).toBe(11);
+  });
+
+  it('API-U065: setOutPoint() rounds fractional frames to integer', () => {
+    loop.setOutPoint(49.3);
+    expect(loop.getOutPoint()).toBe(49);
+  });
+
+  it('API-U066: setInPoint() rejects Infinity', () => {
+    expect(() => loop.setInPoint(Infinity)).toThrow();
+  });
+
+  it('API-U067: setOutPoint() rejects -Infinity', () => {
+    expect(() => loop.setOutPoint(-Infinity)).toThrow();
+  });
 });
 
 // ============================================================
@@ -1427,11 +1445,29 @@ describe('ColorAPI', () => {
     expect(setArg.offset).toEqual({ r: 0.0, g: 0.0, b: 0.0 });
   });
 
-  it('API-U067: setAdjustments ignores invalid numeric values', () => {
-    color.setAdjustments({ exposure: NaN, gamma: 2 });
+  it('API-U067: setAdjustments rejects non-finite numeric values', () => {
+    expect(() => color.setAdjustments({ exposure: NaN })).toThrow(/exposure.*finite number/);
+    expect(() => color.setAdjustments({ exposure: Infinity })).toThrow(/exposure.*finite number/);
+    expect(() => color.setAdjustments({ gamma: -Infinity })).toThrow(/gamma.*finite number/);
+  });
+
+  it('API-U067b: setAdjustments rejects NaN for any field', () => {
+    expect(() => color.setAdjustments({ saturation: NaN })).toThrow(/saturation.*finite number/);
+    expect(() => color.setAdjustments({ contrast: NaN })).toThrow(/contrast.*finite number/);
+    expect(() => color.setAdjustments({ temperature: NaN })).toThrow(/temperature.*finite number/);
+  });
+
+  it('API-U067c: setAdjustments rejects Infinity for any field', () => {
+    expect(() => color.setAdjustments({ brightness: Infinity })).toThrow(/brightness.*finite number/);
+    expect(() => color.setAdjustments({ hueRotation: -Infinity })).toThrow(/hueRotation.*finite number/);
+    expect(() => color.setAdjustments({ tint: Infinity })).toThrow(/tint.*finite number/);
+  });
+
+  it('API-U067d: setAdjustments accepts valid finite values', () => {
+    color.setAdjustments({ exposure: 1.5, gamma: 0.8 });
     const setArg = colorControls.setAdjustments.mock.calls[0][0];
-    expect(setArg.exposure).toBe(0); // NaN should be ignored
-    expect(setArg.gamma).toBe(2);
+    expect(setArg.exposure).toBe(1.5);
+    expect(setArg.gamma).toBe(0.8);
   });
 
   it('API-U068: setAdjustments ignores unknown keys', () => {
@@ -1972,9 +2008,9 @@ describe('MarkersAPI', () => {
     expect(() => markers.add(10, 'note', 123 as any)).toThrow(/color must be a string/);
   });
 
-  it('API-U084: add() accepts frame number as float (rounds down)', () => {
+  it('API-U084: add() rounds float frame to nearest integer', () => {
     markers.add(10.7);
-    expect(session.setMarker).toHaveBeenCalledWith(10.7, '', '#ff4444', undefined);
+    expect(session.setMarker).toHaveBeenCalledWith(11, '', '#ff4444', undefined);
   });
 
   it('API-U085: getAll() returns empty array when no markers', () => {
@@ -2044,6 +2080,49 @@ describe('MarkersAPI', () => {
     markers.add(5, 'test', '#ff0000', 15);
     const stored = session._marks.get(5);
     expect(stored.endFrame).toBe(15);
+  });
+
+  // Regression tests for #564 (float frames) and #569 (non-finite values)
+  it('API-U096: add() rounds float frame to integer', () => {
+    markers.add(10.3);
+    expect(session.setMarker).toHaveBeenCalledWith(10, '', '#ff4444', undefined);
+  });
+
+  it('API-U097: add() rejects Infinity frame', () => {
+    expect(() => markers.add(Infinity)).toThrow(/valid positive frame number/);
+  });
+
+  it('API-U098: add() rejects -Infinity frame', () => {
+    expect(() => markers.add(-Infinity)).toThrow(/valid positive frame number/);
+  });
+
+  it('API-U099: add() rounds float endFrame to integer', () => {
+    markers.add(5, '', '#ff0000', 15.8);
+    expect(session.setMarker).toHaveBeenCalledWith(5, '', '#ff0000', 16);
+  });
+
+  it('API-U100: add() rejects Infinity endFrame', () => {
+    expect(() => markers.add(10, '', '#ff0000', Infinity)).toThrow(/endFrame must be a valid number/);
+  });
+
+  it('API-U101: add() rejects -Infinity endFrame', () => {
+    expect(() => markers.add(10, '', '#ff0000', -Infinity)).toThrow(/endFrame must be a valid number/);
+  });
+
+  it('API-U102: remove() rounds float frame to integer', () => {
+    markers.remove(10.7);
+    expect(session.removeMark).toHaveBeenCalledWith(11);
+  });
+
+  it('API-U103: remove() rejects Infinity frame', () => {
+    expect(() => markers.remove(Infinity)).toThrow(/valid frame number/);
+  });
+
+  it('API-U104: get() rounds float frame to integer', () => {
+    session._marks.set(11, { frame: 11, note: '', color: '#ff0000' });
+    const marker = markers.get(10.7);
+    expect(marker).not.toBeNull();
+    expect(marker!.frame).toBe(11);
   });
 });
 

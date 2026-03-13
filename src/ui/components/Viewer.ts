@@ -1145,6 +1145,14 @@ export class Viewer {
     return this.container;
   }
 
+  /**
+   * Set a callback invoked when an `.orvproject` file is dropped onto the viewer.
+   * Wired by AppPlaybackWiring to route to the persistence manager.
+   */
+  setOnProjectFileDrop(cb: ((file: File, companionFiles: File[]) => void) | null): void {
+    this.inputHandler.onProjectFileDrop = cb;
+  }
+
   private scheduleRender(): void {
     // During video playback, the tick loop handles all rendering via renderDirect().
     // Skip scheduling to prevent render storm that starves the video decoder.

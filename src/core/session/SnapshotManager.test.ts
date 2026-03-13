@@ -252,6 +252,83 @@ describe('SnapshotManager', () => {
 
       await expect(manager.importSnapshot(futureSnapshot)).rejects.toThrow(/newer than supported/);
     });
+
+    it('SNAP-I001: importSnapshot prunes manual snapshots when at limit', async () => {
+      const openRequest = (indexedDB as any).open();
+      openRequest.onsuccess?.();
+
+      const pruneSpy = vi.spyOn(manager as any, 'pruneSnapshots').mockResolvedValue(undefined);
+      vi.spyOn(manager as any, 'putSnapshot').mockResolvedValue(undefined);
+
+      const validSnapshot = JSON.stringify({
+        metadata: {
+          name: 'Imported',
+          version: SESSION_STATE_VERSION,
+          isAutoCheckpoint: false,
+          createdAt: '2025-01-01T00:00:00Z',
+          size: 100,
+          id: 'original-id',
+        },
+        state: { version: SESSION_STATE_VERSION },
+      });
+
+      await manager.importSnapshot(validSnapshot);
+
+      expect(pruneSpy).toHaveBeenCalledTimes(1);
+      expect(pruneSpy).toHaveBeenCalledWith(false, 50);
+    });
+
+    it('SNAP-I002: importSnapshot prunes auto-checkpoints when importing an auto-checkpoint', async () => {
+      const openRequest = (indexedDB as any).open();
+      openRequest.onsuccess?.();
+
+      const pruneSpy = vi.spyOn(manager as any, 'pruneSnapshots').mockResolvedValue(undefined);
+      vi.spyOn(manager as any, 'putSnapshot').mockResolvedValue(undefined);
+
+      const autoCheckpointSnapshot = JSON.stringify({
+        metadata: {
+          name: 'Auto: source-change',
+          version: SESSION_STATE_VERSION,
+          isAutoCheckpoint: true,
+          autoCheckpointEvent: 'source-change',
+          createdAt: '2025-01-01T00:00:00Z',
+          size: 100,
+          id: 'checkpoint-original',
+        },
+        state: { version: SESSION_STATE_VERSION },
+      });
+
+      await manager.importSnapshot(autoCheckpointSnapshot);
+
+      expect(pruneSpy).toHaveBeenCalledTimes(1);
+      expect(pruneSpy).toHaveBeenCalledWith(true, 10);
+    });
+
+    it('SNAP-I003: importSnapshot calls pruneSnapshots even when below limit (prune is a no-op)', async () => {
+      const openRequest = (indexedDB as any).open();
+      openRequest.onsuccess?.();
+
+      const pruneSpy = vi.spyOn(manager as any, 'pruneSnapshots').mockResolvedValue(undefined);
+      vi.spyOn(manager as any, 'putSnapshot').mockResolvedValue(undefined);
+
+      const validSnapshot = JSON.stringify({
+        metadata: {
+          name: 'Single Import',
+          version: SESSION_STATE_VERSION,
+          isAutoCheckpoint: false,
+          createdAt: '2025-01-01T00:00:00Z',
+          size: 50,
+          id: 'snap-1',
+        },
+        state: { version: SESSION_STATE_VERSION },
+      });
+
+      await manager.importSnapshot(validSnapshot);
+
+      // pruneSnapshots is always called; it internally checks count and is a no-op if below limit
+      expect(pruneSpy).toHaveBeenCalledTimes(1);
+      expect(pruneSpy).toHaveBeenCalledWith(false, 50);
+    });
   });
 
   describe('no double serialization (regression)', () => {
@@ -420,6 +497,45 @@ describe('SnapshotManager', () => {
 
       // renameSnapshot early-returns when db is null (first line: if (!this.db) return)
       await expect(manager.renameSnapshot('snapshot-123', 'New Name')).resolves.toBeUndefined();
+    });
+  });
+
+  describe('notifyRestored', () => {
+    it('SNAP-E001: notifyRestored emits snapshotRestored with the given snapshot', () => {
+      const listener = vi.fn();
+      manager.on('snapshotRestored', listener);
+
+      const snapshot = {
+        id: 'snap-1',
+        name: 'Test Snapshot',
+        createdAt: '2025-01-01T00:00:00Z',
+        isAutoCheckpoint: false,
+        version: 1,
+        size: 100,
+      };
+
+      manager.notifyRestored(snapshot);
+
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(listener).toHaveBeenCalledWith({ snapshot });
+    });
+
+    it('SNAP-E002: notifyRestored carries the correct snapshot ID', () => {
+      const listener = vi.fn();
+      manager.on('snapshotRestored', listener);
+
+      const snapshot = {
+        id: 'snap-42',
+        name: 'Specific Snapshot',
+        createdAt: '2025-06-15T12:00:00Z',
+        isAutoCheckpoint: false,
+        version: 1,
+        size: 200,
+      };
+
+      manager.notifyRestored(snapshot);
+
+      expect(listener.mock.calls[0]![0].snapshot.id).toBe('snap-42');
     });
   });
 });

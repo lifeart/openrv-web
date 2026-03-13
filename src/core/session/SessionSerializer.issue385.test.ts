@@ -1,12 +1,9 @@
 /**
- * Regression tests for issue #384:
- * Reloading a saved local image sequence should not collapse it into a single image.
- *
- * Verifies:
- * - Sequence-type media with requiresReload triggers multi-file (sequence) reload prompt
- * - Sequence-type media calls loadSequence instead of loadFile
- * - Non-video accept filter uses SUPPORTED_MEDIA_ACCEPT instead of hardcoded 'image/*'
- * - Non-blob sequence media also uses the sequence reload path
+ * Regression tests for issue #385:
+ * Session-restore file picker must use SUPPORTED_MEDIA_ACCEPT for all media
+ * types (image, video), not hardcode 'image/*' or 'video/*' which excludes
+ * pro formats (EXR, DPX, Cineon, MKV, etc.) that browsers don't map to
+ * standard MIME wildcards.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -23,19 +20,18 @@ import { createDefaultCurvesData } from '../../color/ColorCurves';
 import { DEFAULT_STEREO_EYE_TRANSFORM_STATE, DEFAULT_STEREO_ALIGN_MODE } from '../../stereo/StereoRenderer';
 import { SUPPORTED_MEDIA_ACCEPT } from '../../utils/media/SupportedMediaFormats';
 
-// Mock both Modal functions
+// Mock Modal functions
 vi.mock('../../ui/components/shared/Modal', () => ({
   showFileReloadPrompt: vi.fn(),
   showSequenceReloadPrompt: vi.fn(),
 }));
 
-import { showFileReloadPrompt, showSequenceReloadPrompt } from '../../ui/components/shared/Modal';
+import { showFileReloadPrompt } from '../../ui/components/shared/Modal';
 
 beforeEach(() => {
   vi.clearAllMocks();
 });
 
-// Helper — mirrors createMockComponents from other serializer tests
 function createMockComponents(): SessionComponents {
   const paintEngine = new PaintEngine();
   vi.spyOn(paintEngine, 'loadFromAnnotations');
@@ -164,160 +160,16 @@ function createMockComponents(): SessionComponents {
   } as any;
 }
 
-describe('Issue #384: Sequence reload should not collapse to single image', () => {
-  it('ISS-384-001: sequence with requiresReload uses showSequenceReloadPrompt (multi-file)', async () => {
+describe('Issue #385: Restore file picker must use SUPPORTED_MEDIA_ACCEPT for all types', () => {
+  it('ISS-385-001: image reload uses SUPPORTED_MEDIA_ACCEPT (not hardcoded image/*)', async () => {
     const components = createMockComponents();
-    const seqFiles = [
-      new File(['a'], 'frame.0001.exr'),
-      new File(['b'], 'frame.0002.exr'),
-      new File(['c'], 'frame.0003.exr'),
-    ];
-    vi.mocked(showSequenceReloadPrompt).mockResolvedValue(seqFiles);
-
-    const state = SessionSerializer.createEmpty();
-    state.media = [
-      {
-        name: 'frame.####.exr',
-        path: '',
-        type: 'sequence',
-        width: 1920,
-        height: 1080,
-        duration: 3,
-        fps: 24,
-        requiresReload: true,
-        sequencePattern: 'frame.####.exr',
-        frameRange: { start: 1, end: 3 },
-      },
-    ];
-
-    const result = await SessionSerializer.fromJSON(state, components);
-
-    // Should use the sequence prompt, NOT the single file prompt
-    expect(showSequenceReloadPrompt).toHaveBeenCalledTimes(1);
-    expect(showFileReloadPrompt).not.toHaveBeenCalled();
-
-    // Should call loadSequence, NOT loadFile
-    expect((components.session as any).loadSequence).toHaveBeenCalledWith(seqFiles);
-    expect((components.session as any).loadFile).not.toHaveBeenCalled();
-
-    expect(result.loadedMedia).toBe(1);
-  });
-
-  it('ISS-384-002: sequence with requiresReload passes SUPPORTED_MEDIA_ACCEPT to prompt', async () => {
-    const components = createMockComponents();
-    vi.mocked(showSequenceReloadPrompt).mockResolvedValue(null); // user skips
-
-    const state = SessionSerializer.createEmpty();
-    state.media = [
-      {
-        name: 'shot.####.dpx',
-        path: '',
-        type: 'sequence',
-        width: 2048,
-        height: 1080,
-        duration: 48,
-        fps: 24,
-        requiresReload: true,
-      },
-    ];
-
-    await SessionSerializer.fromJSON(state, components);
-
-    expect(showSequenceReloadPrompt).toHaveBeenCalledWith('shot.####.dpx', {
-      title: 'Reload Sequence',
-      accept: SUPPORTED_MEDIA_ACCEPT,
-    });
-  });
-
-  it('ISS-384-003: sequence reload skipped produces warning (not crash)', async () => {
-    const components = createMockComponents();
-    vi.mocked(showSequenceReloadPrompt).mockResolvedValue(null);
-
-    const state = SessionSerializer.createEmpty();
-    state.media = [
-      {
-        name: 'seq.####.exr',
-        path: '',
-        type: 'sequence',
-        width: 1920,
-        height: 1080,
-        duration: 10,
-        fps: 24,
-        requiresReload: true,
-      },
-    ];
-
-    const result = await SessionSerializer.fromJSON(state, components);
-
-    expect(result.loadedMedia).toBe(0);
-    expect(result.warnings).toContain('Skipped reload: seq.####.exr');
-  });
-
-  it('ISS-384-004: sequence reload failure produces warning', async () => {
-    const components = createMockComponents();
-    const seqFiles = [new File(['a'], 'frame.0001.exr')];
-    vi.mocked(showSequenceReloadPrompt).mockResolvedValue(seqFiles);
-    (components.session as any).loadSequence.mockRejectedValue(new Error('decode failed'));
-
-    const state = SessionSerializer.createEmpty();
-    state.media = [
-      {
-        name: 'seq.####.exr',
-        path: '',
-        type: 'sequence',
-        width: 1920,
-        height: 1080,
-        duration: 10,
-        fps: 24,
-        requiresReload: true,
-      },
-    ];
-
-    const result = await SessionSerializer.fromJSON(state, components);
-
-    expect(result.loadedMedia).toBe(0);
-    expect(result.warnings).toContain('Failed to reload sequence: seq.####.exr');
-  });
-
-  it('ISS-384-005: non-blob sequence type also uses sequence reload prompt', async () => {
-    const components = createMockComponents();
-    const seqFiles = [
-      new File(['a'], 'img.0001.png'),
-      new File(['b'], 'img.0002.png'),
-    ];
-    vi.mocked(showSequenceReloadPrompt).mockResolvedValue(seqFiles);
-
-    const state = SessionSerializer.createEmpty();
-    state.media = [
-      {
-        name: 'img.####.png',
-        path: 'file:///some/path',  // non-blob, non-empty path but type=sequence
-        type: 'sequence',
-        width: 800,
-        height: 600,
-        duration: 2,
-        fps: 30,
-        sequencePattern: 'img.####.png',
-        frameRange: { start: 1, end: 2 },
-      },
-    ];
-
-    const result = await SessionSerializer.fromJSON(state, components);
-
-    expect(showSequenceReloadPrompt).toHaveBeenCalledTimes(1);
-    expect((components.session as any).loadSequence).toHaveBeenCalledWith(seqFiles);
-    expect(result.loadedMedia).toBe(1);
-  });
-
-  it('ISS-384-006: image with requiresReload still uses single-file prompt with SUPPORTED_MEDIA_ACCEPT', async () => {
-    const components = createMockComponents();
-    const file = new File(['img'], 'photo.exr');
+    const file = new File(['img'], 'render.exr');
     vi.mocked(showFileReloadPrompt).mockResolvedValue(file);
 
     const state = SessionSerializer.createEmpty();
     state.media = [
       {
-        name: 'photo.exr',
+        name: 'render.exr',
         path: '',
         type: 'image',
         width: 1920,
@@ -330,32 +182,29 @@ describe('Issue #384: Sequence reload should not collapse to single image', () =
 
     await SessionSerializer.fromJSON(state, components);
 
-    // Image type should use single-file prompt
-    expect(showFileReloadPrompt).toHaveBeenCalledTimes(1);
-    expect(showSequenceReloadPrompt).not.toHaveBeenCalled();
-
-    // Accept should be SUPPORTED_MEDIA_ACCEPT, not hardcoded 'image/*'
     const callArgs = vi.mocked(showFileReloadPrompt).mock.calls[0]!;
     expect(callArgs[1]!.accept).toBe(SUPPORTED_MEDIA_ACCEPT);
-
-    // Should use loadFile for single images
-    expect((components.session as any).loadFile).toHaveBeenCalledWith(file);
+    // Must include pro format extensions
+    expect(callArgs[1]!.accept).toContain('.exr');
+    expect(callArgs[1]!.accept).toContain('.dpx');
+    expect(callArgs[1]!.accept).toContain('.cin');
+    expect(callArgs[1]!.accept).toContain('.tiff');
   });
 
-  it('ISS-384-007: video with requiresReload uses SUPPORTED_MEDIA_ACCEPT (not hardcoded video/*)', async () => {
+  it('ISS-385-002: video reload uses SUPPORTED_MEDIA_ACCEPT (not hardcoded video/*)', async () => {
     const components = createMockComponents();
-    const file = new File(['vid'], 'clip.mp4');
+    const file = new File(['vid'], 'footage.mkv');
     vi.mocked(showFileReloadPrompt).mockResolvedValue(file);
 
     const state = SessionSerializer.createEmpty();
     state.media = [
       {
-        name: 'clip.mp4',
+        name: 'footage.mkv',
         path: '',
         type: 'video',
         width: 1920,
         height: 1080,
-        duration: 100,
+        duration: 200,
         fps: 24,
         requiresReload: true,
       },
@@ -365,5 +214,72 @@ describe('Issue #384: Sequence reload should not collapse to single image', () =
 
     const callArgs = vi.mocked(showFileReloadPrompt).mock.calls[0]!;
     expect(callArgs[1]!.accept).toBe(SUPPORTED_MEDIA_ACCEPT);
+    // Must include video container extensions that browsers may not map to video/*
+    expect(callArgs[1]!.accept).toContain('.mkv');
+    expect(callArgs[1]!.accept).toContain('.ogv');
+  });
+
+  it('ISS-385-003: accept string is identical for image and video reload prompts', async () => {
+    // Restore a project with both an image and a video requiring reload
+    const components = createMockComponents();
+    const imgFile = new File(['img'], 'shot.dpx');
+    const vidFile = new File(['vid'], 'clip.webm');
+    vi.mocked(showFileReloadPrompt)
+      .mockResolvedValueOnce(imgFile)
+      .mockResolvedValueOnce(vidFile);
+
+    const state = SessionSerializer.createEmpty();
+    state.media = [
+      {
+        name: 'shot.dpx',
+        path: '',
+        type: 'image',
+        width: 2048,
+        height: 1080,
+        duration: 1,
+        fps: 24,
+        requiresReload: true,
+      },
+      {
+        name: 'clip.webm',
+        path: '',
+        type: 'video',
+        width: 1920,
+        height: 1080,
+        duration: 100,
+        fps: 30,
+        requiresReload: true,
+      },
+    ];
+
+    await SessionSerializer.fromJSON(state, components);
+
+    expect(showFileReloadPrompt).toHaveBeenCalledTimes(2);
+    const imageAccept = vi.mocked(showFileReloadPrompt).mock.calls[0]![1]!.accept;
+    const videoAccept = vi.mocked(showFileReloadPrompt).mock.calls[1]![1]!.accept;
+    // Both should use the same comprehensive accept string
+    expect(imageAccept).toBe(SUPPORTED_MEDIA_ACCEPT);
+    expect(videoAccept).toBe(SUPPORTED_MEDIA_ACCEPT);
+    expect(imageAccept).toBe(videoAccept);
+  });
+
+  it('ISS-385-004: SUPPORTED_MEDIA_ACCEPT includes both MIME wildcards and extension list', () => {
+    // Sanity check that the constant itself covers all needed bases
+    expect(SUPPORTED_MEDIA_ACCEPT).toContain('image/*');
+    expect(SUPPORTED_MEDIA_ACCEPT).toContain('video/*');
+    // Pro image formats
+    expect(SUPPORTED_MEDIA_ACCEPT).toContain('.exr');
+    expect(SUPPORTED_MEDIA_ACCEPT).toContain('.dpx');
+    expect(SUPPORTED_MEDIA_ACCEPT).toContain('.cin');
+    expect(SUPPORTED_MEDIA_ACCEPT).toContain('.hdr');
+    expect(SUPPORTED_MEDIA_ACCEPT).toContain('.tiff');
+    // RAW formats
+    expect(SUPPORTED_MEDIA_ACCEPT).toContain('.cr2');
+    expect(SUPPORTED_MEDIA_ACCEPT).toContain('.nef');
+    expect(SUPPORTED_MEDIA_ACCEPT).toContain('.dng');
+    // Video containers browsers may not recognize
+    expect(SUPPORTED_MEDIA_ACCEPT).toContain('.mkv');
+    expect(SUPPORTED_MEDIA_ACCEPT).toContain('.ogv');
+    expect(SUPPORTED_MEDIA_ACCEPT).toContain('.avi');
   });
 });

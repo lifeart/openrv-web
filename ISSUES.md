@@ -16,31 +16,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Mu-compatible scripts can get a path to the wrong matching node when multiple upstream branches contain the requested type.
   - That makes “closest by type” unstable across graph shapes and input ordering, which is a logic bug rather than just an approximation.
 
-### 254. Mu compat `fileKind()` misclassifies normal signed or query-string media URLs as unknown files
-
-- Severity: Medium
-- Area: Mu compatibility / file-kind detection
-- Evidence:
-  - `fileKind(path)` determines the extension by calling `getExtension(path)` and lowercasing the substring after the last literal `.` in [src/compat/MuUtilsBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuUtilsBridge.ts#L83) through [src/compat/MuUtilsBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuUtilsBridge.ts#L143).
-  - `getExtension(...)` does not strip query strings or fragments; it simply returns `path.slice(lastDot + 1)` in [src/compat/MuUtilsBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuUtilsBridge.ts#L351) through [src/compat/MuUtilsBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuUtilsBridge.ts#L355).
-  - A common browser URL like `https://example.com/shot.exr?token=abc` therefore yields the extension `exr?token=abc`, which will not match any supported extension list.
-  - The tests only cover bare filenames such as `test.exr`, `video.mp4`, and `TEST.EXR`; there is no coverage for URL-style inputs with `?` or `#` in [src/compat/__tests__/MuEventBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuEventBridge.test.ts#L558) through [src/compat/__tests__/MuEventBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuEventBridge.test.ts#L599).
-- Impact:
-  - Mu-compatible scripts that classify browser-delivered media URLs can get `UnknownFile` for ordinary signed image, movie, LUT, or CDL URLs.
-  - That breaks detection logic exactly in the web scenarios where browser-style URLs are most common.
-
-### 255. Mu compat `remoteConnect()` forces `wss` for every non-local host, which blocks valid plain-`ws` remotes
-
-- Severity: Medium
-- Area: Mu compatibility / remote networking
-- Evidence:
-  - `remoteConnect(name, host, port)` selects `ws` only for `localhost` or `127.0.0.1`; every other host is forced to `wss` in [src/compat/MuNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuNetworkBridge.ts#L85) through [src/compat/MuNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuNetworkBridge.ts#L87).
-  - The method does not inspect the current page protocol, allow an explicit scheme, or provide any override for environments where a non-local remote is legitimately served over plain `ws`.
-  - The compat tests only check the disabled-network warning path and never exercise actual socket URL construction in [src/compat/__tests__/MuEventBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuEventBridge.test.ts#L671) through [src/compat/__tests__/MuEventBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuEventBridge.test.ts#L677).
-- Impact:
-  - Mu-compatible scripts cannot connect to a valid non-local RV peer that is exposed over plain WebSocket, even in environments where that is expected and allowed.
-  - This is a logic bug in connection setup rather than a browser limitation, because the bridge chooses the scheme before the connection attempt even starts.
-
 ### 257. Mu compat playback-health commands are marked supported but only expose hardcoded or never-updated local state
 
 - Severity: Medium
@@ -80,19 +55,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Mu-compatible code can pass a tag expecting tag-scoped hit testing and get no behavioral difference at all.
   - That makes the API misleading for any integration that relies on tagged regions rather than a single bare rectangle per event table.
 
-### 260. Mu compat `wireDOMEvents()` double-registers listeners if called more than once on the same target
-
-- Severity: Medium
-- Area: Mu compatibility / DOM event wiring
-- Evidence:
-  - Each `wireDOMEvents(target)` call unconditionally adds fresh `keydown`, `keyup`, `pointerdown`, `pointerup`, `pointermove`, and `wheel` listeners to the target in [src/compat/MuEventBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEventBridge.ts#L208) through [src/compat/MuEventBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEventBridge.ts#L219).
-  - The bridge keeps only cleanup callbacks in `domListenerCleanups`; it does not track which targets were already wired or deduplicate handlers in [src/compat/MuEventBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEventBridge.ts#L15) through [src/compat/MuEventBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEventBridge.ts#L16) and [src/compat/MuEventBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEventBridge.ts#L208) through [src/compat/MuEventBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEventBridge.ts#L220).
-  - That means a second call on the same target will dispatch each DOM event twice until `dispose()` runs.
-  - There is no compat test covering repeated `wireDOMEvents(...)` on the same element.
-- Impact:
-  - Mu-compatible integrations that reinitialize or rewire the same canvas/element can end up with duplicated key and pointer handling.
-  - Because the failure mode is repeated event dispatch rather than an explicit error, it can look like random double-triggering in interactive tools.
-
 ### 261. Mu compat fullscreen helpers do not track the Safari/WebKit fullscreen path that the main app supports
 
 - Severity: Medium
@@ -119,19 +81,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Mu-compatible scripts can switch a source to `proxy` or another representation and still have follow-up media queries report the old base media.
   - That breaks representation-aware workflows because the bridge advertises rep switching while its own read APIs continue to describe a different source state.
 
-### 263. Mu compat `imagesAtPixel()` returns all rendered images, not just images under the queried point
-
-- Severity: Medium
-- Area: Mu compatibility / image-query scripting
-- Evidence:
-  - The API documentation says `imagesAtPixel(...)` should return “images under the point” in [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L226) through [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L234).
-  - The implementation computes `inside` and `edge`, but then unconditionally pushes a result for every rendered image as long as `_screenToImage(...)` returns coordinates in [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L239) through [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L263).
-  - That means a point far outside the image still returns that image with `inside: false`, which the current tests explicitly accept in [src/compat/__tests__/MuEvalBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuEvalBridge.test.ts#L274) through [src/compat/__tests__/MuEvalBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuEvalBridge.test.ts#L279).
-  - On multi-image renders, the method will therefore report all images with projected coordinates rather than filtering to the actual hit set.
-- Impact:
-  - Mu-compatible hit-testing scripts can treat non-hit images as if they were returned by the query, unless they add their own extra filtering.
-  - That makes the command semantically misleading because its name and docs promise a filtered hit result, but the implementation returns a per-image projection table instead.
-
 ### 264. Mu compat `imageGeometryByTag()` ignores the tag argument entirely
 
 - Severity: Medium
@@ -155,58 +104,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Mu-compatible tools that expect local-coordinate conversion can pass `true` and still get the global/default coordinate behavior.
   - That can break overlay or node-local interaction logic because the flag is accepted but semantically inert.
-
-### 266. Mu compat `sourcesAtFrame()` ignores the requested frame when it falls back to the current OpenRV source
-
-- Severity: Medium
-- Area: Mu compatibility / source queries
-- Evidence:
-  - `sourcesAtFrame(frame)` correctly filters local `SourceRecord`s against `startFrame` and `endFrame` in [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L158) through [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L167).
-  - If no local source matches, the fallback path simply appends `getOpenRV().media.getCurrentSource().name` without comparing the requested frame to any duration or range in [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L169) through [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L178).
-  - The mock current source used in tests even exposes a `duration` field, but the fallback path does not consult it in [src/compat/__tests__/MuSourceBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuSourceBridge.test.ts#L6) through [src/compat/__tests__/MuSourceBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuSourceBridge.test.ts#L22).
-  - The existing fallback test only checks frame `1`, so the out-of-range behavior is untested in [src/compat/__tests__/MuSourceBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuSourceBridge.test.ts#L71) through [src/compat/__tests__/MuSourceBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuSourceBridge.test.ts#L74).
-- Impact:
-  - Mu-compatible scripts can ask which sources are active at an out-of-range frame and still be told that the current OpenRV source is active.
-  - That makes the fallback semantics inconsistent with the local-source path and unreliable for timeline-aware tooling.
-
-### 267. Mu compat `sourceMediaInfoList()` omits the same fallback current source that `sources()` exposes
-
-- Severity: Medium
-- Area: Mu compatibility / source queries
-- Evidence:
-  - `sources()` returns a fabricated fallback entry from `openrv.media.getCurrentSource()` when there are no local sources in [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L124) through [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L147).
-  - `sourceMediaInfoList()` does not use that fallback path at all; it only maps over `this._sources.values()` in [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L389) through [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L393).
-  - So in the “no local sources, but current OpenRV source exists” case, the bridge can report one source via `sources()` and zero sources via `sourceMediaInfoList()`.
-  - The current tests cover local-source listing for `sourceMediaInfoList()`, but not its behavior in the fallback-only case in [src/compat/__tests__/MuSourceBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuSourceBridge.test.ts#L284) through [src/compat/__tests__/MuSourceBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuSourceBridge.test.ts#L292).
-- Impact:
-  - Mu-compatible scripts can get contradictory answers from adjacent source-listing APIs depending on whether they ask for names or info objects.
-  - That inconsistency makes the fallback source model harder to consume and easy to mis-handle in integrations.
-
-### 268. Mu compat fallback `sources()` entries put the source name in the `media` field instead of a media path
-
-- Severity: Medium
-- Area: Mu compatibility / source queries
-- Evidence:
-  - When no local sources exist, `sources()` returns a fallback object using `media: current.name` in [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L133) through [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L141).
-  - The mocked `getCurrentSource()` payload used by the tests contains only metadata such as `name`, `type`, `width`, `height`, `duration`, and `fps`; it does not contain an actual media path in [src/compat/__tests__/MuSourceBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuSourceBridge.test.ts#L6) through [src/compat/__tests__/MuSourceBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuSourceBridge.test.ts#L22).
-  - So the fallback `media` value is, by construction, not the same kind of data that locally tracked source entries return in their `media` field.
-  - The current fallback test only asserts the returned `name` and does not validate the `media` field content in [src/compat/__tests__/MuSourceBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuSourceBridge.test.ts#L43) through [src/compat/__tests__/MuSourceBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuSourceBridge.test.ts#L48).
-- Impact:
-  - Mu-compatible scripts consuming `sources()` can interpret the fallback entry’s `media` value as a real path and then mis-handle it in file/path-based workflows.
-  - This is another schema inconsistency inside the same API, because local entries expose media paths while fallback entries expose source identifiers.
-
-### 269. Mu compat `setNodeInputs()` is not atomic and can leave a node partially rewired after a later connection failure
-
-- Severity: Medium
-- Area: Mu compatibility / node graph editing
-- Evidence:
-  - `setNodeInputs(name, inputNames)` resolves all input nodes first, then immediately disconnects all existing inputs via `node.disconnectAllInputs()` in [src/compat/MuNodeBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuNodeBridge.ts#L178) through [src/compat/MuNodeBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuNodeBridge.ts#L188).
-  - It then connects the new inputs one by one in a loop, relying on `Graph.connect(...)` to detect cycles in [src/compat/MuNodeBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuNodeBridge.ts#L189) through [src/compat/MuNodeBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuNodeBridge.ts#L192).
-  - `Graph.connect(...)` can throw `Connection would create a cycle` after earlier connections have already been applied in [src/core/graph/Graph.ts](/Users/lifeart/Repos/openrv-web/src/core/graph/Graph.ts#L57) through [src/core/graph/Graph.ts](/Users/lifeart/Repos/openrv-web/src/core/graph/Graph.ts#L68).
-  - There is no rollback path to restore the original inputs if one of the later connections fails.
-- Impact:
-  - Mu-compatible scripts can attempt to replace a node’s inputs and end up with a partially applied graph mutation instead of either the old inputs or the full new set.
-  - That makes graph editing brittle because a single invalid input in the requested set can silently destroy the previous connection layout before the method throws.
 
 ### 270. Mu compat `nodeConnections(..., traverseGroups)` ignores the `traverseGroups` flag
 
@@ -244,71 +141,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Mu-compatible tools cannot query camera-space coordinates relative to a specific view node even though the method signature suggests they can.
   - In multi-view or graph-aware contexts, that makes the returned coordinates depend only on whatever global transform was last injected.
-
-### 273. Mu settings helpers can throw in blocked-storage environments even though read/write paths are guarded
-
-- Severity: Medium
-- Area: Mu compatibility / settings persistence
-- Evidence:
-  - `readSetting(...)` and `writeSetting(...)` wrap `localStorage` access in `try/catch` in [src/compat/MuSettingsBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSettingsBridge.ts#L23) through [src/compat/MuSettingsBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSettingsBridge.ts#L55).
-  - The rest of the API does not: `hasSetting(...)`, `removeSetting(...)`, `listSettings(...)`, `clearGroup(...)`, and `clearAll()` call `localStorage` directly with no protection in [src/compat/MuSettingsBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSettingsBridge.ts#L60) through [src/compat/MuSettingsBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSettingsBridge.ts#L123).
-  - In browsers or privacy modes where storage access itself throws, the bridge therefore mixes “graceful fallback” behavior for some operations with hard exceptions for adjacent ones.
-  - The compat tests only cover normal storage behavior and do not exercise blocked or throwing `localStorage` paths.
-- Impact:
-  - Mu-compatible integrations can see settings reads/writes quietly degrade while settings enumeration or removal crashes the bridge in the same environment.
-  - That inconsistency makes storage failures harder to reason about and can break recovery/cleanup paths specifically when storage is already degraded.
-
-### 274. Mu compat `sendInternalEvent()` discards handler-written `returnContents`
-
-- Severity: Medium
-- Area: Mu compatibility / event dispatch
-- Evidence:
-  - The `MuEvent` type explicitly includes a mutable `returnContents` field “for reject/accept signaling” in [src/compat/types.ts](/Users/lifeart/Repos/openrv-web/src/compat/types.ts#L15) through [src/compat/types.ts](/Users/lifeart/Repos/openrv-web/src/compat/types.ts#L25).
-  - `MuEventBridge.sendInternalEvent(...)` creates an event object with `returnContents: ''`, dispatches it, and returns `void` in [src/compat/MuEventBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEventBridge.ts#L191) through [src/compat/MuEventBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEventBridge.ts#L200).
-  - That means any handler mutation of `event.returnContents` is lost to the caller unless they bypass `MuEventBridge` and directly use `ModeManager.dispatchEvent(...)` with their own event object.
-  - The current bridge tests validate only that `sendInternalEvent(...)` creates and dispatches the event object, not that any return payload can be observed by the caller in [src/compat/__tests__/MuEventBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuEventBridge.test.ts#L341) through [src/compat/__tests__/MuEventBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuEventBridge.test.ts#L424).
-- Impact:
-  - Mu-compatible code cannot use the public bridge to get reply data back from internal event handlers even though the event model advertises a return channel.
-  - That turns `sendInternalEvent()` into a fire-and-forget dispatch path, which is a semantic mismatch for callers expecting request/response-style event handling.
-
-### 275. `registerMuCompat()` is documented as a no-op on repeat calls but still returns fresh unmounted command objects each time
-
-- Severity: Medium
-- Area: Mu compatibility / bootstrap contract
-- Evidence:
-  - The function comment says repeated calls are safe and “subsequent calls are no-ops” in [src/compat/index.ts](/Users/lifeart/Repos/openrv-web/src/compat/index.ts#L35) through [src/compat/index.ts](/Users/lifeart/Repos/openrv-web/src/compat/index.ts#L40), and the public docs repeat the same promise in [docs/advanced/mu-compat.md](/Users/lifeart/Repos/openrv-web/docs/advanced/mu-compat.md#L12) through [docs/advanced/mu-compat.md](/Users/lifeart/Repos/openrv-web/docs/advanced/mu-compat.md#L16).
-  - The implementation still constructs a brand new `MuCommands` and `MuExtraCommands` pair on every call in [src/compat/index.ts](/Users/lifeart/Repos/openrv-web/src/compat/index.ts#L42) through [src/compat/index.ts](/Users/lifeart/Repos/openrv-web/src/compat/index.ts#L53).
-  - If `window.rv` already exists, the function leaves the global untouched but still returns the fresh pair, so the returned objects are not the mounted global compat instances in [src/compat/index.ts](/Users/lifeart/Repos/openrv-web/src/compat/index.ts#L46) through [src/compat/index.ts](/Users/lifeart/Repos/openrv-web/src/compat/index.ts#L50).
-  - The tests verify only that an existing `window.rv` is not overwritten, not that repeat calls return the already-mounted objects in [src/compat/__tests__/MuCommands.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuCommands.test.ts#L734) through [src/compat/__tests__/MuCommands.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuCommands.test.ts#L740).
-- Impact:
-  - Integrations can call `registerMuCompat()` twice and receive a second compat object graph that is detached from the globally mounted `window.rv` namespace.
-  - That breaks the documented “no-op” contract and can split state across multiple compat instances without the caller realizing it.
-
-### 276. Mu compat async introspection says `fullScreenMode` is async, but the command does not actually return a Promise
-
-- Severity: Medium
-- Area: Mu compatibility / command introspection
-- Evidence:
-  - `MuCommands.isAsync(name)` reports `true` for `fullScreenMode` because `ASYNC_COMMANDS` contains that command name in [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L126) through [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L173).
-  - The public docs reinforce that contract by saying `fullScreenMode()` returns a Promise internally and pointing callers to `commands.isAsync(name)` in [docs/advanced/mu-compat.md](/Users/lifeart/Repos/openrv-web/docs/advanced/mu-compat.md#L486) through [docs/advanced/mu-compat.md](/Users/lifeart/Repos/openrv-web/docs/advanced/mu-compat.md#L490).
-  - The actual implementation of `MuCommands.fullScreenMode(...)` returns `void` and just fires the fullscreen calls without awaiting or returning their promises in [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L391) through [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L399).
-  - The tests only validate that `isAsync('fullScreenMode')` is `true`; they do not check the runtime return value of `fullScreenMode(...)` in [src/compat/__tests__/MuCommands.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuCommands.test.ts#L135) through [src/compat/__tests__/MuCommands.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuCommands.test.ts#L140).
-- Impact:
-  - A caller can use the official introspection path, conclude that `fullScreenMode` is awaitable, and then receive `undefined` instead of a promise.
-  - That makes the async-command contract unreliable exactly where the docs tell callers to depend on it.
-
-### 278. `MediaCacheManager` claims graceful OPFS fallback, but browsers without `createWritable()` still initialize and then fail writes noisily
-
-- Severity: Medium
-- Area: Caching / storage fallback
-- Evidence:
-  - The class header says it is “Designed to degrade gracefully” and that when storage is unavailable “all public methods become safe no-ops” in [src/cache/MediaCacheManager.ts](/Users/lifeart/Repos/openrv-web/src/cache/MediaCacheManager.ts#L1) through [src/cache/MediaCacheManager.ts](/Users/lifeart/Repos/openrv-web/src/cache/MediaCacheManager.ts#L9).
-  - `initialize()` succeeds as long as `navigator.storage.getDirectory()` and IndexedDB work; it does not probe `createWritable()` support before marking the manager initialized in [src/cache/MediaCacheManager.ts](/Users/lifeart/Repos/openrv-web/src/cache/MediaCacheManager.ts#L94) through [src/cache/MediaCacheManager.ts](/Users/lifeart/Repos/openrv-web/src/cache/MediaCacheManager.ts#L117).
-  - Later, `put(...)` always calls `writeFile(...)`, and `writeFile(...)` throws `createWritable not supported` whenever the file handle lacks that method in [src/cache/MediaCacheManager.ts](/Users/lifeart/Repos/openrv-web/src/cache/MediaCacheManager.ts#L154) through [src/cache/MediaCacheManager.ts](/Users/lifeart/Repos/openrv-web/src/cache/MediaCacheManager.ts#L187) and [src/cache/MediaCacheManager.ts](/Users/lifeart/Repos/openrv-web/src/cache/MediaCacheManager.ts#L331) through [src/cache/MediaCacheManager.ts](/Users/lifeart/Repos/openrv-web/src/cache/MediaCacheManager.ts#L352).
-  - The code comment even calls this branch a “fallback,” but the implementation is a hard failure rather than a no-op path.
-- Impact:
-  - On partial-OPFS environments, media caching can look initialized and then fail on every background write instead of cleanly disabling itself.
-  - That creates repeated error churn and violates the cache layer’s advertised fallback contract.
 
 ### 301. RV/GTO import diagnostics for skipped nodes and degraded modes are emitted internally but never surfaced to users
 
@@ -1187,19 +1019,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Users cannot name or describe a snapshot at creation time even though the docs present that as the normal workflow.
   - That makes the snapshot list harder to curate for real review sessions, especially when multiple checkpoints are created close together.
 
-### 375. Auto-save settings expose only 1-50 saved versions even though the manager and docs support 1-100
-
-- Severity: Low
-- Area: Auto-save settings UI / documentation
-- Evidence:
-  - The session-management guide documents `Max versions` as `1--100` in [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L136) through [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L140).
-  - `AutoSaveManager` also clamps `maxVersions` to `1..100` in [src/core/session/AutoSaveManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AutoSaveManager.ts#L552).
-  - But the shipped auto-save settings popover creates its `Max versions` range input with `max = '50'` in [src/ui/components/AutoSaveIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/AutoSaveIndicator.ts#L318) through [src/ui/components/AutoSaveIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/AutoSaveIndicator.ts#L327).
-  - The same component’s config import/storage path still accepts values up to `100` in [src/ui/components/AutoSaveIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/AutoSaveIndicator.ts#L463) through [src/ui/components/AutoSaveIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/AutoSaveIndicator.ts#L464), so the narrower limit is UI-only.
-- Impact:
-  - Users cannot set the documented upper half of the supported retention range from the shipped UI.
-  - That also means imported or persisted values above 50 are outside the control’s visible authored range, which makes the settings surface less trustworthy.
-
 ### 376. Auto-checkpoints are documented as broad safety nets before major operations, but production only creates them for restore and project-load flows
 
 - Severity: Medium
@@ -1238,18 +1057,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - In normal use, the selected interval is not the real cadence users get; most changes are saved after about two seconds of inactivity instead.
   - That makes the interval control misleading and changes the storage/performance tradeoff users think they are configuring.
 
-### 381. Snapshot import bypasses the documented snapshot-retention limits
-
-- Severity: Low
-- Area: Snapshot storage / import workflow
-- Evidence:
-  - The session-management guide documents hard limits of 50 manual snapshots and 10 auto-checkpoints in [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L118) through [docs/advanced/session-management.md#L122).
-  - Normal in-app snapshot creation enforces those limits by pruning after `createSnapshot(...)` and `createAutoCheckpoint(...)` in [src/core/session/SnapshotManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SnapshotManager.ts#L124) through [src/core/session/SnapshotManager.ts#L152) and [src/core/session/SnapshotManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SnapshotManager.ts#L159) through [src/core/session/SnapshotManager.ts#L188).
-  - But `importSnapshot(...)` writes the imported snapshot and notifies listeners without calling any prune path in [src/core/session/SnapshotManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SnapshotManager.ts#L508) through [src/core/session/SnapshotManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SnapshotManager.ts#L539).
-- Impact:
-  - Users can exceed the documented retention limits simply by importing snapshot files, so the storage model behaves differently depending on how entries were created.
-  - That makes the snapshot limits less trustworthy and can leave more retained state than the UI/docs imply.
-
 ### 382. The session export docs say RV/GTO sessions are import-only, but the shipped Export menu still saves `.rv` and `.gto`
 
 - Severity: Low
@@ -1274,32 +1081,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Users cannot actually cancel the whole restore/reload flow from that dialog even though the docs say they can.
   - Dismissing the prompt can silently degrade the restored session instead of aborting the operation, which is materially different from a true cancel action.
-
-### 385. The restore-time file picker narrows non-video reloads to `image/*` instead of the app's full supported media set
-
-- Severity: Medium
-- Area: Session restore / media reload compatibility
-- Evidence:
-  - The app's normal media picker accepts the full supported extension list through `SUPPORTED_MEDIA_ACCEPT`, including pro image formats such as EXR, DPX, TIFF, and RAW extensions, in [src/utils/media/SupportedMediaFormats.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SupportedMediaFormats.ts#L10) through [src/utils/media/SupportedMediaFormats.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SupportedMediaFormats.ts#L42) and [src/utils/media/SupportedMediaFormats.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SupportedMediaFormats.ts#L117) through [src/utils/media/SupportedMediaFormats.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SupportedMediaFormats.ts#L124).
-  - The main header file input uses that broader accept string in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L219).
-  - But the session-restore path hardcodes `accept = 'image/*'` for every non-video reload prompt in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L472) through [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L476).
-  - This is an inference from the picker filter: many browser file pickers use `accept` to hide or de-prioritize files whose MIME types are not recognized as generic web images, even when the app itself supports those extensions.
-- Impact:
-  - Recovering supported local EXR/DPX/RAW-style media can become harder than loading the same files through the normal Open Media entry point.
-  - That makes the restore workflow less capable than the app's advertised format support, specifically in the crash/project-recovery path where users most need reliable file reattachment.
-
-### 386. The docs say `.orvproject` files can be dragged onto the viewer, but the viewer drop handler does not support them
-
-- Severity: Medium
-- Area: Project loading / drag-and-drop
-- Evidence:
-  - The session export guide says users can load a `.orvproject` "through the file picker ... or by dragging the file onto the viewer" in [docs/export/sessions.md](/Users/lifeart/Repos/openrv-web/docs/export/sessions.md#L35).
-  - The session-management guide repeats the same viewer-drop workflow in [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L67).
-  - The viewer drop handler only special-cases `.rvedl`, `.rv`, and `.gto`, then falls through to sequence/media loading in [src/ui/components/ViewerInputHandler.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInputHandler.ts#L709) through [src/ui/components/ViewerInputHandler.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInputHandler.ts#L819).
-  - A dropped `.orvproject` therefore reaches `session.loadFile(file)` in the generic file loop, but `loadFile(...)` only accepts media types detected as image/video and rejects unknown extensions in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L379) through [src/core/session/SessionMedia.ts#L393](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L393).
-- Impact:
-  - Users following the documented drag-and-drop project workflow will get a load error instead of opening the project.
-  - That makes project restore behavior inconsistent between the explicit Open Project button and the viewer’s drop zone.
 
 ### 387. The RV/GTO companion-file resolution path is effectively unreachable from the shipped Open Project picker
 
@@ -1337,18 +1118,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - The project-opening affordance bundles a timeline-import format that behaves fundamentally differently from a real project/session load.
   - That makes the button’s semantics fuzzy and increases the chance that users expect a session replacement when they are really just importing an edit list.
-
-### 390. `SnapshotManager` advertises a `snapshotRestored` event, but production never emits it
-
-- Severity: Low
-- Area: Snapshot subsystem / event contract
-- Evidence:
-  - `SnapshotManagerEvents` declares `snapshotRestored` in [src/core/session/SnapshotManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SnapshotManager.ts#L43) through [src/core/session/SnapshotManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SnapshotManager.ts#L52).
-  - A production-code search finds no `emit('snapshotRestored', ...)` call anywhere in `src`; the only hit is the event type declaration itself.
-  - The real restore path lives in `AppPersistenceManager.restoreSnapshot(...)`, which performs the restore and user alerts without going back through any `SnapshotManager` restore event in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L218) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L274).
-- Impact:
-  - Any runtime code written against the advertised snapshot-manager event surface cannot observe completed snapshot restores.
-  - That makes the snapshot event contract less trustworthy than the create/delete/rename paths, which do emit corresponding events.
 
 ### 391. Snapshot backend initialization failures are swallowed while the snapshot UI stays enabled
 
@@ -3439,58 +3208,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - A reader following the generated reference can land on a different historical version of the code than the one actually shipped in the repo.
   - That makes the API docs harder to audit and amplifies other documentation drift because the linked source is itself frozen at an older snapshot.
-
-### 564. The public marker API accepts non-integer frame numbers and stores them verbatim, so scripted markers can drift off the real playback frame grid
-
-- Severity: Medium
-- Area: Public API / markers / frame semantics
-- Evidence:
-  - `MarkersAPI.add()` validates only that `frame` is a positive number, then forwards it unchanged to `session.setMarker(...)` in [src/api/MarkersAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/MarkersAPI.ts#L40) through [src/api/MarkersAPI.ts#L63).
-  - The live session path also preserves that raw numeric value with no integer coercion in [src/core/session/SessionAnnotations.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionAnnotations.ts#L87) through [src/core/session/SessionAnnotations.ts#L88) and [src/core/session/MarkerManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MarkerManager.ts#L132) through [src/core/session/MarkerManager.ts#L141).
-  - Marker navigation then feeds that stored value back into playback via `this.currentFrame = frame` in [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L928) through [src/core/session/Session.ts#L940), while playback itself rounds frames to integers in [src/core/session/PlaybackEngine.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaybackEngine.ts#L220) through [src/core/session/PlaybackEngine.ts#L228).
-  - Even the current unit test name claims float input “rounds down,” but the assertion proves the opposite by expecting raw `10.7` to be forwarded in [src/api/OpenRVAPI.test.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.test.ts#L1469) through [src/api/OpenRVAPI.test.ts#L1471).
-- Impact:
-  - A script can create markers at fractional frames that the viewer can never actually hold as a playback position, so readback and navigation semantics diverge.
-  - That makes marker automation unreliable at the API boundary: `get(10)` and playback on frame `11` can disagree with a stored marker at `10.7`, even though the app is otherwise integer-frame based.
-
-### 565. The public loop-range API also accepts fractional frame numbers and preserves them as live in/out points, even though playback itself is integer-frame based
-
-- Severity: Medium
-- Area: Public API / playback range semantics
-- Evidence:
-  - `LoopAPI.setInPoint()` and `setOutPoint()` only reject non-numbers and `NaN`, then forward the raw value to the session in [src/api/LoopAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/LoopAPI.ts#L60) through [src/api/LoopAPI.ts#L92).
-  - The underlying playback engine clamps those values to bounds but does not round them to whole frames in [src/core/session/PlaybackEngine.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaybackEngine.ts#L689) through [src/core/session/PlaybackEngine.ts#L708).
-  - Those fractional in/out points are then emitted back out through `inOutChanged` and reused directly by playback-range logic in [src/core/session/PlaybackEngine.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaybackEngine.ts#L299), [src/core/session/PlaybackEngine.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaybackEngine.ts#L769) through [src/core/session/PlaybackEngine.ts#L770), and [src/core/session/PlaybackTimingController.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaybackTimingController.ts#L363) through [src/core/session/PlaybackTimingController.ts#L385).
-  - Actual frame positions are still rounded to integers by the playback engine in [src/core/session/PlaybackEngine.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaybackEngine.ts#L220) through [src/core/session/PlaybackEngine.ts#L228), and the public docs describe in/out points as 1-based frame numbers in [src/api/LoopAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/LoopAPI.ts#L53) through [src/api/LoopAPI.ts#L83).
-- Impact:
-  - Scripts can put the app into fractional playback ranges like `10.7-50.2`, which the viewer cannot actually display as discrete frames but the timing logic still treats as real boundaries.
-  - That makes range events and playback behavior semantically inconsistent at the API boundary, especially for looping, boundary checks, and exported/public in-out state.
-
-### 569. `openrv.markers.add()` accepts non-finite `frame` and `endFrame`, and the marker subsystem stores them as live marker state
-
-- Severity: Medium
-- Area: Public API / markers
-- Evidence:
-  - `MarkersAPI.add()` rejects only non-numbers, `NaN`, and frames `< 1`, so `Infinity` still passes for both `frame` and `endFrame` in [src/api/MarkersAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/MarkersAPI.ts#L44) through [src/api/MarkersAPI.ts#L63).
-  - The core marker manager does not sanitize those values; it stores `frame` as the map key and preserves any `endFrame > frame` verbatim in [src/core/session/MarkerManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MarkerManager.ts#L132) through [src/core/session/MarkerManager.ts#L142).
-  - Marker queries then operate on those raw values. `getMarkerAtFrame()` treats any frame `<= marker.endFrame`, so a marker with `endFrame = Infinity` becomes an effectively unbounded range in [src/core/session/MarkerManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MarkerManager.ts#L95) through [src/core/session/MarkerManager.ts#L103).
-  - The public readback path also returns marker frames/end frames unchanged in [src/api/MarkersAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/MarkersAPI.ts#L96) through [src/api/MarkersAPI.ts#L110).
-  - Current API tests cover `NaN`, zero, negatives, and normal floats, but they do not defend against non-finite marker positions in [src/api/OpenRVAPI.test.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.test.ts#L1368) through [src/api/OpenRVAPI.test.ts#L1511).
-- Impact:
-  - A script can create an infinite-range marker or an `Infinity`-position marker with one public API call, and that malformed state is then visible through `get()`, `getAll()`, and `markerChange`.
-  - Once such a marker exists, marker-hit testing and range semantics stop matching the app’s integer frame model, which can confuse automation and any UI or export path that assumes finite frame boundaries.
-
-### 570. `openrv.color.setAdjustments()` silently ignores or resets invalid numeric values instead of rejecting them
-
-- Severity: Medium
-- Area: Public API / color adjustments
-- Evidence:
-  - `ColorAPI.setAdjustments()` only validates that the outer argument is an object. Per-field numeric values are accepted whenever they are `typeof number` and not `NaN`, so `Infinity` still passes the API boundary while `NaN` is just skipped without an error in [src/api/ColorAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/ColorAPI.ts#L93) through [src/api/ColorAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/ColorAPI.ts#L127).
-  - The downstream control layer then rewrites non-finite numbers back to defaults instead of surfacing an error, in [src/ui/components/ColorControls.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ColorControls.ts#L746) through [src/ui/components/ColorControls.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ColorControls.ts#L755).
-  - The current tests explicitly lock in that behavior: `setAdjustments({ exposure: NaN, gamma: 2 })` keeps `gamma` and silently ignores the bad `exposure`, and `ColorControls` tests expect `Infinity` to fall back to defaults in [src/api/OpenRVAPI.test.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.test.ts#L1212) through [src/api/OpenRVAPI.test.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.test.ts#L1217) and [src/ui/components/ColorControls.test.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ColorControls.test.ts#L101) through [src/ui/components/ColorControls.test.ts#L108).
-- Impact:
-  - A script can send malformed primary-adjustment values and get a partial success with no exception, which makes automation bugs harder to notice than they should be.
-  - The public color API becomes internally inconsistent: primary adjustments silently normalize bad values, while neighboring setters like `setCDL()` are framed as validation-based APIs.
 
 ## Validation Notes
 

@@ -6,6 +6,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MuUtilsBridge } from '../MuUtilsBridge';
 import type { LoadingEventSource } from '../MuUtilsBridge';
+import { FileKind } from '../types';
 
 /**
  * Minimal mock event source that simulates sourceLoadingStarted / sourceLoaded.
@@ -432,6 +433,49 @@ describe('MuUtilsBridge', () => {
       emit('sourceLoaded', { name: 'ok2.jpg' });
       expect(bridge.loadCount()).toBe(3);
       expect(bridge.progressiveSourceLoading()).toBe(false);
+    });
+  });
+
+  // ── Bug Fix: fileKind strips query strings and fragments (Issue #254) ──
+
+  describe('fileKind — URL query strings and fragments', () => {
+    it('detects image file with ?query=string', () => {
+      expect(bridge.fileKind('https://example.com/shot.exr?token=abc')).toBe(FileKind.ImageFile);
+    });
+
+    it('detects image file with #fragment', () => {
+      expect(bridge.fileKind('https://example.com/shot.exr#section')).toBe(FileKind.ImageFile);
+    });
+
+    it('detects image file with both ?query and #fragment', () => {
+      expect(bridge.fileKind('https://example.com/shot.exr?q=1#frag')).toBe(FileKind.ImageFile);
+    });
+
+    it('detects image file with signed URL (multiple query params)', () => {
+      expect(bridge.fileKind('https://cdn.example.com/shot.exr?token=abc&sig=xyz&exp=123')).toBe(
+        FileKind.ImageFile,
+      );
+    });
+
+    it('detects movie file with query string', () => {
+      expect(bridge.fileKind('https://example.com/clip.mp4?v=2')).toBe(FileKind.MovieFile);
+    });
+
+    it('detects audio file with fragment', () => {
+      expect(bridge.fileKind('https://example.com/track.wav#t=10')).toBe(FileKind.AudioFile);
+    });
+
+    it('still works for normal filenames without query strings', () => {
+      expect(bridge.fileKind('/path/to/image.exr')).toBe(FileKind.ImageFile);
+      expect(bridge.fileKind('video.mp4')).toBe(FileKind.MovieFile);
+      expect(bridge.fileKind('audio.wav')).toBe(FileKind.AudioFile);
+      expect(bridge.fileKind('grades.cdl')).toBe(FileKind.CDLFile);
+      expect(bridge.fileKind('transform.cube')).toBe(FileKind.LUTFile);
+      expect(bridge.fileKind('session.rv')).toBe(FileKind.RVFile);
+    });
+
+    it('returns UnknownFile for paths with no extension', () => {
+      expect(bridge.fileKind('https://example.com/noext?token=abc')).toBe(FileKind.UnknownFile);
     });
   });
 

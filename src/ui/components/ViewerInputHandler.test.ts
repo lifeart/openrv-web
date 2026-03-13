@@ -1516,3 +1516,155 @@ describe('ViewerInputHandler – Text Annotation Selection (#106)', () => {
     expect(overlay).not.toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Drag-and-drop .orvproject file handling (Issue #386)
+// ---------------------------------------------------------------------------
+
+describe('ViewerInputHandler – .orvproject drop handling (Issue #386)', () => {
+  let ctx: ViewerInputContext;
+  let handler: ViewerInputHandler;
+  let dropOverlay: HTMLElement;
+
+  beforeEach(() => {
+    ctx = createMockContext();
+    dropOverlay = document.createElement('div');
+    handler = new ViewerInputHandler(ctx, dropOverlay);
+    handler.bindEvents();
+  });
+
+  afterEach(() => {
+    handler.unbindEvents();
+    const container = ctx.getContainer();
+    if (container.parentNode) {
+      container.parentNode.removeChild(container);
+    }
+  });
+
+  function dispatchDrop(container: HTMLElement, files: File[]): void {
+    const mockDataTransfer = { files };
+    const dropEvent = new Event('drop', { bubbles: true }) as any;
+    dropEvent.dataTransfer = mockDataTransfer;
+    dropEvent.preventDefault = vi.fn();
+    container.dispatchEvent(dropEvent);
+  }
+
+  it('PROJ-DROP-001: .orvproject file dropped invokes onProjectFileDrop callback', async () => {
+    const container = ctx.getContainer();
+    const callback = vi.fn();
+    handler.onProjectFileDrop = callback;
+
+    const projectFile = new File(['project-data'], 'session.orvproject');
+    dispatchDrop(container, [projectFile]);
+
+    await vi.waitFor(() => {
+      expect(callback).toHaveBeenCalledTimes(1);
+    });
+
+    expect(callback).toHaveBeenCalledWith(projectFile, []);
+  });
+
+  it('PROJ-DROP-002: .orvproject with companion files passes them to callback', async () => {
+    const container = ctx.getContainer();
+    const callback = vi.fn();
+    handler.onProjectFileDrop = callback;
+
+    const projectFile = new File(['project-data'], 'session.orvproject');
+    const media1 = new File(['img'], 'plate.exr');
+    const media2 = new File(['img'], 'bg.dpx');
+    dispatchDrop(container, [projectFile, media1, media2]);
+
+    await vi.waitFor(() => {
+      expect(callback).toHaveBeenCalledTimes(1);
+    });
+
+    const companionFiles = callback.mock.calls[0]![1] as File[];
+    expect(companionFiles).toHaveLength(2);
+    expect(companionFiles[0]!.name).toBe('plate.exr');
+    expect(companionFiles[1]!.name).toBe('bg.dpx');
+  });
+
+  it('PROJ-DROP-003: .orvproject is NOT routed through session.loadFile or loadFromGTO', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+    const callback = vi.fn();
+    handler.onProjectFileDrop = callback;
+
+    const projectFile = new File(['project-data'], 'test.orvproject');
+    dispatchDrop(container, [projectFile]);
+
+    await vi.waitFor(() => {
+      expect(callback).toHaveBeenCalledTimes(1);
+    });
+
+    expect(mockSession.loadFile).not.toHaveBeenCalled();
+    expect(mockSession.loadFromGTO).not.toHaveBeenCalled();
+    expect(mockSession.loadEDL).not.toHaveBeenCalled();
+    expect(mockSession.loadSequence).not.toHaveBeenCalled();
+  });
+
+  it('PROJ-DROP-004: case-insensitive .ORVPROJECT extension is recognized', async () => {
+    const container = ctx.getContainer();
+    const callback = vi.fn();
+    handler.onProjectFileDrop = callback;
+
+    const projectFile = new File(['project-data'], 'SESSION.ORVPROJECT');
+    dispatchDrop(container, [projectFile]);
+
+    await vi.waitFor(() => {
+      expect(callback).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('PROJ-DROP-005: .gto drop still works (no regression)', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+    const callback = vi.fn();
+    handler.onProjectFileDrop = callback;
+
+    const gtoFile = new File(['gto-data'], 'scene.gto');
+    dispatchDrop(container, [gtoFile]);
+
+    await vi.waitFor(() => {
+      expect(mockSession.loadFromGTO).toHaveBeenCalledTimes(1);
+    });
+
+    expect(callback).not.toHaveBeenCalled();
+  });
+
+  it('PROJ-DROP-006: .rvedl drop still works (no regression)', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+    const callback = vi.fn();
+    handler.onProjectFileDrop = callback;
+
+    const edlFile = new File(['edl-data'], 'timeline.rvedl');
+    (mockSession.loadEDL as ReturnType<typeof vi.fn>).mockReturnValue([]);
+
+    dispatchDrop(container, [edlFile]);
+
+    await vi.waitFor(() => {
+      expect(mockSession.loadEDL).toHaveBeenCalledTimes(1);
+    });
+
+    expect(callback).not.toHaveBeenCalled();
+  });
+
+  it('PROJ-DROP-007: .orvproject without callback shows warning alert', async () => {
+    const container = ctx.getContainer();
+    // Do NOT set handler.onProjectFileDrop — leave it null
+
+    const projectFile = new File(['project-data'], 'orphan.orvproject');
+    dispatchDrop(container, [projectFile]);
+
+    // Should not crash, and should not route to other handlers
+    const mockSession = ctx.getSession();
+    await vi.waitFor(() => {
+      // Give the async handler time to complete
+      expect(mockSession.loadFile).not.toHaveBeenCalled();
+    });
+
+    expect(mockSession.loadFromGTO).not.toHaveBeenCalled();
+    expect(mockSession.loadEDL).not.toHaveBeenCalled();
+  });
+});

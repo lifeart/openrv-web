@@ -529,6 +529,35 @@ describe('AutoSaveIndicator', () => {
       expect(setConfigCalls.length).toBe(0);
     });
 
+    it('AUTOSAVE-U043: versions slider max attribute is 100 (#375)', () => {
+      const manager = createMockManager();
+      indicator.connect(manager as any);
+      const element = indicator.render();
+
+      element.click();
+
+      const slider = document.body.querySelector<HTMLInputElement>('[data-testid="autosave-versions-slider"]')!;
+      expect(slider).not.toBeNull();
+      expect(slider.max).toBe('100');
+    });
+
+    it('AUTOSAVE-U044: setting max versions to 75 works within range (#375)', () => {
+      const manager = createMockManager();
+      indicator.connect(manager as any);
+      const element = indicator.render();
+
+      element.click();
+
+      const slider = document.body.querySelector<HTMLInputElement>('[data-testid="autosave-versions-slider"]')!;
+      slider.value = '75';
+      slider.dispatchEvent(new Event('input'));
+
+      expect(manager.setConfig).toHaveBeenCalledWith({ maxVersions: 75 });
+
+      const label = document.body.querySelector('[data-testid="autosave-versions-label"]');
+      expect(label?.textContent).toBe('Max versions: 75');
+    });
+
     it('AUTOSAVE-U042: Escape key closes popover', () => {
       const manager = createMockManager();
       indicator.connect(manager as any);

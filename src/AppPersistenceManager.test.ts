@@ -259,6 +259,7 @@ function createMockSnapshotManager() {
     createAutoCheckpoint: vi.fn(async () => {}),
     getSnapshot: vi.fn(async () => null),
     getSnapshotMetadata: vi.fn(async () => null),
+    notifyRestored: vi.fn(),
     dispose: vi.fn(),
   };
 }
@@ -599,6 +600,36 @@ describe('AppPersistenceManager', () => {
         expect.stringContaining('Failed to restore snapshot'),
         expect.objectContaining({ type: 'error' }),
       );
+      consoleSpy.mockRestore();
+    });
+
+    it('APM-083: restoreSnapshot emits snapshotRestored with correct snapshot metadata', async () => {
+      const mockState = { version: 1, name: 'test', color: { exposure: 0 } };
+      const mockMetadata = { id: 'snap-1', name: 'My Snapshot', createdAt: '2025-01-01T00:00:00Z', isAutoCheckpoint: false, version: 1, size: 100 };
+      fullCtx._snapshotManager.getSnapshot.mockResolvedValue(mockState as any);
+      fullCtx._snapshotManager.getSnapshotMetadata.mockResolvedValue(mockMetadata as any);
+
+      await manager.restoreSnapshot('snap-1');
+
+      expect(fullCtx._snapshotManager.notifyRestored).toHaveBeenCalledTimes(1);
+      expect(fullCtx._snapshotManager.notifyRestored).toHaveBeenCalledWith(mockMetadata);
+    });
+
+    it('APM-084: restoreSnapshot does NOT emit snapshotRestored when snapshot not found', async () => {
+      fullCtx._snapshotManager.getSnapshot.mockResolvedValue(null);
+
+      await manager.restoreSnapshot('missing-id');
+
+      expect(fullCtx._snapshotManager.notifyRestored).not.toHaveBeenCalled();
+    });
+
+    it('APM-084b: restoreSnapshot does NOT emit snapshotRestored when restore throws', async () => {
+      fullCtx._snapshotManager.getSnapshot.mockRejectedValue(new Error('DB read error'));
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      await manager.restoreSnapshot('snap-err');
+
+      expect(fullCtx._snapshotManager.notifyRestored).not.toHaveBeenCalled();
       consoleSpy.mockRestore();
     });
   });

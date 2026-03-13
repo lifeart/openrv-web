@@ -226,7 +226,7 @@ export class MuSourceBridge {
       if (current) {
         result.push({
           name: current.name,
-          media: current.url || current.name,
+          media: current.url || '',
           tag: 'default',
         });
       }
@@ -975,7 +975,7 @@ export class MuSourceBridge {
     try {
       const current = getOpenRV().media.getCurrentSource();
       if (current && !this._sources.has(current.name)) {
-        const mediaPath = current.url || current.name;
+        const mediaPath = current.url || '';
         const record = this._createSourceRecord([mediaPath], 'default', current.name);
         if (current.duration > 0) {
           record.endFrame = current.duration;

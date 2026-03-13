@@ -319,6 +319,11 @@ export class AppPersistenceManager {
       const metadata = await snapshotManager.getSnapshotMetadata(id);
       const snapName = metadata?.name || 'snapshot';
 
+      // Emit snapshotRestored event so listeners know restore succeeded (fix #390).
+      if (metadata) {
+        snapshotManager.notifyRestored(metadata);
+      }
+
       // Surface warnings from restore rather than always reporting success (fix #140).
       if (result.warnings.length > 0) {
         showAlert(

@@ -529,3 +529,188 @@
 **Files changed**:
 - `src/api/MediaAPI.ts`
 - `src/api/OpenRVAPI.test.ts`
+
+## Issue #254: Mu compat `fileKind()` misclassifies URLs with query strings
+
+**Status**: Already fixed. `getExtension()` in `MuUtilsBridge.ts` already strips `?` query strings and `#` fragments before extracting the extension.
+
+**Tests added**: 8 regression tests in `MuUtilsBridge.test.ts` covering URLs with query strings, fragments, signed URLs, and normal filenames.
+
+**Files changed**:
+- `src/compat/__tests__/MuUtilsBridge.test.ts`
+
+## Issue #260: Mu compat `wireDOMEvents()` double-registers listeners
+
+**Status**: Already fixed. `MuEventBridge` uses a `WeakSet<EventTarget>` to track wired targets and returns early on duplicate calls. `dispose()` resets the set.
+
+**Tests added**: 3 regression tests already existed covering double-wire, re-wire after dispose.
+
+## Issue #269: Mu compat `setNodeInputs()` non-atomic partial rewire
+
+**Status**: Already fixed. `setNodeInputs()` saves `originalInputs` before disconnecting and restores them in a `catch` block on connection failure.
+
+## Issue #273: Mu settings helpers throw in blocked-storage environments
+
+**Status**: Already fixed. All `localStorage` calls in `MuSettingsBridge.ts` are wrapped in `try/catch` with sensible defaults.
+
+**Tests added**: 14 normal-operation regression tests in `MuSettingsBridge.test.ts`.
+
+**Files changed**:
+- `src/compat/__tests__/MuSettingsBridge.test.ts`
+
+## Issue #274: Mu compat `sendInternalEvent()` discards `returnContents`
+
+**Status**: Already fixed. `sendInternalEvent()` returns `string` (the `event.returnContents` after dispatch). Tests already exist covering handler-written return values.
+
+## Issue #275: `registerMuCompat()` returns fresh objects on repeat calls
+
+**Status**: Already fixed. Uses `_cachedResult` guard to return the same instances on repeat calls.
+
+## Issue #276: Mu compat `fullScreenMode` marked async but returns void
+
+**Status**: Already fixed. `fullScreenMode()` is declared `async` and returns `Promise<void>`.
+
+## Issue #278: `MediaCacheManager` OPFS fallback fails noisily
+
+**Status**: Already fixed. `initialize()` calls `probeCreateWritable()` and stores `_writableSupported` flag. Writes check this flag before attempting `createWritable()`.
+
+## Issue #255: Mu compat `remoteConnect()` forces `wss` for non-local hosts
+
+**Status**: Already fixed. `remoteConnect()` now inspects `location.protocol` and supports explicit `ws://`/`wss://` prefixes.
+
+**Tests added**: 7 regression tests in `MuNetworkBridge.test.ts`.
+
+**Files changed**:
+- `src/compat/__tests__/MuNetworkBridge.test.ts`
+
+## Issue #263: Mu compat `imagesAtPixel()` returns all images, not just under point
+
+**Status**: Already fixed. Added `if (inside || edge)` guard to filter out non-hit images.
+
+## Issue #266: Mu compat `sourcesAtFrame()` ignores frame on fallback
+
+**Status**: Already fixed. Fallback path now checks frame against source duration range.
+
+## Issue #267: Mu compat `sourceMediaInfoList()` omits fallback source
+
+**Status**: Already fixed. `sourceMediaInfoList()` now calls `_ensureFallbackSourceRegistered()` before mapping.
+
+## Issue #268: Mu compat fallback `sources()` puts name in media field
+
+**Root cause**: Fallback source creation used `current.url || current.name`, putting the source identifier name in the `media` field when no URL was available.
+
+**Fix**: Changed to `current.url || ''` in both `sources()` and `_ensureFallbackSourceRegistered()`.
+
+**Tests added**: Updated existing test to verify `media` is empty string (not source name) when no URL available.
+
+**Files changed**:
+- `src/compat/MuSourceBridge.ts`
+- `src/compat/__tests__/MuSourceBridge.test.ts`
+
+## Issue #375: Auto-save max versions UI caps at 50 instead of 100
+
+**Root cause**: `AutoSaveIndicator` max versions range input had `max = '50'` while `AutoSaveManager` supports 1-100.
+
+**Fix**: Changed `max = '50'` to `max = '100'`.
+
+**Tests added**: 2 regression tests (AUTOSAVE-U043, U044) verifying slider max attribute and value 75.
+
+**Files changed**:
+- `src/ui/components/AutoSaveIndicator.ts`
+- `src/ui/components/AutoSaveIndicator.test.ts`
+
+## Issue #381: Snapshot import bypasses retention limits
+
+**Root cause**: `importSnapshot()` stored snapshots without calling the prune logic used by `createSnapshot()`.
+
+**Fix**: Added `pruneSnapshots()` call after `putSnapshot()` in `importSnapshot()`, using the same limits as create paths (50 manual / 10 auto-checkpoints).
+
+**Tests added**: 3 regression tests (SNAP-I001 through I003) verifying prune calls for manual, auto-checkpoint, and unconditional invocation.
+
+**Files changed**:
+- `src/core/session/SnapshotManager.ts`
+- `src/core/session/SnapshotManager.test.ts`
+
+## Issue #385: Restore-time file picker uses `image/*` instead of full supported set
+
+**Root cause**: Session restore picker hardcoded `'video/*'` for video media instead of using the full `SUPPORTED_MEDIA_ACCEPT` constant.
+
+**Fix**: Changed to always use `SUPPORTED_MEDIA_ACCEPT` for all media types.
+
+**Tests added**: 4 regression tests verifying restore picker uses full supported media accept string.
+
+**Files changed**:
+- `src/core/session/SessionSerializer.ts`
+- `src/core/session/SessionSerializer.issue385.test.ts` (new)
+- `src/core/session/SessionSerializer.test.ts`
+- `src/core/session/SessionSerializer.issue384.test.ts`
+
+## Issue #386: `.orvproject` drag-drop not supported in viewer
+
+**Root cause**: Viewer drop handler only handled `.rvedl`, `.rv`, `.gto` — `.orvproject` fell through to generic media loader which rejected it.
+
+**Fix**: Added `.orvproject` detection in `ViewerInputHandler.onDrop`, with `onProjectFileDrop` callback. Wired through `Viewer` to `AppPlaybackWiring` calling `persistenceManager.openProject()`.
+
+**Tests added**: 7 regression tests (PROJ-DROP-001 through 007).
+
+**Files changed**:
+- `src/ui/components/ViewerInputHandler.ts`
+- `src/ui/components/ViewerInputHandler.test.ts`
+- `src/ui/components/Viewer.ts`
+- `src/AppPlaybackWiring.ts`
+- `src/AppPlaybackWiring.test.ts`
+
+## Issue #390: `SnapshotManager` `snapshotRestored` event never emitted
+
+**Root cause**: `SnapshotManagerEvents` declared `snapshotRestored` but no code emitted it. Restore logic lived in `AppPersistenceManager` without notifying the manager.
+
+**Fix**: Added `notifyRestored(snapshot)` method to `SnapshotManager`. Called from `AppPersistenceManager.restoreSnapshot()` after successful restore.
+
+**Tests added**: 5 regression tests (2 unit in SnapshotManager, 3 integration in AppPersistenceManager) covering event emission on success and non-emission on failure.
+
+**Files changed**:
+- `src/core/session/SnapshotManager.ts`
+- `src/core/session/SnapshotManager.test.ts`
+- `src/AppPersistenceManager.ts`
+- `src/AppPersistenceManager.test.ts`
+- `src/AppPersistenceManager.issue191.test.ts`
+
+## Issue #564: Marker API accepts non-integer frame numbers
+
+**Root cause**: `MarkersAPI.add()` accepted float frames (e.g., `10.7`) and stored them verbatim, but playback is integer-frame based.
+
+**Fix**: Added `Math.round()` for `frame` and `endFrame` in `add()`, `remove()`, and `get()`. Added `isFinite()` check to reject `Infinity`/`-Infinity`.
+
+**Tests added**: 9 regression tests (API-U096 through U104) covering float rounding and non-finite rejection.
+
+**Files changed**:
+- `src/api/MarkersAPI.ts`
+- `src/api/OpenRVAPI.test.ts`
+
+## Issue #565: Loop-range API accepts fractional frame numbers
+
+**Root cause**: `LoopAPI.setInPoint()` and `setOutPoint()` forwarded raw float values to the session.
+
+**Fix**: Added `Math.round()` and `isFinite()` validation in both methods.
+
+**Tests added**: 4 regression tests (API-U064 through U067).
+
+**Files changed**:
+- `src/api/LoopAPI.ts`
+- `src/api/OpenRVAPI.test.ts`
+
+## Issue #569: Marker API accepts non-finite frame/endFrame values
+
+**Root cause**: Same as #564 — `isFinite()` check was missing. Fixed together with #564.
+
+## Issue #570: `setAdjustments()` silently ignores invalid numeric values
+
+**Root cause**: `ColorAPI.setAdjustments()` skipped `NaN` fields silently and let `Infinity` through. Downstream `ColorControls` then quietly reset non-finite values to defaults.
+
+**Fix**: Added `Number.isFinite()` validation that throws `ValidationError` for any non-finite numeric field, consistent with `setCDL()` and other validated setters.
+
+**Tests added**: 4 regression tests (API-U067 through U067d) covering NaN, Infinity, and valid value handling.
+
+**Files changed**:
+- `src/api/ColorAPI.ts`
+- `src/api/OpenRVAPI.test.ts`

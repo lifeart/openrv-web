@@ -470,7 +470,7 @@ export class SessionSerializer {
             }
           }
 
-          const accept = ref.type === 'video' ? 'video/*' : SUPPORTED_MEDIA_ACCEPT;
+          const accept = SUPPORTED_MEDIA_ACCEPT;
           const file = await showFileReloadPrompt(ref.name, {
             title: 'Reload File',
             accept,

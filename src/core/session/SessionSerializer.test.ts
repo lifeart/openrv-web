@@ -449,7 +449,7 @@ describe('SessionSerializer', () => {
         'local.mp4',
         expect.objectContaining({
           title: 'Reload File',
-          accept: 'video/*',
+          accept: SUPPORTED_MEDIA_ACCEPT,
         }),
       );
       expect(result.loadedMedia).toBe(1);
@@ -567,7 +567,7 @@ describe('SessionSerializer', () => {
       expect(showFileReloadPrompt).toHaveBeenNthCalledWith(
         2,
         'video1.mp4',
-        expect.objectContaining({ accept: 'video/*' }),
+        expect.objectContaining({ accept: SUPPORTED_MEDIA_ACCEPT }),
       );
       expect(showFileReloadPrompt).toHaveBeenNthCalledWith(
         3,

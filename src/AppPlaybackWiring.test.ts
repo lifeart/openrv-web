@@ -193,6 +193,7 @@ function createMockViewer() {
     exportSourceFrame: vi.fn(),
     copyFrameToClipboard: vi.fn(),
     renderFrameToCanvas: vi.fn(),
+    setOnProjectFileDrop: vi.fn(),
   };
 }
 

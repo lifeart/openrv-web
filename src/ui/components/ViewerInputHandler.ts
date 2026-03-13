@@ -138,6 +138,12 @@ export class ViewerInputHandler {
   // Text input overlay state
   private activeTextOverlay: HTMLTextAreaElement | null = null;
 
+  /**
+   * Optional callback invoked when an `.orvproject` file is dropped.
+   * The Viewer wires this to the persistence manager's openProject flow.
+   */
+  onProjectFileDrop: ((file: File, companionFiles: File[]) => void) | null = null;
+
   constructor(
     private ctx: ViewerInputContext,
     dropOverlay: HTMLElement,
@@ -711,6 +717,21 @@ export class ViewerInputHandler {
 
     const fileArray = Array.from(files);
     const session = this.ctx.getSession();
+
+    // Check for .orvproject file among dropped files (before other session formats)
+    const projectFile = fileArray.find((f) => f.name.toLowerCase().endsWith('.orvproject'));
+    if (projectFile) {
+      if (this.onProjectFileDrop) {
+        const companionFiles = fileArray.filter((f) => f !== projectFile);
+        this.onProjectFileDrop(projectFile, companionFiles);
+      } else {
+        showAlert(
+          `Cannot open ${projectFile.name}: project loading is not available in this context.`,
+          { type: 'warning', title: 'Unsupported Drop' },
+        );
+      }
+      return;
+    }
 
     // Check for .rvedl file among dropped files (before session/sequence detection)
     const edlFile = fileArray.find((f) => f.name.toLowerCase().endsWith('.rvedl'));

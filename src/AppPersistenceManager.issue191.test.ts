@@ -124,6 +124,7 @@ function createMockContext(overrides?: {
         color: {},
       })),
       getSnapshotMetadata: vi.fn(async () => ({ name: 'My Snapshot' })),
+      notifyRestored: vi.fn(),
     } as any,
     snapshotPanel: {
       hide: vi.fn(),

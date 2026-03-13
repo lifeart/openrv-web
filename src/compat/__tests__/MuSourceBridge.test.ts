@@ -90,7 +90,7 @@ describe('MuSourceBridge', () => {
       expect(local[0]!.media).toMatch(/\//);
     });
 
-    it('fallback media uses current.name when url is empty (Issue #268)', () => {
+    it('fallback media uses empty string when url is empty (Issue #268)', () => {
       mockOpenRV.media.getCurrentSource.mockReturnValue({
         name: 'test-source',
         url: '',
@@ -102,7 +102,8 @@ describe('MuSourceBridge', () => {
       });
       const result = bridge.sources();
       expect(result).toHaveLength(1);
-      expect(result[0]!.media).toBe('test-source');
+      expect(result[0]!.media).toBe('');
+      expect(result[0]!.media).not.toBe('test-source');
     });
   });
 
