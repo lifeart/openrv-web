@@ -106,6 +106,7 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
   private _unresolvedClips: UnresolvedOTIOClip[] = [];
   private nextUnresolvedId = 1;
   private transitionManager: TransitionManager | null = null;
+  private transitionManagerCleanup: (() => void) | null = null;
 
   constructor() {
     super();
@@ -113,9 +114,35 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
 
   /**
    * Set the transition manager for overlap-aware frame calculation.
+   * Subscribes to transitionChanged and transitionsReset events so that
+   * clip globalStartFrame values are recalculated when transitions change.
    */
   setTransitionManager(tm: TransitionManager): void {
+    // Clean up previous subscriptions if setTransitionManager is called again
+    if (this.transitionManagerCleanup) {
+      this.transitionManagerCleanup();
+      this.transitionManagerCleanup = null;
+    }
+
     this.transitionManager = tm;
+
+    const onTransitionChanged = () => {
+      this.recalculateGlobalFrames();
+      this.emit('clipsChanged', { clips: [...this.clips] });
+    };
+
+    const onTransitionsReset = () => {
+      this.recalculateGlobalFrames();
+      this.emit('clipsChanged', { clips: [...this.clips] });
+    };
+
+    tm.on('transitionChanged', onTransitionChanged);
+    tm.on('transitionsReset', onTransitionsReset);
+
+    this.transitionManagerCleanup = () => {
+      tm.off('transitionChanged', onTransitionChanged);
+      tm.off('transitionsReset', onTransitionsReset);
+    };
   }
 
   /**
@@ -145,6 +172,7 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
     };
 
     this.clips.push(clip);
+    this.transitionManager?.resizeToClips(this.clips.length);
     this.emit('clipsChanged', { clips: [...this.clips] });
     return clip;
   }
@@ -176,6 +204,7 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
     }
 
     this.clips = nextClips;
+    this.transitionManager?.resizeToClips(this.clips.length);
 
     const totalDuration = this.getTotalDuration();
     this.currentFrame = Math.max(1, Math.min(this.currentFrame, totalDuration || 1));
@@ -191,6 +220,7 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
     if (index === -1) return false;
 
     this.clips.splice(index, 1);
+    this.transitionManager?.resizeToClips(this.clips.length);
     this.recalculateGlobalFrames();
     this.emit('clipsChanged', { clips: [...this.clips] });
     return true;
@@ -214,6 +244,7 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
       console.warn(`PlaylistManager.moveClip: Failed to remove clip at index ${currentIndex}`);
       return false;
     }
+    this.transitionManager?.resizeToClips(this.clips.length);
     this.recalculateGlobalFrames();
     this.emit('clipsChanged', { clips: [...this.clips] });
     return true;
@@ -731,6 +762,10 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
   }
 
   dispose(): void {
+    if (this.transitionManagerCleanup) {
+      this.transitionManagerCleanup();
+      this.transitionManagerCleanup = null;
+    }
     this.clips = [];
   }
 }
