@@ -200,8 +200,8 @@ Floating panels provide detailed controls without permanently consuming screen s
 | Curves | `U` | Master/R/G/B channel curve editor |
 | Color wheels | `Shift+Alt+W` | Lift/Gamma/Gain three-way correction |
 | HSL Qualifier | `Shift+H` | Secondary color selection |
-| Histogram | `H` | RGB/luminance histogram |
-| Waveform | `W` | Luma/RGB/Parade/YCbCr waveform |
+| Histogram | *(none by default)* | RGB/luminance histogram |
+| Waveform | *(none by default)* | Luma/RGB/Parade/YCbCr waveform |
 | Vectorscope | `Y` | Color vector display |
 | Pixel probe | `Shift+I` | Real-time pixel value readout |
 | Markers | `Shift+Alt+M` | Marker list with notes and colors |
