@@ -13,11 +13,16 @@ import {
   parseUncrop,
   parseOutOfRange,
   parseLens,
+  parseCDL,
+  parseTransform,
   parseChannelSwizzle,
   channelNameToSwizzleIndex,
   parseStereo,
 } from './GTOSettingsParser';
 import { SWIZZLE_ZERO, SWIZZLE_ONE } from '../../core/types/color';
+import { DEFAULT_CDL } from '../../color/CDL';
+import { DEFAULT_TRANSFORM } from '../../core/types/transform';
+import { DEFAULT_LENS_PARAMS } from '../../transform/LensDistortion';
 import type { GTODTO } from 'gto-js';
 
 /**
@@ -1331,11 +1336,12 @@ describe('GTOSettingsParser.parseLens — 3DE4 Anamorphic Degree 6', () => {
     expect(result!.cx02).toBeUndefined();
   });
 
-  it('returns null when node is inactive', () => {
+  it('returns default lens params when node is inactive (issue #419)', () => {
     const dto = createLensWarpMockDTO({ k1: 0, model: '3de4_anamorphic_degree_6', cx02: 0.1 }, { active: 0 });
 
     const result = parseLens(dto);
-    expect(result).toBeNull();
+    expect(result).not.toBeNull();
+    expect(result).toEqual(DEFAULT_LENS_PARAMS);
   });
 
   it('returns null when no RVLensWarp node exists', () => {
@@ -1358,6 +1364,224 @@ describe('GTOSettingsParser.parseLens — 3DE4 Anamorphic Degree 6', () => {
     expect(result!.cx02).toBe(0.05);
     expect(result!.cy02).toBeUndefined();
     expect(result!.cx66).toBeUndefined();
+  });
+});
+
+// =================================================================
+// GTOSettingsParser — Issue #419: Inactive nodes return defaults
+// =================================================================
+
+/**
+ * Helper to create a mock GTODTO with an RVColor node that has a CDL component.
+ */
+function createCDLMockDTO(cdlProps?: Record<string, unknown>, protocol: string = 'RVColor'): GTODTO {
+  const mockComponent = (props: Record<string, unknown> | undefined) => ({
+    exists: () => props !== undefined,
+    property: (name: string) => ({
+      value: () => props?.[name],
+      exists: () => props !== undefined && name in props,
+    }),
+  });
+
+  const mockNode = (cdlData: Record<string, unknown> | undefined) => ({
+    component: (name: string) => {
+      if (name === 'CDL') return mockComponent(cdlData);
+      return mockComponent(undefined);
+    },
+    name: 'mock-cdl',
+  });
+
+  return {
+    byProtocol: (proto: string) => {
+      if (proto === protocol && cdlProps) {
+        const results = [mockNode(cdlProps)] as any;
+        results.first = () => results[0];
+        results.length = 1;
+        return results;
+      }
+      const empty = [] as any;
+      empty.first = () => mockNode(undefined);
+      empty.length = 0;
+      return empty;
+    },
+  } as unknown as GTODTO;
+}
+
+/**
+ * Helper to create a mock GTODTO with an RVTransform2D node.
+ */
+function createTransformMockDTO(transformProps?: Record<string, unknown>): GTODTO {
+  const mockComponent = (props: Record<string, unknown> | undefined) => ({
+    exists: () => props !== undefined,
+    property: (name: string) => ({
+      value: () => props?.[name],
+      exists: () => props !== undefined && name in props,
+    }),
+  });
+
+  const mockNode = (data: Record<string, unknown> | undefined) => ({
+    component: (name: string) => {
+      if (name === 'transform') return mockComponent(data);
+      return mockComponent(undefined);
+    },
+    name: 'mock-transform',
+  });
+
+  return {
+    byProtocol: (proto: string) => {
+      if (proto === 'RVTransform2D' && transformProps) {
+        const results = [mockNode(transformProps)] as any;
+        results.first = () => results[0];
+        results.length = 1;
+        return results;
+      }
+      const empty = [] as any;
+      empty.first = () => mockNode(undefined);
+      empty.length = 0;
+      return empty;
+    },
+  } as unknown as GTODTO;
+}
+
+describe('Issue #419: Inactive CDL/Transform/Lens nodes return defaults instead of null', () => {
+  describe('parseCDL', () => {
+    it('returns default CDL values when CDL component is inactive (active=0)', () => {
+      const dto = createCDLMockDTO({
+        active: 0,
+        slope: [1.5, 1.2, 0.8],
+        offset: [0.1, 0.2, 0.3],
+        power: [1.1, 1.0, 0.9],
+        saturation: 0.8,
+      });
+
+      const result = parseCDL(dto);
+
+      expect(result).not.toBeNull();
+      expect(result).toEqual(DEFAULT_CDL);
+    });
+
+    it('returns null when no CDL node exists at all', () => {
+      const dto = createCDLMockDTO(); // no props => no node
+      const result = parseCDL(dto);
+      expect(result).toBeNull();
+    });
+
+    it('returns parsed CDL values when CDL component is active', () => {
+      const dto = createCDLMockDTO({
+        active: 1,
+        slope: [1.5, 1.2, 0.8],
+        offset: [0.1, 0.2, 0.3],
+        power: [1.1, 1.0, 0.9],
+        saturation: 0.8,
+      });
+
+      const result = parseCDL(dto);
+
+      expect(result).not.toBeNull();
+      expect(result!.slope).toEqual({ r: 1.5, g: 1.2, b: 0.8 });
+      expect(result!.offset).toEqual({ r: 0.1, g: 0.2, b: 0.3 });
+      expect(result!.power).toEqual({ r: 1.1, g: 1.0, b: 0.9 });
+      expect(result!.saturation).toBe(0.8);
+    });
+
+    it('returns parsed CDL values when active flag is absent (defaults to active)', () => {
+      const dto = createCDLMockDTO({
+        slope: [1.5, 1.2, 0.8],
+        offset: [0.1, 0.2, 0.3],
+        power: [1.1, 1.0, 0.9],
+        saturation: 0.8,
+      });
+
+      const result = parseCDL(dto);
+
+      expect(result).not.toBeNull();
+      expect(result!.slope).toEqual({ r: 1.5, g: 1.2, b: 0.8 });
+    });
+  });
+
+  describe('parseTransform', () => {
+    it('returns default transform when transform is inactive (active=0)', () => {
+      const dto = createTransformMockDTO({
+        active: 0,
+        rotate: 90,
+        flip: 1,
+        flop: 1,
+      });
+
+      const result = parseTransform(dto);
+
+      expect(result).not.toBeNull();
+      expect(result).toEqual(DEFAULT_TRANSFORM);
+    });
+
+    it('returns null when no RVTransform2D node exists', () => {
+      const dto = createTransformMockDTO(); // no props => no node
+      const result = parseTransform(dto);
+      expect(result).toBeNull();
+    });
+
+    it('returns parsed transform when active', () => {
+      const dto = createTransformMockDTO({
+        active: 1,
+        rotate: 90,
+        flip: 1,
+        flop: 0,
+      });
+
+      const result = parseTransform(dto);
+
+      expect(result).not.toBeNull();
+      expect(result!.rotation).toBe(90);
+      expect(result!.flipV).toBe(true);
+      expect(result!.flipH).toBe(false);
+    });
+
+    it('returns parsed transform when active flag is absent (defaults to active)', () => {
+      const dto = createTransformMockDTO({
+        rotate: 180,
+        flip: 0,
+        flop: 1,
+      });
+
+      const result = parseTransform(dto);
+
+      expect(result).not.toBeNull();
+      expect(result!.rotation).toBe(180);
+      expect(result!.flipH).toBe(true);
+    });
+  });
+
+  describe('parseLens', () => {
+    it('returns default lens params when node is inactive (active=0)', () => {
+      const dto = createLensWarpMockDTO(
+        { k1: 0.5, k2: 0.3, center: [0.5, 0.5] },
+        { active: 0 },
+      );
+
+      const result = parseLens(dto);
+
+      expect(result).not.toBeNull();
+      expect(result).toEqual(DEFAULT_LENS_PARAMS);
+    });
+
+    it('returns null when no RVLensWarp node exists', () => {
+      const dto = createLensWarpMockDTO(); // no props => no node
+      const result = parseLens(dto);
+      expect(result).toBeNull();
+    });
+
+    it('returns parsed lens params when active', () => {
+      const dto = createLensWarpMockDTO(
+        { k1: 0.5, k2: 0.3, center: [0.6, 0.4] },
+        { active: 1 },
+      );
+
+      const result = parseLens(dto);
+
+      expect(result).not.toBeNull();
+      expect(result!.k1).toBe(0.5);
+      expect(result!.k2).toBe(0.3);
+    });
   });
 });
 
@@ -1616,5 +1840,261 @@ describe('GTOSettingsParser.parseStereo', () => {
     const dto = createStereoMockDTO();
     const result = parseStereo(dto);
     expect(result).toBeNull();
+  });
+});
+
+// =================================================================
+// Issue #420 — RVColor and RVDisplayColor active flag
+// =================================================================
+
+describe('GTOSettingsParser — Issue #420: inactive RVColor/RVDisplayColor flags', () => {
+  /**
+   * Helper that supports both 'color' and 'luminanceLUT' components on RVColor,
+   * plus a separate RVDisplayColor node, each with independent props.
+   */
+  function createFullMockDTO(
+    rvColorProps?: Record<string, unknown>,
+    displayColorProps?: Record<string, unknown>,
+    lumLutProps?: Record<string, unknown>,
+  ): GTODTO {
+    const mockComponent = (props: Record<string, unknown> | undefined) => ({
+      exists: () => props !== undefined,
+      property: (name: string) => ({
+        value: () => props?.[name],
+        exists: () => props !== undefined && name in props,
+      }),
+    });
+
+    const mockRVColorNode = (
+      colorData: Record<string, unknown> | undefined,
+      lumLutData: Record<string, unknown> | undefined,
+    ) => ({
+      component: (name: string) => {
+        if (name === 'color') return mockComponent(colorData);
+        if (name === 'luminanceLUT') return mockComponent(lumLutData);
+        return mockComponent(undefined);
+      },
+      name: 'mock-rvcolor',
+    });
+
+    const mockDisplayColorNode = (data: Record<string, unknown> | undefined) => ({
+      component: (name: string) => {
+        if (name === 'color') return mockComponent(data);
+        return mockComponent(undefined);
+      },
+      name: 'mock-displaycolor',
+    });
+
+    return {
+      byProtocol: (proto: string) => {
+        if (proto === 'RVColor' && rvColorProps) {
+          const results = [mockRVColorNode(rvColorProps, lumLutProps)] as any;
+          results.first = () => results[0];
+          results.length = 1;
+          return results;
+        }
+        if (proto === 'RVDisplayColor' && displayColorProps) {
+          const results = [mockDisplayColorNode(displayColorProps)] as any;
+          results.first = () => results[0];
+          results.length = 1;
+          return results;
+        }
+        const empty = [] as any;
+        empty.first = () => mockRVColorNode(undefined, undefined);
+        empty.length = 0;
+        return empty;
+      },
+    } as unknown as GTODTO;
+  }
+
+  // -----------------------------------------------------------------
+  // RVColor active=0 → color adjustments should be skipped
+  // -----------------------------------------------------------------
+
+  describe('RVColor active=0', () => {
+    it('returns null when RVColor has active=0 and no other nodes', () => {
+      const dto = createFullMockDTO(
+        { active: 0, exposure: 2.5, gamma: 1.8, saturation: 0.5, contrast: 1.5 },
+      );
+      const result = parseColorAdjustments(dto);
+      // No adjustments should be parsed from the inactive RVColor node
+      expect(result).toBeNull();
+    });
+
+    it('does not extract exposure/gamma/contrast/saturation when RVColor active=0', () => {
+      const dto = createFullMockDTO(
+        { active: 0, exposure: 2.5, gamma: 1.8, saturation: 0.5, contrast: 1.5, offset: 0.3, scale: 2.0 },
+        { brightness: 0.7 }, // active RVDisplayColor
+      );
+      const result = parseColorAdjustments(dto);
+      expect(result).not.toBeNull();
+      // Only display color brightness should be present, not RVColor values
+      expect(result!.brightness).toBe(0.7);
+      expect(result!.exposure).toBeUndefined();
+      expect(result!.gamma).toBeUndefined();
+      expect(result!.saturation).toBeUndefined();
+      expect(result!.contrast).toBeUndefined();
+      expect(result!.scale).toBeUndefined();
+      expect(result!.offset).toBeUndefined();
+    });
+
+    it('still parses luminanceLUT even when RVColor color component is inactive', () => {
+      const lutData = new Array(768).fill(0).map((_, i) => i / 768);
+      const dto = createFullMockDTO(
+        { active: 0, exposure: 2.5 },
+        undefined,
+        { active: 1, lut: lutData },
+      );
+      const result = parseColorAdjustments(dto);
+      expect(result).not.toBeNull();
+      // luminanceLUT has its own active flag and should still be parsed
+      expect(result!.inlineLUT).toBeInstanceOf(Float32Array);
+      expect(result!.inlineLUT!.length).toBe(768);
+      expect(result!.lutChannels).toBe(3);
+      // But color adjustments from RVColor should not be present
+      expect(result!.exposure).toBeUndefined();
+    });
+  });
+
+  // -----------------------------------------------------------------
+  // RVColor active=1 (or absent) → normal parsing
+  // -----------------------------------------------------------------
+
+  describe('RVColor active=1 or absent', () => {
+    it('parses normally when RVColor active=1', () => {
+      const dto = createFullMockDTO(
+        { active: 1, exposure: 2.5, gamma: 1.8 },
+      );
+      const result = parseColorAdjustments(dto);
+      expect(result).not.toBeNull();
+      expect(result!.exposure).toBe(2.5);
+      expect(result!.gamma).toBe(1.8);
+    });
+
+    it('parses normally when RVColor has no active property (defaults to active)', () => {
+      const dto = createFullMockDTO(
+        { exposure: 1.0, saturation: 0.8 },
+      );
+      const result = parseColorAdjustments(dto);
+      expect(result).not.toBeNull();
+      expect(result!.exposure).toBe(1.0);
+      expect(result!.saturation).toBe(0.8);
+    });
+  });
+
+  // -----------------------------------------------------------------
+  // RVDisplayColor active=0 → display color adjustments should be skipped
+  // -----------------------------------------------------------------
+
+  describe('RVDisplayColor active=0', () => {
+    it('does not extract brightness/gamma from inactive RVDisplayColor', () => {
+      const dto = createFullMockDTO(
+        undefined,
+        { active: 0, brightness: 0.7, gamma: 2.2 },
+      );
+      const result = parseColorAdjustments(dto);
+      // Inactive display color node — no adjustments extracted
+      expect(result).toBeNull();
+    });
+
+    it('still extracts RVColor adjustments when RVDisplayColor is inactive', () => {
+      const dto = createFullMockDTO(
+        { active: 1, exposure: 1.5 },
+        { active: 0, brightness: 0.7, gamma: 2.2 },
+      );
+      const result = parseColorAdjustments(dto);
+      expect(result).not.toBeNull();
+      expect(result!.exposure).toBe(1.5);
+      // Display color brightness should NOT be applied
+      expect(result!.brightness).toBeUndefined();
+    });
+
+    it('parseOutOfRange returns 0 (off) when RVDisplayColor active=0', () => {
+      const dto = createFullMockDTO(
+        undefined,
+        { active: 0, outOfRange: 1 },
+      );
+      const result = parseOutOfRange(dto);
+      // Inactive display color → forced to mode 0 (off)
+      expect(result).toBe(0);
+    });
+
+    it('parseOutOfRange returns 0 even when outOfRange=1 but display is inactive', () => {
+      const dto = createFullMockDTO(
+        undefined,
+        { active: 0, outOfRange: 1, brightness: 0.5 },
+      );
+      const result = parseOutOfRange(dto);
+      expect(result).toBe(0);
+    });
+  });
+
+  // -----------------------------------------------------------------
+  // RVDisplayColor active=1 (or absent) → normal parsing
+  // -----------------------------------------------------------------
+
+  describe('RVDisplayColor active=1 or absent', () => {
+    it('parses normally when RVDisplayColor active=1', () => {
+      const dto = createFullMockDTO(
+        undefined,
+        { active: 1, brightness: 0.7, gamma: 2.2 },
+      );
+      const result = parseColorAdjustments(dto);
+      expect(result).not.toBeNull();
+      expect(result!.brightness).toBe(0.7);
+      expect(result!.gamma).toBe(2.2);
+    });
+
+    it('parses normally when RVDisplayColor has no active property', () => {
+      const dto = createFullMockDTO(
+        undefined,
+        { brightness: 0.3 },
+      );
+      const result = parseColorAdjustments(dto);
+      expect(result).not.toBeNull();
+      expect(result!.brightness).toBe(0.3);
+    });
+
+    it('parseOutOfRange works normally when active=1', () => {
+      const dto = createFullMockDTO(
+        undefined,
+        { active: 1, outOfRange: 1 },
+      );
+      const result = parseOutOfRange(dto);
+      expect(result).toBe(2);
+    });
+
+    it('parseOutOfRange works normally when active flag is absent', () => {
+      const dto = createFullMockDTO(
+        undefined,
+        { outOfRange: 1 },
+      );
+      const result = parseOutOfRange(dto);
+      expect(result).toBe(2);
+    });
+  });
+
+  // -----------------------------------------------------------------
+  // Both inactive
+  // -----------------------------------------------------------------
+
+  describe('both RVColor and RVDisplayColor inactive', () => {
+    it('returns null when both nodes are inactive', () => {
+      const dto = createFullMockDTO(
+        { active: 0, exposure: 2.5, gamma: 1.8 },
+        { active: 0, brightness: 0.7 },
+      );
+      const result = parseColorAdjustments(dto);
+      expect(result).toBeNull();
+    });
+
+    it('parseOutOfRange returns 0 when both are inactive', () => {
+      const dto = createFullMockDTO(
+        { active: 0 },
+        { active: 0, outOfRange: 1 },
+      );
+      const result = parseOutOfRange(dto);
+      expect(result).toBe(0);
+    });
   });
 });

@@ -590,6 +590,7 @@ export function createMockSession(overrides?: Record<string, unknown>) {
     setCurrentAB: vi.fn(),
     setSourceA: vi.fn(),
     setSourceB: vi.fn(),
+    clearSourceB: vi.fn(),
 
     // Audio
     toggleMute: vi.fn(),
@@ -831,6 +832,9 @@ export function createMockSessionBridgeContext(overrides?: Record<string, unknow
     getMatteOverlay: () => matteOverlay,
     setTransform: vi.fn(),
     setNoiseReductionParams: vi.fn(),
+    setLinearize: vi.fn(),
+    setOutOfRange: vi.fn(),
+    setChannelSwizzle: vi.fn(),
     initPrerenderBuffer: vi.fn(),
     refresh: vi.fn(),
     getGLRenderer: vi.fn(() => null),

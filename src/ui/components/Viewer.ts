@@ -2791,6 +2791,21 @@ export class Viewer {
     this.scheduleRender();
   }
 
+  setLinearize(state: import('../../core/types/color').LinearizeState): void {
+    this.glRendererManager.setLinearize(state);
+    this.scheduleRender();
+  }
+
+  setOutOfRange(mode: number): void {
+    this.glRendererManager.setOutOfRange(mode);
+    this.scheduleRender();
+  }
+
+  setChannelSwizzle(swizzle: import('../../core/types/color').ChannelSwizzle): void {
+    this.glRendererManager.setChannelSwizzle(swizzle);
+    this.scheduleRender();
+  }
+
   getWatermarkOverlay(): WatermarkOverlay {
     return this.watermarkOverlay;
   }

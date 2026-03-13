@@ -56,7 +56,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - This is another silent semantic mismatch because callers can vary the tag and receive the same answer every time.
 
 
-
 ### 302. Media representation failures and automatic fallbacks are emitted internally, but the app never surfaces them
 
 - Severity: Medium
@@ -779,35 +778,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - That makes mixed review-bundle imports less predictable and increases the chance that users think they opened a full session when they only imported cut metadata.
 
 
-
-### 411. Partial project/snapshot restore replays source-indexed review state without remapping it to surviving sources
-
-- Severity: High
-- Area: Persistence / partial restore / source-linked data integrity
-- Evidence:
-  - Several serialized subsystems store raw source indices: playback in [src/core/session/SessionState.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionState.ts#L63) through [src/core/session/SessionState.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionState.ts#L77), playlist clips in [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L18) through [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L40), notes in [src/core/session/NoteManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/NoteManager.ts#L11) through [src/core/session/NoteManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/NoteManager.ts#L24), version groups in [src/core/session/VersionManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/VersionManager.ts#L11) through [src/core/session/VersionManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/VersionManager.ts#L27), and statuses in [src/core/session/StatusManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/StatusManager.ts#L16) through [src/core/session/StatusManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/StatusManager.ts#L21).
-  - `SessionSerializer.fromJSON(...)` computes `mediaIndexMap`, but only uses it for representations, not for any of those source-indexed subsystems, in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L450) through [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L563).
-  - The restore path feeds saved source-indexed state straight back into runtime managers with `playlistManager.setState(migrated.playlist)`, `noteManager.fromSerializable(migrated.notes)`, `versionManager.fromSerializable(migrated.versionGroups)`, and `statusManager.fromSerializable(migrated.statuses)` in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L570) through [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L620).
-- Impact:
-  - If a restore comes back with missing or skipped media, playlists, notes, version groups, and statuses can end up attached to the wrong surviving source indices.
-  - That turns partial recovery into data reassociation, not just data loss: review context can move to the wrong shot without any warning that indices drifted.
-
-
-
-
-### 416. RV/GTO settings parsing extracts `linearize`, `outOfRange`, and `channelSwizzle`, but production never applies them
-
-- Severity: High
-- Area: RV/GTO import / color-state restore
-- Evidence:
-  - `GTOViewSettings` explicitly includes `linearize`, `outOfRange`, and `channelSwizzle` in [src/core/session/SessionTypes.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionTypes.ts#L54) through [src/core/session/SessionTypes.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionTypes.ts#L70).
-  - `parseInitialSettings(...)` really parses and emits those fields in [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L70) through [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L92).
-  - The only live `settingsLoaded` consumer is `handleSettingsLoaded(...)` in [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L63) through [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L175), and it has no branches for `linearize`, `outOfRange`, or `channelSwizzle`.
-  - A production-code search finds no other non-test `settingsLoaded` consumer that would apply those fields.
-- Impact:
-  - RV/GTO sessions can carry parsed linearization, out-of-range, and channel-swizzle color settings that never reach the live viewer.
-  - That makes imported color output incomplete even when the parser successfully recovered the settings from the session file.
-
 ### 417. RV/GTO restore contract includes `filterSettings`, but the parser never populates them
 
 - Severity: Medium
@@ -832,33 +802,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Even where the app has live restore plumbing for advanced stereo state, RV/GTO import never feeds it.
   - That makes stereo session interchange less complete than the restore contract and handler structure suggest.
-
-### 419. RV/GTO import cannot explicitly clear CDL, transform, or lens state when those nodes are present but inactive
-
-- Severity: High
-- Area: RV/GTO import / stale state reset
-- Evidence:
-  - `parseCDL(...)` skips inactive CDL components with `active === 0` and returns `null` if it finds no active CDL payload in [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L347) through [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L367).
-  - `parseTransform(...)` returns `null` immediately when the transform node has `active === 0` in [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L373) through [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L418).
-  - `parseLens(...)` does the same for inactive lens-warp nodes in [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L424) through [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L545).
-  - The live restore path only applies those settings when the parsed fields exist, via `if (settings.cdl)`, `if (settings.transform)`, and `if (settings.lens)` in [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L89) through [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L100).
-- Impact:
-  - Importing an RV/GTO session that explicitly disables CDL, transform, or lens warp cannot actively restore those features to default/off if the current app session already had them enabled.
-  - That leaves image state dependent on prior local session history instead of the imported session file.
-
-### 420. RV/GTO import ignores inactive RVColor and RVDisplayColor flags, so disabled grading can still be applied
-
-- Severity: High
-- Area: RV/GTO import / color-state restore
-- Evidence:
-  - The export/serialization contract treats `active` as meaningful for both RVColor and RVDisplayColor. `ColorSerializer.buildColorObject(...)` writes `color.active` from `settings.active !== false ? 1 : 0` in [src/core/session/serializers/ColorSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/serializers/ColorSerializer.ts#L926) through [src/core/session/serializers/ColorSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/serializers/ColorSerializer.ts#L953), and `ColorSerializer.buildDisplayColorObject(...)` does the same in [src/core/session/serializers/ColorSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/serializers/ColorSerializer.ts#L1000) through [src/core/session/serializers/ColorSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/serializers/ColorSerializer.ts#L1026).
-  - That contract is locked in by tests asserting `active=false` serializes to `0` for both node types in [src/core/session/serializers/ColorSerializer.test.ts](/Users/lifeart/Repos/openrv-web/src/core/session/serializers/ColorSerializer.test.ts#L1175) through [src/core/session/serializers/ColorSerializer.test.ts](/Users/lifeart/Repos/openrv-web/src/core/session/serializers/ColorSerializer.test.ts#L1178) and [src/core/session/serializers/ColorSerializer.test.ts](/Users/lifeart/Repos/openrv-web/src/core/session/serializers/ColorSerializer.test.ts#L1322) through [src/core/session/serializers/ColorSerializer.test.ts](/Users/lifeart/Repos/openrv-web/src/core/session/serializers/ColorSerializer.test.ts#L1325).
-  - But `parseColorAdjustments(...)` reads RVColor and RVDisplayColor values without checking `color.active` at all in [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L240) through [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L317).
-  - `parseOutOfRange(...)` likewise reads `RVDisplayColor.color.outOfRange` without honoring `color.active` in [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L748) through [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L760).
-  - The live restore path then applies any parsed color adjustments directly through `context.getColorControls().setAdjustments(...)` in [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L79) through [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L81).
-- Impact:
-  - An imported RV/GTO file can explicitly mark RVColor or RVDisplayColor inactive and still have its exposure, gamma, brightness, or out-of-range state applied on load.
-  - That makes disabled grading/display-color nodes behave as if they were enabled, which is the opposite of what the serialized `active=0` contract says.
 
 ### 421. RV/GTO settings restore ignores standalone RVColorCDL nodes and only reads embedded CDL components
 
@@ -886,18 +829,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - RV/GTO files that represent grading with standalone color nodes can be recognized by the loader layer yet still lose exposure/curve/vibrance/shadow/highlight/grayscale/conversion intent in the live restore path.
   - That leaves color interchange materially narrower than the repo’s own serializer/exporter/loader surface suggests.
 
-### 423. RV/GTO import cannot clear markers when the file carries an empty marks array
-
-- Severity: Medium
-- Area: RV/GTO import / marker restore
-- Evidence:
-  - `GTOGraphLoader` reads `session.marks`, but only assigns `sessionInfo.marks` when the filtered array has `length > 0` in [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L293) through [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L299).
-  - `SessionGraph.loadFromGTO(...)` only calls `markerManager.setFromFrameNumbers(...)` when `result.sessionInfo.marks` is present in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L321) through [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L329).
-  - The marker manager itself does support explicit clearing through `setFromFrameNumbers([])`, which resets the map and emits change notifications in [src/core/session/MarkerManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MarkerManager.ts#L256) through [src/core/session/MarkerManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MarkerManager.ts#L271).
-- Impact:
-  - Importing an RV/GTO session that explicitly contains zero markers cannot clear markers left over from the current session.
-  - Marker state therefore depends on previous local state instead of the imported file whenever the incoming marks payload is empty.
-
 ### 424. RV/GTO crop restore derives source dimensions from RVFileSource only, so still-image sessions can import with a full-frame crop
 
 - Severity: Medium
@@ -924,18 +855,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Paint annotations imported from still-image RV/GTO sessions can be placed incorrectly whenever the image aspect ratio is not 1:1.
   - The same annotation payload therefore restores differently depending on whether the source was serialized as `RVImageSource` or `RVFileSource`.
 
-### 426. RV/GTO import cannot clear notes, version groups, or shot statuses when the incoming session data is empty
-
-- Severity: High
-- Area: RV/GTO import / stale review-session data
-- Evidence:
-  - `SessionGraph.loadFromGTO(...)` explicitly claims it will “always call, even for empty arrays, to clear old data” for notes, version groups, and statuses in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L347) through [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L359).
-  - But `GTOGraphLoader` only assigns `sessionInfo.notes` when `notes.length > 0` in [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L460) through [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L495), only assigns `sessionInfo.versionGroups` when `versionGroups.length > 0` in [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L499) through [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L547), and only assigns `sessionInfo.statuses` when `parsedStatuses.length > 0` in [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L625) through [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L649).
-  - The managers themselves do support explicit clearing on empty arrays: `NoteManager.fromSerializable([])` clears notes in [src/core/session/NoteManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/NoteManager.ts#L316) through [src/core/session/NoteManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/NoteManager.ts#L330), `VersionManager.fromSerializable([])` clears groups in [src/core/session/VersionManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/VersionManager.ts#L338) through [src/core/session/VersionManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/VersionManager.ts#L343), and `StatusManager.fromSerializable([])` clears statuses in [src/core/session/StatusManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/StatusManager.ts#L178) through [src/core/session/StatusManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/StatusManager.ts#L183).
-- Impact:
-  - Importing an RV/GTO session with no notes, no version groups, or no statuses cannot clear the old review data already present in the app.
-  - That leaves review metadata dependent on previous local state, directly contradicting the comments in the live import path.
-
 ### 427. RV/GTO multi-source imports derive crop and annotation geometry from inconsistent source dimensions
 
 - Severity: Medium
@@ -948,19 +867,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - In multi-source RV/GTO sessions with differing source sizes or aspect ratios, crop restore is normalized against the first source while paint annotations are normalized against the last one.
   - That makes imported geometry depend on source ordering rather than the authored session state.
-
-### 428. Share-link compare state cannot explicitly clear an unassigned B source
-
-- Severity: Medium
-- Area: URL sharing / A-B compare restore
-- Evidence:
-  - Share-link capture omits `sourceBIndex` whenever the session has no B assignment by serializing it only when `session.sourceBIndex >= 0` in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L122) through [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L145).
-  - URL-state encoding also strips absent `sourceBIndex` entirely in [src/core/session/SessionURLManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionURLManager.ts#L128) through [src/core/session/SessionURLManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionURLManager.ts#L155).
-  - But share-link apply only calls `session.setSourceB(...)` when `state.sourceBIndex` is present and never calls `session.clearSourceB()` when it is absent in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L184) through [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L220).
-  - The live playback/session stack does have an explicit clear path for B assignments via `clearSourceB()` in [src/core/session/SessionPlayback.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionPlayback.ts#L352) through [src/core/session/SessionPlayback.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionPlayback.ts#L357) and [src/core/session/ABCompareManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/ABCompareManager.ts#L141) through [src/core/session/ABCompareManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/ABCompareManager.ts#L151).
-- Impact:
-  - If the sender has no B source assigned, the recipient can keep a stale local B assignment after opening the share link.
-  - That makes share-link compare state depend on the receiver's prior local compare setup instead of the sender's actual state.
 
 ### 429. Share links claim to share comparison state, but clean recipients can only reconstruct one media source
 
@@ -976,18 +882,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - A share link from a multi-source A/B review can carry compare indices and wipe state but still fail to reconstruct the compared media on a clean recipient.
   - The receiver ends up with partial compare state and only one loaded source, which undermines the feature's stated “comparison state” promise.
 
-### 430. Share-link media load failures are silent to users
-
-- Severity: Medium
-- Area: URL sharing / error handling
-- Evidence:
-  - When a share link contains `sourceUrl`, `applySessionURLState(...)` attempts `session.loadSourceFromUrl(...)` only inside a local `try/catch` in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L152) through [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L164).
-  - On failure, that path only emits `console.warn(...)` and then continues applying view state in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L158) through [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L164).
-  - The startup bootstrap path does surface user-facing messages for malformed WebRTC links through `networkControl.showInfo(...)` in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L265) through [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L302), but there is no equivalent user-facing branch for `sourceUrl` load failures.
-- Impact:
-  - Expired signed URLs, blocked network media, or unsupported remote media can open as a blank or stale viewer with no actionable explanation.
-  - The failure mode is effectively “open the app and log to console,” which is not usable for ordinary recipients of a share link.
-
 ### 431. Media-bearing share links only load the shared media on an empty session
 
 - Severity: High
@@ -999,32 +893,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Opening a media-bearing share link while you already have anything loaded can apply the sender's frame/view/compare state to the wrong local media instead of the shared media.
   - That makes share links context-sensitive: the same link behaves differently depending on whether the recipient opens it in a fresh app state or not.
-
-### 432. Share-link parsing validates `sourceIndex`, but not A/B compare indices
-
-- Severity: Medium
-- Area: URL sharing / compare-state validation
-- Evidence:
-  - `parseState(...)` rejects invalid primary `sourceIndex` values, but accepts any numeric `sai` / `sbi` as `sourceAIndex` / `sourceBIndex` in [src/core/session/SessionURLManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionURLManager.ts#L196) through [src/core/session/SessionURLManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionURLManager.ts#L205).
-  - `applySessionURLState(...)` clamps the primary `sourceIndex` before applying it, but forwards `sourceAIndex` and `sourceBIndex` raw to the session in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L169) through [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L189).
-  - The A/B manager silently ignores out-of-range compare indices rather than clearing or clamping them in [src/core/session/ABCompareManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/ABCompareManager.ts#L124) through [src/core/session/ABCompareManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/ABCompareManager.ts#L138).
-  - The same restore path does have an explicit B-clear API available, but URL-state apply never uses it in [src/core/session/ABCompareManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/ABCompareManager.ts#L141) through [src/core/session/ABCompareManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/ABCompareManager.ts#L151).
-- Impact:
-  - Malformed or source-count-mismatched share links can leave stale local A/B assignments behind even though the primary source index is sanitized.
-  - Compare-state restore is therefore less deterministic than normal source restore and can depend on the receiver's prior session state.
-
-### 433. Malformed normal session share links fail silently during URL bootstrap
-
-- Severity: Medium
-- Area: URL sharing / bootstrap error handling
-- Evidence:
-  - `decodeSessionState(...)` returns `null` for empty, invalid, or unparsable `#s=...` payloads in [src/core/session/SessionURLManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionURLManager.ts#L65) through [src/core/session/SessionURLManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionURLManager.ts#L83).
-  - `handleURLBootstrap()` only applies shared state when `decodeSessionState(...)` returns a value and otherwise does nothing in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L312) through [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L315).
-  - The test suite codifies that behavior as “handles invalid hash gracefully (no crash)” with no user-facing message in [src/services/SessionURLService.test.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.test.ts#L423) through [src/services/SessionURLService.test.ts#L430).
-  - By contrast, the same bootstrap service explicitly calls `networkControl.showInfo(...)` for malformed WebRTC links in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L296) through [src/services/SessionURLService.ts#L302).
-- Impact:
-  - A corrupted or truncated normal share URL can open the app with no state applied and no explanation of why the link failed.
-  - The behavior is inconsistent with malformed WebRTC links, which do surface actionable feedback.
 
 ### 434. Malformed WebSocket sync messages are dropped silently with no error path
 

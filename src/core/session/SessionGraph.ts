@@ -448,8 +448,8 @@ export class SessionGraph extends EventEmitter<SessionGraphEvents> {
         this._host!.setOutPoint(result.sessionInfo.outPoint);
         this._host!.emitInOutChanged(result.sessionInfo.inPoint, result.sessionInfo.outPoint);
       }
-      // Fix #125: always call setFromFrameNumbers, even for empty arrays, to clear old markers
-      if (result.sessionInfo.marks) {
+      // Fix #125/#423: always call setFromFrameNumbers when marks is defined (even empty) to clear old markers
+      if (result.sessionInfo.marks !== undefined) {
         annotations.markerManager.setFromFrameNumbers(
           result.sessionInfo.marks,
           result.sessionInfo.markerNotes,
@@ -634,9 +634,8 @@ export class SessionGraph extends EventEmitter<SessionGraphEvents> {
         const marksValue = sessionComp.property('marks').value();
         if (Array.isArray(marksValue)) {
           const marks = marksValue.filter((value): value is number => typeof value === 'number');
-          if (marks.length > 0) {
-            annotations.markerManager.setFromFrameNumbers(marks);
-          }
+          // Fix #423: call even with empty array to clear leftover markers
+          annotations.markerManager.setFromFrameNumbers(marks);
         }
       }
     }

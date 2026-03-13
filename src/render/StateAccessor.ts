@@ -19,6 +19,7 @@ import type {
   ChannelMode,
   HSLQualifierState,
   LinearizeState,
+  ChannelSwizzle,
 } from '../core/types/color';
 import type {
   ToneMappingState,
@@ -224,6 +225,18 @@ export interface StateAccessor {
 
   /** Get the current quantize bits. */
   getQuantizeBits(): number;
+
+  /** Set out-of-range visualization mode (0=off, 1=clamp-to-black, 2=highlight). */
+  setOutOfRange(mode: number): void;
+
+  /** Get the current out-of-range visualization mode. */
+  getOutOfRange(): number;
+
+  /** Set channel swizzle (remaps RGBA channels). */
+  setChannelSwizzle(swizzle: ChannelSwizzle): void;
+
+  /** Get the current channel swizzle. */
+  getChannelSwizzle(): ChannelSwizzle;
 
   /** Set texel size (called before applyUniforms based on image dimensions). */
   setTexelSize(w: number, h: number): void;

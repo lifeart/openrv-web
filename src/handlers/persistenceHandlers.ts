@@ -136,6 +136,15 @@ function handleSettingsLoaded(
       });
     }
   }
+  if (settings.linearize) {
+    context.getViewer().setLinearize(settings.linearize);
+  }
+  if (settings.outOfRange !== undefined) {
+    context.getViewer().setOutOfRange(settings.outOfRange);
+  }
+  if (settings.channelSwizzle) {
+    context.getViewer().setChannelSwizzle(settings.channelSwizzle);
+  }
   if (settings.channelMode) {
     context.getChannelSelect().setChannel(settings.channelMode);
   }

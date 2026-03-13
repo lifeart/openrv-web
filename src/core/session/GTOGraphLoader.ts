@@ -352,9 +352,9 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File[]>): GTO
       const marksValue = sessionComp.property('marks').value();
       if (Array.isArray(marksValue)) {
         const marks = marksValue.filter((value): value is number => typeof value === 'number');
-        if (marks.length > 0) {
-          sessionInfo.marks = marks;
-        }
+        // Fix #423: assign even when empty so importing a GTO with an empty
+        // marks array clears markers left over from the current session.
+        sessionInfo.marks = marks;
       }
 
       // Parse marker notes (parallel array to marks)
@@ -516,8 +516,8 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File[]>): GTO
     const notesComp = session.component('notes');
     if (notesComp?.exists()) {
       const totalNotes = notesComp.property('totalNotes').value() as number;
+      const notes: Note[] = [];
       if (typeof totalNotes === 'number' && totalNotes > 0) {
-        const notes: Note[] = [];
         for (let i = 1; i <= totalNotes; i++) {
           const p = `note_${String(i).padStart(3, '0')}`;
           const id = notesComp.property(`${p}_id`).value() as string;
@@ -549,18 +549,17 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File[]>): GTO
             });
           }
         }
-        if (notes.length > 0) {
-          sessionInfo.notes = notes;
-        }
       }
+      // Always assign when the component exists (even empty) so loadFromGTO can clear old data
+      sessionInfo.notes = notes;
     }
 
     // Versions component
     const versionsComp = session.component('versions');
     if (versionsComp?.exists()) {
       const groupCount = versionsComp.property('groupCount').value() as number;
+      const versionGroups: VersionGroup[] = [];
       if (typeof groupCount === 'number' && groupCount > 0) {
-        const versionGroups: VersionGroup[] = [];
         for (let g = 0; g < groupCount; g++) {
           const gp = `group_${String(g).padStart(3, '0')}`;
           const id = versionsComp.property(`${gp}_id`).value() as string;
@@ -601,10 +600,9 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File[]>): GTO
             }
           }
         }
-        if (versionGroups.length > 0) {
-          sessionInfo.versionGroups = versionGroups;
-        }
       }
+      // Always assign when the component exists (even empty) so loadFromGTO can clear old data
+      sessionInfo.versionGroups = versionGroups;
     }
   }
 
@@ -661,8 +659,10 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File[]>): GTO
   // references the group name, not the source node directly.
   const sourceGroupChildren = new Map<string, string[]>();
   const parsedStatuses: StatusEntry[] = [];
+  let hasSourceGroups = false;
   for (const obj of allObjects) {
     if (obj.protocol === 'RVSourceGroup') {
+      hasSourceGroups = true;
       // Find child source nodes by naming convention: <groupName>_source
       const groupName = obj.name;
       const children: string[] = [];
@@ -703,7 +703,8 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File[]>): GTO
       }
     }
   }
-  if (parsedStatuses.length > 0) {
+  // Always assign when source groups exist (even empty) so loadFromGTO can clear old data
+  if (hasSourceGroups) {
     sessionInfo.statuses = parsedStatuses;
   }
 

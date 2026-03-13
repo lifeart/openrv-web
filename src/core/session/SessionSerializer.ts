@@ -601,6 +601,11 @@ export class SessionSerializer {
       if (migrated.playback.sourceBIndex !== undefined && migrated.playback.sourceBIndex >= 0) {
         migrated.playback.sourceBIndex = remapIndex(migrated.playback.sourceBIndex) ?? -1;
       }
+
+      // Remap source indices in subsystem state (fix #411).
+      // Playlist clips, notes, version groups, and statuses all store raw
+      // source indices that become stale when media fails to load.
+      this.remapSubsystemSourceIndices(migrated, mediaIndexMap);
     }
 
     // Restore playback state regardless of media count (fix #124).
@@ -721,6 +726,68 @@ export class SessionSerializer {
     }
 
     return { loadedMedia, warnings };
+  }
+
+  /**
+   * Remap source indices in subsystem state through mediaIndexMap (fix #411).
+   *
+   * When some media sources fail to load during partial restore, the saved
+   * source indices no longer match the live runtime indices. This method
+   * remaps playlist clips, notes, version groups, and statuses so they
+   * point at the correct surviving sources. Entries referencing lost
+   * sources are dropped.
+   */
+  private static remapSubsystemSourceIndices(
+    migrated: SessionState,
+    mediaIndexMap: Map<number, number>,
+  ): void {
+    // Playlist clips: remap sourceIndex, drop clips whose source was lost
+    if (migrated.playlist?.clips) {
+      migrated.playlist.clips = migrated.playlist.clips.filter((clip) => {
+        const mapped = mediaIndexMap.get(clip.sourceIndex);
+        if (mapped === undefined) return false; // source was lost
+        clip.sourceIndex = mapped;
+        return true;
+      });
+    }
+
+    // Notes: remap sourceIndex, drop notes whose source was lost
+    if (migrated.notes) {
+      migrated.notes = migrated.notes.filter((note) => {
+        const mapped = mediaIndexMap.get(note.sourceIndex);
+        if (mapped === undefined) return false; // source was lost
+        note.sourceIndex = mapped;
+        return true;
+      });
+    }
+
+    // Version groups: remap each version entry's sourceIndex, drop lost entries, drop empty groups
+    if (migrated.versionGroups) {
+      migrated.versionGroups = migrated.versionGroups.filter((group) => {
+        group.versions = group.versions.filter((entry) => {
+          const mapped = mediaIndexMap.get(entry.sourceIndex);
+          if (mapped === undefined) return false; // source was lost
+          entry.sourceIndex = mapped;
+          return true;
+        });
+        // If active version index is now out of range, clamp it
+        if (group.activeVersionIndex >= group.versions.length) {
+          group.activeVersionIndex = Math.max(0, group.versions.length - 1);
+        }
+        // Drop empty groups
+        return group.versions.length > 0;
+      });
+    }
+
+    // Statuses: remap sourceIndex, drop entries whose source was lost
+    if (migrated.statuses) {
+      migrated.statuses = migrated.statuses.filter((entry) => {
+        const mapped = mediaIndexMap.get(entry.sourceIndex);
+        if (mapped === undefined) return false; // source was lost
+        entry.sourceIndex = mapped;
+        return true;
+      });
+    }
   }
 
   /**

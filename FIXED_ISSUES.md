@@ -1633,3 +1633,150 @@
 **Files changed**:
 - `docs/export/sessions.md`
 - `tests/docs.consistency.test.ts`
+
+## Issue #426: RV/GTO import cannot clear notes, version groups, or shot statuses when the incoming session data is empty
+
+**Root cause**: `GTOGraphLoader` only assigned `sessionInfo.notes` when `notes.length > 0`, `sessionInfo.versionGroups` when `versionGroups.length > 0`, and `sessionInfo.statuses` when `parsedStatuses.length > 0`. This meant importing an RV/GTO session with empty review data could never clear existing data, despite `SessionGraph.loadFromGTO()` commenting that it "always calls, even for empty arrays, to clear old data."
+
+**Fix**: Changed `GTOGraphLoader` to always assign the arrays when the relevant GTO component/section exists, even when empty. When the section does not exist at all, the field remains `undefined` (backward compat). Specifically:
+- Notes: Always assign when `notesComp.exists()` is true
+- Version groups: Always assign when `versionsComp.exists()` is true
+- Statuses: Track `hasSourceGroups` flag and assign when any `RVSourceGroup` exists
+
+**Tests added**: 8 regression tests in `GTOGraphLoader.issue426.test.ts` covering empty arrays, missing sections, and edge cases.
+
+**Files changed**:
+- `src/core/session/GTOGraphLoader.ts`
+- `src/core/session/GTOGraphLoader.issue426.test.ts` (new)
+
+## Issue #420: RV/GTO import ignores inactive RVColor and RVDisplayColor flags, so disabled grading can still be applied
+
+**Root cause**: `parseColorAdjustments()` in `GTOSettingsParser.ts` read color values from RVColor and RVDisplayColor nodes without checking their `active` flag. `parseOutOfRange()` similarly ignored the flag. The serializer properly wrote `active=0` for disabled nodes, but the parser never honored it, causing disabled grading to be applied on import.
+
+**Fix**: Added `active` flag checks in `parseColorAdjustments()` and `parseOutOfRange()`:
+- RVColor with `active=0`: Skip exposure, gamma, contrast, scale, offset, saturation (luminanceLUT still parsed independently)
+- RVDisplayColor with `active=0`: Skip brightness/gamma
+- `parseOutOfRange()` returns `0` (off) when RVDisplayColor is inactive
+
+**Tests added**: 15 regression tests in `GTOSettingsParser.test.ts` covering all active/inactive combinations.
+
+**Files changed**:
+- `src/core/session/GTOSettingsParser.ts`
+- `src/core/session/GTOSettingsParser.test.ts`
+
+## Issue #419: RV/GTO import cannot explicitly clear CDL, transform, or lens state when those nodes are present but inactive
+
+**Root cause**: `parseCDL()`, `parseTransform()`, and `parseLens()` all returned `null` when their respective nodes had `active=0`. The restore handler only applied settings when non-null (`if (settings.cdl)`), so stale state from the current session was never cleared on import of a session with explicitly disabled CDL/transform/lens.
+
+**Fix**: When a CDL/transform/lens node EXISTS but is inactive (`active=0`), return default/reset values instead of `null`:
+- CDL: `DEFAULT_CDL` (slope=[1,1,1], offset=[0,0,0], power=[1,1,1], saturation=1)
+- Transform: `DEFAULT_TRANSFORM` (no flip/flop/rotation)
+- Lens: `DEFAULT_LENS_PARAMS` (all coefficients zero)
+When the node does not exist at all, `null` is still returned (backward compat).
+
+**Tests added**: 10 regression tests in `GTOSettingsParser.test.ts` covering inactive, missing, and active cases for all three node types.
+
+**Files changed**:
+- `src/core/session/GTOSettingsParser.ts`
+- `src/core/session/GTOSettingsParser.test.ts`
+
+## Issue #416: RV/GTO settings parsing extracts `linearize`, `outOfRange`, and `channelSwizzle`, but production never applies them
+
+**Root cause**: `parseInitialSettings()` properly parsed `linearize`, `outOfRange`, and `channelSwizzle` from GTO files, but `handleSettingsLoaded()` in `persistenceHandlers.ts` had no branches to apply them. The parsed values were silently dropped.
+
+**Fix**: Added full plumbing from persistence handler to viewer:
+- Added `setLinearize`, `setOutOfRange`, `setChannelSwizzle` methods through the render pipeline (StateAccessor → Renderer → ViewerGLRenderer → Viewer)
+- Added three restore branches in `handleSettingsLoaded()` for the missing settings
+- Updated test mocks to include the new methods
+
+**Tests added**: 5 regression tests in `persistenceHandlers.test.ts` covering linearize, outOfRange modes, channelSwizzle, and backward compatibility.
+
+**Files changed**:
+- `src/render/StateAccessor.ts`
+- `src/render/Renderer.ts`
+- `src/ui/components/ViewerGLRenderer.ts`
+- `src/ui/components/Viewer.ts`
+- `src/handlers/persistenceHandlers.ts`
+- `src/handlers/persistenceHandlers.test.ts`
+- `test/mocks.ts`
+
+## Issue #423: RV/GTO import cannot clear markers when the file carries an empty marks array
+
+**Root cause**: `GTOGraphLoader` only assigned `sessionInfo.marks` when the filtered array had `length > 0`. Same pattern as Issue #426. `MarkerManager.setFromFrameNumbers([])` properly supports clearing all markers, but the empty array never reached it.
+
+**Fix**: Removed the `marks.length > 0` guard so empty arrays flow through when the marks property exists. Changed `SessionGraph` check to `marks !== undefined` for explicit intent. Applied the fix to both code paths that parse marks.
+
+**Tests added**: 7 regression tests in `GTOGraphLoader.issue423.test.ts` covering empty arrays, missing properties, filtering, and edge cases.
+
+**Files changed**:
+- `src/core/session/GTOGraphLoader.ts`
+- `src/core/session/SessionGraph.ts`
+- `src/core/session/GTOGraphLoader.issue423.test.ts` (new)
+
+## Issue #428: Share-link compare state cannot explicitly clear an unassigned B source
+
+**Root cause**: `applySessionURLState()` only called `setSourceB()` when `sourceBIndex` was present, but never called `clearSourceB()` when it was absent. A share link from a session with no B assignment left the recipient's stale B assignment intact.
+
+**Fix**: Added `clearSourceB()` to the `URLSession` interface. In `applySessionURLState()`, when `sourceAIndex` is present (compare-aware link) but `sourceBIndex` is absent, explicitly call `clearSourceB()`. Links without any compare state leave B untouched (backward compat).
+
+**Tests added**: 4 regression tests in `SessionURLService.test.ts` covering clear-on-absent-B, set-on-present-B, no-compare-state, and round-trip.
+
+**Files changed**:
+- `src/services/SessionURLService.ts`
+- `src/services/SessionURLService.test.ts`
+- `test/mocks.ts`
+
+## Issue #430: Share-link media load failures are silent to users
+
+**Root cause**: When `loadSourceFromUrl()` failed in `applySessionURLState()`, only `console.warn()` was called. The same file already surfaced user-facing messages for malformed WebRTC links via `networkControl.showInfo()`, but not for media load failures.
+
+**Fix**: Added `networkControl.showInfo('Failed to load shared media: <reason>')` in the catch block, matching the pattern used for WebRTC errors. Console.warn preserved for debugging.
+
+**Tests added**: 3 regression tests covering Error rejections, non-Error rejections, and success (no false notification).
+
+**Files changed**:
+- `src/services/SessionURLService.ts`
+- `src/services/SessionURLService.test.ts`
+
+## Issue #432: Share-link parsing validates `sourceIndex`, but not A/B compare indices
+
+**Root cause**: `applySessionURLState()` clamped the primary `sourceIndex` before applying, but forwarded `sourceAIndex` and `sourceBIndex` raw to the session. Out-of-range indices were silently ignored by ABCompareManager, leaving stale local assignments.
+
+**Fix**: Added validation/clamping before applying A/B indices:
+- `sourceAIndex`: Clamped to `[0, sourceCount-1]`
+- `sourceBIndex`: If out of range (negative, >= sourceCount, or sourceCount is 0), calls `clearSourceB()` instead
+
+**Tests added**: 8 regression tests covering out-of-range, negative, boundary, and zero-source-count scenarios.
+
+**Files changed**:
+- `src/services/SessionURLService.ts`
+- `src/services/SessionURLService.test.ts`
+
+## Issue #433: Malformed normal session share links fail silently during URL bootstrap
+
+**Root cause**: `handleURLBootstrap()` did nothing when `decodeSessionState()` returned null for a malformed `#s=...` hash. By contrast, malformed WebRTC links got user-facing messages via `networkControl.showInfo()`.
+
+**Fix**: Added an `else if` branch: when the hash contains a `s=` parameter but decode returns null, calls `networkControl.showInfo('Could not restore shared session state: the link may be corrupted or incomplete.')`. Added a private helper `hashContainsSessionParam()` so the notification only fires for malformed share links, not normal app opens.
+
+**Tests added**: 4 regression tests covering malformed hash, no hash, valid hash, and truncated base64.
+
+**Files changed**:
+- `src/services/SessionURLService.ts`
+- `src/services/SessionURLService.test.ts`
+
+## Issue #411: Partial project/snapshot restore replays source-indexed review state without remapping it to surviving sources
+
+**Root cause**: `SessionSerializer.fromJSON()` computed `mediaIndexMap` (old→new source index mapping when some media fails to load) but only used it for representations. Playlist clips, notes, version groups, and statuses were restored with their original source indices, causing review data to attach to wrong sources during partial restore.
+
+**Fix**: Added `remapSubsystemSourceIndices()` method that remaps source indices through `mediaIndexMap` for all four subsystems:
+- Playlist clips: Remap `sourceIndex`, drop clips whose source was lost
+- Notes: Remap `sourceIndex`, drop notes whose source was lost
+- Version groups: Remap each entry's `sourceIndex`, drop lost entries, remove empty groups, clamp `activeVersionIndex`
+- Statuses: Remap `sourceIndex`, drop entries whose source was lost
+Called from `fromJSON()` inside the existing `if (mediaIndexMap.size > 0)` block.
+
+**Tests added**: 15 regression tests in `SessionSerializer.issue411.test.ts` covering all subsystem remapping, lost source handling, identity case, and combined scenarios.
+
+**Files changed**:
+- `src/core/session/SessionSerializer.ts`
+- `src/core/session/SessionSerializer.issue411.test.ts` (new)

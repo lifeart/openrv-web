@@ -1,7 +1,7 @@
 import { type IPImage, type DataType, type ColorPrimaries } from '../core/image/Image';
 import { ShaderProgram } from './ShaderProgram';
 import { getRotationMatrix2x2, normalizeAngle } from '../utils/rotation';
-import type { ColorAdjustments, ColorWheelsState, ChannelMode, HSLQualifierState } from '../core/types/color';
+import type { ColorAdjustments, ColorWheelsState, ChannelMode, HSLQualifierState, LinearizeState, ChannelSwizzle } from '../core/types/color';
 import type {
   ToneMappingState,
   ZebraState,
@@ -1193,6 +1193,30 @@ export class Renderer implements RendererBackend {
 
   getQuantizeBits(): number {
     return this.stateManager.getQuantizeBits();
+  }
+
+  setLinearize(state: LinearizeState): void {
+    this.stateManager.setLinearize(state);
+  }
+
+  getLinearize(): LinearizeState {
+    return this.stateManager.getLinearize();
+  }
+
+  setOutOfRange(mode: number): void {
+    this.stateManager.setOutOfRange(mode);
+  }
+
+  getOutOfRange(): number {
+    return this.stateManager.getOutOfRange();
+  }
+
+  setChannelSwizzle(swizzle: ChannelSwizzle): void {
+    this.stateManager.setChannelSwizzle(swizzle);
+  }
+
+  getChannelSwizzle(): ChannelSwizzle {
+    return this.stateManager.getChannelSwizzle();
   }
 
   setToneMappingState(state: ToneMappingState): void {

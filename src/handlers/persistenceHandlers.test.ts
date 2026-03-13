@@ -250,6 +250,40 @@ describe('bindPersistenceHandlers', () => {
     expect(context.getCropControl().setUncropState).not.toHaveBeenCalled();
   });
 
+  it('PERH-U041: settingsLoaded restores linearize state', () => {
+    const linearize = { logType: 1, sRGB2linear: false, rec709ToLinear: false, fileGamma: 1.0, alphaType: 0 };
+    handlers.settingsLoaded!({ linearize } as any);
+
+    expect(context.getViewer().setLinearize).toHaveBeenCalledWith(linearize);
+  });
+
+  it('PERH-U042: settingsLoaded restores outOfRange mode', () => {
+    handlers.settingsLoaded!({ outOfRange: 2 } as any);
+
+    expect(context.getViewer().setOutOfRange).toHaveBeenCalledWith(2);
+  });
+
+  it('PERH-U043: settingsLoaded restores outOfRange mode 0 (off)', () => {
+    handlers.settingsLoaded!({ outOfRange: 0 } as any);
+
+    expect(context.getViewer().setOutOfRange).toHaveBeenCalledWith(0);
+  });
+
+  it('PERH-U044: settingsLoaded restores channelSwizzle', () => {
+    const channelSwizzle = [2, 1, 0, 3] as [number, number, number, number];
+    handlers.settingsLoaded!({ channelSwizzle } as any);
+
+    expect(context.getViewer().setChannelSwizzle).toHaveBeenCalledWith(channelSwizzle);
+  });
+
+  it('PERH-U045: settingsLoaded without linearize/outOfRange/channelSwizzle does not call those methods', () => {
+    handlers.settingsLoaded!({} as any);
+
+    expect(context.getViewer().setLinearize).not.toHaveBeenCalled();
+    expect(context.getViewer().setOutOfRange).not.toHaveBeenCalled();
+    expect(context.getViewer().setChannelSwizzle).not.toHaveBeenCalled();
+  });
+
   it('PERH-U022: settingsLoaded restores channel mode', () => {
     handlers.settingsLoaded!({ channelMode: 'red' } as any);
 

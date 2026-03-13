@@ -1488,6 +1488,18 @@ export class ViewerGLRenderer {
     this._glRenderer?.setHDRHeadroom(headroom);
   }
 
+  setLinearize(state: import('../../core/types/color').LinearizeState): void {
+    this._glRenderer?.setLinearize(state);
+  }
+
+  setOutOfRange(mode: number): void {
+    this._glRenderer?.setOutOfRange(mode);
+  }
+
+  setChannelSwizzle(swizzle: import('../../core/types/color').ChannelSwizzle): void {
+    this._glRenderer?.setChannelSwizzle(swizzle);
+  }
+
   /**
    * Dispose all GL resources (renderer, worker proxy, WebGPU blit, canvas reference).
    */

@@ -420,7 +420,7 @@ describe('SessionURLService', () => {
       expect(deps.networkSyncManager.joinRoom).not.toHaveBeenCalled();
     });
 
-    it('SU-018: handles invalid hash gracefully (no crash)', async () => {
+    it('SU-018: handles invalid hash gracefully (no crash) and shows info', async () => {
       deps = createDeps({
         getLocationSearch: () => '',
         getLocationHash: () => '#s=not-valid-base64!!!',
@@ -431,6 +431,52 @@ describe('SessionURLService', () => {
 
       // Should not throw, and should not apply any state
       expect(deps.session.goToFrame).not.toHaveBeenCalled();
+      // Should notify the user about the malformed link
+      expect(deps.networkControl.showInfo).toHaveBeenCalledWith(
+        'Could not restore shared session state: the link may be corrupted or incomplete.',
+      );
+    });
+
+    it('SU-018b: no hash at all does not show info (normal startup)', async () => {
+      deps = createDeps({
+        getLocationSearch: () => '',
+        getLocationHash: () => '',
+      });
+      service = new SessionURLService(deps);
+
+      await service.handleURLBootstrap();
+
+      expect(deps.networkControl.showInfo).not.toHaveBeenCalled();
+    });
+
+    it('SU-018c: valid hash does not show info (successful decode)', async () => {
+      const state: SessionURLState = { frame: 10, fps: 24, sourceIndex: 0 };
+      const encoded = encodeSessionState(state);
+      deps = createDeps({
+        getLocationSearch: () => '',
+        getLocationHash: () => `#s=${encoded}`,
+      });
+      service = new SessionURLService(deps);
+
+      await service.handleURLBootstrap();
+
+      expect(deps.session.goToFrame).toHaveBeenCalledWith(10);
+      expect(deps.networkControl.showInfo).not.toHaveBeenCalled();
+    });
+
+    it('SU-018d: truncated base64 in #s= shows info', async () => {
+      deps = createDeps({
+        getLocationSearch: () => '',
+        getLocationHash: () => '#s=eyJmIjox',  // truncated JSON
+      });
+      service = new SessionURLService(deps);
+
+      await service.handleURLBootstrap();
+
+      expect(deps.session.goToFrame).not.toHaveBeenCalled();
+      expect(deps.networkControl.showInfo).toHaveBeenCalledWith(
+        'Could not restore shared session state: the link may be corrupted or incomplete.',
+      );
     });
   });
 
@@ -536,6 +582,73 @@ describe('SessionURLService', () => {
       expect(deps.session.goToFrame).toHaveBeenCalledWith(10);
 
       warnSpy.mockRestore();
+    });
+
+    it('SU-054: shows user-facing notification when sourceUrl load fails', async () => {
+      const loadSourceFromUrl = vi.fn().mockRejectedValue(new Error('Expired signed URL'));
+      deps.session.sourceCount = 0;
+      (deps.session as any).loadSourceFromUrl = loadSourceFromUrl;
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const state: SessionURLState = {
+        frame: 10,
+        fps: 24,
+        sourceIndex: 0,
+        sourceUrl: 'https://example.com/expired.png',
+      };
+
+      await service.applySessionURLState(state);
+
+      // User-facing notification should be shown
+      expect(deps.networkControl.showInfo).toHaveBeenCalledWith(
+        'Failed to load shared media: Expired signed URL',
+      );
+      // Console warning should still be present for debugging
+      expect(warnSpy).toHaveBeenCalled();
+      // View state should still be applied despite load failure
+      expect(deps.session.goToFrame).toHaveBeenCalledWith(10);
+
+      warnSpy.mockRestore();
+    });
+
+    it('SU-055: shows user-facing notification with stringified non-Error rejection', async () => {
+      const loadSourceFromUrl = vi.fn().mockRejectedValue('network timeout');
+      deps.session.sourceCount = 0;
+      (deps.session as any).loadSourceFromUrl = loadSourceFromUrl;
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const state: SessionURLState = {
+        frame: 5,
+        fps: 24,
+        sourceIndex: 0,
+        sourceUrl: 'https://example.com/timeout.png',
+      };
+
+      await service.applySessionURLState(state);
+
+      expect(deps.networkControl.showInfo).toHaveBeenCalledWith(
+        'Failed to load shared media: network timeout',
+      );
+
+      warnSpy.mockRestore();
+    });
+
+    it('SU-056: does not show error notification when sourceUrl loads successfully', async () => {
+      const loadSourceFromUrl = vi.fn().mockResolvedValue(undefined);
+      deps.session.sourceCount = 0;
+      (deps.session as any).loadSourceFromUrl = loadSourceFromUrl;
+
+      const state: SessionURLState = {
+        frame: 1,
+        fps: 24,
+        sourceIndex: 0,
+        sourceUrl: 'https://example.com/image.png',
+      };
+
+      await service.applySessionURLState(state);
+
+      expect(loadSourceFromUrl).toHaveBeenCalledWith('https://example.com/image.png');
+      expect(deps.networkControl.showInfo).not.toHaveBeenCalled();
     });
 
     it('SU-026: skips sourceUrl when it is empty string', async () => {
@@ -1064,6 +1177,228 @@ describe('SessionURLService', () => {
       );
       // Shared state from hash should still be applied
       expect(deps.session.goToFrame).toHaveBeenCalledWith(77);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Issue #428: Share-link compare state cannot explicitly clear B source
+  // -----------------------------------------------------------------------
+
+  describe('issue #428: share-link clears stale B source', () => {
+    it('SU-050: share link with sourceAIndex but no sourceBIndex calls clearSourceB()', async () => {
+      const state: SessionURLState = {
+        frame: 1,
+        fps: 24,
+        sourceIndex: 0,
+        sourceAIndex: 0,
+        // sourceBIndex intentionally absent — sender had no B assigned
+      };
+
+      await service.applySessionURLState(state);
+
+      expect(deps.session.setSourceA).toHaveBeenCalledWith(0);
+      expect(deps.session.clearSourceB).toHaveBeenCalled();
+      expect(deps.session.setSourceB).not.toHaveBeenCalled();
+    });
+
+    it('SU-051: share link with sourceBIndex present calls setSourceB (existing behavior)', async () => {
+      const state: SessionURLState = {
+        frame: 1,
+        fps: 24,
+        sourceIndex: 0,
+        sourceAIndex: 0,
+        sourceBIndex: 1,
+        currentAB: 'B',
+      };
+
+      await service.applySessionURLState(state);
+
+      expect(deps.session.setSourceA).toHaveBeenCalledWith(0);
+      expect(deps.session.setSourceB).toHaveBeenCalledWith(1);
+      expect(deps.session.clearSourceB).not.toHaveBeenCalled();
+    });
+
+    it('SU-052: share link with no compare state at all does not touch B (backward compat)', async () => {
+      const state: SessionURLState = {
+        frame: 1,
+        fps: 24,
+        sourceIndex: 0,
+        // No sourceAIndex, no sourceBIndex — old-format link
+      };
+
+      await service.applySessionURLState(state);
+
+      expect(deps.session.setSourceA).not.toHaveBeenCalled();
+      expect(deps.session.setSourceB).not.toHaveBeenCalled();
+      expect(deps.session.clearSourceB).not.toHaveBeenCalled();
+    });
+
+    it('SU-053: round-trip encode/decode with no B → apply clears B on recipient', async () => {
+      // Simulate captured state from a sender with no B assigned
+      const senderState: SessionURLState = {
+        frame: 1,
+        fps: 24,
+        sourceIndex: 0,
+        sourceAIndex: 0,
+        // sourceBIndex intentionally absent (sender had no B)
+        currentAB: 'A',
+      };
+
+      expect(senderState.sourceBIndex).toBeUndefined();
+
+      // Encode → decode round-trip
+      const encoded = encodeSessionState(senderState);
+      const decoded = decodeSessionState(encoded)!;
+      expect(decoded).not.toBeNull();
+      expect(decoded.sourceAIndex).toBe(0);
+      expect(decoded.sourceBIndex).toBeUndefined();
+
+      // Apply to a fresh recipient
+      const recipientDeps = createDeps();
+      const recipientService = new SessionURLService(recipientDeps);
+      await recipientService.applySessionURLState(decoded);
+
+      expect(recipientDeps.session.setSourceA).toHaveBeenCalledWith(0);
+      expect(recipientDeps.session.clearSourceB).toHaveBeenCalled();
+      expect(recipientDeps.session.setSourceB).not.toHaveBeenCalled();
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Issue #432: Share-link A/B compare indices not validated
+  // -----------------------------------------------------------------------
+
+  describe('issue #432: validate A/B compare indices against sourceCount', () => {
+    it('SU-057: sourceAIndex out of range gets clamped to sourceCount-1', async () => {
+      deps.session.sourceCount = 3;
+      const state: SessionURLState = {
+        frame: 1,
+        fps: 24,
+        sourceIndex: 0,
+        sourceAIndex: 99, // way out of range
+        sourceBIndex: 1,
+      };
+
+      await service.applySessionURLState(state);
+
+      expect(deps.session.setSourceA).toHaveBeenCalledWith(2); // clamped to sourceCount-1
+      expect(deps.session.setSourceB).toHaveBeenCalledWith(1);
+    });
+
+    it('SU-058: sourceBIndex out of range triggers clearSourceB()', async () => {
+      deps.session.sourceCount = 3;
+      const state: SessionURLState = {
+        frame: 1,
+        fps: 24,
+        sourceIndex: 0,
+        sourceAIndex: 0,
+        sourceBIndex: 99, // way out of range
+      };
+
+      await service.applySessionURLState(state);
+
+      expect(deps.session.setSourceA).toHaveBeenCalledWith(0);
+      expect(deps.session.setSourceB).not.toHaveBeenCalled();
+      expect(deps.session.clearSourceB).toHaveBeenCalled();
+    });
+
+    it('SU-059: valid A/B indices within range are applied normally', async () => {
+      deps.session.sourceCount = 5;
+      const state: SessionURLState = {
+        frame: 1,
+        fps: 24,
+        sourceIndex: 0,
+        sourceAIndex: 2,
+        sourceBIndex: 4,
+        currentAB: 'B',
+      };
+
+      await service.applySessionURLState(state);
+
+      expect(deps.session.setSourceA).toHaveBeenCalledWith(2);
+      expect(deps.session.setSourceB).toHaveBeenCalledWith(4);
+      expect(deps.session.clearSourceB).not.toHaveBeenCalled();
+      expect(deps.session.setCurrentAB).toHaveBeenCalledWith('B');
+    });
+
+    it('SU-060: negative sourceAIndex gets clamped to 0', async () => {
+      deps.session.sourceCount = 3;
+      const state: SessionURLState = {
+        frame: 1,
+        fps: 24,
+        sourceIndex: 0,
+        sourceAIndex: -5,
+        sourceBIndex: 1,
+      };
+
+      await service.applySessionURLState(state);
+
+      expect(deps.session.setSourceA).toHaveBeenCalledWith(0); // clamped to 0
+      expect(deps.session.setSourceB).toHaveBeenCalledWith(1);
+    });
+
+    it('SU-061: negative sourceBIndex triggers clearSourceB()', async () => {
+      deps.session.sourceCount = 3;
+      const state: SessionURLState = {
+        frame: 1,
+        fps: 24,
+        sourceIndex: 0,
+        sourceAIndex: 0,
+        sourceBIndex: -1,
+      };
+
+      await service.applySessionURLState(state);
+
+      expect(deps.session.setSourceA).toHaveBeenCalledWith(0);
+      expect(deps.session.setSourceB).not.toHaveBeenCalled();
+      expect(deps.session.clearSourceB).toHaveBeenCalled();
+    });
+
+    it('SU-062: sourceBIndex equal to sourceCount triggers clearSourceB()', async () => {
+      deps.session.sourceCount = 3;
+      const state: SessionURLState = {
+        frame: 1,
+        fps: 24,
+        sourceIndex: 0,
+        sourceAIndex: 0,
+        sourceBIndex: 3, // exactly at sourceCount boundary
+      };
+
+      await service.applySessionURLState(state);
+
+      expect(deps.session.setSourceB).not.toHaveBeenCalled();
+      expect(deps.session.clearSourceB).toHaveBeenCalled();
+    });
+
+    it('SU-063: sourceAIndex clamped when sourceCount is 0', async () => {
+      deps.session.sourceCount = 0;
+      const state: SessionURLState = {
+        frame: 1,
+        fps: 24,
+        sourceIndex: 0,
+        sourceAIndex: 5,
+      };
+
+      await service.applySessionURLState(state);
+
+      expect(deps.session.setSourceA).toHaveBeenCalledWith(0);
+      expect(deps.session.clearSourceB).toHaveBeenCalled();
+    });
+
+    it('SU-064: sourceBIndex with sourceCount 0 triggers clearSourceB()', async () => {
+      deps.session.sourceCount = 0;
+      const state: SessionURLState = {
+        frame: 1,
+        fps: 24,
+        sourceIndex: 0,
+        sourceAIndex: 0,
+        sourceBIndex: 0,
+      };
+
+      await service.applySessionURLState(state);
+
+      expect(deps.session.setSourceB).not.toHaveBeenCalled();
+      expect(deps.session.clearSourceB).toHaveBeenCalled();
     });
   });
 

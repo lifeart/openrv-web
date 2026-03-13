@@ -33,6 +33,7 @@ export interface URLSession {
   setOutPoint(frame: number): void;
   setSourceA(index: number): void;
   setSourceB(index: number): void;
+  clearSourceB(): void;
   setCurrentAB(ab: 'A' | 'B'): void;
   /** Load media from a URL. Used to reconstruct shared media on a clean session. */
   loadSourceFromUrl?(url: string): Promise<void>;
@@ -156,10 +157,12 @@ export class SessionURLService {
         console.info(`[SessionURLService] Loading media from share link: ${state.sourceUrl}`);
         await session.loadSourceFromUrl(state.sourceUrl);
       } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err);
         console.warn(
           '[SessionURLService] Failed to load media from share link sourceUrl, continuing with view state:',
           err,
         );
+        this.deps.networkControl.showInfo(`Failed to load shared media: ${reason}`);
       }
     }
 
@@ -182,10 +185,27 @@ export class SessionURLService {
       }
 
       if (typeof state.sourceAIndex === 'number') {
-        session.setSourceA(state.sourceAIndex);
+        // Clamp sourceAIndex to valid range (0 to sourceCount-1)
+        const clampedA = session.sourceCount > 0
+          ? Math.max(0, Math.min(session.sourceCount - 1, state.sourceAIndex))
+          : 0;
+        session.setSourceA(clampedA);
+
+        // When the share link is compare-aware (sourceAIndex present) but has
+        // no B assignment, explicitly clear the recipient's B source so it
+        // matches the sender's "no B" state.  Links without any compare state
+        // (older versions) leave B untouched for backward compat.
+        if (typeof state.sourceBIndex !== 'number') {
+          session.clearSourceB();
+        }
       }
       if (typeof state.sourceBIndex === 'number') {
-        session.setSourceB(state.sourceBIndex);
+        // Validate sourceBIndex: if out of range, clear B instead of setting invalid index
+        if (session.sourceCount > 0 && state.sourceBIndex >= 0 && state.sourceBIndex < session.sourceCount) {
+          session.setSourceB(state.sourceBIndex);
+        } else {
+          session.clearSourceB();
+        }
       }
       if (state.currentAB === 'A' || state.currentAB === 'B') {
         session.setCurrentAB(state.currentAB);
@@ -309,10 +329,22 @@ export class SessionURLService {
       networkSyncManager.joinRoom(roomCode.toUpperCase(), 'User', pinCode ?? undefined);
     }
 
-    const sharedState = decodeSessionState(this.deps.getLocationHash());
+    const locationHash = this.deps.getLocationHash();
+    const sharedState = decodeSessionState(locationHash);
     if (sharedState) {
       await this.applySessionURLState(sharedState);
+    } else if (this.hashContainsSessionParam(locationHash)) {
+      networkControl.showInfo(
+        'Could not restore shared session state: the link may be corrupted or incomplete.',
+      );
     }
+  }
+
+  /** Check whether the hash fragment contains a `s=` session parameter. */
+  private hashContainsSessionParam(hash: string): boolean {
+    const cleaned = hash.startsWith('#') ? hash.slice(1) : hash;
+    if (!cleaned) return false;
+    return cleaned.startsWith('s=') || cleaned.includes('&s=');
   }
 
   /** Release references. */

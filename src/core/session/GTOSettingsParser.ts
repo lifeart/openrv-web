@@ -10,10 +10,10 @@ import type { ColorAdjustments, ChannelMode, LinearizeState, ChannelSwizzle } fr
 import { DEFAULT_LINEARIZE_STATE, SWIZZLE_ZERO, SWIZZLE_ONE } from '../../core/types/color';
 import type { NoiseReductionParams } from '../../filters/NoiseReduction';
 import { DEFAULT_NOISE_REDUCTION_PARAMS } from '../../filters/NoiseReduction';
-import type { Transform2D, CropState, UncropState } from '../../core/types/transform';
+import { type Transform2D, DEFAULT_TRANSFORM, type CropState, type UncropState } from '../../core/types/transform';
 import type { ScopesState } from '../../core/types/scopes';
-import type { CDLValues } from '../../color/CDL';
-import type { LensDistortionParams } from '../../transform/LensDistortion';
+import { type CDLValues, DEFAULT_CDL } from '../../color/CDL';
+import { type LensDistortionParams, DEFAULT_LENS_PARAMS } from '../../transform/LensDistortion';
 import type { StereoState } from '../types/stereo';
 import type { GTOViewSettings } from './SessionTypes';
 
@@ -245,6 +245,14 @@ export function parseColorAdjustments(dto: GTODTO): Partial<ColorAdjustments> | 
     const rvColorNode = colorNodes.first();
     const colorComp = rvColorNode.component('color');
     if (colorComp?.exists()) {
+      // Check if this color node is marked inactive (active=0).
+      // When inactive, skip parsing — the caller will get default/null values
+      // so the restore handler resets to defaults rather than applying stale adjustments.
+      const rvColorActive = getNumberValue(colorComp.property('active').value());
+      if (rvColorActive === 0) {
+        // Node explicitly inactive — do not extract any color adjustments from RVColor.
+        // Fall through to RVDisplayColor parsing below.
+      } else {
       // Exposure: default 0 (stops)
       const exposureResult = extractScalarAndRGB(colorComp.property('exposure').value(), 0);
       if (typeof exposureResult.scalar === 'number') adjustments.exposure = exposureResult.scalar;
@@ -286,9 +294,11 @@ export function parseColorAdjustments(dto: GTODTO): Partial<ColorAdjustments> | 
       if (typeof offsetResult.scalar === 'number' && !offsetResult.rgb && adjustments.brightness === undefined) {
         adjustments.brightness = offsetResult.scalar;
       }
+      } // end else (rvColorActive !== 0)
     }
 
     // Extract luminanceLUT component (separate from 'color' component on RVColor node)
+    // Note: luminanceLUT has its own active flag, checked independently below.
     const lumLutComp = rvColorNode.component('luminanceLUT');
     if (lumLutComp?.exists()) {
       const active = getNumberValue(lumLutComp.property('active').value());
@@ -307,10 +317,15 @@ export function parseColorAdjustments(dto: GTODTO): Partial<ColorAdjustments> | 
   if (displayColorNodes.length > 0) {
     const displayComp = displayColorNodes.first().component('color');
     if (displayComp?.exists()) {
-      const brightness = getNumberValue(displayComp.property('brightness').value());
-      const gamma = getNumberValue(displayComp.property('gamma').value());
-      if (typeof brightness === 'number') adjustments.brightness = brightness;
-      if (typeof gamma === 'number' && adjustments.gamma === undefined) adjustments.gamma = gamma;
+      // Check if this display color node is marked inactive (active=0).
+      // When inactive, skip parsing so the restore handler resets to defaults.
+      const displayColorActive = getNumberValue(displayComp.property('active').value());
+      if (displayColorActive !== 0) {
+        const brightness = getNumberValue(displayComp.property('brightness').value());
+        const gamma = getNumberValue(displayComp.property('gamma').value());
+        if (typeof brightness === 'number') adjustments.brightness = brightness;
+        if (typeof gamma === 'number' && adjustments.gamma === undefined) adjustments.gamma = gamma;
+      }
     }
   }
 
@@ -345,12 +360,16 @@ export function parseCDL(dto: GTODTO): CDLValues | null {
   };
 
   const readCDLFromNodes = (nodes: ReturnType<GTODTO['byProtocol']>): CDLValues | null => {
+    let foundInactiveComponent = false;
     for (const node of nodes) {
       const cdlComp = node.component('CDL');
       if (!cdlComp?.exists()) continue;
 
       const active = getNumberValue(cdlComp.property('active').value());
       if (active !== undefined && active === 0) {
+        // CDL component exists but is inactive — remember this so we can
+        // return defaults instead of null (resets stale state on import).
+        foundInactiveComponent = true;
         continue;
       }
 
@@ -361,7 +380,8 @@ export function parseCDL(dto: GTODTO): CDLValues | null {
       const cdl = buildCDL({ slope, offset, power, saturation });
       if (cdl) return cdl;
     }
-    return null;
+    // If a CDL component existed but was inactive, return defaults to clear stale state.
+    return foundInactiveComponent ? { ...DEFAULT_CDL } : null;
   };
 
   return readCDLFromNodes(dto.byProtocol('RVColor')) ?? readCDLFromNodes(dto.byProtocol('RVLinearize'));
@@ -378,7 +398,10 @@ export function parseTransform(dto: GTODTO): Transform2D | null {
   if (!transformComp?.exists()) return null;
 
   const active = getNumberValue(transformComp.property('active').value());
-  if (active !== undefined && active === 0) return null;
+  if (active !== undefined && active === 0) {
+    // Transform node exists but is inactive — return defaults to clear stale state.
+    return { ...DEFAULT_TRANSFORM };
+  }
 
   const rotationValue = getNumberValue(transformComp.property('rotate').value());
   const flipValue = getNumberValue(transformComp.property('flip').value());
@@ -429,7 +452,10 @@ export function parseLens(dto: GTODTO): LensDistortionParams | null {
   const nodeComp = node.component('node');
   if (nodeComp?.exists()) {
     const active = getNumberValue(nodeComp.property('active').value());
-    if (active !== undefined && active === 0) return null;
+    if (active !== undefined && active === 0) {
+      // Lens node exists but is inactive — return defaults to clear stale state.
+      return { ...DEFAULT_LENS_PARAMS };
+    }
   }
 
   const warpComp = node.component('warp');
@@ -754,6 +780,11 @@ export function parseOutOfRange(dto: GTODTO): number | undefined {
 
   const displayComp = nodes.first().component('color');
   if (!displayComp?.exists()) return undefined;
+
+  // When the display color node is inactive (active=0), return mode 0 (off)
+  // so the restore handler explicitly resets out-of-range visualization.
+  const activeFlag = getNumberValue(displayComp.property('active').value());
+  if (activeFlag === 0) return 0;
 
   const rawValue = getNumberValue(displayComp.property('outOfRange').value());
   if (rawValue === undefined) return undefined;
