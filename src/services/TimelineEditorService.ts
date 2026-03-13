@@ -227,9 +227,10 @@ export class TimelineEditorService {
    */
   buildEDLFromRVEDLEntries(
     entries: readonly TimelineRVEDLEntry[],
-  ): { edl: TimelineEDLEntry[]; labels: string[] } {
+  ): { edl: TimelineEDLEntry[]; labels: string[]; unresolvedPaths: string[] } {
     const edl: TimelineEDLEntry[] = [];
     const labels: string[] = [];
+    const unresolvedPaths: string[] = [];
     const sources = this.session.allSources;
 
     let nextFrame = 1;
@@ -251,6 +252,7 @@ export class TimelineEditorService {
       // Fallback: use source 0 if no match found (file may not be loaded yet)
       if (sourceIndex < 0) {
         sourceIndex = 0;
+        unresolvedPaths.push(entry.sourcePath);
       }
 
       const inPoint = Math.max(1, entry.inFrame);
@@ -267,7 +269,7 @@ export class TimelineEditorService {
       nextFrame += duration;
     }
 
-    return { edl, labels };
+    return { edl, labels, unresolvedPaths };
   }
 
   /** Build a fallback EDL from the session's loaded sources. */
@@ -349,6 +351,11 @@ export class TimelineEditorService {
     const rvedlEntries = this.session.edlEntries;
     if (rvedlEntries.length > 0) {
       const result = this.buildEDLFromRVEDLEntries(rvedlEntries);
+      if (result.unresolvedPaths.length > 0) {
+        console.warn(
+          `[TimelineEditorService] ${result.unresolvedPaths.length} RVEDL source path(s) could not be matched to loaded sources and were assigned to source 0: ${result.unresolvedPaths.join(', ')}`,
+        );
+      }
       if (result.edl.length > 0) {
         this.timelineEditor.loadFromEDL(result.edl, result.labels);
         return;

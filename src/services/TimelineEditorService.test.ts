@@ -601,6 +601,56 @@ describe('TimelineEditorService', () => {
 
       expect(result.edl).toEqual([]);
       expect(result.labels).toEqual([]);
+      expect(result.unresolvedPaths).toEqual([]);
+    });
+
+    it('TLE-047: returns unresolved paths for entries that do not match any loaded source', () => {
+      deps.session.allSources = [{ name: 'known.exr', duration: 100 }];
+      const entries: TimelineRVEDLEntry[] = [
+        { sourcePath: '/path/to/known.exr', inFrame: 1, outFrame: 30 },
+        { sourcePath: '/path/to/missing1.exr', inFrame: 10, outFrame: 40 },
+        { sourcePath: '/path/to/missing2.dpx', inFrame: 5, outFrame: 20 },
+      ];
+
+      const result = service.buildEDLFromRVEDLEntries(entries);
+
+      expect(result.unresolvedPaths).toEqual(['/path/to/missing1.exr', '/path/to/missing2.dpx']);
+      // Unresolved entries still fall back to source 0
+      expect(result.edl[1]!.source).toBe(0);
+      expect(result.edl[2]!.source).toBe(0);
+      // Resolved entry uses correct source
+      expect(result.edl[0]!.source).toBe(0);
+    });
+
+    it('TLE-048: returns empty unresolvedPaths when all sources match', () => {
+      deps.session.allSources = [
+        { name: 'clip1.exr', duration: 100 },
+        { name: 'clip2.mov', duration: 200 },
+      ];
+      const entries: TimelineRVEDLEntry[] = [
+        { sourcePath: '/path/to/clip1.exr', inFrame: 1, outFrame: 30 },
+        { sourcePath: '/other/clip2.mov', inFrame: 10, outFrame: 50 },
+      ];
+
+      const result = service.buildEDLFromRVEDLEntries(entries);
+
+      expect(result.unresolvedPaths).toEqual([]);
+      expect(result.edl[0]!.source).toBe(0);
+      expect(result.edl[1]!.source).toBe(1);
+    });
+
+    it('TLE-049: all entries unresolved returns all paths and falls back to source 0', () => {
+      deps.session.allSources = [{ name: 'other.exr', duration: 50 }];
+      const entries: TimelineRVEDLEntry[] = [
+        { sourcePath: '/a/unknown1.exr', inFrame: 1, outFrame: 10 },
+        { sourcePath: '/b/unknown2.exr', inFrame: 1, outFrame: 20 },
+      ];
+
+      const result = service.buildEDLFromRVEDLEntries(entries);
+
+      expect(result.unresolvedPaths).toEqual(['/a/unknown1.exr', '/b/unknown2.exr']);
+      expect(result.edl[0]!.source).toBe(0);
+      expect(result.edl[1]!.source).toBe(0);
     });
   });
 
@@ -643,6 +693,38 @@ describe('TimelineEditorService', () => {
         [{ frame: 1, source: 0, inPoint: 1, outPoint: 30 }],
         ['A'],
       );
+    });
+
+    it('TLE-050: logs console.warn when RVEDL entries have unresolved source paths', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      deps.session.allSources = [{ name: 'known.exr', duration: 100 }];
+      deps.session.edlEntries = [
+        { sourcePath: '/path/to/known.exr', inFrame: 1, outFrame: 30 },
+        { sourcePath: '/path/to/missing.exr', inFrame: 10, outFrame: 40 },
+      ];
+
+      service.syncFromGraph();
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('1 RVEDL source path(s) could not be matched'),
+      );
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('/path/to/missing.exr'),
+      );
+      warnSpy.mockRestore();
+    });
+
+    it('TLE-051: does not log console.warn when all RVEDL entries resolve', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      deps.session.allSources = [{ name: 'shot.exr', duration: 100 }];
+      deps.session.edlEntries = [
+        { sourcePath: '/renders/shot.exr', inFrame: 10, outFrame: 50 },
+      ];
+
+      service.syncFromGraph();
+
+      expect(warnSpy).not.toHaveBeenCalled();
+      warnSpy.mockRestore();
     });
 
     it('TLE-045: RVEDL entries are higher priority than fallback EDL', () => {
