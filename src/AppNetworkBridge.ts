@@ -456,6 +456,17 @@ export class AppNetworkBridge {
       }),
     );
 
+    // Wire toast messages to NetworkControl UI
+    this.unsubscribers.push(
+      networkSyncManager.on('toastMessage', ({ message, type }) => {
+        if (type === 'error') {
+          networkControl.showError(message);
+        } else {
+          networkControl.showInfo(message);
+        }
+      }),
+    );
+
     this.unsubscribers.push(
       networkSyncManager.on('roomLeft', () => {
         networkControl.setLocalUserId(null);

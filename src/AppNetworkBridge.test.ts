@@ -1542,4 +1542,60 @@ describe('AppNetworkBridge', () => {
       );
     });
   });
+
+  // -----------------------------------------------------------------------
+  // Toast message wiring
+  // -----------------------------------------------------------------------
+  describe('toast message wiring', () => {
+    it('ANB-140: toastMessage with type "info" calls networkControl.showInfo', () => {
+      bridge.setup();
+
+      ctx._networkSyncManager.emit('toastMessage', {
+        message: 'Alice joined the room',
+        type: 'info',
+      });
+
+      expect(ctx._networkControl.showInfo).toHaveBeenCalledTimes(1);
+      expect(ctx._networkControl.showInfo).toHaveBeenCalledWith('Alice joined the room');
+      expect(ctx._networkControl.showError).not.toHaveBeenCalled();
+    });
+
+    it('ANB-141: toastMessage with type "success" calls networkControl.showInfo', () => {
+      bridge.setup();
+
+      ctx._networkSyncManager.emit('toastMessage', {
+        message: 'Reconnected successfully',
+        type: 'success',
+      });
+
+      expect(ctx._networkControl.showInfo).toHaveBeenCalledTimes(1);
+      expect(ctx._networkControl.showInfo).toHaveBeenCalledWith('Reconnected successfully');
+    });
+
+    it('ANB-142: toastMessage with type "error" calls networkControl.showError', () => {
+      bridge.setup();
+
+      ctx._networkSyncManager.emit('toastMessage', {
+        message: 'Failed to reconnect. Please try again.',
+        type: 'error',
+      });
+
+      expect(ctx._networkControl.showError).toHaveBeenCalledTimes(1);
+      expect(ctx._networkControl.showError).toHaveBeenCalledWith('Failed to reconnect. Please try again.');
+      expect(ctx._networkControl.showInfo).not.toHaveBeenCalled();
+    });
+
+    it('ANB-143: toastMessage subscription is cleaned up on dispose', () => {
+      bridge.setup();
+      bridge.dispose();
+
+      ctx._networkSyncManager.emit('toastMessage', {
+        message: 'Should not appear',
+        type: 'info',
+      });
+
+      expect(ctx._networkControl.showInfo).not.toHaveBeenCalled();
+      expect(ctx._networkControl.showError).not.toHaveBeenCalled();
+    });
+  });
 });
