@@ -21,6 +21,8 @@ const {
   mockDialogOnFn,
   mockDownloadAnnotationsJSON,
   mockExportAnnotationsPDF,
+  mockParseAnnotationsJSON,
+  mockApplyAnnotationsJSON,
 } = vi.hoisted(() => ({
   mockEncodeFn: vi.fn(),
   mockCancelFn: vi.fn(),
@@ -32,6 +34,8 @@ const {
   mockDialogOnFn: vi.fn().mockReturnValue(() => {}),
   mockDownloadAnnotationsJSON: vi.fn(),
   mockExportAnnotationsPDF: vi.fn().mockResolvedValue(undefined),
+  mockParseAnnotationsJSON: vi.fn(),
+  mockApplyAnnotationsJSON: vi.fn().mockReturnValue(5),
 }));
 
 vi.mock('./export/VideoExporter', () => {
@@ -72,6 +76,8 @@ vi.mock('./ui/components/ExportProgress', () => ({
 
 vi.mock('./utils/export/AnnotationJSONExporter', () => ({
   downloadAnnotationsJSON: mockDownloadAnnotationsJSON,
+  parseAnnotationsJSON: mockParseAnnotationsJSON,
+  applyAnnotationsJSON: mockApplyAnnotationsJSON,
 }));
 
 vi.mock('./utils/export/AnnotationPDFExporter', () => ({
@@ -79,6 +85,9 @@ vi.mock('./utils/export/AnnotationPDFExporter', () => ({
 }));
 
 const showAlertSpy = vi.spyOn(Modal, 'showAlert').mockReturnValue(Promise.resolve());
+const showAnnotationImportDialogSpy = vi
+  .spyOn(Modal, 'showAnnotationImportDialog')
+  .mockResolvedValue(null);
 
 function createMockVolumeControl() {
   const emitter = new EventEmitter();
@@ -487,6 +496,167 @@ describe('wirePlaybackControls', () => {
     const exportControl = headerBar.getExportControl();
     exportControl.emit('annotationsJSONExportRequested', undefined);
     expect(mockDownloadAnnotationsJSON).toHaveBeenCalledWith(expect.anything(), 'annotations');
+  });
+
+  it('PW-014b: annotationsJSONImportRequested opens import dialog', async () => {
+    showAnnotationImportDialogSpy.mockResolvedValue(null); // user cancels
+    const exportControl = headerBar.getExportControl();
+    exportControl.emit('annotationsJSONImportRequested', undefined);
+
+    await vi.waitFor(() => {
+      expect(showAnnotationImportDialogSpy).toHaveBeenCalledWith({ title: 'Import Annotations' });
+    });
+  });
+
+  it('PW-014c: annotationsJSONImportRequested with merge mode calls applyAnnotationsJSON with merge', async () => {
+    const fakeData = { version: 1, source: 'openrv-web', frames: {} };
+    showAnnotationImportDialogSpy.mockResolvedValue({ mode: 'merge', frameOffset: 0 });
+    mockParseAnnotationsJSON.mockReturnValue(fakeData);
+    mockApplyAnnotationsJSON.mockReturnValue(3);
+
+    // Mock file input to simulate file selection
+    const mockFile = new File(['{}'], 'annotations.json', { type: 'application/json' });
+    Object.defineProperty(mockFile, 'text', {
+      value: vi.fn().mockResolvedValue(JSON.stringify(fakeData)),
+    });
+
+    const origCreateElement = document.createElement.bind(document);
+    const createSpy = vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+      if (tag === 'input') {
+        const input = origCreateElement('input') as HTMLInputElement;
+        // Override click to simulate file selection
+        Object.defineProperty(input, 'click', {
+          value: () => {
+            Object.defineProperty(input, 'files', { value: [mockFile], configurable: true });
+            input.dispatchEvent(new Event('change'));
+          },
+        });
+        return input;
+      }
+      return origCreateElement(tag);
+    });
+
+    const exportControl = headerBar.getExportControl();
+    exportControl.emit('annotationsJSONImportRequested', undefined);
+
+    await vi.waitFor(() => {
+      expect(mockApplyAnnotationsJSON).toHaveBeenCalledWith(
+        expect.anything(), // paintEngine
+        fakeData,
+        { mode: 'merge', frameOffset: 0 },
+      );
+    });
+
+    await vi.waitFor(() => {
+      expect(showAlertSpy).toHaveBeenCalledWith(
+        expect.stringContaining('merged'),
+        expect.objectContaining({ type: 'success' }),
+      );
+    });
+
+    createSpy.mockRestore();
+  });
+
+  it('PW-014d: annotationsJSONImportRequested with frame offset applies offset correctly', async () => {
+    const fakeData = { version: 1, source: 'openrv-web', frames: {} };
+    showAnnotationImportDialogSpy.mockResolvedValue({ mode: 'replace', frameOffset: 50 });
+    mockParseAnnotationsJSON.mockReturnValue(fakeData);
+    mockApplyAnnotationsJSON.mockReturnValue(2);
+
+    const mockFile = new File(['{}'], 'annotations.json', { type: 'application/json' });
+    Object.defineProperty(mockFile, 'text', {
+      value: vi.fn().mockResolvedValue(JSON.stringify(fakeData)),
+    });
+
+    const origCreateElement = document.createElement.bind(document);
+    const createSpy = vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+      if (tag === 'input') {
+        const input = origCreateElement('input') as HTMLInputElement;
+        Object.defineProperty(input, 'click', {
+          value: () => {
+            Object.defineProperty(input, 'files', { value: [mockFile], configurable: true });
+            input.dispatchEvent(new Event('change'));
+          },
+        });
+        return input;
+      }
+      return origCreateElement(tag);
+    });
+
+    const exportControl = headerBar.getExportControl();
+    exportControl.emit('annotationsJSONImportRequested', undefined);
+
+    await vi.waitFor(() => {
+      expect(mockApplyAnnotationsJSON).toHaveBeenCalledWith(
+        expect.anything(),
+        fakeData,
+        { mode: 'replace', frameOffset: 50 },
+      );
+    });
+
+    await vi.waitFor(() => {
+      expect(showAlertSpy).toHaveBeenCalledWith(
+        expect.stringContaining('replaced'),
+        expect.objectContaining({ type: 'success' }),
+      );
+    });
+
+    // Verify frame offset is mentioned in the message
+    await vi.waitFor(() => {
+      expect(showAlertSpy).toHaveBeenCalledWith(
+        expect.stringContaining('frame offset: 50'),
+        expect.objectContaining({ type: 'success' }),
+      );
+    });
+
+    createSpy.mockRestore();
+  });
+
+  it('PW-014e: annotationsJSONImportRequested with default options (replace, offset 0) works', async () => {
+    const fakeData = { version: 1, source: 'openrv-web', frames: {} };
+    showAnnotationImportDialogSpy.mockResolvedValue({ mode: 'replace', frameOffset: 0 });
+    mockParseAnnotationsJSON.mockReturnValue(fakeData);
+    mockApplyAnnotationsJSON.mockReturnValue(4);
+
+    const mockFile = new File(['{}'], 'annotations.json', { type: 'application/json' });
+    Object.defineProperty(mockFile, 'text', {
+      value: vi.fn().mockResolvedValue(JSON.stringify(fakeData)),
+    });
+
+    const origCreateElement = document.createElement.bind(document);
+    const createSpy = vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+      if (tag === 'input') {
+        const input = origCreateElement('input') as HTMLInputElement;
+        Object.defineProperty(input, 'click', {
+          value: () => {
+            Object.defineProperty(input, 'files', { value: [mockFile], configurable: true });
+            input.dispatchEvent(new Event('change'));
+          },
+        });
+        return input;
+      }
+      return origCreateElement(tag);
+    });
+
+    const exportControl = headerBar.getExportControl();
+    exportControl.emit('annotationsJSONImportRequested', undefined);
+
+    await vi.waitFor(() => {
+      expect(mockApplyAnnotationsJSON).toHaveBeenCalledWith(
+        expect.anything(),
+        fakeData,
+        { mode: 'replace', frameOffset: 0 },
+      );
+    });
+
+    await vi.waitFor(() => {
+      expect(showAlertSpy).toHaveBeenCalledWith(
+        expect.stringContaining('replaced'),
+        expect.objectContaining({ type: 'success' }),
+      );
+    });
+
+    createSpy.mockRestore();
   });
 
   it('PW-015: annotationsPDFExportRequested calls exportAnnotationsPDF', () => {

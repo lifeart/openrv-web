@@ -411,5 +411,36 @@ describe('PluginEventBus', () => {
       bus.emitPluginLifecycle('plugin:activated', { id: 'x' });
       expect(cb).not.toHaveBeenCalled();
     });
+
+    it('PEVT-061: dispose nulls out eventsAPI so new subscriptions warn', () => {
+      bus.dispose();
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const sub = bus.createSubscription('test.plugin');
+      sub.onApp('app:frameChange', vi.fn());
+
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('EventsAPI not available'));
+      warnSpy.mockRestore();
+    });
+
+    it('PEVT-062: dispose is idempotent', () => {
+      bus.dispose();
+      expect(() => bus.dispose()).not.toThrow();
+    });
+
+    it('PEVT-063: after dispose, setEventsAPI restores bridging', () => {
+      bus.dispose();
+
+      // Re-set the events API
+      const newMockAPI = createMockEventsAPI();
+      bus.setEventsAPI(newMockAPI as any);
+
+      const sub = bus.createSubscription('test.plugin');
+      const cb = vi.fn();
+      sub.onApp('app:frameChange', cb);
+
+      newMockAPI._emit('frameChange', { frame: 99 });
+      expect(cb).toHaveBeenCalledWith({ frame: 99 });
+    });
   });
 });

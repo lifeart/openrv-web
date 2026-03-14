@@ -1122,4 +1122,75 @@ describe('PluginRegistry', () => {
       expect(registry.getExporter('[object Object]')).toBeUndefined();
     });
   });
+
+  // -------------------------------------------------------------------------
+  // detach() — Issue #560
+  // -------------------------------------------------------------------------
+
+  describe('detach()', () => {
+    it('PREG-070: detach() clears apiRef so context.api throws', async () => {
+      const mockAPI = { version: '1.0.0' } as any;
+      registry.setAPI(mockAPI);
+
+      let capturedContext: PluginContext | undefined;
+      const plugin = createPlugin({
+        manifest: { id: 'detach.test.070' },
+        activate: (ctx: PluginContext) => { capturedContext = ctx; },
+      });
+      registry.register(plugin);
+      await registry.activate('detach.test.070');
+
+      // Before detach: api getter works
+      expect(capturedContext!.api).toBe(mockAPI);
+
+      registry.detach();
+
+      // After detach: api getter throws
+      expect(() => capturedContext!.api).toThrow('OpenRV API not yet initialized');
+    });
+
+    it('PREG-071: detach() disposes the event bus (clears subscriptions)', () => {
+      const mockEventsAPI = {
+        on: vi.fn(() => () => {}),
+        once: vi.fn(() => () => {}),
+        off: vi.fn(),
+      } as any;
+      registry.setEventsAPI(mockEventsAPI);
+
+      const sub = registry.eventBus.createSubscription('detach.test.071');
+      const cb = vi.fn();
+      sub.onApp('plugin:activated', cb);
+
+      registry.detach();
+
+      // After detach, event bus is disposed — lifecycle events should not fire
+      registry.eventBus.emitPluginLifecycle('plugin:activated', { id: 'x' });
+      expect(cb).not.toHaveBeenCalled();
+    });
+
+    it('PREG-072: detach() is idempotent', () => {
+      registry.setAPI({ version: '1.0.0' } as any);
+      registry.detach();
+      expect(() => registry.detach()).not.toThrow();
+    });
+
+    it('PREG-073: after detach(), setAPI() restores access', async () => {
+      const api1 = { version: '1.0.0' } as any;
+      const api2 = { version: '2.0.0' } as any;
+      registry.setAPI(api1);
+      registry.detach();
+
+      registry.setAPI(api2);
+
+      let capturedContext: PluginContext | undefined;
+      const plugin = createPlugin({
+        manifest: { id: 'detach.test.073' },
+        activate: (ctx: PluginContext) => { capturedContext = ctx; },
+      });
+      registry.register(plugin);
+      await registry.activate('detach.test.073');
+
+      expect(capturedContext!.api).toBe(api2);
+    });
+  });
 });

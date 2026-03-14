@@ -30,6 +30,8 @@ export type OpenRVEventName =
   | 'sourceLoadFailed'
   | 'viewTransformChanged'
   | 'renderedImagesChanged'
+  | 'representationChanged'
+  | 'fallbackActivated'
   | 'playlistEnded'
   | 'error';
 
@@ -72,6 +74,22 @@ export interface OpenRVEventData {
       tag?: string;
     }>;
   };
+  representationChanged: {
+    sourceIndex: number;
+    previousRepId: string | null;
+    newRepId: string;
+    label: string;
+    width: number;
+    height: number;
+  };
+  fallbackActivated: {
+    sourceIndex: number;
+    failedRepId: string;
+    fallbackRepId: string;
+    label: string;
+    width: number;
+    height: number;
+  };
   playlistEnded: void;
   error: { message: string; code?: string };
 }
@@ -95,6 +113,8 @@ const VALID_EVENTS: ReadonlySet<OpenRVEventName> = new Set([
   'sourceLoadFailed',
   'viewTransformChanged',
   'renderedImagesChanged',
+  'representationChanged',
+  'fallbackActivated',
   'playlistEnded',
   'error',
 ]);
@@ -366,6 +386,40 @@ export class EventsAPI extends DisposableAPI {
       );
     });
     this.internalUnsubscribers.push(unsubRepError);
+
+    // Representation changed — update cached source metadata and notify consumers
+    const unsubRepChanged = this.session.on('representationChanged', (data) => {
+      const { width, height } = data.representation.resolution;
+      const name = data.representation.label;
+      this._lastLoadedSource = { name, width, height };
+      this.emit('representationChanged', {
+        sourceIndex: data.sourceIndex,
+        previousRepId: data.previousRepId,
+        newRepId: data.newRepId,
+        label: name,
+        width,
+        height,
+      });
+      this.emitCurrentRenderedImages();
+    });
+    this.internalUnsubscribers.push(unsubRepChanged);
+
+    // Fallback activated — update cached source metadata and notify consumers
+    const unsubFallback = this.session.on('fallbackActivated', (data) => {
+      const { width, height } = data.fallbackRepresentation.resolution;
+      const name = data.fallbackRepresentation.label;
+      this._lastLoadedSource = { name, width, height };
+      this.emit('fallbackActivated', {
+        sourceIndex: data.sourceIndex,
+        failedRepId: data.failedRepId,
+        fallbackRepId: data.fallbackRepId,
+        label: name,
+        width,
+        height,
+      });
+      this.emitCurrentRenderedImages();
+    });
+    this.internalUnsubscribers.push(unsubFallback);
 
     // Frame decode timeout in play-all-frames mode
     const unsubDecodeTimeout = this.session.on('frameDecodeTimeout', (frame) => {

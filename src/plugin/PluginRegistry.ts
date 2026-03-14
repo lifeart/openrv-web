@@ -118,6 +118,23 @@ export class PluginRegistry {
     this.paintEngineRef = engine;
   }
 
+  /**
+   * Detach the registry from the API layer (called during OpenRVAPI.dispose()).
+   *
+   * - Clears the stored `apiRef` so that `context.api` throws instead of
+   *   returning a stale, disposed API instance.
+   * - Disposes the event bus (clears all subscriptions and the eventsAPI ref).
+   * - Clears the PaintEngine reference.
+   *
+   * Does NOT remove registered plugins — after re-initialization via a new
+   * OpenRVAPI + setAPI()/setEventsAPI(), the registry can be used again.
+   */
+  detach(): void {
+    this.apiRef = null;
+    this.paintEngineRef = null;
+    this.eventBus.dispose();
+  }
+
   // -----------------------------------------------------------------------
   // Registration
   // -----------------------------------------------------------------------

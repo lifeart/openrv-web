@@ -27,6 +27,10 @@ export interface RepresentationLoadResult {
     transferFunction?: string;
     colorPrimaries?: string;
   };
+  /** Duration in frames (undefined = not detected) */
+  duration?: number;
+  /** Frames per second (undefined = not detected) */
+  fps?: number;
 }
 
 /**

@@ -384,7 +384,7 @@ describe('buildViewTab', () => {
     });
 
     expect(deps.viewer.setReferenceImage).toHaveBeenCalledTimes(1);
-    expect(deps.viewer.setReferenceImage).toHaveBeenCalledWith(expect.any(ImageData), 'split-v', 0.62, 0.3);
+    expect(deps.viewer.setReferenceImage).toHaveBeenCalledWith(expect.any(ImageData), 'split-v', 0.62, 0.3, undefined);
   });
 
   it('adds an info strip toggle button wired to the overlay', () => {

@@ -240,5 +240,9 @@ export class OpenRVAPI {
     this.color.dispose();
     this.markers.dispose();
     this.events.dispose();
+
+    // Detach the singleton plugin registry so that plugin contexts no longer
+    // hold a reference to this (now-dead) API instance or its EventsAPI.
+    pluginRegistry.detach();
   }
 }

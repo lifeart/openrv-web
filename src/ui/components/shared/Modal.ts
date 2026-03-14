@@ -568,6 +568,213 @@ export interface FileReloadOptions extends ModalOptions {
 }
 
 /**
+ * Options returned from the annotation import dialog
+ */
+export interface AnnotationImportOptions {
+  /** Import mode: 'replace' clears existing, 'merge' adds to existing */
+  mode: 'replace' | 'merge';
+  /** Frame offset to shift imported annotations by */
+  frameOffset: number;
+}
+
+/**
+ * Show a dialog for annotation import options (mode and frame offset).
+ * Returns the chosen options or null if cancelled.
+ */
+export function showAnnotationImportDialog(options: ModalOptions = {}): Promise<AnnotationImportOptions | null> {
+  return new Promise((resolve) => {
+    cleanupCustomModalEscapeHandler();
+    const { title = 'Import Annotations', onClose } = options;
+
+    const container = getModalContainer();
+    container.innerHTML = '';
+
+    const modal = createModalBase({
+      ...options,
+      title,
+      onClose: () => {
+        onClose?.();
+        resolve(null);
+      },
+    });
+    modal.setAttribute('data-testid', 'annotation-import-dialog');
+
+    // Content
+    const content = document.createElement('div');
+    content.style.cssText = `
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    `;
+
+    // Import mode
+    const modeGroup = document.createElement('fieldset');
+    modeGroup.style.cssText = 'border: none; margin: 0; padding: 0;';
+    const modeLabel = document.createElement('legend');
+    modeLabel.textContent = 'Import mode';
+    modeLabel.style.cssText = `
+      color: var(--text-primary);
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    `;
+    modeGroup.appendChild(modeLabel);
+
+    let selectedMode: 'replace' | 'merge' = 'replace';
+
+    const createRadio = (value: 'replace' | 'merge', labelText: string, description: string) => {
+      const row = document.createElement('label');
+      row.style.cssText = `
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        padding: 4px 0;
+        cursor: pointer;
+      `;
+
+      const radio = document.createElement('input');
+      radio.type = 'radio';
+      radio.name = 'import-mode';
+      radio.value = value;
+      radio.checked = value === 'replace';
+      radio.style.cssText = `
+        margin-top: 2px;
+        accent-color: var(--accent-primary);
+      `;
+      radio.setAttribute('data-testid', `import-mode-${value}`);
+      radio.addEventListener('change', () => {
+        if (radio.checked) selectedMode = value;
+      });
+
+      const textCol = document.createElement('div');
+      const mainLabel = document.createElement('div');
+      mainLabel.textContent = labelText;
+      mainLabel.style.cssText = 'color: var(--text-primary); font-size: 13px;';
+      const desc = document.createElement('div');
+      desc.textContent = description;
+      desc.style.cssText = 'color: var(--text-muted); font-size: 11px; margin-top: 2px;';
+      textCol.appendChild(mainLabel);
+      textCol.appendChild(desc);
+
+      row.appendChild(radio);
+      row.appendChild(textCol);
+      return row;
+    };
+
+    modeGroup.appendChild(createRadio('replace', 'Replace', 'Clear existing annotations and import new ones'));
+    modeGroup.appendChild(createRadio('merge', 'Merge', 'Add imported annotations to existing ones'));
+    content.appendChild(modeGroup);
+
+    // Frame offset
+    const offsetGroup = document.createElement('div');
+    const offsetLabel = document.createElement('label');
+    offsetLabel.htmlFor = 'annotation-import-frame-offset';
+    offsetLabel.textContent = 'Frame offset';
+    offsetLabel.style.cssText = `
+      display: block;
+      color: var(--text-primary);
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    `;
+
+    const offsetDesc = document.createElement('div');
+    offsetDesc.textContent = 'Shift all imported annotation frames by this amount';
+    offsetDesc.style.cssText = 'color: var(--text-muted); font-size: 11px; margin-bottom: 8px;';
+
+    const offsetInput = document.createElement('input');
+    offsetInput.type = 'number';
+    offsetInput.id = 'annotation-import-frame-offset';
+    offsetInput.value = '0';
+    offsetInput.style.cssText = `
+      background: var(--bg-hover);
+      border: 1px solid var(--bg-active);
+      border-radius: 4px;
+      padding: 8px 12px;
+      color: var(--text-primary);
+      font-size: 13px;
+      width: 120px;
+      box-sizing: border-box;
+    `;
+    offsetInput.setAttribute('data-testid', 'import-frame-offset');
+    offsetInput.addEventListener('focus', () => {
+      offsetInput.style.borderColor = 'var(--accent-primary)';
+    });
+    offsetInput.addEventListener('blur', () => {
+      offsetInput.style.borderColor = 'var(--bg-active)';
+    });
+
+    offsetGroup.appendChild(offsetLabel);
+    offsetGroup.appendChild(offsetDesc);
+    offsetGroup.appendChild(offsetInput);
+    content.appendChild(offsetGroup);
+
+    modal.appendChild(content);
+
+    // Footer
+    const footer = document.createElement('div');
+    footer.style.cssText = `
+      display: flex;
+      justify-content: flex-end;
+      padding: 12px 16px;
+      border-top: 1px solid var(--border-primary);
+      gap: 8px;
+    `;
+
+    const handleKeydown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        hideContainer();
+        onClose?.();
+        resolve(null);
+        document.removeEventListener('keydown', handleKeydown);
+      } else if (e.key === 'Enter') {
+        hideContainer();
+        onClose?.();
+        resolve({ mode: selectedMode, frameOffset: parseInt(offsetInput.value, 10) || 0 });
+        document.removeEventListener('keydown', handleKeydown);
+      }
+    };
+
+    const cancelBtn = createButton(
+      'Cancel',
+      () => {
+        hideContainer();
+        onClose?.();
+        resolve(null);
+        document.removeEventListener('keydown', handleKeydown);
+      },
+      { variant: 'default', minWidth: '80px' },
+    );
+    cancelBtn.setAttribute('data-testid', 'annotation-import-cancel');
+
+    const importBtn = createButton(
+      'Import',
+      () => {
+        hideContainer();
+        onClose?.();
+        resolve({ mode: selectedMode, frameOffset: parseInt(offsetInput.value, 10) || 0 });
+        document.removeEventListener('keydown', handleKeydown);
+      },
+      { variant: 'primary', minWidth: '80px' },
+    );
+    importBtn.setAttribute('data-testid', 'annotation-import-confirm');
+
+    footer.appendChild(cancelBtn);
+    footer.appendChild(importBtn);
+    modal.appendChild(footer);
+
+    container.appendChild(modal);
+    showContainer();
+
+    // Focus the import button
+    importBtn.focus();
+
+    document.addEventListener('keydown', handleKeydown);
+  });
+}
+
+/**
  * Show a dialog prompting user to reload a file
  * Returns the selected File or null if skipped
  */

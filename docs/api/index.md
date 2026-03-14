@@ -45,7 +45,7 @@ Union of all exporter contribution types
 
 ### OpenRVEventName
 
-> **OpenRVEventName** = `"frameChange"` \| `"play"` \| `"pause"` \| `"stop"` \| `"speedChange"` \| `"volumeChange"` \| `"muteChange"` \| `"audioScrubEnabledChange"` \| `"loopModeChange"` \| `"inOutChange"` \| `"markerChange"` \| `"sourceLoadingStarted"` \| `"sourceLoaded"` \| `"sourceLoadFailed"` \| `"viewTransformChanged"` \| `"renderedImagesChanged"` \| `"playlistEnded"` \| `"error"`
+> **OpenRVEventName** = `"frameChange"` \| `"play"` \| `"pause"` \| `"stop"` \| `"speedChange"` \| `"volumeChange"` \| `"muteChange"` \| `"audioScrubEnabledChange"` \| `"loopModeChange"` \| `"inOutChange"` \| `"markerChange"` \| `"sourceLoadingStarted"` \| `"sourceLoaded"` \| `"sourceLoadFailed"` \| `"viewTransformChanged"` \| `"renderedImagesChanged"` \| `"representationChanged"` \| `"fallbackActivated"` \| `"playlistEnded"` \| `"error"`
 
 Defined in: [api/EventsAPI.ts:15](https://github.com/lifeart/openrv-web/blob/c0dd53144dcb872c686e6581e476322380198403/src/api/EventsAPI.ts#L15)
 
@@ -116,6 +116,8 @@ Application events are prefixed with `app:` and map directly to the correspondin
 | `app:sourceLoadFailed` | `{ name, error }` | Active |
 | `app:viewTransformChanged` | `{ transform }` | Active |
 | `app:renderedImagesChanged` | `{ images }` | Active |
+| `app:representationChanged` | `{ representationId, kind }` | Active |
+| `app:fallbackActivated` | `{ representationId, reason }` | Active |
 | `app:playlistEnded` | (none) | Active |
 | `app:error` | `{ message, code? }` | Active |
 

@@ -27,10 +27,10 @@ import {
 } from './export/VideoExporter';
 import { muxToMP4Blob } from './export/MP4Muxer';
 import { ExportProgressDialog } from './ui/components/ExportProgress';
-import { showAlert } from './ui/components/shared/Modal';
+import { showAlert, showAnnotationImportDialog } from './ui/components/shared/Modal';
 import { generateSlateFrame } from './export/SlateRenderer';
 import { generateReport } from './export/ReportExporter';
-import { downloadAnnotationsJSON } from './utils/export/AnnotationJSONExporter';
+import { downloadAnnotationsJSON, parseAnnotationsJSON, applyAnnotationsJSON } from './utils/export/AnnotationJSONExporter';
 import { exportAnnotationsPDF } from './utils/export/AnnotationPDFExporter';
 import { DisposableSubscriptionManager } from './utils/DisposableSubscriptionManager';
 import { isAudioScrubAvailable } from './utils/media/SourceUIState';
@@ -188,6 +188,11 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
     }),
   );
   subs.add(
+    exportControl.on('annotationsJSONImportRequested', () => {
+      void handleAnnotationImport(ctx.paintEngine);
+    }),
+  );
+  subs.add(
     exportControl.on('annotationsPDFExportRequested', () => {
       void exportAnnotationsPDF(
         ctx.paintEngine,
@@ -251,6 +256,69 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
   wirePlaylistRuntime(session, controls, subs);
 
   return { subscriptions: subs };
+}
+
+/**
+ * Handle annotation JSON import with options dialog (mode and frame offset).
+ */
+async function handleAnnotationImport(paintEngine: import('./paint/PaintEngine').PaintEngine): Promise<void> {
+  // Show import options dialog first
+  const importOptions = await showAnnotationImportDialog({ title: 'Import Annotations' });
+  if (!importOptions) return; // User cancelled
+
+  // Create file input and trigger file selection
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.accept = '.json,application/json';
+
+  const file = await new Promise<File | null>((resolve) => {
+    fileInput.addEventListener('change', () => {
+      resolve(fileInput.files?.[0] ?? null);
+    });
+    // Handle cancel (focus returns to window without a change event)
+    window.addEventListener(
+      'focus',
+      () => {
+        // Delay to let the change event fire first if a file was selected
+        setTimeout(() => {
+          if (!fileInput.files?.length) resolve(null);
+        }, 300);
+      },
+      { once: true },
+    );
+    fileInput.click();
+  });
+
+  if (!file) return; // User cancelled file selection
+
+  try {
+    const jsonString = await file.text();
+    const data = parseAnnotationsJSON(jsonString);
+    if (!data) {
+      showAlert('Invalid annotation file. The file must be a valid OpenRV annotation JSON export.', {
+        type: 'error',
+        title: 'Import Error',
+      });
+      return;
+    }
+
+    const count = applyAnnotationsJSON(paintEngine, data, {
+      mode: importOptions.mode,
+      frameOffset: importOptions.frameOffset,
+    });
+
+    const modeVerb = importOptions.mode === 'merge' ? 'merged' : 'replaced';
+    const offsetNote = importOptions.frameOffset !== 0 ? ` (frame offset: ${importOptions.frameOffset})` : '';
+    showAlert(`Successfully ${modeVerb} annotations. ${count} annotation(s) imported${offsetNote}.`, {
+      type: 'success',
+      title: 'Import Complete',
+    });
+  } catch {
+    showAlert('Failed to read the annotation file.', {
+      type: 'error',
+      title: 'Import Error',
+    });
+  }
 }
 
 /**

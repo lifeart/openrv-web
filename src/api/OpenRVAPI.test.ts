@@ -18,7 +18,7 @@ import { MarkersAPI } from './MarkersAPI';
 import { EventsAPI } from './EventsAPI';
 import type { OpenRVAPIConfig } from './OpenRVAPI';
 import { pluginRegistry } from '../plugin/PluginRegistry';
-import type { Plugin } from '../plugin/types';
+import type { Plugin, PluginContext } from '../plugin/types';
 import { version as packageVersion } from '../../package.json';
 
 // ============================================================
@@ -2830,6 +2830,196 @@ describe('EventsAPI', () => {
 
     expect(handler).toHaveBeenCalledTimes(1);
   });
+
+  // -- Issue #545: representationChanged / fallbackActivated events --
+
+  it('API-U545a: representationChanged is a valid event name', () => {
+    const names = events.getEventNames();
+    expect(names).toContain('representationChanged');
+  });
+
+  it('API-U545b: fallbackActivated is a valid event name', () => {
+    const names = events.getEventNames();
+    expect(names).toContain('fallbackActivated');
+  });
+
+  it('API-U545c: representationChanged updates _lastLoadedSource and emits renderedImagesChanged', () => {
+    const repHandler = vi.fn();
+    const renderedHandler = vi.fn();
+    events.on('representationChanged', repHandler);
+    events.on('renderedImagesChanged', renderedHandler);
+
+    session.emit('representationChanged', {
+      sourceIndex: 0,
+      previousRepId: 'rep-old',
+      newRepId: 'rep-new',
+      representation: {
+        id: 'rep-new',
+        label: 'Proxy 1280x720',
+        kind: 'proxy',
+        priority: 2,
+        status: 'ready',
+        resolution: { width: 1280, height: 720 },
+        par: 1,
+        sourceNode: null,
+        loaderConfig: {},
+        audioTrackPresent: false,
+        startFrame: 0,
+      },
+    });
+
+    // representationChanged should be emitted with the public payload
+    expect(repHandler).toHaveBeenCalledTimes(1);
+    expect(repHandler).toHaveBeenCalledWith({
+      sourceIndex: 0,
+      previousRepId: 'rep-old',
+      newRepId: 'rep-new',
+      label: 'Proxy 1280x720',
+      width: 1280,
+      height: 720,
+    });
+
+    // renderedImagesChanged should reflect the new representation dimensions
+    expect(renderedHandler).toHaveBeenCalledTimes(1);
+    const renderedPayload = renderedHandler.mock.calls[0][0];
+    expect(renderedPayload.images[0].width).toBe(1280);
+    expect(renderedPayload.images[0].height).toBe(720);
+    expect(renderedPayload.images[0].name).toBe('Proxy 1280x720');
+  });
+
+  it('API-U545d: fallbackActivated updates _lastLoadedSource and emits renderedImagesChanged', () => {
+    const fbHandler = vi.fn();
+    const renderedHandler = vi.fn();
+    events.on('fallbackActivated', fbHandler);
+    events.on('renderedImagesChanged', renderedHandler);
+
+    session.emit('fallbackActivated', {
+      sourceIndex: 0,
+      failedRepId: 'rep-hires',
+      fallbackRepId: 'rep-proxy',
+      fallbackRepresentation: {
+        id: 'rep-proxy',
+        label: 'Fallback 960x540',
+        kind: 'proxy',
+        priority: 3,
+        status: 'ready',
+        resolution: { width: 960, height: 540 },
+        par: 1,
+        sourceNode: null,
+        loaderConfig: {},
+        audioTrackPresent: false,
+        startFrame: 0,
+      },
+    });
+
+    // fallbackActivated should be emitted with the public payload
+    expect(fbHandler).toHaveBeenCalledTimes(1);
+    expect(fbHandler).toHaveBeenCalledWith({
+      sourceIndex: 0,
+      failedRepId: 'rep-hires',
+      fallbackRepId: 'rep-proxy',
+      label: 'Fallback 960x540',
+      width: 960,
+      height: 540,
+    });
+
+    // renderedImagesChanged should reflect fallback dimensions
+    expect(renderedHandler).toHaveBeenCalledTimes(1);
+    const renderedPayload = renderedHandler.mock.calls[0][0];
+    expect(renderedPayload.images[0].width).toBe(960);
+    expect(renderedPayload.images[0].height).toBe(540);
+    expect(renderedPayload.images[0].name).toBe('Fallback 960x540');
+  });
+
+  it('API-U545e: representationChanged overwrites stale _lastLoadedSource from sourceLoaded', () => {
+    const renderedHandler = vi.fn();
+    events.on('renderedImagesChanged', renderedHandler);
+
+    // First: sourceLoaded sets initial dimensions
+    session.emit('sourceLoaded', {
+      name: 'original.exr',
+      type: 'image',
+      width: 4096,
+      height: 2160,
+      duration: 1,
+      fps: 24,
+    });
+    expect(renderedHandler).toHaveBeenCalledTimes(1);
+    expect(renderedHandler.mock.calls[0][0].images[0].width).toBe(4096);
+
+    // Then: representationChanged switches to a proxy
+    session.emit('representationChanged', {
+      sourceIndex: 0,
+      previousRepId: 'rep-full',
+      newRepId: 'rep-proxy',
+      representation: {
+        id: 'rep-proxy',
+        label: 'Proxy 1280x720',
+        kind: 'proxy',
+        priority: 2,
+        status: 'ready',
+        resolution: { width: 1280, height: 720 },
+        par: 1,
+        sourceNode: null,
+        loaderConfig: {},
+        audioTrackPresent: false,
+        startFrame: 0,
+      },
+    });
+
+    // renderedImagesChanged should now have proxy dimensions, not original
+    expect(renderedHandler).toHaveBeenCalledTimes(2);
+    const latest = renderedHandler.mock.calls[1][0];
+    expect(latest.images[0].width).toBe(1280);
+    expect(latest.images[0].height).toBe(720);
+    expect(latest.images[0].name).toBe('Proxy 1280x720');
+  });
+
+  it('API-U545f: representationChanged unsubscribe works', () => {
+    const handler = vi.fn();
+    const unsub = events.on('representationChanged', handler);
+
+    session.emit('representationChanged', {
+      sourceIndex: 0,
+      previousRepId: null,
+      newRepId: 'rep-1',
+      representation: {
+        id: 'rep-1',
+        label: 'Test',
+        kind: 'movie',
+        priority: 1,
+        status: 'ready',
+        resolution: { width: 1920, height: 1080 },
+        par: 1,
+        sourceNode: null,
+        loaderConfig: {},
+        audioTrackPresent: false,
+        startFrame: 0,
+      },
+    });
+    expect(handler).toHaveBeenCalledTimes(1);
+
+    unsub();
+    session.emit('representationChanged', {
+      sourceIndex: 0,
+      previousRepId: 'rep-1',
+      newRepId: 'rep-2',
+      representation: {
+        id: 'rep-2',
+        label: 'Test2',
+        kind: 'movie',
+        priority: 1,
+        status: 'ready',
+        resolution: { width: 1920, height: 1080 },
+        par: 1,
+        sourceNode: null,
+        loaderConfig: {},
+        audioTrackPresent: false,
+        startFrame: 0,
+      },
+    });
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
 });
 
 // ============================================================
@@ -3486,5 +3676,127 @@ describe('OpenRVAPI readiness lifecycle (Issue #287)', () => {
     expect(() => api.media.hasMedia()).not.toThrow();
     expect(() => api.audio.getVolume()).not.toThrow();
     api.dispose();
+  });
+});
+
+// ============================================================
+// Plugin registry detach on API dispose (Issue #560)
+// ============================================================
+
+describe('OpenRVAPI.dispose() detaches plugin registry (Issue #560)', () => {
+  const PLUGIN_ID = 'test-detach-560';
+
+  function makePlugin(id: string = PLUGIN_ID): Plugin {
+    return {
+      manifest: {
+        id,
+        name: 'Detach Test Plugin',
+        version: '1.0.0',
+        contributes: ['decoder'],
+      },
+      activate: vi.fn(),
+      deactivate: vi.fn(),
+      dispose: vi.fn(),
+    } as unknown as Plugin;
+  }
+
+  afterEach(async () => {
+    // Clean up: ensure the plugin is fully removed from the singleton registry
+    const state = pluginRegistry.getState(PLUGIN_ID);
+    if (state && state !== 'disposed') {
+      await pluginRegistry.dispose(PLUGIN_ID);
+    }
+    if (pluginRegistry.getState(PLUGIN_ID) === 'disposed') {
+      pluginRegistry.unregister(PLUGIN_ID);
+    }
+  });
+
+  it('API-U560a: after dispose(), plugin context.api throws (not a stale reference)', async () => {
+    const config = createAPIConfig();
+    const api = new OpenRVAPI(config);
+    api.markReady();
+
+    // Wire up the plugin registry to the API (mimics bootstrap)
+    pluginRegistry.setAPI(api);
+    pluginRegistry.setEventsAPI(api.events);
+
+    // Register and activate a plugin, capturing the context
+    let capturedContext: PluginContext | undefined;
+    const plugin = makePlugin();
+    (plugin as any).activate = vi.fn((ctx: PluginContext) => {
+      capturedContext = ctx;
+    });
+    pluginRegistry.register(plugin);
+    await pluginRegistry.activate(PLUGIN_ID);
+
+    // Before dispose: context.api should work
+    expect(() => capturedContext!.api).not.toThrow();
+
+    // Dispose the API
+    api.dispose();
+
+    // After dispose: context.api should throw (apiRef is null)
+    expect(() => capturedContext!.api).toThrow('OpenRV API not yet initialized');
+  });
+
+  it('API-U560b: after dispose(), plugin event bus subscriptions are cleaned up', () => {
+    const config = createAPIConfig();
+    const api = new OpenRVAPI(config);
+    api.markReady();
+
+    pluginRegistry.setAPI(api);
+    pluginRegistry.setEventsAPI(api.events);
+
+    const sub = pluginRegistry.eventBus.createSubscription('test-sub-560');
+    const cb = vi.fn();
+    sub.onApp('plugin:activated', cb);
+
+    api.dispose();
+
+    // After dispose, event bus should be cleared — lifecycle events should not fire
+    pluginRegistry.eventBus.emitPluginLifecycle('plugin:activated', { id: 'x' });
+    expect(cb).not.toHaveBeenCalled();
+  });
+
+  it('API-U560c: after dispose(), re-initialization with a new API works', async () => {
+    const config1 = createAPIConfig();
+    const api1 = new OpenRVAPI(config1);
+    api1.markReady();
+    pluginRegistry.setAPI(api1);
+    pluginRegistry.setEventsAPI(api1.events);
+
+    api1.dispose();
+
+    // Re-initialize with a new API instance
+    const config2 = createAPIConfig();
+    const api2 = new OpenRVAPI(config2);
+    api2.markReady();
+    pluginRegistry.setAPI(api2);
+    pluginRegistry.setEventsAPI(api2.events);
+
+    // Register and activate a plugin — should work with the new API
+    let capturedContext: PluginContext | undefined;
+    const plugin = makePlugin();
+    (plugin as any).activate = vi.fn((ctx: PluginContext) => {
+      capturedContext = ctx;
+    });
+    pluginRegistry.register(plugin);
+    await pluginRegistry.activate(PLUGIN_ID);
+
+    // context.api should return the new API, not the old disposed one
+    expect(capturedContext!.api).toBe(api2);
+
+    // Clean up
+    api2.dispose();
+  });
+
+  it('API-U560d: dispose() is idempotent w.r.t. plugin registry detach', () => {
+    const config = createAPIConfig();
+    const api = new OpenRVAPI(config);
+    pluginRegistry.setAPI(api);
+
+    api.dispose();
+    // Second dispose should not throw
+    expect(() => api.dispose()).not.toThrow();
   });
 });

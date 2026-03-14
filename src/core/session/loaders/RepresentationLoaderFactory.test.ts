@@ -21,6 +21,8 @@ vi.mock('../../../nodes/sources/VideoSourceNode', () => ({
     loadFile = vi.fn().mockResolvedValue({ success: true });
     isHDR = vi.fn().mockReturnValue(false);
     getMetadata = vi.fn().mockReturnValue({ width: 1920, height: 1080, duration: 100, fps: 24 });
+    getDetectedFps = vi.fn().mockResolvedValue(24);
+    getActualFrameCount = vi.fn().mockResolvedValue(100);
     dispose = vi.fn();
   },
 }));

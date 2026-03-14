@@ -35,6 +35,12 @@ export class VideoRepresentationLoader implements RepresentationLoader {
 
     const metadata = videoSourceNode.getMetadata();
 
+    // Detect FPS and frame count from the video
+    const [detectedFps, actualFrameCount] = await Promise.all([
+      videoSourceNode.getDetectedFps(),
+      videoSourceNode.getActualFrameCount(),
+    ]);
+
     return {
       sourceNode: videoSourceNode,
       audioTrackPresent: true, // Videos typically have audio
@@ -45,6 +51,8 @@ export class VideoRepresentationLoader implements RepresentationLoader {
       par: representation.par ?? 1.0,
       startFrame: representation.startFrame ?? 0,
       colorSpace: videoSourceNode.isHDR() ? { transferFunction: 'PQ', colorPrimaries: 'bt2020' } : undefined,
+      duration: actualFrameCount > 0 ? actualFrameCount : undefined,
+      fps: detectedFps ?? undefined,
     };
   }
 

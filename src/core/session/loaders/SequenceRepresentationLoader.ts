@@ -95,6 +95,8 @@ export class SequenceRepresentationLoader implements RepresentationLoader {
       },
       par: representation.par ?? 1.0,
       startFrame: representation.startFrame ?? 0,
+      duration: sequenceInfo.frames.length > 0 ? sequenceInfo.frames.length : undefined,
+      fps,
     };
   }
 

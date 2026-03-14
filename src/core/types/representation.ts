@@ -64,6 +64,16 @@ export interface MediaRepresentation {
     /** e.g. 'bt709', 'bt2020', 'aces' */
     colorPrimaries?: string;
   };
+  /**
+   * Duration in frames for this representation.
+   * Undefined means not yet detected (e.g. not loaded).
+   */
+  duration?: number;
+  /**
+   * Frames per second for this representation.
+   * Undefined means not yet detected (e.g. not loaded).
+   */
+  fps?: number;
 }
 
 /**
@@ -106,6 +116,8 @@ export interface SerializedRepresentation {
     transferFunction?: string;
     colorPrimaries?: string;
   };
+  duration?: number;
+  fps?: number;
   loaderConfig: Omit<RepresentationLoaderConfig, 'file' | 'files'> & {
     path?: string;
     pattern?: string;
@@ -138,6 +150,10 @@ export interface AddRepresentationConfig {
     transferFunction?: string;
     colorPrimaries?: string;
   };
+  /** Duration in frames */
+  duration?: number;
+  /** Frames per second */
+  fps?: number;
   /** Loader configuration */
   loaderConfig: RepresentationLoaderConfig;
   /** Optional pre-loaded source node (skips loading) */
@@ -163,6 +179,10 @@ export interface RepresentationManagerEvents {
     previousRepId: string | null;
     newRepId: string;
     representation: MediaRepresentation;
+    /** When the switch involves different startFrame offsets, this is the
+     *  frame number remapped into the new representation's timeline.
+     *  Undefined when no remapping was needed (same startFrame). */
+    mappedFrame?: number;
   };
   /** Fired when a representation encounters an error */
   representationError: {
@@ -209,6 +229,8 @@ export function createRepresentation(config: AddRepresentationConfig): MediaRepr
     audioTrackPresent: config.audioTrackPresent ?? false,
     startFrame: config.startFrame ?? 0,
     colorSpace: config.colorSpace ? { ...config.colorSpace } : undefined,
+    duration: config.duration,
+    fps: config.fps,
   };
 }
 
@@ -243,6 +265,8 @@ export function serializeRepresentation(rep: MediaRepresentation): SerializedRep
     audioTrackPresent: rep.audioTrackPresent,
     startFrame: rep.startFrame,
     colorSpace: rep.colorSpace ? { ...rep.colorSpace } : undefined,
+    duration: rep.duration,
+    fps: rep.fps,
     loaderConfig: { ...serializableConfig },
   };
 }
@@ -264,5 +288,7 @@ export function deserializeRepresentation(serialized: SerializedRepresentation):
     audioTrackPresent: serialized.audioTrackPresent,
     startFrame: serialized.startFrame,
     colorSpace: serialized.colorSpace ? { ...serialized.colorSpace } : undefined,
+    duration: serialized.duration,
+    fps: serialized.fps,
   };
 }

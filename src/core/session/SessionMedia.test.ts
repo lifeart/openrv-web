@@ -1151,4 +1151,374 @@ describe('SessionMedia', () => {
       expect(host.play).not.toHaveBeenCalled();
     });
   });
+
+  describe('applyRepresentationShim duration/fps updates (#536)', () => {
+    function makeRepresentation(overrides?: Record<string, unknown>) {
+      return {
+        id: 'rep-1',
+        label: 'Test Rep',
+        kind: 'movie' as const,
+        priority: 1,
+        status: 'ready' as const,
+        resolution: { width: 1920, height: 1080 },
+        par: 1.0,
+        sourceNode: null,
+        loaderConfig: {},
+        audioTrackPresent: false,
+        startFrame: 0,
+        ...overrides,
+      };
+    }
+
+    it('SM-087: switching to a representation with different duration updates source.duration', () => {
+      const source = makeVideoSource({ duration: 120, fps: 24 });
+      media.addSource(source);
+
+      const rep = makeRepresentation({ duration: 240 });
+      (media as any).applyRepresentationShim(0, rep);
+
+      expect(source.duration).toBe(240);
+    });
+
+    it('SM-088: switching to a representation with different fps updates source.fps', () => {
+      const source = makeVideoSource({ duration: 120, fps: 24 });
+      media.addSource(source);
+
+      const rep = makeRepresentation({ fps: 30 });
+      (media as any).applyRepresentationShim(0, rep);
+
+      expect(source.fps).toBe(30);
+    });
+
+    it('SM-089: emits durationChanged and updates out-point when duration changes on current source', () => {
+      const source = makeVideoSource({ duration: 120, fps: 24 });
+      media.addSource(source);
+
+      const durationListener = vi.fn();
+      media.on('durationChanged', durationListener);
+
+      const rep = makeRepresentation({ duration: 300 });
+      (media as any).applyRepresentationShim(0, rep);
+
+      expect(durationListener).toHaveBeenCalledWith(300);
+      expect(host.setOutPoint).toHaveBeenCalledWith(300);
+      expect(host.emitInOutChanged).toHaveBeenCalledWith(1, 300);
+    });
+
+    it('SM-090: emits fpsChanged when fps changes on current source', () => {
+      const source = makeVideoSource({ duration: 120, fps: 24 });
+      media.addSource(source);
+
+      const rep = makeRepresentation({ fps: 60 });
+      (media as any).applyRepresentationShim(0, rep);
+
+      expect(host.setFps).toHaveBeenCalledWith(60);
+      expect(host.emitFpsChanged).toHaveBeenCalledWith(60);
+    });
+
+    it('SM-091: does not emit fpsChanged when fps is unchanged', () => {
+      const source = makeVideoSource({ duration: 120, fps: 24 });
+      media.addSource(source);
+
+      const rep = makeRepresentation({ fps: 24 });
+      (media as any).applyRepresentationShim(0, rep);
+
+      // fps matches current host fps (mocked to return 24), so no event
+      expect(host.emitFpsChanged).not.toHaveBeenCalled();
+    });
+
+    it('SM-092: preserves existing duration when representation has no duration', () => {
+      const source = makeVideoSource({ duration: 120, fps: 24 });
+      media.addSource(source);
+
+      const rep = makeRepresentation({ duration: undefined, fps: undefined });
+      (media as any).applyRepresentationShim(0, rep);
+
+      expect(source.duration).toBe(120);
+      expect(source.fps).toBe(24);
+    });
+
+    it('SM-093: preserves existing fps when representation has no fps', () => {
+      const source = makeVideoSource({ duration: 120, fps: 30 });
+      media.addSource(source);
+
+      const rep = makeRepresentation({});
+      (media as any).applyRepresentationShim(0, rep);
+
+      expect(source.fps).toBe(30);
+      expect(host.setFps).not.toHaveBeenCalled();
+      expect(host.emitFpsChanged).not.toHaveBeenCalled();
+    });
+
+    it('SM-094: does not emit events for non-current source', () => {
+      const source0 = makeVideoSource({ name: 'first.mp4', duration: 120, fps: 24 });
+      const source1 = makeVideoSource({ name: 'second.mp4', duration: 60, fps: 30 });
+      media.addSource(source0);
+      media.addSource(source1);
+
+      // Switch back to source 0 so source 1 is not current
+      media.setCurrentSource(0);
+
+      // Clear mock calls from setCurrentSource
+      (host.setFps as ReturnType<typeof vi.fn>).mockClear();
+      (host.emitFpsChanged as ReturnType<typeof vi.fn>).mockClear();
+      (host.setOutPoint as ReturnType<typeof vi.fn>).mockClear();
+      (host.emitInOutChanged as ReturnType<typeof vi.fn>).mockClear();
+
+      const durationListener = vi.fn();
+      media.on('durationChanged', durationListener);
+
+      // Apply to source index 1 while current is 0
+      const rep = makeRepresentation({ duration: 500, fps: 60 });
+      (media as any).applyRepresentationShim(1, rep);
+
+      // Source-level values should update
+      expect(source1.duration).toBe(500);
+      expect(source1.fps).toBe(60);
+
+      // But no host events should fire (not the current source)
+      expect(durationListener).not.toHaveBeenCalled();
+      expect(host.setFps).not.toHaveBeenCalled();
+      expect(host.emitFpsChanged).not.toHaveBeenCalled();
+      expect(host.setOutPoint).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('applyRepresentationShim source.name/url updates (#540)', () => {
+    function makeRepresentation(overrides?: Record<string, unknown>) {
+      return {
+        id: 'rep-1',
+        label: 'Test Rep',
+        kind: 'movie' as const,
+        priority: 1,
+        status: 'ready' as const,
+        resolution: { width: 1920, height: 1080 },
+        par: 1.0,
+        sourceNode: null,
+        loaderConfig: {},
+        audioTrackPresent: false,
+        startFrame: 0,
+        ...overrides,
+      };
+    }
+
+    it('SM-095: updates source.name from representation label', () => {
+      const source = makeVideoSource({ name: 'original.mp4', url: 'blob:original' });
+      media.addSource(source);
+
+      const rep = makeRepresentation({ label: 'Proxy 720p' });
+      (media as any).applyRepresentationShim(0, rep);
+
+      expect(source.name).toBe('Proxy 720p');
+    });
+
+    it('SM-096: updates source.url from representation loaderConfig.url', () => {
+      const source = makeVideoSource({ name: 'original.mp4', url: 'blob:original' });
+      media.addSource(source);
+
+      const rep = makeRepresentation({ loaderConfig: { url: 'https://cdn.example.com/proxy.mp4' } });
+      (media as any).applyRepresentationShim(0, rep);
+
+      expect(source.url).toBe('https://cdn.example.com/proxy.mp4');
+    });
+
+    it('SM-097: updates source.url from representation loaderConfig.path when url is absent', () => {
+      const source = makeVideoSource({ name: 'original.mp4', url: 'blob:original' });
+      media.addSource(source);
+
+      const rep = makeRepresentation({ loaderConfig: { path: '/media/proxy.mov' } });
+      (media as any).applyRepresentationShim(0, rep);
+
+      expect(source.url).toBe('/media/proxy.mov');
+    });
+
+    it('SM-098: preserves source.name when representation has no label', () => {
+      const source = makeVideoSource({ name: 'original.mp4', url: 'blob:original' });
+      media.addSource(source);
+
+      const rep = makeRepresentation({ label: '' });
+      (media as any).applyRepresentationShim(0, rep);
+
+      expect(source.name).toBe('original.mp4');
+    });
+
+    it('SM-099: restores original name/url after clearing representation', () => {
+      const source = makeVideoSource({ name: 'original.mp4', url: 'blob:original' });
+      media.addSource(source);
+
+      // Apply representation
+      const rep = makeRepresentation({
+        label: 'Proxy 720p',
+        loaderConfig: { url: 'https://cdn.example.com/proxy.mp4' },
+      });
+      (media as any).applyRepresentationShim(0, rep);
+
+      expect(source.name).toBe('Proxy 720p');
+      expect(source.url).toBe('https://cdn.example.com/proxy.mp4');
+
+      // Clear representation (null)
+      (media as any).applyRepresentationShim(0, null);
+
+      expect(source.name).toBe('original.mp4');
+      expect(source.url).toBe('blob:original');
+    });
+
+    it('SM-100: preserves original values across multiple representation switches', () => {
+      const source = makeVideoSource({ name: 'original.mp4', url: 'blob:original' });
+      media.addSource(source);
+
+      // First switch
+      const rep1 = makeRepresentation({
+        label: 'Proxy 720p',
+        loaderConfig: { url: 'https://cdn.example.com/proxy720.mp4' },
+      });
+      (media as any).applyRepresentationShim(0, rep1);
+      expect(source.name).toBe('Proxy 720p');
+
+      // Second switch (original should still be saved, not the first rep's values)
+      const rep2 = makeRepresentation({
+        label: 'Proxy 480p',
+        loaderConfig: { url: 'https://cdn.example.com/proxy480.mp4' },
+      });
+      (media as any).applyRepresentationShim(0, rep2);
+      expect(source.name).toBe('Proxy 480p');
+      expect(source.url).toBe('https://cdn.example.com/proxy480.mp4');
+
+      // Clear — should restore the original, not the first rep
+      (media as any).applyRepresentationShim(0, null);
+      expect(source.name).toBe('original.mp4');
+      expect(source.url).toBe('blob:original');
+    });
+
+    it('SM-101: preserves source.url when representation has no url or path', () => {
+      const source = makeVideoSource({ name: 'original.mp4', url: 'blob:original' });
+      media.addSource(source);
+
+      const rep = makeRepresentation({ label: 'In-memory rep', loaderConfig: {} });
+      (media as any).applyRepresentationShim(0, rep);
+
+      expect(source.name).toBe('In-memory rep');
+      expect(source.url).toBe('blob:original');
+    });
+  });
+
+  describe('currentSourceChanged on representation switch (#546)', () => {
+    function makeRepresentation(overrides?: Record<string, unknown>) {
+      return {
+        id: 'rep-1',
+        label: 'Test Rep',
+        kind: 'movie' as const,
+        priority: 1,
+        status: 'ready' as const,
+        resolution: { width: 1920, height: 1080 },
+        par: 1.0,
+        sourceNode: null,
+        loaderConfig: {},
+        audioTrackPresent: false,
+        startFrame: 0,
+        ...overrides,
+      };
+    }
+
+    it('SM-102: emits currentSourceChanged after representationChanged on current source', () => {
+      media.addSource(makeImageSource({ name: 'a.png' }));
+
+      const currentSourceListener = vi.fn();
+      const repListener = vi.fn();
+      media.on('currentSourceChanged', currentSourceListener);
+      media.on('representationChanged', repListener);
+
+      // Simulate the representation manager emitting a representationChanged event
+      // for the current source (index 0)
+      const rep = makeRepresentation();
+      media.representationManager.emit('representationChanged', {
+        sourceIndex: 0,
+        previousRepId: null,
+        newRepId: 'rep-1',
+        representation: rep as any,
+      });
+
+      expect(repListener).toHaveBeenCalledTimes(1);
+      expect(currentSourceListener).toHaveBeenCalledTimes(1);
+      expect(currentSourceListener).toHaveBeenCalledWith(0);
+    });
+
+    it('SM-103: does NOT emit currentSourceChanged when representationChanged is on a non-current source', () => {
+      media.addSource(makeImageSource({ name: 'a.png' }));
+      media.addSource(makeImageSource({ name: 'b.png' }));
+      // currentSourceIndex is now 1 (last added)
+
+      const currentSourceListener = vi.fn();
+      media.on('currentSourceChanged', currentSourceListener);
+
+      // Emit representationChanged for source index 0 (not the current source)
+      const rep = makeRepresentation();
+      media.representationManager.emit('representationChanged', {
+        sourceIndex: 0,
+        previousRepId: null,
+        newRepId: 'rep-1',
+        representation: rep as any,
+      });
+
+      expect(currentSourceListener).not.toHaveBeenCalled();
+    });
+
+    it('SM-104: emits currentSourceChanged after fallbackActivated on current source', () => {
+      media.addSource(makeImageSource({ name: 'a.png' }));
+
+      const currentSourceListener = vi.fn();
+      const fallbackListener = vi.fn();
+      media.on('currentSourceChanged', currentSourceListener);
+      media.on('fallbackActivated', fallbackListener);
+
+      const fallbackRep = makeRepresentation({ id: 'fallback-rep', label: 'Fallback' });
+      media.representationManager.emit('fallbackActivated', {
+        sourceIndex: 0,
+        failedRepId: 'rep-1',
+        fallbackRepId: 'fallback-rep',
+        fallbackRepresentation: fallbackRep as any,
+      });
+
+      expect(fallbackListener).toHaveBeenCalledTimes(1);
+      expect(currentSourceListener).toHaveBeenCalledTimes(1);
+      expect(currentSourceListener).toHaveBeenCalledWith(0);
+    });
+
+    it('SM-105: does NOT emit currentSourceChanged when fallbackActivated is on a non-current source', () => {
+      media.addSource(makeImageSource({ name: 'a.png' }));
+      media.addSource(makeImageSource({ name: 'b.png' }));
+      // currentSourceIndex is now 1
+
+      const currentSourceListener = vi.fn();
+      media.on('currentSourceChanged', currentSourceListener);
+
+      const fallbackRep = makeRepresentation({ id: 'fallback-rep', label: 'Fallback' });
+      media.representationManager.emit('fallbackActivated', {
+        sourceIndex: 0,
+        failedRepId: 'rep-1',
+        fallbackRepId: 'fallback-rep',
+        fallbackRepresentation: fallbackRep as any,
+      });
+
+      expect(currentSourceListener).not.toHaveBeenCalled();
+    });
+
+    it('SM-106: representationChanged emits before currentSourceChanged for ordering guarantees', () => {
+      media.addSource(makeImageSource({ name: 'a.png' }));
+
+      const order: string[] = [];
+      media.on('representationChanged', () => order.push('representationChanged'));
+      media.on('currentSourceChanged', () => order.push('currentSourceChanged'));
+
+      const rep = makeRepresentation();
+      media.representationManager.emit('representationChanged', {
+        sourceIndex: 0,
+        previousRepId: null,
+        newRepId: 'rep-1',
+        representation: rep as any,
+      });
+
+      expect(order).toEqual(['representationChanged', 'currentSourceChanged']);
+    });
+  });
 });

@@ -2166,3 +2166,138 @@ Called from `fromJSON()` inside the existing `if (mediaIndexMap.size > 0)` block
 - `src/integrations/ShotGridIntegrationBridge.ts`
 - `src/integrations/ShotGridIntegrationBridge.test.ts`
 - `src/AppDCCWiring.ts`
+
+## Issue #552: Mu compat `remoteContacts()` returns local labels instead of peer contact names
+
+**Root cause**: `MuNetworkBridge.remoteContacts()` mapped `connectionInfo.values()` to `info.name`, which was the caller-supplied local label from `remoteConnect(name, host, port)`. The actual peer identity stored in `peerContactName` (set during handshake) was never used.
+
+**Fix**: Changed `remoteContacts()` to return `info.peerContactName ?? info.name`, returning the peer's identity received via handshake with a fallback to the local label if handshake hasn't occurred. Added `peerContactName` and `peerPermission` to the `RemoteConnectionInfo` interface type.
+
+**Tests added**: 4 regression tests in `MuNetworkBridge.test.ts` covering pre-handshake fallback, post-handshake peer name, mixed connections, and `remoteApplications()` still returning local labels.
+
+**Files changed**:
+- `src/compat/MuNetworkBridge.ts`
+- `src/compat/types.ts`
+- `src/compat/__tests__/MuNetworkBridge.test.ts`
+
+## Issue #542: Async idle-fallbacks reported as successful before they actually load
+
+**Root cause**: `handleRepresentationError()` in `MediaRepresentationManager` used fire-and-forget (`void this.switchRepresentation(...)`) for the idle-fallback path and returned `true` optimistically. `SessionSerializer.fromJSON()` relied on this return value to decide whether to warn about failed representation restores.
+
+**Fix**: Made `handleRepresentationError()` async, replacing the fire-and-forget with `return this.switchRepresentation(...)` so it properly awaits the fallback switch and returns the actual result.
+
+**Tests added**: Updated existing tests from sync to async, changed the "optimistically true" test to verify actual results, added 2 regression tests for cascading fallback failures.
+
+**Files changed**:
+- `src/core/session/MediaRepresentationManager.ts`
+- `src/core/session/MediaRepresentationManager.test.ts`
+
+## Issue #537: Removing last active representation leaves source shim pointing at disposed node
+
+**Root cause**: `removeRepresentation()` disposed the loader for the removed representation but when it was active with no fallback, only set `activeRepresentationIndex` to `-1` without clearing source-level node fields. The disposed loader's nodes remained referenced by the source.
+
+**Fix**: Updated `applyRepresentationShim()` to accept `null` representation (clearing all source node fields), and called it in `removeRepresentation()` when the removed rep was active with no fallback.
+
+**Tests added**: 3 regression tests verifying stale field clearing on last-rep removal, no-ready-fallback clearing, and non-active removal preservation.
+
+**Files changed**:
+- `src/core/session/MediaRepresentationManager.ts`
+- `src/core/session/SessionMedia.ts`
+- `src/core/session/MediaRepresentationManager.test.ts`
+
+## Issue #364: Annotation import always replaces; merge and frame-offset never exposed
+
+**Root cause**: The lower-level `applyAnnotationsJSON()` already supported `mode: 'merge'` and `frameOffset`, but `AppPlaybackWiring.ts` hardcoded `{ mode: 'replace' }` and `ExportControl.ts` offered no options dialog.
+
+**Fix**: Added `showAnnotationImportDialog()` to the Modal system (consistent with existing dialog patterns), presenting radio buttons for import mode (Replace/Merge) and a number input for frame offset. Updated the import flow to show this dialog before applying annotations, with success messages reflecting the chosen options.
+
+**Tests added**: 4 regression tests in `AppPlaybackWiring.test.ts` covering dialog opening, merge mode, frame offset, and default replace behavior.
+
+**Files changed**:
+- `src/ui/components/shared/Modal.ts`
+- `src/AppPlaybackWiring.ts`
+- `src/AppPlaybackWiring.test.ts`
+
+## Issue #533: Representation switching never calls `mapFrame()` for frame-accurate remapping
+
+**Root cause**: `MediaRepresentationManager` implemented `mapFrame()` for frame-accurate switching between editorial-offset variants, but `switchRepresentation()` never called it or updated the host's current frame.
+
+**Fix**: Added `_computeMappedFrame()` that checks if two representations have different `startFrame` values, and calls `mapFrame()`. Both switch paths now compute and include `mappedFrame` in the `representationChanged` event. `SessionMedia` applies the mapped frame via `setCurrentFrame()`.
+
+**Tests added**: 5 regression tests for frame remapping on switch: different startFrame, same startFrame, clamping, idle-rep loading, and no-previous-rep cases. Added `mappedFrame` to `RepresentationManagerEvents` and `SessionMediaEvents`.
+
+**Files changed**:
+- `src/core/session/MediaRepresentationManager.ts`
+- `src/core/types/representation.ts`
+- `src/core/session/SessionMedia.ts`
+- `src/core/session/MediaRepresentationManager.test.ts`
+
+## Issue #536: Representation switches leave duration/FPS stale
+
+**Root cause**: `applyRepresentationShim()` only copied width/height from the representation, never updating `source.duration`, `source.fps`, or emitting host playback events. Normal media loads update all of these.
+
+**Fix**: Added `duration` and `fps` fields to representation types, loader results, and serialization. `VideoRepresentationLoader` and `SequenceRepresentationLoader` now detect and return these values. `applyRepresentationShim()` updates source duration/fps and emits appropriate events (durationChanged, fpsChanged, inOutChanged).
+
+**Tests added**: 8 regression tests (SM-087 through SM-094) covering duration/fps updates, event emission, value preservation, and non-current source behavior.
+
+**Files changed**:
+- `src/core/types/representation.ts`
+- `src/core/session/loaders/RepresentationLoader.ts`
+- `src/core/session/loaders/VideoRepresentationLoader.ts`
+- `src/core/session/loaders/SequenceRepresentationLoader.ts`
+- `src/core/session/MediaRepresentationManager.ts`
+- `src/core/session/SessionMedia.ts`
+- `src/core/session/SessionMedia.test.ts`
+- `src/core/session/loaders/RepresentationLoaderFactory.test.ts`
+
+## Issue #540: Representation switches leave `source.name` and `source.url` pinned to base media
+
+**Root cause**: `applyRepresentationShim()` updated only resolution and node-specific fields, never rewriting `source.name` or `source.url` from the active representation's label/path/url.
+
+**Fix**: Added an `_originalSourceIdentity` map to save original name/url before first overwrite. On representation apply, updates `source.name` from `representation.label` and `source.url` from `loaderConfig.url`/`loaderConfig.path`. On null representation (clearing), restores originals.
+
+**Tests added**: 7 regression tests (SM-095 through SM-101) covering label update, url update, path fallback, empty label preservation, original restoration, multi-switch stability, and no-url preservation.
+
+**Files changed**:
+- `src/core/session/SessionMedia.ts`
+- `src/core/session/SessionMedia.test.ts`
+
+## Issue #545: Public source/rendered-image events stay stale across representation switches
+
+**Root cause**: `EventsAPI` subscribed to `representationError` but not `representationChanged` or `fallbackActivated`. Representation switches didn't update `_lastLoadedSource` or trigger `renderedImagesChanged`.
+
+**Fix**: Added `representationChanged` and `fallbackActivated` to `OpenRVEventName`. Added subscriptions that extract resolution/label from the representation, update `_lastLoadedSource`, emit the public event, and call `emitCurrentRenderedImages()`. Updated `docs/api/index.md` event reference.
+
+**Tests added**: 6 regression tests (API-U545a through API-U545f) covering event name presence, _lastLoadedSource updates, renderedImagesChanged emission, stale overwrite, and unsubscribe.
+
+**Files changed**:
+- `src/api/EventsAPI.ts`
+- `src/api/OpenRVAPI.test.ts`
+- `docs/api/index.md`
+
+## Issue #546: `currentSourceChanged` not emitted for representation switches
+
+**Root cause**: `SessionMedia` emitted `currentSourceChanged` only from `setCurrentSource()` on index change. Representation switches emitted `representationChanged`/`fallbackActivated` but not `currentSourceChanged`, leaving downstream listeners (QC state clearing, API bridge) with stale state.
+
+**Fix**: After forwarding `representationChanged` and `fallbackActivated` events, added a check: if the event's `sourceIndex` matches the current source index, also emit `currentSourceChanged`. This preserves correct event ordering (representation event fires first).
+
+**Tests added**: 5 regression tests (SM-102 through SM-106) covering emission on current source, non-emission on non-current source, fallback variants, and event ordering guarantee.
+
+**Files changed**:
+- `src/core/session/SessionMedia.ts`
+- `src/core/session/SessionMedia.test.ts`
+
+## Issue #560: `openrv.dispose()` doesn't detach plugin registry
+
+**Root cause**: `OpenRVAPI.dispose()` only marked the API unready and disposed submodules. It never informed `PluginRegistry`, cleared `apiRef`/`eventsAPI`, or reset the plugin event bus. Active plugin contexts kept stale references to the disposed API.
+
+**Fix**: Added `detach()` method to `PluginRegistry` that clears `apiRef`, `paintEngineRef`, and calls `eventBus.dispose()`. Called from `OpenRVAPI.dispose()`. After disposal, `context.api` throws "OpenRV API not yet initialized" instead of returning a stale reference.
+
+**Tests added**: 4 API-level tests (API-U560a through API-U560d), 4 registry-level tests (PREG-070 through PREG-073), and 3 event bus tests (PEVT-061 through PEVT-063) covering stale reference prevention, subscription cleanup, re-initialization, and idempotency.
+
+**Files changed**:
+- `src/api/OpenRVAPI.ts`
+- `src/plugin/PluginRegistry.ts`
+- `src/api/OpenRVAPI.test.ts`
+- `src/plugin/PluginRegistry.test.ts`
+- `src/plugin/PluginEventBus.test.ts`

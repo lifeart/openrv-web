@@ -40,6 +40,7 @@ export interface SessionMediaEvents extends EventMap {
     previousRepId: string | null;
     newRepId: string;
     representation: MediaRepresentation;
+    mappedFrame?: number;
   };
   representationError: {
     sourceIndex: number;
@@ -108,6 +109,9 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
   /** Representation manager for per-source media representation switching */
   private _representationManager = new MediaRepresentationManager();
 
+  /** Original source identity fields saved before representation overwrite, keyed by source index */
+  private _originalSourceIdentity = new Map<number, { name: string; url: string }>();
+
   /** Public accessor for the representation manager */
   get representationManager(): MediaRepresentationManager {
     return this._representationManager;
@@ -136,7 +140,7 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
           source.activeRepresentationIndex = repIndex;
         }
       },
-      applyRepresentationShim: (sourceIndex: number, representation: MediaRepresentation) => {
+      applyRepresentationShim: (sourceIndex: number, representation: MediaRepresentation | null) => {
         this.applyRepresentationShim(sourceIndex, representation);
       },
       getHDRResizeTier: () => this._hdrResizeTier,
@@ -145,13 +149,27 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
 
     // Forward representation manager events
     this._representationManager.on('representationChanged', (data) => {
+      if (data.mappedFrame !== undefined && this._host) {
+        this._host.setCurrentFrame(data.mappedFrame);
+      }
       this.emit('representationChanged', data);
+      // Emit currentSourceChanged so listeners can clear stale per-source state
+      // (e.g. floating-window QC results). Only emit when the representation
+      // switch is on the currently active source.
+      if (data.sourceIndex === this._currentSourceIndex) {
+        this.emit('currentSourceChanged', this._currentSourceIndex);
+      }
     });
     this._representationManager.on('representationError', (data) => {
       this.emit('representationError', data);
     });
     this._representationManager.on('fallbackActivated', (data) => {
       this.emit('fallbackActivated', data);
+      // Also emit currentSourceChanged on fallback activation for the active source,
+      // since the rendered content has changed and per-source state may be stale.
+      if (data.sourceIndex === this._currentSourceIndex) {
+        this.emit('currentSourceChanged', this._currentSourceIndex);
+      }
     });
   }
 
@@ -1189,13 +1207,9 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
    * @param sourceIndex - Index of the source
    * @param representation - The representation to apply
    */
-  private applyRepresentationShim(sourceIndex: number, representation: MediaRepresentation): void {
+  private applyRepresentationShim(sourceIndex: number, representation: MediaRepresentation | null): void {
     const source = this._sources[sourceIndex];
     if (!source) return;
-
-    // Update the top-level fields from the representation
-    source.width = representation.resolution.width;
-    source.height = representation.resolution.height;
 
     // Clear old source nodes
     source.videoSourceNode = undefined;
@@ -1203,6 +1217,62 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
     source.sequenceInfo = undefined;
     source.sequenceFrames = undefined;
     source.element = undefined;
+
+    // If null, we are clearing the source (no active representation)
+    if (!representation) {
+      // Restore original name/url if they were saved
+      const saved = this._originalSourceIdentity.get(sourceIndex);
+      if (saved) {
+        source.name = saved.name;
+        source.url = saved.url;
+        this._originalSourceIdentity.delete(sourceIndex);
+      }
+      log.info(`Cleared representation shim for source ${sourceIndex}`);
+      return;
+    }
+
+    // Save original name/url before overwriting (only on first representation apply)
+    if (!this._originalSourceIdentity.has(sourceIndex)) {
+      this._originalSourceIdentity.set(sourceIndex, { name: source.name, url: source.url });
+    }
+
+    // Update name from representation label (if available)
+    if (representation.label) {
+      source.name = representation.label;
+    }
+
+    // Update url from representation loaderConfig (prefer url, fall back to path)
+    if (representation.loaderConfig.url) {
+      source.url = representation.loaderConfig.url;
+    } else if (representation.loaderConfig.path) {
+      source.url = representation.loaderConfig.path;
+    }
+
+    // Update the top-level fields from the representation
+    source.width = representation.resolution.width;
+    source.height = representation.resolution.height;
+
+    // Update duration and fps from the representation when available
+    const isCurrentSource = this.currentSource === source;
+
+    if (representation.duration !== undefined && representation.duration > 0) {
+      source.duration = representation.duration;
+      if (isCurrentSource && this._host) {
+        this._host.setOutPoint(representation.duration);
+        this.emit('durationChanged', representation.duration);
+        this._host.emitInOutChanged(1, representation.duration);
+      }
+    }
+
+    if (representation.fps !== undefined && representation.fps > 0) {
+      source.fps = representation.fps;
+      if (isCurrentSource && this._host) {
+        if (representation.fps !== this._host.getFps()) {
+          this._host.setFps(representation.fps);
+          this._host.emitFpsChanged(representation.fps);
+        }
+      }
+    }
 
     // Set the appropriate source node based on the representation's source node type
     const sourceNode = representation.sourceNode;

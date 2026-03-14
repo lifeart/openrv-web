@@ -271,9 +271,12 @@ export class MuNetworkBridge {
 
   /**
    * Get list of remote contact names.
+   * Returns the peer's contact name received during handshake,
+   * falling back to the locally supplied connection label if
+   * handshake hasn't happened yet.
    */
   remoteContacts(): string[] {
-    return Array.from(this.connectionInfo.values()).map((info) => info.name);
+    return Array.from(this.connectionInfo.values()).map((info) => info.peerContactName ?? info.name);
   }
 
   /**
