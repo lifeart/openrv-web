@@ -346,6 +346,52 @@ describe('NetworkControl', () => {
       expect(handler).toHaveBeenCalled();
       expect(handler.mock.calls[0]![0].playback).toBe(false);
     });
+
+    it('NCC-030b: renders cursor sync checkbox', () => {
+      control.setConnectionState('connected');
+      control.setRoomInfo({
+        roomId: 'room-1',
+        roomCode: 'ABCD-1234',
+        hostId: 'u1',
+        users: [],
+        createdAt: Date.now(),
+        maxUsers: 10,
+      });
+      control.openPanel();
+
+      const cursorToggle = document.querySelector('[data-testid="network-sync-cursor"]') as HTMLLabelElement;
+      expect(cursorToggle).toBeTruthy();
+
+      const checkbox = cursorToggle.querySelector('input[type="checkbox"]') as HTMLInputElement;
+      expect(checkbox).toBeTruthy();
+      // cursor is enabled by default per DEFAULT_SYNC_SETTINGS
+      expect(checkbox.checked).toBe(true);
+    });
+
+    it('NCC-030c: toggling cursor checkbox emits syncSettingsChanged', () => {
+      const handler = vi.fn();
+      control.on('syncSettingsChanged', handler);
+
+      control.setConnectionState('connected');
+      control.setRoomInfo({
+        roomId: 'room-1',
+        roomCode: 'ABCD-1234',
+        hostId: 'u1',
+        users: [],
+        createdAt: Date.now(),
+        maxUsers: 10,
+      });
+      control.openPanel();
+
+      const cursorToggle = document.querySelector('[data-testid="network-sync-cursor"]') as HTMLLabelElement;
+      const checkbox = cursorToggle.querySelector('input[type="checkbox"]') as HTMLInputElement;
+
+      checkbox.checked = false;
+      checkbox.dispatchEvent(new Event('change'));
+
+      expect(handler).toHaveBeenCalled();
+      expect(handler.mock.calls[0]![0].cursor).toBe(false);
+    });
   });
 
   describe('copy link', () => {

@@ -790,6 +790,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
       { key: 'view', label: 'View (Pan/Zoom)' },
       { key: 'color', label: 'Color Adjustments' },
       { key: 'annotations', label: 'Annotations' },
+      { key: 'cursor', label: 'Cursor' },
     ];
 
     settings.forEach(({ key, label }) => {
