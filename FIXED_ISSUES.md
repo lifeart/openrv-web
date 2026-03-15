@@ -2545,3 +2545,15 @@ The `URLSession` interface gained `allSources` for URL-based lookup. `SessionURL
 - `src/ui/components/ViewerInputHandler.ts`
 - `src/ui/components/layout/HeaderBar.test.ts`
 - `src/ui/components/ViewerInputHandler.test.ts`
+
+## Issue #448: Cursor sharing is active in the collaboration stack, but the shipped sync-settings UI gives users no cursor toggle
+
+**Root cause**: The sync-settings UI in `NetworkControl` only rendered checkboxes for `playback`, `view`, `color`, and `annotations`, omitting the `cursor` category despite it being defined in the sync model and enabled by default.
+
+**Fix**: Added `{ key: 'cursor', label: 'Cursor' }` to the sync settings checkbox array in `NetworkControl`, following the exact same pattern as existing settings.
+
+**Tests added**: 2 regression tests (NCC-030b, NCC-030c) verifying the cursor checkbox renders checked by default and toggles correctly.
+
+**Files changed**:
+- `src/ui/components/NetworkControl.ts`
+- `src/ui/components/NetworkControl.test.ts`

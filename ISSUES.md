@@ -589,19 +589,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Users following the guide can expect an explicit reconnect affordance that never appears after retry exhaustion.
   - In practice, recovery falls back to manually recreating or rejoining the room through the generic disconnected UI rather than a dedicated reconnect path.
 
-### 448. Cursor sharing is active in the collaboration stack, but the shipped sync-settings UI gives users no cursor toggle
-
-- Severity: Medium
-- Area: Collaboration UI / settings completeness
-- Evidence:
-  - The live sync model defines `cursor` as a first-class sync category and enables it by default in [src/network/types.ts](/Users/lifeart/Repos/openrv-web/src/network/types.ts#L30) through [src/network/types.ts](/Users/lifeart/Repos/openrv-web/src/network/types.ts#L48).
-  - The runtime has a dedicated `sendCursorPosition(...)` path gated by `syncSettings.cursor` in [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L521) through [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L538).
-  - The shipped Network Sync panel only renders checkboxes for `playback`, `view`, `color`, and `annotations`; it never exposes `cursor` in [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L787) through [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L821).
-  - The FAQ still advertises cursor-position sync as part of collaboration in [docs/reference/faq.md](/Users/lifeart/Repos/openrv-web/docs/reference/faq.md#L73) through [docs/reference/faq.md](/Users/lifeart/Repos/openrv-web/docs/reference/faq.md#L79), but the main Network Sync guide's settings table likewise omits any cursor toggle in [docs/advanced/network-sync.md](/Users/lifeart/Repos/openrv-web/docs/advanced/network-sync.md#L52) through [docs/advanced/network-sync.md](/Users/lifeart/Repos/openrv-web/docs/advanced/network-sync.md#L68).
-- Impact:
-  - Users can have remote cursor sharing turned on by default without any shipped UI to inspect or disable it.
-  - The collaboration docs describe cursor sync as part of the product, but the actual settings surface makes it look like only four categories are controllable.
-
 ### 449. Remote cursor sync is transported and tracked, but the shipped app never renders or consumes it
 
 - Severity: Medium
