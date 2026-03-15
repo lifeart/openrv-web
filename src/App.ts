@@ -56,6 +56,8 @@ import { wireStackControls } from './AppStackWiring';
 import { NoteOverlay } from './ui/components/NoteOverlay';
 import { GotoFrameOverlay } from './ui/components/GotoFrameOverlay';
 import { RemoteCursorsOverlay } from './ui/components/RemoteCursorsOverlay';
+import { FrameCacheController } from './cache/FrameCacheController';
+import { detectDefaultBudget } from './config/CacheConfig';
 import { ShotGridIntegrationBridge } from './integrations/ShotGridIntegrationBridge';
 import { ClientMode } from './ui/components/ClientMode';
 import { ExternalPresentation } from './ui/components/ExternalPresentation';
@@ -109,6 +111,7 @@ export class App {
   private cacheManager: MediaCacheManager;
   private audioOrchestrator: AudioOrchestrator;
   private remoteCursorsOverlay: RemoteCursorsOverlay;
+  private frameCacheController: FrameCacheController;
   private dccBridge: DCCBridge | null = null;
   private virtualSliderController: VirtualSliderController | null = null;
   private contextualKeyboardManager: ContextualKeyboardManager;
@@ -166,6 +169,44 @@ export class App {
 
     // Create OPFS media cache manager
     this.cacheManager = new MediaCacheManager();
+
+    // Create frame cache controller (adaptive caching with memory budget)
+    this.frameCacheController = new FrameCacheController({
+      memoryBudgetBytes: detectDefaultBudget(),
+    });
+
+    // Wire session playback events to the frame cache controller
+    this.wiringSubscriptions.add(
+      this.session.on('frameChanged', () => {
+        this.frameCacheController.onPlaybackStateChange({
+          currentFrame: this.session.currentFrame,
+          inPoint: this.session.inPoint,
+          outPoint: this.session.outPoint,
+        });
+      }),
+    );
+    this.wiringSubscriptions.add(
+      this.session.on('playbackChanged', (playing: boolean) => {
+        if (playing) {
+          this.frameCacheController.onPlaybackStart(
+            this.session.playDirection as 1 | -1,
+            this.session.playbackSpeed,
+            this.session.currentFrame,
+          );
+        } else {
+          this.frameCacheController.onPlaybackStop();
+        }
+      }),
+    );
+    this.wiringSubscriptions.add(
+      this.session.on('sourceLoaded', () => {
+        this.frameCacheController.onPlaybackStateChange({
+          currentFrame: this.session.currentFrame,
+          inPoint: this.session.inPoint,
+          outPoint: this.session.outPoint,
+        });
+      }),
+    );
 
     // Create all UI controls via the registry
     this.controls = new AppControlRegistry({
@@ -778,6 +819,7 @@ export class App {
       externalPresentation: this.externalPresentation,
       headerBar: this.headerBar,
       frameNavigation: this.frameNavigation,
+      frameCacheController: this.frameCacheController,
     });
   }
 

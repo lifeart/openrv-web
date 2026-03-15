@@ -861,6 +861,13 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     shift: true,
     description: 'Zoom to 1:8 (12.5%) pixel ratio',
   },
+
+  // Cache mode cycling
+  'cache.cycleCacheMode': {
+    code: 'KeyC',
+    shift: true,
+    description: 'Cycle frame cache mode (None / Nearby / Playback Buffer)',
+  },
 };
 /**
  * Get a human-readable description of a key combination
