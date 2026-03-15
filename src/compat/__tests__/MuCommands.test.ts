@@ -404,10 +404,15 @@ describe('MuCommands', () => {
       expect(() => cmd.setOutPoint('abc' as unknown as number)).toThrow(TypeError);
     });
 
-    it('skipped() returns 0 by default', () => {
+    it('skipped() delegates to playback.getDroppedFrameCount()', () => {
+      mockOpenRV.playback.getDroppedFrameCount.mockReturnValue(0);
       expect(cmd.skipped()).toBe(0);
+
+      mockOpenRV.playback.getDroppedFrameCount.mockReturnValue(5);
+      expect(cmd.skipped()).toBe(5);
     });
 
+<<<<<<< ours
     it('skipped() reads from session dropped frame count', () => {
       mockOpenRV.playback.getDroppedFrameCount.mockReturnValue(5);
       expect(cmd.skipped()).toBe(5);
@@ -421,13 +426,17 @@ describe('MuCommands', () => {
     });
 
     it('isCurrentFrameIncomplete() returns false', () => {
+=======
+    it('isCurrentFrameIncomplete() returns false (unsupported)', () => {
+>>>>>>> theirs
       expect(cmd.isCurrentFrameIncomplete()).toBe(false);
     });
 
-    it('isCurrentFrameError() returns false', () => {
+    it('isCurrentFrameError() returns false (unsupported)', () => {
       expect(cmd.isCurrentFrameError()).toBe(false);
     });
 
+<<<<<<< ours
     it('isBuffering() returns false by default', () => {
       expect(cmd.isBuffering()).toBe(false);
     });
@@ -436,16 +445,26 @@ describe('MuCommands', () => {
       mockOpenRV.playback.isBuffering.mockReturnValue(true);
       expect(cmd.isBuffering()).toBe(true);
 
+=======
+    it('isBuffering() delegates to playback.isBuffering()', () => {
+>>>>>>> theirs
       mockOpenRV.playback.isBuffering.mockReturnValue(false);
       expect(cmd.isBuffering()).toBe(false);
+
+      mockOpenRV.playback.isBuffering.mockReturnValue(true);
+      expect(cmd.isBuffering()).toBe(true);
     });
 
-    it('mbps() / resetMbps() manage throughput counter', () => {
-      expect(cmd.mbps()).toBe(0);
-      cmd.resetMbps();
+    it('mbps() always returns 0 (unsupported)', () => {
       expect(cmd.mbps()).toBe(0);
     });
 
+    it('resetMbps() is a no-op (unsupported)', () => {
+      expect(() => cmd.resetMbps()).not.toThrow();
+      expect(cmd.mbps()).toBe(0);
+    });
+
+<<<<<<< ours
     it('health commands return safe defaults when no session', () => {
       delete (globalThis as Record<string, unknown>).openrv;
       expect(cmd.isBuffering()).toBe(false);
@@ -453,6 +472,30 @@ describe('MuCommands', () => {
       expect(cmd.isCurrentFrameIncomplete()).toBe(false);
       expect(cmd.isCurrentFrameError()).toBe(false);
       expect(cmd.mbps()).toBe(0);
+=======
+    it('isCurrentFrameIncomplete is marked unsupported', () => {
+      expect(cmd.isSupported('isCurrentFrameIncomplete')).toBe(false);
+    });
+
+    it('isCurrentFrameError is marked unsupported', () => {
+      expect(cmd.isSupported('isCurrentFrameError')).toBe(false);
+    });
+
+    it('mbps is marked unsupported', () => {
+      expect(cmd.isSupported('mbps')).toBe(false);
+    });
+
+    it('resetMbps is marked unsupported', () => {
+      expect(cmd.isSupported('resetMbps')).toBe(false);
+    });
+
+    it('skipped is marked supported', () => {
+      expect(cmd.isSupported('skipped')).toBe(true);
+    });
+
+    it('isBuffering is marked supported', () => {
+      expect(cmd.isSupported('isBuffering')).toBe(true);
+>>>>>>> theirs
     });
   });
 

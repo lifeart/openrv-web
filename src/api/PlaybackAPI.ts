@@ -306,6 +306,7 @@ export class PlaybackAPI extends DisposableAPI {
   }
 
   /**
+<<<<<<< ours
    * Get the measured (actual) playback FPS.
    *
    * During active playback, this returns the real throughput measured by the
@@ -329,20 +330,31 @@ export class PlaybackAPI extends DisposableAPI {
    *
    * Returns `true` when the engine is waiting for frames (e.g. play-all-frames
    * starvation or HDR initial buffering delay).
+=======
+   * Check if the player is currently buffering (waiting for frames to decode).
+>>>>>>> theirs
    *
    * @returns `true` if buffering, `false` otherwise.
    *
    * @example
    * ```ts
+<<<<<<< ours
    * if (openrv.playback.isBuffering()) { showSpinner(); }
    * ```
    */
   isBuffering(): boolean {
     this.assertNotDisposed();
+=======
+   * if (openrv.playback.isBuffering()) { console.log('Buffering...'); }
+   * ```
+   */
+  isBuffering(): boolean {
+>>>>>>> theirs
     return this.session.isBuffering;
   }
 
   /**
+<<<<<<< ours
    * Get the cumulative count of dropped (skipped) frames since playback started.
    *
    * In realtime mode the engine may skip frames to maintain the target FPS.
@@ -357,6 +369,18 @@ export class PlaybackAPI extends DisposableAPI {
    */
   getDroppedFrameCount(): number {
     this.assertNotDisposed();
+=======
+   * Get the cumulative count of dropped (skipped) frames since the last play() call.
+   *
+   * @returns The number of frames dropped during the current or most recent playback.
+   *
+   * @example
+   * ```ts
+   * const dropped = openrv.playback.getDroppedFrameCount();
+   * ```
+   */
+  getDroppedFrameCount(): number {
+>>>>>>> theirs
     return this.session.droppedFrameCount;
   }
 }

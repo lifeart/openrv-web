@@ -32,9 +32,12 @@ type OpenRVCompat = {
     setPlaybackMode(mode: 'realtime' | 'playAllFrames'): void;
     getPlaybackMode(): 'realtime' | 'playAllFrames';
     step(n?: number): void;
+<<<<<<< ours
     getMeasuredFPS(): number;
     setPlayDirection(direction: number): void;
     getPlayDirection(): number;
+=======
+>>>>>>> theirs
     isBuffering(): boolean;
     getDroppedFrameCount(): number;
   };
@@ -124,7 +127,11 @@ const SUPPORT_MAP: Record<string, true | false | 'partial'> = {
   isCurrentFrameError: false,
   isBuffering: true,
   mbps: false,
+<<<<<<< ours
   resetMbps: true,
+=======
+  resetMbps: false,
+>>>>>>> theirs
   // Audio
   scrubAudio: 'partial',
   // View & Display
@@ -154,7 +161,15 @@ const ASYNC_COMMANDS = new Set<string>(['fullScreenMode']);
 
 export class MuCommands {
   // --- Internal state for ADD commands ---
+<<<<<<< ours
   private _mbps = 0;
+=======
+  private _frameStart = 1;
+  private _inc = 1;
+  private _overrideFPS: number | null = null;
+  private _filterMode: number = FilterLinear;
+  private _bgMethod = 'black';
+>>>>>>> theirs
   private _margins: number[] = [0, 0, 0, 0];
 
   // =====================================================================
@@ -300,34 +315,55 @@ export class MuCommands {
     getOpenRV().loop.setOutPoint(Math.round(frame));
   }
 
-  /** Get count of skipped frames (since last reset). (Mu #21) */
+  /** Get count of skipped (dropped) frames since last play() started. (Mu #21) */
   skipped(): number {
+<<<<<<< ours
     return tryGetOpenRV()?.playback.getDroppedFrameCount() ?? 0;
+=======
+    return getOpenRV().playback.getDroppedFrameCount();
+>>>>>>> theirs
   }
 
-  /** Check if current frame decode is incomplete. (Mu #22) */
+  /**
+   * Check if current frame decode is incomplete. (Mu #22)
+   * Not supported — no per-frame decode state is tracked by the web engine.
+   */
   isCurrentFrameIncomplete(): boolean {
     return false;
   }
 
-  /** Check if current frame has a decode error. (Mu #23) */
+  /**
+   * Check if current frame has a decode error. (Mu #23)
+   * Not supported — no per-frame decode error state is tracked by the web engine.
+   */
   isCurrentFrameError(): boolean {
     return false;
   }
 
   /** Check if media is buffering. (Mu #24) */
   isBuffering(): boolean {
+<<<<<<< ours
     return tryGetOpenRV()?.playback.isBuffering() ?? false;
+=======
+    return getOpenRV().playback.isBuffering();
+>>>>>>> theirs
   }
 
-  /** Get I/O throughput in megabits per second. (Mu #25) */
+  /**
+   * Get I/O throughput in megabits per second. (Mu #25)
+   * Not supported — the web engine does not track I/O throughput.
+   * Always returns 0.
+   */
   mbps(): number {
-    return this._mbps;
+    return 0;
   }
 
-  /** Reset mbps counter. (Mu #26) */
+  /**
+   * Reset mbps counter. (Mu #26)
+   * Not supported — no-op since mbps is not tracked.
+   */
   resetMbps(): void {
-    this._mbps = 0;
+    // no-op: mbps tracking is not supported in the web engine
   }
 
   // =====================================================================
