@@ -529,18 +529,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Remote EXR plates, float TIFFs, and other formats that only work through the decoder/file pipeline cannot be reconstructed from share links or loaded via URL-based DCC commands even though the app broadly advertises support for those formats.
   - URL workflows are materially less capable than file workflows, which makes remote review/integration flows unreliable for high-end image formats.
 
-### 441. URL-based media loading cannot detect extensionless or routed video URLs and falls back to the image path
-
-- Severity: Medium
-- Area: Share links / DCC integration / URL media detection
-- Evidence:
-  - `Session.loadSourceFromUrl(...)` extracts the media type only from the last pathname extension in [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L1131) through [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L1137); if there is no recognizable extension, it unconditionally calls `loadImage(...)` in [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L1139).
-  - DCC `loadMedia` uses the same extension-only heuristic with `path.split('.').pop()?.toLowerCase()` in [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L186) through [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L190).
-  - The file-loading side of the app explicitly documents a more reliable magic-number-first detection strategy for real files in [docs/guides/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/guides/file-formats.md#L11), but the URL path never gets equivalent sniffing or content-type-based detection.
-- Impact:
-  - CDN or API-style video URLs such as `/media/12345`, `/stream/latest`, or signed routes without a terminal extension can be treated as still images and fail to load correctly.
-  - The app's URL-based loading is weaker than its file-loading path in a way that is hard for integrators and share-link users to predict from the UI.
-
 ### 444. The DCC guide promises a configurable bridge endpoint, but production only supports `?dcc=` URL bootstrap
 
 - Severity: Low

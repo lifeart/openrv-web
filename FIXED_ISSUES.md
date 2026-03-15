@@ -2557,3 +2557,17 @@ The `URLSession` interface gained `allSources` for URL-based lookup. `SessionURL
 **Files changed**:
 - `src/ui/components/NetworkControl.ts`
 - `src/ui/components/NetworkControl.test.ts`
+
+## Issue #441: URL-based media loading cannot detect extensionless or routed video URLs and falls back to the image path
+
+**Root cause**: Both `loadSourceFromUrl` and DCC `loadMedia` determined media type solely from file extension. URLs without recognizable extensions (e.g., CDN routes, signed URLs) were always treated as images.
+
+**Fix**: Added `detectMediaTypeFromUrl()` in `SupportedMediaFormats.ts` that: (1) fast-returns for recognized extensions, (2) performs a HEAD request with 3s timeout to sniff Content-Type for extensionless URLs, (3) falls back to `'image'` on failure. Applied in DCC `loadMedia` and ShotGrid version loading.
+
+**Tests added**: 25 tests in `SupportedMediaFormats.test.ts` covering extension extraction, MIME detection, HEAD request sniffing, network error fallback, and unrecognized content-type handling.
+
+**Files changed**:
+- `src/utils/media/SupportedMediaFormats.ts`
+- `src/utils/media/SupportedMediaFormats.test.ts` (new)
+- `src/AppDCCWiring.ts`
+- `src/integrations/ShotGridIntegrationBridge.ts`
