@@ -2450,3 +2450,22 @@ Called from `fromJSON()` inside the existing `if (mediaIndexMap.size > 0)` block
 **Files changed**:
 - `src/core/session/SessionSerializer.ts`
 - `src/core/session/SessionSerializer.issue394.test.ts` (new)
+
+## Issue #431: Media-bearing share links only load the shared media on an empty session
+
+**Root cause**: `applySessionURLState()` in `SessionURLService` only attempted to load `sourceUrl` when `session.sourceCount === 0`. When the recipient already had media loaded, the shared media URL was silently ignored and the sender's view/compare state was applied to whatever local media the recipient had — potentially the wrong content entirely.
+
+**Fix**: Restructured media resolution into a three-tier strategy that runs regardless of session state:
+1. Check if the shared URL is already loaded (navigate to it, avoiding duplication)
+2. Empty session: use `session.loadSourceFromUrl()` as before
+3. Non-empty session: use a new `deps.loadSourceFromUrl()` callback to add the shared media as a new source
+4. All subsequent state (frame, compare, transform, OCIO) uses the resolved source index
+
+The `URLSession` interface gained `allSources` for URL-based lookup. `SessionURLDeps` gained an optional `loadSourceFromUrl` callback for non-empty-session loading.
+
+**Tests added**: 5 regression tests (SU-023 through SU-027) covering: empty session load, non-empty session add, already-loaded dedup, no-callback fallback, and load-failure fallback.
+
+**Files changed**:
+- `src/services/SessionURLService.ts`
+- `src/services/SessionURLService.test.ts`
+- `test/mocks.ts`

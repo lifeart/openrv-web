@@ -581,19 +581,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - A share link from a multi-source A/B review can carry compare indices and wipe state but still fail to reconstruct the compared media on a clean recipient.
   - The receiver ends up with partial compare state and only one loaded source, which undermines the feature's stated “comparison state” promise.
 
-### 431. Media-bearing share links only load the shared media on an empty session
-
-- Severity: High
-- Area: URL sharing / session bootstrap
-- Evidence:
-  - `applySessionURLState(...)` attempts `loadSourceFromUrl(...)` only behind `if (session.sourceCount === 0 && state.sourceUrl && session.loadSourceFromUrl)` in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L148) through [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L164).
-  - When the recipient already has any media loaded, the same method skips `sourceUrl` entirely and proceeds to apply frame/source/view state to the existing session in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L166) through [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L220).
-  - Share-link capture still records the sender's current `sourceUrl` in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L122) through [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L145), so the shared media identity is available but intentionally ignored once the receiver is not on a blank session.
-- Impact:
-  - Opening a media-bearing share link while you already have anything loaded can apply the sender's frame/view/compare state to the wrong local media instead of the shared media.
-  - That makes share links context-sensitive: the same link behaves differently depending on whether the recipient opens it in a fresh app state or not.
-
-
 ### 440. URL-based media loading bypasses the app's decoder stack and breaks remote EXR or other decoder-backed images
 
 - Severity: Medium
