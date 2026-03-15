@@ -205,6 +205,28 @@ const acceptExtensions = Array.from(
 export const SUPPORTED_MEDIA_ACCEPT = ['image/*', 'video/*', ...acceptExtensions].join(',');
 
 /**
+ * Project/session file extensions.
+ */
+export const PROJECT_EXTENSIONS = ['orvproject', 'rv', 'gto', 'rvedl'] as const;
+
+/**
+ * CDL (Color Decision List) sidecar extension.
+ */
+export const CDL_EXTENSIONS = ['cdl'] as const;
+
+/**
+ * File input accept string for the "Open Project" picker.
+ * Includes project/session formats, media formats, and CDL sidecars
+ * so users can multi-select an .rv/.gto file together with its
+ * companion media/CDL files in a single action.
+ */
+export const SUPPORTED_PROJECT_ACCEPT = [
+  ...PROJECT_EXTENSIONS.map((ext) => `.${ext}`),
+  ...acceptExtensions,
+  ...CDL_EXTENSIONS.map((ext) => `.${ext}`),
+].join(',');
+
+/**
  * Viewer placeholder support lines (rendered as multiline helper text).
  */
 export const VIEWER_PLACEHOLDER_SUPPORT_LINES = [

@@ -24,7 +24,7 @@ import {
   applyA11yFocus,
 } from '../shared/Button';
 import { Z_INDEX, SHADOWS } from '../shared/theme';
-import { SUPPORTED_MEDIA_ACCEPT } from '../../../utils/media/SupportedMediaFormats';
+import { SUPPORTED_MEDIA_ACCEPT, SUPPORTED_PROJECT_ACCEPT } from '../../../utils/media/SupportedMediaFormats';
 import type { LayoutPreset, LayoutPresetId } from '../../layout/LayoutStore';
 
 export interface HeaderBarEvents extends EventMap {
@@ -222,7 +222,8 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     // Hidden file input for project files
     this.projectInput = document.createElement('input');
     this.projectInput.type = 'file';
-    this.projectInput.accept = '.orvproject';
+    this.projectInput.accept = SUPPORTED_PROJECT_ACCEPT;
+    this.projectInput.multiple = true;
     this.projectInput.style.display = 'none';
     this.projectInput.addEventListener('change', (e) => this.handleProjectOpen(e));
     this.container.appendChild(this.projectInput);
@@ -1484,10 +1485,27 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
 
   private handleProjectOpen(e: Event): void {
     const input = e.target as HTMLInputElement;
-    const file = input.files?.[0];
-    if (file) {
-      this.emit('openProject', { file });
+    const files = input.files;
+    if (!files || files.length === 0) {
+      input.value = '';
+      return;
     }
+
+    const fileArray = Array.from(files);
+    const projectExts = ['.orvproject', '.rv', '.gto', '.rvedl'];
+    // Find the first project/session file
+    const projectFile = fileArray.find((f) =>
+      projectExts.some((ext) => f.name.toLowerCase().endsWith(ext)),
+    ) ?? fileArray[0]!;
+    // Everything else is a companion file
+    const companionFiles = fileArray.filter((f) => f !== projectFile);
+
+    this.emit('openProject', {
+      file: projectFile,
+      ...(companionFiles.length > 0
+        ? { availableFiles: new Map(companionFiles.map((f) => [f.name, f])) }
+        : {}),
+    });
     input.value = '';
   }
 

@@ -145,22 +145,20 @@ describe('HeaderBar', () => {
       expect(inputs.length).toBe(2);
     });
 
-    it('HDR-U024: project file input accepts .orvproject files', () => {
+    it('HDR-U024: project file input accepts project and companion media formats', () => {
       const el = headerBar.render();
       const inputs = el.querySelectorAll('input[type="file"]');
       const projectInput = Array.from(inputs).find(
-        (input) => (input as HTMLInputElement).accept === '.orvproject',
+        (input) => (input as HTMLInputElement).accept.includes('.orvproject'),
       ) as HTMLInputElement;
       expect(projectInput).not.toBeNull();
-      expect(projectInput.accept).toBe('.orvproject');
-    });
-
-    it('HDR-U027: neither file input accepts .rvedl (EDL import is handled separately)', () => {
-      const el = headerBar.render();
-      const inputs = el.querySelectorAll('input[type="file"]');
-      for (const input of Array.from(inputs)) {
-        expect((input as HTMLInputElement).accept).not.toContain('.rvedl');
-      }
+      // Should accept project formats and media formats for companion files
+      expect(projectInput.accept).toContain('.orvproject');
+      expect(projectInput.accept).toContain('.rv');
+      expect(projectInput.accept).toContain('.gto');
+      expect(projectInput.accept).toContain('.exr');
+      expect(projectInput.accept).toContain('.cdl');
+      expect(projectInput.multiple).toBe(true);
     });
   });
 
@@ -724,12 +722,12 @@ describe('HeaderBar', () => {
       const el = headerBar.render();
       const inputs = el.querySelectorAll('input[type="file"]');
       const projectInput = Array.from(inputs).find(
-        (input) => (input as HTMLInputElement).accept === '.orvproject',
+        (input) => (input as HTMLInputElement).accept.includes('.orvproject'),
       ) as HTMLInputElement;
 
       // Create a mock file and dispatch change event
       const file = new File([''], 'test.orvproject');
-      Object.defineProperty(projectInput, 'files', { value: [file] });
+      Object.defineProperty(projectInput, 'files', { value: [file], configurable: true });
       projectInput.dispatchEvent(new Event('change'));
 
       expect(callback).toHaveBeenCalledWith({ file });
