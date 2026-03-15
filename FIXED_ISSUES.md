@@ -2499,3 +2499,20 @@ The `URLSession` interface gained `allSources` for URL-based lookup. `SessionURL
 **Files changed**:
 - `src/compat/MuSourceBridge.ts` (previously fixed)
 - `src/compat/__tests__/MuSourceBridge.test.ts`
+
+## Issue #257: Mu compat playback-health commands are marked supported but only expose hardcoded or never-updated local state
+
+**Root cause**: `skipped()`, `mbps()`, `isBuffering()`, `isCurrentFrameIncomplete()`, and `isCurrentFrameError()` all returned hardcoded or never-updated local state instead of querying the real playback engine.
+
+**Fix**:
+- `skipped()` now delegates to `playback.getDroppedFrameCount()` (real `PlaybackEngine.droppedFrameCount`)
+- `isBuffering()` now delegates to `playback.isBuffering()` (real `PlaybackEngine.isBuffering`)
+- `mbps()`/`resetMbps()`/`isCurrentFrameIncomplete()`/`isCurrentFrameError()` honestly marked as unsupported since the web engine doesn't track those metrics
+- Added `isBuffering()` and `getDroppedFrameCount()` to `PlaybackAPI`
+
+**Tests added**: Updated existing tests + added support status verification tests.
+
+**Files changed**:
+- `src/api/PlaybackAPI.ts`
+- `src/compat/MuCommands.ts`
+- `src/compat/__tests__/MuCommands.test.ts`

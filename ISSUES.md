@@ -4,19 +4,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 
 ## Confirmed Issues
 
-### 257. Mu compat playback-health commands are marked supported but only expose hardcoded or never-updated local state
-
-- Severity: Medium
-- Area: Mu compatibility / playback telemetry
-- Evidence:
-  - `skipped()` returns the private `_skippedFrames` field, but production source search finds no non-test code that ever increments or synchronizes that field; it is only initialized to `0` in [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L134) and read in [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L301) through [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L304).
-  - `mbps()` likewise returns the private `_mbps` field, and `resetMbps()` only sets that same local field back to `0` in [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L135) and [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L321) through [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L329); there is no non-test writer that records real throughput.
-  - `isCurrentFrameIncomplete()`, `isCurrentFrameError()`, and `isBuffering()` are all marked supported in the command manifest in [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L97) through [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L100), but their implementations are hardcoded `false` in [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L306) through [src/compat/MuCommands.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuCommands.ts#L319) despite the real app having buffering state in [src/core/session/SessionPlayback.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionPlayback.ts#L148), [src/core/session/PlaybackEngine.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaybackEngine.ts#L371), and [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L616).
-  - The compat tests explicitly validate the inert behavior: `skipped()` returns `0`, `mbps()` returns `0`, and the three health booleans return `false` in [src/compat/__tests__/MuCommands.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuCommands.test.ts#L295) through [src/compat/__tests__/MuCommands.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuCommands.test.ts#L315).
-- Impact:
-  - Mu-compatible scripts can query playback health and receive clean-looking values even while the real player is buffering, skipping frames, or experiencing decode issues.
-  - That is more misleading than an unsupported-path warning because the API reports a valid state snapshot that never came from the actual playback engine.
-
 ### 258. Mu compat media-representation node APIs return fabricated node names that are never created in a real graph
 
 - Severity: Medium
