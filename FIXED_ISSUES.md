@@ -2516,3 +2516,18 @@ The `URLSession` interface gained `allSources` for URL-based lookup. `SessionURL
 - `src/api/PlaybackAPI.ts`
 - `src/compat/MuCommands.ts`
 - `src/compat/__tests__/MuCommands.test.ts`
+
+## Issue #395: `.rv` / `.gto` imports behave differently depending on whether users choose `Open media file` or `Open project`
+
+**Root cause**: "Open media file" called `session.loadFromGTO()` directly, bypassing `AppPersistenceManager.openProject()` which creates a safety checkpoint and performs control resync.
+
+**Fix**: "Open media file" now emits `openProject` event with `{ file, availableFiles }` for `.rv`/`.gto` files, routing through the same `AppPersistenceManager.openProject()` path. The event type was updated to carry optional companion files. `openProject()` gained an optional `availableFiles` parameter.
+
+**Tests added**: 4 regression tests — 3 in `HeaderBar.test.ts` (HDR-U027 through HDR-U029) verifying `.rv`/`.gto` files emit `openProject` instead of direct `loadFromGTO`; 1 in `AppPersistenceManager.test.ts` (APM-088b) verifying `availableFiles` forwarding.
+
+**Files changed**:
+- `src/ui/components/layout/HeaderBar.ts`
+- `src/AppPersistenceManager.ts`
+- `src/AppPlaybackWiring.ts`
+- `src/ui/components/layout/HeaderBar.test.ts`
+- `src/AppPersistenceManager.test.ts`

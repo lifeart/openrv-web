@@ -491,19 +491,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The shipped main file-open affordance does more than its label suggests, which makes session import paths harder to discover correctly and easier to misunderstand.
   - That overlaps awkwardly with the separate `Open project` affordance, since both buttons can open non-media session-like files through different semantics.
 
-### 395. `.rv` / `.gto` imports behave differently depending on whether users choose `Open media file` or `Open project`
-
-- Severity: Medium
-- Area: Session import workflow consistency
-- Evidence:
-  - The `Open media file` path loads RV/GTO sessions directly via `session.loadFromGTO(...)` in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1419) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1436).
-  - The `Open project` path routes the same file types through `AppPersistenceManager.openProject(...)`, which first creates a safety checkpoint and then performs extra control resync after `loadFromGTO(...)` in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L385) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L413).
-  - So the same `.rv` / `.gto` payload goes through materially different runtime steps depending on which header button the user used.
-- Impact:
-  - Users can get different rollback safety and different post-load UI truthfulness for the same session file based solely on which affordance they clicked.
-  - That makes session import behavior less predictable than it should be and increases the chance of subtle “works one way but not the other” reports.
-
-
 ### 401. Multi-select session import from `Open media file` only honors the first `.rv` / `.gto` file and silently demotes the rest to sidecars
 
 - Severity: Medium
