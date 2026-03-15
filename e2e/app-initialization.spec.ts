@@ -68,7 +68,7 @@ test.describe('Application Initialization', () => {
     await page.waitForSelector('#app');
 
     // Folder/Open button should exist
-    const openButton = page.locator('button[title*="Open media"]');
+    const openButton = page.locator('button[title*="Open file"]');
     await expect(openButton).toBeVisible();
   });
 

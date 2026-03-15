@@ -228,7 +228,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this.container.appendChild(this.projectInput);
 
     // Open button (media) — icon-only for compactness
-    fileGroup.appendChild(this.createIconButton('folder', '', () => this.fileInput.click(), 'Open media file'));
+    fileGroup.appendChild(this.createIconButton('folder', '', () => this.fileInput.click(), 'Open file'));
 
     // Save Project button — icon-only
     fileGroup.appendChild(

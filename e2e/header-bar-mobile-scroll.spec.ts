@@ -84,7 +84,7 @@ test.describe('HeaderBar Mobile Scroll', () => {
 
   test('HDRSCROLL-005: file operation buttons should be visible without scrolling', async ({ page }) => {
     // File operations group is first in the header bar, should be visible without scroll
-    const openButton = page.locator('button[title*="Open media"]');
+    const openButton = page.locator('button[title*="Open file"]');
     await expect(openButton).toBeVisible();
 
     // Check it's within the viewport (not scrolled out)
