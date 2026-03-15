@@ -31,7 +31,7 @@ export type { ViewerProvider, ColorAdjustmentProvider, CDLProvider, CurvesProvid
 
 export { PlaybackAPI } from './PlaybackAPI';
 export { MediaAPI } from './MediaAPI';
-export type { SourceInfo } from './MediaAPI';
+export type { SourceInfo, RepresentationInfo } from './MediaAPI';
 export { AudioAPI } from './AudioAPI';
 export { LoopAPI } from './LoopAPI';
 export { ViewAPI } from './ViewAPI';

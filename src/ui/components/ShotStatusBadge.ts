@@ -17,9 +17,12 @@ import { DropdownMenu } from './shared/DropdownMenu';
 /** Human-readable labels for each status */
 const STATUS_LABELS: Record<ShotStatus, string> = {
   pending: 'Pending',
+  'in-review': 'In Review',
   approved: 'Approved',
   'needs-work': 'Needs Work',
   cbb: 'Could Be Better',
+  final: 'Final',
+  'on-hold': 'On Hold',
   omit: 'Omit',
 };
 

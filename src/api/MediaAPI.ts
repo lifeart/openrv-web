@@ -7,6 +7,7 @@
 import type { Session } from '../core/session/Session';
 import type { PatternName, GradientDirection } from '../nodes/sources/ProceduralSourceNode';
 import type { AppPersistenceManager } from '../AppPersistenceManager';
+import type { MediaRepresentation } from '../core/types/representation';
 import { DisposableAPI } from './Disposable';
 import { getCurrentSourceStartFrame } from '../utils/media/SourceUIState';
 
@@ -279,4 +280,69 @@ export class MediaAPI extends DisposableAPI {
     void this.persistenceManager?.checkpointBeforeClearSources();
     this.session.clearSources();
   }
+
+  // --- Representation management ---
+
+  /**
+   * Get all representations for a source.
+   *
+   * @param sourceIndex - Index of the source (defaults to the current source)
+   * @returns Array of representation info objects, or an empty array
+   */
+  getRepresentations(sourceIndex?: number): RepresentationInfo[] {
+    this.assertNotDisposed();
+    const idx = sourceIndex ?? this.session.currentSourceIndex;
+    const source = this.session.getSourceByIndex(idx);
+    if (!source?.representations) return [];
+    return source.representations.map(toRepresentationInfo);
+  }
+
+  /**
+   * Get the currently active representation for a source.
+   *
+   * @param sourceIndex - Index of the source (defaults to the current source)
+   * @returns The active representation info, or null
+   */
+  getActiveRepresentation(sourceIndex?: number): RepresentationInfo | null {
+    this.assertNotDisposed();
+    const idx = sourceIndex ?? this.session.currentSourceIndex;
+    const rep = this.session.getActiveRepresentation(idx);
+    return rep ? toRepresentationInfo(rep) : null;
+  }
+
+  /**
+   * Switch the active representation for a source.
+   *
+   * @param repId - ID of the representation to switch to
+   * @param sourceIndex - Index of the source (defaults to the current source)
+   * @returns Promise that resolves to true if the switch succeeded
+   */
+  async switchRepresentation(repId: string, sourceIndex?: number): Promise<boolean> {
+    this.assertNotDisposed();
+    const idx = sourceIndex ?? this.session.currentSourceIndex;
+    return this.session.switchRepresentation(idx, repId, { userInitiated: true });
+  }
+}
+
+/**
+ * Public representation info returned by the API (no internal objects exposed).
+ */
+export interface RepresentationInfo {
+  id: string;
+  label: string;
+  kind: string;
+  status: string;
+  resolution: { width: number; height: number };
+  priority: number;
+}
+
+function toRepresentationInfo(rep: MediaRepresentation): RepresentationInfo {
+  return {
+    id: rep.id,
+    label: rep.label,
+    kind: rep.kind,
+    status: rep.status,
+    resolution: { width: rep.resolution.width, height: rep.resolution.height },
+    priority: rep.priority,
+  };
 }

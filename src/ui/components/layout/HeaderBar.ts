@@ -27,6 +27,7 @@ import { Z_INDEX, SHADOWS } from '../shared/theme';
 import { SUPPORTED_MEDIA_ACCEPT } from '../../../utils/media/SupportedMediaFormats';
 import type { LayoutPreset, LayoutPresetId } from '../../layout/LayoutStore';
 import { ShotStatusBadge } from '../ShotStatusBadge';
+import { RepresentationSelector } from '../RepresentationSelector';
 
 export interface HeaderBarEvents extends EventMap {
   showShortcuts: void;
@@ -86,6 +87,8 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
 
   // Shot status badge
   private shotStatusBadge: ShotStatusBadge;
+  // Representation selector
+  private representationSelector: RepresentationSelector;
 
   // Overflow fade indicators
   private fadeLeft!: HTMLElement;
@@ -101,6 +104,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this.timecodeDisplay = new TimecodeDisplay(session);
     this.themeControl = new ThemeControl();
     this.shotStatusBadge = new ShotStatusBadge(session);
+    this.representationSelector = new RepresentationSelector(session);
 
     // Create wrapper (position: relative to anchor fade overlays)
     this.wrapper = document.createElement('div');
@@ -282,6 +286,9 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
 
     // === SHOT STATUS BADGE ===
     this.container.appendChild(this.shotStatusBadge.render());
+
+    // === REPRESENTATION SELECTOR ===
+    this.container.appendChild(this.representationSelector.render());
 
     // === AUTO-SAVE INDICATOR SLOT ===
     this.autoSaveSlot = document.createElement('div');
@@ -1399,10 +1406,15 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
 
     if (sessionFile) {
       // If we have a session file, treat other files as potential media sources
-      const availableFiles = new Map<string, File>();
+      const availableFiles = new Map<string, File[]>();
       for (const file of fileArray) {
         if (file !== sessionFile) {
-          availableFiles.set(file.name, file);
+          const existing = availableFiles.get(file.name);
+          if (existing) {
+            existing.push(file);
+          } else {
+            availableFiles.set(file.name, [file]);
+          }
         }
       }
 
@@ -1566,6 +1578,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this.timecodeDisplay.dispose();
     this.themeControl.dispose();
     this.shotStatusBadge.dispose();
+    this.representationSelector.dispose();
   }
 
   getTimecodeDisplay(): TimecodeDisplay {
@@ -1574,6 +1587,10 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
 
   getShotStatusBadge(): ShotStatusBadge {
     return this.shotStatusBadge;
+  }
+
+  getRepresentationSelector(): RepresentationSelector {
+    return this.representationSelector;
   }
 
   /**

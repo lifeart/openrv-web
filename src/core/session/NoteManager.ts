@@ -25,6 +25,7 @@ export interface Note {
   color: string; // Hex color (default '#fbbf24')
   priority: NotePriority; // Priority level (default 'medium')
   category: string; // Category/department tag (default '')
+  externalId: string | null; // Remote system ID (e.g. ShotGrid note ID) for deduplication
 }
 
 /**
@@ -71,9 +72,10 @@ export class NoteManager {
     frameEnd: number,
     text: string,
     author: string,
-    options?: { parentId?: string; color?: string; priority?: NotePriority; category?: string },
+    options?: { parentId?: string; color?: string; priority?: NotePriority; category?: string; createdAt?: string; status?: NoteStatus; externalId?: string },
   ): Note {
     const now = new Date().toISOString();
+    const createdAt = options?.createdAt ?? now;
     const note: Note = {
       id: crypto.randomUUID(),
       sourceIndex,
@@ -81,13 +83,14 @@ export class NoteManager {
       frameEnd,
       text,
       author,
-      createdAt: now,
+      createdAt,
       modifiedAt: now,
-      status: 'open',
+      status: options?.status ?? 'open',
       parentId: options?.parentId ?? null,
       color: options?.color ?? '#fbbf24',
       priority: options?.priority ?? 'medium',
       category: options?.category ?? '',
+      externalId: options?.externalId ?? null,
     };
     this._notes.set(note.id, note);
     this.notifyChange();
@@ -188,6 +191,18 @@ export class NoteManager {
       }
     }
     return result;
+  }
+
+  /**
+   * Find a note by its external system ID (e.g. ShotGrid note ID).
+   */
+  findNoteByExternalId(externalId: string): Note | undefined {
+    for (const note of this._notes.values()) {
+      if (note.externalId === externalId) {
+        return { ...note };
+      }
+    }
+    return undefined;
   }
 
   /**

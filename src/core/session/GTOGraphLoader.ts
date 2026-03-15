@@ -455,6 +455,10 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
                 const val = notesComp.property(`${p}_category`)?.value() as string | undefined;
                 return typeof val === 'string' ? val : '';
               })(),
+              externalId: (() => {
+                const val = notesComp.property(`${p}_externalId`)?.value() as string | undefined;
+                return typeof val === 'string' && val.length > 0 ? val : null;
+              })(),
             });
           }
         }
