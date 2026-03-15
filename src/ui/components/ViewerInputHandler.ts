@@ -747,8 +747,13 @@ export class ViewerInputHandler {
           { type: 'warning', title: 'Mixed Selection' },
         );
       }
-      // Remove the EDL file from the array so remaining media files can still be loaded
-      const remainingFiles = fileArray.filter((f) => f !== edlFile);
+      // Remove the EDL file and any session files from the array so remaining media files can still be loaded
+      const remainingFiles = fileArray.filter(
+        (f) =>
+          f !== edlFile &&
+          !f.name.toLowerCase().endsWith('.rv') &&
+          !f.name.toLowerCase().endsWith('.gto'),
+      );
       try {
         const text = await edlFile.text();
         const entries = session.loadEDL(text);
