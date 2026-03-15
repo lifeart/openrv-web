@@ -2,34 +2,34 @@
 
 ## Classes
 
-- [AudioAPI](classes/AudioAPI.md)
-- [ColorAPI](classes/ColorAPI.md)
-- [EventsAPI](classes/EventsAPI.md)
-- [LoopAPI](classes/LoopAPI.md)
-- [MarkersAPI](classes/MarkersAPI.md)
-- [MediaAPI](classes/MediaAPI.md)
-- [OpenRVAPI](classes/OpenRVAPI.md)
-- [PlaybackAPI](classes/PlaybackAPI.md)
-- [ViewAPI](classes/ViewAPI.md)
+- `AudioAPI` — Volume, mute, pitch correction, audio scrub control
+- `ColorAPI` — Color adjustments, CDL, curves
+- `EventsAPI` — Public event subscription system (on/off/once)
+- `LoopAPI` — Loop mode and in/out point control
+- `MarkersAPI` — Timeline marker management
+- `MediaAPI` — Source information, resolution, duration, FPS
+- `OpenRVAPI` — Top-level API facade exposed at `window.openrv`
+- `PlaybackAPI` — Play, pause, seek, step, speed control
+- `ViewAPI` — Zoom, pan, fit modes, channel isolation
 
 ## Interfaces
 
-- [BlendModeContribution](interfaces/BlendModeContribution.md)
-- [CDLProvider](interfaces/CDLProvider.md)
-- [ColorAdjustmentProvider](interfaces/ColorAdjustmentProvider.md)
-- [CurvesProvider](interfaces/CurvesProvider.md)
-- [MarkerInfo](interfaces/MarkerInfo.md)
-- [OpenRVAPIConfig](interfaces/OpenRVAPIConfig.md)
-- [OpenRVEventData](interfaces/OpenRVEventData.md)
-- [Plugin](interfaces/Plugin.md)
-- [PluginContext](interfaces/PluginContext.md)
-- [PluginManifest](interfaces/PluginManifest.md)
-- [PublicColorAdjustments](interfaces/PublicColorAdjustments.md)
-- [PublicColorCurvesData](interfaces/PublicColorCurvesData.md)
-- [PublicColorCurvesUpdate](interfaces/PublicColorCurvesUpdate.md)
-- [SourceInfo](interfaces/SourceInfo.md)
-- [UIPanelContribution](interfaces/UIPanelContribution.md)
-- [ViewerProvider](interfaces/ViewerProvider.md)
+- `BlendModeContribution` — Plugin contribution for custom blend modes
+- `CDLProvider` — Color Decision List (slope/offset/power/saturation) data
+- `ColorAdjustmentProvider` — Primary color correction values
+- `CurvesProvider` — Per-channel curve point data
+- `MarkerInfo` — Marker with frame, note, color, and optional duration
+- `OpenRVAPIConfig` — Configuration passed to `OpenRVAPI` constructor
+- `OpenRVEventData` — Event data types for each `OpenRVEventName`
+- `Plugin` — Plugin definition with lifecycle hooks
+- `PluginContext` — Context provided to plugin `activate()` / `deactivate()`
+- `PluginManifest` — Plugin metadata (id, name, version, dependencies)
+- `PublicColorAdjustments` — All color adjustment properties
+- `PublicColorCurvesData` — Full curves state (master + per-channel)
+- `PublicColorCurvesUpdate` — Partial curves update payload
+- `SourceInfo` — Loaded source metadata (name, type, dimensions, fps)
+- `UIPanelContribution` — Plugin contribution for custom UI panels
+- `ViewerProvider` — Viewer abstraction used by the API layer
 
 ## Type Aliases
 
@@ -37,7 +37,7 @@
 
 > **ExporterContribution** = `BlobExporterContribution` \| `TextExporterContribution`
 
-Defined in: [plugin/types.ts:178](https://github.com/lifeart/openrv-web/blob/c0dd53144dcb872c686e6581e476322380198403/src/plugin/types.ts#L178)
+Defined in: [plugin/types.ts:178](https://github.com/lifeart/openrv-web/blob/855018687f3c1558e450abc7baf6913f0784de0e/src/plugin/types.ts#L178)
 
 Union of all exporter contribution types
 
@@ -45,9 +45,9 @@ Union of all exporter contribution types
 
 ### OpenRVEventName
 
-> **OpenRVEventName** = `"frameChange"` \| `"play"` \| `"pause"` \| `"stop"` \| `"speedChange"` \| `"volumeChange"` \| `"muteChange"` \| `"audioScrubEnabledChange"` \| `"loopModeChange"` \| `"inOutChange"` \| `"markerChange"` \| `"sourceLoadingStarted"` \| `"sourceLoaded"` \| `"sourceLoadFailed"` \| `"viewTransformChanged"` \| `"renderedImagesChanged"` \| `"representationChanged"` \| `"fallbackActivated"` \| `"playlistEnded"` \| `"error"`
+> **OpenRVEventName** = `"frameChange"` \| `"play"` \| `"pause"` \| `"stop"` \| `"speedChange"` \| `"volumeChange"` \| `"muteChange"` \| `"audioScrubEnabledChange"` \| `"loopModeChange"` \| `"inOutChange"` \| `"markerChange"` \| `"sourceLoaded"` \| `"error"`
 
-Defined in: [api/EventsAPI.ts:15](https://github.com/lifeart/openrv-web/blob/c0dd53144dcb872c686e6581e476322380198403/src/api/EventsAPI.ts#L15)
+Defined in: [api/EventsAPI.ts:15](https://github.com/lifeart/openrv-web/blob/855018687f3c1558e450abc7baf6913f0784de0e/src/api/EventsAPI.ts#L15)
 
 Events that can be subscribed to via the public API
 
@@ -55,9 +55,9 @@ Events that can be subscribed to via the public API
 
 ### PluginContributionType
 
-> **PluginContributionType** = `"decoder"` \| `"node"` \| `"tool"` \| `"exporter"` \| `"blendMode"` \| `"uiPanel"`
+> **PluginContributionType** = `"decoder"` \| `"node"` \| `"processor"` \| `"tool"` \| `"exporter"` \| `"blendMode"` \| `"uiPanel"`
 
-Defined in: [plugin/types.ts:44](https://github.com/lifeart/openrv-web/blob/c0dd53144dcb872c686e6581e476322380198403/src/plugin/types.ts#L44)
+Defined in: [plugin/types.ts:44](https://github.com/lifeart/openrv-web/blob/855018687f3c1558e450abc7baf6913f0784de0e/src/plugin/types.ts#L44)
 
 ***
 
@@ -65,7 +65,7 @@ Defined in: [plugin/types.ts:44](https://github.com/lifeart/openrv-web/blob/c0dd
 
 > **PluginId** = `string`
 
-Defined in: [plugin/types.ts:17](https://github.com/lifeart/openrv-web/blob/c0dd53144dcb872c686e6581e476322380198403/src/plugin/types.ts#L17)
+Defined in: [plugin/types.ts:17](https://github.com/lifeart/openrv-web/blob/855018687f3c1558e450abc7baf6913f0784de0e/src/plugin/types.ts#L17)
 
 Unique plugin identifier, reverse-domain style: "com.example.myformat"
 
@@ -75,7 +75,7 @@ Unique plugin identifier, reverse-domain style: "com.example.myformat"
 
 > **PluginState** = `"registered"` \| `"initialized"` \| `"active"` \| `"inactive"` \| `"disposed"` \| `"error"`
 
-Defined in: [plugin/types.ts:57](https://github.com/lifeart/openrv-web/blob/c0dd53144dcb872c686e6581e476322380198403/src/plugin/types.ts#L57)
+Defined in: [plugin/types.ts:57](https://github.com/lifeart/openrv-web/blob/855018687f3c1558e450abc7baf6913f0784de0e/src/plugin/types.ts#L57)
 
 ---
 
@@ -83,7 +83,7 @@ Defined in: [plugin/types.ts:57](https://github.com/lifeart/openrv-web/blob/c0dd
 
 The `PluginEventSubscription` interface is provided to each plugin via `context.events`. All subscriptions are tracked per-plugin and automatically cleaned up on deactivation.
 
-Defined in: [plugin/PluginEventBus.ts](https://github.com/lifeart/openrv-web/blob/c0dd53144dcb872c686e6581e476322380198403/src/plugin/PluginEventBus.ts)
+Defined in: [plugin/PluginEventBus.ts](https://github.com/lifeart/openrv-web/blob/855018687f3c1558e450abc7baf6913f0784de0e/src/plugin/PluginEventBus.ts)
 
 ### Methods
 
@@ -98,28 +98,21 @@ Defined in: [plugin/PluginEventBus.ts](https://github.com/lifeart/openrv-web/blo
 
 Application events are prefixed with `app:` and map directly to the corresponding `OpenRVEventName` values from the public API:
 
-| Event | Data | Status |
-|-------|------|--------|
-| `app:frameChange` | `{ frame }` | Active |
-| `app:play` | (none) | Active |
-| `app:pause` | (none) | Active |
-| `app:stop` | (none) | Active |
-| `app:speedChange` | `{ speed }` | Active |
-| `app:volumeChange` | `{ volume }` | Active |
-| `app:muteChange` | `{ muted }` | Active |
-| `app:audioScrubEnabledChange` | `{ enabled }` | Active |
-| `app:loopModeChange` | `{ mode }` | Active |
-| `app:inOutChange` | `{ inPoint, outPoint }` | Active |
-| `app:markerChange` | `{ markers: [{ frame, note, color }] }` | Active |
-| `app:sourceLoadingStarted` | `{ name }` | Active |
-| `app:sourceLoaded` | `{ name, type, width, height, duration, fps }` | Active |
-| `app:sourceLoadFailed` | `{ name, error }` | Active |
-| `app:viewTransformChanged` | `{ transform }` | Active |
-| `app:renderedImagesChanged` | `{ images }` | Active |
-| `app:representationChanged` | `{ representationId, kind }` | Active |
-| `app:fallbackActivated` | `{ representationId, reason }` | Active |
-| `app:playlistEnded` | (none) | Active |
-| `app:error` | `{ message, code? }` | Active |
+| Event | Data |
+|-------|------|
+| `app:frameChange` | `{ frame }` |
+| `app:play` | (none) |
+| `app:pause` | (none) |
+| `app:stop` | (none) |
+| `app:speedChange` | `{ speed }` |
+| `app:volumeChange` | `{ volume }` |
+| `app:muteChange` | `{ muted }` |
+| `app:audioScrubEnabledChange` | `{ enabled }` |
+| `app:loopModeChange` | `{ mode }` |
+| `app:inOutChange` | `{ inPoint, outPoint }` |
+| `app:markerChange` | `{ markers: [{ frame, note, color }] }` |
+| `app:sourceLoaded` | `{ name, type, width, height, duration, fps }` |
+| `app:error` | `{ message, code? }` |
 
 ### Plugin Lifecycle Events
 
@@ -135,7 +128,7 @@ Application events are prefixed with `app:` and map directly to the correspondin
 
 The `PluginSettingsAccessor` interface is provided to each plugin via `context.settings`. It requires a `settingsSchema` in the plugin manifest.
 
-Defined in: [plugin/PluginSettingsStore.ts](https://github.com/lifeart/openrv-web/blob/c0dd53144dcb872c686e6581e476322380198403/src/plugin/PluginSettingsStore.ts)
+Defined in: [plugin/PluginSettingsStore.ts](https://github.com/lifeart/openrv-web/blob/855018687f3c1558e450abc7baf6913f0784de0e/src/plugin/PluginSettingsStore.ts)
 
 ### Methods
 
@@ -162,13 +155,11 @@ Settings are validated against their declared type:
 
 ---
 
-## HotReloadManager (Dev-only / Internal)
-
-> **Warning:** This class is **not part of the public API**. It lives under `src/plugin/dev/` and is **not exported** from `src/api/index.ts`. It is intended for development-time use only and may change or be removed without notice. Do not depend on it in production plugin code.
+## HotReloadManager
 
 Development-time hot reload support for plugins. Allows reloading plugin modules without restarting the application, optionally preserving state across reloads via `getState()`/`restoreState()` lifecycle hooks.
 
-Defined in: [plugin/dev/HotReloadManager.ts](https://github.com/lifeart/openrv-web/blob/c0dd53144dcb872c686e6581e476322380198403/src/plugin/dev/HotReloadManager.ts)
+Defined in: [plugin/dev/HotReloadManager.ts](https://github.com/lifeart/openrv-web/blob/855018687f3c1558e450abc7baf6913f0784de0e/src/plugin/dev/HotReloadManager.ts)
 
 ### Methods
 
