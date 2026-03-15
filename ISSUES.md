@@ -503,18 +503,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Selecting multiple RV/GTO sessions does not import multiple sessions or ask the user which one to open; only the first one wins.
   - The remaining session files are silently treated like companion assets, which makes the multi-select affordance misleading and can hide user error during session import.
 
-### 403. Mixed `.rvedl` plus `.rv` or `.gto` selections always load only the EDL and silently ignore the session file
-
-- Severity: Medium
-- Area: Session import / file-open precedence
-- Evidence:
-  - Both main ingest paths check for `.rvedl` before they check for `.rv` / `.gto` and return immediately after the EDL branch in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1382) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1416) and [src/ui/components/ViewerInputHandler.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInputHandler.ts#L709) through [src/ui/components/ViewerInputHandler.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInputHandler.ts#L739).
-  - The `.rv` / `.gto` session-file branches only run afterward in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1420) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1443) and [src/ui/components/ViewerInputHandler.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInputHandler.ts#L743) through [src/ui/components/ViewerInputHandler.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInputHandler.ts#L763).
-- Impact:
-  - Selecting or dropping an EDL together with the RV/GTO session it belongs to does not give the user both pieces of the workflow; the session file is silently skipped.
-  - That makes mixed review-bundle imports less predictable and increases the chance that users think they opened a full session when they only imported cut metadata.
-
-
 ### 429. Share links claim to share comparison state, but clean recipients can only reconstruct one media source
 
 - Severity: Medium

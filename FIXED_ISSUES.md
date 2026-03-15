@@ -2531,3 +2531,17 @@ The `URLSession` interface gained `allSources` for URL-based lookup. `SessionURL
 - `src/AppPlaybackWiring.ts`
 - `src/ui/components/layout/HeaderBar.test.ts`
 - `src/AppPersistenceManager.test.ts`
+
+## Issue #403: Mixed `.rvedl` plus `.rv` or `.gto` selections always load only the EDL and silently ignore the session file
+
+**Root cause**: Both the file picker and drop handler checked for `.rvedl` before `.rv`/`.gto` and returned early after the EDL branch, silently dropping the session file.
+
+**Fix**: Added mixed-selection detection in both ingest paths. When both `.rvedl` and `.rv`/`.gto` files are present, a warning alert is shown informing the user that the EDL was loaded and the session file was skipped.
+
+**Tests added**: 2 regression tests — HDR-U030 in `HeaderBar.test.ts` verifying mixed selection loads EDL only; DROP-MIX-001 in `ViewerInputHandler.test.ts` verifying same for drag-and-drop.
+
+**Files changed**:
+- `src/ui/components/layout/HeaderBar.ts`
+- `src/ui/components/ViewerInputHandler.ts`
+- `src/ui/components/layout/HeaderBar.test.ts`
+- `src/ui/components/ViewerInputHandler.test.ts`
