@@ -14,27 +14,18 @@ import { frameToTimecode, formatTimecode } from '../ui/components/TimecodeDispla
 // Data Model
 // ---------------------------------------------------------------------------
 
-/**
- * Structured note data preserving per-note frame/timecode context.
- */
-export interface StructuredNote {
+export interface ReportNoteEntry {
   text: string;
-  author: string;
-  status: string;
-  frameStart: number | null;
-  frameEnd: number | null;
-  timecodeStart: string;
-  timecodeEnd: string;
+  priority: string;
+  category: string;
 }
 
 export interface ReportRow {
   shotName: string;
   versionLabel: string;
   status: ShotStatus;
-  /** Plain text notes (backward-compatible) */
   notes: string[];
-  /** Structured notes with per-note frame/timecode context */
-  structuredNotes: StructuredNote[];
+  noteEntries: ReportNoteEntry[];
   frameRange: string;
   timecodeIn: string;
   timecodeOut: string;
@@ -65,13 +56,7 @@ export interface ReportSource {
 }
 
 export interface ReportNoteManager {
-  getNotesForSource(sourceIndex: number): {
-    text: string;
-    author?: string;
-    status?: string;
-    frameStart?: number;
-    frameEnd?: number;
-  }[];
+  getNotesForSource(sourceIndex: number): { text: string; priority?: string; category?: string }[];
 }
 
 export interface ReportStatusManager {
@@ -156,25 +141,14 @@ export function buildReportRows(
     const setBy = statusEntry?.setBy ?? '';
     const setAt = statusEntry?.setAt ?? '';
 
-    // Notes — build both plain-text (backward-compat) and structured arrays
+    // Notes
     const rawNotes = noteManager.getNotesForSource(i);
     const notes = rawNotes.map((n) => n.text);
-    const structuredNotes: StructuredNote[] = rawNotes.map((n) => {
-      const hasFrameData = n.frameStart !== undefined && n.frameEnd !== undefined;
-      const frameStart = hasFrameData ? n.frameStart! : null;
-      const frameEnd = hasFrameData ? n.frameEnd! : null;
-      const timecodeStart = frameStart !== null ? formatTimecode(frameToTimecode(frameStart, fps, 0)) : '';
-      const timecodeEnd = frameEnd !== null ? formatTimecode(frameToTimecode(frameEnd, fps, 0)) : '';
-      return {
-        text: n.text,
-        author: n.author ?? '',
-        status: n.status ?? '',
-        frameStart,
-        frameEnd,
-        timecodeStart,
-        timecodeEnd,
-      };
-    });
+    const noteEntries: ReportNoteEntry[] = rawNotes.map((n) => ({
+      text: n.text,
+      priority: n.priority ?? 'medium',
+      category: n.category ?? '',
+    }));
 
     // Frame range using editorial start frame
     const startFrame = source.startFrame ?? 1;
@@ -194,7 +168,7 @@ export function buildReportRows(
       versionLabel,
       status,
       notes,
-      structuredNotes,
+      noteEntries,
       frameRange,
       timecodeIn: tcIn,
       timecodeOut: tcOut,
@@ -224,33 +198,6 @@ function buildCSVHeaders(options: ReportOptions): string[] {
 }
 
 /**
- * Format a single structured note for CSV output.
- * Includes frame range / timecode and author when available.
- */
-function formatStructuredNoteForCSV(note: StructuredNote): string {
-  const parts: string[] = [];
-  if (note.frameStart !== null && note.frameEnd !== null) {
-    if (note.timecodeStart && note.timecodeEnd) {
-      parts.push(`[${note.timecodeStart}-${note.timecodeEnd}]`);
-    } else {
-      parts.push(`[${note.frameStart}-${note.frameEnd}]`);
-    }
-  }
-  if (note.author) {
-    parts.push(`${note.author}:`);
-  }
-  parts.push(note.text);
-  return parts.join(' ');
-}
-
-/**
- * Format all structured notes for a CSV notes field.
- */
-function formatNotesForCSV(notes: StructuredNote[]): string {
-  return notes.map(formatStructuredNoteForCSV).join('; ');
-}
-
-/**
  * Generate a CSV string from report rows. Uses CRLF line endings per RFC 4180.
  */
 export function generateCSV(rows: ReportRow[], options: ReportOptions): string {
@@ -264,7 +211,15 @@ export function generateCSV(rows: ReportRow[], options: ReportOptions): string {
     const fields: string[] = [row.shotName];
     if (options.includeVersions) fields.push(row.versionLabel);
     fields.push(row.status);
-    if (options.includeNotes) fields.push(formatNotesForCSV(row.structuredNotes));
+    if (options.includeNotes) {
+      const noteTexts = row.noteEntries.map((entry) => {
+        const tags: string[] = [];
+        if (entry.priority && entry.priority !== 'medium') tags.push(`[${entry.priority}]`);
+        if (entry.category) tags.push(`[${entry.category}]`);
+        return (tags.length > 0 ? tags.join(' ') + ' ' : '') + entry.text;
+      });
+      fields.push(noteTexts.join('; '));
+    }
     if (options.includeTimecodes) {
       fields.push(
         row.frameRange.split('-')[0] ?? '',
@@ -294,32 +249,6 @@ function buildHTMLHeaders(options: ReportOptions): string {
   return ths.join('');
 }
 
-/**
- * Format a single structured note as HTML with frame/timecode context.
- */
-function formatStructuredNoteHTML(note: StructuredNote): string {
-  const parts: string[] = [];
-  if (note.frameStart !== null && note.frameEnd !== null) {
-    const range = note.timecodeStart && note.timecodeEnd
-      ? `${escapeHTML(note.timecodeStart)}-${escapeHTML(note.timecodeEnd)}`
-      : `${note.frameStart}-${note.frameEnd}`;
-    parts.push(`<span style="color:#6366f1;font-size:0.85em;font-family:monospace;">[${range}]</span>`);
-  }
-  if (note.author) {
-    parts.push(`<strong>${escapeHTML(note.author)}</strong>:`);
-  }
-  parts.push(escapeHTML(note.text));
-  return parts.join(' ');
-}
-
-/**
- * Format all structured notes for an HTML table cell.
- */
-function formatNotesForHTML(notes: StructuredNote[]): string {
-  if (notes.length === 0) return '';
-  return notes.map(formatStructuredNoteHTML).join('<br>');
-}
-
 function statusBadgeHTML(status: ShotStatus): string {
   const color = STATUS_COLORS[status] ?? '#94a3b8';
   return `<span style="display:inline-block;padding:2px 8px;border-radius:4px;background:${color};color:#fff;font-weight:600;font-size:0.85em;">${escapeHTML(status)}</span>`;
@@ -341,13 +270,46 @@ export function generateHTML(rows: ReportRow[], options: ReportOptions): string 
     .map(([s, c]) => `${statusBadgeHTML(s as ShotStatus)} ${c}`)
     .join(' &nbsp; ');
 
+  // Category-based statistics
+  const categoryCounts: Record<string, number> = {};
+  for (const row of rows) {
+    for (const entry of row.noteEntries) {
+      if (entry.category) {
+        categoryCounts[entry.category] = (categoryCounts[entry.category] ?? 0) + 1;
+      }
+    }
+  }
+  const categoryParts = Object.entries(categoryCounts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([cat, count]) => `<span style="display:inline-block;padding:2px 8px;border-radius:4px;background:#e2e8f0;color:#1a1a2e;font-size:0.85em;">${escapeHTML(cat)}: ${count}</span>`)
+    .join(' &nbsp; ');
+  const categorySection = categoryParts
+    ? `<div class="category-stats" style="margin:0.5em 0;"><strong>Notes by category:</strong> ${categoryParts}</div>`
+    : '';
+
   // Table rows (columns match dynamic headers)
   const tableRows = rows
     .map((row) => {
       const cells: string[] = [`<td>${escapeHTML(row.shotName)}</td>`];
       if (options.includeVersions) cells.push(`<td>${escapeHTML(row.versionLabel)}</td>`);
       cells.push(`<td>${statusBadgeHTML(row.status)}</td>`);
-      if (options.includeNotes) cells.push(`<td>${formatNotesForHTML(row.structuredNotes)}</td>`);
+      if (options.includeNotes) {
+        const noteLines = row.noteEntries.map((entry) => {
+          let line = escapeHTML(entry.text);
+          const tags: string[] = [];
+          if (entry.priority && entry.priority !== 'medium') {
+            tags.push(`<span style="font-size:0.8em;color:#666;">[${escapeHTML(entry.priority)}]</span>`);
+          }
+          if (entry.category) {
+            tags.push(`<span style="font-size:0.8em;color:#666;">[${escapeHTML(entry.category)}]</span>`);
+          }
+          if (tags.length > 0) {
+            line = tags.join(' ') + ' ' + line;
+          }
+          return line;
+        });
+        cells.push(`<td>${noteLines.join('<br>')}</td>`);
+      }
       if (options.includeTimecodes) {
         cells.push(
           `<td>${escapeHTML(row.frameRange)}</td>`,
@@ -387,6 +349,7 @@ export function generateHTML(rows: ReportRow[], options: ReportOptions): string 
 <h1>${escapeHTML(title)}</h1>
 ${dateRange}
 <div class="summary">${summaryParts}</div>
+${categorySection}
 <table>
 <thead>
 <tr>

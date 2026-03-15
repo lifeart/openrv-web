@@ -3,7 +3,10 @@
  */
 export type NoteStatus = 'open' | 'resolved' | 'wontfix';
 
-const VALID_STATUSES: ReadonlySet<string> = new Set<NoteStatus>(['open', 'resolved', 'wontfix']);
+/**
+ * Note priority levels
+ */
+export type NotePriority = 'low' | 'medium' | 'high' | 'critical';
 
 /**
  * A note/comment attached to a frame range on a specific media source
@@ -20,15 +23,8 @@ export interface Note {
   status: NoteStatus;
   parentId: string | null; // null = top-level, string = reply
   color: string; // Hex color (default '#fbbf24')
-  externalId: string | null; // Remote system ID (e.g. ShotGrid note ID) for deduplication
-}
-
-/**
- * Result of a fromSerializable import operation.
- */
-export interface ImportResult {
-  imported: number;
-  rejected: number;
+  priority: NotePriority; // Priority level (default 'medium')
+  category: string; // Category/department tag (default '')
 }
 
 /**
@@ -75,10 +71,9 @@ export class NoteManager {
     frameEnd: number,
     text: string,
     author: string,
-    options?: { parentId?: string; color?: string; createdAt?: string; status?: NoteStatus; externalId?: string },
+    options?: { parentId?: string; color?: string; priority?: NotePriority; category?: string },
   ): Note {
     const now = new Date().toISOString();
-    const createdAt = options?.createdAt ?? now;
     const note: Note = {
       id: crypto.randomUUID(),
       sourceIndex,
@@ -86,12 +81,13 @@ export class NoteManager {
       frameEnd,
       text,
       author,
-      createdAt,
+      createdAt: now,
       modifiedAt: now,
-      status: options?.status ?? 'open',
+      status: 'open',
       parentId: options?.parentId ?? null,
       color: options?.color ?? '#fbbf24',
-      externalId: options?.externalId ?? null,
+      priority: options?.priority ?? 'medium',
+      category: options?.category ?? '',
     };
     this._notes.set(note.id, note);
     this.notifyChange();
@@ -102,15 +98,15 @@ export class NoteManager {
    * Update an existing note's text, status, or color.
    * Returns the updated note copy, or null if not found.
    */
-  updateNote(noteId: string, updates: Partial<Pick<Note, 'text' | 'status' | 'color' | 'frameStart' | 'frameEnd'>>): Note | null {
+  updateNote(noteId: string, updates: Partial<Pick<Note, 'text' | 'status' | 'color' | 'priority' | 'category'>>): Note | null {
     const note = this._notes.get(noteId);
     if (!note) return null;
 
     if (updates.text !== undefined) note.text = updates.text;
     if (updates.status !== undefined) note.status = updates.status;
     if (updates.color !== undefined) note.color = updates.color;
-    if (updates.frameStart !== undefined) note.frameStart = updates.frameStart;
-    if (updates.frameEnd !== undefined) note.frameEnd = updates.frameEnd;
+    if (updates.priority !== undefined) note.priority = updates.priority;
+    if (updates.category !== undefined) note.category = updates.category;
     note.modifiedAt = new Date().toISOString();
 
     this.notifyChange();
@@ -207,19 +203,6 @@ export class NoteManager {
     return result;
   }
 
-  /**
-   * Find a note by its external (remote system) ID.
-   * Returns the note copy if found, or undefined.
-   */
-  findNoteByExternalId(externalId: string): Note | undefined {
-    for (const note of this._notes.values()) {
-      if (note.externalId === externalId) {
-        return { ...note };
-      }
-    }
-    return undefined;
-  }
-
   // ---- Navigation ----
 
   /**
@@ -270,66 +253,14 @@ export class NoteManager {
   }
 
   /**
-   * Validate and sanitize a single note entry from external data.
-   * Returns a valid Note or null if required fields are missing/invalid.
+   * Restore notes from a serialized array (for load/import)
    */
-  private validateNoteEntry(entry: unknown): Note | null {
-    if (typeof entry !== 'object' || entry === null) return null;
-    const raw = entry as Record<string, unknown>;
-
-    // Required fields
-    if (typeof raw.frameStart !== 'number' || !Number.isFinite(raw.frameStart)) return null;
-    if (typeof raw.frameEnd !== 'number' || !Number.isFinite(raw.frameEnd)) return null;
-    if (typeof raw.text !== 'string') return null;
-
-    const now = new Date().toISOString();
-    const id = typeof raw.id === 'string' && raw.id.length > 0 ? raw.id : crypto.randomUUID();
-    const sourceIndex = typeof raw.sourceIndex === 'number' && Number.isFinite(raw.sourceIndex) ? raw.sourceIndex : 0;
-    const author = typeof raw.author === 'string' ? raw.author : '';
-    const status: NoteStatus =
-      typeof raw.status === 'string' && VALID_STATUSES.has(raw.status) ? (raw.status as NoteStatus) : 'open';
-    const createdAt = typeof raw.createdAt === 'string' && raw.createdAt.length > 0 ? raw.createdAt : now;
-    const modifiedAt = typeof raw.modifiedAt === 'string' && raw.modifiedAt.length > 0 ? raw.modifiedAt : now;
-    const parentId = typeof raw.parentId === 'string' ? raw.parentId : null;
-    const color = typeof raw.color === 'string' && raw.color.length > 0 ? raw.color : '#fbbf24';
-    const externalId = typeof raw.externalId === 'string' ? raw.externalId : null;
-
-    return {
-      id,
-      sourceIndex,
-      frameStart: raw.frameStart as number,
-      frameEnd: raw.frameEnd as number,
-      text: raw.text as string,
-      author,
-      createdAt,
-      modifiedAt,
-      status,
-      parentId,
-      color,
-      externalId,
-    };
-  }
-
-  /**
-   * Restore notes from a serialized array (for load/import).
-   * Validates each entry — invalid entries are silently dropped.
-   * Returns a summary of how many notes were imported vs rejected.
-   */
-  fromSerializable(notes: unknown[]): ImportResult {
+  fromSerializable(notes: Note[]): void {
     this._notes.clear();
-    let imported = 0;
-    let rejected = 0;
-    for (const entry of notes) {
-      const validated = this.validateNoteEntry(entry);
-      if (validated) {
-        this._notes.set(validated.id, validated);
-        imported++;
-      } else {
-        rejected++;
-      }
+    for (const note of notes) {
+      this._notes.set(note.id, { ...note });
     }
     this.notifyChange();
-    return { imported, rejected };
   }
 
   dispose(): void {

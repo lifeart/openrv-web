@@ -13,9 +13,6 @@ import type { VersionGroup, VersionEntry } from './VersionManager';
 import { VALID_STATUSES } from './StatusManager';
 import type { StatusEntry, ShotStatus } from './StatusManager';
 import type { IPNode } from '../../nodes/base/IPNode';
-import { stackCompositeToBlendModeWithInfo } from '../../composite/BlendModes';
-import { basename as basenameUtil } from '../../utils/path';
-import type { DegradedModeInfo } from '../../composite/BlendModes';
 
 /**
  * Parsed node information from GTO
@@ -30,28 +27,10 @@ export interface GTONodeInfo {
 /**
  * Result of parsing a GTO file
  */
-/**
- * A node type that was skipped during import because it is not yet implemented.
- */
-export interface SkippedNodeInfo {
-  /** The GTO object name (instance name) */
-  name: string;
-  /** The RV protocol (e.g. 'RVColor', 'RVTransform2D') */
-  protocol: string;
-  /** The mapped node type from PROTOCOL_TO_NODE_TYPE (if any) */
-  mappedType: string | null;
-  /** Reason the node was skipped */
-  reason: 'unmapped_protocol' | 'unregistered_type' | 'creation_failed';
-}
-
 export interface GTOParseResult {
   graph: Graph;
   nodes: Map<string, IPNode>;
   rootNode: IPNode | null;
-  /** Nodes that were skipped during import (mapped but unimplemented, or unknown) */
-  skippedNodes: SkippedNodeInfo[];
-  /** Composite modes that were silently degraded to a simpler blend mode */
-  degradedModes: DegradedModeInfo[];
   sessionInfo: {
     name: string;
     viewNode?: string;
@@ -64,8 +43,6 @@ export interface GTOParseResult {
     markerNotes?: string[];
     /** Marker colors (parallel array to marks) */
     markerColors?: string[];
-    /** Marker end frames (parallel array to marks; -1 means point marker) */
-    markerEndFrames?: number[];
     /** Real-time playback rate from GTO (0 means use fps) */
     realtime?: number;
     /** Frame increment for playback */
@@ -201,70 +178,12 @@ const PROTOCOL_TO_NODE_TYPE: Record<string, string> = {
 };
 
 /**
- * Resolve a file from the availableFiles map by matching the original path.
- *
- * When multiple files share the same basename, the resolver picks the one
- * whose `webkitRelativePath` (or falling back to `name`) shares the longest
- * common suffix of path segments with the original GTO path. If the
- * candidates are still ambiguous a console warning is emitted.
- *
- * @internal Exported for testing only.
- */
-export function resolveAvailableFile(
-  originalPath: string,
-  availableFiles: Map<string, File[]>,
-): File | undefined {
-  const base = basenameUtil(originalPath);
-  if (!base) return undefined;
-  const candidates = availableFiles.get(base);
-  if (!candidates || candidates.length === 0) return undefined;
-  if (candidates.length === 1) return candidates[0];
-
-  // Normalise the original path segments (lowercase for case-insensitive FS)
-  const origSegments = originalPath.split(/[/\\]/).filter(Boolean).map(s => s.toLowerCase());
-
-  let bestFile: File = candidates[0]!;
-  let bestScore = -1;
-
-  for (const file of candidates) {
-    // Use webkitRelativePath if available (folder-drop gives relative paths),
-    // otherwise fall back to name (just the basename).
-    const filePath = file.webkitRelativePath || file.name;
-    const fileSegments = filePath.split(/[/\\]/).filter(Boolean).map(s => s.toLowerCase());
-
-    // Count matching suffix segments (from the end)
-    let score = 0;
-    let oi = origSegments.length - 1;
-    let fi = fileSegments.length - 1;
-    while (oi >= 0 && fi >= 0 && origSegments[oi] === fileSegments[fi]) {
-      score++;
-      oi--;
-      fi--;
-    }
-
-    if (score > bestScore) {
-      bestScore = score;
-      bestFile = file;
-    }
-  }
-
-  // Warn when disambiguation was needed
-  console.warn(
-    `Duplicate basename "${base}": ${candidates.length} files share this name. ` +
-    `Resolved "${originalPath}" to "${bestFile.webkitRelativePath || bestFile.name}" ` +
-    `by longest path-suffix match.`,
-  );
-
-  return bestFile;
-}
-
-/**
  * Load node graph from an already-parsed GTODTO
  *
  * @param dto - Pre-parsed GTODTO object
  * @returns Parsed graph result with nodes and connections
  */
-export function loadGTOGraph(dto: GTODTO, availableFiles?: Map<string, File[]>): GTOParseResult {
+export function loadGTOGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOParseResult {
   try {
     return parseGTOToGraph(dto, availableFiles);
   } catch (err) {
@@ -276,11 +195,9 @@ export function loadGTOGraph(dto: GTODTO, availableFiles?: Map<string, File[]>):
 /**
  * Parse GTODTO into a Graph
  */
-function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File[]>): GTOParseResult {
+function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOParseResult {
   const graph = new Graph();
   const nodes = new Map<string, IPNode>();
-  const skippedNodes: SkippedNodeInfo[] = [];
-  const degradedModes: DegradedModeInfo[] = [];
   let rootNode: IPNode | null = null;
 
   // Session info
@@ -352,9 +269,9 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File[]>): GTO
       const marksValue = sessionComp.property('marks').value();
       if (Array.isArray(marksValue)) {
         const marks = marksValue.filter((value): value is number => typeof value === 'number');
-        // Fix #423: assign even when empty so importing a GTO with an empty
-        // marks array clears markers left over from the current session.
-        sessionInfo.marks = marks;
+        if (marks.length > 0) {
+          sessionInfo.marks = marks;
+        }
       }
 
       // Parse marker notes (parallel array to marks)
@@ -375,27 +292,12 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File[]>): GTO
         }
       }
 
-      // Parse marker end frames (parallel array to marks; -1 means point marker)
-      const markerEndFramesValue = sessionComp.property('markerEndFrames').value();
-      if (Array.isArray(markerEndFramesValue)) {
-        const markerEndFrames = markerEndFramesValue.filter((value): value is number => typeof value === 'number');
-        if (markerEndFrames.length > 0) {
-          sessionInfo.markerEndFrames = markerEndFrames;
-        }
-      }
-
-      // Prefer 'realtime' (actual playback fps) over 'fps' if both exist.
-      // Fix #133: realtime = 0 is a valid value meaning "play all frames",
-      // so check for undefined/null instead of treating 0 as falsy.
+      // Prefer 'realtime' (actual playback fps) over 'fps' if both exist
       const fps = sessionComp.property('fps').value() as number;
       const realtime = sessionComp.property('realtime').value() as number;
-      if (typeof realtime === 'number') {
+      if (typeof realtime === 'number' && realtime > 0) {
+        sessionInfo.fps = realtime;
         sessionInfo.realtime = realtime;
-        if (realtime > 0) {
-          sessionInfo.fps = realtime;
-        } else if (typeof fps === 'number' && fps > 0) {
-          sessionInfo.fps = fps;
-        }
       } else if (typeof fps === 'number' && fps > 0) {
         sessionInfo.fps = fps;
       }
@@ -516,8 +418,8 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File[]>): GTO
     const notesComp = session.component('notes');
     if (notesComp?.exists()) {
       const totalNotes = notesComp.property('totalNotes').value() as number;
-      const notes: Note[] = [];
       if (typeof totalNotes === 'number' && totalNotes > 0) {
+        const notes: Note[] = [];
         for (let i = 1; i <= totalNotes; i++) {
           const p = `note_${String(i).padStart(3, '0')}`;
           const id = notesComp.property(`${p}_id`).value() as string;
@@ -545,21 +447,29 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File[]>): GTO
               status: status === 'open' || status === 'resolved' || status === 'wontfix' ? status : 'open',
               parentId: typeof parentId === 'string' && parentId.length > 0 ? parentId : null,
               color: typeof color === 'string' ? color : '#fbbf24',
-              externalId: null,
+              priority: (() => {
+                const val = notesComp.property(`${p}_priority`)?.value() as string | undefined;
+                return val === 'low' || val === 'medium' || val === 'high' || val === 'critical' ? val : 'medium';
+              })(),
+              category: (() => {
+                const val = notesComp.property(`${p}_category`)?.value() as string | undefined;
+                return typeof val === 'string' ? val : '';
+              })(),
             });
           }
         }
+        if (notes.length > 0) {
+          sessionInfo.notes = notes;
+        }
       }
-      // Always assign when the component exists (even empty) so loadFromGTO can clear old data
-      sessionInfo.notes = notes;
     }
 
     // Versions component
     const versionsComp = session.component('versions');
     if (versionsComp?.exists()) {
       const groupCount = versionsComp.property('groupCount').value() as number;
-      const versionGroups: VersionGroup[] = [];
       if (typeof groupCount === 'number' && groupCount > 0) {
+        const versionGroups: VersionGroup[] = [];
         for (let g = 0; g < groupCount; g++) {
           const gp = `group_${String(g).padStart(3, '0')}`;
           const id = versionsComp.property(`${gp}_id`).value() as string;
@@ -600,9 +510,10 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File[]>): GTO
             }
           }
         }
+        if (versionGroups.length > 0) {
+          sessionInfo.versionGroups = versionGroups;
+        }
       }
-      // Always assign when the component exists (even empty) so loadFromGTO can clear old data
-      sessionInfo.versionGroups = versionGroups;
     }
   }
 
@@ -659,10 +570,8 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File[]>): GTO
   // references the group name, not the source node directly.
   const sourceGroupChildren = new Map<string, string[]>();
   const parsedStatuses: StatusEntry[] = [];
-  let hasSourceGroups = false;
   for (const obj of allObjects) {
     if (obj.protocol === 'RVSourceGroup') {
-      hasSourceGroups = true;
       // Find child source nodes by naming convention: <groupName>_source
       const groupName = obj.name;
       const children: string[] = [];
@@ -703,8 +612,7 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File[]>): GTO
       }
     }
   }
-  // Always assign when source groups exist (even empty) so loadFromGTO can clear old data
-  if (hasSourceGroups) {
+  if (parsedStatuses.length > 0) {
     sessionInfo.statuses = parsedStatuses;
   }
 
@@ -768,10 +676,12 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File[]>): GTO
 
           // If we have available files (user selected), check for name match
           if (availableFiles && availableFiles.size > 0) {
-            const file = resolveAvailableFile(movie, availableFiles);
+            // Extract basename from movie path (e.g., /path/to/video.mp4 -> video.mp4)
+            const basename = movie.split(/[/\\]/).pop();
 
-            if (file) {
+            if (basename && availableFiles.has(basename)) {
               // Found a match! Use the blob URL for loading
+              const file = availableFiles.get(basename)!;
               const blobUrl = URL.createObjectURL(file);
 
               nodeInfo.properties.url = blobUrl;
@@ -1379,18 +1289,7 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File[]>): GTO
         const composite = stackComp.property('composite').value() as string;
         const mode = stackComp.property('mode').value() as string;
 
-        if (composite) {
-          nodeInfo.properties.composite = composite;
-          // Check if this composite mode will be degraded
-          const mapResult = stackCompositeToBlendModeWithInfo(composite);
-          if (mapResult.degraded) {
-            degradedModes.push({
-              nodeName: name,
-              originalMode: mapResult.originalMode!,
-              fallbackMode: mapResult.mode,
-            });
-          }
-        }
+        if (composite) nodeInfo.properties.composite = composite;
         if (mode) nodeInfo.properties.mode = mode;
       }
 
@@ -1412,22 +1311,13 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File[]>): GTO
         }
       }
 
-      // Parse per-layer opacities from layerOutput component
-      const layerOutputComp = obj.component('layerOutput');
-      if (layerOutputComp?.exists()) {
-        const opacities = layerOutputComp.property('opacity').value() as number[];
+      // Parse per-layer opacities from output component
+      const outputComp = obj.component('output');
+      if (outputComp?.exists()) {
+        const opacities = outputComp.property('opacity').value() as number[];
         if (Array.isArray(opacities)) {
           nodeInfo.properties.layerOpacities = opacities;
         }
-        const visibleInts = layerOutputComp.property('visible').value() as number[];
-        if (Array.isArray(visibleInts)) {
-          nodeInfo.properties.layerVisible = visibleInts.map((v) => v !== 0);
-        }
-      }
-
-      // Parse output component settings
-      const outputComp = obj.component('output');
-      if (outputComp?.exists()) {
         const chosenAudio = outputComp.property('chosenAudioInput').value() as number;
         if (typeof chosenAudio === 'number') {
           nodeInfo.properties.chosenAudioInput = chosenAudio;
@@ -2066,9 +1956,9 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File[]>): GTO
 
         // Resolve CDL file from availableFiles if specified
         if (typeof file === 'string' && file && availableFiles && availableFiles.size > 0) {
-          const resolved = resolveAvailableFile(file, availableFiles);
-          if (resolved) {
-            nodeInfo.properties.cdlFileResolved = resolved;
+          const basename = file.split(/[/\\]/).pop();
+          if (basename && availableFiles.has(basename)) {
+            nodeInfo.properties.cdlFileResolved = availableFiles.get(basename)!;
           } else {
             console.warn(`CDL file "${file}" not found in available files, using inline CDL values`);
           }
@@ -2225,35 +2115,17 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File[]>): GTO
   for (const [name, info] of nodeInfos) {
     const nodeType = PROTOCOL_TO_NODE_TYPE[info.protocol];
     if (!nodeType) {
-      // Unknown protocol - skip (many RV internals aren't needed)
-      skippedNodes.push({
-        name,
-        protocol: info.protocol,
-        mappedType: null,
-        reason: 'unmapped_protocol',
-      });
+      // Unknown protocol - skip silently (many RV internals aren't needed)
       continue;
     }
 
     if (!NodeFactory.isRegistered(nodeType)) {
-      // Node type mapped but not implemented yet
-      skippedNodes.push({
-        name,
-        protocol: info.protocol,
-        mappedType: nodeType,
-        reason: 'unregistered_type',
-      });
+      // Node type mapped but not implemented yet - skip silently
       continue;
     }
 
     const node = NodeFactory.create(nodeType);
     if (!node) {
-      skippedNodes.push({
-        name,
-        protocol: info.protocol,
-        mappedType: nodeType,
-        reason: 'creation_failed',
-      });
       console.warn(`Failed to create node: ${nodeType}`);
       continue;
     }
@@ -2343,38 +2215,10 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File[]>): GTO
     graph.setOutputNode(rootNode);
   }
 
-  // Log warnings for skipped nodes that were mapped but unregistered (lossy import)
-  const unregistered = skippedNodes.filter((s) => s.reason === 'unregistered_type');
-  if (unregistered.length > 0) {
-    // Group by protocol for a concise summary
-    const counts = new Map<string, number>();
-    for (const s of unregistered) {
-      counts.set(s.protocol, (counts.get(s.protocol) ?? 0) + 1);
-    }
-    const parts = Array.from(counts.entries()).map(
-      ([proto, count]) => `${count} ${proto}`,
-    );
-    console.warn(
-      `[GTOGraphLoader] Skipped ${unregistered.length} mapped-but-unimplemented node(s) during import: ${parts.join(', ')}`,
-    );
-  }
-
-  // Log warnings for degraded composite modes (lossy import)
-  if (degradedModes.length > 0) {
-    const modeParts = degradedModes.map(
-      (d) => `"${d.originalMode}" → "${d.fallbackMode}" (${d.nodeName})`,
-    );
-    console.warn(
-      `[GTOGraphLoader] ${degradedModes.length} composite mode(s) degraded during import: ${modeParts.join(', ')}`,
-    );
-  }
-
   return {
     graph,
     nodes,
     rootNode,
-    skippedNodes,
-    degradedModes,
     sessionInfo,
   };
 }
@@ -2395,57 +2239,5 @@ export function getGraphSummary(result: GTOParseResult): string {
     lines.push(`  ${name} (${node.type}) <- [${inputs}]`);
   }
 
-  if (result.skippedNodes.length > 0) {
-    lines.push('');
-    lines.push(`Skipped: ${result.skippedNodes.length}`);
-    for (const s of result.skippedNodes) {
-      lines.push(`  ${s.name} (${s.protocol}) - ${s.reason}`);
-    }
-  }
-
-  if (result.degradedModes.length > 0) {
-    lines.push('');
-    lines.push(`Degraded modes: ${result.degradedModes.length}`);
-    for (const d of result.degradedModes) {
-      lines.push(`  ${d.nodeName}: "${d.originalMode}" → "${d.fallbackMode}"`);
-    }
-  }
-
   return lines.join('\n');
-}
-
-/**
- * Format a user-facing warning message summarizing skipped nodes.
- * Returns null if no meaningful nodes were skipped.
- */
-export function formatSkippedNodesWarning(skipped: SkippedNodeInfo[]): string | null {
-  // Only warn about mapped-but-unregistered and creation-failed nodes
-  const meaningful = skipped.filter(
-    (s) => s.reason === 'unregistered_type' || s.reason === 'creation_failed',
-  );
-  if (meaningful.length === 0) return null;
-
-  const counts = new Map<string, number>();
-  for (const s of meaningful) {
-    counts.set(s.protocol, (counts.get(s.protocol) ?? 0) + 1);
-  }
-  const parts = Array.from(counts.entries()).map(
-    ([proto, count]) => `${count} ${proto}`,
-  );
-  return `${meaningful.length} node(s) were skipped during import: ${parts.join(', ')}`;
-}
-
-/**
- * Format a user-facing warning message summarizing degraded composite modes.
- * Returns null if no modes were degraded.
- */
-export function formatDegradedModesWarning(degraded: DegradedModeInfo[]): string | null {
-  if (degraded.length === 0) return null;
-
-  const modeParts = degraded.map(
-    (d) => `"${d.originalMode}" → "${d.fallbackMode}"`,
-  );
-  // Deduplicate identical degradation descriptions
-  const unique = [...new Set(modeParts)];
-  return `${degraded.length} composite mode(s) were degraded during import: ${unique.join(', ')}. Compositing may differ from OpenRV.`;
 }

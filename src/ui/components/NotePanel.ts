@@ -13,13 +13,13 @@
 
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { type Session } from '../../core/session/Session';
-import { type Note, type NoteStatus } from '../../core/session/NoteManager';
+import { type Note, type NoteStatus, type NotePriority } from '../../core/session/NoteManager';
 import { getIconSvg } from './shared/Icons';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
 import { getCorePreferencesManager } from '../../core/PreferencesManager';
 import { AriaAnnouncer } from '../a11y/AriaAnnouncer';
-import { showAlert, showConfirm } from './shared/Modal';
+import { showAlert } from './shared/Modal';
 
 export interface NotePanelEvents extends EventMap {
   visibilityChanged: boolean;
@@ -43,13 +43,11 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
   private statusFilter: StatusFilter = 'all';
   private sourceFilter: number | 'all' = 'all';
   private editingNoteId: string | null = null;
-  private editingFrameStart: number | null = null;
-  private editingFrameEnd: number | null = null;
   private replyingToNoteId: string | null = null;
   private lastHighlightedFrame: number | null = null;
   private focusedNoteIndex = -1;
   private filterContainer: HTMLElement;
-  private exclusivePanels: ExclusivePanelRef[] = [];
+  private exclusivePanel: ExclusivePanelRef | null = null;
   private announcer: AriaAnnouncer;
   private noteCountEl!: HTMLElement;
   private badgeElement: HTMLElement | null = null;
@@ -158,13 +156,9 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
     `;
     closeBtn.addEventListener('click', () => this.hide());
 
-    // Export dropdown wrapper
-    const exportWrapper = document.createElement('div');
-    exportWrapper.style.cssText = 'position: relative; display: inline-block;';
-
     const exportBtn = document.createElement('button');
-    exportBtn.textContent = 'Export \u25BE';
-    exportBtn.title = 'Export notes';
+    exportBtn.textContent = 'Export';
+    exportBtn.title = 'Export notes to JSON file';
     exportBtn.dataset.testid = 'note-export-btn';
     exportBtn.style.cssText = `
       background: rgba(var(--accent-primary-rgb), 0.15);
@@ -175,69 +169,7 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
       font-size: 11px;
       cursor: pointer;
     `;
-
-    const exportMenu = document.createElement('div');
-    exportMenu.dataset.testid = 'note-export-menu';
-    exportMenu.style.cssText = `
-      display: none;
-      position: absolute;
-      top: 100%;
-      left: 0;
-      margin-top: 2px;
-      background: var(--overlay-bg);
-      border: 1px solid var(--overlay-border);
-      border-radius: 4px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-      z-index: 1001;
-      min-width: 100px;
-    `;
-
-    const exportFormats: { label: string; format: 'json' | 'csv' | 'html'; testid: string }[] = [
-      { label: 'JSON', format: 'json', testid: 'note-export-json' },
-      { label: 'CSV', format: 'csv', testid: 'note-export-csv' },
-      { label: 'HTML', format: 'html', testid: 'note-export-html' },
-    ];
-    for (const fmt of exportFormats) {
-      const item = document.createElement('button');
-      item.textContent = fmt.label;
-      item.dataset.testid = fmt.testid;
-      item.style.cssText = `
-        display: block;
-        width: 100%;
-        background: none;
-        border: none;
-        color: var(--text-primary);
-        padding: 6px 12px;
-        font-size: 11px;
-        cursor: pointer;
-        text-align: left;
-      `;
-      item.addEventListener('pointerenter', () => {
-        item.style.background = 'var(--bg-hover, rgba(255,255,255,0.1))';
-      });
-      item.addEventListener('pointerleave', () => {
-        item.style.background = 'none';
-      });
-      item.addEventListener('click', (e) => {
-        e.stopPropagation();
-        exportMenu.style.display = 'none';
-        this.exportNotes(fmt.format);
-      });
-      exportMenu.appendChild(item);
-    }
-
-    exportBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      exportMenu.style.display = exportMenu.style.display === 'none' ? 'block' : 'none';
-    });
-
-    // Close menu when clicking outside
-    document.addEventListener('click', () => {
-      exportMenu.style.display = 'none';
-    });
-
-    exportWrapper.appendChild(exportBtn);
-    exportWrapper.appendChild(exportMenu);
+    exportBtn.addEventListener('click', () => this.exportNotes());
 
     const importBtn = document.createElement('button');
     importBtn.textContent = 'Import';
@@ -255,7 +187,7 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
     importBtn.addEventListener('click', () => this.importNotes());
 
     headerButtons.appendChild(addBtn);
-    headerButtons.appendChild(exportWrapper);
+    headerButtons.appendChild(exportBtn);
     headerButtons.appendChild(importBtn);
     headerButtons.appendChild(closeBtn);
     this.headerElement.appendChild(titleArea);
@@ -315,17 +247,15 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
     return this.container;
   }
 
-  /** Register another panel for mutual exclusion - opening this panel will close the other(s) */
+  /** Register another panel for mutual exclusion - opening this panel will close the other */
   setExclusiveWith(panel: ExclusivePanelRef): void {
-    this.exclusivePanels.push(panel);
+    this.exclusivePanel = panel;
   }
 
   show(): void {
-    // Close exclusive panels if they are open
-    for (const ep of this.exclusivePanels) {
-      if (ep.isVisible()) {
-        ep.hide();
-      }
+    // Close exclusive panel if it is open
+    if (this.exclusivePanel?.isVisible()) {
+      this.exclusivePanel.hide();
     }
     this.visible = true;
     this.container.style.display = 'flex';
@@ -339,8 +269,6 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
     this.container.style.display = 'none';
     this.container.setAttribute('aria-expanded', 'false');
     this.editingNoteId = null;
-    this.editingFrameStart = null;
-    this.editingFrameEnd = null;
     this.replyingToNoteId = null;
     this.emit('visibilityChanged', false);
   }
@@ -410,8 +338,6 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
     // Set editing state – the addNote above already triggered notesChanged → render(),
     // but that render ran with editingNoteId=null. We must re-render with editing mode.
     this.editingNoteId = note.id;
-    this.editingFrameStart = frame;
-    this.editingFrameEnd = frame;
     if (!this.visible) {
       this.show();
     } else {
@@ -611,19 +537,9 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
     frameInfo.style.cssText = 'font-size: 11px; color: var(--text-muted); flex-shrink: 0;';
     frameInfo.textContent =
       note.frameStart === note.frameEnd ? `F${note.frameStart}` : `F${note.frameStart}-${note.frameEnd}`;
-    frameInfo.setAttribute('tabindex', '0');
-    frameInfo.setAttribute('role', 'button');
-    frameInfo.setAttribute('aria-label', `Go to frame ${note.frameStart}`);
     frameInfo.addEventListener('click', (e) => {
       e.stopPropagation();
       this.goToNote(note);
-    });
-    frameInfo.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        e.stopPropagation();
-        this.goToNote(note);
-      }
     });
     topRow.appendChild(frameInfo);
 
@@ -645,6 +561,42 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
     `;
     statusBadge.textContent = note.status;
     topRow.appendChild(statusBadge);
+
+    // Priority badge
+    const priorityColors: Record<NotePriority, string> = {
+      low: 'var(--text-muted, #888)',
+      medium: 'var(--accent-primary, #3b82f6)',
+      high: 'var(--warning, #fbbf24)',
+      critical: 'var(--error, #ef4444)',
+    };
+    const priorityBadge = document.createElement('span');
+    priorityBadge.dataset.testid = `note-priority-${note.id}`;
+    priorityBadge.style.cssText = `
+      font-size: 10px;
+      padding: 1px 5px;
+      border-radius: 3px;
+      background: ${priorityColors[note.priority]};
+      color: #000;
+      flex-shrink: 0;
+    `;
+    priorityBadge.textContent = note.priority;
+    topRow.appendChild(priorityBadge);
+
+    // Category badge (only if category is set)
+    if (note.category) {
+      const categoryBadge = document.createElement('span');
+      categoryBadge.dataset.testid = `note-category-${note.id}`;
+      categoryBadge.style.cssText = `
+        font-size: 10px;
+        padding: 1px 5px;
+        border-radius: 3px;
+        background: rgba(var(--accent-primary-rgb), 0.2);
+        color: var(--text-primary);
+        flex-shrink: 0;
+      `;
+      categoryBadge.textContent = note.category;
+      topRow.appendChild(categoryBadge);
+    }
 
     // Author
     const author = document.createElement('span');
@@ -688,8 +640,6 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
     editBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       this.editingNoteId = note.id;
-      this.editingFrameStart = note.frameStart;
-      this.editingFrameEnd = note.frameEnd;
       this.render();
     });
     actions.appendChild(editBtn);
@@ -735,62 +685,6 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
 
     // Text content or edit area
     if (this.editingNoteId === note.id) {
-      // Frame range inputs
-      const frameRangeRow = document.createElement('div');
-      frameRangeRow.dataset.testid = `note-frame-range-${note.id}`;
-      frameRangeRow.style.cssText = 'display: flex; align-items: center; gap: 6px; margin-bottom: 4px;';
-
-      const frameLabel = document.createElement('span');
-      frameLabel.style.cssText = 'font-size: 11px; color: var(--text-muted); flex-shrink: 0;';
-      frameLabel.textContent = 'Frames:';
-      frameRangeRow.appendChild(frameLabel);
-
-      const frameInputStyle = `
-        width: 60px;
-        padding: 2px 4px;
-        background: var(--input-bg, rgba(0, 0, 0, 0.3));
-        border: 1px solid var(--overlay-border);
-        border-radius: 3px;
-        color: var(--text-primary);
-        font-size: 11px;
-        font-family: inherit;
-        outline: none;
-        box-sizing: border-box;
-      `;
-
-      const frameStartInput = document.createElement('input');
-      frameStartInput.type = 'number';
-      frameStartInput.dataset.testid = `note-frame-start-${note.id}`;
-      frameStartInput.value = String(this.editingFrameStart ?? note.frameStart);
-      frameStartInput.style.cssText = frameInputStyle;
-      frameStartInput.setAttribute('aria-label', 'Frame start');
-      frameStartInput.addEventListener('click', (e) => e.stopPropagation());
-      frameStartInput.addEventListener('keydown', (e) => e.stopPropagation());
-      frameStartInput.addEventListener('input', () => {
-        this.editingFrameStart = Number(frameStartInput.value);
-      });
-      frameRangeRow.appendChild(frameStartInput);
-
-      const dashLabel = document.createElement('span');
-      dashLabel.style.cssText = 'font-size: 11px; color: var(--text-muted);';
-      dashLabel.textContent = '\u2013';
-      frameRangeRow.appendChild(dashLabel);
-
-      const frameEndInput = document.createElement('input');
-      frameEndInput.type = 'number';
-      frameEndInput.dataset.testid = `note-frame-end-${note.id}`;
-      frameEndInput.value = String(this.editingFrameEnd ?? note.frameEnd);
-      frameEndInput.style.cssText = frameInputStyle;
-      frameEndInput.setAttribute('aria-label', 'Frame end');
-      frameEndInput.addEventListener('click', (e) => e.stopPropagation());
-      frameEndInput.addEventListener('keydown', (e) => e.stopPropagation());
-      frameEndInput.addEventListener('input', () => {
-        this.editingFrameEnd = Number(frameEndInput.value);
-      });
-      frameRangeRow.appendChild(frameEndInput);
-
-      el.appendChild(frameRangeRow);
-
       const textarea = document.createElement('textarea');
       textarea.dataset.testid = `note-edit-textarea-${note.id}`;
       textarea.value = note.text;
@@ -817,8 +711,6 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
           e.preventDefault();
           e.stopPropagation();
           this.editingNoteId = null;
-          this.editingFrameStart = null;
-          this.editingFrameEnd = null;
           // If the note text is empty (just added), remove it
           if (!note.text) {
             this.session.noteManager.removeNote(note.id);
@@ -859,15 +751,8 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
     timestamp.textContent = this.formatTimestamp(note.createdAt);
     el.appendChild(timestamp);
 
-    // Click/keyboard to navigate
-    el.setAttribute('tabindex', '0');
+    // Click to navigate
     el.addEventListener('click', () => this.goToNote(note));
-    el.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        this.goToNote(note);
-      }
-    });
 
     // Hover effects
     el.addEventListener('pointerenter', () => {
@@ -939,21 +824,14 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
 
   private saveEdit(noteId: string, text: string): void {
     const trimmed = text.trim();
-    const frameStart = this.editingFrameStart;
-    const frameEnd = this.editingFrameEnd;
     // Clear editing state before CRUD so the notesChanged re-render
     // shows the text view instead of the textarea
     this.editingNoteId = null;
-    this.editingFrameStart = null;
-    this.editingFrameEnd = null;
     if (!trimmed) {
       // Remove note if text cleared
       this.session.noteManager.removeNote(noteId);
     } else {
-      const updates: Parameters<typeof this.session.noteManager.updateNote>[1] = { text: trimmed };
-      if (frameStart !== null && Number.isFinite(frameStart)) updates.frameStart = frameStart;
-      if (frameEnd !== null && Number.isFinite(frameEnd)) updates.frameEnd = frameEnd;
-      this.session.noteManager.updateNote(noteId, updates);
+      this.session.noteManager.updateNote(noteId, { text: trimmed });
     }
   }
 
@@ -979,115 +857,25 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
 
   // ---- Export / Import ----
 
-  /** Export all notes in the specified format */
-  private exportNotes(format: 'json' | 'csv' | 'html' = 'json'): void {
+  /** Export all notes to a JSON file download */
+  private exportNotes(): void {
     const notes = this.session.noteManager.toSerializable();
-    const date = new Date().toISOString().slice(0, 10);
-
-    let content: string;
-    let mimeType: string;
-    let extension: string;
-
-    switch (format) {
-      case 'csv':
-        content = this.notesToCSV(notes);
-        mimeType = 'text/csv';
-        extension = 'csv';
-        break;
-      case 'html':
-        content = this.notesToHTML(notes);
-        mimeType = 'text/html';
-        extension = 'html';
-        break;
-      default: {
-        const exportData = {
-          version: 1,
-          exportedAt: new Date().toISOString(),
-          notes,
-        };
-        content = JSON.stringify(exportData, null, 2);
-        mimeType = 'application/json';
-        extension = 'json';
-        break;
-      }
-    }
-
-    const blob = new Blob([content], { type: mimeType });
+    const exportData = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      notes,
+    };
+    const json = JSON.stringify(exportData, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
+    const date = new Date().toISOString().slice(0, 10);
     a.href = url;
-    a.download = `notes-export-${date}.${extension}`;
+    a.download = `notes-export-${date}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  }
-
-  /** Convert notes to CSV format */
-  private notesToCSV(notes: Note[]): string {
-    const escapeCSV = (val: string): string => {
-      if (val.includes(',') || val.includes('"') || val.includes('\n')) {
-        return '"' + val.replace(/"/g, '""') + '"';
-      }
-      return val;
-    };
-    const headers = ['frame', 'frameEnd', 'author', 'status', 'text', 'color'];
-    const rows = notes.map((n) => [
-      String(n.frameStart),
-      String(n.frameEnd),
-      escapeCSV(n.author),
-      n.status,
-      escapeCSV(n.text),
-      n.color,
-    ].join(','));
-    return [headers.join(','), ...rows].join('\n');
-  }
-
-  /** Convert notes to a styled HTML table */
-  private notesToHTML(notes: Note[]): string {
-    const escapeHTML = (s: string): string =>
-      s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-
-    const rows = notes.map((n) => `      <tr>
-        <td>${n.frameStart}</td>
-        <td>${n.frameEnd}</td>
-        <td>${escapeHTML(n.author)}</td>
-        <td>${escapeHTML(n.status)}</td>
-        <td>${escapeHTML(n.text)}</td>
-        <td><span style="color:${escapeHTML(n.color)}">${escapeHTML(n.color)}</span></td>
-      </tr>`).join('\n');
-
-    return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Notes Export</title>
-  <style>
-    body { font-family: system-ui, -apple-system, sans-serif; margin: 20px; }
-    table { border-collapse: collapse; width: 100%; }
-    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-    th { background: #f5f5f5; }
-  </style>
-</head>
-<body>
-  <h1>Notes Export</h1>
-  <table>
-    <thead>
-      <tr>
-        <th>Frame</th>
-        <th>Frame End</th>
-        <th>Author</th>
-        <th>Status</th>
-        <th>Text</th>
-        <th>Color</th>
-      </tr>
-    </thead>
-    <tbody>
-${rows}
-    </tbody>
-  </table>
-</body>
-</html>`;
   }
 
   /** Import notes from a JSON file */
@@ -1107,21 +895,7 @@ ${rows}
             await showAlert('Invalid notes file. Expected { version, notes: [...] } format.');
             return;
           }
-          const existingCount = this.session.noteManager.getNotes().length;
-          if (existingCount > 0) {
-            const importCount = data.notes.length;
-            const confirmed = await showConfirm(
-              `Importing will replace your ${existingCount} existing note(s) with ${importCount} imported note(s). This cannot be undone.`,
-              { title: 'Replace existing notes?', confirmText: 'Replace', confirmVariant: 'danger' },
-            );
-            if (!confirmed) return;
-          }
-          const result = this.session.noteManager.fromSerializable(data.notes);
-          if (result.rejected > 0) {
-            await showAlert(
-              `Imported ${result.imported} note(s). ${result.rejected} invalid entry/entries were skipped.`,
-            );
-          }
+          this.session.noteManager.fromSerializable(data.notes);
         } catch {
           await showAlert('Invalid JSON file. Could not parse note data.');
         }

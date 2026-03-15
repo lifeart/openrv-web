@@ -28,9 +28,7 @@ function createMockSession(
   };
 }
 
-function createMockNoteManager(
-  notes: Record<number, { text: string; author?: string; status?: string; frameStart?: number; frameEnd?: number }[]>,
-): ReportNoteManager {
+function createMockNoteManager(notes: Record<number, { text: string; priority?: string; category?: string }[]>): ReportNoteManager {
   return {
     getNotesForSource: (i: number) => notes[i] ?? [],
   };
@@ -75,9 +73,9 @@ function createSampleRows(): ReportRow[] {
       versionLabel: 'v3',
       status: 'approved',
       notes: ['Looks great', 'Final comp'],
-      structuredNotes: [
-        { text: 'Looks great', author: 'director', status: 'open', frameStart: 10, frameEnd: 20, timecodeStart: '00:00:00:09', timecodeEnd: '00:00:00:19' },
-        { text: 'Final comp', author: '', status: '', frameStart: null, frameEnd: null, timecodeStart: '', timecodeEnd: '' },
+      noteEntries: [
+        { text: 'Looks great', priority: 'medium', category: '' },
+        { text: 'Final comp', priority: 'medium', category: '' },
       ],
       frameRange: '1-48',
       timecodeIn: '00:00:00:00',
@@ -91,8 +89,8 @@ function createSampleRows(): ReportRow[] {
       versionLabel: 'v1',
       status: 'needs-work',
       notes: ['Fix edge blending'],
-      structuredNotes: [
-        { text: 'Fix edge blending', author: 'supervisor', status: 'open', frameStart: 50, frameEnd: 80, timecodeStart: '00:00:02:01', timecodeEnd: '00:00:03:07' },
+      noteEntries: [
+        { text: 'Fix edge blending', priority: 'high', category: 'comp' },
       ],
       frameRange: '1-120',
       timecodeIn: '00:00:00:00',
@@ -165,9 +163,6 @@ describe('ReportExporter', () => {
         createMockVersionManager({}),
       );
       expect(rows[0]!.notes).toEqual(['Note A', 'Note B']);
-      expect(rows[0]!.structuredNotes).toHaveLength(2);
-      expect(rows[0]!.structuredNotes[0]!.text).toBe('Note A');
-      expect(rows[0]!.structuredNotes[1]!.text).toBe('Note B');
     });
 
     it('REPORT-009: handles sources with no notes/status', () => {
@@ -244,9 +239,7 @@ describe('ReportExporter', () => {
           versionLabel: 'v1',
           status: 'approved',
           notes: ['Fix "edge" blending, and roto'],
-          structuredNotes: [
-            { text: 'Fix "edge" blending, and roto', author: '', status: '', frameStart: null, frameEnd: null, timecodeStart: '', timecodeEnd: '' },
-          ],
+          noteEntries: [{ text: 'Fix "edge" blending, and roto', priority: 'medium', category: '' }],
           frameRange: '1-48',
           timecodeIn: '00:00:00:00',
           timecodeOut: '00:00:02:00',
@@ -283,9 +276,7 @@ describe('ReportExporter', () => {
     it('REPORT-006: includes notes when includeNotes=true', () => {
       const rows = createSampleRows();
       const csv = generateCSV(rows, { ...defaultOptions, includeNotes: true });
-      // First note has frame context, second is plain
-      expect(csv).toContain('Looks great');
-      expect(csv).toContain('Final comp');
+      expect(csv).toContain('Looks great; Final comp');
     });
 
     it('REPORT-007: excludes notes when includeNotes=false', () => {
@@ -375,7 +366,7 @@ describe('ReportExporter', () => {
           versionLabel: '',
           status: 'pending',
           notes: [],
-          structuredNotes: [],
+          noteEntries: [],
           frameRange: '1-24',
           timecodeIn: '00:00:00:00',
           timecodeOut: '00:00:01:00',
@@ -402,9 +393,7 @@ describe('ReportExporter', () => {
           versionLabel: '',
           status: 'pending',
           notes: ['<b>bold</b>'],
-          structuredNotes: [
-            { text: '<b>bold</b>', author: '', status: '', frameStart: null, frameEnd: null, timecodeStart: '', timecodeEnd: '' },
-          ],
+          noteEntries: [{ text: '<b>bold</b>', priority: 'medium', category: '' }],
           frameRange: '1-24',
           timecodeIn: '00:00:00:00',
           timecodeOut: '00:00:01:00',
@@ -524,319 +513,125 @@ describe('ReportExporter', () => {
     });
   });
 
-  // -------------------------------------------------------------------------
-  // Structured note regression tests (Issue #320)
-  // -------------------------------------------------------------------------
-
-  describe('structured notes in buildReportRows', () => {
-    it('includes frame range and timecodes in structured notes', () => {
-      const session = createMockSession([{ name: 'shot.exr', duration: 100, fps: 24 }]);
-      const rows = buildReportRows(
-        session,
-        createMockNoteManager({
-          0: [{ text: 'Fix compositing', author: 'artist', status: 'open', frameStart: 10, frameEnd: 25 }],
-        }),
-        createMockStatusManager({}),
-        createMockVersionManager({}),
-      );
-      const sn = rows[0]!.structuredNotes[0]!;
-      expect(sn.text).toBe('Fix compositing');
-      expect(sn.author).toBe('artist');
-      expect(sn.status).toBe('open');
-      expect(sn.frameStart).toBe(10);
-      expect(sn.frameEnd).toBe(25);
-      expect(sn.timecodeStart).toBe('00:00:00:09');
-      expect(sn.timecodeEnd).toBe('00:00:01:00');
-    });
-
-    it('handles notes without frame data (backward compat)', () => {
+  describe('priority and category in reports', () => {
+    it('buildReportRows populates noteEntries with priority and category', () => {
       const session = createMockSession([{ name: 'shot.exr', duration: 48, fps: 24 }]);
       const rows = buildReportRows(
         session,
-        createMockNoteManager({ 0: [{ text: 'General note' }] }),
+        createMockNoteManager({ 0: [
+          { text: 'Fix edge', priority: 'high', category: 'comp' },
+          { text: 'Minor issue', priority: 'low', category: 'paint' },
+        ] }),
         createMockStatusManager({}),
         createMockVersionManager({}),
       );
-      const sn = rows[0]!.structuredNotes[0]!;
-      expect(sn.text).toBe('General note');
-      expect(sn.author).toBe('');
-      expect(sn.frameStart).toBeNull();
-      expect(sn.frameEnd).toBeNull();
-      expect(sn.timecodeStart).toBe('');
-      expect(sn.timecodeEnd).toBe('');
+      expect(rows[0]!.noteEntries).toHaveLength(2);
+      expect(rows[0]!.noteEntries[0]).toEqual({ text: 'Fix edge', priority: 'high', category: 'comp' });
+      expect(rows[0]!.noteEntries[1]).toEqual({ text: 'Minor issue', priority: 'low', category: 'paint' });
     });
 
-    it('preserves individual context for multiple notes per source', () => {
-      const session = createMockSession([{ name: 'shot.exr', duration: 200, fps: 24 }]);
+    it('buildReportRows defaults priority to medium and category to empty', () => {
+      const session = createMockSession([{ name: 'shot.exr', duration: 48, fps: 24 }]);
       const rows = buildReportRows(
         session,
-        createMockNoteManager({
-          0: [
-            { text: 'Note 1', author: 'alice', frameStart: 1, frameEnd: 10 },
-            { text: 'Note 2', author: 'bob', frameStart: 50, frameEnd: 75 },
-            { text: 'Note 3' }, // no frame data
-          ],
-        }),
+        createMockNoteManager({ 0: [{ text: 'Plain note' }] }),
         createMockStatusManager({}),
         createMockVersionManager({}),
       );
-      expect(rows[0]!.structuredNotes).toHaveLength(3);
-      expect(rows[0]!.structuredNotes[0]!.author).toBe('alice');
-      expect(rows[0]!.structuredNotes[0]!.frameStart).toBe(1);
-      expect(rows[0]!.structuredNotes[1]!.author).toBe('bob');
-      expect(rows[0]!.structuredNotes[1]!.frameStart).toBe(50);
-      expect(rows[0]!.structuredNotes[2]!.frameStart).toBeNull();
-      // plain-text notes still populated
-      expect(rows[0]!.notes).toEqual(['Note 1', 'Note 2', 'Note 3']);
+      expect(rows[0]!.noteEntries[0]).toEqual({ text: 'Plain note', priority: 'medium', category: '' });
     });
-  });
 
-  describe('structured notes in CSV output', () => {
-    it('includes frame context for notes with frame ranges', () => {
+    it('HTML report includes category-based statistics', () => {
+      const rows = createSampleRows();
+      const html = generateHTML(rows, defaultOptions);
+      // The second row has category 'comp', so stats should show it
+      expect(html).toContain('Notes by category:');
+      expect(html).toContain('comp: 1');
+    });
+
+    it('HTML report omits category stats when no categories are set', () => {
       const rows: ReportRow[] = [
         {
           shotName: 'shot',
-          versionLabel: '',
-          status: 'pending',
-          notes: ['Fix roto'],
-          structuredNotes: [
-            { text: 'Fix roto', author: 'artist', status: 'open', frameStart: 10, frameEnd: 30, timecodeStart: '00:00:00:09', timecodeEnd: '00:00:01:05' },
-          ],
-          frameRange: '1-100',
-          timecodeIn: '00:00:00:00',
-          timecodeOut: '00:00:04:04',
-          duration: '100 frames',
-          setBy: '',
-          setAt: '',
-        },
-      ];
-      const csv = generateCSV(rows, defaultOptions);
-      // Should contain timecode range and author
-      expect(csv).toContain('[00:00:00:09-00:00:01:05]');
-      expect(csv).toContain('artist:');
-      expect(csv).toContain('Fix roto');
-    });
-
-    it('outputs plain text for notes without frame data', () => {
-      const rows: ReportRow[] = [
-        {
-          shotName: 'shot',
-          versionLabel: '',
-          status: 'pending',
-          notes: ['General feedback'],
-          structuredNotes: [
-            { text: 'General feedback', author: '', status: '', frameStart: null, frameEnd: null, timecodeStart: '', timecodeEnd: '' },
-          ],
+          versionLabel: 'v1',
+          status: 'approved',
+          notes: ['Test'],
+          noteEntries: [{ text: 'Test', priority: 'medium', category: '' }],
           frameRange: '1-48',
           timecodeIn: '00:00:00:00',
           timecodeOut: '00:00:02:00',
           duration: '48 frames',
-          setBy: '',
+          setBy: 'user',
           setAt: '',
         },
       ];
-      const csv = generateCSV(rows, defaultOptions);
-      expect(csv).toContain('General feedback');
-      // Should not contain brackets for notes without frame data
-      expect(csv).not.toMatch(/\[.*\].*General feedback/);
+      const html = generateHTML(rows, defaultOptions);
+      expect(html).not.toContain('Notes by category:');
     });
 
-    it('separates multiple notes with semicolons preserving individual context', () => {
+    it('CSV includes priority and category tags in notes field', () => {
       const rows: ReportRow[] = [
         {
           shotName: 'shot',
-          versionLabel: '',
-          status: 'pending',
-          notes: ['Note A', 'Note B'],
-          structuredNotes: [
-            { text: 'Note A', author: 'alice', status: 'open', frameStart: 5, frameEnd: 15, timecodeStart: '00:00:00:04', timecodeEnd: '00:00:00:14' },
-            { text: 'Note B', author: 'bob', status: 'open', frameStart: 40, frameEnd: 50, timecodeStart: '00:00:01:15', timecodeEnd: '00:00:02:01' },
-          ],
-          frameRange: '1-100',
-          timecodeIn: '00:00:00:00',
-          timecodeOut: '00:00:04:04',
-          duration: '100 frames',
-          setBy: '',
-          setAt: '',
-        },
-      ];
-      const csv = generateCSV(rows, defaultOptions);
-      // Each note should have its own context separated by '; '
-      expect(csv).toContain('alice:');
-      expect(csv).toContain('bob:');
-      expect(csv).toContain('Note A');
-      expect(csv).toContain('Note B');
-      // The notes should be in a single field separated by '; '
-      expect(csv).toMatch(/Note A.*; .*Note B/);
-    });
-
-    it('includes author info when available', () => {
-      const rows: ReportRow[] = [
-        {
-          shotName: 'shot',
-          versionLabel: '',
-          status: 'pending',
-          notes: ['Needs cleanup'],
-          structuredNotes: [
-            { text: 'Needs cleanup', author: 'supervisor', status: 'open', frameStart: null, frameEnd: null, timecodeStart: '', timecodeEnd: '' },
-          ],
+          versionLabel: 'v1',
+          status: 'approved',
+          notes: ['Fix edge'],
+          noteEntries: [{ text: 'Fix edge', priority: 'high', category: 'comp' }],
           frameRange: '1-48',
           timecodeIn: '00:00:00:00',
           timecodeOut: '00:00:02:00',
           duration: '48 frames',
-          setBy: '',
+          setBy: 'user',
           setAt: '',
         },
       ];
       const csv = generateCSV(rows, defaultOptions);
-      expect(csv).toContain('supervisor: Needs cleanup');
+      expect(csv).toContain('[high]');
+      expect(csv).toContain('[comp]');
+      expect(csv).toContain('Fix edge');
     });
-  });
 
-  describe('structured notes in HTML output', () => {
-    it('renders timecode context with styled span for notes with frame ranges', () => {
+    it('CSV omits priority tag for medium priority', () => {
       const rows: ReportRow[] = [
         {
           shotName: 'shot',
-          versionLabel: '',
-          status: 'pending',
-          notes: ['Fix roto'],
-          structuredNotes: [
-            { text: 'Fix roto', author: 'artist', status: 'open', frameStart: 10, frameEnd: 30, timecodeStart: '00:00:00:09', timecodeEnd: '00:00:01:05' },
-          ],
-          frameRange: '1-100',
-          timecodeIn: '00:00:00:00',
-          timecodeOut: '00:00:04:04',
-          duration: '100 frames',
-          setBy: '',
-          setAt: '',
-        },
-      ];
-      const html = generateHTML(rows, defaultOptions);
-      // Timecode range in a styled span
-      expect(html).toContain('[00:00:00:09-00:00:01:05]');
-      expect(html).toContain('font-family:monospace');
-      // Author in bold
-      expect(html).toContain('<strong>artist</strong>');
-      expect(html).toContain('Fix roto');
-    });
-
-    it('renders plain text for notes without frame data', () => {
-      const rows: ReportRow[] = [
-        {
-          shotName: 'shot',
-          versionLabel: '',
-          status: 'pending',
-          notes: ['General feedback'],
-          structuredNotes: [
-            { text: 'General feedback', author: '', status: '', frameStart: null, frameEnd: null, timecodeStart: '', timecodeEnd: '' },
-          ],
+          versionLabel: 'v1',
+          status: 'approved',
+          notes: ['Normal note'],
+          noteEntries: [{ text: 'Normal note', priority: 'medium', category: '' }],
           frameRange: '1-48',
           timecodeIn: '00:00:00:00',
           timecodeOut: '00:00:02:00',
           duration: '48 frames',
-          setBy: '',
+          setBy: 'user',
           setAt: '',
         },
       ];
-      const html = generateHTML(rows, defaultOptions);
-      expect(html).toContain('General feedback');
-      // No timecode span for notes without frame data
-      expect(html).not.toContain('monospace');
-    });
-
-    it('separates multiple notes with <br> preserving individual context', () => {
-      const rows: ReportRow[] = [
-        {
-          shotName: 'shot',
-          versionLabel: '',
-          status: 'pending',
-          notes: ['Note A', 'Note B'],
-          structuredNotes: [
-            { text: 'Note A', author: 'alice', status: 'open', frameStart: 5, frameEnd: 15, timecodeStart: '00:00:00:04', timecodeEnd: '00:00:00:14' },
-            { text: 'Note B', author: 'bob', status: 'resolved', frameStart: 40, frameEnd: 50, timecodeStart: '00:00:01:15', timecodeEnd: '00:00:02:01' },
-          ],
-          frameRange: '1-100',
-          timecodeIn: '00:00:00:00',
-          timecodeOut: '00:00:04:04',
-          duration: '100 frames',
-          setBy: '',
-          setAt: '',
-        },
-      ];
-      const html = generateHTML(rows, defaultOptions);
-      expect(html).toContain('<strong>alice</strong>');
-      expect(html).toContain('<strong>bob</strong>');
-      expect(html).toContain('Note A');
-      expect(html).toContain('Note B');
-      // Notes separated by <br>
-      expect(html).toContain('<br>');
-    });
-
-    it('escapes HTML in author and note text', () => {
-      const rows: ReportRow[] = [
-        {
-          shotName: 'shot',
-          versionLabel: '',
-          status: 'pending',
-          notes: ['<script>xss</script>'],
-          structuredNotes: [
-            { text: '<script>xss</script>', author: '<b>hacker</b>', status: '', frameStart: 1, frameEnd: 5, timecodeStart: '00:00:00:00', timecodeEnd: '00:00:00:04' },
-          ],
-          frameRange: '1-48',
-          timecodeIn: '00:00:00:00',
-          timecodeOut: '00:00:02:00',
-          duration: '48 frames',
-          setBy: '',
-          setAt: '',
-        },
-      ];
-      const html = generateHTML(rows, defaultOptions);
-      expect(html).not.toContain('<script>xss</script>');
-      expect(html).toContain('&lt;script&gt;xss&lt;/script&gt;');
-      expect(html).toContain('&lt;b&gt;hacker&lt;/b&gt;');
-    });
-  });
-
-  describe('structured notes end-to-end via buildReportRows', () => {
-    it('CSV output from buildReportRows contains per-note frame context', () => {
-      const session = createMockSession([{ name: 'shot.exr', duration: 100, fps: 24 }]);
-      const rows = buildReportRows(
-        session,
-        createMockNoteManager({
-          0: [
-            { text: 'Roto issue', author: 'comp_artist', status: 'open', frameStart: 20, frameEnd: 40 },
-            { text: 'Overall looks good' },
-          ],
-        }),
-        createMockStatusManager({}),
-        createMockVersionManager({}),
-      );
       const csv = generateCSV(rows, defaultOptions);
-      // First note should have timecode context
-      expect(csv).toContain('[00:00:00:19-00:00:01:15]');
-      expect(csv).toContain('comp_artist:');
-      expect(csv).toContain('Roto issue');
-      // Second note should appear as plain text
-      expect(csv).toContain('Overall looks good');
+      expect(csv).not.toContain('[medium]');
+      expect(csv).toContain('Normal note');
     });
 
-    it('HTML output from buildReportRows contains per-note frame context', () => {
-      const session = createMockSession([{ name: 'shot.exr', duration: 100, fps: 24 }]);
-      const rows = buildReportRows(
-        session,
-        createMockNoteManager({
-          0: [
-            { text: 'Edge bleeding', author: 'lead', status: 'open', frameStart: 50, frameEnd: 60 },
-          ],
-        }),
-        createMockStatusManager({}),
-        createMockVersionManager({}),
-      );
+    it('HTML notes include priority and category tags', () => {
+      const rows: ReportRow[] = [
+        {
+          shotName: 'shot',
+          versionLabel: 'v1',
+          status: 'approved',
+          notes: ['Fix edge'],
+          noteEntries: [{ text: 'Fix edge', priority: 'critical', category: 'roto' }],
+          frameRange: '1-48',
+          timecodeIn: '00:00:00:00',
+          timecodeOut: '00:00:02:00',
+          duration: '48 frames',
+          setBy: 'user',
+          setAt: '',
+        },
+      ];
       const html = generateHTML(rows, defaultOptions);
-      expect(html).toContain('<strong>lead</strong>');
-      expect(html).toContain('Edge bleeding');
-      expect(html).toContain('monospace');
+      expect(html).toContain('[critical]');
+      expect(html).toContain('[roto]');
+      expect(html).toContain('Fix edge');
     });
   });
 });

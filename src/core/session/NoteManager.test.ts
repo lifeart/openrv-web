@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { NoteManager, type Note, type ImportResult } from './NoteManager';
+import { NoteManager, type Note } from './NoteManager';
 
 describe('NoteManager', () => {
   let manager: NoteManager;
@@ -27,7 +27,6 @@ describe('NoteManager', () => {
       expect(note.status).toBe('open');
       expect(note.parentId).toBeNull();
       expect(note.color).toBe('#fbbf24');
-      expect(note.externalId).toBeNull();
       expect(note.createdAt).toBeTruthy();
       expect(note.modifiedAt).toBeTruthy();
     });
@@ -46,30 +45,6 @@ describe('NoteManager', () => {
     it('creates note with custom color', () => {
       const note = manager.addNote(0, 1, 1, 'Red note', 'Alice', { color: '#ff0000' });
       expect(note.color).toBe('#ff0000');
-    });
-
-    it('uses provided createdAt instead of generating a fresh timestamp', () => {
-      const note = manager.addNote(0, 1, 1, 'Old note', 'Alice', {
-        createdAt: '2023-06-15T08:30:00Z',
-      });
-      expect(note.createdAt).toBe('2023-06-15T08:30:00Z');
-      // modifiedAt should still be a fresh timestamp
-      expect(note.modifiedAt).not.toBe('2023-06-15T08:30:00Z');
-    });
-
-    it('falls back to current time when createdAt is not provided', () => {
-      const before = new Date().toISOString();
-      const note = manager.addNote(0, 1, 1, 'New note', 'Alice');
-      const after = new Date().toISOString();
-      expect(note.createdAt >= before).toBe(true);
-      expect(note.createdAt <= after).toBe(true);
-    });
-
-    it('uses provided status instead of defaulting to open', () => {
-      const note = manager.addNote(0, 1, 1, 'Resolved note', 'Alice', {
-        status: 'resolved',
-      });
-      expect(note.status).toBe('resolved');
     });
 
     it('returns a copy, not internal reference', () => {
@@ -134,35 +109,6 @@ describe('NoteManager', () => {
       const updated = manager.updateNote(note.id, { status: 'wontfix', color: '#ff0000' });
       expect(updated!.status).toBe('wontfix');
       expect(updated!.color).toBe('#ff0000');
-    });
-
-    it('updates frameStart and frameEnd', () => {
-      const note = manager.addNote(0, 10, 10, 'Single frame', 'Alice');
-      const updated = manager.updateNote(note.id, { frameStart: 5, frameEnd: 25 });
-      expect(updated).not.toBeNull();
-      expect(updated!.frameStart).toBe(5);
-      expect(updated!.frameEnd).toBe(25);
-    });
-
-    it('updates frameStart only, preserving frameEnd', () => {
-      const note = manager.addNote(0, 10, 20, 'Range note', 'Alice');
-      const updated = manager.updateNote(note.id, { frameStart: 5 });
-      expect(updated!.frameStart).toBe(5);
-      expect(updated!.frameEnd).toBe(20);
-    });
-
-    it('updates frameEnd only, preserving frameStart', () => {
-      const note = manager.addNote(0, 10, 20, 'Range note', 'Alice');
-      const updated = manager.updateNote(note.id, { frameEnd: 30 });
-      expect(updated!.frameStart).toBe(10);
-      expect(updated!.frameEnd).toBe(30);
-    });
-
-    it('frame range update is reflected in getNotesForFrame', () => {
-      const note = manager.addNote(0, 10, 10, 'Single frame', 'Alice');
-      expect(manager.getNotesForFrame(0, 15).length).toBe(0);
-      manager.updateNote(note.id, { frameStart: 5, frameEnd: 20 });
-      expect(manager.getNotesForFrame(0, 15).length).toBe(1);
     });
   });
 
@@ -264,7 +210,8 @@ describe('NoteManager', () => {
           status: 'open',
           parentId: null,
           color: '#fbbf24',
-          externalId: null,
+          priority: 'medium',
+          category: '',
         },
       ];
       onNotesChanged.mockClear();
@@ -352,55 +299,6 @@ describe('NoteManager', () => {
     });
   });
 
-  describe('externalId', () => {
-    it('addNote stores externalId when provided', () => {
-      const note = manager.addNote(0, 1, 1, 'SG note', 'Alice', { externalId: 'sg-123' });
-      expect(note.externalId).toBe('sg-123');
-    });
-
-    it('addNote defaults externalId to null when not provided', () => {
-      const note = manager.addNote(0, 1, 1, 'Local note', 'Alice');
-      expect(note.externalId).toBeNull();
-    });
-
-    it('findNoteByExternalId returns matching note', () => {
-      manager.addNote(0, 1, 1, 'SG note', 'Alice', { externalId: 'sg-456' });
-      const found = manager.findNoteByExternalId('sg-456');
-      expect(found).toBeDefined();
-      expect(found!.text).toBe('SG note');
-      expect(found!.externalId).toBe('sg-456');
-    });
-
-    it('findNoteByExternalId returns undefined when no match', () => {
-      manager.addNote(0, 1, 1, 'Local note', 'Alice');
-      expect(manager.findNoteByExternalId('sg-999')).toBeUndefined();
-    });
-
-    it('findNoteByExternalId returns a copy, not internal reference', () => {
-      manager.addNote(0, 1, 1, 'SG note', 'Alice', { externalId: 'sg-789' });
-      const found = manager.findNoteByExternalId('sg-789')!;
-      found.text = 'mutated';
-      expect(manager.findNoteByExternalId('sg-789')!.text).toBe('SG note');
-    });
-
-    it('externalId survives serialize/deserialize round-trip', () => {
-      manager.addNote(0, 1, 1, 'SG note', 'Alice', { externalId: 'sg-100' });
-      const serialized = manager.toSerializable();
-      const manager2 = new NoteManager();
-      manager2.fromSerializable(serialized);
-      const found = manager2.findNoteByExternalId('sg-100');
-      expect(found).toBeDefined();
-      expect(found!.externalId).toBe('sg-100');
-      manager2.dispose();
-    });
-
-    it('fromSerializable defaults externalId to null when missing', () => {
-      const partial = { frameStart: 1, frameEnd: 5, text: 'Test', id: 'ext-1' };
-      manager.fromSerializable([partial as unknown as Note]);
-      expect(manager.getNote('ext-1')!.externalId).toBeNull();
-    });
-  });
-
   describe('edge cases', () => {
     it('getNote returns undefined for non-existent ID', () => {
       expect(manager.getNote('non-existent')).toBeUndefined();
@@ -442,182 +340,6 @@ describe('NoteManager', () => {
       manager.removeNote(l1.id);
       expect(manager.getNotes().length).toBe(0);
       expect(manager.getNote(l4.id)).toBeUndefined();
-    });
-  });
-
-  describe('fromSerializable validation', () => {
-    const validNote: Note = {
-      id: 'valid-1',
-      sourceIndex: 0,
-      frameStart: 1,
-      frameEnd: 5,
-      text: 'Test note',
-      author: 'Alice',
-      createdAt: '2026-01-01T00:00:00Z',
-      modifiedAt: '2026-01-01T00:00:00Z',
-      status: 'open',
-      parentId: null,
-      color: '#fbbf24',
-      externalId: null,
-    };
-
-    it('imports valid notes correctly and returns import count', () => {
-      const result: ImportResult = manager.fromSerializable([validNote]);
-      expect(result.imported).toBe(1);
-      expect(result.rejected).toBe(0);
-      expect(manager.getNotes().length).toBe(1);
-      const imported = manager.getNote('valid-1')!;
-      expect(imported.frameStart).toBe(1);
-      expect(imported.text).toBe('Test note');
-    });
-
-    it('rejects entries missing frameStart', () => {
-      const bad = { ...validNote, frameStart: undefined };
-      const result = manager.fromSerializable([bad as unknown as Note]);
-      expect(result.imported).toBe(0);
-      expect(result.rejected).toBe(1);
-      expect(manager.getNotes().length).toBe(0);
-    });
-
-    it('rejects entries missing frameEnd', () => {
-      const bad = { ...validNote, frameEnd: undefined };
-      const result = manager.fromSerializable([bad as unknown as Note]);
-      expect(result.imported).toBe(0);
-      expect(result.rejected).toBe(1);
-    });
-
-    it('rejects entries missing text', () => {
-      const bad = { ...validNote, text: undefined };
-      const result = manager.fromSerializable([bad as unknown as Note]);
-      expect(result.imported).toBe(0);
-      expect(result.rejected).toBe(1);
-    });
-
-    it('rejects entries with non-number frameStart', () => {
-      const bad = { ...validNote, frameStart: 'not-a-number' };
-      const result = manager.fromSerializable([bad as unknown as Note]);
-      expect(result.imported).toBe(0);
-      expect(result.rejected).toBe(1);
-    });
-
-    it('rejects entries with non-number frameEnd', () => {
-      const bad = { ...validNote, frameEnd: null };
-      const result = manager.fromSerializable([bad as unknown as Note]);
-      expect(result.imported).toBe(0);
-      expect(result.rejected).toBe(1);
-    });
-
-    it('rejects entries with non-string text', () => {
-      const bad = { ...validNote, text: 42 };
-      const result = manager.fromSerializable([bad as unknown as Note]);
-      expect(result.imported).toBe(0);
-      expect(result.rejected).toBe(1);
-    });
-
-    it('rejects non-object entries (null, number, string)', () => {
-      const result = manager.fromSerializable([null, 42, 'bad'] as unknown as Note[]);
-      expect(result.imported).toBe(0);
-      expect(result.rejected).toBe(3);
-    });
-
-    it('rejects entries with NaN frameStart', () => {
-      const bad = { ...validNote, frameStart: NaN };
-      const result = manager.fromSerializable([bad as unknown as Note]);
-      expect(result.imported).toBe(0);
-      expect(result.rejected).toBe(1);
-    });
-
-    it('rejects entries with Infinity frameEnd', () => {
-      const bad = { ...validNote, frameEnd: Infinity };
-      const result = manager.fromSerializable([bad as unknown as Note]);
-      expect(result.imported).toBe(0);
-      expect(result.rejected).toBe(1);
-    });
-
-    it('defaults author to empty string if missing', () => {
-      const partial = { frameStart: 1, frameEnd: 5, text: 'Test', id: 'p1' };
-      const result = manager.fromSerializable([partial as unknown as Note]);
-      expect(result.imported).toBe(1);
-      const note = manager.getNote('p1')!;
-      expect(note.author).toBe('');
-    });
-
-    it('defaults status to open if missing or invalid', () => {
-      const partial = { frameStart: 1, frameEnd: 5, text: 'Test', id: 'p2', status: 'bogus' };
-      const result = manager.fromSerializable([partial as unknown as Note]);
-      expect(result.imported).toBe(1);
-      expect(manager.getNote('p2')!.status).toBe('open');
-    });
-
-    it('defaults createdAt to current time if missing', () => {
-      const partial = { frameStart: 1, frameEnd: 5, text: 'Test', id: 'p3' };
-      const result = manager.fromSerializable([partial as unknown as Note]);
-      expect(result.imported).toBe(1);
-      const note = manager.getNote('p3')!;
-      expect(note.createdAt).toBeTruthy();
-      // Should be a valid ISO string
-      expect(() => new Date(note.createdAt)).not.toThrow();
-    });
-
-    it('defaults color to #fbbf24 if missing', () => {
-      const partial = { frameStart: 1, frameEnd: 5, text: 'Test', id: 'p4' };
-      const result = manager.fromSerializable([partial as unknown as Note]);
-      expect(result.imported).toBe(1);
-      expect(manager.getNote('p4')!.color).toBe('#fbbf24');
-    });
-
-    it('defaults sourceIndex to 0 if missing', () => {
-      const partial = { frameStart: 1, frameEnd: 5, text: 'Test', id: 'p5' };
-      const result = manager.fromSerializable([partial as unknown as Note]);
-      expect(result.imported).toBe(1);
-      expect(manager.getNote('p5')!.sourceIndex).toBe(0);
-    });
-
-    it('defaults parentId to null if missing', () => {
-      const partial = { frameStart: 1, frameEnd: 5, text: 'Test', id: 'p6' };
-      const result = manager.fromSerializable([partial as unknown as Note]);
-      expect(result.imported).toBe(1);
-      expect(manager.getNote('p6')!.parentId).toBeNull();
-    });
-
-    it('generates an id if missing', () => {
-      const partial = { frameStart: 1, frameEnd: 5, text: 'Test' };
-      const result = manager.fromSerializable([partial as unknown as Note]);
-      expect(result.imported).toBe(1);
-      const notes = manager.getNotes();
-      expect(notes[0]!.id).toBeTruthy();
-      expect(notes[0]!.id.length).toBeGreaterThan(0);
-    });
-
-    it('reports mixed valid and invalid entries correctly', () => {
-      const entries = [
-        validNote,
-        { frameStart: 'bad' }, // invalid
-        { ...validNote, id: 'valid-2', text: 'Another valid' },
-        null, // invalid
-        { frameStart: 10, frameEnd: 20, text: 'Minimal valid', id: 'valid-3' },
-      ];
-      const result = manager.fromSerializable(entries as unknown as Note[]);
-      expect(result.imported).toBe(3);
-      expect(result.rejected).toBe(2);
-      expect(manager.getNotes().length).toBe(3);
-    });
-
-    it('preserves valid status values', () => {
-      const resolved = { ...validNote, id: 'r1', status: 'resolved' as const };
-      const wontfix = { ...validNote, id: 'r2', status: 'wontfix' as const };
-      manager.fromSerializable([resolved, wontfix]);
-      expect(manager.getNote('r1')!.status).toBe('resolved');
-      expect(manager.getNote('r2')!.status).toBe('wontfix');
-    });
-
-    it('clears existing notes before importing', () => {
-      manager.addNote(0, 1, 1, 'Old', 'Alice');
-      expect(manager.getNotes().length).toBe(1);
-      const result = manager.fromSerializable([validNote]);
-      expect(result.imported).toBe(1);
-      expect(manager.getNotes().length).toBe(1);
-      expect(manager.getNote('valid-1')).toBeDefined();
     });
   });
 
@@ -663,6 +385,76 @@ describe('NoteManager', () => {
       manager.addNote(0, 30, 30, 'S0 next', 'Alice');
       expect(manager.getNextNoteFrame(0, 10)).toBe(30);
       expect(manager.getNextNoteFrame(1, 10)).toBe(20);
+    });
+  });
+
+  describe('priority and category', () => {
+    it('creates note with default priority (medium) and empty category', () => {
+      const note = manager.addNote(0, 1, 1, 'Test', 'Alice');
+      expect(note.priority).toBe('medium');
+      expect(note.category).toBe('');
+    });
+
+    it('creates note with custom priority', () => {
+      const note = manager.addNote(0, 1, 1, 'Critical issue', 'Alice', { priority: 'critical' });
+      expect(note.priority).toBe('critical');
+    });
+
+    it('creates note with custom category', () => {
+      const note = manager.addNote(0, 1, 1, 'Comp fix', 'Alice', { category: 'comp' });
+      expect(note.category).toBe('comp');
+    });
+
+    it('creates note with both priority and category', () => {
+      const note = manager.addNote(0, 1, 1, 'Fix edge', 'Alice', { priority: 'high', category: 'roto' });
+      expect(note.priority).toBe('high');
+      expect(note.category).toBe('roto');
+    });
+
+    it('updateNote changes priority', () => {
+      const note = manager.addNote(0, 1, 1, 'Test', 'Alice');
+      const updated = manager.updateNote(note.id, { priority: 'critical' });
+      expect(updated!.priority).toBe('critical');
+      expect(updated!.category).toBe(''); // unchanged
+    });
+
+    it('updateNote changes category', () => {
+      const note = manager.addNote(0, 1, 1, 'Test', 'Alice');
+      const updated = manager.updateNote(note.id, { category: 'lighting' });
+      expect(updated!.category).toBe('lighting');
+      expect(updated!.priority).toBe('medium'); // unchanged
+    });
+
+    it('updateNote changes both priority and category', () => {
+      const note = manager.addNote(0, 1, 1, 'Test', 'Alice');
+      const updated = manager.updateNote(note.id, { priority: 'low', category: 'paint' });
+      expect(updated!.priority).toBe('low');
+      expect(updated!.category).toBe('paint');
+    });
+
+    it('priority and category survive serialization round-trip', () => {
+      manager.addNote(0, 1, 1, 'High comp', 'Alice', { priority: 'high', category: 'comp' });
+      manager.addNote(0, 10, 10, 'Low anim', 'Bob', { priority: 'low', category: 'anim' });
+
+      const serialized = manager.toSerializable();
+      const json = JSON.stringify(serialized);
+      const restored = JSON.parse(json) as Note[];
+
+      const manager2 = new NoteManager();
+      manager2.fromSerializable(restored);
+
+      const notes = manager2.getNotes();
+      expect(notes.length).toBe(2);
+
+      const highComp = notes.find(n => n.text === 'High comp')!;
+      expect(highComp.priority).toBe('high');
+      expect(highComp.category).toBe('comp');
+
+      const lowAnim = notes.find(n => n.text === 'Low anim')!;
+      expect(lowAnim.priority).toBe('low');
+      expect(lowAnim.category).toBe('anim');
+
+      manager2.dispose();
     });
   });
 });
