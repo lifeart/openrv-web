@@ -15,7 +15,11 @@ import { ShotGridBridge, ShotGridAPIError, mapStatusFromShotGrid, type ShotGridN
 import type { ShotGridConfigUI } from './ShotGridConfig';
 import type { ShotGridPanel } from '../ui/components/ShotGridPanel';
 import type { Session } from '../core/session/Session';
+<<<<<<< ours
 import { isVideoExtension } from '../utils/media/SupportedMediaFormats';
+=======
+import { detectMediaTypeFromUrl } from '../utils/media/SupportedMediaFormats';
+>>>>>>> theirs
 
 // ---------------------------------------------------------------------------
 // Types
@@ -160,6 +164,7 @@ export class ShotGridIntegrationBridge {
         const gen = this.generation;
 
         try {
+<<<<<<< ours
           const isFrameSequencePath = mediaUrl === version.sg_path_to_frames &&
             !version.sg_uploaded_movie?.url &&
             !(version.sg_path_to_movie && (version.sg_path_to_movie.startsWith('http://') || version.sg_path_to_movie.startsWith('https://')));
@@ -172,6 +177,10 @@ export class ShotGridIntegrationBridge {
           const rawExt = cleanUrl.split('.').pop() ?? '';
           const isVideo = isVideoExtension(rawExt.toLowerCase());
           if (isVideo) {
+=======
+          const mediaType = await detectMediaTypeFromUrl(mediaUrl);
+          if (mediaType === 'video') {
+>>>>>>> theirs
             await this.session.loadVideo(version.code, mediaUrl);
           } else {
             await this.session.loadImage(version.code, mediaUrl);

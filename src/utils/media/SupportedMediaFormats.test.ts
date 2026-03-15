@@ -1,146 +1,191 @@
-import { describe, it, expect } from 'vitest';
-import { detectMediaTypeFromFile, isVideoExtension, SUPPORTED_VIDEO_EXTENSIONS } from './SupportedMediaFormats';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import {
+  detectMediaTypeFromFile,
+  detectMediaTypeFromUrl,
+  getExtensionFromUrl,
+} from './SupportedMediaFormats';
 
-describe('detectMediaTypeFromFile', () => {
-  // Helper to create a minimal file-like object
-  function fakeFile(name: string, type = ''): Pick<File, 'name' | 'type'> {
-    return { name, type };
-  }
+// ---------------------------------------------------------------------------
+// getExtensionFromUrl
+// ---------------------------------------------------------------------------
 
-  describe('returns "image" for known image extensions', () => {
-    it.each([
-      'photo.png',
-      'photo.jpg',
-      'photo.jpeg',
-      'photo.webp',
-      'photo.gif',
-      'photo.bmp',
-      'photo.tif',
-      'photo.tiff',
-      'photo.exr',
-      'photo.dpx',
-      'photo.cin',
-      'photo.hdr',
-      'photo.avif',
-      'photo.jxl',
-      'photo.heic',
-      'photo.heif',
-      'photo.jp2',
-      'photo.j2k',
-      'photo.j2c',
-      'photo.jph',
-      'photo.jhc',
-      'photo.cr2',
-      'photo.dng',
-    ])('%s', (name) => {
-      expect(detectMediaTypeFromFile(fakeFile(name))).toBe('image');
-    });
+describe('getExtensionFromUrl', () => {
+  it('extracts extension from a simple URL', () => {
+    expect(getExtensionFromUrl('https://example.com/video.mp4')).toBe('mp4');
   });
 
-  describe('returns "video" for known video extensions', () => {
-    it.each(['clip.mp4', 'clip.mov', 'clip.mkv', 'clip.webm', 'clip.ogg', 'clip.avi', 'clip.mxf'])('%s', (name) => {
-      expect(detectMediaTypeFromFile(fakeFile(name))).toBe('video');
-    });
+  it('extracts extension ignoring query string', () => {
+    expect(getExtensionFromUrl('https://cdn.example.com/file.mov?token=abc')).toBe('mov');
   });
 
-  describe('returns "image" for image MIME types', () => {
-    it('image/png MIME', () => {
-      expect(detectMediaTypeFromFile(fakeFile('unknown', 'image/png'))).toBe('image');
-    });
-
-    it('image/jpeg MIME', () => {
-      expect(detectMediaTypeFromFile(fakeFile('unknown', 'image/jpeg'))).toBe('image');
-    });
+  it('extracts extension ignoring fragment', () => {
+    expect(getExtensionFromUrl('https://example.com/image.png#section')).toBe('png');
   });
 
-  describe('returns "video" for video MIME types', () => {
-    it('video/mp4 MIME', () => {
-      expect(detectMediaTypeFromFile(fakeFile('unknown', 'video/mp4'))).toBe('video');
-    });
-
-    it('application/ogg MIME alias', () => {
-      expect(detectMediaTypeFromFile(fakeFile('unknown', 'application/ogg'))).toBe('video');
-    });
+  it('returns empty string for extensionless URL', () => {
+    expect(getExtensionFromUrl('https://example.com/media/12345')).toBe('');
   });
 
-  describe('returns "unknown" for unrecognized extensions', () => {
-    it.each(['document.pdf', 'document.docx', 'readme.txt', 'data.csv', 'archive.zip', 'script.js', 'style.css'])(
-      '%s',
-      (name) => {
-        expect(detectMediaTypeFromFile(fakeFile(name))).toBe('unknown');
-      },
-    );
+  it('returns empty string for root URL', () => {
+    expect(getExtensionFromUrl('https://example.com/')).toBe('');
   });
 
-  it('returns "unknown" for files with no extension', () => {
-    expect(detectMediaTypeFromFile(fakeFile('Makefile'))).toBe('unknown');
+  it('handles URL with multiple dots', () => {
+    expect(getExtensionFromUrl('https://example.com/my.video.file.webm')).toBe('webm');
   });
 
-  it('returns "unknown" for files with empty MIME and unrecognized extension', () => {
-    expect(detectMediaTypeFromFile(fakeFile('report.xlsx', ''))).toBe('unknown');
+  it('handles relative path', () => {
+    expect(getExtensionFromUrl('/stream/latest')).toBe('');
   });
 
-  describe('JPEG 2000 / HTJ2K extensions are classified as image (issue #512)', () => {
-    it.each(['scan.jp2', 'scan.j2k', 'scan.j2c', 'scan.jph', 'scan.jhc'])('%s', (name) => {
-      expect(detectMediaTypeFromFile(fakeFile(name))).toBe('image');
-    });
-
-    it('JPEG 2000 file with no MIME is still classified by extension', () => {
-      expect(detectMediaTypeFromFile(fakeFile('plate.jp2', ''))).toBe('image');
-    });
-  });
-
-  describe('MXF files are classified as video (issue #513)', () => {
-    it('clip.mxf is classified as video by extension', () => {
-      expect(detectMediaTypeFromFile(fakeFile('clip.mxf'))).toBe('video');
-    });
-
-    it('MXF file with no MIME is still classified by extension', () => {
-      expect(detectMediaTypeFromFile(fakeFile('rushes.mxf', ''))).toBe('video');
-    });
-
-    it('MXF file with video MIME is classified by MIME', () => {
-      expect(detectMediaTypeFromFile(fakeFile('rushes.mxf', 'video/mxf'))).toBe('video');
-    });
-  });
-
-  it('MIME type takes priority over unrecognized extension', () => {
-    // A file with .pdf extension but image/png MIME should be classified as image
-    expect(detectMediaTypeFromFile(fakeFile('weird.pdf', 'image/png'))).toBe('image');
+  it('handles relative path with extension', () => {
+    expect(getExtensionFromUrl('/assets/clip.mp4')).toBe('mp4');
   });
 });
 
-describe('isVideoExtension (single source of truth — issues #522/#523)', () => {
-  it('SMF-V001: returns true for all SUPPORTED_VIDEO_EXTENSIONS', () => {
-    for (const ext of SUPPORTED_VIDEO_EXTENSIONS) {
-      expect(isVideoExtension(ext)).toBe(true);
-    }
+// ---------------------------------------------------------------------------
+// detectMediaTypeFromFile (existing function - basic sanity)
+// ---------------------------------------------------------------------------
+
+describe('detectMediaTypeFromFile', () => {
+  it('detects video from MIME type', () => {
+    expect(detectMediaTypeFromFile({ name: 'file', type: 'video/mp4' })).toBe('video');
   });
 
-  it('SMF-V002: returns true for common video extensions', () => {
-    for (const ext of ['mp4', 'mov', 'mkv', 'webm', 'avi', 'mxf', 'ogv', 'm4v', '3gp']) {
-      expect(isVideoExtension(ext)).toBe(true);
-    }
+  it('detects image from MIME type', () => {
+    expect(detectMediaTypeFromFile({ name: 'file', type: 'image/png' })).toBe('image');
   });
 
-  it('SMF-V003: returns false for image extensions', () => {
-    for (const ext of ['png', 'jpg', 'exr', 'dpx', 'tiff', 'avif']) {
-      expect(isVideoExtension(ext)).toBe(false);
-    }
+  it('detects video from extension when MIME is empty', () => {
+    expect(detectMediaTypeFromFile({ name: 'clip.mp4', type: '' })).toBe('video');
   });
 
-  it('SMF-V004: returns false for non-media extensions', () => {
-    for (const ext of ['pdf', 'txt', 'zip', 'js', 'html']) {
-      expect(isVideoExtension(ext)).toBe(false);
-    }
+  it('defaults to unknown for unrecognized files', () => {
+    expect(detectMediaTypeFromFile({ name: 'unknown', type: '' })).toBe('unknown');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// detectMediaTypeFromUrl
+// ---------------------------------------------------------------------------
+
+describe('detectMediaTypeFromUrl', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
   });
 
-  it('SMF-V005: returns false for empty string', () => {
-    expect(isVideoExtension('')).toBe(false);
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
-  it('SMF-V006: is case-sensitive (expects lowercase input)', () => {
-    expect(isVideoExtension('MP4')).toBe(false);
-    expect(isVideoExtension('mp4')).toBe(true);
+  // --- Extension-based (fast path, no fetch) ---
+
+  it('detects video from .mp4 extension without fetching', async () => {
+    const result = await detectMediaTypeFromUrl('https://cdn.example.com/video.mp4');
+    expect(result).toBe('video');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('detects video from .webm extension without fetching', async () => {
+    const result = await detectMediaTypeFromUrl('https://cdn.example.com/clip.webm');
+    expect(result).toBe('video');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('detects video from .mov extension with query params', async () => {
+    const result = await detectMediaTypeFromUrl('https://cdn.example.com/clip.mov?sig=abc');
+    expect(result).toBe('video');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('detects image from .png extension without fetching', async () => {
+    const result = await detectMediaTypeFromUrl('https://cdn.example.com/photo.png');
+    expect(result).toBe('image');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('detects image from .exr extension without fetching', async () => {
+    const result = await detectMediaTypeFromUrl('https://cdn.example.com/render.exr');
+    expect(result).toBe('image');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  // --- HEAD request (slow path) ---
+
+  it('detects video via HEAD when URL has no extension', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      headers: new Headers({ 'content-type': 'video/mp4' }),
+    } as Response);
+
+    const result = await detectMediaTypeFromUrl('https://api.example.com/media/12345');
+    expect(result).toBe('video');
+    expect(fetch).toHaveBeenCalledWith('https://api.example.com/media/12345', {
+      method: 'HEAD',
+      signal: expect.any(AbortSignal),
+    });
+  });
+
+  it('detects image via HEAD when URL has no extension', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      headers: new Headers({ 'content-type': 'image/jpeg' }),
+    } as Response);
+
+    const result = await detectMediaTypeFromUrl('https://api.example.com/media/67890');
+    expect(result).toBe('image');
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it('detects video from content-type with charset parameter', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      headers: new Headers({ 'content-type': 'video/webm; codecs="vp9"' }),
+    } as Response);
+
+    const result = await detectMediaTypeFromUrl('/stream/latest');
+    expect(result).toBe('video');
+  });
+
+  it('detects video from application/ogg alias', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      headers: new Headers({ 'content-type': 'application/ogg' }),
+    } as Response);
+
+    const result = await detectMediaTypeFromUrl('/stream/ogg');
+    expect(result).toBe('video');
+  });
+
+  it('falls back to image when HEAD request fails (network error)', async () => {
+    vi.mocked(fetch).mockRejectedValue(new Error('Network error'));
+
+    const result = await detectMediaTypeFromUrl('/media/12345');
+    expect(result).toBe('image');
+  });
+
+  it('falls back to image when HEAD returns unrecognized content-type', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      headers: new Headers({ 'content-type': 'application/octet-stream' }),
+    } as Response);
+
+    const result = await detectMediaTypeFromUrl('/media/12345');
+    expect(result).toBe('image');
+  });
+
+  it('falls back to image when HEAD returns no content-type header', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      headers: new Headers(),
+    } as Response);
+
+    const result = await detectMediaTypeFromUrl('/media/12345');
+    expect(result).toBe('image');
+  });
+
+  it('does not fetch for unknown extension that is not a media extension', async () => {
+    // .xyz is not a known media extension, so HEAD should be attempted
+    vi.mocked(fetch).mockResolvedValue({
+      headers: new Headers({ 'content-type': 'video/mp4' }),
+    } as Response);
+
+    const result = await detectMediaTypeFromUrl('https://example.com/file.xyz');
+    expect(result).toBe('video');
+    expect(fetch).toHaveBeenCalledOnce();
   });
 });

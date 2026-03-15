@@ -17,9 +17,13 @@ import { parseLUT } from './color/LUTFormatDetect';
 import type { Annotation } from './paint/types';
 import { Logger } from './utils/Logger';
 import { DisposableSubscriptionManager } from './utils/DisposableSubscriptionManager';
+<<<<<<< ours
 import { basename } from './utils/path';
 import { isVideoExtension } from './utils/media/SupportedMediaFormats';
 import { showAlert } from './ui/components/shared/Modal';
+=======
+import { detectMediaTypeFromUrl } from './utils/media/SupportedMediaFormats';
+>>>>>>> theirs
 
 const log = new Logger('AppDCCWiring');
 
@@ -196,6 +200,7 @@ export function wireDCCBridge(deps: DCCWiringDeps): DCCWiringState {
   subs.add(
     dccBridge.on('loadMedia', (msg) => {
       const path = msg.path;
+<<<<<<< ours
       // Strip query strings and fragments before extracting the extension
       // so that URLs like "shot.mov?token=abc" or "clip.mp4#t=10" are
       // correctly recognised as video.
@@ -235,6 +240,25 @@ export function wireDCCBridge(deps: DCCWiringDeps): DCCWiringState {
             );
           });
       }
+=======
+      const name = path.split('/').pop() ?? path;
+      detectMediaTypeFromUrl(path)
+        .then((mediaType) => {
+          if (mediaType === 'video') {
+            return session.loadVideo(name, path);
+          } else {
+            return session.loadImage(name, path);
+          }
+        })
+        .then(() => {
+          if (typeof msg.frame === 'number') {
+            session.goToFrame(msg.frame);
+          }
+        })
+        .catch((err) => {
+          log.error('Failed to load media from DCC:', err);
+        });
+>>>>>>> theirs
     }),
   );
 
