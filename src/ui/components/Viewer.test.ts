@@ -1721,6 +1721,7 @@ describe('Viewer', () => {
           1, 0, 0,
         ]);
         config.fileLUT.lutData = {
+          type: '3d',
           title: 'File LUT',
           size: 2,
           domainMin: [0, 0, 0],

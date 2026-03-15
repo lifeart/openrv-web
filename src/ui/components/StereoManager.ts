@@ -19,16 +19,19 @@ import {
   DEFAULT_STEREO_EYE_TRANSFORM_STATE,
   DEFAULT_STEREO_ALIGN_MODE,
   isDefaultStereoEyeTransformState,
+  type StereoInputFormat,
 } from '../../stereo/StereoRenderer';
 
 export class StereoManager {
   private _stereoState: StereoState = { ...DEFAULT_STEREO_STATE };
+  private _stereoInputFormat: StereoInputFormat = 'side-by-side';
   private _stereoEyeTransformState: StereoEyeTransformState = {
     ...DEFAULT_STEREO_EYE_TRANSFORM_STATE,
     left: { ...DEFAULT_STEREO_EYE_TRANSFORM_STATE.left },
     right: { ...DEFAULT_STEREO_EYE_TRANSFORM_STATE.right },
   };
   private _stereoAlignMode: StereoAlignMode = DEFAULT_STEREO_ALIGN_MODE;
+  private _rightEyeImageData: ImageData | null = null;
 
   // =========================================================================
   // Stereo State
@@ -52,6 +55,38 @@ export class StereoManager {
 
   isDefaultStereo(): boolean {
     return isDefaultStereoState(this._stereoState);
+  }
+
+  // =========================================================================
+  // Stereo Input Format
+  // =========================================================================
+
+  get stereoInputFormat(): StereoInputFormat {
+    return this._stereoInputFormat;
+  }
+
+  setStereoInputFormat(format: StereoInputFormat): void {
+    this._stereoInputFormat = format;
+  }
+
+  getStereoInputFormat(): StereoInputFormat {
+    return this._stereoInputFormat;
+  }
+
+  resetStereoInputFormat(): void {
+    this._stereoInputFormat = 'side-by-side';
+  }
+
+  /**
+   * Set right-eye ImageData for 'separate' stereo format (multi-view EXR).
+   * When set, extractStereoEyes will use this instead of duplicating the left eye.
+   */
+  setRightEyeImageData(imageData: ImageData | null): void {
+    this._rightEyeImageData = imageData;
+  }
+
+  getRightEyeImageData(): ImageData | null {
+    return this._rightEyeImageData;
   }
 
   // =========================================================================
@@ -133,7 +168,8 @@ export class StereoManager {
     if (isDefaultStereoState(this._stereoState)) return;
 
     const imageData = ctx.getImageData(0, 0, width, height);
-    const processedData = applyStereoModeUtil(imageData, this._stereoState);
+    const rightEye = this._stereoInputFormat === 'separate' ? this._rightEyeImageData ?? undefined : undefined;
+    const processedData = applyStereoModeUtil(imageData, this._stereoState, this._stereoInputFormat, rightEye);
     ctx.putImageData(processedData, 0, 0);
   }
 
@@ -144,11 +180,14 @@ export class StereoManager {
     if (isDefaultStereoState(this._stereoState)) return;
 
     const imageData = ctx.getImageData(0, 0, width, height);
+    const rightEye = this._stereoInputFormat === 'separate' ? this._rightEyeImageData ?? undefined : undefined;
     const processedData = applyStereoModeWithEyeTransformsUtil(
       imageData,
       this._stereoState,
       this._stereoEyeTransformState,
       this._stereoAlignMode,
+      this._stereoInputFormat,
+      rightEye,
     );
     ctx.putImageData(processedData, 0, 0);
   }

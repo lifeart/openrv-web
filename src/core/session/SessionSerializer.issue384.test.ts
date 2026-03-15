@@ -65,6 +65,7 @@ function createMockComponents(): SessionComponents {
       loadVideo: vi.fn<(name: string, url: string) => Promise<void>>().mockResolvedValue(undefined),
       loadFile: vi.fn<(file: File) => Promise<void>>().mockResolvedValue(undefined),
       loadSequence: vi.fn<(files: File[]) => Promise<void>>().mockResolvedValue(undefined),
+      addSource: vi.fn(),
       toSerializedGraph: vi.fn().mockReturnValue(null),
       loadSerializedGraph: vi.fn().mockReturnValue([]),
       setEdlEntries: vi.fn(),
@@ -250,8 +251,8 @@ describe('Issue #384: Sequence reload should not collapse to single image', () =
 
     const result = await SessionSerializer.fromJSON(state, components);
 
-    expect(result.loadedMedia).toBe(0);
-    expect(result.warnings).toContain('Skipped reload: seq.####.exr');
+    expect(result.loadedMedia).toBe(1);
+    expect(result.warnings).toContain('Sequence needs file reload: seq.####.exr');
   });
 
   it('ISS-384-004: sequence reload failure produces warning', async () => {
@@ -276,8 +277,8 @@ describe('Issue #384: Sequence reload should not collapse to single image', () =
 
     const result = await SessionSerializer.fromJSON(state, components);
 
-    expect(result.loadedMedia).toBe(0);
-    expect(result.warnings).toContain('Failed to reload sequence: seq.####.exr');
+    expect(result.loadedMedia).toBe(1);
+    expect(result.warnings).toContain('Failed to reload sequence: seq.####.exr — added as placeholder');
   });
 
   it('ISS-384-005: non-blob sequence type also uses sequence reload prompt', async () => {

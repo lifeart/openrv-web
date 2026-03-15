@@ -26,6 +26,8 @@ export interface SessionURLState {
   sourceIndex: number;
   /** Source URL (for reference / re-loading) */
   sourceUrl?: string;
+  /** Multiple source URLs (for multi-source A/B compare links) */
+  sourceUrls?: string[];
   /** A/B compare source indices */
   sourceAIndex?: number;
   sourceBIndex?: number;
@@ -104,6 +106,7 @@ interface CompactState {
   fps: number;
   si: number; // sourceIndex
   su?: string; // sourceUrl
+  sus?: string[]; // sourceUrls
   ip?: number; // inPoint
   op?: number; // outPoint
   sai?: number; // sourceAIndex
@@ -133,6 +136,7 @@ function buildCompactState(state: SessionURLState): CompactState {
   };
 
   if (state.sourceUrl) c.su = state.sourceUrl;
+  if (state.sourceUrls && state.sourceUrls.length > 0) c.sus = state.sourceUrls;
   if (state.inPoint != null) c.ip = state.inPoint;
   if (state.outPoint != null) c.op = state.outPoint;
   if (state.sourceAIndex != null) c.sai = state.sourceAIndex;
@@ -198,6 +202,9 @@ function parseState(obj: unknown): SessionURLState | null {
   const state: SessionURLState = { frame, fps, sourceIndex };
 
   if (typeof c.su === 'string') state.sourceUrl = c.su;
+  if (Array.isArray(c.sus) && c.sus.length > 0 && c.sus.every((s: unknown) => typeof s === 'string')) {
+    state.sourceUrls = c.sus as string[];
+  }
   if (typeof c.ip === 'number') state.inPoint = c.ip;
   if (typeof c.op === 'number') state.outPoint = c.op;
   if (typeof c.sai === 'number') state.sourceAIndex = c.sai;

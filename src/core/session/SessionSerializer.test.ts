@@ -26,7 +26,7 @@ vi.mock('../../ui/components/shared/Modal', () => ({
   FILE_RELOAD_CANCEL: 'cancel',
 }));
 
-import { showFileReloadPrompt } from '../../ui/components/shared/Modal';
+import { showFileReloadPrompt, showSequenceReloadPrompt } from '../../ui/components/shared/Modal';
 
 describe('SessionSerializer', () => {
   beforeEach(() => {
@@ -393,13 +393,15 @@ describe('SessionSerializer', () => {
 
       const result = await SessionSerializer.fromJSON(state, components);
 
-      // video + img loaded; sequence requires manual selection
-      expect(result.loadedMedia).toBe(2);
-      // Warnings: 1 for sequence (no gap warning since all defaults — fix #137)
+      // video + img loaded; sequence added as placeholder (fix #521)
+      expect(result.loadedMedia).toBe(3);
+      // Warnings: 1 for sequence placeholder (no gap warning since all defaults — fix #137)
       expect(result.warnings.length).toBe(1);
       expect(result.warnings[0]).toContain('seq');
+      expect(result.warnings[0]).toContain('Sequence needs file reload');
       expect(components.session.loadVideo).toHaveBeenCalledWith('video', 'video.mp4');
       expect(components.session.loadImage).toHaveBeenCalledWith('img', 'image.jpg');
+      expect(components.session.addSource).toHaveBeenCalledTimes(1);
       expect(components.viewer.setZoom).toHaveBeenCalled();
       expect(components.paintEngine.loadFromAnnotations).toHaveBeenCalled();
     });
@@ -1536,6 +1538,197 @@ describe('SessionSerializer', () => {
       expect((components.session as any).setEdlEntries).toHaveBeenCalledWith([]);
     });
   });
+
+  describe('sequence placeholder restore (fix #521)', () => {
+    it('SER-SEQ-001: sequence metadata roundtrips through serialize/deserialize', async () => {
+      // Serialize a source with sequence info
+      const components = createMockComponents();
+      (components.session as any).allSources = [
+        {
+          url: '',
+          name: 'shot_v01',
+          type: 'sequence',
+          width: 1920,
+          height: 1080,
+          duration: 48,
+          fps: 24,
+          sequenceInfo: {
+            pattern: 'shot_v01.%04d.exr',
+            startFrame: 1001,
+            endFrame: 1048,
+            name: 'shot_v01',
+            width: 1920,
+            height: 1080,
+            fps: 24,
+            frames: [],
+            missingFrames: [],
+          },
+        },
+      ];
+
+      const state = SessionSerializer.toJSON(components, 'RoundTrip');
+
+      // Verify serialized state
+      expect(state.media[0]?.sequencePattern).toBe('shot_v01.%04d.exr');
+      expect(state.media[0]?.frameRange).toEqual({ start: 1001, end: 1048 });
+      expect(state.media[0]?.type).toBe('sequence');
+
+      // Deserialize (user skips reload → placeholder created)
+      const restoreComponents = createMockComponents();
+      (showSequenceReloadPrompt as ReturnType<typeof vi.fn>).mockResolvedValueOnce(null);
+      const result = await SessionSerializer.fromJSON(state, restoreComponents);
+
+      // Placeholder was added via addSource
+      expect(restoreComponents.session.addSource).toHaveBeenCalledTimes(1);
+      const placeholder = (restoreComponents.session.addSource as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(placeholder.type).toBe('sequence');
+      expect(placeholder.name).toBe('shot_v01');
+      expect(placeholder.width).toBe(1920);
+      expect(placeholder.height).toBe(1080);
+      expect(placeholder.duration).toBe(48);
+      expect(placeholder.fps).toBe(24);
+      expect(placeholder.sequenceInfo.pattern).toBe('shot_v01.%04d.exr');
+      expect(placeholder.sequenceInfo.startFrame).toBe(1001);
+      expect(placeholder.sequenceInfo.endFrame).toBe(1048);
+      expect(result.loadedMedia).toBe(1);
+    });
+
+    it('SER-SEQ-002: restored sequence placeholder has correct frame range and pattern info', async () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty('SeqTest');
+      state.media = [
+        {
+          name: 'anim',
+          path: '',
+          type: 'sequence',
+          width: 2048,
+          height: 1152,
+          duration: 100,
+          fps: 30,
+          requiresReload: true,
+          sequencePattern: 'anim.%06d.dpx',
+          frameRange: { start: 0, end: 99 },
+        },
+      ];
+
+      (showSequenceReloadPrompt as ReturnType<typeof vi.fn>).mockResolvedValueOnce(null);
+      const result = await SessionSerializer.fromJSON(state, components);
+
+      expect(components.session.addSource).toHaveBeenCalledTimes(1);
+      const placeholder = (components.session.addSource as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(placeholder.sequenceInfo.pattern).toBe('anim.%06d.dpx');
+      expect(placeholder.sequenceInfo.startFrame).toBe(0);
+      expect(placeholder.sequenceInfo.endFrame).toBe(99);
+      expect(placeholder.duration).toBe(100);
+      expect(placeholder.fps).toBe(30);
+      expect(placeholder.sequenceFrames).toEqual([]);
+      expect(placeholder.sequenceFrameMap).toBeInstanceOf(Map);
+      expect(placeholder.sequenceFrameMap.size).toBe(0);
+
+      // Warning includes pattern and frame range info
+      expect(result.warnings.length).toBe(1);
+      expect(result.warnings[0]).toContain('anim.%06d.dpx');
+      expect(result.warnings[0]).toContain('frames 0');
+      expect(result.warnings[0]).toContain('99');
+    });
+
+    it('SER-SEQ-003: backward compat — projects without sequencePattern/frameRange still work', async () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty('LegacyTest');
+      state.media = [
+        {
+          name: 'old_seq',
+          path: '',
+          type: 'sequence',
+          width: 100,
+          height: 100,
+          duration: 10,
+          fps: 24,
+          requiresReload: true,
+          // No sequencePattern or frameRange — legacy project
+        },
+      ];
+
+      (showSequenceReloadPrompt as ReturnType<typeof vi.fn>).mockResolvedValueOnce(null);
+      const result = await SessionSerializer.fromJSON(state, components);
+
+      // Should still create a placeholder without crashing
+      expect(components.session.addSource).toHaveBeenCalledTimes(1);
+      const placeholder = (components.session.addSource as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(placeholder.type).toBe('sequence');
+      expect(placeholder.name).toBe('old_seq');
+      expect(placeholder.sequenceInfo.pattern).toBe('');
+      expect(placeholder.sequenceInfo.startFrame).toBe(1);
+      expect(placeholder.sequenceInfo.endFrame).toBe(10);
+      expect(result.loadedMedia).toBe(1);
+      expect(result.warnings.length).toBe(1);
+    });
+
+    it('SER-SEQ-004: failed sequence reload creates placeholder instead of dropping source', async () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty('FailTest');
+      state.media = [
+        {
+          name: 'broken_seq',
+          path: '',
+          type: 'sequence',
+          width: 800,
+          height: 600,
+          duration: 24,
+          fps: 24,
+          requiresReload: true,
+          sequencePattern: 'broken.%04d.png',
+          frameRange: { start: 1, end: 24 },
+        },
+      ];
+
+      // User provides files but loadSequence fails
+      const fakeFiles = [new File(['x'], 'broken.0001.png')];
+      (showSequenceReloadPrompt as ReturnType<typeof vi.fn>).mockResolvedValueOnce(fakeFiles);
+      (components.session.loadSequence as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+        new Error('decode error'),
+      );
+
+      const result = await SessionSerializer.fromJSON(state, components);
+
+      // Placeholder created on failure
+      expect(components.session.addSource).toHaveBeenCalledTimes(1);
+      const placeholder = (components.session.addSource as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(placeholder.sequenceInfo.pattern).toBe('broken.%04d.png');
+      expect(result.loadedMedia).toBe(1);
+      expect(result.warnings[0]).toContain('Failed to reload sequence');
+      expect(result.warnings[0]).toContain('placeholder');
+    });
+
+    it('SER-SEQ-005: non-requiresReload sequence also creates placeholder when skipped', async () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty('NonBlobSeq');
+      state.media = [
+        {
+          name: 'remote_seq',
+          path: 'remote_seq.jpg',
+          type: 'sequence',
+          width: 1920,
+          height: 1080,
+          duration: 50,
+          fps: 24,
+          sequencePattern: 'remote_seq.%04d.jpg',
+          frameRange: { start: 1, end: 50 },
+        },
+      ];
+
+      // User skips the reload prompt
+      (showSequenceReloadPrompt as ReturnType<typeof vi.fn>).mockResolvedValueOnce(null);
+      const result = await SessionSerializer.fromJSON(state, components);
+
+      expect(components.session.addSource).toHaveBeenCalledTimes(1);
+      const placeholder = (components.session.addSource as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(placeholder.type).toBe('sequence');
+      expect(placeholder.sequenceInfo.pattern).toBe('remote_seq.%04d.jpg');
+      expect(result.loadedMedia).toBe(1);
+      expect(result.warnings[0]).toContain('Sequence needs file reload');
+    });
+  });
 });
 
 /**
@@ -1565,6 +1758,8 @@ function createMockComponents(): SessionComponents {
       loadImage: vi.fn<(name: string, url: string) => Promise<void>>().mockResolvedValue(undefined),
       loadVideo: vi.fn<(name: string, url: string) => Promise<void>>().mockResolvedValue(undefined),
       loadFile: vi.fn<(file: File) => Promise<void>>().mockResolvedValue(undefined),
+      loadSequence: vi.fn<(files: File[]) => Promise<void>>().mockResolvedValue(undefined),
+      addSource: vi.fn(),
       noteManager: {
         toSerializable: vi.fn().mockReturnValue([]),
         fromSerializable: vi.fn(),

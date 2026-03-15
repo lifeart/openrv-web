@@ -349,7 +349,7 @@ describe('StatusManager', () => {
 
     it('STATUS-317-009: unknown status values default to pending on deserialization', () => {
       // Simulate corrupted or future data with an unrecognized status
-      const badEntries = [
+      const badEntries: StatusEntry[] = [
         { sourceIndex: 0, status: 'bogus-status' as ShotStatus, setBy: 'Alice', setAt: '2025-01-01T00:00:00.000Z' },
         { sourceIndex: 1, status: 'approved', setBy: 'Bob', setAt: '2025-01-01T00:00:00.000Z' },
       ];

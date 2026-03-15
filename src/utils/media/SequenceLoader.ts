@@ -3,7 +3,18 @@
  * Handles parsing, sorting, and loading of numbered image sequences
  */
 
-import { SUPPORTED_IMAGE_EXTENSIONS } from './SupportedMediaFormats';
+import { SUPPORTED_IMAGE_EXTENSIONS, isDecoderBackedExtension } from './SupportedMediaFormats';
+import { decoderRegistry } from '../../formats/DecoderRegistry';
+
+/** Decoded HDR/pro-format frame data preserved as full-precision Float32Array */
+export interface DecodedFrameData {
+  data: Float32Array;
+  width: number;
+  height: number;
+  channels: number;
+  colorSpace: string;
+  formatName: string;
+}
 
 export interface SequenceFrame {
   index: number; // 0-based frame index
@@ -11,6 +22,7 @@ export interface SequenceFrame {
   file: File;
   url?: string; // Object URL when loaded
   image?: ImageBitmap;
+  decodedData?: DecodedFrameData; // HDR decoded data (preserved full precision)
 }
 
 export interface SequenceInfo {
@@ -122,7 +134,60 @@ export function sortByFrameNumber(files: File[]): SequenceFrame[] {
 }
 
 /**
- * Load a single frame image using background decoders
+ * Get the file extension (lowercase, no dot) from a filename.
+ */
+function getExtension(filename: string): string {
+  const dotIdx = filename.lastIndexOf('.');
+  if (dotIdx === -1 || dotIdx === filename.length - 1) return '';
+  return filename.slice(dotIdx + 1).toLowerCase();
+}
+
+/**
+ * Convert a Float32Array RGBA decode result into an ImageBitmap.
+ * The decoder output has linear float values (0-1+ for HDR).
+ * We clamp to [0,1] and convert to 8-bit RGBA for the ImageBitmap.
+ */
+export async function float32ToImageBitmap(
+  data: Float32Array,
+  width: number,
+  height: number,
+  channels: number,
+): Promise<ImageBitmap> {
+  const pixelCount = width * height;
+  const rgba = new Uint8ClampedArray(pixelCount * 4);
+
+  for (let i = 0; i < pixelCount; i++) {
+    const srcIdx = i * channels;
+    const dstIdx = i * 4;
+    // Clamp to [0,1] and convert to 8-bit
+    rgba[dstIdx] = Math.round(Math.min(1, Math.max(0, data[srcIdx]!)) * 255);
+    rgba[dstIdx + 1] = Math.round(Math.min(1, Math.max(0, data[srcIdx + 1]!)) * 255);
+    rgba[dstIdx + 2] = Math.round(Math.min(1, Math.max(0, data[srcIdx + 2]!)) * 255);
+    rgba[dstIdx + 3] = channels >= 4 ? Math.round(Math.min(1, Math.max(0, data[srcIdx + 3]!)) * 255) : 255;
+  }
+
+  const imageData = new ImageData(rgba, width, height);
+  return createImageBitmap(imageData);
+}
+
+/**
+ * Check if a frame has been loaded (either as ImageBitmap or decoded HDR data).
+ */
+export function isFrameLoaded(frame: SequenceFrame): boolean {
+  return frame.image !== undefined || frame.decodedData !== undefined;
+}
+
+/**
+ * Load a single frame image using background decoders.
+ *
+ * For decoder-backed formats (EXR, DPX, Cineon, HDR, TIFF, etc.), the full-precision
+ * Float32Array is stored in `frame.decodedData` to preserve HDR information. An
+ * ImageBitmap preview is also generated and stored in `frame.image` for dimension
+ * queries and preview/thumbnail use.
+ *
+ * For browser-native formats (PNG, JPEG, WebP, etc.), `createImageBitmap()` is used
+ * directly and only `frame.image` is populated.
+ *
  * @param frame - The frame to load
  * @param signal - Optional AbortSignal to cancel the load operation
  */
@@ -135,13 +200,49 @@ export async function loadFrameImage(frame: SequenceFrame, signal?: AbortSignal)
     return frame.image;
   }
 
+  const ext = getExtension(frame.file.name);
+
   try {
-    // createImageBitmap runs on a background thread and doesn't block the main thread.
-    // We explicitly disable colorspace conversion and premultiplied alpha so we get raw pixels.
-    const bitmap = await createImageBitmap(frame.file, {
-      premultiplyAlpha: 'none',
-      colorSpaceConversion: 'none',
-    });
+    let bitmap: ImageBitmap;
+
+    if (isDecoderBackedExtension(ext)) {
+      // Route through the decoder registry for pro formats (EXR, DPX, Cineon, HDR, TIFF, etc.)
+      const buffer = await frame.file.arrayBuffer();
+
+      if (signal?.aborted) {
+        throw signal.reason ?? new DOMException('The operation was aborted.', 'AbortError');
+      }
+
+      const result = await decoderRegistry.detectAndDecode(buffer);
+      if (!result) {
+        throw new Error(`No decoder found for format: ${ext}`);
+      }
+
+      if (signal?.aborted) {
+        throw signal.reason ?? new DOMException('The operation was aborted.', 'AbortError');
+      }
+
+      // Store full-precision decoded data for the HDR rendering path
+      frame.decodedData = {
+        data: result.data,
+        width: result.width,
+        height: result.height,
+        channels: result.channels,
+        colorSpace: result.colorSpace,
+        formatName: result.formatName,
+      };
+
+      // Also generate an ImageBitmap preview for dimension queries and fallback display
+      bitmap = await float32ToImageBitmap(result.data, result.width, result.height, result.channels);
+    } else {
+      // Browser-native formats (PNG, JPEG, WebP, etc.) use createImageBitmap directly.
+      // createImageBitmap runs on a background thread and doesn't block the main thread.
+      // We explicitly disable colorspace conversion and premultiplied alpha so we get raw pixels.
+      bitmap = await createImageBitmap(frame.file, {
+        premultiplyAlpha: 'none',
+        colorSpaceConversion: 'none',
+      });
+    }
 
     if (signal?.aborted) {
       bitmap.close();
@@ -182,7 +283,7 @@ export async function preloadFrames(
 
   for (let i = start; i <= end; i++) {
     const frame = frames[i];
-    if (frame && !frame.image) {
+    if (frame && !isFrameLoaded(frame)) {
       loadPromises.push(loadFrameImage(frame, signal));
     }
   }
@@ -202,6 +303,9 @@ export function releaseDistantFrames(frames: SequenceFrame[], currentIndex: numb
         if (frame.image) {
           frame.image.close();
           frame.image = undefined;
+        }
+        if (frame.decodedData) {
+          frame.decodedData = undefined;
         }
         if (frame.url) {
           URL.revokeObjectURL(frame.url);
@@ -315,6 +419,9 @@ export function disposeSequence(frames: SequenceFrame[]): void {
     if (frame.image) {
       frame.image.close();
       frame.image = undefined;
+    }
+    if (frame.decodedData) {
+      frame.decodedData = undefined;
     }
     if (frame.url) {
       URL.revokeObjectURL(frame.url);

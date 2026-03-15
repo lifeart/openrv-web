@@ -1154,6 +1154,14 @@ export class Viewer {
     this.inputHandler.onProjectFileDrop = cb;
   }
 
+  /**
+   * Set a callback invoked before media files are loaded via drag-and-drop.
+   * Used to create auto-checkpoints before destructive media load operations.
+   */
+  setOnBeforeMediaLoad(cb: (() => Promise<void>) | null): void {
+    this.inputHandler.onBeforeMediaLoad = cb;
+  }
+
   private scheduleRender(): void {
     // During video playback, the tick loop handles all rendering via renderDirect().
     // Skip scheduling to prevent render storm that starves the video decoder.
@@ -1502,6 +1510,25 @@ export class Viewer {
 
   private renderImage(): void {
     const source = this.session.currentSource;
+
+    // Sync stereo input format from source metadata or file source node
+    const detectedStereoFormat =
+      source?.stereoInputFormat ??
+      source?.fileSourceNode?.stereoInputFormat ??
+      null;
+    if (detectedStereoFormat) {
+      this.stereoManager.setStereoInputFormat(detectedStereoFormat);
+      // Pass right-eye image data for 'separate' stereo (multi-view EXR)
+      const rightEyeIPImage = source?.fileSourceNode?.getIPImage()?.rightEyeImage;
+      if (detectedStereoFormat === 'separate' && rightEyeIPImage) {
+        this.stereoManager.setRightEyeImageData(rightEyeIPImage.toImageData());
+      } else {
+        this.stereoManager.setRightEyeImageData(null);
+      }
+    } else {
+      this.stereoManager.resetStereoInputFormat();
+      this.stereoManager.setRightEyeImageData(null);
+    }
 
     // Deactivate HDR mode if current source isn't HDR, or if OCIO is active
     // (unless WebGPU blit bypasses OCIO for HDR output)
@@ -2300,10 +2327,12 @@ export class Viewer {
   private renderPaint(): void {
     if (this.displayWidth === 0 || this.displayHeight === 0) return;
 
-    // Get annotations with ghost effect, filtering by current A/B version
+    // Get annotations with ghost effect, filtering by current A/B version and source index.
+    // sourceIndex-based filtering ensures annotations follow the media source, not the A/B slot.
     const version = this.paintEngine.annotationVersion;
     const versionFilter = version === 'all' ? undefined : version;
-    const annotations = this.paintEngine.getAnnotationsWithGhost(this.session.currentFrame, versionFilter);
+    const sourceIndexFilter = this.paintEngine.sourceIndex;
+    const annotations = this.paintEngine.getAnnotationsWithGhost(this.session.currentFrame, versionFilter, undefined, sourceIndexFilter);
 
     if (annotations.length === 0) {
       // Only clear if we previously had content
@@ -3138,7 +3167,9 @@ export class Viewer {
     const imageData = this.getImageData();
     if (!imageData) return null;
 
-    return extractStereoEyes(imageData, 'side-by-side', stereoState.eyeSwap);
+    const inputFormat = this.stereoManager.getStereoInputFormat();
+    const rightEyeData = this.stereoManager.getRightEyeImageData() ?? undefined;
+    return extractStereoEyes(imageData, inputFormat, stereoState.eyeSwap, rightEyeData);
   }
 
   // Difference matte methods

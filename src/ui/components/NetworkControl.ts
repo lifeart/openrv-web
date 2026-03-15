@@ -53,6 +53,12 @@ export interface NetworkControlState {
   localUserId: string | null;
 }
 
+/** Result of a copy-link operation, used by AppNetworkBridge */
+export interface CopyResultOptions {
+  success: boolean;
+  message?: string;
+}
+
 interface MediaSyncConfirmationOptions {
   fileCount: number;
   totalBytes: number;
@@ -1097,6 +1103,24 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
   hideError(): void {
     this.errorDisplay.style.display = 'none';
     this.errorDisplay.textContent = '';
+  }
+
+  /**
+   * Report the result of a copy-link operation.
+   * On success, shows brief visual feedback on the copy button.
+   * On failure, displays the error message.
+   */
+  reportCopyResult(success: boolean, errorMessage?: string): void {
+    if (success) {
+      this.copyLinkButton.textContent = 'Copied!';
+      this.copyLinkButton.style.color = 'var(--success)';
+      setTimeout(() => {
+        this.copyLinkButton.style.color = 'var(--text-primary)';
+        this.updateShareLinkUI();
+      }, 2000);
+    } else {
+      this.showError(errorMessage ?? 'Failed to copy link.');
+    }
   }
 
   showInfo(message: string): void {

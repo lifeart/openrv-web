@@ -55,6 +55,7 @@ export function applyStereoMode(
   sourceData: ImageData,
   state: StereoState,
   inputFormat: StereoInputFormat = 'side-by-side',
+  rightEyeImageData?: ImageData,
 ): ImageData {
   if (state.mode === 'off') {
     return sourceData;
@@ -63,7 +64,7 @@ export function applyStereoMode(
   const { width, height } = sourceData;
 
   // Extract left and right eye images based on input format
-  const { left, right } = extractStereoEyes(sourceData, inputFormat, state.eyeSwap);
+  const { left, right } = extractStereoEyes(sourceData, inputFormat, state.eyeSwap, rightEyeImageData);
 
   // Apply offset to the right eye
   const offsetRight = state.offset !== 0 ? applyHorizontalOffset(right, state.offset) : right;
@@ -109,6 +110,7 @@ export function applyStereoModeWithEyeTransforms(
   eyeTransformState?: StereoEyeTransformState,
   alignMode?: StereoAlignMode,
   inputFormat: StereoInputFormat = 'side-by-side',
+  rightEyeImageData?: ImageData,
 ): ImageData {
   if (state.mode === 'off') {
     return sourceData;
@@ -117,7 +119,7 @@ export function applyStereoModeWithEyeTransforms(
   const { width, height } = sourceData;
 
   // Extract left and right eye images based on input format
-  const { left, right } = extractStereoEyes(sourceData, inputFormat, state.eyeSwap);
+  const { left, right } = extractStereoEyes(sourceData, inputFormat, state.eyeSwap, rightEyeImageData);
 
   // Apply offset to the right eye
   const offsetRight = state.offset !== 0 ? applyHorizontalOffset(right, state.offset) : right;
@@ -175,11 +177,19 @@ export function applyStereoModeWithEyeTransforms(
 
 /**
  * Extract left and right eye images from stereo source
+ *
+ * @param sourceData - The source ImageData (left eye for 'separate' format)
+ * @param inputFormat - Format of the stereo content
+ * @param eyeSwap - Whether to swap left and right eyes
+ * @param rightEyeImageData - Pre-decoded right-eye ImageData for 'separate' format
+ *   (e.g., from a multi-view EXR). When provided and inputFormat is 'separate',
+ *   this is used instead of duplicating the left eye.
  */
 export function extractStereoEyes(
   sourceData: ImageData,
   inputFormat: StereoInputFormat,
   eyeSwap: boolean,
+  rightEyeImageData?: ImageData,
 ): { left: ImageData; right: ImageData } {
   const { width, height, data } = sourceData;
 
@@ -237,9 +247,14 @@ export function extractStereoEyes(
       }
     }
   } else {
-    // Separate format - just use the source as both eyes
+    // Separate format - use dedicated right-eye data if available,
+    // otherwise fall back to duplicating the source (left eye)
     leftData = new ImageData(new Uint8ClampedArray(data), width, height);
-    rightData = new ImageData(new Uint8ClampedArray(data), width, height);
+    if (rightEyeImageData) {
+      rightData = new ImageData(new Uint8ClampedArray(rightEyeImageData.data), rightEyeImageData.width, rightEyeImageData.height);
+    } else {
+      rightData = new ImageData(new Uint8ClampedArray(data), width, height);
+    }
   }
 
   // Apply eye swap if requested

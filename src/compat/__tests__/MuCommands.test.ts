@@ -412,7 +412,6 @@ describe('MuCommands', () => {
       expect(cmd.skipped()).toBe(5);
     });
 
-<<<<<<< ours
     it('skipped() reads from session dropped frame count', () => {
       mockOpenRV.playback.getDroppedFrameCount.mockReturnValue(5);
       expect(cmd.skipped()).toBe(5);
@@ -425,10 +424,7 @@ describe('MuCommands', () => {
       expect(cmd.skipped()).toBe(3);
     });
 
-    it('isCurrentFrameIncomplete() returns false', () => {
-=======
     it('isCurrentFrameIncomplete() returns false (unsupported)', () => {
->>>>>>> theirs
       expect(cmd.isCurrentFrameIncomplete()).toBe(false);
     });
 
@@ -436,7 +432,6 @@ describe('MuCommands', () => {
       expect(cmd.isCurrentFrameError()).toBe(false);
     });
 
-<<<<<<< ours
     it('isBuffering() returns false by default', () => {
       expect(cmd.isBuffering()).toBe(false);
     });
@@ -444,10 +439,9 @@ describe('MuCommands', () => {
     it('isBuffering() reflects session buffering state', () => {
       mockOpenRV.playback.isBuffering.mockReturnValue(true);
       expect(cmd.isBuffering()).toBe(true);
+    });
 
-=======
     it('isBuffering() delegates to playback.isBuffering()', () => {
->>>>>>> theirs
       mockOpenRV.playback.isBuffering.mockReturnValue(false);
       expect(cmd.isBuffering()).toBe(false);
 
@@ -464,7 +458,6 @@ describe('MuCommands', () => {
       expect(cmd.mbps()).toBe(0);
     });
 
-<<<<<<< ours
     it('health commands return safe defaults when no session', () => {
       delete (globalThis as Record<string, unknown>).openrv;
       expect(cmd.isBuffering()).toBe(false);
@@ -472,7 +465,8 @@ describe('MuCommands', () => {
       expect(cmd.isCurrentFrameIncomplete()).toBe(false);
       expect(cmd.isCurrentFrameError()).toBe(false);
       expect(cmd.mbps()).toBe(0);
-=======
+    });
+
     it('isCurrentFrameIncomplete is marked unsupported', () => {
       expect(cmd.isSupported('isCurrentFrameIncomplete')).toBe(false);
     });
@@ -495,7 +489,6 @@ describe('MuCommands', () => {
 
     it('isBuffering is marked supported', () => {
       expect(cmd.isSupported('isBuffering')).toBe(true);
->>>>>>> theirs
     });
   });
 

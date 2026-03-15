@@ -38,7 +38,7 @@ function createManifest(overrides?: Partial<PluginManifest>): PluginManifest {
   };
 }
 
-function createPlugin(overrides?: Partial<Plugin> & { manifest?: Partial<PluginManifest> }): Plugin {
+function createPlugin(overrides?: Omit<Partial<Plugin>, 'manifest'> & { manifest?: Partial<PluginManifest> }): Plugin {
   const { manifest: manifestOverrides, ...pluginOverrides } = overrides ?? {};
   return {
     manifest: createManifest(manifestOverrides),

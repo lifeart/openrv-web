@@ -2881,7 +2881,7 @@ describe('EventsAPI', () => {
 
     // renderedImagesChanged should reflect the new representation dimensions
     expect(renderedHandler).toHaveBeenCalledTimes(1);
-    const renderedPayload = renderedHandler.mock.calls[0][0];
+    const renderedPayload = renderedHandler.mock.calls[0]![0];
     expect(renderedPayload.images[0].width).toBe(1280);
     expect(renderedPayload.images[0].height).toBe(720);
     expect(renderedPayload.images[0].name).toBe('Proxy 1280x720');
@@ -2925,7 +2925,7 @@ describe('EventsAPI', () => {
 
     // renderedImagesChanged should reflect fallback dimensions
     expect(renderedHandler).toHaveBeenCalledTimes(1);
-    const renderedPayload = renderedHandler.mock.calls[0][0];
+    const renderedPayload = renderedHandler.mock.calls[0]![0];
     expect(renderedPayload.images[0].width).toBe(960);
     expect(renderedPayload.images[0].height).toBe(540);
     expect(renderedPayload.images[0].name).toBe('Fallback 960x540');
@@ -2945,7 +2945,7 @@ describe('EventsAPI', () => {
       fps: 24,
     });
     expect(renderedHandler).toHaveBeenCalledTimes(1);
-    expect(renderedHandler.mock.calls[0][0].images[0].width).toBe(4096);
+    expect(renderedHandler.mock.calls[0]![0].images[0].width).toBe(4096);
 
     // Then: representationChanged switches to a proxy
     session.emit('representationChanged', {
@@ -2969,7 +2969,7 @@ describe('EventsAPI', () => {
 
     // renderedImagesChanged should now have proxy dimensions, not original
     expect(renderedHandler).toHaveBeenCalledTimes(2);
-    const latest = renderedHandler.mock.calls[1][0];
+    const latest = renderedHandler.mock.calls[1]![0];
     expect(latest.images[0].width).toBe(1280);
     expect(latest.images[0].height).toBe(720);
     expect(latest.images[0].name).toBe('Proxy 1280x720');

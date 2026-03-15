@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
+// @ts-ignore -- Node modules available in test environment
 import { readFileSync } from 'fs';
+// @ts-ignore -- Node modules available in test environment
 import { resolve } from 'path';
 
 /**
@@ -8,6 +10,7 @@ import { resolve } from 'path';
  * the View tab toolbar, header bar buttons, or keyboard shortcuts.
  */
 describe('Documentation UI references', () => {
+  // @ts-ignore -- __dirname available in test environment
   const docsRoot = resolve(__dirname, '..', 'docs');
 
   const docFiles = [

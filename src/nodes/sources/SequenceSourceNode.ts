@@ -12,6 +12,7 @@ import { RegisterNode } from '../base/NodeFactory';
 import {
   type SequenceInfo,
   type SequenceFrame,
+  type DecodedFrameData,
   createSequenceInfo,
   loadFrameImage,
   disposeSequence,
@@ -88,6 +89,9 @@ export class SequenceSourceNode extends BaseSourceNode {
           frameData.image.close();
           frameData.image = undefined;
         }
+        if (frameData.decodedData) {
+          frameData.decodedData = undefined;
+        }
         if (frameData.url) {
           URL.revokeObjectURL(frameData.url);
           frameData.url = undefined;
@@ -148,6 +152,25 @@ export class SequenceSourceNode extends BaseSourceNode {
       return null;
     }
 
+    // When full-precision decoded data is available (EXR, DPX, Cineon, HDR, etc.),
+    // create a float32 IPImage to preserve HDR information through the render pipeline.
+    const decoded: DecodedFrameData | undefined = frameData?.decodedData;
+    if (decoded) {
+      return new IPImage({
+        width: decoded.width,
+        height: decoded.height,
+        channels: decoded.channels,
+        dataType: 'float32',
+        data: decoded.data.buffer as ArrayBuffer,
+        metadata: {
+          colorSpace: decoded.colorSpace,
+          sourcePath: frameData?.file?.name,
+          frameNumber: context.frame,
+        },
+      });
+    }
+
+    // Standard browser-decoded formats (PNG, JPEG, WebP, etc.)
     const ipImage = new IPImage({
       width: image.width,
       height: image.height,

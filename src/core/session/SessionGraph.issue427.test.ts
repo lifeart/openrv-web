@@ -263,8 +263,7 @@ describe('Issue #427: multi-source consistent dimensions for crop and annotation
     const actualAspect = annotations.annotationStore.parsePaintAnnotations.mock.calls[0][1];
     expect(actualAspect).toBeCloseTo(firstSourceAspect, 5);
 
-    // Specifically, it should NOT be the last source's aspect ratio
-    const lastSourceAspect = 3840 / 2160;
+    // Specifically, it should NOT be the last source's aspect ratio (3840/2160 = 16:9)
     // In this case they happen to be the same ratio (16:9), so also test with the SD source
     const sdAspect = 720 / 480; // 1.5
     expect(actualAspect).not.toBeCloseTo(sdAspect, 5);

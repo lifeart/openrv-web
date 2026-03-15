@@ -469,8 +469,8 @@ describe('FalseColor', () => {
       falseColor.apply(imageData);
 
       // Green channel should dominate — this is the ARRI skin tone green
-      expect(imageData.data[1]).toBeGreaterThan(imageData.data[0]); // G > R
-      expect(imageData.data[1]).toBeGreaterThan(imageData.data[2]); // G > B
+      expect(imageData.data[1]!).toBeGreaterThan(imageData.data[0]!); // G > R
+      expect(imageData.data[1]!).toBeGreaterThan(imageData.data[2]!); // G > B
     });
 
     it('FC-111: ARRI skin tone range (45 IRE / value 115) maps to green', () => {
@@ -482,8 +482,8 @@ describe('FalseColor', () => {
       falseColor.apply(imageData);
 
       // Green channel should dominate
-      expect(imageData.data[1]).toBeGreaterThan(imageData.data[0]); // G > R
-      expect(imageData.data[1]).toBeGreaterThan(imageData.data[2]); // G > B
+      expect(imageData.data[1]!).toBeGreaterThan(imageData.data[0]!); // G > R
+      expect(imageData.data[1]!).toBeGreaterThan(imageData.data[2]!); // G > B
     });
 
     it('FC-112: ARRI skin tone range (50 IRE / value 128) maps to green', () => {
@@ -495,8 +495,8 @@ describe('FalseColor', () => {
       falseColor.apply(imageData);
 
       // Green channel should dominate
-      expect(imageData.data[1]).toBeGreaterThan(imageData.data[0]); // G > R
-      expect(imageData.data[1]).toBeGreaterThan(imageData.data[2]); // G > B
+      expect(imageData.data[1]!).toBeGreaterThan(imageData.data[0]!); // G > R
+      expect(imageData.data[1]!).toBeGreaterThan(imageData.data[2]!); // G > B
     });
 
     it('FC-113: ARRI palette legend includes Skin tones label', () => {

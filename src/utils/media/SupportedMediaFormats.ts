@@ -85,6 +85,49 @@ const ALL_KNOWN_EXTENSIONS = new Set<string>([...SUPPORTED_IMAGE_EXTENSIONS, ...
 const VIDEO_MIME_ALIASES = new Set<string>(['application/ogg']);
 
 /**
+ * Image extensions that require the FileSourceNode / decoder pipeline
+ * (not natively supported by HTMLImageElement).
+ * Browser-native formats (png, jpg, jpeg, jpe, webp, gif, bmp, svg, ico, avif)
+ * are excluded — they work fine through the fast HTMLImageElement path.
+ */
+const DECODER_BACKED_EXTENSIONS = new Set<string>([
+  'tif',
+  'tiff',
+  'exr',
+  'sxr',
+  'dpx',
+  'cin',
+  'cineon',
+  'hdr',
+  'pic',
+  'jxl',
+  'heic',
+  'heif',
+  // JPEG 2000 / HTJ2K
+  'jp2',
+  'j2k',
+  'j2c',
+  'jph',
+  'jhc',
+  // RAW formats
+  'cr2',
+  'nef',
+  'arw',
+  'dng',
+  'orf',
+  'pef',
+  'srw',
+]);
+
+/**
+ * Check whether an extension (lowercase, no dot) requires the decoder-backed
+ * pipeline (FileSourceNode) rather than a plain HTMLImageElement.
+ */
+export function isDecoderBackedExtension(ext: string): boolean {
+  return DECODER_BACKED_EXTENSIONS.has(ext);
+}
+
+/**
  * Check whether an extension (lowercase, no dot) is a recognized video extension.
  * This is the single source of truth for video-extension classification.
  */

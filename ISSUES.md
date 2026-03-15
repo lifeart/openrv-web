@@ -214,18 +214,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - A threaded review conversation or resolved/won’t-fix state in OpenRV Web cannot survive a ShotGrid sync round-trip as equivalent structured review data.
   - The integration reduces richer local note workflows to a flat list of plain comments, which weakens production review traceability.
 
-### 334. Comparison annotations are tied to the `A/B` slot, not to the underlying source they were drawn on
-
-- Severity: Medium
-- Area: Paint / compare review data fidelity
-- Evidence:
-  - The advanced compare docs say comparison annotations are "tied to the source they were drawn on" so switching between A and B preserves each source's annotation layer independently in [docs/compare/advanced-compare.md](/Users/lifeart/Repos/openrv-web/docs/compare/advanced-compare.md#L61) through [docs/compare/advanced-compare.md#L63).
-  - The actual paint annotation model has no source identity field; it only stores `version?: 'A' | 'B' | 'all'` on annotations in [src/paint/types.ts](/Users/lifeart/Repos/openrv-web/src/paint/types.ts#L58) through [src/paint/types.ts](/Users/lifeart/Repos/openrv-web/src/paint/types.ts#L69) and [src/paint/types.ts](/Users/lifeart/Repos/openrv-web/src/paint/types.ts#L83) through [src/paint/types.ts](/Users/lifeart/Repos/openrv-web/src/paint/types.ts#L89).
-  - When new paint data is created, `PaintEngine` writes only the current annotation version slot into the annotation payload in [src/paint/PaintEngine.ts](/Users/lifeart/Repos/openrv-web/src/paint/PaintEngine.ts#L237) through [src/paint/PaintEngine.ts](/Users/lifeart/Repos/openrv-web/src/paint/PaintEngine.ts#L254) and [src/paint/PaintEngine.ts](/Users/lifeart/Repos/openrv-web/src/paint/PaintEngine.ts#L291) through [src/paint/PaintEngine.ts](/Users/lifeart/Repos/openrv-web/src/paint/PaintEngine.ts#L299).
-  - Display filtering also keys entirely off that `A/B` version tag, not a source index or media identifier, in [src/paint/PaintEngine.ts](/Users/lifeart/Repos/openrv-web/src/paint/PaintEngine.ts#L633) through [src/paint/PaintEngine.ts](/Users/lifeart/Repos/openrv-web/src/paint/PaintEngine.ts#L703).
-- Impact:
-  - If users redraw A/B assignments to different sources, the annotation layer follows the `A` or `B` slot rather than staying attached to the original media source.
-  - That makes the shipped comparison-annotation workflow less reliable than documented for real version review, because annotation meaning can drift when compare assignments change.
 
 ### 341. Network-sync docs promise participant avatars in the viewer, but presence only renders inside the connection panel
 
@@ -252,31 +240,7 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Users cannot rely on the header control to distinguish a sync conflict from ordinary disconnection/reconnection states the way the docs describe.
   - That weakens trust in the collaboration status indicator during remote review, because one of the documented states is not actually expressible in the shipped UI.
 
-### 345. Multi-view EXR and alternate stereo-input workflows are documented as integrated, but production hardcodes side-by-side stereo
 
-- Severity: High
-- Area: Stereo media workflow / documentation contract
-- Evidence:
-  - The docs say multi-view EXR "integrates with the stereo viewing system" and can be displayed via stereo mode in [docs/playback/exr-layers.md](/Users/lifeart/Repos/openrv-web/docs/playback/exr-layers.md#L72) through [docs/playback/exr-layers.md](/Users/lifeart/Repos/openrv-web/docs/playback/exr-layers.md#L76), and say separate stereo input plus automatic multi-view stereo-pair mapping are supported in [docs/guides/stereo-3d-viewing.md](/Users/lifeart/Repos/openrv-web/docs/guides/stereo-3d-viewing.md#L79) through [docs/guides/stereo-3d-viewing.md](/Users/lifeart/Repos/openrv-web/docs/guides/stereo-3d-viewing.md#L97) and [docs/advanced/stereo-3d.md](/Users/lifeart/Repos/openrv-web/docs/advanced/stereo-3d.md#L163) through [docs/advanced/stereo-3d.md](/Users/lifeart/Repos/openrv-web/docs/advanced/stereo-3d.md#L171).
-  - The `MultiViewEXR` parser/helpers exist, but a production-code search finds no runtime consumer outside the format barrel export in [src/formats/index.ts](/Users/lifeart/Repos/openrv-web/src/formats/index.ts#L14) through [src/formats/index.ts](/Users/lifeart/Repos/openrv-web/src/formats/index.ts#L20).
-  - The shipped viewer stereo path applies `StereoManager.applyStereoMode(...)` / `applyStereoModeWithEyeTransforms(...)` without any input-format argument in [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L2112) through [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L2118), and `Viewer.getStereoPair()` explicitly hardcodes `'side-by-side'` in [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L3050) through [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L3058).
-  - `StereoManager` also calls the renderer helpers without supplying any alternate `StereoInputFormat`, so the default side-by-side path is used in [src/ui/components/StereoManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/StereoManager.ts#L132) through [src/ui/components/StereoManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/StereoManager.ts#L152).
-- Impact:
-  - Users are told to expect separate-input and multi-view stereo workflows that the shipped viewer does not actually wire end-to-end.
-  - That makes stereo EXR review look supported on paper while production behavior remains side-by-side-centric.
-
-### 346. The accessibility overview overclaims live announcements for frame navigation and tool selection
-
-- Severity: Medium
-- Area: Accessibility / documentation contract
-- Evidence:
-  - The UI overview says screen readers are notified for "playback start/stop, frame navigation, source loading, and tool selection" in [docs/getting-started/ui-overview.md](/Users/lifeart/Repos/openrv-web/docs/getting-started/ui-overview.md#L234) through [docs/getting-started/ui-overview.md](/Users/lifeart/Repos/openrv-web/docs/getting-started/ui-overview.md#L236).
-  - The production `AriaAnnouncer` wiring in `LayoutOrchestrator` only announces tab changes, file loads, playback start/pause, and playback speed changes in [src/services/LayoutOrchestrator.ts](/Users/lifeart/Repos/openrv-web/src/services/LayoutOrchestrator.ts#L388) through [src/services/LayoutOrchestrator.ts](/Users/lifeart/Repos/openrv-web/src/services/LayoutOrchestrator.ts#L435).
-  - `KeyboardActionMap` adds announcements for range-shift actions only, not ordinary frame stepping or generic tool selection, in [src/services/KeyboardActionMap.ts](/Users/lifeart/Repos/openrv-web/src/services/KeyboardActionMap.ts#L343) through [src/services/KeyboardActionMap.ts](/Users/lifeart/Repos/openrv-web/src/services/KeyboardActionMap.ts#L366).
-  - A source search for frame-announcement calls finds no production announcement path for normal frame stepping/seek events.
-- Impact:
-  - Assistive-technology users can rely on the docs for a level of navigation feedback that the shipped app does not consistently provide.
-  - That makes the accessibility overview materially overstate what is currently announced at runtime.
 
 ### 351. The format-support reference overstates several partially supported formats as if they were fully usable
 
@@ -371,44 +335,8 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Users following the review docs can look for a persistent header-level status readout that never appears in the shipped app.
   - That makes shot-status tracking feel partially missing even before users hit the deeper limitation that there is no real production status-management UI.
 
-### 376. Auto-checkpoints are documented as broad safety nets before major operations, but production only creates them for restore and project-load flows
 
-- Severity: Medium
-- Area: Snapshots / recovery workflow / documentation
-- Evidence:
-  - The session-management guide says, "Auto-checkpoints are generated before major operations (e.g., loading new media, clearing annotations)" in [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L96).
-  - Production only defines checkpoint creation in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L194) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L212).
-  - A production-code search shows live call sites only before snapshot restore and project/session load in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L227) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L234), [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L349) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L356), and [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L385) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L393).
-  - There is no corresponding checkpoint wiring around ordinary media loads, annotation clearing, or similar destructive editing paths.
-- Impact:
-  - Users can trust auto-checkpoints to protect routine destructive actions that the shipped app never checkpoints.
-  - That makes the documented safety net much narrower than it sounds, especially during active review/editing work where people are not explicitly loading projects.
 
-### 429. Share links claim to share comparison state, but clean recipients can only reconstruct one media source
-
-- Severity: Medium
-- Area: URL sharing / compare-state interoperability
-- Evidence:
-  - The share-link subsystem explicitly describes URL sharing as including “comparison state” in [src/core/session/SessionURLManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionURLManager.ts#L1) through [src/core/session/SessionURLManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionURLManager.ts#L6).
-  - But `SessionURLState` carries only a single `sourceUrl`, not a source list, in [src/core/session/SessionURLManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionURLManager.ts#L16) through [src/core/session/SessionURLManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionURLManager.ts#L39).
-  - Capture fills that field from only `session.currentSource?.url` in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L120) through [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L145).
-  - On a clean recipient, apply will load at most that one URL before restoring compare state in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L152) through [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L189).
-  - A/B compare only becomes available when a valid B source exists, as enforced by [src/core/session/ABCompareManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/ABCompareManager.ts#L76) through [src/core/session/ABCompareManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/ABCompareManager.ts#L79) and [src/core/session/SessionPlayback.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionPlayback.ts#L379) through [src/core/session/SessionPlayback.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionPlayback.ts#L382).
-- Impact:
-  - A share link from a multi-source A/B review can carry compare indices and wipe state but still fail to reconstruct the compared media on a clean recipient.
-  - The receiver ends up with partial compare state and only one loaded source, which undermines the feature's stated “comparison state” promise.
-
-### 440. URL-based media loading bypasses the app's decoder stack and breaks remote EXR or other decoder-backed images
-
-- Severity: Medium
-- Area: Share links / DCC integration / URL media loading
-- Evidence:
-  - `Session.loadSourceFromUrl(...)` classifies URL media only as “known video extension” vs “everything else,” and routes every non-video URL into `loadImage(...)` in [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L1119) through [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L1139).
-  - `SessionMedia.loadImage(...)` then loads the URL through a plain `HTMLImageElement` in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L400) through [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L434), bypassing the `FileSourceNode` and decoder-backed file pipeline used for EXR, TIFF, RAW previews, and other advanced formats in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L437) through [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L515).
-  - Share-link bootstrap uses `session.loadSourceFromUrl(...)` for `sourceUrl` reconstruction in [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L152) through [src/services/SessionURLService.ts](/Users/lifeart/Repos/openrv-web/src/services/SessionURLService.ts#L157), and DCC `loadMedia` sends non-video URLs through `session.loadImage(...)` in [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L184) through [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L221).
-- Impact:
-  - Remote EXR plates, float TIFFs, and other formats that only work through the decoder/file pipeline cannot be reconstructed from share links or loaded via URL-based DCC commands even though the app broadly advertises support for those formats.
-  - URL workflows are materially less capable than file workflows, which makes remote review/integration flows unreliable for high-end image formats.
 
 ### 444. The DCC guide promises a configurable bridge endpoint, but production only supports `?dcc=` URL bootstrap
 
@@ -458,19 +386,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Users following the guide can expect an explicit reconnect affordance that never appears after retry exhaustion.
   - In practice, recovery falls back to manually recreating or rejoining the room through the generic disconnected UI rather than a dedicated reconnect path.
 
-### 449. Remote cursor sync is transported and tracked, but the shipped app never renders or consumes it
-
-- Severity: Medium
-- Area: Collaboration runtime wiring
-- Evidence:
-  - Incoming `sync.cursor` messages are handled, sanitized, stored in `_remoteCursors`, and emitted as `syncCursor` events in [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L870) and [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L1091) through [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L1099).
-  - `NetworkSyncManager` also exposes `remoteCursors` as public state in [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L226) through [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L228).
-  - A production-code search finds `syncCursor` subscribers only in tests; there is no live subscriber in app wiring, viewer code, or UI components outside [src/network/CollaborationEnhancements.test.ts](/Users/lifeart/Repos/openrv-web/src/network/CollaborationEnhancements.test.ts#L269), [src/network/CollaborationEnhancements.test.ts](/Users/lifeart/Repos/openrv-web/src/network/CollaborationEnhancements.test.ts#L717), and [src/network/CollaborationEnhancements.test.ts](/Users/lifeart/Repos/openrv-web/src/network/CollaborationEnhancements.test.ts#L791).
-  - Likewise, a production-code search finds no use of `remoteCursors` outside `NetworkSyncManager` itself.
-  - The FAQ still tells users that collaboration syncs cursor position in [docs/reference/faq.md](/Users/lifeart/Repos/openrv-web/docs/reference/faq.md#L73) through [docs/reference/faq.md](/Users/lifeart/Repos/openrv-web/docs/reference/faq.md#L79).
-- Impact:
-  - Cursor-sharing traffic can flow over the collaboration stack without producing any visible or actionable result in the shipped app.
-  - Users and integrators can expect shared remote cursors from the advertised feature set, but production stops at transport/state bookkeeping.
 
 ### 454. The self-hosting docs present static hosting as sufficient, but the shipped collaboration flow still expects separate signaling infrastructure
 
@@ -979,19 +894,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The guide makes OTIO ingest sound structurally richer than the shipped import path actually is.
   - Editorial users can expect gaps, transitions, and multi-track layout to survive import when production still collapses them into a simple clip sequence.
 
-### 515. The sequence-loading path bypasses the custom decoder stack and decodes frames with `createImageBitmap()`, so documented EXR/DPX/Cineon/HDR sequence workflows are not actually backed by the pro-format loaders
-
-- Severity: High
-- Area: Image sequences / decode pipeline
-- Evidence:
-  - The image-sequences guide says sequences can use professional formats including EXR, DPX, Cineon, Radiance HDR, JPEG XL, JPEG 2000, AVIF, and HEIC in [docs/playback/image-sequences.md](/Users/lifeart/Repos/openrv-web/docs/playback/image-sequences.md#L77) through [docs/playback/image-sequences.md#L86).
-  - The same page claims EXR sequences “benefit from the full HDR pipeline including WebAssembly decoding, Float32 precision, and layer/AOV selection” in [docs/playback/image-sequences.md](/Users/lifeart/Repos/openrv-web/docs/playback/image-sequences.md#L87).
-  - The actual sequence frame loader always calls `createImageBitmap(frame.file, ...)` in [src/utils/media/SequenceLoader.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SequenceLoader.ts#L126) through [src/utils/media/SequenceLoader.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SequenceLoader.ts#L144).
-  - `SessionMedia.loadSequence(...)`, `MediaManager.loadSequence(...)`, and `SequenceSourceNode.loadFiles(...)` all depend on `createSequenceInfo(...)` / `loadFrameImage(...)` from that same loader in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L737) through [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L765), [src/core/session/MediaManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaManager.ts#L791) through [src/core/session/MediaManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaManager.ts#L845), and [src/nodes/sources/SequenceSourceNode.ts](/Users/lifeart/Repos/openrv-web/src/nodes/sources/SequenceSourceNode.ts#L45) through [src/nodes/sources/SequenceSourceNode.ts#L80).
-  - By contrast, the dedicated pro-format decoders live elsewhere in the file-loading stack, such as `decodeEXR(...)` in [src/formats/EXRDecoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/EXRDecoder.ts#L2420) and the JPEG 2000 family branch in [src/nodes/sources/FileSourceNode.ts](/Users/lifeart/Repos/openrv-web/src/nodes/sources/FileSourceNode.ts#L2017) through [src/nodes/sources/FileSourceNode.ts](/Users/lifeart/Repos/openrv-web/src/nodes/sources/FileSourceNode.ts#L2024).
-- Impact:
-  - The shipped sequence workflow does not actually route professional image sequences through the documented decoder/HDR pipeline.
-  - That can turn EXR/DPX/Cineon/HDR sequence review into browser-native decode failures or materially different behavior from single-frame loads, while the docs promise full pro-format handling.
 
 ### 517. The image-sequences guide still describes per-frame blob-URL lifecycle, but the live sequence loader decodes files directly and never creates `frame.url`
 
@@ -1031,18 +933,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The docs make literal pattern strings look like a real ingest format when the shipped app still expects concrete numbered files.
   - Integrations or users that hand the app `shot.####.exr` or `frame.%04d.exr` can reasonably expect sequence loading and instead hit unrelated image-URL or unsupported-file behavior.
 
-### 521. `.orvproject` still serializes `sequencePattern` and `frameRange` for sequences, but the restore path never consumes them
-
-- Severity: Medium
-- Area: Project persistence / dead sequence metadata
-- Evidence:
-  - The session-state schema reserves `sequencePattern` and `frameRange` on `MediaReference` for sequences in [src/core/session/SessionState.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionState.ts#L31) through [src/core/session/SessionState.ts#L54).
-  - `SessionSerializer.serializeMedia(...)` populates both fields for sequence sources in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L409) through [src/core/session/SessionSerializer.ts#L414).
-  - The corresponding load path never consults `ref.sequencePattern` or `ref.frameRange`; for `ref.type === 'sequence'` it only emits `Sequence \"<name>\" requires manual file selection` in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L509) through [src/core/session/SessionSerializer.ts#L512).
-  - A repo search shows no production consumer of those restored sequence fields outside serialization/tests; the remaining hits are schema definitions and assertions in [src/core/session/SessionSerializer.test.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.test.ts#L278) through [src/core/session/SessionSerializer.test.ts#L279).
-- Impact:
-  - Sequence-specific metadata is written into project files without contributing anything to real restore behavior.
-  - That makes the saved project format look more sequence-aware than the load path actually is and leaves dead state in the schema that users cannot benefit from.
 
 ### 524. `.orvproject` restore reloads saved image URLs through `session.loadImage(...)`, so remote decoder-backed images do not round-trip through the project path
 
@@ -1083,18 +973,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The guide presents sequence caching as one simple fixed policy, but the shipped runtime now uses different preload/retention behaviors depending on the path and playback state.
   - That can mislead anyone trying to reason about memory usage, hitching, or cache tuning from the docs alone.
 
-### 527. Sequence-style media representations can never use `SequenceRepresentationLoader`, because the live switch path never passes the `isSequence` flag to the loader factory
-
-- Severity: Medium
-- Area: Media representations / sequence variants
-- Evidence:
-  - `RepresentationLoaderFactory` can return `SequenceRepresentationLoader` for `kind === 'frames'`, but only when its third `isSequence` parameter is `true` in [src/core/session/loaders/RepresentationLoaderFactory.ts](/Users/lifeart/Repos/openrv-web/src/core/session/loaders/RepresentationLoaderFactory.ts#L24) through [src/core/session/loaders/RepresentationLoaderFactory.ts#L36).
-  - The live representation switch path calls `createRepresentationLoader(representation.kind, hdrResizeTier)` with no `isSequence` argument in [src/core/session/MediaRepresentationManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaRepresentationManager.ts#L182), so `frames` representations always get `FileRepresentationLoader`.
-  - `FileRepresentationLoader` requires a single `loaderConfig.file` and throws if one is not present in [src/core/session/loaders/FileRepresentationLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/loaders/FileRepresentationLoader.ts#L13) through [src/core/session/loaders/FileRepresentationLoader.ts#L20).
-  - The separate `SequenceRepresentationLoader` expects `loaderConfig.files` and constructs sequence metadata from that array in [src/core/session/loaders/SequenceRepresentationLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/loaders/SequenceRepresentationLoader.ts#L72) through [src/core/session/loaders/SequenceRepresentationLoader.ts#L89).
-- Impact:
-  - Any representation intended to model an alternate image-sequence variant is routed into the wrong loader and can fail before it ever gets sequence-aware handling.
-  - That leaves the representation system effectively biased toward single-file frame reps even though the codebase contains a dedicated sequence representation loader.
 
 ### 528. Sequence representations also cannot round-trip through serialization, because the serialized loader config omits `files` while `SequenceRepresentationLoader` requires them
 

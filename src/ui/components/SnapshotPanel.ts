@@ -15,6 +15,8 @@ import { applyA11yFocus } from './shared/Button';
 import { showPrompt, showConfirm, showAlert } from './shared/Modal';
 
 export interface SnapshotPanelEvents extends EventMap {
+  /** Emitted when user wants to create a snapshot */
+  createRequested: { name?: string; description?: string };
   /** Emitted when user wants to restore a snapshot */
   restoreRequested: { id: string };
   /** Emitted when user updates a snapshot description */

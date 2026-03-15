@@ -20,7 +20,7 @@ describe('PlaylistManager - issue #407: stale transitions after clip changes', (
   describe('removeClip trims excess transitions', () => {
     it('should trim transitions when a clip is removed', () => {
       // 3 clips → 2 gaps (transitions[0], transitions[1])
-      const clipA = playlist.addClip(0, 'A', 1, 50);
+      playlist.addClip(0, 'A', 1, 50);
       const clipB = playlist.addClip(1, 'B', 1, 40);
       playlist.addClip(2, 'C', 1, 30);
 
@@ -42,7 +42,7 @@ describe('PlaylistManager - issue #407: stale transitions after clip changes', (
     });
 
     it('should clear all transitions when removing down to 1 clip', () => {
-      const clipA = playlist.addClip(0, 'A', 1, 50);
+      playlist.addClip(0, 'A', 1, 50);
       const clipB = playlist.addClip(1, 'B', 1, 40);
 
       transitions.setTransition(0, { type: 'dissolve', durationFrames: 10 });
@@ -133,7 +133,7 @@ describe('PlaylistManager - issue #407: stale transitions after clip changes', (
     });
 
     it('should have zero overlap after removing all but one clip', () => {
-      const clipA = playlist.addClip(0, 'A', 1, 50);
+      playlist.addClip(0, 'A', 1, 50);
       const clipB = playlist.addClip(1, 'B', 1, 40);
 
       transitions.setTransition(0, { type: 'dissolve', durationFrames: 10 });

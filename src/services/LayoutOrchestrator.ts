@@ -146,6 +146,7 @@ export interface LayoutClientMode {
 
 export interface LayoutPaintEngine {
   clearFrame(frame: number): void;
+  sourceIndex: number | undefined;
 }
 
 export interface LayoutOrchestratorDeps {
@@ -649,9 +650,15 @@ export class LayoutOrchestrator {
       paintEngine.clearFrame(session.currentFrame);
     });
 
-    // Sync annotation version filter when A/B source changes
-    const onAbSourceChanged = () => {
+    // Sync annotation version filter and source index when A/B source changes.
+    // The sourceIndex on the paint engine ensures new annotations record which
+    // media source they were drawn on, so they follow the source — not the slot.
+    const onAbSourceChanged = (...args: unknown[]) => {
+      const info = args[0] as { current: 'A' | 'B'; sourceIndex: number } | undefined;
       controls.paintToolbar.setAnnotationVersion(session.currentAB);
+      if (info) {
+        paintEngine.sourceIndex = info.sourceIndex;
+      }
     };
     session.on('abSourceChanged', onAbSourceChanged);
     this._sessionHandlers.push({ event: 'abSourceChanged', handler: onAbSourceChanged });

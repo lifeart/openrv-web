@@ -54,7 +54,7 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
   let videoExportInProgress = false;
 
   // HeaderBar events
-  subs.add(headerBar.on('showShortcuts', () => deps.getKeyboardHandler().showShortcutsDialog()));
+  subs.add(headerBar.on('showShortcuts', () => deps.getKeyboardHandler().showCustomBindingsDialog()));
   subs.add(headerBar.on('showCustomKeyBindings', () => deps.getKeyboardHandler().showCustomBindingsDialog()));
   subs.add(headerBar.on('saveProject', () => persistenceManager.saveProject()));
   subs.add(
@@ -62,6 +62,9 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
       persistenceManager.openProject(file, availableFiles),
     ),
   );
+
+  // Wire auto-checkpoint before media file drops (only fires when sources already exist)
+  viewer.setOnBeforeMediaLoad(() => persistenceManager.checkpointBeforeMediaLoad());
 
   // AutoSave Indicator
   controls.autoSaveIndicator.connect(controls.autoSaveManager);
@@ -193,7 +196,7 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
   );
   subs.add(
     exportControl.on('annotationsJSONImportRequested', () => {
-      void handleAnnotationImport(ctx.paintEngine);
+      void handleAnnotationImport(ctx.paintEngine, persistenceManager);
     }),
   );
   subs.add(
@@ -226,9 +229,9 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
 
   // Snapshot panel create + restore
   subs.add(
-    controls.snapshotPanel.on('createRequested', ({ name, description }) =>
-      persistenceManager.createSnapshot(name, description),
-    ),
+    controls.snapshotPanel.on('createRequested', ({ name, description }) => {
+      void persistenceManager.createSnapshot(name, description);
+    }),
   );
   subs.add(controls.snapshotPanel.on('restoreRequested', ({ id }) => persistenceManager.restoreSnapshot(id)));
   subs.add(
@@ -265,7 +268,10 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
 /**
  * Handle annotation JSON import with options dialog (mode and frame offset).
  */
-async function handleAnnotationImport(paintEngine: import('./paint/PaintEngine').PaintEngine): Promise<void> {
+async function handleAnnotationImport(
+  paintEngine: import('./paint/PaintEngine').PaintEngine,
+  persistenceManager?: import('./AppPersistenceManager').AppPersistenceManager,
+): Promise<void> {
   // Show import options dialog first
   const importOptions = await showAnnotationImportDialog({ title: 'Import Annotations' });
   if (!importOptions) return; // User cancelled
@@ -304,6 +310,11 @@ async function handleAnnotationImport(paintEngine: import('./paint/PaintEngine')
         title: 'Import Error',
       });
       return;
+    }
+
+    // Create auto-checkpoint before replacing annotations (destructive)
+    if (importOptions.mode === 'replace' && persistenceManager) {
+      await persistenceManager.checkpointBeforeClearAnnotations();
     }
 
     const count = applyAnnotationsJSON(paintEngine, data, {

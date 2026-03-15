@@ -282,6 +282,7 @@ export class ColorPipelineManager {
       .join(' -> ');
 
     return {
+      type: '3d',
       title: title || 'Pipeline LUT',
       size,
       domainMin: [0, 0, 0],

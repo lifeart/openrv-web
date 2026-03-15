@@ -221,6 +221,10 @@ export interface MediaSource {
   /** Projection type from container metadata (e.g. 'equirectangular') */
   projectionType?: 'equirectangular' | 'cubemap';
 
+  // --- Stereo input format metadata ---
+  /** How the stereo content is packed in this source (e.g. side-by-side, over-under, separate views) */
+  stereoInputFormat?: import('../../core/types/stereo').StereoInputFormat;
+
   // --- Multiple Media Representations (MMR) ---
   /** All available representations for this source. Undefined or empty array = legacy mode. */
   representations?: MediaRepresentation[];

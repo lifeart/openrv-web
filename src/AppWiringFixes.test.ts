@@ -14,7 +14,6 @@ import { EventEmitter } from './utils/EventEmitter';
 import { ContextualKeyboardManager } from './utils/input/ContextualKeyboardManager';
 import { ActiveContextManager } from './utils/input/ActiveContextManager';
 import { wireDCCBridge, type DCCWiringDeps } from './AppDCCWiring';
-import type { AppWiringContext } from './AppWiringContext';
 
 // ---------------------------------------------------------------------------
 // Lightweight test doubles for DCCBridge wiring

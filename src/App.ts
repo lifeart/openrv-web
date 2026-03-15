@@ -55,6 +55,7 @@ import { wireTransformControls } from './AppTransformWiring';
 import { wireStackControls } from './AppStackWiring';
 import { NoteOverlay } from './ui/components/NoteOverlay';
 import { GotoFrameOverlay } from './ui/components/GotoFrameOverlay';
+import { RemoteCursorsOverlay } from './ui/components/RemoteCursorsOverlay';
 import { ShotGridIntegrationBridge } from './integrations/ShotGridIntegrationBridge';
 import { ClientMode } from './ui/components/ClientMode';
 import { ExternalPresentation } from './ui/components/ExternalPresentation';
@@ -107,6 +108,7 @@ export class App {
   private activeContextManager: ActiveContextManager;
   private cacheManager: MediaCacheManager;
   private audioOrchestrator: AudioOrchestrator;
+  private remoteCursorsOverlay: RemoteCursorsOverlay;
   private dccBridge: DCCBridge | null = null;
   private virtualSliderController: VirtualSliderController | null = null;
   private contextualKeyboardManager: ContextualKeyboardManager;
@@ -128,7 +130,11 @@ export class App {
     this.displayCapabilities = detectDisplayCapabilities();
 
     // Bind event handlers for proper cleanup
-    this.boundHandleResize = () => this.viewer.resize();
+    this.boundHandleResize = () => {
+      this.viewer.resize();
+      const container = this.viewer.getContainer();
+      this.remoteCursorsOverlay.setViewerDimensions(container.clientWidth, container.clientHeight);
+    };
     this.boundHandleVisibilityChange = this.handleVisibilityChange.bind(this);
 
     // Initialize client mode (restricted UI for review presentations)
@@ -174,6 +180,9 @@ export class App {
 
     // Create goto-frame overlay (inline text entry for frame navigation)
     this.gotoFrameOverlay = new GotoFrameOverlay(this.session);
+
+    // Create remote cursors overlay for collaboration cursor rendering
+    this.remoteCursorsOverlay = new RemoteCursorsOverlay();
     this.timeline.setNoteOverlay(this.noteOverlay);
     this.timeline.setPlaylistManagers(this.controls.playlistManager, this.controls.transitionManager);
 
@@ -316,7 +325,7 @@ export class App {
       'channel.red',
       { code: 'KeyR', shift: true },
       () => this.controls.channelSelect.handleKeyboard('R', true),
-      'channel',
+      'viewer',
       'Select red channel',
     );
 
@@ -332,7 +341,7 @@ export class App {
       'channel.blue',
       { code: 'KeyB', shift: true },
       () => this.controls.channelSelect.handleKeyboard('B', true),
-      'channel',
+      'viewer',
       'Select blue channel',
     );
 
@@ -348,7 +357,7 @@ export class App {
       'channel.none',
       { code: 'KeyN', shift: true },
       () => this.controls.channelSelect.handleKeyboard('N', true),
-      'channel',
+      'viewer',
       'Select no channel',
     );
 
@@ -433,6 +442,7 @@ export class App {
       networkSyncManager: this.controls.networkSyncManager,
       networkControl: this.controls.networkControl,
       headerBar: this.headerBar,
+      remoteCursorsOverlay: this.remoteCursorsOverlay,
       getSessionURLState: () => this.sessionURLService.captureSessionURLState(),
       applySessionURLState: (state) => this.sessionURLService.applySessionURLState(state),
     });
@@ -596,6 +606,9 @@ export class App {
 
     // Mount goto-frame overlay into the viewer slot (position: relative parent)
     this.layoutManager.getViewerSlot().appendChild(this.gotoFrameOverlay.getElement());
+
+    // Mount remote cursors overlay into the viewer container
+    this.viewer.getContainer().appendChild(this.remoteCursorsOverlay.getElement());
 
     // Re-register keyboard shortcuts now that focusManager and other
     // layout-dependent objects (fullscreenManager, shortcutCheatSheet) are
@@ -784,6 +797,7 @@ export class App {
       colorControls: this.controls.colorControls,
       cdlControl: this.controls.cdlControl,
       curvesControl: this.controls.curvesControl,
+      persistenceManager: this.persistenceManager,
     };
   }
 
@@ -812,6 +826,7 @@ export class App {
     this.noteOverlay.dispose();
     this.timelineMagnifier.dispose();
     this.gotoFrameOverlay.dispose();
+    this.remoteCursorsOverlay.dispose();
     this.timeline.dispose();
     this.headerBar.dispose();
     this.tabBar.dispose();

@@ -44,6 +44,7 @@ function createMockRepresentation(overrides: Partial<MediaRepresentation> = {}):
 function createMockAccessor(
   reps: MediaRepresentation[] = [],
   activeIndex = -1,
+  options: { isSequence?: boolean } = {},
 ): { accessor: RepresentationSourceAccessor; representations: MediaRepresentation[]; getActiveIndex: () => number } {
   let currentActiveIndex = activeIndex;
   const accessor: RepresentationSourceAccessor = {
@@ -55,6 +56,7 @@ function createMockAccessor(
     applyRepresentationShim: vi.fn(),
     getHDRResizeTier: vi.fn(() => 'none' as const),
     getCurrentFrame: vi.fn(() => 1),
+    isSequenceSource: vi.fn(() => options.isSequence ?? false),
   };
   return { accessor, representations: reps, getActiveIndex: () => currentActiveIndex };
 }
@@ -103,6 +105,7 @@ describe('MediaRepresentationManager', () => {
         applyRepresentationShim: vi.fn(),
         getHDRResizeTier: vi.fn(() => 'none') as any,
         getCurrentFrame: vi.fn(() => 1),
+        isSequenceSource: vi.fn(() => false),
       };
       manager.setAccessor(accessor);
 
@@ -1009,6 +1012,7 @@ describe('MediaRepresentationManager', () => {
         applyRepresentationShim: vi.fn(),
         getHDRResizeTier: vi.fn(() => 'none') as any,
         getCurrentFrame: vi.fn(() => 1),
+        isSequenceSource: vi.fn(() => false),
       };
       manager.setAccessor(accessor);
 
@@ -1016,6 +1020,89 @@ describe('MediaRepresentationManager', () => {
       expect(manager.getActiveRepresentation(0)).toBeNull();
       expect(manager.removeRepresentation(0, 'any')).toBe(false);
       expect(await manager.handleRepresentationError(0, 'any')).toBe(false);
+    });
+  });
+
+  describe('isSequence flag propagation (issue #527)', () => {
+    it('should pass isSequence=true to createRepresentationLoader for sequence sources', async () => {
+      const sourceNode = createMockSourceNode();
+      vi.mocked(createRepresentationLoader).mockReturnValue({
+        load: vi.fn().mockResolvedValue({
+          sourceNode,
+          audioTrackPresent: false,
+          resolution: { width: 1920, height: 1080 },
+          par: 1.0,
+          startFrame: 1,
+        }),
+        dispose: vi.fn(),
+      });
+
+      const rep1 = createMockRepresentation({ id: 'rep-1', status: 'idle', kind: 'frames' });
+      const { accessor } = createMockAccessor([rep1], -1, { isSequence: true });
+      manager.setAccessor(accessor);
+
+      await manager.switchRepresentation(0, 'rep-1');
+
+      expect(createRepresentationLoader).toHaveBeenCalledWith('frames', 'none', true);
+    });
+
+    it('should pass isSequence=false to createRepresentationLoader for non-sequence sources', async () => {
+      const sourceNode = createMockSourceNode();
+      vi.mocked(createRepresentationLoader).mockReturnValue({
+        load: vi.fn().mockResolvedValue({
+          sourceNode,
+          audioTrackPresent: false,
+          resolution: { width: 1920, height: 1080 },
+          par: 1.0,
+          startFrame: 0,
+        }),
+        dispose: vi.fn(),
+      });
+
+      const rep1 = createMockRepresentation({ id: 'rep-1', status: 'idle', kind: 'frames' });
+      const { accessor } = createMockAccessor([rep1], -1, { isSequence: false });
+      manager.setAccessor(accessor);
+
+      await manager.switchRepresentation(0, 'rep-1');
+
+      expect(createRepresentationLoader).toHaveBeenCalledWith('frames', 'none', false);
+    });
+
+    it('should use SequenceRepresentationLoader for frames kind on a sequence source (full path)', async () => {
+      const sourceNode = createMockSourceNode();
+      vi.mocked(createRepresentationLoader).mockReturnValue({
+        load: vi.fn().mockResolvedValue({
+          sourceNode,
+          audioTrackPresent: false,
+          resolution: { width: 1920, height: 1080 },
+          par: 1.0,
+          startFrame: 1,
+        }),
+        dispose: vi.fn(),
+      });
+
+      const rep1 = createMockRepresentation({
+        id: 'rep-original',
+        status: 'ready',
+        kind: 'movie',
+        priority: 1,
+        sourceNode: createMockSourceNode('OriginalNode'),
+      });
+      const rep2 = createMockRepresentation({
+        id: 'rep-frames',
+        status: 'idle',
+        kind: 'frames',
+        priority: 0,
+      });
+      const { accessor } = createMockAccessor([rep2, rep1], 1, { isSequence: true });
+      manager.setAccessor(accessor);
+
+      const result = await manager.switchRepresentation(0, 'rep-frames');
+
+      expect(result).toBe(true);
+      expect(createRepresentationLoader).toHaveBeenCalledWith('frames', 'none', true);
+      expect(rep2.status).toBe('ready');
+      expect(rep2.sourceNode).toBe(sourceNode);
     });
   });
 });

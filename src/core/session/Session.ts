@@ -44,6 +44,8 @@ import { SessionGraph } from './SessionGraph';
 import { SessionMedia } from './SessionMedia';
 import { SessionPlayback } from './SessionPlayback';
 import type { AudioPlaybackManager } from '../../audio/AudioPlaybackManager';
+import { isDecoderBackedExtension } from '../../utils/media/SupportedMediaFormats';
+import { fetchUrlAsFile } from '../../utils/media/fetchUrlAsFile';
 // Logger removed — playback logging now lives in SessionPlayback.
 
 // Re-export types from SessionTypes for backward compatibility
@@ -426,7 +428,7 @@ export class Session extends EventEmitter<SessionEvents> {
     return this._media;
   }
 
-  protected addSource(source: MediaSource): void {
+  addSource(source: MediaSource): void {
     this._media.addSource(source);
   }
 
@@ -1147,6 +1149,9 @@ export class Session extends EventEmitter<SessionEvents> {
    * Load media from a URL, auto-detecting whether it is a video or image
    * based on the file extension. Used to reconstruct shared media from a
    * share-link sourceUrl on a clean session.
+   *
+   * For decoder-backed image formats (EXR, DPX, TIFF, etc.) the URL is
+   * fetched and routed through the FileSourceNode pipeline via loadImageFile().
    */
   async loadSourceFromUrl(url: string): Promise<void> {
     const allowedSchemes = ['http:', 'https:'];
@@ -1166,6 +1171,10 @@ export class Session extends EventEmitter<SessionEvents> {
     const videoExts = new Set(['mp4', 'm4v', '3gp', '3g2', 'mov', 'qt', 'mkv', 'mk3d', 'webm', 'ogg', 'ogv', 'ogm', 'ogx', 'avi']);
     if (videoExts.has(ext)) {
       return this.loadVideo(name, url);
+    }
+    if (isDecoderBackedExtension(ext)) {
+      const file = await fetchUrlAsFile(url, name);
+      return this.loadImageFile(file);
     }
     return this.loadImage(name, url);
   }

@@ -20,7 +20,9 @@ import type {
   AnnotationSyncPayload,
   NoteSyncPayload,
   ColorSyncPayload,
+  CursorSyncPayload,
 } from './network/types';
+import type { RemoteCursorsOverlay } from './ui/components/RemoteCursorsOverlay';
 import {
   buildShareURL,
   decodeSessionState,
@@ -72,6 +74,7 @@ export interface NetworkBridgeContext {
   networkSyncManager: NetworkSyncManager;
   networkControl: NetworkControl;
   headerBar: HeaderBar;
+  remoteCursorsOverlay?: RemoteCursorsOverlay;
   getSessionURLState?: () => SessionURLState;
   applySessionURLState?: (state: SessionURLState) => void;
 }
@@ -710,6 +713,60 @@ export class AppNetworkBridge {
         }
       }),
     );
+
+    // Wire remote cursors overlay
+    const remoteCursorsOverlay = this.ctx.remoteCursorsOverlay;
+    if (remoteCursorsOverlay) {
+      // Activate/deactivate overlay on connection state changes
+      this.unsubscribers.push(
+        networkSyncManager.on('connectionStateChanged', (state) => {
+          remoteCursorsOverlay.setActive(state === 'connected');
+        }),
+      );
+
+      // Forward user list to overlay for name/color lookup
+      this.unsubscribers.push(
+        networkSyncManager.on('usersChanged', (users) => {
+          remoteCursorsOverlay.setUsers(users);
+        }),
+      );
+
+      // Forward room created/joined user lists
+      this.unsubscribers.push(
+        networkSyncManager.on('roomCreated', (info) => {
+          remoteCursorsOverlay.setUsers(info.users);
+          remoteCursorsOverlay.setActive(true);
+        }),
+      );
+
+      this.unsubscribers.push(
+        networkSyncManager.on('roomJoined', (info) => {
+          remoteCursorsOverlay.setUsers(info.users);
+          remoteCursorsOverlay.setActive(true);
+        }),
+      );
+
+      // Clear overlay on room leave
+      this.unsubscribers.push(
+        networkSyncManager.on('roomLeft', () => {
+          remoteCursorsOverlay.setActive(false);
+        }),
+      );
+
+      // Remove individual cursor on user leave
+      this.unsubscribers.push(
+        networkSyncManager.on('userLeft', (user) => {
+          remoteCursorsOverlay.removeCursor(user.id);
+        }),
+      );
+
+      // Forward incoming cursor sync to the overlay
+      this.unsubscribers.push(
+        networkSyncManager.on('syncCursor', (payload: CursorSyncPayload) => {
+          remoteCursorsOverlay.updateCursor(payload);
+        }),
+      );
+    }
 
     // Send outgoing sync when local state changes
     this.unsubscribers.push(

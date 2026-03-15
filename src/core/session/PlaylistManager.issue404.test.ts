@@ -161,12 +161,12 @@ describe('PlaylistManager – Issue #404: stale transitions on restore', () => {
             globalStartFrame: 51,
           },
         ],
-        transitions: [{ type: 'wipe', durationFrames: 20 }],
+        transitions: [{ type: 'wipe-left' as const, durationFrames: 20 }],
       });
 
       const restored = tm.getState();
       expect(restored).toHaveLength(1);
-      expect(restored[0]?.type).toBe('wipe');
+      expect(restored[0]?.type).toBe('wipe-left');
       expect(restored[0]?.durationFrames).toBe(20);
     });
   });

@@ -31,7 +31,7 @@ vi.mock('../../ui/components/shared/Modal', async () => {
   };
 });
 
-import { showFileReloadPrompt, showSequenceReloadPrompt } from '../../ui/components/shared/Modal';
+import { showFileReloadPrompt as _showFileReloadPrompt, showSequenceReloadPrompt } from '../../ui/components/shared/Modal';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -65,6 +65,7 @@ function createMockComponents(): SessionComponents {
       loadVideo: vi.fn<(name: string, url: string) => Promise<void>>().mockResolvedValue(undefined),
       loadFile: vi.fn<(file: File) => Promise<void>>().mockResolvedValue(undefined),
       loadSequence: vi.fn<(files: File[]) => Promise<void>>().mockResolvedValue(undefined),
+      addSource: vi.fn(),
       toSerializedGraph: vi.fn().mockReturnValue(null),
       loadSerializedGraph: vi.fn().mockReturnValue([]),
       setEdlEntries: vi.fn(),
@@ -272,8 +273,8 @@ describe('Issue #394: Locally loaded sequences must round-trip through save/load
     ];
 
     const result = await SessionSerializer.fromJSON(state, components);
-    expect(result.warnings).toContain('Skipped reload: shot.0001.exr');
-    expect(result.loadedMedia).toBe(0);
+    expect(result.warnings).toContain('Sequence needs file reload: shot.0001.exr');
+    expect(result.loadedMedia).toBe(1);
   });
 
   it('ISS-394-005: skipping sequence reload (null) produces a warning', async () => {
@@ -295,8 +296,8 @@ describe('Issue #394: Locally loaded sequences must round-trip through save/load
     ];
 
     const result = await SessionSerializer.fromJSON(state, components);
-    expect(result.warnings).toContain('Skipped reload: shot.0001.exr');
-    expect(result.loadedMedia).toBe(0);
+    expect(result.warnings).toContain('Sequence needs file reload: shot.0001.exr');
+    expect(result.loadedMedia).toBe(1);
   });
 
   it('ISS-394-006: sequence loadSequence failure produces a warning, not abort', async () => {
@@ -322,8 +323,8 @@ describe('Issue #394: Locally loaded sequences must round-trip through save/load
     ];
 
     const result = await SessionSerializer.fromJSON(state, components);
-    expect(result.warnings).toContain('Failed to reload sequence: shot.0001.exr');
-    expect(result.loadedMedia).toBe(0);
+    expect(result.warnings).toContain('Failed to reload sequence: shot.0001.exr — added as placeholder');
+    expect(result.loadedMedia).toBe(1);
   });
 
   it('ISS-394-007: round-trip: serialize then deserialize a sequence source', async () => {

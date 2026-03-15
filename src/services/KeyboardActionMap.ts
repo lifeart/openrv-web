@@ -282,22 +282,30 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
   return {
     // -- Playback --------------------------------------------------------
     'playback.toggle': () => session.togglePlayback(),
-    'playback.stepForward': () => session.stepForward(),
-    'playback.stepBackward': () => session.stepBackward(),
+    'playback.stepForward': () => {
+      session.stepForward();
+      ariaAnnouncer?.announce(`Frame ${session.currentFrame}`);
+    },
+    'playback.stepBackward': () => {
+      session.stepBackward();
+      ariaAnnouncer?.announce(`Frame ${session.currentFrame}`);
+    },
     'playback.toggleDirection': () => session.togglePlayDirection(),
     'playback.goToStart': () => {
       if (controls.playlistManager.isEnabled()) {
         frameNavigation.goToPlaylistStart();
-        return;
+      } else {
+        session.goToStart();
       }
-      session.goToStart();
+      ariaAnnouncer?.announce(`Frame ${session.currentFrame}`);
     },
     'playback.goToEnd': () => {
       if (controls.playlistManager.isEnabled()) {
         frameNavigation.goToPlaylistEnd();
-        return;
+      } else {
+        session.goToEnd();
       }
-      session.goToEnd();
+      ariaAnnouncer?.announce(`Frame ${session.currentFrame}`);
     },
     'playback.slower': () => session.decreaseSpeed(),
     'playback.stop': () => session.pause(),
@@ -305,6 +313,7 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
       // L key - increase speed, but in paint context, line tool takes precedence
       if (activeContextManager.isContextActive('paint')) {
         controls.paintToolbar.handleKeyboard('l');
+        ariaAnnouncer?.announce('Line tool selected');
         return;
       }
       session.increaseSpeed();
@@ -317,20 +326,34 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
       // O key - set out point, but in paint context, ellipse tool takes precedence
       if (activeContextManager.isContextActive('paint')) {
         controls.paintToolbar.handleKeyboard('o');
+        ariaAnnouncer?.announce('Ellipse tool selected');
         return;
       }
       session.setOutPoint();
     },
     'timeline.setOutPointAlt': () => session.setOutPoint(),
     'timeline.toggleMark': () => session.toggleMark(),
-    'timeline.nextMarkOrBoundary': () => frameNavigation.goToNextMarkOrBoundary(),
-    'timeline.previousMarkOrBoundary': () => frameNavigation.goToPreviousMarkOrBoundary(),
-    'timeline.nextShot': () => frameNavigation.goToNextShot(),
-    'timeline.previousShot': () => frameNavigation.goToPreviousShot(),
+    'timeline.nextMarkOrBoundary': () => {
+      frameNavigation.goToNextMarkOrBoundary();
+      ariaAnnouncer?.announce(`Frame ${session.currentFrame}`);
+    },
+    'timeline.previousMarkOrBoundary': () => {
+      frameNavigation.goToPreviousMarkOrBoundary();
+      ariaAnnouncer?.announce(`Frame ${session.currentFrame}`);
+    },
+    'timeline.nextShot': () => {
+      frameNavigation.goToNextShot();
+      ariaAnnouncer?.announce(`Frame ${session.currentFrame}`);
+    },
+    'timeline.previousShot': () => {
+      frameNavigation.goToPreviousShot();
+      ariaAnnouncer?.announce(`Frame ${session.currentFrame}`);
+    },
     'timeline.resetInOut': () => {
       // R key - reset in/out points, but in paint context, rectangle tool takes precedence
       if (activeContextManager.isContextActive('paint')) {
         controls.paintToolbar.handleKeyboard('r');
+        ariaAnnouncer?.announce('Rectangle tool selected');
         return;
       }
       session.resetInOutPoints();
@@ -578,14 +601,38 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
         paintEngine.redo();
       }
     },
-    'paint.pan': () => controls.paintToolbar.handleKeyboard('v'),
-    'paint.pen': () => controls.paintToolbar.handleKeyboard('p'),
-    'paint.eraser': () => controls.paintToolbar.handleKeyboard('e'),
-    'paint.text': () => controls.paintToolbar.handleKeyboard('t'),
-    'paint.rectangle': () => controls.paintToolbar.handleKeyboard('r'),
-    'paint.ellipse': () => controls.paintToolbar.handleKeyboard('o'),
-    'paint.line': () => controls.paintToolbar.handleKeyboard('l'),
-    'paint.arrow': () => controls.paintToolbar.handleKeyboard('a'),
+    'paint.pan': () => {
+      controls.paintToolbar.handleKeyboard('v');
+      ariaAnnouncer?.announce('Pan tool selected');
+    },
+    'paint.pen': () => {
+      controls.paintToolbar.handleKeyboard('p');
+      ariaAnnouncer?.announce('Pen tool selected');
+    },
+    'paint.eraser': () => {
+      controls.paintToolbar.handleKeyboard('e');
+      ariaAnnouncer?.announce('Eraser tool selected');
+    },
+    'paint.text': () => {
+      controls.paintToolbar.handleKeyboard('t');
+      ariaAnnouncer?.announce('Text tool selected');
+    },
+    'paint.rectangle': () => {
+      controls.paintToolbar.handleKeyboard('r');
+      ariaAnnouncer?.announce('Rectangle tool selected');
+    },
+    'paint.ellipse': () => {
+      controls.paintToolbar.handleKeyboard('o');
+      ariaAnnouncer?.announce('Ellipse tool selected');
+    },
+    'paint.line': () => {
+      controls.paintToolbar.handleKeyboard('l');
+      ariaAnnouncer?.announce('Line tool selected');
+    },
+    'paint.arrow': () => {
+      controls.paintToolbar.handleKeyboard('a');
+      ariaAnnouncer?.announce('Arrow tool selected');
+    },
     'paint.toggleBrush': () => controls.paintToolbar.handleKeyboard('b'),
     'paint.toggleGhost': () => controls.paintToolbar.handleKeyboard('g'),
     'paint.toggleHold': () => controls.paintToolbar.handleKeyboard('x'),
@@ -594,8 +641,14 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
     'navigation.gotoFrame': () => controls.gotoFrameOverlay.show(),
 
     // -- Annotations -----------------------------------------------------
-    'annotation.previous': () => frameNavigation.goToPreviousAnnotation(),
-    'annotation.next': () => frameNavigation.goToNextAnnotation(),
+    'annotation.previous': () => {
+      frameNavigation.goToPreviousAnnotation();
+      ariaAnnouncer?.announce(`Frame ${session.currentFrame}`);
+    },
+    'annotation.next': () => {
+      frameNavigation.goToNextAnnotation();
+      ariaAnnouncer?.announce(`Frame ${session.currentFrame}`);
+    },
 
     // -- Tabs ------------------------------------------------------------
     'tab.view': () => tabBar.setActiveTab('view'),
@@ -649,12 +702,14 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
       const frame = session.noteManager.getNextNoteFrame(session.currentSourceIndex, session.currentFrame);
       if (frame !== session.currentFrame) {
         session.goToFrame(frame);
+        ariaAnnouncer?.announce(`Frame ${frame}`);
       }
     },
     'notes.previous': () => {
       const frame = session.noteManager.getPreviousNoteFrame(session.currentSourceIndex, session.currentFrame);
       if (frame !== session.currentFrame) {
         session.goToFrame(frame);
+        ariaAnnouncer?.announce(`Frame ${frame}`);
       }
     },
 

@@ -32,12 +32,9 @@ type OpenRVCompat = {
     setPlaybackMode(mode: 'realtime' | 'playAllFrames'): void;
     getPlaybackMode(): 'realtime' | 'playAllFrames';
     step(n?: number): void;
-<<<<<<< ours
     getMeasuredFPS(): number;
     setPlayDirection(direction: number): void;
     getPlayDirection(): number;
-=======
->>>>>>> theirs
     isBuffering(): boolean;
     getDroppedFrameCount(): number;
   };
@@ -127,11 +124,7 @@ const SUPPORT_MAP: Record<string, true | false | 'partial'> = {
   isCurrentFrameError: false,
   isBuffering: true,
   mbps: false,
-<<<<<<< ours
-  resetMbps: true,
-=======
   resetMbps: false,
->>>>>>> theirs
   // Audio
   scrubAudio: 'partial',
   // View & Display
@@ -161,15 +154,6 @@ const ASYNC_COMMANDS = new Set<string>(['fullScreenMode']);
 
 export class MuCommands {
   // --- Internal state for ADD commands ---
-<<<<<<< ours
-  private _mbps = 0;
-=======
-  private _frameStart = 1;
-  private _inc = 1;
-  private _overrideFPS: number | null = null;
-  private _filterMode: number = FilterLinear;
-  private _bgMethod = 'black';
->>>>>>> theirs
   private _margins: number[] = [0, 0, 0, 0];
 
   // =====================================================================
@@ -317,11 +301,7 @@ export class MuCommands {
 
   /** Get count of skipped (dropped) frames since last play() started. (Mu #21) */
   skipped(): number {
-<<<<<<< ours
     return tryGetOpenRV()?.playback.getDroppedFrameCount() ?? 0;
-=======
-    return getOpenRV().playback.getDroppedFrameCount();
->>>>>>> theirs
   }
 
   /**
@@ -342,11 +322,7 @@ export class MuCommands {
 
   /** Check if media is buffering. (Mu #24) */
   isBuffering(): boolean {
-<<<<<<< ours
     return tryGetOpenRV()?.playback.isBuffering() ?? false;
-=======
-    return getOpenRV().playback.isBuffering();
->>>>>>> theirs
   }
 
   /**

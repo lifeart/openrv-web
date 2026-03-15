@@ -142,7 +142,7 @@ Presentation mode maximizes the viewer area by hiding all toolbars, panels, and 
 
 ### Entering Presentation Mode
 
-Press `F` for fullscreen mode, then press `Ctrl+Shift+P` to activate presentation mode. Alternatively, select **Presentation Mode** from the View menu.
+Press `F` for fullscreen mode, then press `Ctrl+Shift+P` to activate presentation mode. Alternatively, select **Presentation Mode** from the View tab in the toolbar.
 
 In presentation mode:
 

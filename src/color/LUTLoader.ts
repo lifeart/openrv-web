@@ -26,17 +26,23 @@ export interface LUT1D {
 export type LUT = LUT3D | LUT1D;
 
 export function isLUT3D(lut: LUT): lut is LUT3D {
-  if (lut.type === '3d') return true;
   if (lut.type === '1d') return false;
+  if (lut.type === '3d') {
+    return lut.data.length === lut.size * lut.size * lut.size * 3;
+  }
   // Fallback for objects without a type discriminant
-  return 'size' in lut && lut.data.length === lut.size * lut.size * lut.size * 3;
+  const l = lut as LUT3D;
+  return 'size' in l && l.data.length === l.size * l.size * l.size * 3;
 }
 
 export function isLUT1D(lut: LUT): lut is LUT1D {
-  if (lut.type === '1d') return true;
   if (lut.type === '3d') return false;
+  if (lut.type === '1d') {
+    return lut.data.length === lut.size * 3;
+  }
   // Fallback for objects without a type discriminant
-  return 'size' in lut && lut.data.length === lut.size * 3;
+  const l = lut as LUT1D;
+  return 'size' in l && l.data.length === l.size * 3;
 }
 
 /**

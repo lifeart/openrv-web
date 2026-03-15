@@ -6,6 +6,7 @@
 
 import type { Session } from '../core/session/Session';
 import type { PatternName, GradientDirection } from '../nodes/sources/ProceduralSourceNode';
+import type { AppPersistenceManager } from '../AppPersistenceManager';
 import { DisposableAPI } from './Disposable';
 import { getCurrentSourceStartFrame } from '../utils/media/SourceUIState';
 
@@ -24,10 +25,12 @@ export interface SourceInfo {
 
 export class MediaAPI extends DisposableAPI {
   private session: Session;
+  private persistenceManager: AppPersistenceManager | null;
 
-  constructor(session: Session) {
+  constructor(session: Session, persistenceManager?: AppPersistenceManager | null) {
     super();
     this.session = session;
+    this.persistenceManager = persistenceManager ?? null;
   }
 
   /**
@@ -261,6 +264,8 @@ export class MediaAPI extends DisposableAPI {
 
   /**
    * Clear all loaded media sources, releasing associated resources.
+   * Creates an auto-checkpoint before clearing when sources exist
+   * and a persistence manager is available.
    *
    * @example
    * ```ts
@@ -269,6 +274,9 @@ export class MediaAPI extends DisposableAPI {
    */
   clearSources(): void {
     this.assertNotDisposed();
+    // Fire-and-forget checkpoint — clearSources is synchronous so we can't await,
+    // but the checkpoint is best-effort and non-blocking.
+    void this.persistenceManager?.checkpointBeforeClearSources();
     this.session.clearSources();
   }
 }

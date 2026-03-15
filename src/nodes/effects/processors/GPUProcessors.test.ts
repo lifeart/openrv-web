@@ -4,7 +4,7 @@
  * read parameters from their params provider instead of hardcoded values.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { GPUSharpenProcessor } from './GPUSharpenProcessor';
 import { GPUNoiseReductionProcessor } from './GPUNoiseReductionProcessor';
 

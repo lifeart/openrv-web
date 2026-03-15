@@ -548,8 +548,11 @@ describe('KeyBindings', () => {
 
   describe('shortcut reference doc has no duplicate key assignments (Issue #349)', () => {
     it('KB-U107: keyboard-shortcuts.md does not list the same shortcut for two different actions in the same section', async () => {
+      // @ts-ignore -- Node modules available in test environment
       const fs = await import('fs');
+      // @ts-ignore -- Node modules available in test environment
       const path = await import('path');
+      // @ts-ignore -- __dirname available in test environment
       const docPath = path.resolve(__dirname, '../../../docs/reference/keyboard-shortcuts.md');
       const content = fs.readFileSync(docPath, 'utf-8');
 
@@ -566,8 +569,8 @@ describe('KeyBindings', () => {
 
         let match;
         while ((match = shortcutRowRegex.exec(section)) !== null) {
-          const shortcut = match[1].trim();
-          const action = match[2].trim();
+          const shortcut = match[1]!.trim();
+          const action = match[2]!.trim();
 
           // Skip header rows
           if (shortcut === 'Shortcut' || shortcut === 'Action') continue;
@@ -589,8 +592,11 @@ describe('KeyBindings', () => {
     });
 
     it('KB-U109: keyboard-shortcuts.md has no cross-section duplicates for modifier shortcuts', async () => {
+      // @ts-ignore -- Node modules available in test environment
       const fs = await import('fs');
+      // @ts-ignore -- Node modules available in test environment
       const path = await import('path');
+      // @ts-ignore -- __dirname available in test environment
       const docPath = path.resolve(__dirname, '../../../docs/reference/keyboard-shortcuts.md');
       const content = fs.readFileSync(docPath, 'utf-8');
 
@@ -609,8 +615,8 @@ describe('KeyBindings', () => {
         const shortcutRowRegex = /^\|\s*`([^`]+)`\s*\|(.+)\|$/gm;
         let match;
         while ((match = shortcutRowRegex.exec(section)) !== null) {
-          const shortcut = match[1].trim();
-          const action = match[2].trim();
+          const shortcut = match[1]!.trim();
+          const action = match[2]!.trim();
           if (shortcut === 'Shortcut' || shortcut === 'Action') continue;
 
           // Only check shortcuts with modifiers (Shift+, Ctrl+, Alt+)
@@ -634,8 +640,11 @@ describe('KeyBindings', () => {
     });
 
     it('KB-U108: CONTEXTUAL_DEFAULTS channel shortcuts are not listed as active in the doc', async () => {
+      // @ts-ignore -- Node modules available in test environment
       const fs = await import('fs');
+      // @ts-ignore -- Node modules available in test environment
       const path = await import('path');
+      // @ts-ignore -- __dirname available in test environment
       const docPath = path.resolve(__dirname, '../../../docs/reference/keyboard-shortcuts.md');
       const content = fs.readFileSync(docPath, 'utf-8');
 

@@ -144,6 +144,12 @@ export class ViewerInputHandler {
    */
   onProjectFileDrop: ((file: File, companionFiles: File[]) => void) | null = null;
 
+  /**
+   * Optional async callback invoked before loading media files (not project files).
+   * Used to create an auto-checkpoint before destructive media load operations.
+   */
+  onBeforeMediaLoad: (() => Promise<void>) | null = null;
+
   constructor(
     private ctx: ViewerInputContext,
     dropOverlay: HTMLElement,
@@ -819,6 +825,8 @@ export class ViewerInputHandler {
       }
 
       try {
+        // Create auto-checkpoint before loading session file (destructive)
+        await this.onBeforeMediaLoad?.();
         const content = await sessionFile.arrayBuffer();
         await session.loadFromGTO(content, availableFiles);
       } catch (err) {
@@ -827,6 +835,9 @@ export class ViewerInputHandler {
       }
       return;
     }
+
+    // Create auto-checkpoint before loading new media (when sources exist)
+    await this.onBeforeMediaLoad?.();
 
     // Check for sequence
     const imageFiles = filterImageFiles(fileArray);

@@ -147,6 +147,10 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
       },
       getHDRResizeTier: () => this._hdrResizeTier,
       getCurrentFrame: () => this._host?.getCurrentFrame() ?? 1,
+      isSequenceSource: (sourceIndex: number) => {
+        const source = this._sources[sourceIndex];
+        return source?.type === 'sequence';
+      },
     });
 
     // Forward representation manager events

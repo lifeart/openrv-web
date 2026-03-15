@@ -277,13 +277,13 @@ describe('Scope UI hint regression tests (Issues #1, #2, #3)', () => {
 
     const options = dropdown.querySelectorAll('button');
     // histogram option — bare h
-    expect(options[0].textContent).toContain('h');
+    expect(options[0]!.textContent).toContain('h');
     // waveform option — bare w
-    expect(options[1].textContent).toContain('w');
+    expect(options[1]!.textContent).toContain('w');
     // vectorscope option (unchanged)
-    expect(options[2].textContent).toContain('y');
+    expect(options[2]!.textContent).toContain('y');
     // gamut diagram option — bare g
-    expect(options[3].textContent).toContain('g');
+    expect(options[3]!.textContent).toContain('g');
 
     control.dispose();
   });

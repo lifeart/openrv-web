@@ -33,6 +33,8 @@ export interface MuEvent {
   key?: string;
   /** Button index if pointer event */
   button?: number;
+  /** Tag for scoped hit-testing (e.g. widget identifier) */
+  tag?: string;
   /** Modifier state */
   modifiers?: {
     shift: boolean;
@@ -47,12 +49,16 @@ export interface EventTableBinding {
   eventName: string;
   callback: MuEventCallback;
   documentation: string;
+  /** Optional compiled regex for regex-based bindings */
+  regex?: RegExp;
 }
 
 /** Event table: named collection of bindings */
 export interface EventTable {
   name: string;
   bindings: Map<string, EventTableBinding>;
+  /** Number of regex-based bindings in this table */
+  regexCount: number;
 }
 
 /** Minor mode definition */

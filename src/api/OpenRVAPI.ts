@@ -60,6 +60,8 @@ export interface OpenRVAPIConfig {
   displayCapabilitiesProvider?: DisplayCapabilitiesProvider;
   /** Optional OCIO provider for OpenColorIO pipeline control */
   ocioProvider?: OCIOProvider;
+  /** Optional persistence manager for auto-checkpoint creation before destructive API operations */
+  persistenceManager?: import('../AppPersistenceManager').AppPersistenceManager;
 }
 
 /**
@@ -152,7 +154,7 @@ export class OpenRVAPI {
 
   constructor(config: OpenRVAPIConfig) {
     this.playback = new PlaybackAPI(config.session);
-    this.media = new MediaAPI(config.session);
+    this.media = new MediaAPI(config.session, config.persistenceManager);
     this.audio = new AudioAPI(config.session);
     this.loop = new LoopAPI(config.session);
     this.view = new ViewAPI(config.viewer);

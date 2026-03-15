@@ -11,6 +11,7 @@ import type { EvalContext } from '../../core/graph/Graph';
 import { RegisterNode } from '../base/NodeFactory';
 import type { EXRLayerInfo, EXRDecodeOptions, EXRChannelRemapping } from '../../formats/EXRDecoder';
 import { decoderRegistry } from '../../formats/DecoderRegistry';
+import type { StereoInputFormat } from '../../core/types/stereo';
 import type { HEICGainmapInfo, HEICColorInfo } from '../../formats/HEICGainmapDecoder';
 import { isRAWExtension } from '../../formats/RAWPreviewDecoder';
 import { basename } from '../../utils/path';
@@ -569,6 +570,9 @@ export class FileSourceNode extends BaseSourceNode {
   // RAW preview EXIF metadata
   private _rawExifMetadata: RAWExifMetadata | null = null;
 
+  // Multi-view EXR stereo detection
+  private _stereoInputFormat: StereoInputFormat | null = null;
+
   // Canvas cache for HDR rendering (avoids creating new canvas on every getCanvas() call)
   private cachedCanvas: HTMLCanvasElement | null = null;
   private canvasDirty: boolean = true;
@@ -985,9 +989,37 @@ export class FileSourceNode extends BaseSourceNode {
     this.currentExrLayer = options?.layer ?? null;
     this.currentExrRemapping = options?.channelRemapping ?? null;
 
+    // Detect multi-view EXR stereo (left/right views → 'separate' input format)
+    // and decode the right-eye view when present
+    const { isMultiViewEXR, getEXRViews, decodeEXRView } = await import('../../formats/MultiViewEXR');
+    let rightEyeIPImage: IPImage | null = null;
+    if (isMultiViewEXR(buffer)) {
+      const views = getEXRViews(buffer);
+      const viewsLower = views.map((v) => v.toLowerCase());
+      if (viewsLower.includes('left') && viewsLower.includes('right')) {
+        this._stereoInputFormat = 'separate';
+        // Decode the right-eye view
+        const rightViewName = views[viewsLower.indexOf('right')]!;
+        const rightResult = await decodeEXRView(buffer, rightViewName);
+        if (rightResult) {
+          rightEyeIPImage = exrToIPImage(rightResult, originalUrl ?? url);
+          rightEyeIPImage.metadata.frameNumber = 1;
+        }
+      } else {
+        this._stereoInputFormat = null;
+      }
+    } else {
+      this._stereoInputFormat = null;
+    }
+
     // Convert to IPImage
     this.cachedIPImage = exrToIPImage(result, originalUrl ?? url);
     this.cachedIPImage.metadata.frameNumber = 1;
+
+    // Attach right-eye image for stereo 'separate' format
+    if (rightEyeIPImage) {
+      this.cachedIPImage.rightEyeImage = rightEyeIPImage;
+    }
 
     this.url = url;
     this.isEXR = true;
@@ -2062,6 +2094,15 @@ export class FileSourceNode extends BaseSourceNode {
    */
   isHDR(): boolean {
     return this._isHDRFormat || this.isEXR;
+  }
+
+  /**
+   * Get the detected stereo input format for this source.
+   * Returns 'separate' for multi-view EXR files with left/right views,
+   * or null if no stereo format was detected.
+   */
+  get stereoInputFormat(): StereoInputFormat | null {
+    return this._stereoInputFormat;
   }
 
   getElement(_frame: number): HTMLImageElement | null {

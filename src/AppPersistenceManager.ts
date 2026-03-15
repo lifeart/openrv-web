@@ -215,6 +215,40 @@ export class AppPersistenceManager {
   }
 
   /**
+   * Create an auto-checkpoint before loading new media, but only when
+   * the session already has at least one source loaded (i.e., the load
+   * is destructive to an existing working state).
+   */
+  async checkpointBeforeMediaLoad(): Promise<void> {
+    const { session } = this.ctx;
+    if (session.allSources && session.allSources.length > 0) {
+      await this.createAutoCheckpoint('Before Media Load');
+    }
+  }
+
+  /**
+   * Create an auto-checkpoint before clearing all annotations.
+   * Only creates a checkpoint when annotations actually exist.
+   */
+  async checkpointBeforeClearAnnotations(): Promise<void> {
+    const { paintEngine } = this.ctx;
+    if (paintEngine.getAnnotatedFrames && paintEngine.getAnnotatedFrames().size > 0) {
+      await this.createAutoCheckpoint('Before Clear Annotations');
+    }
+  }
+
+  /**
+   * Create an auto-checkpoint before clearing all sources.
+   * Only creates a checkpoint when sources actually exist.
+   */
+  async checkpointBeforeClearSources(): Promise<void> {
+    const { session } = this.ctx;
+    if (session.allSources && session.allSources.length > 0) {
+      await this.createAutoCheckpoint('Before Clear Sources');
+    }
+  }
+
+  /**
    * Sync UI controls from a restored session state.
    * Handles PAR and background pattern controls in addition to
    * the standard color/CDL/filter/transform/crop/lens controls.
@@ -432,7 +466,11 @@ export class AppPersistenceManager {
         }
       } else if (ext === 'rv' || ext === 'gto') {
         const content = await file.arrayBuffer();
-        await session.loadFromGTO(content, availableFiles);
+        // Convert Map<string, File> to Map<string, File[]> expected by loadFromGTO
+        const filesArray = availableFiles
+          ? new Map([...availableFiles].map(([k, v]) => [k, [v]]))
+          : undefined;
+        await session.loadFromGTO(content, filesArray);
       } else if (ext === 'rvedl') {
         const text = await file.text();
         session.loadEDL(text);

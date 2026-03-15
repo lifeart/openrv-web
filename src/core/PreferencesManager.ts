@@ -323,6 +323,8 @@ function hasOwnKey(obj: Record<string, unknown>, key: string): boolean {
 }
 
 export class PreferencesManager extends EventEmitter<CorePreferencesEvents> {
+  /** Whether the storage-only warning has been emitted (reset in tests). */
+  static _storageOnlyWarningEmitted = false;
   private _subsystems: PreferencesSubsystems = {};
   private _pluginSettingsProvider: PluginSettingsProvider | null = null;
 

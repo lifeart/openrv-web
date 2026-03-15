@@ -170,6 +170,22 @@ export class EXRWindowOverlay extends CanvasOverlay<EXRWindowOverlayEvents> {
   }
 
   // -------------------------------------------------------------------------
+  // Style
+  // -------------------------------------------------------------------------
+
+  setShowLabels(show: boolean): void {
+    this.setState({ showLabels: show });
+  }
+
+  setLineWidth(width: number): void {
+    this.setState({ lineWidth: width });
+  }
+
+  setDashPattern(pattern: [number, number]): void {
+    this.setState({ dashPattern: pattern });
+  }
+
+  // -------------------------------------------------------------------------
   // Render
   // -------------------------------------------------------------------------
 

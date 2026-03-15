@@ -37,6 +37,8 @@ export interface RepresentationSourceAccessor {
   getHDRResizeTier(): HDRResizeTier;
   /** Get the current frame for frame mapping */
   getCurrentFrame(): number;
+  /** Check whether the source at the given index is a sequence */
+  isSequenceSource(sourceIndex: number): boolean;
 }
 
 export class MediaRepresentationManager extends EventEmitter<RepresentationManagerEvents> {
@@ -211,7 +213,8 @@ export class MediaRepresentationManager extends EventEmitter<RepresentationManag
 
     try {
       const hdrResizeTier = this._accessor.getHDRResizeTier();
-      const loader = createRepresentationLoader(representation.kind, hdrResizeTier);
+      const isSequence = this._accessor.isSequenceSource(sourceIndex);
+      const loader = createRepresentationLoader(representation.kind, hdrResizeTier, isSequence);
       this._activeLoaders.set(repId, loader);
 
       const result = await loader.load(representation);

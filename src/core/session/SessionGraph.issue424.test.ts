@@ -291,7 +291,7 @@ describe('Issue #424: RVImageSource crop restore', () => {
   it('ISS-424-004: RVImageSource with no proxy component does not crash', async () => {
     const nodeNoProxy = {
       name: 'source_000',
-      component: (name: string) => ({
+      component: (_name: string) => ({
         exists: () => false,
         property: () => ({ value: () => undefined, exists: () => false }),
       }),

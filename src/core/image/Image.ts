@@ -56,6 +56,12 @@ export class IPImage {
     this.managedVideoFrame = frame ? ManagedVideoFrame.wrap(frame) : null;
   }
 
+  /**
+   * Right-eye image for multi-view EXR stereo ('separate' input format).
+   * When present, the stereo renderer uses this instead of duplicating the left eye.
+   */
+  rightEyeImage: IPImage | null = null;
+
   /** Decoded ImageBitmap for zero-copy GPU upload (image sequences) */
   imageBitmap: ImageBitmap | null;
 
@@ -208,6 +214,10 @@ export class IPImage {
         // Already closed
       }
       this.imageBitmap = null;
+    }
+    if (this.rightEyeImage) {
+      this.rightEyeImage.close();
+      this.rightEyeImage = null;
     }
   }
 

@@ -127,6 +127,18 @@ export class SessionURLService {
     const ocioState = ocioControl.getState();
     const source = session.currentSource;
 
+    // Collect all source URLs when multiple sources are loaded
+    // (enables multi-source A/B compare reconstruction on the receiving end)
+    let sourceUrls: string[] | undefined;
+    if (session.allSources.length > 1) {
+      const urls = session.allSources
+        .map((s) => s.url)
+        .filter((u): u is string => typeof u === 'string' && u.length > 0);
+      if (urls.length > 1) {
+        sourceUrls = urls;
+      }
+    }
+
     return {
       frame: session.currentFrame,
       fps: session.fps,
@@ -134,6 +146,7 @@ export class SessionURLService {
       outPoint: session.outPoint,
       sourceIndex: session.currentSourceIndex,
       sourceUrl: source?.url,
+      sourceUrls,
       sourceAIndex: session.sourceAIndex,
       sourceBIndex: session.sourceBIndex >= 0 ? session.sourceBIndex : undefined,
       currentAB: session.currentAB,
@@ -165,15 +178,54 @@ export class SessionURLService {
     return -1;
   }
 
+  /**
+   * Load multiple source URLs in order, skipping any that are already loaded.
+   * Used to reconstruct multi-source A/B compare sessions from share links.
+   */
+  private async loadMultipleSources(urls: string[]): Promise<void> {
+    const { session } = this.deps;
+
+    for (const url of urls) {
+      // Skip if already loaded
+      if (this.findSourceIndexByUrl(url) >= 0) {
+        console.info(`[SessionURLService] Source already loaded, skipping: ${url}`);
+        continue;
+      }
+
+      try {
+        console.info(`[SessionURLService] Loading source from share link: ${url}`);
+        if (session.sourceCount === 0 && session.loadSourceFromUrl) {
+          await session.loadSourceFromUrl(url);
+        } else if (this.deps.loadSourceFromUrl) {
+          await this.deps.loadSourceFromUrl(url);
+        } else {
+          console.warn(`[SessionURLService] No loader available for source: ${url}`);
+        }
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err);
+        console.warn(`[SessionURLService] Failed to load source: ${url}`, err);
+        this.deps.networkControl.showInfo(`Failed to load shared media: ${reason}`);
+      }
+    }
+  }
+
   /** Apply a decoded session state to the session/viewer. */
   async applySessionURLState(state: SessionURLState): Promise<void> {
     const { session, viewer, compareControl, ocioControl, networkSyncManager } = this.deps;
 
     // Phase 1: Resolve shared media (always, regardless of session state)
-    // If sourceUrl is present, ensure that media is available in the session
-    // before applying view/compare state.
+    // If sourceUrls (multi-source) or sourceUrl (single-source) is present,
+    // ensure that media is available in the session before applying view/compare state.
     let resolvedSourceIndex = state.sourceIndex;
-    if (state.sourceUrl) {
+
+    if (state.sourceUrls && state.sourceUrls.length > 0) {
+      // Multi-source share link: load all source URLs in order
+      await this.loadMultipleSources(state.sourceUrls);
+      // resolvedSourceIndex stays as state.sourceIndex — the indices should
+      // match because we loaded sources in the same order they were captured.
+      resolvedSourceIndex = Math.min(state.sourceIndex, Math.max(0, session.sourceCount - 1));
+    } else if (state.sourceUrl) {
+      // Legacy single-source share link
       // First, check if the URL is already loaded
       const existingIndex = this.findSourceIndexByUrl(state.sourceUrl);
       if (existingIndex >= 0) {

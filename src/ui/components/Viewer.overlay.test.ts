@@ -192,6 +192,7 @@ describe('Viewer', () => {
     /** Create a minimal valid LUT3D for OCIO tests */
     function createFakeLUT(): import('../../color/LUTLoader').LUT3D {
       return {
+        type: '3d',
         title: 'test-ocio',
         size: 17,
         domainMin: [0, 0, 0],
@@ -434,6 +435,7 @@ describe('Viewer', () => {
     /** Create a minimal valid LUT3D for GPU LUT tests */
     function createFakeLUT(): import('../../color/LUTLoader').LUT3D {
       return {
+        type: '3d',
         title: 'test-lut',
         size: 17,
         domainMin: [0, 0, 0],
@@ -901,6 +903,7 @@ describe('Viewer', () => {
     /** Create a minimal valid LUT3D for ordering test */
     function createFakeLUT(): import('../../color/LUTLoader').LUT3D {
       return {
+        type: '3d',
         title: 'test-order',
         size: 17,
         domainMin: [0, 0, 0],

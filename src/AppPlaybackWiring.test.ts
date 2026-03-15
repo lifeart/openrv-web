@@ -163,6 +163,7 @@ function createMockViewer() {
     exportSourceFrame: vi.fn(),
     copyFrameToClipboard: vi.fn(),
     renderFrameToCanvas: vi.fn(),
+    setOnBeforeMediaLoad: vi.fn(),
   };
 }
 
@@ -237,6 +238,9 @@ function createMockPersistenceManager() {
     createSnapshot: vi.fn(),
     restoreSnapshot: vi.fn(),
     saveRvSession: vi.fn(),
+    checkpointBeforeMediaLoad: vi.fn().mockResolvedValue(undefined),
+    checkpointBeforeClearAnnotations: vi.fn().mockResolvedValue(undefined),
+    checkpointBeforeClearSources: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -339,10 +343,10 @@ describe('wirePlaybackControls', () => {
     expect(viewer.exportSourceFrame).toHaveBeenCalledWith('jpeg', 0.8);
   });
 
-  it('PW-007: showShortcuts calls keyboardHandler.showShortcutsDialog()', () => {
+  it('PW-007: showShortcuts calls keyboardHandler.showCustomBindingsDialog()', () => {
     headerBar.emit('showShortcuts', undefined);
     const handler = (deps.getKeyboardHandler as ReturnType<typeof vi.fn>).mock.results[0]!.value;
-    expect(handler.showShortcutsDialog).toHaveBeenCalled();
+    expect(handler.showCustomBindingsDialog).toHaveBeenCalled();
   });
 
   it('PW-008: fullscreenToggle calls fullscreenManager.toggle()', () => {

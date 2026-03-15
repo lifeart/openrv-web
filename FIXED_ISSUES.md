@@ -2762,3 +2762,171 @@ The `URLSession` interface gained `allSources` for URL-based lookup. `SessionURL
 **Fix**: Updated the note overlay section to accurately describe timeline-canvas colored bars filtered by source and note status, not a viewer-level text panel.
 
 **Files changed**: `docs/advanced/overlays.md`
+
+## Issue #527: Sequence-style media representations can never use SequenceRepresentationLoader because the live switch path never passes the isSequence flag
+
+**Root cause**: `MediaRepresentationManager.switchRepresentation()` called `createRepresentationLoader(representation.kind, hdrResizeTier)` without the third `isSequence` parameter, so it always defaulted to `false`. This meant any `frames`-kind representation on a sequence source would incorrectly receive `FileRepresentationLoader` (which expects a single file) instead of `SequenceRepresentationLoader` (which handles multi-file sequences).
+
+**Fix**: Added `isSequenceSource(sourceIndex: number): boolean` to the `RepresentationSourceAccessor` interface. The `SessionMedia` accessor wiring implements it by checking `source?.type === 'sequence'`. The `switchRepresentation` method now queries this before calling the factory, passing the result as the third argument.
+
+**Tests added**: 3 regression tests in `MediaRepresentationManager.test.ts`:
+- Verifies `isSequence=true` is passed for sequence sources
+- Verifies `isSequence=false` is passed for non-sequence sources
+- Full integration path with sequence source switching from `movie` to `frames` representation
+
+**Files changed**:
+- `src/core/session/MediaRepresentationManager.ts`
+- `src/core/session/SessionMedia.ts`
+- `src/core/session/MediaRepresentationManager.test.ts`
+
+## Issue #376: Auto-checkpoints are documented as broad safety nets before major operations, but production only creates them for restore and project-load flows
+
+**Root cause**: `AppPersistenceManager.createAutoCheckpoint()` was only called before snapshot restore and project/session load. No other destructive operations (media loading, clearing annotations, clearing sources) triggered checkpoints, despite documentation stating they would.
+
+**Fix**: Added three new checkpoint methods to `AppPersistenceManager`:
+- `checkpointBeforeMediaLoad()` — creates checkpoint when session already has sources (guards on `session.allSources.length > 0`)
+- `checkpointBeforeClearAnnotations()` — creates checkpoint when annotations exist (guards on `paintEngine.getAnnotatedFrames().size > 0`)
+- `checkpointBeforeClearSources()` — creates checkpoint when sources exist
+
+Wired these into: viewer drag-and-drop media loading (`ViewerInputHandler`), annotation import in replace mode (`AppPlaybackWiring`), and `MediaAPI.clearSources()`.
+
+**Tests added**: 10 regression tests in `AppPersistenceManager.issue376.test.ts` covering all three methods, including guard logic and error resilience.
+
+**Files changed**:
+- `src/AppPersistenceManager.ts`
+- `src/ui/components/ViewerInputHandler.ts`
+- `src/ui/components/Viewer.ts`
+- `src/AppPlaybackWiring.ts`
+- `src/api/MediaAPI.ts`
+- `src/api/OpenRVAPI.ts`
+- `src/App.ts`
+- `src/AppPlaybackWiring.test.ts`
+- `src/AppPersistenceManager.issue376.test.ts` (new)
+
+## Issue #346: The accessibility overview overclaims live announcements for frame navigation and tool selection
+
+**Root cause**: The `AriaAnnouncer` wiring in `LayoutOrchestrator` only announced tab changes, file loads, playback start/pause, and speed changes. Frame navigation and tool selection announcements were missing despite being documented as supported.
+
+**Fix**: Added ARIA announcements in `KeyboardActionMap.ts` at the keyboard action handler level (not session events), ensuring they only fire for user-initiated discrete navigation, not during continuous playback:
+- **Frame navigation**: stepForward/backward, goToStart/End, mark/boundary/shot navigation, annotation next/prev, notes next/prev — all announce the current frame number
+- **Tool selection**: All 8 paint tools (pan, pen, eraser, text, rectangle, ellipse, line, arrow) plus 3 context-sensitive tool activations — announce tool name
+
+**Tests added**: 26 regression tests in `KeyboardActionMap.test.ts` covering frame announcements for all navigation actions, tool selection announcements for all paint tools, and null-announcer safety.
+
+**Files changed**:
+- `src/services/KeyboardActionMap.ts`
+- `src/services/KeyboardActionMap.test.ts`
+
+## Issue #449: Remote cursor sync is transported and tracked, but the shipped app never renders or consumes it
+
+**Root cause**: `NetworkSyncManager` handled incoming `sync.cursor` messages, sanitized and stored them in `_remoteCursors`, and emitted `syncCursor` events, but no production code subscribed to render them. The FAQ claimed collaboration syncs cursor position.
+
+**Fix**: Created `RemoteCursorsOverlay` — a DOM-based overlay component that renders colored cursor indicators for each remote participant on the viewer canvas. Features:
+- SVG cursor arrows colored with participant's assigned color, plus name labels
+- Normalized 0-1 coordinate mapping to viewer display pixels
+- Fade at 5s of inactivity, full removal at 7s
+- Color sanitization (hex-only regex) and XSS-safe name rendering (textContent)
+- Activated/deactivated based on collaboration connection state
+
+Wired into `AppNetworkBridge` (subscribes to syncCursor, usersChanged, userLeft, connection events) and `App.ts` (creates, mounts, resizes, disposes overlay).
+
+**Tests added**: 28 regression tests in `RemoteCursorsOverlay.test.ts` covering activation, cursor rendering, coordinate mapping, fade/hide timing, disconnect behavior, user info updates, disposal, and color sanitization.
+
+**Files changed**:
+- `src/ui/components/RemoteCursorsOverlay.ts` (new)
+- `src/ui/components/RemoteCursorsOverlay.test.ts` (new)
+- `src/AppNetworkBridge.ts`
+- `src/App.ts`
+
+## Issue #334: Comparison annotations are tied to the A/B slot, not to the underlying source they were drawn on
+
+**Root cause**: The paint annotation model had no source identity field — only `version?: 'A' | 'B' | 'all'`. Annotations were created and filtered based on the A/B slot, so when users reassigned sources to different slots, annotations followed the slot rather than the original source.
+
+**Fix**: Added `sourceIndex?: number` field to all annotation types (`PenStroke`, `TextAnnotation`, `ShapeAnnotation`). When creating annotations during A/B compare mode, the actual source index (from `ABCompareManager`) is recorded. Display filtering now prefers matching by `sourceIndex` when available, falling back to `version` tag for legacy annotations without `sourceIndex`. Backward compatible — old annotations without `sourceIndex` continue to work via version-based filtering.
+
+**Tests added**: 12 regression tests (COMP-008a through COMP-008l) covering source index stamping on all annotation types, source-following after A/B swap, backward compatibility, `all`-version annotations, ghost mode filtering, and serialization roundtrip.
+
+**Files changed**:
+- `src/paint/types.ts`
+- `src/paint/PaintEngine.ts`
+- `src/services/LayoutOrchestrator.ts`
+- `src/ui/components/Viewer.ts`
+- `src/paint/ComparisonAnnotations.test.ts`
+
+## Issue #429: Share links claim to share comparison state, but clean recipients can only reconstruct one media source
+
+**Root cause**: `SessionURLState` carried only a single `sourceUrl` field. Capture only saved `session.currentSource?.url`. On the receiving end, at most one URL was loaded before restoring compare state, making A/B comparison reconstruction impossible since it requires at least two sources.
+
+**Fix**: Added `sourceUrls?: string[]` to `SessionURLState` (compact key `sus`). Capture now collects all source URLs when multiple sources are loaded. Apply loads all sources sequentially before restoring compare state, with `findSourceIndexByUrl` to skip already-loaded sources. Backward compatible — old single-`sourceUrl` links still work via fallback path.
+
+**Tests added**: 13 regression tests across `SessionURLManager.test.ts` (5 encoding tests) and `SessionURLService.test.ts` (8 capture/apply tests) covering multi-source round-trip, empty arrays, backward compatibility, already-loaded deduplication, and full capture-encode-decode-apply A/B reconstruction.
+
+**Files changed**:
+- `src/core/session/SessionURLManager.ts`
+- `src/services/SessionURLService.ts`
+- `src/core/session/SessionURLManager.test.ts`
+- `src/services/SessionURLService.test.ts`
+
+## Issue #521: `.orvproject` still serializes `sequencePattern` and `frameRange` for sequences, but the restore path never consumes them
+
+**Root cause**: `SessionSerializer.fromJSON()` wrote sequence metadata to project files but the restore path for `ref.type === 'sequence'` only emitted a warning message and silently dropped the source entry. The serialized `sequencePattern` and `frameRange` were never consumed.
+
+**Fix**: Updated both sequence restore paths (requiresReload and non-requiresReload) to create placeholder sources via `createSequencePlaceholder()` that preserve name, dimensions, frame range, pattern, and fps. Placeholders have empty frames (user must re-select files for pixel data). Warning messages now include pattern and frame range via `formatSequenceDetail()` so users know what files to locate.
+
+**Tests added**: 5 regression tests (SER-SEQ-001 through SER-SEQ-005) covering metadata roundtrip, placeholder frame range/pattern preservation, backward compatibility, failed reload fallback, and non-requiresReload placeholder creation.
+
+**Files changed**:
+- `src/core/session/SessionSerializer.ts`
+- `src/core/session/Session.ts`
+- `src/core/session/SessionSerializer.test.ts`
+
+## Issue #440: URL-based media loading bypasses the app's decoder stack and breaks remote EXR or other decoder-backed images
+
+**Root cause**: `Session.loadSourceFromUrl()` classified URLs as "video extension" vs "everything else" and routed all non-video URLs through `loadImage()` which uses a plain `HTMLImageElement`. This bypassed the `FileSourceNode` decoder pipeline, breaking remote EXR, DPX, TIFF, HDR, JXL, HEIC, JP2, and RAW-preview formats.
+
+**Fix**: Added a third routing branch in `loadSourceFromUrl()` for decoder-backed format extensions. When the URL matches a decoder-backed format (EXR, DPX, Cineon, HDR, TIFF, JXL, HEIC, JP2, RAW, etc.), the URL is fetched as a `File` object via `fetchUrlAsFile()` and routed through `loadImageFile()` (the FileSourceNode pipeline). Browser-native formats (PNG, JPEG, GIF, WebP, plain AVIF) still use the fast `HTMLImageElement` path. Video URLs still use `loadVideo()`.
+
+**Tests added**: 42 tests across `Session.loadSourceFromUrl.test.ts` (38 tests: decoder-backed routing, browser-native fast path, video routing, error handling) and `fetchUrlAsFile.test.ts` (4 tests: File creation, MIME, HTTP/network errors).
+
+**Files changed**:
+- `src/core/session/Session.ts`
+- `src/utils/media/SupportedMediaFormats.ts`
+- `src/utils/media/fetchUrlAsFile.ts` (new)
+- `src/utils/media/fetchUrlAsFile.test.ts` (new)
+- `src/core/session/Session.loadSourceFromUrl.test.ts`
+
+## Issue #515: The sequence-loading path bypasses the custom decoder stack and decodes frames with createImageBitmap(), so documented EXR/DPX/Cineon/HDR sequence workflows are not actually backed by the pro-format loaders
+
+**Root cause**: `SequenceLoader.loadFrameImage()` always used `createImageBitmap(frame.file)` for all formats, bypassing the decoder registry (`decodeEXR`, `decodeDPX`, etc.). Professional format sequences were either decoded as browser-native (incorrect output) or failed silently.
+
+**Fix**: Updated `loadFrameImage()` to check file extensions via `isDecoderBackedExtension()`. For decoder-backed formats (EXR, DPX, Cineon, HDR, TIFF, JXL, HEIC, JP2, RAW), the file is read as ArrayBuffer and routed through `decoderRegistry.detectAndDecode()`. The full-precision Float32Array result is stored in a new `decodedData` field on `SequenceFrame`, preserving HDR data for the render pipeline. `SequenceSourceNode.process()` creates float32 `IPImage` objects from decoded data, enabling the full HDR shader chain (EOTF, tone mapping, exposure). Browser-native formats (PNG, JPEG, GIF, WebP) continue using `createImageBitmap()`.
+
+**Tests added**: 16 new tests covering decoder routing (EXR, DPX, Cineon, HDR, browser-native bypass), `decodedData` preservation, `float32ToImageBitmap` conversion, abort signal handling at all checkpoints, `isFrameLoaded()`, and cleanup.
+
+**Files changed**:
+- `src/utils/media/SequenceLoader.ts`
+- `src/nodes/sources/SequenceSourceNode.ts`
+- `src/utils/media/SequenceLoader.test.ts`
+
+## Issue #345: Multi-view EXR and alternate stereo-input workflows are documented as integrated, but production hardcodes side-by-side stereo
+
+**Root cause**: `Viewer.getStereoPair()` hardcoded `'side-by-side'` as the stereo input format. `StereoManager` called renderer helpers without any input format argument. The `MultiViewEXR` parser existed but had no production consumer. Multi-view EXR files with left/right views were decoded as single-view only.
+
+**Fix**: 
+1. **Detection**: `FileSourceNode.loadEXRFromBuffer()` now detects multi-view EXR files with left/right views and sets `stereoInputFormat` to `'separate'`
+2. **Right-eye decoding**: When multi-view is detected, both left and right views are decoded. Right-eye data is stored as `cachedIPImage.rightEyeImage` (new `rightEyeImage` field on `IPImage`)
+3. **Format propagation**: `Viewer.renderImage()` syncs stereo input format from source metadata into `StereoManager`. `getStereoPair()` reads from `StereoManager.getStereoInputFormat()` instead of hardcoding
+4. **Rendering**: `StereoRenderer.extractStereoEyes()` accepts optional `rightEyeImageData` parameter. For `'separate'` format, uses actual right-eye data to produce genuine stereo disparity
+5. **Backward compatible**: Default remains `'side-by-side'` for non-multi-view sources
+
+**Tests added**: 28 regression tests across `StereoManager.inputFormat.test.ts` (11 tests) and `StereoInputFormat.test.ts` (17 tests) covering format detection, propagation, backward compat, separate-eye rendering with distinct left/right data, eye swap, and fallback behavior.
+
+**Files changed**:
+- `src/core/session/SessionTypes.ts`
+- `src/core/image/Image.ts`
+- `src/nodes/sources/FileSourceNode.ts`
+- `src/ui/components/StereoManager.ts`
+- `src/ui/components/Viewer.ts`
+- `src/stereo/StereoRenderer.ts`
+- `src/ui/components/StereoManager.inputFormat.test.ts` (new)
+- `src/stereo/StereoInputFormat.test.ts` (new)

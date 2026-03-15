@@ -436,6 +436,7 @@ export class SessionSerializer {
         if (ref.requiresReload) {
           // Sequences need multi-file picker and the sequence-loading path
           if (ref.type === 'sequence') {
+            const seqDetail = this.formatSequenceDetail(ref);
             const files = await showSequenceReloadPrompt(ref.name, {
               title: 'Reload Sequence',
               accept: SUPPORTED_MEDIA_ACCEPT,
@@ -451,10 +452,18 @@ export class SessionSerializer {
                 mediaIndexMap.set(refIndex, nextSourceIndex++);
                 loadedMedia++;
               } catch (_loadErr) {
-                warnings.push(`Failed to reload sequence: ${ref.name}`);
+                // Load failed — insert placeholder so metadata is preserved
+                session.addSource(this.createSequencePlaceholder(ref));
+                mediaIndexMap.set(refIndex, nextSourceIndex++);
+                loadedMedia++;
+                warnings.push(`Failed to reload sequence: ${ref.name}${seqDetail} — added as placeholder`);
               }
             } else {
-              warnings.push(`Skipped reload: ${ref.name}`);
+              // User skipped — insert placeholder with preserved metadata
+              session.addSource(this.createSequencePlaceholder(ref));
+              mediaIndexMap.set(refIndex, nextSourceIndex++);
+              loadedMedia++;
+              warnings.push(`Sequence needs file reload: ${ref.name}${seqDetail}`);
             }
             continue;
           }
@@ -523,6 +532,7 @@ export class SessionSerializer {
           loadedMedia++;
         } else if (ref.type === 'sequence') {
           // Non-blob sequences: prompt user for sequence files
+          const seqDetail = this.formatSequenceDetail(ref);
           const files = await showSequenceReloadPrompt(ref.name, {
             title: 'Reload Sequence',
             accept: SUPPORTED_MEDIA_ACCEPT,
@@ -538,10 +548,18 @@ export class SessionSerializer {
               mediaIndexMap.set(refIndex, nextSourceIndex++);
               loadedMedia++;
             } catch (_loadErr) {
-              warnings.push(`Failed to reload sequence: ${ref.name}`);
+              // Load failed — insert placeholder so metadata is preserved
+              session.addSource(this.createSequencePlaceholder(ref));
+              mediaIndexMap.set(refIndex, nextSourceIndex++);
+              loadedMedia++;
+              warnings.push(`Failed to reload sequence: ${ref.name}${seqDetail} — added as placeholder`);
             }
           } else {
-            warnings.push(`Skipped reload: ${ref.name}`);
+            // User skipped — insert placeholder with preserved metadata
+            session.addSource(this.createSequencePlaceholder(ref));
+            mediaIndexMap.set(refIndex, nextSourceIndex++);
+            loadedMedia++;
+            warnings.push(`Sequence needs file reload: ${ref.name}${seqDetail}`);
           }
         }
       } catch (_err) {
@@ -861,6 +879,54 @@ export class SessionSerializer {
     };
 
     return migrated;
+  }
+
+  /**
+   * Build a human-readable description of the sequence metadata for warnings.
+   */
+  private static formatSequenceDetail(ref: MediaReference): string {
+    const parts: string[] = [];
+    if (ref.sequencePattern) {
+      parts.push(`pattern: ${ref.sequencePattern}`);
+    }
+    if (ref.frameRange) {
+      parts.push(`frames ${ref.frameRange.start}–${ref.frameRange.end}`);
+    }
+    return parts.length > 0 ? ` (${parts.join(', ')})` : '';
+  }
+
+  /**
+   * Create a placeholder MediaSource from a serialized sequence reference.
+   *
+   * The placeholder preserves name, dimensions, frame range, pattern, and fps
+   * so the entry is visible in the session source list. The sequence frames
+   * themselves are empty (the user must re-select the files to get pixel data).
+   */
+  private static createSequencePlaceholder(ref: MediaReference): MediaSource {
+    const startFrame = ref.frameRange?.start ?? 1;
+    const endFrame = ref.frameRange?.end ?? ref.duration;
+    return {
+      type: 'sequence',
+      name: ref.name,
+      url: '',
+      width: ref.width,
+      height: ref.height,
+      duration: ref.duration,
+      fps: ref.fps,
+      sequenceInfo: {
+        name: ref.name,
+        pattern: ref.sequencePattern ?? '',
+        frames: [],
+        startFrame,
+        endFrame,
+        width: ref.width,
+        height: ref.height,
+        fps: ref.fps,
+        missingFrames: [],
+      },
+      sequenceFrames: [],
+      sequenceFrameMap: new Map(),
+    };
   }
 
   private static getLUTPipelineReloadWarnings(state: SessionState): string[] {

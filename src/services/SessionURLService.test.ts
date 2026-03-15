@@ -1529,4 +1529,238 @@ describe('SessionURLService', () => {
       }).not.toThrow();
     });
   });
+
+  // -----------------------------------------------------------------------
+  // Multi-source A/B compare (issue #429)
+  // -----------------------------------------------------------------------
+
+  describe('multi-source A/B compare', () => {
+    it('SU-023: capture includes sourceUrls when multiple sources have URLs', () => {
+      deps.session.allSources = [
+        { url: 'https://example.com/shot_a.exr' },
+        { url: 'https://example.com/shot_b.exr' },
+      ];
+      deps.session.currentSource = { url: 'https://example.com/shot_a.exr' };
+      deps.session.sourceBIndex = 1;
+
+      const state = service.captureSessionURLState();
+
+      expect(state.sourceUrls).toEqual([
+        'https://example.com/shot_a.exr',
+        'https://example.com/shot_b.exr',
+      ]);
+      // sourceUrl is still set for backward compat
+      expect(state.sourceUrl).toBe('https://example.com/shot_a.exr');
+    });
+
+    it('SU-024: capture omits sourceUrls when only one source loaded', () => {
+      deps.session.allSources = [
+        { url: 'https://example.com/shot_a.exr' },
+      ];
+      deps.session.currentSource = { url: 'https://example.com/shot_a.exr' };
+
+      const state = service.captureSessionURLState();
+
+      expect(state.sourceUrls).toBeUndefined();
+      expect(state.sourceUrl).toBe('https://example.com/shot_a.exr');
+    });
+
+    it('SU-025: capture omits sourceUrls when sources have no URLs', () => {
+      deps.session.allSources = [{}, {}];
+      deps.session.currentSource = {};
+
+      const state = service.captureSessionURLState();
+
+      expect(state.sourceUrls).toBeUndefined();
+    });
+
+    it('SU-026: apply with sourceUrls loads all sources on empty session', async () => {
+      let loadCount = 0;
+      deps.session.sourceCount = 0;
+      // Both session.loadSourceFromUrl and deps.loadSourceFromUrl are used
+      // depending on whether session is empty or not at the time of each call
+      deps.session.loadSourceFromUrl = vi.fn().mockImplementation(async () => {
+        loadCount++;
+        deps.session.sourceCount = loadCount;
+      });
+      const depsLoadSourceFromUrl = vi.fn().mockImplementation(async () => {
+        loadCount++;
+        deps.session.sourceCount = loadCount;
+        return loadCount - 1;
+      });
+
+      deps = createDeps({
+        session: deps.session,
+        loadSourceFromUrl: depsLoadSourceFromUrl,
+      });
+      service = new SessionURLService(deps);
+
+      const state: SessionURLState = {
+        frame: 1,
+        fps: 24,
+        sourceIndex: 0,
+        sourceUrls: [
+          'https://example.com/shot_a.exr',
+          'https://example.com/shot_b.exr',
+        ],
+        sourceAIndex: 0,
+        sourceBIndex: 1,
+      };
+
+      await service.applySessionURLState(state);
+
+      // First source loaded via session.loadSourceFromUrl (empty session),
+      // second via deps.loadSourceFromUrl (non-empty session)
+      expect(deps.session.loadSourceFromUrl).toHaveBeenCalledWith('https://example.com/shot_a.exr');
+      expect(depsLoadSourceFromUrl).toHaveBeenCalledWith('https://example.com/shot_b.exr');
+      expect(deps.session.setSourceA).toHaveBeenCalledWith(0);
+      expect(deps.session.setSourceB).toHaveBeenCalledWith(1);
+    });
+
+    it('SU-027: apply with sourceUrls uses deps.loadSourceFromUrl for non-empty session', async () => {
+      let loadCount = 1;
+      deps.session.sourceCount = 1;
+      deps.session.allSources = [{ url: 'https://example.com/existing.exr' }];
+
+      const loadSourceFromUrl = vi.fn().mockImplementation(async () => {
+        loadCount++;
+        deps.session.sourceCount = loadCount;
+        return loadCount - 1;
+      });
+
+      deps = createDeps({ loadSourceFromUrl });
+      service = new SessionURLService(deps);
+
+      const state: SessionURLState = {
+        frame: 1,
+        fps: 24,
+        sourceIndex: 0,
+        sourceUrls: [
+          'https://example.com/shot_a.exr',
+          'https://example.com/shot_b.exr',
+        ],
+        sourceAIndex: 0,
+        sourceBIndex: 1,
+      };
+
+      await service.applySessionURLState(state);
+
+      expect(loadSourceFromUrl).toHaveBeenCalledTimes(2);
+    });
+
+    it('SU-028: apply with sourceUrls skips already-loaded sources', async () => {
+      deps.session.sourceCount = 1;
+      deps.session.allSources = [{ url: 'https://example.com/shot_a.exr' }];
+
+      const loadSourceFromUrl = vi.fn().mockImplementation(async () => {
+        deps.session.sourceCount = 2;
+        deps.session.allSources.push({ url: 'https://example.com/shot_b.exr' });
+        return 1;
+      });
+
+      deps = createDeps({
+        loadSourceFromUrl,
+        session: deps.session,
+      });
+      service = new SessionURLService(deps);
+
+      const state: SessionURLState = {
+        frame: 1,
+        fps: 24,
+        sourceIndex: 0,
+        sourceUrls: [
+          'https://example.com/shot_a.exr',
+          'https://example.com/shot_b.exr',
+        ],
+        sourceAIndex: 0,
+        sourceBIndex: 1,
+      };
+
+      await service.applySessionURLState(state);
+
+      // shot_a.exr was already loaded, only shot_b.exr should be loaded
+      expect(loadSourceFromUrl).toHaveBeenCalledTimes(1);
+      expect(loadSourceFromUrl).toHaveBeenCalledWith('https://example.com/shot_b.exr');
+    });
+
+    it('SU-029: backward compat — old single-sourceUrl links still work', async () => {
+      deps.session.sourceCount = 0;
+      deps.session.loadSourceFromUrl = vi.fn().mockImplementation(async () => {
+        deps.session.sourceCount = 1;
+      });
+
+      const state: SessionURLState = {
+        frame: 10,
+        fps: 24,
+        sourceIndex: 0,
+        sourceUrl: 'https://example.com/legacy.exr',
+        // no sourceUrls — old format
+      };
+
+      await service.applySessionURLState(state);
+
+      expect(deps.session.loadSourceFromUrl).toHaveBeenCalledWith('https://example.com/legacy.exr');
+    });
+
+    it('SU-030: round-trip capture → encode → decode → apply reconstructs A/B compare', async () => {
+      // Set up a session with two sources in A/B compare mode
+      deps.session.allSources = [
+        { url: 'https://example.com/shot_a.exr' },
+        { url: 'https://example.com/shot_b.exr' },
+      ];
+      deps.session.currentSource = { url: 'https://example.com/shot_a.exr' };
+      deps.session.sourceAIndex = 0;
+      deps.session.sourceBIndex = 1;
+      deps.session.currentAB = 'B';
+      deps.compareControl.getWipeMode.mockReturnValue('horizontal');
+      deps.compareControl.getWipePosition.mockReturnValue(0.4);
+      deps.viewer.getTransform.mockReturnValue({
+        rotation: 0, flipH: false, flipV: false,
+        scale: { x: 1, y: 1 }, translate: { x: 0, y: 0 },
+      });
+
+      // Capture
+      const captured = service.captureSessionURLState();
+      expect(captured.sourceUrls).toHaveLength(2);
+
+      // Encode → Decode
+      const encoded = encodeSessionState(captured);
+      const decoded = decodeSessionState(encoded);
+      expect(decoded).not.toBeNull();
+      expect(decoded!.sourceUrls).toEqual([
+        'https://example.com/shot_a.exr',
+        'https://example.com/shot_b.exr',
+      ]);
+
+      // Apply on a fresh session
+      let loadCount = 0;
+      const freshSession = createMockSession();
+      freshSession.sourceCount = 0;
+      (freshSession as any).loadSourceFromUrl = vi.fn().mockImplementation(async () => {
+        loadCount++;
+        freshSession.sourceCount = loadCount;
+      });
+      const freshDepsLoadSource = vi.fn().mockImplementation(async () => {
+        loadCount++;
+        freshSession.sourceCount = loadCount;
+        return loadCount - 1;
+      });
+      const freshDeps = createDeps({
+        session: freshSession,
+        loadSourceFromUrl: freshDepsLoadSource,
+      });
+      const freshService = new SessionURLService(freshDeps);
+      await freshService.applySessionURLState(decoded!);
+
+      // First source loaded via session.loadSourceFromUrl, second via deps.loadSourceFromUrl
+      expect((freshSession as any).loadSourceFromUrl).toHaveBeenCalledTimes(1);
+      expect(freshDepsLoadSource).toHaveBeenCalledTimes(1);
+      // A/B compare state should be restored
+      expect(freshSession.setSourceA).toHaveBeenCalledWith(0);
+      expect(freshSession.setSourceB).toHaveBeenCalledWith(1);
+      expect(freshSession.setCurrentAB).toHaveBeenCalledWith('B');
+      expect(freshDeps.compareControl.setWipeMode).toHaveBeenCalledWith('horizontal');
+      expect(freshDeps.compareControl.setWipePosition).toHaveBeenCalledWith(0.4);
+    });
+  });
 });
