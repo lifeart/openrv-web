@@ -28,6 +28,7 @@ import { SUPPORTED_MEDIA_ACCEPT } from '../../../utils/media/SupportedMediaForma
 import type { LayoutPreset, LayoutPresetId } from '../../layout/LayoutStore';
 import { ShotStatusBadge } from '../ShotStatusBadge';
 import { RepresentationSelector } from '../RepresentationSelector';
+import type { VersionGroup } from '../../../core/session/VersionManager';
 
 export interface HeaderBarEvents extends EventMap {
   showShortcuts: void;
@@ -89,6 +90,9 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   private shotStatusBadge: ShotStatusBadge;
   // Representation selector
   private representationSelector: RepresentationSelector;
+  // Version selector
+  private versionSelectorContainer!: HTMLElement;
+  private _activeVersionMenuCleanup: (() => void) | null = null;
 
   // Overflow fade indicators
   private fadeLeft!: HTMLElement;
@@ -289,6 +293,10 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
 
     // === REPRESENTATION SELECTOR ===
     this.container.appendChild(this.representationSelector.render());
+
+    // === VERSION SELECTOR ===
+    this.versionSelectorContainer = this.createVersionSelector();
+    this.container.appendChild(this.versionSelectorContainer);
 
     // === AUTO-SAVE INDICATOR SLOT ===
     this.autoSaveSlot = document.createElement('div');
@@ -619,6 +627,124 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     }
   }
 
+  // === VERSION SELECTOR ===
+
+  private createVersionSelector(): HTMLElement {
+    const container = document.createElement('div');
+    container.className = 'version-selector';
+    container.dataset.testid = 'version-selector';
+    container.style.cssText = `display: none; align-items: center; gap: 2px; margin-left: 8px; flex-shrink: 0;`;
+
+    const prevBtn = this.createIconButton('chevron-left', '', () => this.navigateVersion('previous'), 'Previous version (Alt+[)');
+    prevBtn.dataset.testid = 'version-prev-button';
+    prevBtn.style.cssText += '; min-width: 24px; padding: 4px;';
+    container.appendChild(prevBtn);
+
+    const labelBtn = document.createElement('button');
+    labelBtn.dataset.testid = 'version-label-button';
+    labelBtn.setAttribute('aria-haspopup', 'menu');
+    labelBtn.setAttribute('aria-label', 'Select version');
+    labelBtn.style.cssText = `background: rgba(var(--accent-primary-rgb), 0.1); border: 1px solid rgba(var(--accent-primary-rgb), 0.3); color: var(--text-primary); padding: 3px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; font-family: inherit; display: inline-flex; align-items: center; gap: 4px; height: 26px; white-space: nowrap;`;
+    labelBtn.addEventListener('click', () => this.showVersionMenu(labelBtn));
+    container.appendChild(labelBtn);
+
+    const nextBtn = this.createIconButton('chevron-right', '', () => this.navigateVersion('next'), 'Next version (Alt+])');
+    nextBtn.dataset.testid = 'version-next-button';
+    nextBtn.style.cssText += '; min-width: 24px; padding: 4px;';
+    container.appendChild(nextBtn);
+
+    return container;
+  }
+
+  private getActiveVersionGroup(): VersionGroup | undefined {
+    const currentIndex = this.session.currentSourceIndex;
+    if (currentIndex < 0) return undefined;
+    return this.session.versionManager.getGroupForSource(currentIndex);
+  }
+
+  updateVersionSelector(): void {
+    const group = this.getActiveVersionGroup();
+    const labelBtn = this.versionSelectorContainer.querySelector('[data-testid="version-label-button"]') as HTMLButtonElement | null;
+    if (!group || group.versions.length < 2) {
+      this.versionSelectorContainer.style.display = 'none';
+      return;
+    }
+    this.versionSelectorContainer.style.display = 'flex';
+    if (labelBtn) {
+      const activeVersion = group.versions[group.activeVersionIndex];
+      const versionLabel = activeVersion ? activeVersion.label : '?';
+      labelBtn.textContent = `${group.shotName}: ${versionLabel} (${group.activeVersionIndex + 1}/${group.versions.length})`;
+      labelBtn.title = `Version group: ${group.shotName} - ${versionLabel}\nClick for version list`;
+    }
+  }
+
+  navigateVersion(direction: 'next' | 'previous'): void {
+    const group = this.getActiveVersionGroup();
+    if (!group) return;
+    const entry = direction === 'next'
+      ? this.session.versionManager.nextVersion(group.id)
+      : this.session.versionManager.previousVersion(group.id);
+    if (entry) {
+      this.session.setCurrentSource(entry.sourceIndex);
+    }
+  }
+
+  private showVersionMenu(anchor: HTMLElement): void {
+    const group = this.getActiveVersionGroup();
+    if (!group) return;
+    this.closeAllHeaderMenus();
+
+    const menu = document.createElement('div');
+    menu.id = 'version-menu';
+    menu.dataset.testid = 'version-menu-dropdown';
+    menu.setAttribute('role', 'menu');
+    menu.style.cssText = `position: fixed; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 6px; box-shadow: ${SHADOWS.dropdown}; padding: 4px 0; z-index: ${Z_INDEX.dropdown}; min-width: 160px;`;
+
+    const header = document.createElement('div');
+    header.style.cssText = `padding: 4px 12px 6px; font-size: 10px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border-primary); margin-bottom: 2px;`;
+    header.textContent = group.shotName;
+    menu.appendChild(header);
+
+    let activeItem: HTMLButtonElement | null = null;
+    for (let i = 0; i < group.versions.length; i++) {
+      const version = group.versions[i]!;
+      const isActive = i === group.activeVersionIndex;
+      const item = document.createElement('button');
+      item.setAttribute('role', 'menuitemradio');
+      item.setAttribute('aria-checked', String(isActive));
+      item.dataset.testid = `version-menu-item-${i}`;
+      item.tabIndex = -1;
+      item.textContent = `${isActive ? '\u2713 ' : '  '}${version.label}`;
+      item.style.cssText = `display: block; width: 100%; padding: 6px 12px; background: ${isActive ? 'var(--accent-primary)' : 'transparent'}; color: ${isActive ? 'white' : 'var(--text-primary)'}; border: none; text-align: left; cursor: pointer; font-size: 12px; outline: none;`;
+      if (isActive) activeItem = item;
+      item.addEventListener('click', () => {
+        const entry = this.session.versionManager.setActiveVersion(group.id, i);
+        if (entry) this.session.setCurrentSource(entry.sourceIndex);
+        removeMenu();
+      });
+      menu.appendChild(item);
+    }
+
+    menu.addEventListener('keydown', (e: KeyboardEvent) => {
+      const items: HTMLElement[] = Array.from(menu.querySelectorAll('[role="menuitemradio"]'));
+      const ci = items.indexOf(document.activeElement as HTMLElement);
+      if (e.key === 'ArrowDown') { e.preventDefault(); items[(ci + 1) % items.length]?.focus(); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); items[ci > 0 ? ci - 1 : items.length - 1]?.focus(); }
+      else if (e.key === 'Escape' || e.key === 'Tab') { e.preventDefault(); removeMenu(); anchor.focus(); }
+    });
+
+    const rect = anchor.getBoundingClientRect();
+    menu.style.left = `${rect.left}px`;
+    menu.style.top = `${rect.bottom + 4}px`;
+    document.body.appendChild(menu);
+    (activeItem || menu.querySelector('[role="menuitemradio"]') as HTMLElement)?.focus();
+
+    const removeMenu = () => { menu.remove(); document.removeEventListener('click', closeMenu); this._activeVersionMenuCleanup = null; };
+    const closeMenu = (e: MouseEvent) => { if (!menu.contains(e.target as Node)) removeMenu(); };
+    setTimeout(() => document.addEventListener('click', closeMenu), 0);
+    this._activeVersionMenuCleanup = removeMenu;
+  }
+
   private cycleLoopMode(): void {
     const modes: LoopMode[] = ['once', 'loop', 'pingpong'];
     const currentIndex = modes.indexOf(this.session.loopMode);
@@ -774,6 +900,9 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     }
     if (this._activeLayoutMenuCleanup) {
       this._activeLayoutMenuCleanup();
+    }
+    if (this._activeVersionMenuCleanup) {
+      this._activeVersionMenuCleanup();
     }
   }
 

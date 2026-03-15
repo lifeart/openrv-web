@@ -60,7 +60,6 @@ import { handlePlaybackChanged } from './handlers/playbackHandlers';
 import { bindPersistenceHandlers } from './handlers/persistenceHandlers';
 import { bindCompareHandlers } from './handlers/compareHandlers';
 import { showUnsupportedCodecModal } from './handlers/unsupportedCodecModal';
-import { handleBufferingChanged, handleFrameDecodeTimeout } from './handlers/bufferingHandlers';
 
 /**
  * Context interface for what AppSessionBridge needs from App.
@@ -149,22 +148,15 @@ export class AppSessionBridge {
         () => this.updateGamutDiagram(),
         loadedSource,
       );
+
+      // Auto-detect version groups from loaded sources
+      this.runVersionAutoDetection(session);
     });
 
     // --- Handle unsupported codec errors (ProRes, DNxHD, etc.) ---
 
     this.on(session, 'unsupportedCodec', (info) => {
       showUnsupportedCodecModal(info);
-    });
-
-    // --- Buffering / decode-timeout diagnostics ---
-
-    this.on(session, 'buffering', (isBuffering) => {
-      handleBufferingChanged(isBuffering);
-    });
-
-    this.on(session, 'frameDecodeTimeout', (frame) => {
-      handleFrameDecodeTimeout(frame);
     });
 
     // --- Optimize scopes for playback ---
@@ -313,6 +305,28 @@ export class AppSessionBridge {
       unsubscribe();
     }
     this.unsubscribers = [];
+  }
+
+  /**
+   * Run version auto-detection on all currently loaded sources.
+   * Clears existing auto-detected groups first to avoid duplicates,
+   * then re-detects from the full source list.
+   */
+  private runVersionAutoDetection(session: Session): void {
+    const sources = session.allSources;
+    if (sources.length < 2) return;
+
+    // Build the input array for autoDetectGroups
+    const sourceEntries = sources.map((s, i) => ({ name: s.name, index: i }));
+
+    // Clear existing groups and re-detect to avoid duplicates
+    // when new sources are added incrementally
+    const existing = session.versionManager.getGroups();
+    for (const group of existing) {
+      session.versionManager.removeGroup(group.id);
+    }
+
+    session.versionManager.autoDetectGroups(sourceEntries);
   }
 
   /**

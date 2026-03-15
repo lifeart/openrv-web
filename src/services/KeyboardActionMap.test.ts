@@ -10,11 +10,6 @@ vi.mock('../utils/ui/ThemeManager', () => ({
   getThemeManager: () => mockThemeManager,
 }));
 
-const mockShowAlert = vi.fn().mockResolvedValue(undefined);
-vi.mock('../ui/components/shared/Modal', () => ({
-  showAlert: (...args: unknown[]) => mockShowAlert(...args),
-}));
-
 // ---------------------------------------------------------------------------
 // Helpers to build lightweight test doubles
 // ---------------------------------------------------------------------------
@@ -56,7 +51,7 @@ function createMockViewer() {
     smoothSetZoom: vi.fn(),
     smoothSetPixelRatio: vi.fn(),
     refresh: vi.fn(),
-    copyFrameToClipboard: vi.fn().mockResolvedValue(true),
+    copyFrameToClipboard: vi.fn(),
     getPixelProbe: vi.fn().mockReturnValue({ toggle: vi.fn() }),
     getFalseColor: vi.fn().mockReturnValue({ toggle: vi.fn() }),
     getTimecodeOverlay: vi.fn().mockReturnValue({ toggle: vi.fn() }),
@@ -186,7 +181,7 @@ function createMockDeps(): KeyboardActionDeps & {
     sessionBridge: { updateInfoPanel: vi.fn() },
     layoutStore: { applyPreset: vi.fn() },
     externalPresentation: { openWindow: vi.fn() },
-    headerBar: { getExportControl: vi.fn().mockReturnValue({ quickExport: vi.fn() }) },
+    headerBar: { getExportControl: vi.fn().mockReturnValue({ quickExport: vi.fn() }), navigateVersion: vi.fn() },
     frameNavigation: {
       goToNextAnnotation: vi.fn(),
       goToPreviousAnnotation: vi.fn(),
@@ -366,14 +361,20 @@ describe('buildActionHandlers', () => {
     expect(deps.controls.channelSelect.handleKeyboard).toHaveBeenCalledWith('A', true);
   });
 
-  it('channel.luminance always calls channelSelect.handleKeyboard with L', () => {
+  it('channel.luminance toggles LUT pipeline panel when on color tab', () => {
+    deps.tabBar.activeTab = 'color';
+    // Rebuild handlers so the closure captures the updated tab
+    handlers = buildActionHandlers(deps);
     handlers['channel.luminance']!();
-    expect(deps.controls.channelSelect.handleKeyboard).toHaveBeenCalledWith('L', true);
+    expect(deps.controls.lutPipelinePanel.toggle).toHaveBeenCalledOnce();
+    expect(deps.controls.channelSelect.handleKeyboard).not.toHaveBeenCalled();
   });
 
-  it('lut.togglePanel calls lutPipelinePanel.toggle', () => {
-    handlers['lut.togglePanel']!();
-    expect(deps.controls.lutPipelinePanel.toggle).toHaveBeenCalledOnce();
+  it('channel.luminance calls channelSelect.handleKeyboard when not on color tab', () => {
+    deps.tabBar.activeTab = 'view';
+    handlers['channel.luminance']!();
+    expect(deps.controls.channelSelect.handleKeyboard).toHaveBeenCalledWith('L', true);
+    expect(deps.controls.lutPipelinePanel.toggle).not.toHaveBeenCalled();
   });
 
   // -- View modes --------------------------------------------------------
@@ -572,24 +573,9 @@ describe('buildActionHandlers', () => {
     expect(mockQuickExport).toHaveBeenCalledWith('png');
   });
 
-  it('export.copyFrame calls viewer.copyFrameToClipboard with true', async () => {
-    await handlers['export.copyFrame']!();
+  it('export.copyFrame calls viewer.copyFrameToClipboard with true', () => {
+    handlers['export.copyFrame']!();
     expect(deps.viewer.copyFrameToClipboard).toHaveBeenCalledWith(true);
-  });
-
-  it('export.copyFrame shows error alert when clipboard copy fails', async () => {
-    deps.viewer.copyFrameToClipboard.mockResolvedValue(false);
-    await handlers['export.copyFrame']!();
-    expect(mockShowAlert).toHaveBeenCalledWith(
-      expect.stringContaining('Failed to copy frame to clipboard'),
-      expect.objectContaining({ type: 'error', title: 'Clipboard Error' }),
-    );
-  });
-
-  it('export.copyFrame does not show alert when clipboard copy succeeds', async () => {
-    deps.viewer.copyFrameToClipboard.mockResolvedValue(true);
-    await handlers['export.copyFrame']!();
-    expect(mockShowAlert).not.toHaveBeenCalled();
   });
 
   // -- Undo/Redo ---------------------------------------------------------
@@ -835,177 +821,5 @@ describe('buildActionHandlers', () => {
   it('view.zoom1to8 calls viewer.smoothSetPixelRatio(0.125)', () => {
     handlers['view.zoom1to8']!();
     expect(deps.viewer.smoothSetPixelRatio).toHaveBeenCalledWith(0.125);
-  });
-
-  // =================================================================
-  // Frame navigation announcements (#346)
-  // =================================================================
-
-  it('playback.stepForward announces the new frame number', () => {
-    deps.session.currentFrame = 42;
-    handlers['playback.stepForward']!();
-    expect(deps.session.stepForward).toHaveBeenCalledOnce();
-    expect(deps.ariaAnnouncer!.announce).toHaveBeenCalledWith('Frame 42');
-  });
-
-  it('playback.stepBackward announces the new frame number', () => {
-    deps.session.currentFrame = 7;
-    handlers['playback.stepBackward']!();
-    expect(deps.session.stepBackward).toHaveBeenCalledOnce();
-    expect(deps.ariaAnnouncer!.announce).toHaveBeenCalledWith('Frame 7');
-  });
-
-  it('playback.goToStart announces the new frame number', () => {
-    deps.session.currentFrame = 1;
-    handlers['playback.goToStart']!();
-    expect(deps.ariaAnnouncer!.announce).toHaveBeenCalledWith('Frame 1');
-  });
-
-  it('playback.goToEnd announces the new frame number', () => {
-    deps.session.currentFrame = 100;
-    handlers['playback.goToEnd']!();
-    expect(deps.ariaAnnouncer!.announce).toHaveBeenCalledWith('Frame 100');
-  });
-
-  it('timeline.nextMarkOrBoundary announces the new frame number', () => {
-    deps.session.currentFrame = 50;
-    handlers['timeline.nextMarkOrBoundary']!();
-    expect(deps.frameNavigation.goToNextMarkOrBoundary).toHaveBeenCalledOnce();
-    expect(deps.ariaAnnouncer!.announce).toHaveBeenCalledWith('Frame 50');
-  });
-
-  it('timeline.previousMarkOrBoundary announces the new frame number', () => {
-    deps.session.currentFrame = 25;
-    handlers['timeline.previousMarkOrBoundary']!();
-    expect(deps.frameNavigation.goToPreviousMarkOrBoundary).toHaveBeenCalledOnce();
-    expect(deps.ariaAnnouncer!.announce).toHaveBeenCalledWith('Frame 25');
-  });
-
-  it('timeline.nextShot announces the new frame number', () => {
-    deps.session.currentFrame = 60;
-    handlers['timeline.nextShot']!();
-    expect(deps.frameNavigation.goToNextShot).toHaveBeenCalledOnce();
-    expect(deps.ariaAnnouncer!.announce).toHaveBeenCalledWith('Frame 60');
-  });
-
-  it('timeline.previousShot announces the new frame number', () => {
-    deps.session.currentFrame = 30;
-    handlers['timeline.previousShot']!();
-    expect(deps.frameNavigation.goToPreviousShot).toHaveBeenCalledOnce();
-    expect(deps.ariaAnnouncer!.announce).toHaveBeenCalledWith('Frame 30');
-  });
-
-  it('annotation.next announces the new frame number', () => {
-    deps.session.currentFrame = 15;
-    handlers['annotation.next']!();
-    expect(deps.frameNavigation.goToNextAnnotation).toHaveBeenCalledOnce();
-    expect(deps.ariaAnnouncer!.announce).toHaveBeenCalledWith('Frame 15');
-  });
-
-  it('annotation.previous announces the new frame number', () => {
-    deps.session.currentFrame = 5;
-    handlers['annotation.previous']!();
-    expect(deps.frameNavigation.goToPreviousAnnotation).toHaveBeenCalledOnce();
-    expect(deps.ariaAnnouncer!.announce).toHaveBeenCalledWith('Frame 5');
-  });
-
-  it('notes.next announces the target frame number', () => {
-    deps.session.noteManager.getNextNoteFrame.mockReturnValue(20);
-    deps.session.currentFrame = 10;
-    handlers['notes.next']!();
-    expect(deps.ariaAnnouncer!.announce).toHaveBeenCalledWith('Frame 20');
-  });
-
-  it('notes.previous announces the target frame number', () => {
-    deps.session.noteManager.getPreviousNoteFrame.mockReturnValue(5);
-    deps.session.currentFrame = 10;
-    handlers['notes.previous']!();
-    expect(deps.ariaAnnouncer!.announce).toHaveBeenCalledWith('Frame 5');
-  });
-
-  it('notes.next does not announce when frame does not change', () => {
-    deps.session.noteManager.getNextNoteFrame.mockReturnValue(10);
-    deps.session.currentFrame = 10;
-    handlers['notes.next']!();
-    expect(deps.ariaAnnouncer!.announce).not.toHaveBeenCalled();
-  });
-
-  it('frame navigation does not announce when ariaAnnouncer is null', () => {
-    deps.ariaAnnouncer = null;
-    handlers = buildActionHandlers(deps);
-    // Should not throw
-    expect(() => handlers['playback.stepForward']!()).not.toThrow();
-    expect(() => handlers['playback.goToStart']!()).not.toThrow();
-  });
-
-  // =================================================================
-  // Tool selection announcements (#346)
-  // =================================================================
-
-  it('paint.pan announces Pan tool selected', () => {
-    handlers['paint.pan']!();
-    expect(deps.controls.paintToolbar.handleKeyboard).toHaveBeenCalledWith('v');
-    expect(deps.ariaAnnouncer!.announce).toHaveBeenCalledWith('Pan tool selected');
-  });
-
-  it('paint.pen announces Pen tool selected', () => {
-    handlers['paint.pen']!();
-    expect(deps.ariaAnnouncer!.announce).toHaveBeenCalledWith('Pen tool selected');
-  });
-
-  it('paint.eraser announces Eraser tool selected', () => {
-    handlers['paint.eraser']!();
-    expect(deps.ariaAnnouncer!.announce).toHaveBeenCalledWith('Eraser tool selected');
-  });
-
-  it('paint.text announces Text tool selected', () => {
-    handlers['paint.text']!();
-    expect(deps.ariaAnnouncer!.announce).toHaveBeenCalledWith('Text tool selected');
-  });
-
-  it('paint.rectangle announces Rectangle tool selected', () => {
-    handlers['paint.rectangle']!();
-    expect(deps.ariaAnnouncer!.announce).toHaveBeenCalledWith('Rectangle tool selected');
-  });
-
-  it('paint.ellipse announces Ellipse tool selected', () => {
-    handlers['paint.ellipse']!();
-    expect(deps.ariaAnnouncer!.announce).toHaveBeenCalledWith('Ellipse tool selected');
-  });
-
-  it('paint.line announces Line tool selected', () => {
-    handlers['paint.line']!();
-    expect(deps.ariaAnnouncer!.announce).toHaveBeenCalledWith('Line tool selected');
-  });
-
-  it('paint.arrow announces Arrow tool selected', () => {
-    handlers['paint.arrow']!();
-    expect(deps.ariaAnnouncer!.announce).toHaveBeenCalledWith('Arrow tool selected');
-  });
-
-  it('playback.faster announces Line tool when paint context is active', () => {
-    (deps.activeContextManager.isContextActive as ReturnType<typeof vi.fn>).mockReturnValue(true);
-    handlers['playback.faster']!();
-    expect(deps.ariaAnnouncer!.announce).toHaveBeenCalledWith('Line tool selected');
-  });
-
-  it('timeline.setOutPoint announces Ellipse tool when paint context is active', () => {
-    (deps.activeContextManager.isContextActive as ReturnType<typeof vi.fn>).mockReturnValue(true);
-    handlers['timeline.setOutPoint']!();
-    expect(deps.ariaAnnouncer!.announce).toHaveBeenCalledWith('Ellipse tool selected');
-  });
-
-  it('timeline.resetInOut announces Rectangle tool when paint context is active', () => {
-    (deps.activeContextManager.isContextActive as ReturnType<typeof vi.fn>).mockReturnValue(true);
-    handlers['timeline.resetInOut']!();
-    expect(deps.ariaAnnouncer!.announce).toHaveBeenCalledWith('Rectangle tool selected');
-  });
-
-  it('tool selection does not announce when ariaAnnouncer is null', () => {
-    deps.ariaAnnouncer = null;
-    handlers = buildActionHandlers(deps);
-    // Should not throw
-    expect(() => handlers['paint.pen']!()).not.toThrow();
-    expect(() => handlers['paint.rectangle']!()).not.toThrow();
   });
 });

@@ -72,6 +72,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   },
   'timeline.setOutPoint': {
     code: 'KeyO',
+    context: 'timeline',
     description: 'Set out point',
   },
   'timeline.setOutPointAlt': {
@@ -102,6 +103,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   },
   'timeline.resetInOut': {
     code: 'KeyR',
+    context: 'timeline',
     description: 'Reset in/out points to full range',
   },
   'timeline.cycleLoopMode': {
@@ -206,7 +208,6 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   },
   'panel.waveform': {
     code: 'KeyW',
-    context: 'panel',
     description: 'Toggle waveform scope',
   },
   'panel.vectorscope': {
@@ -224,7 +225,6 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   },
   'panel.histogram': {
     code: 'KeyH',
-    context: 'panel',
     description: 'Toggle histogram',
   },
   'panel.ocio': {
@@ -391,30 +391,12 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     code: 'KeyX',
     description: 'Toggle hold mode',
   },
-  'paint.textBold': {
-    code: 'KeyB',
-    ctrl: true,
-    context: 'paint',
-    description: 'Toggle bold on text annotation',
-  },
-  'paint.textItalic': {
-    code: 'KeyI',
-    ctrl: true,
-    context: 'paint',
-    description: 'Toggle italic on text annotation',
-  },
-  'paint.textUnderline': {
-    code: 'KeyU',
-    ctrl: true,
-    context: 'paint',
-    description: 'Toggle underline on text annotation',
-  },
 
   // Channel selection (handled by ChannelSelect component)
   'channel.red': {
     code: 'KeyR',
     shift: true,
-    context: 'viewer',
+    context: 'channel',
     description: 'Select red channel',
   },
   'channel.green': {
@@ -432,10 +414,10 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     shift: true,
     description: 'Select alpha channel',
   },
-  'lut.togglePanel': {
+  'channel.luminance': {
     code: 'KeyL',
     shift: true,
-    description: 'Toggle LUT pipeline panel',
+    description: 'Select luminance channel',
   },
   'channel.grayscale': {
     code: 'KeyY',
@@ -624,8 +606,8 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   // Notes quick-add + navigation
   'notes.addNote': {
     code: 'KeyN',
-    context: 'paint',
-    description: 'Add note at current frame (active on Annotate tab)',
+    context: 'annotate',
+    description: 'Add note at current frame',
   },
   'notes.next': {
     code: 'BracketRight',
@@ -638,6 +620,18 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     alt: true,
     shift: true,
     description: 'Go to previous note',
+  },
+
+  // Version navigation
+  'version.next': {
+    code: 'BracketRight',
+    alt: true,
+    description: 'Go to next version in version group',
+  },
+  'version.previous': {
+    code: 'BracketLeft',
+    alt: true,
+    description: 'Go to previous version in version group',
   },
 
   // Info panel

@@ -7,7 +7,6 @@
 
 import { getThemeManager } from '../utils/ui/ThemeManager';
 import { getGlobalHistoryManager } from '../utils/HistoryManager';
-import { showAlert } from '../ui/components/shared/Modal';
 
 // ---------------------------------------------------------------------------
 // Dependency interfaces (structural typing)
@@ -49,7 +48,7 @@ export interface ActionViewer {
   smoothSetZoom(level: number): void;
   smoothSetPixelRatio(ratio: number): void;
   refresh(): void;
-  copyFrameToClipboard(includeAnnotations: boolean): Promise<boolean>;
+  copyFrameToClipboard(includeAnnotations: boolean): void;
   getPixelProbe(): { toggle(): void };
   getFalseColor(): { toggle(): void };
   getTimecodeOverlay(): { toggle(): void };
@@ -190,7 +189,7 @@ export interface ActionShortcutCheatSheet {
 }
 
 export interface ActionPersistenceManager {
-  createQuickSnapshot(name?: string): void;
+  createQuickSnapshot(): void;
 }
 
 export interface ActionSessionBridge {
@@ -207,6 +206,7 @@ export interface ActionExternalPresentation {
 
 export interface ActionHeaderBar {
   getExportControl(): { quickExport(format?: string): void };
+  navigateVersion(direction: 'next' | 'previous'): void;
 }
 
 export interface ActionFrameNavigation {
@@ -282,30 +282,22 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
   return {
     // -- Playback --------------------------------------------------------
     'playback.toggle': () => session.togglePlayback(),
-    'playback.stepForward': () => {
-      session.stepForward();
-      ariaAnnouncer?.announce(`Frame ${session.currentFrame}`);
-    },
-    'playback.stepBackward': () => {
-      session.stepBackward();
-      ariaAnnouncer?.announce(`Frame ${session.currentFrame}`);
-    },
+    'playback.stepForward': () => session.stepForward(),
+    'playback.stepBackward': () => session.stepBackward(),
     'playback.toggleDirection': () => session.togglePlayDirection(),
     'playback.goToStart': () => {
       if (controls.playlistManager.isEnabled()) {
         frameNavigation.goToPlaylistStart();
-      } else {
-        session.goToStart();
+        return;
       }
-      ariaAnnouncer?.announce(`Frame ${session.currentFrame}`);
+      session.goToStart();
     },
     'playback.goToEnd': () => {
       if (controls.playlistManager.isEnabled()) {
         frameNavigation.goToPlaylistEnd();
-      } else {
-        session.goToEnd();
+        return;
       }
-      ariaAnnouncer?.announce(`Frame ${session.currentFrame}`);
+      session.goToEnd();
     },
     'playback.slower': () => session.decreaseSpeed(),
     'playback.stop': () => session.pause(),
@@ -313,7 +305,6 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
       // L key - increase speed, but in paint context, line tool takes precedence
       if (activeContextManager.isContextActive('paint')) {
         controls.paintToolbar.handleKeyboard('l');
-        ariaAnnouncer?.announce('Line tool selected');
         return;
       }
       session.increaseSpeed();
@@ -326,34 +317,20 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
       // O key - set out point, but in paint context, ellipse tool takes precedence
       if (activeContextManager.isContextActive('paint')) {
         controls.paintToolbar.handleKeyboard('o');
-        ariaAnnouncer?.announce('Ellipse tool selected');
         return;
       }
       session.setOutPoint();
     },
     'timeline.setOutPointAlt': () => session.setOutPoint(),
     'timeline.toggleMark': () => session.toggleMark(),
-    'timeline.nextMarkOrBoundary': () => {
-      frameNavigation.goToNextMarkOrBoundary();
-      ariaAnnouncer?.announce(`Frame ${session.currentFrame}`);
-    },
-    'timeline.previousMarkOrBoundary': () => {
-      frameNavigation.goToPreviousMarkOrBoundary();
-      ariaAnnouncer?.announce(`Frame ${session.currentFrame}`);
-    },
-    'timeline.nextShot': () => {
-      frameNavigation.goToNextShot();
-      ariaAnnouncer?.announce(`Frame ${session.currentFrame}`);
-    },
-    'timeline.previousShot': () => {
-      frameNavigation.goToPreviousShot();
-      ariaAnnouncer?.announce(`Frame ${session.currentFrame}`);
-    },
+    'timeline.nextMarkOrBoundary': () => frameNavigation.goToNextMarkOrBoundary(),
+    'timeline.previousMarkOrBoundary': () => frameNavigation.goToPreviousMarkOrBoundary(),
+    'timeline.nextShot': () => frameNavigation.goToNextShot(),
+    'timeline.previousShot': () => frameNavigation.goToPreviousShot(),
     'timeline.resetInOut': () => {
       // R key - reset in/out points, but in paint context, rectangle tool takes precedence
       if (activeContextManager.isContextActive('paint')) {
         controls.paintToolbar.handleKeyboard('r');
-        ariaAnnouncer?.announce('Rectangle tool selected');
         return;
       }
       session.resetInOutPoints();
@@ -566,15 +543,7 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
 
     // -- Export ----------------------------------------------------------
     'export.quickExport': () => headerBar.getExportControl().quickExport('png'),
-    'export.copyFrame': async () => {
-      const success = await viewer.copyFrameToClipboard(true);
-      if (!success) {
-        showAlert('Failed to copy frame to clipboard. Clipboard access may have been denied by the browser.', {
-          type: 'error',
-          title: 'Clipboard Error',
-        });
-      }
-    },
+    'export.copyFrame': () => viewer.copyFrameToClipboard(true),
 
     // -- Edit / Paint ----------------------------------------------------
     'edit.undo': () => {
@@ -601,38 +570,14 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
         paintEngine.redo();
       }
     },
-    'paint.pan': () => {
-      controls.paintToolbar.handleKeyboard('v');
-      ariaAnnouncer?.announce('Pan tool selected');
-    },
-    'paint.pen': () => {
-      controls.paintToolbar.handleKeyboard('p');
-      ariaAnnouncer?.announce('Pen tool selected');
-    },
-    'paint.eraser': () => {
-      controls.paintToolbar.handleKeyboard('e');
-      ariaAnnouncer?.announce('Eraser tool selected');
-    },
-    'paint.text': () => {
-      controls.paintToolbar.handleKeyboard('t');
-      ariaAnnouncer?.announce('Text tool selected');
-    },
-    'paint.rectangle': () => {
-      controls.paintToolbar.handleKeyboard('r');
-      ariaAnnouncer?.announce('Rectangle tool selected');
-    },
-    'paint.ellipse': () => {
-      controls.paintToolbar.handleKeyboard('o');
-      ariaAnnouncer?.announce('Ellipse tool selected');
-    },
-    'paint.line': () => {
-      controls.paintToolbar.handleKeyboard('l');
-      ariaAnnouncer?.announce('Line tool selected');
-    },
-    'paint.arrow': () => {
-      controls.paintToolbar.handleKeyboard('a');
-      ariaAnnouncer?.announce('Arrow tool selected');
-    },
+    'paint.pan': () => controls.paintToolbar.handleKeyboard('v'),
+    'paint.pen': () => controls.paintToolbar.handleKeyboard('p'),
+    'paint.eraser': () => controls.paintToolbar.handleKeyboard('e'),
+    'paint.text': () => controls.paintToolbar.handleKeyboard('t'),
+    'paint.rectangle': () => controls.paintToolbar.handleKeyboard('r'),
+    'paint.ellipse': () => controls.paintToolbar.handleKeyboard('o'),
+    'paint.line': () => controls.paintToolbar.handleKeyboard('l'),
+    'paint.arrow': () => controls.paintToolbar.handleKeyboard('a'),
     'paint.toggleBrush': () => controls.paintToolbar.handleKeyboard('b'),
     'paint.toggleGhost': () => controls.paintToolbar.handleKeyboard('g'),
     'paint.toggleHold': () => controls.paintToolbar.handleKeyboard('x'),
@@ -641,14 +586,8 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
     'navigation.gotoFrame': () => controls.gotoFrameOverlay.show(),
 
     // -- Annotations -----------------------------------------------------
-    'annotation.previous': () => {
-      frameNavigation.goToPreviousAnnotation();
-      ariaAnnouncer?.announce(`Frame ${session.currentFrame}`);
-    },
-    'annotation.next': () => {
-      frameNavigation.goToNextAnnotation();
-      ariaAnnouncer?.announce(`Frame ${session.currentFrame}`);
-    },
+    'annotation.previous': () => frameNavigation.goToPreviousAnnotation(),
+    'annotation.next': () => frameNavigation.goToNextAnnotation(),
 
     // -- Tabs ------------------------------------------------------------
     'tab.view': () => tabBar.setActiveTab('view'),
@@ -663,8 +602,13 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
     'channel.green': () => controls.channelSelect.handleKeyboard('G', true),
     'channel.blue': () => controls.channelSelect.handleKeyboard('B', true),
     'channel.alpha': () => controls.channelSelect.handleKeyboard('A', true),
-    'channel.luminance': () => controls.channelSelect.handleKeyboard('L', true),
-    'lut.togglePanel': () => controls.lutPipelinePanel.toggle(),
+    'channel.luminance': () => {
+      if (tabBar.activeTab === 'color') {
+        controls.lutPipelinePanel.toggle();
+        return;
+      }
+      controls.channelSelect.handleKeyboard('L', true);
+    },
     'channel.grayscale': () => controls.channelSelect.handleKeyboard('Y', true),
     'channel.none': () => controls.channelSelect.handleKeyboard('N', true),
 
@@ -702,15 +646,21 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
       const frame = session.noteManager.getNextNoteFrame(session.currentSourceIndex, session.currentFrame);
       if (frame !== session.currentFrame) {
         session.goToFrame(frame);
-        ariaAnnouncer?.announce(`Frame ${frame}`);
       }
     },
     'notes.previous': () => {
       const frame = session.noteManager.getPreviousNoteFrame(session.currentSourceIndex, session.currentFrame);
       if (frame !== session.currentFrame) {
         session.goToFrame(frame);
-        ariaAnnouncer?.announce(`Frame ${frame}`);
       }
+    },
+
+    // -- Version navigation ----------------------------------------------
+    'version.next': () => {
+      headerBar.navigateVersion('next');
+    },
+    'version.previous': () => {
+      headerBar.navigateVersion('previous');
     },
 
     // -- Network ---------------------------------------------------------
