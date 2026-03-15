@@ -24,15 +24,16 @@ import {
   applyA11yFocus,
 } from '../shared/Button';
 import { Z_INDEX, SHADOWS } from '../shared/theme';
-import { SUPPORTED_MEDIA_ACCEPT, SUPPORTED_PROJECT_ACCEPT } from '../../../utils/media/SupportedMediaFormats';
+import { SUPPORTED_MEDIA_ACCEPT } from '../../../utils/media/SupportedMediaFormats';
 import type { LayoutPreset, LayoutPresetId } from '../../layout/LayoutStore';
+import { ShotStatusBadge } from '../ShotStatusBadge';
 
 export interface HeaderBarEvents extends EventMap {
   showShortcuts: void;
   showCustomKeyBindings: void;
   fileLoaded: void;
   saveProject: void;
-  openProject: { file: File; availableFiles?: Map<string, File> };
+  openProject: File;
   fullscreenToggle: void;
   presentationToggle: void;
   externalPresentation: void;
@@ -83,6 +84,9 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   private helpButton!: HTMLButtonElement;
   private layoutButton!: HTMLButtonElement;
 
+  // Shot status badge
+  private shotStatusBadge: ShotStatusBadge;
+
   // Overflow fade indicators
   private fadeLeft!: HTMLElement;
   private fadeRight!: HTMLElement;
@@ -96,6 +100,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this.exportControl = new ExportControl();
     this.timecodeDisplay = new TimecodeDisplay(session);
     this.themeControl = new ThemeControl();
+    this.shotStatusBadge = new ShotStatusBadge(session);
 
     // Create wrapper (position: relative to anchor fade overlays)
     this.wrapper = document.createElement('div');
@@ -213,7 +218,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     // Hidden file input for media
     this.fileInput = document.createElement('input');
     this.fileInput.type = 'file';
-    this.fileInput.accept = `${SUPPORTED_MEDIA_ACCEPT},.rv,.gto`;
+    this.fileInput.accept = `${SUPPORTED_MEDIA_ACCEPT},.rv,.gto,.rvedl`;
     this.fileInput.multiple = true;
     this.fileInput.style.display = 'none';
     this.fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
@@ -222,13 +227,13 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     // Hidden file input for project files
     this.projectInput = document.createElement('input');
     this.projectInput.type = 'file';
-    this.projectInput.accept = SUPPORTED_PROJECT_ACCEPT;
+    this.projectInput.accept = '.orvproject';
     this.projectInput.style.display = 'none';
     this.projectInput.addEventListener('change', (e) => this.handleProjectOpen(e));
     this.container.appendChild(this.projectInput);
 
     // Open button (media) — icon-only for compactness
-    fileGroup.appendChild(this.createIconButton('folder', '', () => this.fileInput.click(), 'Open file'));
+    fileGroup.appendChild(this.createIconButton('folder', '', () => this.fileInput.click(), 'Open media file'));
 
     // Save Project button — icon-only
     fileGroup.appendChild(
@@ -274,6 +279,9 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     // === SESSION NAME DISPLAY ===
     this.sessionNameDisplay = this.createSessionNameDisplay();
     this.container.appendChild(this.sessionNameDisplay);
+
+    // === SHOT STATUS BADGE ===
+    this.container.appendChild(this.shotStatusBadge.render());
 
     // === AUTO-SAVE INDICATOR SLOT ===
     this.autoSaveSlot = document.createElement('div');
@@ -1322,16 +1330,10 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       loop: 'Loop',
       pingpong: 'Ping',
     };
-    const tooltips: Record<LoopMode, string> = {
-      once: 'Play Once — Cycle loop mode (L)',
-      loop: 'Loop — Cycle loop mode (L)',
-      pingpong: 'Ping-Pong — Cycle loop mode (L)',
-    };
     const iconName = icons[this.session.loopMode];
     const label = labels[this.session.loopMode];
     this.loopButton.innerHTML = getIconSvg(iconName, 'sm');
     this.loopButton.setAttribute('aria-label', `${label} — Cycle loop mode`);
-    this.loopButton.title = tooltips[this.session.loopMode];
   }
 
   private updateDirectionButton(): void {
@@ -1356,17 +1358,6 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     // Check for .rvedl files in the selection
     const edlFile = fileArray.find((f) => f.name.toLowerCase().endsWith('.rvedl'));
     if (edlFile) {
-      // Warn if session files (.rv/.gto) are also present — they will be ignored
-      const sessionFile = fileArray.find(
-        (f) => f.name.toLowerCase().endsWith('.rv') || f.name.toLowerCase().endsWith('.gto'),
-      );
-      if (sessionFile) {
-        showAlert(
-          `Mixed selection: "${edlFile.name}" (EDL) and "${sessionFile.name}" (session) ` +
-            `were both selected. Loading the EDL file only — the session file was skipped.`,
-          { type: 'warning', title: 'Mixed Selection' },
-        );
-      }
       try {
         const text = await edlFile.text();
         const entries = this.session.loadEDL(text);
@@ -1407,23 +1398,22 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     );
 
     if (sessionFile) {
-      // If we have a session file, treat other non-session files as potential media sources
-      // Extra .rv/.gto files are excluded — the app only loads one session at a time
+      // If we have a session file, treat other files as potential media sources
       const availableFiles = new Map<string, File>();
       for (const file of fileArray) {
         if (file !== sessionFile) {
-          const lowerName = file.name.toLowerCase();
-          if (!lowerName.endsWith('.rv') && !lowerName.endsWith('.gto')) {
-            availableFiles.set(file.name, file);
-          }
+          availableFiles.set(file.name, file);
         }
       }
 
-      // Delegate to persistence manager via openProject event for checkpoint + control resync
-      this.emit('openProject', {
-        file: sessionFile,
-        availableFiles: availableFiles.size > 0 ? availableFiles : undefined,
-      });
+      try {
+        const content = await sessionFile.arrayBuffer();
+        await this.session.loadFromGTO(content, availableFiles);
+        this.emit('fileLoaded', undefined);
+      } catch (err) {
+        console.error('Failed to load session file:', err);
+        showAlert(`Failed to load ${sessionFile.name}: ${err}`, { type: 'error', title: 'Load Error' });
+      }
 
       // Clear input
       input.value = '';
@@ -1488,27 +1478,10 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
 
   private handleProjectOpen(e: Event): void {
     const input = e.target as HTMLInputElement;
-    const files = input.files;
-    if (!files || files.length === 0) {
-      input.value = '';
-      return;
+    const file = input.files?.[0];
+    if (file) {
+      this.emit('openProject', file);
     }
-
-    const fileArray = Array.from(files);
-    const projectExts = ['.orvproject', '.rv', '.gto', '.rvedl'];
-    // Find the first project/session file
-    const projectFile = fileArray.find((f) =>
-      projectExts.some((ext) => f.name.toLowerCase().endsWith(ext)),
-    ) ?? fileArray[0]!;
-    // Everything else is a companion file
-    const companionFiles = fileArray.filter((f) => f !== projectFile);
-
-    this.emit('openProject', {
-      file: projectFile,
-      ...(companionFiles.length > 0
-        ? { availableFiles: new Map(companionFiles.map((f) => [f.name, f])) }
-        : {}),
-    });
     input.value = '';
   }
 
@@ -1592,10 +1565,15 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this.exportControl.dispose();
     this.timecodeDisplay.dispose();
     this.themeControl.dispose();
+    this.shotStatusBadge.dispose();
   }
 
   getTimecodeDisplay(): TimecodeDisplay {
     return this.timecodeDisplay;
+  }
+
+  getShotStatusBadge(): ShotStatusBadge {
+    return this.shotStatusBadge;
   }
 
   /**
