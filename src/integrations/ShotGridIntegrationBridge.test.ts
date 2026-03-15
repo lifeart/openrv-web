@@ -13,11 +13,64 @@ import type { ShotGridVersion, ShotGridNote } from './ShotGridBridge';
 // Mocks
 // ---------------------------------------------------------------------------
 
+function createMockVersionManager() {
+  const groups = new Map<string, any>();
+  let groupIdCounter = 0;
+
+  return {
+    _groups: groups,
+    createGroup: vi.fn((shotName: string, sourceIndices: number[], options?: { labels?: string[] }) => {
+      const id = `group-${++groupIdCounter}`;
+      const versions = sourceIndices.map((sourceIndex, i) => ({
+        versionNumber: i + 1,
+        sourceIndex,
+        label: options?.labels?.[i] ?? `v${i + 1}`,
+        addedAt: new Date().toISOString(),
+      }));
+      const group = { id, shotName, versions, activeVersionIndex: versions.length - 1 };
+      groups.set(id, group);
+      return { ...group, versions: [...group.versions] };
+    }),
+    addVersionToGroup: vi.fn((groupId: string, sourceIndex: number, options?: { label?: string; metadata?: Record<string, string> }) => {
+      const group = groups.get(groupId);
+      if (!group) return null;
+      const maxVersion = group.versions.reduce((max: number, v: any) => Math.max(max, v.versionNumber), 0);
+      const entry = {
+        versionNumber: maxVersion + 1,
+        sourceIndex,
+        label: options?.label ?? `v${maxVersion + 1}`,
+        addedAt: new Date().toISOString(),
+        metadata: options?.metadata,
+      };
+      group.versions.push(entry);
+      return { ...entry };
+    }),
+    getGroups: vi.fn(() => Array.from(groups.values()).map((g: any) => ({ ...g, versions: [...g.versions] }))),
+    getGroup: vi.fn((id: string) => {
+      const g = groups.get(id);
+      return g ? { ...g, versions: [...g.versions] } : undefined;
+    }),
+    getGroupForSource: vi.fn(),
+    removeGroup: vi.fn(),
+    removeVersionFromGroup: vi.fn(),
+    nextVersion: vi.fn(),
+    previousVersion: vi.fn(),
+    setActiveVersion: vi.fn(),
+    getActiveVersion: vi.fn(),
+    autoDetectGroups: vi.fn().mockReturnValue([]),
+    toSerializable: vi.fn().mockReturnValue([]),
+    fromSerializable: vi.fn(),
+    dispose: vi.fn(),
+    setCallbacks: vi.fn(),
+  };
+}
+
 function createMockSession() {
   return {
     sourceCount: 1,
     loadImage: vi.fn().mockResolvedValue(undefined),
     loadVideo: vi.fn().mockResolvedValue(undefined),
+    loadImageSequenceFromPattern: vi.fn().mockResolvedValue(undefined),
     noteManager: {
       getNotesForSource: vi.fn().mockReturnValue([]),
       addNote: vi.fn().mockReturnValue({ id: 'local-note-1' }),
@@ -27,6 +80,7 @@ function createMockSession() {
       setStatus: vi.fn(),
       getStatus: vi.fn().mockReturnValue('pending'),
     },
+    versionManager: createMockVersionManager(),
   };
 }
 
@@ -476,7 +530,7 @@ describe('ShotGridIntegrationBridge', () => {
     }
   });
 
-  it('SG-INT-013: loadVersion handles frame-sequence path and logs info', async () => {
+  it('SG-INT-013: loadVersion routes frame-sequence path through sequence loader', async () => {
     configUI.emit('connect', {
       serverUrl: 'https://studio.shotgrid.autodesk.com',
       scriptName: 'test',
@@ -494,6 +548,8 @@ describe('ShotGridIntegrationBridge', () => {
       sg_uploaded_movie: null,
       sg_path_to_movie: '/local/path.mov',
       sg_path_to_frames: '/path/to/frames/shot.####.exr',
+      sg_first_frame: 1001,
+      sg_last_frame: 1100,
     });
 
     panel.emit('loadVersion', {
@@ -502,8 +558,16 @@ describe('ShotGridIntegrationBridge', () => {
     });
 
     await vi.waitFor(() => {
-      expect(session.loadImage).toHaveBeenCalledWith('shot010_comp_v003', '/path/to/frames/shot.####.exr');
+      expect(session.loadImageSequenceFromPattern).toHaveBeenCalledWith(
+        'shot010_comp_v003',
+        '/path/to/frames/shot.####.exr',
+        1001,
+        1100,
+      );
     });
+
+    // Should NOT have called loadImage
+    expect(session.loadImage).not.toHaveBeenCalled();
 
     expect(consoleSpy).toHaveBeenCalledWith(
       expect.stringContaining('Loading frame sequence path'),
@@ -931,6 +995,147 @@ describe('ShotGridIntegrationBridge', () => {
     expect(callArgs[5]).toMatchObject({ externalId: '999' });
   });
 
+  it('SG-INT-023: loadVersion registers version in VersionManager', async () => {
+    configUI.emit('connect', {
+      serverUrl: 'https://studio.shotgrid.autodesk.com',
+      scriptName: 'test',
+      apiKey: 'key',
+      projectId: 42,
+    });
+
+    await vi.waitFor(() => {
+      expect(configUI.setState).toHaveBeenCalledWith('connected');
+    });
+
+    panel.emit('loadVersion', {
+      version: makeVersion({ id: 101, code: 'shot010_comp_v003', entity: { type: 'Shot', id: 10, name: 'shot010' } }),
+      mediaUrl: 'https://s3.example.com/movie.mp4',
+    });
+
+    await vi.waitFor(() => {
+      expect(session.versionManager.createGroup).toHaveBeenCalledTimes(1);
+    });
+
+    expect(session.versionManager.createGroup).toHaveBeenCalledWith(
+      'shot010',
+      [0],
+      { labels: ['shot010_comp_v003'] },
+    );
+  });
+
+  it('SG-INT-024: multiple versions of same shot are grouped together', async () => {
+    configUI.emit('connect', {
+      serverUrl: 'https://studio.shotgrid.autodesk.com',
+      scriptName: 'test',
+      apiKey: 'key',
+      projectId: 42,
+    });
+
+    await vi.waitFor(() => {
+      expect(configUI.setState).toHaveBeenCalledWith('connected');
+    });
+
+    // Load first version
+    panel.emit('loadVersion', {
+      version: makeVersion({ id: 101, code: 'shot010_comp_v001', entity: { type: 'Shot', id: 10, name: 'shot010' } }),
+      mediaUrl: 'https://s3.example.com/v1.mp4',
+    });
+
+    await vi.waitFor(() => {
+      expect(session.versionManager.createGroup).toHaveBeenCalledTimes(1);
+    });
+
+    // Increment sourceCount to simulate a new source being added
+    session.sourceCount = 2;
+
+    // Load second version of same shot
+    panel.emit('loadVersion', {
+      version: makeVersion({ id: 102, code: 'shot010_comp_v002', entity: { type: 'Shot', id: 10, name: 'shot010' } }),
+      mediaUrl: 'https://s3.example.com/v2.mp4',
+    });
+
+    await vi.waitFor(() => {
+      expect(session.versionManager.addVersionToGroup).toHaveBeenCalledTimes(1);
+    });
+
+    // Should have added to existing group, not created a new one
+    expect(session.versionManager.createGroup).toHaveBeenCalledTimes(1);
+    expect(session.versionManager.addVersionToGroup).toHaveBeenCalledWith(
+      'group-1',
+      1,
+      {
+        label: 'shot010_comp_v002',
+        metadata: { sgVersionId: '102', sgStatus: 'rev' },
+      },
+    );
+  });
+
+  it('SG-INT-025: version labels match ShotGrid version code', async () => {
+    configUI.emit('connect', {
+      serverUrl: 'https://studio.shotgrid.autodesk.com',
+      scriptName: 'test',
+      apiKey: 'key',
+      projectId: 42,
+    });
+
+    await vi.waitFor(() => {
+      expect(configUI.setState).toHaveBeenCalledWith('connected');
+    });
+
+    panel.emit('loadVersion', {
+      version: makeVersion({ id: 201, code: 'hero_shot_final_v007', entity: { type: 'Shot', id: 20, name: 'hero_shot' } }),
+      mediaUrl: 'https://s3.example.com/hero.mp4',
+    });
+
+    await vi.waitFor(() => {
+      expect(session.versionManager.createGroup).toHaveBeenCalledTimes(1);
+    });
+
+    expect(session.versionManager.createGroup).toHaveBeenCalledWith(
+      'hero_shot',
+      [0],
+      { labels: ['hero_shot_final_v007'] },
+    );
+  });
+
+  it('SG-INT-026: different shots create separate version groups', async () => {
+    configUI.emit('connect', {
+      serverUrl: 'https://studio.shotgrid.autodesk.com',
+      scriptName: 'test',
+      apiKey: 'key',
+      projectId: 42,
+    });
+
+    await vi.waitFor(() => {
+      expect(configUI.setState).toHaveBeenCalledWith('connected');
+    });
+
+    // Load version from shot A
+    panel.emit('loadVersion', {
+      version: makeVersion({ id: 301, code: 'shotA_v001', entity: { type: 'Shot', id: 30, name: 'shotA' } }),
+      mediaUrl: 'https://s3.example.com/a.mp4',
+    });
+
+    await vi.waitFor(() => {
+      expect(session.versionManager.createGroup).toHaveBeenCalledTimes(1);
+    });
+
+    session.sourceCount = 2;
+
+    // Load version from shot B (different shot)
+    panel.emit('loadVersion', {
+      version: makeVersion({ id: 302, code: 'shotB_v001', entity: { type: 'Shot', id: 31, name: 'shotB' } }),
+      mediaUrl: 'https://s3.example.com/b.mp4',
+    });
+
+    await vi.waitFor(() => {
+      expect(session.versionManager.createGroup).toHaveBeenCalledTimes(2);
+    });
+
+    // Two separate groups, no addVersionToGroup calls
+    expect(session.versionManager.addVersionToGroup).not.toHaveBeenCalled();
+  });
+
   it('SG-INT-014: loadVersion does not log frame-sequence info for movie URLs', async () => {
     configUI.emit('connect', {
       serverUrl: 'https://studio.shotgrid.autodesk.com',
@@ -959,5 +1164,221 @@ describe('ShotGridIntegrationBridge', () => {
     );
 
     consoleSpy.mockRestore();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Regression tests for Issue #519: sequence pattern detection & routing
+  // ---------------------------------------------------------------------------
+
+  it('SG-INT-027: frame-sequence with %04d printf pattern loads as sequence', async () => {
+    configUI.emit('connect', {
+      serverUrl: 'https://studio.shotgrid.autodesk.com',
+      scriptName: 'test',
+      apiKey: 'key',
+      projectId: 42,
+    });
+
+    await vi.waitFor(() => {
+      expect(configUI.setState).toHaveBeenCalledWith('connected');
+    });
+
+    const version = makeVersion({
+      sg_uploaded_movie: null,
+      sg_path_to_movie: '',
+      sg_path_to_frames: '/renders/shot010/comp_v003.%04d.exr',
+      sg_first_frame: 1001,
+      sg_last_frame: 1048,
+    });
+
+    panel.emit('loadVersion', {
+      version,
+      mediaUrl: '/renders/shot010/comp_v003.%04d.exr',
+    });
+
+    await vi.waitFor(() => {
+      expect(session.loadImageSequenceFromPattern).toHaveBeenCalledWith(
+        'shot010_comp_v003',
+        '/renders/shot010/comp_v003.%04d.exr',
+        1001,
+        1048,
+      );
+    });
+
+    expect(session.loadImage).not.toHaveBeenCalled();
+    expect(session.loadVideo).not.toHaveBeenCalled();
+  });
+
+  it('SG-INT-028: frame-sequence with @@@@ at-sign pattern loads as sequence', async () => {
+    configUI.emit('connect', {
+      serverUrl: 'https://studio.shotgrid.autodesk.com',
+      scriptName: 'test',
+      apiKey: 'key',
+      projectId: 42,
+    });
+
+    await vi.waitFor(() => {
+      expect(configUI.setState).toHaveBeenCalledWith('connected');
+    });
+
+    const version = makeVersion({
+      sg_uploaded_movie: null,
+      sg_path_to_movie: '',
+      sg_path_to_frames: '/renders/shot010/comp_v003.@@@@.exr',
+      sg_first_frame: 1,
+      sg_last_frame: 100,
+    });
+
+    panel.emit('loadVersion', {
+      version,
+      mediaUrl: '/renders/shot010/comp_v003.@@@@.exr',
+    });
+
+    await vi.waitFor(() => {
+      expect(session.loadImageSequenceFromPattern).toHaveBeenCalledWith(
+        'shot010_comp_v003',
+        '/renders/shot010/comp_v003.@@@@.exr',
+        1,
+        100,
+      );
+    });
+
+    expect(session.loadImage).not.toHaveBeenCalled();
+  });
+
+  it('SG-INT-029: frame-sequence falls back to frame_range when sg_first/last_frame are null', async () => {
+    configUI.emit('connect', {
+      serverUrl: 'https://studio.shotgrid.autodesk.com',
+      scriptName: 'test',
+      apiKey: 'key',
+      projectId: 42,
+    });
+
+    await vi.waitFor(() => {
+      expect(configUI.setState).toHaveBeenCalledWith('connected');
+    });
+
+    const version = makeVersion({
+      sg_uploaded_movie: null,
+      sg_path_to_movie: '',
+      sg_path_to_frames: '/renders/shot.####.exr',
+      sg_first_frame: null,
+      sg_last_frame: null,
+      frame_range: '1001-1100',
+    });
+
+    panel.emit('loadVersion', {
+      version,
+      mediaUrl: '/renders/shot.####.exr',
+    });
+
+    await vi.waitFor(() => {
+      expect(session.loadImageSequenceFromPattern).toHaveBeenCalledWith(
+        'shot010_comp_v003',
+        '/renders/shot.####.exr',
+        1,       // startFrame defaults to 1 when sg_first_frame is null
+        1100,    // endFrame parsed from frame_range
+      );
+    });
+  });
+
+  it('SG-INT-030: non-sequence path still loads as single image', async () => {
+    configUI.emit('connect', {
+      serverUrl: 'https://studio.shotgrid.autodesk.com',
+      scriptName: 'test',
+      apiKey: 'key',
+      projectId: 42,
+    });
+
+    await vi.waitFor(() => {
+      expect(configUI.setState).toHaveBeenCalledWith('connected');
+    });
+
+    const version = makeVersion({
+      sg_uploaded_movie: null,
+      sg_path_to_movie: '',
+      sg_path_to_frames: '/renders/still_image.exr',
+    });
+
+    panel.emit('loadVersion', {
+      version,
+      mediaUrl: '/renders/still_image.exr',
+    });
+
+    await vi.waitFor(() => {
+      expect(session.loadImage).toHaveBeenCalledWith('shot010_comp_v003', '/renders/still_image.exr');
+    });
+
+    expect(session.loadImageSequenceFromPattern).not.toHaveBeenCalled();
+  });
+
+  it('SG-INT-031: uploaded movie URL takes priority over frame-sequence path', async () => {
+    configUI.emit('connect', {
+      serverUrl: 'https://studio.shotgrid.autodesk.com',
+      scriptName: 'test',
+      apiKey: 'key',
+      projectId: 42,
+    });
+
+    await vi.waitFor(() => {
+      expect(configUI.setState).toHaveBeenCalledWith('connected');
+    });
+
+    // Version has both uploaded movie and frame sequence path
+    const version = makeVersion({
+      sg_uploaded_movie: { url: 'https://s3.example.com/movie.mp4' },
+      sg_path_to_frames: '/renders/shot.####.exr',
+      sg_first_frame: 1001,
+      sg_last_frame: 1100,
+    });
+
+    panel.emit('loadVersion', {
+      version,
+      mediaUrl: 'https://s3.example.com/movie.mp4',
+    });
+
+    await vi.waitFor(() => {
+      expect(session.loadVideo).toHaveBeenCalledWith('shot010_comp_v003', 'https://s3.example.com/movie.mp4');
+    });
+
+    // Should NOT route through sequence loader when uploaded movie is available
+    expect(session.loadImageSequenceFromPattern).not.toHaveBeenCalled();
+  });
+
+  it('SG-INT-032: sequence version registers in VersionManager after load', async () => {
+    configUI.emit('connect', {
+      serverUrl: 'https://studio.shotgrid.autodesk.com',
+      scriptName: 'test',
+      apiKey: 'key',
+      projectId: 42,
+    });
+
+    await vi.waitFor(() => {
+      expect(configUI.setState).toHaveBeenCalledWith('connected');
+    });
+
+    const version = makeVersion({
+      sg_uploaded_movie: null,
+      sg_path_to_movie: '',
+      sg_path_to_frames: '/renders/shot.####.exr',
+      sg_first_frame: 1001,
+      sg_last_frame: 1100,
+    });
+
+    panel.emit('loadVersion', {
+      version,
+      mediaUrl: '/renders/shot.####.exr',
+    });
+
+    await vi.waitFor(() => {
+      expect(session.loadImageSequenceFromPattern).toHaveBeenCalled();
+    });
+
+    // Should still map version to source and register in VersionManager
+    expect(panel.mapVersionToSource).toHaveBeenCalledWith(101, 0);
+    expect(session.versionManager.createGroup).toHaveBeenCalledWith(
+      'shot010',
+      [0],
+      { labels: ['shot010_comp_v003'] },
+    );
   });
 });

@@ -1,7 +1,9 @@
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import {
   createSequenceInfo,
+  createSequenceInfoFromPattern,
   loadFrameImage,
+  loadFrameImageFromURL,
   preloadFrames,
   releaseDistantFrames,
   disposeSequence,
@@ -804,6 +806,69 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
   }
 
   /**
+   * Load a frame sequence from a URL pattern (e.g. `/path/shot.####.exr`).
+   *
+   * Parses the pattern to extract the frame placeholder, expands it across the
+   * given frame range, and creates a sequence source.  The first frame is
+   * fetched to determine dimensions; subsequent frames are loaded on demand.
+   *
+   * @param name - Display name for the source
+   * @param pattern - URL/path with frame placeholder (`####`, `%04d`, or `@@@@`)
+   * @param startFrame - First frame number (inclusive)
+   * @param endFrame - Last frame number (inclusive)
+   * @param fps - Frame rate (default: session fps)
+   */
+  async loadImageSequenceFromPattern(
+    name: string,
+    pattern: string,
+    startFrame: number,
+    endFrame: number,
+    fps?: number,
+  ): Promise<void> {
+    this._host!.clearGraphData();
+    this.emitSourceLoadingStarted(name);
+
+    const effectiveFps = fps ?? this._host!.getFps();
+
+    try {
+      const sequenceInfo = await createSequenceInfoFromPattern(pattern, startFrame, endFrame, effectiveFps);
+      sequenceInfo.name = name;
+
+      const frameRange = getSequenceFrameRange(sequenceInfo);
+      const source: MediaSource = {
+        type: 'sequence',
+        name,
+        url: pattern,
+        width: sequenceInfo.width,
+        height: sequenceInfo.height,
+        duration: frameRange,
+        fps: sequenceInfo.fps,
+        sequenceInfo,
+        sequenceFrames: sequenceInfo.frames,
+        sequenceFrameMap: buildFrameNumberMap(sequenceInfo.frames),
+        element: sequenceInfo.frames[0]?.image,
+      };
+
+      this.addSource(source);
+      this._host!.setFps(sequenceInfo.fps);
+      this._host!.emitFpsChanged(sequenceInfo.fps);
+      this._host!.setInPoint(1);
+      this._host!.setOutPoint(frameRange);
+      this._host!.setCurrentFrame(1);
+
+      this.emit('sourceLoaded', source);
+      this.emit('durationChanged', frameRange);
+
+      log.info(
+        `Sequence loaded from pattern: ${pattern} [${startFrame}-${endFrame}], ${frameRange} frames @ ${effectiveFps}fps`,
+      );
+    } catch (err) {
+      this.emit('sourceLoadFailed', { name });
+      throw err;
+    }
+  }
+
+  /**
    * Load video sources from the graph nodes that have file data.
    * This enables mediabunny frame-accurate extraction for videos loaded from GTO.
    */
@@ -964,7 +1029,12 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
     const frame = source.sequenceFrameMap?.get(frameNumber);
     if (!frame) return null;
 
-    const image = await loadFrameImage(frame);
+    // URL-based frames (from pattern loading) use URL fetching; file-based
+    // frames (from local file drops) go through the decoder pipeline.
+    const isURLFrame = frame.url && frame.file.size === 0;
+    const image = isURLFrame
+      ? await loadFrameImageFromURL(frame)
+      : await loadFrameImage(frame);
     preloadFrames(source.sequenceFrames, frame.index, 5);
     releaseDistantFrames(source.sequenceFrames, frame.index, 20);
 

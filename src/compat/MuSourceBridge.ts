@@ -721,7 +721,7 @@ export class MuSourceBridge {
    * Add a media representation to a source.
    * Equivalent to Mu's `commands.addSourceMediaRep(sourceName, repName, paths)`. (Mu #72)
    *
-   * @returns The created representation node name
+   * @returns The representation node name (empty string when no graph is attached)
    */
   addSourceMediaRep(
     sourceName: string,
@@ -729,8 +729,16 @@ export class MuSourceBridge {
     paths: string[],
   ): string {
     const source = this._getSource(sourceName);
-    const nodeName = `${sourceName}_${repName}_source`;
-    const switchNodeName = `${sourceName}_switch`;
+
+    // Only fabricate node names when a real graph is attached so that the
+    // returned names always correspond to actual graph nodes.  Without a
+    // graph the names would be meaningless placeholders (Issue #258).
+    const nodeName = this._graph
+      ? `${sourceName}_${repName}_source`
+      : '';
+    const switchNodeName = this._graph
+      ? `${sourceName}_switch`
+      : '';
 
     source.representations.push({
       name: repName,
@@ -1077,7 +1085,8 @@ export class MuSourceBridge {
 
   /**
    * Create real graph nodes for a media representation so that the
-   * fabricated names are resolvable by MuNodeBridge.nodeExists() etc.
+   * names stored in the rep record are resolvable by MuNodeBridge.nodeExists() etc.
+   * Only called with non-empty names when a graph is attached (Issue #258).
    *
    * - One source node per representation (type `RVMediaRepSource`)
    * - One switch node per source, shared across all reps (type `RVMediaRepSwitch`)

@@ -3,13 +3,13 @@
  *
  * Defines types for per-source representation switching,
  * allowing a single logical source to carry multiple alternative
- * media (e.g. full-res frames, proxy video, streaming URL).
+ * media (e.g. full-res frames, proxy video).
  */
 
 import type { BaseSourceNode } from '../../nodes/sources/BaseSourceNode';
 
 /** The kind of media representation */
-export type RepresentationKind = 'frames' | 'movie' | 'proxy' | 'streaming';
+export type RepresentationKind = 'frames' | 'movie' | 'proxy';
 
 /** Lifecycle status of a representation */
 export type RepresentationStatus = 'idle' | 'loading' | 'ready' | 'error';
@@ -95,8 +95,6 @@ export interface RepresentationLoaderConfig {
   frameRange?: { start: number; end: number };
   /** FPS override */
   fps?: number;
-  /** OPFS cache key for resilience against File reference invalidation */
-  opfsCacheKey?: string;
 }
 
 /**
@@ -121,7 +119,6 @@ export interface SerializedRepresentation {
   loaderConfig: Omit<RepresentationLoaderConfig, 'file' | 'files'> & {
     path?: string;
     pattern?: string;
-    opfsCacheKey?: string;
   };
 }
 
@@ -245,8 +242,6 @@ function getDefaultPriority(kind: RepresentationKind): number {
       return 1;
     case 'proxy':
       return 2;
-    case 'streaming':
-      return 3;
   }
 }
 

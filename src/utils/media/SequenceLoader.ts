@@ -781,3 +781,154 @@ export function getBestSequence(files: File[], targetFile?: File): File[] | null
 
   return bestSequence;
 }
+
+// ============================================================================
+// URL-based Sequence Utilities
+// ============================================================================
+
+/**
+ * Check whether a URL/path contains a frame-sequence pattern placeholder.
+ * Recognises `####`, `%04d`, and `@@@@` notations.
+ */
+export function isSequencePattern(url: string): boolean {
+  return parsePatternNotation(url) !== null;
+}
+
+/**
+ * Expand a pattern path into an array of concrete URLs/paths for the
+ * given frame range.
+ *
+ * @param pattern - A path containing a placeholder, e.g. `/path/shot.####.exr`
+ * @param startFrame - First frame number (inclusive)
+ * @param endFrame - Last frame number (inclusive)
+ * @returns Array of expanded URL strings, one per frame
+ */
+export function expandPatternToURLs(pattern: string, startFrame: number, endFrame: number): string[] {
+  const parsed = parsePatternNotation(pattern);
+  if (!parsed) return [];
+
+  const urls: string[] = [];
+  for (let f = startFrame; f <= endFrame; f++) {
+    urls.push(generateFilename(parsed, f));
+  }
+  return urls;
+}
+
+/**
+ * Load an image from a URL and return an ImageBitmap.
+ * Used for URL-based (remote) sequence frames.
+ */
+export async function loadImageBitmapFromURL(url: string, signal?: AbortSignal): Promise<ImageBitmap> {
+  if (signal?.aborted) {
+    throw signal.reason ?? new DOMException('The operation was aborted.', 'AbortError');
+  }
+
+  return new Promise<ImageBitmap>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason ?? new DOMException('The operation was aborted.', 'AbortError'));
+      return;
+    }
+
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+
+    const onAbort = () => {
+      img.src = '';
+      reject(signal!.reason ?? new DOMException('The operation was aborted.', 'AbortError'));
+    };
+
+    signal?.addEventListener('abort', onAbort, { once: true });
+
+    img.onload = () => {
+      signal?.removeEventListener('abort', onAbort);
+      createImageBitmap(img).then(resolve, reject);
+    };
+
+    img.onerror = () => {
+      signal?.removeEventListener('abort', onAbort);
+      reject(new Error(`Failed to load image from URL: ${url}`));
+    };
+
+    img.src = url;
+  });
+}
+
+/**
+ * Create a SequenceInfo from a URL pattern and frame range, without requiring File objects.
+ * Loads the first frame from URL to determine dimensions.
+ *
+ * @param pattern - URL/path with placeholder, e.g. `/path/shot.####.exr`
+ * @param startFrame - First frame number (inclusive)
+ * @param endFrame - Last frame number (inclusive)
+ * @param fps - Frame rate (default: 24)
+ * @returns SequenceInfo with URL-based frames
+ */
+export async function createSequenceInfoFromPattern(
+  pattern: string,
+  startFrame: number,
+  endFrame: number,
+  fps: number = 24,
+): Promise<SequenceInfo> {
+  const parsed = parsePatternNotation(pattern);
+  if (!parsed) {
+    throw new Error(`Invalid sequence pattern: ${pattern}`);
+  }
+
+  // Build SequenceFrame entries for every frame in the range.
+  // We create a minimal File placeholder (empty blob) since SequenceFrame.file
+  // is required by the interface but won't be used for URL-based loading.
+  const frames: SequenceFrame[] = [];
+  for (let f = startFrame; f <= endFrame; f++) {
+    const url = generateFilename(parsed, f);
+    const filename = url.split('/').pop() ?? url;
+    frames.push({
+      index: f - startFrame,
+      frameNumber: f,
+      file: new File([], filename),
+      url,
+    });
+  }
+
+  // Load the first frame to get dimensions
+  const firstUrl = generateFilename(parsed, startFrame);
+  const firstBitmap = await loadImageBitmapFromURL(firstUrl);
+  frames[0]!.image = firstBitmap;
+
+  // Derive a human-readable name from the pattern
+  const patternFilename = pattern.split('/').pop() ?? pattern;
+  const baseName = patternFilename
+    .replace(/##+/g, '')
+    .replace(/%\d*d/g, '')
+    .replace(/@+/g, '')
+    .replace(/[._-]?\.[^.]+$/, '')
+    .replace(/[._-]$/, '') || 'sequence';
+
+  return {
+    name: baseName,
+    pattern: patternFilename,
+    frames,
+    startFrame,
+    endFrame,
+    width: firstBitmap.width,
+    height: firstBitmap.height,
+    fps,
+    missingFrames: [],
+  };
+}
+
+/**
+ * Load a sequence frame from its URL, storing the resulting ImageBitmap
+ * on the frame. Used for URL-based (remote) sequence frames as an
+ * alternative to `loadFrameImage` which requires a real File.
+ */
+export async function loadFrameImageFromURL(frame: SequenceFrame, signal?: AbortSignal): Promise<ImageBitmap> {
+  if (frame.image) return frame.image;
+
+  if (!frame.url) {
+    throw new Error(`Frame ${frame.frameNumber} has no URL`);
+  }
+
+  const bitmap = await loadImageBitmapFromURL(frame.url, signal);
+  frame.image = bitmap;
+  return bitmap;
+}

@@ -2930,3 +2930,140 @@ Wired into `AppNetworkBridge` (subscribes to syncCursor, usersChanged, userLeft,
 - `src/stereo/StereoRenderer.ts`
 - `src/ui/components/StereoManager.inputFormat.test.ts` (new)
 - `src/stereo/StereoInputFormat.test.ts` (new)
+
+## Issue #529: The representation system still advertises a `streaming` kind, but the live loader factory throws for it
+
+**Root cause**: `RepresentationKind` type union included `'streaming'` as a valid variant, and `getDefaultPriority()` assigned it priority 3. However, `RepresentationLoaderFactory` threw "Streaming representations are not yet supported" for this kind, making it accepted by the type system but rejected at runtime.
+
+**Fix**: Removed `'streaming'` from the `RepresentationKind` type union entirely since it was never implemented. Cleaned up `getDefaultPriority()` to no longer include the dead case. Removed the throw branch from `RepresentationLoaderFactory` and added an exhaustive `default: never` guard so any future unhandled kind causes a compile-time error.
+
+**Tests added**: 4 regression tests:
+- `representation.test.ts`: 3 tests verifying only implemented kinds exist, `'streaming'` is rejected by TypeScript, and all valid kinds have distinct priorities
+- `RepresentationLoaderFactory.test.ts`: 1 test verifying all valid kinds produce a loader without throwing
+
+**Files changed**:
+- `src/core/types/representation.ts`
+- `src/core/session/loaders/RepresentationLoaderFactory.ts`
+- `src/core/types/representation.test.ts`
+- `src/core/session/loaders/RepresentationLoaderFactory.test.ts`
+
+## Issue #532: Representation-level `opfsCacheKey` is serialized and tested, but no live representation loader or restore path ever uses it
+
+**Root cause**: `RepresentationLoaderConfig` included an `opfsCacheKey` field documented as providing "resilience against File reference invalidation." However, no representation loader (`FileRepresentationLoader`, `VideoRepresentationLoader`) or restore path (`SessionSerializer.fromJSON`) ever read it. The top-level `MediaSource.opfsCacheKey` is a separate, working mechanism and was not affected.
+
+**Fix**: Removed `opfsCacheKey` from `RepresentationLoaderConfig` and `SerializedRepresentation` types since no loader or restore path consumed it.
+
+**Tests added**: 3 regression tests verifying `createRepresentation()`, `serializeRepresentation()`, and round-trip serialize/deserialize do not carry `opfsCacheKey` in `loaderConfig`.
+
+**Files changed**:
+- `src/core/types/representation.ts`
+- `src/core/types/representation.test.ts`
+
+
+## Issue #258: Mu compat media-representation node APIs return fabricated node names that are never created in a real graph
+
+**Root cause**: `addSourceMediaRep()` synthesized fake node names like `${sourceName}_${repName}_source` and stored them in representation records regardless of whether a graph was attached. Query APIs then returned these unresolvable names, misleading callers.
+
+**Fix**: Made node name generation conditional on graph availability. When no graph is attached, node names are empty strings. When a graph IS present, real `MediaRepNode` objects are created and their names are stored.
+
+**Tests added**: 7 regression tests verifying empty node names without a graph, preserved metadata, and real resolvable node names with a graph.
+
+**Files changed**:
+- `src/compat/MuSourceBridge.ts`
+- `src/compat/__tests__/MuSourceBridge.test.ts`
+
+## Issue #326: The published DCC inbound command set overstates what the bridge actually understands
+
+**Root cause**: The DCC integration guide documented inbound commands `load`, `seek`, `setFrameRange`, `setMetadata`, `setColorSpace` that don't exist in the actual protocol. The real bridge only supports `loadMedia`, `syncFrame`, `syncColor`, and `ping`. Outbound docs also listed `annotationCreated` (wrong name) and `statusChanged` (doesn't exist).
+
+**Fix**: Updated `docs/advanced/dcc-integration.md` to accurately reflect the actual protocol types, schemas, and field names from `DCCBridge.ts`.
+
+**Tests added**: 2 regression tests in `DCCBridge.test.ts` verifying all documented inbound types are accepted and the old/wrong types are rejected with `UNKNOWN_TYPE`.
+
+**Files changed**:
+- `docs/advanced/dcc-integration.md`
+- `src/integrations/DCCBridge.test.ts`
+
+## Issue #327: DCC status roundtrip is documented, but the shipped bridge has no `statusChanged` message path
+
+**Root cause**: The DCC integration guide documented an outbound `statusChanged` message type that doesn't exist in the protocol. The actual outbound types are `frameChanged`, `colorChanged`, `annotationAdded`, `pong`, and `error`.
+
+**Fix**: The docs were already corrected as part of Issue #326. Added 2 regression tests explicitly verifying `statusChanged` is not part of the inbound or outbound protocol.
+
+**Tests added**: 2 regression tests in `DCCBridge.test.ts` verifying `statusChanged` is excluded from both inbound and outbound message type sets.
+
+**Files changed**:
+- `src/integrations/DCCBridge.test.ts`
+
+## Issue #324: The ShotGrid panel does not support the advertised "paste a version URL" workflow
+
+**Root cause**: The ShotGrid panel only accepted plain numeric IDs and supported two query modes (playlist, shot). ShotGrid URLs were rejected as invalid input, and there was no `version` query mode.
+
+**Fix**: Added `parseShotGridInput()` that extracts entity type and ID from ShotGrid URLs (`/detail/Version/12345` and `#Version_12345` patterns). Added `version` query mode. Auto-detects entity type from pasted URLs. Plain numeric IDs remain backward compatible. Added `getVersionById()` to `ShotGridBridge` and wired the `loadVersionById` event through `ShotGridIntegrationBridge`.
+
+**Tests added**: 19 tests — 8 panel integration tests (mode cycling, URL paste, auto-detection, backward compat) + 11 `parseShotGridInput` unit tests.
+
+**Files changed**:
+- `src/ui/components/ShotGridPanel.ts`
+- `src/integrations/ShotGridBridge.ts`
+- `src/integrations/ShotGridIntegrationBridge.ts`
+- `src/ui/components/ShotGridPanel.test.ts`
+
+## Issue #547: The public scripting event surface exposes representation failures, but not successful representation changes or fallbacks
+
+**Root cause**: The public EventsAPI only bridged `representationError` from the internal session, leaving `representationChanged` and `fallbackActivated` invisible to external consumers.
+
+**Fix**: Already integrated in prior work. `EventsAPI` now bridges both `representationChanged` and `fallbackActivated` events from the internal session to the public API with proper payload transformation (lines 391-422 of EventsAPI.ts). Event types are defined in `OpenRVEventName` and `OpenRVEventData`.
+
+**Files**: `src/api/EventsAPI.ts` (already complete)
+
+## Issue #322: ShotGrid version loading never feeds the app's own version-management system
+
+**Root cause**: When ShotGrid versions were loaded, the integration bridge only stored panel-local `versionId → sourceIndex` mappings and applied status. It never called `session.versionManager` to create version groups, so version navigation, grouping, and report features were disconnected from ShotGrid.
+
+**Fix**: Integrated ShotGrid version loading with VersionManager. After successfully loading a version, `registerVersionInManager()` now creates or finds a version group using the shot entity name as group key, adds the version with its ShotGrid code as label, and stores ShotGrid metadata. Multiple versions of the same shot are automatically grouped together. Includes a defensive null check on `versionManager`.
+
+**Tests added**: 4 regression tests (SG-INT-023 through SG-INT-026) verifying single version creates group, multiple versions of same shot are grouped, labels match ShotGrid data, different shots create separate groups.
+
+**Files changed**:
+- `src/integrations/ShotGridIntegrationBridge.ts`
+- `src/integrations/ShotGridIntegrationBridge.test.ts`
+
+## Issue #519: ShotGrid frame-sequence paths are still routed through `session.loadImage(...)`, so `shot.####.exr` is treated like a single image URL instead of a sequence
+
+**Root cause**: When ShotGrid provided `sg_path_to_frames` with a sequence pattern like `/renders/shot.####.exr`, the integration bridge detected it and logged it, but still routed it through `session.loadImage()` which created a single-frame source with `duration: 1`.
+
+**Fix**: Integrated the existing sequence loading infrastructure with the ShotGrid loading path:
+- Added `isSequencePattern()` to detect `####`/`%04d`/`@@@@` patterns in URLs
+- Added `expandPatternToURLs()` to generate concrete frame URLs from patterns
+- Added `loadImageSequenceFromPattern()` to `SessionMedia`/`Session` to load a URL-pattern-based sequence with proper frame count and timeline duration
+- Updated `ShotGridIntegrationBridge` to route sequence patterns through the new method, using `sg_first_frame`/`sg_last_frame` or `frame_range` for bounds
+- Added URL-based frame loading support in `getSequenceFrameImage()`
+
+**Tests added**: 17 new tests — 6 bridge regression tests (SG-INT-027 through SG-INT-032) covering all pattern types, frame range fallback, non-sequence fallback, and VersionManager registration; 11 SequenceLoader unit tests for `isSequencePattern`, `expandPatternToURLs`, and `loadFrameImageFromURL`.
+
+**Files changed**:
+- `src/utils/media/SequenceLoader.ts`
+- `src/utils/media/SequenceLoader.test.ts`
+- `src/core/session/SessionMedia.ts`
+- `src/core/session/Session.ts`
+- `src/integrations/ShotGridIntegrationBridge.ts`
+- `src/integrations/ShotGridIntegrationBridge.test.ts`
+
+## Issue #308: Collaboration permission roles affect sync behavior, but the shipped UI never reflects or enforces them locally
+
+**Root cause**: `NetworkSyncManager` tracked participant roles and emitted `participantPermissionChanged` events, but `NetworkControl` never subscribed to them. The UI only showed a `Host` badge. Users downgraded to `viewer` would silently stop syncing with no visual indication.
+
+**Fix**: Integrated the permission system into the collaboration UI:
+- Added role badges (Reviewer/Viewer) next to each participant in the user list
+- Added "Your role: X" indicator in the connected panel
+- Added "View Only" warning banner when the current user has `viewer` role (sync output disabled)
+- Wired `participantPermissionChanged` from `NetworkSyncManager` through `AppNetworkBridge` to `NetworkControl`
+- Permissions clear automatically on disconnect
+
+**Tests added**: 14 regression tests (NCC-100 through NCC-113) covering role badges, role indicator, view-only banner, dynamic permission changes, bulk set, and cleanup on disconnect.
+
+**Files changed**:
+- `src/ui/components/NetworkControl.ts`
+- `src/ui/components/NetworkControl.test.ts`
+- `src/AppNetworkBridge.ts`

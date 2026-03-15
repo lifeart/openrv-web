@@ -1145,6 +1145,16 @@ export class Session extends EventEmitter<SessionEvents> {
     return this._media.loadSequence(files, fps);
   }
 
+  async loadImageSequenceFromPattern(
+    name: string,
+    pattern: string,
+    startFrame: number,
+    endFrame: number,
+    fps?: number,
+  ): Promise<void> {
+    return this._media.loadImageSequenceFromPattern(name, pattern, startFrame, endFrame, fps);
+  }
+
   /**
    * Load media from a URL, auto-detecting whether it is a video or image
    * based on the file extension. Used to reconstruct shared media from a

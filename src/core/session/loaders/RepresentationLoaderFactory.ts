@@ -35,7 +35,9 @@ export function createRepresentationLoader(
     case 'movie':
     case 'proxy':
       return new VideoRepresentationLoader(hdrResizeTier);
-    case 'streaming':
-      throw new Error('Streaming representations are not yet supported');
+    default: {
+      const exhaustive: never = kind;
+      throw new Error(`Unsupported representation kind: ${exhaustive}`);
+    }
   }
 }

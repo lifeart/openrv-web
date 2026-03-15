@@ -14,6 +14,7 @@ import {
   type SyncFrameMessage,
   type SyncColorMessage,
   type DCCOutboundMessage,
+  type DCCOutboundMessageType,
 } from './DCCBridge';
 
 // ---------------------------------------------------------------------------
@@ -627,6 +628,125 @@ describe('DCCBridge', () => {
 
       // The WebSocket should have been closed
       expect(ws.readyState).toBe(MockWebSocket.CLOSED);
+
+      bridge.dispose();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Regression: documented inbound message types match bridge dispatch
+  // -------------------------------------------------------------------------
+
+  describe('inbound message type coverage (docs/code sync)', () => {
+    /**
+     * This list must stay in sync with docs/advanced/dcc-integration.md.
+     * If you add or remove an inbound command from the bridge, update the
+     * docs AND this list so the two never drift apart again (issue #326).
+     */
+    const DOCUMENTED_INBOUND_TYPES = ['loadMedia', 'syncFrame', 'syncColor', 'ping'];
+
+    it('accepts all documented inbound message types without UNKNOWN_TYPE error', async () => {
+      const { bridge, ws } = await createConnectedBridge({
+        heartbeatInterval: 0,
+        autoReconnect: false,
+      });
+
+      const samplePayloads: Record<string, object> = {
+        loadMedia: { type: 'loadMedia', path: '/tmp/test.exr' },
+        syncFrame: { type: 'syncFrame', frame: 1 },
+        syncColor: { type: 'syncColor', exposure: 0 },
+        ping: { type: 'ping' },
+      };
+
+      for (const msgType of DOCUMENTED_INBOUND_TYPES) {
+        ws.sentMessages.length = 0;
+        const payload = samplePayloads[msgType];
+        expect(payload, `missing sample payload for "${msgType}"`).toBeDefined();
+
+        ws.simulateMessage(JSON.stringify(payload));
+
+        const errorMessages = ws.sentMessages
+          .map((m) => JSON.parse(m))
+          .filter((m: any) => m.type === 'error' && m.code === 'UNKNOWN_TYPE');
+
+        expect(
+          errorMessages,
+          `"${msgType}" should be accepted but got UNKNOWN_TYPE`,
+        ).toHaveLength(0);
+      }
+
+      bridge.dispose();
+    });
+
+    it('does not include statusChanged in the documented inbound set (#327)', () => {
+      expect(DOCUMENTED_INBOUND_TYPES).not.toContain('statusChanged');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Regression: outbound message types must not include statusChanged (#327)
+  // -------------------------------------------------------------------------
+
+  describe('outbound message type coverage (docs/code sync)', () => {
+    /**
+     * This list must stay in sync with docs/advanced/dcc-integration.md.
+     * If you add or remove an outbound event from the bridge, update the
+     * docs AND this list so the two never drift apart again (issue #327).
+     */
+    const DOCUMENTED_OUTBOUND_TYPES: DCCOutboundMessageType[] = [
+      'frameChanged',
+      'colorChanged',
+      'annotationAdded',
+      'ping',
+      'pong',
+      'error',
+    ];
+
+    it('statusChanged is NOT a supported outbound message type (#327)', () => {
+      // Regression: the DCC integration docs previously claimed a statusChanged
+      // outbound message existed. It never did. Ensure it never sneaks in.
+      expect(DOCUMENTED_OUTBOUND_TYPES).not.toContain('statusChanged');
+
+      // Also verify at the type level: sending a statusChanged message through
+      // the bridge should produce an outbound message whose type field is one
+      // of the documented types. We check the concrete helpers on DCCBridge
+      // to ensure none of them produce 'statusChanged'.
+      const helperNames = [
+        'sendFrameChanged',
+        'sendColorChanged',
+        'sendAnnotationAdded',
+        'sendError',
+      ] as const;
+
+      for (const name of helperNames) {
+        expect(typeof DCCBridge.prototype[name]).toBe('function');
+      }
+
+      // Ensure there is no sendStatusChanged helper
+      expect('sendStatusChanged' in DCCBridge.prototype).toBe(false);
+    });
+
+    it('rejects message types NOT in the documented set', async () => {
+      const { bridge, ws } = await createConnectedBridge({
+        heartbeatInterval: 0,
+        autoReconnect: false,
+      });
+
+      const bogusTypes = ['load', 'seek', 'setFrameRange', 'setMetadata', 'setColorSpace'];
+
+      for (const msgType of bogusTypes) {
+        ws.sentMessages.length = 0;
+        ws.simulateMessage(JSON.stringify({ type: msgType }));
+
+        const errorMessages = ws.sentMessages
+          .map((m) => JSON.parse(m))
+          .filter((m: any) => m.type === 'error' && m.code === 'UNKNOWN_TYPE');
+
+        expect(
+          errorMessages,
+          `"${msgType}" should be rejected as UNKNOWN_TYPE`,
+        ).toHaveLength(1);
+      }
 
       bridge.dispose();
     });

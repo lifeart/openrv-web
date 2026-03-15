@@ -1536,4 +1536,14 @@ describe('SessionMedia', () => {
       expect(order).toEqual(['representationChanged', 'currentSourceChanged']);
     });
   });
+
+  describe('Session integration', () => {
+    it('Session uses SessionMedia as its media subsystem', async () => {
+      // Dynamic import to avoid pulling in heavy Session deps at module level
+      const { Session } = await import('./Session');
+      const session = new Session();
+      // The public `media` accessor must return a SessionMedia instance
+      expect(session.media).toBeInstanceOf(SessionMedia);
+    });
+  });
 });

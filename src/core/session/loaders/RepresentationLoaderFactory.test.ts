@@ -53,8 +53,12 @@ describe('RepresentationLoaderFactory', () => {
       expect(loader).toBeInstanceOf(VideoRepresentationLoader);
     });
 
-    it('should throw for "streaming" kind (not yet supported)', () => {
-      expect(() => createRepresentationLoader('streaming')).toThrow('Streaming representations are not yet supported');
+    it('should handle all valid RepresentationKind values without throwing', () => {
+      // Regression test for issue #529: ensure every valid kind produces a loader
+      const validKinds = ['frames', 'movie', 'proxy'] as const;
+      for (const kind of validKinds) {
+        expect(() => createRepresentationLoader(kind)).not.toThrow();
+      }
     });
 
     it('should pass hdrResizeTier to VideoRepresentationLoader', () => {

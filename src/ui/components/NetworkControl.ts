@@ -8,7 +8,7 @@
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
-import type { ConnectionState, SyncUser, SyncSettings, RoomInfo } from '../../network/types';
+import type { ConnectionState, SyncUser, SyncSettings, RoomInfo, ParticipantRole, ParticipantPermission } from '../../network/types';
 import { DEFAULT_SYNC_SETTINGS, USER_COLORS } from '../../network/types';
 
 /**
@@ -51,6 +51,7 @@ export interface NetworkControlState {
   isPanelOpen: boolean;
   rtt: number;
   localUserId: string | null;
+  participantPermissions: Map<string, ParticipantRole>;
 }
 
 /** Result of a copy-link operation, used by AppNetworkBridge */
@@ -92,6 +93,8 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
   private mediaSyncPrompt!: HTMLElement;
   private mediaSyncPromptText!: HTMLElement;
   private pendingMediaPromptResolver: ((accepted: boolean) => void) | null = null;
+  private roleIndicator!: HTMLElement;
+  private viewOnlyBanner!: HTMLElement;
 
   private boundHandleOutsideClick: (e: MouseEvent) => void;
   private boundHandleReposition: () => void;
@@ -115,6 +118,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
       isPanelOpen: false,
       rtt: 0,
       localUserId: null,
+      participantPermissions: new Map(),
     };
 
     this.boundHandleOutsideClick = (e: MouseEvent) => this.handleOutsideClick(e);
@@ -585,6 +589,36 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     `;
     panel.appendChild(this.roomCodeDisplay);
 
+    // Current user role indicator
+    this.roleIndicator = document.createElement('div');
+    this.roleIndicator.dataset.testid = 'network-role-indicator';
+    this.roleIndicator.style.cssText = `
+      display: none;
+      padding: 4px 12px;
+      font-size: 11px;
+      color: var(--text-secondary);
+      border-bottom: 1px solid var(--border-secondary);
+      align-items: center;
+      gap: 6px;
+    `;
+    panel.appendChild(this.roleIndicator);
+
+    // View-only banner (shown when user has viewer role)
+    this.viewOnlyBanner = document.createElement('div');
+    this.viewOnlyBanner.dataset.testid = 'network-view-only-banner';
+    this.viewOnlyBanner.style.cssText = `
+      display: none;
+      padding: 6px 12px;
+      font-size: 11px;
+      color: var(--warning, #f59e0b);
+      background: rgba(245, 158, 11, 0.08);
+      border-bottom: 1px solid var(--border-secondary);
+      align-items: center;
+      gap: 6px;
+    `;
+    this.viewOnlyBanner.textContent = 'View Only — sync output is disabled for your role.';
+    panel.appendChild(this.viewOnlyBanner);
+
     // Share URL display
     const shareSection = document.createElement('div');
     shareSection.style.cssText = `
@@ -989,6 +1023,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
       this.state.isHost = false;
       this.state.responseToken = '';
       this.state.shareLinkKind = 'generic';
+      this.state.participantPermissions.clear();
       this.hideInfo();
     }
     if ((state === 'disconnected' || state === 'error') && this.state.linkedRoomCode) {
@@ -1093,6 +1128,38 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
   setLocalUserId(userId: string | null): void {
     this.state.localUserId = userId;
     this.updateUserList();
+    this.updateRoleIndicator();
+  }
+
+  /**
+   * Update the permission role for a single participant.
+   * Called when `participantPermissionChanged` fires on the sync manager.
+   */
+  setParticipantPermission(permission: ParticipantPermission): void {
+    this.state.participantPermissions.set(permission.userId, permission.role);
+    this.updateUserList();
+    this.updateRoleIndicator();
+  }
+
+  /**
+   * Bulk-set all participant permissions (e.g. on initial room join).
+   */
+  setParticipantPermissions(permissions: ParticipantPermission[]): void {
+    this.state.participantPermissions.clear();
+    for (const p of permissions) {
+      this.state.participantPermissions.set(p.userId, p.role);
+    }
+    this.updateUserList();
+    this.updateRoleIndicator();
+  }
+
+  /**
+   * Clear all participant permissions (e.g. on disconnect).
+   */
+  clearParticipantPermissions(): void {
+    this.state.participantPermissions.clear();
+    this.updateUserList();
+    this.updateRoleIndicator();
   }
 
   showError(message: string): void {
@@ -1354,10 +1421,60 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
         name.appendChild(badge);
       }
 
+      // Role badge: show participant role when known and not host
+      // (host role is already indicated by the Host badge above)
+      const role = this.state.participantPermissions.get(user.id);
+      if (role && !user.isHost) {
+        const roleBadge = document.createElement('span');
+        roleBadge.dataset.testid = 'network-user-role-badge';
+        const isViewer = role === 'viewer';
+        roleBadge.style.cssText = `
+          font-size: 10px;
+          color: ${isViewer ? 'var(--warning, #f59e0b)' : 'var(--text-secondary)'};
+          background: ${isViewer ? 'rgba(245, 158, 11, 0.1)' : 'rgba(128, 128, 128, 0.1)'};
+          padding: 1px 6px;
+          border-radius: 3px;
+        `;
+        roleBadge.textContent = role.charAt(0).toUpperCase() + role.slice(1);
+        name.appendChild(document.createTextNode(' '));
+        name.appendChild(roleBadge);
+      }
+
       row.appendChild(avatar);
       row.appendChild(name);
       this.userListContainer.appendChild(row);
     });
+  }
+
+  private updateRoleIndicator(): void {
+    const localId = this.state.localUserId;
+    if (!localId) {
+      this.roleIndicator.style.display = 'none';
+      this.viewOnlyBanner.style.display = 'none';
+      return;
+    }
+
+    const role = this.state.participantPermissions.get(localId);
+    if (!role) {
+      this.roleIndicator.style.display = 'none';
+      this.viewOnlyBanner.style.display = 'none';
+      return;
+    }
+
+    // Show role indicator
+    this.roleIndicator.style.display = 'flex';
+    this.roleIndicator.textContent = '';
+    const label = document.createElement('span');
+    label.textContent = 'Your role:';
+    const roleLabel = document.createElement('span');
+    roleLabel.dataset.testid = 'network-role-label';
+    roleLabel.style.cssText = 'font-weight: 600;';
+    roleLabel.textContent = role.charAt(0).toUpperCase() + role.slice(1);
+    this.roleIndicator.appendChild(label);
+    this.roleIndicator.appendChild(roleLabel);
+
+    // Show view-only banner if viewer
+    this.viewOnlyBanner.style.display = role === 'viewer' ? 'flex' : 'none';
   }
 
   // ---- Keyboard Handler ----

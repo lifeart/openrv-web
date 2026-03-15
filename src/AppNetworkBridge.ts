@@ -453,6 +453,13 @@ export class AppNetworkBridge {
       }),
     );
 
+    // Wire participant permission changes to NetworkControl UI
+    this.unsubscribers.push(
+      networkSyncManager.on('participantPermissionChanged', (permission) => {
+        networkControl.setParticipantPermission(permission);
+      }),
+    );
+
     this.unsubscribers.push(
       networkSyncManager.on('rttUpdated', (rtt) => {
         networkControl.setRTT(rtt);

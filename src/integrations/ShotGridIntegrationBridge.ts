@@ -11,11 +11,12 @@
  * - Race condition prevention via generation counter
  */
 
-import { ShotGridBridge, ShotGridAPIError, mapStatusFromShotGrid, type ShotGridNote } from './ShotGridBridge';
+import { ShotGridBridge, ShotGridAPIError, mapStatusFromShotGrid, type ShotGridNote, type ShotGridVersion } from './ShotGridBridge';
 import type { ShotGridConfigUI } from './ShotGridConfig';
 import type { ShotGridPanel } from '../ui/components/ShotGridPanel';
 import type { Session } from '../core/session/Session';
 import { isVideoExtension } from '../utils/media/SupportedMediaFormats';
+import { isSequencePattern } from '../utils/media/SequenceLoader';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -153,6 +154,26 @@ export class ShotGridIntegrationBridge {
       }),
     );
 
+    // Load single version by ID
+    this.unsubscribers.push(
+      this.panel.on('loadVersionById', async ({ versionId }) => {
+        if (!this.bridge) return;
+        const gen = ++this.generation;
+
+        this.panel.setLoading(true);
+        try {
+          const version = await this.bridge.getVersionById(versionId);
+          if (gen !== this.generation || this.disposed) return;
+          this.panel.setVersions(version ? [version] : []);
+        } catch (err) {
+          if (gen !== this.generation || this.disposed) return;
+          this.handleError(err);
+        } finally {
+          if (gen === this.generation) this.panel.setLoading(false);
+        }
+      }),
+    );
+
     // Load version media
     this.unsubscribers.push(
       this.panel.on('loadVersion', async ({ version, mediaUrl }) => {
@@ -164,17 +185,28 @@ export class ShotGridIntegrationBridge {
             !version.sg_uploaded_movie?.url &&
             !(version.sg_path_to_movie && (version.sg_path_to_movie.startsWith('http://') || version.sg_path_to_movie.startsWith('https://')));
 
-          if (isFrameSequencePath) {
+          if (isFrameSequencePath && isSequencePattern(mediaUrl)) {
+            // Route frame-sequence paths through the sequence loader
             console.info(`[ShotGrid] Loading frame sequence path: ${mediaUrl}`);
-          }
 
-          const cleanUrl = mediaUrl.split('?')[0]!.split('#')[0]!;
-          const rawExt = cleanUrl.split('.').pop() ?? '';
-          const isVideo = isVideoExtension(rawExt.toLowerCase());
-          if (isVideo) {
-            await this.session.loadVideo(version.code, mediaUrl);
+            const startFrame = version.sg_first_frame ?? 1;
+            const endFrame = version.sg_last_frame ?? this.parseEndFrameFromRange(version.frame_range, startFrame);
+
+            await this.session.loadImageSequenceFromPattern(
+              version.code,
+              mediaUrl,
+              startFrame,
+              endFrame,
+            );
           } else {
-            await this.session.loadImage(version.code, mediaUrl);
+            const cleanUrl = mediaUrl.split('?')[0]!.split('#')[0]!;
+            const rawExt = cleanUrl.split('.').pop() ?? '';
+            const isVideo = isVideoExtension(rawExt.toLowerCase());
+            if (isVideo) {
+              await this.session.loadVideo(version.code, mediaUrl);
+            } else {
+              await this.session.loadImage(version.code, mediaUrl);
+            }
           }
 
           if (gen !== this.generation || this.disposed) return;
@@ -185,6 +217,9 @@ export class ShotGridIntegrationBridge {
           // Apply SG status to StatusManager
           const localStatus = mapStatusFromShotGrid(version.sg_status_list);
           this.session.statusManager.setStatus(sourceIndex, localStatus, 'ShotGrid');
+
+          // Register in VersionManager so version navigation works
+          this.registerVersionInManager(version, sourceIndex);
         } catch (err) {
           if (gen !== this.generation || this.disposed) return;
           this.handleError(err);
@@ -276,6 +311,34 @@ export class ShotGridIntegrationBridge {
 
   // ---- Private ----
 
+  /**
+   * Register a loaded ShotGrid version in the session's VersionManager.
+   * Uses the shot entity name as the group key so multiple versions of the
+   * same shot are grouped together for version navigation.
+   */
+  private registerVersionInManager(version: ShotGridVersion, sourceIndex: number): void {
+    const vm = this.session.versionManager;
+    if (!vm) return;
+    const shotName = version.entity.name;
+    const label = version.code;
+
+    // Look for an existing group for this shot
+    const existingGroup = vm.getGroups().find((g) => g.shotName === shotName);
+
+    if (existingGroup) {
+      // Add to existing group
+      vm.addVersionToGroup(existingGroup.id, sourceIndex, {
+        label,
+        metadata: { sgVersionId: String(version.id), sgStatus: version.sg_status_list },
+      });
+    } else {
+      // Create a new group for this shot
+      vm.createGroup(shotName, [sourceIndex], {
+        labels: [label],
+      });
+    }
+  }
+
   private addNotesFromShotGrid(sgNotes: ShotGridNote[], sourceIndex: number): void {
     for (const sgNote of sgNotes) {
       const sgExternalId = String(sgNote.id);
@@ -321,6 +384,19 @@ export class ShotGridIntegrationBridge {
 
       this.sgNoteIdMap.set(sgNote.id, localNote.id);
     }
+  }
+
+  /**
+   * Extract the end frame from a frame_range string like '1001-1100'.
+   * Falls back to startFrame if the range cannot be parsed.
+   */
+  private parseEndFrameFromRange(frameRange: string | null, startFrame: number): number {
+    if (!frameRange) return startFrame;
+    const match = frameRange.match(/^(\d+)-(\d+)$/);
+    if (match) {
+      return parseInt(match[2]!, 10);
+    }
+    return startFrame;
   }
 
   private handleError(err: unknown): void {

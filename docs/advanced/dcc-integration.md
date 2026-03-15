@@ -71,27 +71,27 @@ The bridge server sends the following command types to OpenRV Web:
 
 | Command | Description |
 |---------|-------------|
-| `load` | Load a media file by path or URL |
-| `seek` | Navigate to a specific frame |
-| `setFrameRange` | Set the in/out point range |
-| `setMetadata` | Update shot name, status, and custom metadata fields |
-| `setColorSpace` | Set the input color space for loaded media |
-| `ping` | Health check for connection monitoring |
+| `loadMedia` | Load a media file by path or URL. Requires a `path` field; optional `frame` field to seek after loading. |
+| `syncFrame` | Navigate to a specific frame. Requires a numeric `frame` field. |
+| `syncColor` | Sync color settings. Optional fields: `exposure`, `gamma`, `temperature`, `tint` (all numeric), and `lutPath` (string). |
+| `ping` | Health check for connection monitoring. The bridge responds with a `pong` message. |
 
-Commands are JSON messages sent over the WebSocket connection. OpenRV Web validates and applies each command, updating the viewer state accordingly.
+Commands are JSON messages sent over the WebSocket connection. Each message must include a `type` field matching one of the commands above. An optional `id` field can be included for request-response correlation, and an optional `timestamp` field (ISO 8601) for logging. OpenRV Web validates each command and responds with an `error` message (code `UNKNOWN_TYPE`, `INVALID_PARAMS`, `INVALID_MESSAGE`, or `PARSE_ERROR`) if the message is malformed or unrecognized.
 
 ---
 
-## Outbound Commands (Viewer to DCC)
+## Outbound Events (Viewer to DCC)
 
-OpenRV Web can send information back to the DCC application:
+OpenRV Web sends the following event types back to the DCC application:
 
-| Command | Description |
-|---------|-------------|
-| `frameChanged` | Current frame position updated |
-| `annotationCreated` | New annotation or note added |
-| `statusChanged` | Shot status updated (approved, needs revision, etc.) |
-| `colorChanged` | Color correction values changed |
+| Event | Description |
+|-------|-------------|
+| `frameChanged` | Current frame position updated. Includes `frame` and `totalFrames` fields. |
+| `colorChanged` | Color correction values changed. Includes `exposure`, `gamma`, `temperature`, and `tint` fields. |
+| `annotationAdded` | New annotation added. Includes `frame`, `annotationType` (`pen`, `text`, or `shape`), and `annotationId` fields. |
+| `error` | Error response. Includes `code` and `message` fields. Sent when an inbound message is invalid or unrecognized. |
+| `ping` | Outbound heartbeat sent by the bridge for connection health monitoring. |
+| `pong` | Heartbeat response to an inbound `ping`. |
 
 These outbound messages enable workflows where an artist reviews in the browser and the DCC application responds -- for example, jumping Nuke's viewer to the same frame, or recording review notes directly in the DCC project file.
 

@@ -826,13 +826,12 @@ describe('MuSourceBridge', () => {
   // ==================================================================
 
   describe('addSourceMediaRep', () => {
-    it('adds a media representation', async () => {
+    it('returns empty string when no graph is attached (Issue #258)', async () => {
       const name = await bridge.addSourceVerbose(['/full.mov']);
       const repNode = bridge.addSourceMediaRep(name, 'proxy', [
         '/proxy.mov',
       ]);
-      expect(typeof repNode).toBe('string');
-      expect(repNode).toContain('proxy');
+      expect(repNode).toBe('');
     });
 
     it('sets first rep as active', async () => {
@@ -886,7 +885,7 @@ describe('MuSourceBridge', () => {
   });
 
   describe('sourceMediaRepsAndNodes', () => {
-    it('returns name-node pairs', async () => {
+    it('returns name-node pairs with empty node names when no graph (Issue #258)', async () => {
       const name = await bridge.addSourceVerbose(['/full.mov']);
       bridge.addSourceMediaRep(name, 'full', ['/full.mov']);
       bridge.addSourceMediaRep(name, 'proxy', ['/proxy.mov']);
@@ -894,18 +893,18 @@ describe('MuSourceBridge', () => {
       expect(pairs).toHaveLength(2);
       expect(pairs[0]![0]).toBe('full');
       expect(pairs[1]![0]).toBe('proxy');
-      // node names should contain the rep name
-      expect(pairs[0]![1]).toContain('full');
-      expect(pairs[1]![1]).toContain('proxy');
+      // Without a graph, node names must be empty strings (Issue #258)
+      expect(pairs[0]![1]).toBe('');
+      expect(pairs[1]![1]).toBe('');
     });
   });
 
   describe('sourceMediaRepSwitchNode', () => {
-    it('returns switch node name', async () => {
+    it('returns empty string when no graph is attached (Issue #258)', async () => {
       const name = await bridge.addSourceVerbose(['/full.mov']);
       bridge.addSourceMediaRep(name, 'full', ['/full.mov']);
       const switchNode = bridge.sourceMediaRepSwitchNode(name);
-      expect(switchNode).toContain('switch');
+      expect(switchNode).toBe('');
     });
 
     it('returns empty string when no reps', async () => {
@@ -983,20 +982,20 @@ describe('MuSourceBridge', () => {
   });
 
   describe('sourceMediaRepSourceNode', () => {
-    it('returns source node for active rep', async () => {
+    it('returns empty string for active rep when no graph (Issue #258)', async () => {
       const name = await bridge.addSourceVerbose(['/full.mov']);
       bridge.addSourceMediaRep(name, 'full', ['/full.mov']);
       bridge.addSourceMediaRep(name, 'proxy', ['/proxy.mov']);
       const node = bridge.sourceMediaRepSourceNode(name);
-      expect(node).toContain('full');
+      expect(node).toBe('');
     });
 
-    it('returns source node for a specific rep', async () => {
+    it('returns empty string for a specific rep when no graph (Issue #258)', async () => {
       const name = await bridge.addSourceVerbose(['/full.mov']);
       bridge.addSourceMediaRep(name, 'full', ['/full.mov']);
       bridge.addSourceMediaRep(name, 'proxy', ['/proxy.mov']);
       const node = bridge.sourceMediaRepSourceNode(name, 'proxy');
-      expect(node).toContain('proxy');
+      expect(node).toBe('');
     });
 
     it('returns empty string for unknown rep', async () => {
@@ -1638,12 +1637,11 @@ describe('MuSourceBridge', () => {
       expect(mockOpenRV.media.addSourceFromURL).toHaveBeenCalled();
     });
 
-    it('gracefully degrades when no graph is provided', async () => {
-      // Default (no-graph) bridge still works as before
+    it('gracefully degrades when no graph is provided (Issue #258)', async () => {
+      // Without a graph, node names must be empty strings — not fabricated
       const name = await bridge.addSourceVerbose(['/full.mov']);
       const repNode = bridge.addSourceMediaRep(name, 'proxy', ['/proxy.mov']);
-      expect(typeof repNode).toBe('string');
-      expect(repNode).toContain('proxy');
+      expect(repNode).toBe('');
     });
 
     it('clearSession removes rep nodes from the graph', async () => {
@@ -1736,6 +1734,85 @@ describe('MuSourceBridge', () => {
       expect(graph.getAllNodes().find((n) => n.name === `${name2}_switch`)).toBeUndefined();
       expect(graph.getAllNodes().some((n) => n.type === 'RVMediaRepSource')).toBe(false);
       expect(graph.getAllNodes().some((n) => n.type === 'RVMediaRepSwitch')).toBe(false);
+    });
+  });
+
+  // ==================================================================
+  // Regression: no fabricated node names without a graph (Issue #258)
+  // ==================================================================
+
+  describe('Issue #258 regression: no fabricated node names without graph', () => {
+    it('addSourceMediaRep returns empty string without a graph', async () => {
+      const name = await bridge.addSourceVerbose(['/clip.mov']);
+      const result = bridge.addSourceMediaRep(name, 'proxy', ['/proxy.mov']);
+      expect(result).toBe('');
+    });
+
+    it('sourceMediaRepsAndNodes returns empty node names without a graph', async () => {
+      const name = await bridge.addSourceVerbose(['/clip.mov']);
+      bridge.addSourceMediaRep(name, 'full', ['/full.mov']);
+      bridge.addSourceMediaRep(name, 'proxy', ['/proxy.mov']);
+      const pairs = bridge.sourceMediaRepsAndNodes(name);
+      expect(pairs).toEqual([
+        ['full', ''],
+        ['proxy', ''],
+      ]);
+    });
+
+    it('sourceMediaRepSwitchNode returns empty string without a graph', async () => {
+      const name = await bridge.addSourceVerbose(['/clip.mov']);
+      bridge.addSourceMediaRep(name, 'full', ['/full.mov']);
+      expect(bridge.sourceMediaRepSwitchNode(name)).toBe('');
+    });
+
+    it('sourceMediaRepSourceNode returns empty string without a graph', async () => {
+      const name = await bridge.addSourceVerbose(['/clip.mov']);
+      bridge.addSourceMediaRep(name, 'full', ['/full.mov']);
+      bridge.addSourceMediaRep(name, 'proxy', ['/proxy.mov']);
+      expect(bridge.sourceMediaRepSourceNode(name)).toBe('');
+      expect(bridge.sourceMediaRepSourceNode(name, 'proxy')).toBe('');
+    });
+
+    it('representation record preserves name and media type correctly', async () => {
+      const name = await bridge.addSourceVerbose(['/clip.mov']);
+      bridge.addSourceMediaRep(name, 'editorial', ['/edit.mov']);
+      bridge.addSourceMediaRep(name, 'proxy', ['/proxy.mov']);
+      // Rep names are preserved
+      expect(bridge.sourceMediaReps(name)).toEqual(['editorial', 'proxy']);
+      // First rep is auto-activated
+      expect(bridge.sourceMediaRep(name)).toBe('editorial');
+      // Switching works
+      bridge.setActiveSourceMediaRep(name, 'proxy');
+      expect(bridge.sourceMediaRep(name)).toBe('proxy');
+    });
+
+    it('graph-backed bridge returns real node names', async () => {
+      const graph = new Graph();
+      const gb = new MuSourceBridge(graph);
+      (globalThis as Record<string, unknown>).openrv = mockOpenRV;
+      const name = await gb.addSourceVerbose(['/clip.mov']);
+      const repNode = gb.addSourceMediaRep(name, 'proxy', ['/proxy.mov']);
+      // With a graph, the node name should be non-empty and correspond to a real node
+      expect(repNode).not.toBe('');
+      expect(repNode).toContain('proxy');
+      const found = graph.getAllNodes().find((n) => n.name === repNode);
+      expect(found).toBeDefined();
+    });
+
+    it('graph-backed sourceMediaRepsAndNodes returns real node names', async () => {
+      const graph = new Graph();
+      const gb = new MuSourceBridge(graph);
+      (globalThis as Record<string, unknown>).openrv = mockOpenRV;
+      const name = await gb.addSourceVerbose(['/clip.mov']);
+      gb.addSourceMediaRep(name, 'full', ['/full.mov']);
+      gb.addSourceMediaRep(name, 'proxy', ['/proxy.mov']);
+      const pairs = gb.sourceMediaRepsAndNodes(name);
+      // Node names should be non-empty and exist in the graph
+      for (const [repName, nodeName] of pairs) {
+        expect(repName).toBeTruthy();
+        expect(nodeName).not.toBe('');
+        expect(graph.getAllNodes().find((n) => n.name === nodeName)).toBeDefined();
+      }
     });
   });
 });

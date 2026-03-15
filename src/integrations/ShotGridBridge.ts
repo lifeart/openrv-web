@@ -242,6 +242,19 @@ export class ShotGridBridge {
   }
 
   /**
+   * Get a single Version by its ID.
+   */
+  async getVersionById(versionId: number): Promise<ShotGridVersion | null> {
+    const url =
+      `${this.serverUrl}/api/v1/entity/versions/${versionId}` +
+      `?fields=${VERSION_FIELDS}`;
+
+    const response = await this.request(url);
+    const data = await response.json();
+    return (data.data as ShotGridVersion) ?? null;
+  }
+
+  /**
    * Get versions linked to a specific Shot, scoped by project.
    */
   async getVersionsForShot(shotId: number): Promise<ShotGridVersion[]> {

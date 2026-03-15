@@ -35,6 +35,10 @@ import {
   getBestSequence,
   buildFrameNumberMap,
   getSequenceFrameRange,
+  // URL-based sequence utilities
+  isSequencePattern,
+  expandPatternToURLs,
+  loadFrameImageFromURL,
 } from './SequenceLoader';
 import type { SequenceFrame, SequenceInfo, InferredSequencePattern } from './SequenceLoader';
 
@@ -1848,6 +1852,96 @@ describe('SequenceLoader', () => {
       expect(arg.data[1]).toBe(128);
       expect(arg.data[2]).toBe(128);
       expect(arg.data[3]).toBe(255); // alpha defaults to 255 for 3-channel
+    });
+  });
+
+  // =========================================================================
+  // URL-based Sequence Utilities (Issue #519)
+  // =========================================================================
+
+  describe('isSequencePattern', () => {
+    it('SLD-URL-001: detects hash notation', () => {
+      expect(isSequencePattern('/path/to/shot.####.exr')).toBe(true);
+      expect(isSequencePattern('frame_##.png')).toBe(true);
+    });
+
+    it('SLD-URL-002: detects printf notation', () => {
+      expect(isSequencePattern('/path/to/shot.%04d.exr')).toBe(true);
+      expect(isSequencePattern('frame_%d.png')).toBe(true);
+    });
+
+    it('SLD-URL-003: detects at-sign notation', () => {
+      expect(isSequencePattern('/path/to/shot.@@@@.exr')).toBe(true);
+    });
+
+    it('SLD-URL-004: rejects plain filenames', () => {
+      expect(isSequencePattern('/path/to/image.exr')).toBe(false);
+      expect(isSequencePattern('https://example.com/photo.jpg')).toBe(false);
+      expect(isSequencePattern('')).toBe(false);
+    });
+  });
+
+  describe('expandPatternToURLs', () => {
+    it('SLD-URL-005: expands hash pattern to frame URLs', () => {
+      const urls = expandPatternToURLs('/path/shot.####.exr', 1001, 1003);
+      expect(urls).toEqual([
+        '/path/shot.1001.exr',
+        '/path/shot.1002.exr',
+        '/path/shot.1003.exr',
+      ]);
+    });
+
+    it('SLD-URL-006: expands printf pattern to frame URLs', () => {
+      const urls = expandPatternToURLs('/path/shot.%04d.exr', 1, 3);
+      expect(urls).toEqual([
+        '/path/shot.0001.exr',
+        '/path/shot.0002.exr',
+        '/path/shot.0003.exr',
+      ]);
+    });
+
+    it('SLD-URL-007: expands at-sign pattern to frame URLs', () => {
+      const urls = expandPatternToURLs('frame.@@.png', 5, 7);
+      expect(urls).toEqual([
+        'frame.05.png',
+        'frame.06.png',
+        'frame.07.png',
+      ]);
+    });
+
+    it('SLD-URL-008: returns empty for non-pattern string', () => {
+      expect(expandPatternToURLs('plain.exr', 1, 10)).toEqual([]);
+    });
+
+    it('SLD-URL-009: single frame range', () => {
+      const urls = expandPatternToURLs('/path/shot.####.exr', 42, 42);
+      expect(urls).toEqual(['/path/shot.0042.exr']);
+    });
+  });
+
+  describe('loadFrameImageFromURL', () => {
+    it('SLD-URL-010: returns existing image if already loaded', async () => {
+      const mockBitmap = { width: 100, height: 100, close: vi.fn() } as unknown as ImageBitmap;
+      const frame: SequenceFrame = {
+        index: 0,
+        frameNumber: 1,
+        file: new File([], 'test.png'),
+        url: 'http://example.com/frame.0001.png',
+        image: mockBitmap,
+      };
+
+      const result = await loadFrameImageFromURL(frame);
+      expect(result).toBe(mockBitmap);
+    });
+
+    it('SLD-URL-011: throws if frame has no URL', async () => {
+      const frame: SequenceFrame = {
+        index: 0,
+        frameNumber: 1,
+        file: new File([], 'test.png'),
+      };
+
+      await expect(loadFrameImageFromURL(frame)).rejects.toThrow('has no URL');
     });
   });
 });

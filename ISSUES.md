@@ -4,18 +4,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 
 ## Confirmed Issues
 
-### 258. Mu compat media-representation node APIs return fabricated node names that are never created in a real graph
-
-- Severity: Medium
-- Area: Mu compatibility / source representations
-- Evidence:
-  - `addSourceMediaRep(...)` synthesizes `nodeName = \`${sourceName}_${repName}_source\`` and `switchNodeName = \`${sourceName}_switch\`` and stores them only inside the local representation record in [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L573) through [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L595).
-  - The method never creates corresponding nodes in a graph, never talks to `window.openrv`, and never wires representation switching into the live session.
-  - `sourceMediaRepsAndNodes(...)`, `sourceMediaRepSwitchNode(...)`, and `sourceMediaRepSourceNode(...)` simply read back those stored string fields in [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L635) through [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L660).
-  - The tests only assert that the returned strings contain the rep or switch names, not that those nodes actually exist anywhere in a graph or session in [src/compat/__tests__/MuSourceBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuSourceBridge.test.ts#L507) through [src/compat/__tests__/MuSourceBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuSourceBridge.test.ts#L615).
-- Impact:
-  - Mu-compatible scripts can receive plausible source-representation node names and then fail when they try to use them as real node identities.
-  - That is especially misleading because the API shape implies graph-backed media-rep wiring, but the returned node IDs are only local placeholders.
 
 ### 307. The adaptive `FrameCacheController` subsystem is fully implemented but never instantiated in production
 
@@ -29,24 +17,13 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The app carries a substantial adaptive frame-cache design, but the shipped runtime never actually turns it on.
   - That leaves cache modes, warm-up behavior, and memory-pressure coordination effectively test-only despite the surrounding config and UI-oriented metadata.
 
-### 308. Collaboration permission roles affect sync behavior, but the shipped UI never reflects or enforces them locally
-
-- Severity: Medium
-- Area: Network sync / collaboration permissions
-- Evidence:
-  - `NetworkSyncManager` exposes real participant roles, defaults unknown users to `reviewer`, and uses `viewer` to suppress outgoing sync via `canUserSync(...)`, `sendAnnotationSync(...)`, and `sendNoteSync(...)` in [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L210) through [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L236) and [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L547) through [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L594).
-  - Incoming host permission changes are applied and emitted as `participantPermissionChanged` in [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L1105) through [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L1113).
-  - A production-code search finds no `participantPermissionChanged` subscriber in app wiring, and the visible network panel only renders a `Host` badge with no reviewer/viewer state or permission controls in [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L1278) through [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L1320).
-- Impact:
-  - A user can be downgraded to `viewer` and silently stop sending synced notes or annotations while the local UI still presents normal collaboration controls.
-  - The permission system exists at the transport layer, but the shipped interface gives no clear indication of current role or why collaboration actions stopped propagating.
 
 ### 309. `SessionManager` is documented as a central session subsystem, but it is never instantiated in production
 
 - Severity: Low
 - Area: Session graph architecture
 - Evidence:
-  - `SessionManager` presents itself as the “Central orchestrator for graph mutations, view history, tree model, and media-graph bridge” in [src/core/session/SessionManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionManager.ts#L1) through [src/core/session/SessionManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionManager.ts#L7).
+  - `SessionManager` presents itself as the "Central orchestrator for graph mutations, view history, tree model, and media-graph bridge" in [src/core/session/SessionManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionManager.ts#L1) through [src/core/session/SessionManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionManager.ts#L7).
   - The docs-generation templates also present `SessionManager` as part of the session-system architecture and include its source file in the generated module set in [docs/scripts/lib/templates.ts](/Users/lifeart/Repos/openrv-web/docs/scripts/lib/templates.ts#L288) through [docs/scripts/lib/templates.ts](/Users/lifeart/Repos/openrv-web/docs/scripts/lib/templates.ts#L304) and [docs/scripts/modules.ts](/Users/lifeart/Repos/openrv-web/docs/scripts/modules.ts#L46) through [docs/scripts/modules.ts](/Users/lifeart/Repos/openrv-web/docs/scripts/modules.ts#L52).
   - A production-code search finds no `new SessionManager()` outside tests.
 - Impact:
@@ -116,17 +93,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Exported dailies reports cannot capture who ran the session, what project it belonged to, or any category-based review statistics.
   - That makes the generated reports much less useful for real production circulation than the workflow suggests.
 
-### 322. ShotGrid version loading never feeds the app’s own version-management system
-
-- Severity: Medium
-- Area: ShotGrid integration / version management
-- Evidence:
-  - When a ShotGrid version is loaded, the integration bridge only loads the media, records a panel-local `versionId -> sourceIndex` mapping, and applies status via `session.statusManager.setStatus(...)` in [src/integrations/ShotGridIntegrationBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/ShotGridIntegrationBridge.ts#L171) through [src/integrations/ShotGridIntegrationBridge.ts#L184).
-  - The `ShotGridPanel` stores those mappings only in its own `versionSourceMap` / `sourceVersionMap` in [src/ui/components/ShotGridPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ShotGridPanel.ts#L53) through [src/ui/components/ShotGridPanel.ts#L55) and [src/ui/components/ShotGridPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ShotGridPanel.ts#L256) through [src/ui/components/ShotGridPanel.ts#L266).
-  - A production-code search finds no call from the ShotGrid flow into `session.versionManager`, `createGroup(...)`, `addVersionToGroup(...)`, or `autoDetectGroups(...)`.
-- Impact:
-  - ShotGrid can surface and load multiple versions of the same shot, but those versions remain isolated inside the ShotGrid panel instead of becoming first-class OpenRV Web version groups.
-  - That means report/export/version-navigation features built around `VersionManager` never benefit from the versions users actually loaded through the production tracking integration.
 
 ### 323. ShotGrid playlist loading is not real playlist sync; it only fills the browser panel
 
@@ -140,17 +106,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Entering a ShotGrid playlist ID does not build an OpenRV Web review playlist; it just populates the ShotGrid side panel with version rows.
   - Users still have to load versions manually one by one, so clip order and review-playlist semantics are not actually imported.
 
-### 324. The ShotGrid panel does not support the advertised “paste a version URL” workflow
-
-- Severity: Medium
-- Area: ShotGrid integration / UX contract
-- Evidence:
-  - The integration guide says users can load versions “by pasting a version URL or using the ShotGrid panel” in [docs/advanced/dcc-integration.md](/Users/lifeart/Repos/openrv-web/docs/advanced/dcc-integration.md#L102) through [docs/advanced/dcc-integration.md#L106).
-  - The shipped `ShotGridPanel` only supports two query modes, `playlist` and `shot`, toggled in [src/ui/components/ShotGridPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ShotGridPanel.ts#L331) through [src/ui/components/ShotGridPanel.ts#L335).
-  - Its load handler parses the input strictly as a positive integer ID and rejects anything else as invalid in [src/ui/components/ShotGridPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ShotGridPanel.ts#L337) through [src/ui/components/ShotGridPanel.ts#L359).
-- Impact:
-  - A real ShotGrid version URL cannot be pasted into the shipped panel even though that is presented as a supported workflow.
-  - Users have to manually extract numeric IDs and also cannot query versions directly, only playlists or shots.
 
 ### 325. ShotGrid note publishing sends only plain note text, not annotations or thumbnails
 
@@ -165,30 +120,7 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Users who rely on annotated frames or visual context cannot actually publish that review artifact back to ShotGrid from the shipped app.
   - The current integration behaves like plain text note posting, which is much less useful than the advertised review-to-tracking workflow.
 
-### 326. The published DCC inbound command set overstates what the bridge actually understands
 
-- Severity: Medium
-- Area: DCC integration / protocol contract
-- Evidence:
-  - The DCC integration guide documents inbound commands `load`, `seek`, `setFrameRange`, `setMetadata`, `setColorSpace`, and `ping` in [docs/advanced/dcc-integration.md](/Users/lifeart/Repos/openrv-web/docs/advanced/dcc-integration.md#L68) through [docs/advanced/dcc-integration.md](/Users/lifeart/Repos/openrv-web/docs/advanced/dcc-integration.md#L80).
-  - The actual bridge protocol only defines inbound message types `loadMedia`, `syncFrame`, `syncColor`, and `ping` in [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L11) through [src/integrations/DCCBridge.ts#L26).
-  - Runtime dispatch in `DCCBridge.handleMessage(...)` only routes those four message types and rejects everything else as `UNKNOWN_TYPE` in [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L395) through [src/integrations/DCCBridge.ts#L418).
-  - `AppDCCWiring` likewise only subscribes to `loadMedia`, `syncFrame`, and `syncColor` in [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L84) through [src/AppDCCWiring.ts#L141).
-- Impact:
-  - Real DCC clients following the published contract for frame-range, metadata, or color-space commands will hit unsupported-message errors instead of getting the documented behavior.
-  - That blocks several advertised roundtrip workflows such as pushing shot context, frame ranges, or input color metadata from Maya/Nuke/Houdini into the viewer.
-
-### 327. DCC status roundtrip is documented, but the shipped bridge has no `statusChanged` message path
-
-- Severity: Medium
-- Area: DCC integration / status sync
-- Evidence:
-  - The DCC integration guide documents outbound `statusChanged` messages from the viewer in [docs/advanced/dcc-integration.md](/Users/lifeart/Repos/openrv-web/docs/advanced/dcc-integration.md#L85) through [docs/advanced/dcc-integration.md](/Users/lifeart/Repos/openrv-web/docs/advanced/dcc-integration.md#L96).
-  - The actual outbound protocol only defines `frameChanged`, `colorChanged`, `annotationAdded`, `pong`, and `error` in [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L22) through [src/integrations/DCCBridge.ts#L27) and [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L75) through [src/integrations/DCCBridge.ts#L117).
-  - `AppDCCWiring` only forwards `session.frameChanged` and `colorControls.adjustmentsChanged` in [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L143) through [src/AppDCCWiring.ts#L162); it never subscribes to `session.statusChanged`.
-- Impact:
-  - A DCC tool cannot rely on OpenRV Web to push review-status changes back over the live bridge, even though that workflow is presented as supported.
-  - Any pipeline expecting browser-driven approval or needs-revision updates to flow back into a DCC-side review context will silently get nothing.
 
 ### 329. Dailies reports include only the current version label, not the version history they advertise
 
@@ -907,18 +839,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The guide describes an older or different sequence-frame memory model than the one the shipped app actually uses.
   - That can mislead anyone debugging sequence memory behavior or trying to understand the current loader’s lifecycle costs.
 
-### 519. ShotGrid frame-sequence paths are still routed through `session.loadImage(...)`, so `shot.####.exr` is treated like a single image URL instead of a sequence
-
-- Severity: Medium
-- Area: ShotGrid integration / sequence loading
-- Evidence:
-  - The ShotGrid panel now resolves `sg_path_to_frames` as the media URL when that path is present in [src/ui/components/ShotGridPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ShotGridPanel.ts#L306) through [src/ui/components/ShotGridPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ShotGridPanel.ts#L307), and the `Load` action is enabled whenever `mediaUrl` exists in [src/ui/components/ShotGridPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ShotGridPanel.ts#L497).
-  - `ShotGridIntegrationBridge` explicitly detects the “frame sequence path” case, logs it, and still routes every non-video URL into `this.session.loadImage(version.code, mediaUrl)` in [src/integrations/ShotGridIntegrationBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/ShotGridIntegrationBridge.ts#L162) through [src/integrations/ShotGridIntegrationBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/ShotGridIntegrationBridge.ts#L174).
-  - `SessionMedia.loadImage(...)` loads that URL through a plain `HTMLImageElement` and creates a single-frame `MediaSource` with `duration: 1` in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L429) through [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L456).
-  - There is no sequence-pattern expansion or sequence-loader handoff in that path; the real sequence flow depends on file batches and `SequenceLoader` helpers instead in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1449) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1477).
-- Impact:
-  - ShotGrid versions backed only by frame-sequence paths can reach a loadable UI state and still fail to behave like sequences in production.
-  - That leaves one of the app’s main review integrations unable to turn a standard `####` frame path into an actual timeline-backed source.
 
 ### 520. The docs present `####` / `%04d` / `@@@@` pattern strings as supported sequence formats, but production does not have a live loader for literal pattern strings
 
@@ -966,8 +886,8 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Area: Documentation / sequence memory behavior
 - Evidence:
   - The image-sequences guide says the preload window is “5 frames ahead and behind” and the keep window is “up to 20 frames” in [docs/playback/image-sequences.md](/Users/lifeart/Repos/openrv-web/docs/playback/image-sequences.md#L66) through [docs/playback/image-sequences.md](/Users/lifeart/Repos/openrv-web/docs/playback/image-sequences.md#L72).
-  - The direct session/media sequence path does still use `preloadFrames(..., 5)` plus `releaseDistantFrames(..., 20)` during normal fetches in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L932) through [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L939) and [src/core/session/MediaManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaManager.ts#L842) through [src/core/session/MediaManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaManager.ts#L848).
-  - But the same runtime also does a wider initial preload of `10` frames on sequence load in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L771) and [src/core/session/MediaManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaManager.ts#L824).
+  - The direct session/media sequence path does still use `preloadFrames(..., 5)` plus `releaseDistantFrames(..., 20)` during normal fetches in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L932) through [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L939).
+  - But the same runtime also does a wider initial preload of `10` frames on sequence load in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L771).
   - The node-graph sequence path uses `FramePreloadManager` defaults of `maxCacheSize: 100`, `preloadAhead: 30`, `preloadBehind: 5`, and `scrubWindow: 10` in [src/utils/media/FramePreloadManager.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/FramePreloadManager.ts#L24) through [src/utils/media/FramePreloadManager.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/FramePreloadManager.ts#L34).
 - Impact:
   - The guide presents sequence caching as one simple fixed policy, but the shipped runtime now uses different preload/retention behaviors depending on the path and playback state.
@@ -987,18 +907,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Sequence-based alternate representations cannot be faithfully restored from saved project state.
   - The representation serialization format carries enough metadata to look sequence-aware, but not enough runtime data for the actual sequence representation loader to work.
 
-### 529. The representation system still advertises a `streaming` kind, but the live loader factory throws for it
-
-- Severity: Medium
-- Area: Media representations / unsupported kind
-- Evidence:
-  - The shared representation model still defines `RepresentationKind = 'frames' | 'movie' | 'proxy' | 'streaming'` and documents representations as things like “full-res frames, proxy video, streaming URL” in [src/core/types/representation.ts](/Users/lifeart/Repos/openrv-web/src/core/types/representation.ts#L4) through [src/core/types/representation.ts#L12).
-  - `getDefaultPriority(...)` also treats `streaming` as a normal representation kind in [src/core/types/representation.ts](/Users/lifeart/Repos/openrv-web/src/core/types/representation.ts#L216) through [src/core/types/representation.ts#L227).
-  - The live loader factory throws `Streaming representations are not yet supported` for `kind === 'streaming'` in [src/core/session/loaders/RepresentationLoaderFactory.ts](/Users/lifeart/Repos/openrv-web/src/core/session/loaders/RepresentationLoaderFactory.ts#L38) through [src/core/session/loaders/RepresentationLoaderFactory.ts#L39).
-  - `MediaRepresentationManager.switchRepresentation(...)` calls that factory directly during normal representation activation in [src/core/session/MediaRepresentationManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaRepresentationManager.ts#L182) through [src/core/session/MediaRepresentationManager.ts#L197).
-- Impact:
-  - A representation kind that the shared model treats as valid still fails at the point of actual use.
-  - That leaves the representation contract broader than the shipped runtime and makes `streaming` look supported until activation time.
 
 ### 530. Non-sequence file, movie, and proxy representations also cannot round-trip through serialization, because the saved loader config strips the `File` objects their live loaders require
 
@@ -1026,18 +934,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - A representation config that looks valid by shared types, comments, and tests can still fail at first real activation if it was built from a path or URL instead of a `File`.
   - That leaves the published representation contract broader than the shipped runtime and makes URL-based or path-only variants look supported when they are not.
 
-### 532. Representation-level `opfsCacheKey` is serialized and tested, but no live representation loader or restore path ever uses it
-
-- Severity: Medium
-- Area: Media representations / resilience contract
-- Evidence:
-  - `RepresentationLoaderConfig` explicitly includes `opfsCacheKey` for “resilience against File reference invalidation,” and `SerializedRepresentation` preserves it in [src/core/types/representation.ts](/Users/lifeart/Repos/openrv-web/src/core/types/representation.ts#L73) through [src/core/types/representation.ts#L113).
-  - The shared representation tests also assert that `serializeRepresentation(...)` keeps `loaderConfig.opfsCacheKey` in [src/core/types/representation.test.ts](/Users/lifeart/Repos/openrv-web/src/core/types/representation.test.ts#L124) through [src/core/types/representation.test.ts#L167).
-  - But the actual OPFS restore logic in `SessionSerializer.fromJSON(...)` only checks the top-level media reference `ref.opfsCacheKey` before reloading the base source in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L387) through [src/core/session/SessionSerializer.ts#L408) and [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L458) through [src/core/session/SessionSerializer.ts#L476).
-  - The live representation loaders still only read `loaderConfig.file` and throw if it is missing, with no `opfsCacheKey` lookup path in [src/core/session/loaders/FileRepresentationLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/loaders/FileRepresentationLoader.ts#L15) through [src/core/session/loaders/FileRepresentationLoader.ts#L25) and [src/core/session/loaders/VideoRepresentationLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/loaders/VideoRepresentationLoader.ts#L21) through [src/core/session/loaders/VideoRepresentationLoader.ts#L32).
-- Impact:
-  - Representation configs can carry an `opfsCacheKey` that appears to promise resilient reload behavior, but losing the original `File` handle still leaves those variants unloadable.
-  - That makes the representation persistence model look more fault-tolerant than the real runtime actually is.
 
 ### 535. Even if a sequence representation loaded successfully, the shim path would still discard the sequence metadata that the rest of the app expects
 
@@ -1081,24 +977,13 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Severity: Medium
 - Area: Media loading / test-to-runtime coverage
 - Evidence:
-  - The real session runtime instantiates `SessionMedia` as its media subsystem in [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L81) through [src/core/session/Session.ts#L92).
+  - The real session runtime instantiates `SessionMedia` as its media subsystem in [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L81) through [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L92).
   - A repo search finds `new MediaManager(...)` only inside [src/core/session/MediaManager.test.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaManager.test.ts), while production code does instantiate `SessionMedia` in [src/core/session/SessionMedia.test.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.test.ts#L111) and the main runtime through `Session`.
-  - The codebase therefore carries two large, similarly named media stacks, but only one of them is actually on the app’s execution path.
+  - The codebase therefore carries two large, similarly named media stacks, but only one of them is actually on the app's execution path.
 - Impact:
-  - Passing `MediaManager` tests can give false confidence about the shipped app’s media behavior, because production requests and state mutations go through different code.
+  - Passing `MediaManager` tests can give false confidence about the shipped app's media behavior, because production requests and state mutations go through different code.
   - That increases the chance of media-loading regressions surviving despite strong-looking unit coverage on the wrong subsystem.
 
-### 547. The public scripting event surface exposes representation failures, but not successful representation changes or fallbacks
-
-- Severity: Medium
-- Area: Public API / observability
-- Evidence:
-  - The internal session emits `representationChanged` and `fallbackActivated` events in [src/core/session/MediaRepresentationManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaRepresentationManager.ts#L167) through [src/core/session/MediaRepresentationManager.ts#L202) and [src/core/session/MediaRepresentationManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaRepresentationManager.ts#L258) through [src/core/session/MediaRepresentationManager.ts#L263).
-  - `EventsAPI` only bridges the failure side of that subsystem via `representationError`, mapping it onto the generic public `error` channel in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L351) through [src/api/EventsAPI.ts#L359).
-  - The public `OpenRVEventName` union has no `representationChanged` or fallback event at all in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L14) through [src/api/EventsAPI.ts#L29).
-- Impact:
-  - Script/plugin authors can be told when representation switching fails, but they have no first-class way to observe when the active variant changes successfully or silently falls back.
-  - That makes representation-aware automation asymmetric and forces consumers to infer state changes indirectly from other stale or incomplete signals.
 
 ### 549. URL/session sharing has no representation awareness, so active alternate variants cannot round-trip through share links or collaboration state
 
