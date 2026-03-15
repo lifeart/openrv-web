@@ -32,7 +32,7 @@ export interface HeaderBarEvents extends EventMap {
   showCustomKeyBindings: void;
   fileLoaded: void;
   saveProject: void;
-  openProject: File;
+  openProject: { file: File; availableFiles?: Map<string, File> };
   fullscreenToggle: void;
   presentationToggle: void;
   externalPresentation: void;
@@ -1404,14 +1404,11 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
         }
       }
 
-      try {
-        const content = await sessionFile.arrayBuffer();
-        await this.session.loadFromGTO(content, availableFiles);
-        this.emit('fileLoaded', undefined);
-      } catch (err) {
-        console.error('Failed to load session file:', err);
-        showAlert(`Failed to load ${sessionFile.name}: ${err}`, { type: 'error', title: 'Load Error' });
-      }
+      // Delegate to persistence manager via openProject event for checkpoint + control resync
+      this.emit('openProject', {
+        file: sessionFile,
+        availableFiles: availableFiles.size > 0 ? availableFiles : undefined,
+      });
 
       // Clear input
       input.value = '';
@@ -1478,7 +1475,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     const input = e.target as HTMLInputElement;
     const file = input.files?.[0];
     if (file) {
-      this.emit('openProject', file);
+      this.emit('openProject', { file });
     }
     input.value = '';
   }

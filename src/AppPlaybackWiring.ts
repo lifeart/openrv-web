@@ -57,7 +57,11 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
   subs.add(headerBar.on('showShortcuts', () => deps.getKeyboardHandler().showShortcutsDialog()));
   subs.add(headerBar.on('showCustomKeyBindings', () => deps.getKeyboardHandler().showCustomBindingsDialog()));
   subs.add(headerBar.on('saveProject', () => persistenceManager.saveProject()));
-  subs.add(headerBar.on('openProject', (file) => persistenceManager.openProject(file)));
+  subs.add(
+    headerBar.on('openProject', ({ file, availableFiles }) =>
+      persistenceManager.openProject(file, availableFiles),
+    ),
+  );
 
   // AutoSave Indicator
   controls.autoSaveIndicator.connect(controls.autoSaveManager);

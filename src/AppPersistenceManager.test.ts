@@ -533,7 +533,7 @@ describe('AppPersistenceManager', () => {
 
       await manager.openProject(file);
 
-      expect(fullCtx.session.loadFromGTO).toHaveBeenCalledWith(expect.any(ArrayBuffer));
+      expect(fullCtx.session.loadFromGTO).toHaveBeenCalledWith(expect.any(ArrayBuffer), undefined);
       expect(SessionSerializer.loadFromFile).not.toHaveBeenCalled();
       expect(fullCtx.session.loadFile).not.toHaveBeenCalled();
     });
@@ -543,8 +543,19 @@ describe('AppPersistenceManager', () => {
 
       await manager.openProject(file);
 
-      expect(fullCtx.session.loadFromGTO).toHaveBeenCalledWith(expect.any(ArrayBuffer));
+      expect(fullCtx.session.loadFromGTO).toHaveBeenCalledWith(expect.any(ArrayBuffer), undefined);
       expect(fullCtx.session.loadFile).not.toHaveBeenCalled();
+    });
+
+    it('APM-088b: openProject passes availableFiles to loadFromGTO for .gto files', async () => {
+      const file = new File(['gto-data'], 'session.gto');
+      const availableFiles = new Map<string, File>([
+        ['clip.exr', new File(['exr-data'], 'clip.exr')],
+      ]);
+
+      await manager.openProject(file, availableFiles);
+
+      expect(fullCtx.session.loadFromGTO).toHaveBeenCalledWith(expect.any(ArrayBuffer), availableFiles);
     });
 
     it('APM-089: openProject handles uppercase .GTO case-insensitively', async () => {
@@ -552,7 +563,7 @@ describe('AppPersistenceManager', () => {
 
       await manager.openProject(file);
 
-      expect(fullCtx.session.loadFromGTO).toHaveBeenCalledWith(expect.any(ArrayBuffer));
+      expect(fullCtx.session.loadFromGTO).toHaveBeenCalledWith(expect.any(ArrayBuffer), undefined);
     });
 
     it('APM-090a: openProject loads .rvedl file via session.loadEDL', async () => {

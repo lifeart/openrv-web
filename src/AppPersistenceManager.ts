@@ -390,7 +390,7 @@ export class AppPersistenceManager {
   /**
    * Open project from file
    */
-  async openProject(file: File): Promise<void> {
+  async openProject(file: File, availableFiles?: Map<string, File>): Promise<void> {
     const { session, paintEngine, viewer } = this.ctx;
     const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
 
@@ -432,7 +432,7 @@ export class AppPersistenceManager {
         }
       } else if (ext === 'rv' || ext === 'gto') {
         const content = await file.arrayBuffer();
-        await session.loadFromGTO(content);
+        await session.loadFromGTO(content, availableFiles);
       } else if (ext === 'rvedl') {
         const text = await file.text();
         session.loadEDL(text);

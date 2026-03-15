@@ -732,7 +732,7 @@ describe('HeaderBar', () => {
       Object.defineProperty(projectInput, 'files', { value: [file] });
       projectInput.dispatchEvent(new Event('change'));
 
-      expect(callback).toHaveBeenCalledWith(file);
+      expect(callback).toHaveBeenCalledWith({ file });
     });
   });
 
@@ -1850,21 +1850,22 @@ describe('HeaderBar', () => {
   });
 
   describe('case-insensitive file extension handling', () => {
-    it('HDR-U025: uppercase .RV file triggers session file branch', async () => {
+    it('HDR-U025: uppercase .RV file triggers openProject event', async () => {
       const el = headerBar.render();
       const input = el.querySelector('input[type="file"]') as HTMLInputElement;
 
-      const loadFromGTOSpy = vi.spyOn(session, 'loadFromGTO').mockResolvedValue();
+      const openProjectSpy = vi.fn();
+      headerBar.on('openProject', openProjectSpy);
       const rvFile = new File(['rv-data'], 'SESSION.RV');
       Object.defineProperty(input, 'files', { value: [rvFile], configurable: true });
       input.dispatchEvent(new Event('change'));
 
       // Wait for async handleFileSelect to complete
       await vi.waitFor(() => {
-        expect(loadFromGTOSpy).toHaveBeenCalled();
+        expect(openProjectSpy).toHaveBeenCalledWith(
+          expect.objectContaining({ file: rvFile }),
+        );
       });
-
-      loadFromGTOSpy.mockRestore();
     });
 
     it('HDR-U026: uppercase .RVEDL file triggers EDL branch', async () => {
@@ -1882,6 +1883,75 @@ describe('HeaderBar', () => {
       });
 
       loadEDLSpy.mockRestore();
+    });
+  });
+
+  describe('rv/gto file open unification (issue #395)', () => {
+    it('HDR-U027: .rv file via Open media emits openProject instead of calling loadFromGTO directly', async () => {
+      const el = headerBar.render();
+      const input = el.querySelector('input[type="file"]') as HTMLInputElement;
+
+      const openProjectSpy = vi.fn();
+      headerBar.on('openProject', openProjectSpy);
+      const loadFromGTOSpy = vi.spyOn(session, 'loadFromGTO').mockResolvedValue();
+
+      const rvFile = new File(['rv-data'], 'scene.rv');
+      Object.defineProperty(input, 'files', { value: [rvFile], configurable: true });
+      input.dispatchEvent(new Event('change'));
+
+      await vi.waitFor(() => {
+        expect(openProjectSpy).toHaveBeenCalledWith({
+          file: rvFile,
+          availableFiles: undefined,
+        });
+      });
+
+      // loadFromGTO should NOT be called directly by HeaderBar
+      expect(loadFromGTOSpy).not.toHaveBeenCalled();
+      loadFromGTOSpy.mockRestore();
+    });
+
+    it('HDR-U028: .gto file via Open media emits openProject instead of calling loadFromGTO directly', async () => {
+      const el = headerBar.render();
+      const input = el.querySelector('input[type="file"]') as HTMLInputElement;
+
+      const openProjectSpy = vi.fn();
+      headerBar.on('openProject', openProjectSpy);
+      const loadFromGTOSpy = vi.spyOn(session, 'loadFromGTO').mockResolvedValue();
+
+      const gtoFile = new File(['gto-data'], 'scene.gto');
+      Object.defineProperty(input, 'files', { value: [gtoFile], configurable: true });
+      input.dispatchEvent(new Event('change'));
+
+      await vi.waitFor(() => {
+        expect(openProjectSpy).toHaveBeenCalledWith({
+          file: gtoFile,
+          availableFiles: undefined,
+        });
+      });
+
+      expect(loadFromGTOSpy).not.toHaveBeenCalled();
+      loadFromGTOSpy.mockRestore();
+    });
+
+    it('HDR-U029: .rv file with companion media passes availableFiles in openProject event', async () => {
+      const el = headerBar.render();
+      const input = el.querySelector('input[type="file"]') as HTMLInputElement;
+
+      const openProjectSpy = vi.fn();
+      headerBar.on('openProject', openProjectSpy);
+
+      const rvFile = new File(['rv-data'], 'scene.rv');
+      const mediaFile = new File(['exr-data'], 'clip.exr');
+      Object.defineProperty(input, 'files', { value: [rvFile, mediaFile], configurable: true });
+      input.dispatchEvent(new Event('change'));
+
+      await vi.waitFor(() => {
+        expect(openProjectSpy).toHaveBeenCalledWith({
+          file: rvFile,
+          availableFiles: new Map([['clip.exr', mediaFile]]),
+        });
+      });
     });
   });
 });
