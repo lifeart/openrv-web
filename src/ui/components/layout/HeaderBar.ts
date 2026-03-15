@@ -1356,6 +1356,17 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     // Check for .rvedl files in the selection
     const edlFile = fileArray.find((f) => f.name.toLowerCase().endsWith('.rvedl'));
     if (edlFile) {
+      // Warn if session files (.rv/.gto) are also present — they will be ignored
+      const sessionFile = fileArray.find(
+        (f) => f.name.toLowerCase().endsWith('.rv') || f.name.toLowerCase().endsWith('.gto'),
+      );
+      if (sessionFile) {
+        showAlert(
+          `Mixed selection: "${edlFile.name}" (EDL) and "${sessionFile.name}" (session) ` +
+            `were both selected. Loading the EDL file only — the session file was skipped.`,
+          { type: 'warning', title: 'Mixed Selection' },
+        );
+      }
       try {
         const text = await edlFile.text();
         const entries = this.session.loadEDL(text);

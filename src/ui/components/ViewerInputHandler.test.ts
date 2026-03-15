@@ -1729,4 +1729,27 @@ describe('ViewerInputHandler – .orvproject drop handling (Issue #386)', () => 
     expect(mockSession.loadFromGTO).not.toHaveBeenCalled();
     expect(mockSession.loadEDL).not.toHaveBeenCalled();
   });
+
+  it('DROP-MIX-001: mixed .rvedl + .rv drop loads EDL and does not load session', async () => {
+    const container = ctx.getContainer();
+
+    const edlFile = new File(
+      ['001 src V C 01:00:00:00 01:00:10:00 01:00:00:00 01:00:10:00\n* FROM CLIP NAME: test.exr'],
+      'test.rvedl',
+    );
+    const rvFile = new File(['rv-data'], 'session.rv');
+    const dt = new DataTransfer();
+    dt.items.add(edlFile);
+    dt.items.add(rvFile);
+
+    container.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true }));
+
+    // Wait for async handling
+    await new Promise((r) => setTimeout(r, 50));
+
+    // EDL should be loaded
+    expect(mockSession.loadEDL).toHaveBeenCalled();
+    // Session file should NOT be loaded
+    expect(mockSession.loadFromGTO).not.toHaveBeenCalled();
+  });
 });

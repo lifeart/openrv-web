@@ -736,6 +736,17 @@ export class ViewerInputHandler {
     // Check for .rvedl file among dropped files (before session/sequence detection)
     const edlFile = fileArray.find((f) => f.name.toLowerCase().endsWith('.rvedl'));
     if (edlFile) {
+      // Warn if session files (.rv/.gto) are also present — they will be ignored
+      const sessionFile = fileArray.find(
+        (f) => f.name.toLowerCase().endsWith('.rv') || f.name.toLowerCase().endsWith('.gto'),
+      );
+      if (sessionFile) {
+        showAlert(
+          `Mixed drop: "${edlFile.name}" (EDL) and "${sessionFile.name}" (session) ` +
+            `were both dropped. Loading the EDL file only — the session file was skipped.`,
+          { type: 'warning', title: 'Mixed Selection' },
+        );
+      }
       // Remove the EDL file from the array so remaining media files can still be loaded
       const remainingFiles = fileArray.filter((f) => f !== edlFile);
       try {

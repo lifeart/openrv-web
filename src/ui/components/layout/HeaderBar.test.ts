@@ -1953,5 +1953,24 @@ describe('HeaderBar', () => {
         });
       });
     });
+
+    it('HDR-U030: mixed .rvedl + .rv selection loads EDL and does not emit openProject', async () => {
+      const el = headerBar.render();
+      const input = el.querySelector('input[type="file"]') as HTMLInputElement;
+
+      const openProjectSpy = vi.fn();
+      headerBar.on('openProject', openProjectSpy);
+
+      const edlFile = new File(['001 src V C 01:00:00:00 01:00:10:00 01:00:00:00 01:00:10:00\n* FROM CLIP NAME: test.exr'], 'test.rvedl');
+      const rvFile = new File(['rv-data'], 'session.rv');
+      Object.defineProperty(input, 'files', { value: [edlFile, rvFile], configurable: true });
+      input.dispatchEvent(new Event('change'));
+
+      // Wait for async handling to complete
+      await new Promise((r) => setTimeout(r, 50));
+
+      // EDL takes precedence — session file should NOT trigger openProject
+      expect(openProjectSpy).not.toHaveBeenCalled();
+    });
   });
 });
