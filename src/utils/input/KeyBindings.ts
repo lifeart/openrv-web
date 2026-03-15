@@ -72,7 +72,6 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   },
   'timeline.setOutPoint': {
     code: 'KeyO',
-    context: 'timeline',
     description: 'Set out point',
   },
   'timeline.setOutPointAlt': {
@@ -103,7 +102,6 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   },
   'timeline.resetInOut': {
     code: 'KeyR',
-    context: 'timeline',
     description: 'Reset in/out points to full range',
   },
   'timeline.cycleLoopMode': {
@@ -396,7 +394,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   'channel.red': {
     code: 'KeyR',
     shift: true,
-    context: 'channel',
+    context: 'panel',
     description: 'Select red channel',
   },
   'channel.green': {
@@ -606,7 +604,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   // Notes quick-add + navigation
   'notes.addNote': {
     code: 'KeyN',
-    context: 'annotate',
+    context: 'paint',
     description: 'Add note at current frame',
   },
   'notes.next': {

@@ -24,7 +24,7 @@ import {
   applyA11yFocus,
 } from '../shared/Button';
 import { Z_INDEX, SHADOWS } from '../shared/theme';
-import { SUPPORTED_MEDIA_ACCEPT } from '../../../utils/media/SupportedMediaFormats';
+import { SUPPORTED_MEDIA_ACCEPT, SUPPORTED_PROJECT_ACCEPT } from '../../../utils/media/SupportedMediaFormats';
 import type { LayoutPreset, LayoutPresetId } from '../../layout/LayoutStore';
 import { ShotStatusBadge } from '../ShotStatusBadge';
 import { RepresentationSelector } from '../RepresentationSelector';
@@ -35,7 +35,7 @@ export interface HeaderBarEvents extends EventMap {
   showCustomKeyBindings: void;
   fileLoaded: void;
   saveProject: void;
-  openProject: File;
+  openProject: { file: File; availableFiles?: Map<string, File> };
   fullscreenToggle: void;
   presentationToggle: void;
   externalPresentation: void;
@@ -235,7 +235,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     // Hidden file input for project files
     this.projectInput = document.createElement('input');
     this.projectInput.type = 'file';
-    this.projectInput.accept = '.orvproject';
+    this.projectInput.accept = SUPPORTED_PROJECT_ACCEPT;
     this.projectInput.style.display = 'none';
     this.projectInput.addEventListener('change', (e) => this.handleProjectOpen(e));
     this.container.appendChild(this.projectInput);
@@ -1462,14 +1462,15 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       pingpong: 'shuffle',
     };
     const labels: Record<LoopMode, string> = {
-      once: 'Once',
+      once: 'Play Once',
       loop: 'Loop',
-      pingpong: 'Ping',
+      pingpong: 'Ping-Pong',
     };
     const iconName = icons[this.session.loopMode];
     const label = labels[this.session.loopMode];
     this.loopButton.innerHTML = getIconSvg(iconName, 'sm');
-    this.loopButton.setAttribute('aria-label', `${label} — Cycle loop mode`);
+    this.loopButton.title = `${label} — Cycle loop mode (L)`;
+    this.loopButton.setAttribute('aria-label', `${label} — Cycle loop mode (L)`);
   }
 
   private updateDirectionButton(): void {
@@ -1534,27 +1535,15 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     );
 
     if (sessionFile) {
-      // If we have a session file, treat other files as potential media sources
-      const availableFiles = new Map<string, File[]>();
+      // If we have a session file, treat other non-session files as potential media sources
+      // Extra .rv/.gto files are excluded — the app only loads one session at a time
+      const availableFiles = new Map<string, File>();
       for (const file of fileArray) {
-        if (file !== sessionFile) {
-          const existing = availableFiles.get(file.name);
-          if (existing) {
-            existing.push(file);
-          } else {
-            availableFiles.set(file.name, [file]);
-          }
+        if (file !== sessionFile && !file.name.toLowerCase().endsWith('.rv') && !file.name.toLowerCase().endsWith('.gto')) {
+          availableFiles.set(file.name, file);
         }
       }
-
-      try {
-        const content = await sessionFile.arrayBuffer();
-        await this.session.loadFromGTO(content, availableFiles);
-        this.emit('fileLoaded', undefined);
-      } catch (err) {
-        console.error('Failed to load session file:', err);
-        showAlert(`Failed to load ${sessionFile.name}: ${err}`, { type: 'error', title: 'Load Error' });
-      }
+      this.emit('openProject', { file: sessionFile, availableFiles: availableFiles.size > 0 ? availableFiles : undefined });
 
       // Clear input
       input.value = '';
@@ -1621,7 +1610,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     const input = e.target as HTMLInputElement;
     const file = input.files?.[0];
     if (file) {
-      this.emit('openProject', file);
+      this.emit('openProject', { file });
     }
     input.value = '';
   }
