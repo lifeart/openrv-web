@@ -2583,3 +2583,16 @@ The `URLSession` interface gained `allSources` for URL-based lookup. `SessionURL
 - `e2e/app-initialization.spec.ts`
 - `e2e/header-bar-mobile-scroll.spec.ts`
 - `features/drag-drop-loading.md`
+
+## Issue #387: The RV/GTO companion-file resolution path is effectively unreachable from the shipped Open Project picker
+
+**Root cause**: The project file input only accepted `.orvproject` files, making it impossible to multi-select `.rv`/`.gto` files alongside companion media/CDL sidecar files.
+
+**Fix**: Expanded the project input's `accept` attribute to `SUPPORTED_PROJECT_ACCEPT` (includes project formats + all supported media extensions + `.cdl`). Enabled multi-select. Updated `handleProjectOpen` to separate the project file from companion files and pass them through the `openProject` event.
+
+**Tests added**: Updated HDR-U024 to verify expanded accept attribute and multi-select. Updated HDR-U131 for new accept string.
+
+**Files changed**:
+- `src/utils/media/SupportedMediaFormats.ts`
+- `src/ui/components/layout/HeaderBar.ts`
+- `src/ui/components/layout/HeaderBar.test.ts`

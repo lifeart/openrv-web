@@ -454,18 +454,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Users can trust auto-checkpoints to protect routine destructive actions that the shipped app never checkpoints.
   - That makes the documented safety net much narrower than it sounds, especially during active review/editing work where people are not explicitly loading projects.
 
-### 387. The RV/GTO companion-file resolution path is effectively unreachable from the shipped Open Project picker
-
-- Severity: Medium
-- Area: Project loading / session sidecars
-- Evidence:
-  - `openProject(file, companionFiles)` explicitly supports additional media/CDL sidecar files for `.rv` / `.gto` resolution in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L339) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L341) and [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L396) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L402).
-  - The header wiring forwards all selected files from the hidden project input to that API in [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L60) through [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L61).
-  - But the shipped project input only accepts `.orvproject,.rv,.gto,.rvedl` in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L226) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L231), so users cannot normally select the non-session media/CDL companion files that the resolver expects.
-- Impact:
-  - The code supports basename-based RV/GTO sidecar recovery, but the primary shipped Open Project picker does not let users provide the needed sidecar files.
-  - In practice that leaves drag-and-drop as the only obvious path for companion resolution, which makes the “Open Project” flow less capable than the underlying implementation suggests.
-
 ### 388. The Open Project picker allows multiple files, but the app still treats only the first selected file as the real project
 
 - Severity: Low
