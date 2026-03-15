@@ -30,20 +30,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Mu-compatible scripts can receive plausible source-representation node names and then fail when they try to use them as real node identities.
   - That is especially misleading because the API shape implies graph-backed media-rep wiring, but the returned node IDs are only local placeholders.
 
-### 262. Mu compat active media-representation selection never changes what `sourceMedia()` or `sourceMediaInfo()` report
-
-- Severity: Medium
-- Area: Mu compatibility / source representations
-- Evidence:
-  - `setActiveSourceMediaRep(...)` only updates `source.activeRep` in [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L602) through [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L610).
-  - `sourceMedia(...)` ignores `activeRep` and always returns `source.mediaPaths` from the base source record in [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L341) through [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L344).
-  - `sourceMediaInfo(...)` likewise ignores `activeRep` and always reports `file: source.mediaPaths[0]` plus the base source dimensions/range in [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L350) through [src/compat/MuSourceBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuSourceBridge.ts#L381).
-  - The tests confirm that active representation can be switched via `sourceMediaRep(name)` in [src/compat/__tests__/MuSourceBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuSourceBridge.test.ts#L524) through [src/compat/__tests__/MuSourceBridge.test.ts](/Users/lifeart/Repos/openrv-web/src/compat/__tests__/MuSourceBridge.test.ts#L538), but there is no test that `sourceMedia(...)` or `sourceMediaInfo(...)` reflect that switch.
-- Impact:
-  - Mu-compatible scripts can switch a source to `proxy` or another representation and still have follow-up media queries report the old base media.
-  - That breaks representation-aware workflows because the bridge advertises rep switching while its own read APIs continue to describe a different source state.
-
-
 ### 307. The adaptive `FrameCacheController` subsystem is fully implemented but never instantiated in production
 
 - Severity: Medium

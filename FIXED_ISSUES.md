@@ -2487,3 +2487,15 @@ The `URLSession` interface gained `allSources` for URL-based lookup. `SessionURL
 - `src/core/session/Session.ts`
 - `src/core/session/SessionAnnotations.test.ts`
 - `src/core/session/Session.state.test.ts`
+
+## Issue #262: Mu compat active media-representation selection never changes what `sourceMedia()` or `sourceMediaInfo()` report
+
+**Root cause**: `sourceMedia()` and `sourceMediaInfo()` always returned the base source's `mediaPaths`, ignoring the `activeRep` field even after `setActiveSourceMediaRep()` was called.
+
+**Fix**: Already resolved via `_getActiveMediaPaths()` helper that checks `activeRep` and returns the matching representation's media paths (falling back to base paths). Both `sourceMedia()` and `sourceMediaInfo()` were updated to use this helper.
+
+**Tests added**: 7 regression tests covering: base paths with no rep, rep paths after switching, auto-activated first rep, fallback for empty rep paths, and sourceMediaInfo reflecting the active rep.
+
+**Files changed**:
+- `src/compat/MuSourceBridge.ts` (previously fixed)
+- `src/compat/__tests__/MuSourceBridge.test.ts`
