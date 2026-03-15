@@ -1298,4 +1298,182 @@ describe('parseOTIOMultiTrack', () => {
       expect(multiResult.tracks[0]!.clips).toEqual(singleResult.clips);
     });
   });
+
+  describe('gap tracking', () => {
+    it('OTIO-M027: gaps are recorded in parsed track', () => {
+      const json = buildMultiTrackOTIOJson([
+        {
+          name: 'Video 1',
+          kind: 'Video',
+          children: [buildClip('shot_01', 0, 24), buildGap(12), buildClip('shot_02', 0, 24)],
+        },
+      ]);
+
+      const result = parseOTIOMultiTrack(json)!;
+      expect(result.gaps).toHaveLength(1);
+      expect(result.gaps[0]!.timelineInFrame).toBe(24);
+      expect(result.gaps[0]!.durationFrames).toBe(12);
+    });
+
+    it('OTIO-M028: gap at start of track is recorded', () => {
+      const json = buildMultiTrackOTIOJson([
+        {
+          name: 'Video 1',
+          kind: 'Video',
+          children: [buildGap(10), buildClip('shot_01', 0, 24)],
+        },
+      ]);
+
+      const result = parseOTIOMultiTrack(json)!;
+      expect(result.gaps).toHaveLength(1);
+      expect(result.gaps[0]!.timelineInFrame).toBe(0);
+      expect(result.gaps[0]!.durationFrames).toBe(10);
+    });
+
+    it('OTIO-M029: multiple gaps across tracks are flattened', () => {
+      const json = buildMultiTrackOTIOJson([
+        {
+          name: 'Video 1',
+          kind: 'Video',
+          children: [buildClip('v1_a', 0, 24), buildGap(6), buildClip('v1_b', 0, 24)],
+        },
+        {
+          name: 'Video 2',
+          kind: 'Video',
+          children: [buildGap(10), buildClip('v2_a', 0, 48)],
+        },
+      ]);
+
+      const result = parseOTIOMultiTrack(json)!;
+      expect(result.gaps).toHaveLength(2);
+      // Track 1 gap
+      expect(result.gaps[0]!.timelineInFrame).toBe(24);
+      expect(result.gaps[0]!.durationFrames).toBe(6);
+      // Track 2 gap
+      expect(result.gaps[1]!.timelineInFrame).toBe(0);
+      expect(result.gaps[1]!.durationFrames).toBe(10);
+    });
+
+    it('OTIO-M030: track with no gaps has empty gaps array', () => {
+      const json = buildMultiTrackOTIOJson([
+        {
+          name: 'Video 1',
+          kind: 'Video',
+          children: [buildClip('shot_01', 0, 48)],
+        },
+      ]);
+
+      const result = parseOTIOMultiTrack(json)!;
+      expect(result.gaps).toHaveLength(0);
+      expect(result.tracks[0]!.gaps).toHaveLength(0);
+    });
+  });
+
+  describe('marker parsing', () => {
+    function buildMarker(
+      name: string,
+      startFrame: number,
+      duration: number,
+      color?: string,
+      metadata?: Record<string, unknown>,
+    ) {
+      const m: Record<string, unknown> = {
+        OTIO_SCHEMA: 'Marker.1',
+        name,
+        marked_range: {
+          OTIO_SCHEMA: 'TimeRange.1',
+          start_time: { OTIO_SCHEMA: 'RationalTime.1', value: startFrame, rate: 24 },
+          duration: { OTIO_SCHEMA: 'RationalTime.1', value: duration, rate: 24 },
+        },
+      };
+      if (color) m.color = color;
+      if (metadata) m.metadata = metadata;
+      return m;
+    }
+
+    it('OTIO-M031: timeline-level markers are parsed', () => {
+      const json = buildMultiTrackOTIOJson(
+        [
+          {
+            name: 'Video 1',
+            kind: 'Video',
+            children: [buildClip('shot_01', 0, 48)],
+          },
+        ],
+        {
+          markers: [buildMarker('Note1', 10, 0, 'RED', { text: 'Fix' })],
+        },
+      );
+
+      const result = parseOTIOMultiTrack(json)!;
+      expect(result.markers).toHaveLength(1);
+      expect(result.markers[0]!.name).toBe('Note1');
+      expect(result.markers[0]!.color).toBe('RED');
+      expect(result.markers[0]!.timelineFrame).toBe(10);
+      expect(result.markers[0]!.durationFrames).toBe(0);
+      expect(result.markers[0]!.metadata).toEqual({ text: 'Fix' });
+    });
+
+    it('OTIO-M032: clip-level markers include timeline offset', () => {
+      const clipWithMarker = buildClip('shot_02', 0, 48);
+      (clipWithMarker as Record<string, unknown>).markers = [
+        buildMarker('ClipNote', 5, 3, 'GREEN'),
+      ];
+
+      const json = buildMultiTrackOTIOJson([
+        {
+          name: 'Video 1',
+          kind: 'Video',
+          children: [buildClip('shot_01', 0, 48), clipWithMarker],
+        },
+      ]);
+
+      const result = parseOTIOMultiTrack(json)!;
+      expect(result.markers).toHaveLength(1);
+      // shot_02 starts at timeline frame 48, marker is at frame 5 within it
+      expect(result.markers[0]!.name).toBe('ClipNote');
+      expect(result.markers[0]!.timelineFrame).toBe(53); // 48 + 5
+      expect(result.markers[0]!.durationFrames).toBe(3);
+    });
+
+    it('OTIO-M033: no markers returns empty array', () => {
+      const json = buildMultiTrackOTIOJson([
+        {
+          name: 'Video 1',
+          kind: 'Video',
+          children: [buildClip('shot_01', 0, 48)],
+        },
+      ]);
+
+      const result = parseOTIOMultiTrack(json)!;
+      expect(result.markers).toHaveLength(0);
+    });
+
+    it('OTIO-M034: multiple timeline markers are parsed', () => {
+      const json = buildMultiTrackOTIOJson(
+        [
+          {
+            name: 'Video 1',
+            kind: 'Video',
+            children: [buildClip('shot_01', 0, 100)],
+          },
+        ],
+        {
+          markers: [
+            buildMarker('Marker1', 0, 0, 'RED'),
+            buildMarker('Marker2', 50, 10, 'BLUE'),
+            buildMarker('Marker3', 90, 5, 'GREEN'),
+          ],
+        },
+      );
+
+      const result = parseOTIOMultiTrack(json)!;
+      expect(result.markers).toHaveLength(3);
+      expect(result.markers[0]!.name).toBe('Marker1');
+      expect(result.markers[1]!.name).toBe('Marker2');
+      expect(result.markers[1]!.timelineFrame).toBe(50);
+      expect(result.markers[1]!.durationFrames).toBe(10);
+      expect(result.markers[2]!.name).toBe('Marker3');
+    });
+  });
 });

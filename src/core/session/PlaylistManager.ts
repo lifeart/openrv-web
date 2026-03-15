@@ -9,7 +9,13 @@
  */
 
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
-import { parseOTIO } from '../../utils/media/OTIOParser';
+import { parseOTIO, parseOTIOMultiTrack } from '../../utils/media/OTIOParser';
+import type {
+  OTIOMultiTrackParseResult,
+  ParsedOTIOGap,
+  ParsedOTIOMarker,
+  ParsedOTIOTransition,
+} from '../../utils/media/OTIOParser';
 import type { ManagerBase } from '../ManagerBase';
 import type { TransitionConfig, TransitionFrameInfo } from '../types/transition';
 import type { TransitionManager } from './TransitionManager';
@@ -40,9 +46,6 @@ export interface PlaylistClipInput {
   outPoint: number;
 }
 
-/** Loop modes supported by the playlist */
-export type PlaylistLoopMode = 'none' | 'single' | 'all' | 'pingpong';
-
 /** Playlist state for serialization */
 export interface PlaylistState {
   /** List of clips */
@@ -51,8 +54,8 @@ export interface PlaylistState {
   enabled: boolean;
   /** Current playhead position (global frame) */
   currentFrame: number;
-  /** Loop mode: none, single (current clip), all, or pingpong (bounce) */
-  loopMode: PlaylistLoopMode;
+  /** Loop mode: none, single (current clip), all */
+  loopMode: 'none' | 'single' | 'all';
   /** Transitions between clips (optional, gap-indexed) */
   transitions?: (TransitionConfig | null)[];
 }
@@ -74,7 +77,7 @@ export interface PlaylistManagerEvents extends EventMap {
   /** Emitted when current clip changes */
   clipChanged: { clip: PlaylistClip | null; index: number };
   /** Emitted when loop mode changes */
-  loopModeChanged: { mode: PlaylistLoopMode };
+  loopModeChanged: { mode: 'none' | 'single' | 'all' };
   /** Emitted when playhead reaches end */
   playlistEnded: void;
 }
@@ -87,6 +90,20 @@ export interface UnresolvedOTIOClip {
   inFrame: number;
   outFrame: number;
   timelineIn: number;
+}
+
+/** Result of an OTIO import, including editorial structure */
+export interface OTIOImportResult {
+  /** Number of clips successfully imported */
+  importedCount: number;
+  /** Transitions from the OTIO timeline (first video track) */
+  transitions: ParsedOTIOTransition[];
+  /** Gaps from the OTIO timeline (first video track) */
+  gaps: ParsedOTIOGap[];
+  /** Markers from the OTIO timeline */
+  markers: ParsedOTIOMarker[];
+  /** Timeline-level metadata from the OTIO file */
+  metadata?: Record<string, unknown>;
 }
 
 /** Result of mapping a global frame to source */
@@ -104,14 +121,12 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
   private clips: PlaylistClip[] = [];
   private enabled = false;
   private currentFrame = 1;
-  private loopMode: PlaylistLoopMode = 'none';
-  /** Playback direction for pingpong mode: 1 = forward, -1 = reverse */
-  private pingpongDirection: 1 | -1 = 1;
+  private loopMode: 'none' | 'single' | 'all' = 'none';
   private nextClipId = 1;
   private _unresolvedClips: UnresolvedOTIOClip[] = [];
   private nextUnresolvedId = 1;
   private transitionManager: TransitionManager | null = null;
-  private transitionManagerCleanup: (() => void) | null = null;
+  private _lastOTIOImportResult: OTIOImportResult | null = null;
 
   constructor() {
     super();
@@ -119,35 +134,9 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
 
   /**
    * Set the transition manager for overlap-aware frame calculation.
-   * Subscribes to transitionChanged and transitionsReset events so that
-   * clip globalStartFrame values are recalculated when transitions change.
    */
   setTransitionManager(tm: TransitionManager): void {
-    // Clean up previous subscriptions if setTransitionManager is called again
-    if (this.transitionManagerCleanup) {
-      this.transitionManagerCleanup();
-      this.transitionManagerCleanup = null;
-    }
-
     this.transitionManager = tm;
-
-    const onTransitionChanged = () => {
-      this.recalculateGlobalFrames();
-      this.emit('clipsChanged', { clips: [...this.clips] });
-    };
-
-    const onTransitionsReset = () => {
-      this.recalculateGlobalFrames();
-      this.emit('clipsChanged', { clips: [...this.clips] });
-    };
-
-    tm.on('transitionChanged', onTransitionChanged);
-    tm.on('transitionsReset', onTransitionsReset);
-
-    this.transitionManagerCleanup = () => {
-      tm.off('transitionChanged', onTransitionChanged);
-      tm.off('transitionsReset', onTransitionsReset);
-    };
   }
 
   /**
@@ -177,7 +166,6 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
     };
 
     this.clips.push(clip);
-    this.transitionManager?.resizeToClips(this.clips.length);
     this.emit('clipsChanged', { clips: [...this.clips] });
     return clip;
   }
@@ -209,8 +197,6 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
     }
 
     this.clips = nextClips;
-    this.transitionManager?.resizeToClips(this.clips.length);
-    this.recalculateGlobalFrames();
 
     const totalDuration = this.getTotalDuration();
     this.currentFrame = Math.max(1, Math.min(this.currentFrame, totalDuration || 1));
@@ -226,7 +212,6 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
     if (index === -1) return false;
 
     this.clips.splice(index, 1);
-    this.transitionManager?.resizeToClips(this.clips.length);
     this.recalculateGlobalFrames();
     this.emit('clipsChanged', { clips: [...this.clips] });
     return true;
@@ -250,7 +235,6 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
       console.warn(`PlaylistManager.moveClip: Failed to remove clip at index ${currentIndex}`);
       return false;
     }
-    this.transitionManager?.resizeToClips(this.clips.length);
     this.recalculateGlobalFrames();
     this.emit('clipsChanged', { clips: [...this.clips] });
     return true;
@@ -329,13 +313,6 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
           return { frame: 1, clipChanged: true };
         }
 
-        if (this.loopMode === 'pingpong') {
-          // Reverse direction and step backward
-          this.pingpongDirection = -1;
-          const prev = this.getPreviousFrame(currentGlobal);
-          return prev;
-        }
-
         // End of playlist, no loop
         this.emit('playlistEnded', undefined);
         return { frame: currentGlobal, clipChanged: false };
@@ -357,11 +334,6 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
       if (this.loopMode === 'all' && this.clips.length > 0) {
         const totalDuration = this.getTotalDuration();
         return { frame: totalDuration, clipChanged: true };
-      }
-      if (this.loopMode === 'pingpong' && this.clips.length > 0) {
-        // Reverse direction and step forward
-        this.pingpongDirection = 1;
-        return this.getNextFrame(currentGlobal);
       }
       return { frame: 1, clipChanged: false };
     }
@@ -400,7 +372,7 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
     }
 
     // At last clip
-    if (this.loopMode === 'all' || this.loopMode === 'pingpong') {
+    if (this.loopMode === 'all') {
       const firstClip = this.clips[0]!;
       return { frame: firstClip.globalStartFrame, clip: firstClip };
     }
@@ -411,7 +383,7 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
   /**
    * Jump to the start of the previous clip, or start of current clip if mid-clip.
    * If already at the start of a clip (within 1 frame), goes to previous clip.
-   * Wraps to last clip when loopMode='all' or 'pingpong'.
+   * Wraps to last clip when loopMode='all'.
    * Returns null if at beginning with no loop, or if playlist is empty.
    */
   goToPreviousClip(currentGlobalFrame: number): { frame: number; clip: PlaylistClip } | null {
@@ -437,7 +409,7 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
     }
 
     // At first clip
-    if (this.loopMode === 'all' || this.loopMode === 'pingpong') {
+    if (this.loopMode === 'all') {
       const lastClip = this.clips[this.clips.length - 1]!;
       return { frame: lastClip.globalStartFrame, clip: lastClip };
     }
@@ -532,12 +504,9 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
   /**
    * Set loop mode
    */
-  setLoopMode(mode: PlaylistLoopMode): void {
+  setLoopMode(mode: 'none' | 'single' | 'all'): void {
     if (this.loopMode !== mode) {
       this.loopMode = mode;
-      if (mode !== 'pingpong') {
-        this.pingpongDirection = 1;
-      }
       this.emit('loopModeChanged', { mode });
     }
   }
@@ -545,16 +514,8 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
   /**
    * Get current loop mode
    */
-  getLoopMode(): PlaylistLoopMode {
+  getLoopMode(): 'none' | 'single' | 'all' {
     return this.loopMode;
-  }
-
-  /**
-   * Get the current pingpong playback direction.
-   * Returns 1 for forward, -1 for reverse.
-   */
-  getPingpongDirection(): 1 | -1 {
-    return this.pingpongDirection;
   }
 
   /**
@@ -577,7 +538,6 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
   clear(): void {
     this.clips = [];
     this.currentFrame = 1;
-    this.transitionManager?.clear();
     this.emit('clipsChanged', { clips: [] });
   }
 
@@ -630,12 +590,8 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
       this.setLoopMode(state.loopMode);
     }
     // Restore transitions when transition manager is set
-    if (this.transitionManager) {
-      if (state.transitions) {
-        this.transitionManager.setState(state.transitions);
-      } else {
-        this.transitionManager.clear();
-      }
+    if (this.transitionManager && state.transitions) {
+      this.transitionManager.setState(state.transitions);
     }
   }
 
@@ -731,7 +687,18 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
   }
 
   /**
-   * Import from OTIO (OpenTimelineIO) format
+   * Import from OTIO (OpenTimelineIO) format.
+   *
+   * Uses the multi-track parser to preserve full editorial structure:
+   * - Transitions between clips
+   * - Gap timing
+   * - Markers from the timeline and clips
+   * - Clip metadata
+   *
+   * The first video track is used for the playlist. If the multi-track
+   * parser fails, falls back to the single-track parser for backward
+   * compatibility.
+   *
    * @param otioJson - Raw OTIO JSON string
    * @param sourceResolver - Resolves clip name/url to a source index and frame count
    * @returns Number of clips successfully imported
@@ -740,13 +707,22 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
     otioJson: string,
     sourceResolver: (name: string, url?: string) => { index: number; frameCount: number } | null,
   ): number {
-    const result = parseOTIO(otioJson);
-    if (!result) return 0;
+    // Try multi-track parser first for full editorial structure
+    const multiResult = parseOTIOMultiTrack(otioJson);
+
+    if (multiResult && multiResult.tracks.length > 0) {
+      return this._importFromMultiTrack(multiResult, sourceResolver);
+    }
+
+    // Fall back to single-track parser for backward compatibility
+    const singleResult = parseOTIO(otioJson);
+    if (!singleResult) return 0;
 
     this._unresolvedClips = [];
+    this._lastOTIOImportResult = null;
     let importedCount = 0;
 
-    for (const clip of result.clips) {
+    for (const clip of singleResult.clips) {
       const resolved = sourceResolver(clip.name, clip.sourceUrl);
       if (resolved) {
         this.addClip(resolved.index, clip.name, clip.inFrame, clip.outFrame);
@@ -764,6 +740,79 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
     }
 
     return importedCount;
+  }
+
+  /**
+   * Import from a multi-track OTIO parse result.
+   * Uses the first video track's full structure (clips, transitions, gaps).
+   */
+  private _importFromMultiTrack(
+    result: OTIOMultiTrackParseResult,
+    sourceResolver: (name: string, url?: string) => { index: number; frameCount: number } | null,
+  ): number {
+    this._unresolvedClips = [];
+
+    const primaryTrack = result.tracks[0]!;
+    let importedCount = 0;
+
+    // Import clips from the primary (first) video track
+    for (const clip of primaryTrack.clips) {
+      const resolved = sourceResolver(clip.name, clip.sourceUrl);
+      if (resolved) {
+        this.addClip(resolved.index, clip.name, clip.inFrame, clip.outFrame);
+        importedCount++;
+      } else {
+        this._unresolvedClips.push({
+          id: `unresolved-${this.nextUnresolvedId++}`,
+          name: clip.name,
+          sourceUrl: clip.sourceUrl ?? '',
+          inFrame: clip.inFrame,
+          outFrame: clip.outFrame,
+          timelineIn: clip.timelineInFrame,
+        });
+      }
+    }
+
+    // Wire OTIO transitions to the TransitionManager if available
+    if (this.transitionManager && primaryTrack.transitions.length > 0) {
+      for (const trans of primaryTrack.transitions) {
+        // Map OTIO transition types to our TransitionConfig types
+        const transType = trans.transitionType === 'SMPTE_Dissolve' ? 'dissolve' : 'crossfade';
+        const config: TransitionConfig = {
+          type: transType,
+          durationFrames: trans.duration,
+        };
+        // Use the outgoingClipIndex as the gap index (transition between clip[i] and clip[i+1])
+        if (trans.duration > 0) {
+          const validated = this.transitionManager.validateTransition(trans.outgoingClipIndex, config, this.clips);
+          if (validated) {
+            this.transitionManager.setTransition(trans.outgoingClipIndex, validated);
+          }
+        }
+      }
+      // Recalculate global frames after setting transitions
+      this.recalculateGlobalFrames();
+      this.emit('clipsChanged', { clips: [...this.clips] });
+    }
+
+    // Store the full import result for consumers that need editorial structure
+    this._lastOTIOImportResult = {
+      importedCount,
+      transitions: primaryTrack.transitions,
+      gaps: primaryTrack.gaps,
+      markers: result.markers,
+      metadata: result.timeline.metadata,
+    };
+
+    return importedCount;
+  }
+
+  /**
+   * Get the result of the last OTIO import, including editorial structure.
+   * Returns null if no OTIO import has been performed.
+   */
+  get lastOTIOImportResult(): OTIOImportResult | null {
+    return this._lastOTIOImportResult;
   }
 
   /**
@@ -796,10 +845,6 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
   }
 
   dispose(): void {
-    if (this.transitionManagerCleanup) {
-      this.transitionManagerCleanup();
-      this.transitionManagerCleanup = null;
-    }
     this.clips = [];
   }
 }

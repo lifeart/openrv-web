@@ -27,12 +27,22 @@ export interface OTIOMediaReference {
   available_range?: OTIOTimeRange;
 }
 
+/** OTIO marker */
+export interface OTIOMarker {
+  OTIO_SCHEMA: 'Marker.1';
+  name: string;
+  color?: string;
+  marked_range?: OTIOTimeRange;
+  metadata?: Record<string, unknown>;
+}
+
 /** OTIO clip */
 export interface OTIOClip {
   OTIO_SCHEMA: 'Clip.1';
   name: string;
   source_range?: OTIOTimeRange;
   media_reference?: OTIOMediaReference;
+  markers?: OTIOMarker[];
   metadata?: Record<string, unknown>;
 }
 
@@ -77,6 +87,7 @@ export interface OTIOTimeline {
   name: string;
   global_start_time?: OTIORationalTime;
   tracks: OTIOStack;
+  markers?: OTIOMarker[];
   metadata?: Record<string, unknown>;
 }
 
@@ -89,6 +100,28 @@ export interface ParsedOTIOClip {
   timelineInFrame: number;
   timelineOutFrame: number;
   metadata?: Record<string, unknown>;
+}
+
+/** Parsed marker for playlist integration */
+export interface ParsedOTIOMarker {
+  /** Display name of the marker */
+  name: string;
+  /** Marker color (e.g. 'RED', 'GREEN', 'BLUE') */
+  color?: string;
+  /** Frame where the marker starts on the timeline */
+  timelineFrame: number;
+  /** Duration in frames (0 for point markers) */
+  durationFrames: number;
+  /** Optional metadata */
+  metadata?: Record<string, unknown>;
+}
+
+/** Parsed gap for preserving gap timing */
+export interface ParsedOTIOGap {
+  /** Timeline frame where the gap begins */
+  timelineInFrame: number;
+  /** Duration in frames */
+  durationFrames: number;
 }
 
 /** Supported transition types */
@@ -132,6 +165,8 @@ export interface ParsedOTIOTrack {
   clips: ParsedOTIOClip[];
   /** Transitions within this track */
   transitions: ParsedOTIOTransition[];
+  /** Gaps within this track */
+  gaps: ParsedOTIOGap[];
   /** Total frames for this track */
   totalFrames: number;
 }
@@ -153,6 +188,10 @@ export interface OTIOMultiTrackParseResult {
   clips: ParsedOTIOClip[];
   /** Flattened transitions from all tracks */
   transitions: ParsedOTIOTransition[];
+  /** Flattened gaps from all tracks */
+  gaps: ParsedOTIOGap[];
+  /** Markers from the timeline and clips */
+  markers: ParsedOTIOMarker[];
   fps: number;
   /** Total frames = max of all track durations */
   totalFrames: number;
@@ -197,6 +236,7 @@ function normalizeTransitionType(raw?: string): TransitionType {
 function parseTrack(track: OTIOTrack, fps: number): ParsedOTIOTrack {
   const clips: ParsedOTIOClip[] = [];
   const transitions: ParsedOTIOTransition[] = [];
+  const gaps: ParsedOTIOGap[] = [];
   let timelinePosition = 0;
 
   // First pass: we need to figure out clip indices for transitions.
@@ -275,7 +315,14 @@ function parseTrack(track: OTIOTrack, fps: number): ParsedOTIOTrack {
     } else if (item.OTIO_SCHEMA === 'Gap.1') {
       const gap = item as OTIOGap;
       if (gap.source_range) {
-        timelinePosition += timeRangeDurationFrames(gap.source_range, fps);
+        const gapDuration = timeRangeDurationFrames(gap.source_range, fps);
+        if (gapDuration > 0) {
+          gaps.push({
+            timelineInFrame: timelinePosition,
+            durationFrames: gapDuration,
+          });
+        }
+        timelinePosition += gapDuration;
       }
     } else if (item.OTIO_SCHEMA === 'Transition.1') {
       // Store the transition; it will be resolved when the next clip is encountered.
@@ -291,6 +338,7 @@ function parseTrack(track: OTIOTrack, fps: number): ParsedOTIOTrack {
     name: track.name,
     clips,
     transitions,
+    gaps,
     totalFrames: timelinePosition,
   };
 }
@@ -344,6 +392,40 @@ export function parseOTIO(jsonString: string): OTIOParseResult | null {
 }
 
 /**
+ * Parse an array of OTIO markers into ParsedOTIOMarker objects.
+ * The timelineOffset is added to each marker's position.
+ */
+function parseMarkers(
+  markers: OTIOMarker[] | undefined,
+  fps: number,
+  timelineOffset: number,
+): ParsedOTIOMarker[] {
+  if (!markers || !Array.isArray(markers)) return [];
+
+  const result: ParsedOTIOMarker[] = [];
+  for (const m of markers) {
+    if (m.OTIO_SCHEMA !== 'Marker.1') continue;
+
+    let timelineFrame = timelineOffset;
+    let durationFrames = 0;
+
+    if (m.marked_range) {
+      timelineFrame += rationalTimeToFrames(m.marked_range.start_time, fps);
+      durationFrames = timeRangeDurationFrames(m.marked_range, fps);
+    }
+
+    result.push({
+      name: m.name ?? '',
+      color: m.color,
+      timelineFrame,
+      durationFrames,
+      metadata: m.metadata,
+    });
+  }
+  return result;
+}
+
+/**
  * Parse OTIO JSON string with full multi-track and transition support.
  * Returns all video tracks, their clips, and transitions.
  * @returns Multi-track parse result or null if invalid
@@ -362,6 +444,8 @@ export function parseOTIOMultiTrack(jsonString: string): OTIOMultiTrackParseResu
   const tracks: ParsedOTIOTrack[] = [];
   const allClips: ParsedOTIOClip[] = [];
   const allTransitions: ParsedOTIOTransition[] = [];
+  const allGaps: ParsedOTIOGap[] = [];
+  const allMarkers: ParsedOTIOMarker[] = [];
   let maxTotalFrames = 0;
 
   for (const vt of videoTracks) {
@@ -369,16 +453,33 @@ export function parseOTIOMultiTrack(jsonString: string): OTIOMultiTrackParseResu
     tracks.push(parsed);
     allClips.push(...parsed.clips);
     allTransitions.push(...parsed.transitions);
+    allGaps.push(...parsed.gaps);
     if (parsed.totalFrames > maxTotalFrames) {
       maxTotalFrames = parsed.totalFrames;
     }
+
+    // Collect markers from clips in this track
+    for (const clip of parsed.clips) {
+      // Find the original OTIO clip to get its markers
+      const otioClip = vt.children.find(
+        (c) => c.OTIO_SCHEMA === 'Clip.1' && (c as OTIOClip).name === clip.name,
+      ) as OTIOClip | undefined;
+      if (otioClip?.markers) {
+        allMarkers.push(...parseMarkers(otioClip.markers, fps, clip.timelineInFrame));
+      }
+    }
   }
+
+  // Parse timeline-level markers
+  allMarkers.push(...parseMarkers(timeline.markers, fps, 0));
 
   return {
     timeline,
     tracks,
     clips: allClips,
     transitions: allTransitions,
+    gaps: allGaps,
+    markers: allMarkers,
     fps,
     totalFrames: maxTotalFrames,
   };
