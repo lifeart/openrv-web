@@ -472,7 +472,9 @@ export class PluginRegistry {
         return registry.apiRef;
       },
       events: registry.eventBus.createSubscription(manifest.id),
-      settings: registry.settingsStore.createAccessor(manifest.id),
+      settings: manifest.settingsSchema
+        ? registry.settingsStore.createAccessor(manifest.id)
+        : registry.settingsStore.createNoopAccessor(manifest.id),
       log: {
         info: (msg: string, ...args: unknown[]) => console.log(`[plugin:${manifest.id}]`, msg, ...args),
         warn: (msg: string, ...args: unknown[]) => console.warn(`[plugin:${manifest.id}]`, msg, ...args),

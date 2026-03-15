@@ -278,6 +278,34 @@ export class PluginSettingsStore {
     };
   }
 
+  /**
+   * Create a no-op settings accessor for plugins without a settingsSchema.
+   * All read operations return undefined/empty; write operations log a warning
+   * instead of throwing, so the accessor is never a "trap" that blows up at runtime.
+   */
+  createNoopAccessor(pluginId: PluginId): PluginSettingsAccessor {
+    return {
+      get<T = unknown>(_key: string): T {
+        return undefined as T;
+      },
+      set(key: string, _value: unknown): boolean {
+        console.warn(
+          `[plugin:${pluginId}] Attempted to set setting "${key}" but this plugin has no settingsSchema`,
+        );
+        return false;
+      },
+      getAll(): Record<string, unknown> {
+        return {};
+      },
+      onChange(_key: string, _callback: (value: unknown, oldValue: unknown) => void): () => void {
+        return () => {};
+      },
+      reset(): void {
+        // no-op: nothing to reset without a schema
+      },
+    };
+  }
+
   // -----------------------------------------------------------------------
   // Internal
   // -----------------------------------------------------------------------

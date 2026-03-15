@@ -448,6 +448,41 @@ describe('PluginSettingsStore', () => {
     });
   });
 
+  describe('createNoopAccessor', () => {
+    it('PSET-160: noop accessor get() returns undefined', () => {
+      const accessor = store.createNoopAccessor('no.schema.plugin');
+      expect(accessor.get('anything')).toBeUndefined();
+    });
+
+    it('PSET-161: noop accessor getAll() returns empty object', () => {
+      const accessor = store.createNoopAccessor('no.schema.plugin');
+      expect(accessor.getAll()).toEqual({});
+    });
+
+    it('PSET-162: noop accessor set() warns instead of throwing', () => {
+      const accessor = store.createNoopAccessor('no.schema.plugin');
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const result = accessor.set('key', 'value');
+      expect(result).toBe(false);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('no settingsSchema'),
+      );
+      warnSpy.mockRestore();
+    });
+
+    it('PSET-163: noop accessor onChange() returns working unsubscribe', () => {
+      const accessor = store.createNoopAccessor('no.schema.plugin');
+      const unsub = accessor.onChange('key', vi.fn());
+      expect(typeof unsub).toBe('function');
+      expect(() => unsub()).not.toThrow();
+    });
+
+    it('PSET-164: noop accessor reset() is a no-op', () => {
+      const accessor = store.createNoopAccessor('no.schema.plugin');
+      expect(() => accessor.reset()).not.toThrow();
+    });
+  });
+
   describe('accessor unsubscribe', () => {
     it('PSET-044: accessor onChange returns working unsubscribe function', () => {
       store.registerSchema('test.plugin', testSchema);
