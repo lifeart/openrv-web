@@ -2301,3 +2301,152 @@ Called from `fromJSON()` inside the existing `if (mediaIndexMap.size > 0)` block
 - `src/api/OpenRVAPI.test.ts`
 - `src/plugin/PluginRegistry.test.ts`
 - `src/plugin/PluginEventBus.test.ts`
+
+## Issue #424: RV/GTO crop restore fails for still-image sessions (RVImageSource)
+
+**Root cause**: `SessionGraph.parseSession()` only extracted `sourceWidth`/`sourceHeight` from `RVFileSource` protocol nodes. Still-image sessions exported as `RVImageSource` were missed, leaving dimensions at 0. This caused `parseCrop()` to fall back to `{ x: 0, y: 0, width: 1, height: 1 }` (full-frame), discarding the authored crop.
+
+**Fix**: After the `RVFileSource` loop, if dimensions are still 0, now also iterates `RVImageSource` protocol nodes using the same proxy-size extraction logic. `RVFileSource` always takes precedence.
+
+**Tests added**: 4 regression tests (ISS-424-001 through ISS-424-004) covering RVImageSource crop, precedence, fallback, and crash safety.
+
+**Files changed**:
+- `src/core/session/SessionGraph.ts`
+- `src/core/session/SessionGraph.issue424.test.ts` (new)
+
+## Issue #425: RV/GTO paint annotation aspect ratio wrong for RVImageSource sessions
+
+**Root cause**: Same as #424 — `aspectRatio` was only computed from `RVFileSource`. Already resolved by the #424 fix which also computes aspect ratio in the `RVImageSource` fallback path.
+
+**Fix**: Covered by #424 fix. Regression tests added to verify correct aspect ratio is passed to `parsePaintAnnotations()`.
+
+**Tests added**: 6 regression tests (ISS-425-001 through ISS-425-006) covering aspect ratio from RVImageSource, RVFileSource, precedence, defaults, non-square, and square sources.
+
+**Files changed**:
+- `src/core/session/SessionGraph.issue425.test.ts` (new)
+
+## Issue #427: Multi-source RV/GTO imports use inconsistent dimensions for crop vs annotations
+
+**Root cause**: The `RVFileSource` loop overwrote `aspectRatio` on every source while `sourceWidth`/`sourceHeight` were only set from the first. Crop used first source's dimensions; annotations used last source's aspect ratio.
+
+**Fix**: Moved `aspectRatio` computation inside the `if (sourceWidth === 0 && sourceHeight === 0)` guard in both the `RVFileSource` and `RVImageSource` loops. Now both crop and annotation geometry consistently use the first source's dimensions.
+
+**Tests added**: 5 regression tests (ISS-427-001 through ISS-427-005) covering multi-source aspect ratio, multi-source crop, single-source regression, multi-source RVImageSource, and 3-source consistency.
+
+**Files changed**:
+- `src/core/session/SessionGraph.ts`
+- `src/core/session/SessionGraph.issue427.test.ts` (new)
+
+## Issue #417: RV/GTO parser never populates filterSettings despite contract
+
+**Root cause**: `parseInitialSettings()` in `GTOSettingsParser.ts` had no `parseFilterSettings()` step, even though the `GTOViewSettings` type defined `filterSettings` and the live restore handler had a corresponding branch.
+
+**Fix**: Added `parseFilterSettings()` that reads `RVFilterGaussian` (radius → blur) and `RVUnsharpMask` (amount → sharpen) protocol nodes with proper clamping, rounding, and active-flag handling. Wired into `parseInitialSettings()`.
+
+**Tests added**: 12 regression tests covering no nodes, individual parsing, combined, clamping, rounding, inactive, zero, negative, and missing properties.
+
+**Files changed**:
+- `src/core/session/GTOSettingsParser.ts`
+- `src/core/session/GTOSettingsParser.test.ts`
+
+## Issue #418: RV/GTO parser never populates stereo eye transforms and align mode
+
+**Root cause**: `parseInitialSettings()` never parsed `stereoEyeTransform` or `stereoAlignMode` from GTO data, even though the settings type and restore handler supported them.
+
+**Fix**: Added `parseStereoEyeTransform()` and `parseStereoAlignMode()` that read from `RVDisplayStereo` protocol nodes. Extended `SessionGTOExporter` to serialize eye transforms and align mode for round-trip support.
+
+**Tests added**: 18 regression tests covering eye transform parsing (left/right/both/linked/defaults/clamping/partial) and align mode (all valid modes, invalid, missing).
+
+**Files changed**:
+- `src/core/session/GTOSettingsParser.ts`
+- `src/core/session/SessionGTOExporter.ts`
+- `src/core/session/GTOSettingsParser.test.ts`
+
+## Issue #421: RV/GTO settings restore ignores standalone RVColorCDL nodes
+
+**Root cause**: `parseCDL()` only read CDL from `RVColor` and `RVLinearize` nodes. Standalone `RVColorCDL` and `RVColorACESLogCDL` nodes (used by the repo's own serializer/exporter/loader) were ignored.
+
+**Fix**: Added `readCDLFromStandaloneNodes()` that reads from the `node` component of `RVColorCDL`/`RVColorACESLogCDL` protocols. Uses proper precedence chain: `RVColor >> RVLinearize >> RVColorCDL >> RVColorACESLogCDL`.
+
+**Tests added**: 7 regression tests covering both standalone protocols, inactive nodes, no-node case, precedence, and fallback behavior.
+
+**Files changed**:
+- `src/core/session/GTOSettingsParser.ts`
+- `src/core/session/GTOSettingsParser.test.ts`
+
+## Issue #422: RV/GTO settings restore ignores standalone color-node protocols (exposure, saturation, etc.)
+
+**Root cause**: Color adjustment parsing only read from `RVColor`/`RVDisplayColor`. Standalone nodes like `RVColorExposure`, `RVColorSaturation`, `RVColorVibrance`, `RVColorShadow`, `RVColorHighlight` were ignored despite being recognized by the loader and serializer.
+
+**Fix**: Added `applyStandaloneColorNode()` helper that reads from standalone color-node protocols as fallbacks. Only fills gaps — `RVColor`/`RVDisplayColor` values always take precedence.
+
+**Tests added**: 14 regression tests covering each standalone node, inactive skipping, precedence, combined parsing, and mixed scenarios.
+
+**Files changed**:
+- `src/core/session/GTOSettingsParser.ts`
+- `src/core/session/GTOSettingsParser.test.ts`
+
+## Issue #383: File-reload dialog has no real Cancel path (Escape/X treated as Skip)
+
+**Root cause**: The file-reload dialog only had Browse, Load, and Skip buttons. Escape and X resolved `null` (same as Skip), so there was no way to abort the restore flow.
+
+**Fix**: Added `FILE_RELOAD_CANCEL` sentinel. Added Cancel button. Changed Escape/X to resolve as cancel instead of skip. Updated `SessionSerializer.fromJSON()` to throw on cancel, aborting the restore. Skip button still works as before.
+
+**Tests added**: 6 regression tests covering cancel sentinel, cancel on file/sequence reload, skip still works, cancel mid-restore aborts, and non-blob sequence cancel.
+
+**Files changed**:
+- `src/ui/components/shared/Modal.ts`
+- `src/core/session/SessionSerializer.ts`
+- `src/core/session/SessionSerializer.issue383.test.ts` (new)
+- `docs/export/sessions.md`
+
+## Issue #389: Open Project picker accepts .rvedl (EDL is not a project)
+
+**Root cause**: The project input accepted `.orvproject,.rv,.gto,.rvedl`, but `.rvedl` only imports an EDL timeline — it doesn't restore project state. Including it in "Open project" was misleading.
+
+**Fix**: Removed `.rvedl` from the project input's accept list. EDL import remains available via the `Open media file` path.
+
+**Tests added**: 1 regression test (HDR-U027) verifying no file input includes `.rvedl`.
+
+**Files changed**:
+- `src/ui/components/layout/HeaderBar.ts`
+- `src/ui/components/layout/HeaderBar.test.ts`
+
+## Issue #436: Outbound collaboration updates silently dropped on send failure
+
+**Root cause**: `NetworkSyncManager.dispatchRealtimeMessage()` tried WebSocket then serverless peer but ignored whether the fallback succeeded. Failed sends were never surfaced.
+
+**Fix**: `dispatchRealtimeMessage()` now returns `boolean`, tracks `_droppedMessageCount`, and emits `syncMessageDropped` event when both transports fail.
+
+**Tests added**: 6 regression tests (NSM-130 through NSM-135) covering failure tracking, event emission, accumulation, and success cases.
+
+**Files changed**:
+- `src/network/NetworkSyncManager.ts`
+- `src/network/types.ts`
+- `src/network/NetworkSyncManager.test.ts`
+
+## Issue #443: Outbound DCC sync events silently dropped when bridge not writable
+
+**Root cause**: `DCCBridge.send()` returned `false` when not writable, but `AppDCCWiring.ts` ignored the return value for all outbound sync paths.
+
+**Fix**: `DCCBridge` now tracks `_droppedMessageCount` and emits `messageDropped` event. `AppDCCWiring` checks return values and logs warnings via `Logger.warn`.
+
+**Tests added**: 4 DCCBridge tests (DCC-OUT-006 through DCC-OUT-008) and 4 AppDCCWiring tests (DCCFIX-070 through DCCFIX-073).
+
+**Files changed**:
+- `src/integrations/DCCBridge.ts`
+- `src/AppDCCWiring.ts`
+- `src/integrations/DCCBridge.test.ts`
+- `src/AppWiringFixes.test.ts`
+
+## Issue #394: Locally loaded image sequences don't round-trip through project save/load
+
+**Root cause**: Sequences created from local files have `url: ''`. `serializeMedia()` only checked for blob URLs to set `requiresReload`, so empty-URL sequences were saved without the flag and couldn't trigger the reload dialog on load.
+
+**Fix**: Extended the `requiresReload` condition to also check for empty URLs: `const needsReload = isBlob || source.url === '';`.
+
+**Tests added**: 8 regression tests (ISS-394-001 through ISS-394-008) covering serialization flag, reload prompt, cancel, skip variants, load failure, round-trip, and blob URL regression.
+
+**Files changed**:
+- `src/core/session/SessionSerializer.ts`
+- `src/core/session/SessionSerializer.issue394.test.ts` (new)

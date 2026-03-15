@@ -262,7 +262,10 @@ export function wireDCCBridge(deps: DCCWiringDeps): DCCWiringState {
   subs.add(
     session.on('frameChanged', () => {
       if (!state.suppressFrameSync) {
-        dccBridge.sendFrameChanged(session.currentFrame, session.frameCount);
+        const sent = dccBridge.sendFrameChanged(session.currentFrame, session.frameCount);
+        if (!sent) {
+          log.warn('DCC frame sync dropped: bridge is not writable');
+        }
       }
     }),
   );
@@ -270,12 +273,15 @@ export function wireDCCBridge(deps: DCCWiringDeps): DCCWiringState {
   // Outbound: adjustmentsChanged -> send color to DCC bridge
   subs.add(
     colorControls.on('adjustmentsChanged', (adjustments: ColorAdjustments) => {
-      dccBridge.sendColorChanged({
+      const sent = dccBridge.sendColorChanged({
         exposure: adjustments.exposure,
         gamma: adjustments.gamma,
         temperature: adjustments.temperature,
         tint: adjustments.tint,
       });
+      if (!sent) {
+        log.warn('DCC color sync dropped: bridge is not writable');
+      }
     }),
   );
 
@@ -283,11 +289,14 @@ export function wireDCCBridge(deps: DCCWiringDeps): DCCWiringState {
   if (paintEngine) {
     subs.add(
       paintEngine.on('strokeAdded', (annotation: Annotation) => {
-        dccBridge.sendAnnotationAdded(
+        const sent = dccBridge.sendAnnotationAdded(
           annotation.frame,
           mapAnnotationType(annotation),
           annotation.id,
         );
+        if (!sent) {
+          log.warn('DCC annotation sync dropped: bridge is not writable');
+        }
       }),
     );
   }

@@ -18,6 +18,7 @@ import { DEFAULT_STEREO_EYE_TRANSFORM_STATE, DEFAULT_STEREO_ALIGN_MODE } from '.
 // Mock the showFileReloadPrompt dialog
 vi.mock('../../ui/components/shared/Modal', () => ({
   showFileReloadPrompt: vi.fn(),
+  FILE_RELOAD_CANCEL: 'cancel',
 }));
 
 beforeEach(() => {

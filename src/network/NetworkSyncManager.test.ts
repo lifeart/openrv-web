@@ -831,4 +831,122 @@ describe('NetworkSyncManager', () => {
       // No warning toast
     });
   });
+
+  describe('dropped message tracking (issue #436)', () => {
+    it('NSM-130: dispatchRealtimeMessage returns false and increments counter when both transports fail', () => {
+      manager._applyLocalRoomCreation();
+
+      // wsClient.send returns false (not connected to WS), no serverless peer
+      const result = (manager as any).dispatchRealtimeMessage({
+        id: 'msg-1',
+        type: 'sync.playback',
+        roomId: manager.roomInfo!.roomId,
+        userId: manager.userId,
+        timestamp: Date.now(),
+        payload: {},
+      });
+
+      expect(result).toBe(false);
+      expect(manager.droppedMessageCount).toBe(1);
+    });
+
+    it('NSM-131: emits syncMessageDropped event when message is dropped', () => {
+      manager._applyLocalRoomCreation();
+
+      const handler = vi.fn();
+      manager.on('syncMessageDropped', handler);
+
+      (manager as any).dispatchRealtimeMessage({
+        id: 'msg-2',
+        type: 'sync.frame',
+        roomId: manager.roomInfo!.roomId,
+        userId: manager.userId,
+        timestamp: Date.now(),
+        payload: {},
+      });
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(handler).toHaveBeenCalledWith({
+        messageType: 'sync.frame',
+        droppedCount: 1,
+      });
+    });
+
+    it('NSM-132: droppedMessageCount accumulates across multiple failures', () => {
+      manager._applyLocalRoomCreation();
+
+      const handler = vi.fn();
+      manager.on('syncMessageDropped', handler);
+
+      for (let i = 0; i < 3; i++) {
+        (manager as any).dispatchRealtimeMessage({
+          id: `msg-${i}`,
+          type: 'sync.playback',
+          roomId: manager.roomInfo!.roomId,
+          userId: manager.userId,
+          timestamp: Date.now(),
+          payload: {},
+        });
+      }
+
+      expect(manager.droppedMessageCount).toBe(3);
+      expect(handler).toHaveBeenCalledTimes(3);
+      expect(handler.mock.calls[2]![0]).toEqual({
+        messageType: 'sync.playback',
+        droppedCount: 3,
+      });
+    });
+
+    it('NSM-133: dispatchRealtimeMessage returns true when wsClient.send succeeds', () => {
+      manager._applyLocalRoomCreation();
+
+      // Simulate WS being connected and send succeeding
+      vi.spyOn((manager as any).wsClient, 'send').mockReturnValue(true);
+
+      const handler = vi.fn();
+      manager.on('syncMessageDropped', handler);
+
+      const result = (manager as any).dispatchRealtimeMessage({
+        id: 'msg-ok',
+        type: 'sync.view',
+        roomId: manager.roomInfo!.roomId,
+        userId: manager.userId,
+        timestamp: Date.now(),
+        payload: {},
+      });
+
+      expect(result).toBe(true);
+      expect(manager.droppedMessageCount).toBe(0);
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('NSM-134: dispatchRealtimeMessage returns true when serverless peer delivers', () => {
+      manager._applyLocalRoomCreation();
+
+      // WS send fails
+      vi.spyOn((manager as any).wsClient, 'send').mockReturnValue(false);
+      // Serverless peer succeeds
+      vi.spyOn(manager as any, 'sendMessageOverServerlessPeer').mockReturnValue(true);
+
+      const handler = vi.fn();
+      manager.on('syncMessageDropped', handler);
+
+      const result = (manager as any).dispatchRealtimeMessage({
+        id: 'msg-peer',
+        type: 'sync.color',
+        roomId: manager.roomInfo!.roomId,
+        userId: manager.userId,
+        timestamp: Date.now(),
+        payload: {},
+      });
+
+      expect(result).toBe(true);
+      expect(manager.droppedMessageCount).toBe(0);
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('NSM-135: droppedMessageCount starts at zero', () => {
+      expect(manager.droppedMessageCount).toBe(0);
+    });
+  });
 });

@@ -373,6 +373,7 @@ export interface NetworkSyncEvents extends EventMap {
   error: ErrorPayload;
   rttUpdated: number;
   toastMessage: { message: string; type: 'info' | 'success' | 'warning' | 'error' };
+  syncMessageDropped: { messageType: string; droppedCount: number };
 }
 
 // ---- WebSocket Client Events ----

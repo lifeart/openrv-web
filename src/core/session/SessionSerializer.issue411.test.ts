@@ -24,6 +24,7 @@ import type { StatusEntry } from './StatusManager';
 // Mock the showFileReloadPrompt dialog
 vi.mock('../../ui/components/shared/Modal', () => ({
   showFileReloadPrompt: vi.fn(),
+  FILE_RELOAD_CANCEL: 'cancel',
 }));
 
 beforeEach(() => {

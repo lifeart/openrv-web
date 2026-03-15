@@ -565,7 +565,21 @@ export interface FileReloadOptions extends ModalOptions {
   browseText?: string;
   /** Skip button text */
   skipText?: string;
+  /** Cancel button text */
+  cancelText?: string;
 }
+
+/**
+ * Sentinel value returned by file-reload prompts when the user cancels
+ * the entire restore flow (via Cancel button, Escape key, or closing the dialog).
+ */
+export const FILE_RELOAD_CANCEL = 'cancel' as const;
+
+/** Result type for file-reload prompts: a File (loaded), null (skipped), or 'cancel' (abort). */
+export type FileReloadResult = File | null | typeof FILE_RELOAD_CANCEL;
+
+/** Result type for sequence-reload prompts: Files (loaded), null (skipped), or 'cancel' (abort). */
+export type SequenceReloadResult = File[] | null | typeof FILE_RELOAD_CANCEL;
 
 /**
  * Options returned from the annotation import dialog
@@ -778,7 +792,7 @@ export function showAnnotationImportDialog(options: ModalOptions = {}): Promise<
  * Show a dialog prompting user to reload a file
  * Returns the selected File or null if skipped
  */
-export function showFileReloadPrompt(filename: string, options: FileReloadOptions = {}): Promise<File | null> {
+export function showFileReloadPrompt(filename: string, options: FileReloadOptions = {}): Promise<FileReloadResult> {
   return new Promise((resolve) => {
     cleanupCustomModalEscapeHandler();
     const {
@@ -786,6 +800,7 @@ export function showFileReloadPrompt(filename: string, options: FileReloadOption
       accept = 'image/*,video/*',
       browseText = 'Browse...',
       skipText = 'Skip',
+      cancelText = 'Cancel',
       onClose,
     } = options;
 
@@ -797,7 +812,7 @@ export function showFileReloadPrompt(filename: string, options: FileReloadOption
       title,
       onClose: () => {
         onClose?.();
-        resolve(null);
+        resolve(FILE_RELOAD_CANCEL);
       },
     });
     modal.setAttribute('data-testid', 'file-reload-dialog');
@@ -917,7 +932,7 @@ export function showFileReloadPrompt(filename: string, options: FileReloadOption
       if (e.key === 'Escape') {
         hideContainer();
         onClose?.();
-        resolve(null);
+        resolve(FILE_RELOAD_CANCEL);
         document.removeEventListener('keydown', handleKeydown);
       } else if (e.key === 'Enter' && selectedFile && !loadBtn.disabled) {
         // Enter confirms when file is selected
@@ -927,6 +942,18 @@ export function showFileReloadPrompt(filename: string, options: FileReloadOption
         document.removeEventListener('keydown', handleKeydown);
       }
     };
+
+    const cancelBtn = createButton(
+      cancelText,
+      () => {
+        hideContainer();
+        onClose?.();
+        resolve(FILE_RELOAD_CANCEL);
+        document.removeEventListener('keydown', handleKeydown);
+      },
+      { variant: 'default', minWidth: '80px' },
+    );
+    cancelBtn.setAttribute('data-testid', 'file-reload-cancel');
 
     const skipBtn = createButton(
       skipText,
@@ -965,6 +992,7 @@ export function showFileReloadPrompt(filename: string, options: FileReloadOption
     loadBtn.disabled = true;
     loadBtn.style.opacity = '0.5';
 
+    footer.appendChild(cancelBtn);
     footer.appendChild(skipBtn);
     footer.appendChild(browseBtn);
     footer.appendChild(loadBtn);
@@ -985,7 +1013,7 @@ export function showFileReloadPrompt(filename: string, options: FileReloadOption
 export function showSequenceReloadPrompt(
   sequenceName: string,
   options: FileReloadOptions = {},
-): Promise<File[] | null> {
+): Promise<SequenceReloadResult> {
   return new Promise((resolve) => {
     cleanupCustomModalEscapeHandler();
     const {
@@ -993,6 +1021,7 @@ export function showSequenceReloadPrompt(
       accept = 'image/*',
       browseText = 'Browse...',
       skipText = 'Skip',
+      cancelText = 'Cancel',
       onClose,
     } = options;
 
@@ -1004,7 +1033,7 @@ export function showSequenceReloadPrompt(
       title,
       onClose: () => {
         onClose?.();
-        resolve(null);
+        resolve(FILE_RELOAD_CANCEL);
       },
     });
     modal.setAttribute('data-testid', 'sequence-reload-dialog');
@@ -1099,7 +1128,7 @@ export function showSequenceReloadPrompt(
       if (e.key === 'Escape') {
         hideContainer();
         onClose?.();
-        resolve(null);
+        resolve(FILE_RELOAD_CANCEL);
         document.removeEventListener('keydown', handleKeydown);
       } else if (e.key === 'Enter' && selectedFiles.length > 0 && !loadBtn.disabled) {
         hideContainer();
@@ -1108,6 +1137,18 @@ export function showSequenceReloadPrompt(
         document.removeEventListener('keydown', handleKeydown);
       }
     };
+
+    const cancelBtn = createButton(
+      cancelText,
+      () => {
+        hideContainer();
+        onClose?.();
+        resolve(FILE_RELOAD_CANCEL);
+        document.removeEventListener('keydown', handleKeydown);
+      },
+      { variant: 'default', minWidth: '80px' },
+    );
+    cancelBtn.setAttribute('data-testid', 'sequence-reload-cancel');
 
     const skipBtn = createButton(
       skipText,
@@ -1146,6 +1187,7 @@ export function showSequenceReloadPrompt(
     loadBtn.disabled = true;
     loadBtn.style.opacity = '0.5';
 
+    footer.appendChild(cancelBtn);
     footer.appendChild(skipBtn);
     footer.appendChild(browseBtn);
     footer.appendChild(loadBtn);

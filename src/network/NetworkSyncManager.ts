@@ -141,6 +141,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
   private _createRoomFallbackTimer: ReturnType<typeof setTimeout> | null = null;
   private _serverlessPeer: ServerlessPeerState | null = null;
   private _pendingServerlessOffer: WebRTCURLOfferSignal | null = null;
+  private _droppedMessageCount = 0;
   private _recentMessageIds = new Set<string>();
   private _recentMessageIdQueue: string[] = [];
   private _pendingStateRequest: {
@@ -205,6 +206,13 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
 
   get rtt(): number {
     return this.wsClient.rtt;
+  }
+
+  /**
+   * Number of outbound sync messages that were dropped because no transport was available.
+   */
+  get droppedMessageCount(): number {
+    return this._droppedMessageCount;
   }
 
   /**
@@ -1223,9 +1231,17 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     });
   }
 
-  private dispatchRealtimeMessage(message: SyncMessage): void {
-    if (this.wsClient.send(message)) return;
-    this.sendMessageOverServerlessPeer(message);
+  private dispatchRealtimeMessage(message: SyncMessage): boolean {
+    if (this.wsClient.send(message)) return true;
+    if (this.sendMessageOverServerlessPeer(message)) return true;
+
+    this._droppedMessageCount++;
+    log.warn(`Sync message dropped (type=${message.type}, total dropped=${this._droppedMessageCount})`);
+    this.emit('syncMessageDropped', {
+      messageType: message.type,
+      droppedCount: this._droppedMessageCount,
+    });
+    return false;
   }
 
   private hasOpenServerlessChannel(): boolean {

@@ -44,7 +44,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - That breaks representation-aware workflows because the bridge advertises rep switching while its own read APIs continue to describe a different source state.
 
 
-
 ### 307. The adaptive `FrameCacheController` subsystem is fully implemented but never instantiated in production
 
 - Severity: Medium
@@ -255,7 +254,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - A threaded review conversation or resolved/won’t-fix state in OpenRV Web cannot survive a ShotGrid sync round-trip as equivalent structured review data.
   - The integration reduces richer local note workflows to a flat list of plain comments, which weakens production review traceability.
-
 
 
 ### 334. Comparison annotations are tied to the `A/B` slot, not to the underlying source they were drawn on
@@ -495,19 +493,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Users can trust auto-checkpoints to protect routine destructive actions that the shipped app never checkpoints.
   - That makes the documented safety net much narrower than it sounds, especially during active review/editing work where people are not explicitly loading projects.
 
-### 383. The file-reload docs promise a real Cancel path, but production treats close and Escape the same as Skip
-
-- Severity: Medium
-- Area: Session restore / blob reload workflow
-- Evidence:
-  - The session export guide says the user can "select the original file, skip the reference, or cancel" in [docs/export/sessions.md](/Users/lifeart/Repos/openrv-web/docs/export/sessions.md#L39) through [docs/export/sessions.md](/Users/lifeart/Repos/openrv-web/docs/export/sessions.md#L45).
-  - The shipped file-reload dialog only renders `Browse`, `Load`, and `Skip` actions in [src/ui/components/shared/Modal.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/shared/Modal.ts#L724) through [src/ui/components/shared/Modal.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/shared/Modal.ts#L742).
-  - Closing the dialog or pressing `Escape` resolves `null` through the same code path as Skip in [src/ui/components/shared/Modal.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/shared/Modal.ts#L588) through [src/ui/components/shared/Modal.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/shared/Modal.ts#L595) and [src/ui/components/shared/Modal.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/shared/Modal.ts#L709) through [src/ui/components/shared/Modal.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/shared/Modal.ts#L715).
-  - `SessionSerializer.fromJSON()` treats any `null` result as a skipped reload and continues loading with a warning in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L475) through [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L489).
-- Impact:
-  - Users cannot actually cancel the whole restore/reload flow from that dialog even though the docs say they can.
-  - Dismissing the prompt can silently degrade the restored session instead of aborting the operation, which is materially different from a true cancel action.
-
 ### 387. The RV/GTO companion-file resolution path is effectively unreachable from the shipped Open Project picker
 
 - Severity: Medium
@@ -533,18 +518,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The picker UI suggests multi-file project opening is meaningful, but selecting multiple project/session files has ambiguous or ignored results.
   - That makes the Open Project affordance less predictable than the single-project mental model the runtime actually implements.
 
-### 389. The `Open project` picker also accepts `.rvedl`, even though that path does not open a project
-
-- Severity: Low
-- Area: Project loading UI / EDL workflow
-- Evidence:
-  - The shipped project input accepts `.orvproject,.rv,.gto,.rvedl` in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L226) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L229).
-  - The same button is presented simply as `Open project` in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L243).
-  - But the `.rvedl` branch in `openProject(...)` only parses EDL text and calls `session.loadEDL(text)`; it does not restore project/session state in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L418) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L423).
-- Impact:
-  - The project-opening affordance bundles a timeline-import format that behaves fundamentally differently from a real project/session load.
-  - That makes the button’s semantics fuzzy and increases the chance that users expect a session replacement when they are really just importing an edit list.
-
 ### 393. The `Open media file` control is also a session and EDL importer, not just a media picker
 
 - Severity: Low
@@ -556,19 +529,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - The shipped main file-open affordance does more than its label suggests, which makes session import paths harder to discover correctly and easier to misunderstand.
   - That overlaps awkwardly with the separate `Open project` affordance, since both buttons can open non-media session-like files through different semantics.
-
-### 394. Locally loaded image sequences do not round-trip through project save/load with a real reload path
-
-- Severity: High
-- Area: Project persistence / image sequences
-- Evidence:
-  - Sequence sources are created with `url: ''` in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L691) through [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L700).
-  - `serializeMedia(...)` only marks media as `requiresReload` when `source.url` is a blob URL in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L388) through [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L407), so locally loaded sequences with an empty URL are saved without a reload prompt marker.
-  - On load, `fromJSON()` does not reconstruct sequences; it just warns `Sequence "<name>" requires manual file selection` in the `ref.type === 'sequence'` branch in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L509) through [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L512).
-  - The docs, however, say that media references which cannot be automatically reloaded trigger a file reload dialog and that locally loaded media can be re-selected so the session resumes intact in [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L57) and [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L174).
-- Impact:
-  - A locally loaded image sequence cannot come back through normal project load/recovery with the same guided reload experience as other local media.
-  - Instead the sequence effectively degrades into a warning-only manual reconstruction problem, which is a significant persistence gap for review sessions built around sequences.
 
 ### 395. `.rv` / `.gto` imports behave differently depending on whether users choose `Open media file` or `Open project`
 
@@ -607,96 +567,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - That makes mixed review-bundle imports less predictable and increases the chance that users think they opened a full session when they only imported cut metadata.
 
 
-### 417. RV/GTO restore contract includes `filterSettings`, but the parser never populates them
-
-- Severity: Medium
-- Area: RV/GTO import / filter-state restore
-- Evidence:
-  - `GTOViewSettings` includes `filterSettings?: FilterSettings` in [src/core/session/SessionTypes.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionTypes.ts#L54) through [src/core/session/SessionTypes.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionTypes.ts#L67).
-  - The live `settingsLoaded` handler has a real `if (settings.filterSettings)` branch that pushes that state into the filter control in [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L82) through [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L83).
-  - But `parseInitialSettings(...)` has no `parseFilterSettings(...)` step at all; it parses color, CDL, transform, lens, crop, channel mode, stereo, scopes, linearize, noise reduction, uncrop, out-of-range, and channel swizzle only in [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L24) through [src/core/session/GTOSettingsParser.ts#L95).
-- Impact:
-  - The restore pipeline advertises filter-state restore, but RV/GTO import never supplies that state to the live handler.
-  - That leaves imported filter behavior dependent on other side effects instead of the documented settings-restore path.
-
-### 418. RV/GTO restore contract includes stereo eye transforms and stereo align mode, but the parser never populates them
-
-- Severity: Medium
-- Area: RV/GTO import / stereo-state restore
-- Evidence:
-  - `GTOViewSettings` includes both `stereoEyeTransform` and `stereoAlignMode` in [src/core/session/SessionTypes.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionTypes.ts#L61) through [src/core/session/SessionTypes.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionTypes.ts#L65).
-  - The live `settingsLoaded` handler has corresponding restore branches that call `context.getStereoEyeTransformControl().setState(...)` and `context.getStereoAlignControl().setMode(...)` in [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L128) through [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L132).
-  - But `parseInitialSettings(...)` never parses or assigns either field; the parser only handles `stereo` and then moves on to scopes and other settings in [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L60) through [src/core/session/GTOSettingsParser.ts#L92).
-  - A production-code search found no other non-test parser path that fills `settings.stereoEyeTransform` or `settings.stereoAlignMode`.
-- Impact:
-  - Even where the app has live restore plumbing for advanced stereo state, RV/GTO import never feeds it.
-  - That makes stereo session interchange less complete than the restore contract and handler structure suggest.
-
-### 421. RV/GTO settings restore ignores standalone RVColorCDL nodes and only reads embedded CDL components
-
-- Severity: Medium
-- Area: RV/GTO import / CDL restore coverage
-- Evidence:
-  - `parseCDL(...)` only reads CDL data from `RVColor` and `RVLinearize` protocol nodes in [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L323) through [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L367).
-  - The repo’s own serializer/exporter defines standalone `RVColorCDL` objects as a first-class GTO shape via `ColorSerializer.buildColorCDLObject(...)` in [src/core/session/serializers/ColorSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/serializers/ColorSerializer.ts#L581) through [src/core/session/serializers/ColorSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/serializers/ColorSerializer.ts#L604) and `SessionGTOExporter.buildColorCDLObject(...)` in [src/core/session/SessionGTOExporter.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGTOExporter.ts#L1082) through [src/core/session/SessionGTOExporter.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGTOExporter.ts#L1085).
-  - The graph loader also recognizes both `RVColorCDL` and `RVColorACESLogCDL` as real import protocols and parses their properties in [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L1987) through [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L2007).
-  - The live restore path does have a real `if (settings.cdl)` branch that would apply parsed CDL values through `context.getCDLControl().setCDL(...)` in [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L89) through [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L90).
-- Impact:
-  - RV/GTO files that express CDL as standalone `RVColorCDL` or `RVColorACESLogCDL` nodes can be recognized by the loader layer but still fail to restore grading through the live `settingsLoaded` path.
-  - That leaves CDL interchange narrower than the repo’s own serializer, exporter, and graph-loader contracts imply.
-
-### 422. RV/GTO settings restore only understands embedded RVColor data and ignores most standalone color-node protocols
-
-- Severity: Medium
-- Area: RV/GTO import / color interchange coverage
-- Evidence:
-  - The repo exposes standalone GTO builders for `RVColorExposure`, `RVColorCurve`, `RVColorSaturation`, `RVColorVibrance`, `RVColorShadow`, `RVColorHighlight`, `RVColorGrayScale`, `RVColorLinearToSRGB`, `RVColorSRGBToLinear`, and `RVPrimaryConvert` in [src/core/session/serializers/ColorSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/serializers/ColorSerializer.ts#L443) through [src/core/session/serializers/ColorSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/serializers/ColorSerializer.ts#L654), re-exported through [src/core/session/SessionGTOExporter.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGTOExporter.ts#L1026) through [src/core/session/SessionGTOExporter.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGTOExporter.ts#L1106).
-  - `GTOGraphLoader` also treats those protocols as real importable node types and parses their properties in [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L1888) through [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L2138).
-  - But the live settings parser only restores color adjustments from `RVColor` and `RVDisplayColor`, plus the narrower dedicated parsers for CDL and linearize in [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L24) through [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L95) and [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L238) through [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L317).
-  - The app’s live grading model is broader than that parser surface: `ColorAdjustments` still includes fields like `vibrance`, `highlights`, and `shadows` in [src/core/types/color.ts](/Users/lifeart/Repos/openrv-web/src/core/types/color.ts#L3) through [src/core/types/color.ts](/Users/lifeart/Repos/openrv-web/src/core/types/color.ts#L18), and the restore handler would apply any parsed adjustments via `setAdjustments(...)` in [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L79) through [src/handlers/persistenceHandlers.ts](/Users/lifeart/Repos/openrv-web/src/handlers/persistenceHandlers.ts#L81).
-- Impact:
-  - RV/GTO files that represent grading with standalone color nodes can be recognized by the loader layer yet still lose exposure/curve/vibrance/shadow/highlight/grayscale/conversion intent in the live restore path.
-  - That leaves color interchange materially narrower than the repo’s own serializer/exporter/loader surface suggests.
-
-### 424. RV/GTO crop restore derives source dimensions from RVFileSource only, so still-image sessions can import with a full-frame crop
-
-- Severity: Medium
-- Area: RV/GTO import / crop restore
-- Evidence:
-  - `SessionGTOExporter.buildSourceGroupObjects(...)` emits still sources as `RVImageSource`, not `RVFileSource`, while still attaching the same `proxy.size` dimensions in [src/core/session/SessionGTOExporter.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGTOExporter.ts#L597) through [src/core/session/SessionGTOExporter.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGTOExporter.ts#L635).
-  - `SessionGraph.parseSession(...)` derives `sourceWidth` and `sourceHeight` only from `dto.byProtocol('RVFileSource')` in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L515) through [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L547).
-  - `parseCrop(...)` needs non-zero source dimensions to convert pixel crop bounds into normalized region values; otherwise it falls back to `{ x: 0, y: 0, width: 1, height: 1 }` even when crop coordinates are present in [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L568) through [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L585).
-  - `SessionGraph.parseSession(...)` feeds those derived dimensions directly into `_parseInitialSettings(dto, { width: sourceWidth, height: sourceHeight })` in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L552).
-- Impact:
-  - RV/GTO sessions built around still images can carry a valid crop but restore it as an enabled full-frame region because the parser never discovers the image dimensions.
-  - Crop behavior therefore differs by source protocol, even though the exporter writes the same `proxy.size` data for both still and file/video sources.
-
-### 425. RV/GTO paint-annotation import uses a default 1.0 aspect ratio for RVImageSource sessions
-
-- Severity: Medium
-- Area: RV/GTO import / annotation geometry
-- Evidence:
-  - `SessionGraph.parseSession(...)` computes `aspectRatio` only while iterating `dto.byProtocol('RVFileSource')` in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L515) through [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L547).
-  - Still-image sessions are exported as `RVImageSource` objects, not `RVFileSource`, in [src/core/session/SessionGTOExporter.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGTOExporter.ts#L597) through [src/core/session/SessionGTOExporter.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGTOExporter.ts#L635).
-  - `SessionGraph.parseSession(...)` then passes the derived `aspectRatio` into `annotationStore.parsePaintAnnotations(dto, aspectRatio)` in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L549) through [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L550).
-  - `AnnotationStore` uses that aspect ratio directly when converting OpenRV coordinates for pen strokes and text annotations in [src/core/session/AnnotationStore.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AnnotationStore.ts#L440) through [src/core/session/AnnotationStore.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AnnotationStore.ts#L465) and [src/core/session/AnnotationStore.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AnnotationStore.ts#L537) through [src/core/session/AnnotationStore.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AnnotationStore.ts#L554).
-- Impact:
-  - Paint annotations imported from still-image RV/GTO sessions can be placed incorrectly whenever the image aspect ratio is not 1:1.
-  - The same annotation payload therefore restores differently depending on whether the source was serialized as `RVImageSource` or `RVFileSource`.
-
-### 427. RV/GTO multi-source imports derive crop and annotation geometry from inconsistent source dimensions
-
-- Severity: Medium
-- Area: RV/GTO import / multi-source restore
-- Evidence:
-  - `SessionGraph.parseSession(...)` walks every `RVFileSource`, but only records `sourceWidth` / `sourceHeight` from the first source while overwriting `aspectRatio` on every later source in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L515) through [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L535).
-  - It then feeds the first source dimensions into `_parseInitialSettings(dto, { width: sourceWidth, height: sourceHeight })` for crop parsing in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L552).
-  - The same method passes the last-seen `aspectRatio` into `annotationStore.parsePaintAnnotations(dto, aspectRatio)` in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L549) through [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L550).
-  - `parseCrop(...)` converts crop bounds using the supplied width/height in [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L568) through [src/core/session/GTOSettingsParser.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOSettingsParser.ts#L579), while `AnnotationStore` converts paint coordinates using the supplied aspect ratio in [src/core/session/AnnotationStore.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AnnotationStore.ts#L440) through [src/core/session/AnnotationStore.ts](/Users/lifeart/Repos/openrv-web/src/core/session/AnnotationStore.ts#L465).
-- Impact:
-  - In multi-source RV/GTO sessions with differing source sizes or aspect ratios, crop restore is normalized against the first source while paint annotations are normalized against the last one.
-  - That makes imported geometry depend on source ordering rather than the authored session state.
-
 ### 429. Share links claim to share comparison state, but clean recipients can only reconstruct one media source
 
 - Severity: Medium
@@ -724,21 +594,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - That makes share links context-sensitive: the same link behaves differently depending on whether the recipient opens it in a fresh app state or not.
 
 
-
-### 436. Outbound collaboration updates can be dropped silently when realtime transport send fails
-
-- Severity: Medium
-- Area: Collaboration / outbound transport reliability
-- Evidence:
-  - `WebSocketClient.send(...)` explicitly returns `false` when the socket is not open or serialization/send throws in [src/network/WebSocketClient.ts](/Users/lifeart/Repos/openrv-web/src/network/WebSocketClient.ts#L109) through [src/network/WebSocketClient.ts#L124).
-  - `NetworkSyncManager.dispatchRealtimeMessage(...)` only checks that WebSocket return value, then tries the serverless data channel once and ignores whether that fallback also returned `false` in [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L1221) through [src/network/NetworkSyncManager.ts#L1238).
-  - All of the live sync senders (`sendPlaybackSync`, `sendFrameSync`, `sendViewSync`, `sendColorSync`, `sendAnnotationSync`, `sendNoteSync`, `sendCursorPosition`, media-sync messages, and permission changes) route through that same helper in [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L463) through [src/network/NetworkSyncManager.ts#L742).
-- Impact:
-  - During transport flaps or serialization failures, local sync changes can be treated as sent even though neither WebSocket nor serverless peer transport accepted the message.
-  - From the user’s perspective, collaboration can drift silently instead of surfacing an actionable transport failure.
-
-
-
 ### 440. URL-based media loading bypasses the app's decoder stack and breaks remote EXR or other decoder-backed images
 
 - Severity: Medium
@@ -762,18 +617,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - CDN or API-style video URLs such as `/media/12345`, `/stream/latest`, or signed routes without a terminal extension can be treated as still images and fail to load correctly.
   - The app's URL-based loading is weaker than its file-loading path in a way that is hard for integrators and share-link users to predict from the UI.
-
-### 443. Outbound DCC sync events can be dropped silently when the bridge is not writable
-
-- Severity: Medium
-- Area: DCC integration / outbound reliability
-- Evidence:
-  - `DCCBridge.send(...)` returns `false` immediately when no WebSocket is open, and only emits an `error` event when a `ws.send(...)` call itself throws in [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L266) through [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L280).
-  - The app-level outbound DCC wiring ignores those return values for frame sync, color sync, and annotation sync in [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L246) through [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L276).
-  - That means the `frameChanged`, `colorChanged`, and `annotationAdded` paths have no retry, queue, or user/tool feedback when the bridge is temporarily disconnected or otherwise unwritable.
-- Impact:
-  - DCC-driven review sync can quietly stop propagating outbound viewer changes even though the local app continues to behave normally.
-  - From the DCC side, lost updates look like random desynchronization rather than an explicit transport failure.
 
 ### 444. The DCC guide promises a configurable bridge endpoint, but production only supports `?dcc=` URL bootstrap
 

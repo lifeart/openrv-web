@@ -8,6 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   parseColorAdjustments,
+  parseFilterSettings,
   parseLinearize,
   parseNoiseReduction,
   parseUncrop,
@@ -18,6 +19,8 @@ import {
   parseChannelSwizzle,
   channelNameToSwizzleIndex,
   parseStereo,
+  parseStereoEyeTransform,
+  parseStereoAlignMode,
 } from './GTOSettingsParser';
 import { SWIZZLE_ZERO, SWIZZLE_ONE } from '../../core/types/color';
 import { DEFAULT_CDL } from '../../color/CDL';
@@ -2095,6 +2098,780 @@ describe('GTOSettingsParser — Issue #420: inactive RVColor/RVDisplayColor flag
       );
       const result = parseOutOfRange(dto);
       expect(result).toBe(0);
+    });
+  });
+});
+
+// =================================================================
+// GTOSettingsParser.parseFilterSettings
+// =================================================================
+
+describe('GTOSettingsParser.parseFilterSettings', () => {
+  function createFilterDTO(
+    gaussianProps?: Record<string, unknown>,
+    unsharpProps?: Record<string, unknown>,
+  ): GTODTO {
+    const mockComponent = (props: Record<string, unknown> | undefined) => ({
+      exists: () => props !== undefined,
+      property: (name: string) => ({
+        value: () => props?.[name],
+      }),
+    });
+
+    const mockNode = (nodeProps: Record<string, unknown> | undefined) => ({
+      component: (name: string) => (name === 'node' ? mockComponent(nodeProps) : mockComponent(undefined)),
+    });
+
+    return {
+      byProtocol: (proto: string) => {
+        if (proto === 'RVFilterGaussian' && gaussianProps) {
+          const results = [mockNode(gaussianProps)] as any;
+          results.first = () => results[0];
+          results.length = 1;
+          return results;
+        }
+        if (proto === 'RVUnsharpMask' && unsharpProps) {
+          const results = [mockNode(unsharpProps)] as any;
+          results.first = () => results[0];
+          results.length = 1;
+          return results;
+        }
+        const empty = [] as any;
+        empty.first = () => mockNode(undefined);
+        empty.length = 0;
+        return empty;
+      },
+    } as unknown as GTODTO;
+  }
+
+  it('returns null when no filter nodes exist', () => {
+    const dto = createFilterDTO();
+    expect(parseFilterSettings(dto)).toBeNull();
+  });
+
+  it('parses blur from RVFilterGaussian radius', () => {
+    const dto = createFilterDTO({ radius: 5.0 });
+    const result = parseFilterSettings(dto);
+    expect(result).toEqual({ blur: 5, sharpen: 0 });
+  });
+
+  it('parses sharpen from RVUnsharpMask amount', () => {
+    const dto = createFilterDTO(undefined, { active: 1, amount: 30 });
+    const result = parseFilterSettings(dto);
+    expect(result).toEqual({ blur: 0, sharpen: 30 });
+  });
+
+  it('parses both blur and sharpen when both nodes exist', () => {
+    const dto = createFilterDTO({ radius: 8.0 }, { active: 1, amount: 50 });
+    const result = parseFilterSettings(dto);
+    expect(result).toEqual({ blur: 8, sharpen: 50 });
+  });
+
+  it('clamps blur to max 20', () => {
+    const dto = createFilterDTO({ radius: 99 });
+    const result = parseFilterSettings(dto);
+    expect(result!.blur).toBe(20);
+  });
+
+  it('clamps sharpen to max 100', () => {
+    const dto = createFilterDTO(undefined, { active: 1, amount: 200 });
+    const result = parseFilterSettings(dto);
+    expect(result!.sharpen).toBe(100);
+  });
+
+  it('rounds blur to nearest 0.5 step', () => {
+    const dto = createFilterDTO({ radius: 3.3 });
+    const result = parseFilterSettings(dto);
+    expect(result!.blur).toBe(3.5);
+  });
+
+  it('rounds sharpen to integer', () => {
+    const dto = createFilterDTO(undefined, { active: 1, amount: 7.6 });
+    const result = parseFilterSettings(dto);
+    expect(result!.sharpen).toBe(8);
+  });
+
+  it('returns null when RVUnsharpMask is inactive', () => {
+    const dto = createFilterDTO(undefined, { active: 0, amount: 50 });
+    expect(parseFilterSettings(dto)).toBeNull();
+  });
+
+  it('returns null when radius is 0 (no blur) and no sharpen node', () => {
+    const dto = createFilterDTO({ radius: 0 });
+    expect(parseFilterSettings(dto)).toBeNull();
+  });
+
+  it('returns null when amount is 0 (no sharpen) and no gaussian node', () => {
+    const dto = createFilterDTO(undefined, { active: 1, amount: 0 });
+    expect(parseFilterSettings(dto)).toBeNull();
+  });
+
+  it('clamps negative radius to 0', () => {
+    const dto = createFilterDTO({ radius: -5 });
+    expect(parseFilterSettings(dto)).toBeNull();
+  });
+
+  it('handles missing properties gracefully', () => {
+    const dto = createFilterDTO({}, { active: 1 });
+    expect(parseFilterSettings(dto)).toBeNull();
+  });
+});
+
+// =================================================================
+// Issue #418 — parseStereoEyeTransform and parseStereoAlignMode
+// =================================================================
+
+/**
+ * Helper to create a mock GTODTO with RVDisplayStereo node that supports
+ * multiple components: stereo, leftEyeTransform, rightEyeTransform, eyeTransform.
+ */
+function createStereoEyeTransformMockDTO(components?: {
+  stereo?: Record<string, unknown>;
+  leftEyeTransform?: Record<string, unknown>;
+  rightEyeTransform?: Record<string, unknown>;
+  eyeTransform?: Record<string, unknown>;
+}): GTODTO {
+  const mockComponent = (props: Record<string, unknown> | undefined) => ({
+    exists: () => props !== undefined,
+    property: (name: string) => ({
+      value: () => props?.[name],
+      exists: () => props !== undefined && name in props,
+    }),
+  });
+
+  const mockNode = (comps: typeof components) => ({
+    component: (name: string) => {
+      if (comps && name in comps) {
+        return mockComponent(comps[name as keyof typeof comps]);
+      }
+      return mockComponent(undefined);
+    },
+    name: 'mockDisplayStereo',
+  });
+
+  return {
+    byProtocol: (proto: string) => {
+      if (proto === 'RVDisplayStereo' && components) {
+        const results = [mockNode(components)] as any;
+        results.first = () => results[0];
+        results.length = 1;
+        return results;
+      }
+      const empty = [] as any;
+      empty.first = () => mockNode(undefined);
+      empty.length = 0;
+      return empty;
+    },
+  } as unknown as GTODTO;
+}
+
+describe('GTOSettingsParser.parseStereoEyeTransform (Issue #418)', () => {
+  it('returns null when no RVDisplayStereo node exists', () => {
+    const dto = createStereoEyeTransformMockDTO();
+    expect(parseStereoEyeTransform(dto)).toBeNull();
+  });
+
+  it('returns null when RVDisplayStereo exists but no eye transform components', () => {
+    const dto = createStereoEyeTransformMockDTO({
+      stereo: { type: 'pair' },
+    });
+    expect(parseStereoEyeTransform(dto)).toBeNull();
+  });
+
+  it('parses left eye transform', () => {
+    const dto = createStereoEyeTransformMockDTO({
+      stereo: { type: 'pair' },
+      leftEyeTransform: { flipH: 1, flipV: 0, rotation: 5, scale: 1.2, translateX: 10, translateY: -5 },
+    });
+    const result = parseStereoEyeTransform(dto);
+    expect(result).not.toBeNull();
+    expect(result!.left).toEqual({
+      flipH: true,
+      flipV: false,
+      rotation: 5,
+      scale: 1.2,
+      translateX: 10,
+      translateY: -5,
+    });
+    // Right should be default
+    expect(result!.right).toEqual({
+      flipH: false,
+      flipV: false,
+      rotation: 0,
+      scale: 1.0,
+      translateX: 0,
+      translateY: 0,
+    });
+  });
+
+  it('parses right eye transform', () => {
+    const dto = createStereoEyeTransformMockDTO({
+      stereo: { type: 'pair' },
+      rightEyeTransform: { flipH: 0, flipV: 1, rotation: -10, scale: 0.8, translateX: -20, translateY: 15 },
+    });
+    const result = parseStereoEyeTransform(dto);
+    expect(result).not.toBeNull();
+    expect(result!.right).toEqual({
+      flipH: false,
+      flipV: true,
+      rotation: -10,
+      scale: 0.8,
+      translateX: -20,
+      translateY: 15,
+    });
+    // Left should be default
+    expect(result!.left).toEqual({
+      flipH: false,
+      flipV: false,
+      rotation: 0,
+      scale: 1.0,
+      translateX: 0,
+      translateY: 0,
+    });
+  });
+
+  it('parses both eye transforms with linked flag', () => {
+    const dto = createStereoEyeTransformMockDTO({
+      stereo: { type: 'pair' },
+      leftEyeTransform: { flipH: 1, flipV: 0, rotation: 3, scale: 1.1, translateX: 5, translateY: 0 },
+      rightEyeTransform: { flipH: 0, flipV: 1, rotation: -3, scale: 0.9, translateX: -5, translateY: 0 },
+      eyeTransform: { linked: 1 },
+    });
+    const result = parseStereoEyeTransform(dto);
+    expect(result).not.toBeNull();
+    expect(result!.linked).toBe(true);
+    expect(result!.left.flipH).toBe(true);
+    expect(result!.right.flipV).toBe(true);
+  });
+
+  it('defaults linked to false when eyeTransform component is absent', () => {
+    const dto = createStereoEyeTransformMockDTO({
+      stereo: { type: 'pair' },
+      leftEyeTransform: { flipH: 0, flipV: 0, rotation: 0, scale: 1, translateX: 1, translateY: 0 },
+    });
+    const result = parseStereoEyeTransform(dto);
+    expect(result).not.toBeNull();
+    expect(result!.linked).toBe(false);
+  });
+
+  it('clamps rotation to [-180, 180]', () => {
+    const dto = createStereoEyeTransformMockDTO({
+      leftEyeTransform: { rotation: 300 },
+    });
+    const result = parseStereoEyeTransform(dto);
+    expect(result!.left.rotation).toBe(180);
+  });
+
+  it('clamps scale to [0.5, 2.0]', () => {
+    const dto = createStereoEyeTransformMockDTO({
+      leftEyeTransform: { scale: 5.0 },
+    });
+    const result = parseStereoEyeTransform(dto);
+    expect(result!.left.scale).toBe(2.0);
+  });
+
+  it('clamps translation to [-100, 100]', () => {
+    const dto = createStereoEyeTransformMockDTO({
+      leftEyeTransform: { translateX: 200, translateY: -200 },
+    });
+    const result = parseStereoEyeTransform(dto);
+    expect(result!.left.translateX).toBe(100);
+    expect(result!.left.translateY).toBe(-100);
+  });
+
+  it('handles missing individual properties with defaults', () => {
+    const dto = createStereoEyeTransformMockDTO({
+      leftEyeTransform: { flipH: 1 }, // only flipH set
+    });
+    const result = parseStereoEyeTransform(dto);
+    expect(result).not.toBeNull();
+    expect(result!.left.flipH).toBe(true);
+    expect(result!.left.flipV).toBe(false);
+    expect(result!.left.rotation).toBe(0);
+    expect(result!.left.scale).toBe(1.0);
+    expect(result!.left.translateX).toBe(0);
+    expect(result!.left.translateY).toBe(0);
+  });
+});
+
+describe('GTOSettingsParser.parseStereoAlignMode (Issue #418)', () => {
+  it('returns null when no RVDisplayStereo node exists', () => {
+    const dto = createStereoEyeTransformMockDTO();
+    expect(parseStereoAlignMode(dto)).toBeNull();
+  });
+
+  it('returns null when stereo component has no alignMode property', () => {
+    const dto = createStereoEyeTransformMockDTO({
+      stereo: { type: 'pair' },
+    });
+    expect(parseStereoAlignMode(dto)).toBeNull();
+  });
+
+  it('returns null for alignMode "off" (default)', () => {
+    const dto = createStereoEyeTransformMockDTO({
+      stereo: { type: 'pair', alignMode: 'off' },
+    });
+    expect(parseStereoAlignMode(dto)).toBeNull();
+  });
+
+  it('parses "grid" align mode', () => {
+    const dto = createStereoEyeTransformMockDTO({
+      stereo: { type: 'pair', alignMode: 'grid' },
+    });
+    expect(parseStereoAlignMode(dto)).toBe('grid');
+  });
+
+  it('parses "crosshair" align mode', () => {
+    const dto = createStereoEyeTransformMockDTO({
+      stereo: { type: 'pair', alignMode: 'crosshair' },
+    });
+    expect(parseStereoAlignMode(dto)).toBe('crosshair');
+  });
+
+  it('parses "difference" align mode', () => {
+    const dto = createStereoEyeTransformMockDTO({
+      stereo: { type: 'pair', alignMode: 'difference' },
+    });
+    expect(parseStereoAlignMode(dto)).toBe('difference');
+  });
+
+  it('parses "edges" align mode', () => {
+    const dto = createStereoEyeTransformMockDTO({
+      stereo: { type: 'pair', alignMode: 'edges' },
+    });
+    expect(parseStereoAlignMode(dto)).toBe('edges');
+  });
+
+  it('returns null for unknown align mode string', () => {
+    const dto = createStereoEyeTransformMockDTO({
+      stereo: { type: 'pair', alignMode: 'invalid-mode' },
+    });
+    expect(parseStereoAlignMode(dto)).toBeNull();
+  });
+
+  it('returns null when stereo component does not exist', () => {
+    const dto = createStereoEyeTransformMockDTO({
+      leftEyeTransform: { flipH: 1 },
+    });
+    expect(parseStereoAlignMode(dto)).toBeNull();
+  });
+});
+
+/**
+ * Helper to create a mock GTODTO with a standalone RVColorCDL or RVColorACESLogCDL node.
+ * These store CDL properties on the 'node' component (not 'CDL').
+ */
+function createStandaloneCDLMockDTO(
+  nodeProps?: Record<string, unknown>,
+  protocol: string = 'RVColorCDL',
+): GTODTO {
+  const mockComponent = (props: Record<string, unknown> | undefined) => ({
+    exists: () => props !== undefined,
+    property: (name: string) => ({
+      value: () => props?.[name],
+      exists: () => props !== undefined && name in props,
+    }),
+  });
+
+  const mockNode = (data: Record<string, unknown> | undefined) => ({
+    component: (name: string) => {
+      if (name === 'node') return mockComponent(data);
+      return mockComponent(undefined);
+    },
+    name: 'mock-standalone-cdl',
+  });
+
+  return {
+    byProtocol: (proto: string) => {
+      if (proto === protocol && nodeProps) {
+        const results = [mockNode(nodeProps)] as any;
+        results.first = () => results[0];
+        results.length = 1;
+        return results;
+      }
+      const empty = [] as any;
+      empty.first = () => mockNode(undefined);
+      empty.length = 0;
+      return empty;
+    },
+  } as unknown as GTODTO;
+}
+
+/**
+ * Helper to create a mock GTODTO that has both an RVColor node (with CDL component)
+ * and a standalone RVColorCDL node (with node component).
+ */
+function createMixedCDLMockDTO(
+  rvColorCDLProps?: Record<string, unknown>,
+  standaloneCDLProps?: Record<string, unknown>,
+): GTODTO {
+  const mockComponent = (props: Record<string, unknown> | undefined) => ({
+    exists: () => props !== undefined,
+    property: (name: string) => ({
+      value: () => props?.[name],
+      exists: () => props !== undefined && name in props,
+    }),
+  });
+
+  const mockRVColorNode = (cdlData: Record<string, unknown> | undefined) => ({
+    component: (name: string) => {
+      if (name === 'CDL') return mockComponent(cdlData);
+      return mockComponent(undefined);
+    },
+    name: 'mock-rvcolor',
+  });
+
+  const mockStandaloneNode = (data: Record<string, unknown> | undefined) => ({
+    component: (name: string) => {
+      if (name === 'node') return mockComponent(data);
+      return mockComponent(undefined);
+    },
+    name: 'mock-standalone-cdl',
+  });
+
+  return {
+    byProtocol: (proto: string) => {
+      if (proto === 'RVColor' && rvColorCDLProps) {
+        const results = [mockRVColorNode(rvColorCDLProps)] as any;
+        results.first = () => results[0];
+        results.length = 1;
+        return results;
+      }
+      if (proto === 'RVColorCDL' && standaloneCDLProps) {
+        const results = [mockStandaloneNode(standaloneCDLProps)] as any;
+        results.first = () => results[0];
+        results.length = 1;
+        return results;
+      }
+      const empty = [] as any;
+      empty.first = () => mockRVColorNode(undefined);
+      empty.length = 0;
+      return empty;
+    },
+  } as unknown as GTODTO;
+}
+
+describe('Issue #421: parseCDL supports standalone RVColorCDL and RVColorACESLogCDL nodes', () => {
+  const cdlValues = {
+    slope: [1.5, 1.2, 0.8],
+    offset: [0.1, 0.2, 0.3],
+    power: [1.1, 1.0, 0.9],
+    saturation: 0.8,
+  };
+
+  describe('RVColorCDL', () => {
+    it('parses CDL from standalone RVColorCDL node', () => {
+      const dto = createStandaloneCDLMockDTO({ ...cdlValues, active: 1 });
+      const result = parseCDL(dto);
+
+      expect(result).not.toBeNull();
+      expect(result!.slope).toEqual({ r: 1.5, g: 1.2, b: 0.8 });
+      expect(result!.offset).toEqual({ r: 0.1, g: 0.2, b: 0.3 });
+      expect(result!.power).toEqual({ r: 1.1, g: 1.0, b: 0.9 });
+      expect(result!.saturation).toBe(0.8);
+    });
+
+    it('parses CDL when active flag is absent (defaults to active)', () => {
+      const dto = createStandaloneCDLMockDTO(cdlValues);
+      const result = parseCDL(dto);
+
+      expect(result).not.toBeNull();
+      expect(result!.slope).toEqual({ r: 1.5, g: 1.2, b: 0.8 });
+    });
+
+    it('returns default CDL when standalone node is inactive (active=0)', () => {
+      const dto = createStandaloneCDLMockDTO({ ...cdlValues, active: 0 });
+      const result = parseCDL(dto);
+
+      expect(result).not.toBeNull();
+      expect(result).toEqual(DEFAULT_CDL);
+    });
+
+    it('returns null when no standalone CDL node exists', () => {
+      const dto = createStandaloneCDLMockDTO();
+      const result = parseCDL(dto);
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('RVColorACESLogCDL', () => {
+    it('parses CDL from standalone RVColorACESLogCDL node', () => {
+      const dto = createStandaloneCDLMockDTO({ ...cdlValues, active: 1 }, 'RVColorACESLogCDL');
+      const result = parseCDL(dto);
+
+      expect(result).not.toBeNull();
+      expect(result!.slope).toEqual({ r: 1.5, g: 1.2, b: 0.8 });
+      expect(result!.offset).toEqual({ r: 0.1, g: 0.2, b: 0.3 });
+      expect(result!.power).toEqual({ r: 1.1, g: 1.0, b: 0.9 });
+      expect(result!.saturation).toBe(0.8);
+    });
+
+    it('returns default CDL when RVColorACESLogCDL node is inactive', () => {
+      const dto = createStandaloneCDLMockDTO({ ...cdlValues, active: 0 }, 'RVColorACESLogCDL');
+      const result = parseCDL(dto);
+
+      expect(result).not.toBeNull();
+      expect(result).toEqual(DEFAULT_CDL);
+    });
+  });
+
+  describe('precedence', () => {
+    it('RVColor CDL takes precedence over standalone RVColorCDL', () => {
+      const rvColorCDL = {
+        active: 1,
+        slope: [2.0, 2.0, 2.0],
+        offset: [0.5, 0.5, 0.5],
+        power: [1.5, 1.5, 1.5],
+        saturation: 0.5,
+      };
+      const standaloneCDL = {
+        active: 1,
+        slope: [1.0, 1.0, 1.0],
+        offset: [0.0, 0.0, 0.0],
+        power: [1.0, 1.0, 1.0],
+        saturation: 1.0,
+      };
+      const dto = createMixedCDLMockDTO(rvColorCDL, standaloneCDL);
+      const result = parseCDL(dto);
+
+      expect(result).not.toBeNull();
+      // Should use RVColor values, not standalone
+      expect(result!.slope).toEqual({ r: 2.0, g: 2.0, b: 2.0 });
+      expect(result!.saturation).toBe(0.5);
+    });
+
+    it('standalone RVColorCDL is used when RVColor has no CDL component', () => {
+      const standaloneCDL = {
+        active: 1,
+        ...cdlValues,
+      };
+      const dto = createMixedCDLMockDTO(undefined, standaloneCDL);
+      const result = parseCDL(dto);
+
+      expect(result).not.toBeNull();
+      expect(result!.slope).toEqual({ r: 1.5, g: 1.2, b: 0.8 });
+    });
+  });
+});
+
+// ─── Standalone color-node fallback tests (Issue #422) ───────────────────────
+
+/**
+ * Helper to create a mock GTODTO with optional RVColor, RVDisplayColor,
+ * and arbitrary standalone color-node protocol entries.
+ *
+ * `standaloneNodes` maps protocol names (e.g. 'RVColorExposure') to a
+ * Record of property values placed on the `color` component.
+ */
+function createStandaloneColorMockDTO(
+  colorProps?: Record<string, unknown>,
+  displayColorProps?: Record<string, unknown>,
+  standaloneNodes?: Record<string, Record<string, unknown>>,
+): GTODTO {
+  const mockComponent = (props: Record<string, unknown> | undefined) => ({
+    exists: () => props !== undefined,
+    property: (name: string) => ({
+      value: () => props?.[name],
+      exists: () => props !== undefined && name in props,
+    }),
+  });
+
+  const mockNode = (compMap: Record<string, Record<string, unknown> | undefined>) => ({
+    component: (name: string) => mockComponent(compMap[name]),
+    name: 'mock',
+  });
+
+  return {
+    byProtocol: (proto: string) => {
+      if (proto === 'RVColor' && colorProps) {
+        const results = [mockNode({ color: colorProps })] as any;
+        results.first = () => results[0];
+        results.length = 1;
+        return results;
+      }
+      if (proto === 'RVDisplayColor' && displayColorProps) {
+        const results = [mockNode({ color: displayColorProps })] as any;
+        results.first = () => results[0];
+        results.length = 1;
+        return results;
+      }
+      if (standaloneNodes && proto in standaloneNodes) {
+        const results = [mockNode({ color: standaloneNodes[proto] })] as any;
+        results.first = () => results[0];
+        results.length = 1;
+        return results;
+      }
+      const empty = [] as any;
+      empty.first = () => mockNode({});
+      empty.length = 0;
+      return empty;
+    },
+  } as unknown as GTODTO;
+}
+
+describe('GTOSettingsParser.parseColorAdjustments – standalone color-node fallbacks', () => {
+  describe('RVColorExposure', () => {
+    it('parses exposure from standalone RVColorExposure when RVColor is absent', () => {
+      const dto = createStandaloneColorMockDTO(undefined, undefined, {
+        RVColorExposure: { active: 1, exposure: 1.5 },
+      });
+      const result = parseColorAdjustments(dto);
+      expect(result).not.toBeNull();
+      expect(result!.exposure).toBe(1.5);
+    });
+
+    it('does NOT override exposure already set by RVColor', () => {
+      const dto = createStandaloneColorMockDTO(
+        { exposure: 0.5 },
+        undefined,
+        { RVColorExposure: { active: 1, exposure: 99 } },
+      );
+      const result = parseColorAdjustments(dto);
+      expect(result).not.toBeNull();
+      expect(result!.exposure).toBe(0.5);
+    });
+
+    it('skips inactive standalone RVColorExposure node', () => {
+      const dto = createStandaloneColorMockDTO(undefined, undefined, {
+        RVColorExposure: { active: 0, exposure: 2.0 },
+      });
+      const result = parseColorAdjustments(dto);
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('RVColorSaturation', () => {
+    it('parses saturation from standalone RVColorSaturation when RVColor is absent', () => {
+      const dto = createStandaloneColorMockDTO(undefined, undefined, {
+        RVColorSaturation: { active: 1, saturation: 0.7 },
+      });
+      const result = parseColorAdjustments(dto);
+      expect(result).not.toBeNull();
+      expect(result!.saturation).toBe(0.7);
+    });
+
+    it('does NOT override saturation already set by RVColor', () => {
+      const dto = createStandaloneColorMockDTO(
+        { saturation: 1.2 },
+        undefined,
+        { RVColorSaturation: { active: 1, saturation: 0.1 } },
+      );
+      const result = parseColorAdjustments(dto);
+      expect(result).not.toBeNull();
+      expect(result!.saturation).toBe(1.2);
+    });
+
+    it('skips inactive standalone RVColorSaturation node', () => {
+      const dto = createStandaloneColorMockDTO(undefined, undefined, {
+        RVColorSaturation: { active: 0, saturation: 0.5 },
+      });
+      const result = parseColorAdjustments(dto);
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('RVColorVibrance', () => {
+    it('parses vibrance from standalone RVColorVibrance when RVColor is absent', () => {
+      const dto = createStandaloneColorMockDTO(undefined, undefined, {
+        RVColorVibrance: { active: 1, vibrance: 0.3 },
+      });
+      const result = parseColorAdjustments(dto);
+      expect(result).not.toBeNull();
+      expect(result!.vibrance).toBe(0.3);
+    });
+
+    it('does NOT override vibrance already set by RVColor', () => {
+      // RVColor doesn't have a vibrance property, but if it did set one
+      // this test ensures the standalone wouldn't override. Since RVColor
+      // doesn't set vibrance, we verify the standalone IS used here.
+      const dto = createStandaloneColorMockDTO(
+        { exposure: 1.0 },
+        undefined,
+        { RVColorVibrance: { active: 1, vibrance: 0.8 } },
+      );
+      const result = parseColorAdjustments(dto);
+      expect(result).not.toBeNull();
+      expect(result!.vibrance).toBe(0.8);
+    });
+  });
+
+  describe('RVColorShadow', () => {
+    it('parses shadows from standalone RVColorShadow when RVColor is absent', () => {
+      const dto = createStandaloneColorMockDTO(undefined, undefined, {
+        RVColorShadow: { active: 1, shadow: -0.2 },
+      });
+      const result = parseColorAdjustments(dto);
+      expect(result).not.toBeNull();
+      expect(result!.shadows).toBe(-0.2);
+    });
+
+    it('skips inactive standalone RVColorShadow node', () => {
+      const dto = createStandaloneColorMockDTO(undefined, undefined, {
+        RVColorShadow: { active: 0, shadow: -0.5 },
+      });
+      const result = parseColorAdjustments(dto);
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('RVColorHighlight', () => {
+    it('parses highlights from standalone RVColorHighlight when RVColor is absent', () => {
+      const dto = createStandaloneColorMockDTO(undefined, undefined, {
+        RVColorHighlight: { active: 1, highlight: 0.4 },
+      });
+      const result = parseColorAdjustments(dto);
+      expect(result).not.toBeNull();
+      expect(result!.highlights).toBe(0.4);
+    });
+
+    it('skips inactive standalone RVColorHighlight node', () => {
+      const dto = createStandaloneColorMockDTO(undefined, undefined, {
+        RVColorHighlight: { active: 0, highlight: 0.9 },
+      });
+      const result = parseColorAdjustments(dto);
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('multiple standalone nodes together', () => {
+    it('parses all standalone color nodes when RVColor is absent', () => {
+      const dto = createStandaloneColorMockDTO(undefined, undefined, {
+        RVColorExposure: { active: 1, exposure: 2.0 },
+        RVColorSaturation: { active: 1, saturation: 0.5 },
+        RVColorVibrance: { active: 1, vibrance: 0.6 },
+        RVColorShadow: { active: 1, shadow: -0.3 },
+        RVColorHighlight: { active: 1, highlight: 0.7 },
+      });
+      const result = parseColorAdjustments(dto);
+      expect(result).not.toBeNull();
+      expect(result!.exposure).toBe(2.0);
+      expect(result!.saturation).toBe(0.5);
+      expect(result!.vibrance).toBe(0.6);
+      expect(result!.shadows).toBe(-0.3);
+      expect(result!.highlights).toBe(0.7);
+    });
+
+    it('RVColor values take precedence over standalone nodes for overlapping fields', () => {
+      const dto = createStandaloneColorMockDTO(
+        { exposure: 0.1, saturation: 1.5 },
+        undefined,
+        {
+          RVColorExposure: { active: 1, exposure: 99 },
+          RVColorSaturation: { active: 1, saturation: 99 },
+          RVColorVibrance: { active: 1, vibrance: 0.4 },
+          RVColorShadow: { active: 1, shadow: -0.1 },
+          RVColorHighlight: { active: 1, highlight: 0.2 },
+        },
+      );
+      const result = parseColorAdjustments(dto);
+      expect(result).not.toBeNull();
+      // RVColor wins for exposure and saturation
+      expect(result!.exposure).toBe(0.1);
+      expect(result!.saturation).toBe(1.5);
+      // Standalone provides vibrance, shadows, highlights (not in RVColor)
+      expect(result!.vibrance).toBe(0.4);
+      expect(result!.shadows).toBe(-0.1);
+      expect(result!.highlights).toBe(0.2);
     });
   });
 });

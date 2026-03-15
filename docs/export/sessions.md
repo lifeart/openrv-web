@@ -40,7 +40,7 @@ Files loaded from the local filesystem use temporary blob URLs that become inval
 
 1. The serializer marks those media references with `requiresReload: true`
 2. On load, a file reload dialog appears for each affected reference
-3. The user can select the original file, skip the reference, or cancel
+3. The user can **Browse** to select the original file, **Skip** the reference (continues loading with a warning), or **Cancel** to abort the entire restore flow
 
 A filename mismatch warning appears if the selected file differs from the expected filename.
 

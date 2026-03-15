@@ -213,7 +213,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     // Hidden file input for media
     this.fileInput = document.createElement('input');
     this.fileInput.type = 'file';
-    this.fileInput.accept = `${SUPPORTED_MEDIA_ACCEPT},.rv,.gto,.rvedl`;
+    this.fileInput.accept = `${SUPPORTED_MEDIA_ACCEPT},.rv,.gto`;
     this.fileInput.multiple = true;
     this.fileInput.style.display = 'none';
     this.fileInput.addEventListener('change', (e) => this.handleFileSelect(e));

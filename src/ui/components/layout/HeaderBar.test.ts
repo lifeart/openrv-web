@@ -154,6 +154,14 @@ describe('HeaderBar', () => {
       expect(projectInput).not.toBeNull();
       expect(projectInput.accept).toBe('.orvproject');
     });
+
+    it('HDR-U027: neither file input accepts .rvedl (EDL import is handled separately)', () => {
+      const el = headerBar.render();
+      const inputs = el.querySelectorAll('input[type="file"]');
+      for (const input of Array.from(inputs)) {
+        expect((input as HTMLInputElement).accept).not.toContain('.rvedl');
+      }
+    });
   });
 
   describe('playback controls', () => {

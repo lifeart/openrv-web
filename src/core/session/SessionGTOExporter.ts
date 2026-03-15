@@ -360,6 +360,28 @@ export interface DisplayStereoSettings {
   relativeOffset?: number;
   /** Right eye offset */
   rightOffset?: [number, number];
+  /** Stereo alignment overlay mode */
+  alignMode?: string;
+  /** Per-eye geometric transforms */
+  eyeTransform?: {
+    linked?: boolean;
+    left?: {
+      flipH?: boolean;
+      flipV?: boolean;
+      rotation?: number;
+      scale?: number;
+      translateX?: number;
+      translateY?: number;
+    };
+    right?: {
+      flipH?: boolean;
+      flipV?: boolean;
+      rotation?: number;
+      scale?: number;
+      translateX?: number;
+      translateY?: number;
+    };
+  };
 }
 
 /**
@@ -1246,13 +1268,53 @@ export class SessionGTOExporter {
     const displayStereoObject = builder.object(name, 'RVDisplayStereo', 1);
 
     // Stereo component
-    displayStereoObject
+    const stereoComponent = displayStereoObject
       .component('stereo')
       .string('type', settings.type ?? 'off')
       .int('swap', settings.swap ? 1 : 0)
       .float('relativeOffset', settings.relativeOffset ?? 0.0)
-      .float2('rightOffset', [settings.rightOffset ?? [0, 0]])
-      .end();
+      .float2('rightOffset', [settings.rightOffset ?? [0, 0]]);
+
+    if (settings.alignMode) {
+      stereoComponent.string('alignMode', settings.alignMode);
+    }
+
+    stereoComponent.end();
+
+    // Per-eye transforms
+    if (settings.eyeTransform) {
+      const et = settings.eyeTransform;
+
+      // Linked flag
+      displayStereoObject
+        .component('eyeTransform')
+        .int('linked', et.linked ? 1 : 0)
+        .end();
+
+      if (et.left) {
+        displayStereoObject
+          .component('leftEyeTransform')
+          .int('flipH', et.left.flipH ? 1 : 0)
+          .int('flipV', et.left.flipV ? 1 : 0)
+          .float('rotation', et.left.rotation ?? 0)
+          .float('scale', et.left.scale ?? 1)
+          .float('translateX', et.left.translateX ?? 0)
+          .float('translateY', et.left.translateY ?? 0)
+          .end();
+      }
+
+      if (et.right) {
+        displayStereoObject
+          .component('rightEyeTransform')
+          .int('flipH', et.right.flipH ? 1 : 0)
+          .int('flipV', et.right.flipV ? 1 : 0)
+          .float('rotation', et.right.rotation ?? 0)
+          .float('scale', et.right.scale ?? 1)
+          .float('translateX', et.right.translateX ?? 0)
+          .float('translateY', et.right.translateY ?? 0)
+          .end();
+      }
+    }
 
     displayStereoObject.end();
     return builder.build().objects[0]!;

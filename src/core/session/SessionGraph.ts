@@ -659,8 +659,8 @@ export class SessionGraph extends EventEmitter<SessionGraphEvents> {
             if (sourceWidth === 0 && sourceHeight === 0) {
               sourceWidth = width;
               sourceHeight = height;
+              aspectRatio = width / height;
             }
-            aspectRatio = width / height;
             log.debug('Source size:', width, 'x', height, 'aspect:', aspectRatio);
           }
         }
@@ -671,6 +671,31 @@ export class SessionGraph extends EventEmitter<SessionGraphEvents> {
         const movieProp = mediaObj.property('movie').value();
         if (movieProp) {
           log.debug('Found source:', movieProp);
+        }
+      }
+    }
+
+    // Issue #424: Also check RVImageSource when RVFileSource yielded no dimensions
+    if (sourceWidth === 0 && sourceHeight === 0) {
+      const imageSources = dto.byProtocol('RVImageSource');
+      log.debug('RVImageSource objects:', imageSources.length);
+      for (const source of imageSources) {
+        const proxyComp = source.component('proxy');
+        if (proxyComp?.exists()) {
+          const sizeValue = proxyComp.property('size').value();
+          const size = getNumberArray(sizeValue);
+          if (size && size.length >= 2) {
+            const width = size[0]!;
+            const height = size[1]!;
+            if (width > 0 && height > 0) {
+              if (sourceWidth === 0 && sourceHeight === 0) {
+                sourceWidth = width;
+                sourceHeight = height;
+                aspectRatio = width / height;
+              }
+              log.debug('Image source size:', width, 'x', height, 'aspect:', aspectRatio);
+            }
+          }
         }
       }
     }

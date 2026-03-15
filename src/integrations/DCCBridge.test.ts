@@ -372,6 +372,45 @@ describe('DCCBridge', () => {
       bridge.dispose();
     });
 
+    it('DCC-OUT-006: send increments droppedMessageCount when not writable (#443)', () => {
+      const bridge = new DCCBridge(defaultConfig());
+      expect(bridge.droppedMessageCount).toBe(0);
+
+      bridge.sendFrameChanged(1, 10);
+      expect(bridge.droppedMessageCount).toBe(1);
+
+      bridge.sendColorChanged({ exposure: 1.0 });
+      expect(bridge.droppedMessageCount).toBe(2);
+
+      bridge.sendAnnotationAdded(1, 'pen', 'a1');
+      expect(bridge.droppedMessageCount).toBe(3);
+
+      bridge.dispose();
+    });
+
+    it('DCC-OUT-007: send emits messageDropped when not writable (#443)', () => {
+      const bridge = new DCCBridge(defaultConfig());
+      const listener = vi.fn();
+      bridge.on('messageDropped', listener);
+
+      bridge.sendFrameChanged(1, 10);
+
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(listener.mock.calls[0]![0]).toMatchObject({
+        type: 'frameChanged',
+        frame: 1,
+        totalFrames: 10,
+      });
+      bridge.dispose();
+    });
+
+    it('DCC-OUT-008: successful send does not increment droppedMessageCount (#443)', async () => {
+      const { bridge } = await createConnectedBridge();
+      bridge.sendFrameChanged(1, 10);
+      expect(bridge.droppedMessageCount).toBe(0);
+      bridge.dispose();
+    });
+
     it('DCC-OUT-005: emits messageSent on successful send', async () => {
       const { bridge } = await createConnectedBridge();
       const listener = vi.fn();

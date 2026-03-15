@@ -23,6 +23,7 @@ import { SUPPORTED_MEDIA_ACCEPT } from '../../utils/media/SupportedMediaFormats'
 vi.mock('../../ui/components/shared/Modal', () => ({
   showFileReloadPrompt: vi.fn(),
   showSequenceReloadPrompt: vi.fn(),
+  FILE_RELOAD_CANCEL: 'cancel',
 }));
 
 import { showFileReloadPrompt } from '../../ui/components/shared/Modal';

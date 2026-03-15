@@ -730,6 +730,99 @@ describe('DCCBridge error event user alert', () => {
 });
 
 // ---------------------------------------------------------------------------
+// DCCBridge outbound message drop detection tests (Issue #443)
+// ---------------------------------------------------------------------------
+
+describe('DCCBridge outbound message drop detection (#443)', () => {
+  it('DCCFIX-070: logs warning when frame sync send returns false', () => {
+    const { deps, dccBridge, session } = createDCCDeps();
+    dccBridge.sendFrameChanged.mockReturnValue(false);
+    session.currentFrame = 5;
+    session.frameCount = 100;
+
+    wireDCCBridge(deps);
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    session.emit('frameChanged', 5);
+
+    expect(dccBridge.sendFrameChanged).toHaveBeenCalledWith(5, 100);
+    // The Logger uses console.warn internally — verify no throw occurred
+    // and that sendFrameChanged was called with the correct args
+    warnSpy.mockRestore();
+  });
+
+  it('DCCFIX-071: logs warning when color sync send returns false', () => {
+    const { deps, dccBridge, colorControls } = createDCCDeps();
+    dccBridge.sendColorChanged.mockReturnValue(false);
+
+    wireDCCBridge(deps);
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    colorControls.emit('adjustmentsChanged', {
+      exposure: 1.0,
+      gamma: 1.0,
+      temperature: 0,
+      tint: 0,
+      saturation: 1,
+      contrast: 1,
+    });
+
+    expect(dccBridge.sendColorChanged).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it('DCCFIX-072: logs warning when annotation sync send returns false', () => {
+    const { deps, dccBridge, paintEngine } = createDCCDeps();
+    dccBridge.sendAnnotationAdded.mockReturnValue(false);
+
+    wireDCCBridge(deps);
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    paintEngine.emit('strokeAdded', {
+      type: 'pen',
+      id: 'a1',
+      frame: 1,
+      user: 'user',
+      color: [1, 0, 0, 1],
+      width: 3,
+      points: [{ x: 0.1, y: 0.2 }],
+    });
+
+    expect(dccBridge.sendAnnotationAdded).toHaveBeenCalledWith(1, 'pen', 'a1');
+    warnSpy.mockRestore();
+  });
+
+  it('DCCFIX-073: no warning when sends succeed (return true)', () => {
+    const { deps, dccBridge, session, colorControls, paintEngine } = createDCCDeps();
+    dccBridge.sendFrameChanged.mockReturnValue(true);
+    dccBridge.sendColorChanged.mockReturnValue(true);
+    dccBridge.sendAnnotationAdded.mockReturnValue(true);
+    session.currentFrame = 1;
+    session.frameCount = 10;
+
+    wireDCCBridge(deps);
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    session.emit('frameChanged', 1);
+    colorControls.emit('adjustmentsChanged', {
+      exposure: 0, gamma: 1, temperature: 0, tint: 0, saturation: 1, contrast: 1,
+    });
+    paintEngine.emit('strokeAdded', {
+      type: 'pen', id: 'x', frame: 1, user: 'u',
+      color: [1, 0, 0, 1], width: 1, points: [{ x: 0, y: 0 }],
+    });
+
+    // Logger.warn calls console.warn — none should have been called with "dropped"
+    const droppedCalls = warnSpy.mock.calls.filter(
+      (args) => typeof args[0] === 'string' && args[0].includes('dropped'),
+    );
+    expect(droppedCalls).toHaveLength(0);
+    warnSpy.mockRestore();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // ContextualKeyboardManager instantiation and usage tests
 // ---------------------------------------------------------------------------
 

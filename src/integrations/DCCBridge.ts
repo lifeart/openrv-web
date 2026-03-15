@@ -134,6 +134,8 @@ export interface DCCBridgeEvents extends EventMap {
   error: Error;
   messageReceived: DCCInboundMessage;
   messageSent: DCCOutboundMessage;
+  /** Emitted when a message could not be sent because the bridge is not writable. */
+  messageDropped: DCCOutboundMessage;
 }
 
 // ---------------------------------------------------------------------------
@@ -198,6 +200,7 @@ export class DCCBridge extends EventEmitter<DCCBridgeEvents> implements ManagerB
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private heartbeatTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
   private _lastPongTime = 0;
+  private _droppedMessageCount = 0;
   private disposed = false;
 
   /** Custom WebSocket constructor for testing (defaults to globalThis.WebSocket) */
@@ -226,6 +229,11 @@ export class DCCBridge extends EventEmitter<DCCBridgeEvents> implements ManagerB
   /** Timestamp of the last received pong. */
   get lastPongTime(): number {
     return this._lastPongTime;
+  }
+
+  /** Number of outbound messages dropped because the bridge was not writable. */
+  get droppedMessageCount(): number {
+    return this._droppedMessageCount;
   }
 
   /**
@@ -266,7 +274,11 @@ export class DCCBridge extends EventEmitter<DCCBridgeEvents> implements ManagerB
    * Send a typed outbound message.
    */
   send(message: DCCOutboundMessage): boolean {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return false;
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      this._droppedMessageCount++;
+      this.emit('messageDropped', message);
+      return false;
+    }
 
     const envelope: DCCOutboundMessage = {
       ...message,

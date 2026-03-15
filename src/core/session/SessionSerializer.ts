@@ -24,7 +24,7 @@ import { DEFAULT_NOISE_REDUCTION_PARAMS } from '../../filters/NoiseReduction';
 import { DEFAULT_WATERMARK_STATE } from '../../ui/components/WatermarkOverlay';
 import type { Annotation, PaintEffects } from '../../paint/types';
 import { DEFAULT_PAINT_EFFECTS } from '../../paint/types';
-import { showFileReloadPrompt, showSequenceReloadPrompt } from '../../ui/components/shared/Modal';
+import { showFileReloadPrompt, showSequenceReloadPrompt, FILE_RELOAD_CANCEL } from '../../ui/components/shared/Modal';
 import { SUPPORTED_MEDIA_ACCEPT } from '../../utils/media/SupportedMediaFormats';
 import type { MediaCacheManager } from '../../cache/MediaCacheManager';
 import { serializeRepresentation } from '../types/representation';
@@ -362,6 +362,9 @@ export class SessionSerializer {
     return sources.map((source) => {
       // Check if the URL is a blob URL (not portable across sessions)
       const isBlob = source.url.startsWith('blob:');
+      // Sequences are loaded from local files and have url: '' — they also
+      // need requiresReload so the user is prompted to re-select files on load.
+      const needsReload = isBlob || source.url === '';
 
       const ref: MediaReference = {
         // Don't save blob URLs - they're session-specific and won't work on reload
@@ -373,7 +376,7 @@ export class SessionSerializer {
         duration: source.duration,
         fps: source.fps,
         // Only set requiresReload when true to keep saved files cleaner
-        ...(isBlob && { requiresReload: true }),
+        ...(needsReload && { requiresReload: true }),
       };
 
       // Include OPFS cache key when the cache entry is stable (write complete)
@@ -438,6 +441,10 @@ export class SessionSerializer {
               accept: SUPPORTED_MEDIA_ACCEPT,
             });
 
+            if (files === FILE_RELOAD_CANCEL) {
+              throw new Error('Session restore cancelled by user');
+            }
+
             if (files && files.length > 0) {
               try {
                 await session.loadSequence(files);
@@ -475,6 +482,10 @@ export class SessionSerializer {
             title: 'Reload File',
             accept,
           });
+
+          if (file === FILE_RELOAD_CANCEL) {
+            throw new Error('Session restore cancelled by user');
+          }
 
           if (file) {
             // User provided a file - load it
@@ -517,6 +528,10 @@ export class SessionSerializer {
             accept: SUPPORTED_MEDIA_ACCEPT,
           });
 
+          if (files === FILE_RELOAD_CANCEL) {
+            throw new Error('Session restore cancelled by user');
+          }
+
           if (files && files.length > 0) {
             try {
               await session.loadSequence(files);
@@ -530,6 +545,10 @@ export class SessionSerializer {
           }
         }
       } catch (_err) {
+        // Re-throw cancel errors so they propagate out of fromJSON
+        if (_err instanceof Error && _err.message === 'Session restore cancelled by user') {
+          throw _err;
+        }
         warnings.push(`Failed to load: ${ref.name}`);
       }
     }

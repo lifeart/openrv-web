@@ -1,8 +1,8 @@
 /**
- * Regression tests for issue #410: Partial project/snapshot restore
- * must remap currentSourceIndex (and sourceAIndex/sourceBIndex) through
- * mediaIndexMap so the active source does not land on the wrong media
- * after skipped loads.
+ * Regression tests for issue #383:
+ * The file-reload dialog must provide a distinct Cancel path that aborts the
+ * entire restore flow.  Closing the dialog or pressing Escape must resolve as
+ * cancel (not skip).  A dedicated Cancel button must be present.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -17,12 +17,19 @@ import { DEFAULT_DIFFERENCE_MATTE_STATE } from '../../ui/components/DifferenceMa
 import { DEFAULT_BLEND_MODE_STATE } from '../../ui/components/ComparisonManager';
 import { createDefaultCurvesData } from '../../color/ColorCurves';
 import { DEFAULT_STEREO_EYE_TRANSFORM_STATE, DEFAULT_STEREO_ALIGN_MODE } from '../../stereo/StereoRenderer';
+import { FILE_RELOAD_CANCEL } from '../../ui/components/shared/Modal';
 
-// Mock the showFileReloadPrompt dialog
-vi.mock('../../ui/components/shared/Modal', () => ({
-  showFileReloadPrompt: vi.fn(),
-  FILE_RELOAD_CANCEL: 'cancel',
-}));
+// Mock Modal functions
+vi.mock('../../ui/components/shared/Modal', async () => {
+  const actual = await vi.importActual<typeof import('../../ui/components/shared/Modal')>('../../ui/components/shared/Modal');
+  return {
+    ...actual,
+    showFileReloadPrompt: vi.fn(),
+    showSequenceReloadPrompt: vi.fn(),
+  };
+});
+
+import { showFileReloadPrompt, showSequenceReloadPrompt } from '../../ui/components/shared/Modal';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -55,6 +62,7 @@ function createMockComponents(): SessionComponents {
       loadImage: vi.fn<(name: string, url: string) => Promise<void>>().mockResolvedValue(undefined),
       loadVideo: vi.fn<(name: string, url: string) => Promise<void>>().mockResolvedValue(undefined),
       loadFile: vi.fn<(file: File) => Promise<void>>().mockResolvedValue(undefined),
+      loadSequence: vi.fn<(files: File[]) => Promise<void>>().mockResolvedValue(undefined),
       toSerializedGraph: vi.fn().mockReturnValue(null),
       loadSerializedGraph: vi.fn().mockReturnValue([]),
       setEdlEntries: vi.fn(),
@@ -155,182 +163,157 @@ function createMockComponents(): SessionComponents {
   } as any;
 }
 
-function makeImageRef(name: string, path: string) {
-  return { name, path, type: 'image' as const, width: 1920, height: 1080, duration: 0, fps: 0 };
-}
-
-// =================================================================
-// Issue #410: currentSourceIndex remapped through mediaIndexMap
-// =================================================================
-
-describe('Issue #410: currentSourceIndex remapped during partial restore', () => {
-  it('ISS-410-001: currentSourceIndex is remapped when first source is skipped', async () => {
-    const components = createMockComponents();
-
-    // Simulate: source 0 fails, source 1 succeeds → mediaIndexMap = {1→0}
-    // loadVideo for first call rejects (source 0 skipped), second call resolves (source 1 loaded as live index 0)
-    let callCount = 0;
-    (components.session as any).loadImage
-      .mockImplementation(() => {
-        callCount++;
-        if (callCount === 1) return Promise.reject(new Error('fail'));
-        return Promise.resolve();
-      });
-
-    const state = SessionSerializer.createEmpty();
-    state.media = [
-      makeImageRef('img0.exr', '/img0.exr'),
-      makeImageRef('img1.exr', '/img1.exr'),
-    ];
-    // Saved state had source index 1 active (the second image)
-    state.playback.currentSourceIndex = 1;
-
-    const result = await SessionSerializer.fromJSON(state, components);
-
-    expect(result.loadedMedia).toBe(1);
-    const arg = (components.session as any).setPlaybackState.mock.calls[0][0];
-    // Source 1 in saved state maps to live index 0 (only one source loaded)
-    expect(arg.currentSourceIndex).toBe(0);
+describe('Issue #383: File-reload dialog must have a Cancel path that aborts restore', () => {
+  it('ISS-383-001: FILE_RELOAD_CANCEL sentinel is a distinct string value', () => {
+    expect(FILE_RELOAD_CANCEL).toBe('cancel');
+    // Must be distinguishable from null (skip) and truthy File values
+    expect(FILE_RELOAD_CANCEL).not.toBeNull();
+    expect(typeof FILE_RELOAD_CANCEL).toBe('string');
   });
 
-  it('ISS-410-002: currentSourceIndex falls back to 0 when the saved active source was skipped', async () => {
+  it('ISS-383-002: cancelling file reload aborts the entire restore flow', async () => {
     const components = createMockComponents();
-
-    // source 0 fails, source 1 succeeds → saved currentSourceIndex was 0 (skipped)
-    let callCount = 0;
-    (components.session as any).loadImage
-      .mockImplementation(() => {
-        callCount++;
-        if (callCount === 1) return Promise.reject(new Error('fail'));
-        return Promise.resolve();
-      });
+    vi.mocked(showFileReloadPrompt).mockResolvedValue(FILE_RELOAD_CANCEL);
 
     const state = SessionSerializer.createEmpty();
     state.media = [
-      makeImageRef('img0.exr', '/img0.exr'),
-      makeImageRef('img1.exr', '/img1.exr'),
+      {
+        name: 'render.exr',
+        path: '',
+        type: 'image',
+        width: 1920,
+        height: 1080,
+        duration: 1,
+        fps: 24,
+        requiresReload: true,
+      },
     ];
-    // Saved state had source index 0 active — but that source failed to load
-    state.playback.currentSourceIndex = 0;
 
-    const result = await SessionSerializer.fromJSON(state, components);
-
-    expect(result.loadedMedia).toBe(1);
-    const arg = (components.session as any).setPlaybackState.mock.calls[0][0];
-    // Source 0 was skipped, nearest valid is 0 (the only live source)
-    expect(arg.currentSourceIndex).toBe(0);
+    await expect(SessionSerializer.fromJSON(state, components)).rejects.toThrow(
+      'Session restore cancelled by user',
+    );
+    // loadFile should never have been called
+    expect(components.session.loadFile).not.toHaveBeenCalled();
   });
 
-  it('ISS-410-003: sourceAIndex and sourceBIndex are also remapped', async () => {
+  it('ISS-383-003: cancelling sequence reload aborts the entire restore flow', async () => {
     const components = createMockComponents();
-
-    // 3 sources: 0 fails, 1 succeeds (→0), 2 succeeds (→1)
-    let callCount = 0;
-    (components.session as any).loadImage
-      .mockImplementation(() => {
-        callCount++;
-        if (callCount === 1) return Promise.reject(new Error('fail'));
-        return Promise.resolve();
-      });
+    vi.mocked(showSequenceReloadPrompt).mockResolvedValue(FILE_RELOAD_CANCEL);
 
     const state = SessionSerializer.createEmpty();
     state.media = [
-      makeImageRef('img0.exr', '/img0.exr'),
-      makeImageRef('img1.exr', '/img1.exr'),
-      makeImageRef('img2.exr', '/img2.exr'),
+      {
+        name: 'shot.0001.exr',
+        path: '',
+        type: 'sequence',
+        width: 2048,
+        height: 1080,
+        duration: 48,
+        fps: 24,
+        requiresReload: true,
+      },
     ];
-    // Saved: active=2, A=1, B=2
-    state.playback.currentSourceIndex = 2;
-    state.playback.sourceAIndex = 1;
-    state.playback.sourceBIndex = 2;
 
-    const result = await SessionSerializer.fromJSON(state, components);
-
-    expect(result.loadedMedia).toBe(2);
-    const arg = (components.session as any).setPlaybackState.mock.calls[0][0];
-    // saved 1→live 0, saved 2→live 1
-    expect(arg.currentSourceIndex).toBe(1);
-    expect(arg.sourceAIndex).toBe(0);
-    expect(arg.sourceBIndex).toBe(1);
+    await expect(SessionSerializer.fromJSON(state, components)).rejects.toThrow(
+      'Session restore cancelled by user',
+    );
+    expect(components.session.loadSequence).not.toHaveBeenCalled();
   });
 
-  it('ISS-410-004: indices unchanged when all sources load successfully', async () => {
+  it('ISS-383-004: skipping (null) still works and adds a warning', async () => {
     const components = createMockComponents();
+    vi.mocked(showFileReloadPrompt).mockResolvedValue(null);
 
     const state = SessionSerializer.createEmpty();
     state.media = [
-      makeImageRef('img0.exr', '/img0.exr'),
-      makeImageRef('img1.exr', '/img1.exr'),
-      makeImageRef('img2.exr', '/img2.exr'),
+      {
+        name: 'render.exr',
+        path: '',
+        type: 'image',
+        width: 1920,
+        height: 1080,
+        duration: 1,
+        fps: 24,
+        requiresReload: true,
+      },
     ];
-    state.playback.currentSourceIndex = 2;
-    state.playback.sourceAIndex = 0;
-    state.playback.sourceBIndex = 1;
 
     const result = await SessionSerializer.fromJSON(state, components);
-
-    expect(result.loadedMedia).toBe(3);
-    const arg = (components.session as any).setPlaybackState.mock.calls[0][0];
-    // All loaded, mapping is identity: 0→0, 1→1, 2→2
-    expect(arg.currentSourceIndex).toBe(2);
-    expect(arg.sourceAIndex).toBe(0);
-    expect(arg.sourceBIndex).toBe(1);
+    expect(result.warnings).toContain('Skipped reload: render.exr');
+    expect(result.loadedMedia).toBe(0);
   });
 
-  it('ISS-410-005: middle source skipped remaps correctly', async () => {
+  it('ISS-383-005: cancel on second file aborts without loading remaining files', async () => {
     const components = createMockComponents();
-
-    // 3 sources: 0 succeeds (→0), 1 fails, 2 succeeds (→1)
-    let callCount = 0;
-    (components.session as any).loadImage
-      .mockImplementation(() => {
-        callCount++;
-        if (callCount === 2) return Promise.reject(new Error('fail'));
-        return Promise.resolve();
-      });
+    const file = new File(['img'], 'first.exr');
+    vi.mocked(showFileReloadPrompt)
+      .mockResolvedValueOnce(file) // first file loaded OK
+      .mockResolvedValueOnce(FILE_RELOAD_CANCEL); // second file cancelled
 
     const state = SessionSerializer.createEmpty();
     state.media = [
-      makeImageRef('img0.exr', '/img0.exr'),
-      makeImageRef('img1.exr', '/img1.exr'),
-      makeImageRef('img2.exr', '/img2.exr'),
+      {
+        name: 'first.exr',
+        path: '',
+        type: 'image',
+        width: 1920,
+        height: 1080,
+        duration: 1,
+        fps: 24,
+        requiresReload: true,
+      },
+      {
+        name: 'second.exr',
+        path: '',
+        type: 'image',
+        width: 1920,
+        height: 1080,
+        duration: 1,
+        fps: 24,
+        requiresReload: true,
+      },
+      {
+        name: 'third.exr',
+        path: '',
+        type: 'image',
+        width: 1920,
+        height: 1080,
+        duration: 1,
+        fps: 24,
+        requiresReload: true,
+      },
     ];
-    // Saved active source was index 1 (the one that will be skipped)
-    state.playback.currentSourceIndex = 1;
 
-    const result = await SessionSerializer.fromJSON(state, components);
+    await expect(SessionSerializer.fromJSON(state, components)).rejects.toThrow(
+      'Session restore cancelled by user',
+    );
 
-    expect(result.loadedMedia).toBe(2);
-    const arg = (components.session as any).setPlaybackState.mock.calls[0][0];
-    // Source 1 was skipped. Valid live indices are 0 (from saved 0) and 1 (from saved 2).
-    // Closest live index to saved index 1 is live index 1 (distance 0 vs distance 1).
-    expect(arg.currentSourceIndex).toBe(1);
+    // First file was loaded, second triggered cancel, third never prompted
+    expect(components.session.loadFile).toHaveBeenCalledTimes(1);
+    expect(showFileReloadPrompt).toHaveBeenCalledTimes(2);
   });
 
-  it('ISS-410-006: sourceBIndex of -1 is preserved (not remapped)', async () => {
+  it('ISS-383-006: cancelling non-blob sequence reload aborts restore', async () => {
     const components = createMockComponents();
-
-    // Source 0 fails, source 1 succeeds
-    let callCount = 0;
-    (components.session as any).loadImage
-      .mockImplementation(() => {
-        callCount++;
-        if (callCount === 1) return Promise.reject(new Error('fail'));
-        return Promise.resolve();
-      });
+    vi.mocked(showSequenceReloadPrompt).mockResolvedValue(FILE_RELOAD_CANCEL);
 
     const state = SessionSerializer.createEmpty();
     state.media = [
-      makeImageRef('img0.exr', '/img0.exr'),
-      makeImageRef('img1.exr', '/img1.exr'),
+      {
+        name: 'shot.0001.exr',
+        path: '/path/to/shot.0001.exr',
+        type: 'sequence',
+        width: 2048,
+        height: 1080,
+        duration: 48,
+        fps: 24,
+        // No requiresReload — this is the non-blob sequence path
+      },
     ];
-    state.playback.currentSourceIndex = 1;
-    state.playback.sourceAIndex = 1;
-    state.playback.sourceBIndex = -1; // No B source assigned
 
-    await SessionSerializer.fromJSON(state, components);
-
-    const arg = (components.session as any).setPlaybackState.mock.calls[0][0];
-    expect(arg.sourceBIndex).toBe(-1); // Should remain -1
+    await expect(SessionSerializer.fromJSON(state, components)).rejects.toThrow(
+      'Session restore cancelled by user',
+    );
+    expect(components.session.loadSequence).not.toHaveBeenCalled();
   });
 });
