@@ -550,6 +550,7 @@ export function createMockSession(overrides?: Record<string, unknown>) {
     volume: 1,
     muted: false,
     currentSource: { duration: 100, width: 1920, height: 1080 } as Record<string, unknown> | null,
+    allSources: [] as Array<{ url?: string }>,
     currentAB: 'A' as 'A' | 'B',
     sourceAIndex: 0,
     sourceBIndex: -1,

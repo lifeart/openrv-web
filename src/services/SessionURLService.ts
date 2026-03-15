@@ -23,6 +23,7 @@ export interface URLSession {
   readonly outPoint: number;
   readonly currentSourceIndex: number;
   readonly currentSource: { url?: string } | null;
+  readonly allSources: ReadonlyArray<{ url?: string }>;
   readonly sourceAIndex: number;
   readonly sourceBIndex: number;
   readonly currentAB: 'A' | 'B';
@@ -101,6 +102,12 @@ export interface SessionURLDeps {
   getLocationSearch: () => string;
   getLocationHash: () => string;
   getLocationHref: () => string;
+  /**
+   * Optional callback to load a source from URL into the session,
+   * returning the new source index (or -1 on failure).
+   * Used when the session already has media loaded.
+   */
+  loadSourceFromUrl?: (url: string) => Promise<number>;
 }
 
 // ---------------------------------------------------------------------------
@@ -146,23 +153,59 @@ export class SessionURLService {
     };
   }
 
+  /**
+   * Find the index of an already-loaded source by URL match.
+   * Returns -1 if no match found.
+   */
+  private findSourceIndexByUrl(url: string): number {
+    const { session } = this.deps;
+    for (let i = 0; i < session.allSources.length; i++) {
+      if (session.allSources[i]?.url === url) return i;
+    }
+    return -1;
+  }
+
   /** Apply a decoded session state to the session/viewer. */
   async applySessionURLState(state: SessionURLState): Promise<void> {
     const { session, viewer, compareControl, ocioControl, networkSyncManager } = this.deps;
 
-    // When the session has no media loaded and sourceUrl is available,
-    // attempt to load media from the shared URL before applying view state.
-    if (session.sourceCount === 0 && state.sourceUrl && session.loadSourceFromUrl) {
-      try {
-        console.info(`[SessionURLService] Loading media from share link: ${state.sourceUrl}`);
-        await session.loadSourceFromUrl(state.sourceUrl);
-      } catch (err) {
-        const reason = err instanceof Error ? err.message : String(err);
-        console.warn(
-          '[SessionURLService] Failed to load media from share link sourceUrl, continuing with view state:',
-          err,
-        );
-        this.deps.networkControl.showInfo(`Failed to load shared media: ${reason}`);
+    // Phase 1: Resolve shared media (always, regardless of session state)
+    // If sourceUrl is present, ensure that media is available in the session
+    // before applying view/compare state.
+    let resolvedSourceIndex = state.sourceIndex;
+    if (state.sourceUrl) {
+      // First, check if the URL is already loaded
+      const existingIndex = this.findSourceIndexByUrl(state.sourceUrl);
+      if (existingIndex >= 0) {
+        // Already loaded — just navigate to it
+        resolvedSourceIndex = existingIndex;
+        console.info(`[SessionURLService] Shared media already loaded at index ${existingIndex}`);
+      } else {
+        // Not loaded yet — attempt to load it
+        try {
+          console.info(`[SessionURLService] Loading media from share link: ${state.sourceUrl}`);
+          if (session.sourceCount === 0 && session.loadSourceFromUrl) {
+            // Empty session: use session's own loadSourceFromUrl
+            await session.loadSourceFromUrl(state.sourceUrl);
+            // After loading, the new source should be the last one
+            resolvedSourceIndex = Math.max(0, session.sourceCount - 1);
+          } else if (this.deps.loadSourceFromUrl) {
+            // Non-empty session: use the deps callback to add a new source
+            const newIndex = await this.deps.loadSourceFromUrl(state.sourceUrl);
+            if (newIndex >= 0) {
+              resolvedSourceIndex = newIndex;
+            } else {
+              console.warn('[SessionURLService] loadSourceFromUrl returned -1, using original sourceIndex');
+            }
+          }
+        } catch (err) {
+          const reason = err instanceof Error ? err.message : String(err);
+          console.warn(
+            '[SessionURLService] Failed to load media from share link sourceUrl, continuing with view state:',
+            err,
+          );
+          this.deps.networkControl.showInfo(`Failed to load shared media: ${reason}`);
+        }
       }
     }
 
@@ -170,7 +213,7 @@ export class SessionURLService {
     syncStateManager.beginApplyRemote();
     try {
       if (session.sourceCount > 0) {
-        const sourceIndex = Math.max(0, Math.min(session.sourceCount - 1, state.sourceIndex));
+        const sourceIndex = Math.max(0, Math.min(session.sourceCount - 1, resolvedSourceIndex));
         session.setCurrentSource(sourceIndex);
       }
 

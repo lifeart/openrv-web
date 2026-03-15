@@ -1403,6 +1403,117 @@ describe('SessionURLService', () => {
   });
 
   // -----------------------------------------------------------------------
+  // Issue #431 regression: share links load media regardless of session state
+  // -----------------------------------------------------------------------
+
+  describe('share link media loading (issue #431)', () => {
+    it('SU-023: loads media on empty session via session.loadSourceFromUrl', async () => {
+      deps.session.sourceCount = 0;
+      deps.session.loadSourceFromUrl = vi.fn(async () => {
+        deps.session.sourceCount = 1;
+      });
+      deps.session.allSources = [];
+
+      const state: SessionURLState = {
+        frame: 10,
+        fps: 24,
+        sourceIndex: 0,
+        sourceUrl: 'https://example.com/media.mp4',
+      };
+
+      await service.applySessionURLState(state);
+      expect(deps.session.loadSourceFromUrl).toHaveBeenCalledWith('https://example.com/media.mp4');
+    });
+
+    it('SU-024: loads media when session already has other media (non-empty)', async () => {
+      deps.session.sourceCount = 1;
+      deps.session.allSources = [{ url: 'https://example.com/existing.mp4' }];
+      const loadSourceFromUrl = vi.fn(async () => {
+        deps.session.sourceCount = 2;
+        return 1; // new source at index 1
+      });
+
+      const depsWithLoader = createDeps({
+        ...deps,
+        loadSourceFromUrl,
+      });
+      const svc = new SessionURLService(depsWithLoader);
+
+      const state: SessionURLState = {
+        frame: 5,
+        fps: 24,
+        sourceIndex: 0,
+        sourceUrl: 'https://example.com/shared.mp4',
+      };
+
+      await svc.applySessionURLState(state);
+      expect(loadSourceFromUrl).toHaveBeenCalledWith('https://example.com/shared.mp4');
+      // Should navigate to the newly loaded source (index 1)
+      expect(depsWithLoader.session.setCurrentSource).toHaveBeenCalledWith(1);
+    });
+
+    it('SU-025: navigates to existing source instead of duplicating', async () => {
+      deps.session.sourceCount = 2;
+      deps.session.allSources = [
+        { url: 'https://example.com/a.mp4' },
+        { url: 'https://example.com/shared.mp4' },
+      ];
+
+      const state: SessionURLState = {
+        frame: 5,
+        fps: 24,
+        sourceIndex: 0,
+        sourceUrl: 'https://example.com/shared.mp4',
+      };
+
+      await service.applySessionURLState(state);
+      // Should navigate to index 1 where the URL already exists
+      expect(deps.session.setCurrentSource).toHaveBeenCalledWith(1);
+    });
+
+    it('SU-026: falls through gracefully when no loadSourceFromUrl callback', async () => {
+      deps.session.sourceCount = 1;
+      deps.session.allSources = [{ url: 'https://example.com/existing.mp4' }];
+      // No loadSourceFromUrl on deps
+
+      const state: SessionURLState = {
+        frame: 5,
+        fps: 24,
+        sourceIndex: 0,
+        sourceUrl: 'https://example.com/shared.mp4',
+      };
+
+      await service.applySessionURLState(state);
+      // Should use original sourceIndex since it can't load
+      expect(deps.session.setCurrentSource).toHaveBeenCalledWith(0);
+    });
+
+    it('SU-027: loadSourceFromUrl failure falls back to original sourceIndex', async () => {
+      deps.session.sourceCount = 1;
+      deps.session.allSources = [];
+      const loadSourceFromUrl = vi.fn(async () => -1);
+
+      const depsWithLoader = createDeps({
+        ...deps,
+        loadSourceFromUrl,
+      });
+      const svc = new SessionURLService(depsWithLoader);
+
+      const state: SessionURLState = {
+        frame: 5,
+        fps: 24,
+        sourceIndex: 0,
+        sourceUrl: 'https://example.com/shared.mp4',
+      };
+
+      await svc.applySessionURLState(state);
+      expect(loadSourceFromUrl).toHaveBeenCalledWith('https://example.com/shared.mp4');
+      // Should fall back to original sourceIndex
+      expect(depsWithLoader.session.setCurrentSource).toHaveBeenCalledWith(0);
+    });
+  });
+
+  // -----------------------------------------------------------------------
   // dispose
   // -----------------------------------------------------------------------
 
