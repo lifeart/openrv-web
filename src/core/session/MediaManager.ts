@@ -6,6 +6,8 @@ import {
   preloadFrames,
   releaseDistantFrames,
   disposeSequence,
+  buildFrameNumberMap,
+  getSequenceFrameRange,
 } from '../../utils/media/SequenceLoader';
 import { VideoSourceNode } from '../../nodes/sources/VideoSourceNode';
 import { FileSourceNode } from '../../nodes/sources/FileSourceNode';
@@ -795,16 +797,18 @@ export class MediaManager implements ManagerBase {
       throw new Error('No valid image sequence found in the selected files');
     }
 
+    const frameRange = getSequenceFrameRange(sequenceInfo);
     const source: MediaSource = {
       type: 'sequence',
       name: sequenceInfo.name,
       url: '',
       width: sequenceInfo.width,
       height: sequenceInfo.height,
-      duration: sequenceInfo.frames.length,
+      duration: frameRange,
       fps: sequenceInfo.fps,
       sequenceInfo,
       sequenceFrames: sequenceInfo.frames,
+      sequenceFrameMap: buildFrameNumberMap(sequenceInfo.frames),
       element: sequenceInfo.frames[0]?.image,
     };
 
@@ -814,11 +818,11 @@ export class MediaManager implements ManagerBase {
     this._host?.setFpsInternal(sequenceInfo.fps);
     this._host?.emitFpsChanged(sequenceInfo.fps);
     this._host?.setInPointInternal(1);
-    this._host?.setOutPointInternal(sequenceInfo.frames.length);
+    this._host?.setOutPointInternal(frameRange);
     this._host?.setCurrentFrameInternal(1);
 
     this._host?.emitSourceLoaded(source);
-    this._host?.emitDurationChanged(sequenceInfo.frames.length);
+    this._host?.emitDurationChanged(frameRange);
 
     // Preload adjacent frames
     preloadFrames(sequenceInfo.frames, 0, 10);
@@ -838,14 +842,16 @@ export class MediaManager implements ManagerBase {
     }
 
     const currentFrame = this._host?.getCurrentFrame() ?? 1;
-    const idx = (frameIndex ?? currentFrame) - 1;
-    const frame = source.sequenceFrames[idx];
+    const timelineFrame = frameIndex ?? currentFrame;
+    const startFrame = source.sequenceInfo?.startFrame ?? 1;
+    const frameNumber = startFrame + timelineFrame - 1;
+    const frame = source.sequenceFrameMap?.get(frameNumber);
     if (!frame) return null;
 
     const image = await loadFrameImage(frame);
 
-    preloadFrames(source.sequenceFrames, idx, 5);
-    releaseDistantFrames(source.sequenceFrames, idx, 20);
+    preloadFrames(source.sequenceFrames, frame.index, 5);
+    releaseDistantFrames(source.sequenceFrames, frame.index, 20);
 
     return image;
   }
@@ -860,8 +866,10 @@ export class MediaManager implements ManagerBase {
     }
 
     const currentFrame = this._host?.getCurrentFrame() ?? 1;
-    const idx = (frameIndex ?? currentFrame) - 1;
-    const frame = source.sequenceFrames[idx];
+    const timelineFrame = frameIndex ?? currentFrame;
+    const startFrame = source.sequenceInfo?.startFrame ?? 1;
+    const frameNumber = startFrame + timelineFrame - 1;
+    const frame = source.sequenceFrameMap?.get(frameNumber);
     return frame?.image ?? null;
   }
 

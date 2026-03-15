@@ -2676,3 +2676,89 @@ The `URLSession` interface gained `allSources` for URL-based lookup. `SessionURL
 **Fix**: Removed false HUD claim from `docs/advanced/review-workflow.md`, kept accurate description of actual presentation mode features.
 
 **Files changed**: `docs/advanced/review-workflow.md`
+
+## Issue #501: The file-format guide advertises `.ico` support, but the shipped supported-format lists and picker accept string do not include it
+
+**Root cause**: `SUPPORTED_IMAGE_EXTENSIONS` in `SupportedMediaFormats.ts` did not include `ico`, so the extension-based classifier, file picker accept string, and all downstream consumers rejected `.ico` files.
+
+**Fix**: Added `'ico'` to `SUPPORTED_IMAGE_EXTENSIONS`, which automatically propagates to `IMAGE_EXTENSION_SET`, `ALL_KNOWN_EXTENSIONS`, and `SUPPORTED_MEDIA_ACCEPT`.
+
+**Tests added**: 5 regression tests verifying `.ico` detection from extension, MIME type, presence in extension list, presence in accept string, and `detectMediaTypeFromFile` classification.
+
+**Files changed**: `src/utils/media/SupportedMediaFormats.ts`, `src/utils/media/SupportedMediaFormats.test.ts`
+
+## Issue #502: The JPEG gainmap guide documents the wrong HDR reconstruction formula for the shipped decoder
+
+**Root cause**: The docs described `hdr = sdr_linear * (1 + gainMap * headroom)` (multiplicative), but the shipped decoder implements the ISO 21496-1 exponential model `HDR_linear = sRGB_to_linear(base) * exp2(gainmap * headroom)`.
+
+**Fix**: Corrected the formula in `docs/guides/file-formats.md` to match the actual implementation.
+
+**Files changed**: `docs/guides/file-formats.md`
+
+## Issue #514: The image-sequence workflow only recognizes a narrow legacy extension subset, even though the docs say sequences can use any supported image format
+
+**Root cause**: `IMAGE_EXTENSIONS` in `SequenceLoader.ts` was a hardcoded set of only 12 legacy extensions, while `SupportedMediaFormats.ts` defines 33 supported image extensions. Formats like AVIF, HEIC, JXL, JP2, HDR were excluded from sequence detection.
+
+**Fix**: Replaced the hardcoded `IMAGE_EXTENSIONS` set with `new Set<string>(SUPPORTED_IMAGE_EXTENSIONS)`, deriving from the single source of truth in `SupportedMediaFormats.ts`.
+
+**Tests added**: 4 regression tests covering JXL/JP2/AVIF/HEIC acceptance, HDR/ICO/SVG/PIC/SXR/RAW acceptance, sequence discovery with new extensions, and non-image rejection.
+
+**Files changed**: `src/utils/media/SequenceLoader.ts`, `src/utils/media/SequenceLoader.test.ts`
+
+## Issue #516: Sequence loads collapse the numeric frame range down to `frames.length`, so missing-frame positions are not preserved as real timeline frames
+
+**Root cause**: Both `SessionMedia.loadSequence()` and `MediaManager.loadSequence()` set source duration/out-point to `sequenceInfo.frames.length` (count of actual files) instead of the numeric frame range (`endFrame - startFrame + 1`). Frame lookups used direct array indexing which only worked for dense sequences.
+
+**Fix**: Added `buildFrameNumberMap()` for O(1) frame lookups by frame number, and `getSequenceFrameRange()` to compute the correct numeric range. Updated `SessionMedia`, `MediaManager`, `Viewer`, and `ViewerExport` to use the frame number map and correct range for duration. A gapped sequence like 1001, 1002, 1004 now correctly becomes a 4-frame timeline with frame 1003 as a missing-frame slot.
+
+**Tests added**: 7 regression tests for `buildFrameNumberMap` and `getSequenceFrameRange`, plus integration test verifying gapped sequence duration and frame lookup.
+
+**Files changed**: `src/utils/media/SequenceLoader.ts`, `src/core/session/SessionTypes.ts`, `src/core/session/SessionMedia.ts`, `src/core/session/MediaManager.ts`, `src/ui/components/Viewer.ts`, `src/ui/components/ViewerExport.ts`, `src/utils/media/SequenceLoader.test.ts`, `src/core/session/Session.media.test.ts`, `src/core/session/SessionMedia.test.ts`, `src/core/session/MediaManager.test.ts`, `src/ui/components/Viewer.render.test.ts`, `src/ui/components/ViewerExport.test.ts`
+
+## Issue #506: The top-level file-format reference presents HEIC/HEIF as a pure WASM decode path, but the shipped runtime uses native Safari decode first and WASM only as fallback
+
+**Root cause**: The format reference table labeled HEIC/HEIF decoder as just "libheif WASM", omitting that Safari uses native decode with WASM as fallback only on other browsers.
+
+**Fix**: Updated the decoder column from "libheif WASM" to "Native (Safari) / libheif WASM (other browsers)".
+
+**Files changed**: `docs/reference/file-formats.md`
+
+## Issue #511: The EXR docs still describe a WASM / compiled OpenEXR decoder, but the shipped `EXRDecoder.ts` is a pure TypeScript implementation
+
+**Root cause**: Docs described EXR as using a "WebAssembly-compiled OpenEXR library" and labeled it "WASM decoder", but the actual implementation is a pure TypeScript EXR parser with TypeScript codec modules (EXRPIZCodec.ts, EXRDWACodec.ts).
+
+**Fix**: Updated `docs/guides/file-formats.md` to say "Pure TypeScript EXR parser" and `docs/reference/file-formats.md` to say "TypeScript decoder".
+
+**Files changed**: `docs/guides/file-formats.md`, `docs/reference/file-formats.md`
+
+## Issue #340: The session-management guide describes the History panel as snapshot/autosave recovery, but the shipped panel is only undo/redo action history
+
+**Root cause**: Docs described the History Panel as providing "a unified view of both manual snapshots and auto-save entries" with filtering and restore, but the shipped `HistoryPanel` is an undo/redo action history viewer built on `HistoryManager`.
+
+**Fix**: Updated `docs/advanced/session-management.md` to accurately describe the History Panel as an undo/redo action history panel and directs users to the Snapshot Panel for snapshot/auto-save recovery.
+
+**Files changed**: `docs/advanced/session-management.md`
+
+## Issue #352: The overlays guide relies on a non-existent `Overlays` submenu and a non-existent `Clear All Overlays` action
+
+**Root cause**: Docs referenced an "Overlays menu" and "Clear All Overlays" action that don't exist. The actual overlay controls are individual toggle buttons in the View tab toolbar and watermark in the Effects tab.
+
+**Fix**: Replaced all references to the non-existent "Overlays menu" with accurate descriptions of the individual toggle buttons in the View tab toolbar, and removed the "Clear All Overlays" claim.
+
+**Files changed**: `docs/advanced/overlays.md`
+
+## Issue #355: The overlays guide documents a tiled text watermark system, but the shipped watermark is only a single positioned image overlay
+
+**Root cause**: Docs described the watermark as tiling "a text string or image across the entire frame" with text, rotation, and color controls. The shipped `WatermarkOverlay` is a single positioned image overlay with image upload, position, scale, opacity, and margin controls.
+
+**Fix**: Updated the watermark section to accurately describe the single positioned image overlay with its actual controls.
+
+**Files changed**: `docs/advanced/overlays.md`
+
+## Issue #354: The overlays guide documents a viewer note overlay, but production `NoteOverlay` is only a timeline note-bar helper
+
+**Root cause**: Docs described a bottom-of-viewer note panel with frame text, authors, stacked notes, and navigation arrows. The shipped `NoteOverlay` draws colored bars on the timeline canvas to indicate frame ranges with notes.
+
+**Fix**: Updated the note overlay section to accurately describe timeline-canvas colored bars filtered by source and note status, not a viewer-level text panel.
+
+**Files changed**: `docs/advanced/overlays.md`

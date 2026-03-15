@@ -204,6 +204,8 @@ export interface MediaSource {
   // Sequence-specific data
   sequenceInfo?: SequenceInfo;
   sequenceFrames?: SequenceFrame[];
+  /** Map from frame number → SequenceFrame for O(1) timeline lookups */
+  sequenceFrameMap?: Map<number, SequenceFrame>;
   // Video source node for mediabunny frame extraction
   videoSourceNode?: VideoSourceNode;
   // File source node for EXR files (supports layer selection)

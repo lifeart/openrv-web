@@ -31,6 +31,8 @@ import {
   findMatchingFiles,
   discoverSequences,
   getBestSequence,
+  buildFrameNumberMap,
+  getSequenceFrameRange,
 } from './SequenceLoader';
 import type { SequenceFrame, SequenceInfo, InferredSequencePattern } from './SequenceLoader';
 
@@ -1206,6 +1208,55 @@ describe('SequenceLoader', () => {
     });
   });
 
+  describe('Extended image format support (regression)', () => {
+    it('SLD-R003: filterImageFiles accepts JPEG XL, JPEG 2000, AVIF, and HEIC extensions', () => {
+      const extensions = ['jxl', 'jp2', 'j2k', 'j2c', 'jph', 'jhc', 'avif', 'heic', 'heif'];
+      const files = extensions.map((ext) => new File([''], `frame_0001.${ext}`));
+
+      const result = filterImageFiles(files);
+
+      expect(result).toHaveLength(extensions.length);
+      expect(result.map((f) => f.name)).toEqual(extensions.map((ext) => `frame_0001.${ext}`));
+    });
+
+    it('SLD-R004: filterImageFiles accepts HDR, ICO, SVG, and RAW extensions', () => {
+      const extensions = ['hdr', 'ico', 'svg', 'pic', 'sxr', 'cr2', 'nef', 'arw', 'dng', 'orf', 'pef', 'srw'];
+      const files = extensions.map((ext) => new File([''], `image.${ext}`));
+
+      const result = filterImageFiles(files);
+
+      expect(result).toHaveLength(extensions.length);
+    });
+
+    it('SLD-R005: discoverSequences detects sequences with new format extensions', () => {
+      const newFormats = ['jxl', 'avif', 'heic', 'jp2', 'hdr'];
+      for (const ext of newFormats) {
+        const files = [
+          new File([''], `frame_001.${ext}`),
+          new File([''], `frame_002.${ext}`),
+          new File([''], `frame_003.${ext}`),
+        ];
+
+        const sequences = discoverSequences(files);
+        expect(sequences.size).toBe(1);
+        const seqFiles = Array.from(sequences.values())[0]!;
+        expect(seqFiles).toHaveLength(3);
+      }
+    });
+
+    it('SLD-R006: filterImageFiles still rejects non-image extensions', () => {
+      const files = [
+        new File([''], 'video.mp4'),
+        new File([''], 'document.txt'),
+        new File([''], 'data.json'),
+        new File([''], 'script.js'),
+      ];
+
+      const result = filterImageFiles(files);
+      expect(result).toHaveLength(0);
+    });
+  });
+
   describe('preloadFrames resilience (regression)', () => {
     it('SLD-R001: Promise.allSettled handles partial failure (conceptual)', async () => {
       // This validates that Promise.allSettled (used in the fix) gracefully
@@ -1249,6 +1300,88 @@ describe('SequenceLoader', () => {
       } finally {
         globalThis.createImageBitmap = origCreateImageBitmap;
       }
+    });
+  });
+
+  // ---------------------------------------------------------------
+  // buildFrameNumberMap / getSequenceFrameRange (issue #516)
+  // ---------------------------------------------------------------
+
+  describe('buildFrameNumberMap', () => {
+    it('SLD-MAP-001: builds map keyed by frame number', () => {
+      const frames: SequenceFrame[] = [
+        { index: 0, frameNumber: 1001, file: new File([], 'f.1001.png') },
+        { index: 1, frameNumber: 1002, file: new File([], 'f.1002.png') },
+        { index: 2, frameNumber: 1004, file: new File([], 'f.1004.png') },
+      ];
+
+      const map = buildFrameNumberMap(frames);
+
+      expect(map.size).toBe(3);
+      expect(map.get(1001)).toBe(frames[0]);
+      expect(map.get(1002)).toBe(frames[1]);
+      expect(map.get(1004)).toBe(frames[2]);
+      expect(map.has(1003)).toBe(false);
+    });
+
+    it('SLD-MAP-002: returns empty map for empty frames', () => {
+      const map = buildFrameNumberMap([]);
+      expect(map.size).toBe(0);
+    });
+  });
+
+  describe('getSequenceFrameRange', () => {
+    it('SLD-RANGE-001: returns numeric range for contiguous sequence', () => {
+      const info = {
+        startFrame: 1,
+        endFrame: 10,
+      } as SequenceInfo;
+
+      expect(getSequenceFrameRange(info)).toBe(10);
+    });
+
+    it('SLD-RANGE-002: returns numeric range for gapped sequence', () => {
+      // Frames 1001, 1002, 1004 — range should be 4 (1001-1004)
+      const info = {
+        startFrame: 1001,
+        endFrame: 1004,
+      } as SequenceInfo;
+
+      expect(getSequenceFrameRange(info)).toBe(4);
+    });
+
+    it('SLD-RANGE-003: returns 1 for single-frame sequence', () => {
+      const info = {
+        startFrame: 42,
+        endFrame: 42,
+      } as SequenceInfo;
+
+      expect(getSequenceFrameRange(info)).toBe(1);
+    });
+
+    it('SLD-RANGE-004: gapped sequence range exceeds frames.length', () => {
+      // 3 actual files but the numeric range is 4
+      const frames: SequenceFrame[] = [
+        { index: 0, frameNumber: 1001, file: new File([], 'f.1001.png') },
+        { index: 1, frameNumber: 1002, file: new File([], 'f.1002.png') },
+        { index: 2, frameNumber: 1004, file: new File([], 'f.1004.png') },
+      ];
+      const info: SequenceInfo = {
+        name: 'f.####.png',
+        pattern: 'f.####.png',
+        frames,
+        startFrame: 1001,
+        endFrame: 1004,
+        width: 100,
+        height: 100,
+        fps: 24,
+        missingFrames: [1003],
+      };
+
+      expect(getSequenceFrameRange(info)).toBe(4);
+      expect(info.frames.length).toBe(3);
+      // The timeline duration (4) must be larger than the file count (3)
+      expect(getSequenceFrameRange(info)).toBeGreaterThan(info.frames.length);
     });
   });
 });

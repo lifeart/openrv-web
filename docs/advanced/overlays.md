@@ -17,7 +17,7 @@ The timecode overlay displays the current frame position in SMPTE timecode forma
 
 The timecode is derived from the current frame number and the session frame rate. For sources with embedded timecode metadata, the source timecode is displayed alongside the session timecode.
 
-Toggle the timecode overlay from the Overlays menu or the context toolbar.
+Toggle the timecode overlay from its dedicated button in the **View** tab toolbar (keyboard shortcut: Alt+Shift+T). Right-click the button to access display settings.
 
 ---
 
@@ -83,7 +83,7 @@ When the data window differs from the display window, this overlay draws:
 
 This is particularly useful when reviewing overscan content, partial renders, or multi-pass compositing where different elements have different data extents.
 
-The EXR window overlay is enabled from the Overlays menu and activates automatically when an EXR file with mismatched data/display windows is detected.
+The EXR window overlay is enabled from its dedicated button in the **View** tab toolbar. Right-click the button to access settings. The overlay activates automatically when an EXR file with mismatched data/display windows is detected.
 
 ---
 
@@ -97,7 +97,7 @@ The matte overlay applies an opaque or semi-transparent mask to simulate a deliv
 - **Opacity**: Control the darkness of the matte region, from fully transparent (0%) to fully opaque (100%)
 - **Center point**: Offset the matte from the image center for asymmetric framing evaluation
 
-The matte overlay is configured through the Overlays menu in the UI, or via the scripting API:
+The matte overlay is toggled from its dedicated button in the **View** tab toolbar. Right-click the button to access settings. It can also be configured via the scripting API:
 
 ```javascript
 // Enable matte with 2.39:1 aspect and 80% opacity
@@ -136,19 +136,19 @@ The bug overlay is also used during video export to burn the logo into the outpu
 
 ## Watermark Overlay
 
-The watermark overlay tiles a text string or image across the entire frame at low opacity. This is used for:
+The watermark overlay places a single image at a chosen position on the frame. This is used for:
 
-- Marking review copies as confidential or for internal use only
+- Marking review copies with a logo or badge
 - Adding recipient identification to distributed media
 - Deterring unauthorized distribution of pre-release content
 
 ### Controls
 
-- **Text**: The watermark message (e.g., "CONFIDENTIAL", "FOR REVIEW ONLY", recipient name)
-- **Font size**: Relative to frame dimensions
-- **Opacity**: Low opacity values (10-20%) provide visible marking without obscuring content
-- **Rotation**: Angle of the tiled text pattern (default: -30 degrees)
-- **Color**: Watermark text color
+- **Image**: Upload a PNG, JPEG, WebP, or SVG file for the watermark graphic
+- **Position**: Nine preset positions on a 3x3 grid (top-left through bottom-right) or a custom X/Y coordinate
+- **Scale**: Resize the image relative to its original dimensions (10%-200%)
+- **Opacity**: Control transparency (0-100%)
+- **Margin**: Pixel offset from the frame edge when using a preset position
 
 The watermark renders as an overlay and does not modify the source image. For permanent watermarking, use the frameburn feature during video export.
 
@@ -177,16 +177,17 @@ The grid overlay is particularly useful for evaluating composition in dailies re
 
 ## Note Overlay
 
-The note overlay displays review notes and annotations as persistent text overlays on the viewer. Unlike the annotation system (which provides per-frame drawing tools), the note overlay shows text associated with the current frame's markers or review notes in a fixed position on screen.
+The note overlay draws colored bars on the timeline canvas to indicate frame ranges that have review notes. It is a timeline-level feature, not a viewer overlay.
 
 ### Display
 
-- Notes are shown in a semi-transparent panel at the bottom of the viewer
-- Each note shows the frame number, author (if available), and note text
-- Multiple notes for the same frame are stacked vertically
-- Navigation arrows allow stepping between noted frames
+- Each note is rendered as a thin horizontal bar just below the timeline track
+- Bars are color-coded by status: amber for open, green for resolved, gray for won't-fix
+- Bar width corresponds to the note's frame range; single-frame notes have a minimum width of 2px for visibility
+- Only top-level notes are shown (replies are excluded)
+- Only notes matching the current source index are drawn
 
-The note overlay integrates with the marker system. When a marker with a note exists at the current frame, the note text appears automatically in the overlay.
+The note overlay listens for `notesChanged` events on the session and triggers a timeline redraw when notes are added, updated, or removed.
 
 ---
 
@@ -217,7 +218,7 @@ This ordering ensures that diagnostic overlays remain visible above decorative e
 
 ## Enabling and Disabling Overlays
 
-All overlays can be toggled from the **Overlays** submenu in the View tab, or from the Overlays section of the context toolbar. Each overlay has an independent enable/disable toggle. A master "Clear All Overlays" option disables all overlays at once.
+Most overlays are controlled from individual toggle buttons in the **View** tab toolbar (spotlight, matte, bug, EXR window, info strip, timecode, FPS indicator, missing frame indicator). The watermark overlay is controlled from the **Effects** tab. Each overlay has an independent enable/disable toggle, and right-clicking a button opens its settings menu.
 
 Overlay states are included in the session state and are preserved in `.orvproject` files and snapshots.
 

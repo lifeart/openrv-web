@@ -22,7 +22,7 @@ These formats are the backbone of visual effects pipelines. OpenRV Web provides 
 
 OpenEXR is the industry-standard HDR image format for VFX, developed by Industrial Light & Magic and maintained by the Academy Software Foundation. OpenRV Web provides comprehensive EXR support:
 
-- **Decoder**: WebAssembly-compiled OpenEXR library (`EXRDecoder.ts`)
+- **Decoder**: Pure TypeScript EXR parser (`EXRDecoder.ts`)
 - **Precision**: Full Float32 per channel -- no 8-bit bottleneck
 - **Compression**: PIZ (lossless, wavelet-based) and DWA (lossy, DCT-based) via dedicated codec modules (`EXRPIZCodec.ts`, `EXRDWACodec.ts`)
 - **Multi-layer AOV selection**: EXR files containing multiple render passes (beauty, diffuse, specular, depth, normals, etc.) can be viewed layer by layer. The decoder exposes layer information and supports channel remapping (`EXRChannelRemapping`)
@@ -120,7 +120,7 @@ Google's Ultra HDR / Adobe Gainmap HDR format embeds an HDR gain map within a st
 
 - **Decoder**: Pure JavaScript (`JPEGGainmapDecoder.ts`)
 - **Structure**: The file contains a standard SDR JPEG as the primary image, plus a secondary JPEG gain map image referenced via an APP2 MPF marker. XMP metadata describes the headroom and gain parameters
-- **HDR reconstruction**: The decoder applies the gain map formula: `hdr = sdr_linear * (1 + gainMap * headroom)`, where `sdr_linear` is the sRGB-to-linear converted base image, `gainMap` is the decoded gain map, and `headroom` is extracted from XMP metadata
+- **HDR reconstruction**: The decoder applies the ISO 21496-1 exponential gain map formula: `HDR_linear = sRGB_to_linear(base) * exp2(gainmap * headroom)`, where `sRGB_to_linear(base)` is the sRGB-to-linear converted base image, `gainmap` is the decoded gain map, and `headroom` is extracted from XMP metadata
 - **Orientation**: EXIF orientation is extracted and applied via `extractJPEGOrientation()`
 - **Detection**: JPEG SOI marker (`0xFFD8`) followed by an APP2 segment containing `MPF\0` identifier
 

@@ -3,6 +3,8 @@
  * Handles parsing, sorting, and loading of numbered image sequences
  */
 
+import { SUPPORTED_IMAGE_EXTENSIONS } from './SupportedMediaFormats';
+
 export interface SequenceFrame {
   index: number; // 0-based frame index
   frameNumber: number; // Original frame number from filename
@@ -30,20 +32,7 @@ const FRAME_PATTERNS = [
   /(\d{3,})(?=\.[^.]+$)/, // 3+ digit numbers: file0001.png
 ];
 
-const IMAGE_EXTENSIONS = new Set([
-  'png',
-  'jpg',
-  'jpeg',
-  'webp',
-  'gif',
-  'bmp',
-  'tiff',
-  'tif',
-  'exr',
-  'dpx',
-  'cin',
-  'cineon',
-]);
+const IMAGE_EXTENSIONS = new Set<string>(SUPPORTED_IMAGE_EXTENSIONS);
 
 /**
  * Filter files to only include supported image formats
@@ -298,6 +287,24 @@ export function isFrameMissing(sequenceInfo: SequenceInfo, frameNumber: number):
 export function getFrameIndexByNumber(sequenceInfo: SequenceInfo, frameNumber: number): number {
   const frame = sequenceInfo.frames.find((f) => f.frameNumber === frameNumber);
   return frame ? frame.index : -1;
+}
+
+/**
+ * Build a Map from frame number → SequenceFrame for O(1) lookups.
+ */
+export function buildFrameNumberMap(frames: SequenceFrame[]): Map<number, SequenceFrame> {
+  const map = new Map<number, SequenceFrame>();
+  for (const frame of frames) {
+    map.set(frame.frameNumber, frame);
+  }
+  return map;
+}
+
+/**
+ * Compute the numeric frame range (total timeline frames including gaps).
+ */
+export function getSequenceFrameRange(sequenceInfo: SequenceInfo): number {
+  return sequenceInfo.endFrame - sequenceInfo.startFrame + 1;
 }
 
 /**

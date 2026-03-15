@@ -9,6 +9,12 @@ vi.mock('../../utils/media/SequenceLoader', () => ({
   preloadFrames: vi.fn(),
   releaseDistantFrames: vi.fn(),
   disposeSequence: vi.fn(),
+  buildFrameNumberMap: (frames: any[]) => {
+    const map = new Map();
+    for (const f of frames) map.set(f.frameNumber, f);
+    return map;
+  },
+  getSequenceFrameRange: (info: any) => info.endFrame - info.startFrame + 1,
 }));
 
 vi.mock('../../nodes/sources/VideoSourceNode', () => ({
@@ -91,7 +97,7 @@ function createMockCacheManager(): MediaCacheManager {
 }
 
 function makeSequenceSource(overrides?: Partial<MediaSource>): MediaSource {
-  return {
+  const source: MediaSource = {
     type: 'sequence',
     name: 'seq_####.exr',
     url: '',
@@ -100,8 +106,17 @@ function makeSequenceSource(overrides?: Partial<MediaSource>): MediaSource {
     duration: 48,
     fps: 24,
     sequenceFrames: [],
+    sequenceInfo: { name: 'seq_####.exr', pattern: 'seq_####.exr', frames: [], startFrame: 1, endFrame: 48, width: 1920, height: 1080, fps: 24, missingFrames: [] },
+    sequenceFrameMap: new Map(),
     ...overrides,
   };
+  // Ensure sequenceFrameMap stays in sync with sequenceFrames when overridden
+  if (overrides?.sequenceFrames && !overrides?.sequenceFrameMap) {
+    source.sequenceFrameMap = new Map(
+      (source.sequenceFrames ?? []).filter((f) => f.frameNumber !== undefined).map((f) => [f.frameNumber, f]),
+    );
+  }
+  return source;
 }
 
 describe('SessionMedia', () => {
@@ -734,18 +749,18 @@ describe('SessionMedia', () => {
 
     it('SM-062: returns frame image when available', () => {
       const mockBitmap = {} as ImageBitmap;
-      const frames = [{ image: mockBitmap, file: null as any, loaded: true }];
+      const frames = [{ index: 0, frameNumber: 1, image: mockBitmap, file: null as any, loaded: true }];
       const seqSource = makeSequenceSource({ sequenceFrames: frames as any });
       (media as any)._sources.push(seqSource);
       (media as any)._currentSourceIndex = 0;
 
-      // Frame index is 1-based, so frame 1 maps to index 0
+      // Frame index is 1-based, so timeline frame 1 maps to frameNumber startFrame (1)
       const result = media.getSequenceFrameSync(1);
       expect(result).toBe(mockBitmap);
     });
 
     it('SM-063: returns null for out-of-range frame index', () => {
-      const frames = [{ image: null, file: null as any, loaded: false }];
+      const frames = [{ index: 0, frameNumber: 1, image: null, file: null as any, loaded: false }];
       const seqSource = makeSequenceSource({ sequenceFrames: frames as any });
       (media as any)._sources.push(seqSource);
       (media as any)._currentSourceIndex = 0;

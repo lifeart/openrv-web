@@ -426,8 +426,10 @@ export function renderSourceToImageData(
   let element: CanvasImageSource | null = source.element ?? null;
 
   // Use sequence frame image for the current frame when available.
-  if (source.type === 'sequence' && source.sequenceFrames) {
-    const seqFrame = source.sequenceFrames[frame - 1]?.image;
+  if (source.type === 'sequence' && source.sequenceFrameMap) {
+    const startFrame = source.sequenceInfo?.startFrame ?? 1;
+    const frameNumber = startFrame + frame - 1;
+    const seqFrame = source.sequenceFrameMap.get(frameNumber)?.image;
     if (seqFrame) {
       element = seqFrame;
     }

@@ -217,14 +217,14 @@ To free storage, delete old snapshots and auto-save entries from the Snapshot Pa
 
 ## History Panel
 
-Press `Shift+Alt+H` to open the History Panel, which provides a unified view of both manual snapshots and auto-save entries. The panel supports:
+Press `Shift+Alt+H` to open the History Panel, which displays undo/redo action history. The panel supports:
 
-- Chronological listing of all saved states
-- Filtering by type (manual snapshot, auto-checkpoint, auto-save)
-- Quick restore to any previous state
-- Bulk delete operations
+- Chronological listing of all actions with timestamps
+- Click any entry to revert to that state
+- Current state highlighting
+- Clear history option
 
-The History Panel is the primary interface for navigating session history and performing recovery operations.
+For snapshot and auto-save recovery, use the Snapshot Panel instead. The History Panel is focused on navigating the undo/redo action stack within the current session.
 
 ---
 

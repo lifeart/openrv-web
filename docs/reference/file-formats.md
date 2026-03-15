@@ -12,8 +12,8 @@ This page lists all file formats supported by OpenRV Web.
 | GIF | `.gif` | Browser native | No | Animated GIF support |
 | BMP | `.bmp` | Browser native | No | Uncompressed bitmap |
 | AVIF | `.avif` | Browser native | No | AV1-based still image |
-| HEIC/HEIF | `.heic`, `.heif` | libheif WASM | No | Apple image format |
-| EXR | `.exr`, `.sxr` | WASM decoder | Yes | Float32 HDR, multi-layer, AOV, multi-view stereo |
+| HEIC/HEIF | `.heic`, `.heif` | Native (Safari) / libheif WASM (other browsers) | No | Apple image format |
+| EXR | `.exr`, `.sxr` | TypeScript decoder | Yes | Float32 HDR, multi-layer, AOV, multi-view stereo |
 | DPX | `.dpx` | Custom decoder | Yes | Log-to-linear conversion |
 | Cineon | `.cin` | Custom decoder | Yes | Configurable film gamma |
 | Radiance HDR | `.hdr`, `.pic` | Custom decoder | Yes | RGBE encoding |

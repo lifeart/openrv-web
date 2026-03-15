@@ -3,6 +3,8 @@ import {
   detectMediaTypeFromFile,
   detectMediaTypeFromUrl,
   getExtensionFromUrl,
+  SUPPORTED_IMAGE_EXTENSIONS,
+  SUPPORTED_MEDIA_ACCEPT,
 } from './SupportedMediaFormats';
 
 // ---------------------------------------------------------------------------
@@ -62,6 +64,32 @@ describe('detectMediaTypeFromFile', () => {
 
   it('defaults to unknown for unrecognized files', () => {
     expect(detectMediaTypeFromFile({ name: 'unknown', type: '' })).toBe('unknown');
+  });
+
+  it('detects .ico as image from extension when MIME is empty', () => {
+    expect(detectMediaTypeFromFile({ name: 'favicon.ico', type: '' })).toBe('image');
+  });
+
+  it('detects .ico as image from image/x-icon MIME type', () => {
+    expect(detectMediaTypeFromFile({ name: 'icon.ico', type: 'image/x-icon' })).toBe('image');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ICO support regression (issue #501)
+// ---------------------------------------------------------------------------
+
+describe('ICO support (issue #501)', () => {
+  it('ico is included in SUPPORTED_IMAGE_EXTENSIONS', () => {
+    expect(SUPPORTED_IMAGE_EXTENSIONS).toContain('ico');
+  });
+
+  it('ico is included in SUPPORTED_MEDIA_ACCEPT', () => {
+    expect(SUPPORTED_MEDIA_ACCEPT).toContain('.ico');
+  });
+
+  it('detectMediaTypeFromFile classifies .ico as image', () => {
+    expect(detectMediaTypeFromFile({ name: 'test.ico', type: '' })).toBe('image');
   });
 });
 

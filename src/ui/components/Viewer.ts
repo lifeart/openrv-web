@@ -1217,33 +1217,25 @@ export class Viewer {
 
   private getMissingSequenceFrameNumber(frameIndex: number): number | null {
     const source = this.session.currentSource;
-    if (source?.type !== 'sequence' || !source.sequenceFrames || source.sequenceFrames.length < 2) {
+    if (source?.type !== 'sequence' || !source.sequenceFrameMap || !source.sequenceInfo) {
       return null;
     }
 
-    const idx = frameIndex - 1;
-    if (idx <= 0 || idx >= source.sequenceFrames.length) {
+    const startFrame = source.sequenceInfo.startFrame;
+    const frameNumber = startFrame + frameIndex - 1;
+
+    // If the frame number is outside the sequence range, not a missing frame
+    if (frameNumber < source.sequenceInfo.startFrame || frameNumber > source.sequenceInfo.endFrame) {
       return null;
     }
 
-    const previousFrameNumber = source.sequenceFrames[idx - 1]?.frameNumber;
-    const currentFrameNumber = source.sequenceFrames[idx]?.frameNumber;
-    if (previousFrameNumber === undefined || currentFrameNumber === undefined) {
+    // If the frame exists in the map, it's not missing
+    if (source.sequenceFrameMap.has(frameNumber)) {
       return null;
     }
 
-    if (currentFrameNumber - previousFrameNumber <= 1) {
-      return null;
-    }
-
-    const candidate = previousFrameNumber + 1;
-    const missingFrames = source.sequenceInfo?.missingFrames ?? [];
-    if (missingFrames.length === 0 || missingFrames.includes(candidate)) {
-      return candidate;
-    }
-
-    const between = missingFrames.find((frame) => frame > previousFrameNumber && frame < currentFrameNumber);
-    return between ?? candidate;
+    // Frame is missing — return its frame number
+    return frameNumber;
   }
 
   /**

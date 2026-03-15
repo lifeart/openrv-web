@@ -1399,6 +1399,10 @@ describe('Viewer', () => {
             { index: 0, frameNumber: 1, file: new File([''], 'frame_0001.png') },
             { index: 1, frameNumber: 3, file: new File([''], 'frame_0003.png') },
           ],
+          sequenceFrameMap: new Map([
+            [1, { index: 0, frameNumber: 1, file: new File([''], 'frame_0001.png') }],
+            [3, { index: 1, frameNumber: 3, file: new File([''], 'frame_0003.png') }],
+          ]) as any,
           sequenceInfo: {
             name: 'seq',
             pattern: 'frame_####.png',

@@ -5,6 +5,8 @@ import {
   preloadFrames,
   releaseDistantFrames,
   disposeSequence,
+  buildFrameNumberMap,
+  getSequenceFrameRange,
 } from '../../utils/media/SequenceLoader';
 import { VideoSourceNode } from '../../nodes/sources/VideoSourceNode';
 import { FileSourceNode } from '../../nodes/sources/FileSourceNode';
@@ -765,16 +767,18 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
         throw new Error('No valid image sequence found in the selected files');
       }
 
+      const frameRange = getSequenceFrameRange(sequenceInfo);
       const source: MediaSource = {
         type: 'sequence',
         name: sequenceInfo.name,
         url: '',
         width: sequenceInfo.width,
         height: sequenceInfo.height,
-        duration: sequenceInfo.frames.length,
+        duration: frameRange,
         fps: sequenceInfo.fps,
         sequenceInfo,
         sequenceFrames: sequenceInfo.frames,
+        sequenceFrameMap: buildFrameNumberMap(sequenceInfo.frames),
         element: sequenceInfo.frames[0]?.image,
       };
 
@@ -782,11 +786,11 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
       this._host!.setFps(sequenceInfo.fps);
       this._host!.emitFpsChanged(sequenceInfo.fps);
       this._host!.setInPoint(1);
-      this._host!.setOutPoint(sequenceInfo.frames.length);
+      this._host!.setOutPoint(frameRange);
       this._host!.setCurrentFrame(1);
 
       this.emit('sourceLoaded', source);
-      this.emit('durationChanged', sequenceInfo.frames.length);
+      this.emit('durationChanged', frameRange);
 
       preloadFrames(sequenceInfo.frames, 0, 10);
     } catch (err) {
@@ -950,13 +954,15 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
       return null;
     }
 
-    const idx = (frameIndex ?? this._host!.getCurrentFrame()) - 1;
-    const frame = source.sequenceFrames[idx];
+    const timelineFrame = frameIndex ?? this._host!.getCurrentFrame();
+    const startFrame = source.sequenceInfo?.startFrame ?? 1;
+    const frameNumber = startFrame + timelineFrame - 1;
+    const frame = source.sequenceFrameMap?.get(frameNumber);
     if (!frame) return null;
 
     const image = await loadFrameImage(frame);
-    preloadFrames(source.sequenceFrames, idx, 5);
-    releaseDistantFrames(source.sequenceFrames, idx, 20);
+    preloadFrames(source.sequenceFrames, frame.index, 5);
+    releaseDistantFrames(source.sequenceFrames, frame.index, 20);
 
     return image;
   }
@@ -967,8 +973,10 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
       return null;
     }
 
-    const idx = (frameIndex ?? this._host!.getCurrentFrame()) - 1;
-    const frame = source.sequenceFrames[idx];
+    const timelineFrame = frameIndex ?? this._host!.getCurrentFrame();
+    const startFrame = source.sequenceInfo?.startFrame ?? 1;
+    const frameNumber = startFrame + timelineFrame - 1;
+    const frame = source.sequenceFrameMap?.get(frameNumber);
     return frame?.image ?? null;
   }
 

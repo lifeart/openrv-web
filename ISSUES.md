@@ -227,19 +227,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - If users redraw A/B assignments to different sources, the annotation layer follows the `A` or `B` slot rather than staying attached to the original media source.
   - That makes the shipped comparison-annotation workflow less reliable than documented for real version review, because annotation meaning can drift when compare assignments change.
 
-### 340. The session-management guide describes the History panel as snapshot/autosave recovery, but the shipped panel is only undo/redo action history
-
-- Severity: Medium
-- Area: Documentation / recovery workflow
-- Evidence:
-  - The session-management guide says the History Panel provides "a unified view of both manual snapshots and auto-save entries" with filtering by snapshot/checkpoint/autosave type and quick restore in [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L190) through [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L199).
-  - The shipped `HistoryPanel` source describes itself as a "Visual panel showing undo/redo history" in [src/ui/components/HistoryPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/HistoryPanel.ts#L1) through [src/ui/components/HistoryPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/HistoryPanel.ts#L7).
-  - Its implementation is built entirely on `HistoryManager` action entries and exposes only entry selection plus clear-history behavior in [src/ui/components/HistoryPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/HistoryPanel.ts#L25) through [src/ui/components/HistoryPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/HistoryPanel.ts#L124) and [src/ui/components/HistoryPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/HistoryPanel.ts#L175) through [src/ui/components/HistoryPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/HistoryPanel.ts#L205).
-  - Snapshot and autosave recovery are handled by separate systems (`SnapshotPanel`, `SnapshotManager`, `AutoSaveManager`, and `AppPersistenceManager`), not by `HistoryPanel`, as shown in [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L1) through [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L8) and [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L2) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L6).
-- Impact:
-  - Users looking for crash recovery, auto-checkpoints, or snapshot restore in the History panel will land in the wrong tool entirely.
-  - That makes the recovery workflow docs materially misleading, because the described panel does not match the shipped runtime behavior.
-
 ### 341. Network-sync docs promise participant avatars in the viewer, but presence only renders inside the connection panel
 
 - Severity: Medium
@@ -307,44 +294,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Users reading the top-level support table can assume they can review MXF media or multi-view stereo EXRs end-to-end when the shipped app only provides partial or metadata-level behavior.
   - That makes the support matrix look more complete than the runtime actually is, which is costly when teams plan media handoff formats around it.
-
-### 352. The overlays guide relies on a non-existent `Overlays` submenu and a non-existent `Clear All Overlays` action
-
-- Severity: Medium
-- Area: Documentation / overlay controls
-- Evidence:
-  - The overlays guide tells users to toggle overlays from the `Overlays menu`, says the EXR window overlay is enabled from the `Overlays menu`, and claims all overlays live under an `Overlays` submenu in the View tab with a master `Clear All Overlays` option in [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L20), [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L86), and [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L211) through [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L215).
-  - A production-code search finds no `Overlays` menu/submenu and no `Clear All Overlays` implementation.
-  - The shipped overlay entry points are scattered as individual buttons and controls instead, such as EXR window, info strip, spotlight, and FPS indicator toggles in the View tab and watermark in Effects, as shown in [src/services/tabContent/buildViewTab.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildViewTab.ts#L375) through [src/services/tabContent/buildViewTab.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildViewTab.ts#L440) and [src/services/tabContent/buildEffectsTab.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildEffectsTab.ts#L53) through [src/services/tabContent/buildEffectsTab.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildEffectsTab.ts#L66).
-- Impact:
-  - Users following the overlays guide can waste time looking for a centralized menu and bulk-clear action that do not exist in the shipped app.
-  - That also obscures the real control layout, because the actual overlay toggles are distributed across separate toolbar buttons and panels.
-
-### 354. The overlays guide documents a viewer note overlay, but production `NoteOverlay` is only a timeline note-bar helper
-
-- Severity: Medium
-- Area: Documentation / notes UI
-- Evidence:
-  - The overlays guide describes a bottom-of-viewer note panel with frame text, authors, stacked notes, and navigation arrows in [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L171) through [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L182).
-  - The shipped `NoteOverlay` implementation explicitly "draws colored bars on the timeline canvas for notes" and contains only timeline draw logic, not viewer-overlay text UI, in [src/ui/components/NoteOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NoteOverlay.ts#L1) through [src/ui/components/NoteOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NoteOverlay.ts#L104).
-  - App bootstrap wires that object into the timeline, not the viewer, in [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L171) through [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L177).
-  - `OverlayManager` enumerates the actual viewer overlays and does not include any viewer note overlay in [src/ui/components/OverlayManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/OverlayManager.ts#L10) through [src/ui/components/OverlayManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/OverlayManager.ts#L32) and [src/ui/components/OverlayManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/OverlayManager.ts#L45) through [src/ui/components/OverlayManager.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/OverlayManager.ts#L63).
-- Impact:
-  - Users looking for a live viewer note overlay will not find the panel, arrows, or automatic current-frame note text that the docs describe.
-  - The only shipped "note overlay" is a compact timeline mark, so the documentation currently promises a different UI than the app provides.
-
-### 355. The overlays guide documents a tiled text watermark system, but the shipped watermark is only a single positioned image overlay
-
-- Severity: Medium
-- Area: Documentation / watermark workflow
-- Evidence:
-  - The overlays guide says the watermark overlay tiles "a text string or image across the entire frame" and exposes text, rotation, and color controls in [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L130) through [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L146).
-  - The shipped `WatermarkOverlay` is defined as a "Static image overlay" whose state only contains image URL, position, scale, opacity, and margin in [src/ui/components/WatermarkOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/WatermarkOverlay.ts#L1) through [src/ui/components/WatermarkOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/WatermarkOverlay.ts#L31).
-  - Rendering is a single `drawImage(...)` call at one calculated position, not a tiled text/image pattern, in [src/ui/components/WatermarkOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/WatermarkOverlay.ts#L199) through [src/ui/components/WatermarkOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/WatermarkOverlay.ts#L215).
-  - The shipped `WatermarkControl` only exposes image upload/removal plus position, scale, opacity, and margin controls in [src/ui/components/WatermarkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/WatermarkControl.ts#L1) through [src/ui/components/WatermarkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/WatermarkControl.ts#L8) and [src/ui/components/WatermarkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/WatermarkControl.ts#L89) through [src/ui/components/WatermarkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/WatermarkControl.ts#L140).
-- Impact:
-  - Users expecting confidential tiled text watermarks or recipient-name overlays from the shipped UI will not be able to create them.
-  - The current documentation describes a substantially broader watermark feature than the runtime actually implements.
 
 ### 356. The overlays guide's `Perspective Grid` section describes composition guides, but production splits those features between Safe Areas and a perspective-correction mesh
 
@@ -936,31 +885,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The guide explains the shipped architecture incorrectly for ordinary local image loads.
   - That makes the format docs misleading for anyone debugging load behavior, decoder fallbacks, or source-node state in production.
 
-### 501. The file-format guide advertises `.ico` support, but the shipped supported-format lists and picker accept string do not include it
-
-- Severity: Low
-- Area: Documentation / browser-native image format support
-- Evidence:
-  - The browser-native formats table lists `ICO | .ico | Icon format` in [docs/guides/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/guides/file-formats.md#L197).
-  - The shipped supported image-extension list includes `svg` but does not include `ico` in [src/utils/media/SupportedMediaFormats.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SupportedMediaFormats.ts#L9) through [src/utils/media/SupportedMediaFormats.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SupportedMediaFormats.ts#L33).
-  - The extension-based classifier therefore has no `.ico` fallback in `detectMediaTypeFromFile(...)` in [src/utils/media/SupportedMediaFormats.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SupportedMediaFormats.ts#L76) through [src/utils/media/SupportedMediaFormats.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SupportedMediaFormats.ts#L98).
-  - The hidden `Open media file` input uses `SUPPORTED_MEDIA_ACCEPT`, which is built from that same extension list and therefore does not include `.ico`, in [src/utils/media/SupportedMediaFormats.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SupportedMediaFormats.ts#L100) through [src/utils/media/SupportedMediaFormats.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SupportedMediaFormats.ts#L121) and [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L217) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L221).
-- Impact:
-  - The docs present `.ico` as a supported browser-native format, but the shipped open-media flow does not consistently treat it as one.
-  - Users can expect `.ico` files to appear and classify like other listed image formats when the real picker/runtime support is narrower.
-
-### 502. The JPEG gainmap guide documents the wrong HDR reconstruction formula for the shipped decoder
-
-- Severity: Low
-- Area: Documentation / JPEG gainmap HDR behavior
-- Evidence:
-  - The file-format guide says JPEG gainmap reconstruction uses `hdr = sdr_linear * (1 + gainMap * headroom)` in [docs/guides/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/guides/file-formats.md#L123).
-  - The shipped JPEG gainmap decoder documents and implements the simplified ISO 21496-1-style exponential model `HDR_linear = sRGB_to_linear(base) * exp2(gainmap * headroom)` in [src/formats/JPEGGainmapDecoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/JPEGGainmapDecoder.ts#L15) through [src/formats/JPEGGainmapDecoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/JPEGGainmapDecoder.ts#L17).
-  - The shared gain-map reconstruction path also precomputes gain factors with `Math.exp((i / 255.0) * headroom * Math.LN2)`, which is the same exponential formulation, in [src/formats/GainMapMetadata.ts](/Users/lifeart/Repos/openrv-web/src/formats/GainMapMetadata.ts#L284) through [src/formats/GainMapMetadata.ts](/Users/lifeart/Repos/openrv-web/src/formats/GainMapMetadata.ts#L288).
-- Impact:
-  - The docs explain the shipped HDR reconstruction math incorrectly.
-  - Anyone using the guide to reason about highlight scaling, parity checks, or external reimplementation of the decoder will get the wrong model.
-
 ### 503. The file-format guide says all image decoding yields `Float32Array` RGBA data, but standard browser-native image loads still stay as `HTMLImageElement` sources
 
 - Severity: Low
@@ -998,19 +922,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - The docs overstate how much original JXL color-space metadata the shipped SDR decode path preserves.
   - Users or integrators can expect richer color metadata from JXL loads than production currently exposes.
-
-### 506. The top-level file-format reference presents HEIC/HEIF as a pure WASM decode path, but the shipped runtime uses native Safari decode first and WASM only as fallback elsewhere
-
-- Severity: Low
-- Area: Documentation / HEIC support
-- Evidence:
-  - The top-level format table says `HEIC/HEIF | .heic, .heif | libheif WASM` in [docs/reference/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/reference/file-formats.md#L15).
-  - The deeper file-format guide says browser-native HEIC is used on Safari and WASM is the non-Safari fallback in [docs/guides/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/guides/file-formats.md#L195).
-  - The live `FileSourceNode` path matches the deeper guide: it first tries `tryLoadHEICNative(...)` and only then falls back to `loadHEICSDRWasm(...)` in [src/nodes/sources/FileSourceNode.ts](/Users/lifeart/Repos/openrv-web/src/nodes/sources/FileSourceNode.ts#L1993) through [src/nodes/sources/FileSourceNode.ts](/Users/lifeart/Repos/openrv-web/src/nodes/sources/FileSourceNode.ts#L2002).
-  - The HEIC WASM decoder itself is documented as a cross-browser fallback for Chrome/Firefox/Edge because Safari already has native HEIC support in [src/formats/HEICWasmDecoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/HEICWasmDecoder.ts#L2) through [src/formats/HEICWasmDecoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/HEICWasmDecoder.ts#L5).
-- Impact:
-  - The top-level reference misstates how HEIC actually loads in production.
-  - Readers can come away with the wrong performance and compatibility expectations for Safari versus other browsers.
 
 ### 507. The file-format and image-sequence guides describe missing-frame playback as always “hold last frame,” but the shipped viewer exposes four modes and defaults to `show-frame`
 
@@ -1068,33 +979,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The guide makes OTIO ingest sound structurally richer than the shipped import path actually is.
   - Editorial users can expect gaps, transitions, and multi-track layout to survive import when production still collapses them into a simple clip sequence.
 
-### 511. The EXR docs still describe a WASM / compiled OpenEXR decoder, but the shipped `EXRDecoder.ts` is a pure TypeScript implementation with custom codec helpers
-
-- Severity: Low
-- Area: Documentation / EXR implementation details
-- Evidence:
-  - The file-format guide says EXR uses a “WebAssembly-compiled OpenEXR library (`EXRDecoder.ts`)" in [docs/guides/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/guides/file-formats.md#L25).
-  - The top-level format reference also labels EXR as a `WASM decoder` in [docs/reference/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/reference/file-formats.md#L16).
-  - The shipped EXR decoder file is a large TypeScript implementation that directly parses headers and decodes scanline/tiled data in [src/formats/EXRDecoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/EXRDecoder.ts#L1) through [src/formats/EXRDecoder.ts](/Users/lifeart/Repos/openrv-web/src/formats/EXRDecoder.ts#L2420).
-  - Compression handling is provided by local TypeScript codec modules such as [src/formats/EXRPIZCodec.ts](/Users/lifeart/Repos/openrv-web/src/formats/EXRPIZCodec.ts) and [src/formats/EXRDWACodec.ts](/Users/lifeart/Repos/openrv-web/src/formats/EXRDWACodec.ts), not a compiled OpenEXR WASM module.
-  - The decoder registry imports `decodeEXR` directly from that TS path, unlike the JP2 path which explicitly acquires a WASM decoder instance in [src/formats/DecoderRegistry.ts](/Users/lifeart/Repos/openrv-web/src/formats/DecoderRegistry.ts#L487) and [src/formats/DecoderRegistry.ts](/Users/lifeart/Repos/openrv-web/src/formats/DecoderRegistry.ts#L753) through [src/formats/DecoderRegistry.ts](/Users/lifeart/Repos/openrv-web/src/formats/DecoderRegistry.ts#L754).
-- Impact:
-  - The docs misstate how EXR decode is implemented in production.
-  - That gives readers the wrong expectations about bundle composition, performance characteristics, and the decoder’s maintenance surface.
-
-### 514. The image-sequence workflow only recognizes a narrow legacy extension subset, even though the docs say sequences can use any supported image format
-
-- Severity: Medium
-- Area: Image sequences / format coverage
-- Evidence:
-  - The image-sequences guide says sequences can consist of files in “any supported image format,” explicitly listing JPEG XL, JPEG 2000, AVIF, and HEIC in [docs/playback/image-sequences.md](/Users/lifeart/Repos/openrv-web/docs/playback/image-sequences.md#L77) through [docs/playback/image-sequences.md#L85).
-  - The sequence loader’s `IMAGE_EXTENSIONS` set only includes `png`, `jpg`, `jpeg`, `webp`, `gif`, `bmp`, `tiff`, `tif`, `exr`, `dpx`, `cin`, and `cineon` in [src/utils/media/SequenceLoader.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SequenceLoader.ts#L33) through [src/utils/media/SequenceLoader.ts#L46).
-  - Sequence detection and inference both run through `filterImageFiles(...)` in the normal open flows in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1449) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1477) and [src/ui/components/ViewerInputHandler.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInputHandler.ts#L773) through [src/ui/components/ViewerInputHandler.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInputHandler.ts#L799).
-  - `createSequenceInfo(...)` also filters by that same subset before building sequence metadata in [src/utils/media/SequenceLoader.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SequenceLoader.ts#L227) through [src/utils/media/SequenceLoader.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SequenceLoader.ts#L235).
-- Impact:
-  - Multi-file and inferred-sequence workflows do not treat many documented “supported” image families as sequence candidates at all.
-  - Users can select AVIF, HEIC, JXL, or JPEG 2000 frame sets and get single-file loading or outright non-sequence behavior instead of the documented sequence workflow.
-
 ### 515. The sequence-loading path bypasses the custom decoder stack and decodes frames with `createImageBitmap()`, so documented EXR/DPX/Cineon/HDR sequence workflows are not actually backed by the pro-format loaders
 
 - Severity: High
@@ -1108,19 +992,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - The shipped sequence workflow does not actually route professional image sequences through the documented decoder/HDR pipeline.
   - That can turn EXR/DPX/Cineon/HDR sequence review into browser-native decode failures or materially different behavior from single-frame loads, while the docs promise full pro-format handling.
-
-### 516. Sequence loads collapse the numeric frame range down to `frames.length`, so missing-frame positions are not preserved as real timeline frames
-
-- Severity: High
-- Area: Image sequences / frame-range semantics
-- Evidence:
-  - `SequenceInfo` separately tracks `startFrame`, `endFrame`, and `missingFrames`, so the loader does know the original numbered range in [src/utils/media/SequenceLoader.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SequenceLoader.ts#L14) through [src/utils/media/SequenceLoader.ts#L23) and [src/utils/media/SequenceLoader.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SequenceLoader.ts#L250) through [src/utils/media/SequenceLoader.ts#L261).
-  - Despite that, both `SessionMedia.loadSequence(...)` and `MediaManager.loadSequence(...)` set source duration and out-point to `sequenceInfo.frames.length`, not to the numeric frame range, in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L754) through [src/core/session/SessionMedia.ts#L769) and [src/core/session/MediaManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/MediaManager.ts#L804) through [src/core/session/MediaManager.ts#L821).
-  - The viewer then detects “missing frames” by comparing adjacent loaded frame numbers inside that shortened frame list in [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L1198) through [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L1225).
-  - The image-sequences guide says the sequence range runs from the lowest to highest frame number and that the timeline displays that total frame count in [docs/playback/image-sequences.md](/Users/lifeart/Repos/openrv-web/docs/playback/image-sequences.md#L50).
-- Impact:
-  - A gapped sequence like `1001, 1002, 1004` becomes a 3-frame timeline instead of a 4-frame numeric range with an actual missing-frame slot.
-  - That makes timeline duration, in/out behavior, and frame-based review semantics drift away from the source numbering the app is simultaneously trying to report.
 
 ### 517. The image-sequences guide still describes per-frame blob-URL lifecycle, but the live sequence loader decodes files directly and never creates `frame.url`
 

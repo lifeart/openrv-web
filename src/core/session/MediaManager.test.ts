@@ -9,6 +9,12 @@ vi.mock('../../utils/media/SequenceLoader', () => ({
   loadFrameImage: vi.fn(),
   releaseDistantFrames: vi.fn(),
   disposeSequence: vi.fn(),
+  buildFrameNumberMap: (frames: any[]) => {
+    const map = new Map();
+    for (const f of frames) map.set(f.frameNumber, f);
+    return map;
+  },
+  getSequenceFrameRange: (info: any) => info.endFrame - info.startFrame + 1,
 }));
 
 // Mock VideoSourceNode
@@ -143,6 +149,7 @@ function createSequenceSource(overrides: Partial<MediaSource> = {}): MediaSource
     { index: 1, frameNumber: 2, file: new File([], 'frame_002.png'), image: createMockImageBitmap() },
     { index: 2, frameNumber: 3, file: new File([], 'frame_003.png'), image: createMockImageBitmap() },
   ];
+  const sequenceFrameMap = new Map(frames.map((f) => [f.frameNumber, f]));
   return {
     type: 'sequence',
     name: 'frame_###.png',
@@ -152,6 +159,8 @@ function createSequenceSource(overrides: Partial<MediaSource> = {}): MediaSource
     duration: 3,
     fps: 24,
     sequenceFrames: frames,
+    sequenceFrameMap,
+    sequenceInfo: { name: 'frame_###.png', pattern: 'frame_###.png', frames, startFrame: 1, endFrame: 3, width: 1920, height: 1080, fps: 24, missingFrames: [] },
     ...overrides,
   };
 }

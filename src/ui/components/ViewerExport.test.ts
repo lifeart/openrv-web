@@ -997,10 +997,13 @@ describe('ViewerExport', () => {
       const seqFrame = createMockImage(320, 180);
       const source = createMockMediaSource('sequence', 320, 180);
       source.element = undefined as any;
-      source.sequenceFrames = [
+      const frames = [
         { index: 0, frameNumber: 1, file: new File([''], 'f0001.png') },
         { index: 1, frameNumber: 2, file: new File([''], 'f0002.png'), image: seqFrame as unknown as ImageBitmap },
       ];
+      source.sequenceFrames = frames;
+      source.sequenceFrameMap = new Map(frames.map((f) => [f.frameNumber, f]));
+      source.sequenceInfo = { name: 'f####.png', pattern: 'f####.png', frames: frames as any, startFrame: 1, endFrame: 2, width: 320, height: 180, fps: 24, missingFrames: [] };
       mockSession.currentFrame = 2;
       (mockSession.getSourceByIndex as any).mockReturnValue(source);
 

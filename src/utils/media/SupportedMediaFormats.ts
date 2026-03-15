@@ -16,6 +16,7 @@ export const SUPPORTED_IMAGE_EXTENSIONS = [
   'gif',
   'bmp',
   'svg',
+  'ico',
   'tif',
   'tiff',
   'exr',
