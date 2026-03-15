@@ -144,18 +144,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Exported dailies reports cannot capture who ran the session, what project it belonged to, or any category-based review statistics.
   - That makes the generated reports much less useful for real production circulation than the workflow suggests.
 
-### 321. Version-manager navigation is a no-op at runtime because active-version changes never switch the session source
-
-- Severity: Medium
-- Area: Version management / session behavior
-- Evidence:
-  - `VersionManager.nextVersion(...)`, `previousVersion(...)`, and `setActiveVersion(...)` all invoke the `onActiveVersionChanged(...)` callback after updating internal state in [src/core/session/VersionManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/VersionManager.ts#L191) through [src/core/session/VersionManager.ts#L232).
-  - `SessionAnnotations` wires that callback to an explicit no-op with the comment “Can be extended for source switching in future” in [src/core/session/SessionAnnotations.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionAnnotations.ts#L37) through [src/core/session/SessionAnnotations.ts#L42).
-  - The session only re-emits a generic `versionsChanged` event in [src/core/session/Session.ts](/Users/lifeart/Repos/openrv-web/src/core/session/Session.ts#L316) through [src/core/session/Session.ts#L329); there is no production caller that translates active-version changes into `session.setCurrentSource(...)`.
-- Impact:
-  - Even if version navigation were exposed through UI, scripting, or future automation, changing the active version group state would not actually change the displayed media.
-  - That leaves the version subsystem internally inconsistent: it can record an “active” version without the viewer ever following it.
-
 ### 322. ShotGrid version loading never feeds the app’s own version-management system
 
 - Severity: Medium

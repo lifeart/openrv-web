@@ -2469,3 +2469,21 @@ The `URLSession` interface gained `allSources` for URL-based lookup. `SessionURL
 - `src/services/SessionURLService.ts`
 - `src/services/SessionURLService.test.ts`
 - `test/mocks.ts`
+
+## Issue #321: Version-manager navigation is a no-op at runtime because active-version changes never switch the session source
+
+**Root cause**: `SessionAnnotations` wired `VersionManager`'s `onActiveVersionChanged` callback to an explicit no-op with a "future" comment. No production code translated active-version changes into `session.setCurrentSource()`.
+
+**Fix**:
+- `SessionAnnotations` now emits `activeVersionChanged` event with `{ groupId, entry }` payload
+- `SessionTypes` `SessionEvents` interface gained `activeVersionChanged` event
+- `Session` forwards the annotation event and wires a listener that calls `setCurrentSource(entry.sourceIndex)` when a version is activated
+
+**Tests added**: 6 regression tests — 3 in `SessionAnnotations.test.ts` (SA-034 through SA-036) verifying event emission; 3 in `Session.state.test.ts` (SES-VER-001 through SES-VER-003) verifying actual source switching.
+
+**Files changed**:
+- `src/core/session/SessionAnnotations.ts`
+- `src/core/session/SessionTypes.ts`
+- `src/core/session/Session.ts`
+- `src/core/session/SessionAnnotations.test.ts`
+- `src/core/session/Session.state.test.ts`
