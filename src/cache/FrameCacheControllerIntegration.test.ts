@@ -154,7 +154,7 @@ function createMinimalDeps(
     sessionBridge: { updateInfoPanel: noop },
     layoutStore: { applyPreset: noop },
     externalPresentation: { openWindow: noop },
-    headerBar: { getExportControl: () => ({ quickExport: noop }) },
+    headerBar: { getExportControl: () => ({ quickExport: noop }), navigateVersion: noop },
     frameNavigation: {
       goToNextAnnotation: noop, goToPreviousAnnotation: noop,
       goToPlaylistStart: noop, goToPlaylistEnd: noop,

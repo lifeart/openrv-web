@@ -226,6 +226,10 @@ export interface ActionAriaAnnouncer {
   announce(message: string, priority?: 'polite' | 'assertive'): void;
 }
 
+export interface ActionFrameCacheController {
+  cycleMode(): void;
+}
+
 // ---------------------------------------------------------------------------
 // Aggregated dependencies
 // ---------------------------------------------------------------------------

@@ -60,6 +60,7 @@ import { handlePlaybackChanged } from './handlers/playbackHandlers';
 import { bindPersistenceHandlers } from './handlers/persistenceHandlers';
 import { bindCompareHandlers } from './handlers/compareHandlers';
 import { showUnsupportedCodecModal } from './handlers/unsupportedCodecModal';
+import { handleBufferingChanged, handleFrameDecodeTimeout } from './handlers/bufferingHandlers';
 
 /**
  * Context interface for what AppSessionBridge needs from App.
@@ -171,6 +172,14 @@ export class AppSessionBridge {
         () => this.updateGamutDiagram(),
       );
     });
+
+    // --- Buffering indicator ---
+
+    this.on(session, 'buffering', (data) => handleBufferingChanged(data));
+
+    // --- Frame decode timeout ---
+
+    this.on(session, 'frameDecodeTimeout', (frame) => handleFrameDecodeTimeout(frame));
 
     // --- A/B availability and source switching ---
 

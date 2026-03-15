@@ -212,6 +212,7 @@ describe('NoteManager', () => {
           color: '#fbbf24',
           priority: 'medium',
           category: '',
+          externalId: null,
         },
       ];
       onNotesChanged.mockClear();

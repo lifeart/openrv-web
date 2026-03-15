@@ -340,6 +340,7 @@ describe('NotePanel E2E Integration', () => {
           color: '#fbbf24',
           priority: 'medium',
           category: '',
+          externalId: null,
         },
         {
           id: 'batch-2',
@@ -355,6 +356,7 @@ describe('NotePanel E2E Integration', () => {
           color: '#fbbf24',
           priority: 'medium',
           category: '',
+          externalId: null,
         },
       ];
       session.noteManager.fromSerializable(notes);

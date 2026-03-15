@@ -54,8 +54,8 @@ export interface PlaylistState {
   enabled: boolean;
   /** Current playhead position (global frame) */
   currentFrame: number;
-  /** Loop mode: none, single (current clip), all */
-  loopMode: 'none' | 'single' | 'all';
+  /** Loop mode: none, single (current clip), all, pingpong */
+  loopMode: 'none' | 'single' | 'all' | 'pingpong';
   /** Transitions between clips (optional, gap-indexed) */
   transitions?: (TransitionConfig | null)[];
 }
@@ -77,7 +77,7 @@ export interface PlaylistManagerEvents extends EventMap {
   /** Emitted when current clip changes */
   clipChanged: { clip: PlaylistClip | null; index: number };
   /** Emitted when loop mode changes */
-  loopModeChanged: { mode: 'none' | 'single' | 'all' };
+  loopModeChanged: { mode: 'none' | 'single' | 'all' | 'pingpong' };
   /** Emitted when playhead reaches end */
   playlistEnded: void;
 }
@@ -121,11 +121,14 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
   private clips: PlaylistClip[] = [];
   private enabled = false;
   private currentFrame = 1;
-  private loopMode: 'none' | 'single' | 'all' = 'none';
+  private loopMode: 'none' | 'single' | 'all' | 'pingpong' = 'none';
+  private pingpongDirection: 1 | -1 = 1;
   private nextClipId = 1;
   private _unresolvedClips: UnresolvedOTIOClip[] = [];
   private nextUnresolvedId = 1;
   private transitionManager: TransitionManager | null = null;
+  private _transitionChangedHandler: (() => void) | null = null;
+  private _transitionsResetHandler: (() => void) | null = null;
   private _lastOTIOImportResult: OTIOImportResult | null = null;
 
   constructor() {
@@ -136,7 +139,25 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
    * Set the transition manager for overlap-aware frame calculation.
    */
   setTransitionManager(tm: TransitionManager): void {
+    // Remove listeners from old transition manager
+    if (this.transitionManager && this._transitionChangedHandler && this._transitionsResetHandler) {
+      this.transitionManager.off('transitionChanged', this._transitionChangedHandler);
+      this.transitionManager.off('transitionsReset', this._transitionsResetHandler);
+    }
+
     this.transitionManager = tm;
+
+    this._transitionChangedHandler = () => {
+      this.recalculateGlobalFrames();
+      this.emit('clipsChanged', { clips: [...this.clips] });
+    };
+    this._transitionsResetHandler = () => {
+      this.recalculateGlobalFrames();
+      this.emit('clipsChanged', { clips: [...this.clips] });
+    };
+
+    tm.on('transitionChanged', this._transitionChangedHandler);
+    tm.on('transitionsReset', this._transitionsResetHandler);
   }
 
   /**
@@ -166,6 +187,7 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
     };
 
     this.clips.push(clip);
+    this.transitionManager?.resizeToClips(this.clips.length);
     this.emit('clipsChanged', { clips: [...this.clips] });
     return clip;
   }
@@ -176,7 +198,6 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
    */
   replaceClips(clips: PlaylistClipInput[]): void {
     const nextClips: PlaylistClip[] = [];
-    let globalStartFrame = 1;
 
     for (const clip of clips) {
       const inPoint = Math.max(1, Math.floor(clip.inPoint));
@@ -189,14 +210,14 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
         sourceName: clip.sourceName,
         inPoint,
         outPoint,
-        globalStartFrame,
+        globalStartFrame: 1, // will be recalculated
         duration,
       });
-
-      globalStartFrame += duration;
     }
 
+    this.transitionManager?.resizeToClips(nextClips.length);
     this.clips = nextClips;
+    this.recalculateGlobalFrames();
 
     const totalDuration = this.getTotalDuration();
     this.currentFrame = Math.max(1, Math.min(this.currentFrame, totalDuration || 1));
@@ -212,6 +233,7 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
     if (index === -1) return false;
 
     this.clips.splice(index, 1);
+    this.transitionManager?.resizeToClips(this.clips.length);
     this.recalculateGlobalFrames();
     this.emit('clipsChanged', { clips: [...this.clips] });
     return true;
@@ -287,6 +309,11 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
     const totalDuration = this.getTotalDuration();
     if (totalDuration === 0) return { frame: currentGlobal, clipChanged: false };
 
+    // In pingpong mode with reverse direction, "next" actually goes backwards
+    if (this.loopMode === 'pingpong' && this.pingpongDirection === -1) {
+      return this._getPreviousFrameInternal(currentGlobal);
+    }
+
     const currentMapping = this.getClipAtFrame(currentGlobal);
     const nextGlobal = currentGlobal + 1;
 
@@ -313,6 +340,12 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
           return { frame: 1, clipChanged: true };
         }
 
+        if (this.loopMode === 'pingpong') {
+          // Reverse direction and go backwards
+          this.pingpongDirection = -1;
+          return this._getPreviousFrameInternal(currentGlobal);
+        }
+
         // End of playlist, no loop
         this.emit('playlistEnded', undefined);
         return { frame: currentGlobal, clipChanged: false };
@@ -327,11 +360,20 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
   }
 
   /**
-   * Get the previous frame, handling clip transitions
+   * Internal helper for going backwards (used by pingpong logic)
    */
-  getPreviousFrame(currentGlobal: number): { frame: number; clipChanged: boolean } {
+  private _getPreviousFrameInternal(currentGlobal: number): { frame: number; clipChanged: boolean } {
     if (currentGlobal <= 1) {
-      if (this.loopMode === 'all' && this.clips.length > 0) {
+      if (this.loopMode === 'pingpong') {
+        // Reverse direction back to forward
+        this.pingpongDirection = 1;
+        const nextGlobal = currentGlobal + 1;
+        const nextMapping = this.getClipAtFrame(nextGlobal);
+        const currentMapping = this.getClipAtFrame(currentGlobal);
+        const clipChanged = currentMapping && nextMapping && currentMapping.clipIndex !== nextMapping.clipIndex;
+        return { frame: nextGlobal, clipChanged: !!clipChanged };
+      }
+      if (this.loopMode === 'all') {
         const totalDuration = this.getTotalDuration();
         return { frame: totalDuration, clipChanged: true };
       }
@@ -351,8 +393,69 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
   }
 
   /**
+   * Get the previous frame, handling clip transitions
+   */
+  getPreviousFrame(currentGlobal: number): { frame: number; clipChanged: boolean } {
+    // In pingpong mode with reverse direction, "previous" actually goes forward
+    if (this.loopMode === 'pingpong' && this.pingpongDirection === -1) {
+      // Going forward (opposite of the current reverse direction)
+      const totalDuration = this.getTotalDuration();
+      if (totalDuration === 0) return { frame: currentGlobal, clipChanged: false };
+
+      const currentMapping = this.getClipAtFrame(currentGlobal);
+      const nextGlobal = currentGlobal + 1;
+
+      if (currentMapping) {
+        const clipEnd = currentMapping.clip.globalStartFrame + currentMapping.clip.duration - 1;
+        if (currentGlobal >= clipEnd) {
+          const nextClipIndex = currentMapping.clipIndex + 1;
+          const nextClip = this.clips[nextClipIndex];
+          if (nextClip) {
+            return { frame: nextClip.globalStartFrame, clipChanged: true };
+          }
+          // At end, reverse back to forward
+          this.pingpongDirection = 1;
+          return this._getPreviousFrameInternal(currentGlobal);
+        }
+      }
+
+      const nextMapping = this.getClipAtFrame(nextGlobal);
+      const clipChanged = currentMapping && nextMapping && currentMapping.clipIndex !== nextMapping.clipIndex;
+      return { frame: nextGlobal, clipChanged: !!clipChanged };
+    }
+
+    if (currentGlobal <= 1) {
+      if (this.loopMode === 'all' && this.clips.length > 0) {
+        const totalDuration = this.getTotalDuration();
+        return { frame: totalDuration, clipChanged: true };
+      }
+      if (this.loopMode === 'pingpong' && this.clips.length > 0) {
+        // Reverse direction back to forward
+        this.pingpongDirection = 1;
+        const nextGlobal = currentGlobal + 1;
+        const nextMapping = this.getClipAtFrame(nextGlobal);
+        const currentMapping = this.getClipAtFrame(currentGlobal);
+        const clipChanged = currentMapping && nextMapping && currentMapping.clipIndex !== nextMapping.clipIndex;
+        return { frame: nextGlobal, clipChanged: !!clipChanged };
+      }
+      return { frame: 1, clipChanged: false };
+    }
+
+    const currentMapping = this.getClipAtFrame(currentGlobal);
+    const prevGlobal = currentGlobal - 1;
+    const prevMapping = this.getClipAtFrame(prevGlobal);
+
+    if (currentMapping && prevMapping) {
+      const clipChanged = currentMapping.clipIndex !== prevMapping.clipIndex;
+      return { frame: prevGlobal, clipChanged };
+    }
+
+    return { frame: prevGlobal, clipChanged: false };
+  }
+
+  /**
    * Jump to the start of the next clip in the playlist.
-   * Wraps to first clip when loopMode='all'.
+   * Wraps to first clip when loopMode='all' or 'pingpong'.
    * Returns null if at end with no loop, or if playlist is empty.
    */
   goToNextClip(currentGlobalFrame: number): { frame: number; clip: PlaylistClip } | null {
@@ -372,7 +475,7 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
     }
 
     // At last clip
-    if (this.loopMode === 'all') {
+    if (this.loopMode === 'all' || this.loopMode === 'pingpong') {
       const firstClip = this.clips[0]!;
       return { frame: firstClip.globalStartFrame, clip: firstClip };
     }
@@ -383,7 +486,7 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
   /**
    * Jump to the start of the previous clip, or start of current clip if mid-clip.
    * If already at the start of a clip (within 1 frame), goes to previous clip.
-   * Wraps to last clip when loopMode='all'.
+   * Wraps to last clip when loopMode='all' or 'pingpong'.
    * Returns null if at beginning with no loop, or if playlist is empty.
    */
   goToPreviousClip(currentGlobalFrame: number): { frame: number; clip: PlaylistClip } | null {
@@ -409,7 +512,7 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
     }
 
     // At first clip
-    if (this.loopMode === 'all') {
+    if (this.loopMode === 'all' || this.loopMode === 'pingpong') {
       const lastClip = this.clips[this.clips.length - 1]!;
       return { frame: lastClip.globalStartFrame, clip: lastClip };
     }
@@ -504,9 +607,12 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
   /**
    * Set loop mode
    */
-  setLoopMode(mode: 'none' | 'single' | 'all'): void {
+  setLoopMode(mode: 'none' | 'single' | 'all' | 'pingpong'): void {
     if (this.loopMode !== mode) {
       this.loopMode = mode;
+      if (mode !== 'pingpong') {
+        this.pingpongDirection = 1;
+      }
       this.emit('loopModeChanged', { mode });
     }
   }
@@ -514,8 +620,16 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
   /**
    * Get current loop mode
    */
-  getLoopMode(): 'none' | 'single' | 'all' {
+  getLoopMode(): 'none' | 'single' | 'all' | 'pingpong' {
     return this.loopMode;
+  }
+
+  /**
+   * Get the current pingpong direction.
+   * 1 = forward, -1 = reverse.
+   */
+  getPingpongDirection(): 1 | -1 {
+    return this.pingpongDirection;
   }
 
   /**
@@ -538,6 +652,9 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
   clear(): void {
     this.clips = [];
     this.currentFrame = 1;
+    if (this.transitionManager) {
+      this.transitionManager.clear();
+    }
     this.emit('clipsChanged', { clips: [] });
   }
 
@@ -590,8 +707,12 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
       this.setLoopMode(state.loopMode);
     }
     // Restore transitions when transition manager is set
-    if (this.transitionManager && state.transitions) {
-      this.transitionManager.setState(state.transitions);
+    if (this.transitionManager) {
+      if (state.transitions) {
+        this.transitionManager.setState(state.transitions);
+      } else {
+        this.transitionManager.clear();
+      }
     }
   }
 

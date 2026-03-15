@@ -206,6 +206,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   },
   'panel.waveform': {
     code: 'KeyW',
+    context: 'panel',
     description: 'Toggle waveform scope',
   },
   'panel.vectorscope': {
@@ -223,6 +224,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   },
   'panel.histogram': {
     code: 'KeyH',
+    context: 'panel',
     description: 'Toggle histogram',
   },
   'panel.ocio': {
@@ -394,7 +396,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   'channel.red': {
     code: 'KeyR',
     shift: true,
-    context: 'panel',
+    context: 'viewer',
     description: 'Select red channel',
   },
   'channel.green': {
@@ -412,11 +414,6 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     shift: true,
     description: 'Select alpha channel',
   },
-  'channel.luminance': {
-    code: 'KeyL',
-    shift: true,
-    description: 'Select luminance channel',
-  },
   'channel.grayscale': {
     code: 'KeyY',
     shift: true,
@@ -426,6 +423,13 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     code: 'KeyN',
     shift: true,
     description: 'Select no channel',
+  },
+
+  // LUT panel toggle
+  'lut.togglePanel': {
+    code: 'KeyL',
+    shift: true,
+    description: 'Toggle LUT panel',
   },
 
   // Stereo controls (handled by StereoControl component)

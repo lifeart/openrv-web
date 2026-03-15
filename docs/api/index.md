@@ -45,7 +45,7 @@ Union of all exporter contribution types
 
 ### OpenRVEventName
 
-> **OpenRVEventName** = `"frameChange"` \| `"play"` \| `"pause"` \| `"stop"` \| `"speedChange"` \| `"volumeChange"` \| `"muteChange"` \| `"audioScrubEnabledChange"` \| `"loopModeChange"` \| `"inOutChange"` \| `"markerChange"` \| `"sourceLoaded"` \| `"error"`
+> **OpenRVEventName** = `"frameChange"` \| `"play"` \| `"pause"` \| `"stop"` \| `"speedChange"` \| `"volumeChange"` \| `"muteChange"` \| `"audioScrubEnabledChange"` \| `"loopModeChange"` \| `"inOutChange"` \| `"markerChange"` \| `"sourceLoadingStarted"` \| `"sourceLoaded"` \| `"sourceLoadFailed"` \| `"viewTransformChanged"` \| `"renderedImagesChanged"` \| `"representationChanged"` \| `"fallbackActivated"` \| `"playlistEnded"` \| `"error"`
 
 Defined in: [api/EventsAPI.ts:15](https://github.com/lifeart/openrv-web/blob/855018687f3c1558e450abc7baf6913f0784de0e/src/api/EventsAPI.ts#L15)
 

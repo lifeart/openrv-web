@@ -1451,7 +1451,7 @@ describe('SessionMedia', () => {
       (media as any).applyRepresentationShim(0, rep);
 
       expect(source.element).toBeDefined();
-      expect(source.element?.tagName).toBe('VIDEO');
+      expect(source.element && 'tagName' in source.element ? source.element.tagName : undefined).toBe('VIDEO');
     });
 
     it('SM-108: calls initVideoPreservesPitch for video representation', () => {

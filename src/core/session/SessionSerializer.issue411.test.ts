@@ -203,6 +203,8 @@ function makeNote(sourceIndex: number, text: string): Note {
     parentId: null,
     color: '#fbbf24',
     externalId: null,
+    priority: 'medium' as const,
+    category: '',
   };
 }
 
