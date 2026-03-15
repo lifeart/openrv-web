@@ -13,6 +13,7 @@ import type { FileSourceNode } from '../../nodes/sources/FileSourceNode';
 import type { ProceduralSourceNode } from '../../nodes/sources/ProceduralSourceNode';
 import type { UnsupportedCodecError, CodecFamily } from '../../utils/media/CodecUtils';
 import type { Annotation, PaintEffects } from '../../paint/types';
+import type { VersionEntry } from './VersionManager';
 import type { ColorAdjustments, ChannelMode, LinearizeState, ChannelSwizzle } from '../../core/types/color';
 import type { FilterSettings } from '../../core/types/filter';
 import type { Transform2D, CropState, UncropState } from '../../core/types/transform';
@@ -161,6 +162,7 @@ export interface SessionEvents extends EventMap {
   // Note/comment events
   notesChanged: void;
   versionsChanged: void;
+  activeVersionChanged: { groupId: string; entry: VersionEntry };
   // Playback stopped (pause + return to start)
   playbackStopped: void;
   // Playlist reached end without looping

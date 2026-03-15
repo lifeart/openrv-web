@@ -323,12 +323,20 @@ export class Session extends EventEmitter<SessionEvents> {
       'matteChanged',
       'notesChanged',
       'versionsChanged',
+      'activeVersionChanged',
       'statusChanged',
       'statusesChanged',
     ] as const;
     for (const event of annotationEvents) {
       this._annotations.on(event as any, (data: any) => this.emit(event as any, data));
     }
+
+    // Wire active-version changes to source switching
+    this._annotations.on('activeVersionChanged', ({ entry }) => {
+      if (typeof entry.sourceIndex === 'number' && entry.sourceIndex >= 0 && entry.sourceIndex < this.sourceCount) {
+        this.setCurrentSource(entry.sourceIndex);
+      }
+    });
 
     // Wire SessionGraph host
     this._sessionGraph.setHost({

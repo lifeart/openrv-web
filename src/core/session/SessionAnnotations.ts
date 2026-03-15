@@ -1,7 +1,7 @@
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { MarkerManager, MARKER_COLORS, type Marker } from './MarkerManager';
 import { NoteManager } from './NoteManager';
-import { VersionManager } from './VersionManager';
+import { VersionManager, type VersionEntry } from './VersionManager';
 import { StatusManager } from './StatusManager';
 import { AnnotationStore } from './AnnotationStore';
 import type { ParsedAnnotations, MatteSettings } from './SessionTypes';
@@ -15,6 +15,7 @@ export interface SessionAnnotationEvents extends EventMap {
   notesChanged: void;
   versionsChanged: void;
   statusChanged: { sourceIndex: number; status: string; previous: string };
+  activeVersionChanged: { groupId: string; entry: VersionEntry };
   statusesChanged: void;
 }
 
@@ -36,8 +37,8 @@ export class SessionAnnotations extends EventEmitter<SessionAnnotationEvents> {
     });
     this._versionManager.setCallbacks({
       onVersionsChanged: () => this.emit('versionsChanged', undefined),
-      onActiveVersionChanged: (_groupId, _entry) => {
-        // Can be extended for source switching in future
+      onActiveVersionChanged: (groupId, entry) => {
+        this.emit('activeVersionChanged', { groupId, entry });
       },
     });
     this._statusManager.setCallbacks({
