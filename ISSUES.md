@@ -5,19 +5,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 ## Confirmed Issues
 
 
-### 307. The adaptive `FrameCacheController` subsystem is fully implemented but never instantiated in production
-
-- Severity: Medium
-- Area: Playback cache architecture
-- Evidence:
-  - `FrameCacheController` is described as the central frame-caching coordinator with region/lookahead modes, memory-pressure management, and pre-roll warm-up in [src/cache/FrameCacheController.ts](/Users/lifeart/Repos/openrv-web/src/cache/FrameCacheController.ts#L1) through [src/cache/FrameCacheController.ts](/Users/lifeart/Repos/openrv-web/src/cache/FrameCacheController.ts#L15).
-  - Its companion config explicitly defines UI labels/tooltips and even a cache-mode cycle “for `Shift+C` keyboard shortcut” in [src/config/CacheConfig.ts](/Users/lifeart/Repos/openrv-web/src/config/CacheConfig.ts#L1) through [src/config/CacheConfig.ts](/Users/lifeart/Repos/openrv-web/src/config/CacheConfig.ts#L37) and [src/config/CacheConfig.ts](/Users/lifeart/Repos/openrv-web/src/config/CacheConfig.ts#L92) through [src/config/CacheConfig.ts](/Users/lifeart/Repos/openrv-web/src/config/CacheConfig.ts#L95).
-  - A production-code search finds no `new FrameCacheController(...)` outside tests, and the shipped controls only create the simpler passive `CacheIndicator` in [src/services/controls/createPanelControls.ts](/Users/lifeart/Repos/openrv-web/src/services/controls/createPanelControls.ts#L71) through [src/services/controls/createPanelControls.ts](/Users/lifeart/Repos/openrv-web/src/services/controls/createPanelControls.ts#L72), which itself just reflects session/viewer cache stats and a clear button in [src/ui/components/CacheIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/CacheIndicator.ts#L1) through [src/ui/components/CacheIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/CacheIndicator.ts#L9) and [src/ui/components/CacheIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/CacheIndicator.ts#L169) through [src/ui/components/CacheIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/CacheIndicator.ts#L192).
-- Impact:
-  - The app carries a substantial adaptive frame-cache design, but the shipped runtime never actually turns it on.
-  - That leaves cache modes, warm-up behavior, and memory-pressure coordination effectively test-only despite the surrounding config and UI-oriented metadata.
-
-
 ### 309. `SessionManager` is documented as a central session subsystem, but it is never instantiated in production
 
 - Severity: Low
@@ -29,19 +16,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - The repo carries a documented graph-mutation/view-history service that is effectively test-only in the shipped app.
   - That makes the published session architecture ahead of production wiring for any future graph-browser or view-history workflows that would depend on this manager.
-
-### 314. Version management is implemented underneath the session layer, but the shipped app never wires it to UI or auto-detection
-
-- Severity: Medium
-- Area: Review workflow / version management
-- Evidence:
-  - `VersionManager` implements grouping, next/previous navigation, active-version switching, and filename-based auto-detection in [src/core/session/VersionManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/VersionManager.ts#L1) through [src/core/session/VersionManager.ts#L349).
-  - The auto-detection entry point `autoDetectGroups(...)` exists in [src/core/session/VersionManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/VersionManager.ts#L273) through [src/core/session/VersionManager.ts#L324), but a production-code search finds no caller outside the manager itself.
-  - The only live consumers of version groups are export/report serialization paths such as [src/export/ReportExporter.ts](/Users/lifeart/Repos/openrv-web/src/export/ReportExporter.ts#L120) through [src/export/ReportExporter.ts#L129) and session save/load in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L372) through [src/core/session/SessionSerializer.ts#L376) and [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L574) through [src/core/session/SessionSerializer.ts#L577).
-  - A production-code search finds no header/QC/source-panel UI that calls `getGroups()`, `getGroupForSource()`, `nextVersion()`, `previousVersion()`, or `setActiveVersion(...)`, even though the shipped docs still promise a header-bar version selector and version list in [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L36) through [docs/advanced/review-workflow.md#L40).
-- Impact:
-  - Version groups can exist in saved state and reports, but the production app never auto-detects them from filenames and never exposes navigation or selection controls.
-  - That makes version management effectively a persistence/export-only subsystem instead of a usable review feature.
 
 ### 318. Dailies report export ignores playlist structure and always reports every loaded source
 

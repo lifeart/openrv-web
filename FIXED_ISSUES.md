@@ -3161,3 +3161,32 @@ Wired into `AppNetworkBridge` (subscribes to syncCursor, usersChanged, userLeft,
 - `src/api/MediaAPI.ts`
 - `src/api/index.ts`
 - `src/ui/components/layout/HeaderBar.ts`
+
+## Issue #307: FrameCacheController never instantiated in production
+
+**Root cause**: `FrameCacheController` was fully implemented with region/lookahead modes, memory-pressure management, and pre-roll warm-up, but no production code ever called `new FrameCacheController(...)`. The shipped app only used the simpler passive `CacheIndicator`.
+
+**Fix**: Instantiated `FrameCacheController` in `App.ts` with adaptive memory budget from `detectDefaultBudget()`. Wired session `frameChanged`, `playbackChanged`, and `sourceLoaded` events to the cache controller. Added `Shift+C` keyboard shortcut for cache mode cycling. Passed controller to `buildActionHandlers()`.
+
+**Tests added**: 28 regression tests (FCCI-001 through FCCI-028) covering instantiation, cache mode cycling, session integration, memory pressure, visibility handling, multi-source budgets, and lifecycle.
+
+**Files changed**:
+- `src/App.ts`
+- `src/utils/input/KeyBindings.ts`
+- `src/cache/FrameCacheControllerIntegration.test.ts` (new)
+
+## Issue #314: Version management not wired to UI or auto-detection
+
+**Root cause**: `VersionManager` implemented grouping, navigation, and auto-detection, but `autoDetectGroups()` had no production caller and no UI existed for version navigation.
+
+**Fix**: Added version auto-detection on source load via `AppSessionBridge.runVersionAutoDetection()`. Created version selector in the header bar with previous/next buttons and dropdown version list. Added `Alt+[` and `Alt+]` keyboard shortcuts for version navigation.
+
+**Tests added**: 19 regression tests (VSEL-001 through VSEL-019) covering auto-detection, navigation with wrapping, group queries, display updates, and keyboard action wiring.
+
+**Files changed**:
+- `src/AppSessionBridge.ts`
+- `src/ui/components/layout/HeaderBar.ts`
+- `src/utils/input/KeyBindings.ts`
+- `src/services/KeyboardActionMap.ts`
+- `src/services/KeyboardActionMap.test.ts`
+- `src/ui/components/layout/VersionSelector.test.ts` (new)
