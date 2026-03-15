@@ -914,6 +914,74 @@ describe('MuSourceBridge', () => {
     });
   });
 
+  describe('sourceMedia with active representation', () => {
+    it('returns base media paths when no active rep is set', async () => {
+      const name = await bridge.addSourceVerbose(['/full.mov']);
+      const result = bridge.sourceMedia(name);
+      expect(result.media).toEqual(['/full.mov']);
+    });
+
+    it('returns rep media paths after switching active rep', async () => {
+      const name = await bridge.addSourceVerbose(['/full.mov']);
+      bridge.addSourceMediaRep(name, 'full', ['/full-res.mov']);
+      bridge.addSourceMediaRep(name, 'proxy', ['/proxy.mov']);
+      bridge.setActiveSourceMediaRep(name, 'proxy');
+
+      const result = bridge.sourceMedia(name);
+      expect(result.media).toEqual(['/proxy.mov']);
+    });
+
+    it('returns first rep media paths when first rep is auto-activated', async () => {
+      const name = await bridge.addSourceVerbose(['/full.mov']);
+      bridge.addSourceMediaRep(name, 'full', ['/full-res.mov']);
+
+      const result = bridge.sourceMedia(name);
+      expect(result.media).toEqual(['/full-res.mov']);
+    });
+
+    it('returns base paths if active rep has empty media paths', async () => {
+      const name = await bridge.addSourceVerbose(['/full.mov']);
+      bridge.addSourceMediaRep(name, 'empty', []);
+
+      const result = bridge.sourceMedia(name);
+      expect(result.media).toEqual(['/full.mov']);
+    });
+  });
+
+  describe('sourceMediaInfo with active representation', () => {
+    it('returns base file when no active rep is set', async () => {
+      const name = await bridge.addSourceVerbose(['/full.mov']);
+      const info = bridge.sourceMediaInfo(name);
+      expect(info.file).toBe('/full.mov');
+    });
+
+    it('returns rep file after switching active rep', async () => {
+      const name = await bridge.addSourceVerbose(['/full.mov']);
+      bridge.addSourceMediaRep(name, 'full', ['/full-res.mov']);
+      bridge.addSourceMediaRep(name, 'proxy', ['/proxy.mov']);
+      bridge.setActiveSourceMediaRep(name, 'proxy');
+
+      const info = bridge.sourceMediaInfo(name);
+      expect(info.file).toBe('/proxy.mov');
+      expect(info.name).toBe(name);
+    });
+
+    it('preserves source metadata when returning rep file', async () => {
+      const name = await bridge.addSourceVerbose(['/full.mov']);
+      bridge.setSourceDimensions(name, 3840, 2160, 1.0);
+      bridge.setSourceFrameRange(name, 1, 200);
+      bridge.addSourceMediaRep(name, 'proxy', ['/proxy.mov']);
+      bridge.setActiveSourceMediaRep(name, 'proxy');
+
+      const info = bridge.sourceMediaInfo(name);
+      expect(info.file).toBe('/proxy.mov');
+      expect(info.width).toBe(3840);
+      expect(info.height).toBe(2160);
+      expect(info.startFrame).toBe(1);
+      expect(info.endFrame).toBe(200);
+    });
+  });
+
   describe('sourceMediaRepSourceNode', () => {
     it('returns source node for active rep', async () => {
       const name = await bridge.addSourceVerbose(['/full.mov']);
