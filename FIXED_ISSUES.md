@@ -2571,3 +2571,15 @@ The `URLSession` interface gained `allSources` for URL-based lookup. `SessionURL
 - `src/utils/media/SupportedMediaFormats.test.ts` (new)
 - `src/AppDCCWiring.ts`
 - `src/integrations/ShotGridIntegrationBridge.ts`
+
+## Issue #393: The `Open media file` control is also a session and EDL importer, not just a media picker
+
+**Root cause**: The header button was labeled "Open media file" but actually handles media, `.rv`/`.gto` sessions, and `.rvedl` EDLs — making the label misleading.
+
+**Fix**: Renamed the button tooltip/aria-label from "Open media file" to "Open file". Updated e2e test selectors and documentation references.
+
+**Files changed**:
+- `src/ui/components/layout/HeaderBar.ts`
+- `e2e/app-initialization.spec.ts`
+- `e2e/header-bar-mobile-scroll.spec.ts`
+- `features/drag-drop-loading.md`

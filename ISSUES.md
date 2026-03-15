@@ -479,18 +479,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The picker UI suggests multi-file project opening is meaningful, but selecting multiple project/session files has ambiguous or ignored results.
   - That makes the Open Project affordance less predictable than the single-project mental model the runtime actually implements.
 
-### 393. The `Open media file` control is also a session and EDL importer, not just a media picker
-
-- Severity: Low
-- Area: Header file-open UI semantics
-- Evidence:
-  - The header button is titled `Open media file` in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L234) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L235).
-  - But its hidden input accepts not just supported media formats, but also `.rv`, `.gto`, and `.rvedl` in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L216) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L220).
-  - The same handler explicitly branches into RV/GTO session import and RVEDL import before ordinary media loading in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1382) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1439).
-- Impact:
-  - The shipped main file-open affordance does more than its label suggests, which makes session import paths harder to discover correctly and easier to misunderstand.
-  - That overlaps awkwardly with the separate `Open project` affordance, since both buttons can open non-media session-like files through different semantics.
-
 ### 401. Multi-select session import from `Open media file` only honors the first `.rv` / `.gto` file and silently demotes the rest to sidecars
 
 - Severity: Medium
