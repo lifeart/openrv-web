@@ -246,6 +246,7 @@ export interface KeyboardActionDeps {
   externalPresentation: ActionExternalPresentation;
   headerBar: ActionHeaderBar;
   frameNavigation: ActionFrameNavigation;
+  frameCacheController?: ActionFrameCacheController | null;
   ariaAnnouncer?: ActionAriaAnnouncer | null;
 }
 
@@ -276,6 +277,7 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
     externalPresentation,
     headerBar,
     frameNavigation,
+    frameCacheController,
     ariaAnnouncer,
   } = deps;
 
@@ -661,6 +663,11 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
     },
     'version.previous': () => {
       headerBar.navigateVersion('previous');
+    },
+
+    // -- Cache -----------------------------------------------------------
+    'cache.cycleCacheMode': () => {
+      frameCacheController?.cycleMode();
     },
 
     // -- Network ---------------------------------------------------------
