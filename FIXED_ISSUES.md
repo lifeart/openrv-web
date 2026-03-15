@@ -3067,3 +3067,97 @@ Wired into `AppNetworkBridge` (subscribes to syncCursor, usersChanged, userLeft,
 - `src/ui/components/NetworkControl.ts`
 - `src/ui/components/NetworkControl.test.ts`
 - `src/AppNetworkBridge.ts`
+
+## Issue #539: Video representations lose HTMLVideoElement and audio wiring
+
+**Root cause**: `applyRepresentationShim` in SessionMedia.ts only set `source.videoSourceNode` and `source.type = 'video'` for video representations, without creating an HTMLVideoElement or wiring audio. Large parts of playback and export branch on `source.element instanceof HTMLVideoElement`.
+
+**Fix**: Added HTMLVideoElement creation, `initVideoPreservesPitch`, and `loadAudioFromVideo` calls inside the VideoSourceNode branch of `applyRepresentationShim`, matching the normal video load path.
+
+**Tests added**: 5 regression tests (SM-107 through SM-111) covering video element creation, pitch preservation, audio wiring, URL fallback, and non-video representation verification.
+
+**Files changed**:
+- `src/core/session/SessionMedia.ts`
+- `src/core/session/SessionMedia.test.ts`
+
+## Issue #556: Generated API reference has dead links and stale commit hashes
+
+**Root cause**: `docs/api/index.md` linked to non-existent `classes/*.md` and `interfaces/*.md` pages, and all "Defined in" source links pointed to a stale commit hash.
+
+**Fix**: Replaced broken links with inline descriptions. Updated all commit hashes to current HEAD. Corrected OpenRVEventName listing to match actual 13-event API surface.
+
+**Files changed**:
+- `docs/api/index.md`
+
+## Issue #561: Plugin settings accessor throws for schema-less plugins
+
+**Root cause**: `PluginRegistry.createContext()` always injected a settings accessor, even for plugins without `settingsSchema`. The accessor's `set()` would throw "No settings schema registered" at runtime.
+
+**Fix**: Added `createNoopAccessor()` to PluginSettingsStore that returns a safe no-op accessor (warns on set instead of throwing). `createContext()` now checks for `settingsSchema` and uses the noop accessor when absent.
+
+**Tests added**: 5 regression tests (PSET-160 through PSET-164) covering noop get, getAll, set warning, onChange, and reset.
+
+**Files changed**:
+- `src/plugin/PluginSettingsStore.ts`
+- `src/plugin/PluginRegistry.ts`
+- `src/plugin/PluginSettingsStore.test.ts`
+
+## Issue #470: OTIO import collapses editorial structure into plain clip list
+
+**Root cause**: `PlaylistManager.fromOTIO()` used the single-track `parseOTIO()` helper which returned only clips, dropping transitions, gaps, markers, and metadata.
+
+**Fix**: Rewired `fromOTIO()` to use `parseOTIOMultiTrack()` with single-track fallback. Added gap tracking, marker parsing, and transition wiring to TransitionManager. Editorial structure is preserved in `lastOTIOImportResult`.
+
+**Tests added**: 19 regression tests in PlaylistManager.issue470.test.ts plus 8 new parser tests (OTIO-M027 through OTIO-M034).
+
+**Files changed**:
+- `src/utils/media/OTIOParser.ts`
+- `src/utils/media/OTIOParser.test.ts`
+- `src/core/session/PlaylistManager.ts`
+- `src/core/session/PlaylistManager.issue470.test.ts` (new)
+
+## Issue #313: Shot status tracking has no UI
+
+**Root cause**: `StatusManager` was fully implemented but never wired to any UI. No header badge, no status selector.
+
+**Fix**: Created `ShotStatusBadge` component with colored dot + label, dropdown selector for all 8 status values, wired to `session.statusManager.setStatus()`. Mounted in HeaderBar next to source name.
+
+**Tests added**: 26 regression tests covering rendering, status display, StatusManager integration, source tracking, and disposal.
+
+**Files changed**:
+- `src/ui/components/ShotStatusBadge.ts` (new)
+- `src/ui/components/ShotStatusBadge.test.ts` (new)
+- `src/ui/components/layout/HeaderBar.ts`
+
+## Issue #316: Review notes missing priority and category fields
+
+**Root cause**: Note model only stored text, author, frame range, status, reply parent, and color. No priority or category support.
+
+**Fix**: Added `NotePriority` type and `priority`/`category` fields to Note model. Updated NotePanel with color-coded priority badges and category tags. Updated ReportExporter with category-based statistics. Restored `externalId` field for ShotGrid integration.
+
+**Tests added**: 19 new tests across NoteManager, NotePanel, and ReportExporter.
+
+**Files changed**:
+- `src/core/session/NoteManager.ts`
+- `src/core/session/NoteManager.test.ts`
+- `src/ui/components/NotePanel.ts`
+- `src/ui/components/NotePanel.test.ts`
+- `src/ui/components/NotePanel.e2e.test.ts`
+- `src/export/ReportExporter.ts`
+- `src/export/ReportExporter.test.ts`
+- `src/core/session/GTOGraphLoader.ts`
+
+## Issue #543: Representation subsystem unwired in shipped app
+
+**Root cause**: No production UI, app-shell, or public API caller for representation management. Only reachable through session restore.
+
+**Fix**: Created `RepresentationSelector` dropdown in header bar. Added `getRepresentations()`, `getActiveRepresentation()`, and `switchRepresentation()` to MediaAPI. Exported `RepresentationInfo` type.
+
+**Tests added**: 16 regression tests for RepresentationSelector UI.
+
+**Files changed**:
+- `src/ui/components/RepresentationSelector.ts` (new)
+- `src/ui/components/RepresentationSelector.test.ts` (new)
+- `src/api/MediaAPI.ts`
+- `src/api/index.ts`
+- `src/ui/components/layout/HeaderBar.ts`

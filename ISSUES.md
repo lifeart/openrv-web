@@ -30,19 +30,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The repo carries a documented graph-mutation/view-history service that is effectively test-only in the shipped app.
   - That makes the published session architecture ahead of production wiring for any future graph-browser or view-history workflows that would depend on this manager.
 
-### 313. Shot status tracking exists in session/export code, but the shipped app exposes no real status UI
-
-- Severity: Medium
-- Area: Review workflow / status tracking
-- Evidence:
-  - The session layer ships a real `StatusManager` with per-source status state, counts, colors, serialization, and change callbacks in [src/core/session/StatusManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/StatusManager.ts#L1) through [src/core/session/StatusManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/StatusManager.ts#L190).
-  - Production consumers are effectively limited to export and ShotGrid integration: `generateReport(...)` reads `session.statusManager` in [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L293), and ShotGrid push/pull maps statuses through [src/integrations/ShotGridIntegrationBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/ShotGridIntegrationBridge.ts#L182) through [src/integrations/ShotGridIntegrationBridge.ts#L247).
-  - A production-code search finds no real UI code using `session.statusManager`, `getStatus(...)`, or `setStatus(...)` in the shipped header, QC tab, or source panels, while the QC toolbar itself only mounts scopes/analysis/pixel-probe controls in [src/services/tabContent/buildQCTab.ts](/Users/lifeart/Repos/openrv-web/src/services/tabContent/buildQCTab.ts#L17) through [src/services/tabContent/buildQCTab.ts#L130).
-  - The current docs and UI overview still describe shot-status controls as part of QC/review flow in [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L22) through [docs/advanced/review-workflow.md#L26) and [docs/getting-started/ui-overview.md](/Users/lifeart/Repos/openrv-web/docs/getting-started/ui-overview.md#L71).
-- Impact:
-  - Users can load, save, export, and even sync status data indirectly, but they cannot actually set or inspect shot status through the shipped app UI.
-  - That leaves a core review-workflow feature implemented underneath the app yet unavailable in the normal production workflow.
-
 ### 314. Version management is implemented underneath the session layer, but the shipped app never wires it to UI or auto-detection
 
 - Severity: Medium
@@ -55,19 +42,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Version groups can exist in saved state and reports, but the production app never auto-detects them from filenames and never exposes navigation or selection controls.
   - That makes version management effectively a persistence/export-only subsystem instead of a usable review feature.
-
-### 316. Review notes do not support priority or category, so the richer dailies workflow is impossible in the shipped app
-
-- Severity: Medium
-- Area: Notes / review workflow
-- Evidence:
-  - The shipped review-workflow guide describes notes with priority, category, and category-based report statistics in [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L64) through [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L68) and [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L106) through [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L111).
-  - The actual `Note` model only stores `text`, `author`, frame range, status, reply parent, and color in [src/core/session/NoteManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/NoteManager.ts#L8) through [src/core/session/NoteManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/NoteManager.ts#L23), and the CRUD surface only updates `text`, `status`, or `color` in [src/core/session/NoteManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/NoteManager.ts#L71) through [src/core/session/NoteManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/NoteManager.ts#L120).
-  - The shipped `NotePanel` only renders frame, status, author, text, and reply/edit/delete actions; there is no priority/category display or editor in [src/ui/components/NotePanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NotePanel.ts#L522) through [src/ui/components/NotePanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NotePanel.ts#L728).
-  - Report generation only pulls raw note text arrays per source in [src/export/ReportExporter.ts](/Users/lifeart/Repos/openrv-web/src/export/ReportExporter.ts#L137) through [src/export/ReportExporter.ts](/Users/lifeart/Repos/openrv-web/src/export/ReportExporter.ts#L164), so there is no data available for category rollups.
-- Impact:
-  - Reviewers cannot tag notes by department/severity, and supervisors cannot produce the category-based dailies summaries the workflow describes.
-  - The shipped note system is materially simpler than the advertised review process, which limits its usefulness in actual production review sessions.
 
 ### 318. Dailies report export ignores playlist structure and always reports every loaded source
 
@@ -456,19 +430,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - The docs make OTIO import sound structurally richer than the runtime actually is.
   - Users can expect editorial gaps and transitions to survive import semantics when the shipped workflow collapses them into a plain cut list.
-
-### 470. OTIO import is lossy: the live playlist import path collapses editorial structure into a plain clip list
-
-- Severity: Medium
-- Area: OTIO import / editorial fidelity
-- Evidence:
-  - The only production OTIO import path is `PlaylistManager.fromOTIO(...)`, which uses the backward-compatible single-track `parseOTIO(...)` helper in [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L674) through [src/core/session/PlaylistManager.ts#L703) and [src/utils/media/OTIOParser.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/OTIOParser.ts#L315) through [src/utils/media/OTIOParser.ts#L337).
-  - That single-track parse result returns only clips plus timing, not transition objects, even though the richer `parseOTIOMultiTrack(...)` path exists separately in [src/utils/media/OTIOParser.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/OTIOParser.ts#L347) through [src/utils/media/OTIOParser.ts#L382).
-  - `fromOTIO(...)` then imports each resolved clip via `addClip(...)`, which rebuilds a contiguous cut-only playlist with fresh sequential `globalStartFrame` values in [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L133) through [src/core/session/PlaylistManager.ts#L159).
-  - OTIO parser metadata is captured transiently, but `fromOTIO(...)` drops it; OTIO markers are not parsed at all.
-- Impact:
-  - Importing OTIO into the shipped app silently degrades the editorial timeline into a much simpler playlist model.
-  - Gaps, transitions, markers, and metadata context can disappear without any explicit warning that the import was lossy.
 
 ### 472. The advanced-compare docs present Quad View as a shipped feature, but the live UI itself marks it as preview-only and unwired
 
@@ -947,31 +908,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - A sequence-based alternate representation would still be only partially wired even after the loader problems were fixed.
   - Existing sequence-aware playback and UI paths would lose access to frame lists, sequence metadata, and the normal source-level sequence state they depend on.
 
-### 539. Video representations are not promoted to full video sources, so they lose the `HTMLVideoElement` and audio wiring that normal video playback paths still rely on
-
-- Severity: High
-- Area: Media representations / video runtime wiring
-- Evidence:
-  - Normal video file loads build both a `VideoSourceNode` and an `HTMLVideoElement`, store both on the active `MediaSource`, and call `loadAudioFromVideo(...)` for audio sync/playback in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L621) through [src/core/session/SessionMedia.ts#L672).
-  - The representation shim clears `source.element` and, for `VideoSourceNode` representations, restores only `source.videoSourceNode` plus `type = 'video'` in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L1188) through [src/core/session/SessionMedia.ts#L1203).
-  - No representation-switch path recreates an `HTMLVideoElement`, calls `initVideoPreservesPitch(...)`, or calls `loadAudioFromVideo(...)`; a repo search finds those only in the normal media-load paths.
-  - Large parts of playback and export still branch on `source.element instanceof HTMLVideoElement`, including current-time sync and native video playback/audio sync in [src/core/session/SessionPlayback.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionPlayback.ts#L486) through [src/core/session/SessionPlayback.ts#L499) and [src/core/session/PlaybackEngine.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaybackEngine.ts#L536) through [src/core/session/PlaybackEngine.ts#L553), plus export/render fallbacks in [src/ui/components/ViewerExport.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerExport.ts#L102) through [src/ui/components/ViewerExport.ts#L114).
-- Impact:
-  - Switching into a video/proxy representation does not give the app the same runtime shape as loading that video normally.
-  - That can break audio sync/playback and any native-video/export path that still expects an `HTMLVideoElement` on video sources.
-
-### 543. The multiple-representation subsystem is effectively unwired in the shipped app outside save/load internals
-
-- Severity: Medium
-- Area: Media representations / production reachability
-- Evidence:
-  - A repo search finds no production UI, app-shell, service, plugin, or public-API caller for `session.switchRepresentation(...)`, `addRepresentationToSource(...)`, or `removeRepresentationFromSource(...)`; outside tests, the only live caller is `SessionSerializer.fromJSON(...)` during restore in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L534) through [src/core/session/SessionSerializer.ts#L552).
-  - The public API layer exposes representation-related error events, but no matching user-facing or scripting methods to manage representations; the search over [src/api](/Users/lifeart/Repos/openrv-web/src/api) only finds `representationError` event bridging in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L351) through [src/api/EventsAPI.ts#L359).
-  - The UI/app-shell search over `src/ui`, `src/App.ts`, `src/AppPlaybackWiring.ts`, and `src/services` does not find any shipped control path that switches or edits representations.
-- Impact:
-  - The app contains a substantial media-representation system, but in production it is mostly reachable only indirectly through project/session restore.
-  - That leaves the feature set largely untestable by real users, and it helps explain why multiple restore/runtime edge cases can exist without an everyday UI path exposing them earlier.
-
 ### 544. The heavily tested legacy `MediaManager` is effectively dead in production; the shipped app runs through `SessionMedia` instead
 
 - Severity: Medium
@@ -1021,79 +957,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Automation or external review tools querying `openrv.playback` during playlist review get per-clip frame numbers and durations even while the UI/timeline is operating in playlist-global frame space.
   - That makes scripting against playlist sessions fundamentally ambiguous: external code cannot reconstruct the same frame position the user is actually seeing from the public API alone.
-
-### 556. The generated public API reference under-documents the live event surface by omitting several valid `openrv.events` names
-
-- Severity: Medium
-- Area: Public API documentation / scripting events
-- Evidence:
-  - The live `OpenRVEventName` union includes `sourceLoadingStarted`, `sourceLoadFailed`, `viewTransformChanged`, and `renderedImagesChanged` in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L16) through [src/api/EventsAPI.ts#L29), and `getEventNames()` returns the full `VALID_EVENTS` set in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L78) through [src/api/EventsAPI.ts#L83) and [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L199) through [src/api/EventsAPI.ts#L202).
-  - The generated API index still documents `OpenRVEventName` as only `"frameChange" | "play" | "pause" | "stop" | "speedChange" | "volumeChange" | "muteChange" | "audioScrubEnabledChange" | "loopModeChange" | "inOutChange" | "markerChange" | "sourceLoaded" | "error"` in [docs/api/index.md](/Users/lifeart/Repos/openrv-web/docs/api/index.md#L46) through [docs/api/index.md#L55).
-  - The same generated reference also publishes plugin-visible `app:` events only for that narrower subset in [docs/api/index.md](/Users/lifeart/Repos/openrv-web/docs/api/index.md#L99) through [docs/api/index.md#L115), so the omission propagates into plugin-facing documentation too.
-- Impact:
-  - Script and plugin authors reading the generated API reference can conclude that several real runtime events do not exist and avoid subscribing to them.
-  - That makes the documented scripting surface narrower than the actual shipped API, which is the opposite of the other docs-drift problems already logged.
-
-### 557. The generated API index is full of dead local links because it advertises class/interface pages that do not exist in the shipped docs tree
-
-- Severity: Medium
-- Area: API documentation / discoverability
-- Evidence:
-  - `docs/api/index.md` links to local pages such as `classes/AudioAPI.md`, `classes/OpenRVAPI.md`, and `interfaces/OpenRVEventData.md` in [docs/api/index.md](/Users/lifeart/Repos/openrv-web/docs/api/index.md#L3) through [docs/api/index.md](/Users/lifeart/Repos/openrv-web/docs/api/index.md#L28).
-  - The actual docs tree in this checkout contains only a single file, [docs/api/index.md](/Users/lifeart/Repos/openrv-web/docs/api/index.md), with no `docs/api/classes/` or `docs/api/interfaces/` directories.
-- Impact:
-  - Readers can see a full API table of contents and then immediately hit dead links for most of the advertised reference pages.
-  - That makes the generated API area look complete while failing at the first level of navigation.
-
-### 558. Plugin `onApp(...)` subscriptions only cover an older subset of public events, so plugins cannot observe newer `openrv.events` signals through the advertised bridge
-
-- Severity: Medium
-- Area: Plugin API / event bridging
-- Evidence:
-  - The public event layer exposes `sourceLoadingStarted`, `sourceLoadFailed`, `viewTransformChanged`, and `renderedImagesChanged` as valid `OpenRVEventName` values in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L16) through [src/api/EventsAPI.ts#L29).
-  - `PluginEventBus.AppEventName` and `APP_EVENT_TO_API` only include the older subset through `app:sourceLoaded` plus `app:error`, with no plugin-visible equivalents for those newer events, in [src/plugin/PluginEventBus.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginEventBus.ts#L19) through [src/plugin/PluginEventBus.ts#L49) and [src/plugin/PluginEventBus.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginEventBus.ts#L79) through [src/plugin/PluginEventBus.ts#L92).
-  - Plugin authors are told that `onApp(...)` subscribes to “application events” mapped from the public API surface in [docs/api/index.md](/Users/lifeart/Repos/openrv-web/docs/api/index.md#L92) through [docs/api/index.md](/Users/lifeart/Repos/openrv-web/docs/api/index.md#L115), but the runtime bridge does not actually provide parity with the live `EventsAPI`.
-- Impact:
-  - A plugin can subscribe to public app-state events only if they happen to be in the reduced plugin bridge subset; newer loading/view/render events are unavailable even though external scripts can subscribe to them directly.
-  - That makes plugin automation less observant than plain `window.openrv.events` consumers for no obvious reason.
-
-### 559. The main scripting guide also under-documents the live event surface, so script authors are steered away from valid `openrv.events` subscriptions
-
-- Severity: Medium
-- Area: Public API documentation / scripting guide
-- Evidence:
-  - The live `EventsAPI` exposes `sourceLoadingStarted`, `sourceLoadFailed`, `viewTransformChanged`, and `renderedImagesChanged` in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L16) through [src/api/EventsAPI.ts#L32).
-  - The “Available Events” table in [docs/advanced/scripting-api.md](/Users/lifeart/Repos/openrv-web/docs/advanced/scripting-api.md#L303) through [docs/advanced/scripting-api.md#L317) lists only the narrower subset ending at `sourceLoaded` and `error`.
-  - The same page explicitly tells users to call `openrv.events.getEventNames()` for the available set in [docs/advanced/scripting-api.md](/Users/lifeart/Repos/openrv-web/docs/advanced/scripting-api.md#L298), but the written table still omits several names that `getEventNames()` would return at runtime.
-- Impact:
-  - Script authors reading the primary scripting guide can conclude that loading-progress, view-transform, and rendered-image events are unavailable when they are actually live.
-  - That makes the human-facing guide lag behind the real event API even for users who never consult the generated reference.
-
-### 561. Every plugin gets `context.settings`, even without a `settingsSchema`, so the API degrades into a trap object instead of a clearly absent capability
-
-- Severity: Medium
-- Area: Plugin API / settings lifecycle
-- Evidence:
-  - `PluginRegistry.createContext()` injects `settings: registry.settingsStore.createAccessor(manifest.id)` for every plugin with no guard on `manifest.settingsSchema` in [src/plugin/PluginRegistry.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginRegistry.ts#L395) through [src/plugin/PluginRegistry.ts#L449).
-  - The settings store only registers schemas when `manifest.settingsSchema` exists in [src/plugin/PluginRegistry.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginRegistry.ts#L167) through [src/plugin/PluginRegistry.ts#L169).
-  - That accessor is only partially usable without a schema: `get()` falls through to `undefined`, `getAll()` returns an empty object, but `set()` throws `No settings schema registered for plugin ...` in [src/plugin/PluginSettingsStore.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginSettingsStore.ts#L110) through [src/plugin/PluginSettingsStore.ts#L114), [src/plugin/PluginSettingsStore.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginSettingsStore.ts#L129) through [src/plugin/PluginSettingsStore.ts#L131), and [src/plugin/PluginSettingsStore.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginSettingsStore.ts#L260) through [src/plugin/PluginSettingsStore.ts#L276).
-  - The published API docs describe `context.settings` as requiring a `settingsSchema` in the manifest in [docs/api/index.md](/Users/lifeart/Repos/openrv-web/docs/api/index.md#L129), but the runtime still exposes it unconditionally.
-- Impact:
-  - Plugin authors can reasonably treat `context.settings` as a supported capability because it is always present, then hit runtime-only failures on first write if their plugin has no schema.
-  - That makes the plugin context harder to reason about than either alternative: omitting `settings` entirely when unsupported, or making it fully no-op and explicit.
-
-### 562. The published plugin-settings API still claims `set()` is `void` and always persists, hiding the real success/failure signal from plugin authors
-
-- Severity: Medium
-- Area: Plugin API documentation / settings persistence
-- Evidence:
-  - The real `PluginSettingsAccessor` contract defines `set(key, value): boolean` and documents that it returns `true` when persisted and `false` when the update only landed in memory in [src/plugin/PluginSettingsStore.ts](/Users/lifeart/Repos/openrv-web/src/plugin/PluginSettingsStore.ts#L49) through [src/plugin/PluginSettingsStore.ts#L58).
-  - The generated API reference still publishes `set(key: string, value: unknown): void` and says it “persists to localStorage” in [docs/api/index.md](/Users/lifeart/Repos/openrv-web/docs/api/index.md#L136) through [docs/api/index.md#L141).
-  - The main scripting guide makes the same unconditional persistence claim and shows `context.settings.set(...)` without any returned status handling in [docs/advanced/scripting-api.md](/Users/lifeart/Repos/openrv-web/docs/advanced/scripting-api.md#L403) through [docs/advanced/scripting-api.md#L443).
-  - The runtime already has a real failure mode where settings updates can remain in-memory only, which is why the boolean exists in the first place, as captured in issue `211`.
-- Impact:
-  - Plugin authors reading the shipped docs can conclude there is no reason to check for persistence failure, even though the live API was explicitly designed to report it.
-  - That turns the existing partial-persistence behavior into a documentation trap instead of a documented recovery path.
 
 ### 563. The generated API reference is pinned to an old GitHub commit, so its “Defined in” links can disagree with the checked-in source tree
 
