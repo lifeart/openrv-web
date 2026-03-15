@@ -131,10 +131,10 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
     // Safe areas section
     dropdown.appendChild(this.createSectionLabel('Safe Areas'));
     dropdown.appendChild(
-      this.createCheckboxItem('actionSafe', 'Action Safe (90%)', () => this.overlay.toggleActionSafe()),
+      this.createCheckboxItem('actionSafe', 'Action Safe (93%)', () => this.overlay.toggleActionSafe()),
     );
     dropdown.appendChild(
-      this.createCheckboxItem('titleSafe', 'Title Safe (80%)', () => this.overlay.toggleTitleSafe()),
+      this.createCheckboxItem('titleSafe', 'Title Safe (90%)', () => this.overlay.toggleTitleSafe()),
     );
 
     dropdown.appendChild(this.createSeparator());

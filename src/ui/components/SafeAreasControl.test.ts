@@ -586,6 +586,44 @@ describe('SafeAreasControl', () => {
     });
   });
 
+  describe('SMPTE RP 2046-2:2018 label accuracy (Issue #482)', () => {
+    it('SAFE-U150: action safe label shows 93%', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
+      button.click();
+
+      const actionItem = document.querySelector('[data-testid="safe-areas-item-actionSafe"]') as HTMLElement;
+      expect(actionItem.textContent).toContain('Action Safe (93%)');
+    });
+
+    it('SAFE-U151: title safe label shows 90%', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
+      button.click();
+
+      const titleItem = document.querySelector('[data-testid="safe-areas-item-titleSafe"]') as HTMLElement;
+      expect(titleItem.textContent).toContain('Title Safe (90%)');
+    });
+
+    it('SAFE-U152: action safe label does NOT show old 90% value', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
+      button.click();
+
+      const actionItem = document.querySelector('[data-testid="safe-areas-item-actionSafe"]') as HTMLElement;
+      expect(actionItem.textContent).not.toContain('Action Safe (90%)');
+    });
+
+    it('SAFE-U153: title safe label does NOT show old 80% value', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
+      button.click();
+
+      const titleItem = document.querySelector('[data-testid="safe-areas-item-titleSafe"]') as HTMLElement;
+      expect(titleItem.textContent).not.toContain('Title Safe (80%)');
+    });
+  });
+
   describe('positioning', () => {
     it('SAFE-U110: dropdown has fixed positioning', () => {
       const el = control.render();

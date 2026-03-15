@@ -954,6 +954,51 @@ describe('ViewerInputHandler – GTO drop with sidecar files', () => {
     expect(availableFiles.size).toBe(1);
     expect(availableFiles.get('plate.exr')).toEqual([file1, file2]);
   });
+
+  it('SIDECAR-008: extra .rv/.gto files are excluded from availableFiles (#401)', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+
+    const primaryRv = new File(['rv-data'], 'session1.rv');
+    const extraRv = new File(['rv-data'], 'session2.rv');
+    const extraGto = new File(['gto-data'], 'backup.gto');
+    const mediaFile = new File(['img'], 'plate.exr');
+
+    dispatchDrop(container, [primaryRv, extraRv, extraGto, mediaFile]);
+
+    await vi.waitFor(() => {
+      expect(mockSession.loadFromGTO).toHaveBeenCalledTimes(1);
+    });
+
+    const callArgs = (mockSession.loadFromGTO as any).mock.calls[0];
+    const availableFiles: Map<string, File[]> = callArgs[1];
+    // Only the media file should be in availableFiles; extra session files must NOT be demoted
+    expect(availableFiles.size).toBe(1);
+    expect(availableFiles.get('plate.exr')).toEqual([mediaFile]);
+    expect(availableFiles.has('session2.rv')).toBe(false);
+    expect(availableFiles.has('backup.gto')).toBe(false);
+  });
+
+  it('SIDECAR-009: extra uppercase .RV/.GTO files are also excluded from availableFiles (#401)', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+
+    const primaryGto = new File(['gto-data'], 'main.gto');
+    const extraRv = new File(['rv-data'], 'OTHER.RV');
+    const mediaFile = new File(['img'], 'render.dpx');
+
+    dispatchDrop(container, [primaryGto, extraRv, mediaFile]);
+
+    await vi.waitFor(() => {
+      expect(mockSession.loadFromGTO).toHaveBeenCalledTimes(1);
+    });
+
+    const callArgs = (mockSession.loadFromGTO as any).mock.calls[0];
+    const availableFiles: Map<string, File[]> = callArgs[1];
+    expect(availableFiles.size).toBe(1);
+    expect(availableFiles.get('render.dpx')).toEqual([mediaFile]);
+    expect(availableFiles.has('OTHER.RV')).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------

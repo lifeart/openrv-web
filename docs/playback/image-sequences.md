@@ -53,11 +53,17 @@ In/out points (`I` / `O` or `[` / `]`) constrain playback to a subset of the seq
 
 ## FPS Assignment
 
-Image sequences do not have an inherent frame rate. OpenRV Web assigns a default FPS (typically 24) when loading a sequence. The session FPS can be configured:
+Image sequences do not have an inherent frame rate. OpenRV Web assigns a default FPS (typically 24) when loading a sequence. The session playback FPS can be configured:
 
 ```javascript
-// Set the FPS for the current session
-window.openrv.media.getFPS();  // Get current FPS
+// Get the source FPS (read-only, reflects the loaded media or default)
+const sourceFps = window.openrv.media.getFPS();
+
+// Get the current playback FPS (may differ from source FPS if overridden)
+const playbackFps = window.openrv.media.getPlaybackFPS();
+
+// Override the playback FPS for the current session
+window.openrv.media.setPlaybackFPS(48);
 ```
 
 The timeline status bar displays the configured FPS during playback.
@@ -93,6 +99,10 @@ When loading EXR sequences, each frame benefits from the full HDR pipeline inclu
 const duration = window.openrv.media.getDuration();
 const resolution = window.openrv.media.getResolution();
 const source = window.openrv.media.getCurrentSource();
+
+// FPS control
+const fps = window.openrv.media.getPlaybackFPS();
+window.openrv.media.setPlaybackFPS(30);
 ```
 
 ---

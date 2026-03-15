@@ -68,7 +68,7 @@ The BroadcastChannel API enables the External Presentation feature, which synchr
 
 ### Fullscreen API
 
-The Fullscreen API provides native fullscreen mode via `F11` or the toolbar button. Presentation mode (clean display with cursor auto-hide) also depends on this API. It requires a secure context (HTTPS).
+The Fullscreen API provides native fullscreen mode via `F11` or the toolbar button. It requires a secure context (HTTPS). Note that presentation mode (clean display with cursor auto-hide) is a separate feature that does not depend on the Fullscreen API; it works by hiding UI elements and auto-hiding the cursor within the normal browser window.
 
 ### Clipboard API
 
@@ -76,7 +76,7 @@ The Clipboard API enables copying the current frame to the system clipboard via 
 
 ### WebRTC
 
-WebRTC powers peer-to-peer connections for collaborative review sessions with NAT traversal via STUN/TURN servers. Required only for network sync features.
+WebRTC enables optional peer-to-peer connections as an alternative transport for collaborative review sessions, with NAT traversal via STUN/TURN servers. Normal collaboration uses WebSocket transport and works without WebRTC. When available, WebRTC can be used for direct peer-to-peer data transfer as an optimization.
 
 ## Hi-DPI and Retina Support
 

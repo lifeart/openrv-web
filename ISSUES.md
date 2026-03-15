@@ -92,7 +92,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Reviewers cannot tag notes by department/severity, and supervisors cannot produce the category-based dailies summaries the workflow describes.
   - The shipped note system is materially simpler than the advertised review process, which limits its usefulness in actual production review sessions.
 
-
 ### 318. Dailies report export ignores playlist structure and always reports every loaded source
 
 - Severity: Medium
@@ -191,7 +190,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - A DCC tool cannot rely on OpenRV Web to push review-status changes back over the live bridge, even though that workflow is presented as supported.
   - Any pipeline expecting browser-driven approval or needs-revision updates to flow back into a DCC-side review context will silently get nothing.
 
-
 ### 329. Dailies reports include only the current version label, not the version history they advertise
 
 - Severity: Medium
@@ -216,7 +214,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - A threaded review conversation or resolved/won’t-fix state in OpenRV Web cannot survive a ShotGrid sync round-trip as equivalent structured review data.
   - The integration reduces richer local note workflows to a flat list of plain comments, which weakens production review traceability.
 
-
 ### 334. Comparison annotations are tied to the `A/B` slot, not to the underlying source they were drawn on
 
 - Severity: Medium
@@ -229,20 +226,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - If users redraw A/B assignments to different sources, the annotation layer follows the `A` or `B` slot rather than staying attached to the original media source.
   - That makes the shipped comparison-annotation workflow less reliable than documented for real version review, because annotation meaning can drift when compare assignments change.
-
-### 335. Presentation mode does not provide the visual playback HUD that the review docs describe
-
-- Severity: Medium
-- Area: Presentation mode / review UX
-- Evidence:
-  - The review workflow docs say that in presentation mode "A minimal HUD appears briefly when playback state changes (play/pause indicator, frame counter)" in [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L145) through [docs/advanced/review-workflow.md#L151).
-  - `PresentationMode` itself only manages hidden elements and cursor auto-hide; its stated responsibility is to hide UI and show only the viewer canvas in [src/utils/ui/PresentationMode.ts](/Users/lifeart/Repos/openrv-web/src/utils/ui/PresentationMode.ts#L1) through [src/utils/ui/PresentationMode.ts#L5), and its enter/exit logic only hides/restores DOM elements plus cursor state in [src/utils/ui/PresentationMode.ts](/Users/lifeart/Repos/openrv-web/src/utils/ui/PresentationMode.ts#L111) through [src/utils/ui/PresentationMode.ts#L165).
-  - The live playback-state hook in `LayoutOrchestrator` only announces play/pause changes to the screen-reader announcer in [src/services/LayoutOrchestrator.ts](/Users/lifeart/Repos/openrv-web/src/services/LayoutOrchestrator.ts#L423) through [src/services/LayoutOrchestrator.ts#L428); it does not create any visual presentation HUD.
-  - The nearest visual playback overlay, `FPSIndicator`, is a separate optional viewer overlay with its own enable flag and is not tied to presentation mode in [src/ui/components/FPSIndicator.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/FPSIndicator.ts#L193) through [src/ui/components/FPSIndicator.ts#L215).
-- Impact:
-  - Users entering presentation mode get hidden chrome and cursor auto-hide, but not the transient play/pause plus frame-counter HUD the review workflow promises.
-  - That makes playback-state feedback weaker than documented in screening-room or client-review usage, especially once normal UI chrome is hidden.
-
 
 ### 340. The session-management guide describes the History panel as snapshot/autosave recovery, but the shipped panel is only undo/redo action history
 
@@ -307,7 +290,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Assistive-technology users can rely on the docs for a level of navigation feedback that the shipped app does not consistently provide.
   - That makes the accessibility overview materially overstate what is currently announced at runtime.
-
 
 ### 351. The format-support reference overstates several partially supported formats as if they were fully usable
 
@@ -376,7 +358,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Users are taught to look for one configurable perspective-grid feature, but the shipped app splits part of that into Safe Areas and omits the rest entirely.
   - That makes both the composition-guide workflow and the perspective-correction workflow harder to discover because the docs collapse them into a feature model the UI does not match.
-
 
 ### 359. The network-sync guide overstates generic one-click joining from share URLs
 
@@ -453,31 +434,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Users can trust auto-checkpoints to protect routine destructive actions that the shipped app never checkpoints.
   - That makes the documented safety net much narrower than it sounds, especially during active review/editing work where people are not explicitly loading projects.
-
-### 388. The Open Project picker allows multiple files, but the app still treats only the first selected file as the real project
-
-- Severity: Low
-- Area: Project loading / picker behavior
-- Evidence:
-  - The shipped hidden project input is configured with `multiple = true` in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L226) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L229).
-  - `handleProjectOpen(...)` forwards the entire `FileList` as-is in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1503) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1508).
-  - But production wiring always calls `openProject(files[0]!, files.slice(1))`, so only the first selected file is treated as the actual project/session and every remaining file is demoted to a companion slot in [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L60) through [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L61).
-  - In the `.orvproject` branch, those extra selected files are ignored entirely because `companionFiles` are only used for `.rv` / `.gto` handling in [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L348) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L384) and [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L396) through [src/AppPersistenceManager.ts](/Users/lifeart/Repos/openrv-web/src/AppPersistenceManager.ts#L402).
-- Impact:
-  - The picker UI suggests multi-file project opening is meaningful, but selecting multiple project/session files has ambiguous or ignored results.
-  - That makes the Open Project affordance less predictable than the single-project mental model the runtime actually implements.
-
-### 401. Multi-select session import from `Open media file` only honors the first `.rv` / `.gto` file and silently demotes the rest to sidecars
-
-- Severity: Medium
-- Area: Session import / file-open workflow
-- Evidence:
-  - The shipped `Open media file` input explicitly enables multi-select in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L217) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L222).
-  - But the loader only picks a single session file via `fileArray.find(...)` in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1420) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1424), then drops every other selected file into the `availableFiles` sidecar map in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1425) through [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts#L1435).
-  - The viewer drag-and-drop path uses the same first-match behavior in [src/ui/components/ViewerInputHandler.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInputHandler.ts#L743) through [src/ui/components/ViewerInputHandler.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ViewerInputHandler.ts#L758).
-- Impact:
-  - Selecting multiple RV/GTO sessions does not import multiple sessions or ask the user which one to open; only the first one wins.
-  - The remaining session files are silently treated like companion assets, which makes the multi-select affordance misleading and can hide user error during session import.
 
 ### 429. Share links claim to share comparison state, but clean recipients can only reconstruct one media source
 
@@ -567,32 +523,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Cursor-sharing traffic can flow over the collaboration stack without producing any visible or actionable result in the shipped app.
   - Users and integrators can expect shared remote cursors from the advertised feature set, but production stops at transport/state bookkeeping.
 
-### 452. The FAQ says collaboration data stays peer-to-peer, but production falls back to WebSocket for state and media transfer
-
-- Severity: Medium
-- Area: Documentation / collaboration data path
-- Evidence:
-  - The FAQ says "No media passes through any server -- all data flows directly between peers" in [docs/reference/faq.md](/Users/lifeart/Repos/openrv-web/docs/reference/faq.md#L79).
-  - `sendSessionStateResponse(...)` is explicitly implemented to try WebRTC first and then fall back to realtime transport in [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L642) through [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L668).
-  - That realtime path routes through `dispatchRealtimeMessage(...)`, which prefers `wsClient.send(message)` before any serverless peer channel in [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L1222) through [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L1232).
-  - Media transfer requests are also sent through that same realtime/WebSocket path by default in [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L670) through [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L681).
-- Impact:
-  - The FAQ overstates the privacy and deployment model of collaboration by implying that shared state and media bytes never traverse a server-backed transport.
-  - In production, state/media exchange can use the WebSocket path when peer transport is unavailable, so the all-peer-to-peer claim is false.
-
-### 453. The FAQ says locally loaded files never leave the machine, but collaboration media sync can transmit them to other participants
-
-- Severity: Medium
-- Area: Documentation / privacy and data movement
-- Evidence:
-  - The FAQ says files loaded through drag-and-drop or the file picker "never leave the machine" in [docs/reference/faq.md](/Users/lifeart/Repos/openrv-web/docs/reference/faq.md#L15).
-  - The collaboration bridge can request local media from another participant through `requestMediaSync(...)` in [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L670) through [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L681).
-  - The app wiring responds to those requests by reading local file data and sending chunk payloads back through `sendMediaChunk(...)` / `sendMediaComplete(...)` in [src/AppNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppNetworkBridge.ts#L292) through [src/AppNetworkBridge.ts](/Users/lifeart/Repos/openrv-web/src/AppNetworkBridge.ts#L391) and [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L723) through [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L746).
-  - Those media chunks are sent over the same realtime transport helper in [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L1222) through [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L1232).
-- Impact:
-  - The FAQ understates how collaboration can move user-selected local media off the originating machine.
-  - Users relying on that privacy statement can miss the fact that review peers may receive transferred file contents during sync workflows.
-
 ### 454. The self-hosting docs present static hosting as sufficient, but the shipped collaboration flow still expects separate signaling infrastructure
 
 - Severity: Low
@@ -605,18 +535,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - The deployment docs make the full app sound entirely static-hosted even though the advertised collaboration feature still has external signaling/runtime dependencies in normal operation.
   - Self-hosters can deploy the static app successfully and still be surprised when collaborative review is unavailable or misconfigured.
-
-### 456. The browser-requirements guide says Presentation Mode depends on the Fullscreen API, but the runtime mode is separate
-
-- Severity: Low
-- Area: Documentation / browser feature requirements
-- Evidence:
-  - The browser-requirements guide says "Presentation mode (clean display with cursor auto-hide) also depends on this API" under the Fullscreen API section in [docs/getting-started/browser-requirements.md](/Users/lifeart/Repos/openrv-web/docs/getting-started/browser-requirements.md#L71) through [docs/getting-started/browser-requirements.md](/Users/lifeart/Repos/openrv-web/docs/getting-started/browser-requirements.md#L73).
-  - `PresentationMode` is implemented as a DOM/UI-hiding mode with cursor auto-hide in [src/utils/ui/PresentationMode.ts](/Users/lifeart/Repos/openrv-web/src/utils/ui/PresentationMode.ts#L1) through [src/utils/ui/PresentationMode.ts#L17), and its state transitions only hide/restore elements and cursor behavior in [src/utils/ui/PresentationMode.ts](/Users/lifeart/Repos/openrv-web/src/utils/ui/PresentationMode.ts#L52) through [src/utils/ui/PresentationMode.ts](/Users/lifeart/Repos/openrv-web/src/utils/ui/PresentationMode.ts#L89).
-  - A production-code search of the PresentationMode implementation finds no Fullscreen API call or dependency.
-- Impact:
-  - The docs overstate the browser requirement for Presentation Mode and make the feature sound unavailable without Fullscreen support.
-  - In production, fullscreen and presentation are separate behaviors, so troubleshooting/browser-support guidance becomes less accurate than it should be.
 
 ### 457. The image-sequences guide says the detected pattern is shown in sequence information, but the shipped UI never surfaces `sequenceInfo.pattern`
 
@@ -642,18 +560,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The docs make internal loader helpers sound like supported scripting features even though end users do not get them through `window.openrv`.
   - That can mislead automation/integration users who treat the page as public-app behavior rather than internal source layout.
 
-### 459. The image-sequences guide says sequence FPS can be configured, but its example only calls `getFPS()` and omits the real public setter
-
-- Severity: Low
-- Area: Documentation / scripting surface
-- Evidence:
-  - The image-sequences guide says "The session FPS can be configured" but the code sample only calls `window.openrv.media.getFPS()` in [docs/playback/image-sequences.md](/Users/lifeart/Repos/openrv-web/docs/playback/image-sequences.md#L56) through [docs/playback/image-sequences.md#L60).
-  - The public API does expose `getPlaybackFPS()` and `setPlaybackFPS(...)` for this purpose in [src/api/MediaAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/MediaAPI.ts#L86) through [src/api/MediaAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/MediaAPI.ts#L119).
-  - The same page's scripting section never mentions those methods and instead only documents `getFPS()` in [docs/playback/image-sequences.md](/Users/lifeart/Repos/openrv-web/docs/playback/image-sequences.md#L84) through [docs/playback/image-sequences.md#L88).
-- Impact:
-  - Readers get told that sequence FPS is configurable but are not shown the public method that actually does it.
-  - That makes the page's scripting guidance incomplete and nudges users toward the wrong API surface.
-
 ### 460. The browser-support docs present External Presentation as a working BroadcastChannel feature, but the shipped feature is already broken at runtime
 
 - Severity: Low
@@ -665,18 +571,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - The compatibility docs make External Presentation sound like a reliable browser-capability question, when the stronger limitation is that the shipped feature itself is not functionally complete.
   - Users can spend time diagnosing browser support for a feature that is already broken independent of API availability.
-
-### 461. The browser-requirements page presents WebRTC as required for network sync, but the normal collaboration path is WebSocket-based
-
-- Severity: Low
-- Area: Documentation / browser feature requirements
-- Evidence:
-  - The browser-requirements page says "WebRTC powers peer-to-peer connections for collaborative review sessions ... Required only for network sync features" in [docs/getting-started/browser-requirements.md](/Users/lifeart/Repos/openrv-web/docs/getting-started/browser-requirements.md#L77) through [docs/getting-started/browser-requirements.md#L79).
-  - Normal room create/join flows do not require `RTCPeerConnection`; they go straight through `wsClient.connect(...)` in [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L377) through [src/network/NetworkSyncManager.ts#L418).
-  - `canUseWebRTC()` is only checked for the serverless/WebRTC-specific paths and peer-transfer helpers in [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L275), [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L668), and [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L1542) through [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L1547).
-- Impact:
-  - The page overstates WebRTC as a baseline requirement for collaboration when the shipped app’s ordinary room/sync path is primarily WebSocket-driven.
-  - Browser-support guidance becomes less accurate, especially for deployments that use collaboration without peer-to-peer fallback paths.
 
 ### 462. The UI overview says all interactive controls are semantic and properly labeled, but the shipped UI still has mouse-only/non-semantic interactions
 
@@ -840,7 +734,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The docs promise a richer review overlay than the shipped implementation actually provides.
   - Users expecting both session and embedded source timecode on screen will only get a single timecode readout.
 
-
 ### 478. The overlays guide describes a single “missing frame indicator” behavior, but production ships multiple modes and the default does not replace the viewer content
 
 - Severity: Low
@@ -891,18 +784,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The docs promise a second visual cue in the timeline that the shipped app does not provide.
   - Sequence reviewers can search for a timeline indicator that simply is not implemented in production.
 
-### 482. The overlays guide publishes industry-safe percentages that do not match the shipped safe-areas overlay
-
-- Severity: Low
-- Area: Documentation / safe-areas behavior
-- Evidence:
-  - The overlays guide says Action Safe is `93%` and Title Safe is `90%` in [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L30) through [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L33).
-  - The shipped overlay implementation documents and draws Action Safe at `90%` and Title Safe at `80%` in [src/ui/components/SafeAreasOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SafeAreasOverlay.ts#L3) through [src/ui/components/SafeAreasOverlay.ts#L9) and [src/ui/components/SafeAreasOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SafeAreasOverlay.ts#L154) through [src/ui/components/SafeAreasOverlay.ts#L160).
-  - The shipped control labels also say `Action Safe (90%)` and `Title Safe (80%)` in [src/ui/components/SafeAreasControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SafeAreasControl.ts#L129) through [src/ui/components/SafeAreasControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SafeAreasControl.ts#L133).
-- Impact:
-  - The docs teach a different framing geometry than the actual overlay draws.
-  - Reviewers can rely on the written percentages and assume the on-screen guides follow them when production uses materially smaller safe boxes instead.
-
 ### 483. The overlays guide describes custom per-zone safe areas and distinct colors, but the shipped safe-areas overlay only has fixed title/action boxes with one shared color
 
 - Severity: Low
@@ -915,7 +796,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - The docs promise a more flexible broadcast-safe workflow than the runtime actually supports.
   - Users can look for user-defined percentages or color-coded zones that simply are not part of the shipped overlay model.
-
 
 ### 485. The overlays guide says overlay states are preserved in session files and snapshots, but the `.orvproject` serializer only persists watermark among the viewer overlays
 
@@ -953,18 +833,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - The docs promise a studio-customizable false-color workflow that the shipped app does not implement.
   - Users can look for custom mapping controls or APIs that simply are not present in production.
-
-### 490. The histogram docs still say pixel analysis runs on the GPU, but the shipped histogram always computes bins on the CPU
-
-- Severity: Low
-- Area: Documentation / histogram implementation
-- Evidence:
-  - The histogram guide says “Pixel analysis runs on the GPU” in [docs/scopes/histogram.md](/Users/lifeart/Repos/openrv-web/docs/scopes/histogram.md#L68).
-  - The shipped `Histogram.update()` path explicitly says histogram data is “always” calculated on the CPU, then only uses GPU acceleration for bar rendering in [src/ui/components/Histogram.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Histogram.ts#L291) through [src/ui/components/Histogram.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Histogram.ts#L306).
-  - The core histogram calculation itself is the CPU `calculateHistogram(imageData)` call in [src/ui/components/Histogram.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Histogram.ts#L281) through [src/ui/components/Histogram.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Histogram.ts#L284).
-- Impact:
-  - The docs overstate the shipped histogram pipeline and performance model.
-  - Users reading the guide can expect GPU-side analysis behavior that production does not implement.
 
 ### 491. The waveform docs describe WebGL computation as the runtime model, but the shipped scope still has full CPU fallback paths
 
@@ -1265,7 +1133,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - The guide describes an older or different sequence-frame memory model than the one the shipped app actually uses.
   - That can mislead anyone debugging sequence memory behavior or trying to understand the current loader’s lifecycle costs.
-
 
 ### 519. ShotGrid frame-sequence paths are still routed through `session.loadImage(...)`, so `shot.####.exr` is treated like a single image URL instead of a sequence
 

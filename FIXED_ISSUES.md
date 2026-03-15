@@ -2596,3 +2596,83 @@ The `URLSession` interface gained `allSources` for URL-based lookup. `SessionURL
 - `src/utils/media/SupportedMediaFormats.ts`
 - `src/ui/components/layout/HeaderBar.ts`
 - `src/ui/components/layout/HeaderBar.test.ts`
+
+## Issue #482: Safe area percentages mismatch
+
+**Root cause**: Docs stated Action Safe 93% and Title Safe 90%, but the code used 90%/80%.
+
+**Fix**: Updated `SafeAreasOverlay.ts` and `SafeAreasControl.ts` to use industry-standard SMPTE RP 2046-2:2018 percentages (Action Safe 93%, Title Safe 90%). Added 9 new regression tests.
+
+**Files changed**: `src/ui/components/SafeAreasOverlay.ts`, `src/ui/components/SafeAreasControl.ts`
+
+## Issue #490: Histogram docs claim GPU pixel analysis
+
+**Root cause**: Docs said "Pixel analysis runs on the GPU" but analysis is CPU-based; only bar rendering uses GPU.
+
+**Fix**: Updated `docs/scopes/histogram.md` to accurately describe CPU analysis with optional GPU rendering.
+
+**Files changed**: `docs/scopes/histogram.md`
+
+## Issue #456: Docs say Presentation Mode depends on Fullscreen API
+
+**Root cause**: Browser-requirements page incorrectly listed Presentation Mode under Fullscreen API dependencies.
+
+**Fix**: Removed incorrect dependency claim, clarified that fullscreen and presentation mode are separate features.
+
+**Files changed**: `docs/getting-started/browser-requirements.md`
+
+## Issue #453: FAQ claims files never leave machine
+
+**Root cause**: FAQ said files "never leave the machine" but collaboration media sync can transmit them to other participants.
+
+**Fix**: Updated FAQ to accurately disclose collaboration media sync behavior.
+
+**Files changed**: `docs/reference/faq.md`
+
+## Issue #452: FAQ claims all peer-to-peer collaboration
+
+**Root cause**: FAQ said "No media passes through any server" but WebSocket fallback exists for state and media transfer.
+
+**Fix**: Updated FAQ to describe the dual WebRTC/WebSocket transport model.
+
+**Files changed**: `docs/reference/faq.md`
+
+## Issue #461: Browser requirements overstate WebRTC as required
+
+**Root cause**: Docs said WebRTC is "Required only for network sync features" but normal sync uses WebSocket.
+
+**Fix**: Updated docs to describe WebRTC as an optional optimization, not a baseline requirement.
+
+**Files changed**: `docs/getting-started/browser-requirements.md`
+
+## Issue #459: Image-sequences guide incomplete FPS API
+
+**Root cause**: Docs showed only `getFPS()` but not the real `getPlaybackFPS()`/`setPlaybackFPS()` setters.
+
+**Fix**: Added correct API method names and examples to the image-sequences documentation.
+
+**Files changed**: `docs/playback/image-sequences.md`
+
+## Issue #388: Open Project picker allows multiple files
+
+**Root cause**: Project input had `multiple=true` but only the first file was used; extra files were silently ignored.
+
+**Fix**: Removed `multiple` attribute from the project file input. Added 1 new regression test.
+
+**Files changed**: `src/ui/components/layout/HeaderBar.ts`, `src/ui/components/layout/HeaderBar.test.ts`
+
+## Issue #401: Multi-select session import silently demotes extra .rv/.gto
+
+**Root cause**: Extra `.rv`/`.gto` files in multi-select were silently added to the companion/sidecar map instead of being rejected or prompting the user.
+
+**Fix**: Filter out extra session files from the companion map in both the file picker and drag-drop paths. Added 4 new regression tests.
+
+**Files changed**: `src/ui/components/layout/HeaderBar.ts`, `src/ui/components/ViewerInputHandler.ts`
+
+## Issue #335: Presentation mode lacks documented HUD
+
+**Root cause**: Docs described a transient play/pause + frame counter HUD in presentation mode that does not exist in the shipped app.
+
+**Fix**: Removed false HUD claim from `docs/advanced/review-workflow.md`, kept accurate description of actual presentation mode features.
+
+**Files changed**: `docs/advanced/review-workflow.md`

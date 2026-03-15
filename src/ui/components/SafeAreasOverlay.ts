@@ -2,8 +2,8 @@
  * SafeAreasOverlay - Overlay for broadcast safe areas, aspect ratio guides, and composition helpers
  *
  * Features:
- * - Title safe area (80% of frame)
- * - Action safe area (90% of frame)
+ * - Title safe area (90% of frame, per SMPTE RP 2046-2:2018)
+ * - Action safe area (93% of frame, per SMPTE RP 2046-2:2018)
  * - Custom aspect ratio overlays (16:9, 2.39:1, 4:3, 1:1, etc.)
  * - Center crosshair
  * - Rule of thirds grid
@@ -189,11 +189,11 @@ export class SafeAreasOverlay extends CanvasOverlay<SafeAreasEvents> {
     }
 
     if (this.state.actionSafe) {
-      this.drawSafeArea(0.9, color, alpha, 'action');
+      this.drawSafeArea(0.93, color, alpha, 'action');
     }
 
     if (this.state.titleSafe) {
-      this.drawSafeArea(0.8, color, alpha, 'title');
+      this.drawSafeArea(0.9, color, alpha, 'title');
     }
 
     if (this.state.ruleOfThirds) {

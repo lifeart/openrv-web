@@ -223,7 +223,6 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this.projectInput = document.createElement('input');
     this.projectInput.type = 'file';
     this.projectInput.accept = SUPPORTED_PROJECT_ACCEPT;
-    this.projectInput.multiple = true;
     this.projectInput.style.display = 'none';
     this.projectInput.addEventListener('change', (e) => this.handleProjectOpen(e));
     this.container.appendChild(this.projectInput);
@@ -1408,11 +1407,15 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     );
 
     if (sessionFile) {
-      // If we have a session file, treat other files as potential media sources
+      // If we have a session file, treat other non-session files as potential media sources
+      // Extra .rv/.gto files are excluded — the app only loads one session at a time
       const availableFiles = new Map<string, File>();
       for (const file of fileArray) {
         if (file !== sessionFile) {
-          availableFiles.set(file.name, file);
+          const lowerName = file.name.toLowerCase();
+          if (!lowerName.endsWith('.rv') && !lowerName.endsWith('.gto')) {
+            availableFiles.set(file.name, file);
+          }
         }
       }
 

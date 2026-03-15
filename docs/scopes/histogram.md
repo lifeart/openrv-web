@@ -69,7 +69,7 @@ When a channel is isolated (e.g., `Shift+R` for red only), the histogram updates
 
 ## GPU Acceleration
 
-The histogram is rendered using WebGL for fast computation. Pixel analysis runs on the GPU, ensuring real-time updates even for large images. The canvas-based display component renders at native resolution on Hi-DPI screens.
+Pixel analysis (bin calculation) runs on the CPU, which also provides the clipping statistics. When WebGL is available, the histogram bars are rendered on the GPU for efficient drawing; otherwise the component falls back to CPU-based canvas rendering. The display renders at native resolution on Hi-DPI screens.
 
 ::: tip VFX Use Case
 Before final delivery, use the histogram to verify that no unintentional clipping exists. Many delivery specs (e.g., Netflix, Amazon) require that blacks and whites stay within legal range. Spikes at either edge of the histogram indicate data loss that may cause rejection in QC. Check both the RGB and luminance modes to catch per-channel clipping that may not be visible in luminance alone.

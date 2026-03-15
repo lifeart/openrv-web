@@ -12,7 +12,7 @@ Yes. OpenRV Web is released under the MIT license. It is free to use, modify, an
 
 ### Does OpenRV Web send my files to a server?
 
-No. All processing happens locally in the browser. Files loaded through drag-and-drop or the file picker never leave the machine. Collaborative review sessions use WebSocket connections for room management and real-time sync, with optional WebRTC as an additional peer-to-peer channel. No media data passes through any server.
+No server upload is required for viewing. All decoding and rendering happens locally in the browser -- files loaded through drag-and-drop or the file picker are never uploaded to a server for processing. However, when you join a collaborative review session, the media-sync feature may transmit file data to other participants over the session's peer-to-peer or WebSocket transport so that all reviewers can view the same content. Outside of collaboration, your files stay entirely on your machine.
 
 ### What is the relationship to the original OpenRV?
 
@@ -72,11 +72,11 @@ Three loop modes are available: **Loop** (continuous repetition), **Ping-pong** 
 
 ### How does collaborative review work?
 
-OpenRV Web uses WebSocket connections as the primary transport for real-time collaboration. Create a room, share the room code with other viewers, and sync playback position, zoom, color adjustments, annotations, and cursor position. WebRTC is available as an optional additional peer-to-peer channel. PIN-based encryption secures the session.
+OpenRV Web uses WebSocket (server-relayed) connections as its primary transport for real-time collaboration. Create a room, share the room code with other viewers, and sync playback position, zoom, color adjustments, annotations, and cursor position. When available, WebRTC peer-to-peer connections are attempted first for session state transfer, with WebSocket used as a fallback. Both state sync and media transfer can flow through either transport path depending on availability. PIN-based encryption secures the session.
 
 ### Is a server required for collaboration?
 
-A WebSocket server is used for room creation, joining, and real-time sync transport. OpenRV Web can also use WebRTC as an optional peer-to-peer channel, with public STUN/TURN servers (Google, Cloudflare, OpenRelay) for connection establishment. URL-based signaling provides a serverless P2P alternative for WebRTC. No media data passes through any server.
+A WebSocket server is used for room creation, joining, and as the default transport for real-time sync messages and media transfer requests. When WebRTC is available, session state responses are sent peer-to-peer first and fall back to the WebSocket relay if the peer channel is unavailable. Public STUN/TURN servers (Google, Cloudflare, OpenRelay) assist WebRTC connection establishment. URL-based signaling provides a serverless P2P alternative for WebRTC. Note: when media sync is active, file data may be transmitted to other participants through either transport so everyone can review the same content.
 
 ## Export
 

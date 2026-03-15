@@ -158,7 +158,16 @@ describe('HeaderBar', () => {
       expect(projectInput.accept).toContain('.gto');
       expect(projectInput.accept).toContain('.exr');
       expect(projectInput.accept).toContain('.cdl');
-      expect(projectInput.multiple).toBe(true);
+    });
+
+    it('HDR-U025: project file input does NOT allow multiple selection (#388)', () => {
+      const el = headerBar.render();
+      const inputs = el.querySelectorAll('input[type="file"]');
+      const projectInput = Array.from(inputs).find(
+        (input) => (input as HTMLInputElement).accept.includes('.orvproject'),
+      ) as HTMLInputElement;
+      expect(projectInput).not.toBeNull();
+      expect(projectInput.multiple).toBe(false);
     });
   });
 
@@ -1948,6 +1957,54 @@ describe('HeaderBar', () => {
         expect(openProjectSpy).toHaveBeenCalledWith({
           file: rvFile,
           availableFiles: new Map([['clip.exr', mediaFile]]),
+        });
+      });
+    });
+
+    it('HDR-U031: multiple .rv/.gto files selected — extras excluded from availableFiles (#401)', async () => {
+      const el = headerBar.render();
+      const input = el.querySelector('input[type="file"]') as HTMLInputElement;
+
+      const openProjectSpy = vi.fn();
+      headerBar.on('openProject', openProjectSpy);
+
+      const rvFile1 = new File(['rv-data'], 'session1.rv');
+      const rvFile2 = new File(['rv-data'], 'session2.rv');
+      const gtoFile = new File(['gto-data'], 'backup.gto');
+      const mediaFile = new File(['exr-data'], 'plate.exr');
+      Object.defineProperty(input, 'files', {
+        value: [rvFile1, rvFile2, gtoFile, mediaFile],
+        configurable: true,
+      });
+      input.dispatchEvent(new Event('change'));
+
+      await vi.waitFor(() => {
+        expect(openProjectSpy).toHaveBeenCalledWith({
+          file: rvFile1,
+          availableFiles: new Map([['plate.exr', mediaFile]]),
+        });
+      });
+    });
+
+    it('HDR-U032: extra uppercase .RV/.GTO files are not demoted to sidecars (#401)', async () => {
+      const el = headerBar.render();
+      const input = el.querySelector('input[type="file"]') as HTMLInputElement;
+
+      const openProjectSpy = vi.fn();
+      headerBar.on('openProject', openProjectSpy);
+
+      const gtoFile = new File(['gto-data'], 'main.GTO');
+      const extraRv = new File(['rv-data'], 'OTHER.RV');
+      Object.defineProperty(input, 'files', {
+        value: [gtoFile, extraRv],
+        configurable: true,
+      });
+      input.dispatchEvent(new Event('change'));
+
+      await vi.waitFor(() => {
+        expect(openProjectSpy).toHaveBeenCalledWith({
+          file: gtoFile,
+          availableFiles: undefined,
         });
       });
     });

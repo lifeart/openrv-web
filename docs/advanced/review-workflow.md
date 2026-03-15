@@ -150,7 +150,6 @@ In presentation mode:
 - The viewer fills the entire browser window (or physical display in fullscreen)
 - Mouse cursor hides automatically after 3 seconds of inactivity
 - Playback controls are accessible via keyboard shortcuts only
-- A minimal HUD appears briefly when playback state changes (play/pause indicator, frame counter)
 
 ### Exiting Presentation Mode
 

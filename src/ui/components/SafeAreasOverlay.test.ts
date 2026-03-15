@@ -170,10 +170,10 @@ describe('SafeAreasOverlay', () => {
   });
 
   describe('title safe area (FEATURES.md SAFE-001)', () => {
-    it('SAFE-001: title safe area is 80% of frame by default', () => {
+    it('SAFE-001: title safe area is 90% of frame by default (SMPTE RP 2046-2:2018)', () => {
       const state = safeAreas.getState();
       expect(state.titleSafe).toBe(true);
-      // Title safe is rendered at 80% - verified by testing render behavior
+      // Title safe is rendered at 90% - verified by testing render behavior
     });
 
     it('SAFE-020: toggleTitleSafe toggles title safe', () => {
@@ -197,10 +197,10 @@ describe('SafeAreasOverlay', () => {
   });
 
   describe('action safe area (FEATURES.md SAFE-002)', () => {
-    it('SAFE-002: action safe area is 90% of frame by default', () => {
+    it('SAFE-002: action safe area is 93% of frame by default (SMPTE RP 2046-2:2018)', () => {
       const state = safeAreas.getState();
       expect(state.actionSafe).toBe(true);
-      // Action safe is rendered at 90% - verified by testing render behavior
+      // Action safe is rendered at 93% - verified by testing render behavior
     });
 
     it('SAFE-030: toggleActionSafe toggles action safe', () => {
@@ -533,5 +533,108 @@ describe('Compositing: display:none for inactive overlay', () => {
     overlay.setViewerDimensions(800, 600, 0, 0, 800, 600);
     expect(overlay.getElement().style.display).toBe('');
     overlay.dispose();
+  });
+});
+
+describe('SMPTE RP 2046-2:2018 safe area percentages (Issue #482)', () => {
+  let overlay: SafeAreasOverlay;
+
+  beforeEach(() => {
+    overlay = new SafeAreasOverlay();
+    overlay.setViewerDimensions(1000, 1000, 0, 0, 1000, 1000);
+  });
+
+  afterEach(() => {
+    overlay.dispose();
+  });
+
+  it('SAFE-200: action safe area uses 93% (3.5% inset per edge)', () => {
+    overlay.setState({ enabled: true, actionSafe: true, titleSafe: false });
+
+    // Access the internal ctx that was captured at construction time
+    const ctx = (overlay as unknown as { ctx: CanvasRenderingContext2D }).ctx;
+    const strokeRectSpy = vi.spyOn(ctx, 'strokeRect');
+
+    overlay.render();
+
+    // Action safe: 93% of 1000 = 930, margin = (1-0.93)/2 * 1000 = 35
+    const actionCall = strokeRectSpy.mock.calls.find(
+      ([_x, _y, w, h]) => Math.abs(w - 930) < 1 && Math.abs(h - 930) < 1,
+    );
+    expect(actionCall).toBeDefined();
+    expect(actionCall![0]).toBeCloseTo(35, 0); // x offset
+    expect(actionCall![1]).toBeCloseTo(35, 0); // y offset
+    expect(actionCall![2]).toBeCloseTo(930, 0); // width
+    expect(actionCall![3]).toBeCloseTo(930, 0); // height
+  });
+
+  it('SAFE-201: title safe area uses 90% (5% inset per edge)', () => {
+    overlay.setState({ enabled: true, actionSafe: false, titleSafe: true });
+
+    const ctx = (overlay as unknown as { ctx: CanvasRenderingContext2D }).ctx;
+    const strokeRectSpy = vi.spyOn(ctx, 'strokeRect');
+
+    overlay.render();
+
+    // Title safe: 90% of 1000 = 900, margin = (1-0.9)/2 * 1000 = 50
+    const titleCall = strokeRectSpy.mock.calls.find(
+      ([_x, _y, w, h]) => Math.abs(w - 900) < 1 && Math.abs(h - 900) < 1,
+    );
+    expect(titleCall).toBeDefined();
+    expect(titleCall![0]).toBeCloseTo(50, 0); // x offset
+    expect(titleCall![1]).toBeCloseTo(50, 0); // y offset
+    expect(titleCall![2]).toBeCloseTo(900, 0); // width
+    expect(titleCall![3]).toBeCloseTo(900, 0); // height
+  });
+
+  it('SAFE-202: action safe is NOT 90% (old incorrect value)', () => {
+    overlay.setState({ enabled: true, actionSafe: true, titleSafe: false });
+
+    const ctx = (overlay as unknown as { ctx: CanvasRenderingContext2D }).ctx;
+    const strokeRectSpy = vi.spyOn(ctx, 'strokeRect');
+
+    overlay.render();
+
+    // Should NOT find a 900x900 rect (that was the old incorrect action safe)
+    const oldActionCall = strokeRectSpy.mock.calls.find(
+      ([_x, _y, w, h]) => Math.abs(w - 900) < 1 && Math.abs(h - 900) < 1,
+    );
+    expect(oldActionCall).toBeUndefined();
+  });
+
+  it('SAFE-203: title safe is NOT 80% (old incorrect value)', () => {
+    overlay.setState({ enabled: true, actionSafe: false, titleSafe: true });
+
+    const ctx = (overlay as unknown as { ctx: CanvasRenderingContext2D }).ctx;
+    const strokeRectSpy = vi.spyOn(ctx, 'strokeRect');
+
+    overlay.render();
+
+    // Should NOT find an 800x800 rect (that was the old incorrect title safe)
+    const oldTitleCall = strokeRectSpy.mock.calls.find(
+      ([_x, _y, w, h]) => Math.abs(w - 800) < 1 && Math.abs(h - 800) < 1,
+    );
+    expect(oldTitleCall).toBeUndefined();
+  });
+
+  it('SAFE-204: both safe areas render at correct SMPTE percentages simultaneously', () => {
+    overlay.setState({ enabled: true, actionSafe: true, titleSafe: true });
+
+    const ctx = (overlay as unknown as { ctx: CanvasRenderingContext2D }).ctx;
+    const strokeRectSpy = vi.spyOn(ctx, 'strokeRect');
+
+    overlay.render();
+
+    const calls = strokeRectSpy.mock.calls;
+    // Should have at least 2 strokeRect calls (action + title)
+    expect(calls.length).toBeGreaterThanOrEqual(2);
+
+    // Action safe: 93% -> 930x930 at offset 35,35
+    const actionCall = calls.find(([_x, _y, w]) => Math.abs(w - 930) < 1);
+    expect(actionCall).toBeDefined();
+
+    // Title safe: 90% -> 900x900 at offset 50,50
+    const titleCall = calls.find(([_x, _y, w]) => Math.abs(w - 900) < 1);
+    expect(titleCall).toBeDefined();
   });
 });

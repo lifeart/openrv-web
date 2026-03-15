@@ -801,15 +801,19 @@ export class ViewerInputHandler {
 
     if (sessionFile) {
       // Build availableFiles map from non-session files (sidecar media/CDL)
+      // Extra .rv/.gto files are excluded — the app only loads one session at a time
       const availableFiles = new Map<string, File[]>();
       for (const file of fileArray) {
         if (file !== sessionFile) {
-          const key = file.name;
-          const existing = availableFiles.get(key);
-          if (existing) {
-            existing.push(file);
-          } else {
-            availableFiles.set(key, [file]);
+          const lowerName = file.name.toLowerCase();
+          if (!lowerName.endsWith('.rv') && !lowerName.endsWith('.gto')) {
+            const key = file.name;
+            const existing = availableFiles.get(key);
+            if (existing) {
+              existing.push(file);
+            } else {
+              availableFiles.set(key, [file]);
+            }
           }
         }
       }
