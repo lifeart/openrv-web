@@ -1364,6 +1364,34 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
     if (sourceNode instanceof VideoSourceNode) {
       source.videoSourceNode = sourceNode;
       source.type = 'video';
+
+      // Create an HTMLVideoElement so that playback sync & audio wiring
+      // work the same way as a normal video load path.
+      const videoUrl =
+        representation.loaderConfig.url ??
+        (representation.loaderConfig.file
+          ? URL.createObjectURL(representation.loaderConfig.file)
+          : source.url);
+
+      if (videoUrl) {
+        const video = document.createElement('video');
+        video.crossOrigin = 'anonymous';
+        video.preload = 'auto';
+        video.muted = this._host!.getMuted();
+        video.volume = this._host!.getEffectiveVolume();
+        video.loop = false;
+        video.playsInline = true;
+        this._host!.initVideoPreservesPitch(video);
+        video.src = videoUrl;
+        video.load();
+
+        source.element = video;
+        this._host!.loadAudioFromVideo(
+          video,
+          this._host!.getEffectiveVolume(),
+          this._host!.getMuted(),
+        );
+      }
     } else if (sourceNode instanceof FileSourceNode) {
       source.fileSourceNode = sourceNode;
       source.type = 'image';

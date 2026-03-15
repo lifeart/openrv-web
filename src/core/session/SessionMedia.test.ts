@@ -17,12 +17,19 @@ vi.mock('../../utils/media/SequenceLoader', () => ({
   getSequenceFrameRange: (info: any) => info.endFrame - info.startFrame + 1,
 }));
 
+// Use vi.hoisted + class mocks so instanceof checks work in applyRepresentationShim
+const { MockVideoSourceNode, MockFileSourceNode } = vi.hoisted(() => {
+  class _MockVideoSourceNode {}
+  class _MockFileSourceNode {}
+  return { MockVideoSourceNode: _MockVideoSourceNode, MockFileSourceNode: _MockFileSourceNode };
+});
+
 vi.mock('../../nodes/sources/VideoSourceNode', () => ({
-  VideoSourceNode: vi.fn(),
+  VideoSourceNode: MockVideoSourceNode,
 }));
 
 vi.mock('../../nodes/sources/FileSourceNode', () => ({
-  FileSourceNode: vi.fn(),
+  FileSourceNode: MockFileSourceNode,
 }));
 
 vi.mock('../../utils/media/SupportedMediaFormats', () => ({
@@ -1414,6 +1421,86 @@ describe('SessionMedia', () => {
 
       expect(source.name).toBe('In-memory rep');
       expect(source.url).toBe('blob:original');
+    });
+  });
+
+  describe('applyRepresentationShim video element wiring (#539)', () => {
+    function makeRepresentation(overrides?: Record<string, unknown>) {
+      return {
+        id: 'rep-video-1',
+        label: 'Video Rep',
+        kind: 'movie' as const,
+        priority: 1,
+        status: 'ready' as const,
+        resolution: { width: 1920, height: 1080 },
+        par: 1.0,
+        sourceNode: null,
+        loaderConfig: {},
+        audioTrackPresent: false,
+        startFrame: 0,
+        ...overrides,
+      };
+    }
+
+    it('SM-107: creates HTMLVideoElement when video representation sourceNode is VideoSourceNode', () => {
+      const source = makeVideoSource({ url: 'blob:video' });
+      media.addSource(source);
+
+      const mockNode = new MockVideoSourceNode();
+      const rep = makeRepresentation({ sourceNode: mockNode, loaderConfig: { url: 'https://cdn/proxy.mp4' } });
+      (media as any).applyRepresentationShim(0, rep);
+
+      expect(source.element).toBeDefined();
+      expect(source.element?.tagName).toBe('VIDEO');
+    });
+
+    it('SM-108: calls initVideoPreservesPitch for video representation', () => {
+      const source = makeVideoSource({ url: 'blob:video' });
+      media.addSource(source);
+
+      const mockNode = new MockVideoSourceNode();
+      const rep = makeRepresentation({ sourceNode: mockNode, loaderConfig: { url: 'https://cdn/proxy.mp4' } });
+      (media as any).applyRepresentationShim(0, rep);
+
+      expect(host.initVideoPreservesPitch).toHaveBeenCalled();
+    });
+
+    it('SM-109: calls loadAudioFromVideo for video representation', () => {
+      const source = makeVideoSource({ url: 'blob:video' });
+      media.addSource(source);
+
+      const mockNode = new MockVideoSourceNode();
+      const rep = makeRepresentation({ sourceNode: mockNode, loaderConfig: { url: 'https://cdn/proxy.mp4' } });
+      (media as any).applyRepresentationShim(0, rep);
+
+      expect(host.loadAudioFromVideo).toHaveBeenCalledWith(
+        source.element,
+        0.7,
+        false,
+      );
+    });
+
+    it('SM-110: falls back to source.url when loaderConfig has no url or file', () => {
+      const source = makeVideoSource({ url: 'blob:original-video' });
+      media.addSource(source);
+
+      const mockNode = new MockVideoSourceNode();
+      const rep = makeRepresentation({ sourceNode: mockNode, loaderConfig: {} });
+      (media as any).applyRepresentationShim(0, rep);
+
+      expect(source.element).toBeDefined();
+    });
+
+    it('SM-111: non-video representations do not create HTMLVideoElement', () => {
+      const source = makeImageSource();
+      media.addSource(source);
+
+      const mockNode = new MockFileSourceNode();
+      const rep = makeRepresentation({ sourceNode: mockNode });
+      (media as any).applyRepresentationShim(0, rep);
+
+      expect(host.initVideoPreservesPitch).not.toHaveBeenCalled();
+      expect(host.loadAudioFromVideo).not.toHaveBeenCalled();
     });
   });
 
