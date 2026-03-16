@@ -59,6 +59,7 @@ export function updateInfoPanel(context: SessionBridgeContext): void {
     filename: source?.name ?? undefined,
     width: source?.width ?? undefined,
     height: source?.height ?? undefined,
+    sequencePattern: source?.sequenceInfo?.pattern ?? undefined,
     currentFrame,
     totalFrames,
     timecode,

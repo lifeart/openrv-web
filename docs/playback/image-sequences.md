@@ -32,7 +32,7 @@ OpenRV Web recognizes several naming conventions for numbered files:
 | Hash notation | `frame.####.exr` | Each `#` represents one digit |
 | At-sign notation | `frame.@@@@.exr` | Each `@` represents one digit |
 
-Pattern detection is automatic and requires no configuration. The detected pattern is displayed using hash notation (e.g., `frame_####.png`) in the sequence information.
+Pattern detection is automatic and requires no configuration. The detected pattern is displayed using hash notation (e.g., `frame_####.png`) in the Info Panel overlay (toggle with the info panel shortcut).
 
 ## Missing Frame Detection
 

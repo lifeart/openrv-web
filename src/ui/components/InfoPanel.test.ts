@@ -321,6 +321,40 @@ describe('InfoPanel', () => {
     });
   });
 
+  describe('sequence pattern display', () => {
+    it('INFO-U110a: displays sequence pattern when field is enabled and data provided', () => {
+      panel.enable();
+      panel.update({ sequencePattern: 'frame_####.exr' });
+      expect(panel.getElement().textContent).toContain('Seq: frame_####.exr');
+    });
+
+    it('INFO-U110b: does not display sequence pattern when field is disabled', () => {
+      panel.enable();
+      panel.setFields({ sequencePattern: false });
+      panel.update({ sequencePattern: 'frame_####.exr' });
+      expect(panel.getElement().textContent).not.toContain('frame_####.exr');
+    });
+
+    it('INFO-U110c: does not display sequence pattern when data is undefined', () => {
+      panel.enable();
+      panel.update({ sequencePattern: undefined });
+      expect(panel.getElement().textContent).not.toContain('Seq:');
+    });
+
+    it('INFO-U110d: sequencePattern field is enabled by default', () => {
+      const fields = panel.getFields();
+      expect(fields.sequencePattern).toBe(true);
+    });
+
+    it('INFO-U110e: escapes HTML in sequence pattern to prevent XSS', () => {
+      panel.enable();
+      panel.update({ sequencePattern: '<script>alert(1)</script>' });
+      const content = panel.getElement().innerHTML;
+      expect(content).not.toContain('<script>');
+      expect(content).toContain('&lt;script&gt;');
+    });
+  });
+
   describe('field visibility', () => {
     it('INFO-U100: disabled field is not rendered', () => {
       panel.enable();

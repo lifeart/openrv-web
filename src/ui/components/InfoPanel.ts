@@ -18,6 +18,7 @@ export type InfoPanelPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bott
 export interface InfoPanelFields {
   filename: boolean;
   resolution: boolean;
+  sequencePattern: boolean;
   frameInfo: boolean;
   timecode: boolean;
   duration: boolean;
@@ -35,6 +36,7 @@ export interface InfoPanelData {
   filename?: string;
   width?: number;
   height?: number;
+  sequencePattern?: string;
   currentFrame?: number;
   totalFrames?: number;
   timecode?: string;
@@ -52,6 +54,7 @@ export interface InfoPanelEvents extends EventMap {
 const DEFAULT_FIELDS: InfoPanelFields = {
   filename: true,
   resolution: true,
+  sequencePattern: true,
   frameInfo: true,
   timecode: true,
   duration: false,
@@ -304,6 +307,10 @@ export class InfoPanel extends EventEmitter<InfoPanelEvents> {
 
     if (this.fields.resolution && this.currentData.width && this.currentData.height) {
       lines.push(this.createTextNode(`${this.currentData.width} x ${this.currentData.height}`));
+    }
+
+    if (this.fields.sequencePattern && this.currentData.sequencePattern) {
+      lines.push(this.createTextNode(`Seq: ${this.currentData.sequencePattern}`));
     }
 
     if (this.fields.frameInfo && this.currentData.currentFrame !== undefined) {
