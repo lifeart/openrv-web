@@ -211,7 +211,7 @@ Browser storage quotas vary by browser and device. The auto-save manager can che
 - A warning is emitted when storage usage exceeds 80% of the available quota
 - If storage is critically low, auto-save may fail; the error indicator appears in the header
 
-To free storage, delete old snapshots and auto-save entries from the Snapshot Panel.
+To free storage, delete old snapshots and auto-checkpoints from the Snapshot Panel. Auto-save entries are managed automatically: old versions beyond the configured `maxVersions` limit (default 10) are pruned each time a new auto-save is written. To adjust how many auto-save versions are retained, change the **Max versions** setting in the auto-save configuration.
 
 ---
 
@@ -224,7 +224,7 @@ Press `Shift+Alt+H` to open the History Panel, which displays undo/redo action h
 - Current state highlighting
 - Clear history option
 
-For snapshot and auto-save recovery, use the Snapshot Panel instead. The History Panel is focused on navigating the undo/redo action stack within the current session.
+For snapshot management, use the Snapshot Panel. For auto-save crash recovery, see the recovery prompt that appears on startup when an unclean shutdown is detected. The History Panel is focused on navigating the undo/redo action stack within the current session.
 
 ---
 
