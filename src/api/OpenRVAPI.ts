@@ -12,6 +12,7 @@
  */
 
 import type { Session } from '../core/session/Session';
+import type { PlaylistManager } from '../core/session/PlaylistManager';
 import type {
   ViewerProvider,
   ColorAdjustmentProvider,
@@ -63,6 +64,8 @@ export interface OpenRVAPIConfig {
   ocioProvider?: OCIOProvider;
   /** Optional persistence manager for auto-checkpoint creation before destructive API operations */
   persistenceManager?: import('../AppPersistenceManager').AppPersistenceManager;
+  /** Optional playlist manager for playlist-aware frame/duration in the public API */
+  playlistManager?: PlaylistManager;
 }
 
 /**
@@ -175,6 +178,12 @@ export class OpenRVAPI {
     );
     this.markers = new MarkersAPI(config.session);
     this.events = new EventsAPI(config.session, config.viewer);
+
+    // Wire playlist manager into sub-APIs for playlist-aware behavior
+    if (config.playlistManager) {
+      this.playback.setPlaylistManager(config.playlistManager);
+      this.events.setPlaylistManager(config.playlistManager);
+    }
   }
 
   /**

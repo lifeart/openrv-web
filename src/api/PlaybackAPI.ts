@@ -5,16 +5,26 @@
  */
 
 import type { Session } from '../core/session/Session';
+import type { PlaylistManager } from '../core/session/PlaylistManager';
 import type { PlaybackMode } from '../core/types/session';
 import { ValidationError } from '../core/errors';
 import { DisposableAPI } from './Disposable';
 
 export class PlaybackAPI extends DisposableAPI {
   private session: Session;
+  private playlistManager: PlaylistManager | null = null;
 
   constructor(session: Session) {
     super();
     this.session = session;
+  }
+
+  /**
+   * Set the playlist manager for playlist-aware frame/duration reporting.
+   * @internal Called by the bootstrap wiring, not intended for external use.
+   */
+  setPlaylistManager(pm: PlaylistManager): void {
+    this.playlistManager = pm;
   }
 
   /**
@@ -243,6 +253,9 @@ export class PlaybackAPI extends DisposableAPI {
   /**
    * Get current frame number (1-based).
    *
+   * When a playlist is active, returns the global playlist frame.
+   * When no playlist is active, returns the clip-local frame.
+   *
    * @returns The current frame number, starting from 1.
    *
    * @example
@@ -252,11 +265,17 @@ export class PlaybackAPI extends DisposableAPI {
    */
   getCurrentFrame(): number {
     this.assertNotDisposed();
+    if (this.playlistManager?.isEnabled()) {
+      return this.playlistManager.getCurrentFrame();
+    }
     return this.session.currentFrame;
   }
 
   /**
-   * Get total number of frames in the current source.
+   * Get total number of frames.
+   *
+   * When a playlist is active, returns the total playlist duration.
+   * When no playlist is active, returns the current source duration.
    *
    * @returns The total frame count, or 0 if no source is loaded.
    *
@@ -266,6 +285,63 @@ export class PlaybackAPI extends DisposableAPI {
    * ```
    */
   getTotalFrames(): number {
+    this.assertNotDisposed();
+    if (this.playlistManager?.isEnabled()) {
+      return this.playlistManager.getTotalDuration();
+    }
+    return this.session.currentSource?.duration ?? 0;
+  }
+
+  /**
+   * Check whether playlist mode is currently active.
+   *
+   * @returns `true` if a playlist is loaded and enabled, `false` otherwise.
+   *
+   * @example
+   * ```ts
+   * if (openrv.playback.isPlaylistActive()) {
+   *   console.log('Global frame:', openrv.playback.getCurrentFrame());
+   * }
+   * ```
+   */
+  isPlaylistActive(): boolean {
+    this.assertNotDisposed();
+    return this.playlistManager?.isEnabled() ?? false;
+  }
+
+  /**
+   * Get the clip-local frame number, regardless of playlist mode.
+   *
+   * Always returns the session's current frame (the frame within the
+   * currently loaded clip/source). Useful when consumers need the
+   * clip-local position even during playlist playback.
+   *
+   * @returns The clip-local frame number (1-based).
+   *
+   * @example
+   * ```ts
+   * const clipFrame = openrv.playback.getClipFrame();
+   * ```
+   */
+  getClipFrame(): number {
+    this.assertNotDisposed();
+    return this.session.currentFrame;
+  }
+
+  /**
+   * Get the clip-local total frame count, regardless of playlist mode.
+   *
+   * Always returns the current source's duration. Useful when consumers
+   * need the clip duration even during playlist playback.
+   *
+   * @returns The clip-local total frame count, or 0 if no source is loaded.
+   *
+   * @example
+   * ```ts
+   * const clipTotal = openrv.playback.getClipDuration();
+   * ```
+   */
+  getClipDuration(): number {
     this.assertNotDisposed();
     return this.session.currentSource?.duration ?? 0;
   }

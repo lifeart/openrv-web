@@ -6,6 +6,7 @@
  */
 
 import type { Session } from '../core/session/Session';
+import type { PlaylistManager } from '../core/session/PlaylistManager';
 import type { ViewerProvider } from './types';
 import { ValidationError } from '../core/errors';
 import { DisposableAPI } from './Disposable';
@@ -124,6 +125,7 @@ export class EventsAPI extends DisposableAPI {
   private internalUnsubscribers: Array<() => void> = [];
   private session: Session;
   private viewer: ViewerProvider;
+  private playlistManager: PlaylistManager | null = null;
 
   /** Last loaded source info, used to build RenderedImageInfo on view changes */
   private _lastLoadedSource: { name: string; width: number; height: number } | null = null;
@@ -133,6 +135,14 @@ export class EventsAPI extends DisposableAPI {
     this.session = session;
     this.viewer = viewer;
     this.wireInternalEvents();
+  }
+
+  /**
+   * Set the playlist manager for playlist-aware frame events.
+   * @internal Called by the bootstrap wiring, not intended for external use.
+   */
+  setPlaylistManager(pm: PlaylistManager): void {
+    this.playlistManager = pm;
   }
 
   /**
@@ -254,9 +264,13 @@ export class EventsAPI extends DisposableAPI {
    * Wire internal Session/Viewer events to the public API events
    */
   private wireInternalEvents(): void {
-    // Frame changes
+    // Frame changes — emit global playlist frame when playlist is active
     const unsubFrame = this.session.on('frameChanged', (frame) => {
-      this.emit('frameChange', { frame });
+      if (this.playlistManager?.isEnabled()) {
+        this.emit('frameChange', { frame: this.playlistManager.getCurrentFrame() });
+      } else {
+        this.emit('frameChange', { frame });
+      }
     });
     this.internalUnsubscribers.push(unsubFrame);
 
