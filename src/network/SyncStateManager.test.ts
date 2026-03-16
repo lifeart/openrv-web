@@ -493,4 +493,59 @@ describe('SyncStateManager', () => {
       expect(manager.shouldSyncPlayback()).toBe(true);
     });
   });
+
+  describe('hasConflict (combined)', () => {
+    it('SSM-080: hasConflict returns true when playback conflict exists', () => {
+      manager.updateLocalPlayback({ isPlaying: true, currentFrame: 10 });
+      manager.updateRemotePlayback({
+        isPlaying: false,
+        currentFrame: 10,
+        playbackSpeed: 1,
+        playDirection: 1,
+        loopMode: 'loop',
+        timestamp: Date.now(),
+      });
+
+      expect(manager.hasConflict()).toBe(true);
+    });
+
+    it('SSM-081: hasConflict returns true when view conflict exists', () => {
+      manager.updateLocalView({ panX: 0, panY: 0, zoom: 1, channelMode: 'rgb' });
+      manager.updateRemoteView({ panX: 10, panY: 0, zoom: 1, channelMode: 'rgb' });
+
+      expect(manager.hasConflict()).toBe(true);
+    });
+
+    it('SSM-082: hasConflict returns true when both playback and view conflicts exist', () => {
+      manager.updateLocalPlayback({ isPlaying: true, currentFrame: 10 });
+      manager.updateRemotePlayback({
+        isPlaying: false,
+        currentFrame: 10,
+        playbackSpeed: 1,
+        playDirection: 1,
+        loopMode: 'loop',
+        timestamp: Date.now(),
+      });
+      manager.updateLocalView({ panX: 0, panY: 0, zoom: 1, channelMode: 'rgb' });
+      manager.updateRemoteView({ panX: 10, panY: 0, zoom: 1, channelMode: 'rgb' });
+
+      expect(manager.hasConflict()).toBe(true);
+    });
+
+    it('SSM-083: hasConflict returns false when no conflicts exist', () => {
+      manager.updateLocalPlayback({ isPlaying: false, currentFrame: 10 });
+      manager.updateRemotePlayback({
+        isPlaying: false,
+        currentFrame: 10,
+        playbackSpeed: 1,
+        playDirection: 1,
+        loopMode: 'loop',
+        timestamp: Date.now(),
+      });
+      manager.updateLocalView({ panX: 5, panY: 5, zoom: 2, channelMode: 'rgb' });
+      manager.updateRemoteView({ panX: 5, panY: 5, zoom: 2, channelMode: 'rgb' });
+
+      expect(manager.hasConflict()).toBe(false);
+    });
+  });
 });

@@ -406,7 +406,7 @@ export class AppNetworkBridge {
     this.unsubscribers.push(
       networkSyncManager.on('connectionStateChanged', (state) => {
         networkControl.setConnectionState(state);
-        if (state !== 'connected') {
+        if (state !== 'connected' && state !== 'conflict') {
           networkControl.setIsHost(false);
         } else {
           networkControl.setIsHost(networkSyncManager.isHost);

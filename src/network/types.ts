@@ -9,7 +9,7 @@ import type { EventMap } from '../utils/EventEmitter';
 
 // ---- Connection States ----
 
-export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'error';
+export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'error' | 'conflict';
 
 // ---- User / Room ----
 

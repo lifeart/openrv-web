@@ -3190,3 +3190,30 @@ Wired into `AppNetworkBridge` (subscribes to syncCursor, usersChanged, userLeft,
 - `src/services/KeyboardActionMap.ts`
 - `src/services/KeyboardActionMap.test.ts`
 - `src/ui/components/layout/VersionSelector.test.ts` (new)
+
+## Issue #342: Network-sync conflict/warning header state missing from UI
+
+**Root cause**: The network-sync docs described a dedicated red warning state for conflicts, but the `ConnectionState` type only had `disconnected`, `connecting`, `connected`, `reconnecting`, and `error`. `SyncStateManager` had conflict detection logic (`hasPlaybackConflict()`, `hasViewConflict()`) but no UI consumer. `NetworkControl.updateButtonStyle()` only rendered three visual cases with no conflict distinction.
+
+**Fix**:
+- Added `'conflict'` to the `ConnectionState` union type in `src/network/types.ts`
+- Added `hasConflict()` convenience method to `SyncStateManager` that checks both playback and view conflicts
+- Added `emitConflictStateIfNeeded()` to `NetworkSyncManager` that transitions to `'conflict'` state when conflicts are detected and back to `'connected'` when cleared, wired into `handleSyncPlayback()` and `handleSyncView()`
+- Updated `NetworkControl.updateButtonStyle()` with a distinct red visual for conflict state (red background, red border/color)
+- Updated `updatePanelVisibility()` to show connected panel during conflicts (connection is still active)
+- Updated `AppNetworkBridge` to preserve host state during conflicts
+
+**Tests added**: 14 regression tests:
+- `SyncStateManager.test.ts`: 4 tests (SSM-080 through SSM-083) for `hasConflict()` covering playback-only, view-only, both, and no conflicts
+- `NetworkSyncManager.test.ts`: 4 tests (NSM-140 through NSM-143) for conflict state emission on playback sync, view sync, clearing, and disconnected guard
+- `NetworkControl.test.ts`: 6 tests (NCC-120 through NCC-125) for distinct conflict button style vs connected/error/connecting, connected panel visibility, and type system
+
+**Files changed**:
+- `src/network/types.ts`
+- `src/network/SyncStateManager.ts`
+- `src/network/SyncStateManager.test.ts`
+- `src/network/NetworkSyncManager.ts`
+- `src/network/NetworkSyncManager.test.ts`
+- `src/ui/components/NetworkControl.ts`
+- `src/ui/components/NetworkControl.test.ts`
+- `src/AppNetworkBridge.ts`

@@ -860,4 +860,67 @@ describe('NetworkControl', () => {
       expect(banner.style.display).toBe('none');
     });
   });
+
+  describe('conflict state (Issue #342)', () => {
+    it('NCC-120: conflict state renders distinct red/warning button style', () => {
+      control.setConnectionState('conflict');
+
+      const button = control.render().querySelector('[data-testid="network-sync-button"]') as HTMLButtonElement;
+      expect(button.style.borderColor).toContain('ef4444');
+      expect(button.style.color).toContain('ef4444');
+      expect(button.style.background).toContain('rgba(239, 68, 68');
+    });
+
+    it('NCC-121: conflict state style is distinct from connected state', () => {
+      control.setConnectionState('connected');
+      const button = control.render().querySelector('[data-testid="network-sync-button"]') as HTMLButtonElement;
+      const connectedBorder = button.style.borderColor;
+      const connectedColor = button.style.color;
+      const connectedBg = button.style.background;
+
+      control.setConnectionState('conflict');
+      expect(button.style.borderColor).not.toBe(connectedBorder);
+      expect(button.style.color).not.toBe(connectedColor);
+      expect(button.style.background).not.toBe(connectedBg);
+    });
+
+    it('NCC-122: conflict state style is distinct from error state', () => {
+      control.setConnectionState('error');
+      const button = control.render().querySelector('[data-testid="network-sync-button"]') as HTMLButtonElement;
+      const errorBorder = button.style.borderColor;
+      const errorColor = button.style.color;
+      const errorBg = button.style.background;
+
+      control.setConnectionState('conflict');
+      // Error state uses default (transparent) styling, conflict uses red
+      expect(button.style.borderColor).not.toBe(errorBorder);
+      expect(button.style.color).not.toBe(errorColor);
+      expect(button.style.background).not.toBe(errorBg);
+    });
+
+    it('NCC-123: conflict state style is distinct from connecting state', () => {
+      control.setConnectionState('connecting');
+      const button = control.render().querySelector('[data-testid="network-sync-button"]') as HTMLButtonElement;
+      const connectingBg = button.style.background;
+
+      control.setConnectionState('conflict');
+      expect(button.style.background).not.toBe(connectingBg);
+    });
+
+    it('NCC-124: conflict state shows connected panel (connection is still active)', () => {
+      control.setConnectionState('conflict');
+      control.openPanel();
+
+      const connectedPanel = document.querySelector('[data-testid="network-connected-panel"]');
+      expect(connectedPanel).toBeTruthy();
+      expect((connectedPanel as HTMLElement).style.display).not.toBe('none');
+    });
+
+    it('NCC-125: conflict state exists in ConnectionState type', () => {
+      // Compile-time type check: this line would fail TypeScript compilation
+      // if 'conflict' were not part of ConnectionState
+      const state: import('../../network/types').ConnectionState = 'conflict';
+      expect(state).toBe('conflict');
+    });
+  });
 });

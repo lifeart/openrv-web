@@ -189,14 +189,14 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
 
     // Hover states
     this.button.addEventListener('pointerenter', () => {
-      if (this.state.connectionState !== 'connected') {
+      if (this.state.connectionState !== 'connected' && this.state.connectionState !== 'conflict') {
         this.button.style.background = 'var(--bg-hover)';
         this.button.style.borderColor = 'var(--border-primary)';
         this.button.style.color = 'var(--text-primary)';
       }
     });
     this.button.addEventListener('pointerleave', () => {
-      if (this.state.connectionState !== 'connected') {
+      if (this.state.connectionState !== 'connected' && this.state.connectionState !== 'conflict') {
         this.button.style.background = 'transparent';
         this.button.style.borderColor = 'transparent';
         this.button.style.color = 'var(--text-muted)';
@@ -1224,7 +1224,11 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
   private updateButtonStyle(): void {
     const { connectionState } = this.state;
 
-    if (connectionState === 'connected') {
+    if (connectionState === 'conflict') {
+      this.button.style.background = 'rgba(239, 68, 68, 0.15)';
+      this.button.style.borderColor = 'var(--error, #ef4444)';
+      this.button.style.color = 'var(--error, #ef4444)';
+    } else if (connectionState === 'connected') {
       this.button.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
       this.button.style.borderColor = 'var(--accent-primary)';
       this.button.style.color = 'var(--accent-primary)';
@@ -1256,7 +1260,8 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
       connectionState === 'disconnected' || connectionState === 'error' ? 'block' : 'none';
     this.connectingPanel.style.display =
       connectionState === 'connecting' || connectionState === 'reconnecting' ? 'block' : 'none';
-    this.connectedPanel.style.display = connectionState === 'connected' ? 'flex' : 'none';
+    this.connectedPanel.style.display =
+      connectionState === 'connected' || connectionState === 'conflict' ? 'flex' : 'none';
   }
 
   private updateJoinRoomInputState(): void {

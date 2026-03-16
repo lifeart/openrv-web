@@ -949,4 +949,120 @@ describe('NetworkSyncManager', () => {
       expect(manager.droppedMessageCount).toBe(0);
     });
   });
+
+  describe('conflict state emission (Issue #342)', () => {
+    it('NSM-140: emits conflict state when playback conflict detected after sync', () => {
+      const states: ConnectionState[] = [];
+      manager.on('connectionStateChanged', (s) => states.push(s));
+
+      // Set manager to connected state
+      (manager as any)._connectionState = 'connected';
+
+      // Set up local playback state that will conflict
+      const stateManager = manager.getSyncStateManager();
+      stateManager.updateLocalPlayback({ isPlaying: true, currentFrame: 10 });
+
+      // Simulate receiving a conflicting remote playback sync message
+      const message = {
+        id: 'msg-conflict-1',
+        type: 'sync.playback',
+        roomId: 'room-1',
+        userId: 'other-user',
+        timestamp: Date.now(),
+        payload: {
+          isPlaying: false,
+          currentFrame: 10,
+          playbackSpeed: 1,
+          playDirection: 1,
+          loopMode: 'loop',
+          timestamp: Date.now(),
+        },
+      };
+      (manager as any).handleMessage(message, 'websocket');
+
+      expect(states).toContain('conflict');
+    });
+
+    it('NSM-141: emits conflict state when view conflict detected after sync', () => {
+      const states: ConnectionState[] = [];
+      manager.on('connectionStateChanged', (s) => states.push(s));
+
+      // Set manager to connected state
+      (manager as any)._connectionState = 'connected';
+
+      // Set up local view state that will conflict
+      const stateManager = manager.getSyncStateManager();
+      stateManager.updateLocalView({ panX: 0, panY: 0, zoom: 1, channelMode: 'rgb' });
+
+      // Simulate receiving a conflicting remote view sync message
+      const message = {
+        id: 'msg-conflict-2',
+        type: 'sync.view',
+        roomId: 'room-1',
+        userId: 'other-user',
+        timestamp: Date.now(),
+        payload: {
+          panX: 100,
+          panY: 0,
+          zoom: 1,
+          channelMode: 'rgb',
+        },
+      };
+      (manager as any).handleMessage(message, 'websocket');
+
+      expect(states).toContain('conflict');
+    });
+
+    it('NSM-142: transitions back to connected when conflict clears', () => {
+      const states: ConnectionState[] = [];
+      manager.on('connectionStateChanged', (s) => states.push(s));
+
+      // Start in conflict state
+      (manager as any)._connectionState = 'conflict';
+
+      // Set up matching local and remote states (no conflict)
+      const stateManager = manager.getSyncStateManager();
+      stateManager.updateLocalPlayback({ isPlaying: false, currentFrame: 10 });
+      // Both view states must match to clear all conflicts
+      stateManager.updateLocalView({ panX: 0, panY: 0, zoom: 1, channelMode: 'rgb' });
+      stateManager.updateRemoteView({ panX: 0, panY: 0, zoom: 1, channelMode: 'rgb' });
+
+      // Simulate receiving a matching remote playback sync
+      const message = {
+        id: 'msg-resolve-1',
+        type: 'sync.playback',
+        roomId: 'room-1',
+        userId: 'other-user',
+        timestamp: Date.now(),
+        payload: {
+          isPlaying: false,
+          currentFrame: 10,
+          playbackSpeed: 1,
+          playDirection: 1,
+          loopMode: 'loop',
+          timestamp: Date.now(),
+        },
+      };
+      (manager as any).handleMessage(message, 'websocket');
+
+      expect(states).toContain('connected');
+    });
+
+    it('NSM-143: does not emit conflict state when disconnected', () => {
+      const states: ConnectionState[] = [];
+      manager.on('connectionStateChanged', (s) => states.push(s));
+
+      // Manager is disconnected by default
+      expect(manager.connectionState).toBe('disconnected');
+
+      // Even with conflicting state, no conflict emission
+      const stateManager = manager.getSyncStateManager();
+      stateManager.updateLocalPlayback({ isPlaying: true, currentFrame: 10 });
+
+      // Directly call the private method to verify guard
+      (manager as any).emitConflictStateIfNeeded();
+
+      expect(states).not.toContain('conflict');
+    });
+  });
 });

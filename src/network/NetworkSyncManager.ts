@@ -1035,6 +1035,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     if (!validatePlaybackPayload(payload)) return;
 
     this.stateManager.updateRemotePlayback(payload);
+    this.emitConflictStateIfNeeded();
     this.emit('syncPlayback', payload);
   }
 
@@ -1050,6 +1051,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     if (!validateViewPayload(payload)) return;
 
     this.stateManager.updateRemoteView(payload);
+    this.emitConflictStateIfNeeded();
     this.emit('syncView', payload);
   }
 
@@ -1791,6 +1793,23 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     if (this._connectionState === state) return;
     this._connectionState = state;
     this.emit('connectionStateChanged', state);
+  }
+
+  /**
+   * If we are connected and the SyncStateManager detects a conflict,
+   * transition to the 'conflict' connection state so the UI can show
+   * a red/warning indicator. When the conflict clears, transition
+   * back to 'connected'.
+   */
+  private emitConflictStateIfNeeded(): void {
+    // Only evaluate conflict when in connected or conflict state
+    if (this._connectionState !== 'connected' && this._connectionState !== 'conflict') return;
+
+    if (this.stateManager.hasConflict()) {
+      this.setConnectionState('conflict');
+    } else if (this._connectionState === 'conflict') {
+      this.setConnectionState('connected');
+    }
   }
 
   private resetRoomState(): void {

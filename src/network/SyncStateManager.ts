@@ -205,6 +205,13 @@ export class SyncStateManager {
   // ---- Conflict Detection ----
 
   /**
+   * Check if any conflict (playback or view) exists between local and remote state.
+   */
+  hasConflict(): boolean {
+    return this.hasPlaybackConflict() || this.hasViewConflict();
+  }
+
+  /**
    * Check if the local and remote playback states conflict.
    * A conflict occurs when both sides have diverged since the last sync.
    */

@@ -107,19 +107,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Users expecting live participant presence in the viewer itself will not get the on-image collaboration cue the docs describe.
   - That makes collaborative review feel less visible than documented, especially when the network panel is closed during playback.
 
-### 342. Network-sync docs describe a dedicated conflict/warning header state that the shipped indicator cannot represent
-
-- Severity: Medium
-- Area: Collaboration status UI / documentation contract
-- Evidence:
-  - The network-sync guide says the header sync indicator shows a `Red warning` state for conflicts and manual intervention in [docs/advanced/network-sync.md](/Users/lifeart/Repos/openrv-web/docs/advanced/network-sync.md#L139) through [docs/advanced/network-sync.md](/Users/lifeart/Repos/openrv-web/docs/advanced/network-sync.md#L143).
-  - The runtime connection-state model only defines `disconnected`, `connecting`, `connected`, `reconnecting`, and `error` in [src/network/types.ts](/Users/lifeart/Repos/openrv-web/src/network/types.ts#L9).
-  - `NetworkControl.updateButtonStyle()` only renders three visual cases: connected, connecting/reconnecting, and everything else muted; there is no separate conflict/manual-intervention styling path in [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L1133) through [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L1148).
-  - Conflict detection currently lives in `SyncStateManager` logic only, with no UI consumer found in the production indicator path.
-- Impact:
-  - Users cannot rely on the header control to distinguish a sync conflict from ordinary disconnection/reconnection states the way the docs describe.
-  - That weakens trust in the collaboration status indicator during remote review, because one of the documented states is not actually expressible in the shipped UI.
-
 
 
 ### 351. The format-support reference overstates several partially supported formats as if they were fully usable
