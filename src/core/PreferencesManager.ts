@@ -20,6 +20,12 @@ import type { CustomKeyBindingsManager } from '../utils/input/CustomKeyBindingsM
 import type { OCIOStateManager } from '../ui/components/OCIOStateManager';
 import type { DisplayColorState } from '../color/DisplayTransfer';
 import type { TimecodeDisplayMode } from '../utils/media/Timecode';
+import {
+  DCC_STORAGE_KEY,
+  DEFAULT_DCC_PREFS,
+  sanitizeDCCPrefs,
+  type DCCPrefs,
+} from '../integrations/DCCSettings';
 
 export type MissingFrameMode = 'off' | 'show-frame' | 'hold' | 'black';
 
@@ -102,6 +108,7 @@ export interface PreferencesExportPayload {
   displayProfile: DisplayColorState | null;
   timelineDisplayMode: TimecodeDisplayMode | null;
   missingFrameMode: MissingFrameMode | null;
+  dccPrefs: DCCPrefs;
   pluginSettings?: Record<string, Record<string, unknown>>;
 }
 
@@ -162,6 +169,7 @@ export interface CorePreferencesEvents extends EventMap {
   exportDefaultsChanged: ExportDefaults;
   generalPrefsChanged: GeneralPrefs;
   fpsIndicatorPrefsChanged: FPSIndicatorPrefs;
+  dccPrefsChanged: DCCPrefs;
   imported: PreferencesExportPayload;
   reset: void;
 }
@@ -496,6 +504,17 @@ export class PreferencesManager extends EventEmitter<CorePreferencesEvents> {
     }
   }
 
+  getDCCPrefs(): DCCPrefs {
+    return sanitizeDCCPrefs(this.storage.getJSON<unknown>(DCC_STORAGE_KEY));
+  }
+
+  setDCCPrefs(prefs: Partial<DCCPrefs>): void {
+    const current = this.getDCCPrefs();
+    const merged = sanitizeDCCPrefs({ ...current, ...prefs });
+    this.storage.setJSON(DCC_STORAGE_KEY, merged);
+    this.emit('dccPrefsChanged', merged);
+  }
+
   exportAll(): string {
     return JSON.stringify(this.buildExportPayload());
   }
@@ -623,6 +642,16 @@ export class PreferencesManager extends EventEmitter<CorePreferencesEvents> {
       }
     }
 
+    if (hasOwnKey(parsed, 'dccPrefs')) {
+      const value = parsed.dccPrefs;
+      if (value === null) {
+        this.storage.remove(DCC_STORAGE_KEY);
+        this.emit('dccPrefsChanged', { ...DEFAULT_DCC_PREFS });
+      } else if (isRecord(value)) {
+        this.setDCCPrefs(value as Partial<DCCPrefs>);
+      }
+    }
+
     if (hasOwnKey(parsed, 'pluginSettings') && this._pluginSettingsProvider) {
       const value = parsed.pluginSettings;
       if (isRecord(value)) {
@@ -643,6 +672,7 @@ export class PreferencesManager extends EventEmitter<CorePreferencesEvents> {
     for (const key of Object.values(CORE_PREFERENCE_STORAGE_KEYS)) {
       this.storage.remove(key);
     }
+    this.storage.remove(DCC_STORAGE_KEY);
     if (this._pluginSettingsProvider) {
       this._pluginSettingsProvider.clearAll();
     }
@@ -654,6 +684,7 @@ export class PreferencesManager extends EventEmitter<CorePreferencesEvents> {
     this.emit('exportDefaultsChanged', { ...DEFAULT_EXPORT_DEFAULTS });
     this.emit('generalPrefsChanged', { ...DEFAULT_GENERAL_PREFS });
     this.emit('fpsIndicatorPrefsChanged', { ...DEFAULT_FPS_INDICATOR_PREFS });
+    this.emit('dccPrefsChanged', { ...DEFAULT_DCC_PREFS });
     this.emit('reset', undefined);
   }
 
@@ -709,6 +740,7 @@ export class PreferencesManager extends EventEmitter<CorePreferencesEvents> {
       displayProfile: this.getDisplayProfile(),
       timelineDisplayMode: this.getTimelineDisplayMode(),
       missingFrameMode: this.getMissingFrameMode(),
+      dccPrefs: this.getDCCPrefs(),
     };
     if (this._pluginSettingsProvider) {
       payload.pluginSettings = this._pluginSettingsProvider.exportAll();

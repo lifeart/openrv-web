@@ -24,7 +24,58 @@ DCC Application (Nuke/Maya/Houdini)
   OpenRV Web (browser, connects to ws://localhost:9200)
 ```
 
-The bridge server runs on the artist's workstation and requires no cloud infrastructure. The browser connects to `localhost`, so no network traversal or firewall configuration is needed for single-machine setups. For remote setups, the bridge server address can be configured in the OpenRV Web settings.
+The bridge server runs on the artist's workstation and requires no cloud infrastructure. The browser connects to `localhost`, so no network traversal or firewall configuration is needed for single-machine setups. For remote setups, the bridge server address can be configured in the OpenRV Web settings (see [Configuring the DCC Endpoint](#configuring-the-dcc-endpoint) below).
+
+---
+
+## Configuring the DCC Endpoint
+
+There are two ways to tell OpenRV Web where the DCC bridge server is running:
+
+### 1. URL Query Parameter (one-time)
+
+Append `?dcc=<ws-url>` to the page URL:
+
+```
+https://your-host/openrv?dcc=ws://localhost:9200
+```
+
+This is useful for quick, one-off connections. The query parameter always takes highest priority.
+
+### 2. Persisted Setting (across sessions)
+
+OpenRV Web can persist the DCC bridge endpoint in the browser's localStorage so you do not need to add `?dcc=` to the URL every time. The setting is stored under the key `openrv-dcc-endpoint` and includes two fields:
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `endpoint` | string | `""` | WebSocket URL (e.g. `ws://localhost:9200`). Empty means disabled. |
+| `autoConnect` | boolean | `true` | Whether to auto-connect on page load when a persisted endpoint exists. |
+
+You can set the endpoint programmatically:
+
+```ts
+import { setDCCPrefs } from './integrations/DCCSettings';
+
+// Persist the DCC bridge endpoint
+setDCCPrefs({ endpoint: 'ws://localhost:9200' });
+
+// Disable auto-connect (bridge only activates via ?dcc= param)
+setDCCPrefs({ autoConnect: false });
+
+// Clear the persisted endpoint
+import { clearDCCPrefs } from './integrations/DCCSettings';
+clearDCCPrefs();
+```
+
+The DCC endpoint setting is also included in the preferences export/import/reset flow managed by `PreferencesManager`.
+
+### Priority Order
+
+When OpenRV Web starts, it resolves the DCC endpoint in this order:
+
+1. **`?dcc=` query parameter** -- highest priority, always wins
+2. **Persisted endpoint** -- used when `autoConnect` is `true` and no query parameter is present
+3. **No bridge** -- if neither source provides a URL, no DCC bridge is created
 
 ---
 

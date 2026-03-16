@@ -65,6 +65,7 @@ import { ActiveContextManager, type BindingContext } from './utils/input/ActiveC
 import { ContextualKeyboardManager } from './utils/input/ContextualKeyboardManager';
 import { AudioOrchestrator } from './services/AudioOrchestrator';
 import { DCCBridge } from './integrations/DCCBridge';
+import { resolveDCCEndpoint } from './integrations/DCCSettings';
 import { MediaCacheManager } from './cache/MediaCacheManager';
 import { showAlert } from './ui/components/shared/Modal';
 import { DisposableSubscriptionManager } from './utils/DisposableSubscriptionManager';
@@ -561,7 +562,8 @@ export class App {
     });
 
     // DCC Bridge (optional WebSocket integration with DCC tools)
-    const dccUrl = new URLSearchParams(window.location.search).get('dcc');
+    // Priority: ?dcc= query param > persisted DCC endpoint preference
+    const dccUrl = resolveDCCEndpoint();
     if (dccUrl) {
       this.dccBridge = new DCCBridge({ url: dccUrl });
 
