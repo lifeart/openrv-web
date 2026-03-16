@@ -122,6 +122,14 @@ function createMockContext(overrides?: Partial<PersistenceManagerContext>): Pers
       setStackLayers: vi.fn(),
       setNoiseReductionParams: vi.fn(),
       setWatermarkState: vi.fn(),
+      getTimecodeOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({}), setState: vi.fn() }),
+      getSafeAreasOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({}), setState: vi.fn() }),
+      getClippingOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({}), setState: vi.fn() }),
+      getInfoStripOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({}), setState: vi.fn() }),
+      getSpotlightOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({}), setState: vi.fn() }),
+      getBugOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({}), setState: vi.fn() }),
+      getEXRWindowOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({}), setState: vi.fn() }),
+      getFPSIndicator: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({}), setState: vi.fn() }),
       setLUTIntensity: vi.fn(),
       setPARState: vi.fn(),
       setBackgroundPatternState: vi.fn(),
@@ -355,6 +363,14 @@ describe('SessionSerializer.fromJSON - issue #121: clears session before import'
       resetStereoAlignMode: vi.fn(),
       resetChannelMode: vi.fn(),
       resetDifferenceMatteState: vi.fn(),
+      getTimecodeOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({}), setState: vi.fn() }),
+      getSafeAreasOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({}), setState: vi.fn() }),
+      getClippingOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({}), setState: vi.fn() }),
+      getInfoStripOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({}), setState: vi.fn() }),
+      getSpotlightOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({}), setState: vi.fn() }),
+      getBugOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({}), setState: vi.fn() }),
+      getEXRWindowOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({}), setState: vi.fn() }),
+      getFPSIndicator: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({}), setState: vi.fn() }),
     } as any;
 
     const paintEngine = { loadFromAnnotations: vi.fn() } as any;
@@ -457,6 +473,14 @@ describe('Session.setPlaybackState - issue #122: restores currentSourceIndex', (
       resetStereoAlignMode: vi.fn(),
       resetChannelMode: vi.fn(),
       resetDifferenceMatteState: vi.fn(),
+      getTimecodeOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({}), setState: vi.fn() }),
+      getSafeAreasOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({}), setState: vi.fn() }),
+      getClippingOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({}), setState: vi.fn() }),
+      getInfoStripOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({}), setState: vi.fn() }),
+      getSpotlightOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({}), setState: vi.fn() }),
+      getBugOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({}), setState: vi.fn() }),
+      getEXRWindowOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({}), setState: vi.fn() }),
+      getFPSIndicator: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({}), setState: vi.fn() }),
     } as any;
 
     const paintEngine = { loadFromAnnotations: vi.fn() } as any;

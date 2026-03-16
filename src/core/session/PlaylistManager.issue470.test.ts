@@ -486,7 +486,7 @@ describe('PlaylistManager.fromOTIO -- Issue #470', () => {
       expect(result).not.toBeNull();
       expect(result!.markers).toHaveLength(1);
       expect(result!.markers[0]!.name).toBe('ReviewNote');
-      expect(result!.markers[0]!.color).toBe('RED');
+      expect(result!.markers[0]!.color).toBe('#ff4444');
       expect(result!.markers[0]!.timelineFrame).toBe(10);
       expect(result!.markers[0]!.durationFrames).toBe(0);
       expect(result!.markers[0]!.metadata).toEqual({ note: 'Fix color' });

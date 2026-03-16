@@ -137,7 +137,7 @@ describe('Documentation consistency', () => {
 
   test('API docs list all API classes', () => {
     const classNames = getAPIClassNames();
-    expect(classNames.length).toBe(9);
+    expect(classNames.length).toBe(10);
 
     const apiIndex = readFile('docs/api/index.md');
     for (const name of classNames) {

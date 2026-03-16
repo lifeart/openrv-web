@@ -354,7 +354,7 @@ Comprehensive documentation is available at **[lifeart.github.io/openrv-web/docs
 - **Annotations** -- pen, shapes, text, per-frame modes, export
 - **Export** -- frame/video export, slate, frameburn, EDL/OTIO, sessions
 - **Advanced Topics** -- stereo 3D, network sync, DCC integration, scripting API, filters, transforms
-- **API Reference** -- auto-generated TypeDoc reference for all 9 public API classes
+- **API Reference** -- auto-generated TypeDoc reference for all 10 public API classes
 - **Technical Guides** -- rendering pipeline, LUT system, CDL, OCIO, node graph, file formats, session compatibility
 
 ---

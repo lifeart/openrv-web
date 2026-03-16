@@ -10,6 +10,7 @@
 - `MediaAPI` — Source information, resolution, duration, FPS
 - `OpenRVAPI` — Top-level API facade exposed at `window.openrv`
 - `PlaybackAPI` — Play, pause, seek, step, speed control
+- `SequenceAPI` — Image sequence inspection, missing-frame detection
 - `ViewAPI` — Zoom, pan, fit modes, channel isolation
 
 ## Interfaces

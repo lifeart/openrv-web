@@ -94,7 +94,7 @@ describe('InfoPanelSettingsMenu', () => {
     it('IPSM-U012: field items have role="menuitemcheckbox"', () => {
       menu.show(100, 100);
       const checkboxes = document.querySelectorAll('[role="menuitemcheckbox"]');
-      expect(checkboxes.length).toBe(7);
+      expect(checkboxes.length).toBe(8);
     });
 
     it('IPSM-U013: current position has aria-checked="true"', () => {
