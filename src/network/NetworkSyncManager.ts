@@ -150,6 +150,9 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     retryCount: number;
     timer: ReturnType<typeof setTimeout>;
   } | null = null;
+  private _reconnectExhausted = false;
+  private _lastRoomCode: string | null = null;
+  private _lastRoomAction: 'create' | 'join' | null = null;
 
   // Subscriptions to clean up
   private _unsubscribers: Array<() => void> = [];
@@ -198,6 +201,14 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
 
   get isConnected(): boolean {
     return this._connectionState === 'connected';
+  }
+
+  /**
+   * Whether reconnect retries have been exhausted and the user
+   * must manually trigger a reconnection attempt.
+   */
+  get isReconnectExhausted(): boolean {
+    return this._reconnectExhausted;
   }
 
   get syncSettings(): SyncSettings {
@@ -253,6 +264,21 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
 
   setPinCode(pinCode: string): void {
     this._pinCode = pinCode.trim();
+  }
+
+  /**
+   * Manually trigger a reconnection attempt after automatic retries
+   * have been exhausted. Re-uses the last room code and user name.
+   */
+  manualReconnect(): void {
+    if (!this._reconnectExhausted) return;
+    this._reconnectExhausted = false;
+
+    if (this._lastRoomAction === 'create') {
+      this.createRoom(this._userName, this._pinCode);
+    } else if (this._lastRoomAction === 'join' && this._lastRoomCode) {
+      this.joinRoom(this._lastRoomCode, this._userName, this._pinCode);
+    }
   }
 
   /**
@@ -388,6 +414,9 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     if (userName) this._userName = userName;
     if (typeof pinCode === 'string') this.setPinCode(pinCode);
     this._pendingRoomAction = 'create';
+    this._lastRoomAction = 'create';
+    this._lastRoomCode = null;
+    this._reconnectExhausted = false;
     this.scheduleCreateRoomFallback();
 
     this.setConnectionState('connecting');
@@ -419,6 +448,9 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     if (userName) this._userName = userName;
     if (typeof pinCode === 'string') this.setPinCode(pinCode);
     this._pendingRoomAction = 'join';
+    this._lastRoomAction = 'join';
+    this._lastRoomCode = roomCode.toUpperCase();
+    this._reconnectExhausted = false;
     this.clearCreateRoomFallbackTimer();
 
     this.setConnectionState('connecting');
@@ -794,12 +826,14 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
       if (this.tryFallbackToLocalHostRoom()) {
         return;
       }
+      this._reconnectExhausted = true;
       this.setConnectionState('error');
       this.emit('toastMessage', {
         message: 'Failed to reconnect. Please try again.',
         type: 'error',
       });
       this.emit('error', { code: 'RECONNECT_FAILED', message: 'Maximum reconnection attempts reached.' });
+      this.emit('reconnectExhausted', undefined);
     });
 
     const unsub6 = this.wsClient.on('rttUpdated', (rtt) => {

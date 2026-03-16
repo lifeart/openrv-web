@@ -28,6 +28,7 @@ export interface NetworkControlEvents extends EventMap {
   createRoom: { userName: string };
   joinRoom: { roomCode: string; userName: string };
   leaveRoom: void;
+  reconnect: void;
   syncSettingsChanged: SyncSettings;
   copyLink: string;
   applyResponseLink: string;
@@ -52,6 +53,7 @@ export interface NetworkControlState {
   rtt: number;
   localUserId: string | null;
   participantPermissions: Map<string, ParticipantRole>;
+  reconnectExhausted: boolean;
 }
 
 /** Result of a copy-link operation, used by AppNetworkBridge */
@@ -88,6 +90,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
   private responseTokenInput!: HTMLInputElement;
   private roomCodeInput!: HTMLInputElement;
   private pinCodeInput!: HTMLInputElement;
+  private reconnectPanel!: HTMLElement;
   private errorDisplay!: HTMLElement;
   private infoDisplay!: HTMLElement;
   private mediaSyncPrompt!: HTMLElement;
@@ -119,6 +122,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
       rtt: 0,
       localUserId: null,
       participantPermissions: new Map(),
+      reconnectExhausted: false,
     };
 
     this.boundHandleOutsideClick = (e: MouseEvent) => this.handleOutsideClick(e);
@@ -362,6 +366,10 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     this.disconnectedPanel = this.buildDisconnectedPanel();
     this.panel.appendChild(this.disconnectedPanel);
 
+    // Reconnect exhausted panel (shown instead of disconnected panel when retries exhausted)
+    this.reconnectPanel = this.buildReconnectPanel();
+    this.panel.appendChild(this.reconnectPanel);
+
     // Connecting state panel
     this.connectingPanel = this.buildConnectingPanel();
     this.panel.appendChild(this.connectingPanel);
@@ -552,6 +560,53 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     joinSection.appendChild(joinBtn);
 
     panel.appendChild(joinSection);
+    return panel;
+  }
+
+  private buildReconnectPanel(): HTMLElement {
+    const panel = document.createElement('div');
+    panel.dataset.testid = 'network-reconnect-panel';
+    panel.style.cssText = `
+      padding: 24px 12px;
+      text-align: center;
+      display: none;
+    `;
+
+    const message = document.createElement('div');
+    message.style.cssText = `
+      color: var(--text-secondary);
+      font-size: 12px;
+      margin-bottom: 12px;
+    `;
+    message.textContent = 'Connection lost. Automatic reconnection attempts have been exhausted.';
+    panel.appendChild(message);
+
+    const reconnectBtn = document.createElement('button');
+    reconnectBtn.dataset.testid = 'network-reconnect-button';
+    reconnectBtn.textContent = 'Reconnect';
+    reconnectBtn.style.cssText = `
+      width: 100%;
+      padding: 8px 12px;
+      background: var(--accent-primary);
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      transition: background 0.12s ease;
+    `;
+    reconnectBtn.addEventListener('pointerenter', () => {
+      reconnectBtn.style.background = 'var(--accent-hover)';
+    });
+    reconnectBtn.addEventListener('pointerleave', () => {
+      reconnectBtn.style.background = 'var(--accent-primary)';
+    });
+    reconnectBtn.addEventListener('click', () => {
+      this.emit('reconnect', undefined);
+    });
+    panel.appendChild(reconnectBtn);
+
     return panel;
   }
 
@@ -1026,12 +1081,25 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
       this.state.participantPermissions.clear();
       this.hideInfo();
     }
+    // Clear reconnect exhausted when moving to a non-error state
+    if (state === 'connecting' || state === 'connected' || state === 'reconnecting') {
+      this.state.reconnectExhausted = false;
+    }
     if ((state === 'disconnected' || state === 'error') && this.state.linkedRoomCode) {
       this.state.linkedRoomAutoJoinArmed = true;
     }
     this.updateButtonStyle();
     this.updatePanelVisibility();
     this.updateShareLinkUI();
+  }
+
+  /**
+   * Signal that automatic reconnection retries have been exhausted.
+   * Shows the reconnect button panel instead of the normal disconnected panel.
+   */
+  setReconnectExhausted(exhausted: boolean): void {
+    this.state.reconnectExhausted = exhausted;
+    this.updatePanelVisibility();
   }
 
   setIsHost(isHost: boolean): void {
@@ -1254,10 +1322,13 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
   }
 
   private updatePanelVisibility(): void {
-    const { connectionState } = this.state;
+    const { connectionState, reconnectExhausted } = this.state;
+    const isDisconnectedOrError = connectionState === 'disconnected' || connectionState === 'error';
 
+    // Show reconnect panel when retries are exhausted, otherwise normal disconnected panel
+    this.reconnectPanel.style.display = isDisconnectedOrError && reconnectExhausted ? 'block' : 'none';
     this.disconnectedPanel.style.display =
-      connectionState === 'disconnected' || connectionState === 'error' ? 'block' : 'none';
+      isDisconnectedOrError && !reconnectExhausted ? 'block' : 'none';
     this.connectingPanel.style.display =
       connectionState === 'connecting' || connectionState === 'reconnecting' ? 'block' : 'none';
     this.connectedPanel.style.display =

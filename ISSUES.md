@@ -227,18 +227,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Pipeline teams reading the guide can expect first-class DCC-specific workflows that the shipped browser app does not actually expose as protocol or UI features.
   - The real integration surface is a generic WebSocket media/frame/color bridge, not the richer per-application workflow the docs currently imply.
 
-### 447. The network-sync guide promises a manual reconnect option after retry exhaustion, but the shipped UI exposes none
-
-- Severity: Low
-- Area: Documentation / collaboration recovery UX
-- Evidence:
-  - The network-sync guide says that after 10 failed reconnect attempts, "the system stops retrying and presents a manual reconnect option" in [docs/advanced/network-sync.md](/Users/lifeart/Repos/openrv-web/docs/advanced/network-sync.md#L133) through [docs/advanced/network-sync.md](/Users/lifeart/Repos/openrv-web/docs/advanced/network-sync.md#L137).
-  - When reconnect attempts are exhausted, `NetworkSyncManager` only emits a toast/error pair with `Failed to reconnect. Please try again.` in [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L785) through [src/network/NetworkSyncManager.ts](/Users/lifeart/Repos/openrv-web/src/network/NetworkSyncManager.ts#L794).
-  - The shipped `NetworkControl` has disconnected, connecting, and connected panels, but no reconnect button or dedicated retry action; the disconnected panel only offers create/join flows in [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L350) through [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L544).
-- Impact:
-  - Users following the guide can expect an explicit reconnect affordance that never appears after retry exhaustion.
-  - In practice, recovery falls back to manually recreating or rejoining the room through the generic disconnected UI rather than a dedicated reconnect path.
-
 
 ### 454. The self-hosting docs present static hosting as sufficient, but the shipped collaboration flow still expects separate signaling infrastructure
 

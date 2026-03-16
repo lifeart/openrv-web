@@ -3229,3 +3229,26 @@ Wired into `AppNetworkBridge` (subscribes to syncCursor, usersChanged, userLeft,
 **Files changed**:
 - `src/ui/components/layout/HeaderBar.ts`
 - `src/ui/components/layout/HeaderBar.test.ts`
+
+## Issue #447: Manual reconnect option missing after retry exhaustion
+
+**Root cause**: When `NetworkSyncManager` exhausted reconnect retries, it only emitted a toast/error message. `NetworkControl` had no dedicated reconnect button — the disconnected panel only offered create/join flows, leaving users with no way to retry the last room.
+
+**Fix**:
+- Added `reconnectExhausted` event to `NetworkSyncEvents` in types
+- Added `isReconnectExhausted` getter, `manualReconnect()` method, and `_lastRoomCode`/`_lastRoomAction` tracking to `NetworkSyncManager`
+- Added reconnect panel with a "Reconnect" button to `NetworkControl` (shown instead of the normal disconnected panel when retries are exhausted)
+- Wired through `AppNetworkBridge`: `reconnectExhausted` event shows the panel, `reconnect` button click triggers `manualReconnect()`
+- Exhaustion flag clears on successful `connecting`/`connected`/`reconnecting` state transitions
+
+**Tests added**: 30 regression tests:
+- `ReconnectExhausted.test.ts` (new): 15 tests for exhaustion state, event emission, manual reconnect behavior
+- `NetworkControl.reconnect.test.ts` (new): 15 tests for panel visibility, button behavior, state transitions
+
+**Files changed**:
+- `src/network/types.ts`
+- `src/network/NetworkSyncManager.ts`
+- `src/network/ReconnectExhausted.test.ts` (new)
+- `src/ui/components/NetworkControl.ts`
+- `src/ui/components/NetworkControl.reconnect.test.ts` (new)
+- `src/AppNetworkBridge.ts`

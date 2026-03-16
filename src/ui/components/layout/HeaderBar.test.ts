@@ -1893,7 +1893,6 @@ describe('HeaderBar', () => {
     });
   });
 
-<<<<<<< ours
   describe('rv/gto file open unification (issue #395)', () => {
     it('HDR-U027: .rv file via Open media emits openProject instead of calling loadFromGTO directly', async () => {
       const el = headerBar.render();
@@ -2027,7 +2026,9 @@ describe('HeaderBar', () => {
 
       // EDL takes precedence — session file should NOT trigger openProject
       expect(openProjectSpy).not.toHaveBeenCalled();
-=======
+    });
+  });
+
   describe('shot status badge', () => {
     it('HDR-U030: renders a shot-status-badge element in the header bar', () => {
       const el = headerBar.render();
@@ -2035,21 +2036,23 @@ describe('HeaderBar', () => {
       expect(badge).toBeInstanceOf(HTMLElement);
     });
 
-    it('HDR-U031: badge is hidden when no source is loaded', () => {
+    it('HDR-U031: badge is visible even when no source is loaded (shows default pending)', () => {
       // Create a fresh session with no sources
       const emptySession = new Session();
       const emptyHeader = new HeaderBar(emptySession);
       const el = emptyHeader.render();
       const badge = el.querySelector('[data-testid="shot-status-badge"]') as HTMLElement;
-      expect(badge.style.display).toBe('none');
+      expect(badge.style.display).toBe('inline-flex');
+      const text = badge.querySelector('[data-testid="shot-status-label"]') as HTMLElement;
+      expect(text.textContent).toBe('Pending');
       emptyHeader.dispose();
     });
 
     it('HDR-U032: badge shows "Pending" status by default when a source is loaded', () => {
       const el = headerBar.render();
       const badge = el.querySelector('[data-testid="shot-status-badge"]') as HTMLElement;
-      expect(badge.style.display).toBe('flex');
-      const text = badge.querySelector('[data-testid="shot-status-text"]') as HTMLElement;
+      expect(badge.style.display).toBe('inline-flex');
+      const text = badge.querySelector('[data-testid="shot-status-label"]') as HTMLElement;
       expect(text.textContent).toBe('Pending');
     });
 
@@ -2065,7 +2068,7 @@ describe('HeaderBar', () => {
       session.statusManager.setStatus(0, 'approved', 'tester');
 
       const badge = headerBar.getContainer().querySelector('[data-testid="shot-status-badge"]') as HTMLElement;
-      const text = badge.querySelector('[data-testid="shot-status-text"]') as HTMLElement;
+      const text = badge.querySelector('[data-testid="shot-status-label"]') as HTMLElement;
       const dot = badge.querySelector('[data-testid="shot-status-dot"]') as HTMLElement;
 
       expect(text.textContent).toBe('Approved');
@@ -2077,35 +2080,35 @@ describe('HeaderBar', () => {
       headerBar.render();
       session.statusManager.setStatus(0, 'needs-work', 'tester');
 
-      const text = headerBar.getContainer().querySelector('[data-testid="shot-status-text"]') as HTMLElement;
-      expect(text.textContent).toBe('Needs Revision');
+      const text = headerBar.getContainer().querySelector('[data-testid="shot-status-label"]') as HTMLElement;
+      expect(text.textContent).toBe('Needs Work');
     });
 
     it('HDR-U036: badge updates when status is set to cbb', () => {
       headerBar.render();
       session.statusManager.setStatus(0, 'cbb', 'tester');
 
-      const text = headerBar.getContainer().querySelector('[data-testid="shot-status-text"]') as HTMLElement;
-      expect(text.textContent).toBe('CBB');
+      const text = headerBar.getContainer().querySelector('[data-testid="shot-status-label"]') as HTMLElement;
+      expect(text.textContent).toBe('Could Be Better');
     });
 
     it('HDR-U037: badge updates when status is set to omit', () => {
       headerBar.render();
       session.statusManager.setStatus(0, 'omit', 'tester');
 
-      const text = headerBar.getContainer().querySelector('[data-testid="shot-status-text"]') as HTMLElement;
+      const text = headerBar.getContainer().querySelector('[data-testid="shot-status-label"]') as HTMLElement;
       const dot = headerBar.getContainer().querySelector('[data-testid="shot-status-dot"]') as HTMLElement;
 
       expect(text.textContent).toBe('Omit');
-      // omit color is #ef4444 (red-500)
-      expect(dot.style.background).toBe('rgb(239, 68, 68)');
+      // omit color is #64748b (slate-500)
+      expect(dot.style.background).toBe('rgb(100, 116, 139)');
     });
 
     it('HDR-U038: badge reverts to pending when status is cleared', () => {
       headerBar.render();
       session.statusManager.setStatus(0, 'approved', 'tester');
 
-      const text = headerBar.getContainer().querySelector('[data-testid="shot-status-text"]') as HTMLElement;
+      const text = headerBar.getContainer().querySelector('[data-testid="shot-status-label"]') as HTMLElement;
       expect(text.textContent).toBe('Approved');
 
       session.statusManager.clearStatus(0);
@@ -2141,14 +2144,14 @@ describe('HeaderBar', () => {
       session.statusManager.setStatus(1, 'needs-work', 'tester');
 
       // Initially on source 0
-      const text = headerBar.getContainer().querySelector('[data-testid="shot-status-text"]') as HTMLElement;
+      const text = headerBar.getContainer().querySelector('[data-testid="shot-status-label"]') as HTMLElement;
       expect(text.textContent).toBe('Approved');
 
       // Switch to source 1 by emitting sourceLoaded
       (session as any)._media._currentSourceIndex = 1;
       session.emit('sourceLoaded', {} as any);
 
-      expect(text.textContent).toBe('Needs Revision');
+      expect(text.textContent).toBe('Needs Work');
     });
 
     it('HDR-U041: badge is positioned after the session name display', () => {
@@ -2164,7 +2167,7 @@ describe('HeaderBar', () => {
       headerBar.render();
       const badge = headerBar.getContainer().querySelector('[data-testid="shot-status-badge"]') as HTMLElement;
       const dot = badge.querySelector('[data-testid="shot-status-dot"]');
-      const text = badge.querySelector('[data-testid="shot-status-text"]');
+      const text = badge.querySelector('[data-testid="shot-status-label"]');
 
       expect(dot).toBeInstanceOf(HTMLElement);
       expect(text).toBeInstanceOf(HTMLElement);
@@ -2178,9 +2181,8 @@ describe('HeaderBar', () => {
         { sourceIndex: 0, status: 'omit', setBy: 'admin', setAt: new Date().toISOString() },
       ]);
 
-      const text = headerBar.getContainer().querySelector('[data-testid="shot-status-text"]') as HTMLElement;
+      const text = headerBar.getContainer().querySelector('[data-testid="shot-status-label"]') as HTMLElement;
       expect(text.textContent).toBe('Omit');
->>>>>>> theirs
     });
   });
 });

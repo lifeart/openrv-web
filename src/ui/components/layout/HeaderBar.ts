@@ -26,13 +26,9 @@ import {
 import { Z_INDEX, SHADOWS } from '../shared/theme';
 import { SUPPORTED_MEDIA_ACCEPT, SUPPORTED_PROJECT_ACCEPT } from '../../../utils/media/SupportedMediaFormats';
 import type { LayoutPreset, LayoutPresetId } from '../../layout/LayoutStore';
-<<<<<<< ours
 import { ShotStatusBadge } from '../ShotStatusBadge';
 import { RepresentationSelector } from '../RepresentationSelector';
 import type { VersionGroup } from '../../../core/session/VersionManager';
-=======
-import { STATUS_COLORS, type ShotStatus } from '../../../core/session/StatusManager';
->>>>>>> theirs
 
 export interface HeaderBarEvents extends EventMap {
   showShortcuts: void;
@@ -91,16 +87,12 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   private layoutButton!: HTMLButtonElement;
 
   // Shot status badge
-<<<<<<< ours
   private shotStatusBadge: ShotStatusBadge;
   // Representation selector
   private representationSelector: RepresentationSelector;
   // Version selector
   private versionSelectorContainer!: HTMLElement;
   private _activeVersionMenuCleanup: (() => void) | null = null;
-=======
-  private statusBadge!: HTMLElement;
->>>>>>> theirs
 
   // Overflow fade indicators
   private fadeLeft!: HTMLElement;
@@ -297,7 +289,6 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this.container.appendChild(this.sessionNameDisplay);
 
     // === SHOT STATUS BADGE ===
-<<<<<<< ours
     this.container.appendChild(this.shotStatusBadge.render());
 
     // === REPRESENTATION SELECTOR ===
@@ -306,10 +297,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     // === VERSION SELECTOR ===
     this.versionSelectorContainer = this.createVersionSelector();
     this.container.appendChild(this.versionSelectorContainer);
-=======
-    this.statusBadge = this.createStatusBadge();
-    this.container.appendChild(this.statusBadge);
->>>>>>> theirs
+
 
     // === AUTO-SAVE INDICATOR SLOT ===
     this.autoSaveSlot = document.createElement('div');
@@ -640,7 +628,6 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     }
   }
 
-<<<<<<< ours
   // === VERSION SELECTOR ===
 
   private createVersionSelector(): HTMLElement {
@@ -757,86 +744,6 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     const closeMenu = (e: MouseEvent) => { if (!menu.contains(e.target as Node)) removeMenu(); };
     setTimeout(() => document.addEventListener('click', closeMenu), 0);
     this._activeVersionMenuCleanup = removeMenu;
-=======
-  private createStatusBadge(): HTMLElement {
-    const badge = document.createElement('span');
-    badge.className = 'shot-status-badge';
-    badge.dataset.testid = 'shot-status-badge';
-    badge.style.cssText = `
-      display: none;
-      align-items: center;
-      gap: 4px;
-      padding: 2px 8px;
-      border-radius: 10px;
-      font-size: 10px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      white-space: nowrap;
-      flex-shrink: 0;
-      margin-left: 4px;
-    `;
-
-    // Color dot indicator
-    const dot = document.createElement('span');
-    dot.className = 'shot-status-dot';
-    dot.dataset.testid = 'shot-status-dot';
-    dot.style.cssText = `
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      flex-shrink: 0;
-    `;
-    badge.appendChild(dot);
-
-    // Status text
-    const text = document.createElement('span');
-    text.className = 'shot-status-text';
-    text.dataset.testid = 'shot-status-text';
-    badge.appendChild(text);
-
-    return badge;
-  }
-
-  private getStatusLabel(status: ShotStatus): string {
-    const labels: Record<ShotStatus, string> = {
-      pending: 'Pending',
-      approved: 'Approved',
-      'needs-work': 'Needs Revision',
-      cbb: 'CBB',
-      omit: 'Omit',
-    };
-    return labels[status];
-  }
-
-  private updateStatusBadge(): void {
-    const sourceIndex = this.session.currentSourceIndex;
-    // Only show badge when there is a loaded source (index >= 0 means a source exists)
-    if (sourceIndex < 0 || !this.session.currentSource) {
-      this.statusBadge.style.display = 'none';
-      return;
-    }
-
-    const status = this.session.statusManager.getStatus(sourceIndex);
-    const color = STATUS_COLORS[status];
-    const label = this.getStatusLabel(status);
-
-    const dot = this.statusBadge.querySelector('.shot-status-dot') as HTMLElement;
-    const text = this.statusBadge.querySelector('.shot-status-text') as HTMLElement;
-
-    if (dot) {
-      dot.style.background = color;
-    }
-    if (text) {
-      text.textContent = label;
-    }
-
-    // Set background as a tinted version of the status color
-    this.statusBadge.style.background = `${color}22`;
-    this.statusBadge.style.color = color;
-    this.statusBadge.style.display = 'flex';
-    this.statusBadge.setAttribute('aria-label', `Shot status: ${label}`);
->>>>>>> theirs
   }
 
   private cycleLoopMode(): void {
@@ -1716,9 +1623,6 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this.session.on('playbackSpeedChanged', () => this.updateSpeedButton());
     this.session.on('playbackModeChanged', () => this.updatePlaybackModeButton());
     this.session.on('metadataChanged', () => this.updateSessionNameDisplay());
-    this.session.on('sourceLoaded', () => this.updateStatusBadge());
-    this.session.on('statusChanged', () => this.updateStatusBadge());
-    this.session.on('statusesChanged', () => this.updateStatusBadge());
   }
 
   private updateLayoutButtonState(): void {
@@ -1751,7 +1655,6 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this.updateSpeedButton();
     this.updatePlaybackModeButton();
     this.updateSessionNameDisplay();
-    this.updateStatusBadge();
     return this.wrapper;
   }
 

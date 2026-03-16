@@ -370,6 +370,7 @@ export interface NetworkSyncEvents extends EventMap {
     transferId: string;
     senderUserId: string;
   };
+  reconnectExhausted: void;
   error: ErrorPayload;
   rttUpdated: number;
   toastMessage: { message: string; type: 'info' | 'success' | 'warning' | 'error' };

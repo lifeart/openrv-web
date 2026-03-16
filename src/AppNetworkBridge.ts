@@ -132,6 +132,12 @@ export class AppNetworkBridge {
     );
 
     this.unsubscribers.push(
+      networkControl.on('reconnect', () => {
+        networkSyncManager.manualReconnect();
+      }),
+    );
+
+    this.unsubscribers.push(
       networkControl.on('syncSettingsChanged', (settings) => {
         networkSyncManager.setSyncSettings(settings);
       }),
@@ -474,6 +480,12 @@ export class AppNetworkBridge {
         } else {
           networkControl.showInfo(message);
         }
+      }),
+    );
+
+    this.unsubscribers.push(
+      networkSyncManager.on('reconnectExhausted', () => {
+        networkControl.setReconnectExhausted(true);
       }),
     );
 
