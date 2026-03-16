@@ -34,39 +34,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The integration reduces richer local note workflows to a flat list of plain comments, which weakens production review traceability.
 
 
-
-
-
-### 351. The format-support reference overstates several partially supported formats as if they were fully usable
-
-- Severity: Medium
-- Area: Documentation / format support contract
-- Evidence:
-  - The quick format table presents `EXR` as supporting "multi-view stereo", `Float TIFF` as a supported HDR image format, and `MXF` as a supported video format in [docs/reference/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/reference/file-formats.md#L16), [docs/reference/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/reference/file-formats.md#L20), and [docs/reference/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/reference/file-formats.md#L59).
-  - The FAQ likewise lists `MXF` among supported video formats in [docs/reference/faq.md](/Users/lifeart/Repos/openrv-web/docs/reference/faq.md#L29).
-  - Production stereo wiring is still side-by-side-centric: `Viewer.getStereoPair()` hardcodes `'side-by-side'`, and the `MultiViewEXR` helpers have no production consumer outside barrel exports in [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L3050) through [src/ui/components/Viewer.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/Viewer.ts#L3058) and [src/formats/index.ts](/Users/lifeart/Repos/openrv-web/src/formats/index.ts#L14) through [src/formats/index.ts](/Users/lifeart/Repos/openrv-web/src/formats/index.ts#L20).
-  - The deeper technical guide already admits MXF is metadata-only with "No pixel decode" in [docs/guides/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/guides/file-formats.md#L262) through [docs/guides/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/guides/file-formats.md#L269) and [docs/guides/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/guides/file-formats.md#L418).
-  - Existing decoder/runtime behavior also narrows the practical support envelope further than the top-level table suggests:
-    - valid float TIFF layouts are rejected outside the decoder’s narrow accepted channel/compression cases
-    - EXR multi-view stereo is parsed but not wired to real stereo playback
-    - MXF registration does not mean usable frame decode
-- Impact:
-  - Users reading the top-level support table can assume they can review MXF media or multi-view stereo EXRs end-to-end when the shipped app only provides partial or metadata-level behavior.
-  - That makes the support matrix look more complete than the runtime actually is, which is costly when teams plan media handoff formats around it.
-
-### 356. The overlays guide's `Perspective Grid` section describes composition guides, but production splits those features between Safe Areas and a perspective-correction mesh
-
-- Severity: Medium
-- Area: Documentation / overlay feature model
-- Evidence:
-  - The overlays guide describes a configurable `Perspective Grid` with rule-of-thirds, golden-ratio, custom-grid, and crosshair modes plus color/line-width/diagonal options in [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L150) through [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L167).
-  - The shipped `PerspectiveGridOverlay` is actually a perspective-correction mesh with four draggable corner handles, a fixed 8x8 subdivision count, and fixed colors in [src/ui/components/PerspectiveGridOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PerspectiveGridOverlay.ts#L1) through [src/ui/components/PerspectiveGridOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PerspectiveGridOverlay.ts#L13) and [src/ui/components/PerspectiveGridOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PerspectiveGridOverlay.ts#L78) through [src/ui/components/PerspectiveGridOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/PerspectiveGridOverlay.ts#L104).
-  - The composition-guide pieces the docs mention are instead attached to `SafeAreasOverlay`, which implements rule-of-thirds, center crosshair, aspect-ratio guides, and configurable color/opacity in [src/ui/components/SafeAreasOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SafeAreasOverlay.ts#L1) through [src/ui/components/SafeAreasOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SafeAreasOverlay.ts#L29), [src/ui/components/SafeAreasOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SafeAreasOverlay.ts#L151) through [src/ui/components/SafeAreasOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SafeAreasOverlay.ts#L201), and [src/ui/components/SafeAreasOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SafeAreasOverlay.ts#L307) through [src/ui/components/SafeAreasOverlay.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SafeAreasOverlay.ts#L380).
-  - There is no production evidence for the documented golden-ratio, arbitrary row/column grid, diagonal-line, or line-width options.
-- Impact:
-  - Users are taught to look for one configurable perspective-grid feature, but the shipped app splits part of that into Safe Areas and omits the rest entirely.
-  - That makes both the composition-guide workflow and the perspective-correction workflow harder to discover because the docs collapse them into a feature model the UI does not match.
-
 ### 359. The network-sync guide overstates generic one-click joining from share URLs
 
 - Severity: Medium
@@ -79,47 +46,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - Users can rely on the docs for generic one-click join behavior that only works for narrower URL shapes than the guide implies.
   - When a copied link does not auto-join or a malformed invite opens silently, the app appears unreliable instead of merely under-documented.
-
-### 361. The stabilization docs describe controls and viewer progress UI that the shipped stabilization panel does not provide
-
-- Severity: Medium
-- Area: Documentation / stabilization workflow
-- Evidence:
-  - The effects guide describes a short pre-analysis pass with a progress indicator in the viewer, and lists translation and rotation enable/disable controls in [docs/advanced/filters-effects.md](/Users/lifeart/Repos/openrv-web/docs/advanced/filters-effects.md#L85) through [docs/advanced/filters-effects.md](/Users/lifeart/Repos/openrv-web/docs/advanced/filters-effects.md#L90).
-  - The shipped `StabilizationControl` only exposes three user-facing controls: `Enabled`, `Smoothing Strength`, and `Crop Amount` in [src/ui/components/StabilizationControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/StabilizationControl.ts#L158) through [src/ui/components/StabilizationControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/StabilizationControl.ts#L203).
-  - A production-code search finds no viewer-side stabilization progress indicator or progress UI path.
-  - The underlying effect adapter does still mention `stabilizationAutoMotion`, but there is no corresponding shipped panel control for the documented translation/rotation toggles in [src/effects/adapters/StabilizationEffect.ts](/Users/lifeart/Repos/openrv-web/src/effects/adapters/StabilizationEffect.ts#L13) through [src/effects/adapters/StabilizationEffect.ts#L18).
-- Impact:
-  - Users following the stabilization docs can look for controls and progress feedback that the shipped panel never surfaces.
-  - That makes stabilization feel incomplete or broken in production even when the simpler crop/smoothing implementation is working as designed.
-
-
-### 365. The session-management docs tell users to delete auto-save entries from the Snapshot Panel, but that panel does not manage auto-saves
-
-- Severity: Medium
-- Area: Documentation / session-storage cleanup
-- Evidence:
-  - The session-management guide says, "To free storage, delete old snapshots and auto-save entries from the Snapshot Panel" in [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L180) through [docs/advanced/session-management.md#L186).
-  - The shipped `SnapshotPanel` is a snapshot browser with `Create Snapshot`, `Import`, and per-snapshot restore/export/delete actions in [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L1) through [src/ui/components/SnapshotPanel.ts#L10) and [src/ui/components/SnapshotPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/SnapshotPanel.ts#L187) through [src/ui/components/SnapshotPanel.ts#L249).
-  - The underlying `SnapshotManager` models manual snapshots and auto-checkpoints, not `AutoSaveManager` entries, in [src/core/session/SnapshotManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SnapshotManager.ts#L5) through [src/core/session/SnapshotManager.ts#L24) and [src/core/session/SnapshotManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SnapshotManager.ts#L121) through [src/core/session/SnapshotManager.ts#L183).
-  - The same docs page separately describes a `History Panel` as the place for auto-save history and recovery in [docs/advanced/session-management.md](/Users/lifeart/Repos/openrv-web/docs/advanced/session-management.md#L190) through [docs/advanced/session-management.md#L199), which does not match the shipped history UI either.
-- Impact:
-  - Users trying to free storage via the documented panel cannot actually remove auto-save entries there, because that panel only manages snapshots and auto-checkpoints.
-  - That makes a concrete maintenance workflow in the docs impossible to complete from the named UI.
-
-
-### 446. The DCC guide overstates app-specific Nuke, Maya, and Houdini workflows that the shipped bridge does not model
-
-- Severity: Medium
-- Area: Documentation / DCC feature scope
-- Evidence:
-  - The DCC guide presents concrete app-specific features such as Nuke node-selection sync and flipbook replacement, Maya camera sync and shot-context push, and Houdini flipbook/MPlay integration in [docs/advanced/dcc-integration.md](/Users/lifeart/Repos/openrv-web/docs/advanced/dcc-integration.md#L33) through [docs/advanced/dcc-integration.md](/Users/lifeart/Repos/openrv-web/docs/advanced/dcc-integration.md#L61).
-  - The actual shipped bridge protocol only exposes four inbound message types (`loadMedia`, `syncFrame`, `syncColor`, `ping`) and a small outbound set (`frameChanged`, `colorChanged`, `annotationAdded`, `pong`, `error`) in [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L23) through [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L27) and [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L112) through [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L117).
-  - App wiring only connects those generic media/frame/color/annotation paths in [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L172) through [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L280), and a production-code search finds no Nuke-, Maya-, or Houdini-specific bridge module or runtime feature layer.
-- Impact:
-  - Pipeline teams reading the guide can expect first-class DCC-specific workflows that the shipped browser app does not actually expose as protocol or UI features.
-  - The real integration surface is a generic WebSocket media/frame/color bridge, not the richer per-application workflow the docs currently imply.
-
 
 ### 454. The self-hosting docs present static hosting as sufficient, but the shipped collaboration flow still expects separate signaling infrastructure
 
@@ -500,49 +426,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The sequence docs present one fixed playback response to gaps, but the shipped app treats missing frames as a user-selectable viewer policy.
   - Users reading those guides can expect hold-last-frame playback even when the default runtime behavior is different.
 
-### 508. The file-format guide still says RV/GTO import reconstructs the complete node graph, but the live importer remains lossy
-
-- Severity: Medium
-- Area: Documentation / RV-GTO compatibility
-- Evidence:
-  - The file-format guide says OpenRV Web can “load and reconstruct the complete node graph” from RV/GTO files in [docs/guides/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/guides/file-formats.md#L342).
-  - The same section presents “Graph reconstruction” as a supported capability in [docs/guides/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/guides/file-formats.md#L344).
-  - The live importer still records skipped nodes and degraded modes during RV/GTO load in [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L396) through [src/core/session/SessionGraph.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionGraph.ts#L412).
-  - `GTOGraphLoader` only maps a limited subset of node protocols, and unsupported-but-recognized nodes are explicitly skipped in [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L474) through [src/core/session/GTOGraphLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/GTOGraphLoader.ts#L606).
-  - The current issue inventory already has concrete runtime losses from that path, including skipped mapped nodes in [ISSUES.md](/Users/lifeart/Repos/openrv-web/ISSUES.md#L227), downgraded stack modes in [ISSUES.md](/Users/lifeart/Repos/openrv-web/ISSUES.md#L279), and unsurfaced import diagnostics in [ISSUES.md](/Users/lifeart/Repos/openrv-web/ISSUES.md#L3425).
-- Impact:
-  - The guide overstates RV/GTO interchange fidelity and makes the import path sound lossless.
-  - Users can trust imported sessions more than the runtime actually warrants, especially when complex RV graphs are involved.
-
-### 509. The file-format guide still describes `.orvproject` as complete viewer state with node-graph topology, but the serializer tracks known gaps and leaves `graph` unwired
-
-- Severity: Medium
-- Area: Documentation / native session format
-- Evidence:
-  - The file-format guide says `.orvproject` is “a JSON-based file containing the complete viewer state” in [docs/guides/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/guides/file-formats.md#L367).
-  - The same section lists `node graph topology` in the serialized content in [docs/guides/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/guides/file-formats.md#L371).
-  - `SessionSerializer` explicitly tracks multiple viewer-state serialization gaps, including OCIO, display profile, gamut mapping, curves, tone mapping, stereo state, compare state, and several Effects-tab controls, in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L67) through [src/core/session/SessionSerializer.ts#L220).
-  - The live serializer also documents that the `graph` field exists in the schema but is still unwired in `.orvproject` save/load in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L328) through [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L333).
-  - The current issue inventory already contains the corresponding runtime defects: known serialization gaps in [ISSUES.md](/Users/lifeart/Repos/openrv-web/ISSUES.md#L3374), and missing graph persistence in [ISSUES.md](/Users/lifeart/Repos/openrv-web/ISSUES.md#L1467) and [ISSUES.md](/Users/lifeart/Repos/openrv-web/ISSUES.md#L3388).
-- Impact:
-  - The docs present `.orvproject` as a fuller fidelity format than the serializer actually implements.
-  - Users can save projects expecting complete state recovery, then reopen into a materially reduced session.
-
-### 510. The file-format guide still presents OTIO import as clips, gaps, transitions, and track mapping, but the live app flattens it to the first video track’s clip list
-
-- Severity: Medium
-- Area: Documentation / OTIO import fidelity
-- Evidence:
-  - The file-format guide says OTIO import supports “clips, gaps, and transitions” in [docs/guides/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/guides/file-formats.md#L359).
-  - The same section says “OTIO tracks map to sequence groups” in [docs/guides/file-formats.md](/Users/lifeart/Repos/openrv-web/docs/guides/file-formats.md#L362).
-  - The shipped `parseOTIO(...)` helper is explicitly “single-track, backward-compatible” and “returns clips from the first video track only” in [src/utils/media/OTIOParser.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/OTIOParser.ts#L315) through [src/utils/media/OTIOParser.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/OTIOParser.ts#L333).
-  - The only production import path, `PlaylistManager.fromOTIO(...)`, consumes that single-track parse result and imports each clip via `addClip(...)` into a linear playlist in [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L671) through [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L703).
-  - The richer `parseOTIOMultiTrack(...)` path exists separately, but the live import path does not use it in [src/utils/media/OTIOParser.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/OTIOParser.ts#L340) through [src/utils/media/OTIOParser.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/OTIOParser.ts#L382).
-- Impact:
-  - The guide makes OTIO ingest sound structurally richer than the shipped import path actually is.
-  - Editorial users can expect gaps, transitions, and multi-track layout to survive import when production still collapses them into a simple clip sequence.
-
-
 ### 517. The image-sequences guide still describes per-frame blob-URL lifecycle, but the live sequence loader decodes files directly and never creates `frame.url`
 
 - Severity: Low
@@ -568,20 +451,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - The docs make literal pattern strings look like a real ingest format when the shipped app still expects concrete numbered files.
   - Integrations or users that hand the app `shot.####.exr` or `frame.%04d.exr` can reasonably expect sequence loading and instead hit unrelated image-URL or unsupported-file behavior.
-
-
-### 524. `.orvproject` restore reloads saved image URLs through `session.loadImage(...)`, so remote decoder-backed images do not round-trip through the project path
-
-- Severity: Medium
-- Area: Project persistence / URL-backed media restore
-- Evidence:
-  - During project load, `SessionSerializer.fromJSON(...)` restores every saved `ref.type === 'image'` entry by calling `await session.loadImage(ref.name, ref.path)` in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L510) through [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L513).
-  - `session.loadImage(...)` uses the plain `HTMLImageElement` URL path rather than the decoder-backed `FileSourceNode` pipeline, as shown in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L429) through [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L456).
-  - The decoder-backed image path lives in `loadImageFile(...)` / `FileSourceNode.loadFile(...)` instead in [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L468) through [src/core/session/SessionMedia.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionMedia.ts#L515).
-  - This is the same underlying capability gap already recorded for share-link and DCC URL loading in [ISSUES.md](/Users/lifeart/Repos/openrv-web/ISSUES.md#L5160), but project restore hardcodes that same weaker path inside the persistence layer.
-- Impact:
-  - A project file that references remote EXR, float TIFF, RAW-preview, or other decoder-backed image URLs can reopen through a different and weaker load path than the original session used.
-  - That makes `.orvproject` URL-backed media restore less faithful than users would expect from a save/load round-trip.
 
 ### 525. The DCC `loadMedia` protocol advertises “file path or URL,” but the browser-side loader just forwards raw paths into `img.src` / `video.src`
 
@@ -673,19 +542,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - A shared URL can reconstruct only the base media plus viewer state, not the actual active representation/variant a user was reviewing.
   - That makes representation-based review state non-shareable across the app’s URL and collaboration entry points even though project save/load tries to preserve it.
-
-### 554. The public playback/event API stays clip-local in playlist mode and never exposes the global playlist timeline the UI is actually using
-
-- Severity: Medium
-- Area: Public API / playlist runtime
-- Evidence:
-  - When the app jumps within a playlist, it stores the playlist-global frame in `playlistManager.setCurrentFrame(globalFrame)` but seeks the session to the clip-local frame via `session.goToFrame(mapping.localFrame)` in [src/services/FrameNavigationService.ts](/Users/lifeart/Repos/openrv-web/src/services/FrameNavigationService.ts#L225) through [src/services/FrameNavigationService.ts#L235) and [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L875) through [src/AppPlaybackWiring.ts#L885).
-  - `PlaybackAPI.getCurrentFrame()` returns `this.session.currentFrame` and `PlaybackAPI.getTotalFrames()` returns `this.session.currentSource?.duration`, both of which are clip-local values in that runtime model, in [src/api/PlaybackAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/PlaybackAPI.ts#L253) through [src/api/PlaybackAPI.ts#L270).
-  - The public `frameChange` event is likewise bridged directly from `session.on('frameChanged', ...)` in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L234) through [src/api/EventsAPI.ts#L237), so event consumers also see only the clip-local frame domain.
-  - The real playlist-global frame lives only in `PlaylistManager.getCurrentFrame()` / `getTotalDuration()` in [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L427) through [src/core/session/PlaylistManager.ts#L511), and the public API has no playlist module that exposes those values.
-- Impact:
-  - Automation or external review tools querying `openrv.playback` during playlist review get per-clip frame numbers and durations even while the UI/timeline is operating in playlist-global frame space.
-  - That makes scripting against playlist sessions fundamentally ambiguous: external code cannot reconstruct the same frame position the user is actually seeing from the public API alone.
 
 ### 563. The generated API reference is pinned to an old GitHub commit, so its “Defined in” links can disagree with the checked-in source tree
 

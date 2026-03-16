@@ -3493,3 +3493,84 @@ Wired into `AppNetworkBridge` (subscribes to syncCursor, usersChanged, userLeft,
 - `src/AppDCCWiring.ts`
 - `src/AppDCCWiring.test.ts`
 - `docs/advanced/dcc-integration.md`
+
+## Issue #351: The format-support reference overstates several partially supported formats as if they were fully usable
+
+**Fix**: Corrected `docs/reference/file-formats.md` and `docs/reference/faq.md` to accurately reflect support levels. EXR multi-view stereo is wired to stereo renderer via separate input format (not "hardcoded to side-by-side"). Float TIFF described as float-only (16/32/64-bit) with JPEG compression unsupported. MXF marked as metadata-only with no pixel decode. MXF removed from FAQ supported video formats list.
+
+**Files changed**:
+- `docs/reference/file-formats.md`
+- `docs/reference/faq.md`
+
+## Issue #356: The overlays guide's Perspective Grid section describes composition guides, but production splits those features between Safe Areas and a perspective-correction mesh
+
+**Fix**: Rewrote the Perspective Grid section in `docs/advanced/overlays.md` to accurately describe the perspective-correction mesh (4 draggable corner handles, 8x8 subdivision grid, fixed light blue color). Removed false claims about golden-ratio, arbitrary grid, diagonal-line, and line-width options. Added cross-reference to Safe Areas section for composition guides.
+
+**Files changed**:
+- `docs/advanced/overlays.md`
+
+## Issue #361: The stabilization docs describe controls and viewer progress UI that the shipped stabilization panel does not provide
+
+**Fix**: Replaced false claims about translation/rotation toggles and viewer progress indicator with the three actual shipped controls: Enabled, Smoothing Strength (0-100), and Crop Amount (0-64). Noted API-only params (`stabilizationAutoMotion`, `stabilizationDx`, `stabilizationDy`) for advanced users.
+
+**Files changed**:
+- `docs/advanced/filters-effects.md`
+
+## Issue #365: The session-management docs tell users to delete auto-save entries from the Snapshot Panel, but that panel does not manage auto-saves
+
+**Fix**: Corrected storage cleanup instructions: Snapshot Panel manages snapshots/auto-checkpoints only. Auto-save entries are pruned automatically by `AutoSaveManager.pruneOldVersions()` based on `maxVersions` config (default 10). Corrected History Panel section to separate snapshot management from auto-save crash recovery (startup recovery prompt via `recoveryAvailable` event).
+
+**Files changed**:
+- `docs/advanced/session-management.md`
+
+## Issue #446: The DCC guide overstates app-specific Nuke, Maya, and Houdini workflows that the shipped bridge does not model
+
+**Fix**: Clarified that OpenRV Web ships a generic WebSocket bridge protocol, not DCC-specific integrations. Renamed "Supported Applications" to "Example DCC Integration Patterns". Reframed Nuke/Maya/Houdini sections as example patterns pipeline teams would implement using the actual protocol messages (`loadMedia`, `syncFrame`, `syncColor`, etc.).
+
+**Files changed**:
+- `docs/advanced/dcc-integration.md`
+
+## Issue #508: The file-format guide still says RV/GTO import reconstructs the complete node graph, but the live importer remains lossy
+
+**Fix**: Replaced "complete node graph reconstruction" with accurate best-effort description. Documented that nodes are only reconstructed when a mapped implementation exists, others are skipped. Noted that blend mode downgrade infrastructure is scaffolded but not yet active. Added `skippedNodes` diagnostics reference.
+
+**Files changed**:
+- `docs/guides/file-formats.md`
+
+## Issue #509: The file-format guide still describes `.orvproject` as complete viewer state with node-graph topology, but the serializer tracks known gaps
+
+**Fix**: Replaced "complete viewer state" with "majority of the viewer state, though some subsystems are not yet serialized". Added comprehensive Known serialization gaps list: OCIO, display profile, gamut mapping, color inversion, curves, tone mapping, stereo state, compare state (difference matte, blend mode), ghost frames, channel isolation, and Effects-tab controls. Referenced `getSerializationGaps()` as authoritative source. Confirmed node graph topology IS actually wired.
+
+**Files changed**:
+- `docs/guides/file-formats.md`
+
+## Issue #510: The file-format guide still presents OTIO import as clips, gaps, transitions, and track mapping, but the live app flattens it to the first video track's clip list
+
+**Fix**: Documented that live import reads first video track only and linearizes clips. Accurately described transition import into TransitionManager, gap parsing (stored in metadata but not playlist-represented), marker support (timeline and clip-level), and that `parseOTIOMultiTrack()` API exists but only first track is used. Qualified NLE interchange as "single-track editorial workflows".
+
+**Files changed**:
+- `docs/guides/file-formats.md`
+
+## Issue #524: `.orvproject` restore reloads saved image URLs through `session.loadImage(...)`, so remote decoder-backed images do not round-trip through the project path
+
+**Fix**: Added `decoderBacked` flag to `MediaReference` interface. Save path sets flag when source has `fileSourceNode`. Restore path routes decoder-backed remote URLs (http/https) through `session.loadSourceFromUrl()` (FileSourceNode pipeline) instead of plain `loadImage()` (HTMLImageElement). Extension-based fallback detection for backward compatibility with older project files.
+
+**Tests added**: 12 regression tests covering save/restore routing, extension detection, backward compatibility, mixed media, and round-trip serialization.
+
+**Files changed**:
+- `src/core/session/SessionState.ts`
+- `src/core/session/SessionSerializer.ts`
+- `src/core/session/SessionSerializer.issue524.test.ts`
+
+## Issue #554: The public playback/event API stays clip-local in playlist mode and never exposes the global playlist timeline
+
+**Fix**: Made `PlaybackAPI.getCurrentFrame()` and `getTotalFrames()` playlist-aware — they return global playlist frame/duration when playlist is active, clip-local otherwise. Added `isPlaylistActive()`, `getClipFrame()`, `getClipDuration()` for explicit access. Made `EventsAPI` `frameChange` event playlist-aware. Wired `PlaylistManager` through `OpenRVAPI` config. Fully backward compatible when no PlaylistManager is provided.
+
+**Tests added**: 22 regression tests covering playlist-active, inactive, toggling, explicit clip-local accessors, no-playlist-manager, and event emission scenarios.
+
+**Files changed**:
+- `src/api/PlaybackAPI.ts`
+- `src/api/EventsAPI.ts`
+- `src/api/OpenRVAPI.ts`
+- `src/api/PlaybackAPI.playlist.test.ts`
+- `src/api/EventsAPI.playlist.test.ts`
