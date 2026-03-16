@@ -365,11 +365,12 @@ OpenTimelineIO is the ASWF standard for editorial timeline interchange:
 
 ### .orvproject (Native Session Format)
 
-OpenRV Web's native session format is a JSON-based file containing the complete viewer state:
+OpenRV Web's native session format is a JSON-based file containing the majority of the viewer state, though some subsystems are not yet serialized:
 
 - **Serializer**: `SessionSerializer.ts` handles save/load with migration support
 - **Schema version**: Currently version 2, with automatic migration from version 1
-- **Content**: Media references, playback state, annotations, view transform, color adjustments, CDL values, filter settings, 2D transforms, crop, lens distortion, wipe state, layer stack, LUT reference, playlist, notes, version groups, statuses, and node graph topology
+- **Serialized state**: Media references, playback state, annotations, view transform, color adjustments, CDL values, filter settings, 2D transforms, crop, lens distortion, wipe state, layer stack, LUT reference, playlist, notes, version groups, statuses, node graph topology, and EDL entries
+- **Known serialization gaps**: The serializer explicitly tracks viewer states that are **not** persisted and will revert to defaults on reload. Major gaps include: OCIO configuration, display profile (transfer function, display gamma), gamut mapping, color inversion, curves, tone mapping, stereo state (mode, eye transforms, align mode), ghost frames, channel isolation mode, compare state (difference matte, blend mode), and several Effects-tab controls (deinterlace, film emulation, perspective correction, stabilization, uncrop). The `SessionSerializer.getSerializationGaps()` method returns the full list with per-item active/inactive status so the UI can warn users before saving
 - **Blob URL handling**: Local file references use blob URLs which are session-specific. The serializer detects these, sets `requiresReload: true`, and prompts the user to re-select files when loading
 
 ### CMX3600 EDL Export
