@@ -1,11 +1,11 @@
 # DCC Integration
 
-OpenRV Web provides a bridge for connecting to Digital Content Creation (DCC) applications, enabling bidirectional communication between the viewer and tools such as Nuke, Maya, and Houdini. This integration allows artists to send frames from their compositing or 3D application directly to the browser-based viewer, and to push review notes and status updates back to the DCC or production tracking systems.
+OpenRV Web ships a **generic WebSocket bridge** for connecting to Digital Content Creation (DCC) applications. The bridge provides a small, application-agnostic message protocol for loading media, synchronizing frames, syncing color settings, and receiving annotations/notes. It is not tied to any specific DCC tool -- the same protocol works with Nuke, Maya, Houdini, or any application that can open a WebSocket and send JSON messages.
 
 ---
 
 ::: tip Who uses this
-Compositors, lighters, and animators use DCC integration for seamless roundtrip review with Nuke, Maya, and Houdini. Push a frame from your comp directly to OpenRV Web, check it with scopes and the show LUT, then send annotations back -- without saving files or switching applications.
+Compositors, lighters, and animators use the DCC bridge for roundtrip review. A bridge server running alongside the DCC application can push frames to OpenRV Web for review with scopes and the show LUT, and receive annotations back -- without saving files or switching applications. The bridge server is something your pipeline or TD team builds for each DCC tool; OpenRV Web provides the viewer-side protocol.
 :::
 
 ## DCC Bridge Architecture
@@ -79,37 +79,39 @@ When OpenRV Web starts, it resolves the DCC endpoint in this order:
 
 ---
 
-## Supported Applications
+## Example DCC Integration Patterns
+
+The sections below describe **example integration patterns** that a pipeline or TD team could build on the DCC side using the generic bridge protocol. OpenRV Web does **not** ship Nuke-, Maya-, or Houdini-specific bridge modules -- these are reference designs showing how the four inbound commands (`loadMedia`, `syncFrame`, `syncColor`, `ping`) and the outbound events (`frameChanged`, `colorChanged`, `annotationAdded`, `noteAdded`) can be wired to DCC-specific workflows.
 
 ### Nuke
 
-The Nuke bridge supports:
+A Nuke-side bridge server (e.g., a Python plugin using `nuke.callbacks`) could implement:
 
-- **Send to viewer**: Render the current frame or frame range from Nuke and push the result to OpenRV Web for review. Supports EXR output with AOV layers.
-- **Flipbook replacement**: Use OpenRV Web as an external flipbook viewer, replacing Nuke's built-in viewer for playback and color analysis.
-- **Node selection sync**: Selecting a Read or Write node in Nuke can automatically load the corresponding media in OpenRV Web.
-- **Annotation round-trip**: Annotations created in OpenRV Web can be sent back to Nuke as overlay data for reference during compositing.
+- **Send to viewer**: Render the current frame or frame range and send a `loadMedia` message with the output path so OpenRV Web loads the result for review.
+- **Flipbook replacement**: Route flipbook renders to a local path and send `loadMedia`, using OpenRV Web as an external flipbook viewer instead of Nuke's built-in one.
+- **Node selection sync**: Listen for node selection changes in Nuke's callback system and send `loadMedia` with the selected Read/Write node's file path.
+- **Annotation round-trip**: Listen for `annotationAdded` events from the bridge and convert them into Nuke overlay data for reference during compositing.
 
 ### Maya
 
-The Maya bridge supports:
+A Maya-side bridge server (e.g., a Python plugin using `maya.cmds` / `maya.api`) could implement:
 
-- **Playblast to viewer**: Capture a playblast from the Maya viewport and send it to OpenRV Web for frame-accurate review.
-- **Camera sync**: Synchronize the Maya camera with the OpenRV Web viewer for look-through comparison.
-- **Shot context**: Push the current shot name, frame range, and camera metadata to OpenRV Web for display in the header and overlays.
+- **Playblast to viewer**: Capture a playblast and send `loadMedia` with the output path for frame-accurate review in OpenRV Web.
+- **Camera sync**: Map Maya camera changes to `syncFrame` messages, or use `syncColor` to push exposure/gamma values matching the Maya viewport.
+- **Shot context**: Encode shot name and frame range into `loadMedia` messages so OpenRV Web displays the correct context.
 
 ### Houdini
 
-The Houdini bridge supports:
+A Houdini-side bridge server (e.g., a Python SOP/ROP callback or shelf tool) could implement:
 
-- **Render to viewer**: Send Mantra, Karma, or other renderer output directly to OpenRV Web.
-- **Flipbook integration**: Route Houdini's MPlay output to OpenRV Web instead.
-- **Metadata pass-through**: Propagate render metadata (render time, memory usage, sample count) to the OpenRV Web info display.
+- **Render to viewer**: Send `loadMedia` after a Mantra, Karma, or other render completes, pointing to the output file.
+- **Flipbook integration**: Route Houdini's MPlay output path to a `loadMedia` message, using OpenRV Web as the flipbook viewer.
+- **Frame sync**: Use `syncFrame` to keep the Houdini and OpenRV Web timelines in lockstep during playback.
 
 ---
 
 ::: tip VFX Use Case
-The Nuke bridge replaces the traditional "render, save, open in RV" workflow with a direct push from the comp to the viewer. Compositors can send the current frame from Nuke to OpenRV Web to immediately check it with scopes, false color, and the show LUT -- without leaving Nuke. For Maya, routing playblasts directly to OpenRV Web gives animators frame-accurate review with timecode and markers, which the built-in Maya playblast viewer does not support.
+With a DCC-side bridge server in place, the traditional "render, save, open in RV" workflow becomes a direct push from the comp to the viewer. A compositor's Nuke plugin can send `loadMedia` after rendering a frame, and OpenRV Web immediately displays it with scopes, false color, and the show LUT -- without leaving Nuke. Similarly, a Maya bridge plugin can route playblasts directly to OpenRV Web for frame-accurate review.
 :::
 
 ::: info Pipeline Note
@@ -145,7 +147,7 @@ OpenRV Web sends the following event types back to the DCC application:
 | `ping` | Outbound heartbeat sent by the bridge for connection health monitoring. |
 | `pong` | Heartbeat response to an inbound `ping`. |
 
-These outbound messages enable workflows where an artist reviews in the browser and the DCC application responds -- for example, jumping Nuke's viewer to the same frame, or recording review notes directly in the DCC project file.
+These outbound messages allow a DCC-side bridge server to react to viewer activity -- for example, a Nuke plugin could listen for `frameChanged` to keep its viewer in sync, or record `noteAdded` events as annotations in the project file. What the DCC side does with these events is up to the bridge server implementation.
 
 ---
 
