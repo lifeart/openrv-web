@@ -21,15 +21,21 @@ export class VideoRepresentationLoader implements RepresentationLoader {
   async load(representation: MediaRepresentation): Promise<RepresentationLoadResult> {
     const config = representation.loaderConfig;
     const file = config.file;
-    const path = config.path ?? file?.name ?? 'unknown';
+    const url = config.url ?? config.path;
+    const path = config.path ?? file?.name ?? url ?? 'unknown';
     const fps = config.fps ?? 24;
 
-    if (!file) {
-      throw new Error(`VideoRepresentationLoader: no file provided for "${path}"`);
+    if (!file && !url) {
+      throw new Error(`VideoRepresentationLoader: no file or url provided for "${path}"`);
     }
 
     const videoSourceNode = new VideoSourceNode(path);
-    await videoSourceNode.loadFile(file, fps, this._hdrResizeTier);
+
+    if (file) {
+      await videoSourceNode.loadFile(file, fps, this._hdrResizeTier);
+    } else {
+      await videoSourceNode.load(url!, path, fps, this._hdrResizeTier);
+    }
 
     this._sourceNode = videoSourceNode;
 

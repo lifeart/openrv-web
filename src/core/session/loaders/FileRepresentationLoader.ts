@@ -15,14 +15,20 @@ export class FileRepresentationLoader implements RepresentationLoader {
   async load(representation: MediaRepresentation): Promise<RepresentationLoadResult> {
     const config = representation.loaderConfig;
     const file = config.file;
-    const path = config.path ?? file?.name ?? 'unknown';
+    const url = config.url ?? config.path;
+    const path = config.path ?? file?.name ?? url ?? 'unknown';
 
-    if (!file) {
-      throw new Error(`FileRepresentationLoader: no file provided for "${path}"`);
+    if (!file && !url) {
+      throw new Error(`FileRepresentationLoader: no file or url provided for "${path}"`);
     }
 
     const fileSourceNode = new FileSourceNode(path);
-    await fileSourceNode.loadFile(file);
+
+    if (file) {
+      await fileSourceNode.loadFile(file);
+    } else {
+      await fileSourceNode.load(url!, path);
+    }
 
     this._sourceNode = fileSourceNode;
 
