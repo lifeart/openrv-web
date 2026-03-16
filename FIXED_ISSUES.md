@@ -3291,3 +3291,16 @@ Wired into `AppNetworkBridge` (subscribes to syncCursor, usersChanged, userLeft,
 - `src/export/ReportExporter.ts`
 - `src/export/ReportExporter.test.ts`
 - `src/AppPlaybackWiring.ts`
+
+## Issue #319: Dailies reports omit core session metadata and category statistics
+
+**Root cause**: `ReportOptions` only carried `title` and `dateRange`. HTML/CSV output had no session metadata (date, supervisor, project) and no category-based statistics (total shots, approval rate, counts by status).
+
+**Fix**: Extended `ReportOptions` with `sessionDate`, `supervisorName`, `projectId`. Added `ReportStatistics` interface and `computeReportStatistics()` function. Updated `generateCSV()` with metadata preamble and statistics rows before the data table. Updated `generateHTML()` with metadata div and statistics div. Wired `sessionDate` and `projectId` from `AppPlaybackWiring`.
+
+**Tests added**: 8 new tests covering `computeReportStatistics` (totals, 0%, 100%), HTML metadata presence/absence/statistics, CSV preamble/statistics.
+
+**Files changed**:
+- `src/export/ReportExporter.ts`
+- `src/export/ReportExporter.test.ts`
+- `src/AppPlaybackWiring.ts`

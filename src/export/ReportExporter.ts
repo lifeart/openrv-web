@@ -41,6 +41,46 @@ export interface ReportOptions {
   includeVersions: boolean;
   title: string;
   dateRange?: string;
+  /** Session date (ISO 8601 or display string) */
+  sessionDate?: string;
+  /** Name of the supervisor running the review */
+  supervisorName?: string;
+  /** Project identifier (e.g. session displayName or project code) */
+  projectId?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Category-based statistics
+// ---------------------------------------------------------------------------
+
+export interface ReportStatistics {
+  /** Total number of shots reviewed (rows in the report) */
+  totalShots: number;
+  /** Number of shots with 'approved' status */
+  approvedCount: number;
+  /** Approval rate as a percentage (0-100), rounded to one decimal */
+  approvalRate: number;
+  /** Counts per status category */
+  countsByStatus: Record<string, number>;
+}
+
+/**
+ * Compute category-based statistics from report rows.
+ */
+export function computeReportStatistics(rows: ReportRow[]): ReportStatistics {
+  const totalShots = rows.length;
+  const countsByStatus: Record<string, number> = {};
+
+  for (const row of rows) {
+    countsByStatus[row.status] = (countsByStatus[row.status] ?? 0) + 1;
+  }
+
+  const approvedCount = countsByStatus['approved'] ?? 0;
+  const approvalRate = totalShots > 0
+    ? Math.round((approvedCount / totalShots) * 1000) / 10
+    : 0;
+
+  return { totalShots, approvedCount, approvalRate, countsByStatus };
 }
 
 // ---------------------------------------------------------------------------
@@ -151,7 +191,13 @@ function buildRowForSource(
   const setAt = statusEntry?.setAt ?? '';
 
   // Notes
-  const notes = noteManager.getNotesForSource(sourceIndex).map((n) => n.text);
+  const rawNotes = noteManager.getNotesForSource(sourceIndex);
+  const notes = rawNotes.map((n) => n.text);
+  const noteEntries: ReportNoteEntry[] = rawNotes.map((n) => ({
+    text: n.text,
+    priority: n.priority ?? 'medium',
+    category: n.category ?? '',
+  }));
 
   // Frame range using editorial start frame
   const startFrame = source.startFrame ?? 1;
@@ -171,6 +217,7 @@ function buildRowForSource(
     versionLabel,
     status,
     notes,
+    noteEntries,
     frameRange,
     timecodeIn: tcIn,
     timecodeOut: tcOut,
@@ -208,56 +255,12 @@ export function buildReportRows(
     return rows;
   }
 
-<<<<<<< ours
-    // Status
-    const status = statusManager.getStatus(i);
-    const statusEntry = statusManager.getStatusEntry(i);
-    const setBy = statusEntry?.setBy ?? '';
-    const setAt = statusEntry?.setAt ?? '';
-
-    // Notes
-    const rawNotes = noteManager.getNotesForSource(i);
-    const notes = rawNotes.map((n) => n.text);
-    const noteEntries: ReportNoteEntry[] = rawNotes.map((n) => ({
-      text: n.text,
-      priority: n.priority ?? 'medium',
-      category: n.category ?? '',
-    }));
-
-    // Frame range using editorial start frame
-    const startFrame = source.startFrame ?? 1;
-    const frameIn = startFrame;
-    const frameOut = startFrame + duration - 1;
-    const frameRange = duration > 0 ? `${frameIn}-${frameOut}` : '';
-
-    // Timecodes (TC Out is exclusive: first frame after last)
-    const tcIn = formatTimecode(frameToTimecode(frameIn, fps, 0));
-    const tcOut = duration > 0 ? formatTimecode(frameToTimecode(frameOut + 1, fps, 0)) : tcIn;
-
-    // Duration string
-    const durationStr = duration > 0 ? `${duration} frames` : '0 frames';
-
-    rows.push({
-      shotName,
-      versionLabel,
-      status,
-      notes,
-      noteEntries,
-      frameRange,
-      timecodeIn: tcIn,
-      timecodeOut: tcOut,
-      duration: durationStr,
-      setBy,
-      setAt,
-    });
-=======
   // Fallback: iterate all loaded sources
   for (let i = 0; i < session.sourceCount; i++) {
     const row = buildRowForSource(i, session, noteManager, statusManager, versionManager);
     if (row) {
       rows.push(row);
     }
->>>>>>> theirs
   }
 
   return rows;
@@ -284,6 +287,20 @@ function buildCSVHeaders(options: ReportOptions): string[] {
  */
 export function generateCSV(rows: ReportRow[], options: ReportOptions): string {
   const lines: string[] = [];
+
+  // Session metadata preamble
+  if (options.sessionDate) lines.push(`Session Date,${escapeCSVField(options.sessionDate)}`);
+  if (options.supervisorName) lines.push(`Supervisor,${escapeCSVField(options.supervisorName)}`);
+  if (options.projectId) lines.push(`Project,${escapeCSVField(options.projectId)}`);
+
+  // Statistics
+  const stats = computeReportStatistics(rows);
+  lines.push(`Total Shots,${stats.totalShots}`);
+  lines.push(`Approval Rate,${stats.approvalRate}%`);
+  for (const [status, count] of Object.entries(stats.countsByStatus)) {
+    lines.push(`${escapeCSVField(status)},${count}`);
+  }
+  lines.push(''); // blank separator before data table
 
   // Header
   lines.push(buildCSVHeaders(options).map(escapeCSVField).join(','));
@@ -342,6 +359,17 @@ function statusBadgeHTML(status: ShotStatus): string {
 export function generateHTML(rows: ReportRow[], options: ReportOptions): string {
   const title = options.title || 'Dailies Report';
   const dateRange = options.dateRange ? `<p style="color:#666;">${escapeHTML(options.dateRange)}</p>` : '';
+
+  const metadataItems: string[] = [];
+  if (options.sessionDate) metadataItems.push(`<strong>Session Date:</strong> ${escapeHTML(options.sessionDate)}`);
+  if (options.supervisorName) metadataItems.push(`<strong>Supervisor:</strong> ${escapeHTML(options.supervisorName)}`);
+  if (options.projectId) metadataItems.push(`<strong>Project:</strong> ${escapeHTML(options.projectId)}`);
+  const metadataHTML = metadataItems.length > 0
+    ? `<div class="session-metadata" style="margin:0.5em 0;">${metadataItems.join(' &nbsp;|&nbsp; ')}</div>`
+    : '';
+
+  const stats = computeReportStatistics(rows);
+  const statsHTML = `<div class="report-statistics" style="margin:0.5em 0 1em;"><strong>Total Shots:</strong> ${stats.totalShots} &nbsp; <strong>Approval Rate:</strong> ${stats.approvalRate}%</div>`;
 
   // Summary counts
   const counts: Record<string, number> = {};
@@ -430,6 +458,7 @@ export function generateHTML(rows: ReportRow[], options: ReportOptions): string 
 <body>
 <h1>${escapeHTML(title)}</h1>
 ${dateRange}
+${metadataHTML}${statsHTML}
 <div class="summary">${summaryParts}</div>
 ${categorySection}
 <table>

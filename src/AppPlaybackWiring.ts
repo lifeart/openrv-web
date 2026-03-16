@@ -235,6 +235,8 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
           includeTimecodes: true,
           includeVersions: true,
           title: session.metadata.displayName || 'Dailies Report',
+          sessionDate: new Date().toISOString(),
+          projectId: session.metadata?.displayName || undefined,
         },
         playlist,
       );

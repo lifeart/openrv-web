@@ -18,18 +18,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - That makes the published session architecture ahead of production wiring for any future graph-browser or view-history workflows that would depend on this manager.
 
 
-### 319. Dailies reports omit core session metadata and the category-based summary the workflow promises
-
-- Severity: Medium
-- Area: Reports / review workflow
-- Evidence:
-  - The review-workflow guide says dailies reports include “Session date, supervisor name, and project identifier” plus “Statistics: total shots reviewed, approval rate, revision counts by category” in [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L106) through [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L111).
-  - The actual `ReportOptions` only carry `title` and optional `dateRange` in [src/export/ReportExporter.ts](/Users/lifeart/Repos/openrv-web/src/export/ReportExporter.ts#L30) through [src/export/ReportExporter.ts#L37), and the production call site passes only `format`, `include*` flags, and `title` in [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L292) through [src/AppPlaybackWiring.ts#L299).
-  - HTML generation only renders the title, optional `dateRange`, and a simple count-by-status summary in [src/export/ReportExporter.ts](/Users/lifeart/Repos/openrv-web/src/export/ReportExporter.ts#L239) through [src/export/ReportExporter.ts#L249) and [src/export/ReportExporter.ts](/Users/lifeart/Repos/openrv-web/src/export/ReportExporter.ts#L294) through [src/export/ReportExporter.ts#L296).
-- Impact:
-  - Exported dailies reports cannot capture who ran the session, what project it belonged to, or any category-based review statistics.
-  - That makes the generated reports much less useful for real production circulation than the workflow suggests.
-
 
 ### 323. ShotGrid playlist loading is not real playlist sync; it only fills the browser panel
 

@@ -5,6 +5,7 @@ import {
   generateHTML,
   generateReport,
   escapeCSVField,
+  computeReportStatistics,
   type ReportSession,
   type ReportNoteManager,
   type ReportStatusManager,
@@ -220,17 +221,23 @@ describe('ReportExporter', () => {
   });
 
   describe('generateCSV', () => {
+    /** Find the header line index (the line containing 'Shot' column header) */
+    function findHeaderIndex(lines: string[]): number {
+      return lines.findIndex((l) => l.includes('Shot') && l.includes('Status') && l.includes('Duration'));
+    }
+
     it('REPORT-001: produces valid CSV with header row', () => {
       const csv = generateCSV([], defaultOptions);
       const lines = csv.split('\r\n');
-      // Header + trailing empty from final CRLF
-      expect(lines[0]).toContain('Shot');
-      expect(lines[0]).toContain('Version');
-      expect(lines[0]).toContain('Status');
-      expect(lines[0]).toContain('Notes');
-      expect(lines[0]).toContain('Duration');
-      expect(lines[0]).toContain('Reviewed By');
-      expect(lines[0]).toContain('Status Date');
+      const headerIdx = findHeaderIndex(lines);
+      expect(headerIdx).toBeGreaterThanOrEqual(0);
+      expect(lines[headerIdx]).toContain('Shot');
+      expect(lines[headerIdx]).toContain('Version');
+      expect(lines[headerIdx]).toContain('Status');
+      expect(lines[headerIdx]).toContain('Notes');
+      expect(lines[headerIdx]).toContain('Duration');
+      expect(lines[headerIdx]).toContain('Reviewed By');
+      expect(lines[headerIdx]).toContain('Status Date');
     });
 
     it('REPORT-002: escapes commas and quotes in notes', () => {
@@ -250,18 +257,20 @@ describe('ReportExporter', () => {
         },
       ];
       const csv = generateCSV(rows, defaultOptions);
-      const dataLine = csv.split('\r\n')[1]!;
       // The notes field should be double-quoted and inner quotes doubled
-      expect(dataLine).toContain('"Fix ""edge"" blending, and roto"');
+      expect(csv).toContain('"Fix ""edge"" blending, and roto"');
     });
 
     it('REPORT-003: includes all fields per row', () => {
       const rows = createSampleRows();
       const csv = generateCSV(rows, defaultOptions);
-      const lines = csv.split('\r\n').filter((l) => l.length > 0);
-      expect(lines).toHaveLength(3); // header + 2 data rows
+      const lines = csv.split('\r\n');
+      const headerIdx = findHeaderIndex(lines);
+      // header + 2 data rows after preamble
+      const dataLines = lines.slice(headerIdx).filter((l) => l.length > 0);
+      expect(dataLines).toHaveLength(3); // header + 2 data rows
 
-      const fields = lines[1]!.split(',');
+      const fields = dataLines[1]!.split(',');
       // Shot, Version, Status are first 3 columns
       expect(fields[0]).toBe('vfx_010_020');
       expect(fields[1]).toBe('v3');
@@ -286,35 +295,39 @@ describe('ReportExporter', () => {
       expect(csv).not.toContain('Looks great');
       expect(csv).not.toContain('Fix edge blending');
       // Header should not contain Notes column
-      const header = csv.split('\r\n')[0]!;
-      expect(header).not.toContain('Notes');
+      const lines = csv.split('\r\n');
+      const headerIdx = findHeaderIndex(lines);
+      expect(lines[headerIdx]).not.toContain('Notes');
     });
 
     it('REPORT-008: handles empty playlist (header only)', () => {
       const csv = generateCSV([], defaultOptions);
-      const lines = csv.split('\r\n').filter((l) => l.length > 0);
-      expect(lines).toHaveLength(1);
-      expect(lines[0]).toContain('Shot');
+      const lines = csv.split('\r\n');
+      const headerIdx = findHeaderIndex(lines);
+      const dataLines = lines.slice(headerIdx).filter((l) => l.length > 0);
+      expect(dataLines).toHaveLength(1);
+      expect(dataLines[0]).toContain('Shot');
     });
 
     it('excludes version column when includeVersions=false', () => {
       const rows = createSampleRows();
       const csv = generateCSV(rows, { ...defaultOptions, includeVersions: false });
-      const header = csv.split('\r\n')[0]!;
-      expect(header).not.toContain('Version');
+      const lines = csv.split('\r\n');
+      const headerIdx = findHeaderIndex(lines);
+      expect(lines[headerIdx]).not.toContain('Version');
       // Data should not contain the version label as a separate column
-      const dataLine = csv.split('\r\n')[1]!;
-      expect(dataLine).not.toContain('v3');
+      expect(lines[headerIdx + 1]).not.toContain('v3');
     });
 
     it('excludes timecode columns when includeTimecodes=false', () => {
       const rows = createSampleRows();
       const csv = generateCSV(rows, { ...defaultOptions, includeTimecodes: false });
-      const header = csv.split('\r\n')[0]!;
-      expect(header).not.toContain('TC In');
-      expect(header).not.toContain('TC Out');
-      expect(header).not.toContain('Frame In');
-      expect(header).not.toContain('Frame Out');
+      const lines = csv.split('\r\n');
+      const headerIdx = findHeaderIndex(lines);
+      expect(lines[headerIdx]).not.toContain('TC In');
+      expect(lines[headerIdx]).not.toContain('TC Out');
+      expect(lines[headerIdx]).not.toContain('Frame In');
+      expect(lines[headerIdx]).not.toContain('Frame Out');
     });
   });
 
@@ -684,6 +697,107 @@ describe('ReportExporter', () => {
       URL.createObjectURL = originalCreateObjectURL;
       URL.revokeObjectURL = originalRevokeObjectURL;
       vi.restoreAllMocks();
+    });
+  });
+
+  describe('computeReportStatistics', () => {
+    function makeRow(overrides: Partial<ReportRow> = {}): ReportRow {
+      return {
+        shotName: 'shot',
+        versionLabel: 'v1',
+        status: 'pending',
+        notes: [],
+        noteEntries: [],
+        frameRange: '1-48',
+        timecodeIn: '00:00:00:00',
+        timecodeOut: '00:00:02:00',
+        duration: '48 frames',
+        setBy: '',
+        setAt: '',
+        ...overrides,
+      };
+    }
+
+    it('computes correct totals and approval rate', () => {
+      const rows = [
+        makeRow({ status: 'approved' }),
+        makeRow({ status: 'approved' }),
+        makeRow({ status: 'needs-work' }),
+      ];
+      const stats = computeReportStatistics(rows);
+      expect(stats.totalShots).toBe(3);
+      expect(stats.approvedCount).toBe(2);
+      expect(stats.approvalRate).toBe(66.7);
+      expect(stats.countsByStatus).toEqual({ approved: 2, 'needs-work': 1 });
+    });
+
+    it('returns 0% for empty rows', () => {
+      const stats = computeReportStatistics([]);
+      expect(stats.totalShots).toBe(0);
+      expect(stats.approvalRate).toBe(0);
+    });
+
+    it('returns 100% when all approved', () => {
+      const rows = [makeRow({ status: 'approved' }), makeRow({ status: 'approved' })];
+      const stats = computeReportStatistics(rows);
+      expect(stats.approvalRate).toBe(100);
+    });
+  });
+
+  describe('session metadata in HTML', () => {
+    const sampleRows = createSampleRows();
+
+    it('includes metadata when provided', () => {
+      const html = generateHTML(sampleRows, {
+        ...defaultOptions,
+        format: 'html',
+        sessionDate: '2025-01-15',
+        supervisorName: 'Jane Doe',
+        projectId: 'PROJ-42',
+      });
+      expect(html).toContain('Session Date:');
+      expect(html).toContain('2025-01-15');
+      expect(html).toContain('Supervisor:');
+      expect(html).toContain('Jane Doe');
+      expect(html).toContain('Project:');
+      expect(html).toContain('PROJ-42');
+    });
+
+    it('omits metadata section when no fields provided', () => {
+      const html = generateHTML(sampleRows, { ...defaultOptions, format: 'html' });
+      expect(html).not.toContain('session-metadata');
+    });
+
+    it('includes statistics section', () => {
+      const html = generateHTML(sampleRows, { ...defaultOptions, format: 'html' });
+      expect(html).toContain('report-statistics');
+      expect(html).toContain('Total Shots:');
+      expect(html).toContain('Approval Rate:');
+    });
+  });
+
+  describe('session metadata in CSV', () => {
+    const sampleRows = createSampleRows();
+
+    it('includes preamble lines when metadata provided', () => {
+      const csv = generateCSV(sampleRows, {
+        ...defaultOptions,
+        format: 'csv',
+        sessionDate: '2025-01-15',
+        supervisorName: 'Jane Doe',
+        projectId: 'PROJ-42',
+      });
+      const lines = csv.split('\r\n');
+      expect(lines[0]).toBe('Session Date,2025-01-15');
+      expect(lines[1]).toBe('Supervisor,Jane Doe');
+      expect(lines[2]).toBe('Project,PROJ-42');
+    });
+
+    it('omits metadata preamble when no fields provided', () => {
+      const csv = generateCSV(sampleRows, { ...defaultOptions, format: 'csv' });
+      const lines = csv.split('\r\n');
+      // First line should be statistics, not metadata
+      expect(lines[0]).toContain('Total Shots');
     });
   });
 
