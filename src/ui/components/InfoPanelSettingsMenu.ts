@@ -27,6 +27,7 @@ const FIELD_LABELS: Record<keyof InfoPanelFields, string> = {
   duration: 'Duration',
   fps: 'FPS',
   colorAtCursor: 'Color at Cursor',
+  sequencePattern: 'Sequence Pattern',
 };
 
 export class InfoPanelSettingsMenu {

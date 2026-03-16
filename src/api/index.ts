@@ -39,6 +39,7 @@ export { ColorAPI } from './ColorAPI';
 export type { PublicColorAdjustments, PublicColorCurvesData, PublicColorCurvesUpdate } from './ColorAPI';
 export { MarkersAPI } from './MarkersAPI';
 export type { MarkerInfo } from './MarkersAPI';
+export { SequenceAPI } from './SequenceAPI';
 export { EventsAPI } from './EventsAPI';
 export type { OpenRVEventName, OpenRVEventData } from './EventsAPI';
 

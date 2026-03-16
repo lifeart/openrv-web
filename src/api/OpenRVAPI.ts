@@ -34,6 +34,7 @@ import { MarkersAPI } from './MarkersAPI';
 import { EventsAPI } from './EventsAPI';
 import { pluginRegistry } from '../plugin/PluginRegistry';
 import type { Plugin, PluginId, PluginState } from '../plugin/types';
+import { SequenceAPI } from './SequenceAPI';
 import { APIError } from '../core/errors';
 import { ENGINE_VERSION } from '../plugin/version';
 
@@ -91,6 +92,9 @@ export class OpenRVAPI {
 
   /** Marker management methods */
   readonly markers: MarkersAPI;
+
+  /** Sequence inspection methods */
+  readonly sequence: SequenceAPI;
 
   /** Event subscription methods */
   readonly events: EventsAPI;
@@ -157,6 +161,7 @@ export class OpenRVAPI {
     this.media = new MediaAPI(config.session, config.persistenceManager);
     this.audio = new AudioAPI(config.session);
     this.loop = new LoopAPI(config.session);
+    this.sequence = new SequenceAPI(config.session);
     this.view = new ViewAPI(config.viewer);
     this.color = new ColorAPI(
       config.colorControls,

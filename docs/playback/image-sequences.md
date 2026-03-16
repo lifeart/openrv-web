@@ -38,10 +38,18 @@ Pattern detection is automatic and requires no configuration. The detected patte
 
 After detecting a sequence range, OpenRV Web checks for gaps. If files are missing within the range (e.g., frames 1--10 exist but frame 5 is absent), the missing frames are identified and tracked.
 
-Missing frames can be queried programmatically:
+Missing frames can be queried programmatically through the public API:
 
-- `detectMissingFrames()` -- returns a list of missing frame numbers
-- `isFrameMissing(frame)` -- checks whether a specific frame is missing
+```javascript
+// Get all missing frame numbers in the active sequence
+const missing = window.openrv.sequence.detectMissingFrames();
+// e.g. [5, 12, 13]
+
+// Check whether a specific frame is missing
+if (window.openrv.sequence.isFrameMissing(5)) {
+  console.log('Frame 5 is missing');
+}
+```
 
 When playback reaches a missing frame, the application holds the last available frame rather than displaying a blank screen.
 
