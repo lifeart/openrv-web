@@ -13,11 +13,11 @@ This page lists all file formats supported by OpenRV Web.
 | BMP | `.bmp` | Browser native | No | Uncompressed bitmap |
 | AVIF | `.avif` | Browser native | No | AV1-based still image |
 | HEIC/HEIF | `.heic`, `.heif` | Native (Safari) / libheif WASM (other browsers) | No | Apple image format |
-| EXR | `.exr`, `.sxr` | TypeScript decoder | Yes | Float32 HDR, multi-layer, AOV, multi-view stereo |
+| EXR | `.exr`, `.sxr` | TypeScript decoder | Yes | Float32 HDR, multi-layer, AOV; multi-view stereo files are parsed and per-view decoding is wired to the stereo renderer via separate input format |
 | DPX | `.dpx` | Custom decoder | Yes | Log-to-linear conversion |
 | Cineon | `.cin` | Custom decoder | Yes | Configurable film gamma |
 | Radiance HDR | `.hdr`, `.pic` | Custom decoder | Yes | RGBE encoding |
-| Float TIFF | `.tiff`, `.tif` | Custom decoder | Yes | 32-bit floating-point |
+| Float TIFF | `.tiff`, `.tif` | Custom decoder | Yes | Float samples only (16/32/64-bit); JPEG compression not supported |
 | JPEG XL | `.jxl` | WASM (libjxl) + browser native HDR | Yes | Modern HDR format |
 | JPEG 2000 | `.jp2`, `.j2k`, `.j2c` | openjph WASM | No | Wavelet compression |
 | HTJ2K | `.jph`, `.jhc` | openjph WASM | No | High-throughput JPEG 2000 |
@@ -32,7 +32,7 @@ EXR decoding supports:
 
 - **Compression**: PIZ (wavelet), DWA (DCT), ZIP, ZIPS, RLE, uncompressed
 - **Multi-layer**: Named layers with AOV selection and channel remapping
-- **Multi-view**: Separate left/right eye views for stereo workflows
+- **Multi-view**: Separate left/right eye views are parsed and per-view decoding is wired to the stereo renderer via the separate input format; the user must enable a stereo display mode to view left/right eyes independently
 - **Data/Display windows**: Separate data and display window regions
 - **Float32 precision**: Full HDR dynamic range
 
@@ -56,7 +56,7 @@ JPEG, HEIC, and AVIF gainmap formats reconstruct HDR images from an SDR base ima
 | WebM | `.webm` | WebCodecs (mediabunny) | VP8, VP9, AV1 |
 | OGG | `.ogg`, `.ogv`, `.ogx` | WebCodecs (mediabunny) | Theora, VP8 |
 | AVI | `.avi` | Browser fallback | Legacy container |
-| MXF | `.mxf` | MXF Demuxer | Container parsing; identifies codec, resolution, FPS |
+| MXF | `.mxf` | MXF Demuxer | Metadata-only; no pixel decode. Parses codec, resolution, FPS from header |
 
 ### HDR Video
 

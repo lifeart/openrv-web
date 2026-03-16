@@ -26,7 +26,7 @@ Yes. Build the project with `pnpm build` and deploy the static files in the `dis
 
 ### What file formats are supported?
 
-OpenRV Web supports a wide range of image formats (PNG, JPEG, WebP, EXR, DPX, Cineon, HDR, TIFF, JPEG XL, JPEG 2000, HEIC, AVIF, gainmap HDR variants), video formats (MP4, MOV, MKV, WebM, OGG, AVI, MXF), and session formats (RV, GTO, OTIO). See the [File Formats](file-formats.md) reference for the complete list.
+OpenRV Web supports a wide range of image formats (PNG, JPEG, WebP, EXR, DPX, Cineon, HDR, TIFF, JPEG XL, JPEG 2000, HEIC, AVIF, gainmap HDR variants), video formats (MP4, MOV, MKV, WebM, OGG, AVI), and session formats (RV, GTO, OTIO). See the [File Formats](file-formats.md) reference for the complete list.
 
 ### How do I load an image sequence?
 
