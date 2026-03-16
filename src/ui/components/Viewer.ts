@@ -4009,6 +4009,13 @@ export class Viewer {
   }
 
   /**
+   * Get the presence overlay instance for showing connected participant avatars
+   */
+  getPresenceOverlay(): import('./PresenceOverlay').PresenceOverlay {
+    return this.overlayManager.getPresenceOverlay();
+  }
+
+  /**
    * Set (or clear) a reference image for overlay comparison.
    *
    * When imageData is non-null the reference is composited on top of the

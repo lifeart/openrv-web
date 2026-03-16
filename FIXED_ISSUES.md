@@ -3317,3 +3317,19 @@ Wired into `AppNetworkBridge` (subscribes to syncCursor, usersChanged, userLeft,
 - `src/export/ReportExporter.ts`
 - `src/export/ReportExporter.test.ts`
 - `src/export/index.ts`
+
+## Issue #341: Network-sync participant avatars only in panel, not viewer
+
+**Root cause**: `NetworkControl` rendered user avatars only inside the connection panel's `userListContainer`. No viewer-side presence overlay existed. The docs promised "avatar overlays in the viewer" at "the top-right corner."
+
+**Fix**: Created `PresenceOverlay` component — colored circles (28px) with user initials positioned at top-right of the viewer. Integrated via `OverlayManager.getPresenceOverlay()`. Wired through `AppNetworkBridge` to show/hide on connection state changes and update on user join/leave events.
+
+**Tests added**: 23 regression tests in `PresenceOverlay.test.ts` covering rendering, avatar display, user join/leave updates, hidden when disconnected, color/initials, state management, dispose cleanup.
+
+**Files changed**:
+- `src/ui/components/PresenceOverlay.ts` (new)
+- `src/ui/components/PresenceOverlay.test.ts` (new)
+- `src/ui/components/OverlayManager.ts`
+- `src/ui/components/Viewer.ts`
+- `src/AppNetworkBridge.ts`
+- `src/AppNetworkBridge.test.ts`

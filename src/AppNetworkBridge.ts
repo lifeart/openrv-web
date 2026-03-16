@@ -100,6 +100,7 @@ export class AppNetworkBridge {
    */
   setup(): void {
     const { session, viewer, networkSyncManager, networkControl, headerBar } = this.ctx;
+    const presenceOverlay = viewer.getPresenceOverlay();
 
     // Add NetworkControl to header bar
     headerBar.setNetworkControl(networkControl.render());
@@ -127,6 +128,8 @@ export class AppNetworkBridge {
         networkControl.setRoomInfo(null);
         networkControl.setUsers([]);
         networkControl.hideInfo();
+        presenceOverlay.setUsers([]);
+        presenceOverlay.hide();
         this.ctx.paintEngine?.setIdPrefix('');
       }),
     );
@@ -414,8 +417,10 @@ export class AppNetworkBridge {
         networkControl.setConnectionState(state);
         if (state !== 'connected' && state !== 'conflict') {
           networkControl.setIsHost(false);
+          presenceOverlay.hide();
         } else {
           networkControl.setIsHost(networkSyncManager.isHost);
+          presenceOverlay.show();
         }
       }),
     );
@@ -429,6 +434,8 @@ export class AppNetworkBridge {
         networkControl.hideInfo();
         networkControl.setRoomInfo(info);
         networkControl.setUsers(info.users);
+        presenceOverlay.setUsers(info.users);
+        presenceOverlay.show();
         this.ctx.paintEngine?.setIdPrefix(networkSyncManager.userId);
         void this.refreshShareLinkPreview();
       }),
@@ -441,6 +448,8 @@ export class AppNetworkBridge {
         networkControl.setShareLinkKind(networkSyncManager.isHost ? 'invite' : 'generic');
         networkControl.setRoomInfo(info);
         networkControl.setUsers(info.users);
+        presenceOverlay.setUsers(info.users);
+        presenceOverlay.show();
         this.ctx.paintEngine?.setIdPrefix(networkSyncManager.userId);
         void this.refreshShareLinkPreview();
       }),
@@ -449,6 +458,7 @@ export class AppNetworkBridge {
     this.unsubscribers.push(
       networkSyncManager.on('usersChanged', (users) => {
         networkControl.setUsers(users);
+        presenceOverlay.setUsers(users);
         void this.refreshShareLinkPreview();
       }),
     );

@@ -61,17 +61,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The integration reduces richer local note workflows to a flat list of plain comments, which weakens production review traceability.
 
 
-### 341. Network-sync docs promise participant avatars in the viewer, but presence only renders inside the connection panel
-
-- Severity: Medium
-- Area: Collaboration UI / documentation contract
-- Evidence:
-  - The network-sync docs say participants are visible "as avatar overlays in the viewer" and that presence avatars appear "in the top-right corner of the viewer" in [docs/advanced/network-sync.md](/Users/lifeart/Repos/openrv-web/docs/advanced/network-sync.md#L41) through [docs/advanced/network-sync.md](/Users/lifeart/Repos/openrv-web/docs/advanced/network-sync.md#L47).
-  - The shipped `NetworkControl` renders user avatars only inside `userListContainer` in the connection panel in [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L1273) through [src/ui/components/NetworkControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NetworkControl.ts#L1325).
-  - A production-code search finds no viewer-side presence overlay or avatar rendering path outside that panel list; the runtime matches are limited to `NetworkControl`'s panel DOM.
-- Impact:
-  - Users expecting live participant presence in the viewer itself will not get the on-image collaboration cue the docs describe.
-  - That makes collaborative review feel less visible than documented, especially when the network panel is closed during playback.
 
 
 

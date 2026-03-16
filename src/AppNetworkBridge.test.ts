@@ -158,6 +158,11 @@ function createMockViewer() {
     getTransform: vi.fn(() => null),
     setTransform: vi.fn(),
     setWipeState: vi.fn(),
+    getPresenceOverlay: vi.fn(() => ({
+      setUsers: vi.fn(),
+      show: vi.fn(),
+      hide: vi.fn(),
+    })),
   };
 }
 
