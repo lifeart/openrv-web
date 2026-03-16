@@ -82,12 +82,11 @@ The motion stabilization filter reduces frame-to-frame jitter in handheld or poo
 
 ### Controls
 
-- **Smoothing window**: The number of surrounding frames analyzed to compute the stable reference. Larger windows produce smoother results but introduce a longer analysis delay.
-- **Translation**: Enable or disable horizontal and vertical shift correction.
-- **Rotation**: Enable or disable rotational jitter correction.
-- **Border cropping**: Controls how much of the frame edge is cropped to hide the stabilization offset. Higher values eliminate black borders but reduce the visible image area.
+- **Enabled**: Toggle stabilization on or off.
+- **Smoothing Strength**: Controls the amount of temporal smoothing applied to the estimated camera path. Higher values produce smoother results but may lag behind intentional camera moves. Range: 0–100.
+- **Crop Amount**: Controls how many pixels of the frame edge are cropped to hide the stabilization offset. Higher values eliminate black borders but reduce the visible image area. Range: 0–64.
 
-Stabilization requires a short pre-analysis pass before playback begins. During this pass, a progress indicator appears in the viewer.
+> **Note:** The underlying effect adapter also supports automatic inter-frame motion estimation (`stabilizationAutoMotion`) and manual shift offsets (`stabilizationDx`, `stabilizationDy`), but these parameters are API-only and are not exposed in the stabilization panel.
 
 ---
 
