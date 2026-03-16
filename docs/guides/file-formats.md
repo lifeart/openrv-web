@@ -339,12 +339,13 @@ The `SequenceSourceNode` manages frame loading with:
 
 ### RV/GTO Session Files (.rv)
 
-Desktop OpenRV saves sessions in the GTO (Graph Topology Object) binary format. OpenRV Web can **load and reconstruct** the complete node graph from these files:
+Desktop OpenRV saves sessions in the GTO (Graph Topology Object) binary format. OpenRV Web performs a **best-effort import** of these files — many common node types are reconstructed, but some are skipped or degraded during loading:
 
 - **Parser**: `GTOGraphLoader.ts` uses the `gto-js` library to parse the binary GTO format
-- **Graph reconstruction**: RV node types are mapped to OpenRV Web node types (see [Session Compatibility](session-compatibility.md) for the full mapping table)
+- **Graph reconstruction**: RV node protocols are mapped to OpenRV Web node types where an implementation exists (see [Session Compatibility](session-compatibility.md) for the full mapping table). Nodes whose protocol is unmapped or whose mapped type is not yet implemented are silently skipped.
 - **Property restoration**: GTO properties are mapped to the OpenRV Web `PropertyContainer` system
 - **Supported state**: Source references, view configurations (sequence, stack, layout, switch), color corrections, playback position, markers, stereo settings, EDL data
+- **Known limitations**: The importer emits `skippedNodes` diagnostics so the UI can surface which nodes were dropped. Composite/stack blend mode downgrade infrastructure is scaffolded but not yet active. Import is lossy for sessions that rely on advanced or plugin-defined RV node types
 
 ### RV EDL (.rvedl)
 
