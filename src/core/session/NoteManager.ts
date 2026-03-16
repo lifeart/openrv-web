@@ -37,6 +37,16 @@ export interface NoteManagerCallbacks {
 }
 
 /**
+ * Event types emitted by NoteManager.
+ */
+export interface NoteManagerEvents {
+  /** Emitted when a new note is added. Payload is a copy of the created note. */
+  noteAdded: Note;
+}
+
+type NoteManagerEventCallback<K extends keyof NoteManagerEvents> = (data: NoteManagerEvents[K]) => void;
+
+/**
  * NoteManager owns note/comment state and operations:
  * - Adding, removing, updating notes
  * - Threaded replies (parentId)
@@ -48,6 +58,7 @@ export interface NoteManagerCallbacks {
 export class NoteManager {
   private _notes = new Map<string, Note>();
   private _callbacks: NoteManagerCallbacks | null = null;
+  private _eventListeners = new Map<keyof NoteManagerEvents, Set<NoteManagerEventCallback<any>>>();
 
   /**
    * Set the callbacks object. Called once by Session after construction.
@@ -58,6 +69,33 @@ export class NoteManager {
 
   private notifyChange(): void {
     this._callbacks?.onNotesChanged();
+  }
+
+  // ---- Events ----
+
+  /**
+   * Subscribe to a NoteManager event.
+   * Returns an unsubscribe function.
+   */
+  on<K extends keyof NoteManagerEvents>(event: K, callback: NoteManagerEventCallback<K>): () => void {
+    if (!this._eventListeners.has(event)) {
+      this._eventListeners.set(event, new Set());
+    }
+    this._eventListeners.get(event)!.add(callback);
+    return () => {
+      this._eventListeners.get(event)?.delete(callback);
+    };
+  }
+
+  private emitEvent<K extends keyof NoteManagerEvents>(event: K, data: NoteManagerEvents[K]): void {
+    this._eventListeners.get(event)?.forEach((callback) => {
+      try {
+        callback(data);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error(`Error in NoteManager event listener for "${String(event)}":`, err);
+      }
+    });
   }
 
   // ---- CRUD ----
@@ -94,7 +132,9 @@ export class NoteManager {
     };
     this._notes.set(note.id, note);
     this.notifyChange();
-    return { ...note };
+    const copy = { ...note };
+    this.emitEvent('noteAdded', copy);
+    return copy;
   }
 
   /**
@@ -281,5 +321,6 @@ export class NoteManager {
   dispose(): void {
     this._notes.clear();
     this._callbacks = null;
+    this._eventListeners.clear();
   }
 }

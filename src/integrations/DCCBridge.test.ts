@@ -366,6 +366,21 @@ describe('DCCBridge', () => {
       bridge.dispose();
     });
 
+    it('DCC-OUT-009: sendNoteAdded sends correct message (#445)', async () => {
+      const { bridge, ws } = await createConnectedBridge();
+
+      bridge.sendNoteAdded(15, 'Fix edge artifact', 'Alice', 'open', 'note-456');
+
+      const msg = parseSent(ws, 0);
+      expect(msg.type).toBe('noteAdded');
+      expect((msg as { frame: number }).frame).toBe(15);
+      expect((msg as { text: string }).text).toBe('Fix edge artifact');
+      expect((msg as { author: string }).author).toBe('Alice');
+      expect((msg as { status: string }).status).toBe('open');
+      expect((msg as { noteId: string }).noteId).toBe('note-456');
+      bridge.dispose();
+    });
+
     it('DCC-OUT-004: send returns false when disconnected', () => {
       const bridge = new DCCBridge(defaultConfig());
       const result = bridge.sendFrameChanged(1, 10);
@@ -697,6 +712,7 @@ describe('DCCBridge', () => {
       'frameChanged',
       'colorChanged',
       'annotationAdded',
+      'noteAdded',
       'ping',
       'pong',
       'error',
@@ -715,6 +731,7 @@ describe('DCCBridge', () => {
         'sendFrameChanged',
         'sendColorChanged',
         'sendAnnotationAdded',
+        'sendNoteAdded',
         'sendError',
       ] as const;
 

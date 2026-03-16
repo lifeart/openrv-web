@@ -140,6 +140,7 @@ OpenRV Web sends the following event types back to the DCC application:
 | `frameChanged` | Current frame position updated. Includes `frame` and `totalFrames` fields. |
 | `colorChanged` | Color correction values changed. Includes `exposure`, `gamma`, `temperature`, and `tint` fields. |
 | `annotationAdded` | New annotation added. Includes `frame`, `annotationType` (`pen`, `text`, or `shape`), and `annotationId` fields. |
+| `noteAdded` | New review note added. Includes `frame`, `text`, `author`, `status`, and `noteId` fields. |
 | `error` | Error response. Includes `code` and `message` fields. Sent when an inbound message is invalid or unrecognized. |
 | `ping` | Outbound heartbeat sent by the bridge for connection health monitoring. |
 | `pong` | Heartbeat response to an inbound `ping`. |

@@ -23,7 +23,7 @@ import type { ManagerBase } from '../core/ManagerBase';
 export type DCCInboundMessageType = 'loadMedia' | 'syncFrame' | 'syncColor' | 'ping' | 'pong';
 
 /** All supported outbound message types */
-export type DCCOutboundMessageType = 'frameChanged' | 'colorChanged' | 'annotationAdded' | 'ping' | 'pong' | 'error';
+export type DCCOutboundMessageType = 'frameChanged' | 'colorChanged' | 'annotationAdded' | 'noteAdded' | 'ping' | 'pong' | 'error';
 
 /** Base message structure */
 export interface DCCMessage {
@@ -96,6 +96,16 @@ export interface AnnotationAddedMessage extends DCCMessage {
   annotationId: string;
 }
 
+/** Outbound: note added notification */
+export interface NoteAddedMessage extends DCCMessage {
+  type: 'noteAdded';
+  frame: number;
+  text: string;
+  author: string;
+  status: string;
+  noteId: string;
+}
+
 /** Outbound: pong (heartbeat response) */
 export interface PongMessage extends DCCMessage {
   type: 'pong';
@@ -113,6 +123,7 @@ export type DCCOutboundMessage =
   | FrameChangedMessage
   | ColorChangedMessage
   | AnnotationAddedMessage
+  | NoteAddedMessage
   | PingMessage
   | PongMessage
   | ErrorMessage;
@@ -325,6 +336,20 @@ export class DCCBridge extends EventEmitter<DCCBridgeEvents> implements ManagerB
       code,
       message,
       ...(id !== undefined ? { id } : {}),
+    });
+  }
+
+  /**
+   * Send a note-added notification.
+   */
+  sendNoteAdded(frame: number, text: string, author: string, status: string, noteId: string): boolean {
+    return this.send({
+      type: 'noteAdded',
+      frame,
+      text,
+      author,
+      status,
+      noteId,
     });
   }
 

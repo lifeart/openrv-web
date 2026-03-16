@@ -15,6 +15,7 @@ import type { LUT } from './color/LUTLoader';
 import { isLUT3D } from './color/LUTLoader';
 import { parseLUT } from './color/LUTFormatDetect';
 import type { Annotation } from './paint/types';
+import type { Note } from './core/session/NoteManager';
 import { Logger } from './utils/Logger';
 import { DisposableSubscriptionManager } from './utils/DisposableSubscriptionManager';
 import { basename } from './utils/path';
@@ -56,6 +57,11 @@ export interface DCCWiringPaintEngine {
   on(event: string, handler: (...args: any[]) => void): any;
 }
 
+/** Minimal noteManager surface needed by DCC wiring. */
+export interface DCCWiringNoteManager {
+  on(event: string, handler: (...args: any[]) => void): any;
+}
+
 /**
  * Dependencies that the DCC wiring needs. These come from App-level
  * objects that are not part of AppWiringContext.
@@ -67,6 +73,8 @@ export interface DCCWiringDeps {
   colorControls: DCCWiringColorControls;
   /** Optional paint engine for forwarding annotation events to the DCC bridge. */
   paintEngine?: DCCWiringPaintEngine;
+  /** Optional note manager for forwarding note events to the DCC bridge. */
+  noteManager?: DCCWiringNoteManager;
   /** Optional fetch implementation for loading LUT files (defaults to globalThis.fetch). */
   fetchFn?: typeof globalThis.fetch;
   /** Optional alert function for surfacing errors to the user (defaults to showAlert). */
@@ -154,7 +162,7 @@ export function mapAnnotationType(annotation: Annotation): 'pen' | 'text' | 'sha
  * (App) can inspect or override the frame-sync suppression flag.
  */
 export function wireDCCBridge(deps: DCCWiringDeps): DCCWiringState {
-  const { dccBridge, session, viewer, colorControls, paintEngine } = deps;
+  const { dccBridge, session, viewer, colorControls, paintEngine, noteManager } = deps;
   const fetchFn = deps.fetchFn ?? globalThis.fetch.bind(globalThis);
   const alertFn = deps.showAlertFn ?? ((msg: string, opts?: { type?: string; title?: string }) =>
     showAlert(msg, opts as any));
@@ -279,6 +287,24 @@ export function wireDCCBridge(deps: DCCWiringDeps): DCCWiringState {
         );
         if (!sent) {
           log.warn('DCC annotation sync dropped: bridge is not writable');
+        }
+      }),
+    );
+  }
+
+  // Outbound: noteAdded -> send noteAdded to DCC bridge
+  if (noteManager) {
+    subs.add(
+      noteManager.on('noteAdded', (note: Note) => {
+        const sent = dccBridge.sendNoteAdded(
+          note.frameStart,
+          note.text,
+          note.author,
+          note.status,
+          note.id,
+        );
+        if (!sent) {
+          log.warn('DCC note sync dropped: bridge is not writable');
         }
       }),
     );
