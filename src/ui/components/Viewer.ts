@@ -3308,6 +3308,8 @@ export class Viewer {
       displayBrightness: state.displayBrightness,
       customGamma: state.customGamma,
     });
+    // Update the display profile indicator overlay (flash on transfer function change)
+    this.overlayManager.getDisplayProfileIndicator().setDisplayState(state, true);
     this.notifyEffectsChanged();
     this.scheduleRender();
   }
@@ -3324,6 +3326,8 @@ export class Viewer {
       displayBrightness: DEFAULT_DISPLAY_COLOR_STATE.displayBrightness,
       customGamma: DEFAULT_DISPLAY_COLOR_STATE.customGamma,
     });
+    // Update the display profile indicator overlay
+    this.overlayManager.getDisplayProfileIndicator().setDisplayState(DEFAULT_DISPLAY_COLOR_STATE, true);
     this.notifyEffectsChanged();
     this.scheduleRender();
   }

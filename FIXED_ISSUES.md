@@ -3264,3 +3264,17 @@ Wired into `AppNetworkBridge` (subscribes to syncCursor, usersChanged, userLeft,
 **Files changed**:
 - `src/services/LayoutOrchestrator.ts`
 - `src/services/LayoutOrchestrator.test.ts`
+
+## Issue #362: Display-profile viewer status indicator missing
+
+**Root cause**: The `DisplayProfileControl` provided the `Shift+Alt+D` shortcut and dropdown UI, but no viewer-side HUD indicator displayed the active profile name. The docs promised "The active profile name appears in the viewer status area" which was not implemented.
+
+**Fix**: Created `DisplayProfileIndicator` component — a semi-transparent HUD overlay at bottom-left of the viewer showing "Display: [profile]". Features flash-on-change (briefly goes fully opaque for 1.5s, then fades back). Integrated via `OverlayManager.getDisplayProfileIndicator()` (lazy creation pattern). Wired in `Viewer.setDisplayColorState()` and `resetDisplayColorState()` so the indicator updates on every profile change including keyboard cycling.
+
+**Tests added**: 35 regression tests in `DisplayProfileIndicator.test.ts` covering rendering, accessibility (role/aria-label/aria-live), all 6 transfer function labels, reactivity on profile changes, flash behavior (opacity, timer reset), state management (enable/disable/toggle), dispose cleanup, and integration patterns.
+
+**Files changed**:
+- `src/ui/components/DisplayProfileIndicator.ts` (new)
+- `src/ui/components/DisplayProfileIndicator.test.ts` (new)
+- `src/ui/components/OverlayManager.ts`
+- `src/ui/components/Viewer.ts`

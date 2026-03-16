@@ -165,17 +165,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Users following the stabilization docs can look for controls and progress feedback that the shipped panel never surfaces.
   - That makes stabilization feel incomplete or broken in production even when the simpler crop/smoothing implementation is working as designed.
 
-### 362. The display-profile guide promises a viewer status-area profile indicator that production does not expose
-
-- Severity: Low
-- Area: Documentation / display-profile feedback
-- Evidence:
-  - The display-profile guide says `Shift+Alt+D` cycles display profiles and that "The active profile name appears in the viewer status area" in [docs/color/display-profiles.md](/Users/lifeart/Repos/openrv-web/docs/color/display-profiles.md#L22) through [docs/color/display-profiles.md](/Users/lifeart/Repos/openrv-web/docs/color/display-profiles.md#L24).
-  - The shipped `DisplayProfileControl` does provide the `Shift+Alt+D` shortcut and the dropdown/button UI in [src/ui/components/DisplayProfileControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/DisplayProfileControl.ts#L56) through [src/ui/components/DisplayProfileControl.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/DisplayProfileControl.ts#L59), but it does not create any separate viewer status indicator.
-  - A production-code search for display-profile status rendering only finds the control itself and its tests; there is no viewer HUD/status widget that displays the active profile name.
-- Impact:
-  - Users following the guide can look for an on-viewer status readout that never appears.
-  - That makes profile cycling feel less observable than the docs imply, especially when using only the keyboard shortcut.
 
 ### 365. The session-management docs tell users to delete auto-save entries from the Snapshot Panel, but that panel does not manage auto-saves
 

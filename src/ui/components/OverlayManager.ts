@@ -30,6 +30,7 @@ import { BugOverlay } from './BugOverlay';
 import { EXRWindowOverlay } from './EXRWindowOverlay';
 import { InfoStripOverlay } from './InfoStripOverlay';
 import { FPSIndicator } from './FPSIndicator';
+import { DisplayProfileIndicator } from './DisplayProfileIndicator';
 
 /**
  * Callbacks the OverlayManager needs from the Viewer to wire up
@@ -52,6 +53,7 @@ export class OverlayManager {
   private _exrWindowOverlay: EXRWindowOverlay | null = null;
   private _infoStripOverlay: InfoStripOverlay | null = null;
   private _fpsIndicator: FPSIndicator | null = null;
+  private _displayProfileIndicator: DisplayProfileIndicator | null = null;
 
   // Non-DOM overlays (pixel probe has its own floating panel)
   private readonly pixelProbe: PixelProbe;
@@ -277,6 +279,14 @@ export class OverlayManager {
     return this._fpsIndicator;
   }
 
+  getDisplayProfileIndicator(): DisplayProfileIndicator {
+    if (!this._displayProfileIndicator) {
+      this._displayProfileIndicator = new DisplayProfileIndicator();
+      this.canvasContainer.appendChild(this._displayProfileIndicator.getElement());
+    }
+    return this._displayProfileIndicator;
+  }
+
   // ---------------------------------------------------------------------------
   // Lifecycle
   // ---------------------------------------------------------------------------
@@ -298,5 +308,6 @@ export class OverlayManager {
     this._exrWindowOverlay?.dispose();
     this._infoStripOverlay?.dispose();
     this._fpsIndicator?.dispose();
+    this._displayProfileIndicator?.dispose();
   }
 }
