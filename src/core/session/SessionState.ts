@@ -16,6 +16,14 @@ import type { StackLayer } from '../../ui/components/StackControl';
 import type { PARState } from '../../utils/media/PixelAspectRatio';
 import type { NoiseReductionParams } from '../../filters/NoiseReduction';
 import type { WatermarkState } from '../../ui/components/WatermarkOverlay';
+import type { TimecodeOverlayState } from '../../ui/components/TimecodeOverlay';
+import type { SafeAreasState } from '../../ui/components/SafeAreasOverlay';
+import type { ClippingOverlayState } from '../../ui/components/ClippingOverlay';
+import type { InfoStripOverlayState } from '../../ui/components/InfoStripOverlay';
+import type { SpotlightState } from '../../ui/components/SpotlightOverlay';
+import type { BugOverlayState } from '../../ui/components/BugOverlay';
+import type { EXRWindowOverlayState } from '../../ui/components/EXRWindowOverlay';
+import type { FPSIndicatorState } from '../../ui/components/FPSIndicator';
 import type { Annotation, PaintEffects } from '../../paint/types';
 import type { LoopMode, MediaType, PlaybackMode } from '../types/session';
 import type { Marker } from './Session';
@@ -137,6 +145,22 @@ export interface SessionState {
   noiseReduction?: NoiseReductionParams;
   /** Watermark overlay state */
   watermark?: WatermarkState;
+  /** Timecode overlay state */
+  timecodeOverlay?: TimecodeOverlayState;
+  /** Safe areas overlay state */
+  safeAreasOverlay?: SafeAreasState;
+  /** Clipping overlay state */
+  clippingOverlay?: ClippingOverlayState;
+  /** Info strip overlay state */
+  infoStripOverlay?: InfoStripOverlayState;
+  /** Spotlight overlay state */
+  spotlightOverlay?: SpotlightState;
+  /** Bug overlay state */
+  bugOverlay?: BugOverlayState;
+  /** EXR window overlay state */
+  exrWindowOverlay?: EXRWindowOverlayState;
+  /** FPS indicator overlay state */
+  fpsIndicatorOverlay?: FPSIndicatorState;
   /** LUT file path (not embedded) */
   lutPath?: string;
   /** LUT intensity blend */

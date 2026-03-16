@@ -22,6 +22,14 @@ import { DEFAULT_WIPE_STATE } from '../types/wipe';
 import { DEFAULT_PAR_STATE } from '../../utils/media/PixelAspectRatio';
 import { DEFAULT_NOISE_REDUCTION_PARAMS } from '../../filters/NoiseReduction';
 import { DEFAULT_WATERMARK_STATE } from '../../ui/components/WatermarkOverlay';
+import { DEFAULT_TIMECODE_OVERLAY_STATE } from '../../ui/components/TimecodeOverlay';
+import { DEFAULT_SAFE_AREAS_STATE } from '../../ui/components/SafeAreasOverlay';
+import { DEFAULT_CLIPPING_OVERLAY_STATE } from '../../ui/components/ClippingOverlay';
+import { DEFAULT_INFO_STRIP_OVERLAY_STATE } from '../../ui/components/InfoStripOverlay';
+import { DEFAULT_SPOTLIGHT_STATE } from '../../ui/components/SpotlightOverlay';
+import { DEFAULT_BUG_OVERLAY_STATE } from '../../ui/components/BugOverlay';
+import { DEFAULT_EXR_WINDOW_OVERLAY_STATE } from '../../ui/components/EXRWindowOverlay';
+import { DEFAULT_FPS_INDICATOR_STATE } from '../../ui/components/FPSIndicator';
 import type { Annotation, PaintEffects } from '../../paint/types';
 import { DEFAULT_PAINT_EFFECTS } from '../../paint/types';
 import { showFileReloadPrompt, showSequenceReloadPrompt, FILE_RELOAD_CANCEL } from '../../ui/components/shared/Modal';
@@ -337,6 +345,14 @@ export class SessionSerializer {
       stack: viewer.getStackLayers(),
       noiseReduction: viewer.getNoiseReductionParams(),
       watermark: viewer.getWatermarkState(),
+      timecodeOverlay: viewer.getTimecodeOverlay().getState(),
+      safeAreasOverlay: viewer.getSafeAreasOverlay().getState(),
+      clippingOverlay: viewer.getClippingOverlay().getState(),
+      infoStripOverlay: viewer.getInfoStripOverlay().getState(),
+      spotlightOverlay: viewer.getSpotlightOverlay().getState(),
+      bugOverlay: viewer.getBugOverlay().getState(),
+      exrWindowOverlay: viewer.getEXRWindowOverlay().getState(),
+      fpsIndicatorOverlay: viewer.getFPSIndicator().getState(),
       lutPath: viewer.getLUT()?.title,
       lutIntensity: viewer.getLUTIntensity(),
       lutPipeline: viewer.getLUTPipeline().getSerializableState(),
@@ -681,6 +697,14 @@ export class SessionSerializer {
     viewer.setStackLayers(migrated.stack);
     viewer.setNoiseReductionParams(migrated.noiseReduction ?? DEFAULT_NOISE_REDUCTION_PARAMS);
     viewer.setWatermarkState(migrated.watermark ?? DEFAULT_WATERMARK_STATE);
+    viewer.getTimecodeOverlay().setState(migrated.timecodeOverlay ?? DEFAULT_TIMECODE_OVERLAY_STATE);
+    viewer.getSafeAreasOverlay().setState(migrated.safeAreasOverlay ?? DEFAULT_SAFE_AREAS_STATE);
+    viewer.getClippingOverlay().setState(migrated.clippingOverlay ?? DEFAULT_CLIPPING_OVERLAY_STATE);
+    viewer.getInfoStripOverlay().setState(migrated.infoStripOverlay ?? DEFAULT_INFO_STRIP_OVERLAY_STATE);
+    viewer.getSpotlightOverlay().setState(migrated.spotlightOverlay ?? DEFAULT_SPOTLIGHT_STATE);
+    viewer.getBugOverlay().setState(migrated.bugOverlay ?? DEFAULT_BUG_OVERLAY_STATE);
+    viewer.getEXRWindowOverlay().setState(migrated.exrWindowOverlay ?? DEFAULT_EXR_WINDOW_OVERLAY_STATE);
+    viewer.getFPSIndicator().setState(migrated.fpsIndicatorOverlay ?? DEFAULT_FPS_INDICATOR_STATE);
     viewer.setLUTIntensity(migrated.lutIntensity);
     const lutPipeline = viewer.getLUTPipeline?.();
     if (lutPipeline && typeof lutPipeline.loadSerializableState === 'function') {
@@ -857,6 +881,30 @@ export class SessionSerializer {
     migrated.stack = migrated.stack ?? [];
     migrated.noiseReduction = { ...DEFAULT_NOISE_REDUCTION_PARAMS, ...migrated.noiseReduction };
     migrated.watermark = { ...DEFAULT_WATERMARK_STATE, ...migrated.watermark };
+    migrated.timecodeOverlay = migrated.timecodeOverlay
+      ? { ...DEFAULT_TIMECODE_OVERLAY_STATE, ...migrated.timecodeOverlay }
+      : undefined;
+    migrated.safeAreasOverlay = migrated.safeAreasOverlay
+      ? { ...DEFAULT_SAFE_AREAS_STATE, ...migrated.safeAreasOverlay }
+      : undefined;
+    migrated.clippingOverlay = migrated.clippingOverlay
+      ? { ...DEFAULT_CLIPPING_OVERLAY_STATE, ...migrated.clippingOverlay }
+      : undefined;
+    migrated.infoStripOverlay = migrated.infoStripOverlay
+      ? { ...DEFAULT_INFO_STRIP_OVERLAY_STATE, ...migrated.infoStripOverlay }
+      : undefined;
+    migrated.spotlightOverlay = migrated.spotlightOverlay
+      ? { ...DEFAULT_SPOTLIGHT_STATE, ...migrated.spotlightOverlay }
+      : undefined;
+    migrated.bugOverlay = migrated.bugOverlay
+      ? { ...DEFAULT_BUG_OVERLAY_STATE, ...migrated.bugOverlay }
+      : undefined;
+    migrated.exrWindowOverlay = migrated.exrWindowOverlay
+      ? { ...DEFAULT_EXR_WINDOW_OVERLAY_STATE, ...migrated.exrWindowOverlay }
+      : undefined;
+    migrated.fpsIndicatorOverlay = migrated.fpsIndicatorOverlay
+      ? { ...DEFAULT_FPS_INDICATOR_STATE, ...migrated.fpsIndicatorOverlay }
+      : undefined;
     migrated.lutIntensity = migrated.lutIntensity ?? 1.0;
     migrated.par = migrated.par ? { ...DEFAULT_PAR_STATE, ...migrated.par } : undefined;
     migrated.backgroundPattern = migrated.backgroundPattern
