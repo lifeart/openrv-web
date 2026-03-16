@@ -8,6 +8,8 @@ import {
   parseOTIOMultiTrack,
   rationalTimeToFrames,
   timeRangeDurationFrames,
+  otioMarkerColorToHex,
+  OTIO_MARKER_COLOR_MAP,
   type OTIORationalTime,
   type OTIOTimeRange,
   type OTIOParseResult,
@@ -124,6 +126,7 @@ function buildMultiTrackOTIOJson(
     name: string;
     kind: string;
     children: unknown[];
+    markers?: unknown[];
   }>,
   overrides: Record<string, unknown> = {},
 ): string {
@@ -143,6 +146,7 @@ function buildMultiTrackOTIOJson(
         name: t.name,
         kind: t.kind,
         children: t.children,
+        ...(t.markers ? { markers: t.markers } : {}),
       })),
     },
     ...overrides,
@@ -1408,7 +1412,7 @@ describe('parseOTIOMultiTrack', () => {
       const result = parseOTIOMultiTrack(json)!;
       expect(result.markers).toHaveLength(1);
       expect(result.markers[0]!.name).toBe('Note1');
-      expect(result.markers[0]!.color).toBe('RED');
+      expect(result.markers[0]!.color).toBe('#ff4444');
       expect(result.markers[0]!.timelineFrame).toBe(10);
       expect(result.markers[0]!.durationFrames).toBe(0);
       expect(result.markers[0]!.metadata).toEqual({ text: 'Fix' });
@@ -1474,6 +1478,176 @@ describe('parseOTIOMultiTrack', () => {
       expect(result.markers[1]!.timelineFrame).toBe(50);
       expect(result.markers[1]!.durationFrames).toBe(10);
       expect(result.markers[2]!.name).toBe('Marker3');
+    });
+
+    it('OTIO-M035: marker colors are converted to hex', () => {
+      const json = buildMultiTrackOTIOJson(
+        [
+          {
+            name: 'Video 1',
+            kind: 'Video',
+            children: [buildClip('shot_01', 0, 100)],
+          },
+        ],
+        {
+          markers: [
+            buildMarker('RedMark', 0, 0, 'RED'),
+            buildMarker('GreenMark', 10, 0, 'GREEN'),
+            buildMarker('BlueMark', 20, 0, 'BLUE'),
+          ],
+        },
+      );
+
+      const result = parseOTIOMultiTrack(json)!;
+      expect(result.markers[0]!.color).toBe('#ff4444');
+      expect(result.markers[1]!.color).toBe('#44ff44');
+      expect(result.markers[2]!.color).toBe('#4444ff');
+    });
+
+    it('OTIO-M036: unknown marker color is passed through unchanged', () => {
+      const json = buildMultiTrackOTIOJson(
+        [
+          {
+            name: 'Video 1',
+            kind: 'Video',
+            children: [buildClip('shot_01', 0, 48)],
+          },
+        ],
+        {
+          markers: [buildMarker('Custom', 0, 0, 'CUSTOM_COLOR')],
+        },
+      );
+
+      const result = parseOTIOMultiTrack(json)!;
+      expect(result.markers[0]!.color).toBe('CUSTOM_COLOR');
+    });
+
+    it('OTIO-M037: marker without color returns undefined color', () => {
+      const json = buildMultiTrackOTIOJson(
+        [
+          {
+            name: 'Video 1',
+            kind: 'Video',
+            children: [buildClip('shot_01', 0, 48)],
+          },
+        ],
+        {
+          markers: [buildMarker('NoColor', 0, 0)],
+        },
+      );
+
+      const result = parseOTIOMultiTrack(json)!;
+      expect(result.markers[0]!.color).toBeUndefined();
+    });
+
+    it('OTIO-M038: track-level markers are collected', () => {
+      const json = buildMultiTrackOTIOJson([
+        {
+          name: 'Video 1',
+          kind: 'Video',
+          children: [buildClip('shot_01', 0, 48)],
+          markers: [buildMarker('TrackNote', 10, 0, 'YELLOW')],
+        },
+      ]);
+
+      const result = parseOTIOMultiTrack(json)!;
+      expect(result.markers).toHaveLength(1);
+      expect(result.markers[0]!.name).toBe('TrackNote');
+      expect(result.markers[0]!.color).toBe('#ffff00');
+      expect(result.markers[0]!.timelineFrame).toBe(10);
+    });
+
+    it('OTIO-M039: per-track markers field is populated', () => {
+      const clipWithMarker = buildClip('shot_02', 0, 48);
+      (clipWithMarker as Record<string, unknown>).markers = [
+        buildMarker('ClipM', 5, 0, 'CYAN'),
+      ];
+
+      const json = buildMultiTrackOTIOJson([
+        {
+          name: 'Video 1',
+          kind: 'Video',
+          children: [buildClip('shot_01', 0, 48), clipWithMarker],
+          markers: [buildMarker('TrackM', 0, 0, 'ORANGE')],
+        },
+      ]);
+
+      const result = parseOTIOMultiTrack(json)!;
+      // The track should have both clip-level and track-level markers
+      expect(result.tracks[0]!.markers).toHaveLength(2);
+      expect(result.tracks[0]!.markers[0]!.name).toBe('ClipM');
+      expect(result.tracks[0]!.markers[1]!.name).toBe('TrackM');
+    });
+
+    it('OTIO-M040: parseOTIO (single-track) collects markers', () => {
+      const clipWithMarker = buildClip('shot_01', 0, 48);
+      (clipWithMarker as Record<string, unknown>).markers = [
+        buildMarker('ClipMarker', 5, 2, 'GREEN'),
+      ];
+
+      const json = JSON.stringify({
+        OTIO_SCHEMA: 'Timeline.1',
+        name: 'Test',
+        global_start_time: { OTIO_SCHEMA: 'RationalTime.1', value: 0, rate: 24 },
+        tracks: {
+          OTIO_SCHEMA: 'Stack.1',
+          name: 'Tracks',
+          children: [
+            {
+              OTIO_SCHEMA: 'Track.1',
+              name: 'Video 1',
+              kind: 'Video',
+              children: [clipWithMarker],
+            },
+          ],
+        },
+        markers: [buildMarker('TimelineMarker', 10, 0, 'RED')],
+      });
+
+      const result = parseOTIO(json)!;
+      expect(result).not.toBeNull();
+      expect(result.markers).toHaveLength(2);
+      expect(result.markers[0]!.name).toBe('ClipMarker');
+      expect(result.markers[0]!.color).toBe('#44ff44');
+      expect(result.markers[1]!.name).toBe('TimelineMarker');
+      expect(result.markers[1]!.color).toBe('#ff4444');
+    });
+
+    it('OTIO-M041: parseOTIO returns empty markers for no-marker timeline', () => {
+      const json = buildOTIOJson();
+      const result = parseOTIO(json)!;
+      expect(result.markers).toHaveLength(0);
+    });
+  });
+
+  describe('otioMarkerColorToHex', () => {
+    it('converts known OTIO colors to hex', () => {
+      expect(otioMarkerColorToHex('RED')).toBe('#ff4444');
+      expect(otioMarkerColorToHex('GREEN')).toBe('#44ff44');
+      expect(otioMarkerColorToHex('BLUE')).toBe('#4444ff');
+      expect(otioMarkerColorToHex('YELLOW')).toBe('#ffff00');
+      expect(otioMarkerColorToHex('CYAN')).toBe('#44ffff');
+      expect(otioMarkerColorToHex('PURPLE')).toBe('#9944ff');
+      expect(otioMarkerColorToHex('MAGENTA')).toBe('#ff44ff');
+      expect(otioMarkerColorToHex('ORANGE')).toBe('#ff8800');
+      expect(otioMarkerColorToHex('PINK')).toBe('#ff88cc');
+      expect(otioMarkerColorToHex('WHITE')).toBe('#ffffff');
+      expect(otioMarkerColorToHex('BLACK')).toBe('#000000');
+    });
+
+    it('returns unknown color string unchanged', () => {
+      expect(otioMarkerColorToHex('CUSTOM')).toBe('CUSTOM');
+    });
+
+    it('returns undefined for undefined input', () => {
+      expect(otioMarkerColorToHex(undefined)).toBeUndefined();
+    });
+
+    it('OTIO_MARKER_COLOR_MAP has all standard colors', () => {
+      const expected = ['RED', 'PINK', 'ORANGE', 'YELLOW', 'GREEN', 'CYAN', 'BLUE', 'PURPLE', 'MAGENTA', 'WHITE', 'BLACK'];
+      for (const c of expected) {
+        expect(OTIO_MARKER_COLOR_MAP[c]).toBeDefined();
+      }
     });
   });
 });

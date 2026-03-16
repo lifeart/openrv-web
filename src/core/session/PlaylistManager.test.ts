@@ -709,4 +709,101 @@ FCM: NON-DROP FRAME
       expect(manager.getClipForSource(0)).toBeNull();
     });
   });
+
+  describe('fromOTIO with markerImporter', () => {
+    function makeOTIOJson(markers?: unknown[]) {
+      return JSON.stringify({
+        OTIO_SCHEMA: 'Timeline.1',
+        name: 'Test',
+        global_start_time: { OTIO_SCHEMA: 'RationalTime.1', value: 0, rate: 24 },
+        tracks: {
+          OTIO_SCHEMA: 'Stack.1',
+          name: 'Tracks',
+          children: [
+            {
+              OTIO_SCHEMA: 'Track.1',
+              name: 'Video 1',
+              kind: 'Video',
+              children: [
+                {
+                  OTIO_SCHEMA: 'Clip.1',
+                  name: 'shot_01',
+                  source_range: {
+                    OTIO_SCHEMA: 'TimeRange.1',
+                    start_time: { OTIO_SCHEMA: 'RationalTime.1', value: 0, rate: 24 },
+                    duration: { OTIO_SCHEMA: 'RationalTime.1', value: 48, rate: 24 },
+                  },
+                  media_reference: {
+                    OTIO_SCHEMA: 'ExternalReference.1',
+                    target_url: '/media/shot_01.exr',
+                  },
+                },
+              ],
+            },
+          ],
+        },
+        ...(markers ? { markers } : {}),
+      });
+    }
+
+    const resolver = (name: string) => {
+      if (name === 'shot_01') return { index: 0, frameCount: 100 };
+      return null;
+    };
+
+    it('calls markerImporter with parsed markers', () => {
+      const markerImporter = vi.fn();
+      const json = makeOTIOJson([
+        {
+          OTIO_SCHEMA: 'Marker.1',
+          name: 'ReviewNote',
+          color: 'RED',
+          marked_range: {
+            OTIO_SCHEMA: 'TimeRange.1',
+            start_time: { OTIO_SCHEMA: 'RationalTime.1', value: 10, rate: 24 },
+            duration: { OTIO_SCHEMA: 'RationalTime.1', value: 0, rate: 24 },
+          },
+        },
+      ]);
+
+      manager.fromOTIO(json, resolver, { markerImporter });
+
+      expect(markerImporter).toHaveBeenCalledTimes(1);
+      expect(markerImporter).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({ name: 'ReviewNote', color: '#ff4444', timelineFrame: 10 }),
+        ]),
+      );
+    });
+
+    it('does not call markerImporter when there are no markers', () => {
+      const markerImporter = vi.fn();
+      const json = makeOTIOJson();
+
+      manager.fromOTIO(json, resolver, { markerImporter });
+
+      expect(markerImporter).not.toHaveBeenCalled();
+    });
+
+    it('stores markers in lastOTIOImportResult even without markerImporter', () => {
+      const json = makeOTIOJson([
+        {
+          OTIO_SCHEMA: 'Marker.1',
+          name: 'Note',
+          marked_range: {
+            OTIO_SCHEMA: 'TimeRange.1',
+            start_time: { OTIO_SCHEMA: 'RationalTime.1', value: 5, rate: 24 },
+            duration: { OTIO_SCHEMA: 'RationalTime.1', value: 0, rate: 24 },
+          },
+        },
+      ]);
+
+      manager.fromOTIO(json, resolver);
+
+      const result = manager.lastOTIOImportResult;
+      expect(result).not.toBeNull();
+      expect(result!.markers).toHaveLength(1);
+      expect(result!.markers[0]!.name).toBe('Note');
+    });
+  });
 });

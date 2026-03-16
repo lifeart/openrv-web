@@ -827,12 +827,16 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
   fromOTIO(
     otioJson: string,
     sourceResolver: (name: string, url?: string) => { index: number; frameCount: number } | null,
+    options?: {
+      /** Optional callback invoked with parsed markers after import */
+      markerImporter?: (markers: ParsedOTIOMarker[]) => void;
+    },
   ): number {
     // Try multi-track parser first for full editorial structure
     const multiResult = parseOTIOMultiTrack(otioJson);
 
     if (multiResult && multiResult.tracks.length > 0) {
-      return this._importFromMultiTrack(multiResult, sourceResolver);
+      return this._importFromMultiTrack(multiResult, sourceResolver, options?.markerImporter);
     }
 
     // Fall back to single-track parser for backward compatibility
@@ -870,6 +874,7 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
   private _importFromMultiTrack(
     result: OTIOMultiTrackParseResult,
     sourceResolver: (name: string, url?: string) => { index: number; frameCount: number } | null,
+    markerImporter?: (markers: ParsedOTIOMarker[]) => void,
   ): number {
     this._unresolvedClips = [];
 
@@ -924,6 +929,11 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
       markers: result.markers,
       metadata: result.timeline.metadata,
     };
+
+    // Invoke the marker importer callback if provided
+    if (markerImporter && result.markers.length > 0) {
+      markerImporter(result.markers);
+    }
 
     return importedCount;
   }
