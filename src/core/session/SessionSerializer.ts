@@ -33,7 +33,7 @@ import { DEFAULT_FPS_INDICATOR_STATE } from '../../ui/components/FPSIndicator';
 import type { Annotation, PaintEffects } from '../../paint/types';
 import { DEFAULT_PAINT_EFFECTS } from '../../paint/types';
 import { showFileReloadPrompt, showSequenceReloadPrompt, FILE_RELOAD_CANCEL } from '../../ui/components/shared/Modal';
-import { SUPPORTED_MEDIA_ACCEPT } from '../../utils/media/SupportedMediaFormats';
+import { SUPPORTED_MEDIA_ACCEPT, isDecoderBackedExtension } from '../../utils/media/SupportedMediaFormats';
 import type { MediaCacheManager } from '../../cache/MediaCacheManager';
 import { serializeRepresentation } from '../types/representation';
 import type { AddRepresentationConfig } from '../types/representation';
@@ -393,6 +393,8 @@ export class SessionSerializer {
         fps: source.fps,
         // Only set requiresReload when true to keep saved files cleaner
         ...(needsReload && { requiresReload: true }),
+        // Mark decoder-backed images so restore uses the FileSourceNode pipeline
+        ...(source.fileSourceNode && { decoderBacked: true }),
       };
 
       // Include OPFS cache key when the cache entry is stable (write complete)
@@ -539,7 +541,19 @@ export class SessionSerializer {
         }
 
         if (ref.type === 'image') {
-          await session.loadImage(ref.name, ref.path);
+          // Decoder-backed images (EXR, DPX, float TIFF, RAW, etc.) must go
+          // through the FileSourceNode pipeline, not a plain HTMLImageElement.
+          // Detect via the serialized flag or by file extension as a fallback.
+          // Only use the decoder path for remote URLs (http/https) since
+          // loadSourceFromUrl fetches the URL and routes through FileSourceNode.
+          const ext = ref.name.includes('.') ? ref.name.split('.').pop()!.toLowerCase() : '';
+          const needsDecoder = ref.decoderBacked || isDecoderBackedExtension(ext);
+          const isRemoteUrl = ref.path.startsWith('http://') || ref.path.startsWith('https://');
+          if (needsDecoder && isRemoteUrl) {
+            await session.loadSourceFromUrl(ref.path);
+          } else {
+            await session.loadImage(ref.name, ref.path);
+          }
           mediaIndexMap.set(refIndex, nextSourceIndex++);
           loadedMedia++;
         } else if (ref.type === 'video') {

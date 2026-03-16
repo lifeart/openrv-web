@@ -67,6 +67,8 @@ export interface MediaReference {
   representations?: SerializedRepresentation[];
   /** Active representation ID */
   activeRepresentationId?: string;
+  /** True if the image was loaded through the decoder-backed pipeline (FileSourceNode) */
+  decoderBacked?: boolean;
 }
 
 /** Playback state */
