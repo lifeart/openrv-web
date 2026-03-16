@@ -494,6 +494,7 @@ export class App {
       session: this.session,
       configUI: this.controls.shotGridConfig,
       panel: this.controls.shotGridPanel,
+      playlistManager: this.controls.playlistManager,
     });
     this.shotGridBridge.setup();
 

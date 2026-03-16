@@ -15,6 +15,7 @@ import { ShotGridBridge, ShotGridAPIError, mapStatusFromShotGrid, type ShotGridN
 import type { ShotGridConfigUI } from './ShotGridConfig';
 import type { ShotGridPanel } from '../ui/components/ShotGridPanel';
 import type { Session } from '../core/session/Session';
+import type { PlaylistManager } from '../core/session/PlaylistManager';
 import { isVideoExtension } from '../utils/media/SupportedMediaFormats';
 import { isSequencePattern } from '../utils/media/SequenceLoader';
 
@@ -26,6 +27,8 @@ export interface ShotGridIntegrationContext {
   session: Session;
   configUI: ShotGridConfigUI;
   panel: ShotGridPanel;
+  /** Optional PlaylistManager — when provided, loadPlaylist also builds a review playlist */
+  playlistManager?: PlaylistManager;
 }
 
 export interface NoteResult {
@@ -42,6 +45,7 @@ export class ShotGridIntegrationBridge {
   private readonly session: Session;
   private readonly configUI: ShotGridConfigUI;
   private readonly panel: ShotGridPanel;
+  private readonly playlistManager: PlaylistManager | null;
   private bridge: ShotGridBridge | null = null;
   private generation = 0;
   private disposed = false;
@@ -54,6 +58,7 @@ export class ShotGridIntegrationBridge {
     this.session = ctx.session;
     this.configUI = ctx.configUI;
     this.panel = ctx.panel;
+    this.playlistManager = ctx.playlistManager ?? null;
   }
 
   /**
@@ -125,6 +130,11 @@ export class ShotGridIntegrationBridge {
           const versions = await this.bridge.getVersionsForPlaylist(playlistId);
           if (gen !== this.generation || this.disposed) return;
           this.panel.setVersions(versions);
+
+          // Build a review playlist if PlaylistManager is available
+          if (this.playlistManager && versions.length > 0) {
+            await this.buildPlaylistFromVersions(versions, gen);
+          }
         } catch (err) {
           if (gen !== this.generation || this.disposed) return;
           this.handleError(err);
@@ -181,33 +191,7 @@ export class ShotGridIntegrationBridge {
         const gen = this.generation;
 
         try {
-          const isFrameSequencePath = mediaUrl === version.sg_path_to_frames &&
-            !version.sg_uploaded_movie?.url &&
-            !(version.sg_path_to_movie && (version.sg_path_to_movie.startsWith('http://') || version.sg_path_to_movie.startsWith('https://')));
-
-          if (isFrameSequencePath && isSequencePattern(mediaUrl)) {
-            // Route frame-sequence paths through the sequence loader
-            console.info(`[ShotGrid] Loading frame sequence path: ${mediaUrl}`);
-
-            const startFrame = version.sg_first_frame ?? 1;
-            const endFrame = version.sg_last_frame ?? this.parseEndFrameFromRange(version.frame_range, startFrame);
-
-            await this.session.loadImageSequenceFromPattern(
-              version.code,
-              mediaUrl,
-              startFrame,
-              endFrame,
-            );
-          } else {
-            const cleanUrl = mediaUrl.split('?')[0]!.split('#')[0]!;
-            const rawExt = cleanUrl.split('.').pop() ?? '';
-            const isVideo = isVideoExtension(rawExt.toLowerCase());
-            if (isVideo) {
-              await this.session.loadVideo(version.code, mediaUrl);
-            } else {
-              await this.session.loadImage(version.code, mediaUrl);
-            }
-          }
+          await this.loadVersionMedia(version, mediaUrl);
 
           if (gen !== this.generation || this.disposed) return;
 
@@ -310,6 +294,105 @@ export class ShotGridIntegrationBridge {
   }
 
   // ---- Private ----
+
+  /**
+   * Build a review playlist from ShotGrid versions by loading each version's
+   * media into the session and then wiring clips into the PlaylistManager.
+   * Preserves the order from ShotGrid's playlist.
+   */
+  private async buildPlaylistFromVersions(versions: ShotGridVersion[], gen: number): Promise<void> {
+    if (!this.playlistManager) return;
+
+    const clipInputs: Array<{ sourceIndex: number; sourceName: string; version: ShotGridVersion }> = [];
+
+    for (const version of versions) {
+      if (gen !== this.generation || this.disposed) return;
+
+      const mediaUrl = this.panel.resolveMediaUrl(version);
+      if (!mediaUrl) continue;
+
+      try {
+        await this.loadVersionMedia(version, mediaUrl);
+        if (gen !== this.generation || this.disposed) return;
+
+        const sourceIndex = this.session.sourceCount - 1;
+        this.panel.mapVersionToSource(version.id, sourceIndex);
+
+        // Apply SG status to StatusManager
+        const localStatus = mapStatusFromShotGrid(version.sg_status_list);
+        this.session.statusManager.setStatus(sourceIndex, localStatus, 'ShotGrid');
+
+        // Register in VersionManager so version navigation works
+        this.registerVersionInManager(version, sourceIndex);
+
+        clipInputs.push({ sourceIndex, sourceName: version.code, version });
+      } catch (err) {
+        // Log but continue with remaining versions
+        const message = err instanceof Error ? err.message : 'Failed to load version';
+        console.warn(`[ShotGrid] Skipping version ${version.code}: ${message}`);
+      }
+    }
+
+    if (gen !== this.generation || this.disposed) return;
+
+    if (clipInputs.length > 0) {
+      this.playlistManager.replaceClips(
+        clipInputs.map((c) => ({
+          sourceIndex: c.sourceIndex,
+          sourceName: c.sourceName,
+          inPoint: 1,
+          outPoint: this.getSourceFrameCount(c.sourceIndex),
+          metadata: { sgVersionId: c.version.id, sgShotName: c.version.entity.name },
+        })),
+      );
+      this.playlistManager.setEnabled(true);
+    }
+  }
+
+  /**
+   * Load a single version's media into the session.
+   * Shared by both individual loadVersion events and batch playlist building.
+   */
+  private async loadVersionMedia(version: ShotGridVersion, mediaUrl: string): Promise<void> {
+    const isFrameSequencePath = mediaUrl === version.sg_path_to_frames &&
+      !version.sg_uploaded_movie?.url &&
+      !(version.sg_path_to_movie && (version.sg_path_to_movie.startsWith('http://') || version.sg_path_to_movie.startsWith('https://')));
+
+    if (isFrameSequencePath && isSequencePattern(mediaUrl)) {
+      console.info(`[ShotGrid] Loading frame sequence path: ${mediaUrl}`);
+
+      const startFrame = version.sg_first_frame ?? 1;
+      const endFrame = version.sg_last_frame ?? this.parseEndFrameFromRange(version.frame_range, startFrame);
+
+      await this.session.loadImageSequenceFromPattern(
+        version.code,
+        mediaUrl,
+        startFrame,
+        endFrame,
+      );
+    } else {
+      const cleanUrl = mediaUrl.split('?')[0]!.split('#')[0]!;
+      const rawExt = cleanUrl.split('.').pop() ?? '';
+      const isVideo = isVideoExtension(rawExt.toLowerCase());
+      if (isVideo) {
+        await this.session.loadVideo(version.code, mediaUrl);
+      } else {
+        await this.session.loadImage(version.code, mediaUrl);
+      }
+    }
+  }
+
+  /**
+   * Get the frame count (duration) for a loaded source.
+   * Falls back to 1 if the source cannot be found.
+   */
+  private getSourceFrameCount(sourceIndex: number): number {
+    const source = this.session.getSourceByIndex(sourceIndex);
+    if (source && typeof source.duration === 'number' && source.duration > 0) {
+      return source.duration;
+    }
+    return 1;
+  }
 
   /**
    * Register a loaded ShotGrid version in the session's VersionManager.

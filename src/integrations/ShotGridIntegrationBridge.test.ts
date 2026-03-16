@@ -1374,7 +1374,9 @@ describe('ShotGridIntegrationBridge', () => {
     });
 
     // Should still map version to source and register in VersionManager
-    expect(panel.mapVersionToSource).toHaveBeenCalledWith(101, 0);
+    await vi.waitFor(() => {
+      expect(panel.mapVersionToSource).toHaveBeenCalledWith(101, 0);
+    });
     expect(session.versionManager.createGroup).toHaveBeenCalledWith(
       'shot010',
       [0],
