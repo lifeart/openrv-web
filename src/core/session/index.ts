@@ -17,6 +17,9 @@ export type { SessionMediaEvents, SessionMediaHost } from './SessionMedia';
 export { SessionPlayback } from './SessionPlayback';
 export type { SessionPlaybackEvents, SessionPlaybackHost } from './SessionPlayback';
 
+export { SessionManager } from './SessionManager';
+export type { SessionManagerEvents, SessionManagerHost } from './SessionManager';
+
 export { AnnotationStore } from './AnnotationStore';
 export type { AnnotationStoreCallbacks } from './AnnotationStore';
 export { getNumberValue, getBooleanValue, getNumberArray, getStringValue } from './AnnotationStore';

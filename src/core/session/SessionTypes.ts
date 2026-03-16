@@ -169,6 +169,10 @@ export interface SessionEvents extends EventMap {
   playlistEnded: void;
   statusChanged: { sourceIndex: number; status: string; previous: string };
   statusesChanged: void;
+  // SessionManager events (graph structure, view node, view history)
+  viewNodeChanged: { nodeId: string };
+  graphStructureChanged: void;
+  viewHistoryChanged: { canGoBack: boolean; canGoForward: boolean };
   // Range shifting events
   rangeShifted: { inPoint: number; outPoint: number };
   // Representation events

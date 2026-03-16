@@ -3333,3 +3333,17 @@ Wired into `AppNetworkBridge` (subscribes to syncCursor, usersChanged, userLeft,
 - `src/ui/components/Viewer.ts`
 - `src/AppNetworkBridge.ts`
 - `src/AppNetworkBridge.test.ts`
+
+## Issue #309: SessionManager never instantiated in production
+
+**Root cause**: `SessionManager` was documented as the "central orchestrator for graph mutations, view history, tree model, and media-graph bridge" but was only used in tests. No production code ever called `new SessionManager()`.
+
+**Fix**: Wired `SessionManager` into `Session` following the same pattern as other subsystems (`SessionAnnotations`, `SessionGraph`, `SessionMedia`). The `SessionManagerHost` provides `getGraph()` from `SessionGraph`. Connected to graph lifecycle: `onGraphCreated()` fires on `graphLoaded`, `onGraphCleared()` fires on `clearGraphData`. All three `SessionManager` events (`viewNodeChanged`, `graphStructureChanged`, `viewHistoryChanged`) are forwarded as `Session` events. Added public `sessionManager` getter and `dispose()` cleanup.
+
+**Tests added**: 8 integration tests in `SessionManager.integration.test.ts` covering: instance creation, singleton access, host wiring, event forwarding (3 event types), dispose cleanup, and graph clearing lifecycle.
+
+**Files changed**:
+- `src/core/session/Session.ts`
+- `src/core/session/SessionTypes.ts`
+- `src/core/session/index.ts`
+- `src/core/session/SessionManager.integration.test.ts` (new)

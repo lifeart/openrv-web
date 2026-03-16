@@ -5,17 +5,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 ## Confirmed Issues
 
 
-### 309. `SessionManager` is documented as a central session subsystem, but it is never instantiated in production
-
-- Severity: Low
-- Area: Session graph architecture
-- Evidence:
-  - `SessionManager` presents itself as the "Central orchestrator for graph mutations, view history, tree model, and media-graph bridge" in [src/core/session/SessionManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionManager.ts#L1) through [src/core/session/SessionManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionManager.ts#L7).
-  - The docs-generation templates also present `SessionManager` as part of the session-system architecture and include its source file in the generated module set in [docs/scripts/lib/templates.ts](/Users/lifeart/Repos/openrv-web/docs/scripts/lib/templates.ts#L288) through [docs/scripts/lib/templates.ts](/Users/lifeart/Repos/openrv-web/docs/scripts/lib/templates.ts#L304) and [docs/scripts/modules.ts](/Users/lifeart/Repos/openrv-web/docs/scripts/modules.ts#L46) through [docs/scripts/modules.ts](/Users/lifeart/Repos/openrv-web/docs/scripts/modules.ts#L52).
-  - A production-code search finds no `new SessionManager()` outside tests.
-- Impact:
-  - The repo carries a documented graph-mutation/view-history service that is effectively test-only in the shipped app.
-  - That makes the published session architecture ahead of production wiring for any future graph-browser or view-history workflows that would depend on this manager.
 
 
 

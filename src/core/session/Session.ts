@@ -43,6 +43,7 @@ import { SessionAnnotations } from './SessionAnnotations';
 import { SessionGraph } from './SessionGraph';
 import { SessionMedia } from './SessionMedia';
 import { SessionPlayback } from './SessionPlayback';
+import { SessionManager } from './SessionManager';
 import type { AudioPlaybackManager } from '../../audio/AudioPlaybackManager';
 import { isDecoderBackedExtension } from '../../utils/media/SupportedMediaFormats';
 import { fetchUrlAsFile } from '../../utils/media/fetchUrlAsFile';
@@ -94,6 +95,9 @@ export class Session extends EventEmitter<SessionEvents> {
 
   // Media source management service
   private _media = new SessionMedia();
+
+  // Graph mutation / view-history orchestrator
+  private _sessionManager = new SessionManager();
 
   // Static constant for starvation threshold - kept for backward compatibility
   static readonly MAX_CONSECUTIVE_STARVATION_SKIPS = MAX_CONSECUTIVE_STARVATION_SKIPS;
@@ -400,7 +404,10 @@ export class Session extends EventEmitter<SessionEvents> {
       onSourceAdded: (c) => this._playback._abCompareManager.onSourceAdded(c),
       emitABChanged: (i) => this._playback._abCompareManager.emitChanged(i),
       loadAudioFromVideo: (video, vol, muted) => this._playback._audioCoordinator.loadFromVideo(video, vol, muted),
-      clearGraphData: () => this._sessionGraph.clearData(),
+      clearGraphData: () => {
+        this._sessionGraph.clearData();
+        this._sessionManager.onGraphCleared();
+      },
       emitFpsChanged: (fps) => this.emit('fpsChanged', fps),
       emitInOutChanged: (inP, outP) => this.emit('inOutChanged', { inPoint: inP, outPoint: outP }),
     });
@@ -420,6 +427,23 @@ export class Session extends EventEmitter<SessionEvents> {
     ] as const;
     for (const event of mediaEvents) {
       this._media.on(event as any, (data: any) => this.emit(event as any, data));
+    }
+
+    // Wire SessionManager host — gives it access to the current graph
+    this._sessionManager.setHost({
+      getGraph: () => this._sessionGraph.graph,
+    });
+
+    // Connect SessionManager to graph lifecycle events:
+    // When a new graph is loaded (GTO import), re-subscribe to graph signals.
+    this._sessionGraph.on('graphLoaded', () => {
+      this._sessionManager.onGraphCreated();
+    });
+
+    // Forward SessionManager events to Session events
+    const sessionManagerEvents = ['viewNodeChanged', 'graphStructureChanged', 'viewHistoryChanged'] as const;
+    for (const event of sessionManagerEvents) {
+      this._sessionManager.on(event as any, (data: any) => this.emit(event as any, data));
     }
   }
 
@@ -591,6 +615,11 @@ export class Session extends EventEmitter<SessionEvents> {
   /** Shot status tracking (review workflow) */
   get statusManager(): StatusManager {
     return this._annotations.statusManager;
+  }
+
+  /** Graph mutation / view-history orchestrator */
+  get sessionManager(): SessionManager {
+    return this._sessionManager;
   }
 
   /** Session metadata (name, comment, version, origin) */
@@ -1482,5 +1511,6 @@ export class Session extends EventEmitter<SessionEvents> {
     this._media.dispose();
     this._annotations.dispose();
     this._sessionGraph.dispose();
+    this._sessionManager.dispose();
   }
 }
