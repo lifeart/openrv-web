@@ -156,22 +156,19 @@ The watermark renders as an overlay and does not modify the source image. For pe
 
 ## Perspective Grid
 
-The perspective grid overlay draws a configurable grid pattern on the viewer for composition analysis and alignment verification.
+The perspective grid overlay is a perspective-correction mesh used for verifying and adjusting perspective distortion in the viewed image. It is not a composition guide — for rule-of-thirds, center crosshair, and aspect-ratio guides, see [Safe Areas](#safe-areas).
 
-### Grid Types
+### How It Works
 
-- **Rule of thirds**: Divides the frame into a 3x3 grid for classical composition evaluation
-- **Golden ratio**: Places grid lines at the golden section points (approximately 0.382 and 0.618 of each dimension)
-- **Custom grid**: User-defined row and column count for arbitrary grid divisions
-- **Crosshair**: Simple center crosshair for alignment checks
+The overlay draws an 8x8 subdivision grid that is mapped to four draggable corner handles. Dragging any corner repositions the grid lines to follow a perspective transform, allowing you to visually align the grid with vanishing points and architectural lines in the image.
 
-### Display Options
+### Controls
 
-- **Color**: Grid line color (default: white with 50% opacity)
-- **Line width**: Thin (1px), medium (2px), or thick (3px)
-- **Diagonal lines**: Optional diagonal guides from corner to corner
+- **Corner handles**: Four circular handles at each corner of the grid. Drag a handle to warp the grid into the desired perspective
+- **Grid lines**: Fixed 8x8 subdivision mesh rendered in a light blue color
+- **Enable/disable**: The overlay can be toggled on or off; when disabled the grid and handles are hidden
 
-The grid overlay is particularly useful for evaluating composition in dailies reviews and verifying that CG camera framing matches the plate.
+The perspective grid overlay emits a `cornersChanged` event whenever a handle is moved, which feeds into the perspective-correction transform pipeline.
 
 ---
 
