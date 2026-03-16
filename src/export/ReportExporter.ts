@@ -20,9 +20,15 @@ export interface ReportNoteEntry {
   category: string;
 }
 
+export interface ReportVersionHistoryEntry {
+  label: string;
+  isCurrent: boolean;
+}
+
 export interface ReportRow {
   shotName: string;
   versionLabel: string;
+  versionHistory: ReportVersionHistoryEntry[];
   status: ShotStatus;
   notes: string[];
   noteEntries: ReportNoteEntry[];
@@ -136,7 +142,7 @@ export interface ReportPlaylist {
 // ---------------------------------------------------------------------------
 
 const CSV_HEADER_CORE = ['Shot', 'Status'];
-const CSV_HEADER_VERSION = ['Version'];
+const CSV_HEADER_VERSION = ['Version', 'Version History'];
 const CSV_HEADER_NOTES = ['Notes'];
 const CSV_HEADER_TC = ['Frame In', 'Frame Out', 'TC In', 'TC Out'];
 const CSV_HEADER_TAIL = ['Duration', 'Reviewed By', 'Status Date'];
@@ -177,11 +183,18 @@ function buildRowForSource(
   const versionGroup = versionManager.getGroupForSource(sourceIndex);
   const shotName = versionGroup?.shotName ?? source.name;
 
-  // Version label
+  // Version label and history
   let versionLabel = '';
+  const versionHistory: ReportVersionHistoryEntry[] = [];
   if (versionGroup) {
     const entry = versionGroup.versions.find((v) => v.sourceIndex === sourceIndex);
     versionLabel = entry?.label ?? '';
+    for (const v of versionGroup.versions) {
+      versionHistory.push({
+        label: v.label,
+        isCurrent: v.sourceIndex === sourceIndex,
+      });
+    }
   }
 
   // Status
@@ -215,6 +228,7 @@ function buildRowForSource(
   return {
     shotName,
     versionLabel,
+    versionHistory,
     status,
     notes,
     noteEntries,
@@ -267,6 +281,21 @@ export function buildReportRows(
 }
 
 // ---------------------------------------------------------------------------
+// Version history formatting
+// ---------------------------------------------------------------------------
+
+/**
+ * Format version history entries for CSV display.
+ * Current version is marked with an asterisk: "v1, v2, *v3 (current)*"
+ */
+export function formatVersionHistory(history: ReportVersionHistoryEntry[]): string {
+  if (history.length === 0) return '';
+  return history
+    .map((h) => (h.isCurrent ? `*${h.label} (current)*` : h.label))
+    .join(', ');
+}
+
+// ---------------------------------------------------------------------------
 // CSV generation
 // ---------------------------------------------------------------------------
 
@@ -308,7 +337,10 @@ export function generateCSV(rows: ReportRow[], options: ReportOptions): string {
   // Data rows
   for (const row of rows) {
     const fields: string[] = [row.shotName];
-    if (options.includeVersions) fields.push(row.versionLabel);
+    if (options.includeVersions) {
+      fields.push(row.versionLabel);
+      fields.push(formatVersionHistory(row.versionHistory));
+    }
     fields.push(row.status);
     if (options.includeNotes) {
       const noteTexts = row.noteEntries.map((entry) => {
@@ -340,12 +372,27 @@ export function generateCSV(rows: ReportRow[], options: ReportOptions): string {
 
 function buildHTMLHeaders(options: ReportOptions): string {
   const ths: string[] = ['<th>Shot</th>'];
-  if (options.includeVersions) ths.push('<th>Version</th>');
+  if (options.includeVersions) ths.push('<th>Version</th>', '<th>Version History</th>');
   ths.push('<th>Status</th>');
   if (options.includeNotes) ths.push('<th>Notes</th>');
   if (options.includeTimecodes) ths.push('<th>Frame Range</th>', '<th>TC In</th>', '<th>TC Out</th>');
   ths.push('<th>Duration</th>', '<th>Reviewed By</th>', '<th>Status Date</th>');
   return ths.join('');
+}
+
+/**
+ * Format version history entries for HTML display.
+ * Current version is highlighted with bold styling.
+ */
+function formatVersionHistoryHTML(history: ReportVersionHistoryEntry[]): string {
+  if (history.length === 0) return '';
+  return history
+    .map((h) =>
+      h.isCurrent
+        ? `<strong>${escapeHTML(h.label)}</strong>`
+        : escapeHTML(h.label),
+    )
+    .join(', ');
 }
 
 function statusBadgeHTML(status: ShotStatus): string {
@@ -401,7 +448,10 @@ export function generateHTML(rows: ReportRow[], options: ReportOptions): string 
   const tableRows = rows
     .map((row) => {
       const cells: string[] = [`<td>${escapeHTML(row.shotName)}</td>`];
-      if (options.includeVersions) cells.push(`<td>${escapeHTML(row.versionLabel)}</td>`);
+      if (options.includeVersions) {
+        cells.push(`<td>${escapeHTML(row.versionLabel)}</td>`);
+        cells.push(`<td>${formatVersionHistoryHTML(row.versionHistory)}</td>`);
+      }
       cells.push(`<td>${statusBadgeHTML(row.status)}</td>`);
       if (options.includeNotes) {
         const noteLines = row.noteEntries.map((entry) => {

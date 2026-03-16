@@ -6,6 +6,7 @@ import {
   generateReport,
   escapeCSVField,
   computeReportStatistics,
+  formatVersionHistory,
   type ReportSession,
   type ReportNoteManager,
   type ReportStatusManager,
@@ -13,6 +14,7 @@ import {
   type ReportOptions,
   type ReportRow,
   type ReportPlaylist,
+  type ReportVersionHistoryEntry,
 } from './ReportExporter';
 import type { ShotStatus } from '../core/session/StatusManager';
 
@@ -60,6 +62,31 @@ function createMockVersionManager(groups: Record<number, { shotName: string; lab
   };
 }
 
+/**
+ * Creates a mock version manager with full multi-version groups.
+ * Each group maps a set of sourceIndices to their labels under a shared shotName.
+ */
+function createMockVersionManagerMulti(
+  groupDefs: { shotName: string; versions: { sourceIndex: number; label: string }[]; activeSourceIndex: number }[],
+): ReportVersionManager {
+  return {
+    getGroupForSource: (i: number) => {
+      for (const def of groupDefs) {
+        const match = def.versions.find((v) => v.sourceIndex === i);
+        if (match) {
+          const activeIdx = def.versions.findIndex((v) => v.sourceIndex === def.activeSourceIndex);
+          return {
+            shotName: def.shotName,
+            versions: def.versions,
+            activeVersionIndex: activeIdx >= 0 ? activeIdx : 0,
+          };
+        }
+      }
+      return undefined;
+    },
+  };
+}
+
 const defaultOptions: ReportOptions = {
   format: 'csv',
   includeNotes: true,
@@ -73,6 +100,11 @@ function createSampleRows(): ReportRow[] {
     {
       shotName: 'vfx_010_020',
       versionLabel: 'v3',
+      versionHistory: [
+        { label: 'v1', isCurrent: false },
+        { label: 'v2', isCurrent: false },
+        { label: 'v3', isCurrent: true },
+      ],
       status: 'approved',
       notes: ['Looks great', 'Final comp'],
       noteEntries: [
@@ -89,6 +121,9 @@ function createSampleRows(): ReportRow[] {
     {
       shotName: 'vfx_010_030',
       versionLabel: 'v1',
+      versionHistory: [
+        { label: 'v1', isCurrent: true },
+      ],
       status: 'needs-work',
       notes: ['Fix edge blending'],
       noteEntries: [
@@ -245,6 +280,7 @@ describe('ReportExporter', () => {
         {
           shotName: 'shot',
           versionLabel: 'v1',
+          versionHistory: [],
           status: 'approved',
           notes: ['Fix "edge" blending, and roto'],
           noteEntries: [{ text: 'Fix "edge" blending, and roto', priority: 'medium', category: '' }],
@@ -270,11 +306,10 @@ describe('ReportExporter', () => {
       const dataLines = lines.slice(headerIdx).filter((l) => l.length > 0);
       expect(dataLines).toHaveLength(3); // header + 2 data rows
 
-      const fields = dataLines[1]!.split(',');
-      // Shot, Version, Status are first 3 columns
-      expect(fields[0]).toBe('vfx_010_020');
-      expect(fields[1]).toBe('v3');
-      expect(fields[2]).toBe('approved');
+      const line = dataLines[1]!;
+      // Shot, Version, Version History (quoted due to commas), Status...
+      expect(line).toMatch(/^vfx_010_020,v3,/);
+      expect(line).toContain('approved');
     });
 
     it('uses CRLF line endings per RFC 4180', () => {
@@ -378,6 +413,7 @@ describe('ReportExporter', () => {
         {
           shotName: '<script>alert("xss")</script>',
           versionLabel: '',
+          versionHistory: [],
           status: 'pending',
           notes: [],
           noteEntries: [],
@@ -405,6 +441,7 @@ describe('ReportExporter', () => {
         {
           shotName: 'shot',
           versionLabel: '',
+          versionHistory: [],
           status: 'pending',
           notes: ['<b>bold</b>'],
           noteEntries: [{ text: '<b>bold</b>', priority: 'medium', category: '' }],
@@ -705,6 +742,7 @@ describe('ReportExporter', () => {
       return {
         shotName: 'shot',
         versionLabel: 'v1',
+        versionHistory: [],
         status: 'pending',
         notes: [],
         noteEntries: [],
@@ -842,6 +880,7 @@ describe('ReportExporter', () => {
         {
           shotName: 'shot',
           versionLabel: 'v1',
+          versionHistory: [],
           status: 'approved',
           notes: ['Test'],
           noteEntries: [{ text: 'Test', priority: 'medium', category: '' }],
@@ -862,6 +901,7 @@ describe('ReportExporter', () => {
         {
           shotName: 'shot',
           versionLabel: 'v1',
+          versionHistory: [],
           status: 'approved',
           notes: ['Fix edge'],
           noteEntries: [{ text: 'Fix edge', priority: 'high', category: 'comp' }],
@@ -884,6 +924,7 @@ describe('ReportExporter', () => {
         {
           shotName: 'shot',
           versionLabel: 'v1',
+          versionHistory: [],
           status: 'approved',
           notes: ['Normal note'],
           noteEntries: [{ text: 'Normal note', priority: 'medium', category: '' }],
@@ -905,6 +946,7 @@ describe('ReportExporter', () => {
         {
           shotName: 'shot',
           versionLabel: 'v1',
+          versionHistory: [],
           status: 'approved',
           notes: ['Fix edge'],
           noteEntries: [{ text: 'Fix edge', priority: 'critical', category: 'roto' }],
@@ -920,6 +962,198 @@ describe('ReportExporter', () => {
       expect(html).toContain('[critical]');
       expect(html).toContain('[roto]');
       expect(html).toContain('Fix edge');
+    });
+  });
+
+  describe('version history (Issue #329)', () => {
+    describe('formatVersionHistory', () => {
+      it('returns empty string for empty history', () => {
+        expect(formatVersionHistory([])).toBe('');
+      });
+
+      it('marks current version with asterisks', () => {
+        const history: ReportVersionHistoryEntry[] = [
+          { label: 'v1', isCurrent: false },
+          { label: 'v2', isCurrent: false },
+          { label: 'v3', isCurrent: true },
+        ];
+        expect(formatVersionHistory(history)).toBe('v1, v2, *v3 (current)*');
+      });
+
+      it('handles single version that is current', () => {
+        const history: ReportVersionHistoryEntry[] = [
+          { label: 'v1', isCurrent: true },
+        ];
+        expect(formatVersionHistory(history)).toBe('*v1 (current)*');
+      });
+
+      it('handles current version in the middle', () => {
+        const history: ReportVersionHistoryEntry[] = [
+          { label: 'v1', isCurrent: false },
+          { label: 'v2', isCurrent: true },
+          { label: 'v3', isCurrent: false },
+        ];
+        expect(formatVersionHistory(history)).toBe('v1, *v2 (current)*, v3');
+      });
+    });
+
+    describe('buildReportRows populates versionHistory', () => {
+      it('populates versionHistory from version group with multiple versions', () => {
+        const session = createMockSession([
+          { name: 'shot_v1.exr', duration: 48, fps: 24 },
+          { name: 'shot_v2.exr', duration: 48, fps: 24 },
+          { name: 'shot_v3.exr', duration: 48, fps: 24 },
+        ]);
+        const versionManager = createMockVersionManagerMulti([
+          {
+            shotName: 'shot',
+            versions: [
+              { sourceIndex: 0, label: 'v1' },
+              { sourceIndex: 1, label: 'v2' },
+              { sourceIndex: 2, label: 'v3' },
+            ],
+            activeSourceIndex: 2,
+          },
+        ]);
+        const rows = buildReportRows(
+          session,
+          createMockNoteManager({}),
+          createMockStatusManager({}),
+          versionManager,
+        );
+        // Source 0 should see itself as current, others not
+        expect(rows[0]!.versionHistory).toEqual([
+          { label: 'v1', isCurrent: true },
+          { label: 'v2', isCurrent: false },
+          { label: 'v3', isCurrent: false },
+        ]);
+        expect(rows[0]!.versionLabel).toBe('v1');
+
+        // Source 2 should see v3 as current
+        expect(rows[2]!.versionHistory).toEqual([
+          { label: 'v1', isCurrent: false },
+          { label: 'v2', isCurrent: false },
+          { label: 'v3', isCurrent: true },
+        ]);
+        expect(rows[2]!.versionLabel).toBe('v3');
+      });
+
+      it('returns empty versionHistory when source has no version group', () => {
+        const session = createMockSession([{ name: 'standalone.exr', duration: 48, fps: 24 }]);
+        const rows = buildReportRows(
+          session,
+          createMockNoteManager({}),
+          createMockStatusManager({}),
+          createMockVersionManager({}),
+        );
+        expect(rows[0]!.versionHistory).toEqual([]);
+        expect(rows[0]!.versionLabel).toBe('');
+      });
+
+      it('returns single-entry versionHistory when group has one version', () => {
+        const session = createMockSession([{ name: 'shot_v1.exr', duration: 48, fps: 24 }]);
+        const rows = buildReportRows(
+          session,
+          createMockNoteManager({}),
+          createMockStatusManager({}),
+          createMockVersionManager({ 0: { shotName: 'shot', label: 'v1' } }),
+        );
+        expect(rows[0]!.versionHistory).toEqual([{ label: 'v1', isCurrent: true }]);
+      });
+    });
+
+    describe('CSV includes Version History column', () => {
+      it('adds Version History header when includeVersions is true', () => {
+        const csv = generateCSV([], defaultOptions);
+        const lines = csv.split('\r\n');
+        const headerLine = lines.find((l) => l.includes('Shot') && l.includes('Status'));
+        expect(headerLine).toContain('Version History');
+      });
+
+      it('omits Version History header when includeVersions is false', () => {
+        const csv = generateCSV([], { ...defaultOptions, includeVersions: false });
+        const lines = csv.split('\r\n');
+        const headerLine = lines.find((l) => l.includes('Shot') && l.includes('Status'));
+        expect(headerLine).not.toContain('Version History');
+      });
+
+      it('renders version history with current marker in CSV data rows', () => {
+        const rows = createSampleRows();
+        const csv = generateCSV(rows, defaultOptions);
+        // First row has v1, v2, *v3 (current)*
+        expect(csv).toContain('*v3 (current)*');
+        expect(csv).toContain('v1');
+        expect(csv).toContain('v2');
+      });
+
+      it('renders empty version history field for sources without groups', () => {
+        const rows: ReportRow[] = [
+          {
+            shotName: 'standalone',
+            versionLabel: '',
+            versionHistory: [],
+            status: 'pending',
+            notes: [],
+            noteEntries: [],
+            frameRange: '1-24',
+            timecodeIn: '00:00:00:00',
+            timecodeOut: '00:00:01:00',
+            duration: '24 frames',
+            setBy: '',
+            setAt: '',
+          },
+        ];
+        const csv = generateCSV(rows, defaultOptions);
+        // The version history column should be empty
+        const lines = csv.split('\r\n');
+        const headerIdx = lines.findIndex((l) => l.includes('Shot') && l.includes('Status'));
+        const dataLine = lines[headerIdx + 1]!;
+        // After Shot (standalone), Version (''), Version History (''), Status (pending)
+        expect(dataLine).toMatch(/standalone,,/);
+      });
+    });
+
+    describe('HTML includes Version History column', () => {
+      it('adds Version History header in HTML when includeVersions is true', () => {
+        const html = generateHTML([], defaultOptions);
+        expect(html).toContain('<th>Version History</th>');
+      });
+
+      it('omits Version History header when includeVersions is false', () => {
+        const html = generateHTML([], { ...defaultOptions, includeVersions: false });
+        expect(html).not.toContain('<th>Version History</th>');
+      });
+
+      it('renders version history with bold current version in HTML', () => {
+        const rows = createSampleRows();
+        const html = generateHTML(rows, defaultOptions);
+        // Current version should be bold
+        expect(html).toContain('<strong>v3</strong>');
+        // Non-current versions should appear as plain text
+        expect(html).toContain('v1, v2, <strong>v3</strong>');
+      });
+
+      it('renders empty cell for sources without version history', () => {
+        const rows: ReportRow[] = [
+          {
+            shotName: 'standalone',
+            versionLabel: '',
+            versionHistory: [],
+            status: 'pending',
+            notes: [],
+            noteEntries: [],
+            frameRange: '1-24',
+            timecodeIn: '00:00:00:00',
+            timecodeOut: '00:00:01:00',
+            duration: '24 frames',
+            setBy: '',
+            setAt: '',
+          },
+        ];
+        const html = generateHTML(rows, defaultOptions);
+        // Should have an empty version history cell
+        expect(html).toContain('<td></td><td></td>');
+      });
     });
   });
 });

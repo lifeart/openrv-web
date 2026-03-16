@@ -3304,3 +3304,16 @@ Wired into `AppNetworkBridge` (subscribes to syncCursor, usersChanged, userLeft,
 - `src/export/ReportExporter.ts`
 - `src/export/ReportExporter.test.ts`
 - `src/AppPlaybackWiring.ts`
+
+## Issue #329: Dailies reports only show current version label, not version history
+
+**Root cause**: `buildReportRows` only extracted the single `label` for the current source's version entry. Neither CSV nor HTML output included other version-group entries.
+
+**Fix**: Added `ReportVersionHistoryEntry` interface and `versionHistory` field to `ReportRow`. Updated `buildRowForSource()` to populate all versions from the group with `isCurrent` markers. Added `formatVersionHistory()`/`formatVersionHistoryHTML()` helpers. Updated CSV with "Version History" column and HTML with bold-current-version display.
+
+**Tests added**: 15 regression tests covering formatVersionHistory (empty/single/multi/middle-current), buildReportRows multi-version population, CSV/HTML header presence and data rendering.
+
+**Files changed**:
+- `src/export/ReportExporter.ts`
+- `src/export/ReportExporter.test.ts`
+- `src/export/index.ts`

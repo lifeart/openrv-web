@@ -47,17 +47,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 
 
 
-### 329. Dailies reports include only the current version label, not the version history they advertise
-
-- Severity: Medium
-- Area: Reports / version data
-- Evidence:
-  - The report docs describe “Version info | Version number and history” in [docs/export/edl-otio.md](/Users/lifeart/Repos/openrv-web/docs/export/edl-otio.md#L86) through [docs/export/edl-otio.md](/Users/lifeart/Repos/openrv-web/docs/export/edl-otio.md#L96).
-  - `buildReportRows(...)` looks up the version group for a source, then only extracts the single `label` for the current source’s matching entry in [src/export/ReportExporter.ts](/Users/lifeart/Repos/openrv-web/src/export/ReportExporter.ts#L120) through [src/export/ReportExporter.ts#L129).
-  - Neither the CSV nor HTML output adds any other version-group entries or history fields in [src/export/ReportExporter.ts](/Users/lifeart/Repos/openrv-web/src/export/ReportExporter.ts#L196) through [src/export/ReportExporter.ts#L210) and [src/export/ReportExporter.ts](/Users/lifeart/Repos/openrv-web/src/export/ReportExporter.ts#L252) through [src/export/ReportExporter.ts#L269).
-- Impact:
-  - Review reports cannot show a shot’s version lineage or alternative versions, only the one label attached to the exported source row.
-  - That makes the report less useful for production review trails where version progression itself matters.
 
 ### 330. ShotGrid note sync flattens local note threads and statuses into plain top-level comments
 
