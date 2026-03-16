@@ -359,9 +359,12 @@ The RV Edit Decision List format describes cut sequences with frame-accurate sou
 
 OpenTimelineIO is the ASWF standard for editorial timeline interchange:
 
-- **Import**: Editorial timelines with clips, gaps, and transitions can be imported
-- **Mapping**: OTIO clips map to source nodes; OTIO tracks map to sequence groups
-- **Interchange**: Provides a bridge between NLE systems (Avid, Premiere, Resolve) and OpenRV Web
+- **Import**: The live import reads the **first video track only** and linearizes its clips into the playlist via `PlaylistManager.fromOTIO()`. Each OTIO clip is added sequentially with `addClip()`
+- **Transitions**: OTIO transitions (e.g. SMPTE_Dissolve) from the first video track are imported into the `TransitionManager` when available
+- **Gaps**: OTIO gaps are parsed and stored in the import result metadata but are **not** represented in the playlist timeline
+- **Markers**: Timeline-level and clip-level markers are parsed and forwarded to the marker importer callback
+- **Multi-track**: A `parseOTIOMultiTrack()` API exists and is attempted first internally, but only the first video track's clips are imported into the playlist. Additional video or audio tracks are not surfaced in the UI
+- **Interchange**: Provides a bridge between NLE systems (Avid, Premiere, Resolve) and OpenRV Web for single-track editorial workflows
 
 ### .orvproject (Native Session Format)
 
