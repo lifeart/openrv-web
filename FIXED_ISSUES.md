@@ -3347,3 +3347,149 @@ Wired into `AppNetworkBridge` (subscribes to syncCursor, usersChanged, userLeft,
 - `src/core/session/SessionTypes.ts`
 - `src/core/session/index.ts`
 - `src/core/session/SessionManager.integration.test.ts` (new)
+
+## Issue #457: Sequence pattern not surfaced in UI
+
+**Root cause**: `sequenceInfo.pattern` was stored in session state and serialized to project files, but no UI component rendered it. The Info Panel overlay displayed filename, resolution, frame info, timecode, fps, and color values — but not the detected sequence pattern.
+
+**Fix**: Added `sequencePattern` field to `InfoPanelFields` and `InfoPanelData`. Wired `source.sequenceInfo.pattern` through `infoPanelHandlers.ts` into the Info Panel, rendering the pattern (e.g., `frame_####.exr`) between resolution and frame info lines. Added the field to InfoPanelSettingsMenu for toggle control.
+
+**Tests added**: 8 regression tests across InfoPanel.test.ts and infoPanelHandlers.test.ts covering rendering, toggling, undefined handling, defaults, and XSS prevention.
+
+**Files changed**:
+- `src/ui/components/InfoPanel.ts`
+- `src/handlers/infoPanelHandlers.ts`
+- `src/ui/components/InfoPanelSettingsMenu.ts`
+- `src/ui/components/InfoPanel.test.ts`
+- `src/handlers/infoPanelHandlers.test.ts`
+- `docs/playback/image-sequences.md`
+
+## Issue #458: Missing-frame detection helpers not in public API
+
+**Root cause**: `detectMissingFrames()` and `isFrameMissing()` existed only as internal utilities in `src/utils/media/SequenceLoader.ts`. The public API surface at `window.openrv` had no sequence module exposing these helpers.
+
+**Fix**: Created `SequenceAPI` class with `detectMissingFrames()`, `isFrameMissing()`, `isSequence()`, `getPattern()`, and `getFrameRange()` methods. Wired into `OpenRVAPI` as `window.openrv.sequence`. Added barrel export in `src/api/index.ts`.
+
+**Tests added**: 17 regression tests covering no-source, non-sequence, missing frames, complete sequences, and out-of-range frames.
+
+**Files changed**:
+- `src/api/SequenceAPI.ts` (new)
+- `src/api/SequenceAPI.test.ts` (new)
+- `src/api/OpenRVAPI.ts`
+- `src/api/index.ts`
+- `docs/api/index.md`
+- `docs/playback/image-sequences.md`
+- `README.md`
+
+## Issue #467: OTIO markers not imported
+
+**Root cause**: The OTIO parser's `parseTrack()` only handled `Clip.1`, `Gap.1`, and `Transition.1` children. `Marker.1` items were ignored at all levels (timeline, track, clip). `PlaylistManager.fromOTIO()` had no marker consumption path.
+
+**Fix**: Added `OTIOMarker` interface, `ParsedOTIOMarker` type with hex color mapping, and `parseMarkers()` helper. Updated `parseTrack()` to collect clip-level and track-level markers. Added `markers` field to `OTIOParseResult` and `OTIOMultiTrackParseResult`. Added optional `markerImporter` callback to `PlaylistManager.fromOTIO()`.
+
+**Tests added**: 18 regression tests covering marker parsing at timeline/track/clip levels, color mapping, metadata preservation, and backward compatibility.
+
+**Files changed**:
+- `src/utils/media/OTIOParser.ts`
+- `src/utils/media/OTIOParser.test.ts`
+- `src/core/session/PlaylistManager.ts`
+- `src/core/session/PlaylistManager.test.ts`
+- `docs/export/edl-otio.md`
+
+## Issue #468: OTIO metadata dropped during playlist import
+
+**Root cause**: `OTIOParser` captured clip metadata, but `PlaylistManager.fromOTIO()` only imported clip names, source resolution, and frame ranges — `clip.metadata` was silently discarded.
+
+**Fix**: Added `metadata?: Record<string, unknown>` to `PlaylistClip` and `PlaylistClipInput` interfaces. Wired metadata through `fromOTIO()`, `addClip()`, and `replaceClips()` so OTIO clip metadata is stored and accessible at runtime.
+
+**Tests added**: 8 regression tests covering metadata preservation through import, addClip, replaceClips, and serialization.
+
+**Files changed**:
+- `src/core/session/PlaylistManager.ts`
+- `src/core/session/PlaylistManager.issue468.test.ts` (new)
+- `docs/export/edl-otio.md`
+
+## Issue #485: Overlay states not persisted in session files
+
+**Root cause**: `SessionSerializer.toJSON()` only serialized `watermark` among viewer overlays. TimecodeOverlay, SafeAreasOverlay, ClippingOverlay, InfoStripOverlay, SpotlightOverlay, BugOverlay, EXRWindowOverlay, and FPSIndicator states were all lost on save/load.
+
+**Fix**: Added 8 overlay state types to `SessionState` interface. Extended `toJSON()` to serialize all overlay states via `viewer.getXxxOverlay().getState()`. Extended `fromJSON()` to restore via `setState()` with default fallbacks for legacy projects. Added migration support.
+
+**Tests added**: 5 regression tests covering serialization, restoration, legacy migration, round-trip, and partial state handling. Updated 8 existing test files with overlay accessor mocks.
+
+**Files changed**:
+- `src/core/session/SessionSerializer.ts`
+- `src/core/session/SessionState.ts`
+- `src/core/session/SessionSerializer.issue485.test.ts` (new)
+- `src/core/session/SessionSerializer.test.ts`
+- 7 additional SessionSerializer test files (mock updates)
+
+## Issue #531: Representation loaders don't support url/path configs
+
+**Root cause**: `RepresentationLoaderConfig` documented `url` and `path` fields, and tests used them, but `FileRepresentationLoader` and `VideoRepresentationLoader` only checked for `loaderConfig.file` and threw immediately if missing.
+
+**Fix**: Updated both loaders to fall back from `file` → `url` → `path`. File loader uses `fileSourceNode.load(url, path)` for URL/path cases. Video loader uses `videoSourceNode.load(url, path, fps, hdrResizeTier)`. Only throws when none of file/url/path are provided.
+
+**Tests added**: 8 regression tests covering URL-based loading, path-based loading, and file-over-url preference in both loaders.
+
+**Files changed**:
+- `src/core/session/loaders/FileRepresentationLoader.ts`
+- `src/core/session/loaders/VideoRepresentationLoader.ts`
+- `src/core/session/loaders/RepresentationLoaderFactory.test.ts`
+
+## Issue #550: renderedImagesChanged event hardcoded to single source
+
+**Root cause**: `EventsAPI.emitCurrentRenderedImages()` always emitted a single-item `images` array from `_lastLoadedSource`, even when the viewer was in A/B compare mode with two sources visible.
+
+**Fix**: Updated `emitCurrentRenderedImages()` to check `session.abCompareAvailable`. When A/B compare is active and `sourceB` exists, appends a second entry to the images array with `index: 1` and B source's name/dimensions.
+
+**Tests added**: 2 regression tests for single-source and A/B compare emission.
+
+**Files changed**:
+- `src/api/EventsAPI.ts`
+- `src/api/OpenRVAPI.test.ts`
+
+## Issue #323: ShotGrid playlist loading not wired to playlist manager
+
+**Root cause**: The `loadPlaylist` handler in `ShotGridIntegrationBridge` only fetched versions and called `panel.setVersions(versions)` to populate the side panel. It never built an OpenRV Web review playlist — users had to load versions manually one by one.
+
+**Fix**: After setting versions on the panel (preserved), `loadPlaylist` now also calls `buildPlaylistFromVersions()` which: loads each version's media in order, maps source indices, applies SG status, registers in VersionManager, then calls `playlistManager.replaceClips()` and enables the playlist. Individual version load failures are handled gracefully with warnings.
+
+**Tests added**: 13 regression tests covering playlist clip building, media loading, source mapping, error handling, backward compatibility, and race condition prevention.
+
+**Files changed**:
+- `src/integrations/ShotGridIntegrationBridge.ts`
+- `src/integrations/ShotGridIntegrationBridge.test.ts`
+- `src/integrations/ShotGridIntegrationBridge.issue323.test.ts` (new)
+- `src/App.ts`
+
+## Issue #444: DCC bridge endpoint not configurable from settings
+
+**Root cause**: The DCC bridge only activated via a `?dcc=` URL query parameter. There was no persisted DCC endpoint preference or settings panel — users had to supply the endpoint out-of-band in the launch URL every time.
+
+**Fix**: Created `DCCSettings` module with localStorage persistence (`openrv-dcc-endpoint` key). Added `resolveDCCEndpoint()` implementing priority: URL query param > persisted setting > no bridge. Wired into App.ts bootstrap and PreferencesManager for export/import/reset.
+
+**Tests added**: 21 regression tests covering sanitization, persistence, and endpoint resolution priority.
+
+**Files changed**:
+- `src/integrations/DCCSettings.ts` (new)
+- `src/integrations/DCCSettings.test.ts` (new)
+- `src/App.ts`
+- `src/core/PreferencesManager.ts`
+- `docs/advanced/dcc-integration.md`
+
+## Issue #445: DCC bridge missing note roundtrip
+
+**Root cause**: The DCC outbound protocol had no note message type. Production wiring only forwarded `paintEngine.strokeAdded` as `annotationAdded`. There was no subscriber to NoteManager changes in the DCC path.
+
+**Fix**: Added `noteAdded` outbound message type to DCCBridge with `sendNoteAdded()` helper. Added event subscription (`on()` method) to NoteManager. Wired `NoteManager.noteAdded` events through `AppDCCWiring` to the DCC bridge.
+
+**Tests added**: 10 regression tests covering message format, wiring integration, event subscription, unsubscribe, and dispose cleanup.
+
+**Files changed**:
+- `src/core/session/NoteManager.ts`
+- `src/integrations/DCCBridge.ts`
+- `src/integrations/DCCBridge.test.ts`
+- `src/AppDCCWiring.ts`
+- `src/AppDCCWiring.test.ts`
+- `docs/advanced/dcc-integration.md`

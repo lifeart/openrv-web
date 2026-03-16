@@ -5,22 +5,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 ## Confirmed Issues
 
 
-
-
-
-### 323. ShotGrid playlist loading is not real playlist sync; it only fills the browser panel
-
-- Severity: Medium
-- Area: ShotGrid integration / playlist workflow
-- Evidence:
-  - The integration guide says “ShotGrid playlists can be imported into OpenRV Web as review playlists, maintaining clip order and metadata” in [docs/advanced/dcc-integration.md](/Users/lifeart/Repos/openrv-web/docs/advanced/dcc-integration.md#L104) through [docs/advanced/dcc-integration.md#L109).
-  - The actual `loadPlaylist` flow only fetches versions and calls `panel.setVersions(versions)` in [src/integrations/ShotGridIntegrationBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/ShotGridIntegrationBridge.ts#L115) through [src/integrations/ShotGridIntegrationBridge.ts#L131).
-  - A production-code search finds no ShotGrid path that calls `playlistManager`, `replaceClips(...)`, `addClip(...)`, or similar playlist runtime APIs.
-- Impact:
-  - Entering a ShotGrid playlist ID does not build an OpenRV Web review playlist; it just populates the ShotGrid side panel with version rows.
-  - Users still have to load versions manually one by one, so clip order and review-playlist semantics are not actually imported.
-
-
 ### 325. ShotGrid note publishing sends only plain note text, not annotations or thumbnails
 
 - Severity: Medium
@@ -124,30 +108,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - That makes a concrete maintenance workflow in the docs impossible to complete from the named UI.
 
 
-### 444. The DCC guide promises a configurable bridge endpoint, but production only supports `?dcc=` URL bootstrap
-
-- Severity: Low
-- Area: Documentation / DCC connection setup
-- Evidence:
-  - The DCC guide says the browser connects to `ws://localhost:9200` and that for remote setups “the bridge server address can be configured in the OpenRV Web settings” in [docs/advanced/dcc-integration.md](/Users/lifeart/Repos/openrv-web/docs/advanced/dcc-integration.md#L24) through [docs/advanced/dcc-integration.md](/Users/lifeart/Repos/openrv-web/docs/advanced/dcc-integration.md#L27).
-  - Production bootstrap only creates the bridge when a `dcc` query parameter is present in the page URL, in [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L603) through [src/App.ts](/Users/lifeart/Repos/openrv-web/src/App.ts#L617).
-  - A production-code search finds no DCC settings panel, no persisted DCC endpoint preference, and no other runtime entry point for configuring a bridge URL outside that query-param path.
-- Impact:
-  - Users following the guide can look for a settings-driven DCC connection flow that the shipped app does not provide.
-  - Remote or repeated DCC setups are less usable than documented because the endpoint must be supplied out-of-band in the launch URL.
-
-### 445. The DCC guide promises browser review notes back to the DCC, but the shipped bridge only reports paint annotations
-
-- Severity: Low
-- Area: Documentation / DCC review roundtrip
-- Evidence:
-  - The DCC guide says artists can “push review notes and status updates back to the DCC” and that outbound viewer messages include `annotationCreated` in [docs/advanced/dcc-integration.md](/Users/lifeart/Repos/openrv-web/docs/advanced/dcc-integration.md#L3) through [docs/advanced/dcc-integration.md](/Users/lifeart/Repos/openrv-web/docs/advanced/dcc-integration.md#L4) and [docs/advanced/dcc-integration.md](/Users/lifeart/Repos/openrv-web/docs/advanced/dcc-integration.md#L89) through [docs/advanced/dcc-integration.md](/Users/lifeart/Repos/openrv-web/docs/advanced/dcc-integration.md#L96).
-  - The actual outbound protocol defines `annotationAdded`, not `annotationCreated`, and it has no note message type at all in [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L26) through [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L27) and [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L91) through [src/integrations/DCCBridge.ts](/Users/lifeart/Repos/openrv-web/src/integrations/DCCBridge.ts#L117).
-  - Production wiring only forwards `paintEngine.strokeAdded` through `sendAnnotationAdded(...)` in [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L267) through [src/AppDCCWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppDCCWiring.ts#L276), and there is no runtime subscriber to note-manager changes in the DCC path.
-- Impact:
-  - Users and integrators can expect note-level review roundtrip from the guide, but the shipped bridge only reports paint annotations.
-  - That makes the documented DCC review loop sound richer than the real protocol and can mislead pipeline implementers about what feedback types they will receive.
-
 ### 446. The DCC guide overstates app-specific Nuke, Maya, and Houdini workflows that the shipped bridge does not model
 
 - Severity: Medium
@@ -173,30 +133,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - The deployment docs make the full app sound entirely static-hosted even though the advertised collaboration feature still has external signaling/runtime dependencies in normal operation.
   - Self-hosters can deploy the static app successfully and still be surprised when collaborative review is unavailable or misconfigured.
-
-### 457. The image-sequences guide says the detected pattern is shown in sequence information, but the shipped UI never surfaces `sequenceInfo.pattern`
-
-- Severity: Low
-- Area: Documentation / image-sequence UI
-- Evidence:
-  - The image-sequences guide says "The detected pattern is displayed using hash notation ... in the sequence information" in [docs/playback/image-sequences.md](/Users/lifeart/Repos/openrv-web/docs/playback/image-sequences.md#L35).
-  - Production code does store the pattern in sequence state and serialization, for example in [src/core/session/loaders/SequenceRepresentationLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/loaders/SequenceRepresentationLoader.ts#L59) and [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L411).
-  - A production-code search finds no UI consumer of `sequenceInfo.pattern` or `sequencePattern`; outside persistence/internal loaders, those fields are not rendered anywhere in the shipped interface.
-- Impact:
-  - Users reading the sequence docs can expect a visible sequence-pattern readout that never appears in the actual UI.
-  - The runtime keeps the pattern as internal metadata, but the documented “sequence information” surface is not real.
-
-### 458. The image-sequences guide presents `detectMissingFrames()` and `isFrameMissing()` as programmatic affordances, but they are internal utilities, not public API
-
-- Severity: Low
-- Area: Documentation / scripting surface
-- Evidence:
-  - The image-sequences guide says missing frames can be queried programmatically via `detectMissingFrames()` and `isFrameMissing(frame)` in [docs/playback/image-sequences.md](/Users/lifeart/Repos/openrv-web/docs/playback/image-sequences.md#L43) through [docs/playback/image-sequences.md](/Users/lifeart/Repos/openrv-web/docs/playback/image-sequences.md#L44).
-  - Those functions exist only as exports from the internal utility module [src/utils/media/SequenceLoader.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SequenceLoader.ts#L268) and [src/utils/media/SequenceLoader.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/SequenceLoader.ts#L290).
-  - The shipped public API surface in [src/api/OpenRVAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.ts#L42) through [src/api/OpenRVAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/OpenRVAPI.ts#L98) exposes no sequence/missing-frame module or helper methods for those calls.
-- Impact:
-  - The docs make internal loader helpers sound like supported scripting features even though end users do not get them through `window.openrv`.
-  - That can mislead automation/integration users who treat the page as public-app behavior rather than internal source layout.
 
 ### 460. The browser-support docs present External Presentation as a working BroadcastChannel feature, but the shipped feature is already broken at runtime
 
@@ -249,31 +185,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - The guide makes the conform workflow sound end-to-end usable when the most important relink entry points still dead-end in production.
   - Editorial users can reach the panel, see browse actions, and assume they missed something when the app simply does not handle them.
-
-### 467. The OTIO import docs claim markers are imported, but the shipped parser does not read OTIO marker data at all
-
-- Severity: Low
-- Area: Documentation / OTIO feature coverage
-- Evidence:
-  - The EDL/OTIO guide's supported-elements table lists `Markers | Imported as timeline markers` in [docs/export/edl-otio.md](/Users/lifeart/Repos/openrv-web/docs/export/edl-otio.md#L49) through [docs/export/edl-otio.md#L56).
-  - The shipped OTIO parser only models clips, gaps, transitions, tracks, stacks, timelines, media references, and metadata in [src/utils/media/OTIOParser.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/OTIOParser.ts#L9) through [src/utils/media/OTIOParser.ts#L155).
-  - `parseTrack(...)` only handles `Clip.1`, `Gap.1`, and `Transition.1` children in [src/utils/media/OTIOParser.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/OTIOParser.ts#L217) through [src/utils/media/OTIOParser.ts#L286), and `PlaylistManager.fromOTIO(...)` only consumes the parser's clips/transitions output in [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L674) through [src/core/session/PlaylistManager.ts#L703).
-- Impact:
-  - Editorial users can expect OTIO note/marker round-trip that the shipped importer simply does not perform.
-  - That makes the supported-elements table materially richer than the real OTIO ingest path.
-
-### 468. The OTIO import docs say metadata is preserved for display, but the live playlist import path drops OTIO metadata
-
-- Severity: Low
-- Area: Documentation / OTIO feature coverage
-- Evidence:
-  - The OTIO guide's supported-elements table says `Metadata | Preserved for display` in [docs/export/edl-otio.md](/Users/lifeart/Repos/openrv-web/docs/export/edl-otio.md#L49) through [docs/export/edl-otio.md#L56).
-  - `OTIOParser` does capture clip/transition metadata in [src/utils/media/OTIOParser.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/OTIOParser.ts#L242) and [src/utils/media/OTIOParser.ts](/Users/lifeart/Repos/openrv-web/src/utils/media/OTIOParser.ts#L267).
-  - But `PlaylistManager.fromOTIO(...)` only imports clip names, source resolution, and frame ranges; it never stores or forwards `clip.metadata` into playlist/UI state in [src/core/session/PlaylistManager.ts](/Users/lifeart/Repos/openrv-web/src/core/session/PlaylistManager.ts#L674) through [src/core/session/PlaylistManager.ts#L703).
-  - A production-code search finds no playlist/timeline UI path that renders OTIO metadata after import.
-- Impact:
-  - The docs promise richer editorial context than the shipped OTIO workflow actually preserves.
-  - Users can expect imported metadata to remain inspectable in the app when it is currently discarded during import.
 
 ### 469. The OTIO import docs say gaps and transitions are recognized, but the shipped playlist import path linearizes clips and drops both structures
 
@@ -410,19 +321,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - The docs promise a more flexible broadcast-safe workflow than the runtime actually supports.
   - Users can look for user-defined percentages or color-coded zones that simply are not part of the shipped overlay model.
-
-### 485. The overlays guide says overlay states are preserved in session files and snapshots, but the `.orvproject` serializer only persists watermark among the viewer overlays
-
-- Severity: Low
-- Area: Documentation / overlay persistence
-- Evidence:
-  - The overlays guide says “All overlay settings are saved with the session state” and that overlay states are preserved in `.orvproject` files and snapshots in [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L3) and [docs/advanced/overlays.md](/Users/lifeart/Repos/openrv-web/docs/advanced/overlays.md#L215).
-  - The serialized session schema only contains an explicit overlay field for `watermark` in [src/core/session/SessionState.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionState.ts#L131) through [src/core/session/SessionState.ts#L132).
-  - `SessionSerializer.toJSON()` saves `watermark`, but does not read `getTimecodeOverlay()`, `getSafeAreasOverlay()`, `getClippingOverlay()`, `getInfoStripOverlay()`, `getFPSIndicator()`, `getEXRWindowOverlay()`, `getSpotlightOverlay()`, or `getBugOverlay()` anywhere in the serialization path in [src/core/session/SessionSerializer.ts](/Users/lifeart/Repos/openrv-web/src/core/session/SessionSerializer.ts#L338) through [src/core/session/SessionSerializer.ts#L368).
-  - Snapshots and auto-saves reuse the same lossy serializer through `AppPersistenceManager`, so this persistence gap is not limited to `.orvproject` files, as already established by issues `138` and `139`.
-- Impact:
-  - The overlays guide makes the session system sound much more complete for viewer overlays than the shipped persistence model actually is.
-  - Users can save a review session expecting overlay state to round-trip when most overlay toggles and settings are still omitted from the serialized payload.
 
 ### 486. The overlays guide says bug overlays are burned into video export, but the shipped export flow never consults bug-overlay state
 
@@ -739,20 +637,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Saved projects can preserve alternate representation metadata and IDs, but any restored non-sequence representation that still depends on a runtime `File` object can fail as soon as activation is attempted.
   - That leaves representation persistence broken more broadly than the already-logged sequence case: metadata round-trips, but the real loadable media payload does not.
 
-### 531. The shared representation loader contract advertises `path` and `url` configs, but live representation activation still hard-fails unless an in-memory `File` object is present
-
-- Severity: Medium
-- Area: Media representations / runtime contract
-- Evidence:
-  - `RepresentationLoaderConfig` explicitly documents `path` for file-based representations and `url` for URL-based representations in [src/core/types/representation.ts](/Users/lifeart/Repos/openrv-web/src/core/types/representation.ts#L69) through [src/core/types/representation.ts#L85).
-  - The shared type tests also treat those fields as normal inputs, for example creating reps with `loaderConfig: { url: 'http://example.com/video.mp4' }` and `loaderConfig: { path: '/path/to/file.exr' }` in [src/core/types/representation.test.ts](/Users/lifeart/Repos/openrv-web/src/core/types/representation.test.ts#L25) through [src/core/types/representation.test.ts#L56).
-  - But the live `frames` loader ignores `url` and requires `loaderConfig.file`, throwing `FileRepresentationLoader: no file provided` when it is missing in [src/core/session/loaders/FileRepresentationLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/loaders/FileRepresentationLoader.ts#L15) through [src/core/session/loaders/FileRepresentationLoader.ts#L22).
-  - The live `movie` / `proxy` loader does the same, throwing `VideoRepresentationLoader: no file provided` whenever `loaderConfig.file` is absent in [src/core/session/loaders/VideoRepresentationLoader.ts](/Users/lifeart/Repos/openrv-web/src/core/session/loaders/VideoRepresentationLoader.ts#L21) through [src/core/session/loaders/VideoRepresentationLoader.ts#L29).
-- Impact:
-  - A representation config that looks valid by shared types, comments, and tests can still fail at first real activation if it was built from a path or URL instead of a `File`.
-  - That leaves the published representation contract broader than the shipped runtime and makes URL-based or path-only variants look supported when they are not.
-
-
 ### 535. Even if a sequence representation loaded successfully, the shim path would still discard the sequence metadata that the rest of the app expects
 
 - Severity: Medium
@@ -789,18 +673,6 @@ This file tracks findings from exploratory review and targeted validation runs.
 - Impact:
   - A shared URL can reconstruct only the base media plus viewer state, not the actual active representation/variant a user was reviewing.
   - That makes representation-based review state non-shareable across the app’s URL and collaboration entry points even though project save/load tries to preserve it.
-
-### 550. Public `renderedImagesChanged` payloads are hardcoded to one synthetic image from the last loaded source, not the actual current render set
-
-- Severity: Medium
-- Area: Public API / rendered-image model
-- Evidence:
-  - `EventsAPI.emitCurrentRenderedImages()` always emits a single-item `images` array, with `index: 0` and `nodeName: name`, derived only from `_lastLoadedSource` in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L408) through [src/api/EventsAPI.ts#L422).
-  - `_lastLoadedSource` itself stores only `{ name, width, height }`, not a real render list, node graph identity, compare overlays, or multiple active images in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L104) through [src/api/EventsAPI.ts#L105).
-  - The same public event type is described as `images: Array<...>` and is consumed by compatibility code that expects it to reflect the current render set in [src/api/EventsAPI.ts](/Users/lifeart/Repos/openrv-web/src/api/EventsAPI.ts#L62) through [src/api/EventsAPI.ts#L70) and [src/compat/MuEvalBridge.ts](/Users/lifeart/Repos/openrv-web/src/compat/MuEvalBridge.ts#L114) through [src/compat/MuEvalBridge.ts#L128).
-- Impact:
-  - Public/compat consumers can be told there is exactly one rendered image even when the viewer is in compare or other multi-image states.
-  - That makes the rendered-image event payload a lossy approximation of viewer output rather than a trustworthy description of the current render graph.
 
 ### 554. The public playback/event API stays clip-local in playlist mode and never exposes the global playlist timeline the UI is actually using
 
