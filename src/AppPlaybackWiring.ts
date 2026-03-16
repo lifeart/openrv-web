@@ -217,13 +217,27 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
   );
   subs.add(
     exportControl.on('reportExportRequested', ({ format }) => {
-      generateReport(session, session.noteManager, session.statusManager, session.versionManager, {
-        format,
-        includeNotes: true,
-        includeTimecodes: true,
-        includeVersions: true,
-        title: session.metadata.displayName || 'Dailies Report',
-      });
+      // When a playlist is active with clips, scope the report to the playlist
+      const playlistManager = controls.playlistManager;
+      const playlist =
+        playlistManager.isEnabled() && playlistManager.getClipCount() > 0
+          ? { clips: playlistManager.getClips().map((c) => ({ sourceIndex: c.sourceIndex, sourceName: c.sourceName })) }
+          : undefined;
+
+      generateReport(
+        session,
+        session.noteManager,
+        session.statusManager,
+        session.versionManager,
+        {
+          format,
+          includeNotes: true,
+          includeTimecodes: true,
+          includeVersions: true,
+          title: session.metadata.displayName || 'Dailies Report',
+        },
+        playlist,
+      );
     }),
   );
 

@@ -3278,3 +3278,16 @@ Wired into `AppNetworkBridge` (subscribes to syncCursor, usersChanged, userLeft,
 - `src/ui/components/DisplayProfileIndicator.test.ts` (new)
 - `src/ui/components/OverlayManager.ts`
 - `src/ui/components/Viewer.ts`
+
+## Issue #318: Dailies report export ignores playlist structure
+
+**Root cause**: `buildReportRows()` always iterated `session.sourceCount` and built one row per loaded source. It had no playlist input, so reports couldn't honor playlist order, omitted shots, or curated subsets.
+
+**Fix**: Added `ReportPlaylistClip` and `ReportPlaylist` interfaces. Modified `buildReportRows()` to accept optional `playlist` parameter — when provided with clips, iterates playlist clips in playlist order; otherwise falls back to all loaded sources. Extracted `buildRowForSource()` helper to avoid duplication. Updated `AppPlaybackWiring` to check `playlistManager.isEnabled()` and pass playlist data to `generateReport()`.
+
+**Tests added**: 9 regression tests covering: all sources when no playlist, undefined playlist fallback, empty playlist fallback, playlist-only clips, exclusion of non-playlist clips, playlist order preservation, notes/status/version data preservation, duplicate source entries, and invalid source index skipping.
+
+**Files changed**:
+- `src/export/ReportExporter.ts`
+- `src/export/ReportExporter.test.ts`
+- `src/AppPlaybackWiring.ts`

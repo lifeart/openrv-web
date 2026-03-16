@@ -80,6 +80,17 @@ export interface ReportSession {
   fps: number;
 }
 
+/** Minimal playlist clip shape for report generation */
+export interface ReportPlaylistClip {
+  sourceIndex: number;
+  sourceName: string;
+}
+
+/** Optional playlist data to scope the report to a curated clip list */
+export interface ReportPlaylist {
+  clips: ReportPlaylistClip[];
+}
+
 // ---------------------------------------------------------------------------
 // CSV helpers (RFC 4180)
 // ---------------------------------------------------------------------------
@@ -107,34 +118,97 @@ export function escapeCSVField(value: string): string {
 // ---------------------------------------------------------------------------
 
 /**
- * Build report rows from session data. One row per source.
+ * Build a single report row for a source at the given index.
+ */
+function buildRowForSource(
+  sourceIndex: number,
+  session: ReportSession,
+  noteManager: ReportNoteManager,
+  statusManager: ReportStatusManager,
+  versionManager: ReportVersionManager,
+): ReportRow | null {
+  const source = session.getSourceByIndex(sourceIndex);
+  if (!source) return null;
+
+  const fps = source.fps || session.fps || 24;
+  const duration = source.duration || 0;
+
+  // Shot name: prefer version group shot name, fall back to source name
+  const versionGroup = versionManager.getGroupForSource(sourceIndex);
+  const shotName = versionGroup?.shotName ?? source.name;
+
+  // Version label
+  let versionLabel = '';
+  if (versionGroup) {
+    const entry = versionGroup.versions.find((v) => v.sourceIndex === sourceIndex);
+    versionLabel = entry?.label ?? '';
+  }
+
+  // Status
+  const status = statusManager.getStatus(sourceIndex);
+  const statusEntry = statusManager.getStatusEntry(sourceIndex);
+  const setBy = statusEntry?.setBy ?? '';
+  const setAt = statusEntry?.setAt ?? '';
+
+  // Notes
+  const notes = noteManager.getNotesForSource(sourceIndex).map((n) => n.text);
+
+  // Frame range using editorial start frame
+  const startFrame = source.startFrame ?? 1;
+  const frameIn = startFrame;
+  const frameOut = startFrame + duration - 1;
+  const frameRange = duration > 0 ? `${frameIn}-${frameOut}` : '';
+
+  // Timecodes (TC Out is exclusive: first frame after last)
+  const tcIn = formatTimecode(frameToTimecode(frameIn, fps, 0));
+  const tcOut = duration > 0 ? formatTimecode(frameToTimecode(frameOut + 1, fps, 0)) : tcIn;
+
+  // Duration string
+  const durationStr = duration > 0 ? `${duration} frames` : '0 frames';
+
+  return {
+    shotName,
+    versionLabel,
+    status,
+    notes,
+    frameRange,
+    timecodeIn: tcIn,
+    timecodeOut: tcOut,
+    duration: durationStr,
+    setBy,
+    setAt,
+  };
+}
+
+/**
+ * Build report rows from session data.
+ *
+ * When a playlist is provided with clips, only the sources referenced by
+ * those clips are included and the playlist clip order is preserved.
+ * When no playlist is provided (or the playlist has no clips), falls back
+ * to iterating all loaded sources.
  */
 export function buildReportRows(
   session: ReportSession,
   noteManager: ReportNoteManager,
   statusManager: ReportStatusManager,
   versionManager: ReportVersionManager,
+  playlist?: ReportPlaylist,
 ): ReportRow[] {
   const rows: ReportRow[] = [];
 
-  for (let i = 0; i < session.sourceCount; i++) {
-    const source = session.getSourceByIndex(i);
-    if (!source) continue;
-
-    const fps = source.fps || session.fps || 24;
-    const duration = source.duration || 0;
-
-    // Shot name: prefer version group shot name, fall back to source name
-    const versionGroup = versionManager.getGroupForSource(i);
-    const shotName = versionGroup?.shotName ?? source.name;
-
-    // Version label
-    let versionLabel = '';
-    if (versionGroup) {
-      const entry = versionGroup.versions.find((v) => v.sourceIndex === i);
-      versionLabel = entry?.label ?? '';
+  // When an active playlist with clips is provided, use playlist order
+  if (playlist && playlist.clips.length > 0) {
+    for (const clip of playlist.clips) {
+      const row = buildRowForSource(clip.sourceIndex, session, noteManager, statusManager, versionManager);
+      if (row) {
+        rows.push(row);
+      }
     }
+    return rows;
+  }
 
+<<<<<<< ours
     // Status
     const status = statusManager.getStatus(i);
     const statusEntry = statusManager.getStatusEntry(i);
@@ -176,6 +250,14 @@ export function buildReportRows(
       setBy,
       setAt,
     });
+=======
+  // Fallback: iterate all loaded sources
+  for (let i = 0; i < session.sourceCount; i++) {
+    const row = buildRowForSource(i, session, noteManager, statusManager, versionManager);
+    if (row) {
+      rows.push(row);
+    }
+>>>>>>> theirs
   }
 
   return rows;
@@ -374,6 +456,9 @@ function escapeHTML(text: string): string {
 
 /**
  * Generate report and trigger browser download.
+ *
+ * When a playlist is provided, the report is scoped to the playlist clips
+ * in playlist order. Otherwise all loaded sources are included.
  */
 export function generateReport(
   session: ReportSession,
@@ -381,8 +466,9 @@ export function generateReport(
   statusManager: ReportStatusManager,
   versionManager: ReportVersionManager,
   options: ReportOptions,
+  playlist?: ReportPlaylist,
 ): void {
-  const rows = buildReportRows(session, noteManager, statusManager, versionManager);
+  const rows = buildReportRows(session, noteManager, statusManager, versionManager, playlist);
 
   let content: string;
   let mimeType: string;

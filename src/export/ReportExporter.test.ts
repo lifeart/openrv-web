@@ -11,6 +11,7 @@ import {
   type ReportVersionManager,
   type ReportOptions,
   type ReportRow,
+  type ReportPlaylist,
 } from './ReportExporter';
 import type { ShotStatus } from '../core/session/StatusManager';
 
@@ -430,6 +431,179 @@ describe('ReportExporter', () => {
       expect(html).toContain('<th>Shot</th>');
       expect(html).toContain('<th>Status</th>');
       expect(html).toContain('<th>Duration</th>');
+    });
+  });
+
+  describe('buildReportRows with playlist', () => {
+    const sources = [
+      { name: 'shot_A.exr', duration: 48, fps: 24 },
+      { name: 'shot_B.exr', duration: 100, fps: 24 },
+      { name: 'shot_C.exr', duration: 72, fps: 24 },
+      { name: 'shot_D.exr', duration: 60, fps: 24 },
+    ];
+
+    it('includes all sources when no playlist is provided', () => {
+      const session = createMockSession(sources);
+      const rows = buildReportRows(
+        session,
+        createMockNoteManager({}),
+        createMockStatusManager({}),
+        createMockVersionManager({}),
+      );
+      expect(rows).toHaveLength(4);
+      expect(rows.map((r) => r.shotName)).toEqual([
+        'shot_A.exr',
+        'shot_B.exr',
+        'shot_C.exr',
+        'shot_D.exr',
+      ]);
+    });
+
+    it('includes all sources when playlist is undefined', () => {
+      const session = createMockSession(sources);
+      const rows = buildReportRows(
+        session,
+        createMockNoteManager({}),
+        createMockStatusManager({}),
+        createMockVersionManager({}),
+        undefined,
+      );
+      expect(rows).toHaveLength(4);
+    });
+
+    it('falls back to all sources when playlist has no clips', () => {
+      const session = createMockSession(sources);
+      const playlist: ReportPlaylist = { clips: [] };
+      const rows = buildReportRows(
+        session,
+        createMockNoteManager({}),
+        createMockStatusManager({}),
+        createMockVersionManager({}),
+        playlist,
+      );
+      expect(rows).toHaveLength(4);
+      expect(rows.map((r) => r.shotName)).toEqual([
+        'shot_A.exr',
+        'shot_B.exr',
+        'shot_C.exr',
+        'shot_D.exr',
+      ]);
+    });
+
+    it('only includes playlist clips when a playlist is active', () => {
+      const session = createMockSession(sources);
+      const playlist: ReportPlaylist = {
+        clips: [
+          { sourceIndex: 0, sourceName: 'shot_A.exr' },
+          { sourceIndex: 2, sourceName: 'shot_C.exr' },
+        ],
+      };
+      const rows = buildReportRows(
+        session,
+        createMockNoteManager({}),
+        createMockStatusManager({}),
+        createMockVersionManager({}),
+        playlist,
+      );
+      expect(rows).toHaveLength(2);
+      expect(rows.map((r) => r.shotName)).toEqual(['shot_A.exr', 'shot_C.exr']);
+    });
+
+    it('excludes clips not in the playlist', () => {
+      const session = createMockSession(sources);
+      const playlist: ReportPlaylist = {
+        clips: [{ sourceIndex: 1, sourceName: 'shot_B.exr' }],
+      };
+      const rows = buildReportRows(
+        session,
+        createMockNoteManager({}),
+        createMockStatusManager({}),
+        createMockVersionManager({}),
+        playlist,
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.shotName).toBe('shot_B.exr');
+    });
+
+    it('respects playlist clip order (not source load order)', () => {
+      const session = createMockSession(sources);
+      // Playlist order: C, A, D — reversed from load order
+      const playlist: ReportPlaylist = {
+        clips: [
+          { sourceIndex: 2, sourceName: 'shot_C.exr' },
+          { sourceIndex: 0, sourceName: 'shot_A.exr' },
+          { sourceIndex: 3, sourceName: 'shot_D.exr' },
+        ],
+      };
+      const rows = buildReportRows(
+        session,
+        createMockNoteManager({}),
+        createMockStatusManager({}),
+        createMockVersionManager({}),
+        playlist,
+      );
+      expect(rows).toHaveLength(3);
+      expect(rows.map((r) => r.shotName)).toEqual(['shot_C.exr', 'shot_A.exr', 'shot_D.exr']);
+    });
+
+    it('preserves notes and status for playlist-scoped clips', () => {
+      const session = createMockSession(sources);
+      const playlist: ReportPlaylist = {
+        clips: [{ sourceIndex: 1, sourceName: 'shot_B.exr' }],
+      };
+      const rows = buildReportRows(
+        session,
+        createMockNoteManager({ 1: [{ text: 'Roto fix needed' }] }),
+        createMockStatusManager({ 1: { status: 'needs-work', setBy: 'supervisor' } }),
+        createMockVersionManager({ 1: { shotName: 'vfx_020', label: 'v2' } }),
+        playlist,
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.shotName).toBe('vfx_020');
+      expect(rows[0]!.versionLabel).toBe('v2');
+      expect(rows[0]!.status).toBe('needs-work');
+      expect(rows[0]!.notes).toEqual(['Roto fix needed']);
+      expect(rows[0]!.setBy).toBe('supervisor');
+    });
+
+    it('allows duplicate source entries in playlist (same source, different clips)', () => {
+      const session = createMockSession(sources);
+      const playlist: ReportPlaylist = {
+        clips: [
+          { sourceIndex: 0, sourceName: 'shot_A.exr' },
+          { sourceIndex: 0, sourceName: 'shot_A.exr' },
+        ],
+      };
+      const rows = buildReportRows(
+        session,
+        createMockNoteManager({}),
+        createMockStatusManager({}),
+        createMockVersionManager({}),
+        playlist,
+      );
+      expect(rows).toHaveLength(2);
+      expect(rows[0]!.shotName).toBe('shot_A.exr');
+      expect(rows[1]!.shotName).toBe('shot_A.exr');
+    });
+
+    it('skips playlist clips whose source index is invalid', () => {
+      const session = createMockSession(sources);
+      const playlist: ReportPlaylist = {
+        clips: [
+          { sourceIndex: 0, sourceName: 'shot_A.exr' },
+          { sourceIndex: 99, sourceName: 'nonexistent.exr' }, // invalid
+          { sourceIndex: 2, sourceName: 'shot_C.exr' },
+        ],
+      };
+      const rows = buildReportRows(
+        session,
+        createMockNoteManager({}),
+        createMockStatusManager({}),
+        createMockVersionManager({}),
+        playlist,
+      );
+      expect(rows).toHaveLength(2);
+      expect(rows.map((r) => r.shotName)).toEqual(['shot_A.exr', 'shot_C.exr']);
     });
   });
 

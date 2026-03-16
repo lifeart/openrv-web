@@ -17,17 +17,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The repo carries a documented graph-mutation/view-history service that is effectively test-only in the shipped app.
   - That makes the published session architecture ahead of production wiring for any future graph-browser or view-history workflows that would depend on this manager.
 
-### 318. Dailies report export ignores playlist structure and always reports every loaded source
-
-- Severity: Medium
-- Area: Reports / playlist review workflow
-- Evidence:
-  - The documented dailies workflow says to load shots as a playlist, review them, then generate a report in [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L97) through [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L113).
-  - The production export path wires `reportExportRequested` straight to `generateReport(session, session.noteManager, session.statusManager, session.versionManager, ...)` with no playlist input in [src/AppPlaybackWiring.ts](/Users/lifeart/Repos/openrv-web/src/AppPlaybackWiring.ts#L292) through [src/AppPlaybackWiring.ts#L300).
-  - `buildReportRows(...)` then iterates `for (let i = 0; i < session.sourceCount; i++)` and builds one row per loaded source from `session.getSourceByIndex(i)` in [src/export/ReportExporter.ts](/Users/lifeart/Repos/openrv-web/src/export/ReportExporter.ts#L105) through [src/export/ReportExporter.ts#L167).
-- Impact:
-  - A dailies report cannot honor playlist order, omitted shots, repeated comparison clips, or a curated review subset; it just exports the whole loaded source set.
-  - That makes reports diverge from the actual session the reviewer just stepped through whenever playlist structure matters.
 
 ### 319. Dailies reports omit core session metadata and the category-based summary the workflow promises
 
