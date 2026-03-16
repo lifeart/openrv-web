@@ -54,7 +54,7 @@ OpenTimelineIO (OTIO) files can be imported to reconstruct editorial timelines w
 | Gaps | Recognized as empty regions |
 | Transitions | Recognized (visual transition not applied) |
 | Markers | Imported from timeline, track, and clip levels; colors mapped to hex |
-| Metadata | Preserved for display |
+| Metadata | Preserved on each playlist clip (`PlaylistClip.metadata`) |
 
 ### Import Process
 

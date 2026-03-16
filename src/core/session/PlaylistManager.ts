@@ -36,6 +36,8 @@ export interface PlaylistClip {
   globalStartFrame: number;
   /** Duration in frames */
   duration: number;
+  /** Optional metadata (e.g. from OTIO import) */
+  metadata?: Record<string, unknown>;
 }
 
 /** Input shape for replacing playlist clips in one operation */
@@ -44,6 +46,7 @@ export interface PlaylistClipInput {
   sourceName: string;
   inPoint: number;
   outPoint: number;
+  metadata?: Record<string, unknown>;
 }
 
 /** Playlist state for serialization */
@@ -172,7 +175,13 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
   /**
    * Add a clip to the playlist
    */
-  addClip(sourceIndex: number, sourceName: string, inPoint: number, outPoint: number): PlaylistClip {
+  addClip(
+    sourceIndex: number,
+    sourceName: string,
+    inPoint: number,
+    outPoint: number,
+    metadata?: Record<string, unknown>,
+  ): PlaylistClip {
     const duration = outPoint - inPoint + 1;
     const globalStartFrame = this.getTotalDuration() + 1;
 
@@ -185,6 +194,10 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
       globalStartFrame,
       duration,
     };
+
+    if (metadata) {
+      clip.metadata = metadata;
+    }
 
     this.clips.push(clip);
     this.transitionManager?.resizeToClips(this.clips.length);
@@ -204,7 +217,7 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
       const outPoint = Math.max(inPoint, Math.floor(clip.outPoint));
       const duration = outPoint - inPoint + 1;
 
-      nextClips.push({
+      const entry: PlaylistClip = {
         id: `clip-${this.nextClipId++}`,
         sourceIndex: clip.sourceIndex,
         sourceName: clip.sourceName,
@@ -212,7 +225,13 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
         outPoint,
         globalStartFrame: 1, // will be recalculated
         duration,
-      });
+      };
+
+      if (clip.metadata) {
+        entry.metadata = clip.metadata;
+      }
+
+      nextClips.push(entry);
     }
 
     this.transitionManager?.resizeToClips(nextClips.length);
@@ -850,7 +869,7 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
     for (const clip of singleResult.clips) {
       const resolved = sourceResolver(clip.name, clip.sourceUrl);
       if (resolved) {
-        this.addClip(resolved.index, clip.name, clip.inFrame, clip.outFrame);
+        this.addClip(resolved.index, clip.name, clip.inFrame, clip.outFrame, clip.metadata);
         importedCount++;
       } else {
         this._unresolvedClips.push({
@@ -885,7 +904,7 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
     for (const clip of primaryTrack.clips) {
       const resolved = sourceResolver(clip.name, clip.sourceUrl);
       if (resolved) {
-        this.addClip(resolved.index, clip.name, clip.inFrame, clip.outFrame);
+        this.addClip(resolved.index, clip.name, clip.inFrame, clip.outFrame, clip.metadata);
         importedCount++;
       } else {
         this._unresolvedClips.push({
