@@ -474,17 +474,43 @@ export class EventsAPI extends DisposableAPI {
   private emitCurrentRenderedImages(): void {
     if (!this._lastLoadedSource) return;
     const { name, width, height } = this._lastLoadedSource;
-    this.emit('renderedImagesChanged', {
-      images: [{
-        name,
-        index: 0,
-        imageMin: [0, 0] as [number, number],
-        imageMax: [width, height] as [number, number],
-        width,
-        height,
-        nodeName: name,
-      }],
-    });
+
+    const images: Array<{
+      name: string;
+      index: number;
+      imageMin: [number, number];
+      imageMax: [number, number];
+      width: number;
+      height: number;
+      nodeName: string;
+      tag?: string;
+    }> = [{
+      name,
+      index: 0,
+      imageMin: [0, 0],
+      imageMax: [width, height],
+      width,
+      height,
+      nodeName: name,
+    }];
+
+    // When A/B compare is active, include the B source as a second image
+    if (this.session.abCompareAvailable) {
+      const sourceB = this.session.sourceB;
+      if (sourceB) {
+        images.push({
+          name: sourceB.name,
+          index: 1,
+          imageMin: [0, 0],
+          imageMax: [sourceB.width, sourceB.height],
+          width: sourceB.width,
+          height: sourceB.height,
+          nodeName: sourceB.name,
+        });
+      }
+    }
+
+    this.emit('renderedImagesChanged', { images });
   }
 
   /**

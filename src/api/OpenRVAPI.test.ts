@@ -228,6 +228,18 @@ function createMockSession() {
   session.loadSourceFromUrl = vi.fn().mockResolvedValue(undefined);
   session.clearSources = vi.fn();
 
+  // A/B compare state (defaults to inactive)
+  session._abCompareAvailable = false;
+  session._sourceB = null;
+  Object.defineProperty(session, 'abCompareAvailable', {
+    get: () => session._abCompareAvailable,
+    configurable: true,
+  });
+  Object.defineProperty(session, 'sourceB', {
+    get: () => session._sourceB,
+    configurable: true,
+  });
+
   return session;
 }
 
@@ -2336,6 +2348,67 @@ describe('EventsAPI', () => {
         height: 1080,
         nodeName: 'first.mp4',
       }],
+    });
+  });
+
+  it('API-U064b2: renderedImagesChanged emits one image in single-source mode', () => {
+    session._abCompareAvailable = false;
+    session._sourceB = null;
+
+    const handler = vi.fn();
+    events.on('renderedImagesChanged', handler);
+
+    session.emit('sourceLoaded', {
+      name: 'clip.mp4', type: 'video', width: 1920, height: 1080, duration: 100, fps: 24,
+    });
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    const payload = handler.mock.calls[0]![0];
+    expect(payload.images).toHaveLength(1);
+    expect(payload.images[0]).toEqual({
+      name: 'clip.mp4',
+      index: 0,
+      imageMin: [0, 0],
+      imageMax: [1920, 1080],
+      width: 1920,
+      height: 1080,
+      nodeName: 'clip.mp4',
+    });
+  });
+
+  it('API-U064b3: renderedImagesChanged emits two images in A/B compare mode', () => {
+    // Set up A/B compare as active with a B source
+    session._abCompareAvailable = true;
+    session._sourceB = { name: 'clipB.mp4', type: 'video', width: 3840, height: 2160, duration: 200, fps: 30 };
+
+    const handler = vi.fn();
+    events.on('renderedImagesChanged', handler);
+
+    // Load source A (triggers emitCurrentRenderedImages)
+    session.emit('sourceLoaded', {
+      name: 'clipA.mp4', type: 'video', width: 1920, height: 1080, duration: 100, fps: 24,
+    });
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    const payload = handler.mock.calls[0]![0];
+    expect(payload.images).toHaveLength(2);
+    expect(payload.images[0]).toEqual({
+      name: 'clipA.mp4',
+      index: 0,
+      imageMin: [0, 0],
+      imageMax: [1920, 1080],
+      width: 1920,
+      height: 1080,
+      nodeName: 'clipA.mp4',
+    });
+    expect(payload.images[1]).toEqual({
+      name: 'clipB.mp4',
+      index: 1,
+      imageMin: [0, 0],
+      imageMax: [3840, 2160],
+      width: 3840,
+      height: 2160,
+      nodeName: 'clipB.mp4',
     });
   });
 
