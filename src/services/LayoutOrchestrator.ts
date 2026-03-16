@@ -586,6 +586,29 @@ export class LayoutOrchestrator {
       }
     });
 
+    // Wire source metadata updates to floating info panel
+    const updateInfoPanelMetadata = () => {
+      const source = session.currentSource;
+      const fps = session.fps;
+      const currentFrame = session.currentFrame;
+      const totalFrames = source?.duration ?? 0;
+      const durationSeconds = totalFrames / (fps || 1);
+      controls.infoPanel.update({
+        filename: source?.name,
+        width: source?.width,
+        height: source?.height,
+        currentFrame,
+        totalFrames,
+        timecode: formatTimecode(currentFrame, fps),
+        duration: formatDuration(durationSeconds),
+        fps,
+      });
+    };
+    session.on('sourceLoaded', updateInfoPanelMetadata);
+    this._sessionHandlers.push({ event: 'sourceLoaded', handler: updateInfoPanelMetadata });
+    session.on('frameChanged', updateInfoPanelMetadata);
+    this._sessionHandlers.push({ event: 'frameChanged', handler: updateInfoPanelMetadata });
+
     // Wire histogram data from scope scheduler to mini histogram in right panel
     sessionBridge.setHistogramDataCallback((data) => {
       controls.rightPanelContent.updateHistogram(data);

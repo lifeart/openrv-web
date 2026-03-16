@@ -3252,3 +3252,15 @@ Wired into `AppNetworkBridge` (subscribes to syncCursor, usersChanged, userLeft,
 - `src/ui/components/NetworkControl.ts`
 - `src/ui/components/NetworkControl.reconnect.test.ts` (new)
 - `src/AppNetworkBridge.ts`
+
+## Issue #463: Info panel only shows cursor-color, not full metadata
+
+**Root cause**: The `InfoPanel` component was fully implemented to show filename, resolution, frame, FPS, timecode, and duration metadata, but `LayoutOrchestrator` only wired the cursor-color callback. No production event handler updated the panel with source or frame metadata.
+
+**Fix**: Added `updateInfoPanelMetadata()` wiring in `LayoutOrchestrator` that feeds `InfoPanel.update()` with filename, width, height, currentFrame, totalFrames, timecode, duration, and fps. Wired to both `sourceLoaded` and `frameChanged` session events, properly tracked in `_sessionHandlers` for cleanup.
+
+**Tests added**: 8 regression tests (LO-031 through LO-038) covering filename on source load, resolution, frame on frameChanged, FPS, source change updates, successive frame changes, timecode/totalFrames, and cursor-color non-regression.
+
+**Files changed**:
+- `src/services/LayoutOrchestrator.ts`
+- `src/services/LayoutOrchestrator.test.ts`

@@ -289,17 +289,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - The overview overstates the current accessibility quality of the shipped UI.
   - Users and auditors can infer a more consistently semantic control surface than the runtime actually provides.
 
-### 463. The UI overview advertises the Info panel as a metadata panel, but production wiring only keeps cursor-color updates alive
-
-- Severity: Low
-- Area: Documentation / UI capability description
-- Evidence:
-  - The UI overview panel table describes `Info panel` as `Filename, resolution, frame, FPS` in [docs/getting-started/ui-overview.md](/Users/lifeart/Repos/openrv-web/docs/getting-started/ui-overview.md#L207) through [docs/getting-started/ui-overview.md#L213).
-  - The `InfoPanel` component is implemented to show that richer metadata in [src/ui/components/InfoPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/InfoPanel.ts#L1) through [src/ui/components/InfoPanel.ts#L301).
-  - In production wiring, the only live update path is the viewer cursor-color callback in [src/services/LayoutOrchestrator.ts](/Users/lifeart/Repos/openrv-web/src/services/LayoutOrchestrator.ts#L569) through [src/services/LayoutOrchestrator.ts#L576), which is already captured as issue `101`.
-- Impact:
-  - The getting-started docs make the Info panel sound far more useful than it is in the shipped app.
-  - Users can open that panel expecting source/frame metadata and instead get a mostly cursor-color readout.
 
 ### 465. The EDL/OTIO guide overstates the main-app import/export paths; those workflows are still mostly confined to the Playlist panel
 

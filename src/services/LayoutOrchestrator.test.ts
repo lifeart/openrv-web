@@ -657,6 +657,130 @@ describe('LayoutOrchestrator', () => {
   });
 
   // -------------------------------------------------------------------------
+  // LO-031–LO-038: InfoPanel metadata wiring (#463)
+  // -------------------------------------------------------------------------
+  it('LO-031: updates info panel with filename on sourceLoaded', () => {
+    orchestrator.createLayout();
+
+    d.mocks.session.currentSource = { name: 'movie.exr', width: 3840, height: 2160, duration: 200 };
+    d.mocks.session._emit('sourceLoaded', d.mocks.session.currentSource);
+
+    expect(d.mocks.controls.infoPanel.update).toHaveBeenCalledWith(
+      expect.objectContaining({ filename: 'movie.exr' }),
+    );
+  });
+
+  it('LO-032: updates info panel with resolution on sourceLoaded', () => {
+    orchestrator.createLayout();
+
+    d.mocks.session.currentSource = { name: 'test.dpx', width: 2048, height: 1080, duration: 50 };
+    d.mocks.session._emit('sourceLoaded', d.mocks.session.currentSource);
+
+    expect(d.mocks.controls.infoPanel.update).toHaveBeenCalledWith(
+      expect.objectContaining({ width: 2048, height: 1080 }),
+    );
+  });
+
+  it('LO-033: updates info panel with current frame on frameChanged', () => {
+    orchestrator.createLayout();
+
+    d.mocks.session.currentFrame = 42;
+    d.mocks.session._emit('frameChanged');
+
+    expect(d.mocks.controls.infoPanel.update).toHaveBeenCalledWith(
+      expect.objectContaining({ currentFrame: 42 }),
+    );
+  });
+
+  it('LO-034: updates info panel with FPS on sourceLoaded', () => {
+    orchestrator.createLayout();
+
+    d.mocks.session.fps = 30;
+    d.mocks.session.currentSource = { name: 'clip.mov', width: 1920, height: 1080, duration: 300 };
+    d.mocks.session._emit('sourceLoaded', d.mocks.session.currentSource);
+
+    expect(d.mocks.controls.infoPanel.update).toHaveBeenCalledWith(
+      expect.objectContaining({ fps: 30 }),
+    );
+  });
+
+  it('LO-035: updates info panel when source changes', () => {
+    orchestrator.createLayout();
+
+    // First source
+    d.mocks.session.currentSource = { name: 'first.exr', width: 1920, height: 1080, duration: 100 };
+    d.mocks.session._emit('sourceLoaded', d.mocks.session.currentSource);
+
+    // Second source
+    d.mocks.session.currentSource = { name: 'second.dpx', width: 4096, height: 2160, duration: 200 };
+    d.mocks.session._emit('sourceLoaded', d.mocks.session.currentSource);
+
+    const calls = d.mocks.controls.infoPanel.update.mock.calls;
+    // Find calls with filename to filter out cursor-color calls
+    const metadataCalls = calls.filter(
+      (c: unknown[]) => (c[0] as Record<string, unknown>).filename !== undefined,
+    );
+    expect(metadataCalls.length).toBeGreaterThanOrEqual(2);
+    expect((metadataCalls[metadataCalls.length - 1]![0] as Record<string, unknown>).filename).toBe('second.dpx');
+    expect((metadataCalls[metadataCalls.length - 1]![0] as Record<string, unknown>).width).toBe(4096);
+  });
+
+  it('LO-036: updates info panel frame on frameChanged event', () => {
+    orchestrator.createLayout();
+
+    d.mocks.session.currentFrame = 10;
+    d.mocks.session._emit('frameChanged');
+
+    d.mocks.session.currentFrame = 20;
+    d.mocks.session._emit('frameChanged');
+
+    const calls = d.mocks.controls.infoPanel.update.mock.calls;
+    const frameCalls = calls.filter(
+      (c: unknown[]) => (c[0] as Record<string, unknown>).currentFrame !== undefined,
+    );
+    expect(frameCalls.length).toBeGreaterThanOrEqual(2);
+    expect((frameCalls[frameCalls.length - 1]![0] as Record<string, unknown>).currentFrame).toBe(20);
+  });
+
+  it('LO-037: info panel metadata includes timecode and totalFrames', () => {
+    orchestrator.createLayout();
+
+    d.mocks.session.fps = 24;
+    d.mocks.session.currentFrame = 48;
+    d.mocks.session.currentSource = { name: 'test.exr', width: 1920, height: 1080, duration: 240 };
+    d.mocks.session._emit('sourceLoaded', d.mocks.session.currentSource);
+
+    expect(d.mocks.controls.infoPanel.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        totalFrames: 240,
+        timecode: expect.any(String),
+      }),
+    );
+  });
+
+  it('LO-038: cursor-color wiring still works alongside metadata wiring', () => {
+    orchestrator.createLayout();
+
+    // Get the cursor-color callback
+    expect(d.mocks.viewer.onCursorColorChange).toHaveBeenCalledWith(expect.any(Function));
+    const cursorCallback = d.mocks.viewer.onCursorColorChange.mock.calls[0]![0] as (
+      color: { r: number; g: number; b: number } | null,
+      position: { x: number; y: number } | null,
+    ) => void;
+
+    // Enable info panel and call cursor callback
+    d.mocks.controls.infoPanel.isEnabled.mockReturnValue(true);
+    cursorCallback({ r: 128, g: 64, b: 32 }, { x: 100, y: 200 });
+
+    expect(d.mocks.controls.infoPanel.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        colorAtCursor: { r: 128, g: 64, b: 32 },
+        cursorPosition: { x: 100, y: 200 },
+      }),
+    );
+  });
+
+  // -------------------------------------------------------------------------
   // LO-030: Presentation mode exit re-asserts image mode
   // -------------------------------------------------------------------------
   it('LO-030a: dispose() on freshly constructed orchestrator (no createLayout) does not throw', () => {
