@@ -3217,3 +3217,15 @@ Wired into `AppNetworkBridge` (subscribes to syncCursor, usersChanged, userLeft,
 - `src/ui/components/NetworkControl.ts`
 - `src/ui/components/NetworkControl.test.ts`
 - `src/AppNetworkBridge.ts`
+
+## Issue #368: Shot-status badge missing from header bar
+
+**Root cause**: The review workflow docs described a shot-status badge in the header bar next to the source name, but no such UI existed. Status badges were only available in NotePanel and ShotGridPanel. The `StatusManager` had full status tracking, but the header bar had no consumer.
+
+**Fix**: Added a shot-status badge to `HeaderBar` that reads from `session.statusManager.getStatus(currentSourceIndex)`. Badge displays a colored dot and status label (Pending, Approved, Needs Revision, Could Be Better, Omit) next to the source name. Wired to three session events: `sourceLoaded`, `statusChanged`, and `statusesChanged` for real-time updates during playlist playback and bulk restore.
+
+**Tests added**: 14 regression tests (HDR-U030 through HDR-U043) covering badge rendering, visibility, status colors, all 5 statuses, source change updates, accessibility (aria-label), DOM positioning, sub-element structure, and bulk status restore.
+
+**Files changed**:
+- `src/ui/components/layout/HeaderBar.ts`
+- `src/ui/components/layout/HeaderBar.test.ts`

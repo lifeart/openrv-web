@@ -1893,6 +1893,7 @@ describe('HeaderBar', () => {
     });
   });
 
+<<<<<<< ours
   describe('rv/gto file open unification (issue #395)', () => {
     it('HDR-U027: .rv file via Open media emits openProject instead of calling loadFromGTO directly', async () => {
       const el = headerBar.render();
@@ -2026,6 +2027,160 @@ describe('HeaderBar', () => {
 
       // EDL takes precedence — session file should NOT trigger openProject
       expect(openProjectSpy).not.toHaveBeenCalled();
+=======
+  describe('shot status badge', () => {
+    it('HDR-U030: renders a shot-status-badge element in the header bar', () => {
+      const el = headerBar.render();
+      const badge = el.querySelector('[data-testid="shot-status-badge"]');
+      expect(badge).toBeInstanceOf(HTMLElement);
+    });
+
+    it('HDR-U031: badge is hidden when no source is loaded', () => {
+      // Create a fresh session with no sources
+      const emptySession = new Session();
+      const emptyHeader = new HeaderBar(emptySession);
+      const el = emptyHeader.render();
+      const badge = el.querySelector('[data-testid="shot-status-badge"]') as HTMLElement;
+      expect(badge.style.display).toBe('none');
+      emptyHeader.dispose();
+    });
+
+    it('HDR-U032: badge shows "Pending" status by default when a source is loaded', () => {
+      const el = headerBar.render();
+      const badge = el.querySelector('[data-testid="shot-status-badge"]') as HTMLElement;
+      expect(badge.style.display).toBe('flex');
+      const text = badge.querySelector('[data-testid="shot-status-text"]') as HTMLElement;
+      expect(text.textContent).toBe('Pending');
+    });
+
+    it('HDR-U033: badge shows correct color dot for pending status', () => {
+      const el = headerBar.render();
+      const dot = el.querySelector('[data-testid="shot-status-dot"]') as HTMLElement;
+      // pending color is #94a3b8 (slate-400)
+      expect(dot.style.background).toBe('rgb(148, 163, 184)');
+    });
+
+    it('HDR-U034: badge updates when status is set to approved', () => {
+      headerBar.render();
+      session.statusManager.setStatus(0, 'approved', 'tester');
+
+      const badge = headerBar.getContainer().querySelector('[data-testid="shot-status-badge"]') as HTMLElement;
+      const text = badge.querySelector('[data-testid="shot-status-text"]') as HTMLElement;
+      const dot = badge.querySelector('[data-testid="shot-status-dot"]') as HTMLElement;
+
+      expect(text.textContent).toBe('Approved');
+      // approved color is #22c55e (green-500)
+      expect(dot.style.background).toBe('rgb(34, 197, 94)');
+    });
+
+    it('HDR-U035: badge updates when status is set to needs-work', () => {
+      headerBar.render();
+      session.statusManager.setStatus(0, 'needs-work', 'tester');
+
+      const text = headerBar.getContainer().querySelector('[data-testid="shot-status-text"]') as HTMLElement;
+      expect(text.textContent).toBe('Needs Revision');
+    });
+
+    it('HDR-U036: badge updates when status is set to cbb', () => {
+      headerBar.render();
+      session.statusManager.setStatus(0, 'cbb', 'tester');
+
+      const text = headerBar.getContainer().querySelector('[data-testid="shot-status-text"]') as HTMLElement;
+      expect(text.textContent).toBe('CBB');
+    });
+
+    it('HDR-U037: badge updates when status is set to omit', () => {
+      headerBar.render();
+      session.statusManager.setStatus(0, 'omit', 'tester');
+
+      const text = headerBar.getContainer().querySelector('[data-testid="shot-status-text"]') as HTMLElement;
+      const dot = headerBar.getContainer().querySelector('[data-testid="shot-status-dot"]') as HTMLElement;
+
+      expect(text.textContent).toBe('Omit');
+      // omit color is #ef4444 (red-500)
+      expect(dot.style.background).toBe('rgb(239, 68, 68)');
+    });
+
+    it('HDR-U038: badge reverts to pending when status is cleared', () => {
+      headerBar.render();
+      session.statusManager.setStatus(0, 'approved', 'tester');
+
+      const text = headerBar.getContainer().querySelector('[data-testid="shot-status-text"]') as HTMLElement;
+      expect(text.textContent).toBe('Approved');
+
+      session.statusManager.clearStatus(0);
+      expect(text.textContent).toBe('Pending');
+    });
+
+    it('HDR-U039: badge has correct aria-label', () => {
+      headerBar.render();
+      const badge = headerBar.getContainer().querySelector('[data-testid="shot-status-badge"]') as HTMLElement;
+      expect(badge.getAttribute('aria-label')).toBe('Shot status: Pending');
+
+      session.statusManager.setStatus(0, 'approved', 'tester');
+      expect(badge.getAttribute('aria-label')).toBe('Shot status: Approved');
+    });
+
+    it('HDR-U040: badge updates when source changes during playlist playback', () => {
+      // Add a second source
+      (session as any).addSource({
+        name: 'shot2.mp4',
+        url: 'blob:test2',
+        type: 'video',
+        duration: 50,
+        fps: 24,
+        width: 1920,
+        height: 1080,
+        element: document.createElement('video'),
+      });
+
+      headerBar.render();
+
+      // Set different statuses for each source
+      session.statusManager.setStatus(0, 'approved', 'tester');
+      session.statusManager.setStatus(1, 'needs-work', 'tester');
+
+      // Initially on source 0
+      const text = headerBar.getContainer().querySelector('[data-testid="shot-status-text"]') as HTMLElement;
+      expect(text.textContent).toBe('Approved');
+
+      // Switch to source 1 by emitting sourceLoaded
+      (session as any)._media._currentSourceIndex = 1;
+      session.emit('sourceLoaded', {} as any);
+
+      expect(text.textContent).toBe('Needs Revision');
+    });
+
+    it('HDR-U041: badge is positioned after the session name display', () => {
+      const el = headerBar.render();
+      const sessionName = el.querySelector('[data-testid="session-name-display"]') as HTMLElement;
+      const badge = el.querySelector('[data-testid="shot-status-badge"]') as HTMLElement;
+
+      // Badge should be the next sibling of the session name display
+      expect(sessionName.nextElementSibling).toBe(badge);
+    });
+
+    it('HDR-U042: badge contains both dot and text elements', () => {
+      headerBar.render();
+      const badge = headerBar.getContainer().querySelector('[data-testid="shot-status-badge"]') as HTMLElement;
+      const dot = badge.querySelector('[data-testid="shot-status-dot"]');
+      const text = badge.querySelector('[data-testid="shot-status-text"]');
+
+      expect(dot).toBeInstanceOf(HTMLElement);
+      expect(text).toBeInstanceOf(HTMLElement);
+    });
+
+    it('HDR-U043: badge updates on statusesChanged event (bulk status restore)', () => {
+      headerBar.render();
+
+      // Simulate bulk restore via fromSerializable which fires statusesChanged
+      session.statusManager.fromSerializable([
+        { sourceIndex: 0, status: 'omit', setBy: 'admin', setAt: new Date().toISOString() },
+      ]);
+
+      const text = headerBar.getContainer().querySelector('[data-testid="shot-status-text"]') as HTMLElement;
+      expect(text.textContent).toBe('Omit');
+>>>>>>> theirs
     });
   });
 });

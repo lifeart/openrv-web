@@ -190,20 +190,6 @@ This file tracks findings from exploratory review and targeted validation runs.
   - Users trying to free storage via the documented panel cannot actually remove auto-save entries there, because that panel only manages snapshots and auto-checkpoints.
   - That makes a concrete maintenance workflow in the docs impossible to complete from the named UI.
 
-### 368. The review docs promise a shot-status badge in the header, but production has no such header status UI
-
-- Severity: Medium
-- Area: Documentation / review workflow UI
-- Evidence:
-  - The review workflow guide says, "The current shot status is displayed as a colored badge in the header bar next to the source name" and that it follows the visible clip during playlist playback in [docs/advanced/review-workflow.md](/Users/lifeart/Repos/openrv-web/docs/advanced/review-workflow.md#L26).
-  - A production UI search finds status badges only in note and ShotGrid-related surfaces, such as [src/ui/components/NotePanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/NotePanel.ts#L522) and [src/ui/components/ShotGridPanel.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/ShotGridPanel.ts#L7), not in the main header bar.
-  - There is no corresponding header-bar component or wiring path that reads `StatusManager` and renders a source-adjacent status badge in [src/ui/components/layout/HeaderBar.ts](/Users/lifeart/Repos/openrv-web/src/ui/components/layout/HeaderBar.ts).
-- Impact:
-  - Users following the review docs can look for a persistent header-level status readout that never appears in the shipped app.
-  - That makes shot-status tracking feel partially missing even before users hit the deeper limitation that there is no real production status-management UI.
-
-
-
 
 ### 444. The DCC guide promises a configurable bridge endpoint, but production only supports `?dcc=` URL bootstrap
 
