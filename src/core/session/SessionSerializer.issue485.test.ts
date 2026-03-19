@@ -184,7 +184,8 @@ describe('Issue #485: Overlay states must round-trip through serialization', () 
     // Configure non-default overlay states
     const timecodeState: TimecodeOverlayState = {
       enabled: true, position: 'bottom-right', fontSize: 'large',
-      showFrameCounter: false, backgroundOpacity: 0.8,
+      showFrameCounter: false, backgroundOpacity: 0.8, displayFormat: 'smpte',
+      sourceTimecode: undefined, showSourceTimecode: true,
     };
     const safeAreasState: SafeAreasState = {
       enabled: true, titleSafe: false, actionSafe: true,
@@ -263,7 +264,8 @@ describe('Issue #485: Overlay states must round-trip through serialization', () 
 
     const timecodeState: TimecodeOverlayState = {
       enabled: true, position: 'top-right', fontSize: 'small',
-      showFrameCounter: true, backgroundOpacity: 0.4,
+      showFrameCounter: true, backgroundOpacity: 0.4, displayFormat: 'both',
+      sourceTimecode: undefined, showSourceTimecode: true,
     };
     const safeAreasState: SafeAreasState = {
       enabled: true, titleSafe: true, actionSafe: false,

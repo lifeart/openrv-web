@@ -467,18 +467,18 @@ describe('ConformPanel', () => {
       warnSpy.mockRestore();
     });
 
-    it('CONFORM-019: browse button has tooltip indicating host integration required', () => {
+    it('CONFORM-019: browse button has tooltip', () => {
       setup([makeClip({ id: 'clip-1' })], [makeSource()]);
 
       const browseBtn = container.querySelector('.conform-browse') as HTMLButtonElement;
-      expect(browseBtn.title).toContain('requires host integration');
+      expect(browseBtn.title).toContain('replacement source file');
     });
 
-    it('CONFORM-020: folder relink button has tooltip indicating host integration required', () => {
+    it('CONFORM-020: folder relink button has tooltip', () => {
       setup([makeClip()], []);
 
       const folderBtn = container.querySelector('.conform-folder-relink') as HTMLButtonElement;
-      expect(folderBtn.title).toContain('requires host integration');
+      expect(folderBtn.title).toContain('selecting multiple files');
     });
 
     it('suggestions select has aria-label', () => {
@@ -486,6 +486,265 @@ describe('ConformPanel', () => {
 
       const select = container.querySelector('.conform-suggestions') as HTMLSelectElement;
       expect(select.getAttribute('aria-label')).toBe('Re-link source for Shot 010');
+    });
+
+    it('CONFORM-021: setFileHandler stores the handler', () => {
+      setup([makeClip({ id: 'clip-1' })], [makeSource()]);
+      const handler = vi.fn();
+      panel.setFileHandler(handler);
+      // Handler is stored internally; verify no error
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('CONFORM-022: browse button with fileHandler does not dispatch custom event', async () => {
+      setup([makeClip({ id: 'clip-1' })], [makeSource()]);
+
+      const fileHandler = vi.fn().mockResolvedValue(0);
+      panel.setFileHandler(fileHandler);
+
+      const eventHandler = vi.fn();
+      container.addEventListener('conform-browse', eventHandler);
+
+      // Mock openFilePicker by intercepting the file input click
+      const origCreateElement = document.createElement.bind(document);
+      const createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+        const el = origCreateElement(tag);
+        if (tag === 'input' && el instanceof HTMLInputElement) {
+          // Override click to simulate file selection
+          el.click = () => {
+            Object.defineProperty(el, 'files', {
+              value: [new File(['data'], 'shot_010_comp_v02.exr')],
+              writable: false,
+            });
+            el.dispatchEvent(new Event('change'));
+          };
+        }
+        return el;
+      });
+
+      const browseBtn = container.querySelector('.conform-browse') as HTMLButtonElement;
+      browseBtn.click();
+
+      // Wait for async operations
+      await vi.waitFor(() => {
+        expect(fileHandler).toHaveBeenCalledTimes(1);
+      });
+
+      expect(eventHandler).not.toHaveBeenCalled();
+      expect(fileHandler.mock.calls[0]![0].name).toBe('shot_010_comp_v02.exr');
+
+      createElementSpy.mockRestore();
+    });
+
+    it('CONFORM-023: browse button with fileHandler relinks clip on success', async () => {
+      setup([makeClip({ id: 'clip-1' })], [makeSource()]);
+
+      const fileHandler = vi.fn().mockResolvedValue(5);
+      panel.setFileHandler(fileHandler);
+
+      const origCreateElement = document.createElement.bind(document);
+      const createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+        const el = origCreateElement(tag);
+        if (tag === 'input' && el instanceof HTMLInputElement) {
+          el.click = () => {
+            Object.defineProperty(el, 'files', {
+              value: [new File(['data'], 'replacement.exr')],
+              writable: false,
+            });
+            el.dispatchEvent(new Event('change'));
+          };
+        }
+        return el;
+      });
+
+      const browseBtn = container.querySelector('.conform-browse') as HTMLButtonElement;
+      browseBtn.click();
+
+      await vi.waitFor(() => {
+        expect(manager.relinkClip).toHaveBeenCalledWith('clip-1', 5);
+      });
+
+      createElementSpy.mockRestore();
+    });
+
+    it('CONFORM-024: browse button with fileHandler does not relink on null result', async () => {
+      setup([makeClip({ id: 'clip-1' })], [makeSource()]);
+
+      const fileHandler = vi.fn().mockResolvedValue(null);
+      panel.setFileHandler(fileHandler);
+
+      const origCreateElement = document.createElement.bind(document);
+      const createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+        const el = origCreateElement(tag);
+        if (tag === 'input' && el instanceof HTMLInputElement) {
+          el.click = () => {
+            Object.defineProperty(el, 'files', {
+              value: [new File(['data'], 'replacement.exr')],
+              writable: false,
+            });
+            el.dispatchEvent(new Event('change'));
+          };
+        }
+        return el;
+      });
+
+      const browseBtn = container.querySelector('.conform-browse') as HTMLButtonElement;
+      browseBtn.click();
+
+      await vi.waitFor(() => {
+        expect(fileHandler).toHaveBeenCalledTimes(1);
+      });
+
+      expect(manager.relinkClip).not.toHaveBeenCalled();
+
+      createElementSpy.mockRestore();
+    });
+
+    it('CONFORM-025: folder relink with fileHandler does batch fuzzy matching', async () => {
+      const clips = [
+        makeClip({ id: 'clip-1', originalUrl: '/old/shot_010.exr' }),
+        makeClip({ id: 'clip-2', originalUrl: '/old/shot_020.exr' }),
+      ];
+      const sources = [makeSource({ index: 0, name: 'other.exr' })];
+      setup(clips, sources);
+
+      let callCount = 0;
+      const fileHandler = vi.fn().mockImplementation(async () => {
+        callCount++;
+        return callCount + 9; // returns 10, 11
+      });
+      panel.setFileHandler(fileHandler);
+
+      const origCreateElement = document.createElement.bind(document);
+      const createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+        const el = origCreateElement(tag);
+        if (tag === 'input' && el instanceof HTMLInputElement) {
+          el.click = () => {
+            Object.defineProperty(el, 'files', {
+              value: [
+                new File(['data'], 'shot_010.exr'),
+                new File(['data'], 'shot_020.exr'),
+                new File(['data'], 'unrelated.mov'),
+              ],
+              writable: false,
+            });
+            el.dispatchEvent(new Event('change'));
+          };
+        }
+        return el;
+      });
+
+      const folderBtn = container.querySelector('.conform-folder-relink') as HTMLButtonElement;
+      folderBtn.click();
+
+      await vi.waitFor(() => {
+        // Only the matching files should be loaded (not unrelated.mov)
+        expect(fileHandler).toHaveBeenCalledTimes(2);
+      });
+
+      expect(manager.relinkClip).toHaveBeenCalledWith('clip-1', 10);
+      expect(manager.relinkClip).toHaveBeenCalledWith('clip-2', 11);
+
+      createElementSpy.mockRestore();
+    });
+
+    it('CONFORM-026: folder relink with fileHandler skips weak matches', async () => {
+      setup(
+        [makeClip({ id: 'clip-1', originalUrl: '/old/shot_010.exr' })],
+        [makeSource()],
+      );
+
+      const fileHandler = vi.fn().mockResolvedValue(5);
+      panel.setFileHandler(fileHandler);
+
+      const origCreateElement = document.createElement.bind(document);
+      const createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+        const el = origCreateElement(tag);
+        if (tag === 'input' && el instanceof HTMLInputElement) {
+          el.click = () => {
+            Object.defineProperty(el, 'files', {
+              value: [new File(['data'], 'totally_different.mov')],
+              writable: false,
+            });
+            el.dispatchEvent(new Event('change'));
+          };
+        }
+        return el;
+      });
+
+      const folderBtn = container.querySelector('.conform-folder-relink') as HTMLButtonElement;
+      folderBtn.click();
+
+      // Give async code time to run
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(fileHandler).not.toHaveBeenCalled();
+      expect(manager.relinkClip).not.toHaveBeenCalled();
+
+      createElementSpy.mockRestore();
+    });
+
+    it('CONFORM-027: folder relink without fileHandler still dispatches event', () => {
+      setup([makeClip()], []);
+
+      const handler = vi.fn();
+      container.addEventListener('conform-browse-folder', handler);
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const folderBtn = container.querySelector('.conform-folder-relink') as HTMLButtonElement;
+      folderBtn.click();
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      warnSpy.mockRestore();
+    });
+
+    it('CONFORM-028: browse without fileHandler still dispatches event', () => {
+      setup([makeClip({ id: 'clip-1' })], [makeSource()]);
+
+      const handler = vi.fn();
+      container.addEventListener('conform-browse', handler);
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const browseBtn = container.querySelector('.conform-browse') as HTMLButtonElement;
+      browseBtn.click();
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      const detail = (handler.mock.calls[0]![0] as CustomEvent).detail;
+      expect(detail.clipId).toBe('clip-1');
+      warnSpy.mockRestore();
+    });
+
+    it('CONFORM-029: browse with fileHandler and cancelled picker does not relink', async () => {
+      setup([makeClip({ id: 'clip-1' })], [makeSource()]);
+
+      const fileHandler = vi.fn().mockResolvedValue(0);
+      panel.setFileHandler(fileHandler);
+
+      const origCreateElement = document.createElement.bind(document);
+      const createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+        const el = origCreateElement(tag);
+        if (tag === 'input' && el instanceof HTMLInputElement) {
+          el.click = () => {
+            // Simulate cancelled picker — no files selected
+            Object.defineProperty(el, 'files', {
+              value: [],
+              writable: false,
+            });
+            el.dispatchEvent(new Event('change'));
+          };
+        }
+        return el;
+      });
+
+      const browseBtn = container.querySelector('.conform-browse') as HTMLButtonElement;
+      browseBtn.click();
+
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(fileHandler).not.toHaveBeenCalled();
+      expect(manager.relinkClip).not.toHaveBeenCalled();
+
+      createElementSpy.mockRestore();
     });
   });
 });

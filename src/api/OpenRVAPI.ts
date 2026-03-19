@@ -23,6 +23,7 @@ import type {
   DisplayProvider,
   DisplayCapabilitiesProvider,
   OCIOProvider,
+  PixelProbeProvider,
 } from './types';
 
 import { PlaybackAPI } from './PlaybackAPI';
@@ -66,6 +67,8 @@ export interface OpenRVAPIConfig {
   persistenceManager?: import('../AppPersistenceManager').AppPersistenceManager;
   /** Optional playlist manager for playlist-aware frame/duration in the public API */
   playlistManager?: PlaylistManager;
+  /** Optional pixel probe provider for pixel-probe control through the view API */
+  pixelProbeProvider?: PixelProbeProvider;
 }
 
 /**
@@ -165,7 +168,7 @@ export class OpenRVAPI {
     this.audio = new AudioAPI(config.session);
     this.loop = new LoopAPI(config.session);
     this.sequence = new SequenceAPI(config.session);
-    this.view = new ViewAPI(config.viewer);
+    this.view = new ViewAPI(config.viewer, config.pixelProbeProvider);
     this.color = new ColorAPI(
       config.colorControls,
       config.cdlControl,

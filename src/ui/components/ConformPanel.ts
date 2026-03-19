@@ -42,6 +42,12 @@ export interface ConformStatus {
   total: number;
 }
 
+/**
+ * Callback that loads a File into the session and returns the new source index,
+ * or null if loading failed.
+ */
+export type ConformFileHandler = (file: File) => Promise<number | null>;
+
 /** Minimal manager interface — avoids hard coupling to session internals. */
 export interface ConformPanelManager {
   getUnresolvedClips(): UnresolvedClip[];
@@ -212,6 +218,7 @@ export class ConformPanel {
   private listContainer: HTMLElement;
   private toolbar: HTMLElement;
   private resolvedIds = new Set<string>();
+  private fileHandler: ConformFileHandler | null = null;
 
   constructor(container: HTMLElement, manager: ConformPanelManager) {
     this.container = container;
@@ -222,6 +229,15 @@ export class ConformPanel {
     this.toolbar = this.createToolbar();
     this.container.appendChild(this.toolbar);
     this.render();
+  }
+
+  /**
+   * Set a handler that loads a File into the session.
+   * When set, the browse buttons open a real file picker instead of
+   * only dispatching custom events.
+   */
+  setFileHandler(handler: ConformFileHandler): void {
+    this.fileHandler = handler;
   }
 
   getResolvedIds(): ReadonlySet<string> {
@@ -309,7 +325,7 @@ export class ConformPanel {
       const browseBtn = document.createElement('button');
       browseBtn.className = 'conform-browse';
       browseBtn.textContent = 'Browse...';
-      browseBtn.title = 'Browse for source file (requires host integration)';
+      browseBtn.title = 'Browse for replacement source file';
       browseBtn.addEventListener('click', () => this.browseForClip(entry.clip.id));
       row.appendChild(browseBtn);
 
@@ -332,7 +348,7 @@ export class ConformPanel {
     const folderBtn = document.createElement('button');
     folderBtn.className = 'conform-folder-relink';
     folderBtn.textContent = 'Re-link by Folder...';
-    folderBtn.title = 'Re-link clips from a folder (requires host integration)';
+    folderBtn.title = 'Re-link clips by selecting multiple files';
     folderBtn.addEventListener('click', () => this.browseFolder());
 
     toolbar.appendChild(autoBtn);
@@ -349,17 +365,27 @@ export class ConformPanel {
   }
 
   private browseForClip(clipId: string): void {
-    // Show available sources in a simple prompt-style selection
+    if (this.fileHandler) {
+      // Open a real file picker and load the selected file
+      this.openFilePicker(false).then(async (files) => {
+        if (files.length === 0) return;
+        const file = files[0]!;
+        const sourceIndex = await this.fileHandler!(file);
+        if (sourceIndex !== null) {
+          this.relinkClip(clipId, sourceIndex);
+        }
+      });
+      return;
+    }
+
+    // Fallback: dispatch custom event for host integration
     const sources = this.manager.getAvailableSources();
-    if (sources.length === 0) return;
 
     console.warn(
       `[ConformPanel] Browse for clip "${clipId}" is not yet connected to a file picker. ` +
         'A host integration listener for the "conform-browse" event is required.',
     );
 
-    // In a real implementation this would open a file picker.
-    // For testability, we dispatch a custom event that the host can handle.
     const event = new CustomEvent('conform-browse', {
       detail: { clipId, sources },
       bubbles: true,
@@ -368,6 +394,41 @@ export class ConformPanel {
   }
 
   private browseFolder(): void {
+    if (this.fileHandler) {
+      // Open a multi-file picker and fuzzy-match against unresolved clips
+      this.openFilePicker(true).then(async (files) => {
+        if (files.length === 0) return;
+        const clips = this.manager.getUnresolvedClips();
+        let changed = false;
+        for (const clip of clips) {
+          const filename = extractFilename(clip.originalUrl);
+          // Find the best-matching file for this clip
+          let bestFile: File | null = null;
+          let bestScore = 0;
+          for (const file of files) {
+            const score = matchScore(filename, file.name);
+            if (score > bestScore) {
+              bestScore = score;
+              bestFile = file;
+            }
+          }
+          if (bestFile && bestScore >= 80) {
+            const sourceIndex = await this.fileHandler!(bestFile);
+            if (sourceIndex !== null) {
+              const success = this.manager.relinkClip(clip.id, sourceIndex);
+              if (success) {
+                this.resolvedIds.add(clip.id);
+                changed = true;
+              }
+            }
+          }
+        }
+        if (changed) this.render();
+      });
+      return;
+    }
+
+    // Fallback: dispatch custom event for host integration
     console.warn(
       '[ConformPanel] Re-link by Folder is not yet connected to a folder picker. ' +
         'A host integration listener for the "conform-browse-folder" event is required.',
@@ -377,6 +438,34 @@ export class ConformPanel {
       bubbles: true,
     });
     this.container.dispatchEvent(event);
+  }
+
+  /**
+   * Open a hidden file input to select one or multiple files.
+   * Returns an array of selected File objects (empty if cancelled).
+   */
+  private openFilePicker(multiple: boolean): Promise<File[]> {
+    const input = document.createElement('input');
+    input.type = 'file';
+    if (multiple) input.multiple = true;
+
+    return new Promise<File[]>((resolve) => {
+      input.addEventListener('change', () => {
+        const files = input.files ? Array.from(input.files) : [];
+        resolve(files);
+      });
+      // Handle cancel (focus returns to window without a change event)
+      window.addEventListener(
+        'focus',
+        () => {
+          setTimeout(() => {
+            if (!input.files?.length) resolve([]);
+          }, 300);
+        },
+        { once: true },
+      );
+      input.click();
+    });
   }
 
   dispose(): void {

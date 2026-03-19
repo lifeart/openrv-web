@@ -543,4 +543,105 @@ describe('PlaylistPanel', () => {
       document.body.removeChild(panel.render());
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // Public API: importOTIOFile, triggerEDLExport, triggerOTIOExport (Issue #465)
+  // ---------------------------------------------------------------------------
+
+  describe('public import/export API (Issue #465)', () => {
+    it('PL-060: importOTIOFile reads file and calls playlistManager.fromOTIO', async () => {
+      const mockManager = manager as unknown as Record<string, ReturnType<typeof vi.fn>>;
+      mockManager.fromOTIO = vi.fn().mockReturnValue(2);
+      mockManager.clear = vi.fn();
+      (manager as any).unresolvedClips = [];
+
+      const otioContent = '{"OTIO_SCHEMA": "Timeline.1", "name": "test"}';
+      const file = new File([otioContent], 'timeline.otio');
+
+      panel.importOTIOFile(file);
+
+      // Wait for FileReader to complete
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(mockManager.clear).toHaveBeenCalledTimes(1);
+      expect(mockManager.fromOTIO).toHaveBeenCalledTimes(1);
+      expect(mockManager.fromOTIO).toHaveBeenCalledWith(otioContent, expect.any(Function));
+    });
+
+    it('PL-061: importOTIOFile emits imported event after successful import', async () => {
+      const mockManager = manager as unknown as Record<string, ReturnType<typeof vi.fn>>;
+      mockManager.fromOTIO = vi.fn().mockReturnValue(3);
+      mockManager.clear = vi.fn();
+      (manager as any).unresolvedClips = [{ name: 'unresolved.exr' }];
+
+      const importedCallback = vi.fn();
+      panel.on('imported', importedCallback);
+
+      const file = new File(['{}'], 'timeline.otio');
+      panel.importOTIOFile(file);
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(importedCallback).toHaveBeenCalledWith({
+        format: 'otio',
+        importedCount: 3,
+        unresolvedCount: 1,
+      });
+    });
+
+    it('PL-062: importOTIOFile uses sourceNameResolver when set', async () => {
+      const mockManager = manager as unknown as Record<string, ReturnType<typeof vi.fn>>;
+      mockManager.fromOTIO = vi.fn().mockReturnValue(1);
+      mockManager.clear = vi.fn();
+      (manager as any).unresolvedClips = [];
+
+      const resolver = vi.fn().mockReturnValue({ index: 0, frameCount: 100 });
+      panel.setSourceNameResolver(resolver);
+
+      const file = new File(['{}'], 'timeline.otio');
+      panel.importOTIOFile(file);
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // fromOTIO should receive the resolver, not the fallback
+      const passedResolver = mockManager.fromOTIO.mock.calls[0]![1];
+      passedResolver('test', 'url');
+      expect(resolver).toHaveBeenCalledWith('test', 'url');
+    });
+
+    it('PL-063: triggerEDLExport calls the same export logic as the EDL button', () => {
+      // Mock downloadEDL by checking that getClips is called (part of exportEDL flow)
+      const mockManager = manager as unknown as Record<string, ReturnType<typeof vi.fn>>;
+      mockManager.getClips = vi.fn().mockReturnValue([]);
+
+      expect(() => panel.triggerEDLExport()).not.toThrow();
+      expect(mockManager.getClips).toHaveBeenCalled();
+    });
+
+    it('PL-064: triggerOTIOExport calls the same export logic as the OTIO button', () => {
+      const mockManager = manager as unknown as Record<string, ReturnType<typeof vi.fn>>;
+      mockManager.getClips = vi.fn().mockReturnValue([]);
+
+      expect(() => panel.triggerOTIOExport()).not.toThrow();
+      expect(mockManager.getClips).toHaveBeenCalled();
+    });
+
+    it('PL-065: importOTIOFile handles parse errors gracefully', async () => {
+      const mockManager = manager as unknown as Record<string, ReturnType<typeof vi.fn>>;
+      mockManager.fromOTIO = vi.fn().mockImplementation(() => {
+        throw new Error('Invalid OTIO');
+      });
+      mockManager.clear = vi.fn();
+
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const file = new File(['not-json'], 'broken.otio');
+      panel.importOTIOFile(file);
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(consoleSpy).toHaveBeenCalled();
+      consoleSpy.mockRestore();
+    });
+  });
 });

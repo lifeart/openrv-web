@@ -843,6 +843,7 @@ export class App {
       cdlControl: this.controls.cdlControl,
       curvesControl: this.controls.curvesControl,
       persistenceManager: this.persistenceManager,
+      pixelProbeProvider: this.viewer.getPixelProbe(),
     };
   }
 

@@ -287,6 +287,31 @@ describe('buildViewTab', () => {
     expect(menu?.getAttribute('aria-label')).toBe('Matte Overlay settings');
   });
 
+  it('highlights the matte overlay button when the overlay is shown', () => {
+    const deps = createTestDeps();
+
+    const result = buildViewTab(deps);
+    const button = result.element.querySelector<HTMLButtonElement>('[data-testid="matte-overlay-toggle-btn"]')!;
+
+    expect(button.classList.contains('active')).toBe(false);
+
+    deps.matteOverlay.emit('settingsChanged', { show: true, aspect: 1.78, opacity: 0.66, heightVisible: -1, centerPoint: [0, 0] });
+    expect(button.classList.contains('active')).toBe(true);
+  });
+
+  it('removes the matte overlay button highlight when the overlay is hidden', () => {
+    const deps = createTestDeps();
+
+    const result = buildViewTab(deps);
+    const button = result.element.querySelector<HTMLButtonElement>('[data-testid="matte-overlay-toggle-btn"]')!;
+
+    deps.matteOverlay.emit('settingsChanged', { show: true, aspect: 1.78, opacity: 0.66, heightVisible: -1, centerPoint: [0, 0] });
+    expect(button.classList.contains('active')).toBe(true);
+
+    deps.matteOverlay.emit('settingsChanged', { show: false, aspect: 1.78, opacity: 0.66, heightVisible: -1, centerPoint: [0, 0] });
+    expect(button.classList.contains('active')).toBe(false);
+  });
+
   it('opens the bug overlay settings menu when the button is clicked without an image', () => {
     const deps = createTestDeps();
 

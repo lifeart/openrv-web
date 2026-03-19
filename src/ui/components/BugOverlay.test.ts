@@ -448,6 +448,64 @@ describe('BugOverlay', () => {
       expect(overlay.hasImage()).toBe(false);
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // getImage / getImageDimensions (export pipeline support)
+  // ---------------------------------------------------------------------------
+  describe('getImage', () => {
+    it('BUG-140: returns null when no image loaded', () => {
+      expect(overlay.getImage()).toBeNull();
+    });
+
+    it('BUG-141: returns the loaded image element after setImage', () => {
+      const img = new Image();
+      Object.defineProperty(img, 'naturalWidth', { value: 200 });
+      Object.defineProperty(img, 'naturalHeight', { value: 100 });
+      overlay.setImage(img);
+      expect(overlay.getImage()).toBe(img);
+    });
+
+    it('BUG-142: returns null after removeImage', () => {
+      const img = new Image();
+      Object.defineProperty(img, 'naturalWidth', { value: 200 });
+      Object.defineProperty(img, 'naturalHeight', { value: 100 });
+      overlay.setImage(img);
+      overlay.removeImage();
+      expect(overlay.getImage()).toBeNull();
+    });
+
+    it('BUG-143: returns null after dispose', () => {
+      const img = new Image();
+      Object.defineProperty(img, 'naturalWidth', { value: 200 });
+      Object.defineProperty(img, 'naturalHeight', { value: 100 });
+      overlay.setImage(img);
+      overlay.dispose();
+      expect(overlay.getImage()).toBeNull();
+    });
+  });
+
+  describe('getImageDimensions', () => {
+    it('BUG-150: returns zero dimensions when no image loaded', () => {
+      expect(overlay.getImageDimensions()).toEqual({ width: 0, height: 0 });
+    });
+
+    it('BUG-151: returns correct dimensions after setImage', () => {
+      const img = new Image();
+      Object.defineProperty(img, 'naturalWidth', { value: 300 });
+      Object.defineProperty(img, 'naturalHeight', { value: 150 });
+      overlay.setImage(img);
+      expect(overlay.getImageDimensions()).toEqual({ width: 300, height: 150 });
+    });
+
+    it('BUG-152: returns zero dimensions after removeImage', () => {
+      const img = new Image();
+      Object.defineProperty(img, 'naturalWidth', { value: 300 });
+      Object.defineProperty(img, 'naturalHeight', { value: 150 });
+      overlay.setImage(img);
+      overlay.removeImage();
+      expect(overlay.getImageDimensions()).toEqual({ width: 0, height: 0 });
+    });
+  });
 });
 
 describe('Compositing: display:none for inactive overlay', () => {

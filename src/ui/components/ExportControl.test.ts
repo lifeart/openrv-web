@@ -638,3 +638,140 @@ describe('ExportControl keyboard accessibility', () => {
     expect(button.getAttribute('aria-expanded')).toBe('false');
   });
 });
+
+describe('ExportControl EDL/OTIO playlist export menu items (Issue #465)', () => {
+  let control: ExportControl;
+
+  beforeEach(() => {
+    control = new ExportControl();
+    document.body.appendChild(control.render());
+  });
+
+  afterEach(() => {
+    control.dispose();
+    const el = control.render();
+    if (el.parentNode) {
+      el.parentNode.removeChild(el);
+    }
+  });
+
+  function openDropdown(): void {
+    const button = control.render().querySelector('button') as HTMLButtonElement;
+    button.click();
+  }
+
+  function getDropdown(): HTMLElement {
+    return document.querySelector('.export-dropdown') as HTMLElement;
+  }
+
+  it('EXPORT-U090: dropdown contains "Playlist" section header', () => {
+    openDropdown();
+    const dropdown = getDropdown();
+    const headers = Array.from(dropdown.querySelectorAll('div')).filter(
+      (el) => el.textContent === 'Playlist' && el.style.textTransform === 'uppercase',
+    );
+    expect(headers.length).toBe(1);
+  });
+
+  it('EXPORT-U091: dropdown contains Export EDL (CMX 3600) menu item', () => {
+    openDropdown();
+    const dropdown = getDropdown();
+    const edlItem = Array.from(dropdown.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Export EDL (CMX 3600)'),
+    );
+    expect(edlItem).toBeDefined();
+  });
+
+  it('EXPORT-U092: dropdown contains Export OTIO menu item', () => {
+    openDropdown();
+    const dropdown = getDropdown();
+    const otioItem = Array.from(dropdown.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Export OTIO'),
+    );
+    expect(otioItem).toBeDefined();
+  });
+
+  it('EXPORT-U093: clicking Export EDL emits edlExportRequested event', () => {
+    const callback = vi.fn();
+    control.on('edlExportRequested', callback);
+
+    openDropdown();
+    const dropdown = getDropdown();
+    const edlItem = Array.from(dropdown.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Export EDL (CMX 3600)'),
+    ) as HTMLButtonElement;
+
+    edlItem.click();
+
+    expect(callback).toHaveBeenCalledTimes(1);
+  });
+
+  it('EXPORT-U094: clicking Export OTIO emits otioExportRequested event', () => {
+    const callback = vi.fn();
+    control.on('otioExportRequested', callback);
+
+    openDropdown();
+    const dropdown = getDropdown();
+    const otioItem = Array.from(dropdown.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Export OTIO'),
+    ) as HTMLButtonElement;
+
+    otioItem.click();
+
+    expect(callback).toHaveBeenCalledTimes(1);
+  });
+
+  it('EXPORT-U095: edlExportRequested listener can be registered and removed', () => {
+    const callback = vi.fn();
+    control.on('edlExportRequested', callback);
+    expect(() => control.off('edlExportRequested', callback)).not.toThrow();
+  });
+
+  it('EXPORT-U096: otioExportRequested listener can be registered and removed', () => {
+    const callback = vi.fn();
+    control.on('otioExportRequested', callback);
+    expect(() => control.off('otioExportRequested', callback)).not.toThrow();
+  });
+
+  it('EXPORT-U097: EDL and OTIO items are menu items with correct role', () => {
+    openDropdown();
+    const dropdown = getDropdown();
+    const edlItem = Array.from(dropdown.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Export EDL (CMX 3600)'),
+    );
+    const otioItem = Array.from(dropdown.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Export OTIO'),
+    );
+
+    expect(edlItem?.getAttribute('role')).toBe('menuitem');
+    expect(otioItem?.getAttribute('role')).toBe('menuitem');
+  });
+
+  it('EXPORT-U098: clicking EDL export closes the dropdown', () => {
+    openDropdown();
+    const dropdown = getDropdown();
+    const edlItem = Array.from(dropdown.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Export EDL (CMX 3600)'),
+    ) as HTMLButtonElement;
+
+    edlItem.click();
+
+    expect(dropdown.style.display).toBe('none');
+  });
+
+  it('EXPORT-U099: existing menu sections still present after adding Playlist section', () => {
+    openDropdown();
+    const dropdown = getDropdown();
+    const getHeader = (text: string) =>
+      Array.from(dropdown.querySelectorAll('div')).find(
+        (el) => el.textContent === text && el.style.textTransform === 'uppercase',
+      );
+
+    expect(getHeader('Single Frame')).toBeDefined();
+    expect(getHeader('Sequence Export')).toBeDefined();
+    expect(getHeader('Video Export')).toBeDefined();
+    expect(getHeader('Session')).toBeDefined();
+    expect(getHeader('Reports')).toBeDefined();
+    expect(getHeader('Playlist')).toBeDefined();
+  });
+});

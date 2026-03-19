@@ -7,7 +7,7 @@
 
 import { SHADOWS, Z_INDEX } from './shared/theme';
 import { applyHoverEffect } from './shared/Button';
-import type { OverlayPosition, TimecodeOverlay, TimecodeOverlayState } from './TimecodeOverlay';
+import type { OverlayPosition, TimecodeOverlay, TimecodeOverlayState, TimecodeDisplayFormat } from './TimecodeOverlay';
 
 const VIEWPORT_MARGIN = 8;
 
@@ -22,6 +22,12 @@ const FONT_SIZE_LABELS: Record<TimecodeOverlayState['fontSize'], string> = {
   small: 'Small',
   medium: 'Medium',
   large: 'Large',
+};
+
+const DISPLAY_FORMAT_LABELS: Record<TimecodeDisplayFormat, string> = {
+  smpte: 'SMPTE Timecode',
+  frame: 'Frame Number',
+  both: 'Both',
 };
 
 export class TimecodeOverlaySettingsMenu {
@@ -83,22 +89,37 @@ export class TimecodeOverlaySettingsMenu {
     }
 
     menu.appendChild(this.createSeparator());
-    menu.appendChild(this.createSectionHeader('Display'));
+    menu.appendChild(this.createSectionHeader('Display Format'));
 
-    const frameCounterItem = this.createCheckableItem(
-      'Show Frame Counter',
-      currentState.showFrameCounter,
+    for (const format of ['smpte', 'frame', 'both'] as TimecodeDisplayFormat[]) {
+      const item = this.createCheckableItem(
+        DISPLAY_FORMAT_LABELS[format],
+        currentState.displayFormat === format,
+        'menuitemradio',
+        () => {
+          this.overlay.setDisplayFormat(format);
+          this.updateRadioGroup(menu, 'data-display-format', format);
+        },
+      );
+      item.dataset.displayFormat = format;
+      menu.appendChild(item);
+    }
+
+    menu.appendChild(this.createSeparator());
+    const sourceTimecodeItem = this.createCheckableItem(
+      'Show Source Timecode',
+      currentState.showSourceTimecode,
       'menuitemcheckbox',
       () => {
-        const next = !this.overlay.getState().showFrameCounter;
-        this.overlay.setShowFrameCounter(next);
-        frameCounterItem.setAttribute('aria-checked', String(next));
-        const check = frameCounterItem.querySelector<HTMLElement>('.menu-check');
+        const next = !this.overlay.getState().showSourceTimecode;
+        this.overlay.setShowSourceTimecode(next);
+        sourceTimecodeItem.setAttribute('aria-checked', String(next));
+        const check = sourceTimecodeItem.querySelector<HTMLElement>('.menu-check');
         if (check) check.textContent = next ? '\u2713' : '';
       },
     );
-    frameCounterItem.dataset.setting = 'frame-counter';
-    menu.appendChild(frameCounterItem);
+    sourceTimecodeItem.dataset.testid = 'show-source-timecode';
+    menu.appendChild(sourceTimecodeItem);
 
     menu.appendChild(this.createOpacityControl(currentState.backgroundOpacity));
 
@@ -266,9 +287,14 @@ export class TimecodeOverlaySettingsMenu {
     return sep;
   }
 
-  private updateRadioGroup(menu: HTMLDivElement, datasetKey: 'data-position' | 'data-font-size', selectedValue: string): void {
-    const attr = datasetKey === 'data-position' ? 'position' : 'fontSize';
-    const selector = datasetKey === 'data-position' ? '[data-position]' : '[data-font-size]';
+  private updateRadioGroup(menu: HTMLDivElement, datasetKey: 'data-position' | 'data-font-size' | 'data-display-format', selectedValue: string): void {
+    const attrMap: Record<string, string> = {
+      'data-position': 'position',
+      'data-font-size': 'fontSize',
+      'data-display-format': 'displayFormat',
+    };
+    const attr = attrMap[datasetKey]!;
+    const selector = `[${datasetKey}]`;
     const items = menu.querySelectorAll<HTMLDivElement>(selector);
     for (const item of items) {
       const checked = item.dataset[attr] === selectedValue;

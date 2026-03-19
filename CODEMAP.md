@@ -278,7 +278,6 @@ openrv-web/
 │   │       ├── AnnotationStore.ts # Annotation storage
 │   │       ├── AutoSaveManager.ts # Auto-save to IndexedDB
 │   │       ├── MarkerManager.ts  # Timeline marker management
-│   │       ├── MediaManager.ts   # Media management
 │   │       ├── NoteManager.ts    # Notes/annotations
 │   │       ├── PlaybackEngine.ts # Playback engine (core, update() split into focused sub-methods)
 │   │       ├── PlaybackTimingController.ts # Playback timing

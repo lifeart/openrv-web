@@ -79,11 +79,35 @@ The overlay uses a semi-transparent dark background with rounded corners, box sh
 
 ## Scripting API
 
-Pixel probe state is accessible through the view API:
+Pixel probe state is accessible through the view API at `window.openrv.view`:
 
 ```javascript
-// Toggle pixel probe
-// (Primarily controlled via keyboard shortcut Shift+I)
+// Enable / disable the probe overlay
+openrv.view.enableProbe();
+openrv.view.disableProbe();
+
+// Check whether the probe is active
+const active = openrv.view.isProbeEnabled();
+
+// Lock / unlock the probe position
+openrv.view.toggleProbeLock();
+const locked = openrv.view.isProbeLocked();
+
+// Read current probe values (position, RGB, HSL, IRE, etc.)
+const state = openrv.view.getProbeState();
+console.log(`Pixel (${state.x}, ${state.y}): rgb(${state.rgb.r}, ${state.rgb.g}, ${state.rgb.b})`);
+console.log(`IRE: ${state.ire}, Alpha: ${state.alpha}`);
+
+// Change the highlighted display format
+openrv.view.setProbeFormat('hsl');   // 'rgb', 'rgb01', 'hsl', 'hex', 'ire'
+
+// Set sample area size for averaging
+openrv.view.setProbeSampleSize(3);   // 1, 3, 5, or 9 (NxN)
+const size = openrv.view.getProbeSampleSize();
+
+// Switch between rendered (post-grade) and source (pre-grade) values
+openrv.view.setProbeSourceMode('source');
+const mode = openrv.view.getProbeSourceMode(); // 'rendered' or 'source'
 ```
 
 ---

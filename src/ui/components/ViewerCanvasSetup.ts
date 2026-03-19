@@ -198,9 +198,14 @@ export function updatePaintCanvasSize(
 
 /**
  * Update overlay dimensions to match display size.
+ * When the crop manager has an active non-full crop, the crop region
+ * is forwarded so that safe-areas guides are drawn relative to the
+ * cropped sub-region.
  */
 export function updateOverlayDimensions(ctx: CanvasSetupContext): void {
-  ctx.getOverlayManager().updateDimensions(ctx.getDisplayWidth(), ctx.getDisplayHeight());
+  const cropManager = ctx.getCropManager();
+  const activeCrop = cropManager.isCropClipActive() ? cropManager.getCropState().region : null;
+  ctx.getOverlayManager().updateDimensions(ctx.getDisplayWidth(), ctx.getDisplayHeight(), activeCrop);
 }
 
 /**

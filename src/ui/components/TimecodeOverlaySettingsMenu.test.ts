@@ -8,6 +8,9 @@ function createOverlayMock() {
     fontSize: 'medium' as const,
     showFrameCounter: true,
     backgroundOpacity: 0.6,
+    displayFormat: 'smpte' as 'smpte' | 'frame' | 'both',
+    sourceTimecode: undefined as string | undefined,
+    showSourceTimecode: true,
   };
 
   return {
@@ -23,6 +26,12 @@ function createOverlayMock() {
     }),
     setBackgroundOpacity: vi.fn((backgroundOpacity) => {
       state = { ...state, backgroundOpacity };
+    }),
+    setDisplayFormat: vi.fn((displayFormat) => {
+      state = { ...state, displayFormat };
+    }),
+    setShowSourceTimecode: vi.fn((showSourceTimecode) => {
+      state = { ...state, showSourceTimecode };
     }),
   };
 }
@@ -63,11 +72,46 @@ describe('TimecodeOverlaySettingsMenu', () => {
     expect(overlay.setFontSize).toHaveBeenCalledWith('large');
   });
 
-  it('TOM-004: frame counter toggle updates the overlay', () => {
+  it('TOM-004: display format selection updates the overlay to frame', () => {
     menu.show(100, 120);
-    const item = document.querySelector<HTMLElement>('[data-setting="frame-counter"]');
+    const item = document.querySelector<HTMLElement>('[data-display-format="frame"]');
+    expect(item).not.toBeNull();
     item?.click();
-    expect(overlay.setShowFrameCounter).toHaveBeenCalledWith(false);
+    expect(overlay.setDisplayFormat).toHaveBeenCalledWith('frame');
+  });
+
+  it('TOM-008: display format selection updates the overlay to both', () => {
+    menu.show(100, 120);
+    const item = document.querySelector<HTMLElement>('[data-display-format="both"]');
+    expect(item).not.toBeNull();
+    item?.click();
+    expect(overlay.setDisplayFormat).toHaveBeenCalledWith('both');
+  });
+
+  it('TOM-009: display format selection updates the overlay to smpte', () => {
+    menu.show(100, 120);
+    const item = document.querySelector<HTMLElement>('[data-display-format="smpte"]');
+    expect(item).not.toBeNull();
+    item?.click();
+    expect(overlay.setDisplayFormat).toHaveBeenCalledWith('smpte');
+  });
+
+  it('TOM-010: current display format is checked in menu', () => {
+    menu.show(100, 120);
+    const smpteItem = document.querySelector<HTMLElement>('[data-display-format="smpte"]');
+    const frameItem = document.querySelector<HTMLElement>('[data-display-format="frame"]');
+    const bothItem = document.querySelector<HTMLElement>('[data-display-format="both"]');
+
+    expect(smpteItem?.getAttribute('aria-checked')).toBe('true');
+    expect(frameItem?.getAttribute('aria-checked')).toBe('false');
+    expect(bothItem?.getAttribute('aria-checked')).toBe('false');
+  });
+
+  it('TOM-011: display format section header exists', () => {
+    menu.show(100, 120);
+    const headers = document.querySelectorAll('.timecode-overlay-settings-menu div[role="none"]');
+    const headerTexts = Array.from(headers).map((h) => h.textContent);
+    expect(headerTexts).toContain('Display Format');
   });
 
   it('TOM-005: opacity slider updates the overlay', () => {
@@ -90,5 +134,25 @@ describe('TimecodeOverlaySettingsMenu', () => {
     menu.show(100, 120);
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     expect(menu.isVisible()).toBe(false);
+  });
+
+  it('TOM-012: show source timecode toggle exists', () => {
+    menu.show(100, 120);
+    const item = document.querySelector<HTMLElement>('[data-testid="show-source-timecode"]');
+    expect(item).not.toBeNull();
+    expect(item?.getAttribute('role')).toBe('menuitemcheckbox');
+  });
+
+  it('TOM-013: show source timecode toggle is checked by default', () => {
+    menu.show(100, 120);
+    const item = document.querySelector<HTMLElement>('[data-testid="show-source-timecode"]');
+    expect(item?.getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('TOM-014: clicking source timecode toggle calls setShowSourceTimecode', () => {
+    menu.show(100, 120);
+    const item = document.querySelector<HTMLElement>('[data-testid="show-source-timecode"]');
+    item?.click();
+    expect(overlay.setShowSourceTimecode).toHaveBeenCalledWith(false);
   });
 });

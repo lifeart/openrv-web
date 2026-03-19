@@ -11,11 +11,16 @@ The timecode overlay displays the current frame position in SMPTE timecode forma
 ### Display Options
 
 - **Position**: Top-left, top-right, bottom-left, or bottom-right corner of the viewer
-- **Format**: SMPTE timecode (HH:MM:SS:FF), frame number, or both
+- **Display format**: Configurable via the `displayFormat` setting:
+  - **SMPTE Timecode** (`smpte`): Shows only the SMPTE timecode (HH:MM:SS:FF). This is the default.
+  - **Frame Number** (`frame`): Shows only the frame number (e.g. "Frame 42 / 100").
+  - **Both** (`both`): Shows both SMPTE timecode and frame number.
 - **Background**: Semi-transparent background box for readability against any image content
 - **Font size**: Small, medium, or large
 
-The timecode is derived from the current frame number and the session frame rate. For sources with embedded timecode metadata, the source timecode is displayed alongside the session timecode.
+The display format can be changed from the right-click settings menu on the timecode overlay button in the **View** tab toolbar.
+
+The timecode is derived from the current frame number and the session frame rate. For sources with embedded timecode metadata (e.g. MXF files with a start timecode), the source timecode is displayed in a separate row below the session timecode. This can be toggled via the "Show Source Timecode" checkbox in the right-click settings menu.
 
 Toggle the timecode overlay from its dedicated button in the **View** tab toolbar (keyboard shortcut: Alt+Shift+T). Right-click the button to access display settings.
 
@@ -39,7 +44,7 @@ Safe area overlays mark the broadcast-safe and title-safe regions of the frame, 
 
 Safe areas are rendered as semi-transparent bordered rectangles centered on the frame. The border color and opacity are configurable. When multiple safe zones are active simultaneously, each uses a distinct color for clarity.
 
-Safe area overlays respect the current crop settings. If crop is active, safe areas are calculated relative to the cropped region rather than the full image.
+Safe area overlays respect the current crop settings. When crop is active with a non-full crop region, all safe area guides (title safe, action safe, aspect ratio, center crosshair, and rule of thirds) are calculated relative to the cropped region rather than the full image. When crop is disabled or the crop region covers the full frame, guides revert to full-display positioning.
 
 ---
 
@@ -130,7 +135,7 @@ The bug overlay places a small, persistent logo or graphic element in a corner o
 - **Size**: Scale relative to the frame dimensions
 - **Opacity**: Control transparency for subtle watermarking
 
-The bug overlay is also used during video export to burn the logo into the output file.
+When a bug overlay is enabled and has an image loaded, it is automatically composited (burned) into each frame during video and image export. The exported logo matches the viewer's configured position, size, opacity, and margin. The bug overlay is drawn after annotations but before frameburn text, so timecode and metadata overlays remain readable on top of the logo.
 
 ---
 

@@ -219,6 +219,10 @@ export interface MediaSource {
   // OPFS cache key (set after successful cache put)
   opfsCacheKey?: string;
 
+  // --- Embedded timecode metadata ---
+  /** Embedded source timecode string from container metadata (e.g. MXF startTimecode) */
+  sourceTimecode?: string;
+
   // --- Spherical / 360 metadata ---
   /** True if the source is tagged as spherical (e.g. XMP SphericalVideo) */
   isSpherical?: boolean;

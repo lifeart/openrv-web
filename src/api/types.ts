@@ -18,6 +18,7 @@ import type { ToneMappingState } from '../core/types/effects';
 import type { DisplayColorState } from '../color/DisplayTransfer';
 import type { DisplayCapabilities } from '../color/DisplayCapabilities';
 import type { OCIOState } from '../color/OCIOConfig';
+import type { PixelProbeState, SampleSize, SourceMode } from '../ui/components/PixelProbe';
 
 /**
  * Minimal viewer interface required by the API layer.
@@ -132,4 +133,24 @@ export interface DisplayCapabilitiesProvider {
 export interface OCIOProvider {
   getOCIOState(): OCIOState;
   setOCIOState(state: Partial<OCIOState>): void;
+}
+
+/**
+ * Minimal pixel probe interface required by the API layer.
+ *
+ * Provides enable/disable, lock/unlock, state query, and configuration
+ * for the pixel-probe overlay.
+ */
+export interface PixelProbeProvider {
+  enable(): void;
+  disable(): void;
+  isEnabled(): boolean;
+  toggleLock(): void;
+  isLocked(): boolean;
+  getState(): PixelProbeState;
+  setFormat(format: PixelProbeState['format']): void;
+  setSampleSize(size: SampleSize): void;
+  getSampleSize(): SampleSize;
+  setSourceMode(mode: SourceMode): void;
+  getSourceMode(): SourceMode;
 }

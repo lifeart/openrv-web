@@ -114,6 +114,7 @@ import {
   createExportCanvas as createExportCanvasUtil,
   createSourceExportCanvas as createSourceExportCanvasUtil,
   renderFrameToCanvas as renderFrameToCanvasUtil,
+  type BugOverlayExportConfig,
 } from './ViewerExport';
 import type { FrameburnTimecodeOptions } from './FrameburnCompositor';
 import {
@@ -1471,6 +1472,15 @@ export class Viewer {
     } catch (err) {
       console.error('Crop overlay render failed:', err);
     }
+
+    // Update safe-areas overlay crop region so guides track the cropped area.
+    // This runs every frame to pick up crop state changes that don't trigger
+    // a canvas resize (which is the only path that calls updateOverlayDimensions).
+    {
+      const activeCrop = this.cropManager.isCropClipActive() ? this.cropManager.getCropState().region : null;
+      this.overlayManager.updateSafeAreasCropRegion(activeCrop);
+    }
+
     PerfTrace.end('paint+crop');
   }
 
@@ -3518,9 +3528,34 @@ export class Viewer {
     this.watermarkOverlay.render(ctx, canvas.width, canvas.height);
   }
 
+  /**
+   * Build an export config for the bug overlay if it is enabled and has an image.
+   * Returns null when the bug overlay should not be burned into exports.
+   */
+  private getExportBugOverlayConfig(): BugOverlayExportConfig | null {
+    const bug = this.overlayManager.getBugOverlay();
+    if (!bug.isEnabled() || !bug.hasImage()) return null;
+    const state = bug.getState();
+    const image = bug.getImage();
+    if (!image) return null;
+    const dims = bug.getImageDimensions();
+    if (dims.width <= 0 || dims.height <= 0) return null;
+    return {
+      enabled: true,
+      image,
+      imageWidth: dims.width,
+      imageHeight: dims.height,
+      position: state.position,
+      size: state.size,
+      opacity: state.opacity,
+      margin: state.margin,
+    };
+  }
+
   createExportCanvas(includeAnnotations: boolean, colorSpace?: 'srgb' | 'display-p3'): HTMLCanvasElement | null {
     const cropRegion = this.cropManager.getExportCropRegion();
     const frameburnOptions = this.getExportFrameburnOptions(this.session.currentFrame);
+    const bugOverlayConfig = this.getExportBugOverlayConfig();
     const canvas = createExportCanvasUtil(
       this.session,
       this.paintEngine,
@@ -3531,6 +3566,9 @@ export class Viewer {
       cropRegion,
       colorSpace,
       frameburnOptions,
+      undefined,
+      undefined,
+      bugOverlayConfig,
     );
     if (canvas) {
       this.applyWatermarkToCanvas(canvas);
@@ -3550,6 +3588,7 @@ export class Viewer {
   ): Promise<HTMLCanvasElement | null> {
     const cropRegion = this.cropManager.getExportCropRegion();
     const frameburnOptions = this.getExportFrameburnOptions(frame);
+    const bugOverlayConfig = this.getExportBugOverlayConfig();
     const canvas = await renderFrameToCanvasUtil(
       this.session,
       this.paintEngine,
@@ -3563,6 +3602,7 @@ export class Viewer {
       frameburnOptions,
       advancedFrameburnConfig,
       advancedFrameburnContext,
+      bugOverlayConfig,
     );
     if (canvas) {
       this.applyWatermarkToCanvas(canvas);

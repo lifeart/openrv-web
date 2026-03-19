@@ -161,8 +161,74 @@ export class MatteOverlaySettingsMenu {
       input.value = this.overlay.getSettings().aspect.toFixed(2);
     });
 
+    // Preset aspect ratio buttons
+    const presets = [
+      { label: '2.39:1', value: 2.39 },
+      { label: '1.85:1', value: 1.85 },
+      { label: '16:9', value: 16 / 9 },
+      { label: '4:3', value: 4 / 3 },
+      { label: '1:1', value: 1 },
+    ];
+
+    const presetsRow = document.createElement('div');
+    presetsRow.dataset.testid = 'matte-aspect-presets';
+    presetsRow.style.cssText = `
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    `;
+
+    const updatePresetHighlights = () => {
+      const currentAspect = this.overlay.getSettings().aspect;
+      presetsRow.querySelectorAll<HTMLButtonElement>('button').forEach((btn) => {
+        const presetValue = Number.parseFloat(btn.dataset.aspect!);
+        const isSelected = Math.abs(currentAspect - presetValue) < 0.005;
+        btn.style.background = isSelected ? 'rgba(var(--accent-primary-rgb), 0.2)' : 'var(--bg-tertiary)';
+        btn.style.color = isSelected ? 'var(--accent-primary)' : 'var(--text-primary)';
+        btn.style.borderColor = isSelected ? 'var(--accent-primary)' : 'var(--border-secondary)';
+      });
+    };
+
+    for (const preset of presets) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = preset.label;
+      btn.dataset.testid = `matte-aspect-preset-${preset.label.replace(/[:.]/g, '-')}`;
+      btn.dataset.aspect = String(preset.value);
+      btn.style.cssText = `
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border-secondary);
+        color: var(--text-primary);
+        border-radius: 4px;
+        padding: 4px 8px;
+        font-size: 11px;
+        cursor: pointer;
+        transition: all 0.12s ease;
+      `;
+      btn.addEventListener('click', () => {
+        this.overlay.setAspect(preset.value);
+        input.value = this.overlay.getSettings().aspect.toFixed(2);
+        updatePresetHighlights();
+      });
+      btn.addEventListener('pointerenter', () => {
+        btn.style.background = 'var(--bg-hover)';
+      });
+      btn.addEventListener('pointerleave', () => {
+        const presetValue = Number.parseFloat(btn.dataset.aspect!);
+        const currentAspect = this.overlay.getSettings().aspect;
+        const isSelected = Math.abs(currentAspect - presetValue) < 0.005;
+        btn.style.background = isSelected ? 'rgba(var(--accent-primary-rgb), 0.2)' : 'var(--bg-tertiary)';
+      });
+      presetsRow.appendChild(btn);
+    }
+
     wrapper.appendChild(label);
+    wrapper.appendChild(presetsRow);
     wrapper.appendChild(input);
+
+    // Apply initial highlight
+    updatePresetHighlights();
+
     return wrapper;
   }
 

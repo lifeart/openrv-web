@@ -43,6 +43,8 @@ export interface ExportControlEvents extends EventMap {
   annotationsJSONImportRequested: void;
   annotationsPDFExportRequested: void;
   reportExportRequested: { format: 'csv' | 'html' };
+  edlExportRequested: void;
+  otioExportRequested: void;
   pluginExportRequested: PluginExportRequest;
 }
 
@@ -244,6 +246,13 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
     this.addSectionHeader('Reports');
     this.addMenuItem('note', 'Export Dailies Report (CSV)', () => this.exportReport('csv'));
     this.addMenuItem('note', 'Export Dailies Report (HTML)', () => this.exportReport('html'));
+
+    this.addSeparator();
+
+    // Playlist export section
+    this.addSectionHeader('Playlist');
+    this.addMenuItem('download', 'Export EDL (CMX 3600)', () => this.exportEDL());
+    this.addMenuItem('download', 'Export OTIO', () => this.exportOTIO());
 
     this.addSeparator();
 
@@ -521,6 +530,14 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
 
   private exportReport(format: 'csv' | 'html'): void {
     this.emit('reportExportRequested', { format });
+  }
+
+  private exportEDL(): void {
+    this.emit('edlExportRequested', undefined);
+  }
+
+  private exportOTIO(): void {
+    this.emit('otioExportRequested', undefined);
   }
 
   /**

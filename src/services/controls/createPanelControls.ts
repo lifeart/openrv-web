@@ -132,6 +132,21 @@ export function createPanelControls(deps: PanelControlDeps): PanelControlGroupIn
   };
   const conformPanel = new ConformPanel(conformPanelContainer, conformManager);
 
+  // Wire the file handler so browse buttons open real file pickers
+  conformPanel.setFileHandler(async (file: File): Promise<number | null> => {
+    const countBefore = (session.allSources ?? []).length;
+    try {
+      await session.loadImageFile(file);
+    } catch {
+      return null;
+    }
+    const countAfter = (session.allSources ?? []).length;
+    if (countAfter > countBefore) {
+      return countAfter - 1;
+    }
+    return null;
+  });
+
   return {
     historyPanel,
     infoPanel,

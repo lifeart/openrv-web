@@ -38,11 +38,18 @@ The matte overlay adds a letterbox or pillarbox mask to the viewer with configur
 - **Safe area reference** -- mask out areas outside the intended crop
 - **Client presentation** -- show final framing during review sessions
 
+### Accessing the Matte Overlay
+
+The matte overlay toggle button (crop icon) is located in the View tab toolbar. Click the button to enable or disable the overlay. Right-click the button to open the settings menu.
+
 ### Configuration
 
-- **Aspect ratio** -- set the matte to any desired ratio (e.g., 1.85:1, 2.39:1, 16:9)
-- **Opacity** -- adjust the darkness of the matte bars (0--100%)
-- **Center point** -- offset the matte center if the composition is not centered
+The settings menu provides the following controls:
+
+- **Aspect ratio presets** -- quick-select buttons for common ratios: 2.39:1, 1.85:1, 16:9, 4:3, 1:1
+- **Custom aspect ratio** -- numeric input for any desired ratio (0.1--10)
+- **Opacity** -- slider to adjust the darkness of the matte bars (0--100%)
+- **Center X / Center Y** -- sliders to offset the matte center if the composition is not centered (-100% to +100%)
 
 Matte settings persist across frame changes and are included in session state.
 

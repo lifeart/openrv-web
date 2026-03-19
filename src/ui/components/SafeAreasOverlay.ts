@@ -11,6 +11,7 @@
  */
 
 import type { EventMap } from '../../utils/EventEmitter';
+import type { CropRegion } from './CropControl';
 import { CanvasOverlay } from './CanvasOverlay';
 
 export interface SafeAreasEvents extends EventMap {
@@ -60,6 +61,7 @@ export const DEFAULT_SAFE_AREAS_STATE: SafeAreasState = {
 export class SafeAreasOverlay extends CanvasOverlay<SafeAreasEvents> {
   private state: SafeAreasState = { ...DEFAULT_SAFE_AREAS_STATE };
   private customAspectRatio = 1;
+  private cropRegion: CropRegion | null = null;
 
   constructor() {
     super('safe-areas-overlay', 'safe-areas-overlay', 45);
@@ -167,6 +169,49 @@ export class SafeAreasOverlay extends CanvasOverlay<SafeAreasEvents> {
   }
 
   /**
+   * Set the active crop region. When non-null, safe areas and all other
+   * guides are calculated relative to the cropped sub-region instead of
+   * the full display area. Pass `null` to revert to full-display mode.
+   *
+   * The crop region uses normalized coordinates (0-1) relative to the
+   * display area, matching the CropRegion type used by CropManager.
+   */
+  setCropRegion(region: CropRegion | null): void {
+    this.cropRegion = region;
+    if (this.isVisible()) {
+      this.render();
+    }
+  }
+
+  /**
+   * Get the current crop region, or null if not set.
+   */
+  getCropRegion(): CropRegion | null {
+    return this.cropRegion ? { ...this.cropRegion } : null;
+  }
+
+  /**
+   * Compute the effective drawing bounds, accounting for the crop region
+   * when active. Returns the offset and dimensions that all drawing
+   * methods should use instead of raw offsetX/offsetY/displayWidth/displayHeight.
+   */
+  private getEffectiveBounds(): { eOffsetX: number; eOffsetY: number; eWidth: number; eHeight: number } {
+    if (this.cropRegion) {
+      const eOffsetX = this.offsetX + this.displayWidth * this.cropRegion.x;
+      const eOffsetY = this.offsetY + this.displayHeight * this.cropRegion.y;
+      const eWidth = this.displayWidth * this.cropRegion.width;
+      const eHeight = this.displayHeight * this.cropRegion.height;
+      return { eOffsetX, eOffsetY, eWidth, eHeight };
+    }
+    return {
+      eOffsetX: this.offsetX,
+      eOffsetY: this.offsetY,
+      eWidth: this.displayWidth,
+      eHeight: this.displayHeight,
+    };
+  }
+
+  /**
    * Render all enabled guides
    */
   render(): void {
@@ -210,13 +255,13 @@ export class SafeAreasOverlay extends CanvasOverlay<SafeAreasEvents> {
    */
   private drawSafeArea(percentage: number, color: string, alpha: number, type: 'title' | 'action'): void {
     const { ctx } = this;
-    const { offsetX, offsetY, displayWidth, displayHeight } = this;
+    const { eOffsetX, eOffsetY, eWidth, eHeight } = this.getEffectiveBounds();
 
     const margin = (1 - percentage) / 2;
-    const x = offsetX + displayWidth * margin;
-    const y = offsetY + displayHeight * margin;
-    const w = displayWidth * percentage;
-    const h = displayHeight * percentage;
+    const x = eOffsetX + eWidth * margin;
+    const y = eOffsetY + eHeight * margin;
+    const w = eWidth * percentage;
+    const h = eHeight * percentage;
 
     ctx.strokeStyle = this.hexToRgba(color, alpha);
     ctx.lineWidth = type === 'title' ? 1 : 1.5;
@@ -243,54 +288,55 @@ export class SafeAreasOverlay extends CanvasOverlay<SafeAreasEvents> {
    * Draw aspect ratio letterbox/pillarbox guides
    */
   private drawAspectRatioGuide(color: string, alpha: number): void {
-    const { ctx, offsetX, offsetY, displayWidth, displayHeight } = this;
+    const { ctx } = this;
+    const { eOffsetX, eOffsetY, eWidth, eHeight } = this.getEffectiveBounds();
 
     const targetRatio =
       this.state.aspectRatio === 'custom' ? this.customAspectRatio : ASPECT_RATIOS[this.state.aspectRatio!].ratio;
 
-    const currentRatio = displayWidth / displayHeight;
+    const currentRatio = eWidth / eHeight;
 
     ctx.fillStyle = this.hexToRgba('#000000', 0.6);
 
     if (targetRatio > currentRatio) {
       // Letterbox (bars top and bottom)
-      const newHeight = displayWidth / targetRatio;
-      const barHeight = (displayHeight - newHeight) / 2;
+      const newHeight = eWidth / targetRatio;
+      const barHeight = (eHeight - newHeight) / 2;
 
       // Top bar
-      ctx.fillRect(offsetX, offsetY, displayWidth, barHeight);
+      ctx.fillRect(eOffsetX, eOffsetY, eWidth, barHeight);
       // Bottom bar
-      ctx.fillRect(offsetX, offsetY + displayHeight - barHeight, displayWidth, barHeight);
+      ctx.fillRect(eOffsetX, eOffsetY + eHeight - barHeight, eWidth, barHeight);
 
       // Draw border lines
       ctx.strokeStyle = this.hexToRgba(color, alpha);
       ctx.lineWidth = 1;
       ctx.setLineDash([]);
       ctx.beginPath();
-      ctx.moveTo(offsetX, offsetY + barHeight);
-      ctx.lineTo(offsetX + displayWidth, offsetY + barHeight);
-      ctx.moveTo(offsetX, offsetY + displayHeight - barHeight);
-      ctx.lineTo(offsetX + displayWidth, offsetY + displayHeight - barHeight);
+      ctx.moveTo(eOffsetX, eOffsetY + barHeight);
+      ctx.lineTo(eOffsetX + eWidth, eOffsetY + barHeight);
+      ctx.moveTo(eOffsetX, eOffsetY + eHeight - barHeight);
+      ctx.lineTo(eOffsetX + eWidth, eOffsetY + eHeight - barHeight);
       ctx.stroke();
     } else if (targetRatio < currentRatio) {
       // Pillarbox (bars left and right)
-      const newWidth = displayHeight * targetRatio;
-      const barWidth = (displayWidth - newWidth) / 2;
+      const newWidth = eHeight * targetRatio;
+      const barWidth = (eWidth - newWidth) / 2;
 
       // Left bar
-      ctx.fillRect(offsetX, offsetY, barWidth, displayHeight);
+      ctx.fillRect(eOffsetX, eOffsetY, barWidth, eHeight);
       // Right bar
-      ctx.fillRect(offsetX + displayWidth - barWidth, offsetY, barWidth, displayHeight);
+      ctx.fillRect(eOffsetX + eWidth - barWidth, eOffsetY, barWidth, eHeight);
 
       // Draw border lines
       ctx.strokeStyle = this.hexToRgba(color, alpha);
       ctx.lineWidth = 1;
       ctx.setLineDash([]);
       ctx.beginPath();
-      ctx.moveTo(offsetX + barWidth, offsetY);
-      ctx.lineTo(offsetX + barWidth, offsetY + displayHeight);
-      ctx.moveTo(offsetX + displayWidth - barWidth, offsetY);
-      ctx.lineTo(offsetX + displayWidth - barWidth, offsetY + displayHeight);
+      ctx.moveTo(eOffsetX + barWidth, eOffsetY);
+      ctx.lineTo(eOffsetX + barWidth, eOffsetY + eHeight);
+      ctx.moveTo(eOffsetX + eWidth - barWidth, eOffsetY);
+      ctx.lineTo(eOffsetX + eWidth - barWidth, eOffsetY + eHeight);
       ctx.stroke();
     }
 
@@ -304,14 +350,15 @@ export class SafeAreasOverlay extends CanvasOverlay<SafeAreasEvents> {
     ctx.font = '11px sans-serif';
     ctx.textAlign = 'right';
     ctx.textBaseline = 'bottom';
-    ctx.fillText(label, offsetX + displayWidth - 8, offsetY + displayHeight - 8);
+    ctx.fillText(label, eOffsetX + eWidth - 8, eOffsetY + eHeight - 8);
   }
 
   /**
    * Draw rule of thirds grid
    */
   private drawRuleOfThirds(color: string, alpha: number): void {
-    const { ctx, offsetX, offsetY, displayWidth, displayHeight } = this;
+    const { ctx } = this;
+    const { eOffsetX, eOffsetY, eWidth, eHeight } = this.getEffectiveBounds();
 
     ctx.strokeStyle = this.hexToRgba(color, alpha * 0.6);
     ctx.lineWidth = 1;
@@ -319,19 +366,19 @@ export class SafeAreasOverlay extends CanvasOverlay<SafeAreasEvents> {
 
     // Vertical lines
     for (let i = 1; i <= 2; i++) {
-      const x = offsetX + (displayWidth * i) / 3;
+      const x = eOffsetX + (eWidth * i) / 3;
       ctx.beginPath();
-      ctx.moveTo(x, offsetY);
-      ctx.lineTo(x, offsetY + displayHeight);
+      ctx.moveTo(x, eOffsetY);
+      ctx.lineTo(x, eOffsetY + eHeight);
       ctx.stroke();
     }
 
     // Horizontal lines
     for (let i = 1; i <= 2; i++) {
-      const y = offsetY + (displayHeight * i) / 3;
+      const y = eOffsetY + (eHeight * i) / 3;
       ctx.beginPath();
-      ctx.moveTo(offsetX, y);
-      ctx.lineTo(offsetX + displayWidth, y);
+      ctx.moveTo(eOffsetX, y);
+      ctx.lineTo(eOffsetX + eWidth, y);
       ctx.stroke();
     }
 
@@ -340,8 +387,8 @@ export class SafeAreasOverlay extends CanvasOverlay<SafeAreasEvents> {
     const pointRadius = 3;
     for (let i = 1; i <= 2; i++) {
       for (let j = 1; j <= 2; j++) {
-        const x = offsetX + (displayWidth * i) / 3;
-        const y = offsetY + (displayHeight * j) / 3;
+        const x = eOffsetX + (eWidth * i) / 3;
+        const y = eOffsetY + (eHeight * j) / 3;
         ctx.beginPath();
         ctx.arc(x, y, pointRadius, 0, Math.PI * 2);
         ctx.fill();
@@ -353,11 +400,12 @@ export class SafeAreasOverlay extends CanvasOverlay<SafeAreasEvents> {
    * Draw center crosshair
    */
   private drawCenterCrosshair(color: string, alpha: number): void {
-    const { ctx, offsetX, offsetY, displayWidth, displayHeight } = this;
+    const { ctx } = this;
+    const { eOffsetX, eOffsetY, eWidth, eHeight } = this.getEffectiveBounds();
 
-    const centerX = offsetX + displayWidth / 2;
-    const centerY = offsetY + displayHeight / 2;
-    const size = Math.min(displayWidth, displayHeight) * 0.05;
+    const centerX = eOffsetX + eWidth / 2;
+    const centerY = eOffsetY + eHeight / 2;
+    const size = Math.min(eWidth, eHeight) * 0.05;
     const gap = size * 0.3;
 
     ctx.strokeStyle = this.hexToRgba(color, alpha);

@@ -153,6 +153,11 @@ export function compositeTimecodeFrameburn(
 ): void {
   if (!options?.enabled) return;
 
+  // Resolve display format with backward compat for showFrameCounter
+  const displayFormat = options.displayFormat ?? (options.showFrameCounter ? 'both' : 'smpte');
+  const showTimecode = displayFormat === 'smpte' || displayFormat === 'both';
+  const showFrame = displayFormat === 'frame' || displayFormat === 'both';
+
   const timecode = formatTimecode(frameToTimecode(options.frame, options.fps, options.startFrame ?? 0));
   const frameCounter = `Frame ${options.frame} / ${options.totalFrames}`;
 
@@ -160,23 +165,25 @@ export function compositeTimecodeFrameburn(
   const counterFontSize = Math.max(11, Math.round(fontSize * 0.75));
   const horizontalPadding = Math.max(10, Math.round(fontSize * 0.66));
   const verticalPadding = Math.max(8, Math.round(fontSize * 0.5));
-  const lineGap = options.showFrameCounter ? Math.max(4, Math.round(fontSize * 0.22)) : 0;
+  const showBothLines = showTimecode && showFrame;
+  const lineGap = showBothLines ? Math.max(4, Math.round(fontSize * 0.22)) : 0;
 
   ctx.save();
   ctx.textBaseline = 'top';
 
   ctx.font = `${fontSize}px ${FONT_FAMILY}`;
-  const timecodeWidth = ctx.measureText(timecode).width;
+  const timecodeWidth = showTimecode ? ctx.measureText(timecode).width : 0;
 
   let maxTextWidth = timecodeWidth;
-  if (options.showFrameCounter) {
+  if (showFrame) {
     ctx.font = `${counterFontSize}px ${FONT_FAMILY}`;
     maxTextWidth = Math.max(maxTextWidth, ctx.measureText(frameCounter).width);
   }
 
+  const primaryLineHeight = showTimecode ? fontSize : counterFontSize;
   const boxWidth = Math.ceil(maxTextWidth + horizontalPadding * 2);
   const boxHeight = Math.ceil(
-    verticalPadding * 2 + fontSize + (options.showFrameCounter ? lineGap + counterFontSize : 0),
+    verticalPadding * 2 + primaryLineHeight + (showBothLines ? lineGap + counterFontSize : 0),
   );
 
   const { x, y } = getAnchorPosition(options.position, canvasWidth, canvasHeight, boxWidth, boxHeight);
@@ -184,14 +191,19 @@ export function compositeTimecodeFrameburn(
   ctx.fillStyle = `rgba(0, 0, 0, ${Math.max(0, Math.min(1, options.backgroundOpacity))})`;
   drawRoundedRect(ctx, x, y, boxWidth, boxHeight, 4);
 
-  ctx.fillStyle = '#ffffff';
-  ctx.font = `${fontSize}px ${FONT_FAMILY}`;
-  ctx.fillText(timecode, x + horizontalPadding, y + verticalPadding);
+  let currentY = y + verticalPadding;
 
-  if (options.showFrameCounter) {
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+  if (showTimecode) {
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `${fontSize}px ${FONT_FAMILY}`;
+    ctx.fillText(timecode, x + horizontalPadding, currentY);
+    currentY += fontSize + lineGap;
+  }
+
+  if (showFrame) {
+    ctx.fillStyle = showTimecode ? 'rgba(255, 255, 255, 0.75)' : '#ffffff';
     ctx.font = `${counterFontSize}px ${FONT_FAMILY}`;
-    ctx.fillText(frameCounter, x + horizontalPadding, y + verticalPadding + fontSize + lineGap);
+    ctx.fillText(frameCounter, x + horizontalPadding, currentY);
   }
 
   ctx.restore();

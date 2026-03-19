@@ -2185,4 +2185,96 @@ describe('HeaderBar', () => {
       expect(text.textContent).toBe('Omit');
     });
   });
+
+  describe('OTIO file picker support (Issue #465)', () => {
+    it('HDR-U050: file input accept attribute includes .otio', () => {
+      headerBar.render();
+      const inputs = headerBar.getContainer().querySelectorAll('input[type="file"]');
+      const mediaInput = Array.from(inputs).find(
+        (input) => (input as HTMLInputElement).accept.includes('.rv'),
+      ) as HTMLInputElement;
+
+      expect(mediaInput).toBeDefined();
+      expect(mediaInput.accept).toContain('.otio');
+    });
+
+    it('HDR-U051: onOTIOFileOpen property defaults to null', () => {
+      expect(headerBar.onOTIOFileOpen).toBeNull();
+    });
+
+    it('HDR-U052: onOTIOFileOpen can be set to a callback', () => {
+      const callback = vi.fn();
+      headerBar.onOTIOFileOpen = callback;
+      expect(headerBar.onOTIOFileOpen).toBe(callback);
+    });
+
+    it('HDR-U053: selecting .otio file invokes onOTIOFileOpen callback', async () => {
+      headerBar.render();
+      const callback = vi.fn();
+      headerBar.onOTIOFileOpen = callback;
+
+      const inputs = headerBar.getContainer().querySelectorAll('input[type="file"]');
+      const mediaInput = Array.from(inputs).find(
+        (input) => (input as HTMLInputElement).accept.includes('.otio'),
+      ) as HTMLInputElement;
+
+      const otioFile = new File(['{"OTIO_SCHEMA": "Timeline.1"}'], 'timeline.otio');
+      Object.defineProperty(mediaInput, 'files', { value: [otioFile], writable: false });
+
+      mediaInput.dispatchEvent(new Event('change'));
+
+      await vi.waitFor(() => {
+        expect(callback).toHaveBeenCalledTimes(1);
+      });
+      expect(callback).toHaveBeenCalledWith(otioFile);
+    });
+
+    it('HDR-U054: selecting .otio file without callback shows alert instead of crashing', async () => {
+      headerBar.render();
+      headerBar.onOTIOFileOpen = null;
+
+      const alertSpy = vi.spyOn(Modal, 'showAlert').mockImplementation(() => Promise.resolve());
+
+      const inputs = headerBar.getContainer().querySelectorAll('input[type="file"]');
+      const mediaInput = Array.from(inputs).find(
+        (input) => (input as HTMLInputElement).accept.includes('.otio'),
+      ) as HTMLInputElement;
+
+      const otioFile = new File(['{}'], 'timeline.otio');
+      Object.defineProperty(mediaInput, 'files', { value: [otioFile], writable: false });
+
+      mediaInput.dispatchEvent(new Event('change'));
+
+      await vi.waitFor(() => {
+        expect(alertSpy).toHaveBeenCalledTimes(1);
+      });
+      expect(alertSpy).toHaveBeenCalledWith(
+        expect.stringContaining('OTIO import is not available'),
+        expect.objectContaining({ type: 'warning' }),
+      );
+    });
+
+    it('HDR-U055: selecting .otio file does not load it as media', async () => {
+      headerBar.render();
+      const callback = vi.fn();
+      headerBar.onOTIOFileOpen = callback;
+
+      const loadFileSpy = vi.spyOn(session, 'loadFile').mockResolvedValue();
+
+      const inputs = headerBar.getContainer().querySelectorAll('input[type="file"]');
+      const mediaInput = Array.from(inputs).find(
+        (input) => (input as HTMLInputElement).accept.includes('.otio'),
+      ) as HTMLInputElement;
+
+      const otioFile = new File(['{}'], 'timeline.otio');
+      Object.defineProperty(mediaInput, 'files', { value: [otioFile], writable: false });
+
+      mediaInput.dispatchEvent(new Event('change'));
+
+      await vi.waitFor(() => {
+        expect(callback).toHaveBeenCalledTimes(1);
+      });
+      expect(loadFileSpy).not.toHaveBeenCalled();
+    });
+  });
 });

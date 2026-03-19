@@ -6,7 +6,10 @@ OpenRV Web supports exporting Edit Decision Lists (EDL) in CMX 3600 format and i
 
 ## EDL Export (CMX 3600)
 
-Export the current playlist as an EDL file from the Playlist panel or the Export menu.
+Export the current playlist as an EDL file. Two paths are available:
+
+- **Playlist panel** -- click the EDL export button in the panel footer
+- **Export menu** -- select "Export EDL (CMX 3600)" from the top-bar Export dropdown (the export uses the same playlist data)
 
 ### Format
 
@@ -58,18 +61,22 @@ OpenTimelineIO (OTIO) files can be imported to reconstruct editorial timelines w
 
 ### Import Process
 
-1. Load an OTIO file through the file picker or drag and drop
+1. Load an OTIO file using any of these methods:
+   - **File picker** -- click the Open button in the top bar and select an `.otio` file
+   - **Drag and drop** -- drop an `.otio` file onto the viewer
+   - **Playlist panel** -- click the Import button in the panel footer and select an `.otio` file
 2. OpenRV Web parses the timeline structure
 3. Clips are mapped to available media sources
 
 ### Conform / Re-link Panel
 
-When OTIO clips reference media files that are not yet loaded, the Conform/Re-link panel appears. This panel allows:
+When OTIO clips reference media files that are not yet loaded, the Conform/Re-link panel appears (toggle with the link icon in the header bar). This panel allows:
 
-- Viewing unresolved media references
-- Selecting replacement files from the local filesystem
-- Fuzzy filename matching to suggest likely matches
-- Skipping unresolved references
+- **Viewing unresolved media references** -- each clip shows its original filename, reason for failure, and suggested matches from already-loaded sources
+- **Per-clip browse** -- click "Browse..." on any clip row to open a file picker, select a replacement file, and the clip is re-linked automatically
+- **Batch re-link by folder** -- click "Re-link by Folder..." in the toolbar to select multiple files at once; unresolved clips are fuzzy-matched against the selected files by filename (score >= 80) and re-linked in bulk
+- **Auto Re-link** -- click "Auto Re-link" to match unresolved clips against already-loaded sources by filename similarity
+- **Suggestions dropdown** -- when loaded sources have similar names, a dropdown lets you pick a match manually
 
 Once media is re-linked, the timeline plays back with the correct content at the specified frame ranges.
 
@@ -78,7 +85,7 @@ EDL export enables the editorial roundtrip: assemble a review playlist in OpenRV
 :::
 
 ::: tip VFX Use Case
-When using OTIO import for conform, the Re-link panel is critical. VFX media often lives on different storage paths than editorial media. Use the fuzzy filename matching to quickly re-link shots to your local VFX renders, then review the edit in context with the latest comp versions rather than the editorial offline media.
+When using OTIO import for conform, the Re-link panel is critical. VFX media often lives on different storage paths than editorial media. Use the "Browse..." button on individual clips or "Re-link by Folder..." to select multiple replacement files at once. The fuzzy filename matching will automatically pair unresolved clips with the best-matching files, so you can quickly re-link shots to your local VFX renders and review the edit in context with the latest comp versions.
 :::
 
 ## Dailies Reports

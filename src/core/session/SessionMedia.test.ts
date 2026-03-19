@@ -34,6 +34,7 @@ vi.mock('../../nodes/sources/FileSourceNode', () => ({
 
 vi.mock('../../utils/media/SupportedMediaFormats', () => ({
   detectMediaTypeFromFile: vi.fn().mockReturnValue('image'),
+  detectMediaTypeFromFileBytes: vi.fn().mockResolvedValue('unknown'),
 }));
 
 vi.mock('../../cache/MediaCacheKey', () => ({
@@ -1621,6 +1622,198 @@ describe('SessionMedia', () => {
       });
 
       expect(order).toEqual(['representationChanged', 'currentSourceChanged']);
+    });
+  });
+
+  describe('preloadVideoFrames', () => {
+    it('SM-112: does nothing when no video source', () => {
+      expect(() => media.preloadVideoFrames()).not.toThrow();
+    });
+
+    it('SM-113: does nothing for image source', () => {
+      media.addSource(makeImageSource());
+      expect(() => media.preloadVideoFrames()).not.toThrow();
+    });
+
+    it('SM-114: delegates to videoSourceNode.preloadFrames with host frame', () => {
+      const preloadFrames = vi.fn().mockResolvedValue(undefined);
+      const videoSource = makeVideoSource({
+        videoSourceNode: {
+          isUsingMediabunny: () => true,
+          preloadFrames,
+        } as any,
+      });
+      (media as any)._sources.push(videoSource);
+      (media as any)._currentSourceIndex = 0;
+
+      (host.getCurrentFrame as ReturnType<typeof vi.fn>).mockReturnValue(5);
+      media.preloadVideoFrames();
+
+      expect(preloadFrames).toHaveBeenCalledWith(5);
+    });
+
+    it('SM-115: uses explicit centerFrame parameter', () => {
+      const preloadFrames = vi.fn().mockResolvedValue(undefined);
+      const videoSource = makeVideoSource({
+        videoSourceNode: {
+          isUsingMediabunny: () => true,
+          preloadFrames,
+        } as any,
+      });
+      (media as any)._sources.push(videoSource);
+      (media as any)._currentSourceIndex = 0;
+
+      media.preloadVideoFrames(20);
+
+      expect(preloadFrames).toHaveBeenCalledWith(20);
+    });
+  });
+
+  describe('getPendingFrames with video source', () => {
+    it('SM-116: delegates to videoSourceNode.getPendingFrames', () => {
+      const pending = new Set([4, 5]);
+      const videoSource = makeVideoSource({
+        videoSourceNode: {
+          isUsingMediabunny: () => true,
+          getPendingFrames: vi.fn().mockReturnValue(pending),
+        } as any,
+      });
+      (media as any)._sources.push(videoSource);
+      (media as any)._currentSourceIndex = 0;
+
+      expect(media.getPendingFrames()).toBe(pending);
+    });
+  });
+
+  describe('getCacheStats edge cases', () => {
+    it('SM-117: returns null for non-mediabunny video source', () => {
+      const videoSource = makeVideoSource({
+        videoSourceNode: {
+          isUsingMediabunny: () => false,
+        } as any,
+      });
+      (media as any)._sources.push(videoSource);
+      (media as any)._currentSourceIndex = 0;
+
+      expect(media.getCacheStats()).toBeNull();
+    });
+
+    it('SM-118: delegates to videoSourceNode.getCacheStats for mediabunny source', () => {
+      const stats = { cachedCount: 10, pendingCount: 2, totalFrames: 100, maxCacheSize: 200 };
+      const videoSource = makeVideoSource({
+        videoSourceNode: {
+          isUsingMediabunny: () => true,
+          getCacheStats: vi.fn().mockReturnValue(stats),
+        } as any,
+      });
+      (media as any)._sources.push(videoSource);
+      (media as any)._currentSourceIndex = 0;
+
+      expect(media.getCacheStats()).toBe(stats);
+    });
+  });
+
+  describe('clearVideoCache edge cases', () => {
+    it('SM-119: does nothing for non-mediabunny video source', () => {
+      const clearCache = vi.fn();
+      const videoSource = makeVideoSource({
+        videoSourceNode: {
+          isUsingMediabunny: () => false,
+          clearCache,
+        } as any,
+      });
+      (media as any)._sources.push(videoSource);
+      (media as any)._currentSourceIndex = 0;
+
+      media.clearVideoCache();
+      expect(clearCache).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('disposeVideoSource edge cases', () => {
+    it('SM-120: does nothing for video source without videoSourceNode', () => {
+      const source = makeVideoSource();
+      delete source.videoSourceNode;
+      expect(() => media.disposeVideoSource(source)).not.toThrow();
+    });
+  });
+
+  describe('dispose edge cases', () => {
+    it('SM-121: is safe to call with no sources', () => {
+      media.dispose();
+      expect(media.sourceCount).toBe(0);
+      expect(media.currentSource).toBeNull();
+    });
+
+    it('SM-122: disposes procedural source nodes', () => {
+      const disposeFn = vi.fn();
+      const source = makeImageSource({
+        proceduralSourceNode: { dispose: disposeFn } as any,
+      });
+      (media as any)._sources.push(source);
+
+      media.dispose();
+
+      expect(disposeFn).toHaveBeenCalled();
+    });
+  });
+
+  describe('multiple sources ordering', () => {
+    it('SM-123: multiple sources maintain correct ordering', () => {
+      const src1 = makeImageSource({ name: 'first.png' });
+      const src2 = makeImageSource({ name: 'second.png' });
+      const src3 = makeImageSource({ name: 'third.png' });
+
+      media.addSource(src1);
+      media.addSource(src2);
+      media.addSource(src3);
+
+      expect(media.getSourceByIndex(0)).toBe(src1);
+      expect(media.getSourceByIndex(1)).toBe(src2);
+      expect(media.getSourceByIndex(2)).toBe(src3);
+    });
+  });
+
+  describe('fetchSourceBVideoFrame', () => {
+    it('SM-124: does nothing for null source', async () => {
+      await expect(media.fetchSourceBVideoFrame(null, 1)).resolves.not.toThrow();
+    });
+
+    it('SM-125: does nothing for non-video source', async () => {
+      await expect(media.fetchSourceBVideoFrame(makeImageSource(), 1)).resolves.not.toThrow();
+    });
+
+    it('SM-126: delegates to videoSourceNode.getFrameAsync', async () => {
+      const getFrameAsync = vi.fn().mockResolvedValue(null);
+      const sourceB = makeVideoSource({
+        videoSourceNode: {
+          isUsingMediabunny: () => true,
+          getFrameAsync,
+        } as any,
+      });
+
+      await media.fetchSourceBVideoFrame(sourceB, 42);
+      expect(getFrameAsync).toHaveBeenCalledWith(42);
+    });
+  });
+
+  describe('setCurrentSource video-to-image switching', () => {
+    it('SM-127: handles video-to-image switching correctly', () => {
+      const video = document.createElement('video');
+      const videoPause = vi.spyOn(video, 'pause');
+      const videoSource = makeVideoSource({ element: video, duration: 100 });
+      const imageSource = makeImageSource({ duration: 1 });
+
+      (media as any)._sources.push(videoSource);
+      (media as any)._sources.push(imageSource);
+      (media as any)._currentSourceIndex = 0;
+
+      media.setCurrentSource(1);
+
+      expect(media.currentSourceIndex).toBe(1);
+      expect(media.currentSource?.type).toBe('image');
+      expect(media.currentSource?.duration).toBe(1);
+      expect(videoPause).toHaveBeenCalled();
     });
   });
 

@@ -89,4 +89,72 @@ describe('MatteOverlaySettingsMenu', () => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     expect(menu.isVisible()).toBe(false);
   });
+
+  describe('aspect ratio presets', () => {
+    it('MOSM-006: renders preset buttons for common aspect ratios', () => {
+      menu.show(100, 120);
+      const presetsRow = document.querySelector('[data-testid="matte-aspect-presets"]');
+      expect(presetsRow).not.toBeNull();
+
+      const buttons = presetsRow!.querySelectorAll('button');
+      expect(buttons.length).toBe(5);
+
+      const labels = Array.from(buttons).map((b) => b.textContent);
+      expect(labels).toEqual(['2.39:1', '1.85:1', '16:9', '4:3', '1:1']);
+    });
+
+    it('MOSM-007: clicking a preset sets the overlay aspect and updates the input', () => {
+      menu.show(100, 120);
+      const presetBtn = document.querySelector<HTMLButtonElement>('[data-testid="matte-aspect-preset-2-39-1"]')!;
+      presetBtn.click();
+
+      expect(overlay.setAspect).toHaveBeenCalledWith(2.39);
+      const input = document.querySelector<HTMLInputElement>('[data-testid="matte-aspect-input"]')!;
+      expect(input.value).toBe('2.39');
+    });
+
+    it('MOSM-008: clicking 16:9 preset sets aspect to 16/9', () => {
+      menu.show(100, 120);
+      const presetBtn = document.querySelector<HTMLButtonElement>('[data-testid="matte-aspect-preset-16-9"]')!;
+      presetBtn.click();
+
+      expect(overlay.setAspect).toHaveBeenCalledWith(16 / 9);
+    });
+
+    it('MOSM-009: clicking 4:3 preset sets aspect to 4/3', () => {
+      menu.show(100, 120);
+      const presetBtn = document.querySelector<HTMLButtonElement>('[data-testid="matte-aspect-preset-4-3"]')!;
+      presetBtn.click();
+
+      expect(overlay.setAspect).toHaveBeenCalledWith(4 / 3);
+    });
+
+    it('MOSM-010: clicking 1:1 preset sets aspect to 1', () => {
+      menu.show(100, 120);
+      const presetBtn = document.querySelector<HTMLButtonElement>('[data-testid="matte-aspect-preset-1-1"]')!;
+      presetBtn.click();
+
+      expect(overlay.setAspect).toHaveBeenCalledWith(1);
+    });
+
+    it('MOSM-011: the matching preset is highlighted when the menu opens', () => {
+      // Default aspect is 1.78 which matches 16:9 (1.7777...)
+      menu.show(100, 120);
+      const presetBtn = document.querySelector<HTMLButtonElement>('[data-testid="matte-aspect-preset-16-9"]')!;
+      // 16/9 = 1.7777... and default is 1.78, within 0.005 tolerance
+      expect(presetBtn.style.color).toBe('var(--accent-primary)');
+    });
+
+    it('MOSM-012: clicking a preset updates the highlight to the selected ratio', () => {
+      menu.show(100, 120);
+      const btn239 = document.querySelector<HTMLButtonElement>('[data-testid="matte-aspect-preset-2-39-1"]')!;
+      btn239.click();
+
+      expect(btn239.style.color).toBe('var(--accent-primary)');
+
+      // The 16:9 button should no longer be highlighted
+      const btn169 = document.querySelector<HTMLButtonElement>('[data-testid="matte-aspect-preset-16-9"]')!;
+      expect(btn169.style.color).toBe('var(--text-primary)');
+    });
+  });
 });

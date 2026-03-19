@@ -8,7 +8,7 @@
 
 OpenRV Web supports a wide range of image, video, and session file formats, spanning professional VFX interchange formats, HDR photography formats, web-native media, and editorial interchange. All image decoding produces **Float32Array** pixel data in RGBA layout, ensuring consistent precision throughout the rendering pipeline regardless of the source format's native bit depth.
 
-Format detection uses a **magic-number-first** strategy: the `DecoderRegistry` inspects the first bytes of each file to identify the format by its binary signature, then dispatches to the appropriate decoder. This is more reliable than extension-based detection and handles misnamed or extensionless files correctly.
+Format detection uses a **two-tier** strategy. The fast path classifies files by MIME type and extension via `detectMediaTypeFromFile()`. When neither is recognized (extensionless or misnamed files), the fallback path reads the first bytes and checks them against the `DecoderRegistry`'s magic-number detectors (`detectMediaTypeFromFileBytes()`). This combination keeps the common case fast while still handling misnamed or extensionless files correctly -- any file whose bytes match a registered decoder will be loaded even if the extension is wrong or absent.
 
 Decoders are **lazy-loaded** via dynamic `import()` on first use. Heavy WASM modules (EXR, JXL, JP2, HEIC) are code-split into separate chunks and never included in the initial bundle, keeping startup fast.
 

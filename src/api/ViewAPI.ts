@@ -4,11 +4,12 @@
  * Wraps the Viewer and ChannelSelect to expose zoom, pan, and channel controls.
  */
 
-import type { ViewerProvider } from './types';
+import type { ViewerProvider, PixelProbeProvider } from './types';
 import type { ChannelMode } from '../core/types/color';
 import type { TextureFilterMode } from '../core/types/filter';
 import type { BackgroundPatternState } from '../core/types/background';
 import type { MatteSettings } from '../core/session/SessionTypes';
+import type { PixelProbeState, SampleSize, SourceMode } from '../ui/components/PixelProbe';
 import { ValidationError } from '../core/errors';
 import { DisposableAPI } from './Disposable';
 
@@ -30,12 +31,18 @@ const CHANNEL_ALIASES: Record<string, ChannelMode> = {
   l: 'luminance',
 };
 
+const VALID_SAMPLE_SIZES: ReadonlySet<number> = new Set([1, 3, 5, 9]);
+const VALID_SOURCE_MODES: ReadonlySet<string> = new Set(['rendered', 'source']);
+const VALID_PROBE_FORMATS: ReadonlySet<string> = new Set(['rgb', 'rgb01', 'hsl', 'hex', 'ire']);
+
 export class ViewAPI extends DisposableAPI {
   private viewer: ViewerProvider;
+  private pixelProbe: PixelProbeProvider | null;
 
-  constructor(viewer: ViewerProvider) {
+  constructor(viewer: ViewerProvider, pixelProbe?: PixelProbeProvider) {
     super();
     this.viewer = viewer;
+    this.pixelProbe = pixelProbe ?? null;
   }
 
   /**
@@ -361,5 +368,215 @@ export class ViewAPI extends DisposableAPI {
   getMatte(): MatteSettings {
     this.assertNotDisposed();
     return this.viewer.getMatteSettings();
+  }
+
+  // ────────────────────────────────────────────────────────────
+  // Pixel Probe
+  // ────────────────────────────────────────────────────────────
+
+  /**
+   * Guard that throws if no pixel probe provider is configured.
+   * Returns the provider for convenient chaining.
+   */
+  private requireProbe(): PixelProbeProvider {
+    if (!this.pixelProbe) {
+      throw new ValidationError('Pixel probe is not available');
+    }
+    return this.pixelProbe;
+  }
+
+  /**
+   * Enable the pixel probe overlay.
+   *
+   * @throws {ValidationError} If the pixel probe provider is not available.
+   *
+   * @example
+   * ```ts
+   * openrv.view.enableProbe();
+   * ```
+   */
+  enableProbe(): void {
+    this.assertNotDisposed();
+    this.requireProbe().enable();
+  }
+
+  /**
+   * Disable the pixel probe overlay.
+   *
+   * @throws {ValidationError} If the pixel probe provider is not available.
+   *
+   * @example
+   * ```ts
+   * openrv.view.disableProbe();
+   * ```
+   */
+  disableProbe(): void {
+    this.assertNotDisposed();
+    this.requireProbe().disable();
+  }
+
+  /**
+   * Check whether the pixel probe is currently enabled.
+   *
+   * @returns `true` if the probe overlay is visible, `false` otherwise.
+   * @throws {ValidationError} If the pixel probe provider is not available.
+   *
+   * @example
+   * ```ts
+   * if (openrv.view.isProbeEnabled()) { ... }
+   * ```
+   */
+  isProbeEnabled(): boolean {
+    this.assertNotDisposed();
+    return this.requireProbe().isEnabled();
+  }
+
+  /**
+   * Lock or unlock the pixel probe position.
+   *
+   * When locked, the probe values remain fixed at the current position
+   * and mouse movement does not update them.
+   *
+   * @throws {ValidationError} If the pixel probe provider is not available.
+   *
+   * @example
+   * ```ts
+   * openrv.view.toggleProbeLock();
+   * ```
+   */
+  toggleProbeLock(): void {
+    this.assertNotDisposed();
+    this.requireProbe().toggleLock();
+  }
+
+  /**
+   * Check whether the pixel probe position is locked.
+   *
+   * @returns `true` if the probe position is locked, `false` otherwise.
+   * @throws {ValidationError} If the pixel probe provider is not available.
+   *
+   * @example
+   * ```ts
+   * const locked = openrv.view.isProbeLocked();
+   * ```
+   */
+  isProbeLocked(): boolean {
+    this.assertNotDisposed();
+    return this.requireProbe().isLocked();
+  }
+
+  /**
+   * Get the current pixel probe state including position, color values, and settings.
+   *
+   * @returns A deep copy of the current probe state.
+   * @throws {ValidationError} If the pixel probe provider is not available.
+   *
+   * @example
+   * ```ts
+   * const state = openrv.view.getProbeState();
+   * console.log(`Pixel at (${state.x}, ${state.y}): rgb(${state.rgb.r}, ${state.rgb.g}, ${state.rgb.b})`);
+   * ```
+   */
+  getProbeState(): PixelProbeState {
+    this.assertNotDisposed();
+    return this.requireProbe().getState();
+  }
+
+  /**
+   * Set the display format for the pixel probe overlay.
+   *
+   * @param format - One of `'rgb'`, `'rgb01'`, `'hsl'`, `'hex'`, `'ire'`.
+   * @throws {ValidationError} If `format` is not a valid format string.
+   *
+   * @example
+   * ```ts
+   * openrv.view.setProbeFormat('hsl');
+   * ```
+   */
+  setProbeFormat(format: string): void {
+    this.assertNotDisposed();
+    const probe = this.requireProbe();
+    if (typeof format !== 'string' || !VALID_PROBE_FORMATS.has(format)) {
+      throw new ValidationError(
+        `Invalid probe format: "${format}". Valid formats: ${Array.from(VALID_PROBE_FORMATS).join(', ')}`,
+      );
+    }
+    probe.setFormat(format as PixelProbeState['format']);
+  }
+
+  /**
+   * Set the sample size for area averaging in the pixel probe.
+   *
+   * @param size - One of `1`, `3`, `5`, `9` (NxN pixel area).
+   * @throws {ValidationError} If `size` is not a valid sample size.
+   *
+   * @example
+   * ```ts
+   * openrv.view.setProbeSampleSize(3); // 3x3 area average
+   * ```
+   */
+  setProbeSampleSize(size: number): void {
+    this.assertNotDisposed();
+    const probe = this.requireProbe();
+    if (typeof size !== 'number' || !VALID_SAMPLE_SIZES.has(size)) {
+      throw new ValidationError(
+        `Invalid sample size: ${size}. Valid sizes: ${Array.from(VALID_SAMPLE_SIZES).join(', ')}`,
+      );
+    }
+    probe.setSampleSize(size as SampleSize);
+  }
+
+  /**
+   * Get the current sample size for area averaging.
+   *
+   * @returns The current sample size (1, 3, 5, or 9).
+   * @throws {ValidationError} If the pixel probe provider is not available.
+   *
+   * @example
+   * ```ts
+   * const size = openrv.view.getProbeSampleSize(); // e.g. 1
+   * ```
+   */
+  getProbeSampleSize(): SampleSize {
+    this.assertNotDisposed();
+    return this.requireProbe().getSampleSize();
+  }
+
+  /**
+   * Set the source mode for pixel probe values.
+   *
+   * @param mode - `'rendered'` for post-pipeline values or `'source'` for original source values.
+   * @throws {ValidationError} If `mode` is not `'rendered'` or `'source'`.
+   *
+   * @example
+   * ```ts
+   * openrv.view.setProbeSourceMode('source'); // show original values before grading
+   * ```
+   */
+  setProbeSourceMode(mode: string): void {
+    this.assertNotDisposed();
+    const probe = this.requireProbe();
+    if (typeof mode !== 'string' || !VALID_SOURCE_MODES.has(mode)) {
+      throw new ValidationError(
+        `Invalid source mode: "${mode}". Valid modes: ${Array.from(VALID_SOURCE_MODES).join(', ')}`,
+      );
+    }
+    probe.setSourceMode(mode as SourceMode);
+  }
+
+  /**
+   * Get the current source mode for pixel probe values.
+   *
+   * @returns `'rendered'` or `'source'`.
+   * @throws {ValidationError} If the pixel probe provider is not available.
+   *
+   * @example
+   * ```ts
+   * const mode = openrv.view.getProbeSourceMode(); // e.g. 'rendered'
+   * ```
+   */
+  getProbeSourceMode(): SourceMode {
+    this.assertNotDisposed();
+    return this.requireProbe().getSourceMode();
   }
 }

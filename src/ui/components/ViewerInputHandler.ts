@@ -150,6 +150,12 @@ export class ViewerInputHandler {
    */
   onBeforeMediaLoad: (() => Promise<void>) | null = null;
 
+  /**
+   * Optional callback invoked when an `.otio` file is dropped.
+   * The app wires this to the playlist panel's OTIO import flow.
+   */
+  onOTIOFileDrop: ((file: File) => void) | null = null;
+
   constructor(
     private ctx: ViewerInputContext,
     dropOverlay: HTMLElement,
@@ -798,6 +804,21 @@ export class ViewerInputHandler {
       // Continue to load remaining media files below
       fileArray.length = 0;
       fileArray.push(...remainingFiles);
+    }
+
+    // Check for .otio file among dropped files — route to playlist OTIO import
+    const otioFile = fileArray.find((f) => f.name.toLowerCase().endsWith('.otio'));
+    if (otioFile) {
+      if (this.onOTIOFileDrop) {
+        this.onOTIOFileDrop(otioFile);
+      } else {
+        showAlert(
+          `Cannot import ${otioFile.name}: OTIO import is not available in this context. ` +
+            `Open the Playlist panel to import OTIO files.`,
+          { type: 'warning', title: 'OTIO Import Unavailable' },
+        );
+      }
+      return;
     }
 
     // Check for .rv or .gto session file among dropped files (before sequence detection)

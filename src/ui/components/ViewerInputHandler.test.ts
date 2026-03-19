@@ -1803,3 +1803,105 @@ describe('ViewerInputHandler – .orvproject drop handling (Issue #386)', () => 
     expect(session.loadFromGTO).not.toHaveBeenCalled();
   });
 });
+
+describe('ViewerInputHandler – OTIO drop handling (Issue #465)', () => {
+  let ctx: ViewerInputContext;
+  let handler: ViewerInputHandler;
+  let dropOverlay: HTMLElement;
+
+  beforeEach(() => {
+    ctx = createMockContext();
+    dropOverlay = document.createElement('div');
+    handler = new ViewerInputHandler(ctx, dropOverlay);
+    handler.bindEvents();
+  });
+
+  afterEach(() => {
+    handler.unbindEvents();
+    const container = ctx.getContainer();
+    if (container.parentNode) {
+      container.parentNode.removeChild(container);
+    }
+  });
+
+  function dispatchDrop(container: HTMLElement, files: File[]): void {
+    const mockDataTransfer = { files };
+    const dropEvent = new Event('drop', { bubbles: true }) as any;
+    dropEvent.dataTransfer = mockDataTransfer;
+    dropEvent.preventDefault = vi.fn();
+    container.dispatchEvent(dropEvent);
+  }
+
+  it('OTIO-DROP-001: .otio file dropped invokes onOTIOFileDrop callback', async () => {
+    const container = ctx.getContainer();
+    const otioCallback = vi.fn();
+    handler.onOTIOFileDrop = otioCallback;
+
+    const otioContent = '{"OTIO_SCHEMA": "Timeline.1", "name": "test"}';
+    const otioFile = new File([otioContent], 'timeline.otio');
+
+    dispatchDrop(container, [otioFile]);
+
+    await vi.waitFor(() => {
+      expect(otioCallback).toHaveBeenCalledTimes(1);
+    });
+    expect(otioCallback).toHaveBeenCalledWith(otioFile);
+  });
+
+  it('OTIO-DROP-002: .otio file is NOT routed through loadFile or loadEDL', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+    const otioCallback = vi.fn();
+    handler.onOTIOFileDrop = otioCallback;
+
+    const otioFile = new File(['{}'], 'timeline.otio');
+
+    dispatchDrop(container, [otioFile]);
+
+    await vi.waitFor(() => {
+      expect(otioCallback).toHaveBeenCalledTimes(1);
+    });
+
+    expect(mockSession.loadFile).not.toHaveBeenCalled();
+    expect(mockSession.loadEDL).not.toHaveBeenCalled();
+    expect(mockSession.loadFromGTO).not.toHaveBeenCalled();
+    expect(mockSession.loadSequence).not.toHaveBeenCalled();
+  });
+
+  it('OTIO-DROP-003: .otio drop without onOTIOFileDrop callback shows alert', async () => {
+    const container = ctx.getContainer();
+    handler.onOTIOFileDrop = null;
+
+    const otioFile = new File(['{}'], 'timeline.otio');
+
+    dispatchDrop(container, [otioFile]);
+
+    // Should not throw and should not call any session methods
+    await vi.waitFor(() => {
+      // The drop handler should have completed (no callback, shows alert)
+    });
+
+    const mockSession = ctx.getSession();
+    expect(mockSession.loadFile).not.toHaveBeenCalled();
+  });
+
+  it('OTIO-DROP-004: .OTIO file (uppercase) is also handled', async () => {
+    const container = ctx.getContainer();
+    const otioCallback = vi.fn();
+    handler.onOTIOFileDrop = otioCallback;
+
+    const otioFile = new File(['{}'], 'TIMELINE.OTIO');
+
+    dispatchDrop(container, [otioFile]);
+
+    await vi.waitFor(() => {
+      expect(otioCallback).toHaveBeenCalledTimes(1);
+    });
+    expect(otioCallback).toHaveBeenCalledWith(otioFile);
+  });
+
+  it('OTIO-DROP-005: onOTIOFileDrop property defaults to null', () => {
+    const newHandler = new ViewerInputHandler(ctx, dropOverlay);
+    expect(newHandler.onOTIOFileDrop).toBeNull();
+  });
+});

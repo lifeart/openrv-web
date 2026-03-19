@@ -100,6 +100,12 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   private _scrollHandler: (() => void) | null = null;
   private _resizeHandler: (() => void) | null = null;
 
+  /**
+   * Optional callback invoked when an `.otio` file is opened via the file picker.
+   * The app wires this to the playlist panel's OTIO import flow.
+   */
+  onOTIOFileOpen: ((file: File) => void) | null = null;
+
   constructor(session: Session) {
     super();
     this.session = session;
@@ -226,7 +232,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     // Hidden file input for media
     this.fileInput = document.createElement('input');
     this.fileInput.type = 'file';
-    this.fileInput.accept = `${SUPPORTED_MEDIA_ACCEPT},.rv,.gto,.rvedl`;
+    this.fileInput.accept = `${SUPPORTED_MEDIA_ACCEPT},.rv,.gto,.rvedl,.otio`;
     this.fileInput.multiple = true;
     this.fileInput.style.display = 'none';
     this.fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
@@ -1525,6 +1531,22 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       } catch (err) {
         console.error('Failed to load RVEDL file:', err);
         showAlert(`Failed to load ${edlFile.name}: ${err}`, { type: 'error', title: 'Load Error' });
+      }
+      input.value = '';
+      return;
+    }
+
+    // Check for .otio files in the selection — route to playlist OTIO import
+    const otioFile = fileArray.find((f) => f.name.toLowerCase().endsWith('.otio'));
+    if (otioFile) {
+      if (this.onOTIOFileOpen) {
+        this.onOTIOFileOpen(otioFile);
+      } else {
+        showAlert(
+          `Cannot import ${otioFile.name}: OTIO import is not available in this context. ` +
+            `Open the Playlist panel to import OTIO files.`,
+          { type: 'warning', title: 'OTIO Import Unavailable' },
+        );
       }
       input.value = '';
       return;

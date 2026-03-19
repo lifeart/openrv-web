@@ -1316,6 +1316,268 @@ describe('ViewAPI', () => {
     view.dispose();
     expect(() => view.getMatte()).toThrow();
   });
+
+  // ────────────────────────────────────────────────────────────
+  // Pixel Probe API tests (no provider)
+  // ────────────────────────────────────────────────────────────
+
+  it('API-U080P: enableProbe() throws when no probe provider is available', () => {
+    expect(() => view.enableProbe()).toThrow(/not available/);
+  });
+
+  it('API-U081P: disableProbe() throws when no probe provider is available', () => {
+    expect(() => view.disableProbe()).toThrow(/not available/);
+  });
+
+  it('API-U082P: isProbeEnabled() throws when no probe provider is available', () => {
+    expect(() => view.isProbeEnabled()).toThrow(/not available/);
+  });
+
+  it('API-U083P: getProbeState() throws when no probe provider is available', () => {
+    expect(() => view.getProbeState()).toThrow(/not available/);
+  });
+});
+
+// ============================================================
+// ViewAPI Pixel Probe Tests (with provider)
+// ============================================================
+
+function createMockPixelProbeProvider() {
+  const probe = {
+    _enabled: false,
+    _locked: false,
+    _format: 'rgb' as const,
+    _sampleSize: 1 as 1 | 3 | 5 | 9,
+    _sourceMode: 'rendered' as 'rendered' | 'source',
+    _state: {
+      enabled: false,
+      locked: false,
+      x: 42,
+      y: 84,
+      rgb: { r: 128, g: 64, b: 32 },
+      alpha: 255,
+      hsl: { h: 20, s: 60, l: 31 },
+      ire: 28,
+      format: 'rgb' as const,
+      sampleSize: 1 as 1 | 3 | 5 | 9,
+      sourceMode: 'rendered' as 'rendered' | 'source',
+      floatPrecision: 3 as 3 | 6,
+    },
+    enable: vi.fn(function (this: typeof probe) { this._enabled = true; this._state.enabled = true; }),
+    disable: vi.fn(function (this: typeof probe) { this._enabled = false; this._locked = false; this._state.enabled = false; this._state.locked = false; }),
+    isEnabled: vi.fn(function (this: typeof probe) { return this._enabled; }),
+    toggleLock: vi.fn(function (this: typeof probe) { this._locked = !this._locked; this._state.locked = this._locked; }),
+    isLocked: vi.fn(function (this: typeof probe) { return this._locked; }),
+    getState: vi.fn(function (this: typeof probe) { return { ...this._state, rgb: { ...this._state.rgb }, hsl: { ...this._state.hsl } }; }),
+    setFormat: vi.fn(function (this: typeof probe, format: string) { this._format = format as any; this._state.format = format as any; }),
+    setSampleSize: vi.fn(function (this: typeof probe, size: number) { this._sampleSize = size as any; this._state.sampleSize = size as any; }),
+    getSampleSize: vi.fn(function (this: typeof probe) { return this._sampleSize; }),
+    setSourceMode: vi.fn(function (this: typeof probe, mode: string) { this._sourceMode = mode as any; this._state.sourceMode = mode as any; }),
+    getSourceMode: vi.fn(function (this: typeof probe) { return this._sourceMode; }),
+  };
+  return probe;
+}
+
+describe('ViewAPI (Pixel Probe)', () => {
+  let view: ViewAPI;
+  let viewer: any;
+  let probeProvider: ReturnType<typeof createMockPixelProbeProvider>;
+
+  beforeEach(() => {
+    viewer = createMockViewer();
+    probeProvider = createMockPixelProbeProvider();
+    view = new ViewAPI(viewer, probeProvider);
+  });
+
+  it('API-U084P: enableProbe() enables the probe', () => {
+    view.enableProbe();
+    expect(probeProvider.enable).toHaveBeenCalledOnce();
+  });
+
+  it('API-U085P: disableProbe() disables the probe', () => {
+    view.enableProbe();
+    view.disableProbe();
+    expect(probeProvider.disable).toHaveBeenCalledOnce();
+  });
+
+  it('API-U086P: isProbeEnabled() returns correct state', () => {
+    expect(view.isProbeEnabled()).toBe(false);
+    view.enableProbe();
+    expect(view.isProbeEnabled()).toBe(true);
+    view.disableProbe();
+    expect(view.isProbeEnabled()).toBe(false);
+  });
+
+  it('API-U087P: toggleProbeLock() toggles lock state', () => {
+    expect(view.isProbeLocked()).toBe(false);
+    view.toggleProbeLock();
+    expect(view.isProbeLocked()).toBe(true);
+    view.toggleProbeLock();
+    expect(view.isProbeLocked()).toBe(false);
+  });
+
+  it('API-U088P: isProbeLocked() returns current lock state', () => {
+    expect(view.isProbeLocked()).toBe(false);
+    view.toggleProbeLock();
+    expect(view.isProbeLocked()).toBe(true);
+  });
+
+  it('API-U089P: getProbeState() returns probe state', () => {
+    const state = view.getProbeState();
+    expect(state).toHaveProperty('enabled');
+    expect(state).toHaveProperty('locked');
+    expect(state).toHaveProperty('x');
+    expect(state).toHaveProperty('y');
+    expect(state).toHaveProperty('rgb');
+    expect(state).toHaveProperty('alpha');
+    expect(state).toHaveProperty('hsl');
+    expect(state).toHaveProperty('ire');
+    expect(state).toHaveProperty('format');
+    expect(state).toHaveProperty('sampleSize');
+    expect(state).toHaveProperty('sourceMode');
+    expect(state.x).toBe(42);
+    expect(state.y).toBe(84);
+    expect(state.rgb).toEqual({ r: 128, g: 64, b: 32 });
+  });
+
+  it('API-U090P: getProbeState() returns a deep copy', () => {
+    const state1 = view.getProbeState();
+    const state2 = view.getProbeState();
+    expect(state1).not.toBe(state2);
+    expect(state1.rgb).not.toBe(state2.rgb);
+  });
+
+  it('API-U091P: setProbeFormat() updates the format', () => {
+    view.setProbeFormat('hsl');
+    expect(probeProvider.setFormat).toHaveBeenCalledWith('hsl');
+  });
+
+  it('API-U092P: setProbeFormat() validates format string', () => {
+    expect(() => view.setProbeFormat('invalid')).toThrow(/Invalid probe format/);
+    expect(() => view.setProbeFormat('')).toThrow(/Invalid probe format/);
+    expect(() => view.setProbeFormat(123 as any)).toThrow(/Invalid probe format/);
+  });
+
+  it('API-U093P: setProbeFormat() accepts all valid formats', () => {
+    for (const format of ['rgb', 'rgb01', 'hsl', 'hex', 'ire']) {
+      view.setProbeFormat(format);
+    }
+    expect(probeProvider.setFormat).toHaveBeenCalledTimes(5);
+  });
+
+  it('API-U094P: setProbeSampleSize() updates sample size', () => {
+    view.setProbeSampleSize(3);
+    expect(probeProvider.setSampleSize).toHaveBeenCalledWith(3);
+  });
+
+  it('API-U095P: setProbeSampleSize() validates size', () => {
+    expect(() => view.setProbeSampleSize(2)).toThrow(/Invalid sample size/);
+    expect(() => view.setProbeSampleSize(0)).toThrow(/Invalid sample size/);
+    expect(() => view.setProbeSampleSize(7)).toThrow(/Invalid sample size/);
+    expect(() => view.setProbeSampleSize('3' as any)).toThrow(/Invalid sample size/);
+  });
+
+  it('API-U096P: setProbeSampleSize() accepts all valid sizes', () => {
+    for (const size of [1, 3, 5, 9]) {
+      view.setProbeSampleSize(size);
+    }
+    expect(probeProvider.setSampleSize).toHaveBeenCalledTimes(4);
+  });
+
+  it('API-U097P: getProbeSampleSize() returns current sample size', () => {
+    expect(view.getProbeSampleSize()).toBe(1);
+    view.setProbeSampleSize(5);
+    expect(view.getProbeSampleSize()).toBe(5);
+  });
+
+  it('API-U098P: setProbeSourceMode() updates source mode', () => {
+    view.setProbeSourceMode('source');
+    expect(probeProvider.setSourceMode).toHaveBeenCalledWith('source');
+  });
+
+  it('API-U099P: setProbeSourceMode() validates mode', () => {
+    expect(() => view.setProbeSourceMode('invalid')).toThrow(/Invalid source mode/);
+    expect(() => view.setProbeSourceMode('')).toThrow(/Invalid source mode/);
+    expect(() => view.setProbeSourceMode(123 as any)).toThrow(/Invalid source mode/);
+  });
+
+  it('API-U100P: setProbeSourceMode() accepts all valid modes', () => {
+    view.setProbeSourceMode('rendered');
+    view.setProbeSourceMode('source');
+    expect(probeProvider.setSourceMode).toHaveBeenCalledTimes(2);
+  });
+
+  it('API-U101P: getProbeSourceMode() returns current source mode', () => {
+    expect(view.getProbeSourceMode()).toBe('rendered');
+    view.setProbeSourceMode('source');
+    expect(view.getProbeSourceMode()).toBe('source');
+  });
+
+  // Dispose tests
+  it('API-U102P: enableProbe() throws after dispose', () => {
+    view.dispose();
+    expect(() => view.enableProbe()).toThrow(/dispose/);
+  });
+
+  it('API-U103P: disableProbe() throws after dispose', () => {
+    view.dispose();
+    expect(() => view.disableProbe()).toThrow(/dispose/);
+  });
+
+  it('API-U104P: isProbeEnabled() throws after dispose', () => {
+    view.dispose();
+    expect(() => view.isProbeEnabled()).toThrow(/dispose/);
+  });
+
+  it('API-U105P: toggleProbeLock() throws after dispose', () => {
+    view.dispose();
+    expect(() => view.toggleProbeLock()).toThrow(/dispose/);
+  });
+
+  it('API-U106P: isProbeLocked() throws after dispose', () => {
+    view.dispose();
+    expect(() => view.isProbeLocked()).toThrow(/dispose/);
+  });
+
+  it('API-U107P: getProbeState() throws after dispose', () => {
+    view.dispose();
+    expect(() => view.getProbeState()).toThrow(/dispose/);
+  });
+
+  it('API-U108P: setProbeFormat() throws after dispose', () => {
+    view.dispose();
+    expect(() => view.setProbeFormat('hsl')).toThrow(/dispose/);
+  });
+
+  it('API-U109P: setProbeSampleSize() throws after dispose', () => {
+    view.dispose();
+    expect(() => view.setProbeSampleSize(3)).toThrow(/dispose/);
+  });
+
+  it('API-U110P: getProbeSampleSize() throws after dispose', () => {
+    view.dispose();
+    expect(() => view.getProbeSampleSize()).toThrow(/dispose/);
+  });
+
+  it('API-U111P: setProbeSourceMode() throws after dispose', () => {
+    view.dispose();
+    expect(() => view.setProbeSourceMode('source')).toThrow(/dispose/);
+  });
+
+  it('API-U112P: getProbeSourceMode() throws after dispose', () => {
+    view.dispose();
+    expect(() => view.getProbeSourceMode()).toThrow(/dispose/);
+  });
+
+  // Existing ViewAPI methods still work with probe provider
+  it('API-U113P: existing view methods still work alongside probe', () => {
+    view.setZoom(2);
+    expect(view.getZoom()).toBe(2);
+    view.setPan(10, 20);
+    expect(view.getPan()).toEqual({ x: 10, y: 20 });
+    view.setChannel('red');
+    expect(view.getChannel()).toBe('red');
+  });
 });
 
 // ============================================================

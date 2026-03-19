@@ -1,6 +1,6 @@
 /**
  * Shared media format helpers used by file inputs, placeholder UI copy,
- * and media type detection in Session/MediaManager.
+ * and media type detection in SessionMedia.
  */
 
 /**
@@ -141,6 +141,37 @@ function getFileExtension(filename: string): string {
     return '';
   }
   return filename.slice(dotIdx + 1).toLowerCase();
+}
+
+/** Number of bytes to read for magic-number sniffing when extension/MIME detection fails. */
+const MAGIC_SNIFF_BYTES = 16384;
+
+/**
+ * Attempt to classify a file as an image by reading its first bytes and
+ * checking against the DecoderRegistry's magic-number detectors.
+ *
+ * This is the fallback path for files whose extension/MIME type is
+ * unrecognized (extensionless, misnamed, etc.). Only image formats are
+ * probed because video containers are never loaded through the decoder
+ * registry.
+ *
+ * Returns `'image'` if a registered decoder recognizes the bytes, otherwise
+ * `'unknown'`.
+ */
+export async function detectMediaTypeFromFileBytes(file: File): Promise<'image' | 'unknown'> {
+  try {
+    const slice = file.slice(0, MAGIC_SNIFF_BYTES);
+    const buffer = await slice.arrayBuffer();
+    // Lazy import to avoid pulling the decoder registry into the initial bundle
+    const { decoderRegistry } = await import('../../formats/DecoderRegistry');
+    const format = decoderRegistry.detectFormat(buffer);
+    if (format !== null) {
+      return 'image';
+    }
+  } catch {
+    // Read or import failed — fall through to unknown
+  }
+  return 'unknown';
 }
 
 /**

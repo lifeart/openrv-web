@@ -14,7 +14,7 @@ The API is organized into namespaced modules:
 | `window.openrv.media` | Source information, resolution, duration, FPS |
 | `window.openrv.audio` | Volume, mute, pitch correction, audio scrub |
 | `window.openrv.loop` | Loop mode, in/out points |
-| `window.openrv.view` | Zoom, pan, fit modes, channel isolation |
+| `window.openrv.view` | Zoom, pan, fit modes, channel isolation, pixel probe |
 | `window.openrv.color` | Color adjustments, CDL, curves |
 | `window.openrv.markers` | Add, remove, navigate markers |
 | `window.openrv.events` | Subscribe to state change events |
@@ -155,7 +155,7 @@ openrv.loop.clearInOut();
 
 ## View Control
 
-The `view` module controls zoom, pan, fit modes, and channel isolation.
+The `view` module controls zoom, pan, fit modes, channel isolation, and the pixel probe.
 
 ```javascript
 // Zoom (1.0 = 100%)
@@ -181,6 +181,20 @@ const ch = openrv.view.getChannel();
 
 // Shorthand aliases are accepted: 'r', 'g', 'b', 'a', 'luma', 'l'
 openrv.view.setChannel('a');  // Same as 'alpha'
+
+// Pixel probe
+openrv.view.enableProbe();           // Show the pixel probe overlay
+openrv.view.disableProbe();          // Hide the pixel probe overlay
+const active = openrv.view.isProbeEnabled();
+
+openrv.view.toggleProbeLock();       // Lock/unlock probe position
+const locked = openrv.view.isProbeLocked();
+
+const state = openrv.view.getProbeState();  // Full probe state (position, colors, settings)
+
+openrv.view.setProbeFormat('hsl');           // 'rgb', 'rgb01', 'hsl', 'hex', 'ire'
+openrv.view.setProbeSampleSize(3);           // 1, 3, 5, or 9
+openrv.view.setProbeSourceMode('source');    // 'rendered' or 'source'
 ```
 
 ---

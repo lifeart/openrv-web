@@ -1007,6 +1007,48 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
     }
   }
 
+  /**
+   * Import an OTIO file into the playlist programmatically.
+   * This is the same logic used by the panel's Import button and can be called
+   * from the header file picker or viewer drag-and-drop paths.
+   */
+  importOTIOFile(file: File): void {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const text = reader.result as string;
+        this.playlistManager.clear();
+        const resolver = this.sourceNameResolver ?? (() => null);
+        const importedCount = this.playlistManager.fromOTIO(text, resolver);
+        const unresolvedCount = this.playlistManager.unresolvedClips?.length ?? 0;
+        this.renderList();
+        this.updateFooterInfo();
+        this.emit('imported', { format: 'otio', importedCount, unresolvedCount });
+      } catch (err) {
+        console.error('[PlaylistPanel] Failed to parse OTIO file:', err);
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  /**
+   * Export the current playlist as an EDL file programmatically.
+   * This is the same logic used by the panel's EDL export button and can be
+   * called from the Export menu in the header bar.
+   */
+  triggerEDLExport(): void {
+    this.exportEDL();
+  }
+
+  /**
+   * Export the current playlist as an OTIO file programmatically.
+   * This is the same logic used by the panel's OTIO export button and can be
+   * called from the Export menu in the header bar.
+   */
+  triggerOTIOExport(): void {
+    this.exportOTIO();
+  }
+
   render(): HTMLElement {
     return this.container;
   }

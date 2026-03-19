@@ -3574,3 +3574,166 @@ Wired into `AppNetworkBridge` (subscribes to syncCursor, usersChanged, userLeft,
 - `src/api/OpenRVAPI.ts`
 - `src/api/PlaybackAPI.playlist.test.ts`
 - `src/api/EventsAPI.playlist.test.ts`
+
+## Issue #492: Pixel probe state not exposed in ViewAPI
+
+**Root cause**: The pixel-probe documentation claimed probe state was accessible through `window.openrv.view`, but the `ViewAPI` class had no pixel-probe methods. The docs contained an empty placeholder code snippet.
+
+**Fix**: Added a `PixelProbeProvider` interface and 11 new public methods to `ViewAPI`: `enableProbe()`, `disableProbe()`, `isProbeEnabled()`, `toggleProbeLock()`, `isProbeLocked()`, `getProbeState()`, `setProbeFormat()`, `setProbeSampleSize()`, `getProbeSampleSize()`, `setProbeSourceMode()`, `getProbeSourceMode()`. Wired through `OpenRVAPI` and `App.ts` bootstrap. All methods include input validation and dispose guards.
+
+**Tests added**: 34 regression tests in `OpenRVAPI.test.ts` covering all probe methods, error cases, and dispose guards.
+
+**Files changed**:
+- `src/api/types.ts`
+- `src/api/ViewAPI.ts`
+- `src/api/OpenRVAPI.ts`
+- `src/api/index.ts`
+- `src/App.ts`
+- `src/api/OpenRVAPI.test.ts`
+- `docs/scopes/pixel-probe.md`
+- `docs/advanced/scripting-api.md`
+
+## Issue #479: Timecode overlay cannot switch to frame-only display
+
+**Root cause**: `TimecodeOverlayState` had no format enum — it only had `showFrameCounter` alongside an always-rendered SMPTE timecode row. Users could not display frame numbers only.
+
+**Fix**: Added `TimecodeDisplayFormat` type (`'smpte' | 'frame' | 'both'`) and `displayFormat` field to `TimecodeOverlayState` (default `'smpte'` for backward compat). Updated `update()` to switch on format. Added `setDisplayFormat()` method. Kept `showFrameCounter` as deprecated with automatic sync. Replaced the settings menu checkbox with a radio group. Updated `FrameburnCompositor` to respect the format.
+
+**Tests added**: 14 regression tests in `TimecodeOverlay.test.ts` (TC-200–TC-213), 4 tests in `TimecodeOverlaySettingsMenu.test.ts`.
+
+**Files changed**:
+- `src/ui/components/TimecodeOverlay.ts`
+- `src/ui/components/TimecodeOverlaySettingsMenu.ts`
+- `src/ui/components/FrameburnCompositor.ts`
+- `src/ui/components/TimecodeOverlay.test.ts`
+- `src/ui/components/TimecodeOverlaySettingsMenu.test.ts`
+- `src/ui/components/FrameburnCompositor.test.ts`
+- `src/ui/components/ViewerExport.test.ts`
+- `src/core/session/SessionSerializer.issue485.test.ts`
+- `docs/advanced/overlays.md`
+
+## Issue #476: TimecodeOverlay only shows one timecode, not source+session
+
+**Root cause**: The overlay only rendered a single formatted timecode string. There was no field for source timecode metadata, no DOM element for it, and no wiring to read embedded timecode from `MediaSource`.
+
+**Fix**: Added `sourceTimecode` and `showSourceTimecode` fields to `TimecodeOverlayState`. Added `sourceTimecode` to the `MediaSource` interface in `SessionTypes.ts`. Added a visually distinct source timecode DOM row. Wired the overlay to read source timecode from `session.currentSource` metadata on `sourceLoaded` and `currentSourceChanged` events. Added a settings menu toggle.
+
+**Tests added**: 19 regression tests in `TimecodeOverlay.test.ts` (TC-300–TC-318), 3 tests in `TimecodeOverlaySettingsMenu.test.ts`.
+
+**Files changed**:
+- `src/ui/components/TimecodeOverlay.ts`
+- `src/ui/components/TimecodeOverlaySettingsMenu.ts`
+- `src/core/session/SessionTypes.ts`
+- `src/ui/components/TimecodeOverlay.test.ts`
+- `src/ui/components/TimecodeOverlaySettingsMenu.test.ts`
+- `docs/advanced/overlays.md`
+
+## Issue #474: Matte Overlay not exposed in View tab UI
+
+**Root cause**: The matte overlay was already wired in `buildViewTab.ts` with a toggle button and settings menu, but the settings menu lacked preset aspect ratio buttons for common cinema/broadcast ratios that the documentation described.
+
+**Fix**: Added preset aspect ratio buttons (2.39:1, 1.85:1, 16:9, 4:3, 1:1) to `MatteOverlaySettingsMenu`. Presets highlight to show the current match. Clicking a preset updates both the overlay and the numeric input. Updated documentation.
+
+**Tests added**: 7 tests in `MatteOverlaySettingsMenu.test.ts` (MOSM-006–MOSM-012), 2 tests in `buildViewTab.test.ts`.
+
+**Files changed**:
+- `src/ui/components/MatteOverlaySettingsMenu.ts`
+- `src/ui/components/MatteOverlaySettingsMenu.test.ts`
+- `src/services/tabContent/buildViewTab.test.ts`
+- `docs/compare/advanced-compare.md`
+
+## Issue #480: Safe areas overlay ignores crop region
+
+**Root cause**: `SafeAreasOverlay` drew guides against raw `offsetX/offsetY/displayWidth/displayHeight` with no crop-state input. `OverlayManager.updateDimensions()` always fed uncropped viewer dimensions. Crop was applied later in the pipeline without remapping overlay positions.
+
+**Fix**: Added `cropRegion` field and `setCropRegion()`/`getCropRegion()` methods to `SafeAreasOverlay`. Added `getEffectiveBounds()` helper that computes drawing bounds based on crop region. Updated all drawing methods to use effective bounds. Wired `OverlayManager` and `ViewerCanvasSetup` to pass active crop region. Added per-frame sync in `Viewer.render()`.
+
+**Tests added**: 13 regression tests in `SafeAreasOverlay.test.ts` (SAFE-300–SAFE-350).
+
+**Files changed**:
+- `src/ui/components/SafeAreasOverlay.ts`
+- `src/ui/components/OverlayManager.ts`
+- `src/ui/components/ViewerCanvasSetup.ts`
+- `src/ui/components/Viewer.ts`
+- `src/ui/components/SafeAreasOverlay.test.ts`
+- `src/ui/components/ViewerCanvasSetup.test.ts`
+- `docs/advanced/overlays.md`
+
+## Issue #486: Bug overlay not burned into video export
+
+**Root cause**: The bug overlay was only composited viewer-side. The export pipeline (`ViewerExport.ts`) never read bug-overlay state — export-side logo handling only existed for slate rendering in `SlateRenderer.ts`.
+
+**Fix**: Added `getImage()` and `getImageDimensions()` to `BugOverlay`. Added `BugOverlayExportConfig` interface and `compositeBugOverlay()` function to `ViewerExport.ts`. Wired bug overlay config into both `createExportCanvas()` and `renderFrameToCanvas()`. Added `getExportBugOverlayConfig()` to `Viewer.ts`.
+
+**Tests added**: 7 tests in `BugOverlay.test.ts` (BUG-140–BUG-152), 15 tests in `ViewerExport.test.ts`.
+
+**Files changed**:
+- `src/ui/components/BugOverlay.ts`
+- `src/ui/components/ViewerExport.ts`
+- `src/ui/components/Viewer.ts`
+- `src/ui/components/BugOverlay.test.ts`
+- `src/ui/components/ViewerExport.test.ts`
+- `docs/advanced/overlays.md`
+
+## Issue #465: EDL/OTIO not wired into main Export menu or file picker/drag-drop
+
+**Root cause**: EDL/OTIO export was only available from the Playlist panel. The main `ExportControl` menu had no EDL/OTIO entries. OTIO import only worked through the Playlist panel's dedicated import button, not via the header file picker or viewer drag-and-drop.
+
+**Fix**: Added "Export EDL (CMX 3600)" and "Export OTIO" to `ExportControl` under a new "Playlist" section. Added `importOTIOFile()`, `triggerEDLExport()`, `triggerOTIOExport()` public methods to `PlaylistPanel`. Added `.otio` to `HeaderBar` file picker accept list with routing callback. Added `.otio` detection in `ViewerInputHandler` drag-and-drop.
+
+**Tests added**: 10 tests in `ExportControl.test.ts`, 6 in `PlaylistPanel.test.ts`, 5 in `ViewerInputHandler.test.ts`, 6 in `HeaderBar.test.ts` (27 total).
+
+**Files changed**:
+- `src/ui/components/ExportControl.ts`
+- `src/ui/components/PlaylistPanel.ts`
+- `src/ui/components/layout/HeaderBar.ts`
+- `src/ui/components/ViewerInputHandler.ts`
+- `src/ui/components/ExportControl.test.ts`
+- `src/ui/components/PlaylistPanel.test.ts`
+- `src/ui/components/ViewerInputHandler.test.ts`
+- `src/ui/components/layout/HeaderBar.test.ts`
+- `docs/export/edl-otio.md`
+
+## Issue #466: ConformPanel browse events are unhandled stubs
+
+**Root cause**: `ConformPanel`'s "Browse..." and "Re-link by Folder..." buttons only dispatched `conform-browse` and `conform-browse-folder` custom DOM events with no app-level handler to open file pickers and perform relinking.
+
+**Fix**: Added `ConformFileHandler` type and `setFileHandler()` method to `ConformPanel`. Modified `browseForClip()` and `browseFolder()` to open real file pickers via hidden `<input type="file">` elements when a handler is set. `browseFolder()` uses fuzzy matching (score >= 80) against unresolved clips. Wired the handler in `createPanelControls.ts` using `session.loadImageFile()`. Falls back to old event dispatch when no handler is set.
+
+**Tests added**: 9 regression tests in `ConformPanel.test.ts` (CONFORM-021–CONFORM-029).
+
+**Files changed**:
+- `src/ui/components/ConformPanel.ts`
+- `src/services/controls/createPanelControls.ts`
+- `src/ui/components/ConformPanel.test.ts`
+- `docs/export/edl-otio.md`
+
+## Issue #498: File loading rejects misnamed/extensionless files before magic-number sniffing
+
+**Root cause**: `detectMediaTypeFromFile()` was MIME/extension-based only. When both were unrecognized, `SessionMedia.loadFile()` immediately rejected with "Unsupported file type" before any decoder could inspect the bytes.
+
+**Fix**: Added `detectMediaTypeFromFileBytes()` to `SupportedMediaFormats.ts` — reads the first 16KB of a file and runs through `decoderRegistry.detectFormat()`. In `SessionMedia.loadFile()`, when the fast extension/MIME check returns `unknown`, the new function runs as a fallback before rejecting. Uses lazy dynamic import to avoid bundling decoder modules on the critical path.
+
+**Tests added**: 16 regression tests in `SupportedMediaFormats.issue498.test.ts`.
+
+**Files changed**:
+- `src/utils/media/SupportedMediaFormats.ts`
+- `src/core/session/SessionMedia.ts`
+- `src/core/session/SessionMedia.test.ts`
+- `src/utils/media/SupportedMediaFormats.issue498.test.ts` (new)
+- `docs/guides/file-formats.md`
+
+## Issue #544: Dead MediaManager code gives false test confidence
+
+**Root cause**: `MediaManager` was a legacy media subsystem that was never instantiated in production code. The real app uses `SessionMedia` (instantiated in `Session.ts`). `MediaManager` had 1,097 lines of code and 1,447 lines of tests that passed but covered dead code paths.
+
+**Fix**: Verified MediaManager had zero production imports/usages. Ported 16 valuable test scenarios from `MediaManager.test.ts` to `SessionMedia.test.ts` (SM-112–SM-127). Removed `MediaManager.ts` and `MediaManager.test.ts` (2,544 lines of dead code). Updated CODEMAP.md.
+
+**Tests ported**: 16 tests covering preloadVideoFrames, getPendingFrames, getCacheStats, clearVideoCache, disposeVideoSource, dispose edge cases, multiple sources ordering, fetchSourceBVideoFrame, and video-to-image switching.
+
+**Files changed**:
+- `src/core/session/MediaManager.ts` (removed)
+- `src/core/session/MediaManager.test.ts` (removed)
+- `src/core/session/SessionMedia.test.ts`
+- `src/utils/media/SupportedMediaFormats.ts`
+- `CODEMAP.md`

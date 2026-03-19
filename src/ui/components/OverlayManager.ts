@@ -17,6 +17,7 @@
  */
 
 import type { Session } from '../../core/session/Session';
+import type { CropRegion } from './CropControl';
 import { SafeAreasOverlay } from './SafeAreasOverlay';
 import { MatteOverlay } from './MatteOverlay';
 import { TimecodeOverlay } from './TimecodeOverlay';
@@ -71,6 +72,7 @@ export class OverlayManager {
   private readonly session: Session;
   private lastWidth = 0;
   private lastHeight = 0;
+  private lastCropRegion: CropRegion | null = null;
 
   constructor(canvasContainer: HTMLElement, session: Session, callbacks: OverlayManagerCallbacks) {
     this.canvasContainer = canvasContainer;
@@ -140,16 +142,22 @@ export class OverlayManager {
   /**
    * Update overlay dimensions to match display size.
    * Called whenever the canvas resizes.
+   *
+   * When `activeCropRegion` is provided, the safe-areas overlay will
+   * draw its guides relative to the cropped sub-region instead of the
+   * full display area. Other overlays are unaffected.
    */
-  updateDimensions(width: number, height: number): void {
+  updateDimensions(width: number, height: number, activeCropRegion?: CropRegion | null): void {
     this.lastWidth = width;
     this.lastHeight = height;
+    this.lastCropRegion = activeCropRegion ?? null;
 
     // Only update already-created overlays; uncreated ones will receive
     // stored dimensions when lazily created.
     if (this._safeAreasOverlay) {
       try {
         this._safeAreasOverlay.setViewerDimensions(width, height, 0, 0, width, height);
+        this._safeAreasOverlay.setCropRegion(this.lastCropRegion);
       } catch (err) {
         console.error('SafeAreasOverlay setViewerDimensions failed:', err);
       }
@@ -188,6 +196,18 @@ export class OverlayManager {
     }
   }
 
+  /**
+   * Update the safe-areas overlay crop region without a full dimension update.
+   * Called every render frame so safe-area guides track crop changes that
+   * don't trigger a canvas resize.
+   */
+  updateSafeAreasCropRegion(cropRegion: CropRegion | null): void {
+    this.lastCropRegion = cropRegion;
+    if (this._safeAreasOverlay) {
+      this._safeAreasOverlay.setCropRegion(cropRegion);
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Typed accessors (lazy creation on first access)
   // ---------------------------------------------------------------------------
@@ -197,6 +217,7 @@ export class OverlayManager {
       this._safeAreasOverlay = new SafeAreasOverlay();
       this.canvasContainer.appendChild(this._safeAreasOverlay.getElement());
       this.applyStoredDimensions(this._safeAreasOverlay);
+      this._safeAreasOverlay.setCropRegion(this.lastCropRegion);
     }
     return this._safeAreasOverlay;
   }

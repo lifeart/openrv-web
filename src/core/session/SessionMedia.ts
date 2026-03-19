@@ -19,7 +19,7 @@ import type { MediaSource, UnsupportedCodecInfo } from './SessionTypes';
 import type { IPImage } from '../../core/image/Image';
 import type { GTOParseResult } from './GTOGraphLoader';
 import { Logger } from '../../utils/Logger';
-import { detectMediaTypeFromFile } from '../../utils/media/SupportedMediaFormats';
+import { detectMediaTypeFromFile, detectMediaTypeFromFileBytes } from '../../utils/media/SupportedMediaFormats';
 import { MediaRepresentationManager } from './MediaRepresentationManager';
 import type { MediaCacheManager, CacheEntryMeta } from '../../cache/MediaCacheManager';
 import { computeCacheKey } from '../../cache/MediaCacheKey';
@@ -435,7 +435,13 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
 
   async loadFile(file: File): Promise<void> {
     this._host!.clearGraphData();
-    const type = this.getMediaType(file);
+    let type = this.getMediaType(file);
+
+    // When MIME/extension detection fails, attempt magic-number sniffing
+    // against the decoder registry before rejecting.
+    if (type === 'unknown') {
+      type = await detectMediaTypeFromFileBytes(file);
+    }
 
     if (type === 'unknown') {
       const ext = file.name.includes('.') ? file.name.split('.').pop() : '(none)';
