@@ -1,6 +1,6 @@
 # EXR Multi-Layer and AOV Workflow
 
-OpenRV EXR support extends beyond simple image display to include multi-layer files with AOV (Arbitrary Output Variable) selection and channel remapping. This workflow is essential for VFX compositing review where artists need to inspect individual render passes.
+OpenRV Web supports multi-layer EXR files with AOV (Arbitrary Output Variable) selection and channel remapping, allowing artists to inspect individual render passes without opening a compositing application.
 
 ![EXR file loaded in OpenRV Web](/assets/screenshots/22-exr-loaded.png)
 

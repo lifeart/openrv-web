@@ -1,6 +1,6 @@
 # Stereo 3D Viewing
 
-Stereo 3D review is essential for visual effects and animated feature production. OpenRV Web delivers a comprehensive set of software-based stereo display modes that run entirely in the browser via WebGL2, requiring no special hardware, drivers, or plugins. Artists can load stereo content, view it through ten stereo display modes (nine active modes plus the default Off state), adjust convergence in real time, and annotate individual eyes independently.
+OpenRV Web provides ten software-based stereo display modes (nine active modes plus Off) that run entirely in the browser via WebGL2, requiring no special hardware, drivers, or plugins. Artists can load stereo content, adjust convergence in real time, and annotate individual eyes independently.
 
 This guide covers practical workflows for stereo review. For the underlying technical architecture, shader pipeline position, and renderer implementation, see [Stereo 3D Viewing -- Technical Guide](../guides/stereo-3d-viewing.md).
 

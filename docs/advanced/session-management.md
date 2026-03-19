@@ -202,7 +202,7 @@ Crash recovery restores the full session state, including media references (whic
 
 ### Session Recovery After Browser Restart
 
-After a browser restart, locally-loaded media files are referenced by blob URLs that are no longer valid. The session recovery system detects these invalid blob URLs and displays file re-selection prompts for each affected media source. The user selects the original files from disk, and the session resumes with all color corrections, annotations, and playback state intact. This ensures that no review work is lost even when the browser is closed unexpectedly or the system restarts.
+After a browser restart, locally-loaded media files are referenced by blob URLs that are no longer valid. The session recovery system detects these invalid blob URLs and displays file re-selection prompts for each affected media source. The user selects the original files from disk, and the session resumes with all color corrections, annotations, and playback state intact.
 
 ---
 

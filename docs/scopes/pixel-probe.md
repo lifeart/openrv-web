@@ -1,6 +1,6 @@
 # Pixel Probe
 
-The pixel probe provides a real-time readout of exact color values under the cursor. It is essential for precise color evaluation, verifying exposure levels, and confirming that specific pixel values meet requirements.
+The pixel probe provides a real-time readout of exact color values under the cursor, used for color evaluation, exposure verification, and checking pixel values against delivery specifications.
 
 ![Pixel probe overlay showing color values](/assets/screenshots/16-pixel-probe.png)
 

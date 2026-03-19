@@ -180,16 +180,6 @@ Per-eye geometric transforms (translate, rotate, scale) allow fine-grained align
 
 The eye transform state is persisted in the session and applied in the rendering pipeline before stereo compositing.
 
-### Stereo Eye Transform
-
-Per-eye geometric transforms (translate, rotate, scale) allow fine-grained alignment correction of each eye independently. This compensates for:
-
-- Vertical misalignment between stereo rig cameras
-- Rotation (tilt) differences between cameras
-- Scale differences due to lens matching imperfections
-
-The eye transform state is persisted in the session and applied in the rendering pipeline before stereo compositing. The `StereoEyeTransform` module provides transform state management with configurable alignment modes.
-
 ### Session Persistence
 
 All stereo settings -- mode, input format, convergence offset, eye swap, alignment overlay state, per-eye transforms, and alignment mode -- are stored in the GTO session format and the `.orvproject` native session format. Opening a saved session restores the complete stereo viewing configuration.

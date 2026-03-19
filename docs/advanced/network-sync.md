@@ -1,6 +1,6 @@
 # Network Sync and Collaboration
 
-OpenRV Web supports real-time collaborative review sessions where multiple users view the same content simultaneously with synchronized playback, view controls, and annotations. Network sync transforms the application from a single-user viewer into a shared review environment accessible from any browser.
+OpenRV Web supports real-time collaborative review sessions where multiple users view the same content simultaneously with synchronized playback, view controls, and annotations.
 
 ---
 
