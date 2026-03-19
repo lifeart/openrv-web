@@ -2015,4 +2015,134 @@ describe('SessionMedia', () => {
       expect(session.media).toBeInstanceOf(SessionMedia);
     });
   });
+
+  describe('documentation regression — call-site preload/release values (#526)', () => {
+    // These tests verify that the numeric constants passed at the call sites
+    // inside SessionMedia.ts match the documented values. If someone changes
+    // the numbers without updating the docs, these tests will fail.
+
+    it('SM-128: initial sequence preload uses windowSize=10', async () => {
+      // SessionMedia.loadSequence calls: preloadFrames(sequenceInfo.frames, 0, 10)
+      const { preloadFrames } = await import('../../utils/media/SequenceLoader');
+      const preloadMock = preloadFrames as ReturnType<typeof vi.fn>;
+      preloadMock.mockClear();
+
+      const frames = Array.from({ length: 20 }, (_, i) => ({
+        index: i,
+        frameNumber: i + 1,
+        file: new File([], `frame_${String(i + 1).padStart(4, '0')}.png`),
+        image: { width: 1920, height: 1080, close: vi.fn() } as any,
+      }));
+      const seqInfo = {
+        name: 'seq',
+        pattern: 'seq_####.png',
+        frames,
+        startFrame: 1,
+        endFrame: 20,
+        width: 1920,
+        height: 1080,
+        fps: 24,
+        missingFrames: [],
+      };
+
+      const { createSequenceInfo } = await import('../../utils/media/SequenceLoader');
+      (createSequenceInfo as ReturnType<typeof vi.fn>).mockResolvedValueOnce(seqInfo);
+
+      const fileList = frames.map((f) => f.file);
+      try {
+        await media.loadSequence(fileList);
+      } catch {
+        // May throw due to mocks; we only care about the preloadFrames call
+      }
+
+      // Verify the initial preload call uses windowSize = 10
+      const matchingCall = preloadMock.mock.calls.find(
+        (args: any[]) => args[2] === 10,
+      );
+      expect(matchingCall).toBeDefined();
+      expect(matchingCall![2]).toBe(10);
+    });
+
+    it('SM-129: per-frame sequence preload uses windowSize=5', async () => {
+      // SessionMedia.getSequenceFrameImage calls: preloadFrames(source.sequenceFrames, frame.index, 5)
+      const { preloadFrames, loadFrameImage } = await import('../../utils/media/SequenceLoader');
+      const preloadMock = preloadFrames as ReturnType<typeof vi.fn>;
+      preloadMock.mockClear();
+      const mockBitmap = { width: 1920, height: 1080, close: vi.fn() } as any;
+      (loadFrameImage as ReturnType<typeof vi.fn>).mockResolvedValue(mockBitmap);
+
+      const frames = Array.from({ length: 20 }, (_, i) => ({
+        index: i,
+        frameNumber: i + 1,
+        file: new File(['x'], `frame_${String(i + 1).padStart(4, '0')}.png`),
+      }));
+
+      const seqSource = makeSequenceSource({
+        sequenceFrames: frames as any,
+        sequenceInfo: {
+          name: 'seq',
+          pattern: 'seq_####.png',
+          frames: frames as any,
+          startFrame: 1,
+          endFrame: 20,
+          width: 1920,
+          height: 1080,
+          fps: 24,
+          missingFrames: [],
+        },
+        sequenceFrameMap: new Map(frames.map((f) => [f.frameNumber, f as any])),
+      });
+      (media as any)._sources.push(seqSource);
+      (media as any)._currentSourceIndex = 0;
+
+      await media.getSequenceFrameImage(5);
+
+      const matchingCall = preloadMock.mock.calls.find(
+        (args: any[]) => args[2] === 5,
+      );
+      expect(matchingCall).toBeDefined();
+      expect(matchingCall![2]).toBe(5);
+    });
+
+    it('SM-130: per-frame sequence release uses keepWindow=20', async () => {
+      // SessionMedia.getSequenceFrameImage calls: releaseDistantFrames(source.sequenceFrames, frame.index, 20)
+      const { releaseDistantFrames, loadFrameImage } = await import('../../utils/media/SequenceLoader');
+      const releaseMock = releaseDistantFrames as ReturnType<typeof vi.fn>;
+      releaseMock.mockClear();
+      const mockBitmap = { width: 1920, height: 1080, close: vi.fn() } as any;
+      (loadFrameImage as ReturnType<typeof vi.fn>).mockResolvedValue(mockBitmap);
+
+      const frames = Array.from({ length: 30 }, (_, i) => ({
+        index: i,
+        frameNumber: i + 1,
+        file: new File(['x'], `frame_${String(i + 1).padStart(4, '0')}.png`),
+      }));
+
+      const seqSource = makeSequenceSource({
+        sequenceFrames: frames as any,
+        sequenceInfo: {
+          name: 'seq',
+          pattern: 'seq_####.png',
+          frames: frames as any,
+          startFrame: 1,
+          endFrame: 30,
+          width: 1920,
+          height: 1080,
+          fps: 24,
+          missingFrames: [],
+        },
+        sequenceFrameMap: new Map(frames.map((f) => [f.frameNumber, f as any])),
+      });
+      (media as any)._sources.push(seqSource);
+      (media as any)._currentSourceIndex = 0;
+
+      await media.getSequenceFrameImage(10);
+
+      const matchingCall = releaseMock.mock.calls.find(
+        (args: any[]) => args[2] === 20,
+      );
+      expect(matchingCall).toBeDefined();
+      expect(matchingCall![2]).toBe(20);
+    });
+  });
 });

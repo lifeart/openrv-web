@@ -37,8 +37,7 @@ import { SUPPORTED_MEDIA_ACCEPT, isDecoderBackedExtension } from '../../utils/me
 import type { MediaCacheManager } from '../../cache/MediaCacheManager';
 import { serializeRepresentation } from '../types/representation';
 import type { AddRepresentationConfig } from '../types/representation';
-import { DEFAULT_TONE_MAPPING_STATE } from '../types/effects';
-import { DEFAULT_GAMUT_MAPPING_STATE } from '../types/effects';
+import { DEFAULT_TONE_MAPPING_STATE, DEFAULT_GAMUT_MAPPING_STATE } from '../types/effects';
 import { DEFAULT_STEREO_STATE } from '../types/stereo';
 import { DEFAULT_GHOST_FRAME_STATE } from '../../ui/components/GhostFrameControl';
 import { DEFAULT_DISPLAY_COLOR_STATE } from '../../color/DisplayTransfer';

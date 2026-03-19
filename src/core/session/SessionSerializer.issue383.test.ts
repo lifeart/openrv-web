@@ -8,8 +8,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SessionSerializer, type SessionComponents } from './SessionSerializer';
 import { PaintEngine } from '../../paint/PaintEngine';
-import { DEFAULT_TONE_MAPPING_STATE } from '../../core/types/effects';
-import { DEFAULT_GAMUT_MAPPING_STATE } from '../../core/types/effects';
+import { DEFAULT_TONE_MAPPING_STATE, DEFAULT_GAMUT_MAPPING_STATE } from '../../core/types/effects';
 import { DEFAULT_STEREO_STATE } from '../../core/types/stereo';
 import { DEFAULT_GHOST_FRAME_STATE } from '../../ui/components/GhostFrameControl';
 import { DEFAULT_DISPLAY_COLOR_STATE } from '../../color/DisplayTransfer';
@@ -17,7 +16,7 @@ import { DEFAULT_DIFFERENCE_MATTE_STATE } from '../../ui/components/DifferenceMa
 import { DEFAULT_BLEND_MODE_STATE } from '../../ui/components/ComparisonManager';
 import { createDefaultCurvesData } from '../../color/ColorCurves';
 import { DEFAULT_STEREO_EYE_TRANSFORM_STATE, DEFAULT_STEREO_ALIGN_MODE } from '../../stereo/StereoRenderer';
-import { FILE_RELOAD_CANCEL } from '../../ui/components/shared/Modal';
+import { FILE_RELOAD_CANCEL, showFileReloadPrompt, showSequenceReloadPrompt } from '../../ui/components/shared/Modal';
 import { DEFAULT_TIMECODE_OVERLAY_STATE } from '../../ui/components/TimecodeOverlay';
 import { DEFAULT_SAFE_AREAS_STATE } from '../../ui/components/SafeAreasOverlay';
 import { DEFAULT_CLIPPING_OVERLAY_STATE } from '../../ui/components/ClippingOverlay';
@@ -36,8 +35,6 @@ vi.mock('../../ui/components/shared/Modal', async () => {
     showSequenceReloadPrompt: vi.fn(),
   };
 });
-
-import { showFileReloadPrompt, showSequenceReloadPrompt } from '../../ui/components/shared/Modal';
 
 beforeEach(() => {
   vi.clearAllMocks();

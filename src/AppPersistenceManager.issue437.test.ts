@@ -212,6 +212,7 @@ describe('Issue #437 – auto-save failure alert references correct save mechani
     const ctx = createMockContext();
     // Override initialize to throw a string instead of Error
     (ctx.autoSaveManager as any).initialize = vi.fn(async () => {
+      // eslint-disable-next-line no-throw-literal -- deliberately testing non-Error throw handling
       throw 'storage blocked';
     });
     const mgr = new AppPersistenceManager(ctx);

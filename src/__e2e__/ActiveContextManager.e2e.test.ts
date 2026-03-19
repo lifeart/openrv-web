@@ -267,12 +267,12 @@ describe('ActiveContextManager E2E', () => {
       expect(result!.action).toBe('timeline.resetInOut');
     });
 
-    it('E2E-ACM-032: transform tab resolves transform-context bindings', () => {
+    it('E2E-ACM-032: transform tab resolves transform-context bindings over global', () => {
       const transformHandler = vi.fn();
       const channelHandler = vi.fn();
 
+      keyManager.register('channel.red', { code: 'KeyR', shift: true }, channelHandler, 'global');
       keyManager.register('transform.rotateLeft', { code: 'KeyR', shift: true }, transformHandler, 'transform');
-      keyManager.register('channel.red', { code: 'KeyR', shift: true }, channelHandler, 'viewer');
 
       updateActiveContext(contextManager, 'transform');
       const result = keyManager.resolve({ code: 'KeyR', shift: true });

@@ -180,8 +180,9 @@ export class ClippingOverlay extends EventEmitter<ClippingOverlayEvents> {
       this.state.bothColor.r === color.r &&
       this.state.bothColor.g === color.g &&
       this.state.bothColor.b === color.b
-    )
+    ) {
       return;
+    }
     this.state.bothColor = { ...color };
     this.emit('stateChanged', { ...this.state });
   }

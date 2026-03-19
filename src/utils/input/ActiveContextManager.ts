@@ -17,7 +17,7 @@ import { Signal } from '../../core/graph/Signal';
  *
  * Production tab-to-context mapping (see App.ts):
  *   view tab      -> 'viewer'
- *   color tab     -> 'global'
+ *   color tab     -> 'color'
  *   effects tab   -> 'global'
  *   transform tab -> 'transform'
  *   annotate tab  -> 'paint'
@@ -28,7 +28,8 @@ export type BindingContext =
   | 'paint'
   | 'viewer'
   | 'panel'
-  | 'transform';
+  | 'transform'
+  | 'color';
 
 export class ActiveContextManager {
   private _activeContext: BindingContext = 'global';

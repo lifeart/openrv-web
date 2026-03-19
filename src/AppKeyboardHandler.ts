@@ -46,9 +46,14 @@ export class AppKeyboardHandler {
     'panel.histogram', // H key - panel context (histogram scope toggle)
     'panel.waveform', // W key - panel context (waveform scope toggle)
     'panel.gamutDiagram', // G key - panel context (gamut diagram toggle)
-    'channel.red', // Shift+R is reserved for transform.rotateLeft
-    'channel.blue', // Shift+B is reserved for view.cycleBackgroundPattern
-    'channel.none', // Shift+N is reserved for network.togglePanel
+    'channel.red', // Shift+R conflicts with transform.rotateLeft; resolved via contextual manager (channel=global, rotate=transform)
+    'channel.blue', // Shift+B conflicts with view.cycleBackgroundPattern; resolved via contextual manager (channel=global, bg=viewer)
+    'channel.none', // Shift+N conflicts with network.togglePanel; resolved via contextual manager (channel=global, network=panel)
+    'channel.luminance', // Shift+L conflicts with lut.togglePanel; resolved via contextual manager (channel=global, lut=color)
+    'transform.rotateLeft', // Shift+R - transform context only; conflicts with channel.red globally
+    'view.cycleBackgroundPattern', // Shift+B - viewer context only; conflicts with channel.blue globally
+    'network.togglePanel', // Shift+N - panel context only; conflicts with channel.none globally
+    'lut.togglePanel', // Shift+L - color context only; conflicts with channel.luminance globally
   ]);
   private static readonly HIDDEN_DEFAULTS = new Set([
     'view.toggleWaveform', // W key - legacy duplicate of panel.waveform

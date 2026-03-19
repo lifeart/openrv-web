@@ -4267,3 +4267,109 @@ Wired into `AppNetworkBridge` (subscribes to syncCursor, usersChanged, userLeft,
 **Files changed**:
 - `docs/guides/file-formats.md`
 - `src/formats/avif-browser-native-only.test.ts` (new)
+
+## Issue VN-4/VN-5: `pnpm lint` fails with 35 errors across 15 files
+
+**Root cause**: Recent commits introduced duplicate imports (same module imported on multiple lines), missing braces on `if` statements, a `let` that should be `const`, a constant ternary expression, and a string throw literal — all violating the project's ESLint rules.
+
+**Fix**:
+- Consolidated 30 duplicate import statements across 13 files (merging symbols from identical module paths)
+- Added missing braces in `shaderMathToneMapping.test.ts` and `ClippingOverlay.ts`
+- Changed `let outG` to `const outG` in `shaderMathReference.ts` (never reassigned)
+- Simplified constant expression `(2 + 2) % 2 === 0 ? 50 : 200` to `50` in `ViewerEffects.test.ts`
+- Added scoped `eslint-disable` for intentional string throw in `AppPersistenceManager.issue437.test.ts`
+
+**Tests added**: No new tests needed — all changes are cosmetic lint fixes with no behavioral impact. Verified 247 tests across affected files still pass.
+
+**Files changed**:
+- `src/core/session/SessionSerializer.ts`
+- `src/core/session/SessionSerializer.test.ts` + 8 issue-specific test files
+- `src/cache/FrameCacheControllerIntegration.test.ts`
+- `src/ui/components/WipeManager.ts`
+- `src/render/__tests__/shaderMathReference.ts`
+- `src/render/__tests__/shaderMathToneMapping.test.ts`
+- `src/ui/components/ClippingOverlay.ts`
+- `src/ui/components/ViewerEffects.test.ts`
+- `src/AppPersistenceManager.issue437.test.ts`
+
+## Issue VN-1: `G` key on QC tab opens goto-frame instead of gamut diagram (regression of #1-3)
+
+**Root cause**: The tab-to-context map in `App.ts` mapped the QC tab to `'viewer'` context instead of `'panel'`. The `ContextualKeyboardManager.resolve()` found no `'viewer'`-context binding for `KeyG`, fell back to the `'global'` binding (`navigation.gotoFrame`), and the `panel.gamutDiagram` binding (registered under `'panel'` context) was never matched. Same issue affected `H` and `W` keys (histogram, waveform) on the QC tab.
+
+**Fix**:
+- Changed `qc: 'viewer'` to `qc: 'panel'` in the tab-to-context map
+- Extracted the inline context map to an exported `TAB_CONTEXT_MAP` constant for testability
+- Added missing contextual registrations for `KeyH` (fitToHeight/histogram) and `KeyW` (fitToWidth/waveform)
+
+**Tests added**: 12 new regression tests:
+- 5 `TABCTX` tests verifying all tab-to-context mappings including QC→panel
+- 7 updated `CKM` tests importing production `TAB_CONTEXT_MAP` and verifying G/H/W resolve correctly on QC vs View tabs
+
+**Files changed**:
+- `src/App.ts`
+- `src/AppKeyboardHandler.test.ts`
+- `src/utils/input/ContextualKeyboardManager.test.ts`
+
+## Issue VN-2: `Shift+R` / `Shift+B` / `Shift+N` don't activate red/blue/none channel selection
+
+**Root cause**: Channel shortcuts (`channel.red`, `channel.blue`, `channel.none`) were registered with `'viewer'` context (View tab only), while their conflicting actions (`transform.rotateLeft`, `view.cycleBackgroundPattern`, `network.togglePanel`) were registered as `'global'`. Since `ContextualKeyboardManager.resolve()` falls back to global when no context match is found, the conflicting global actions always won on non-View tabs. `Shift+G` and `Shift+A` worked because they had no conflicting bindings.
+
+**Fix**:
+- Swapped context assignments: channel shortcuts are now global (work everywhere), conflicting actions are context-specific (only on their relevant tabs: transform, viewer, panel)
+- Updated `KeyBindings.ts` context annotations to match
+- Added conflicting actions to `CONTEXTUAL_DEFAULTS` set to prevent direct registration
+
+**Tests added**: 5 new regression tests (KW-070 through KW-074) verifying channel shortcuts work from color, effects, and QC tabs, plus updates to 15+ existing tests.
+
+**Files changed**:
+- `src/App.ts`
+- `src/AppKeyboardHandler.ts`
+- `src/utils/input/KeyBindings.ts`
+- `src/KeyboardWiring.test.ts`
+- `src/utils/input/ContextualKeyboardManager.test.ts`
+- `src/__e2e__/ActiveContextManager.e2e.test.ts`
+
+## Issue VN-3: `Shift+L` on Color tab opens LUT pipeline panel instead of switching to luminance
+
+**Root cause**: Multi-layered wiring failure: (1) `channel.luminance` had a handler but no key binding in `DEFAULT_KEY_BINDINGS`, (2) `lut.togglePanel` had a binding but no handler, (3) the `channel.luminance` handler had a workaround that checked `tabBar.activeTab === 'color'` and toggled LUT instead, mixing two unrelated concerns, (4) the Color tab had no entry in `TAB_CONTEXT_MAP`, falling back to `'global'`.
+
+**Fix**:
+- Added `'color'` to the `BindingContext` type union and `color: 'color'` to `TAB_CONTEXT_MAP`
+- Added `channel.luminance` binding with `Shift+L` as global
+- Added `lut.togglePanel` handler and registered it under `'color'` context
+- Simplified `channel.luminance` handler to always select luminance (removed LUT conditional)
+- Added both actions to `CONTEXTUAL_DEFAULTS` set
+
+**Tests added**: CKM-017 and CKM-018 verifying Shift+L resolution per context, SCOPE-REG07b regression test, updated TABCTX and KeyboardActionMap tests.
+
+**Files changed**:
+- `src/utils/input/ActiveContextManager.ts`
+- `src/App.ts`
+- `src/utils/input/KeyBindings.ts`
+- `src/AppKeyboardHandler.ts`
+- `src/services/KeyboardActionMap.ts`
+- `src/AppKeyboardHandler.test.ts`
+- `src/services/KeyboardActionMap.test.ts`
+- `src/utils/input/ContextualKeyboardManager.test.ts`
+- `src/KeyboardWiring.test.ts`
+
+## Issue #526: Image-sequences guide presents fixed caching policies that don't match the live runtime
+
+**Root cause**: The documentation described a single fixed caching policy (5-frame preload, 20-frame retention), but the runtime actually uses two different caching paths with different policies depending on media type: the direct session path (SessionMedia) and the node-graph path (FramePreloadManager).
+
+**Fix**:
+- Replaced the single "Memory Management" section with three subsections: Direct Session Path, Node-Graph Path, and "Which Path Is Used?" table
+- Direct session path: 10-frame initial preload, 5-frame symmetric per-frame preload, 20-frame retention
+- Node-graph path: 100-frame LRU cache, 30-ahead/5-behind preloading, 10-frame scrub window, 3 concurrent requests
+- Table mapping media types to their caching path
+
+**Tests added**: 11 regression tests:
+- 6 in `FramePreloadManager.test.ts` (FPM-053–058) asserting `DEFAULT_PRELOAD_CONFIG` values
+- 2 in `SequenceLoader.test.ts` (SLD-600-001/002) asserting function default parameters
+- 3 in `SessionMedia.test.ts` (SM-128–130) asserting call-site values (10, 5, 20)
+
+**Files changed**:
+- `docs/playback/image-sequences.md`
+- `src/utils/media/FramePreloadManager.test.ts`
+- `src/utils/media/SequenceLoader.test.ts`
+- `src/core/session/SessionMedia.test.ts`

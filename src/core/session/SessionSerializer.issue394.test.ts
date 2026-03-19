@@ -10,8 +10,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SessionSerializer, type SessionComponents } from './SessionSerializer';
 import { PaintEngine } from '../../paint/PaintEngine';
-import { DEFAULT_TONE_MAPPING_STATE } from '../../core/types/effects';
-import { DEFAULT_GAMUT_MAPPING_STATE } from '../../core/types/effects';
+import { DEFAULT_TONE_MAPPING_STATE, DEFAULT_GAMUT_MAPPING_STATE } from '../../core/types/effects';
 import { DEFAULT_STEREO_STATE } from '../../core/types/stereo';
 import { DEFAULT_GHOST_FRAME_STATE } from '../../ui/components/GhostFrameControl';
 import { DEFAULT_DISPLAY_COLOR_STATE } from '../../color/DisplayTransfer';
@@ -27,7 +26,7 @@ import { DEFAULT_SPOTLIGHT_STATE } from '../../ui/components/SpotlightOverlay';
 import { DEFAULT_BUG_OVERLAY_STATE } from '../../ui/components/BugOverlay';
 import { DEFAULT_EXR_WINDOW_OVERLAY_STATE } from '../../ui/components/EXRWindowOverlay';
 import { DEFAULT_FPS_INDICATOR_STATE } from '../../ui/components/FPSIndicator';
-import { FILE_RELOAD_CANCEL } from '../../ui/components/shared/Modal';
+import { FILE_RELOAD_CANCEL, showFileReloadPrompt as _showFileReloadPrompt, showSequenceReloadPrompt } from '../../ui/components/shared/Modal';
 
 // Mock Modal functions
 vi.mock('../../ui/components/shared/Modal', async () => {
@@ -38,8 +37,6 @@ vi.mock('../../ui/components/shared/Modal', async () => {
     showSequenceReloadPrompt: vi.fn(),
   };
 });
-
-import { showFileReloadPrompt as _showFileReloadPrompt, showSequenceReloadPrompt } from '../../ui/components/shared/Modal';
 
 beforeEach(() => {
   vi.clearAllMocks();

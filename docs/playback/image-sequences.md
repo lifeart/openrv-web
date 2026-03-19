@@ -101,13 +101,39 @@ The timeline status bar displays the configured FPS during playback.
 
 ## Memory Management
 
-Image sequences can consume significant memory. OpenRV Web uses several strategies to manage resource usage:
+Image sequences can consume significant memory. OpenRV Web uses two distinct caching strategies depending on how media is loaded.
 
-- **Preload window** -- 5 frames ahead and behind the current frame are loaded proactively
-- **Keep window** -- up to 20 frames are kept in memory at a time
+### Direct Session Path (File-Based Image Sequences)
+
+When image sequences are loaded from local files (drag-and-drop or file picker), the session layer manages caching directly via `SessionMedia` and the `SequenceLoader` utilities:
+
+- **Initial preload** -- on sequence load, the first 10 frames are preloaded immediately to prime the cache
+- **Per-frame preload window** -- each time a frame is fetched, 5 frames on each side of the current position are preloaded proactively
+- **Retention window** -- up to 20 frames are retained around the current position; frames beyond this distance are released automatically via `releaseDistantFrames()`
 - **Direct decode** -- frames are decoded directly from `File` objects using `createImageBitmap(frame.file, ...)` for browser-native formats (PNG, JPEG, WebP, etc.) or through the decoder registry for pro formats (EXR, DPX, Cineon, HDR, TIFF). No intermediate blob URLs are created during loading.
-- **Distance-based release** -- frames far from the current position are released automatically via `releaseDistantFrames()`, which closes `ImageBitmap` handles and drops decoded `Float32Array` data
+- **Distance-based release** -- `releaseDistantFrames()` closes `ImageBitmap` handles and drops decoded `Float32Array` data for frames outside the retention window
 - **Dispose** -- all `ImageBitmap` handles and decoded data references are cleaned up when switching sources. The `SequenceFrame.url` field is vestigial; no production code assigns it during file-based loading, but cleanup paths (`releaseDistantFrames`, `disposeSequence`) defensively revoke it if present.
+
+### Node-Graph Path (Video and Mediabunny Sources)
+
+When media is loaded through the node graph (e.g., video files decoded via the `mediabunny` WebCodecs backend, or `SequenceSourceNode`), caching is handled by `FramePreloadManager` with larger, more sophisticated buffers:
+
+- **Max cache size** -- up to 100 frames are kept in an LRU cache (clamped between 5 and 500)
+- **Playback preloading** -- during playback, 30 frames are preloaded ahead in the playback direction and 5 frames are kept behind
+- **Scrub preloading** -- when scrubbing (paused navigation), 10 frames are preloaded symmetrically in each direction around the current position
+- **Concurrency limit** -- at most 3 concurrent preload requests (1 for the current frame + 2 for sequential preloading)
+- **Priority-based queue** -- closer frames load first; priority degrades with distance from the current frame
+- **Direction-aware** -- preload direction adapts to forward or reverse playback; changing direction aborts stale preload requests
+- **LRU eviction** -- when the cache reaches 80% capacity, distant frames are evicted using least-recently-used ordering
+- **Request cancellation** -- pending preload requests are cancelled when navigating away or changing playback state, with `AbortSignal` propagation to the decoder
+
+### Which Path Is Used?
+
+| Media type | Caching path | When used |
+|---|---|---|
+| Local image files (PNG, EXR, DPX, etc.) via drag-and-drop or file picker | Direct session path | `SessionMedia.getSequenceFrame()` with `preloadFrames()` and `releaseDistantFrames()` |
+| Video files (MP4, MOV, WebM, etc.) using WebCodecs/mediabunny | Node-graph path (`FramePreloadManager`) | `VideoSourceNode` with mediabunny frame extraction |
+| Image sequences through node graph | Node-graph path (`FramePreloadManager`) | `SequenceSourceNode` with default preload config |
 
 ## Supported Image Formats
 

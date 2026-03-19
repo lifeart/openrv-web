@@ -396,7 +396,6 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   'channel.red': {
     code: 'KeyR',
     shift: true,
-    context: 'viewer',
     description: 'Select red channel',
   },
   'channel.green': {
@@ -414,6 +413,11 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     shift: true,
     description: 'Select alpha channel',
   },
+  'channel.luminance': {
+    code: 'KeyL',
+    shift: true,
+    description: 'Select luminance channel',
+  },
   'channel.grayscale': {
     code: 'KeyY',
     shift: true,
@@ -429,6 +433,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   'lut.togglePanel': {
     code: 'KeyL',
     shift: true,
+    context: 'color',
     description: 'Toggle LUT panel',
   },
 
@@ -655,6 +660,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   'view.cycleBackgroundPattern': {
     code: 'KeyB',
     shift: true,
+    context: 'viewer',
     description: 'Cycle background pattern (Black/Grey18/Grey50/Checker)',
   },
   'view.toggleCheckerboard': {
@@ -680,6 +686,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   'network.togglePanel': {
     code: 'KeyN',
     shift: true,
+    context: 'panel',
     description: 'Toggle network sync panel',
   },
   'network.disconnect': {

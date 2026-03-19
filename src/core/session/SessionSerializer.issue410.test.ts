@@ -8,8 +8,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SessionSerializer, type SessionComponents } from './SessionSerializer';
 import { PaintEngine } from '../../paint/PaintEngine';
-import { DEFAULT_TONE_MAPPING_STATE } from '../../core/types/effects';
-import { DEFAULT_GAMUT_MAPPING_STATE } from '../../core/types/effects';
+import { DEFAULT_TONE_MAPPING_STATE, DEFAULT_GAMUT_MAPPING_STATE } from '../../core/types/effects';
 import { DEFAULT_STEREO_STATE } from '../../core/types/stereo';
 import { DEFAULT_GHOST_FRAME_STATE } from '../../ui/components/GhostFrameControl';
 import { DEFAULT_DISPLAY_COLOR_STATE } from '../../color/DisplayTransfer';

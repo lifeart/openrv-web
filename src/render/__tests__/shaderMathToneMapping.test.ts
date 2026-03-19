@@ -63,8 +63,9 @@ function checkMonotonicityRGB(
   for (let i = 1; i <= steps; i++) {
     const v = start + step * i;
     const curr = fn(v, v, v);
-    if (curr.r < prev.r - 1e-9 || curr.g < prev.g - 1e-9 || curr.b < prev.b - 1e-9)
+    if (curr.r < prev.r - 1e-9 || curr.g < prev.g - 1e-9 || curr.b < prev.b - 1e-9) {
       return false;
+    }
     prev = curr;
   }
   return true;

@@ -181,89 +181,89 @@ describe('Conflicting shortcuts resolved via contextual keyboard manager', () =>
     expect(ckm.resolve({ code: 'KeyL' })?.action).toBe('paint.line');
   });
 
-  // --- Shift+R: transform.rotateLeft (global) vs channel.red (viewer/panel) ---
+  // --- Shift+R: channel.red (global) vs transform.rotateLeft (transform) ---
 
-  it('KW-016: Shift+R resolves to transform.rotateLeft in global context', () => {
-    ckm.register('transform.rotateLeft', { code: 'KeyR', shift: true }, vi.fn(), 'global');
-    ckm.register('channel.red', { code: 'KeyR', shift: true }, vi.fn(), 'viewer');
+  it('KW-016: Shift+R resolves to channel.red in global context', () => {
+    ckm.register('channel.red', { code: 'KeyR', shift: true }, vi.fn(), 'global');
+    ckm.register('transform.rotateLeft', { code: 'KeyR', shift: true }, vi.fn(), 'transform');
 
     contextManager.setContext('global');
-    expect(ckm.resolve({ code: 'KeyR', shift: true })?.action).toBe('transform.rotateLeft');
+    expect(ckm.resolve({ code: 'KeyR', shift: true })?.action).toBe('channel.red');
   });
 
-  it('KW-017: Shift+R resolves to channel.red in viewer context', () => {
-    ckm.register('transform.rotateLeft', { code: 'KeyR', shift: true }, vi.fn(), 'global');
-    ckm.register('channel.red', { code: 'KeyR', shift: true }, vi.fn(), 'viewer');
+  it('KW-017: Shift+R resolves to channel.red in viewer context (global fallback)', () => {
+    ckm.register('channel.red', { code: 'KeyR', shift: true }, vi.fn(), 'global');
+    ckm.register('transform.rotateLeft', { code: 'KeyR', shift: true }, vi.fn(), 'transform');
 
     contextManager.setContext('viewer');
     expect(ckm.resolve({ code: 'KeyR', shift: true })?.action).toBe('channel.red');
   });
 
-  it('KW-017b: Shift+R resolves to channel.red.panel in panel context', () => {
-    ckm.register('transform.rotateLeft', { code: 'KeyR', shift: true }, vi.fn(), 'global');
-    ckm.register('channel.red.panel', { code: 'KeyR', shift: true }, vi.fn(), 'panel');
+  it('KW-017b: Shift+R resolves to transform.rotateLeft in transform context', () => {
+    ckm.register('channel.red', { code: 'KeyR', shift: true }, vi.fn(), 'global');
+    ckm.register('transform.rotateLeft', { code: 'KeyR', shift: true }, vi.fn(), 'transform');
 
-    contextManager.setContext('panel');
-    expect(ckm.resolve({ code: 'KeyR', shift: true })?.action).toBe('channel.red.panel');
+    contextManager.setContext('transform');
+    expect(ckm.resolve({ code: 'KeyR', shift: true })?.action).toBe('transform.rotateLeft');
   });
 
-  // --- Shift+B: view.cycleBackgroundPattern (global) vs channel.blue (viewer/panel) ---
+  // --- Shift+B: channel.blue (global) vs view.cycleBackgroundPattern (viewer) ---
 
-  it('KW-018: Shift+B resolves to view.cycleBackgroundPattern in global context', () => {
-    ckm.register('view.cycleBackgroundPattern', { code: 'KeyB', shift: true }, vi.fn(), 'global');
-    ckm.register('channel.blue', { code: 'KeyB', shift: true }, vi.fn(), 'viewer');
+  it('KW-018: Shift+B resolves to channel.blue in global context', () => {
+    ckm.register('channel.blue', { code: 'KeyB', shift: true }, vi.fn(), 'global');
+    ckm.register('view.cycleBackgroundPattern', { code: 'KeyB', shift: true }, vi.fn(), 'viewer');
 
     contextManager.setContext('global');
-    expect(ckm.resolve({ code: 'KeyB', shift: true })?.action).toBe('view.cycleBackgroundPattern');
-  });
-
-  it('KW-019: Shift+B resolves to channel.blue in viewer context', () => {
-    ckm.register('view.cycleBackgroundPattern', { code: 'KeyB', shift: true }, vi.fn(), 'global');
-    ckm.register('channel.blue', { code: 'KeyB', shift: true }, vi.fn(), 'viewer');
-
-    contextManager.setContext('viewer');
     expect(ckm.resolve({ code: 'KeyB', shift: true })?.action).toBe('channel.blue');
   });
 
-  it('KW-019b: Shift+B resolves to channel.blue.panel in panel context', () => {
-    ckm.register('view.cycleBackgroundPattern', { code: 'KeyB', shift: true }, vi.fn(), 'global');
-    ckm.register('channel.blue.panel', { code: 'KeyB', shift: true }, vi.fn(), 'panel');
+  it('KW-019: Shift+B resolves to view.cycleBackgroundPattern in viewer context', () => {
+    ckm.register('channel.blue', { code: 'KeyB', shift: true }, vi.fn(), 'global');
+    ckm.register('view.cycleBackgroundPattern', { code: 'KeyB', shift: true }, vi.fn(), 'viewer');
+
+    contextManager.setContext('viewer');
+    expect(ckm.resolve({ code: 'KeyB', shift: true })?.action).toBe('view.cycleBackgroundPattern');
+  });
+
+  it('KW-019b: Shift+B resolves to channel.blue in panel context (global fallback)', () => {
+    ckm.register('channel.blue', { code: 'KeyB', shift: true }, vi.fn(), 'global');
+    ckm.register('view.cycleBackgroundPattern', { code: 'KeyB', shift: true }, vi.fn(), 'viewer');
 
     contextManager.setContext('panel');
-    expect(ckm.resolve({ code: 'KeyB', shift: true })?.action).toBe('channel.blue.panel');
+    expect(ckm.resolve({ code: 'KeyB', shift: true })?.action).toBe('channel.blue');
   });
 
-  // --- Shift+N: network.togglePanel (global) vs channel.none (viewer/panel) ---
+  // --- Shift+N: channel.none (global) vs network.togglePanel (panel) ---
 
-  it('KW-020: Shift+N resolves to network.togglePanel in global context', () => {
-    ckm.register('network.togglePanel', { code: 'KeyN', shift: true }, vi.fn(), 'global');
-    ckm.register('channel.none', { code: 'KeyN', shift: true }, vi.fn(), 'viewer');
+  it('KW-020: Shift+N resolves to channel.none in global context', () => {
+    ckm.register('channel.none', { code: 'KeyN', shift: true }, vi.fn(), 'global');
+    ckm.register('network.togglePanel', { code: 'KeyN', shift: true }, vi.fn(), 'panel');
 
     contextManager.setContext('global');
-    expect(ckm.resolve({ code: 'KeyN', shift: true })?.action).toBe('network.togglePanel');
+    expect(ckm.resolve({ code: 'KeyN', shift: true })?.action).toBe('channel.none');
   });
 
-  it('KW-021: Shift+N resolves to channel.none in viewer context', () => {
-    ckm.register('network.togglePanel', { code: 'KeyN', shift: true }, vi.fn(), 'global');
-    ckm.register('channel.none', { code: 'KeyN', shift: true }, vi.fn(), 'viewer');
+  it('KW-021: Shift+N resolves to channel.none in viewer context (global fallback)', () => {
+    ckm.register('channel.none', { code: 'KeyN', shift: true }, vi.fn(), 'global');
+    ckm.register('network.togglePanel', { code: 'KeyN', shift: true }, vi.fn(), 'panel');
 
     contextManager.setContext('viewer');
     expect(ckm.resolve({ code: 'KeyN', shift: true })?.action).toBe('channel.none');
   });
 
-  it('KW-021b: Shift+N resolves to channel.none.panel in panel context', () => {
-    ckm.register('network.togglePanel', { code: 'KeyN', shift: true }, vi.fn(), 'global');
-    ckm.register('channel.none.panel', { code: 'KeyN', shift: true }, vi.fn(), 'panel');
+  it('KW-021b: Shift+N resolves to network.togglePanel in panel context', () => {
+    ckm.register('channel.none', { code: 'KeyN', shift: true }, vi.fn(), 'global');
+    ckm.register('network.togglePanel', { code: 'KeyN', shift: true }, vi.fn(), 'panel');
 
     contextManager.setContext('panel');
-    expect(ckm.resolve({ code: 'KeyN', shift: true })?.action).toBe('channel.none.panel');
+    expect(ckm.resolve({ code: 'KeyN', shift: true })?.action).toBe('network.togglePanel');
   });
 
-  // --- Shift+R: transform.rotateLeft (transform) vs channel.red (viewer) ---
+  // --- Shift+R: transform.rotateLeft (transform) vs channel.red (global) ---
 
   it('KW-022: Shift+R resolves to transform.rotateLeft in transform context', () => {
+    ckm.register('channel.red', { code: 'KeyR', shift: true }, vi.fn(), 'global');
     ckm.register('transform.rotateLeft', { code: 'KeyR', shift: true }, vi.fn(), 'transform');
-    ckm.register('channel.red', { code: 'KeyR', shift: true }, vi.fn(), 'viewer');
 
     contextManager.setContext('transform');
     expect(ckm.resolve({ code: 'KeyR', shift: true })?.action).toBe('transform.rotateLeft');
@@ -395,12 +395,13 @@ describe('Conflicting defaults have context metadata', () => {
     expect(binding!.context).toBe('paint');
   });
 
-  it('KW-043: channel.red is defined with context viewer in DEFAULT_KEY_BINDINGS', () => {
+  it('KW-043: channel.red is defined without context restriction in DEFAULT_KEY_BINDINGS', () => {
     const binding = DEFAULT_KEY_BINDINGS['channel.red'];
     expect(binding).toBeDefined();
     expect(binding!.code).toBe('KeyR');
     expect(binding!.shift).toBe(true);
-    expect(binding!.context).toBe('viewer');
+    // channel.red is global (no context) so it works from any tab
+    expect(binding!.context).toBeUndefined();
   });
 
   it('KW-044: channel.blue is defined with context channel in DEFAULT_KEY_BINDINGS', () => {
@@ -431,23 +432,16 @@ describe('End-to-end contextual dispatch with tab switching', () => {
   let ckm: ContextualKeyboardManager;
   let km: KeyboardManager;
 
-  // Replicate updateActiveContext from App.ts
+  // Replicate updateActiveContext from App.ts (must match TAB_CONTEXT_MAP)
   function updateActiveContext(tabId: string): void {
-    switch (tabId) {
-      case 'annotate':
-        contextManager.setContext('paint');
-        break;
-      case 'transform':
-        contextManager.setContext('transform');
-        break;
-      case 'view':
-      case 'qc':
-        contextManager.setContext('viewer');
-        break;
-      default:
-        contextManager.setContext('global');
-        break;
-    }
+    const contextMap: Record<string, string> = {
+      annotate: 'paint',
+      transform: 'transform',
+      view: 'viewer',
+      qc: 'panel',
+      color: 'color',
+    };
+    contextManager.setContext((contextMap[tabId] ?? 'global') as BindingContext);
   }
 
   beforeEach(() => {
@@ -529,23 +523,23 @@ describe('End-to-end contextual dispatch with tab switching', () => {
     km.detach(document);
   });
 
-  it('KW-054: viewer context activates channel shortcuts over global', () => {
+  it('KW-054: channel.red (global) works everywhere, transform.rotateLeft only in transform context', () => {
     const transformHandler = vi.fn();
     const channelHandler = vi.fn();
 
-    ckm.register('transform.rotateLeft', { code: 'KeyR', shift: true }, transformHandler, 'global');
-    ckm.register('channel.red', { code: 'KeyR', shift: true }, channelHandler, 'viewer');
+    ckm.register('channel.red', { code: 'KeyR', shift: true }, channelHandler, 'global');
+    ckm.register('transform.rotateLeft', { code: 'KeyR', shift: true }, transformHandler, 'transform');
 
-    // Default: transform wins
+    // Global context: channel.red wins (global fallback)
     contextManager.setContext('global');
-    expect(ckm.resolve({ code: 'KeyR', shift: true })?.action).toBe('transform.rotateLeft');
+    expect(ckm.resolve({ code: 'KeyR', shift: true })?.action).toBe('channel.red');
 
-    // Set viewer context (view tab): channel.red wins
+    // Viewer context: channel.red wins (global fallback)
     contextManager.setContext('viewer');
     expect(ckm.resolve({ code: 'KeyR', shift: true })?.action).toBe('channel.red');
 
-    // Back to global: transform wins
-    contextManager.setContext('global');
+    // Transform context: transform.rotateLeft wins (context-specific override)
+    contextManager.setContext('transform');
     expect(ckm.resolve({ code: 'KeyR', shift: true })?.action).toBe('transform.rotateLeft');
   });
 });
@@ -566,6 +560,7 @@ describe('Channel shortcuts reachable on view and qc tabs (Issue #8)', () => {
       transform: 'transform',
       view: 'viewer',
       qc: 'panel',
+      color: 'color',
     };
     contextManager.setContext((contextMap[tabId] ?? 'global') as BindingContext);
   }
@@ -585,20 +580,15 @@ describe('Channel shortcuts reachable on view and qc tabs (Issue #8)', () => {
     const bgPatternHandler = vi.fn();
     const networkHandler = vi.fn();
 
-    // Global shortcuts (fallback)
-    ckm.register('transform.rotateLeft', { code: 'KeyR', shift: true }, rotateHandler, 'global');
-    ckm.register('view.cycleBackgroundPattern', { code: 'KeyB', shift: true }, bgPatternHandler, 'global');
-    ckm.register('network.togglePanel', { code: 'KeyN', shift: true }, networkHandler, 'global');
+    // Channel shortcuts are global (work from any tab)
+    ckm.register('channel.red', { code: 'KeyR', shift: true }, redHandler, 'global');
+    ckm.register('channel.blue', { code: 'KeyB', shift: true }, blueHandler, 'global');
+    ckm.register('channel.none', { code: 'KeyN', shift: true }, noneHandler, 'global');
 
-    // Channel shortcuts for viewer context (view tab)
-    ckm.register('channel.red', { code: 'KeyR', shift: true }, redHandler, 'viewer');
-    ckm.register('channel.blue', { code: 'KeyB', shift: true }, blueHandler, 'viewer');
-    ckm.register('channel.none', { code: 'KeyN', shift: true }, noneHandler, 'viewer');
-
-    // Channel shortcuts for panel context (qc tab)
-    ckm.register('channel.red.panel', { code: 'KeyR', shift: true }, redHandler, 'panel');
-    ckm.register('channel.blue.panel', { code: 'KeyB', shift: true }, blueHandler, 'panel');
-    ckm.register('channel.none.panel', { code: 'KeyN', shift: true }, noneHandler, 'panel');
+    // Conflicting shortcuts are context-specific
+    ckm.register('transform.rotateLeft', { code: 'KeyR', shift: true }, rotateHandler, 'transform');
+    ckm.register('view.cycleBackgroundPattern', { code: 'KeyB', shift: true }, bgPatternHandler, 'viewer');
+    ckm.register('network.togglePanel', { code: 'KeyN', shift: true }, networkHandler, 'panel');
 
     return { redHandler, blueHandler, noneHandler, rotateHandler, bgPatternHandler, networkHandler };
   }
@@ -610,7 +600,7 @@ describe('Channel shortcuts reachable on view and qc tabs (Issue #8)', () => {
     km.setContextualManager(ckm);
   });
 
-  it('KW-060: Shift+R selects red channel on view tab instead of rotating', () => {
+  it('KW-060: Shift+R selects red channel on view tab (global fallback)', () => {
     const { redHandler, rotateHandler } = registerChannelBindings();
     updateActiveContext('view');
 
@@ -622,7 +612,7 @@ describe('Channel shortcuts reachable on view and qc tabs (Issue #8)', () => {
     expect(rotateHandler).not.toHaveBeenCalled();
   });
 
-  it('KW-061: Shift+B selects blue channel on view tab instead of cycling background', () => {
+  it('KW-061: Shift+B cycles background on view tab (viewer context wins)', () => {
     const { blueHandler, bgPatternHandler } = registerChannelBindings();
     updateActiveContext('view');
 
@@ -630,11 +620,12 @@ describe('Channel shortcuts reachable on view and qc tabs (Issue #8)', () => {
     fireKey('KeyB', { shiftKey: true });
     km.detach(document);
 
-    expect(blueHandler).toHaveBeenCalled();
-    expect(bgPatternHandler).not.toHaveBeenCalled();
+    // On view tab (viewer context), cycleBackgroundPattern wins over channel.blue
+    expect(bgPatternHandler).toHaveBeenCalled();
+    expect(blueHandler).not.toHaveBeenCalled();
   });
 
-  it('KW-062: Shift+N selects no channel on view tab instead of opening network', () => {
+  it('KW-062: Shift+N selects no channel on view tab (global fallback, no panel context)', () => {
     const { noneHandler, networkHandler } = registerChannelBindings();
     updateActiveContext('view');
 
@@ -646,7 +637,7 @@ describe('Channel shortcuts reachable on view and qc tabs (Issue #8)', () => {
     expect(networkHandler).not.toHaveBeenCalled();
   });
 
-  it('KW-063: Shift+R selects red channel on qc tab', () => {
+  it('KW-063: Shift+R selects red channel on qc tab (global fallback)', () => {
     const { redHandler, rotateHandler } = registerChannelBindings();
     updateActiveContext('qc');
 
@@ -658,7 +649,7 @@ describe('Channel shortcuts reachable on view and qc tabs (Issue #8)', () => {
     expect(rotateHandler).not.toHaveBeenCalled();
   });
 
-  it('KW-064: Shift+B selects blue channel on qc tab', () => {
+  it('KW-064: Shift+B selects blue channel on qc tab (global fallback)', () => {
     const { blueHandler, bgPatternHandler } = registerChannelBindings();
     updateActiveContext('qc');
 
@@ -670,7 +661,7 @@ describe('Channel shortcuts reachable on view and qc tabs (Issue #8)', () => {
     expect(bgPatternHandler).not.toHaveBeenCalled();
   });
 
-  it('KW-065: Shift+N selects no channel on qc tab', () => {
+  it('KW-065: Shift+N opens network panel on qc tab (panel context wins)', () => {
     const { noneHandler, networkHandler } = registerChannelBindings();
     updateActiveContext('qc');
 
@@ -678,13 +669,40 @@ describe('Channel shortcuts reachable on view and qc tabs (Issue #8)', () => {
     fireKey('KeyN', { shiftKey: true });
     km.detach(document);
 
-    expect(noneHandler).toHaveBeenCalled();
-    expect(networkHandler).not.toHaveBeenCalled();
+    // On qc tab (panel context), network.togglePanel wins over channel.none
+    expect(networkHandler).toHaveBeenCalled();
+    expect(noneHandler).not.toHaveBeenCalled();
   });
 
-  it('KW-066: Shift+R still rotates on color tab (global context)', () => {
+  it('KW-066: Shift+R selects red channel on color tab (global fallback)', () => {
     const { redHandler, rotateHandler } = registerChannelBindings();
     updateActiveContext('color');
+
+    km.attach(document);
+    fireKey('KeyR', { shiftKey: true });
+    km.detach(document);
+
+    // Channel shortcuts are now global, so they work on any tab
+    expect(redHandler).toHaveBeenCalled();
+    expect(rotateHandler).not.toHaveBeenCalled();
+  });
+
+  it('KW-067: Shift+N selects no channel on effects tab (global fallback)', () => {
+    const { noneHandler, networkHandler } = registerChannelBindings();
+    updateActiveContext('effects');
+
+    km.attach(document);
+    fireKey('KeyN', { shiftKey: true });
+    km.detach(document);
+
+    // Channel shortcuts are now global, so they work on any tab
+    expect(noneHandler).toHaveBeenCalled();
+    expect(networkHandler).not.toHaveBeenCalled();
+  });
+
+  it('KW-068: Shift+R still rotates on transform tab', () => {
+    const { redHandler, rotateHandler } = registerChannelBindings();
+    updateActiveContext('transform');
 
     km.attach(document);
     fireKey('KeyR', { shiftKey: true });
@@ -694,30 +712,62 @@ describe('Channel shortcuts reachable on view and qc tabs (Issue #8)', () => {
     expect(redHandler).not.toHaveBeenCalled();
   });
 
-  it('KW-067: Shift+N still opens network on effects tab (global context)', () => {
-    const { noneHandler, networkHandler } = registerChannelBindings();
-    updateActiveContext('effects');
+  // --- Regression: channel shortcuts must work from ALL non-conflicting tabs ---
 
-    km.attach(document);
-    fireKey('KeyN', { shiftKey: true });
-    km.detach(document);
-
-    expect(networkHandler).toHaveBeenCalled();
-    expect(noneHandler).not.toHaveBeenCalled();
-  });
-
-  it('KW-068: Shift+R still rotates on transform tab', () => {
+  it('KW-070: Shift+R selects red channel on color tab (regression)', () => {
     const { redHandler } = registerChannelBindings();
-    const transformRotateHandler = vi.fn();
-    // Also register transform-context variant
-    ckm.register('transform.rotateLeft.ctx', { code: 'KeyR', shift: true }, transformRotateHandler, 'transform');
-    updateActiveContext('transform');
+    updateActiveContext('color'); // global context
 
     km.attach(document);
     fireKey('KeyR', { shiftKey: true });
     km.detach(document);
 
-    expect(transformRotateHandler).toHaveBeenCalled();
-    expect(redHandler).not.toHaveBeenCalled();
+    expect(redHandler).toHaveBeenCalled();
+  });
+
+  it('KW-071: Shift+R selects red channel on effects tab (regression)', () => {
+    const { redHandler } = registerChannelBindings();
+    updateActiveContext('effects'); // global context
+
+    km.attach(document);
+    fireKey('KeyR', { shiftKey: true });
+    km.detach(document);
+
+    expect(redHandler).toHaveBeenCalled();
+  });
+
+  it('KW-072: Shift+B selects blue channel on color tab (regression)', () => {
+    const { blueHandler } = registerChannelBindings();
+    updateActiveContext('color'); // global context
+
+    km.attach(document);
+    fireKey('KeyB', { shiftKey: true });
+    km.detach(document);
+
+    expect(blueHandler).toHaveBeenCalled();
+  });
+
+  it('KW-073: Shift+N selects no channel on color tab (regression)', () => {
+    const { noneHandler } = registerChannelBindings();
+    updateActiveContext('color'); // global context
+
+    km.attach(document);
+    fireKey('KeyN', { shiftKey: true });
+    km.detach(document);
+
+    expect(noneHandler).toHaveBeenCalled();
+  });
+
+  it('KW-074: Shift+B selects blue channel on qc tab (not viewer context)', () => {
+    const { blueHandler, bgPatternHandler } = registerChannelBindings();
+    updateActiveContext('qc'); // panel context
+
+    km.attach(document);
+    fireKey('KeyB', { shiftKey: true });
+    km.detach(document);
+
+    // bgPatternHandler is viewer-context only, so channel.blue (global) wins on qc (panel) tab
+    expect(blueHandler).toHaveBeenCalled();
+    expect(bgPatternHandler).not.toHaveBeenCalled();
   });
 });

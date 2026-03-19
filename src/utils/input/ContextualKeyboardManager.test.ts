@@ -134,8 +134,8 @@ describe('ContextualKeyboardManager', () => {
       const transformHandler = vi.fn();
       const channelHandler = vi.fn();
 
+      keyManager.register('channel.red', { code: 'KeyR', shift: true }, channelHandler, 'global');
       keyManager.register('transform.rotateLeft', { code: 'KeyR', shift: true }, transformHandler, 'transform');
-      keyManager.register('channel.red', { code: 'KeyR', shift: true }, channelHandler, 'viewer');
 
       contextManager.setContext('transform');
 
@@ -143,17 +143,43 @@ describe('ContextualKeyboardManager', () => {
       expect(result!.action).toBe('transform.rotateLeft');
     });
 
-    it('CKM-016: Shift+KeyR resolves to channel.red in viewer context', () => {
+    it('CKM-016: Shift+KeyR resolves to channel.red in viewer context (global fallback)', () => {
       const transformHandler = vi.fn();
       const channelHandler = vi.fn();
 
+      keyManager.register('channel.red', { code: 'KeyR', shift: true }, channelHandler, 'global');
       keyManager.register('transform.rotateLeft', { code: 'KeyR', shift: true }, transformHandler, 'transform');
-      keyManager.register('channel.red', { code: 'KeyR', shift: true }, channelHandler, 'viewer');
 
       contextManager.setContext('viewer');
 
       const result = keyManager.resolve({ code: 'KeyR', shift: true });
       expect(result!.action).toBe('channel.red');
+    });
+  });
+
+  describe('Shift+L: channel.luminance vs lut.togglePanel resolution', () => {
+    it('CKM-017: Shift+L resolves to lut.togglePanel in color context', () => {
+      const channelHandler = vi.fn();
+      const lutHandler = vi.fn();
+
+      keyManager.register('channel.luminance', { code: 'KeyL', shift: true }, channelHandler, 'global');
+      keyManager.register('lut.togglePanel', { code: 'KeyL', shift: true }, lutHandler, 'color');
+
+      contextManager.setContext('color');
+      const result = keyManager.resolve({ code: 'KeyL', shift: true });
+      expect(result!.action).toBe('lut.togglePanel');
+    });
+
+    it('CKM-018: Shift+L resolves to channel.luminance outside color context (global fallback)', () => {
+      const channelHandler = vi.fn();
+      const lutHandler = vi.fn();
+
+      keyManager.register('channel.luminance', { code: 'KeyL', shift: true }, channelHandler, 'global');
+      keyManager.register('lut.togglePanel', { code: 'KeyL', shift: true }, lutHandler, 'color');
+
+      contextManager.setContext('viewer');
+      const result = keyManager.resolve({ code: 'KeyL', shift: true });
+      expect(result!.action).toBe('channel.luminance');
     });
   });
 
@@ -318,12 +344,13 @@ describe('ContextualKeyboardManager', () => {
   describe('production tab-to-context mapping - scope shortcuts reachability', () => {
     // Regression tests for issue #10: panel context must be activated by QC tab
     // so that scope shortcuts (H, G, W) resolve to their panel actions.
-    const TAB_CONTEXT_MAP: Record<string, string> = {
-      annotate: 'paint',
-      transform: 'transform',
-      view: 'viewer',
-      qc: 'panel',
-    };
+    // Uses the production TAB_CONTEXT_MAP from App.ts to catch mapping regressions.
+    let TAB_CONTEXT_MAP: Record<string, string>;
+
+    beforeEach(async () => {
+      const mod = await import('../../App');
+      TAB_CONTEXT_MAP = mod.TAB_CONTEXT_MAP;
+    });
 
     it('CKM-100: QC tab activates panel context (not viewer)', () => {
       const context = TAB_CONTEXT_MAP['qc'];

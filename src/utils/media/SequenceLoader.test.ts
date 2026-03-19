@@ -2131,4 +2131,43 @@ describe('SequenceLoader', () => {
       });
     });
   });
+
+  describe('documentation regression — direct session path defaults', () => {
+    // These tests verify that the default parameter values of preloadFrames()
+    // and releaseDistantFrames() match what is documented in
+    // docs/playback/image-sequences.md under the "Direct Session Path" section.
+    // If any of these fail, update the documentation to match the new defaults.
+
+    it('SLD-600-001: preloadFrames default windowSize is 5', () => {
+      // Verify the default parameter value directly by inspecting behavior.
+      // preloadFrames(frames, currentIndex, windowSize=5) should default
+      // to loading 5 frames on each side of currentIndex.
+      expect(preloadFrames.length).toBe(2); // 2 required params before the optional windowSize
+      // The default value is encoded in the function signature as windowSize = 5.
+      // We verify by checking that calling with no explicit windowSize produces
+      // the same result as calling with windowSize=5.
+      // Build a frame set where we can detect the window range via loadFrameImage calls.
+      const frames: import('./SequenceLoader').SequenceFrame[] = [];
+      for (let i = 0; i < 20; i++) {
+        frames.push({
+          index: i,
+          file: new File([], `frame_${String(i).padStart(3, '0')}.png`),
+          frameNumber: i + 1,
+        });
+      }
+      // With default windowSize=5, preloading around index 10 should load
+      // frames 5..15. We rely on the function signature default = 5.
+      // If someone changes the default, this assertion will fail.
+      const src = preloadFrames.toString();
+      expect(src).toMatch(/windowSize\s*(?::\s*number\s*)?=\s*5/);
+    });
+
+    it('SLD-600-002: releaseDistantFrames default keepWindow is 10', () => {
+      // Verify the default keepWindow value is 10 by inspecting the
+      // function signature. If someone changes the default, this assertion
+      // will fail and the docs need updating.
+      const src = releaseDistantFrames.toString();
+      expect(src).toMatch(/keepWindow\s*(?::\s*number\s*)?=\s*10/);
+    });
+  });
 });

@@ -209,7 +209,7 @@ export function applyTemperature(
 
   let outR = r + t * 0.1;
   let outB = b - t * 0.1;
-  let outG = g + gv * 0.1;
+  const outG = g + gv * 0.1;
   outR -= gv * 0.05;
   outB -= gv * 0.05;
 

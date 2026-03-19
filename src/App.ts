@@ -79,6 +79,19 @@ import { LayoutStore } from './ui/layout/LayoutStore';
 import { LayoutManager } from './ui/layout/LayoutManager';
 import { SequenceGroupNode } from './nodes/groups/SequenceGroupNode';
 
+/**
+ * Maps tab IDs to their binding contexts for keyboard shortcut resolution.
+ * Exported for testability — regression tests verify this mapping to prevent
+ * scope shortcut bugs (e.g., G opening goto-frame instead of gamut diagram on QC tab).
+ */
+export const TAB_CONTEXT_MAP: Record<string, BindingContext> = {
+  annotate: 'paint',
+  transform: 'transform',
+  view: 'viewer',
+  qc: 'panel',
+  color: 'color',
+};
+
 export class App {
   private container: HTMLElement | null = null;
   private session: Session;
@@ -252,13 +265,7 @@ export class App {
       this.tabBar.on('tabChanged', (tabId: TabId) => {
         this.contextToolbar.setActiveTab(tabId);
         // Update active context for key binding scoping
-        const contextMap: Record<string, BindingContext> = {
-          annotate: 'paint',
-          transform: 'transform',
-          view: 'viewer',
-          qc: 'viewer',
-        };
-        this.activeContextManager.setContext(contextMap[tabId] ?? 'global');
+        this.activeContextManager.setContext(TAB_CONTEXT_MAP[tabId] ?? 'global');
       }),
     );
 
@@ -355,52 +362,105 @@ export class App {
       'Toggle CIE gamut diagram',
     );
 
-    // Shift+R: transform.rotateLeft (global) vs channel.red (channel)
+    // KeyH: view.fitToHeight (global) vs panel.histogram (panel)
     this.contextualKeyboardManager.register(
-      'transform.rotateLeft',
-      { code: 'KeyR', shift: true },
-      () => this.controls.transformControl.rotateLeft(),
+      'view.fitToHeight',
+      { code: 'KeyH' },
+      () => this.viewer.smoothFitToHeight(),
       'global',
-      'Rotate left 90 degrees',
+      'Fit image height to window',
     );
+    this.contextualKeyboardManager.register(
+      'panel.histogram',
+      { code: 'KeyH' },
+      () => this.controls.scopesControl.toggleScope('histogram'),
+      'panel',
+      'Toggle histogram',
+    );
+
+    // KeyW: view.fitToWidth (global) vs panel.waveform (panel)
+    this.contextualKeyboardManager.register(
+      'view.fitToWidth',
+      { code: 'KeyW' },
+      () => this.viewer.smoothFitToWidth(),
+      'global',
+      'Fit image width to window',
+    );
+    this.contextualKeyboardManager.register(
+      'panel.waveform',
+      { code: 'KeyW' },
+      () => this.controls.scopesControl.toggleScope('waveform'),
+      'panel',
+      'Toggle waveform scope',
+    );
+
+    // Shift+R: channel.red (global) vs transform.rotateLeft (transform context)
+    // Channel shortcuts are global so they work from any tab (like Shift+G and Shift+A).
+    // transform.rotateLeft only activates when the Transform tab is selected.
     this.contextualKeyboardManager.register(
       'channel.red',
       { code: 'KeyR', shift: true },
       () => this.controls.channelSelect.handleKeyboard('R', true),
-      'viewer',
+      'global',
       'Select red channel',
     );
-
-    // Shift+B: view.cycleBackgroundPattern (global) vs channel.blue (channel)
     this.contextualKeyboardManager.register(
-      'view.cycleBackgroundPattern',
-      { code: 'KeyB', shift: true },
-      () => this.controls.backgroundPatternControl.cyclePattern(),
-      'global',
-      'Cycle background pattern',
+      'transform.rotateLeft',
+      { code: 'KeyR', shift: true },
+      () => this.controls.transformControl.rotateLeft(),
+      'transform',
+      'Rotate left 90 degrees',
     );
+
+    // Shift+B: channel.blue (global) vs view.cycleBackgroundPattern (viewer context)
+    // Channel shortcuts are global; background pattern cycling is viewer-context only.
     this.contextualKeyboardManager.register(
       'channel.blue',
       { code: 'KeyB', shift: true },
       () => this.controls.channelSelect.handleKeyboard('B', true),
-      'viewer',
+      'global',
       'Select blue channel',
     );
-
-    // Shift+N: network.togglePanel (global) vs channel.none (channel)
     this.contextualKeyboardManager.register(
-      'network.togglePanel',
-      { code: 'KeyN', shift: true },
-      () => this.controls.networkControl.togglePanel(),
-      'global',
-      'Toggle network sync panel',
+      'view.cycleBackgroundPattern',
+      { code: 'KeyB', shift: true },
+      () => this.controls.backgroundPatternControl.cyclePattern(),
+      'viewer',
+      'Cycle background pattern',
     );
+
+    // Shift+N: channel.none (global) vs network.togglePanel (panel context)
+    // Channel shortcuts are global; network panel toggle is panel-context only.
     this.contextualKeyboardManager.register(
       'channel.none',
       { code: 'KeyN', shift: true },
       () => this.controls.channelSelect.handleKeyboard('N', true),
-      'viewer',
+      'global',
       'Select no channel',
+    );
+    this.contextualKeyboardManager.register(
+      'network.togglePanel',
+      { code: 'KeyN', shift: true },
+      () => this.controls.networkControl.togglePanel(),
+      'panel',
+      'Toggle network sync panel',
+    );
+
+    // Shift+L: channel.luminance (global) vs lut.togglePanel (color context)
+    // Channel shortcuts are global; LUT pipeline panel toggle is color-tab-context only.
+    this.contextualKeyboardManager.register(
+      'channel.luminance',
+      { code: 'KeyL', shift: true },
+      () => this.controls.channelSelect.handleKeyboard('L', true),
+      'global',
+      'Select luminance channel',
+    );
+    this.contextualKeyboardManager.register(
+      'lut.togglePanel',
+      { code: 'KeyL', shift: true },
+      () => this.controls.lutPipelinePanel.toggle(),
+      'color',
+      'Toggle LUT pipeline panel',
     );
 
     // Wire unified preferences facade with live subsystem references

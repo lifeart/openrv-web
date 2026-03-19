@@ -109,10 +109,11 @@ describe('Keyboard registration tests (M-25)', () => {
     expect(histogramBinding!.context).not.toBe(fitToHeightBinding!.context ?? 'global');
   });
 
-  it('SK-M25n: Shift+L is only registered for lut.togglePanel (no conflict with channel.luminance)', () => {
+  it('SK-M25n: Shift+L is contextual — both channel.luminance and lut.togglePanel are in CONTEXTUAL_DEFAULTS', () => {
     const km = new KeyboardManager();
     const ckm = new CustomKeyBindingsManager();
     const actionHandlers = {
+      'channel.luminance': () => undefined,
       'lut.togglePanel': () => undefined,
     };
     const registrationHandler = new AppKeyboardHandler(km, ckm, {
@@ -122,16 +123,18 @@ describe('Keyboard registration tests (M-25)', () => {
 
     registrationHandler.setup();
 
-    // Shift+L should be registered exactly once for lut.togglePanel
+    // Neither should be directly registered — they are resolved by the contextual manager
     const shiftLBindings = km.getBindings().filter(
       (binding) => binding.combo.code === 'KeyL' && binding.combo.shift,
     );
-    expect(shiftLBindings).toHaveLength(1);
+    expect(shiftLBindings).toHaveLength(0);
   });
 
-  it('SK-M25o: channel.luminance has no default binding; lut.togglePanel owns Shift+L', () => {
+  it('SK-M25o: channel.luminance has Shift+L binding; lut.togglePanel also has Shift+L (resolved by context)', () => {
     const luminanceBinding = DEFAULT_KEY_BINDINGS['channel.luminance'];
-    expect(luminanceBinding).toBeUndefined();
+    expect(luminanceBinding).toBeDefined();
+    expect(luminanceBinding!.code).toBe('KeyL');
+    expect(luminanceBinding!.shift).toBe(true);
 
     const lutBinding = DEFAULT_KEY_BINDINGS['lut.togglePanel'];
     expect(lutBinding).toBeDefined();
@@ -139,7 +142,7 @@ describe('Keyboard registration tests (M-25)', () => {
     expect(lutBinding!.shift).toBe(true);
   });
 
-  it('SK-M25p: channel.grayscale (Shift+Y) is the working shortcut for luminance', () => {
+  it('SK-M25p: channel.grayscale (Shift+Y) is an alias for luminance', () => {
     const grayscaleBinding = DEFAULT_KEY_BINDINGS['channel.grayscale'];
     expect(grayscaleBinding).toBeDefined();
     expect(grayscaleBinding!.code).toBe('KeyY');
@@ -242,6 +245,28 @@ describe('Scope shortcut regression tests (Issues #1, #2, #3)', () => {
     expect(gBindings).toHaveLength(0);
   });
 
+  it('SCOPE-REG07b: Shift+L is context-managed (channel.luminance and lut.togglePanel skipped from direct registration)', () => {
+    const km = new KeyboardManager();
+    const ckm = new CustomKeyBindingsManager();
+    const actionHandlers = {
+      'channel.luminance': () => undefined,
+      'lut.togglePanel': () => undefined,
+    };
+    const registrationHandler = new AppKeyboardHandler(km, ckm, {
+      getActionHandlers: () => actionHandlers,
+      getContainer: () => document.body,
+    });
+
+    registrationHandler.setup();
+
+    const bindings = km.getBindings();
+    // Shift+L should NOT be directly registered (context-managed)
+    const shiftLBindings = bindings.filter(
+      (b) => b.combo.code === 'KeyL' && b.combo.shift,
+    );
+    expect(shiftLBindings).toHaveLength(0);
+  });
+
   it('SCOPE-REG08: describeKeyCombo produces correct labels for scope shortcuts', () => {
     expect(describeKeyCombo({ code: 'KeyH' })).toBe('H');
     expect(describeKeyCombo({ code: 'KeyW' })).toBe('W');
@@ -286,6 +311,43 @@ describe('Scope UI hint regression tests (Issues #1, #2, #3)', () => {
     expect(options[3]!.textContent).toContain('g');
 
     control.dispose();
+  });
+});
+
+describe('Production TAB_CONTEXT_MAP regression tests', () => {
+  // These tests import the actual production mapping to prevent regressions
+  // like the QC tab being mapped to 'viewer' instead of 'panel'.
+  let TAB_CONTEXT_MAP: Record<string, string>;
+
+  beforeEach(async () => {
+    // Dynamic import to get the actual production constant
+    const mod = await import('./App');
+    TAB_CONTEXT_MAP = mod.TAB_CONTEXT_MAP;
+  });
+
+  it('TABCTX-01: QC tab maps to panel context (not viewer)', () => {
+    expect(TAB_CONTEXT_MAP['qc']).toBe('panel');
+  });
+
+  it('TABCTX-02: annotate tab maps to paint context', () => {
+    expect(TAB_CONTEXT_MAP['annotate']).toBe('paint');
+  });
+
+  it('TABCTX-03: transform tab maps to transform context', () => {
+    expect(TAB_CONTEXT_MAP['transform']).toBe('transform');
+  });
+
+  it('TABCTX-04: view tab maps to viewer context', () => {
+    expect(TAB_CONTEXT_MAP['view']).toBe('viewer');
+  });
+
+  it('TABCTX-05: color tab maps to color context', () => {
+    expect(TAB_CONTEXT_MAP['color']).toBe('color');
+  });
+
+  it('TABCTX-06: unmapped tabs fall back to global (effects)', () => {
+    // Tabs not in the map should use the ?? 'global' fallback
+    expect(TAB_CONTEXT_MAP['effects']).toBeUndefined();
   });
 });
 

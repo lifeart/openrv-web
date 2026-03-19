@@ -7,8 +7,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { FrameCacheController, type CacheSourceInfo } from './FrameCacheController';
 import { MemoryBudgetManager } from './MemoryBudgetManager';
-import { MB } from '../config/CacheConfig';
-import { CACHE_MODE_CYCLE, CACHE_MODE_LABELS } from '../config/CacheConfig';
+import { MB, CACHE_MODE_CYCLE, CACHE_MODE_LABELS } from '../config/CacheConfig';
 import { buildActionHandlers, type KeyboardActionDeps } from '../services/KeyboardActionMap';
 
 // Mock getThemeManager for buildActionHandlers

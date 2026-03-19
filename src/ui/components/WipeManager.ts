@@ -9,7 +9,7 @@
  * Viewer because it needs deep session/canvas coupling.
  */
 
-import { DEFAULT_WIPE_STATE } from '../../core/types/wipe';
+import { DEFAULT_WIPE_STATE, DEFAULT_STENCIL_BOX, computeHorizontalWipeBoxes, computeVerticalWipeBoxes } from '../../core/types/wipe';
 import type { WipeState, WipeMode, StencilBox } from '../../core/types/wipe';
 import {
   createWipeUIElements,
@@ -29,7 +29,6 @@ import {
   calculateSplitPosition,
   isSplitScreenMode,
 } from './ViewerSplitScreen';
-import { DEFAULT_STENCIL_BOX, computeHorizontalWipeBoxes, computeVerticalWipeBoxes } from '../../core/types/wipe';
 
 // Wipe label constants
 const DEFAULT_WIPE_LABEL_A = 'Original';
