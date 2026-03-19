@@ -3841,12 +3841,17 @@ function createTiledTestEXR(
             for (let x = 0; x < actualTileW; x++) {
               const globalX = tx * tileXSize + x;
               let value = 0;
-              if (ch === 'R') value = (globalX + globalY * lvl.levelWidth) / (lvl.levelWidth * lvl.levelHeight);
-              else if (ch === 'G') value = 0.5;
-              else if (ch === 'B')
+              if (ch === 'R') {
+                value = (globalX + globalY * lvl.levelWidth) / (lvl.levelWidth * lvl.levelHeight);
+              } else if (ch === 'G') {
+                value = 0.5;
+              } else if (ch === 'B') {
                 value = 1.0 - (globalX + globalY * lvl.levelWidth) / (lvl.levelWidth * lvl.levelHeight);
-              else if (ch === 'A') value = 1.0;
-              else if (ch === 'Y') value = (globalX + globalY * lvl.levelWidth) / (lvl.levelWidth * lvl.levelHeight);
+              } else if (ch === 'A') {
+                value = 1.0;
+              } else if (ch === 'Y') {
+                value = (globalX + globalY * lvl.levelWidth) / (lvl.levelWidth * lvl.levelHeight);
+              }
 
               if (pixelType === EXRPixelType.HALF) {
                 writeHalf(value);
