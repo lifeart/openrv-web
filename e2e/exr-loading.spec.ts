@@ -12,10 +12,7 @@ import path from 'path';
 const SAMPLE_EXR = 'sample/test_hdr.exr';
 const SAMPLE_EXR_SMALL = 'sample/test_small.exr';
 
-async function setRangeValue(
-  slider: import('@playwright/test').Locator,
-  value: number,
-) {
+async function setRangeValue(slider: import('@playwright/test').Locator, value: number) {
   await slider.evaluate((el, val) => {
     const input = el as HTMLInputElement;
     input.value = String(val);
@@ -50,10 +47,7 @@ test.describe('EXR Format Support', () => {
       const filePath = path.resolve(process.cwd(), SAMPLE_EXR);
       const fileInput = page.locator('input[type="file"]').first();
       await fileInput.setInputFiles(filePath);
-      await page.waitForFunction(
-        () => window.__OPENRV_TEST__?.getSessionState()?.hasMedia === true,
-        { timeout: 5000 }
-      );
+      await page.waitForFunction(() => window.__OPENRV_TEST__?.getSessionState()?.hasMedia === true, { timeout: 5000 });
 
       // Verify media loaded
       state = await getSessionState(page);
@@ -68,10 +62,7 @@ test.describe('EXR Format Support', () => {
       const filePath = path.resolve(process.cwd(), SAMPLE_EXR);
       const fileInput = page.locator('input[type="file"]').first();
       await fileInput.setInputFiles(filePath);
-      await page.waitForFunction(
-        () => window.__OPENRV_TEST__?.getSessionState()?.hasMedia === true,
-        { timeout: 5000 }
-      );
+      await page.waitForFunction(() => window.__OPENRV_TEST__?.getSessionState()?.hasMedia === true, { timeout: 5000 });
 
       // Verify canvas has content
       const afterScreenshot = await captureViewerScreenshot(page);
@@ -83,10 +74,7 @@ test.describe('EXR Format Support', () => {
       const filePath = path.resolve(process.cwd(), SAMPLE_EXR);
       const fileInput = page.locator('input[type="file"]').first();
       await fileInput.setInputFiles(filePath);
-      await page.waitForFunction(
-        () => window.__OPENRV_TEST__?.getSessionState()?.hasMedia === true,
-        { timeout: 5000 }
-      );
+      await page.waitForFunction(() => window.__OPENRV_TEST__?.getSessionState()?.hasMedia === true, { timeout: 5000 });
 
       // The test EXR is 32x32
       // We can verify this by checking the session state or info panel
@@ -99,10 +87,7 @@ test.describe('EXR Format Support', () => {
       const filePath = path.resolve(process.cwd(), SAMPLE_EXR_SMALL);
       const fileInput = page.locator('input[type="file"]').first();
       await fileInput.setInputFiles(filePath);
-      await page.waitForFunction(
-        () => window.__OPENRV_TEST__?.getSessionState()?.hasMedia === true,
-        { timeout: 5000 }
-      );
+      await page.waitForFunction(() => window.__OPENRV_TEST__?.getSessionState()?.hasMedia === true, { timeout: 5000 });
 
       const state = await getSessionState(page);
       expect(state.hasMedia).toBe(true);
@@ -115,10 +100,7 @@ test.describe('EXR Format Support', () => {
       const filePath = path.resolve(process.cwd(), SAMPLE_EXR);
       const fileInput = page.locator('input[type="file"]').first();
       await fileInput.setInputFiles(filePath);
-      await page.waitForFunction(
-        () => window.__OPENRV_TEST__?.getSessionState()?.hasMedia === true,
-        { timeout: 5000 }
-      );
+      await page.waitForFunction(() => window.__OPENRV_TEST__?.getSessionState()?.hasMedia === true, { timeout: 5000 });
 
       // Capture initial state
       const beforeScreenshot = await captureViewerScreenshot(page);
@@ -141,7 +123,7 @@ test.describe('EXR Format Support', () => {
             const state = window.__OPENRV_TEST__?.getColorState();
             return state && Math.abs(state.exposure - 2) < 0.01;
           },
-          { timeout: 5000 }
+          { timeout: 5000 },
         );
 
         // Capture after adjustment
@@ -157,10 +139,7 @@ test.describe('EXR Format Support', () => {
       const filePath = path.resolve(process.cwd(), SAMPLE_EXR);
       const fileInput = page.locator('input[type="file"]').first();
       await fileInput.setInputFiles(filePath);
-      await page.waitForFunction(
-        () => window.__OPENRV_TEST__?.getSessionState()?.hasMedia === true,
-        { timeout: 5000 }
-      );
+      await page.waitForFunction(() => window.__OPENRV_TEST__?.getSessionState()?.hasMedia === true, { timeout: 5000 });
 
       // The test EXR has a red gradient from 0 to 2.0
       // With default exposure, bright areas should be clipped
@@ -182,9 +161,9 @@ test.describe('EXR Format Support', () => {
         await page.waitForFunction(
           () => {
             const state = window.__OPENRV_TEST__?.getColorState();
-            return state && Math.abs(state.exposure - (-1)) < 0.01;
+            return state && Math.abs(state.exposure - -1) < 0.01;
           },
-          { timeout: 5000 }
+          { timeout: 5000 },
         );
 
         const lowExposure = await captureViewerScreenshot(page);
@@ -212,21 +191,21 @@ test.describe('EXR Format Support', () => {
       const filePath = path.resolve(process.cwd(), SAMPLE_EXR);
       const fileInput = page.locator('input[type="file"]').first();
       await fileInput.setInputFiles(filePath);
-      await page.waitForFunction(
-        () => window.__OPENRV_TEST__?.getSessionState()?.hasMedia === true,
-        { timeout: 5000 }
-      );
+      await page.waitForFunction(() => window.__OPENRV_TEST__?.getSessionState()?.hasMedia === true, { timeout: 5000 });
 
       let state = await getSessionState(page);
       expect(state.hasMedia).toBe(true);
 
       // App shortcuts should still respond
+      // H key toggles histogram only on the QC tab
       const initialHistogramVisible = (await getViewerState(page)).histogramVisible;
+      await page.click('button[data-tab-id="qc"]');
+      await page.waitForTimeout(100);
       await page.keyboard.press('h');
       await page.waitForFunction(
         (initial) => window.__OPENRV_TEST__?.getViewerState()?.histogramVisible !== initial,
         initialHistogramVisible,
-        { timeout: 5000 }
+        { timeout: 5000 },
       );
       const afterHistogramToggle = await getViewerState(page);
       expect(afterHistogramToggle.histogramVisible).toBe(!initialHistogramVisible);
@@ -242,10 +221,7 @@ test.describe('EXR Format Support', () => {
       const filePath = path.resolve(process.cwd(), SAMPLE_EXR);
       const fileInput = page.locator('input[type="file"]').first();
       await fileInput.setInputFiles(filePath);
-      await page.waitForFunction(
-        () => window.__OPENRV_TEST__?.getSessionState()?.hasMedia === true,
-        { timeout: 5000 }
-      );
+      await page.waitForFunction(() => window.__OPENRV_TEST__?.getSessionState()?.hasMedia === true, { timeout: 5000 });
 
       // Capture before zoom
       const beforeZoom = await captureViewerScreenshot(page);
@@ -263,7 +239,7 @@ test.describe('EXR Format Support', () => {
           return state && state.zoom !== initialZoom;
         },
         initialViewerState.zoom,
-        { timeout: 5000 }
+        { timeout: 5000 },
       );
 
       const viewerState = await getViewerState(page);
@@ -279,10 +255,7 @@ test.describe('EXR Format Support', () => {
       const filePath = path.resolve(process.cwd(), SAMPLE_EXR);
       const fileInput = page.locator('input[type="file"]').first();
       await fileInput.setInputFiles(filePath);
-      await page.waitForFunction(
-        () => window.__OPENRV_TEST__?.getSessionState()?.hasMedia === true,
-        { timeout: 5000 }
-      );
+      await page.waitForFunction(() => window.__OPENRV_TEST__?.getSessionState()?.hasMedia === true, { timeout: 5000 });
 
       // Switch to red channel via channel dropdown (Shift+R is reserved for rotation).
       const channelButton = page.locator('[data-testid="channel-select-button"]');
@@ -290,10 +263,9 @@ test.describe('EXR Format Support', () => {
       const channelDropdown = page.locator('[data-testid="channel-dropdown"]');
       await expect(channelDropdown).toBeVisible();
       await channelDropdown.locator('button', { hasText: 'Red' }).click();
-      await page.waitForFunction(
-        () => window.__OPENRV_TEST__?.getViewerState()?.channelMode === 'red',
-        { timeout: 5000 }
-      );
+      await page.waitForFunction(() => window.__OPENRV_TEST__?.getViewerState()?.channelMode === 'red', {
+        timeout: 5000,
+      });
 
       const viewerState = await getViewerState(page);
       expect(viewerState.channelMode).toBe('red');
@@ -303,10 +275,9 @@ test.describe('EXR Format Support', () => {
       await channelButton.click();
       await expect(channelDropdown).toBeVisible();
       await channelDropdown.locator('button', { hasText: 'RGB' }).click();
-      await page.waitForFunction(
-        () => window.__OPENRV_TEST__?.getViewerState()?.channelMode === 'rgb',
-        { timeout: 5000 }
-      );
+      await page.waitForFunction(() => window.__OPENRV_TEST__?.getViewerState()?.channelMode === 'rgb', {
+        timeout: 5000,
+      });
       const restoredState = await getViewerState(page);
       expect(restoredState.channelMode).toBe('rgb');
       await expect(channelButton).toContainText('Ch');
@@ -317,17 +288,15 @@ test.describe('EXR Format Support', () => {
       const filePath = path.resolve(process.cwd(), SAMPLE_EXR);
       const fileInput = page.locator('input[type="file"]').first();
       await fileInput.setInputFiles(filePath);
-      await page.waitForFunction(
-        () => window.__OPENRV_TEST__?.getSessionState()?.hasMedia === true,
-        { timeout: 5000 }
-      );
+      await page.waitForFunction(() => window.__OPENRV_TEST__?.getSessionState()?.hasMedia === true, { timeout: 5000 });
 
-      // Toggle histogram (h key)
+      // Toggle histogram (h key — only works on QC tab)
+      await page.click('button[data-tab-id="qc"]');
+      await page.waitForTimeout(100);
       await page.keyboard.press('h');
-      await page.waitForFunction(
-        () => window.__OPENRV_TEST__?.getViewerState()?.histogramVisible === true,
-        { timeout: 5000 }
-      );
+      await page.waitForFunction(() => window.__OPENRV_TEST__?.getViewerState()?.histogramVisible === true, {
+        timeout: 5000,
+      });
 
       const viewerState = await getViewerState(page);
       expect(viewerState.histogramVisible).toBe(true);
@@ -338,17 +307,15 @@ test.describe('EXR Format Support', () => {
       const filePath = path.resolve(process.cwd(), SAMPLE_EXR);
       const fileInput = page.locator('input[type="file"]').first();
       await fileInput.setInputFiles(filePath);
-      await page.waitForFunction(
-        () => window.__OPENRV_TEST__?.getSessionState()?.hasMedia === true,
-        { timeout: 5000 }
-      );
+      await page.waitForFunction(() => window.__OPENRV_TEST__?.getSessionState()?.hasMedia === true, { timeout: 5000 });
 
-      // Toggle waveform (w key)
+      // Toggle waveform (w key — only works on QC tab)
+      await page.click('button[data-tab-id="qc"]');
+      await page.waitForTimeout(100);
       await page.keyboard.press('w');
-      await page.waitForFunction(
-        () => window.__OPENRV_TEST__?.getViewerState()?.waveformVisible === true,
-        { timeout: 5000 }
-      );
+      await page.waitForFunction(() => window.__OPENRV_TEST__?.getViewerState()?.waveformVisible === true, {
+        timeout: 5000,
+      });
 
       const viewerState = await getViewerState(page);
       expect(viewerState.waveformVisible).toBe(true);
@@ -361,10 +328,7 @@ test.describe('EXR Format Support', () => {
       const filePath1 = path.resolve(process.cwd(), SAMPLE_EXR);
       const fileInput = page.locator('input[type="file"]').first();
       await fileInput.setInputFiles(filePath1);
-      await page.waitForFunction(
-        () => window.__OPENRV_TEST__?.getSessionState()?.hasMedia === true,
-        { timeout: 5000 }
-      );
+      await page.waitForFunction(() => window.__OPENRV_TEST__?.getSessionState()?.hasMedia === true, { timeout: 5000 });
 
       let state = await getSessionState(page);
       expect(state.hasMedia).toBe(true);
@@ -377,7 +341,7 @@ test.describe('EXR Format Support', () => {
           const sessionState = window.__OPENRV_TEST__?.getSessionState();
           return sessionState && sessionState.hasMedia === true;
         },
-        { timeout: 5000 }
+        { timeout: 5000 },
       );
 
       // A/B should be available
