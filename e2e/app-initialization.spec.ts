@@ -68,7 +68,7 @@ test.describe('Application Initialization', () => {
     await page.waitForSelector('#app');
 
     // Folder/Open button should exist
-    const openButton = page.locator('button[title*="Open file"]');
+    const openButton = page.locator('button[title*="Open media"]');
     await expect(openButton).toBeVisible();
   });
 
@@ -128,7 +128,7 @@ test.describe('Application Initialization', () => {
 
     // Modal with shortcuts should appear
     await page.waitForTimeout(200);
-    const modal = page.getByRole('heading', { name: 'Keyboard Shortcuts' });
+    const modal = page.getByRole('heading', { name: 'Custom Key Bindings' });
     await expect(modal).toBeVisible();
   });
 
