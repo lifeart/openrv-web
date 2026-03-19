@@ -1757,11 +1757,8 @@ describe('Timeline', () => {
       (timeline as any).draw();
 
       // For a video source, 0.25 should NOT appear from missing-frame code.
-      // (Other draw paths may use globalAlpha, but not in the 0.25 pattern from missing frames)
-      // We verify by checking that no fillRect preceded by globalAlpha=0.25 targets the track area
-      // This is a negative test: no sequence info means no missing-frame drawing.
-      // Simply verify it doesn't throw and completes normally.
-      expect(true).toBe(true);
+      // globalAlpha=0.25 is the marker used for missing-frame drawing.
+      expect(globalAlphaValues).not.toContain(0.25);
 
       delete (ctx as any).globalAlpha;
     });

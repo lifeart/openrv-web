@@ -80,22 +80,22 @@ describe('Phase 1: Wide Color Gamut (Display P3)', () => {
       expect(caps).toHaveProperty('activeHDRMode');
     });
 
-    it('AC-P1-1.1b: detectDisplayCapabilities returns correct defaults', () => {
+    it('AC-P1-1.1b: detectDisplayCapabilities returns correct defaults in jsdom', () => {
       const caps = detectDisplayCapabilities();
-      // booleans default to false (in jsdom which doesn't support P3/HDR)
-      expect(typeof caps.canvasP3).toBe('boolean');
-      expect(typeof caps.webglP3).toBe('boolean');
-      expect(typeof caps.displayHDR).toBe('boolean');
-      expect(typeof caps.webglHLG).toBe('boolean');
-      expect(typeof caps.webglPQ).toBe('boolean');
-      expect(typeof caps.canvasHLG).toBe('boolean');
-      expect(typeof caps.canvasFloat16).toBe('boolean');
-      expect(typeof caps.webgpuAvailable).toBe('boolean');
-      expect(typeof caps.webgpuHDR).toBe('boolean');
+      // jsdom doesn't support P3/HDR, so all capability booleans default to false
+      expect(caps.canvasP3).toBe(false);
+      expect(caps.webglP3).toBe(false);
+      expect(caps.displayHDR).toBe(false);
+      expect(caps.webglHLG).toBe(false);
+      expect(caps.webglPQ).toBe(false);
+      expect(caps.canvasHLG).toBe(false);
+      expect(caps.canvasFloat16).toBe(false);
+      expect(caps.webgpuAvailable).toBe(false);
+      expect(caps.webgpuHDR).toBe(false);
       // String defaults
-      expect(['srgb', 'p3', 'rec2020']).toContain(caps.displayGamut);
-      expect(['srgb', 'display-p3']).toContain(caps.activeColorSpace);
-      expect(['sdr', 'hlg', 'pq', 'extended', 'none']).toContain(caps.activeHDRMode);
+      expect(caps.displayGamut).toBe('srgb');
+      expect(caps.activeColorSpace).toBe('srgb');
+      expect(['sdr', 'none']).toContain(caps.activeHDRMode);
     });
 
     it('AC-P1-1.1c: detection uses throwaway canvases - no leaked DOM nodes', () => {
@@ -131,9 +131,8 @@ describe('Phase 1: Wide Color Gamut (Display P3)', () => {
       expect(info).toHaveProperty('bitDepth');
     });
 
-    it('AC-P1-1.1f: existing canvasSupportsDisplayP3 continues to work', () => {
-      expect(() => canvasSupportsDisplayP3()).not.toThrow();
-      expect(typeof canvasSupportsDisplayP3()).toBe('boolean');
+    it('AC-P1-1.1f: canvasSupportsDisplayP3 returns false in jsdom', () => {
+      expect(canvasSupportsDisplayP3()).toBe(false);
     });
   });
 
@@ -281,12 +280,12 @@ describe('Phase 1: Wide Color Gamut (Display P3)', () => {
       expect(getActiveOutputColorSpace(caps)).toBe('srgb');
     });
 
-    it('AC-P1-1.5c: existing detectBrowserColorSpace returns same shape', () => {
+    it('AC-P1-1.5c: existing detectBrowserColorSpace returns correct defaults in jsdom', () => {
       const info = detectBrowserColorSpace();
-      expect(typeof info.colorSpace).toBe('string');
-      expect(['srgb', 'p3', 'rec2020', 'unknown']).toContain(info.gamut);
-      expect(typeof info.hdr).toBe('boolean');
-      expect(typeof info.bitDepth).toBe('number');
+      expect(info.colorSpace).toBe('srgb');
+      expect(info.gamut).toBe('srgb');
+      expect(info.hdr).toBe(false);
+      expect(info.bitDepth).toBe(8);
     });
   });
 
@@ -324,13 +323,9 @@ describe('Phase 1: Wide Color Gamut (Display P3)', () => {
   // 1.1g App.ts integration: detectDisplayCapabilities called at startup
   // =====================================================================
   describe('1.1 App.ts integration', () => {
-    it('AC-P1-1.1g: App.ts imports detectDisplayCapabilities from color/DisplayCapabilities', async () => {
-      // Read the App.ts source to verify the import exists
-      // This is a static source-level check, verifying the wiring exists
+    it('AC-P1-1.1g: App module exports the App class', async () => {
       const appModule = await import('./App');
-      // The App class should be exported
       expect(appModule.App).toBeDefined();
-      expect(typeof appModule.App).toBe('function');
     });
 
     it('AC-P1-1.1h: App constructor calls detectDisplayCapabilities and passes result to Viewer and DisplayProfileControl', () => {
@@ -433,25 +428,24 @@ describe('Phase 2: HDR Extended Range Output', () => {
       vi.restoreAllMocks();
     });
 
-    it('AC-P2-2.1a: webglHLG detects via drawingBufferColorSpace read-back', () => {
-      // In jsdom webglHLG will be false because there is no real WebGL2
+    it('AC-P2-2.1a: webglHLG is false in jsdom (no real WebGL2)', () => {
       const caps = detectDisplayCapabilities();
-      expect(typeof caps.webglHLG).toBe('boolean');
+      expect(caps.webglHLG).toBe(false);
     });
 
-    it('AC-P2-2.1b: webglPQ detects via drawingBufferColorSpace read-back', () => {
+    it('AC-P2-2.1b: webglPQ is false in jsdom (no real WebGL2)', () => {
       const caps = detectDisplayCapabilities();
-      expect(typeof caps.webglPQ).toBe('boolean');
+      expect(caps.webglPQ).toBe(false);
     });
 
-    it('AC-P2-2.1c: canvasHLG detects via getContext with rec2100-hlg', () => {
+    it('AC-P2-2.1c: canvasHLG is false in jsdom (no rec2100-hlg support)', () => {
       const caps = detectDisplayCapabilities();
-      expect(typeof caps.canvasHLG).toBe('boolean');
+      expect(caps.canvasHLG).toBe(false);
     });
 
-    it('AC-P2-2.1d: canvasFloat16 detects via pixelFormat float16', () => {
+    it('AC-P2-2.1d: canvasFloat16 is false in jsdom (no float16 support)', () => {
       const caps = detectDisplayCapabilities();
-      expect(typeof caps.canvasFloat16).toBe('boolean');
+      expect(caps.canvasFloat16).toBe(false);
     });
 
     it('AC-P2-2.1e: displayHDR reflects matchMedia dynamic-range high', () => {
@@ -1097,18 +1091,13 @@ describe('Phase 3: Comprehensive Pipeline Updates', () => {
       histogram.dispose();
     });
 
-    it('AC-P3-3.2a: Histogram has setHDRMode method matching WebGLScopes API', () => {
-      expect(typeof histogram.setHDRMode).toBe('function');
-
-      // Should accept (active: boolean, headroom?: number)
+    it('AC-P3-3.2a: Histogram.setHDRMode accepts boolean and optional headroom', () => {
       expect(() => histogram.setHDRMode(true)).not.toThrow();
       expect(() => histogram.setHDRMode(true, 3.5)).not.toThrow();
       expect(() => histogram.setHDRMode(false)).not.toThrow();
     });
 
-    it('AC-P3-3.2b: Histogram has getMaxValue method matching WebGLScopes API', () => {
-      expect(typeof histogram.getMaxValue).toBe('function');
-
+    it('AC-P3-3.2b: Histogram.getMaxValue returns correct values for SDR and HDR', () => {
       // SDR default
       expect(histogram.getMaxValue()).toBe(1.0);
 
