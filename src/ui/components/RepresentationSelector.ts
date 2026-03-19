@@ -11,7 +11,7 @@ import type { Session } from '../../core/session/Session';
 import type { MediaRepresentation } from '../../core/types/representation';
 import { DropdownMenu } from './shared/DropdownMenu';
 import { createButton as sharedCreateButton } from './shared/Button';
-import { getIconSvg } from './shared/Icons';
+import { getIconSvg, type IconName } from './shared/Icons';
 
 export interface RepresentationSelectorEvents extends EventMap {
   /** Fired when the user selects a representation */
@@ -37,19 +37,16 @@ function kindLabel(kind: string): string {
 }
 
 /**
- * Status icon for representation status
+ * Status icon for representation status (returns inline SVG markup)
  */
 function statusIcon(status: string): string {
-  switch (status) {
-    case 'ready':
-      return '\u2713'; // checkmark
-    case 'loading':
-      return '\u231B'; // hourglass
-    case 'error':
-      return '\u2717'; // cross
-    default:
-      return '';
-  }
+  const iconMap: Record<string, IconName> = {
+    ready: 'check',
+    loading: 'clock',
+    error: 'error',
+  };
+  const iconName = iconMap[status];
+  return iconName ? getIconSvg(iconName, 'sm') : '';
 }
 
 export class RepresentationSelector extends EventEmitter<RepresentationSelectorEvents> {
@@ -161,7 +158,7 @@ export class RepresentationSelector extends EventEmitter<RepresentationSelectorE
     const items = representations.map((rep) => ({
       value: rep.id,
       label: `${rep.label}`,
-      icon: statusIcon(rep.status),
+      iconSvg: statusIcon(rep.status) || undefined,
       shortcut: kindLabel(rep.kind),
       disabled: rep.status === 'loading',
     }));

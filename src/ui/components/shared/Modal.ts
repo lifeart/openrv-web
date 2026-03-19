@@ -885,7 +885,7 @@ export function showFileReloadPrompt(filename: string, options: FileReloadOption
       font-size: 12px;
       display: none;
     `;
-    warningEl.textContent = '\u26A0\uFE0F Filename does not match. Make sure you selected the correct file.';
+    warningEl.innerHTML = `${getIconSvg('warning', 'sm')} Filename does not match. Make sure you selected the correct file.`;
 
     fileInput.addEventListener('change', () => {
       const file = fileInput.files?.[0];

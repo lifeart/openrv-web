@@ -484,9 +484,9 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
     valueLabel.style.cssText = 'flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
 
     const arrow = document.createElement('span');
-    arrow.textContent = '\u25BC';
+    arrow.innerHTML = getIconSvg('chevron-down', 'sm');
     arrow.setAttribute('aria-hidden', 'true');
-    arrow.style.cssText = 'font-size: 8px; color: var(--text-muted);';
+    arrow.style.cssText = 'color: var(--text-muted); display: inline-flex; align-items: center;';
 
     selectButton.appendChild(valueLabel);
     selectButton.appendChild(arrow);
@@ -606,8 +606,8 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
       padding-bottom: 4px;
     `;
     const arrow = document.createElement('span');
-    arrow.textContent = '\u25B6';
-    arrow.style.cssText = 'font-size: 8px; transition: transform 0.15s ease;';
+    arrow.innerHTML = getIconSvg('chevron-right', 'sm');
+    arrow.style.cssText = 'display: inline-flex; align-items: center; transition: transform 0.15s ease;';
     const label = document.createElement('span');
     label.textContent = 'Quick Presets';
     header.appendChild(arrow);

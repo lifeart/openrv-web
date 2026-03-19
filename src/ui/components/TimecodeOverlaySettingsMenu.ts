@@ -56,6 +56,7 @@ export class TimecodeOverlaySettingsMenu {
       padding: 4px 0;
       z-index: ${Z_INDEX.dropdown};
       min-width: 200px;
+      max-width: calc(100vw - 16px);
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       visibility: hidden;
     `;

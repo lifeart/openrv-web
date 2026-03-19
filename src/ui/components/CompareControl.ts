@@ -308,7 +308,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
 
     const toggleButton = document.createElement('button');
     toggleButton.dataset.testid = 'compare-ab-toggle';
-    toggleButton.textContent = '\u21C4';
+    toggleButton.innerHTML = getIconSvg('repeat', 'sm');
     toggleButton.title = 'Toggle A/B (`)';
     toggleButton.style.cssText = `
       background: transparent;

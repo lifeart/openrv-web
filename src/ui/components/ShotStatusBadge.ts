@@ -53,7 +53,7 @@ export class ShotStatusBadge {
       color: var(--text-secondary);
       cursor: pointer;
       font-size: 11px;
-      height: 26px;
+      min-height: 32px;
       flex-shrink: 0;
       margin-left: 8px;
       transition: all 0.12s ease;

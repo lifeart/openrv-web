@@ -650,10 +650,10 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
       replyBtn.dataset.testid = `note-reply-${note.id}`;
       replyBtn.title = 'Reply';
       replyBtn.setAttribute('aria-label', 'Reply to note');
-      replyBtn.textContent = '\u21a9';
+      replyBtn.innerHTML = getIconSvg('undo', 'sm');
       replyBtn.style.cssText = `
         background: none; border: none; color: var(--text-muted);
-        cursor: pointer; padding: 2px; font-size: 14px; line-height: 1;
+        cursor: pointer; padding: 2px; line-height: 1; display: inline-flex; align-items: center;
       `;
       replyBtn.addEventListener('click', (e) => {
         e.stopPropagation();
