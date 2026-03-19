@@ -59,7 +59,7 @@ To create an optimized production build:
 pnpm build
 ```
 
-This generates static files in the `dist/` directory. The build process minifies JavaScript, optimizes assets, and bundles WebAssembly modules for EXR, JPEG XL, JPEG 2000, HEIC, and OCIO decoding.
+This generates static files in the `dist/` directory. The build process minifies JavaScript, optimizes assets, and bundles WebAssembly modules for JPEG XL, JPEG 2000, HEIC, and OCIO decoding.
 
 To preview the production build locally:
 

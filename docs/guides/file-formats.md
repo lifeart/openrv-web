@@ -15,7 +15,7 @@ OpenRV Web supports a wide range of image, video, and session file formats, span
 
 Format detection uses a **two-tier** strategy. The fast path classifies files by MIME type and extension via `detectMediaTypeFromFile()`. When neither is recognized (extensionless or misnamed files), the fallback path reads the first bytes and checks them against the `DecoderRegistry`'s magic-number detectors (`detectMediaTypeFromFileBytes()`). This combination keeps the common case fast while still handling misnamed or extensionless files correctly -- any file whose bytes match a registered decoder will be loaded even if the extension is wrong or absent.
 
-Decoders are **lazy-loaded** via dynamic `import()` on first use. Heavy WASM modules (EXR, JXL, JP2, HEIC) are code-split into separate chunks and never included in the initial bundle, keeping startup fast.
+Decoders are **lazy-loaded** via dynamic `import()` on first use. Heavy WASM modules (JXL, JP2, HEIC) are code-split into separate chunks and never included in the initial bundle, keeping startup fast.
 
 ---
 

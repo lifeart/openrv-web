@@ -147,7 +147,7 @@ Sequences can consist of files in any supported image format:
 - JPEG XL, JPEG 2000
 - AVIF, HEIC
 
-When loading EXR sequences, each frame benefits from the full HDR pipeline including WebAssembly decoding, Float32 precision, and layer/AOV selection.
+When loading EXR sequences, each frame benefits from the full HDR pipeline including TypeScript decoding, Float32 precision, and layer/AOV selection.
 
 ## Scripting API
 

@@ -53,7 +53,7 @@ Video export relies on WebCodecs for encoding. Browsers without WebCodecs suppor
 
 | Decoder | Chrome | Firefox | Safari | Edge |
 |---------|--------|---------|--------|------|
-| EXR (WASM) | Yes | Yes | Yes | Yes |
+| EXR (TypeScript) | Yes | Yes | Yes | Yes |
 | JPEG XL (WASM) | Yes | Yes | Yes | Yes |
 | JPEG 2000 / HTJ2K (WASM) | Yes | Yes | Yes | Yes |
 | HEIC (WASM fallback) | Yes | Yes | Native | Yes |
