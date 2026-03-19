@@ -47,6 +47,7 @@ import { SessionManager } from './SessionManager';
 import type { AudioPlaybackManager } from '../../audio/AudioPlaybackManager';
 import { isDecoderBackedExtension } from '../../utils/media/SupportedMediaFormats';
 import { fetchUrlAsFile } from '../../utils/media/fetchUrlAsFile';
+import { isSequencePattern } from '../../utils/media/SequenceLoader';
 // Logger removed — playback logging now lives in SessionPlayback.
 
 // Re-export types from SessionTypes for backward compatibility
@@ -1193,6 +1194,15 @@ export class Session extends EventEmitter<SessionEvents> {
    * fetched and routed through the FileSourceNode pipeline via loadImageFile().
    */
   async loadSourceFromUrl(url: string): Promise<void> {
+    // Detect sequence pattern strings (e.g. shot.####.exr, frame.%04d.exr, render.@@@@.exr).
+    // Only treat non-URL strings as patterns — a full URL like
+    // https://cdn.example.com/clip.mp4#signed must not be matched by the
+    // hash-pattern detector (the '#' in the URL fragment would be a false positive).
+    const looksLikeUrl = /^https?:\/\//i.test(url);
+    if (!looksLikeUrl && isSequencePattern(url)) {
+      return this.loadSequenceFromPatternString(url);
+    }
+
     const allowedSchemes = ['http:', 'https:'];
     try {
       const parsed = new URL(url);
@@ -1216,6 +1226,33 @@ export class Session extends EventEmitter<SessionEvents> {
       return this.loadImageFile(file);
     }
     return this.loadImage(name, url);
+  }
+
+  /**
+   * Load a sequence from a pattern string like `shot.####.exr`, `frame.%04d.exr`,
+   * or `render.@@@@.exr`. Uses default frame range 1-100 unless specified via
+   * `loadImageSequenceFromPattern()` directly.
+   *
+   * @param pattern - A path/filename with a frame placeholder (`####`, `%04d`, or `@@@@`)
+   * @param startFrame - First frame number (inclusive, default: 1)
+   * @param endFrame - Last frame number (inclusive, default: 100)
+   * @param fps - Frame rate (default: session fps)
+   */
+  async loadSequenceFromPatternString(
+    pattern: string,
+    startFrame: number = 1,
+    endFrame: number = 100,
+    fps?: number,
+  ): Promise<void> {
+    const patternFilename = pattern.split('/').pop() ?? pattern;
+    const name = patternFilename
+      .replace(/##+/g, '')
+      .replace(/%\d*d/g, '')
+      .replace(/@+/g, '')
+      .replace(/[._-]?\.[^.]+$/, '')
+      .replace(/[._-]$/, '') || 'sequence';
+
+    return this.loadImageSequenceFromPattern(name, pattern, startFrame, endFrame, fps);
   }
 
   // Frame access — delegated to SessionMedia

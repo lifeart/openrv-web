@@ -2,6 +2,7 @@ import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import {
   createSequenceInfo,
   createSequenceInfoFromPattern,
+  isSequencePattern,
   loadFrameImage,
   loadFrameImageFromURL,
   preloadFrames,
@@ -13,6 +14,7 @@ import {
 import { VideoSourceNode } from '../../nodes/sources/VideoSourceNode';
 import { FileSourceNode } from '../../nodes/sources/FileSourceNode';
 import { ProceduralSourceNode, parseMovieProc } from '../../nodes/sources/ProceduralSourceNode';
+import { SequenceSourceNodeWrapper } from './loaders/SequenceRepresentationLoader';
 import type { PatternName, GradientDirection } from '../../nodes/sources/ProceduralSourceNode';
 import type { HDRResizeTier } from '../../utils/media/HDRFrameResizer';
 import type { MediaSource, UnsupportedCodecInfo } from './SessionTypes';
@@ -875,6 +877,37 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
   }
 
   /**
+   * Load a sequence from a pattern string like `shot.####.exr`, `frame.%04d.exr`,
+   * or `render.@@@@.exr`. Derives a display name from the pattern and delegates
+   * to `loadImageSequenceFromPattern`.
+   *
+   * @param pattern - A path/filename with a frame placeholder (`####`, `%04d`, or `@@@@`)
+   * @param startFrame - First frame number (inclusive, default: 1)
+   * @param endFrame - Last frame number (inclusive, default: 100)
+   * @param fps - Frame rate (default: session fps)
+   */
+  async loadSequenceFromPatternString(
+    pattern: string,
+    startFrame: number = 1,
+    endFrame: number = 100,
+    fps?: number,
+  ): Promise<void> {
+    if (!isSequencePattern(pattern)) {
+      throw new Error(`Not a valid sequence pattern: ${pattern}`);
+    }
+
+    const patternFilename = pattern.split('/').pop() ?? pattern;
+    const name = patternFilename
+      .replace(/##+/g, '')
+      .replace(/%\d*d/g, '')
+      .replace(/@+/g, '')
+      .replace(/[._-]?\.[^.]+$/, '')
+      .replace(/[._-]$/, '') || 'sequence';
+
+    return this.loadImageSequenceFromPattern(name, pattern, startFrame, endFrame, fps);
+  }
+
+  /**
    * Load video sources from the graph nodes that have file data.
    * This enables mediabunny frame-accurate extraction for videos loaded from GTO.
    */
@@ -1304,6 +1337,7 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
     source.fileSourceNode = undefined;
     source.sequenceInfo = undefined;
     source.sequenceFrames = undefined;
+    source.sequenceFrameMap = undefined;
     source.element = undefined;
 
     // If null, we are clearing the source (no active representation)
@@ -1401,9 +1435,21 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
     } else if (sourceNode instanceof FileSourceNode) {
       source.fileSourceNode = sourceNode;
       source.type = 'image';
+    } else if (sourceNode instanceof SequenceSourceNodeWrapper) {
+      // Sequence representation: restore sequence metadata so the rest of
+      // the app (frame navigation, preloading, disposal) works identically
+      // to the normal sequence load path.
+      source.type = 'sequence';
+      source.sequenceInfo = sourceNode.sequenceInfo;
+      source.sequenceFrames = sourceNode.frames;
+      source.sequenceFrameMap = buildFrameNumberMap(sourceNode.frames);
+
+      const element = sourceNode.getElement(1);
+      if (element) {
+        source.element = element;
+      }
     } else {
-      // Could be a SequenceSourceNodeWrapper or other type
-      // Try to get element from the source node
+      // Unknown source node type – best-effort: grab element and mark as sequence
       const element = sourceNode.getElement(1);
       if (element) {
         source.element = element;

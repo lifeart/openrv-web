@@ -3923,3 +3923,216 @@ Wired into `AppNetworkBridge` (subscribes to syncCursor, usersChanged, userLeft,
 
 **Files changed**:
 - `docs/playback/image-sequences.md`
+
+## Issue #325: ShotGrid note publishing sends only plain note text, not annotations or thumbnails
+
+**Root cause**: The `pushNotes` flow in `ShotGridIntegrationBridge` only sent `text` and `frameRange` to `ShotGridBridge.pushNote()`, which serialized only `subject`, `content`, and `frame_range`. No code path read from the annotation store, rendered thumbnails, or uploaded attachments.
+
+**Fix**:
+- Added `AnnotationProvider` and `ThumbnailRenderer` interfaces to decouple from paint engine internals
+- Extended `ShotGridIntegrationContext` with optional providers for annotations and thumbnails
+- Updated `pushNotes` handler to collect annotation summaries across frame ranges with deduplication, render thumbnails from first-frame annotations, and pass both to `pushNote()`
+- Extended `ShotGridBridge.pushNote()` to append structured annotation summaries to note content and upload thumbnail blobs via `uploadAttachment()`
+- Added `uploadAttachment()` method using ShotGrid REST API v1 upload endpoint with `image` form field
+- Added `console.warn` logging for failed uploads (non-fatal)
+- Backward compatible: without providers, behavior is identical to before
+
+**Tests added**: 22 new regression tests:
+- 15 in `ShotGridIntegrationBridge.issue325.test.ts` (annotation wiring, thumbnails, backward compat, edge cases)
+- 7 in `ShotGridBridge.test.ts` (annotation content, attachment upload, error handling)
+
+**Files changed**:
+- `src/integrations/ShotGridBridge.ts`
+- `src/integrations/ShotGridIntegrationBridge.ts`
+- `src/integrations/ShotGridIntegrationBridge.issue325.test.ts` (new)
+- `src/integrations/ShotGridBridge.test.ts`
+- `docs/advanced/dcc-integration.md`
+
+## Issue #330: ShotGrid note sync flattens local note threads and statuses into plain top-level comments
+
+**Root cause**: The push flow only sent `text` and `frameRange`, ignoring `parentId` and `status`. The pull flow reconstructed notes without reply linkage or status restoration.
+
+**Fix**:
+- Added bidirectional status mapping between local `NoteStatus` (`open`/`resolved`/`wontfix`) and ShotGrid codes (`opn`/`clsd`). Note: `wontfix` maps to `clsd` with documented fidelity loss on round-trip.
+- Push flow now includes `sg_status_list` in attributes and `reply_to_entity` in relationships
+- Push flow topologically sorts notes (parents before children) so ShotGrid IDs are available for reply linkage
+- Pull flow restores `parentId` from `reply_to_entity` and `status` from `sg_status_list`
+- Pull flow topologically sorts incoming ShotGrid notes to handle out-of-order API responses
+- `getNotesForVersion()` now requests `sg_status_list` and `reply_to_entity` fields
+
+**Tests added**: 23 new regression tests in `ShotGridIntegrationBridge.issue330.test.ts` covering status mapping, push/pull threading, topological sort, orphaned replies, backward compatibility, and bridge payload verification.
+
+**Files changed**:
+- `src/integrations/ShotGridBridge.ts`
+- `src/integrations/ShotGridIntegrationBridge.ts`
+- `src/integrations/ShotGridIntegrationBridge.issue330.test.ts` (new)
+- `src/integrations/ShotGridIntegrationBridge.test.ts`
+
+## Issue #359: The network-sync guide overstates generic one-click joining from share URLs
+
+**Root cause**: The network-sync documentation described share URL behavior in overly broad terms. It claimed that opening any shareable URL "automatically populates the room code and initiates a join" and described URL-based signaling as enabling "one-click joining without manual code entry." The code already supported auto-join for both room-only and room+pin URLs (via `handleURLBootstrap` calling `joinRoom` unconditionally when a room code is present) and already surfaced errors for malformed WebRTC links. However, the documentation did not distinguish between PIN-protected and unprotected rooms, nor did it mention error handling for malformed links.
+
+**Fix**: Updated `docs/advanced/network-sync.md` to accurately describe the auto-join behavior:
+- Clarified that room-only URLs auto-join immediately for unprotected rooms
+- Clarified that room+pin URLs auto-join for PIN-protected rooms
+- Clarified that room-only URLs for PIN-protected rooms prefill the room code and prompt for manual PIN entry
+- Documented that malformed or corrupted share links (both room URLs and WebRTC signaling URLs) display error notifications to the user
+- Removed the overstated "one-click joining without manual code entry" claim from the URL-Based Signaling section
+
+**Tests added**: 8 new regression tests (SU-065 through SU-072) in `SessionURLService.test.ts` covering:
+- Room-only URL auto-joins without PIN
+- Room+PIN URL auto-joins with PIN
+- Room code uppercasing for both UI prefill and join call
+- No room params results in no auto-join and no error
+- Malformed WebRTC token shows user-visible error
+- Valid WebRTC offer URL processes correctly
+- Unrecognized WebRTC signal type shows malformed error
+- PIN-only URL (no room) does not auto-join
+
+**Files changed**:
+- `docs/advanced/network-sync.md`
+- `src/services/SessionURLService.test.ts`
+
+## Issue #520: Sequence pattern strings documented but not wired to production loader
+
+**Root cause**: The pattern parsers (`parsePatternNotation`, `isSequencePattern`, etc.) existed in `SequenceLoader.ts` but had no production callers. The core loading paths could not accept pattern strings like `shot.####.exr`, `frame.%04d.exr`, or `render.@@@@.exr`.
+
+**Fix**:
+- Wired `isSequencePattern()` check into `Session.loadSourceFromUrl()` before URL parsing, with a `looksLikeUrl` guard to prevent false positives on URL fragments
+- Added `loadSequenceFromPatternString()` to both `Session` and `SessionMedia` with display name derivation
+- Added `addSourceFromPattern()` to the public `MediaAPI` with configurable frame range and FPS
+- Updated `docs/playback/image-sequences.md` with programmatic API examples
+
+**Tests added**: 33 new regression tests:
+- 20 in `SequenceLoader.test.ts` (parsing, detection, generation, cross-notation conversion, integration)
+- 13 in `Session.loadSourceFromUrl.test.ts` (pattern routing, false positive prevention, name derivation)
+
+**Files changed**:
+- `src/utils/media/SequenceLoader.ts`
+- `src/core/session/Session.ts`
+- `src/core/session/SessionMedia.ts`
+- `src/api/MediaAPI.ts`
+- `src/utils/media/SequenceLoader.test.ts`
+- `src/core/session/Session.loadSourceFromUrl.test.ts` (new)
+- `docs/playback/image-sequences.md`
+
+## Issue #525: DCC `loadMedia` protocol advertises "file path or URL," but browser-side loader forwards raw paths
+
+**Root cause**: `AppDCCWiring` forwarded the `loadMedia.path` string directly to session loaders without validation. Raw filesystem paths (e.g., `/mnt/renders/shot.exr`) were assigned to `img.src`/`video.src` where they silently failed in the browser sandbox.
+
+**Fix**:
+- Added `validateMediaPath()` in `AppDCCWiring.ts` that validates paths before forwarding to session loaders
+- Accepted schemes: `http:`, `https:`, `blob:`, `data:`, `file:`; protocol-relative URLs upgraded to `https:`
+- Rejected with actionable errors: empty strings, Unix paths, Windows drive paths, UNC paths, unsupported schemes
+- Invalid paths send `INVALID_MEDIA_PATH` error back to DCC tool via `sendError()`
+- Updated `LoadMediaMessage` JSDoc in `DCCBridge.ts` documenting supported URL schemes
+- Added "Media Path Requirements" section to `docs/advanced/dcc-integration.md`
+- Updated 8 existing tests in `AppWiringFixes.test.ts` to use valid HTTP URLs
+
+**Tests added**: 20 new regression tests in `AppDCCWiring.test.ts` (DCCP-001 through DCCP-020): 15 unit tests for `validateMediaPath()` + 5 integration tests for the full loadMedia handler.
+
+**Files changed**:
+- `src/AppDCCWiring.ts`
+- `src/integrations/DCCBridge.ts`
+- `src/AppDCCWiring.test.ts`
+- `src/AppWiringFixes.test.ts`
+- `docs/advanced/dcc-integration.md`
+
+## Issue #528: Sequence representations cannot round-trip through serialization
+
+**Root cause**: `serializeRepresentation()` correctly strips non-serializable `File` objects, but `SequenceRepresentationLoader.load()` only supported loading from `File[]` objects — so deserialized representations always threw "no files provided."
+
+**Fix**:
+- Added URL/pattern-based loading path to `SequenceRepresentationLoader`: when `files` are absent but `pattern` and `frameRange` are present, uses `createSequenceInfoFromPattern()` to reconstruct the sequence from URLs
+- After file-based load, auto-populates `pattern` and `frameRange` on loaderConfig (with no-overwrite guards) so future serialization captures them
+- `pattern` and `frameRange` are plain serializable fields that survive `serializeRepresentation()` stripping
+
+**Tests added**: 13 new regression tests in `SequenceRepresentationLoader.test.ts` covering file-based loading, pattern auto-population, pattern-based loading, error cases, serialization preservation, and full round-trip.
+
+**Files changed**:
+- `src/core/session/loaders/SequenceRepresentationLoader.ts`
+- `src/core/session/loaders/SequenceRepresentationLoader.test.ts` (new)
+- `src/core/session/loaders/RepresentationLoaderFactory.test.ts`
+
+## Issue #530: Non-sequence file, movie, and proxy representations cannot round-trip through serialization
+
+**Root cause**: Both `FileRepresentationLoader` and `VideoRepresentationLoader` already had URL fallback loading paths, but never populated `config.url` after file-based loading. When `serializeRepresentation()` stripped the `File` objects, the restored config had neither `file` nor `url`, causing "no file provided" errors.
+
+**Fix**:
+- After file-based loading, both loaders now call `URL.createObjectURL(file)` and store the result in `config.url` (with no-overwrite guard)
+- The existing URL fallback paths then handle restoration from serialized state
+- Minimal 3-line change per loader, following the same pattern as #528
+
+**Tests added**: 22 new regression tests:
+- 10 in `FileRepresentationLoader.test.ts` (file loading, URL population, URL loading, error cases, round-trip)
+- 12 in `VideoRepresentationLoader.test.ts` (same coverage + video-specific: fps, proxy kind, duration)
+
+**Files changed**:
+- `src/core/session/loaders/FileRepresentationLoader.ts`
+- `src/core/session/loaders/VideoRepresentationLoader.ts`
+- `src/core/session/loaders/FileRepresentationLoader.test.ts` (new)
+- `src/core/session/loaders/VideoRepresentationLoader.test.ts` (new)
+
+## Issue #535: Sequence representation shim path discards sequence metadata
+
+**Root cause**: `applyRepresentationShim` unconditionally cleared `sequenceInfo`, `sequenceFrames`, and `sequenceFrameMap` on the source. For `SequenceSourceNodeWrapper` nodes, it only copied `getElement(1)` and set `type = 'sequence'`, discarding the metadata that frame navigation, preloading, and disposal depend on.
+
+**Fix**:
+- Added `instanceof SequenceSourceNodeWrapper` branch in `applyRepresentationShim` that preserves `sequenceInfo`, `sequenceFrames`, and builds `sequenceFrameMap` via `buildFrameNumberMap()`
+- Added `sequenceFrameMap = undefined` to the cleanup block to prevent stale references
+- Duration/fps/out-point updates already handled by generic code above the branch
+
+**Tests added**: 9 new regression tests (SM-100 through SM-108) in `SessionMedia.test.ts` covering metadata preservation, frame map construction, type setting, element extraction, duration/fps propagation, host timeline updates, backward compatibility, and cleanup on reset.
+
+**Files changed**:
+- `src/core/session/SessionMedia.ts`
+- `src/core/session/SessionMedia.test.ts`
+
+## Issue #549: URL/session sharing has no representation awareness
+
+**Root cause**: `SessionURLService.captureSessionURLState()` only stored source index, sourceUrl, A/B indices, frame, transform, wipe, and OCIO state. No path existed to capture or restore active representation IDs or configs.
+
+**Fix**:
+- Added `RepresentationURLState` interface for compact, serializable per-source representation state
+- Extended `captureSessionURLState()` to iterate sources, capture active representation data (stripping non-serializable File fields)
+- Extended `applySessionURLState()` to restore representations via `addRepresentationToSource` + `activateRepresentation` with per-rep error handling
+- Extended `URLSession` interface with 3 optional methods for representation access
+- Extended `SessionURLManager` compact encoding with `reps` field and validation
+- Fully backward compatible: URLs without representation data still work
+
+**Tests added**: 11 new regression tests (SU-073 through SU-083) covering capture with/without reps, apply/restore, graceful degradation, full round-trip, multi-source, File stripping, and null handling.
+
+**Files changed**:
+- `src/services/SessionURLService.ts`
+- `src/core/session/SessionURLManager.ts`
+- `src/services/SessionURLService.test.ts`
+
+## Issue #563: API reference pinned to old GitHub commit
+
+**Root cause**: `docs/api/index.md` had all 8 "Defined in" source links hardcoded to a specific GitHub blob commit hash. As the repo evolved, these links pointed to stale code.
+
+**Fix**:
+- Replaced all 8 GitHub blob URLs with relative paths (`../../src/<path>#L<line>`) that always resolve to the current source
+- Added `sourceLinkTemplate: "../../{path}#L{line}"` to `typedoc.json` so future `pnpm docs:api` regenerations produce relative links
+
+**Tests added**: 4 regression tests in `docs-api-links.test.ts` verifying: no hardcoded commit hashes, all links are relative, all referenced source files exist on disk, and TypeDoc config uses relative template.
+
+**Files changed**:
+- `docs/api/index.md`
+- `typedoc.json`
+- `src/docs-api-links.test.ts` (new)
+
+## Issue #454: Self-hosting docs present static hosting as sufficient without mentioning signaling infrastructure
+
+**Root cause**: The FAQ and installation guide described the app as purely static-hosted without mentioning that collaborative review requires a WebSocket signaling server. Self-hosters could deploy successfully but be surprised when collaboration didn't work.
+
+**Fix** (documentation-only):
+- FAQ: Expanded "Can I self-host?" to distinguish static core viewer from collaboration requiring signaling server
+- Installation guide: Added caveat to deployment section, expanded env var documentation for `VITE_NETWORK_SIGNALING_SERVERS`/TURN credentials, added dedicated "Collaboration and Signaling" section explaining server responsibilities, default URL, and serverless P2P fallback
+
+**Tests added**: 10 regression tests in `docs-collaboration-signaling.test.ts` verifying FAQ and installation guide mention signaling requirements, env vars, default URL, WebSocket/WebRTC details, and preserve static-files claims.
+
+**Files changed**:
+- `docs/reference/faq.md`
+- `docs/getting-started/installation.md`
+- `src/docs-collaboration-signaling.test.ts` (new)

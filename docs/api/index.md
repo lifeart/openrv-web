@@ -38,7 +38,7 @@
 
 > **ExporterContribution** = `BlobExporterContribution` \| `TextExporterContribution`
 
-Defined in: [plugin/types.ts:178](https://github.com/lifeart/openrv-web/blob/855018687f3c1558e450abc7baf6913f0784de0e/src/plugin/types.ts#L178)
+Defined in: [plugin/types.ts:178](../../src/plugin/types.ts#L178)
 
 Union of all exporter contribution types
 
@@ -48,7 +48,7 @@ Union of all exporter contribution types
 
 > **OpenRVEventName** = `"frameChange"` \| `"play"` \| `"pause"` \| `"stop"` \| `"speedChange"` \| `"volumeChange"` \| `"muteChange"` \| `"audioScrubEnabledChange"` \| `"loopModeChange"` \| `"inOutChange"` \| `"markerChange"` \| `"sourceLoadingStarted"` \| `"sourceLoaded"` \| `"sourceLoadFailed"` \| `"viewTransformChanged"` \| `"renderedImagesChanged"` \| `"representationChanged"` \| `"fallbackActivated"` \| `"playlistEnded"` \| `"error"`
 
-Defined in: [api/EventsAPI.ts:15](https://github.com/lifeart/openrv-web/blob/855018687f3c1558e450abc7baf6913f0784de0e/src/api/EventsAPI.ts#L15)
+Defined in: [api/EventsAPI.ts:15](../../src/api/EventsAPI.ts#L15)
 
 Events that can be subscribed to via the public API
 
@@ -58,7 +58,7 @@ Events that can be subscribed to via the public API
 
 > **PluginContributionType** = `"decoder"` \| `"node"` \| `"processor"` \| `"tool"` \| `"exporter"` \| `"blendMode"` \| `"uiPanel"`
 
-Defined in: [plugin/types.ts:44](https://github.com/lifeart/openrv-web/blob/855018687f3c1558e450abc7baf6913f0784de0e/src/plugin/types.ts#L44)
+Defined in: [plugin/types.ts:44](../../src/plugin/types.ts#L44)
 
 ***
 
@@ -66,7 +66,7 @@ Defined in: [plugin/types.ts:44](https://github.com/lifeart/openrv-web/blob/8550
 
 > **PluginId** = `string`
 
-Defined in: [plugin/types.ts:17](https://github.com/lifeart/openrv-web/blob/855018687f3c1558e450abc7baf6913f0784de0e/src/plugin/types.ts#L17)
+Defined in: [plugin/types.ts:17](../../src/plugin/types.ts#L17)
 
 Unique plugin identifier, reverse-domain style: "com.example.myformat"
 
@@ -76,7 +76,7 @@ Unique plugin identifier, reverse-domain style: "com.example.myformat"
 
 > **PluginState** = `"registered"` \| `"initialized"` \| `"active"` \| `"inactive"` \| `"disposed"` \| `"error"`
 
-Defined in: [plugin/types.ts:57](https://github.com/lifeart/openrv-web/blob/855018687f3c1558e450abc7baf6913f0784de0e/src/plugin/types.ts#L57)
+Defined in: [plugin/types.ts:57](../../src/plugin/types.ts#L57)
 
 ---
 
@@ -84,7 +84,7 @@ Defined in: [plugin/types.ts:57](https://github.com/lifeart/openrv-web/blob/8550
 
 The `PluginEventSubscription` interface is provided to each plugin via `context.events`. All subscriptions are tracked per-plugin and automatically cleaned up on deactivation.
 
-Defined in: [plugin/PluginEventBus.ts](https://github.com/lifeart/openrv-web/blob/855018687f3c1558e450abc7baf6913f0784de0e/src/plugin/PluginEventBus.ts)
+Defined in: [plugin/PluginEventBus.ts](../../src/plugin/PluginEventBus.ts)
 
 ### Methods
 
@@ -129,7 +129,7 @@ Application events are prefixed with `app:` and map directly to the correspondin
 
 The `PluginSettingsAccessor` interface is provided to each plugin via `context.settings`. It requires a `settingsSchema` in the plugin manifest.
 
-Defined in: [plugin/PluginSettingsStore.ts](https://github.com/lifeart/openrv-web/blob/855018687f3c1558e450abc7baf6913f0784de0e/src/plugin/PluginSettingsStore.ts)
+Defined in: [plugin/PluginSettingsStore.ts](../../src/plugin/PluginSettingsStore.ts)
 
 ### Methods
 
@@ -160,7 +160,7 @@ Settings are validated against their declared type:
 
 Development-time hot reload support for plugins. Allows reloading plugin modules without restarting the application, optionally preserving state across reloads via `getState()`/`restoreState()` lifecycle hooks.
 
-Defined in: [plugin/dev/HotReloadManager.ts](https://github.com/lifeart/openrv-web/blob/855018687f3c1558e450abc7baf6913f0784de0e/src/plugin/dev/HotReloadManager.ts)
+Defined in: [plugin/dev/HotReloadManager.ts](../../src/plugin/dev/HotReloadManager.ts)
 
 ### Methods
 

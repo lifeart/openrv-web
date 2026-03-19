@@ -39,6 +39,7 @@ import {
   isSequencePattern,
   expandPatternToURLs,
   loadFrameImageFromURL,
+  createSequenceInfoFromPattern,
 } from './SequenceLoader';
 import type { SequenceFrame, SequenceInfo, InferredSequencePattern } from './SequenceLoader';
 
@@ -1942,6 +1943,192 @@ describe('SequenceLoader', () => {
       };
 
       await expect(loadFrameImageFromURL(frame)).rejects.toThrow('has no URL');
+    });
+  });
+
+  // =========================================================================
+  // Regression tests for Issue #520 — pattern string wiring
+  // =========================================================================
+
+  describe('Issue #520: pattern notation wiring into production paths', () => {
+    describe('hash notation (####) end-to-end', () => {
+      it('SLD-520-001: shot.####.exr is correctly parsed and generates filenames', () => {
+        const parsed = parsePatternNotation('shot.####.exr');
+        expect(parsed).not.toBeNull();
+        expect(parsed!.notation).toBe('hash');
+        expect(parsed!.prefix).toBe('shot.');
+        expect(parsed!.suffix).toBe('.exr');
+        expect(parsed!.padding).toBe(4);
+        expect(parsed!.extension).toBe('exr');
+
+        expect(generateFilename(parsed!, 1)).toBe('shot.0001.exr');
+        expect(generateFilename(parsed!, 1001)).toBe('shot.1001.exr');
+        expect(generateFilename(parsed!, 99999)).toBe('shot.99999.exr');
+      });
+
+      it('SLD-520-002: isSequencePattern detects hash notation', () => {
+        expect(isSequencePattern('shot.####.exr')).toBe(true);
+        expect(isSequencePattern('/path/to/shot.####.exr')).toBe(true);
+        expect(isSequencePattern('render_######.tif')).toBe(true);
+      });
+
+      it('SLD-520-003: expandPatternToURLs produces correct frame URLs for hash', () => {
+        const urls = expandPatternToURLs('shot.####.exr', 1001, 1003);
+        expect(urls).toEqual(['shot.1001.exr', 'shot.1002.exr', 'shot.1003.exr']);
+      });
+    });
+
+    describe('printf notation (%04d) end-to-end', () => {
+      it('SLD-520-004: frame.%04d.exr is correctly parsed and generates filenames', () => {
+        const parsed = parsePatternNotation('frame.%04d.exr');
+        expect(parsed).not.toBeNull();
+        expect(parsed!.notation).toBe('printf');
+        expect(parsed!.prefix).toBe('frame.');
+        expect(parsed!.suffix).toBe('.exr');
+        expect(parsed!.padding).toBe(4);
+        expect(parsed!.extension).toBe('exr');
+
+        expect(generateFilename(parsed!, 1)).toBe('frame.0001.exr');
+        expect(generateFilename(parsed!, 42)).toBe('frame.0042.exr');
+      });
+
+      it('SLD-520-005: isSequencePattern detects printf notation', () => {
+        expect(isSequencePattern('frame.%04d.exr')).toBe(true);
+        expect(isSequencePattern('/renders/shot_%08d.dpx')).toBe(true);
+        expect(isSequencePattern('img_%d.png')).toBe(true);
+      });
+
+      it('SLD-520-006: expandPatternToURLs produces correct frame URLs for printf', () => {
+        const urls = expandPatternToURLs('frame.%04d.exr', 1, 3);
+        expect(urls).toEqual(['frame.0001.exr', 'frame.0002.exr', 'frame.0003.exr']);
+      });
+    });
+
+    describe('at-sign notation (@@@@) end-to-end', () => {
+      it('SLD-520-007: render.@@@@.exr is correctly parsed and generates filenames', () => {
+        const parsed = parsePatternNotation('render.@@@@.exr');
+        expect(parsed).not.toBeNull();
+        expect(parsed!.notation).toBe('at');
+        expect(parsed!.prefix).toBe('render.');
+        expect(parsed!.suffix).toBe('.exr');
+        expect(parsed!.padding).toBe(4);
+        expect(parsed!.extension).toBe('exr');
+
+        expect(generateFilename(parsed!, 1)).toBe('render.0001.exr');
+        expect(generateFilename(parsed!, 50)).toBe('render.0050.exr');
+      });
+
+      it('SLD-520-008: isSequencePattern detects at-sign notation', () => {
+        expect(isSequencePattern('render.@@@@.exr')).toBe(true);
+        expect(isSequencePattern('/path/shot.@@.png')).toBe(true);
+      });
+
+      it('SLD-520-009: expandPatternToURLs produces correct frame URLs for at-sign', () => {
+        const urls = expandPatternToURLs('render.@@@@.exr', 10, 12);
+        expect(urls).toEqual(['render.0010.exr', 'render.0011.exr', 'render.0012.exr']);
+      });
+    });
+
+    describe('invalid pattern strings handled gracefully', () => {
+      it('SLD-520-010: regular filenames are not mistaken for patterns', () => {
+        expect(isSequencePattern('shot.0001.exr')).toBe(false);
+        expect(isSequencePattern('image.png')).toBe(false);
+        expect(isSequencePattern('')).toBe(false);
+        expect(isSequencePattern('no_pattern_here')).toBe(false);
+      });
+
+      it('SLD-520-011: parsePatternNotation returns null for invalid patterns', () => {
+        expect(parsePatternNotation('shot.0001.exr')).toBeNull();
+        expect(parsePatternNotation('image.png')).toBeNull();
+        expect(parsePatternNotation('')).toBeNull();
+        expect(parsePatternNotation('no_extension')).toBeNull();
+      });
+
+      it('SLD-520-012: expandPatternToURLs returns empty for invalid patterns', () => {
+        expect(expandPatternToURLs('not_a_pattern.exr', 1, 10)).toEqual([]);
+        expect(expandPatternToURLs('', 1, 10)).toEqual([]);
+      });
+
+      it('SLD-520-013: createSequenceInfoFromPattern rejects invalid patterns', async () => {
+        await expect(createSequenceInfoFromPattern('not_a_pattern.exr', 1, 10))
+          .rejects.toThrow('Invalid sequence pattern');
+      });
+    });
+
+    describe('cross-notation conversion', () => {
+      it('SLD-520-014: hash notation converts to printf and back', () => {
+        const hash = 'shot.####.exr';
+        const printf = toPrintfNotation(hash);
+        expect(printf).toBe('shot.%04d.exr');
+        const backToHash = toHashNotation(printf);
+        expect(backToHash).toBe('shot.####.exr');
+      });
+
+      it('SLD-520-015: at-sign notation converts to hash', () => {
+        const at = 'render.@@@@.exr';
+        const hash = toHashNotation(at);
+        expect(hash).toBe('render.####.exr');
+      });
+
+      it('SLD-520-016: at-sign notation converts to printf', () => {
+        const at = 'render.@@@@.exr';
+        const printf = toPrintfNotation(at);
+        expect(printf).toBe('render.%04d.exr');
+      });
+    });
+
+    describe('integration with existing sequence loading', () => {
+      it('SLD-520-017: pattern-based filenames match files found by discoverSequences', () => {
+        // Simulate files that would result from expanding shot.####.exr
+        const files = [
+          new File([''], 'shot.0001.exr'),
+          new File([''], 'shot.0002.exr'),
+          new File([''], 'shot.0003.exr'),
+        ];
+
+        // discoverSequences should find them
+        const sequences = discoverSequences(files);
+        expect(sequences.size).toBe(1);
+        expect(sequences.has('shot.####.exr')).toBe(true);
+
+        // The pattern key from discoverSequences should be parseable
+        const patternKey = Array.from(sequences.keys())[0]!;
+        const parsed = parsePatternNotation(patternKey);
+        expect(parsed).not.toBeNull();
+        expect(parsed!.notation).toBe('hash');
+      });
+
+      it('SLD-520-018: generateFilename output matches extractFrameNumber input', () => {
+        const parsed = parsePatternNotation('shot.####.exr')!;
+        for (let f = 1; f <= 10; f++) {
+          const filename = generateFilename(parsed, f);
+          const extracted = extractFrameNumber(filename);
+          expect(extracted).toBe(f);
+        }
+      });
+
+      it('SLD-520-019: printf pattern-generated filenames work with extractPatternFromFilename', () => {
+        const parsed = parsePatternNotation('frame.%04d.png')!;
+        const filename = generateFilename(parsed, 42);
+        expect(filename).toBe('frame.0042.png');
+
+        const inferred = extractPatternFromFilename(filename);
+        expect(inferred).not.toBeNull();
+        expect(inferred!.prefix).toBe('frame.');
+        expect(inferred!.frameNumber).toBe(42);
+        expect(inferred!.padding).toBe(4);
+      });
+
+      it('SLD-520-020: at-sign pattern-generated filenames work with extractPatternFromFilename', () => {
+        const parsed = parsePatternNotation('render.@@@@.exr')!;
+        const filename = generateFilename(parsed, 1001);
+        expect(filename).toBe('render.1001.exr');
+
+        const inferred = extractPatternFromFilename(filename);
+        expect(inferred).not.toBeNull();
+        expect(inferred!.prefix).toBe('render.');
+        expect(inferred!.frameNumber).toBe(1001);
+      });
     });
   });
 });

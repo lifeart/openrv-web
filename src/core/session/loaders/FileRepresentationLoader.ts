@@ -26,6 +26,11 @@ export class FileRepresentationLoader implements RepresentationLoader {
 
     if (file) {
       await fileSourceNode.loadFile(file);
+      // Populate url on the config so future serialization can restore
+      // without the non-serializable File object.
+      if (!config.url) {
+        config.url = URL.createObjectURL(file);
+      }
     } else {
       await fileSourceNode.load(url!, path);
     }

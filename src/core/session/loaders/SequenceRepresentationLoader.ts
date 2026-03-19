@@ -7,7 +7,7 @@
 
 import type { RepresentationLoader, RepresentationLoadResult } from './RepresentationLoader';
 import type { MediaRepresentation } from '../../types/representation';
-import { createSequenceInfo } from '../../../utils/media/SequenceLoader';
+import { createSequenceInfo, createSequenceInfoFromPattern } from '../../../utils/media/SequenceLoader';
 import { BaseSourceNode } from '../../../nodes/sources/BaseSourceNode';
 import type { SequenceInfo, SequenceFrame } from '../../../utils/media/SequenceLoader';
 import type { IPImage } from '../../image/Image';
@@ -74,13 +74,33 @@ export class SequenceRepresentationLoader implements RepresentationLoader {
     const files = config.files;
     const fps = config.fps ?? 24;
 
-    if (!files || files.length === 0) {
-      throw new Error('SequenceRepresentationLoader: no files provided');
-    }
+    let sequenceInfo: SequenceInfo | null = null;
 
-    const sequenceInfo = await createSequenceInfo(files, fps);
-    if (!sequenceInfo) {
-      throw new Error('No valid image sequence found in the provided files');
+    if (files && files.length > 0) {
+      // File-based loading path (runtime / live session)
+      sequenceInfo = await createSequenceInfo(files, fps);
+      if (!sequenceInfo) {
+        throw new Error('No valid image sequence found in the provided files');
+      }
+
+      // Populate pattern and frameRange on the loaderConfig so that future
+      // serialization captures enough data to restore without File objects.
+      if (sequenceInfo.pattern && !config.pattern) {
+        config.pattern = sequenceInfo.pattern;
+      }
+      if (!config.frameRange && sequenceInfo.startFrame !== undefined && sequenceInfo.endFrame !== undefined) {
+        config.frameRange = { start: sequenceInfo.startFrame, end: sequenceInfo.endFrame };
+      }
+    } else if (config.pattern && config.frameRange) {
+      // URL/pattern-based loading path (deserialized from project file)
+      sequenceInfo = await createSequenceInfoFromPattern(
+        config.pattern,
+        config.frameRange.start,
+        config.frameRange.end,
+        fps,
+      );
+    } else {
+      throw new Error('SequenceRepresentationLoader: no files or pattern provided');
     }
 
     const wrapper = new SequenceSourceNodeWrapper(sequenceInfo, sequenceInfo.frames);

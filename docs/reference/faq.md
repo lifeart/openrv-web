@@ -20,7 +20,7 @@ OpenRV Web is a web-based reimplementation inspired by the original C++ [OpenRV]
 
 ### Can I self-host OpenRV Web?
 
-Yes. Build the project with `pnpm build` and deploy the static files in the `dist/` directory to any web server or static hosting service. See the [Installation](../getting-started/installation.md) guide for details.
+Yes. Build the project with `pnpm build` and deploy the static files in the `dist/` directory to any web server or static hosting service. The core viewer (file loading, playback, color grading, annotations) works entirely from static files with no server-side runtime. However, the **collaborative review** feature requires a WebSocket signaling server for room creation, joining, and real-time message relay. If you need collaboration, you must also deploy or point to a signaling server and set the `VITE_NETWORK_SIGNALING_SERVERS` environment variable before building. See the [Installation](../getting-started/installation.md) guide for details.
 
 ## File Loading
 

@@ -1514,6 +1514,188 @@ describe('SessionURLService', () => {
   });
 
   // -----------------------------------------------------------------------
+  // Issue #359 regression: share URL auto-join and error surfacing
+  // -----------------------------------------------------------------------
+
+  describe('issue #359: share URL auto-join and error surfacing', () => {
+    it('SU-065: room-only URL (no pin) auto-joins immediately', async () => {
+      deps = createDeps({
+        getLocationSearch: () => '?room=EFGH',
+        getLocationHash: () => '',
+      });
+      service = new SessionURLService(deps);
+
+      await service.handleURLBootstrap();
+
+      // Room code should be prefilled in the UI
+      expect(deps.networkControl.setJoinRoomCodeFromLink).toHaveBeenCalledWith('EFGH');
+      // Auto-join should be attempted with no pin
+      expect(deps.networkSyncManager.joinRoom).toHaveBeenCalledWith('EFGH', 'User', undefined);
+      // No pin should be set
+      expect(deps.networkControl.setPinCode).not.toHaveBeenCalled();
+      expect(deps.networkSyncManager.setPinCode).not.toHaveBeenCalled();
+    });
+
+    it('SU-066: room+pin URL auto-joins with pin', async () => {
+      deps = createDeps({
+        getLocationSearch: () => '?room=MNOP&pin=4321',
+        getLocationHash: () => '',
+      });
+      service = new SessionURLService(deps);
+
+      await service.handleURLBootstrap();
+
+      expect(deps.networkControl.setJoinRoomCodeFromLink).toHaveBeenCalledWith('MNOP');
+      expect(deps.networkControl.setPinCode).toHaveBeenCalledWith('4321');
+      expect(deps.networkSyncManager.setPinCode).toHaveBeenCalledWith('4321');
+      expect(deps.networkSyncManager.joinRoom).toHaveBeenCalledWith('MNOP', 'User', '4321');
+    });
+
+    it('SU-067: room code is uppercased for both UI prefill and join', async () => {
+      deps = createDeps({
+        getLocationSearch: () => '?room=abcd-efgh',
+        getLocationHash: () => '',
+      });
+      service = new SessionURLService(deps);
+
+      await service.handleURLBootstrap();
+
+      expect(deps.networkControl.setJoinRoomCodeFromLink).toHaveBeenCalledWith('ABCD-EFGH');
+      expect(deps.networkSyncManager.joinRoom).toHaveBeenCalledWith('ABCD-EFGH', 'User', undefined);
+    });
+
+    it('SU-068: URL with no room params does not auto-join or show error', async () => {
+      deps = createDeps({
+        getLocationSearch: () => '',
+        getLocationHash: () => '',
+      });
+      service = new SessionURLService(deps);
+
+      await service.handleURLBootstrap();
+
+      expect(deps.networkControl.setJoinRoomCodeFromLink).not.toHaveBeenCalled();
+      expect(deps.networkSyncManager.joinRoom).not.toHaveBeenCalled();
+      expect(deps.networkControl.showInfo).not.toHaveBeenCalled();
+    });
+
+    it('SU-069: malformed WebRTC token in URL shows user-visible error', async () => {
+      deps = createDeps({
+        getLocationSearch: () => `?${WEBRTC_URL_SIGNAL_PARAM}=completely-broken-token!!!`,
+        getLocationHash: () => '',
+      });
+      service = new SessionURLService(deps);
+
+      await service.handleURLBootstrap();
+
+      expect(deps.networkControl.showInfo).toHaveBeenCalledWith(
+        'The WebRTC link is malformed or corrupted and could not be processed.',
+      );
+      // Should NOT attempt a room join
+      expect(deps.networkSyncManager.joinRoom).not.toHaveBeenCalled();
+    });
+
+    it('SU-070: valid WebRTC offer URL processes correctly without error', async () => {
+      const offerSignal: WebRTCURLOfferSignal = {
+        version: 1,
+        type: 'offer',
+        roomId: 'room-359',
+        roomCode: 'TEST',
+        hostUserId: 'host-359',
+        hostUserName: 'TestHost',
+        hostColor: '#0000ff',
+        createdAt: Date.now(),
+        sdp: 'v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\n',
+      };
+      const answerSignal: WebRTCURLAnswerSignal = {
+        version: 1,
+        type: 'answer',
+        roomId: 'room-359',
+        roomCode: 'TEST',
+        hostUserId: 'host-359',
+        guestUserId: 'guest-359',
+        guestUserName: 'TestGuest',
+        guestColor: '#00ff00',
+        createdAt: Date.now(),
+        sdp: 'v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\n',
+      };
+      const token = encodeWebRTCURLSignal(offerSignal);
+      const answerToken = encodeWebRTCURLSignal(answerSignal);
+
+      deps = createDeps({
+        getLocationSearch: () => `?${WEBRTC_URL_SIGNAL_PARAM}=${token}`,
+        getLocationHash: () => '',
+        getLocationHref: () => 'http://localhost/',
+      });
+      deps.networkSyncManager.joinServerlessRoomFromOfferToken.mockResolvedValue(answerToken);
+      service = new SessionURLService(deps);
+
+      await service.handleURLBootstrap();
+
+      expect(deps.networkSyncManager.joinServerlessRoomFromOfferToken).toHaveBeenCalledWith(
+        token,
+        'User',
+        undefined,
+      );
+      // Success message, not error
+      expect(deps.networkControl.showInfo).toHaveBeenCalledWith(
+        'Connected as guest via WebRTC. Copy the response token (or response URL) and send it to the host.',
+      );
+      expect(deps.networkControl.showInfo).not.toHaveBeenCalledWith(
+        expect.stringContaining('malformed'),
+      );
+      // Response URL and token should be set
+      expect(deps.networkControl.setShareLink).toHaveBeenCalled();
+      expect(deps.networkControl.setShareLinkKind).toHaveBeenCalledWith('response');
+      expect(deps.networkControl.setResponseToken).toHaveBeenCalledWith(answerToken);
+    });
+
+    it('SU-071: WebRTC token with unrecognized type shows malformed error', async () => {
+      // A valid base64 JSON object but with type neither 'offer' nor 'answer'
+      const badSignal = btoa(JSON.stringify({
+        version: 1,
+        type: 'negotiate',
+        roomId: 'room-1',
+        roomCode: 'ZZZZ',
+        hostUserId: 'h1',
+        createdAt: Date.now(),
+        sdp: 'v=0\r\n',
+      }))
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/g, '');
+
+      deps = createDeps({
+        getLocationSearch: () => `?${WEBRTC_URL_SIGNAL_PARAM}=${badSignal}`,
+        getLocationHash: () => '',
+      });
+      service = new SessionURLService(deps);
+
+      await service.handleURLBootstrap();
+
+      expect(deps.networkControl.showInfo).toHaveBeenCalledWith(
+        'The WebRTC link is malformed or corrupted and could not be processed.',
+      );
+    });
+
+    it('SU-072: pin-only URL (no room) does not auto-join and no error shown', async () => {
+      deps = createDeps({
+        getLocationSearch: () => '?pin=1234',
+        getLocationHash: () => '',
+      });
+      service = new SessionURLService(deps);
+
+      await service.handleURLBootstrap();
+
+      // Pin is set in the manager for later use
+      expect(deps.networkControl.setPinCode).toHaveBeenCalledWith('1234');
+      expect(deps.networkSyncManager.setPinCode).toHaveBeenCalledWith('1234');
+      // But no auto-join without room code
+      expect(deps.networkSyncManager.joinRoom).not.toHaveBeenCalled();
+      expect(deps.networkControl.setJoinRoomCodeFromLink).not.toHaveBeenCalled();
+    });
+  });
+
+  // -----------------------------------------------------------------------
   // dispose
   // -----------------------------------------------------------------------
 
@@ -1761,6 +1943,344 @@ describe('SessionURLService', () => {
       expect(freshSession.setCurrentAB).toHaveBeenCalledWith('B');
       expect(freshDeps.compareControl.setWipeMode).toHaveBeenCalledWith('horizontal');
       expect(freshDeps.compareControl.setWipePosition).toHaveBeenCalledWith(0.4);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Issue #549: Representation awareness in URL/session sharing
+  // -----------------------------------------------------------------------
+
+  describe('issue #549: representation awareness in share links', () => {
+    it('SU-073: capture includes representation data when active', () => {
+      deps.session.allSources = [{ url: 'https://example.com/shot.exr' }];
+      deps.session.currentSource = { url: 'https://example.com/shot.exr' };
+      (deps.session as any).getActiveRepresentation = vi.fn((sourceIndex: number) => {
+        if (sourceIndex === 0) {
+          return {
+            id: 'rep-proxy-1',
+            label: 'Proxy MOV (1920x1080)',
+            kind: 'proxy',
+            resolution: { width: 1920, height: 1080 },
+            loaderConfig: { url: 'https://example.com/shot_proxy.mov' },
+          };
+        }
+        return null;
+      });
+
+      const state = service.captureSessionURLState();
+
+      expect(state.representations).toBeDefined();
+      expect(state.representations).toHaveLength(1);
+      expect(state.representations![0]).toEqual({
+        sourceIndex: 0,
+        id: 'rep-proxy-1',
+        label: 'Proxy MOV (1920x1080)',
+        kind: 'proxy',
+        resolution: { width: 1920, height: 1080 },
+        loaderConfig: { url: 'https://example.com/shot_proxy.mov' },
+      });
+    });
+
+    it('SU-074: capture excludes representation data when no active rep', () => {
+      deps.session.allSources = [{ url: 'https://example.com/shot.exr' }];
+      deps.session.currentSource = { url: 'https://example.com/shot.exr' };
+      (deps.session as any).getActiveRepresentation = vi.fn(() => null);
+
+      const state = service.captureSessionURLState();
+
+      expect(state.representations).toBeUndefined();
+    });
+
+    it('SU-075: capture excludes representation data when getActiveRepresentation is not available', () => {
+      deps.session.allSources = [{ url: 'https://example.com/shot.exr' }];
+      deps.session.currentSource = { url: 'https://example.com/shot.exr' };
+      // No getActiveRepresentation on session
+
+      const state = service.captureSessionURLState();
+
+      expect(state.representations).toBeUndefined();
+    });
+
+    it('SU-076: apply restores active representation', async () => {
+      const addRepresentationToSource = vi.fn().mockReturnValue({
+        id: 'rep-proxy-1',
+        label: 'Proxy MOV (1920x1080)',
+        kind: 'proxy',
+      });
+      const activateRepresentation = vi.fn().mockResolvedValue(true);
+      (deps.session as any).addRepresentationToSource = addRepresentationToSource;
+      (deps.session as any).activateRepresentation = activateRepresentation;
+
+      const state: SessionURLState = {
+        frame: 1,
+        fps: 24,
+        sourceIndex: 0,
+        representations: [
+          {
+            sourceIndex: 0,
+            id: 'rep-proxy-1',
+            label: 'Proxy MOV (1920x1080)',
+            kind: 'proxy',
+            resolution: { width: 1920, height: 1080 },
+            loaderConfig: { url: 'https://example.com/shot_proxy.mov' },
+          },
+        ],
+      };
+
+      await service.applySessionURLState(state);
+
+      expect(addRepresentationToSource).toHaveBeenCalledWith(0, {
+        id: 'rep-proxy-1',
+        label: 'Proxy MOV (1920x1080)',
+        kind: 'proxy',
+        resolution: { width: 1920, height: 1080 },
+        loaderConfig: { url: 'https://example.com/shot_proxy.mov' },
+      });
+      expect(activateRepresentation).toHaveBeenCalledWith(0, 'rep-proxy-1');
+    });
+
+    it('SU-077: apply skips representation restoration when methods not available', async () => {
+      // No addRepresentationToSource or activateRepresentation on session
+
+      const state: SessionURLState = {
+        frame: 1,
+        fps: 24,
+        sourceIndex: 0,
+        representations: [
+          {
+            sourceIndex: 0,
+            id: 'rep-proxy-1',
+            label: 'Proxy MOV',
+            kind: 'proxy',
+            resolution: { width: 1920, height: 1080 },
+            loaderConfig: { url: 'https://example.com/proxy.mov' },
+          },
+        ],
+      };
+
+      // Should not throw
+      await service.applySessionURLState(state);
+
+      // View state should still be applied
+      expect(deps.session.goToFrame).toHaveBeenCalledWith(1);
+    });
+
+    it('SU-078: apply handles representation restoration failure gracefully', async () => {
+      const addRepresentationToSource = vi.fn().mockImplementation(() => {
+        throw new Error('Source not found');
+      });
+      const activateRepresentation = vi.fn().mockResolvedValue(true);
+      (deps.session as any).addRepresentationToSource = addRepresentationToSource;
+      (deps.session as any).activateRepresentation = activateRepresentation;
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const state: SessionURLState = {
+        frame: 10,
+        fps: 24,
+        sourceIndex: 0,
+        representations: [
+          {
+            sourceIndex: 0,
+            id: 'rep-proxy-1',
+            label: 'Proxy MOV',
+            kind: 'proxy',
+            resolution: { width: 1920, height: 1080 },
+            loaderConfig: { url: 'https://example.com/proxy.mov' },
+          },
+        ],
+      };
+
+      // Should not throw
+      await service.applySessionURLState(state);
+
+      expect(warnSpy).toHaveBeenCalled();
+      // View state should still be applied
+      expect(deps.session.goToFrame).toHaveBeenCalledWith(10);
+
+      warnSpy.mockRestore();
+    });
+
+    it('SU-079: backward compat — URLs without representation data still work', async () => {
+      const state: SessionURLState = {
+        frame: 42,
+        fps: 24,
+        sourceIndex: 0,
+        // No representations field
+      };
+
+      await service.applySessionURLState(state);
+
+      expect(deps.session.goToFrame).toHaveBeenCalledWith(42);
+    });
+
+    it('SU-080: round-trip capture → encode → decode → apply preserves representation', async () => {
+      // Setup: session with an active representation
+      deps.session.allSources = [{ url: 'https://example.com/shot.exr' }];
+      deps.session.currentSource = { url: 'https://example.com/shot.exr' };
+      deps.viewer.getTransform.mockReturnValue({
+        rotation: 0, flipH: false, flipV: false,
+        scale: { x: 1, y: 1 }, translate: { x: 0, y: 0 },
+      });
+      (deps.session as any).getActiveRepresentation = vi.fn((sourceIndex: number) => {
+        if (sourceIndex === 0) {
+          return {
+            id: 'rep-frames-1',
+            label: 'EXR Frames (4096x2160)',
+            kind: 'frames',
+            resolution: { width: 4096, height: 2160 },
+            loaderConfig: {
+              pattern: '/shots/shot.####.exr',
+              frameRange: { start: 1001, end: 1100 },
+            },
+          };
+        }
+        return null;
+      });
+
+      // Capture
+      const captured = service.captureSessionURLState();
+      expect(captured.representations).toHaveLength(1);
+
+      // Encode → Decode round-trip
+      const encoded = encodeSessionState(captured);
+      const decoded = decodeSessionState(encoded);
+      expect(decoded).not.toBeNull();
+      expect(decoded!.representations).toHaveLength(1);
+      expect(decoded!.representations![0]).toEqual({
+        sourceIndex: 0,
+        id: 'rep-frames-1',
+        label: 'EXR Frames (4096x2160)',
+        kind: 'frames',
+        resolution: { width: 4096, height: 2160 },
+        loaderConfig: {
+          pattern: '/shots/shot.####.exr',
+          frameRange: { start: 1001, end: 1100 },
+        },
+      });
+
+      // Apply on fresh session
+      const addRepresentationToSource = vi.fn().mockReturnValue({
+        id: 'rep-frames-1',
+        label: 'EXR Frames (4096x2160)',
+        kind: 'frames',
+      });
+      const activateRepresentation = vi.fn().mockResolvedValue(true);
+      const freshDeps = createDeps();
+      (freshDeps.session as any).addRepresentationToSource = addRepresentationToSource;
+      (freshDeps.session as any).activateRepresentation = activateRepresentation;
+      const freshService = new SessionURLService(freshDeps);
+
+      await freshService.applySessionURLState(decoded!);
+
+      expect(addRepresentationToSource).toHaveBeenCalledWith(0, {
+        id: 'rep-frames-1',
+        label: 'EXR Frames (4096x2160)',
+        kind: 'frames',
+        resolution: { width: 4096, height: 2160 },
+        loaderConfig: {
+          pattern: '/shots/shot.####.exr',
+          frameRange: { start: 1001, end: 1100 },
+        },
+      });
+      expect(activateRepresentation).toHaveBeenCalledWith(0, 'rep-frames-1');
+    });
+
+    it('SU-081: capture includes representations for multiple sources', () => {
+      deps.session.allSources = [
+        { url: 'https://example.com/shot_a.exr' },
+        { url: 'https://example.com/shot_b.exr' },
+      ];
+      deps.session.currentSource = { url: 'https://example.com/shot_a.exr' };
+      (deps.session as any).getActiveRepresentation = vi.fn((sourceIndex: number) => {
+        if (sourceIndex === 0) {
+          return {
+            id: 'rep-proxy-a',
+            label: 'Proxy A',
+            kind: 'proxy',
+            resolution: { width: 1920, height: 1080 },
+            loaderConfig: { url: 'https://example.com/shot_a_proxy.mov' },
+          };
+        }
+        if (sourceIndex === 1) {
+          return {
+            id: 'rep-proxy-b',
+            label: 'Proxy B',
+            kind: 'movie',
+            resolution: { width: 1920, height: 1080 },
+            loaderConfig: { url: 'https://example.com/shot_b_proxy.mov' },
+          };
+        }
+        return null;
+      });
+
+      const state = service.captureSessionURLState();
+
+      expect(state.representations).toHaveLength(2);
+      expect(state.representations![0]!.sourceIndex).toBe(0);
+      expect(state.representations![0]!.id).toBe('rep-proxy-a');
+      expect(state.representations![1]!.sourceIndex).toBe(1);
+      expect(state.representations![1]!.id).toBe('rep-proxy-b');
+    });
+
+    it('SU-082: capture strips non-serializable File fields from loaderConfig', () => {
+      deps.session.allSources = [{ url: 'https://example.com/shot.exr' }];
+      deps.session.currentSource = { url: 'https://example.com/shot.exr' };
+      (deps.session as any).getActiveRepresentation = vi.fn((sourceIndex: number) => {
+        if (sourceIndex === 0) {
+          return {
+            id: 'rep-1',
+            label: 'Frames',
+            kind: 'frames',
+            resolution: { width: 4096, height: 2160 },
+            loaderConfig: {
+              url: 'https://example.com/frame.exr',
+              file: new File([], 'frame.exr'),  // non-serializable
+              files: [new File([], 'f1.exr')],  // non-serializable
+              pattern: 'shot.####.exr',
+            },
+          };
+        }
+        return null;
+      });
+
+      const state = service.captureSessionURLState();
+
+      expect(state.representations).toHaveLength(1);
+      const lc = state.representations![0]!.loaderConfig;
+      expect(lc.url).toBe('https://example.com/frame.exr');
+      expect(lc.pattern).toBe('shot.####.exr');
+      // File objects should be stripped
+      expect('file' in lc).toBe(false);
+      expect('files' in lc).toBe(false);
+    });
+
+    it('SU-083: apply does not restore representation when addRepresentationToSource returns null', async () => {
+      const addRepresentationToSource = vi.fn().mockReturnValue(null);
+      const activateRepresentation = vi.fn().mockResolvedValue(true);
+      (deps.session as any).addRepresentationToSource = addRepresentationToSource;
+      (deps.session as any).activateRepresentation = activateRepresentation;
+
+      const state: SessionURLState = {
+        frame: 1,
+        fps: 24,
+        sourceIndex: 0,
+        representations: [
+          {
+            sourceIndex: 0,
+            id: 'rep-1',
+            label: 'Proxy',
+            kind: 'proxy',
+            resolution: { width: 1920, height: 1080 },
+            loaderConfig: { url: 'https://example.com/proxy.mov' },
+          },
+        ],
+      };
+
+      await service.applySessionURLState(state);
+
+      expect(addRepresentationToSource).toHaveBeenCalled();
+      // activateRepresentation should NOT be called since addRepresentationToSource returned null
+      expect(activateRepresentation).not.toHaveBeenCalled();
     });
   });
 });

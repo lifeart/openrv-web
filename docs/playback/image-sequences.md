@@ -34,6 +34,22 @@ OpenRV Web recognizes several naming conventions for numbered files:
 
 Pattern detection is automatic and requires no configuration. The detected pattern is displayed using hash notation (e.g., `frame_####.png`) in the Info Panel overlay (toggle with the info panel shortcut).
 
+Pattern strings can also be used programmatically to load sequences:
+
+```javascript
+// Load a sequence from a hash-notation pattern (frames 1001-1100 at 24 fps)
+await window.openrv.media.addSourceFromPattern('/renders/shot.####.exr', 1001, 1100);
+
+// Load from printf notation
+await window.openrv.media.addSourceFromPattern('frame.%04d.png', 1, 48, 30);
+
+// Load from at-sign notation
+await window.openrv.media.addSourceFromPattern('render.@@@@.exr', 1, 100);
+
+// Pattern strings are also auto-detected by addSourceFromURL
+await window.openrv.media.addSourceFromURL('shot.####.exr');
+```
+
 ## Missing Frame Detection
 
 After detecting a sequence range, OpenRV Web checks for gaps. If files are missing within the range (e.g., frames 1--10 exist but frame 5 is absent), the missing frames are identified and tracked.
@@ -118,6 +134,9 @@ const source = window.openrv.media.getCurrentSource();
 // FPS control
 const fps = window.openrv.media.getPlaybackFPS();
 window.openrv.media.setPlaybackFPS(30);
+
+// Load sequence from pattern string
+await window.openrv.media.addSourceFromPattern('/renders/shot.####.exr', 1001, 1100);
 ```
 
 ---

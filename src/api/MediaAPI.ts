@@ -264,6 +264,34 @@ export class MediaAPI extends DisposableAPI {
   }
 
   /**
+   * Load an image sequence from a pattern string.
+   *
+   * Accepts `####` (hash), `%04d` (printf), or `@@@@` (at-sign) notation to
+   * specify the frame-number placeholder.  The pattern is expanded across the
+   * given frame range and each resulting URL is loaded as a sequence frame.
+   *
+   * @param pattern   - URL/path with a frame placeholder, e.g. `/path/shot.####.exr`
+   * @param startFrame - First frame number (inclusive, default: 1)
+   * @param endFrame   - Last frame number (inclusive, default: 100)
+   * @param fps        - Frame rate (default: session fps)
+   *
+   * @example
+   * ```ts
+   * await openrv.media.addSourceFromPattern('/renders/shot.####.exr', 1001, 1100);
+   * await openrv.media.addSourceFromPattern('frame.%04d.png', 1, 48, 30);
+   * ```
+   */
+  async addSourceFromPattern(
+    pattern: string,
+    startFrame?: number,
+    endFrame?: number,
+    fps?: number,
+  ): Promise<void> {
+    this.assertNotDisposed();
+    return this.session.loadSequenceFromPatternString(pattern, startFrame, endFrame, fps);
+  }
+
+  /**
    * Clear all loaded media sources, releasing associated resources.
    * Creates an auto-checkpoint before clearing when sources exist
    * and a persistence manager is available.

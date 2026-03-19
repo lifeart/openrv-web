@@ -334,6 +334,6 @@ describe('SequenceRepresentationLoader', () => {
       startFrame: 0,
     };
 
-    await expect(loader.load(rep)).rejects.toThrow('no files provided');
+    await expect(loader.load(rep)).rejects.toThrow('no files or pattern provided');
   });
 });

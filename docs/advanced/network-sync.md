@@ -32,9 +32,9 @@ Participants join an existing room by entering the room code provided by the hos
 2. Enter the room code in the **Room Code** field
 3. Click **Join Room**
 
-Alternatively, the host can copy a shareable URL using the **Copy Link** button. Opening this URL in a browser automatically populates the room code and initiates a join.
+Alternatively, the host can copy a shareable URL using the **Copy Link** button. Opening this URL in a browser automatically populates the room code and initiates a join attempt. If the room is not PIN-protected, the join completes without any manual steps. If the room requires a PIN and the URL includes the PIN parameter, the join also completes automatically. If the room requires a PIN but the URL does not include one, the room code is prefilled in the UI and the user is prompted to enter the PIN manually.
 
-Invalid or non-existent room codes produce an error message. If the room has reached its maximum participant count, a "Room is full" error is displayed.
+Invalid or non-existent room codes produce an error message. If the room has reached its maximum participant count, a "Room is full" error is displayed. Malformed or corrupted share links display an error notification explaining that the link could not be processed.
 
 ---
 
@@ -85,7 +85,7 @@ OpenRV Web uses **WebSocket** connections (Secure WebSocket, `wss://`) as the pr
 
 ### URL-Based Signaling
 
-Room connection is established through URL-based signaling. The shareable room URL encodes the room code and server endpoint, allowing one-click joining without manual code entry.
+Room connection is established through URL-based signaling. The shareable room URL encodes the room code (and optionally a PIN) as query parameters. For rooms without PIN protection, opening the URL joins the room automatically with no manual entry required. For PIN-protected rooms, the URL must include the PIN parameter for automatic joining; otherwise, the room code is prefilled and the user must enter the PIN manually. Malformed or corrupted signaling URLs display an error notification to the user rather than failing silently.
 
 ### PIN Encryption
 
@@ -112,7 +112,7 @@ For remote dailies with a director or client, create the room with a PIN for sec
 
 ## WebRTC Peer Connections
 
-In addition to WebSocket-based sync, OpenRV Web supports direct peer-to-peer connections via WebRTC for lower-latency communication. NAT traversal uses public STUN and TURN servers (Google, Cloudflare, OpenRelay) so peers behind firewalls and NATs can establish direct connections. URL-based signaling enables serverless P2P connection setup -- participants exchange connection offers through encoded URLs without needing a dedicated signaling server.
+In addition to WebSocket-based sync, OpenRV Web supports direct peer-to-peer connections via WebRTC for lower-latency communication. NAT traversal uses public STUN and TURN servers (Google, Cloudflare, OpenRelay) so peers behind firewalls and NATs can establish direct connections. URL-based signaling enables serverless P2P connection setup -- participants exchange connection offers through encoded URLs without needing a dedicated signaling server. If a WebRTC invite link is malformed, expired, or already consumed, the application displays an error notification explaining why the link could not be processed.
 
 ## Media Transfer
 

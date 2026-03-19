@@ -530,6 +530,117 @@ describe('ShotGridBridge', () => {
       const body = JSON.parse(mockFetch.mock.calls[1]![1]?.body as string);
       expect(body.data.attributes.frame_range).toBeUndefined();
     });
+
+    it('SG-003e: appends annotation summaries to content when provided', async () => {
+      mockFetch.mockResolvedValueOnce(authResponse()).mockResolvedValueOnce(jsonResponse({ data: { id: 504 } }));
+
+      await bridge.pushNote(101, {
+        text: 'Fix edge',
+        frameRange: '5',
+        annotations: [
+          { frame: 5, type: 'pen', user: 'Reviewer', description: '3-point stroke' },
+          { frame: 5, type: 'text', user: 'Reviewer', description: 'Fix this' },
+        ],
+      });
+
+      const body = JSON.parse(mockFetch.mock.calls[1]![1]?.body as string);
+      const content = body.data.attributes.content as string;
+      expect(content).toContain('Fix edge');
+      expect(content).toContain('--- Annotations ---');
+      expect(content).toContain('[Frame 5] pen: 3-point stroke (by Reviewer)');
+      expect(content).toContain('[Frame 5] text: Fix this (by Reviewer)');
+    });
+
+    it('SG-003f: content is plain text when no annotations provided', async () => {
+      mockFetch.mockResolvedValueOnce(authResponse()).mockResolvedValueOnce(jsonResponse({ data: { id: 505 } }));
+
+      await bridge.pushNote(101, { text: 'Plain note' });
+
+      const body = JSON.parse(mockFetch.mock.calls[1]![1]?.body as string);
+      expect(body.data.attributes.content).toBe('Plain note');
+      expect(body.data.attributes.content).not.toContain('Annotations');
+    });
+
+    it('SG-003g: content is plain text when annotations array is empty', async () => {
+      mockFetch.mockResolvedValueOnce(authResponse()).mockResolvedValueOnce(jsonResponse({ data: { id: 506 } }));
+
+      await bridge.pushNote(101, { text: 'No drawings', annotations: [] });
+
+      const body = JSON.parse(mockFetch.mock.calls[1]![1]?.body as string);
+      expect(body.data.attributes.content).toBe('No drawings');
+    });
+
+    it('SG-003h: uploads thumbnail as attachment after note creation', async () => {
+      // Auth + note creation + attachment upload
+      mockFetch
+        .mockResolvedValueOnce(authResponse())
+        .mockResolvedValueOnce(jsonResponse({ data: { id: 507 } }))
+        .mockResolvedValueOnce(jsonResponse({ data: { id: 1001 } }));
+
+      const blob = new Blob(['fake-png'], { type: 'image/png' });
+
+      await bridge.pushNote(101, {
+        text: 'With thumbnail',
+        thumbnailBlob: blob,
+      });
+
+      // 3 requests: auth + note + upload
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+
+      const uploadCall = mockFetch.mock.calls[2]!;
+      expect(uploadCall[0]).toBe('https://studio.shotgrid.autodesk.com/api/v1/entity/notes/507/_upload');
+      expect(uploadCall[1]?.method).toBe('POST');
+      // Body should be FormData
+      expect(uploadCall[1]?.body).toBeInstanceOf(FormData);
+    });
+
+    it('SG-003i: note is still returned if thumbnail upload fails', async () => {
+      // Auth + note creation (ok) + attachment upload (fails)
+      mockFetch
+        .mockResolvedValueOnce(authResponse())
+        .mockResolvedValueOnce(jsonResponse({ data: { id: 508, subject: 'Test' } }))
+        .mockResolvedValueOnce(jsonResponse({ error: 'upload failed' }, 500));
+
+      const blob = new Blob(['fake-png'], { type: 'image/png' });
+
+      const result = await bridge.pushNote(101, {
+        text: 'With failed thumbnail',
+        thumbnailBlob: blob,
+      });
+
+      // Note was still created successfully
+      expect(result.id).toBe(508);
+    });
+  });
+
+  describe('uploadAttachment', () => {
+    it('SG-003j: sends FormData with file to the correct URL', async () => {
+      mockFetch
+        .mockResolvedValueOnce(authResponse())
+        .mockResolvedValueOnce(jsonResponse({ data: { id: 1001 } }));
+
+      const blob = new Blob(['test-data'], { type: 'image/png' });
+      await bridge.uploadAttachment(999, blob, 'thumb.png');
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      const call = mockFetch.mock.calls[1]!;
+      expect(call[0]).toBe('https://studio.shotgrid.autodesk.com/api/v1/entity/notes/999/_upload');
+      expect(call[1]?.method).toBe('POST');
+      expect(call[1]?.body).toBeInstanceOf(FormData);
+
+      // Authorization header should be present
+      const headers = call[1]?.headers as Record<string, string>;
+      expect(headers.Authorization).toBe('Bearer mock-bearer-token');
+    });
+
+    it('SG-003k: throws on upload failure', async () => {
+      mockFetch
+        .mockResolvedValueOnce(authResponse())
+        .mockResolvedValueOnce(jsonResponse({ error: 'bad request' }, 400));
+
+      const blob = new Blob(['test-data'], { type: 'image/png' });
+      await expect(bridge.uploadAttachment(999, blob)).rejects.toThrow(ShotGridAPIError);
+    });
   });
 
   describe('pushStatus', () => {

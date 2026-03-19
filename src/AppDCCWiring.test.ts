@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { fetchAndApplyLUT, wireDCCBridge, type DCCWiringState, type DCCWiringColorControls, type DCCWiringViewer, type DCCWiringDeps } from './AppDCCWiring';
+import { fetchAndApplyLUT, wireDCCBridge, validateMediaPath, type DCCWiringState, type DCCWiringColorControls, type DCCWiringViewer, type DCCWiringDeps } from './AppDCCWiring';
 import { DisposableSubscriptionManager } from './utils/DisposableSubscriptionManager';
 import { NoteManager } from './core/session/NoteManager';
 
@@ -390,5 +390,255 @@ describe('NoteManager — noteAdded event (#445)', () => {
     // the internal state is cleared. We create a new manager to verify
     // the old listener is gone.
     expect(listener).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// validateMediaPath regression tests (#525)
+// ---------------------------------------------------------------------------
+
+describe('validateMediaPath — DCC loadMedia path validation (#525)', () => {
+  it('DCCP-001: HTTP URL passes through correctly', () => {
+    const result = validateMediaPath('http://localhost:8080/renders/shot.exr');
+    expect(result.valid).toBe(true);
+    expect((result as { valid: true; url: string }).url).toBe('http://localhost:8080/renders/shot.exr');
+  });
+
+  it('DCCP-002: HTTPS URL passes through correctly', () => {
+    const result = validateMediaPath('https://cdn.example.com/media/video.mp4');
+    expect(result.valid).toBe(true);
+    expect((result as { valid: true; url: string }).url).toBe('https://cdn.example.com/media/video.mp4');
+  });
+
+  it('DCCP-003: blob: URL passes through correctly', () => {
+    const result = validateMediaPath('blob:http://localhost/abc-123');
+    expect(result.valid).toBe(true);
+    expect((result as { valid: true; url: string }).url).toBe('blob:http://localhost/abc-123');
+  });
+
+  it('DCCP-004: data: URL passes through correctly', () => {
+    const result = validateMediaPath('data:image/png;base64,iVBORw0KGgo=');
+    expect(result.valid).toBe(true);
+    expect((result as { valid: true; url: string }).url).toBe('data:image/png;base64,iVBORw0KGgo=');
+  });
+
+  it('DCCP-005: file: URL passes through correctly', () => {
+    const result = validateMediaPath('file:///mnt/renders/shot.exr');
+    expect(result.valid).toBe(true);
+    expect((result as { valid: true; url: string }).url).toBe('file:///mnt/renders/shot.exr');
+  });
+
+  it('DCCP-006: Unix filesystem path is rejected with actionable error', () => {
+    const result = validateMediaPath('/mnt/renders/shot.exr');
+    expect(result.valid).toBe(false);
+    const err = (result as { valid: false; error: string }).error;
+    expect(err).toContain('/mnt/renders/shot.exr');
+    expect(err).toContain('file://');
+    expect(err).toContain('HTTP');
+  });
+
+  it('DCCP-007: Windows drive path (backslash) is rejected with actionable error', () => {
+    const result = validateMediaPath('C:\\renders\\shot.exr');
+    expect(result.valid).toBe(false);
+    const err = (result as { valid: false; error: string }).error;
+    expect(err).toContain('C:\\renders\\shot.exr');
+    expect(err).toContain('file://');
+  });
+
+  it('DCCP-008: Windows drive path (forward slash) is rejected', () => {
+    const result = validateMediaPath('D:/renders/shot.exr');
+    expect(result.valid).toBe(false);
+    const err = (result as { valid: false; error: string }).error;
+    expect(err).toContain('D:/renders/shot.exr');
+  });
+
+  it('DCCP-009: UNC path is rejected with actionable error', () => {
+    const result = validateMediaPath('\\\\server\\share\\file.exr');
+    expect(result.valid).toBe(false);
+    const err = (result as { valid: false; error: string }).error;
+    expect(err).toContain('UNC path');
+    expect(err).toContain('file://');
+  });
+
+  it('DCCP-010: empty string is rejected', () => {
+    const result = validateMediaPath('');
+    expect(result.valid).toBe(false);
+    expect((result as { valid: false; error: string }).error).toContain('Empty path');
+  });
+
+  it('DCCP-011: whitespace-only string is rejected', () => {
+    const result = validateMediaPath('   ');
+    expect(result.valid).toBe(false);
+    expect((result as { valid: false; error: string }).error).toContain('Empty path');
+  });
+
+  it('DCCP-012: protocol-relative URL is upgraded to https', () => {
+    const result = validateMediaPath('//cdn.example.com/media/shot.exr');
+    expect(result.valid).toBe(true);
+    expect((result as { valid: true; url: string }).url).toBe('https://cdn.example.com/media/shot.exr');
+  });
+
+  it('DCCP-013: unsupported URL scheme (ftp:) is rejected', () => {
+    const result = validateMediaPath('ftp://server/renders/shot.exr');
+    expect(result.valid).toBe(false);
+    const err = (result as { valid: false; error: string }).error;
+    expect(err).toContain('ftp:');
+    expect(err).toContain('Unsupported URL scheme');
+  });
+
+  it('DCCP-014: file: URL with Windows drive letter passes', () => {
+    const result = validateMediaPath('file:///C:/renders/shot.exr');
+    expect(result.valid).toBe(true);
+    expect((result as { valid: true; url: string }).url).toBe('file:///C:/renders/shot.exr');
+  });
+
+  it('DCCP-015: URL with leading/trailing whitespace is trimmed', () => {
+    const result = validateMediaPath('  https://example.com/shot.exr  ');
+    expect(result.valid).toBe(true);
+    expect((result as { valid: true; url: string }).url).toBe('https://example.com/shot.exr');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// wireDCCBridge loadMedia path validation integration (#525)
+// ---------------------------------------------------------------------------
+
+describe('wireDCCBridge — loadMedia path validation (#525)', () => {
+  it('DCCP-016: valid HTTP URL is forwarded to session loader', async () => {
+    const bridge = makeMockBridge();
+    const session = makeMockSession();
+
+    const deps: DCCWiringDeps = {
+      dccBridge: bridge as any,
+      session: session as any,
+      viewer: makeViewer() as any,
+      colorControls: makeMockColorControls() as any,
+      showAlertFn: vi.fn(),
+    };
+
+    wireDCCBridge(deps);
+
+    // Simulate inbound loadMedia with valid URL
+    const loadMediaHandlers = bridge._handlers.get('loadMedia') ?? [];
+    expect(loadMediaHandlers.length).toBeGreaterThan(0);
+
+    loadMediaHandlers[0]!({ type: 'loadMedia', path: 'https://example.com/shot.png' });
+
+    // Wait for the async chain to resolve
+    await vi.waitFor(() => {
+      expect(session.loadImage).toHaveBeenCalledTimes(1);
+    });
+
+    expect(session.loadImage).toHaveBeenCalledWith('shot.png', 'https://example.com/shot.png');
+  });
+
+  it('DCCP-017: local filesystem path sends INVALID_MEDIA_PATH error back to DCC', () => {
+    const bridge = makeMockBridge();
+    const session = makeMockSession();
+
+    const deps: DCCWiringDeps = {
+      dccBridge: bridge as any,
+      session: session as any,
+      viewer: makeViewer() as any,
+      colorControls: makeMockColorControls() as any,
+      showAlertFn: vi.fn(),
+    };
+
+    wireDCCBridge(deps);
+
+    const loadMediaHandlers = bridge._handlers.get('loadMedia') ?? [];
+    loadMediaHandlers[0]!({ type: 'loadMedia', path: '/mnt/renders/shot.exr', id: 'req-42' });
+
+    expect(bridge.sendError).toHaveBeenCalledTimes(1);
+    expect(bridge.sendError).toHaveBeenCalledWith(
+      'INVALID_MEDIA_PATH',
+      expect.stringContaining('/mnt/renders/shot.exr'),
+      'req-42',
+    );
+    // Session loaders should NOT have been called
+    expect(session.loadImage).not.toHaveBeenCalled();
+    expect(session.loadVideo).not.toHaveBeenCalled();
+  });
+
+  it('DCCP-018: Windows path sends INVALID_MEDIA_PATH error back to DCC', () => {
+    const bridge = makeMockBridge();
+    const session = makeMockSession();
+
+    const deps: DCCWiringDeps = {
+      dccBridge: bridge as any,
+      session: session as any,
+      viewer: makeViewer() as any,
+      colorControls: makeMockColorControls() as any,
+      showAlertFn: vi.fn(),
+    };
+
+    wireDCCBridge(deps);
+
+    const loadMediaHandlers = bridge._handlers.get('loadMedia') ?? [];
+    loadMediaHandlers[0]!({ type: 'loadMedia', path: 'C:\\renders\\shot.exr' });
+
+    expect(bridge.sendError).toHaveBeenCalledTimes(1);
+    expect(bridge.sendError).toHaveBeenCalledWith(
+      'INVALID_MEDIA_PATH',
+      expect.stringContaining('C:\\renders\\shot.exr'),
+      undefined,
+    );
+    expect(session.loadImage).not.toHaveBeenCalled();
+    expect(session.loadVideo).not.toHaveBeenCalled();
+  });
+
+  it('DCCP-019: UNC path sends INVALID_MEDIA_PATH error back to DCC', () => {
+    const bridge = makeMockBridge();
+    const session = makeMockSession();
+
+    const deps: DCCWiringDeps = {
+      dccBridge: bridge as any,
+      session: session as any,
+      viewer: makeViewer() as any,
+      colorControls: makeMockColorControls() as any,
+      showAlertFn: vi.fn(),
+    };
+
+    wireDCCBridge(deps);
+
+    const loadMediaHandlers = bridge._handlers.get('loadMedia') ?? [];
+    loadMediaHandlers[0]!({ type: 'loadMedia', path: '\\\\server\\share\\file.exr' });
+
+    expect(bridge.sendError).toHaveBeenCalledTimes(1);
+    expect(bridge.sendError).toHaveBeenCalledWith(
+      'INVALID_MEDIA_PATH',
+      expect.stringContaining('UNC path'),
+      undefined,
+    );
+    expect(session.loadImage).not.toHaveBeenCalled();
+    expect(session.loadVideo).not.toHaveBeenCalled();
+  });
+
+  it('DCCP-020: empty path sends INVALID_MEDIA_PATH error (path passes DCCBridge validation but fails URL validation)', () => {
+    const bridge = makeMockBridge();
+    const session = makeMockSession();
+
+    const deps: DCCWiringDeps = {
+      dccBridge: bridge as any,
+      session: session as any,
+      viewer: makeViewer() as any,
+      colorControls: makeMockColorControls() as any,
+      showAlertFn: vi.fn(),
+    };
+
+    wireDCCBridge(deps);
+
+    // Simulate a loadMedia message that somehow has an empty path
+    // (DCCBridge.handleLoadMedia already checks for missing path,
+    //  but validateMediaPath adds a second line of defence for whitespace-only)
+    const loadMediaHandlers = bridge._handlers.get('loadMedia') ?? [];
+    loadMediaHandlers[0]!({ type: 'loadMedia', path: '   ' });
+
+    expect(bridge.sendError).toHaveBeenCalledTimes(1);
+    expect(bridge.sendError).toHaveBeenCalledWith(
+      'INVALID_MEDIA_PATH',
+      expect.stringContaining('Empty path'),
+      undefined,
+    );
   });
 });

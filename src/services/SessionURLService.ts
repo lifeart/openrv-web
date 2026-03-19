@@ -6,10 +6,11 @@
  * top-level orchestrator.
  */
 
-import { decodeSessionState, type SessionURLState } from '../core/session/SessionURLManager';
+import { decodeSessionState, type SessionURLState, type RepresentationURLState } from '../core/session/SessionURLManager';
 import { decodeWebRTCURLSignal, WEBRTC_URL_SIGNAL_PARAM } from '../network/WebRTCURLSignaling';
 import type { Transform2D } from '../core/types/transform';
 import { DEFAULT_TRANSFORM } from '../core/types/transform';
+import type { AddRepresentationConfig, MediaRepresentation } from '../core/types/representation';
 
 // ---------------------------------------------------------------------------
 // Dependency interfaces (structural typing)
@@ -38,6 +39,12 @@ export interface URLSession {
   setCurrentAB(ab: 'A' | 'B'): void;
   /** Load media from a URL. Used to reconstruct shared media on a clean session. */
   loadSourceFromUrl?(url: string): Promise<void>;
+  /** Get the active representation for a source. Returns null if none. */
+  getActiveRepresentation?(sourceIndex: number): MediaRepresentation | null;
+  /** Add a representation to a source. Returns the created representation or null. */
+  addRepresentationToSource?(sourceIndex: number, config: AddRepresentationConfig): MediaRepresentation | null;
+  /** Switch the active representation for a source. Returns true on success. */
+  activateRepresentation?(sourceIndex: number, repId: string): Promise<boolean>;
 }
 
 /** Subset of Viewer used by URL state management. */
@@ -139,6 +146,29 @@ export class SessionURLService {
       }
     }
 
+    // Collect active representations for each source
+    let representations: RepresentationURLState[] | undefined;
+    if (session.getActiveRepresentation) {
+      const reps: RepresentationURLState[] = [];
+      for (let i = 0; i < session.allSources.length; i++) {
+        const rep = session.getActiveRepresentation(i);
+        if (rep) {
+          const { file: _file, files: _files, ...serializableConfig } = rep.loaderConfig;
+          reps.push({
+            sourceIndex: i,
+            id: rep.id,
+            label: rep.label,
+            kind: rep.kind,
+            resolution: { ...rep.resolution },
+            loaderConfig: { ...serializableConfig },
+          });
+        }
+      }
+      if (reps.length > 0) {
+        representations = reps;
+      }
+    }
+
     return {
       frame: session.currentFrame,
       fps: session.fps,
@@ -163,6 +193,7 @@ export class SessionURLService {
             look: ocioState.look,
           }
         : undefined,
+      representations,
     };
   }
 
@@ -350,6 +381,29 @@ export class SessionURLService {
         const currentOcio = ocioControl.getState();
         if (currentOcio.enabled) {
           ocioControl.setState({ ...currentOcio, enabled: false });
+        }
+      }
+
+      // Restore active representations
+      if (state.representations && state.representations.length > 0 && session.addRepresentationToSource && session.activateRepresentation) {
+        for (const repState of state.representations) {
+          try {
+            const rep = session.addRepresentationToSource(repState.sourceIndex, {
+              id: repState.id,
+              label: repState.label,
+              kind: repState.kind,
+              resolution: repState.resolution,
+              loaderConfig: repState.loaderConfig,
+            });
+            if (rep) {
+              await session.activateRepresentation(repState.sourceIndex, rep.id);
+            }
+          } catch (err) {
+            console.warn(
+              `[SessionURLService] Failed to restore representation "${repState.label}" for source ${repState.sourceIndex}:`,
+              err,
+            );
+          }
         }
       }
     } finally {

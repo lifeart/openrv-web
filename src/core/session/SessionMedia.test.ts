@@ -18,10 +18,28 @@ vi.mock('../../utils/media/SequenceLoader', () => ({
 }));
 
 // Use vi.hoisted + class mocks so instanceof checks work in applyRepresentationShim
-const { MockVideoSourceNode, MockFileSourceNode } = vi.hoisted(() => {
+const { MockVideoSourceNode, MockFileSourceNode, MockSequenceSourceNodeWrapper } = vi.hoisted(() => {
   class _MockVideoSourceNode {}
   class _MockFileSourceNode {}
-  return { MockVideoSourceNode: _MockVideoSourceNode, MockFileSourceNode: _MockFileSourceNode };
+  class _MockSequenceSourceNodeWrapper {
+    private _sequenceInfo: any;
+    private _frames: any[];
+    constructor(sequenceInfo: any, frames: any[]) {
+      this._sequenceInfo = sequenceInfo;
+      this._frames = frames;
+    }
+    get sequenceInfo() { return this._sequenceInfo; }
+    get frames() { return this._frames; }
+    getElement(frame: number) {
+      const idx = frame - 1;
+      return this._frames[idx]?.image ?? null;
+    }
+  }
+  return {
+    MockVideoSourceNode: _MockVideoSourceNode,
+    MockFileSourceNode: _MockFileSourceNode,
+    MockSequenceSourceNodeWrapper: _MockSequenceSourceNodeWrapper,
+  };
 });
 
 vi.mock('../../nodes/sources/VideoSourceNode', () => ({
@@ -30,6 +48,10 @@ vi.mock('../../nodes/sources/VideoSourceNode', () => ({
 
 vi.mock('../../nodes/sources/FileSourceNode', () => ({
   FileSourceNode: MockFileSourceNode,
+}));
+
+vi.mock('./loaders/SequenceRepresentationLoader', () => ({
+  SequenceSourceNodeWrapper: MockSequenceSourceNodeWrapper,
 }));
 
 vi.mock('../../utils/media/SupportedMediaFormats', () => ({
@@ -1814,6 +1836,173 @@ describe('SessionMedia', () => {
       expect(media.currentSource?.type).toBe('image');
       expect(media.currentSource?.duration).toBe(1);
       expect(videoPause).toHaveBeenCalled();
+    });
+  });
+
+  describe('applyRepresentationShim sequence metadata preservation (#535)', () => {
+    function makeRepresentation(overrides?: Record<string, unknown>) {
+      return {
+        id: 'rep-seq-1',
+        kind: 'proxy' as const,
+        label: 'Proxy Sequence',
+        resolution: { width: 1920, height: 1080 },
+        loaderConfig: {},
+        sourceNode: null,
+        duration: undefined as number | undefined,
+        fps: undefined as number | undefined,
+        ...overrides,
+      };
+    }
+
+    function makeSequenceFrames(count: number) {
+      return Array.from({ length: count }, (_, i) => ({
+        frameNumber: i + 1,
+        image: { tagName: 'IMG', src: `frame${i + 1}.png` } as unknown as HTMLImageElement,
+      }));
+    }
+
+    function makeSequenceInfo(frames: any[]) {
+      return {
+        name: 'shot_####.exr',
+        pattern: 'shot_####.exr',
+        width: 1920,
+        height: 1080,
+        fps: 24,
+        startFrame: 1,
+        endFrame: frames.length,
+        frames,
+      };
+    }
+
+    it('SM-100: preserves sequenceInfo from SequenceSourceNodeWrapper', () => {
+      const source = makeImageSource({ duration: 1, fps: 24 });
+      media.addSource(source);
+
+      const frames = makeSequenceFrames(48);
+      const seqInfo = makeSequenceInfo(frames);
+      const wrapper = new (MockSequenceSourceNodeWrapper as any)(seqInfo, frames);
+      const rep = makeRepresentation({ sourceNode: wrapper, duration: 48, fps: 24 });
+      (media as any).applyRepresentationShim(0, rep);
+
+      expect(source.sequenceInfo).toBe(seqInfo);
+    });
+
+    it('SM-101: preserves sequenceFrames from SequenceSourceNodeWrapper', () => {
+      const source = makeImageSource({ duration: 1, fps: 24 });
+      media.addSource(source);
+
+      const frames = makeSequenceFrames(48);
+      const seqInfo = makeSequenceInfo(frames);
+      const wrapper = new (MockSequenceSourceNodeWrapper as any)(seqInfo, frames);
+      const rep = makeRepresentation({ sourceNode: wrapper, duration: 48, fps: 24 });
+      (media as any).applyRepresentationShim(0, rep);
+
+      expect(source.sequenceFrames).toBe(frames);
+      expect(source.sequenceFrames!.length).toBe(48);
+    });
+
+    it('SM-102: builds sequenceFrameMap for O(1) lookups', () => {
+      const source = makeImageSource({ duration: 1, fps: 24 });
+      media.addSource(source);
+
+      const frames = makeSequenceFrames(10);
+      const seqInfo = makeSequenceInfo(frames);
+      const wrapper = new (MockSequenceSourceNodeWrapper as any)(seqInfo, frames);
+      const rep = makeRepresentation({ sourceNode: wrapper, duration: 10, fps: 24 });
+      (media as any).applyRepresentationShim(0, rep);
+
+      expect(source.sequenceFrameMap).toBeDefined();
+      expect(source.sequenceFrameMap!.size).toBe(10);
+      // Frame number 1 should map to the first frame
+      expect(source.sequenceFrameMap!.get(1)).toBe(frames[0]);
+    });
+
+    it('SM-103: sets source type to sequence', () => {
+      const source = makeImageSource({ duration: 1, fps: 24 });
+      media.addSource(source);
+
+      const frames = makeSequenceFrames(24);
+      const seqInfo = makeSequenceInfo(frames);
+      const wrapper = new (MockSequenceSourceNodeWrapper as any)(seqInfo, frames);
+      const rep = makeRepresentation({ sourceNode: wrapper, duration: 24, fps: 24 });
+      (media as any).applyRepresentationShim(0, rep);
+
+      expect(source.type).toBe('sequence');
+    });
+
+    it('SM-104: sets element from first frame via getElement(1)', () => {
+      const source = makeImageSource({ duration: 1, fps: 24 });
+      media.addSource(source);
+
+      const frames = makeSequenceFrames(5);
+      const seqInfo = makeSequenceInfo(frames);
+      const wrapper = new (MockSequenceSourceNodeWrapper as any)(seqInfo, frames);
+      const rep = makeRepresentation({ sourceNode: wrapper, duration: 5, fps: 24 });
+      (media as any).applyRepresentationShim(0, rep);
+
+      expect(source.element).toBe(frames[0]!.image);
+    });
+
+    it('SM-105: updates duration and fps from representation', () => {
+      const source = makeImageSource({ duration: 1, fps: 24 });
+      media.addSource(source);
+
+      const frames = makeSequenceFrames(100);
+      const seqInfo = makeSequenceInfo(frames);
+      const wrapper = new (MockSequenceSourceNodeWrapper as any)(seqInfo, frames);
+      const rep = makeRepresentation({ sourceNode: wrapper, duration: 100, fps: 30 });
+      (media as any).applyRepresentationShim(0, rep);
+
+      expect(source.duration).toBe(100);
+      expect(source.fps).toBe(30);
+    });
+
+    it('SM-106: updates host FPS and out-point for current source', () => {
+      const source = makeImageSource({ duration: 1, fps: 24 });
+      media.addSource(source);
+
+      const frames = makeSequenceFrames(48);
+      const seqInfo = makeSequenceInfo(frames);
+      const wrapper = new (MockSequenceSourceNodeWrapper as any)(seqInfo, frames);
+      const rep = makeRepresentation({ sourceNode: wrapper, duration: 48, fps: 30 });
+      (media as any).applyRepresentationShim(0, rep);
+
+      expect(host.setFps).toHaveBeenCalledWith(30);
+      expect(host.emitFpsChanged).toHaveBeenCalledWith(30);
+      expect(host.setOutPoint).toHaveBeenCalledWith(48);
+    });
+
+    it('SM-107: non-sequence representations still work (backward compat)', () => {
+      const source = makeImageSource({ duration: 1, fps: 24 });
+      media.addSource(source);
+
+      const mockNode = new MockFileSourceNode();
+      const rep = makeRepresentation({ sourceNode: mockNode });
+      (media as any).applyRepresentationShim(0, rep);
+
+      expect(source.type).toBe('image');
+      expect(source.fileSourceNode).toBe(mockNode);
+      expect(source.sequenceInfo).toBeUndefined();
+      expect(source.sequenceFrames).toBeUndefined();
+    });
+
+    it('SM-108: clears sequence metadata when representation is set to null', () => {
+      const source = makeImageSource({ duration: 1, fps: 24 });
+      media.addSource(source);
+
+      // First apply a sequence representation
+      const frames = makeSequenceFrames(24);
+      const seqInfo = makeSequenceInfo(frames);
+      const wrapper = new (MockSequenceSourceNodeWrapper as any)(seqInfo, frames);
+      const rep = makeRepresentation({ sourceNode: wrapper, duration: 24, fps: 24 });
+      (media as any).applyRepresentationShim(0, rep);
+      expect(source.sequenceInfo).toBeDefined();
+
+      // Now clear
+      (media as any).applyRepresentationShim(0, null);
+      expect(source.sequenceInfo).toBeUndefined();
+      expect(source.sequenceFrames).toBeUndefined();
+      expect(source.sequenceFrameMap).toBeUndefined();
     });
   });
 

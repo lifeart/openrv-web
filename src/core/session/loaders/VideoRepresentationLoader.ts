@@ -33,6 +33,11 @@ export class VideoRepresentationLoader implements RepresentationLoader {
 
     if (file) {
       await videoSourceNode.loadFile(file, fps, this._hdrResizeTier);
+      // Populate url on the config so future serialization can restore
+      // without the non-serializable File object.
+      if (!config.url) {
+        config.url = URL.createObjectURL(file);
+      }
     } else {
       await videoSourceNode.load(url!, path, fps, this._hdrResizeTier);
     }

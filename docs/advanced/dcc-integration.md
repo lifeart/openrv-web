@@ -124,12 +124,29 @@ The bridge server sends the following command types to OpenRV Web:
 
 | Command | Description |
 |---------|-------------|
-| `loadMedia` | Load a media file by path or URL. Requires a `path` field; optional `frame` field to seek after loading. |
+| `loadMedia` | Load a media file by URL. Requires a `path` field containing a browser-loadable URL (http, https, blob, data, or file scheme); optional `frame` field to seek after loading. Raw filesystem paths are rejected with an `INVALID_MEDIA_PATH` error. |
 | `syncFrame` | Navigate to a specific frame. Requires a numeric `frame` field. |
 | `syncColor` | Sync color settings. Optional fields: `exposure`, `gamma`, `temperature`, `tint` (all numeric), and `lutPath` (string). |
 | `ping` | Health check for connection monitoring. The bridge responds with a `pong` message. |
 
-Commands are JSON messages sent over the WebSocket connection. Each message must include a `type` field matching one of the commands above. An optional `id` field can be included for request-response correlation, and an optional `timestamp` field (ISO 8601) for logging. OpenRV Web validates each command and responds with an `error` message (code `UNKNOWN_TYPE`, `INVALID_PARAMS`, `INVALID_MESSAGE`, or `PARSE_ERROR`) if the message is malformed or unrecognized.
+Commands are JSON messages sent over the WebSocket connection. Each message must include a `type` field matching one of the commands above. An optional `id` field can be included for request-response correlation, and an optional `timestamp` field (ISO 8601) for logging. OpenRV Web validates each command and responds with an `error` message (code `UNKNOWN_TYPE`, `INVALID_PARAMS`, `INVALID_MESSAGE`, `INVALID_MEDIA_PATH`, or `PARSE_ERROR`) if the message is malformed or unrecognized.
+
+### Media Path Requirements
+
+The `loadMedia` command's `path` field must be a **browser-loadable URL**, not a raw filesystem path. The browser sandbox cannot access the host filesystem directly, so paths like `/mnt/renders/shot.exr` or `C:\renders\shot.exr` will be rejected with an `INVALID_MEDIA_PATH` error.
+
+**Supported URL schemes:**
+
+| Scheme | Example | Notes |
+|--------|---------|-------|
+| `http:` / `https:` | `http://localhost:8080/renders/shot.exr` | Recommended. The DCC bridge server can serve files from a local directory. |
+| `blob:` | `blob:http://localhost/...` | For in-memory content created by the browser. |
+| `data:` | `data:image/png;base64,...` | For small inline payloads. |
+| `file:` | `file:///mnt/renders/shot.exr` | Browser security policies may restrict access depending on context. |
+
+**How to serve local files:**
+
+If your DCC tool renders to disk, the bridge server should include a simple HTTP file server (e.g., Python's `http.server`, Node's `serve`, or a custom handler) that serves the output directory. Then send the `http://localhost:PORT/filename.exr` URL in the `loadMedia` message instead of the raw filesystem path.
 
 ---
 
@@ -156,7 +173,7 @@ These outbound messages allow a DCC-side bridge server to react to viewer activi
 OpenRV Web integrates with Autodesk ShotGrid (formerly Shotgun) for production tracking:
 
 - **Version loading**: Load versions directly from ShotGrid by pasting a version URL or using the ShotGrid panel in OpenRV Web.
-- **Note publishing**: Publish review notes and annotations from OpenRV Web back to ShotGrid as version notes, with frame references and thumbnails.
+- **Note publishing**: Publish review notes and annotations from OpenRV Web back to ShotGrid as version notes, with frame references, annotation summaries, and thumbnails. When an `AnnotationProvider` and `ThumbnailRenderer` are wired into the integration bridge, annotations on each note's frame range are serialized as structured summaries in the note content, and a rendered thumbnail of the annotations is uploaded as a note attachment.
 - **Status updates**: Change version status (e.g., mark as "Approved" or "Revisions Needed") directly from the viewer. Status changes are written back to ShotGrid via the API.
 - **Playlist sync**: ShotGrid playlists can be imported into OpenRV Web as review playlists, maintaining clip order and metadata.
 

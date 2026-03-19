@@ -90,6 +90,105 @@ export interface DCCWiringState {
 }
 
 // ---------------------------------------------------------------------------
+// Media path validation
+// ---------------------------------------------------------------------------
+
+/** URL schemes that the browser can load directly into media elements. */
+const ALLOWED_URL_SCHEMES = ['http:', 'https:', 'blob:', 'data:', 'file:'];
+
+/**
+ * Result of validating a media path received from a DCC tool.
+ * When `valid` is true the `url` field contains the browser-loadable URL.
+ * When `valid` is false the `error` field describes what went wrong.
+ */
+export type MediaPathValidationResult =
+  | { valid: true; url: string }
+  | { valid: false; error: string };
+
+/**
+ * Check whether a raw path string from a DCC `loadMedia` message is a
+ * browser-loadable URL.
+ *
+ * Accepted inputs:
+ * - Absolute URLs with an allowed scheme (http, https, blob, data, file)
+ * - Protocol-relative URLs (//host/path — treated as https)
+ *
+ * Rejected inputs:
+ * - Empty / whitespace-only strings
+ * - Unix filesystem paths (`/mnt/renders/shot.exr`)
+ * - Windows filesystem paths (`C:\renders\shot.exr`)
+ * - UNC paths (`\\server\share\file.exr`)
+ * - Any other string that is not a valid URL the browser can fetch
+ */
+export function validateMediaPath(raw: string): MediaPathValidationResult {
+  const trimmed = raw.trim();
+
+  if (trimmed.length === 0) {
+    return { valid: false, error: 'Empty path. Provide an HTTP(S), blob:, data:, or file: URL.' };
+  }
+
+  // UNC path: \\server\share\...
+  if (/^\\\\/.test(trimmed)) {
+    return {
+      valid: false,
+      error:
+        `UNC path "${trimmed}" cannot be loaded by the browser. ` +
+        'Serve the file over HTTP or convert to a file:// URL.',
+    };
+  }
+
+  // Windows drive path: C:\..., D:/...
+  if (/^[A-Za-z]:[/\\]/.test(trimmed)) {
+    return {
+      valid: false,
+      error:
+        `Windows path "${trimmed}" cannot be loaded by the browser. ` +
+        'Serve the file over HTTP or convert to a file:// URL (e.g. file:///C:/renders/shot.exr).',
+    };
+  }
+
+  // Unix absolute path that is NOT a URL with a scheme
+  // A bare "/foo/bar" has no scheme, so URL parsing would fail or produce garbage.
+  if (trimmed.startsWith('/') && !trimmed.startsWith('//')) {
+    return {
+      valid: false,
+      error:
+        `Local filesystem path "${trimmed}" cannot be loaded by the browser. ` +
+        'Serve the file over HTTP or convert to a file:// URL (e.g. file:///mnt/renders/shot.exr).',
+    };
+  }
+
+  // Protocol-relative URL: //host/path → upgrade to https
+  if (trimmed.startsWith('//')) {
+    return { valid: true, url: `https:${trimmed}` };
+  }
+
+  // Try to parse as a URL and check the scheme
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return {
+      valid: false,
+      error:
+        `"${trimmed}" is not a valid URL. ` +
+        'Provide an HTTP(S), blob:, data:, or file: URL that the browser can load.',
+    };
+  }
+
+  if (!ALLOWED_URL_SCHEMES.includes(parsed.protocol)) {
+    return {
+      valid: false,
+      error:
+        `Unsupported URL scheme "${parsed.protocol}" in "${trimmed}". ` +
+        `Supported schemes: ${ALLOWED_URL_SCHEMES.join(', ')}.`,
+    };
+  }
+
+  return { valid: true, url: trimmed };
+}
+
+// ---------------------------------------------------------------------------
 // LUT loading helper
 // ---------------------------------------------------------------------------
 
@@ -200,17 +299,26 @@ export function wireDCCBridge(deps: DCCWiringDeps): DCCWiringState {
     }),
   );
 
-  // Inbound: loadMedia - dispatch to image or video loader
+  // Inbound: loadMedia - validate path, then dispatch to image or video loader
   subs.add(
     dccBridge.on('loadMedia', (msg) => {
-      const path = msg.path;
-      const name = basename(path);
-      detectMediaTypeFromUrl(path)
+      const rawPath = msg.path;
+      const validation = validateMediaPath(rawPath);
+
+      if (!validation.valid) {
+        log.error(`DCC loadMedia path rejected: ${validation.error}`);
+        dccBridge.sendError('INVALID_MEDIA_PATH', validation.error, msg.id);
+        return;
+      }
+
+      const url = validation.url;
+      const name = basename(url);
+      detectMediaTypeFromUrl(url)
         .then((mediaType) => {
           if (mediaType === 'video') {
-            return session.loadVideo(name, path);
+            return session.loadVideo(name, url);
           } else {
-            return session.loadImage(name, path);
+            return session.loadImage(name, url);
           }
         })
         .then(() => {
@@ -222,7 +330,7 @@ export function wireDCCBridge(deps: DCCWiringDeps): DCCWiringState {
           log.error('Failed to load media from DCC:', err);
           dccBridge.sendError(
             'LOAD_MEDIA_FAILED',
-            `Failed to load media "${path}": ${err instanceof Error ? err.message : String(err)}`,
+            `Failed to load media "${url}": ${err instanceof Error ? err.message : String(err)}`,
             msg.id,
           );
         });

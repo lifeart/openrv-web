@@ -340,8 +340,8 @@ describe('ShotGridIntegrationBridge', () => {
 
     // Mock notes
     session.noteManager.getNotesForSource.mockReturnValue([
-      { id: 'n1', text: 'Note 1', frameStart: 1, frameEnd: 10 },
-      { id: 'n2', text: 'Note 2', frameStart: 5, frameEnd: 5 },
+      { id: 'n1', text: 'Note 1', frameStart: 1, frameEnd: 10, parentId: null, status: 'open' },
+      { id: 'n2', text: 'Note 2', frameStart: 5, frameEnd: 5, parentId: null, status: 'open' },
     ]);
 
     // Mock first push succeeds, second fails
@@ -386,6 +386,8 @@ describe('ShotGridIntegrationBridge', () => {
         sg_first_frame: null,
         sg_last_frame: null,
         frame_range: null,
+        sg_status_list: null,
+        reply_to_entity: null,
       },
     ];
 
@@ -500,9 +502,9 @@ describe('ShotGridIntegrationBridge', () => {
 
     // Mock 3 notes
     session.noteManager.getNotesForSource.mockReturnValue([
-      { id: 'n1', text: 'Note 1', frameStart: 1, frameEnd: 1 },
-      { id: 'n2', text: 'Note 2', frameStart: 2, frameEnd: 2 },
-      { id: 'n3', text: 'Note 3', frameStart: 3, frameEnd: 3 },
+      { id: 'n1', text: 'Note 1', frameStart: 1, frameEnd: 1, parentId: null, status: 'open' },
+      { id: 'n2', text: 'Note 2', frameStart: 2, frameEnd: 2, parentId: null, status: 'open' },
+      { id: 'n3', text: 'Note 3', frameStart: 3, frameEnd: 3, parentId: null, status: 'open' },
     ]);
 
     // Make pushNote disconnect after first note
@@ -599,6 +601,8 @@ describe('ShotGridIntegrationBridge', () => {
         sg_first_frame: 1045,
         sg_last_frame: 1052,
         frame_range: '1045-1052',
+        sg_status_list: null,
+        reply_to_entity: null,
       },
     ];
 
@@ -620,7 +624,7 @@ describe('ShotGridIntegrationBridge', () => {
       1052,
       'Check frames 1045-1052',
       'Reviewer',
-      { createdAt: '2024-04-10T09:00:00Z', externalId: '800' },
+      { createdAt: '2024-04-10T09:00:00Z', externalId: '800', parentId: undefined, status: 'open' },
     );
   });
 
@@ -647,6 +651,8 @@ describe('ShotGridIntegrationBridge', () => {
         sg_first_frame: null,
         sg_last_frame: null,
         frame_range: '100-200',
+        sg_status_list: null,
+        reply_to_entity: null,
       },
     ];
 
@@ -668,7 +674,7 @@ describe('ShotGridIntegrationBridge', () => {
       200,
       'Check range',
       'Reviewer',
-      { createdAt: '2024-04-10T10:00:00Z', externalId: '801' },
+      { createdAt: '2024-04-10T10:00:00Z', externalId: '801', parentId: undefined, status: 'open' },
     );
   });
 
@@ -695,6 +701,8 @@ describe('ShotGridIntegrationBridge', () => {
         sg_first_frame: null,
         sg_last_frame: null,
         frame_range: null,
+        sg_status_list: null,
+        reply_to_entity: null,
       },
     ];
 
@@ -716,7 +724,7 @@ describe('ShotGridIntegrationBridge', () => {
       1,
       'General feedback',
       'Reviewer',
-      { createdAt: '2024-04-10T11:00:00Z', externalId: '802' },
+      { createdAt: '2024-04-10T11:00:00Z', externalId: '802', parentId: undefined, status: 'open' },
     );
   });
 
@@ -743,6 +751,8 @@ describe('ShotGridIntegrationBridge', () => {
         sg_first_frame: null,
         sg_last_frame: null,
         frame_range: null,
+        sg_status_list: null,
+        reply_to_entity: null,
       },
     ];
 
@@ -760,7 +770,7 @@ describe('ShotGridIntegrationBridge', () => {
 
     // Verify created_at is passed through in options
     const callArgs = session.noteManager.addNote.mock.calls[0]!;
-    expect(callArgs[5]).toEqual({ createdAt: '2023-06-15T08:30:00Z', externalId: '803' });
+    expect(callArgs[5]).toEqual({ createdAt: '2023-06-15T08:30:00Z', externalId: '803', parentId: undefined, status: 'open' });
   });
 
   it('SG-INT-019: pullNotes passes undefined createdAt when created_at is empty', async () => {
@@ -786,6 +796,8 @@ describe('ShotGridIntegrationBridge', () => {
         sg_first_frame: null,
         sg_last_frame: null,
         frame_range: null,
+        sg_status_list: null,
+        reply_to_entity: null,
       },
     ];
 
@@ -803,7 +815,7 @@ describe('ShotGridIntegrationBridge', () => {
 
     // Empty string is falsy, so createdAt should be undefined (falls back to now in NoteManager)
     const callArgs = session.noteManager.addNote.mock.calls[0]!;
-    expect(callArgs[5]).toEqual({ createdAt: undefined, externalId: '804' });
+    expect(callArgs[5]).toEqual({ createdAt: undefined, externalId: '804', parentId: undefined, status: 'open' });
   });
 
   it('SG-INT-020: pullNotes deduplicates via noteManager after disconnect/reconnect', async () => {
@@ -830,6 +842,8 @@ describe('ShotGridIntegrationBridge', () => {
         sg_first_frame: null,
         sg_last_frame: null,
         frame_range: null,
+        sg_status_list: null,
+        reply_to_entity: null,
       },
     ];
 
@@ -908,6 +922,8 @@ describe('ShotGridIntegrationBridge', () => {
         sg_first_frame: null,
         sg_last_frame: null,
         frame_range: null,
+        sg_status_list: null,
+        reply_to_entity: null,
       },
       {
         id: 902,
@@ -919,6 +935,8 @@ describe('ShotGridIntegrationBridge', () => {
         sg_first_frame: 10,
         sg_last_frame: 20,
         frame_range: '10-20',
+        sg_status_list: null,
+        reply_to_entity: null,
       },
     ];
 
@@ -948,7 +966,7 @@ describe('ShotGridIntegrationBridge', () => {
       20,
       'Brand new feedback',
       'Supervisor',
-      { createdAt: '2024-05-02T12:00:00Z', externalId: '902' },
+      { createdAt: '2024-05-02T12:00:00Z', externalId: '902', parentId: undefined, status: 'open' },
     );
   });
 
@@ -975,6 +993,8 @@ describe('ShotGridIntegrationBridge', () => {
         sg_first_frame: null,
         sg_last_frame: null,
         frame_range: null,
+        sg_status_list: null,
+        reply_to_entity: null,
       },
     ];
 

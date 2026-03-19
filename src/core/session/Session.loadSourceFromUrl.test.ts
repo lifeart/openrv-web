@@ -1,14 +1,25 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Session } from './Session';
 
-// Mock SequenceLoader
-vi.mock('../../utils/media/SequenceLoader', () => ({
-  createSequenceInfo: vi.fn(),
-  preloadFrames: vi.fn(),
-  loadFrameImage: vi.fn(),
-  releaseDistantFrames: vi.fn(),
-  disposeSequence: vi.fn(),
-}));
+// Mock SequenceLoader — import the real isSequencePattern so pattern detection works
+vi.mock('../../utils/media/SequenceLoader', async () => {
+  const actual = await vi.importActual<typeof import('../../utils/media/SequenceLoader')>('../../utils/media/SequenceLoader');
+  return {
+    createSequenceInfo: vi.fn(),
+    createSequenceInfoFromPattern: vi.fn(),
+    preloadFrames: vi.fn(),
+    loadFrameImage: vi.fn(),
+    loadFrameImageFromURL: vi.fn(),
+    releaseDistantFrames: vi.fn(),
+    disposeSequence: vi.fn(),
+    buildFrameNumberMap: vi.fn().mockReturnValue(new Map()),
+    getSequenceFrameRange: vi.fn().mockReturnValue(1),
+    isSequencePattern: actual.isSequencePattern,
+    parsePatternNotation: actual.parsePatternNotation,
+    generateFilename: actual.generateFilename,
+    expandPatternToURLs: actual.expandPatternToURLs,
+  };
+});
 
 // Mock fetchUrlAsFile so we don't actually fetch anything
 vi.mock('../../utils/media/fetchUrlAsFile', () => ({
@@ -275,6 +286,100 @@ describe('Session.loadSourceFromUrl', () => {
       await session.loadSourceFromUrl('https://example.com/media');
       expect(loadImageSpy).toHaveBeenCalledWith('media', 'https://example.com/media');
       expect(loadVideoSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  // ==========================================================================
+  // Issue #520: pattern string routing
+  // ==========================================================================
+
+  describe('pattern string routing (Issue #520)', () => {
+    let loadSeqPatternSpy: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+      loadSeqPatternSpy = vi.spyOn(session, 'loadImageSequenceFromPattern').mockResolvedValue(undefined);
+    });
+
+    it('routes hash pattern (####) to loadImageSequenceFromPattern', async () => {
+      await session.loadSourceFromUrl('shot.####.exr');
+      expect(loadSeqPatternSpy).toHaveBeenCalledWith('shot', 'shot.####.exr', 1, 100, undefined);
+      expect(loadImageSpy).not.toHaveBeenCalled();
+      expect(loadVideoSpy).not.toHaveBeenCalled();
+    });
+
+    it('routes printf pattern (%04d) to loadImageSequenceFromPattern', async () => {
+      await session.loadSourceFromUrl('frame.%04d.exr');
+      expect(loadSeqPatternSpy).toHaveBeenCalledWith('frame', 'frame.%04d.exr', 1, 100, undefined);
+      expect(loadImageSpy).not.toHaveBeenCalled();
+    });
+
+    it('routes at-sign pattern (@@@@) to loadImageSequenceFromPattern', async () => {
+      await session.loadSourceFromUrl('render.@@@@.exr');
+      expect(loadSeqPatternSpy).toHaveBeenCalledWith('render', 'render.@@@@.exr', 1, 100, undefined);
+      expect(loadImageSpy).not.toHaveBeenCalled();
+    });
+
+    it('routes path-prefixed pattern to loadImageSequenceFromPattern', async () => {
+      await session.loadSourceFromUrl('/path/to/shot.####.exr');
+      expect(loadSeqPatternSpy).toHaveBeenCalledWith('shot', '/path/to/shot.####.exr', 1, 100, undefined);
+    });
+
+    it('does not route regular URLs to pattern loader', async () => {
+      await session.loadSourceFromUrl('https://example.com/photo.png');
+      expect(loadSeqPatternSpy).not.toHaveBeenCalled();
+      expect(loadImageSpy).toHaveBeenCalled();
+    });
+
+    it('does not route numbered filenames to pattern loader', async () => {
+      await session.loadSourceFromUrl('https://example.com/shot.0001.exr');
+      expect(loadSeqPatternSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('loadSequenceFromPatternString (Issue #520)', () => {
+    let loadSeqPatternSpy: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+      loadSeqPatternSpy = vi.spyOn(session, 'loadImageSequenceFromPattern').mockResolvedValue(undefined);
+    });
+
+    it('accepts custom frame range', async () => {
+      await session.loadSequenceFromPatternString('shot.####.exr', 1001, 1100);
+      expect(loadSeqPatternSpy).toHaveBeenCalledWith('shot', 'shot.####.exr', 1001, 1100, undefined);
+    });
+
+    it('accepts custom fps', async () => {
+      await session.loadSequenceFromPatternString('frame.%04d.png', 1, 48, 30);
+      expect(loadSeqPatternSpy).toHaveBeenCalledWith('frame', 'frame.%04d.png', 1, 48, 30);
+    });
+
+    it('derives display name from hash pattern', async () => {
+      await session.loadSequenceFromPatternString('render_######.tif', 1, 10);
+      const calledName = loadSeqPatternSpy.mock.calls[0]![0];
+      expect(calledName).toBe('render');
+    });
+
+    it('derives display name from printf pattern with underscores', async () => {
+      await session.loadSequenceFromPatternString('my_shot_%04d.exr', 1, 10);
+      const calledName = loadSeqPatternSpy.mock.calls[0]![0];
+      expect(calledName).toBe('my_shot');
+    });
+
+    it('derives display name from at-sign pattern', async () => {
+      await session.loadSequenceFromPatternString('comp.@@@@.png', 1, 10);
+      const calledName = loadSeqPatternSpy.mock.calls[0]![0];
+      expect(calledName).toBe('comp');
+    });
+
+    it('uses "sequence" as fallback name', async () => {
+      await session.loadSequenceFromPatternString('%04d.png', 1, 10);
+      const calledName = loadSeqPatternSpy.mock.calls[0]![0];
+      expect(calledName).toBe('sequence');
+    });
+
+    it('defaults to frame range 1-100', async () => {
+      await session.loadSequenceFromPatternString('shot.####.exr');
+      expect(loadSeqPatternSpy).toHaveBeenCalledWith('shot', 'shot.####.exr', 1, 100, undefined);
     });
   });
 });

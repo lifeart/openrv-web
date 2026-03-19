@@ -34,10 +34,31 @@ export interface DCCMessage {
   timestamp?: string;
 }
 
-/** Inbound: load a media file */
+/**
+ * Inbound: load a media file.
+ *
+ * The `path` field must be a browser-loadable URL. Supported URL schemes:
+ * - `http:` / `https:` — served over the network (recommended for DCC integration)
+ * - `blob:` — in-memory blob URL created by the browser
+ * - `data:` — inline data URL
+ * - `file:` — local file URL (e.g. `file:///C:/renders/shot.exr`); note that
+ *   browser security policies may restrict `file:` access depending on context
+ *
+ * Raw filesystem paths (e.g. `/mnt/renders/shot.exr`, `C:\renders\shot.exr`,
+ * `\\server\share\file.exr`) are **not** supported. The browser sandbox cannot
+ * access the local filesystem directly. If the DCC tool has files on disk, the
+ * bridge server should either:
+ * 1. Serve them over a local HTTP server and send the `http://localhost:…` URL, or
+ * 2. Convert to a `file://` URL (e.g. `file:///mnt/renders/shot.exr`).
+ */
 export interface LoadMediaMessage extends DCCMessage {
   type: 'loadMedia';
-  /** File path or URL */
+  /**
+   * Browser-loadable URL for the media file.
+   *
+   * Must use one of the supported URL schemes: http, https, blob, data, or file.
+   * Raw filesystem paths are rejected with an `INVALID_MEDIA_PATH` error.
+   */
   path: string;
   /** Optional frame to seek to after loading */
   frame?: number;

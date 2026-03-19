@@ -95,11 +95,11 @@ describe('DCCBridge loadMedia wiring fix', () => {
     const { deps, dccBridge, session } = createDCCDeps();
     wireDCCBridge(deps);
 
-    dccBridge.emit('loadMedia', { type: 'loadMedia', path: '/mnt/shows/shot.exr' });
+    dccBridge.emit('loadMedia', { type: 'loadMedia', path: 'https://renders.example.com/shows/shot.exr' });
 
     // loadImage is called async; await the microtask
     await vi.waitFor(() => {
-      expect(session.loadImage).toHaveBeenCalledWith('shot.exr', '/mnt/shows/shot.exr');
+      expect(session.loadImage).toHaveBeenCalledWith('shot.exr', 'https://renders.example.com/shows/shot.exr');
     });
     expect(session.loadVideo).not.toHaveBeenCalled();
   });
@@ -108,10 +108,10 @@ describe('DCCBridge loadMedia wiring fix', () => {
     const { deps, dccBridge, session } = createDCCDeps();
     wireDCCBridge(deps);
 
-    dccBridge.emit('loadMedia', { type: 'loadMedia', path: '/mnt/shows/clip.mp4' });
+    dccBridge.emit('loadMedia', { type: 'loadMedia', path: 'https://renders.example.com/shows/clip.mp4' });
 
     await vi.waitFor(() => {
-      expect(session.loadVideo).toHaveBeenCalledWith('clip.mp4', '/mnt/shows/clip.mp4');
+      expect(session.loadVideo).toHaveBeenCalledWith('clip.mp4', 'https://renders.example.com/shows/clip.mp4');
     });
     expect(session.loadImage).not.toHaveBeenCalled();
   });
@@ -122,7 +122,7 @@ describe('DCCBridge loadMedia wiring fix', () => {
 
     dccBridge.emit('loadMedia', {
       type: 'loadMedia',
-      path: '/mnt/shows/shot.exr',
+      path: 'https://renders.example.com/shows/shot.exr',
       frame: 42,
     });
 
@@ -517,7 +517,7 @@ describe('DCCBridge loadMedia error reporting', () => {
     session.loadVideo.mockRejectedValue(new Error('Codec not supported'));
     wireDCCBridge(deps);
 
-    dccBridge.emit('loadMedia', { type: 'loadMedia', path: '/mnt/shows/clip.mp4', id: 'req-1' });
+    dccBridge.emit('loadMedia', { type: 'loadMedia', path: 'https://renders.example.com/shows/clip.mp4', id: 'req-1' });
 
     await vi.waitFor(() => {
       expect(dccBridge.sendError).toHaveBeenCalledWith(
@@ -533,7 +533,7 @@ describe('DCCBridge loadMedia error reporting', () => {
     session.loadImage.mockRejectedValue(new Error('Unsupported format'));
     wireDCCBridge(deps);
 
-    dccBridge.emit('loadMedia', { type: 'loadMedia', path: '/mnt/shows/shot.exr', id: 'req-2' });
+    dccBridge.emit('loadMedia', { type: 'loadMedia', path: 'https://renders.example.com/shows/shot.exr', id: 'req-2' });
 
     await vi.waitFor(() => {
       expect(dccBridge.sendError).toHaveBeenCalledWith(
@@ -620,7 +620,7 @@ describe('DCCBridge loadMedia error reporting', () => {
     const { deps, dccBridge, session } = createDCCDeps();
     wireDCCBridge(deps);
 
-    dccBridge.emit('loadMedia', { type: 'loadMedia', path: '/mnt/shows/shot.exr' });
+    dccBridge.emit('loadMedia', { type: 'loadMedia', path: 'https://renders.example.com/shows/shot.exr' });
 
     await vi.waitFor(() => {
       expect(session.loadImage).toHaveBeenCalled();
@@ -634,12 +634,12 @@ describe('DCCBridge loadMedia error reporting', () => {
     session.loadVideo.mockRejectedValue(new Error('Network error'));
     wireDCCBridge(deps);
 
-    dccBridge.emit('loadMedia', { type: 'loadMedia', path: '/mnt/shows/clip.mp4' });
+    dccBridge.emit('loadMedia', { type: 'loadMedia', path: 'https://renders.example.com/shows/clip.mp4' });
 
     await vi.waitFor(() => {
       expect(dccBridge.sendError).toHaveBeenCalledWith(
         'LOAD_MEDIA_FAILED',
-        expect.stringContaining('/mnt/shows/clip.mp4'),
+        expect.stringContaining('https://renders.example.com/shows/clip.mp4'),
         undefined,
       );
     });
@@ -650,12 +650,12 @@ describe('DCCBridge loadMedia error reporting', () => {
     session.loadImage.mockRejectedValue(new Error('File not found'));
     wireDCCBridge(deps);
 
-    dccBridge.emit('loadMedia', { type: 'loadMedia', path: '/mnt/shows/shot.exr' });
+    dccBridge.emit('loadMedia', { type: 'loadMedia', path: 'https://renders.example.com/shows/shot.exr' });
 
     await vi.waitFor(() => {
       expect(dccBridge.sendError).toHaveBeenCalledWith(
         'LOAD_MEDIA_FAILED',
-        expect.stringContaining('/mnt/shows/shot.exr'),
+        expect.stringContaining('https://renders.example.com/shows/shot.exr'),
         undefined,
       );
     });
