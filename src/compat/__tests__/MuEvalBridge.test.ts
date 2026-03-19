@@ -581,8 +581,8 @@ describe('MuEvalBridge', () => {
     it('falls back to view transform for unknown image', () => {
       const result = bridge.eventToImageSpace('unknown', [400, 300]);
       expect(result).toHaveLength(2);
-      expect(typeof result[0]).toBe('number');
-      expect(typeof result[1]).toBe('number');
+      expect(Number.isFinite(result[0])).toBe(true);
+      expect(Number.isFinite(result[1])).toBe(true);
     });
   });
 

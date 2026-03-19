@@ -1327,8 +1327,7 @@ describe('MuUtilsBridge', () => {
   });
 
   describe('device pixel ratio', () => {
-    it('returns a number', () => {
-      expect(typeof utils.devicePixelRatio()).toBe('number');
+    it('returns a positive number', () => {
       expect(utils.devicePixelRatio()).toBeGreaterThan(0);
     });
   });

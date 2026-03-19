@@ -229,7 +229,6 @@ describe('MuSourceBridge', () => {
   describe('addSourceVerbose', () => {
     it('returns the created source name', async () => {
       const name = await bridge.addSourceVerbose(['/a.mov'], 'tag1');
-      expect(typeof name).toBe('string');
       expect(name).toMatch(/^sourceGroup\d{6}$/);
     });
 
@@ -261,7 +260,7 @@ describe('MuSourceBridge', () => {
     it('addSourceVerbose returns name during batch', async () => {
       bridge.addSourceBegin();
       const name = await bridge.addSourceVerbose(['/a.mov']);
-      expect(typeof name).toBe('string');
+      expect(name).toMatch(/^sourceGroup\d{6}$/);
       await bridge.addSourceEnd();
     });
 
@@ -308,7 +307,6 @@ describe('MuSourceBridge', () => {
 
     it('non-batch addSourceVerbose still works (backward compat)', async () => {
       const name = await bridge.addSourceVerbose(['/a.mov'], 'direct');
-      expect(typeof name).toBe('string');
       expect(bridge.sourceCount()).toBe(1);
       expect(bridge.sourceMedia(name).media).toEqual(['/a.mov']);
     });
@@ -1217,7 +1215,7 @@ describe('MuSourceBridge', () => {
     it('addSourceVerbose in batch mode defers session loading until addSourceEnd', async () => {
       bridge.addSourceBegin();
       const name = await bridge.addSourceVerbose(['https://example.com/batch.mp4'], 'movie');
-      expect(typeof name).toBe('string');
+      expect(name).toMatch(/^sourceGroup\d{6}$/);
       // No session call yet
       expect(mockOpenRV.media.addSourceFromURL).not.toHaveBeenCalled();
 
@@ -1432,15 +1430,13 @@ describe('MuSourceBridge', () => {
       expect(bridge.sourceCount()).toBe(1);
     });
 
-    it('sourceMediaInfo after fallback does not throw', () => {
+    it('sourceMediaInfo after fallback returns a non-null object', () => {
       const result = bridge.sources();
       expect(result).toHaveLength(1);
       const name = result[0]!.name;
-      // Should NOT throw — the fallback source was registered
-      expect(() => bridge.sourceMediaInfo(name)).not.toThrow();
       const info = bridge.sourceMediaInfo(name);
-      expect(info).toBeDefined();
-      expect(typeof info).toBe('object');
+      expect(info).not.toBeNull();
+      expect(Object.keys(info).length).toBeGreaterThan(0);
     });
 
     it('sourceAttributes after fallback does not throw', () => {

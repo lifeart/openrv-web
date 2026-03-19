@@ -281,7 +281,7 @@ export class FrameburnSettingsMenu {
     header.setAttribute('role', 'none');
     header.textContent = text;
     header.style.cssText = `
-      padding: 6px 12px 4px;
+      padding: 6px 12px 2px;
       font-size: 10px;
       color: var(--text-muted);
       text-transform: uppercase;

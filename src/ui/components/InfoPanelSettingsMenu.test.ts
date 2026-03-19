@@ -211,10 +211,10 @@ describe('InfoPanelSettingsMenu', () => {
       expect(menu.isVisible()).toBe(false);
     });
 
-    it('IPSM-U026: window blur hides the menu', () => {
+    it('IPSM-U026: window blur does not hide the menu', () => {
       menu.show(100, 100);
       window.dispatchEvent(new Event('blur'));
-      expect(menu.isVisible()).toBe(false);
+      expect(menu.isVisible()).toBe(true);
     });
 
     it('IPSM-U027: hide is idempotent', () => {

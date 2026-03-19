@@ -595,8 +595,8 @@ describe('MuCommands', () => {
       expect(mockOpenRV.view.fitToWindow).toHaveBeenCalledOnce();
     });
 
-    it('isFullScreen() returns a boolean', () => {
-      expect(typeof cmd.isFullScreen()).toBe('boolean');
+    it('isFullScreen() returns false when not fullscreen', () => {
+      expect(cmd.isFullScreen()).toBe(false);
     });
 
     it('isFullScreen() detects webkitFullscreenElement', () => {
@@ -817,8 +817,7 @@ describe('MuCommands', () => {
       expect(cmd.contentAspect()).toBe(1);
     });
 
-    it('devicePixelRatio() returns a number', () => {
-      expect(typeof cmd.devicePixelRatio()).toBe('number');
+    it('devicePixelRatio() returns a positive number', () => {
       expect(cmd.devicePixelRatio()).toBeGreaterThan(0);
     });
   });

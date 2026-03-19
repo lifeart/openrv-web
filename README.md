@@ -15,16 +15,15 @@ A professional web-based image and video review tool inspired by [OpenRV](https:
 
 **Images**
 - PNG, JPEG, WebP, GIF, BMP, AVIF, HEIC/HEIF -- via browser-native decoding
-- **EXR** (.exr/.sxr) -- WebAssembly decoder with Float32 HDR precision
+- **EXR** (.exr/.sxr) -- TypeScript decoder with Float32 HDR precision
   - Multi-layer EXR with AOV selection and channel remapping
-  - PIZ wavelet compression (Huffman + Haar + LUT)
-  - DWA compression support
+  - Compression: NONE, RLE, ZIP, ZIPS, PIZ, PXR24, DWAA, DWAB
   - Multi-view EXR for stereo workflows
   - Data window / display window visualization overlay
 - **DPX** -- Digital Picture Exchange format with log-to-linear conversion
 - **Cineon** -- Kodak Cineon format with configurable film gamma
 - **Radiance HDR** (.hdr/.pic) -- RGBE encoding with adaptive RLE decompression
-- **Float TIFF** -- 32-bit floating-point TIFF images
+- **Float TIFF** -- 16/32/64-bit floating-point TIFF images
 - **JPEG XL** (.jxl) -- modern HDR-capable format via WASM decoder and browser-native HDR path
 - **JPEG 2000 / HTJ2K** (.jp2/.j2k/.j2c/.jph/.jhc) -- via openjph-based WASM module
 - **JPEG Gainmap HDR** -- MPF parsing, XMP headroom extraction, sRGB-to-linear + gain reconstruction
@@ -46,7 +45,7 @@ A professional web-based image and video review tool inspired by [OpenRV](https:
   - Missing frame detection with visual overlay
 - RV/GTO session files with full graph reconstruction
 - **RV EDL** -- OpenRV edit decision list format parsing
-- **OTIO (OpenTimelineIO)** -- import editorial timelines with clips, gaps, and transitions
+- **OTIO (OpenTimelineIO)** -- import editorial timelines with clips, gaps, transitions, and markers
 
 ### Color Management
 
@@ -105,6 +104,7 @@ A professional web-based image and video review tool inspired by [OpenRV](https:
 - Display gamma and brightness adjustments
 - GPU-accelerated via fragment shader
 - LocalStorage persistence for profile settings
+- Display profile indicator HUD with flash-on-change
 
 **HDR and Wide Color Gamut**
 - Display P3 automatic wide gamut output on supported displays
@@ -169,6 +169,7 @@ A professional web-based image and video review tool inspired by [OpenRV](https:
 - Cache indicator showing cached frames and memory usage
 - **Prerender Buffer** -- double-buffered cache for glitch-free effect parameter changes
   - SIMD-like TypedArray optimizations, half-resolution convolution, async chunked processing
+- **Representation Selector** -- switch between frames, movie, and proxy representations per source
 - **Multi-Clip Playlist** -- manage and play multiple clips in sequence
   - Drag-and-drop reordering, loop modes, in/out points
   - EDL (CMX3600) export and OTIO import
@@ -290,7 +291,7 @@ A professional web-based image and video review tool inspired by [OpenRV](https:
 
 - **WebSocket-based Sync** -- real-time collaboration between multiple viewers
   - Room creation and joining with unique room codes
-  - User presence indicators
+  - User presence overlay with participant avatars and remote cursors
   - Configurable sync: playback, view (pan/zoom), color adjustments, annotations, cursor position
   - Host/participant role distinction
   - Reconnection with exponential backoff
@@ -309,6 +310,7 @@ A professional web-based image and video review tool inspired by [OpenRV](https:
 - **ShotGrid (ShotGun) Integration** -- REST API bridge
   - Authentication, version loading, note push, and status sync
   - Bidirectional status mapping between OpenRV Web and ShotGrid
+  - Playlist import from ShotGrid into PlaylistManager
 
 ### Scripting API
 
@@ -320,6 +322,7 @@ A professional web-based image and video review tool inspired by [OpenRV](https:
   - View: `setZoom()`, `getZoom()`, `fitToWindow()`, `setPan()`, `setChannel()`
   - Color: `setAdjustments()`, `getAdjustments()`, `reset()`, `setCDL()`, `loadLUT()`
   - Markers: `add()`, `remove()`, `getAll()`, `clear()`, `goToNext()`, `goToPrevious()`
+  - Sequence: `getSequenceInfo()`, `getMissingFrames()` for sequence inspection
   - Events: `on()`, `off()`, `once()` for frameChange, play, pause, sourceLoaded, error, etc.
   - Version and readiness: `openrv.version`, `openrv.isReady()`
 
@@ -333,10 +336,12 @@ A professional web-based image and video review tool inspired by [OpenRV](https:
 - **History Panel** -- visual undo/redo with jump to any state
 - **Floating Info Panel** -- filename, resolution, frame, FPS, cursor color readout
 - **Hi-DPI / Retina Support** -- crisp rendering on 2x, 3x, and fractional DPR displays
+- **Overlay State Persistence** -- all overlay toggle states saved and restored with sessions
 - **Session Snapshots** -- named version history with preview and restore (IndexedDB persistence)
 - **Auto-Save** -- configurable interval with crash recovery, storage quota monitoring, and visual indicator
 - **Session Recovery** -- detects invalid blob URLs after browser restart with file re-selection prompts
 - **Shortcut Editor** -- view and customize keyboard shortcuts with conflict detection and export/import
+- **Contextual Keyboard Shortcuts** -- tab-dependent shortcut dispatch (e.g., H/W/G resolve per active panel)
 - **Shortcut Cheat Sheet** -- quick-reference keyboard shortcut overlay
 - **Accessibility** -- ARIA announcer for screen reader support
 
@@ -536,7 +541,7 @@ src/
 │       ├── VersionManager.ts    # Shot versioning and navigation
 │       └── NoteManager.ts       # Threaded review notes
 ├── formats/
-│   ├── EXRDecoder.ts            # WebAssembly EXR decoder with multi-layer support
+│   ├── EXRDecoder.ts            # TypeScript EXR decoder with multi-layer support
 │   ├── EXRPIZCodec.ts           # PIZ wavelet compression codec
 │   ├── EXRDWACodec.ts           # DWA compression codec
 │   ├── DPXDecoder.ts            # DPX format decoder
@@ -728,7 +733,7 @@ The codebase includes comprehensive test coverage with **20,000+ unit tests** ac
 - **Playwright** -- end-to-end testing
 - **WebGL2** -- GPU-accelerated rendering (tone mapping, LUT processing, color transforms)
 - **WebGPU** -- experimental backend alongside WebGL2 (rgba16float, extended tone mapping)
-- **WebAssembly** -- high-performance EXR, JPEG XL, JPEG 2000, HEIC, and OCIO decoding
+- **WebAssembly** -- high-performance JPEG XL, JPEG 2000, HEIC, and OCIO decoding
 - **WebCodecs API** -- frame-accurate video decoding via [mediabunny](https://github.com/nickarora/mediabunny) and video encoding for export
 - **Web Audio API** -- audio playback, waveform generation, volume control, and pitch correction
 - **WebRTC** -- peer-to-peer connections for collaborative review

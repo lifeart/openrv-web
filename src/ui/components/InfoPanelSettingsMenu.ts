@@ -237,51 +237,34 @@ export class InfoPanelSettingsMenu {
 
   private createSeparator(): HTMLDivElement {
     const sep = document.createElement('div');
+    sep.setAttribute('role', 'separator');
     sep.style.cssText = `
       height: 1px;
-      background: var(--border-primary);
       margin: 4px 0;
+      background: var(--border-secondary);
+      opacity: 0.5;
     `;
     return sep;
   }
 
   private setupDismissHandlers(menu: HTMLDivElement): void {
-    // Click outside
-    const onClickOutside = (e: MouseEvent) => {
-      if (!menu.contains(e.target as Node)) {
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node) || !menu.contains(target)) {
         this.hide();
       }
     };
-    setTimeout(() => {
-      if (this._isVisible) {
-        document.addEventListener('click', onClickOutside);
-        document.addEventListener('contextmenu', onClickOutside);
-      }
-    }, 0);
-    this.dismissHandlers.push(() => {
-      document.removeEventListener('click', onClickOutside);
-      document.removeEventListener('contextmenu', onClickOutside);
-    });
 
-    // Escape key
-    const onEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
         this.hide();
       }
     };
-    document.addEventListener('keydown', onEscape);
-    this.dismissHandlers.push(() => {
-      document.removeEventListener('keydown', onEscape);
-    });
 
-    // Window blur
-    const onBlur = () => {
-      this.hide();
-    };
-    window.addEventListener('blur', onBlur);
-    this.dismissHandlers.push(() => {
-      window.removeEventListener('blur', onBlur);
-    });
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    this.dismissHandlers.push(() => document.removeEventListener('mousedown', onPointerDown));
+    this.dismissHandlers.push(() => document.removeEventListener('keydown', onKeyDown));
   }
 
   private cleanupDismissHandlers(): void {

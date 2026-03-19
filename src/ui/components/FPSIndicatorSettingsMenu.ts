@@ -266,10 +266,12 @@ export class FPSIndicatorSettingsMenu {
 
   private createSeparator(): HTMLDivElement {
     const sep = document.createElement('div');
+    sep.setAttribute('role', 'separator');
     sep.style.cssText = `
       height: 1px;
-      background: var(--border-primary);
       margin: 4px 0;
+      background: var(--border-secondary);
+      opacity: 0.5;
     `;
     return sep;
   }
@@ -291,21 +293,23 @@ export class FPSIndicatorSettingsMenu {
   }
 
   private setupDismissHandlers(menu: HTMLDivElement): void {
-    const onClickOutside = (e: MouseEvent) => {
-      if (!menu.contains(e.target as Node)) this.hide();
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node) || !menu.contains(target)) {
+        this.hide();
+      }
     };
-    document.addEventListener('mousedown', onClickOutside);
-    this.dismissHandlers.push(() => document.removeEventListener('mousedown', onClickOutside));
 
-    const onEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') this.hide();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        this.hide();
+      }
     };
-    document.addEventListener('keydown', onEscape);
-    this.dismissHandlers.push(() => document.removeEventListener('keydown', onEscape));
 
-    const onWindowBlur = () => this.hide();
-    window.addEventListener('blur', onWindowBlur);
-    this.dismissHandlers.push(() => window.removeEventListener('blur', onWindowBlur));
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    this.dismissHandlers.push(() => document.removeEventListener('mousedown', onPointerDown));
+    this.dismissHandlers.push(() => document.removeEventListener('keydown', onKeyDown));
   }
 
   private cleanupDismissHandlers(): void {
