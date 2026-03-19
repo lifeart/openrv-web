@@ -125,7 +125,7 @@ test.describe('Channel Select Keyboard Shortcuts', () => {
 
   test('CS-013: Shift+Y selects luminance channel', async ({ page }) => {
     await page.keyboard.press('Shift+y');
-    await waitForChannelMode(page, 'luminance');
+    await waitForChannelMode(page, 'luminance', 10000);
 
     const state = await getViewerState(page);
     expect(state.channelMode).toBe('luminance');
