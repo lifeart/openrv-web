@@ -148,16 +148,14 @@ function createMockComponents(): SessionComponents {
       getStereoAlignMode: vi.fn().mockReturnValue(DEFAULT_STEREO_ALIGN_MODE),
       getDeinterlaceParams: vi.fn().mockReturnValue({ method: 'bob', fieldOrder: 'tff', enabled: false }),
       getFilmEmulationParams: vi.fn().mockReturnValue({ enabled: false, stock: 'kodak-portra-400', intensity: 1.0 }),
-      getPerspectiveParams: vi
-        .fn()
-        .mockReturnValue({
-          enabled: false,
-          topLeft: { x: 0, y: 0 },
-          topRight: { x: 1, y: 0 },
-          bottomRight: { x: 1, y: 1 },
-          bottomLeft: { x: 0, y: 1 },
-          quality: 'bilinear',
-        }),
+      getPerspectiveParams: vi.fn().mockReturnValue({
+        enabled: false,
+        topLeft: { x: 0, y: 0 },
+        topRight: { x: 1, y: 0 },
+        bottomRight: { x: 1, y: 1 },
+        bottomLeft: { x: 0, y: 1 },
+        quality: 'bilinear',
+      }),
       getStabilizationParams: vi.fn().mockReturnValue({ enabled: false, smoothingStrength: 50 }),
       isUncropActive: vi.fn().mockReturnValue(false),
       setColorAdjustments: vi.fn(),

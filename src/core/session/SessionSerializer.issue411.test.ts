@@ -139,16 +139,14 @@ function createMockComponents(): SessionComponents & { playlistManager: any } {
       getStereoAlignMode: vi.fn().mockReturnValue(DEFAULT_STEREO_ALIGN_MODE),
       getDeinterlaceParams: vi.fn().mockReturnValue({ method: 'bob', fieldOrder: 'tff', enabled: false }),
       getFilmEmulationParams: vi.fn().mockReturnValue({ enabled: false, stock: 'kodak-portra-400', intensity: 1.0 }),
-      getPerspectiveParams: vi
-        .fn()
-        .mockReturnValue({
-          enabled: false,
-          topLeft: { x: 0, y: 0 },
-          topRight: { x: 1, y: 0 },
-          bottomRight: { x: 1, y: 1 },
-          bottomLeft: { x: 0, y: 1 },
-          quality: 'bilinear',
-        }),
+      getPerspectiveParams: vi.fn().mockReturnValue({
+        enabled: false,
+        topLeft: { x: 0, y: 0 },
+        topRight: { x: 1, y: 0 },
+        bottomRight: { x: 1, y: 1 },
+        bottomLeft: { x: 0, y: 1 },
+        quality: 'bilinear',
+      }),
       getStabilizationParams: vi.fn().mockReturnValue({ enabled: false, smoothingStrength: 50 }),
       isUncropActive: vi.fn().mockReturnValue(false),
       setColorAdjustments: vi.fn(),
@@ -189,39 +187,31 @@ function createMockComponents(): SessionComponents & { playlistManager: any } {
           activeSourceId: null,
         }),
       }),
-      getTimecodeOverlay: vi
-        .fn()
-        .mockReturnValue({
-          getState: vi.fn().mockReturnValue({ ...DEFAULT_TIMECODE_OVERLAY_STATE }),
-          setState: vi.fn(),
-        }),
+      getTimecodeOverlay: vi.fn().mockReturnValue({
+        getState: vi.fn().mockReturnValue({ ...DEFAULT_TIMECODE_OVERLAY_STATE }),
+        setState: vi.fn(),
+      }),
       getSafeAreasOverlay: vi
         .fn()
         .mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_SAFE_AREAS_STATE }), setState: vi.fn() }),
-      getClippingOverlay: vi
-        .fn()
-        .mockReturnValue({
-          getState: vi.fn().mockReturnValue({ ...DEFAULT_CLIPPING_OVERLAY_STATE }),
-          setState: vi.fn(),
-        }),
-      getInfoStripOverlay: vi
-        .fn()
-        .mockReturnValue({
-          getState: vi.fn().mockReturnValue({ ...DEFAULT_INFO_STRIP_OVERLAY_STATE }),
-          setState: vi.fn(),
-        }),
+      getClippingOverlay: vi.fn().mockReturnValue({
+        getState: vi.fn().mockReturnValue({ ...DEFAULT_CLIPPING_OVERLAY_STATE }),
+        setState: vi.fn(),
+      }),
+      getInfoStripOverlay: vi.fn().mockReturnValue({
+        getState: vi.fn().mockReturnValue({ ...DEFAULT_INFO_STRIP_OVERLAY_STATE }),
+        setState: vi.fn(),
+      }),
       getSpotlightOverlay: vi
         .fn()
         .mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_SPOTLIGHT_STATE }), setState: vi.fn() }),
       getBugOverlay: vi
         .fn()
         .mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_BUG_OVERLAY_STATE }), setState: vi.fn() }),
-      getEXRWindowOverlay: vi
-        .fn()
-        .mockReturnValue({
-          getState: vi.fn().mockReturnValue({ ...DEFAULT_EXR_WINDOW_OVERLAY_STATE }),
-          setState: vi.fn(),
-        }),
+      getEXRWindowOverlay: vi.fn().mockReturnValue({
+        getState: vi.fn().mockReturnValue({ ...DEFAULT_EXR_WINDOW_OVERLAY_STATE }),
+        setState: vi.fn(),
+      }),
       getFPSIndicator: vi
         .fn()
         .mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_FPS_INDICATOR_STATE }), setState: vi.fn() }),
