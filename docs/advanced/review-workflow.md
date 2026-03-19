@@ -21,7 +21,7 @@ Each media source loaded into OpenRV Web can be assigned a status that reflects 
 | On Hold | `on-hold` | Red | Work paused, awaiting decision |
 | Omit | `omit` | Slate | Excluded from delivery |
 
-Status is assigned from the Review panel or via the context menu on a source. When connected to ShotGrid or another production tracking system, status changes are propagated automatically.
+Status is assigned from the Review panel, via the context menu on a source, or by clicking the status badge in the header bar. Clicking the badge opens a dropdown listing all available statuses, allowing quick status changes without opening the Review panel. When connected to ShotGrid or another production tracking system, status changes are propagated automatically.
 
 ### Status in the UI
 

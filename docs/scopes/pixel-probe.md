@@ -21,6 +21,18 @@ The probe overlay shows:
 | **HSL** | Hue (degrees), Saturation (%), Lightness (%) |
 | **HEX** | Hexadecimal color code (#RRGGBB) |
 | **IRE** | Luminance in IRE units using Rec.709 coefficients |
+| **Alpha** | Alpha channel value shown as both 0--255 integer and 0.0--1.0 float. When alpha is below 255, the color swatch displays a checkerboard pattern behind the semi-transparent color. |
+| **Nits** | HDR luminance in cd/m² (candelas per square meter). Only visible when HDR float data is available. Values above 1000 cd/m² are displayed in K cd/m² notation (e.g., "1.25 K cd/m²"). Computed as Rec.709 luminance multiplied by 203. |
+| **Color Space** | The active color space label (e.g., "sRGB", "Display P3", "Rec.2020"). Updated via the `setColorSpace()` method when the viewer detects the source color space. |
+
+## Float Precision Toggle
+
+The **P3/P6** button in the format button row toggles the number of decimal places used for floating-point value display:
+
+- **P3** (default): 3 decimal places (e.g., `0.502, 0.310, 0.118`)
+- **P6**: 6 decimal places (e.g., `0.501961, 0.309804, 0.117647`)
+
+The precision setting affects the RGB 0--1 row and clipboard copy output. When P6 is active, the button is highlighted. This is useful when precise float values matter, such as verifying linear-light data in EXR files or checking HDR values that exceed the 0--1 range.
 
 ## Format Selector
 

@@ -146,6 +146,28 @@ A sync status indicator in the header bar shows the current connection state:
 
 ---
 
+## Remote Cursors
+
+When cursor sync is active, each participant's mouse position is broadcast to the room and displayed as a colored cursor overlay on every other participant's viewer.
+
+### Appearance
+
+Each remote cursor is rendered as an **SVG arrow** filled with the participant's assigned color and outlined in dark semi-transparent stroke. A **name label** appears beside the arrow, displayed as white text on a colored badge matching the participant's color. The label uses an 11px font with a 3px border-radius for readability.
+
+### Coordinate Mapping
+
+Cursor positions are transmitted as **normalized coordinates** in the 0--1 range. The overlay maps these values to the current viewer display dimensions, so cursors appear at the correct relative position regardless of each participant's window size or zoom level.
+
+### Fade-Out Behavior
+
+Cursors that have not received an update for **5 seconds** begin a 2-second fade-out transition. Once the fade completes (7 seconds total inactivity), the cursor element is removed from the DOM entirely. Any new movement from that participant recreates the cursor at full opacity.
+
+### Automatic Cleanup
+
+When a participant **disconnects** from the room, their cursor is removed immediately via the `removeCursor` method. When the local user **leaves** the room or the overlay is deactivated, all remote cursors are cleared at once. The overlay itself is hidden (set to `display: none`) when collaboration is not active.
+
+---
+
 ## Related Pages
 
 - [Session Management](session-management.md) -- Saving and restoring session state

@@ -195,6 +195,16 @@ The `SessionState` interface (`src/core/session/SessionState.ts`) defines the se
 | `notes` | Note[]? | Review notes and comments |
 | `versionGroups` | VersionGroup[]? | Version comparison groups |
 | `statuses` | StatusEntry[]? | Shot status entries |
+| `timecodeOverlay` | TimecodeOverlayState? | Timecode overlay settings |
+| `safeAreasOverlay` | SafeAreasState? | Safe areas overlay settings |
+| `clippingOverlay` | ClippingOverlayState? | Clipping overlay settings |
+| `infoStripOverlay` | InfoStripOverlayState? | Info strip overlay settings |
+| `spotlightOverlay` | SpotlightState? | Spotlight overlay settings |
+| `bugOverlay` | BugOverlayState? | Bug overlay settings |
+| `exrWindowOverlay` | EXRWindowOverlayState? | EXR window overlay settings |
+| `fpsIndicatorOverlay` | FPSIndicatorState? | FPS indicator overlay settings |
+| `lutPipeline` | SerializableLUTPipelineState? | Multi-stage LUT pipeline settings |
+| `edlEntries` | RVEDLEntry[]? | Edit Decision List entries |
 | `graph` | SerializedGraph? | Node graph topology (v2+) |
 
 ---

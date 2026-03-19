@@ -18,7 +18,7 @@ OpenRV Web uses the `.orvproject` file format for session persistence. This is a
 | Playback state | Current frame, in/out points, FPS, loop mode, volume, muted state |
 | Markers | Frame number, note text, color for each marker |
 | Annotations | All pen strokes, shapes, and text per frame; ghost/hold settings |
-| Color adjustments | Exposure, gamma, contrast, saturation, brightness, temperature, tint, highlights, shadows, whites, blacks |
+| Color adjustments | Exposure, gamma, contrast, saturation, vibrance, brightness, clarity, temperature, tint, highlights, shadows, whites, blacks |
 | CDL values | Slope, offset, power, saturation |
 | View state | Zoom level, pan position |
 | Transform | Rotation, flip, scale, translate |
@@ -29,6 +29,8 @@ OpenRV Web uses the `.orvproject` file format for session persistence. This is a
 | LUT | LUT file path reference and blend intensity |
 | LUT pipeline | Per-source and display LUT stage assignments (names, enabled flags, intensities) |
 | Filters | Blur, sharpen settings |
+| Overlays | Timecode overlay, Safe Areas overlay, Clipping overlay, Info Strip overlay, Spotlight overlay, Bug overlay, EXR Window overlay, FPS Indicator overlay |
+| EDL entries | Edit Decision List entries |
 | Playlist | Clip list with in/out points and loop mode |
 | Node graph | Graph topology, node connections, and properties (when a graph is active) |
 
@@ -108,6 +110,7 @@ The file reload dialog appears for each media reference that cannot be automatic
 - A filename mismatch warning (if the selected file has a different name than expected)
 - **Load** button (disabled until a file is selected)
 - **Skip** button (continues without loading that media, showing a warning)
+- **Cancel** button (aborts the entire reload flow)
 
 Multiple reload prompts appear sequentially if the session contains several locally-loaded files.
 

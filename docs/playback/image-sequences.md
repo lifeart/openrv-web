@@ -163,6 +163,16 @@ window.openrv.media.setPlaybackFPS(30);
 
 // Load sequence from pattern string
 await window.openrv.media.addSourceFromPattern('/renders/shot.####.exr', 1001, 1100);
+
+// Check if the current source is an image sequence
+if (window.openrv.sequence.isSequence()) {
+  // Get the detected naming pattern (e.g., "frame_####.png")
+  const pattern = window.openrv.sequence.getPattern();
+
+  // Get the frame range of the active sequence
+  const range = window.openrv.sequence.getFrameRange();
+  // e.g. { start: 1001, end: 1100 }
+}
 ```
 
 ---

@@ -8,7 +8,7 @@ OpenRV EXR support extends beyond simple image display to include multi-layer fi
 
 ## Multi-Layer EXR Overview
 
-OpenRV Web decodes EXR files using a WebAssembly decoder with Float32 HDR precision. Multi-layer EXR files contain multiple named layers, each representing a different render pass or data channel. Common layers include:
+OpenRV Web decodes EXR files using a TypeScript decoder with Float32 HDR precision. Multi-layer EXR files contain multiple named layers, each representing a different render pass or data channel. Common layers include:
 
 | Layer | Purpose |
 |-------|---------|
@@ -64,10 +64,11 @@ The EXR decoder extracts layer information during decoding:
 OpenRV Web supports multiple EXR compression methods:
 
 - **PIZ** -- wavelet compression using Huffman, Haar transform, and LUT encoding. Best for grainy or noisy images.
-- **DWA** -- lossy DCT-based compression. Good for preview-quality images at smaller file sizes.
+- **DWA** (DWAA/DWAB) -- lossy DCT-based compression. Good for preview-quality images at smaller file sizes.
 - **ZIP** and **ZIPS** -- standard deflate compression.
 - **RLE** -- run-length encoding for images with large flat areas.
-- **Uncompressed** -- no compression, fastest decode.
+- **PXR24** -- lossy compression for float channels (lossless for half-float). Truncates 32-bit floats to 24 bits.
+- **Uncompressed** (NONE) -- no compression, fastest decode.
 
 ## Multi-View EXR
 

@@ -29,7 +29,7 @@ OpenEXR is the industry-standard HDR image format for VFX, developed by Industri
 
 - **Decoder**: Pure TypeScript EXR parser (`EXRDecoder.ts`)
 - **Precision**: Full Float32 per channel -- no 8-bit bottleneck
-- **Compression**: PIZ (lossless, wavelet-based) and DWA (lossy, DCT-based) via dedicated codec modules (`EXRPIZCodec.ts`, `EXRDWACodec.ts`)
+- **Compression**: NONE (uncompressed), RLE, ZIP, ZIPS, PIZ (lossless, wavelet-based), PXR24 (lossy for float, lossless for half), DWAA and DWAB (lossy, DCT-based) via dedicated codec modules (`EXRPIZCodec.ts`, `EXRDWACodec.ts`)
 - **Multi-layer AOV selection**: EXR files containing multiple render passes (beauty, diffuse, specular, depth, normals, etc.) can be viewed layer by layer. The decoder exposes layer information and supports channel remapping (`EXRChannelRemapping`)
 - **Data/display window**: OpenEXR's data window (actual pixel extent) and display window (intended viewing area) are respected, with correct offset and cropping applied
 - **Multi-view EXR**: Stereo and multi-view EXR files are parsed by `MultiViewEXR.ts`, which extracts view names, maps channels to views, and enables per-view decoding. View names follow the OpenEXR convention (e.g., `left`, `right`)
@@ -70,7 +70,7 @@ Kodak's original digital film scanning format, the predecessor to DPX. OpenRV We
 
 **Color space**: Logarithmic (Cineon density). Log-to-linear conversion is applied by default during decode.
 
-### Radiance HDR (.hdr, .rgbe)
+### Radiance HDR (.hdr, .pic)
 
 The Radiance High Dynamic Range format, also known as RGBE (Red-Green-Blue-Exponent), stores HDR images using a shared exponent encoding scheme:
 
@@ -90,7 +90,7 @@ The Radiance High Dynamic Range format, also known as RGBE (Red-Green-Blue-Expon
 TIFF files with 32-bit floating-point sample format, commonly used for HDR compositing interchange:
 
 - **Decoder**: Pure JavaScript (`TIFFFloatDecoder.ts`)
-- **Detection**: The decoder specifically identifies TIFF files where SampleFormat=3 (IEEE floating-point) and BitsPerSample=32. Standard 8/16-bit TIFFs are handled by the browser's native `<img>` decoder instead
+- **Detection**: The decoder specifically identifies TIFF files where SampleFormat=3 (IEEE floating-point) and BitsPerSample=16/32/64. Standard 8/16-bit integer TIFFs are handled by the browser's native `<img>` decoder instead
 - **Endianness**: Both Intel (II, little-endian) and Motorola (MM, big-endian) byte orders
 - **Channels**: Supports 1-channel (grayscale), 3-channel (RGB), and 4-channel (RGBA) float TIFF images
 
@@ -197,7 +197,7 @@ The following formats are decoded by the browser's built-in image decoder via `<
 | WebP | .webp | Lossy and lossless, alpha; loaded as single-frame still (animated playback not supported) |
 | GIF | .gif | 256-color palette; loaded as single-frame still (animated playback not supported) |
 | BMP | .bmp | Uncompressed bitmap |
-| HEIC/HEIF | .heic, .heif | Safari native; other browsers via WASM |
+| HEIC/HEIF | .heic, .heif | Decoder-backed (gainmap HDR via ISOBMFF parser; SDR via WASM libheif). Safari uses its native HEIC decoder for the base image |
 | SVG | .svg | Vector graphics (rasterized by browser) |
 | ICO | .ico | Icon format |
 
@@ -396,7 +396,7 @@ The following table compares format support between desktop OpenRV and OpenRV We
 
 | Format | Extension | OpenRV Desktop | OpenRV Web | Decoder Type | HDR |
 |--------|----------|---------------|------------|--------------|-----|
-| OpenEXR | .exr, .sxr | Yes | Yes | WASM | Yes |
+| OpenEXR | .exr, .sxr | Yes | Yes | TypeScript | Yes |
 | DPX | .dpx | Yes | Yes | JavaScript | No (log) |
 | Cineon | .cin | Yes | Yes | JavaScript | No (log) |
 | Radiance HDR | .hdr | Yes | Yes | JavaScript | Yes |
@@ -450,7 +450,7 @@ The `DecoderRegistry` class manages all format decoders in a priority-ordered ch
 ```
 EXR -> DPX -> Cineon -> Float TIFF -> RAW Preview -> JPEG Gainmap
     -> HEIC Gainmap -> AVIF Gainmap -> Plain AVIF -> Radiance HDR
-    -> JPEG XL -> JPEG 2000 -> MXF
+    -> JPEG XL -> JPEG 2000
 ```
 
 Each decoder implements the generic `FormatDecoder<TOptions>` interface:

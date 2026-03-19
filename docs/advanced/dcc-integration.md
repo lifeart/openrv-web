@@ -128,8 +128,9 @@ The bridge server sends the following command types to OpenRV Web:
 | `syncFrame` | Navigate to a specific frame. Requires a numeric `frame` field. |
 | `syncColor` | Sync color settings. Optional fields: `exposure`, `gamma`, `temperature`, `tint` (all numeric), and `lutPath` (string). |
 | `ping` | Health check for connection monitoring. The bridge responds with a `pong` message. |
+| `pong` | Response to an outbound `ping` heartbeat sent by the viewer. Confirms the DCC bridge server is still reachable. |
 
-Commands are JSON messages sent over the WebSocket connection. Each message must include a `type` field matching one of the commands above. An optional `id` field can be included for request-response correlation, and an optional `timestamp` field (ISO 8601) for logging. OpenRV Web validates each command and responds with an `error` message (code `UNKNOWN_TYPE`, `INVALID_PARAMS`, `INVALID_MESSAGE`, `INVALID_MEDIA_PATH`, or `PARSE_ERROR`) if the message is malformed or unrecognized.
+Commands are JSON messages sent over the WebSocket connection. Each message must include a `type` field matching one of the commands above. An optional `id` field can be included for request-response correlation, and an optional `timestamp` field (ISO 8601) for logging. OpenRV Web validates each command and responds with an `error` message (code `UNKNOWN_TYPE`, `INVALID_PARAMS`, `INVALID_MESSAGE`, `INVALID_MEDIA_PATH`, `LOAD_MEDIA_FAILED`, or `PARSE_ERROR`) if the message is malformed or unrecognized.
 
 ### Media Path Requirements
 

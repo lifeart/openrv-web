@@ -217,6 +217,84 @@ The note overlay listens for `notesChanged` events on the session and triggers a
 
 ---
 
+## Spotlight Overlay
+
+The spotlight overlay highlights a region of interest while dimming the surrounding area. It is useful during review sessions to draw attention to a specific part of the frame.
+
+### Shape
+
+The spotlight supports two shapes:
+
+- **Circle**: A circular highlight with uniform radius. Resize handles appear at the four cardinal points (N, S, E, W).
+- **Rectangle**: A rectangular highlight with independent width and height. Resize handles appear at all eight positions (four corners and four edge midpoints).
+
+### Interaction
+
+- **Drag to position**: Click inside the spotlight region and drag to move it. The cursor changes to a move icon.
+- **Resize**: Click and drag any resize handle to change the spotlight size. The cursor changes to the appropriate resize direction (e.g., `ns-resize`, `nwse-resize`).
+- Position and size use **normalized 0--1 coordinates** relative to the image dimensions.
+
+### Controls
+
+| Setting | Range | Default | Description |
+|---------|-------|---------|-------------|
+| **Dim amount** | 0--1 | 0.7 | How dark the area outside the spotlight becomes. 0 = no dimming, 1 = fully black. |
+| **Feather** | 0--0.5 | 0.05 | How soft the edge transition is. 0 = hard edge, higher values = smoother gradient. |
+| **Shape** | circle / rectangle | circle | The shape of the highlighted region. |
+
+The spotlight outline is drawn as a dashed white line (50% opacity) for visual feedback. The overlay is toggled from its dedicated button in the **View** tab toolbar.
+
+---
+
+## Info Strip Overlay
+
+The info strip overlay displays a semi-transparent bar at the bottom of the viewer showing the current source filename. It provides at-a-glance identification of which file is loaded.
+
+### Display
+
+- **Basename mode** (default): Shows only the filename (e.g., `shot_010_comp_v03.exr`)
+- **Full path mode**: Shows the complete URL or file path, with right-to-left truncation so the filename end remains visible when the path is long
+
+Toggle between modes by clicking the toggle icon button on the right side of the strip, or by pressing `Shift+F7`.
+
+### Settings
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| **Background opacity** | 0.5 | Controls the darkness of the strip background (0 = transparent, 1 = fully opaque) |
+
+The strip uses a monospace font (SF Mono / Fira Code / Consolas) with a text shadow for readability against any image content. Toggle visibility with `F7` (matching desktop OpenRV). The overlay passes pointer events through to the viewer canvas so it does not interfere with interaction.
+
+---
+
+## FPS Indicator
+
+The FPS indicator is a heads-up display that shows real-time playback performance metrics on the viewer canvas. It appears automatically during playback and hides 2 seconds after playback stops.
+
+### Display
+
+- **Actual FPS**: The measured frame rate, smoothed with exponential moving average (EMA) for stable readout. Color-coded based on performance:
+  - **Green**: At or above 97% of target FPS (good)
+  - **Yellow**: Between 85% and 97% of target (warning)
+  - **Red**: Below 85% of target (critical)
+- **Target FPS**: Shown below the actual FPS. When playback speed is not 1x, displays the effective target FPS with the speed multiplier (e.g., "/ 48 eff. fps (2x)").
+- **Dropped frames**: A counter of skipped frames during the current playback session. Displayed in red when drops have occurred.
+
+### Settings
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| **Position** | top-right | Corner placement (top-left, top-right, bottom-left, bottom-right) |
+| **Show dropped frames** | Enabled | Toggle the skipped frame counter |
+| **Show target FPS** | Enabled | Toggle the target FPS line |
+| **Background opacity** | 0.6 | Darkness of the indicator background |
+| **Warning threshold** | 0.97 | Ratio below which the color turns yellow |
+| **Critical threshold** | 0.85 | Ratio below which the color turns red |
+
+Settings are persisted in user preferences and survive page reloads.
+
+---
+
 ## False Color and Zebra Stripes
 
 For exposure analysis overlays including false color mapping and animated zebra stripes, see [False Color and Zebra Stripes](../scopes/false-color-zebra.md). These diagnostic overlays are documented alongside the scopes system because they operate on luminance analysis data and are typically used in conjunction with the histogram and waveform scopes.
@@ -229,14 +307,15 @@ When multiple overlays are active simultaneously, they are composited in a fixed
 
 1. EXR data/display window
 2. Matte overlay
-3. Clipping indicators
-4. Safe area guides
-5. Perspective grid
-6. Watermark
-7. Bug overlay
-8. Timecode display
-9. Note overlay
-10. Missing frame indicator (in **Frame** mode, overlays on top of the current image; in **Black** mode, replaces the image entirely; see [Missing Frame Indicator](#missing-frame-indicator) for all modes)
+3. Spotlight overlay
+4. Clipping indicators
+5. Safe area guides
+6. Perspective grid
+7. Watermark
+8. Bug overlay
+9. Timecode display
+10. Note overlay
+11. Missing frame indicator (in **Frame** mode, overlays on top of the current image; in **Black** mode, replaces the image entirely; see [Missing Frame Indicator](#missing-frame-indicator) for all modes)
 
 This ordering ensures that diagnostic overlays remain visible above decorative elements, and that the missing frame indicator is never obscured.
 

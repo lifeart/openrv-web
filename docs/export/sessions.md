@@ -28,7 +28,11 @@ Click the Save button in the header bar or use the Export menu to save the curre
 | **Layer stack** | Layer blend modes and opacity |
 | **LUT** | LUT file path reference and intensity |
 | **Filters** | Blur, sharpen settings |
+| **LUT pipeline** | Per-source and display LUT stage assignments (names, enabled flags, intensities) |
+| **Overlays** | Timecode overlay, Safe Areas overlay, Clipping overlay, Info Strip overlay, Spotlight overlay, Bug overlay, EXR Window overlay, FPS Indicator overlay |
+| **EDL entries** | Edit Decision List entries |
 | **Playlist** | Clip list with in/out points and loop mode |
+| **Node graph** | Graph topology, node connections, and properties (when a graph is active) |
 
 ## Loading a Session
 

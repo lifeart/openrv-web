@@ -10,15 +10,15 @@ OpenRV Web provides six channel viewing modes:
 
 | Mode | Shortcut | Description |
 |------|----------|-------------|
-| RGB (Normal) | *(toolbar or custom binding)* | Full-color display (default) |
-| Red | *(toolbar or custom binding)* | Red channel displayed as grayscale |
+| RGB (Normal) | `Shift+N` | Full-color display (default) |
+| Red | `Shift+R` | Red channel displayed as grayscale |
 | Green | `Shift+G` | Green channel displayed as grayscale |
-| Blue | *(toolbar or custom binding)* | Blue channel displayed as grayscale |
+| Blue | `Shift+B` | Blue channel displayed as grayscale |
 | Alpha | `Shift+A` | Alpha channel displayed as grayscale (fully opaque) |
-| Luminance | `Shift+Y` | Rec.709 luminance (0.2126R + 0.7152G + 0.0722B) |
+| Luminance | `Shift+L` / `Shift+Y` | Rec.709 luminance (0.2126R + 0.7152G + 0.0722B). `Shift+L` is the primary shortcut but is overridden by the LUT panel on the Color tab; `Shift+Y` always works. |
 
-::: warning Shortcut Availability
-`Shift+R`, `Shift+B`, and `Shift+N` are reserved for other actions (rotate-left, background-pattern cycling, and network sync respectively) and are **not active by default** for channel isolation. Use the Channel Select dropdown in the toolbar to switch to Red, Blue, or RGB mode, or assign custom shortcuts via the shortcut editor.
+::: info Contextual Overrides
+`Shift+R`, `Shift+B`, `Shift+N`, and `Shift+L` are **active by default** as global channel shortcuts. However, they are overridden on specific tabs: `Shift+R` triggers rotate-left on the Transform tab, `Shift+B` cycles the background pattern on the View tab, `Shift+N` opens the network panel on the QC tab, and `Shift+L` opens the LUT panel on the Color tab. If a channel shortcut does not respond, check which tab is active or use the Channel Select dropdown in the toolbar.
 :::
 
 ## Channel Select Dropdown
@@ -72,7 +72,7 @@ When channel isolation is active, scopes (Histogram, Waveform, Vectorscope) upda
 
 ## State Persistence
 
-The selected channel mode persists across frame changes and tab switches. Switching tabs does not reset the channel selection. To return to normal full-color display, use the Channel Select dropdown in the toolbar or assign a custom shortcut for the RGB (Normal) mode.
+The selected channel mode persists across frame changes and tab switches. Switching tabs does not reset the channel selection. To return to normal full-color display, press `Shift+N` or use the Channel Select dropdown in the toolbar.
 
 ---
 

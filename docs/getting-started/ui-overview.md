@@ -83,6 +83,12 @@ The playback control group includes:
 - **Speed button** -- displays current speed (e.g., "1x"); click to cycle presets, right-click for speed menu
 - **Loop mode** -- icon-only button; hover tooltip shows current mode (Loop, Ping-Pong, Play Once); click to cycle
 
+### Source Header Controls
+
+When media is loaded, additional controls appear in the header bar next to the source name:
+
+- **Representation selector** -- a dropdown that appears when a source has multiple media representations (e.g., Frames, Movie, Proxy, Stream). Click to switch between representations. The selector is hidden when only one representation is available.
+
 ### Utilities (Right)
 
 - **Volume control** -- mute button with expandable slider on hover

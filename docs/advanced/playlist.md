@@ -104,6 +104,16 @@ Transition duration and type are configurable per cut point in the Timeline Edit
 
 ---
 
+## ShotGrid Playlist Import
+
+When the ShotGrid integration is connected (see [DCC Integration -- ShotGrid](dcc-integration.md#shotgrid-integration)), playlists can be loaded directly from ShotGrid. Selecting a ShotGrid playlist in the ShotGrid panel fetches all versions in the playlist, loads each version's media into the session, and automatically builds a review playlist preserving the clip order from ShotGrid.
+
+Each imported clip records ShotGrid metadata (version ID and shot name), and the version's ShotGrid status is applied to the session's status manager. If a version's media cannot be loaded (e.g., the URL is unreachable), it is skipped with a warning and the remaining versions continue loading.
+
+ShotGrid playlist import requires a `PlaylistManager` to be wired into the integration bridge. Without it, versions are loaded into the session but no playlist is created.
+
+---
+
 ## EDL Export and OTIO Import
 
 The playlist can be exported as a CMX 3600 EDL file using the **EDL** button in the playlist panel footer. EDL export generates a standard-format edit decision list with SMPTE timecodes at the session frame rate.

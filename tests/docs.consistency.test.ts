@@ -278,34 +278,36 @@ describe('Documentation consistency', () => {
 
   // -- Keyboard shortcut accuracy (H/W hidden defaults) ---------------------
 
-  test('docs do not advertise H as histogram shortcut', () => {
-    const filesToCheck = [
-      'docs/reference/keyboard-shortcuts.md',
+  test('docs correctly document H as contextual histogram shortcut on QC tab', () => {
+    const shortcutsDoc = readFile('docs/reference/keyboard-shortcuts.md');
+    // H is a contextual shortcut: fit-to-height globally, histogram on QC tab
+    expect(shortcutsDoc).toMatch(/\| `H` \| Fit to height \| Histogram \(QC tab\) \|/);
+
+    // Should NOT claim H is a standalone histogram toggle outside contextual table
+    const nonContextualFiles = [
       'docs/getting-started/ui-overview.md',
       'docs/scopes/histogram.md',
     ];
-
-    for (const file of filesToCheck) {
+    for (const file of nonContextualFiles) {
       if (!fileExists(file)) continue;
       const content = readFile(file);
-      // Should not claim `H` toggles the histogram (H is fit-to-height)
-      expect(content).not.toMatch(/\| `H` \| .*[Hh]istogram/);
       expect(content).not.toMatch(/Press `H` to toggle the histogram/);
     }
   });
 
-  test('docs do not advertise W as waveform shortcut', () => {
-    const filesToCheck = [
-      'docs/reference/keyboard-shortcuts.md',
+  test('docs correctly document W as contextual waveform shortcut on QC tab', () => {
+    const shortcutsDoc = readFile('docs/reference/keyboard-shortcuts.md');
+    // W is a contextual shortcut: fit-to-width globally, waveform on QC tab
+    expect(shortcutsDoc).toMatch(/\| `W` \| Fit to width \| Waveform \(QC tab\) \|/);
+
+    // Should NOT claim W is a standalone waveform toggle outside contextual table
+    const nonContextualFiles = [
       'docs/getting-started/ui-overview.md',
       'docs/scopes/waveform.md',
     ];
-
-    for (const file of filesToCheck) {
+    for (const file of nonContextualFiles) {
       if (!fileExists(file)) continue;
       const content = readFile(file);
-      // Should not claim `W` toggles the waveform (W is fit-to-width)
-      expect(content).not.toMatch(/\| `W` \| .*[Ww]aveform/);
       expect(content).not.toMatch(/Press `W` to toggle the waveform/);
     }
   });
@@ -322,8 +324,9 @@ describe('Documentation consistency', () => {
     expect(source).toMatch(/CONTEXTUAL_DEFAULTS.*=.*new Set\(\[[\s\S]*?'panel\.waveform'/);
     expect(source).toMatch(/CONTEXTUAL_DEFAULTS.*=.*new Set\(\[[\s\S]*?'panel\.histogram'/);
 
-    // Verify the docs mention that histogram/waveform have no default shortcut
+    // Verify the docs explain H/W contextual behavior (scopes on QC tab, fit shortcuts globally)
     const shortcutsDoc = readFile('docs/reference/keyboard-shortcuts.md');
-    expect(shortcutsDoc).toContain('Histogram and waveform scopes do not have default keyboard shortcuts');
+    expect(shortcutsDoc).toMatch(/`H`.*histogram.*contextual/i);
+    expect(shortcutsDoc).toMatch(/`W`.*waveform.*contextual/i);
   });
 });
