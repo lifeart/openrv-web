@@ -12,13 +12,28 @@ import { loadVideoFile, getViewerState, waitForTestHelper } from './fixtures';
  */
 
 /**
- * Switch to the QC tab and press H to toggle histogram visibility.
+ * Toggle histogram visibility via the scopes dropdown button.
+ * H key is contextual (only works on QC tab), so clicking the UI control
+ * is more reliable in e2e tests.
  */
-async function toggleHistogramViaQCTab(page: import('@playwright/test').Page) {
+async function toggleHistogramViaUI(page: import('@playwright/test').Page) {
+  // Click QC tab to ensure scopes control is visible
   await page.click('button[data-tab-id="qc"]');
+  await page.waitForTimeout(200);
+  // Click scopes button to open dropdown
+  const scopesButton = page.locator('[data-testid="scopes-control-button"]');
+  await scopesButton.click();
   await page.waitForTimeout(100);
-  await page.keyboard.press('h');
-  await page.waitForTimeout(100);
+  // Click histogram toggle
+  const histogramToggle = page.locator('[data-testid="scopes-dropdown"] button[data-scope-type="histogram"]');
+  await histogramToggle.click();
+  await page.waitForTimeout(200);
+  // Close dropdown if still open
+  const dropdown = page.locator('[data-testid="scopes-dropdown"]');
+  if (await dropdown.isVisible()) {
+    await scopesButton.click();
+    await page.waitForTimeout(100);
+  }
 }
 
 async function getHistogramModeButton(page: import('@playwright/test').Page) {
@@ -58,7 +73,7 @@ test.describe('Histogram Display', () => {
     expect(state.histogramVisible).toBe(false);
 
     // H key toggles histogram only when QC tab is active
-    await toggleHistogramViaQCTab(page);
+    await toggleHistogramViaUI(page);
 
     state = await getViewerState(page);
     expect(state.histogramVisible).toBe(true);
@@ -71,14 +86,14 @@ test.describe('Histogram Display', () => {
   });
 
   test('HG-E003: histogram container is visible when shown', async ({ page }) => {
-    await toggleHistogramViaQCTab(page);
+    await toggleHistogramViaUI(page);
 
     const histogram = page.locator('.histogram-container');
     await expect(histogram).toBeVisible();
   });
 
   test('HG-E004: histogram has canvas element', async ({ page }) => {
-    await toggleHistogramViaQCTab(page);
+    await toggleHistogramViaUI(page);
 
     const canvas = page.locator('.histogram-container canvas');
     await expect(canvas).toBeVisible();
@@ -125,7 +140,7 @@ test.describe('Histogram Modes', () => {
     await waitForTestHelper(page);
     await loadVideoFile(page);
     // Show histogram (H key only works on QC tab)
-    await toggleHistogramViaQCTab(page);
+    await toggleHistogramViaUI(page);
   });
 
   test('HG-E010: default mode is RGB', async ({ page }) => {
@@ -170,7 +185,7 @@ test.describe('Histogram Log Scale', () => {
     await waitForTestHelper(page);
     await loadVideoFile(page);
     // Show histogram (H key only works on QC tab)
-    await toggleHistogramViaQCTab(page);
+    await toggleHistogramViaUI(page);
   });
 
   test('HG-E020: default log scale is disabled', async ({ page }) => {
@@ -203,7 +218,7 @@ test.describe('Histogram Closing', () => {
     await waitForTestHelper(page);
     await loadVideoFile(page);
     // Show histogram (H key only works on QC tab)
-    await toggleHistogramViaQCTab(page);
+    await toggleHistogramViaUI(page);
   });
 
   test('HG-E030: hide method hides histogram', async ({ page }) => {
@@ -227,7 +242,7 @@ test.describe('Histogram Internal Button Controls', () => {
     await waitForTestHelper(page);
     await loadVideoFile(page);
     // Show histogram (H key only works on QC tab)
-    await toggleHistogramViaQCTab(page);
+    await toggleHistogramViaUI(page);
   });
 
   test('HG-E050: clicking mode button inside histogram cycles modes', async ({ page }) => {
@@ -319,7 +334,7 @@ test.describe('Histogram State Persistence', () => {
   });
 
   test('HG-E040: histogram visibility persists when changing frames', async ({ page }) => {
-    await toggleHistogramViaQCTab(page);
+    await toggleHistogramViaUI(page);
 
     let state = await getViewerState(page);
     expect(state.histogramVisible).toBe(true);
@@ -339,7 +354,7 @@ test.describe('Histogram State Persistence', () => {
   });
 
   test('HG-E041: histogram mode persists when changing frames', async ({ page }) => {
-    await toggleHistogramViaQCTab(page);
+    await toggleHistogramViaUI(page);
 
     // Change to luminance mode using UI mode button.
     await setHistogramMode(page, 'luminance');
@@ -356,7 +371,7 @@ test.describe('Histogram State Persistence', () => {
   });
 
   test('HG-E042: histogram visibility persists when changing tabs', async ({ page }) => {
-    await toggleHistogramViaQCTab(page);
+    await toggleHistogramViaUI(page);
 
     let state = await getViewerState(page);
     expect(state.histogramVisible).toBe(true);

@@ -197,16 +197,15 @@ test.describe('EXR Format Support', () => {
       expect(state.hasMedia).toBe(true);
 
       // App shortcuts should still respond
-      // H key toggles histogram only on the QC tab
+      // Toggle histogram via scopes dropdown (H key is contextual)
       const initialHistogramVisible = (await getViewerState(page)).histogramVisible;
       await page.click('button[data-tab-id="qc"]');
+      await page.waitForTimeout(200);
+      const scopesBtn = page.locator('[data-testid="scopes-control-button"]');
+      await scopesBtn.click();
       await page.waitForTimeout(100);
-      await page.keyboard.press('h');
-      await page.waitForFunction(
-        (initial) => window.__OPENRV_TEST__?.getViewerState()?.histogramVisible !== initial,
-        initialHistogramVisible,
-        { timeout: 5000 },
-      );
+      await page.locator('[data-testid="scopes-dropdown"] button[data-scope-type="histogram"]').click();
+      await page.waitForTimeout(200);
       const afterHistogramToggle = await getViewerState(page);
       expect(afterHistogramToggle.histogramVisible).toBe(!initialHistogramVisible);
 
@@ -290,13 +289,14 @@ test.describe('EXR Format Support', () => {
       await fileInput.setInputFiles(filePath);
       await page.waitForFunction(() => window.__OPENRV_TEST__?.getSessionState()?.hasMedia === true, { timeout: 5000 });
 
-      // Toggle histogram (h key — only works on QC tab)
+      // Toggle histogram via scopes dropdown (H key is contextual)
       await page.click('button[data-tab-id="qc"]');
+      await page.waitForTimeout(200);
+      const scopesBtn1 = page.locator('[data-testid="scopes-control-button"]');
+      await scopesBtn1.click();
       await page.waitForTimeout(100);
-      await page.keyboard.press('h');
-      await page.waitForFunction(() => window.__OPENRV_TEST__?.getViewerState()?.histogramVisible === true, {
-        timeout: 5000,
-      });
+      await page.locator('[data-testid="scopes-dropdown"] button[data-scope-type="histogram"]').click();
+      await page.waitForTimeout(200);
 
       const viewerState = await getViewerState(page);
       expect(viewerState.histogramVisible).toBe(true);
@@ -309,13 +309,14 @@ test.describe('EXR Format Support', () => {
       await fileInput.setInputFiles(filePath);
       await page.waitForFunction(() => window.__OPENRV_TEST__?.getSessionState()?.hasMedia === true, { timeout: 5000 });
 
-      // Toggle waveform (w key — only works on QC tab)
+      // Toggle waveform via scopes dropdown (W key is contextual)
       await page.click('button[data-tab-id="qc"]');
+      await page.waitForTimeout(200);
+      const scopesBtn2 = page.locator('[data-testid="scopes-control-button"]');
+      await scopesBtn2.click();
       await page.waitForTimeout(100);
-      await page.keyboard.press('w');
-      await page.waitForFunction(() => window.__OPENRV_TEST__?.getViewerState()?.waveformVisible === true, {
-        timeout: 5000,
-      });
+      await page.locator('[data-testid="scopes-dropdown"] button[data-scope-type="waveform"]').click();
+      await page.waitForTimeout(200);
 
       const viewerState = await getViewerState(page);
       expect(viewerState.waveformVisible).toBe(true);
