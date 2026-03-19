@@ -373,7 +373,9 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
 
     // Normal frame advance
     const nextMapping = this.getClipAtFrame(nextGlobal);
-    const clipChanged = currentMapping && nextMapping && currentMapping.clipIndex !== nextMapping.clipIndex;
+    const clipChanged =
+      (currentMapping === null && nextMapping !== null) ||
+      (currentMapping !== null && nextMapping !== null && currentMapping.clipIndex !== nextMapping.clipIndex);
 
     return { frame: nextGlobal, clipChanged: !!clipChanged };
   }
@@ -389,7 +391,9 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
         const nextGlobal = currentGlobal + 1;
         const nextMapping = this.getClipAtFrame(nextGlobal);
         const currentMapping = this.getClipAtFrame(currentGlobal);
-        const clipChanged = currentMapping && nextMapping && currentMapping.clipIndex !== nextMapping.clipIndex;
+        const clipChanged =
+          (currentMapping === null && nextMapping !== null) ||
+          (currentMapping !== null && nextMapping !== null && currentMapping.clipIndex !== nextMapping.clipIndex);
         return { frame: nextGlobal, clipChanged: !!clipChanged };
       }
       if (this.loopMode === 'all') {
@@ -403,12 +407,11 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
     const prevGlobal = currentGlobal - 1;
     const prevMapping = this.getClipAtFrame(prevGlobal);
 
-    if (currentMapping && prevMapping) {
-      const clipChanged = currentMapping.clipIndex !== prevMapping.clipIndex;
-      return { frame: prevGlobal, clipChanged };
-    }
+    const clipChanged =
+      (currentMapping === null && prevMapping !== null) ||
+      (currentMapping !== null && prevMapping !== null && currentMapping.clipIndex !== prevMapping.clipIndex);
 
-    return { frame: prevGlobal, clipChanged: false };
+    return { frame: prevGlobal, clipChanged: !!clipChanged };
   }
 
   /**
@@ -439,7 +442,9 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
       }
 
       const nextMapping = this.getClipAtFrame(nextGlobal);
-      const clipChanged = currentMapping && nextMapping && currentMapping.clipIndex !== nextMapping.clipIndex;
+      const clipChanged =
+        (currentMapping === null && nextMapping !== null) ||
+        (currentMapping !== null && nextMapping !== null && currentMapping.clipIndex !== nextMapping.clipIndex);
       return { frame: nextGlobal, clipChanged: !!clipChanged };
     }
 
@@ -454,7 +459,9 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
         const nextGlobal = currentGlobal + 1;
         const nextMapping = this.getClipAtFrame(nextGlobal);
         const currentMapping = this.getClipAtFrame(currentGlobal);
-        const clipChanged = currentMapping && nextMapping && currentMapping.clipIndex !== nextMapping.clipIndex;
+        const clipChanged =
+          (currentMapping === null && nextMapping !== null) ||
+          (currentMapping !== null && nextMapping !== null && currentMapping.clipIndex !== nextMapping.clipIndex);
         return { frame: nextGlobal, clipChanged: !!clipChanged };
       }
       return { frame: 1, clipChanged: false };
@@ -464,12 +471,11 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
     const prevGlobal = currentGlobal - 1;
     const prevMapping = this.getClipAtFrame(prevGlobal);
 
-    if (currentMapping && prevMapping) {
-      const clipChanged = currentMapping.clipIndex !== prevMapping.clipIndex;
-      return { frame: prevGlobal, clipChanged };
-    }
+    const clipChanged =
+      (currentMapping === null && prevMapping !== null) ||
+      (currentMapping !== null && prevMapping !== null && currentMapping.clipIndex !== prevMapping.clipIndex);
 
-    return { frame: prevGlobal, clipChanged: false };
+    return { frame: prevGlobal, clipChanged: !!clipChanged };
   }
 
   /**
@@ -568,14 +574,28 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
 
   /**
    * Get total playlist duration in frames.
-   * When a transition manager is set, subtracts transition overlaps.
+   * Accounts for gap-spaced clips (non-contiguous globalStartFrame values)
+   * by computing the end of the last clip. When a transition manager is set,
+   * subtracts transition overlaps from the raw sum instead.
    */
   getTotalDuration(): number {
-    const rawDuration = this.clips.reduce((sum, clip) => sum + clip.duration, 0);
+    if (this.clips.length === 0) return 0;
+
     if (this.transitionManager) {
+      const rawDuration = this.clips.reduce((sum, clip) => sum + clip.duration, 0);
       return rawDuration - this.transitionManager.getTotalOverlap();
     }
-    return rawDuration;
+
+    // Find the end of the last clip by globalStartFrame + duration - 1
+    // This correctly handles gaps (non-contiguous globalStartFrame values).
+    let maxEnd = 0;
+    for (const clip of this.clips) {
+      const clipEnd = clip.globalStartFrame + clip.duration - 1;
+      if (clipEnd > maxEnd) {
+        maxEnd = clipEnd;
+      }
+    }
+    return maxEnd;
   }
 
   /**
@@ -863,13 +883,32 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
     if (!singleResult) return 0;
 
     this._unresolvedClips = [];
-    this._lastOTIOImportResult = null;
     let importedCount = 0;
 
+    // Use timelineInFrame from the parse result (+1 for 1-based playlist)
+    // so that gap spacing is preserved.
     for (const clip of singleResult.clips) {
       const resolved = sourceResolver(clip.name, clip.sourceUrl);
       if (resolved) {
-        this.addClip(resolved.index, clip.name, clip.inFrame, clip.outFrame, clip.metadata);
+        const duration = clip.outFrame - clip.inFrame + 1;
+        const globalStartFrame = clip.timelineInFrame + 1;
+
+        const entry: PlaylistClip = {
+          id: `clip-${this.nextClipId++}`,
+          sourceIndex: resolved.index,
+          sourceName: clip.name,
+          inPoint: clip.inFrame,
+          outPoint: clip.outFrame,
+          globalStartFrame,
+          duration,
+        };
+
+        if (clip.metadata) {
+          entry.metadata = clip.metadata;
+        }
+
+        this.clips.push(entry);
+        this.transitionManager?.resizeToClips(this.clips.length);
         importedCount++;
       } else {
         this._unresolvedClips.push({
@@ -883,12 +922,31 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
       }
     }
 
+    this.emit('clipsChanged', { clips: [...this.clips] });
+
+    // Store the import result with editorial structure
+    this._lastOTIOImportResult = {
+      importedCount,
+      transitions: singleResult.transitions,
+      gaps: singleResult.gaps,
+      markers: singleResult.markers,
+      metadata: singleResult.timeline.metadata,
+    };
+
+    // Invoke the marker importer callback if provided
+    if (options?.markerImporter && singleResult.markers.length > 0) {
+      options.markerImporter(singleResult.markers);
+    }
+
     return importedCount;
   }
 
   /**
    * Import from a multi-track OTIO parse result.
    * Uses the first video track's full structure (clips, transitions, gaps).
+   * Gap spacing from the OTIO timeline is preserved: each clip's
+   * `globalStartFrame` is derived from its `timelineInFrame` so that
+   * gaps produce empty regions in the playlist.
    */
   private _importFromMultiTrack(
     result: OTIOMultiTrackParseResult,
@@ -900,11 +958,31 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
     const primaryTrack = result.tracks[0]!;
     let importedCount = 0;
 
-    // Import clips from the primary (first) video track
+    // Import clips from the primary (first) video track.
+    // Use timelineInFrame from the OTIO parse result (+1 to convert from
+    // 0-based OTIO positions to 1-based playlist frames) so that gap
+    // spacing is preserved.
     for (const clip of primaryTrack.clips) {
       const resolved = sourceResolver(clip.name, clip.sourceUrl);
       if (resolved) {
-        this.addClip(resolved.index, clip.name, clip.inFrame, clip.outFrame, clip.metadata);
+        const duration = clip.outFrame - clip.inFrame + 1;
+        const globalStartFrame = clip.timelineInFrame + 1;
+
+        const entry: PlaylistClip = {
+          id: `clip-${this.nextClipId++}`,
+          sourceIndex: resolved.index,
+          sourceName: clip.name,
+          inPoint: clip.inFrame,
+          outPoint: clip.outFrame,
+          globalStartFrame,
+          duration,
+        };
+
+        if (clip.metadata) {
+          entry.metadata = clip.metadata;
+        }
+
+        this.clips.push(entry);
         importedCount++;
       } else {
         this._unresolvedClips.push({
@@ -917,6 +995,8 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
         });
       }
     }
+
+    this.transitionManager?.resizeToClips(this.clips.length);
 
     // Wire OTIO transitions to the TransitionManager if available
     if (this.transitionManager && primaryTrack.transitions.length > 0) {
@@ -935,10 +1015,9 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
           }
         }
       }
-      // Recalculate global frames after setting transitions
-      this.recalculateGlobalFrames();
-      this.emit('clipsChanged', { clips: [...this.clips] });
     }
+
+    this.emit('clipsChanged', { clips: [...this.clips] });
 
     // Store the full import result for consumers that need editorial structure
     this._lastOTIOImportResult = {

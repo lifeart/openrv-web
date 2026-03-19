@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { SafeAreasOverlay, type AspectRatioGuide, ASPECT_RATIOS, DEFAULT_SAFE_AREAS_STATE } from './SafeAreasOverlay';
+import { SafeAreasOverlay, type AspectRatioGuide, ASPECT_RATIOS, DEFAULT_SAFE_AREAS_STATE, SAFE_ZONE_COLORS } from './SafeAreasOverlay';
 import type { CropRegion } from './CropControl';
 
 // Canvas mocks are provided by test/setup.ts
@@ -117,6 +117,8 @@ describe('SafeAreasOverlay', () => {
         enabled: false,
         titleSafe: true,
         actionSafe: true,
+        customSafeArea: false,
+        customSafeAreaPercentage: 85,
         centerCrosshair: false,
         ruleOfThirds: false,
         aspectRatio: null,
@@ -424,6 +426,8 @@ describe('SafeAreasOverlay', () => {
       expect(state).toHaveProperty('enabled');
       expect(state).toHaveProperty('titleSafe');
       expect(state).toHaveProperty('actionSafe');
+      expect(state).toHaveProperty('customSafeArea');
+      expect(state).toHaveProperty('customSafeAreaPercentage');
       expect(state).toHaveProperty('centerCrosshair');
       expect(state).toHaveProperty('ruleOfThirds');
       expect(state).toHaveProperty('aspectRatio');
@@ -894,5 +898,363 @@ describe('Safe areas crop-region support (Issue #480)', () => {
     expect(actionCall).toBeDefined();
     expect(actionCall![0]).toBeCloseTo(35, 0);
     expect(actionCall![1]).toBeCloseTo(35, 0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #483: Custom safe area and distinct zone colors
+// ---------------------------------------------------------------------------
+describe('Custom safe area (Issue #483)', () => {
+  let overlay: SafeAreasOverlay;
+
+  beforeEach(() => {
+    overlay = new SafeAreasOverlay();
+    overlay.setViewerDimensions(1000, 1000, 0, 0, 1000, 1000);
+  });
+
+  afterEach(() => {
+    overlay.dispose();
+  });
+
+  it('SAFE-400: customSafeArea defaults to false', () => {
+    expect(overlay.getState().customSafeArea).toBe(false);
+  });
+
+  it('SAFE-401: customSafeAreaPercentage defaults to 85', () => {
+    expect(overlay.getState().customSafeAreaPercentage).toBe(85);
+  });
+
+  it('SAFE-402: toggleCustomSafeArea toggles custom safe area', () => {
+    overlay.toggleCustomSafeArea();
+    expect(overlay.getState().customSafeArea).toBe(true);
+
+    overlay.toggleCustomSafeArea();
+    expect(overlay.getState().customSafeArea).toBe(false);
+  });
+
+  it('SAFE-403: toggleCustomSafeArea emits stateChanged', () => {
+    const handler = vi.fn();
+    overlay.on('stateChanged', handler);
+
+    overlay.toggleCustomSafeArea();
+
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({ customSafeArea: true }));
+  });
+
+  it('SAFE-404: setCustomSafeAreaPercentage updates percentage', () => {
+    overlay.setCustomSafeAreaPercentage(75);
+    expect(overlay.getState().customSafeAreaPercentage).toBe(75);
+  });
+
+  it('SAFE-405: setCustomSafeAreaPercentage clamps to 1-99', () => {
+    overlay.setCustomSafeAreaPercentage(0);
+    expect(overlay.getState().customSafeAreaPercentage).toBe(1);
+
+    overlay.setCustomSafeAreaPercentage(100);
+    expect(overlay.getState().customSafeAreaPercentage).toBe(99);
+
+    overlay.setCustomSafeAreaPercentage(-10);
+    expect(overlay.getState().customSafeAreaPercentage).toBe(1);
+
+    overlay.setCustomSafeAreaPercentage(150);
+    expect(overlay.getState().customSafeAreaPercentage).toBe(99);
+  });
+
+  it('SAFE-406: setCustomSafeAreaPercentage rounds to integer', () => {
+    overlay.setCustomSafeAreaPercentage(75.7);
+    expect(overlay.getState().customSafeAreaPercentage).toBe(76);
+  });
+
+  it('SAFE-407: custom safe area renders at specified percentage', () => {
+    overlay.setState({
+      enabled: true,
+      actionSafe: false,
+      titleSafe: false,
+      customSafeArea: true,
+      customSafeAreaPercentage: 80,
+    });
+
+    const ctx = (overlay as unknown as { ctx: CanvasRenderingContext2D }).ctx;
+    const strokeRectSpy = vi.spyOn(ctx, 'strokeRect');
+
+    overlay.render();
+
+    // Custom safe: 80% of 1000 = 800, margin = (1-0.8)/2 * 1000 = 100
+    const customCall = strokeRectSpy.mock.calls.find(
+      ([_x, _y, w, h]) => Math.abs(w - 800) < 1 && Math.abs(h - 800) < 1,
+    );
+    expect(customCall).toBeDefined();
+    expect(customCall![0]).toBeCloseTo(100, 0);
+    expect(customCall![1]).toBeCloseTo(100, 0);
+  });
+
+  it('SAFE-408: custom safe area does not render when disabled', () => {
+    overlay.setState({
+      enabled: true,
+      actionSafe: false,
+      titleSafe: false,
+      customSafeArea: false,
+      customSafeAreaPercentage: 80,
+    });
+
+    const ctx = (overlay as unknown as { ctx: CanvasRenderingContext2D }).ctx;
+    const strokeRectSpy = vi.spyOn(ctx, 'strokeRect');
+
+    overlay.render();
+
+    expect(strokeRectSpy).not.toHaveBeenCalled();
+  });
+
+  it('SAFE-409: render works with all safe areas enabled simultaneously', () => {
+    overlay.setState({
+      enabled: true,
+      actionSafe: true,
+      titleSafe: true,
+      customSafeArea: true,
+      customSafeAreaPercentage: 80,
+    });
+
+    const ctx = (overlay as unknown as { ctx: CanvasRenderingContext2D }).ctx;
+    const strokeRectSpy = vi.spyOn(ctx, 'strokeRect');
+
+    overlay.render();
+
+    // Verify all three safe area sizes are present in this render pass
+    const widths = strokeRectSpy.mock.calls.map(([, , w]) => Math.round(w as number));
+    expect(widths).toContain(930); // action safe (93%)
+    expect(widths).toContain(900); // title safe (90%)
+    expect(widths).toContain(800); // custom safe (80%)
+  });
+
+  it('SAFE-410: custom safe area label includes percentage', () => {
+    overlay.setState({
+      enabled: true,
+      actionSafe: false,
+      titleSafe: false,
+      customSafeArea: true,
+      customSafeAreaPercentage: 75,
+    });
+
+    const ctx = (overlay as unknown as { ctx: CanvasRenderingContext2D }).ctx;
+    const fillTextSpy = vi.spyOn(ctx, 'fillText');
+
+    overlay.render();
+
+    const labelCall = fillTextSpy.mock.calls.find(([text]) => (text as string).includes('Custom'));
+    expect(labelCall).toBeDefined();
+    expect(labelCall![0]).toContain('75%');
+  });
+});
+
+describe('Label overlap fix (Issue #483)', () => {
+  let overlay: SafeAreasOverlay;
+
+  beforeEach(() => {
+    overlay = new SafeAreasOverlay();
+    overlay.setViewerDimensions(1000, 1000, 0, 0, 1000, 1000);
+  });
+
+  afterEach(() => {
+    overlay.dispose();
+  });
+
+  it('SAFE-430: labels at overlapping percentages have different Y positions', () => {
+    // Set custom safe area to 90% (same as title safe) so zones overlap
+    overlay.setState({
+      enabled: true,
+      actionSafe: false,
+      titleSafe: true,
+      customSafeArea: true,
+      customSafeAreaPercentage: 90,
+    });
+
+    const ctx = (overlay as unknown as { ctx: CanvasRenderingContext2D }).ctx;
+    const fillTextSpy = vi.spyOn(ctx, 'fillText');
+
+    overlay.render();
+
+    // Both title safe and custom safe are at 90%, so their rects start at the same (x, y).
+    // The labels should have different Y positions to avoid overlap.
+    const titleLabel = fillTextSpy.mock.calls.find(([text]) => (text as string).includes('Title'));
+    const customLabel = fillTextSpy.mock.calls.find(([text]) => (text as string).includes('Custom'));
+
+    expect(titleLabel).toBeDefined();
+    expect(customLabel).toBeDefined();
+
+    // Y positions (3rd arg of fillText) must differ
+    const titleY = titleLabel![2] as number;
+    const customY = customLabel![2] as number;
+    expect(titleY).not.toBe(customY);
+  });
+
+  it('SAFE-431: action, title, and custom labels all have distinct Y offsets', () => {
+    // Set custom to 93% (same as action safe) to force maximum overlap
+    overlay.setState({
+      enabled: true,
+      actionSafe: true,
+      titleSafe: true,
+      customSafeArea: true,
+      customSafeAreaPercentage: 93,
+    });
+
+    const ctx = (overlay as unknown as { ctx: CanvasRenderingContext2D }).ctx;
+    const fillTextSpy = vi.spyOn(ctx, 'fillText');
+
+    overlay.render();
+
+    const actionLabel = fillTextSpy.mock.calls.find(([text]) => (text as string).includes('Action'));
+    const titleLabel = fillTextSpy.mock.calls.find(([text]) => (text as string).includes('Title'));
+    const customLabel = fillTextSpy.mock.calls.find(([text]) => (text as string).includes('Custom'));
+
+    expect(actionLabel).toBeDefined();
+    expect(titleLabel).toBeDefined();
+    expect(customLabel).toBeDefined();
+
+    const actionY = actionLabel![2] as number;
+    const titleY = titleLabel![2] as number;
+    const customY = customLabel![2] as number;
+
+    // All three Y positions must be distinct
+    const yPositions = new Set([actionY, titleY, customY]);
+    expect(yPositions.size).toBe(3);
+  });
+
+  it('SAFE-432: custom safe area with crop region interaction', () => {
+    // Set a crop region and verify custom safe area is drawn relative to it
+    overlay.setCropRegion({ x: 0.25, y: 0.25, width: 0.5, height: 0.5 });
+    overlay.setState({
+      enabled: true,
+      actionSafe: false,
+      titleSafe: false,
+      customSafeArea: true,
+      customSafeAreaPercentage: 80,
+    });
+
+    const ctx = (overlay as unknown as { ctx: CanvasRenderingContext2D }).ctx;
+    const strokeRectSpy = vi.spyOn(ctx, 'strokeRect');
+
+    overlay.render();
+
+    // Crop region: offset (250, 250), size (500, 500)
+    // Custom safe: 80% of 500 = 400, margin = 500 * 0.1 = 50
+    // x = 250 + 50 = 300, y = 250 + 50 = 300
+    const customCall = strokeRectSpy.mock.calls.find(
+      ([_x, _y, w, h]) => Math.abs(w - 400) < 1 && Math.abs(h - 400) < 1,
+    );
+    expect(customCall).toBeDefined();
+    expect(customCall![0]).toBeCloseTo(300, 0);
+    expect(customCall![1]).toBeCloseTo(300, 0);
+  });
+});
+
+describe('Distinct zone colors (Issue #483)', () => {
+  let overlay: SafeAreasOverlay;
+
+  beforeEach(() => {
+    overlay = new SafeAreasOverlay();
+    overlay.setViewerDimensions(1000, 1000, 0, 0, 1000, 1000);
+  });
+
+  afterEach(() => {
+    overlay.dispose();
+  });
+
+  it('SAFE-420: SAFE_ZONE_COLORS has distinct values for each zone', () => {
+    expect(SAFE_ZONE_COLORS.title).toBeDefined();
+    expect(SAFE_ZONE_COLORS.action).toBeDefined();
+    expect(SAFE_ZONE_COLORS.custom).toBeDefined();
+    // All three should be different
+    const colors = new Set([SAFE_ZONE_COLORS.title, SAFE_ZONE_COLORS.action, SAFE_ZONE_COLORS.custom]);
+    expect(colors.size).toBe(3);
+  });
+
+  it('SAFE-421: multiple active zones use distinct colors', () => {
+    overlay.setState({
+      enabled: true,
+      actionSafe: true,
+      titleSafe: true,
+      customSafeArea: false,
+    });
+
+    const ctx = (overlay as unknown as { ctx: CanvasRenderingContext2D }).ctx;
+    const strokeStyleSets: string[] = [];
+    const origSet = Object.getOwnPropertyDescriptor(ctx, 'strokeStyle')?.set
+      ?? Object.getOwnPropertyDescriptor(Object.getPrototypeOf(ctx), 'strokeStyle')?.set;
+    Object.defineProperty(ctx, 'strokeStyle', {
+      set(val: string) {
+        strokeStyleSets.push(val);
+        origSet?.call(ctx, val);
+      },
+      get() {
+        return '';
+      },
+      configurable: true,
+    });
+
+    overlay.render();
+
+    // With two zones active, the strokeStyle should have been set to two different colors
+    // (the SAFE_ZONE_COLORS for action and title)
+    const uniqueColors = new Set(strokeStyleSets);
+    expect(uniqueColors.size).toBeGreaterThanOrEqual(2);
+  });
+
+  it('SAFE-422: single active zone uses guideColor, not zone color', () => {
+    overlay.setState({
+      enabled: true,
+      actionSafe: true,
+      titleSafe: false,
+      customSafeArea: false,
+      guideColor: '#ff0000',
+    });
+
+    const ctx = (overlay as unknown as { ctx: CanvasRenderingContext2D }).ctx;
+    const strokeStyleSets: string[] = [];
+    const origSet = Object.getOwnPropertyDescriptor(ctx, 'strokeStyle')?.set
+      ?? Object.getOwnPropertyDescriptor(Object.getPrototypeOf(ctx), 'strokeStyle')?.set;
+    Object.defineProperty(ctx, 'strokeStyle', {
+      set(val: string) {
+        strokeStyleSets.push(val);
+        origSet?.call(ctx, val);
+      },
+      get() {
+        return '';
+      },
+      configurable: true,
+    });
+
+    overlay.render();
+
+    // With only one zone active, should use the user's guideColor (#ff0000)
+    // The rgba should contain the red channel (255)
+    const hasUserColor = strokeStyleSets.some((c) => c.includes('255, 0, 0'));
+    expect(hasUserColor).toBe(true);
+  });
+
+  it('SAFE-423: existing title/action safe areas still work after adding custom', () => {
+    // Ensure backward compatibility: title and action safe areas render correctly
+    overlay.setState({
+      enabled: true,
+      actionSafe: true,
+      titleSafe: true,
+      customSafeArea: false,
+    });
+
+    const ctx = (overlay as unknown as { ctx: CanvasRenderingContext2D }).ctx;
+    const strokeRectSpy = vi.spyOn(ctx, 'strokeRect');
+
+    overlay.render();
+
+    // Action safe: 930x930
+    const actionCall = strokeRectSpy.mock.calls.find(
+      ([_x, _y, w, h]) => Math.abs(w - 930) < 1 && Math.abs(h - 930) < 1,
+    );
+    expect(actionCall).toBeDefined();
+
+    // Title safe: 900x900
+    const titleCall = strokeRectSpy.mock.calls.find(
+      ([_x, _y, w, h]) => Math.abs(w - 900) < 1 && Math.abs(h - 900) < 1,
+    );
+    expect(titleCall).toBeDefined();
   });
 });

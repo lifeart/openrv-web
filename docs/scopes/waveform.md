@@ -56,9 +56,11 @@ For broadcast content, standard exposure levels are:
 
 HDR content extends beyond 100 IRE. The waveform in OpenRV Web accommodates values beyond 1.0 to display HDR content correctly.
 
-## GPU Acceleration
+## Rendering
 
-The waveform is computed using WebGL, ensuring real-time performance for high-resolution images. The scope updates live as the frame changes or as color adjustments are applied.
+The waveform uses a dual rendering architecture. When WebGL scopes are available, the waveform is computed on the GPU for real-time performance with high-resolution and HDR imagery. When GPU scopes are unavailable -- for example, on devices without WebGL2 support or when the shared scopes processor fails to initialize -- the waveform falls back to a CPU rendering path that produces the same visual output using the Canvas 2D API.
+
+The scope updates live as the frame changes or as color adjustments are applied, regardless of which rendering path is active.
 
 ::: info Pipeline Note
 For broadcast delivery, signals must fall within legal levels: **16-235** (8-bit) or **64-940** (10-bit) for video-legal, which corresponds to **0-100 IRE**. Values outside this range will be clipped by broadcast encoders. Use the waveform to verify that highlights do not exceed 100 IRE and blacks do not dip below 0 IRE before handing off to editorial or mastering.

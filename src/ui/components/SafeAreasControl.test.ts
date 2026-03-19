@@ -586,6 +586,69 @@ describe('SafeAreasControl', () => {
     });
   });
 
+  describe('custom safe area controls (Issue #483)', () => {
+    it('SAFE-U160: dropdown has custom safe area checkbox', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
+      button.click();
+
+      const customItem = document.querySelector('[data-testid="safe-areas-item-customSafeArea"]');
+      expect(customItem).not.toBeNull();
+    });
+
+    it('SAFE-U161: clicking custom safe area item toggles custom safe area', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
+      button.click();
+
+      const customItem = document.querySelector('[data-testid="safe-areas-item-customSafeArea"]') as HTMLElement;
+
+      expect(overlay.getState().customSafeArea).toBe(false);
+      customItem.click();
+      expect(overlay.getState().customSafeArea).toBe(true);
+    });
+
+    it('SAFE-U162: enabling custom safe area shows percentage input', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
+      button.click();
+
+      const container = document.querySelector('[data-testid="safe-areas-custom-percentage-container"]') as HTMLElement;
+      expect(container.style.display).toBe('none');
+
+      const customItem = document.querySelector('[data-testid="safe-areas-item-customSafeArea"]') as HTMLElement;
+      customItem.click();
+
+      expect(container.style.display).toBe('flex');
+    });
+
+    it('SAFE-U163: custom percentage input updates overlay value', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
+      button.click();
+
+      // Enable custom safe area first
+      const customItem = document.querySelector('[data-testid="safe-areas-item-customSafeArea"]') as HTMLElement;
+      customItem.click();
+
+      const input = document.querySelector('[data-testid="safe-areas-custom-percentage"]') as HTMLInputElement;
+      input.value = '75';
+      input.dispatchEvent(new Event('input'));
+
+      expect(overlay.getState().customSafeAreaPercentage).toBe(75);
+    });
+
+    it('SAFE-U164: custom safe area counts in active guide count', () => {
+      const el = control.render();
+      overlay.enable();
+      overlay.toggleCustomSafeArea();
+
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
+      // titleSafe + actionSafe + customSafeArea = 3
+      expect(button.textContent).toMatch(/Guides\s*\(3\)/);
+    });
+  });
+
   describe('SMPTE RP 2046-2:2018 label accuracy (Issue #482)', () => {
     it('SAFE-U150: action safe label shows 93%', () => {
       const el = control.render();

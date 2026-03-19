@@ -22,12 +22,24 @@ export interface SafeAreasState {
   enabled: boolean;
   titleSafe: boolean;
   actionSafe: boolean;
+  customSafeArea: boolean;
+  customSafeAreaPercentage: number;
   centerCrosshair: boolean;
   ruleOfThirds: boolean;
   aspectRatio: AspectRatioGuide | null;
   guideColor: string;
   guideOpacity: number;
 }
+
+/**
+ * Default distinct colors for each safe zone type.
+ * Used when multiple safe zones are active simultaneously for visual clarity.
+ */
+export const SAFE_ZONE_COLORS: Record<'title' | 'action' | 'custom', string> = {
+  title: '#00ff00',   // green
+  action: '#ffffff',  // white
+  custom: '#ff9900',  // orange
+};
 
 export type AspectRatioGuide = '16:9' | '4:3' | '1:1' | '2.39:1' | '2.35:1' | '1.85:1' | '9:16' | 'custom';
 
@@ -51,6 +63,8 @@ export const DEFAULT_SAFE_AREAS_STATE: SafeAreasState = {
   enabled: false,
   titleSafe: true,
   actionSafe: true,
+  customSafeArea: false,
+  customSafeAreaPercentage: 85,
   centerCrosshair: false,
   ruleOfThirds: false,
   aspectRatio: null,
@@ -117,6 +131,21 @@ export class SafeAreasOverlay extends CanvasOverlay<SafeAreasEvents> {
    */
   toggleActionSafe(): void {
     this.setState({ actionSafe: !this.state.actionSafe });
+  }
+
+  /**
+   * Toggle custom safe area
+   */
+  toggleCustomSafeArea(): void {
+    this.setState({ customSafeArea: !this.state.customSafeArea });
+  }
+
+  /**
+   * Set custom safe area percentage (1-99)
+   */
+  setCustomSafeAreaPercentage(percentage: number): void {
+    const clamped = Math.max(1, Math.min(99, Math.round(percentage)));
+    this.setState({ customSafeAreaPercentage: clamped });
   }
 
   /**
@@ -212,6 +241,20 @@ export class SafeAreasOverlay extends CanvasOverlay<SafeAreasEvents> {
   }
 
   /**
+   * Determine the effective color for a safe zone type.
+   * When multiple safe zones are active simultaneously, each uses its
+   * distinct color from SAFE_ZONE_COLORS for visual clarity.
+   * When only one safe zone is active, the user-configured guideColor is used.
+   */
+  private getSafeZoneColor(type: 'title' | 'action' | 'custom'): string {
+    const activeCount = [this.state.titleSafe, this.state.actionSafe, this.state.customSafeArea].filter(Boolean).length;
+    if (activeCount > 1) {
+      return SAFE_ZONE_COLORS[type];
+    }
+    return this.state.guideColor;
+  }
+
+  /**
    * Render all enabled guides
    */
   render(): void {
@@ -234,11 +277,15 @@ export class SafeAreasOverlay extends CanvasOverlay<SafeAreasEvents> {
     }
 
     if (this.state.actionSafe) {
-      this.drawSafeArea(0.93, color, alpha, 'action');
+      this.drawSafeArea(0.93, this.getSafeZoneColor('action'), alpha, 'action', 4);
     }
 
     if (this.state.titleSafe) {
-      this.drawSafeArea(0.9, color, alpha, 'title');
+      this.drawSafeArea(0.9, this.getSafeZoneColor('title'), alpha, 'title', 18);
+    }
+
+    if (this.state.customSafeArea) {
+      this.drawSafeArea(this.state.customSafeAreaPercentage / 100, this.getSafeZoneColor('custom'), alpha, 'custom', 32);
     }
 
     if (this.state.ruleOfThirds) {
@@ -253,7 +300,7 @@ export class SafeAreasOverlay extends CanvasOverlay<SafeAreasEvents> {
   /**
    * Draw a safe area rectangle
    */
-  private drawSafeArea(percentage: number, color: string, alpha: number, type: 'title' | 'action'): void {
+  private drawSafeArea(percentage: number, color: string, alpha: number, type: 'title' | 'action' | 'custom', labelOffset: number = 4): void {
     const { ctx } = this;
     const { eOffsetX, eOffsetY, eWidth, eHeight } = this.getEffectiveBounds();
 
@@ -264,10 +311,12 @@ export class SafeAreasOverlay extends CanvasOverlay<SafeAreasEvents> {
     const h = eHeight * percentage;
 
     ctx.strokeStyle = this.hexToRgba(color, alpha);
-    ctx.lineWidth = type === 'title' ? 1 : 1.5;
+    ctx.lineWidth = type === 'title' ? 1 : type === 'custom' ? 1 : 1.5;
 
     if (type === 'title') {
       ctx.setLineDash([4, 4]);
+    } else if (type === 'custom') {
+      ctx.setLineDash([6, 3]);
     } else {
       ctx.setLineDash([]);
     }
@@ -280,8 +329,15 @@ export class SafeAreasOverlay extends CanvasOverlay<SafeAreasEvents> {
     ctx.font = '10px sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
-    const label = type === 'title' ? 'Title Safe' : 'Action Safe';
-    ctx.fillText(label, x + 4, y + 4);
+    let label: string;
+    if (type === 'title') {
+      label = 'Title Safe';
+    } else if (type === 'action') {
+      label = 'Action Safe';
+    } else {
+      label = `Custom (${Math.round(percentage * 100)}%)`;
+    }
+    ctx.fillText(label, x + 4, y + labelOffset);
   }
 
   /**

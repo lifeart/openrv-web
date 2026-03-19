@@ -136,6 +136,10 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
     dropdown.appendChild(
       this.createCheckboxItem('titleSafe', 'Title Safe (90%)', () => this.overlay.toggleTitleSafe()),
     );
+    dropdown.appendChild(
+      this.createCheckboxItem('customSafeArea', 'Custom Safe Area', () => this.overlay.toggleCustomSafeArea()),
+    );
+    dropdown.appendChild(this.createCustomSafeAreaPercentageInput());
 
     dropdown.appendChild(this.createSeparator());
 
@@ -339,6 +343,52 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
     return container;
   }
 
+  private createCustomSafeAreaPercentageInput(): HTMLElement {
+    const container = document.createElement('div');
+    container.dataset.testid = 'safe-areas-custom-percentage-container';
+    container.style.cssText = `
+      padding: 4px 12px;
+      display: none;
+      flex-direction: column;
+      gap: 4px;
+    `;
+
+    const label = document.createElement('label');
+    label.textContent = 'Safe Area %';
+    label.style.cssText = `
+      color: var(--text-muted);
+      font-size: 11px;
+    `;
+
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.min = '1';
+    input.max = '99';
+    input.step = '1';
+    input.value = String(this.overlay.getState().customSafeAreaPercentage);
+    input.dataset.testid = 'safe-areas-custom-percentage';
+    input.style.cssText = `
+      width: 100%;
+      padding: 6px 8px;
+      background: var(--bg-hover);
+      border: 1px solid var(--border-primary);
+      border-radius: 4px;
+      color: var(--text-primary);
+      font-size: 12px;
+    `;
+    input.addEventListener('click', (e) => e.stopPropagation());
+    input.addEventListener('keydown', (e) => e.stopPropagation());
+    input.addEventListener('input', () => {
+      const next = Number.parseInt(input.value, 10);
+      if (!Number.isFinite(next) || next < 1 || next > 99) return;
+      this.overlay.setCustomSafeAreaPercentage(next);
+    });
+
+    container.appendChild(label);
+    container.appendChild(input);
+    return container;
+  }
+
   private createGuideColorInput(): HTMLElement {
     const container = document.createElement('div');
     container.style.cssText = `
@@ -443,6 +493,7 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
       const activeCount = [
         state.titleSafe,
         state.actionSafe,
+        state.customSafeArea,
         state.centerCrosshair,
         state.ruleOfThirds,
         state.aspectRatio !== null,
@@ -493,8 +544,21 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
     updateCheckbox('enabled', state.enabled);
     updateCheckbox('titleSafe', state.titleSafe);
     updateCheckbox('actionSafe', state.actionSafe);
+    updateCheckbox('customSafeArea', state.customSafeArea);
     updateCheckbox('centerCrosshair', state.centerCrosshair);
     updateCheckbox('ruleOfThirds', state.ruleOfThirds);
+
+    // Update custom safe area percentage input visibility
+    const customPercentageContainer = this.dropdown.querySelector(
+      '[data-testid="safe-areas-custom-percentage-container"]',
+    ) as HTMLElement;
+    const customPercentageInput = this.dropdown.querySelector(
+      '[data-testid="safe-areas-custom-percentage"]',
+    ) as HTMLInputElement;
+    if (customPercentageContainer && customPercentageInput) {
+      customPercentageContainer.style.display = state.customSafeArea ? 'flex' : 'none';
+      customPercentageInput.value = String(state.customSafeAreaPercentage);
+    }
 
     // Update aspect ratio select
     const select = this.dropdown.querySelector('[data-testid="safe-areas-aspect-ratio"]') as HTMLSelectElement;

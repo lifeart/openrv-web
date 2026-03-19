@@ -206,7 +206,7 @@ describe('FalseColorControl', () => {
     it('FALSE-U040: dropdown has preset buttons', () => {
       const dropdown = openDropdown();
       const presetButtons = dropdown.querySelectorAll('button[data-preset]');
-      expect(presetButtons.length).toBe(3); // standard, arri, red
+      expect(presetButtons.length).toBe(4); // standard, arri, red, custom
     });
 
     it('FALSE-U041: standard preset button exists', () => {
@@ -656,6 +656,135 @@ describe('FalseColorControl', () => {
       const resizeCalls = resizeSpy.mock.calls.filter(([event]) => event === 'resize');
       expect(resizeCalls.length).toBeGreaterThanOrEqual(1);
       resizeSpy.mockRestore();
+    });
+  });
+
+  describe('custom preset UI (#487)', () => {
+    function openDropdown(): HTMLElement {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="false-color-control-button"]') as HTMLButtonElement;
+      button.click();
+      return document.querySelector('[data-testid="false-color-dropdown"]') as HTMLElement;
+    }
+
+    it('FALSE-C001: custom preset button exists in dropdown', () => {
+      const dropdown = openDropdown();
+      const customBtn = dropdown.querySelector('button[data-preset="custom"]');
+      expect(customBtn).not.toBeNull();
+      expect(customBtn?.textContent).toBe('Custom');
+    });
+
+    it('FALSE-C002: custom editor section exists in dropdown', () => {
+      const dropdown = openDropdown();
+      const editor = dropdown.querySelector('[data-testid="false-color-custom-editor"]');
+      expect(editor).not.toBeNull();
+    });
+
+    it('FALSE-C003: custom editor is hidden when non-custom preset is active', () => {
+      const dropdown = openDropdown();
+      const editor = dropdown.querySelector('[data-testid="false-color-custom-editor"]') as HTMLElement;
+      expect(editor.style.display).toBe('none');
+    });
+
+    it('FALSE-C004: custom editor is visible when custom preset is active', () => {
+      const dropdown = openDropdown();
+      falseColor.setPreset('custom');
+      const editor = dropdown.querySelector('[data-testid="false-color-custom-editor"]') as HTMLElement;
+      expect(editor.style.display).toBe('block');
+    });
+
+    it('FALSE-C005: clicking custom preset button shows editor', () => {
+      const dropdown = openDropdown();
+      const customBtn = dropdown.querySelector('button[data-preset="custom"]') as HTMLButtonElement;
+      customBtn.click();
+      const editor = dropdown.querySelector('[data-testid="false-color-custom-editor"]') as HTMLElement;
+      expect(editor.style.display).toBe('block');
+    });
+
+    it('FALSE-C006: custom editor has add button', () => {
+      const dropdown = openDropdown();
+      falseColor.setPreset('custom');
+      const addBtn = dropdown.querySelector('[data-testid="custom-range-add"]');
+      expect(addBtn).not.toBeNull();
+      expect(addBtn?.textContent).toBe('+ Add');
+    });
+
+    it('FALSE-C007: custom editor renders range rows matching custom palette', () => {
+      falseColor.setCustomPalette([
+        { min: 0, max: 127, color: [255, 0, 0], label: 'Low' },
+        { min: 128, max: 255, color: [0, 255, 0], label: 'High' },
+      ]);
+      const dropdown = openDropdown();
+      const rangesList = dropdown.querySelector('[data-testid="custom-ranges-list"]');
+      expect(rangesList?.children.length).toBe(2);
+    });
+
+    it('FALSE-C008: add button appends a new range', () => {
+      falseColor.setCustomPalette([
+        { min: 0, max: 100, color: [255, 0, 0], label: 'Low' },
+      ]);
+      const dropdown = openDropdown();
+      const addBtn = dropdown.querySelector('[data-testid="custom-range-add"]') as HTMLButtonElement;
+      addBtn.click();
+
+      const palette = falseColor.getCustomPalette();
+      expect(palette.length).toBe(2);
+      expect(palette[1]!.label).toBe('New range');
+    });
+
+    it('FALSE-C009: delete button removes a range', () => {
+      falseColor.setCustomPalette([
+        { min: 0, max: 127, color: [255, 0, 0], label: 'Low' },
+        { min: 128, max: 255, color: [0, 255, 0], label: 'High' },
+      ]);
+      const dropdown = openDropdown();
+      const deleteBtn = dropdown.querySelector('[data-testid="custom-range-delete-0"]') as HTMLButtonElement;
+      deleteBtn.click();
+
+      const palette = falseColor.getCustomPalette();
+      expect(palette.length).toBe(1);
+      expect(palette[0]!.label).toBe('High');
+    });
+
+    it('FALSE-C010: switching away from custom hides editor', () => {
+      const dropdown = openDropdown();
+      falseColor.setPreset('custom');
+      const editor = dropdown.querySelector('[data-testid="false-color-custom-editor"]') as HTMLElement;
+      expect(editor.style.display).toBe('block');
+
+      falseColor.setPreset('standard');
+      expect(editor.style.display).toBe('none');
+    });
+
+    it('FALSE-C012: color picker uses change event, not input event', () => {
+      falseColor.setCustomPalette([
+        { min: 0, max: 255, color: [255, 0, 0], label: 'All red' },
+      ]);
+      const dropdown = openDropdown();
+      const colorInput = dropdown.querySelector('[data-testid="custom-range-color-0"]') as HTMLInputElement;
+      expect(colorInput).not.toBeNull();
+
+      // 'input' event should NOT trigger palette update (would cause re-render on every drag)
+      colorInput.value = '#00ff00';
+      colorInput.dispatchEvent(new Event('input'));
+      let palette = falseColor.getCustomPalette();
+      // Palette should still be the original red since 'input' is not listened to
+      expect(palette[0]!.color).toEqual([255, 0, 0]);
+
+      // 'change' event SHOULD trigger palette update
+      colorInput.value = '#0000ff';
+      colorInput.dispatchEvent(new Event('change'));
+      palette = falseColor.getCustomPalette();
+      expect(palette[0]!.color).toEqual([0, 0, 255]);
+    });
+
+    it('FALSE-C011: legend updates to reflect custom palette', () => {
+      falseColor.setCustomPalette([
+        { min: 0, max: 255, color: [42, 42, 42], label: 'Studio Grey' },
+      ]);
+      const dropdown = openDropdown();
+      const legendItems = dropdown.querySelector('.legend-items') as HTMLElement;
+      expect(legendItems.textContent).toContain('Studio Grey');
     });
   });
 });

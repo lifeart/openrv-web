@@ -14,19 +14,25 @@ Each quadrant operates independently, showing its assigned source at the current
 
 The Reference Image Manager captures and stores a snapshot of the current frame as a reference image. This reference can then be compared against live footage using several view modes.
 
-### Capturing a Reference
+### Toolbar Controls
 
-Use the Reference Image Manager to capture the current viewer content. The captured image is stored in memory and remains available throughout the session.
+The View tab toolbar exposes the following reference image controls:
+
+- **Capture** (camera icon) -- captures the current viewer frame as the reference image and enables comparison. Keyboard shortcut: `Alt+Shift+R`.
+- **Toggle** (layers icon) -- enables or disables reference comparison. Keyboard shortcut: `Ctrl+Shift+R`. Right-click this button to open the full settings context menu.
+- **Mode dropdown** (labelled "Ref: ...") -- selects the active comparison view mode (see table below).
+- **Opacity slider** -- adjusts blend opacity (0--100%). Shown when the mode is Overlay or Toggle.
+- **Wipe slider** -- adjusts the split/wipe position (0--100%). Shown when the mode is Split Horizontal or Split Vertical.
 
 ### View Modes
 
 | Mode | Description |
 |------|-------------|
-| Split horizontal | Reference on left, live on right |
-| Split vertical | Reference on top, live on bottom |
+| Split H | Reference on left, live on right, with adjustable wipe position |
+| Split V | Reference on top, live on bottom, with adjustable wipe position |
 | Overlay | Reference overlaid on live with adjustable opacity |
-| Side by side | Reference and live displayed in adjacent panels |
-| Toggle | Press to switch between reference and live |
+| Side by Side | Reference and live displayed in adjacent panels |
+| Toggle | Press to switch between reference and live, with adjustable opacity |
 
 The reference image comparison is independent of the A/B source system. It allows comparing the current graded frame against a previously captured state -- useful for evaluating whether color corrections improve on a starting point.
 

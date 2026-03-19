@@ -3737,3 +3737,189 @@ Wired into `AppNetworkBridge` (subscribes to syncCursor, usersChanged, userLeft,
 - `src/core/session/SessionMedia.test.ts`
 - `src/utils/media/SupportedMediaFormats.ts`
 - `CODEMAP.md`
+
+## Issue #487: False-color custom presets — implemented user-definable color-to-exposure mappings
+
+**Root cause**: The `custom` preset key existed in the `FalseColorPreset` type but was aliased to `STANDARD_PALETTE` with no UI or API to define custom ranges. The docs promised custom presets that didn't actually work.
+
+**Fix**:
+- Separated `BUILTIN_PALETTES` (standard/arri/red) from the custom palette, which is stored as mutable private state
+- Added `setCustomPalette(ranges)` API to define user-specific color-to-exposure mappings with validation, deep copy, auto-switch to custom preset, LUT rebuild, and event emission
+- Added `getCustomPalette()` API returning a deep copy of current custom ranges
+- Updated `getPresets()` to include the Custom option
+- Built a full custom editor UI in FalseColorControl: color pickers, min/max inputs, label inputs, add/delete range buttons — all editing immediately updates the LUT in real time
+
+**Tests added**: 22 new tests
+- 11 in `FalseColor.test.ts` (FC-200–FC-210): preset list, setCustomPalette behavior, deep copy safety, validation, LUT correctness, legend labels, round-trip switching
+- 11 in `FalseColorControl.test.ts` (FALSE-C001–FALSE-C011): button existence, editor visibility, add/delete operations, preset switching, legend integration
+
+**Files changed**:
+- `src/ui/components/FalseColor.ts`
+- `src/ui/components/FalseColorControl.ts`
+- `src/ui/components/FalseColor.test.ts`
+- `src/ui/components/FalseColorControl.test.ts`
+- `docs/scopes/false-color-zebra.md`
+
+## Issue #483: Safe areas — implemented custom per-zone safe areas with distinct colors
+
+**Root cause**: The `SafeAreasState` only had `titleSafe` and `actionSafe` toggles with a single shared `guideColor`. No custom percentage zones existed. Docs promised features that weren't implemented.
+
+**Fix**:
+- Added `customSafeArea` toggle and `customSafeAreaPercentage` (1-99) to `SafeAreasState`
+- Added `SAFE_ZONE_COLORS` constant with distinct per-zone colors: white (action), green (title), orange (custom)
+- Smart color logic: distinct colors when multiple zones active, user's `guideColor` when only one zone shown
+- Custom zone renders with unique dash pattern `[6, 3]` and percentage label
+- Wired full UI: checkbox toggle + percentage number input in SafeAreasControl dropdown
+
+**Tests added**: 20 new tests
+- 11 in `SafeAreasOverlay.test.ts` (SAFE-400–SAFE-410): custom zone rendering, percentage, toggle, boundaries
+- 4 in `SafeAreasOverlay.test.ts` (SAFE-420–SAFE-423): distinct zone color logic
+- 5 in `SafeAreasControl.test.ts` (SAFE-U160–SAFE-U164): UI controls, input, active count
+
+**Files changed**:
+- `src/ui/components/SafeAreasOverlay.ts`
+- `src/ui/components/SafeAreasControl.ts`
+- `src/ui/components/SafeAreasOverlay.test.ts`
+- `src/ui/components/SafeAreasControl.test.ts`
+- `src/core/session/SessionSerializer.issue485.test.ts`
+- `docs/advanced/overlays.md`
+
+## Issue #473: Reference Image Manager — wired viewMode, opacity, and wipePosition to UI controls
+
+**Root cause**: `ReferenceManager` already carried `viewMode`, `opacity`, and `wipePosition` state, but the View tab only exposed two actions (capture + binary toggle). The rich comparison modes were unreachable from the UI.
+
+**Fix**:
+- Added view mode dropdown in View tab listing all 5 modes (Split H, Split V, Overlay, Side by Side, Toggle)
+- Added opacity slider (0-100%) for overlay/toggle modes
+- Added wipe position slider (0-100%) for split-h/split-v modes
+- Controls auto-show/hide based on active mode
+- External state changes (e.g. context menu) sync the UI
+
+**Tests added**: 10 new tests in `buildViewTab.test.ts`
+- 3 for view mode dropdown (render, listing, selection)
+- 3 for opacity slider (render, callback, conditional visibility)
+- 3 for wipe position slider (render, callback, conditional visibility)
+- 1 for external state sync
+
+**Files changed**:
+- `src/services/tabContent/buildViewTab.ts`
+- `src/services/tabContent/buildViewTab.test.ts`
+- `docs/compare/advanced-compare.md`
+
+## Issue #481: Timeline — implemented missing-frame position highlighting
+
+**Root cause**: The overlays guide said the timeline highlights missing-frame positions, but Timeline.ts had no missing-frame rendering path at all.
+
+**Fix**:
+- Added `drawMissingFrameMarkers()` helper in `timelineRenderHelpers.ts` — draws red vertical lines with semi-transparent background at each missing frame position
+- Wired into `Timeline.draw()` — checks if current source is a sequence with `sequenceInfo.missingFrames`, renders before mark lines
+- Added `missingFrame` color (`#ff6b6b`) to theme cache, matching MissingFrameOverlay's red
+- Correctly converts absolute frame numbers to 1-based timeline indices using startFrame offset
+
+**Tests added**: 11 new tests
+- 6 in `timelineRenderHelpers.test.ts` (TRHELP-MF-001–006): basic rendering, empty array, out-of-range, globalAlpha, startFrame conversion, color
+- 5 in `Timeline.test.ts` (TML-MF-001–005): integration with sequence sources, video exclusion, empty frames, theme cache, color correctness
+
+**Files changed**:
+- `src/ui/components/timelineRenderHelpers.ts`
+- `src/ui/components/Timeline.ts`
+- `src/ui/components/timelineRenderHelpers.test.ts`
+- `src/ui/components/Timeline.test.ts`
+- `docs/advanced/overlays.md`
+
+## Issue #505: JXL decoder — implemented color-space metadata extraction for SDR path
+
+**Root cause**: The SDR JXL decoder hardcoded `colorSpace: 'srgb'` and only returned `format`/`container` in metadata. The actual color space from the JXL container or codestream was never parsed for the SDR path.
+
+**Fix**:
+- Added `parseJXLColorSpace()` — unified entry point that parses both ISOBMFF container `colr(nclx)` boxes and bare JXL codestream `colour_encoding` headers per ISO 18181-1
+- Added `mapCICPToColorSpace()` — maps CICP primaries/transfer codes to human-readable color space strings (srgb, linear, display-p3, rec2020, rec2020-pq, rec2020-hlg, etc.)
+- Added `JXLBitReader` class for LSB-first bit reading of JXL codestream headers
+- Modified `decodeJXL()` to use detected color space instead of hardcoded 'srgb'; metadata now includes `colorSpace`, `primaries`, and `transfer`
+- Exported `parseJXLColorSpace`, `mapCICPToColorSpace`, and `JXLColorSpaceInfo` from public formats API
+
+**Tests added**: 26 new tests in `JXLDecoder.test.ts`
+- 11 for `mapCICPToColorSpace` covering all CICP mappings
+- 11 for `parseJXLColorSpace` (codestream and ISOBMFF container formats)
+- 4 for `decodeJXL` integration (colorSpace in result/metadata, fallback behavior)
+
+**Files changed**:
+- `src/formats/JXLDecoder.ts`
+- `src/formats/JXLDecoder.test.ts`
+- `src/formats/index.ts`
+- `docs/guides/file-formats.md`
+
+## Issue #469: OTIO import — implemented gap and transition preservation
+
+**Root cause**: `PlaylistManager.fromOTIO()` used `addClip()` which rebuilt contiguous `globalStartFrame` values, dropping gap spacing. `OTIOParseResult` didn't expose transitions or gaps arrays.
+
+**Fix**:
+- Added `transitions` and `gaps` fields to `OTIOParseResult` interface
+- Updated `parseOTIO()` to populate these from parsed track data
+- Replaced `addClip()` calls in `fromOTIO()` with direct `PlaylistClip` construction using `timelineInFrame + 1` from OTIO, preserving gap spacing
+- Fixed `getTotalDuration()` to compute max(globalStartFrame + duration - 1) instead of summing durations
+- Single-track fallback now stores `_lastOTIOImportResult` and invokes `markerImporter` callback
+
+**Tests added**: 18 new tests
+- 4 in `OTIOParser.test.ts` (OTIO-U027–U030): transitions/gaps arrays in parse results
+- 14 in `PlaylistManager.issue469.test.ts` (I469-001–I469-014): gap spacing, duration with gaps, null in gap regions, transitions/gaps/markers in import result, unresolved clips, single-track fallback
+
+**Files changed**:
+- `src/utils/media/OTIOParser.ts`
+- `src/core/session/PlaylistManager.ts`
+- `src/utils/media/OTIOParser.test.ts`
+- `src/core/session/PlaylistManager.issue469.test.ts` (new)
+- `docs/export/edl-otio.md`
+
+## Issue #491: Waveform docs — documented CPU fallback alongside WebGL primary path
+
+**Root cause**: Docs said "The waveform is computed using WebGL" but the shipped implementation has a full CPU fallback via Canvas 2D API when GPU scopes are unavailable.
+
+**Fix**: Updated docs/scopes/waveform.md to describe the dual rendering architecture — WebGL GPU primary path with CPU Canvas 2D fallback for both standard and HDR float data.
+
+**Tests added**: None (docs-only change)
+
+**Files changed**:
+- `docs/scopes/waveform.md`
+
+## Issue #493: Vectorscope docs — documented CPU fallback alongside WebGL primary path
+
+**Root cause**: Docs said "The vectorscope is rendered using WebGL for real-time performance" but the shipped implementation has a complete CPU fallback via `drawCPU()` when GPU scopes are unavailable.
+
+**Fix**: Updated docs/scopes/vectorscope.md — replaced "GPU Acceleration" section with "Rendering Architecture" documenting WebGL primary path, CPU fallback (drawCPU with RGB-to-YCbCr), and conditions that trigger fallback.
+
+**Tests added**: None (docs-only change)
+
+**Files changed**:
+- `docs/scopes/vectorscope.md`
+
+## Issue #478: Missing-frame overlays docs — documented all 4 modes and correct visual appearance
+## Issue #507: Missing-frame playback docs — updated to match 4-mode reality
+
+**Root cause**: Docs described a single "red X pattern fills the viewer area" behavior, but the shipped app has four modes (Off, Frame, Hold, Black) with the default being Frame (warning icon overlay, not content replacement). Multiple doc files had the same inaccuracy.
+
+**Fix**: Updated three doc files:
+- `docs/advanced/overlays.md` — comprehensive rewrite of Missing Frame Indicator section with mode table, overlay appearance description, timeline marker subsection
+- `docs/playback/image-sequences.md` — replaced "holds the last available frame" with 4-mode summary + cross-reference
+- `docs/guides/file-formats.md` — updated Missing Frame Detection bullets with 4-mode system
+
+**Tests added**: None (docs-only change)
+
+**Files changed**:
+- `docs/advanced/overlays.md`
+- `docs/playback/image-sequences.md`
+- `docs/guides/file-formats.md`
+
+## Issue #517: Sequence guide — fixed blob-URL lifecycle description to match current direct-decode model
+
+**Root cause**: Docs described a blob-URL create/revoke lifecycle for sequence frames, but the shipped loader decodes files directly via `createImageBitmap(frame.file)` with no intermediate blob URLs.
+
+**Fix**: Updated docs/playback/image-sequences.md:
+- Replaced "Blob URL lifecycle" with "Direct decode" describing `createImageBitmap` path
+- Updated distance-based release to describe `ImageBitmap` handle cleanup
+- Updated dispose description; noted `SequenceFrame.url` is vestigial
+
+**Tests added**: None (docs-only change)
+
+**Files changed**:
+- `docs/playback/image-sequences.md`

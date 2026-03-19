@@ -34,15 +34,19 @@ Safe area overlays mark the broadcast-safe and title-safe regions of the frame, 
 
 ### Standard Safe Areas
 
-| Zone | Percentage | Purpose |
-|------|-----------|---------|
-| Action safe | 93% | All important action must fall within this area to avoid being cut off by consumer displays |
-| Title safe | 90% | All text and graphics must fall within this area for legibility on edge-cropping displays |
-| Custom | User-defined | Specify any percentage for production-specific safe zones |
+| Zone | Percentage | Default Color | Purpose |
+|------|-----------|---------------|---------|
+| Action safe | 93% | White | All important action must fall within this area to avoid being cut off by consumer displays |
+| Title safe | 90% | Green | All text and graphics must fall within this area for legibility on edge-cropping displays |
+| Custom | User-defined (1-99%) | Orange | Specify any percentage for production-specific safe zones |
 
 ### Display
 
-Safe areas are rendered as semi-transparent bordered rectangles centered on the frame. The border color and opacity are configurable. When multiple safe zones are active simultaneously, each uses a distinct color for clarity.
+Safe areas are rendered as semi-transparent bordered rectangles centered on the frame. The border color and opacity are configurable via the Appearance section of the safe areas dropdown. When multiple safe zones are active simultaneously, each uses a distinct color for clarity: white for action safe, green for title safe, and orange for custom. When only a single zone is active, it uses the user-configured guide color instead.
+
+### Custom Safe Area
+
+The custom safe area allows specifying any percentage between 1% and 99%. Enable "Custom Safe Area" in the safe areas dropdown, then enter the desired percentage in the input field that appears. This is useful for production-specific safe zones that differ from the standard SMPTE title/action safe areas.
 
 Safe area overlays respect the current crop settings. When crop is active with a non-full crop region, all safe area guides (title safe, action safe, aspect ratio, center crosshair, and rule of thirds) are calculated relative to the cropped region rather than the full image. When crop is disabled or the crop region covers the full frame, guides revert to full-display positioning.
 
@@ -66,13 +70,33 @@ The clipping thresholds can be adjusted from their default 0.0/1.0 positions. Fo
 
 ## Missing Frame Indicator
 
-When an image sequence has gaps (missing frame numbers), the missing frame indicator replaces the viewer content with a clearly visible warning state:
+When an image sequence has gaps (missing frame numbers), the missing frame indicator helps users identify and handle those gaps. The **View** tab toolbar exposes a **Missing Frame Mode** dropdown with four modes:
 
-- A **red X** pattern fills the viewer area
-- The missing frame number is displayed prominently
-- The timeline highlights the missing frame position
+### Modes
 
-This overlay prevents the common mistake of assuming a missing frame is simply a duplicate of the previous frame. Missing frame detection is automatic for image sequences and requires no manual configuration.
+| Mode | UI Label | Internal Value | Behavior |
+|------|----------|---------------|----------|
+| **Off** | Off | `off` | No missing-frame indication. Gaps are ignored and the viewer draws whatever is available (or nothing). |
+| **Frame** (default) | Frame | `show-frame` | The current source frame continues to render in the viewer while a centered **warning icon** and **"MISSING FRAME"** label with the frame number are shown as a semi-transparent overlay on top. This is the default mode. |
+| **Hold** | Hold | `hold` | The nearest available preceding frame is displayed in place of the missing frame, so the viewer always shows real image content. The overlay is not shown. |
+| **Black** | Black | `black` | The viewer content is replaced entirely with a black frame. The overlay is not shown. |
+
+### Overlay Appearance
+
+When the mode is **Frame** (the default), the overlay consists of:
+
+- A **warning icon** (triangle with exclamation mark) rendered in red, centered in the viewer
+- A **"MISSING FRAME"** label in red uppercase text below the icon
+- The **frame number** (e.g. "Frame 42") displayed below the label in muted text
+- A **semi-transparent dark background** (75% opacity black) covering the viewer area
+
+The overlay is non-interactive (pointer events pass through to the viewer).
+
+### Timeline Markers
+
+The **timeline highlights each missing-frame position** with a thin red vertical line and a semi-transparent red region on the track bar, so gaps are visible at a glance even when scrubbing. Timeline markers appear regardless of which missing-frame mode is selected.
+
+Missing frame detection is automatic for image sequences and requires no manual configuration. The selected mode is persisted in local storage across sessions.
 
 ---
 
@@ -212,7 +236,7 @@ When multiple overlays are active simultaneously, they are composited in a fixed
 7. Bug overlay
 8. Timecode display
 9. Note overlay
-10. Missing frame indicator (replaces all others when active)
+10. Missing frame indicator (in **Frame** mode, overlays on top of the current image; in **Black** mode, replaces the image entirely; see [Missing Frame Indicator](#missing-frame-indicator) for all modes)
 
 This ordering ensures that diagnostic overlays remain visible above decorative elements, and that the missing frame indicator is never obscured.
 

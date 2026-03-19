@@ -399,6 +399,97 @@ describe('OTIOParser', () => {
     });
   });
 
+  describe('parseOTIO - gaps and transitions in result', () => {
+    it('OTIO-U027: parseOTIO result includes gaps array', () => {
+      const json = buildOTIOJson({
+        tracks: {
+          OTIO_SCHEMA: 'Stack.1',
+          name: 'Tracks',
+          children: [
+            {
+              OTIO_SCHEMA: 'Track.1',
+              name: 'Video 1',
+              kind: 'Video',
+              children: [buildClip('shot_01', 0, 24), buildGap(12), buildClip('shot_02', 0, 24)],
+            },
+          ],
+        },
+      });
+
+      const result = parseOTIO(json);
+      expect(result).not.toBeNull();
+      expect(result!.gaps).toHaveLength(1);
+      expect(result!.gaps[0]!.timelineInFrame).toBe(24);
+      expect(result!.gaps[0]!.durationFrames).toBe(12);
+    });
+
+    it('OTIO-U028: parseOTIO result includes transitions array', () => {
+      const json = buildOTIOJson({
+        tracks: {
+          OTIO_SCHEMA: 'Stack.1',
+          name: 'Tracks',
+          children: [
+            {
+              OTIO_SCHEMA: 'Track.1',
+              name: 'Video 1',
+              kind: 'Video',
+              children: [
+                buildClip('shot_01', 0, 48),
+                buildTransition('Dissolve', 'SMPTE_Dissolve', 6, 6),
+                buildClip('shot_02', 0, 48),
+              ],
+            },
+          ],
+        },
+      });
+
+      const result = parseOTIO(json);
+      expect(result).not.toBeNull();
+      expect(result!.transitions).toHaveLength(1);
+      expect(result!.transitions[0]!.name).toBe('Dissolve');
+      expect(result!.transitions[0]!.inOffset).toBe(6);
+      expect(result!.transitions[0]!.outOffset).toBe(6);
+      expect(result!.transitions[0]!.duration).toBe(12);
+    });
+
+    it('OTIO-U029: parseOTIO result has empty transitions/gaps for clip-only timeline', () => {
+      const json = buildOTIOJson({
+        tracks: {
+          OTIO_SCHEMA: 'Stack.1',
+          name: 'Tracks',
+          children: [
+            {
+              OTIO_SCHEMA: 'Track.1',
+              name: 'Video 1',
+              kind: 'Video',
+              children: [buildClip('shot_01', 0, 48)],
+            },
+          ],
+        },
+      });
+
+      const result = parseOTIO(json);
+      expect(result).not.toBeNull();
+      expect(result!.transitions).toHaveLength(0);
+      expect(result!.gaps).toHaveLength(0);
+    });
+
+    it('OTIO-U030: parseOTIO empty timeline has empty transitions/gaps', () => {
+      const json = buildOTIOJson({
+        tracks: {
+          OTIO_SCHEMA: 'Stack.1',
+          name: 'Tracks',
+          children: [],
+        },
+      });
+
+      const result = parseOTIO(json);
+      expect(result).not.toBeNull();
+      expect(result!.transitions).toHaveLength(0);
+      expect(result!.gaps).toHaveLength(0);
+    });
+  });
+
   describe('parseOTIO - gap handling', () => {
     it('OTIO-U010: gaps advance timeline position', () => {
       const json = buildOTIOJson({

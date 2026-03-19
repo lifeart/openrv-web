@@ -205,6 +205,10 @@ export interface ParsedOTIOTrack {
 export interface OTIOParseResult {
   timeline: OTIOTimeline;
   clips: ParsedOTIOClip[];
+  /** Transitions from the first video track */
+  transitions: ParsedOTIOTransition[];
+  /** Gaps from the first video track */
+  gaps: ParsedOTIOGap[];
   /** Markers from clips and timeline */
   markers: ParsedOTIOMarker[];
   fps: number;
@@ -422,7 +426,7 @@ export function parseOTIO(jsonString: string): OTIOParseResult | null {
   // Use first video track for linear playlist
   const primaryTrack = videoTracks[0];
   if (!primaryTrack) {
-    return { timeline, clips: [], markers: [], fps, totalFrames: 0 };
+    return { timeline, clips: [], transitions: [], gaps: [], markers: [], fps, totalFrames: 0 };
   }
 
   const parsed = parseTrack(primaryTrack, fps);
@@ -434,6 +438,8 @@ export function parseOTIO(jsonString: string): OTIOParseResult | null {
   return {
     timeline,
     clips: parsed.clips,
+    transitions: parsed.transitions,
+    gaps: parsed.gaps,
     markers: allMarkers,
     fps,
     totalFrames: parsed.totalFrames,

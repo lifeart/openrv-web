@@ -20,6 +20,7 @@ import {
   drawPlayedRegion,
   drawMarkLines,
   drawAnnotationTriangles,
+  drawMissingFrameMarkers,
 } from './timelineRenderHelpers';
 import type { NoteOverlay } from './NoteOverlay';
 import type { PlaylistManager } from '../../core/session/PlaylistManager';
@@ -87,6 +88,7 @@ export class Timeline {
     text: string;
     textDim: string;
     border: string;
+    missingFrame: string;
   } | null = null;
 
   // Colors are resolved from ThemeManager and cached until theme changes
@@ -107,6 +109,7 @@ export class Timeline {
       text: theme.textPrimary,
       textDim: theme.textMuted,
       border: theme.borderPrimary,
+      missingFrame: '#ff6b6b',
     };
     return this.cachedColors;
   }
@@ -761,6 +764,20 @@ export class Timeline {
     if (this.paintEngine) {
       const annotatedFrames = this.paintEngine.getAnnotatedFrames();
       drawAnnotationTriangles(ctx, annotatedFrames, frameToX, trackY, trackHeight, colors.annotation, duration);
+    }
+
+    // Draw missing-frame markers (for image sequences with gaps)
+    if (source?.type === 'sequence' && source.sequenceInfo?.missingFrames?.length) {
+      drawMissingFrameMarkers(
+        ctx,
+        source.sequenceInfo.missingFrames,
+        source.sequenceInfo.startFrame,
+        frameToX,
+        trackY,
+        trackHeight,
+        colors.missingFrame,
+        duration,
+      );
     }
 
     // Draw marks (within full duration) - with custom colors from Marker data

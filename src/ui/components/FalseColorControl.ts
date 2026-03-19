@@ -3,11 +3,12 @@
  *
  * Features:
  * - Toggle button with dropdown
- * - Preset selector (Standard, ARRI, RED)
+ * - Preset selector (Standard, ARRI, RED, Custom)
+ * - Custom preset editor for user-defined color-to-exposure mappings
  * - Color legend display
  */
 
-import { type FalseColor, type FalseColorPreset } from './FalseColor';
+import { type FalseColor, type FalseColorPreset, type ColorRange } from './FalseColor';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { SHADOWS } from './shared/theme';
@@ -21,6 +22,7 @@ export class FalseColorControl {
   private isDropdownOpen = false;
   private toggleButton: HTMLButtonElement;
   private presetButtons: Map<FalseColorPreset, HTMLButtonElement> = new Map();
+  private customEditorSection: HTMLElement | null = null;
   private boundHandleReposition: () => void;
   private subs = new DisposableSubscriptionManager();
 
@@ -109,6 +111,7 @@ export class FalseColorControl {
       this.falseColor.on('stateChanged', () => {
         this.updateButtonState();
         this.updatePresetButtons();
+        this.updateCustomEditorVisibility();
         this.updateLegend();
       }),
     );
@@ -226,6 +229,10 @@ export class FalseColorControl {
     presetSection.appendChild(presetRow);
     this.dropdown.appendChild(presetSection);
 
+    // Custom preset editor section
+    this.customEditorSection = this.createCustomEditorSection();
+    this.dropdown.appendChild(this.customEditorSection);
+
     // Legend section
     const legendSection = document.createElement('div');
     legendSection.className = 'false-color-legend';
@@ -253,6 +260,7 @@ export class FalseColorControl {
 
     // Initial update
     this.updatePresetButtons();
+    this.updateCustomEditorVisibility();
     this.updateLegend();
   }
 
@@ -323,6 +331,254 @@ export class FalseColorControl {
       row.appendChild(label);
       legendContainer.appendChild(row);
     }
+  }
+
+  private createCustomEditorSection(): HTMLElement {
+    const section = document.createElement('div');
+    section.className = 'false-color-custom-editor';
+    section.dataset.testid = 'false-color-custom-editor';
+    section.style.cssText = `
+      margin-bottom: 10px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border-primary);
+      display: none;
+    `;
+
+    const headerRow = document.createElement('div');
+    headerRow.style.cssText = `
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    `;
+
+    const sectionLabel = document.createElement('div');
+    sectionLabel.textContent = 'Custom Ranges';
+    sectionLabel.style.cssText = `
+      color: var(--text-secondary);
+      font-size: 10px;
+      text-transform: uppercase;
+    `;
+    headerRow.appendChild(sectionLabel);
+
+    const addBtn = document.createElement('button');
+    addBtn.textContent = '+ Add';
+    addBtn.dataset.testid = 'custom-range-add';
+    addBtn.style.cssText = `
+      padding: 2px 6px;
+      border: 1px solid var(--border-secondary);
+      border-radius: 3px;
+      background: var(--bg-secondary);
+      color: var(--text-secondary);
+      font-size: 9px;
+      cursor: pointer;
+    `;
+    addBtn.addEventListener('click', () => {
+      this.addCustomRange();
+    });
+    headerRow.appendChild(addBtn);
+
+    section.appendChild(headerRow);
+
+    const rangesContainer = document.createElement('div');
+    rangesContainer.className = 'custom-ranges-list';
+    rangesContainer.dataset.testid = 'custom-ranges-list';
+    rangesContainer.style.cssText = `
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      max-height: 200px;
+      overflow-y: auto;
+    `;
+    section.appendChild(rangesContainer);
+
+    return section;
+  }
+
+  private updateCustomEditorVisibility(): void {
+    if (!this.customEditorSection) return;
+    const isCustom = this.falseColor.getState().preset === 'custom';
+    this.customEditorSection.style.display = isCustom ? 'block' : 'none';
+    if (isCustom) {
+      this.renderCustomRanges();
+    }
+  }
+
+  private renderCustomRanges(): void {
+    const container = this.customEditorSection?.querySelector('.custom-ranges-list');
+    if (!container) return;
+    container.innerHTML = '';
+
+    const ranges = this.falseColor.getCustomPalette();
+    for (let i = 0; i < ranges.length; i++) {
+      const range = ranges[i]!;
+      const row = this.createRangeRow(range, i, ranges.length);
+      container.appendChild(row);
+    }
+  }
+
+  private createRangeRow(range: ColorRange, index: number, totalCount: number): HTMLElement {
+    const row = document.createElement('div');
+    row.className = 'custom-range-row';
+    row.style.cssText = `
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 0;
+    `;
+
+    // Color picker
+    const colorInput = document.createElement('input');
+    colorInput.type = 'color';
+    colorInput.value = this.rgbToHex(range.color);
+    colorInput.dataset.testid = `custom-range-color-${index}`;
+    colorInput.title = 'Range color';
+    colorInput.style.cssText = `
+      width: 24px;
+      height: 20px;
+      border: 1px solid var(--border-primary);
+      border-radius: 2px;
+      padding: 0;
+      cursor: pointer;
+      flex-shrink: 0;
+    `;
+
+    // Min input
+    const minInput = document.createElement('input');
+    minInput.type = 'number';
+    minInput.min = '0';
+    minInput.max = '255';
+    minInput.value = String(range.min);
+    minInput.dataset.testid = `custom-range-min-${index}`;
+    minInput.title = 'Min luminance (0-255)';
+    minInput.style.cssText = `
+      width: 36px;
+      padding: 2px 3px;
+      border: 1px solid var(--border-secondary);
+      border-radius: 2px;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-size: 10px;
+      text-align: center;
+    `;
+
+    // Dash
+    const dash = document.createElement('span');
+    dash.textContent = '-';
+    dash.style.cssText = 'color: var(--text-secondary); font-size: 10px;';
+
+    // Max input
+    const maxInput = document.createElement('input');
+    maxInput.type = 'number';
+    maxInput.min = '0';
+    maxInput.max = '255';
+    maxInput.value = String(range.max);
+    maxInput.dataset.testid = `custom-range-max-${index}`;
+    maxInput.title = 'Max luminance (0-255)';
+    maxInput.style.cssText = `
+      width: 36px;
+      padding: 2px 3px;
+      border: 1px solid var(--border-secondary);
+      border-radius: 2px;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-size: 10px;
+      text-align: center;
+    `;
+
+    // Label input
+    const labelInput = document.createElement('input');
+    labelInput.type = 'text';
+    labelInput.value = range.label;
+    labelInput.dataset.testid = `custom-range-label-${index}`;
+    labelInput.title = 'Range label';
+    labelInput.style.cssText = `
+      flex: 1;
+      min-width: 0;
+      padding: 2px 4px;
+      border: 1px solid var(--border-secondary);
+      border-radius: 2px;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-size: 10px;
+    `;
+
+    // Delete button (only if more than 1 range)
+    const deleteBtn = document.createElement('button');
+    deleteBtn.textContent = '\u00d7';
+    deleteBtn.dataset.testid = `custom-range-delete-${index}`;
+    deleteBtn.title = 'Remove range';
+    deleteBtn.style.cssText = `
+      width: 18px;
+      height: 18px;
+      border: none;
+      border-radius: 2px;
+      background: transparent;
+      color: var(--text-secondary);
+      font-size: 12px;
+      cursor: pointer;
+      flex-shrink: 0;
+      display: ${totalCount > 1 ? 'block' : 'none'};
+    `;
+
+    // Wire up change handlers
+    const applyChange = () => {
+      const ranges = this.falseColor.getCustomPalette();
+      const r = ranges[index];
+      if (!r) return;
+      r.color = this.hexToRgb(colorInput.value);
+      r.min = Math.max(0, Math.min(255, parseInt(minInput.value, 10) || 0));
+      r.max = Math.max(0, Math.min(255, parseInt(maxInput.value, 10) || 0));
+      r.label = labelInput.value || 'Unnamed';
+      this.falseColor.setCustomPalette(ranges);
+    };
+
+    colorInput.addEventListener('change', applyChange);
+    minInput.addEventListener('change', applyChange);
+    maxInput.addEventListener('change', applyChange);
+    labelInput.addEventListener('change', applyChange);
+
+    deleteBtn.addEventListener('click', () => {
+      const ranges = this.falseColor.getCustomPalette();
+      if (ranges.length <= 1) return;
+      ranges.splice(index, 1);
+      this.falseColor.setCustomPalette(ranges);
+    });
+
+    row.appendChild(colorInput);
+    row.appendChild(minInput);
+    row.appendChild(dash);
+    row.appendChild(maxInput);
+    row.appendChild(labelInput);
+    row.appendChild(deleteBtn);
+
+    return row;
+  }
+
+  private addCustomRange(): void {
+    const ranges = this.falseColor.getCustomPalette();
+    // Find a gap or append at the end
+    const lastMax = ranges.length > 0 ? ranges[ranges.length - 1]!.max : -1;
+    const newMin = Math.min(lastMax + 1, 255);
+    const newMax = Math.min(newMin + 10, 255);
+    ranges.push({
+      min: newMin,
+      max: newMax,
+      color: [128, 128, 128],
+      label: 'New range',
+    });
+    this.falseColor.setCustomPalette(ranges);
+  }
+
+  private rgbToHex(color: [number, number, number]): string {
+    return '#' + color.map((c) => c.toString(16).padStart(2, '0')).join('');
+  }
+
+  private hexToRgb(hex: string): [number, number, number] {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return [r, g, b];
   }
 
   private toggleDropdown(): void {

@@ -189,6 +189,7 @@ describe('Issue #485: Overlay states must round-trip through serialization', () 
     };
     const safeAreasState: SafeAreasState = {
       enabled: true, titleSafe: false, actionSafe: true,
+      customSafeArea: false, customSafeAreaPercentage: 85,
       centerCrosshair: true, ruleOfThirds: true,
       aspectRatio: '2.39:1', guideColor: '#ff0000', guideOpacity: 0.9,
     };
@@ -269,6 +270,7 @@ describe('Issue #485: Overlay states must round-trip through serialization', () 
     };
     const safeAreasState: SafeAreasState = {
       enabled: true, titleSafe: true, actionSafe: false,
+      customSafeArea: false, customSafeAreaPercentage: 85,
       centerCrosshair: false, ruleOfThirds: true,
       aspectRatio: '16:9', guideColor: '#00ff00', guideOpacity: 0.7,
     };

@@ -148,6 +148,43 @@ export function drawMarkLines(
 }
 
 /**
+ * Draw missing-frame markers on the timeline track.
+ *
+ * Each missing frame is rendered as a thin red vertical line with a semi-transparent
+ * red region, providing a visible but non-obstructive indicator on the timeline.
+ */
+export function drawMissingFrameMarkers(
+  ctx: CanvasRenderingContext2D,
+  missingFrames: readonly number[],
+  startFrame: number,
+  frameToX: (frame: number) => number,
+  trackY: number,
+  trackHeight: number,
+  color: string,
+  duration: number,
+): void {
+  if (missingFrames.length === 0) return;
+
+  for (const absFrame of missingFrames) {
+    // Convert absolute frame number to 1-based timeline index
+    const timelineFrame = absFrame - startFrame + 1;
+    if (timelineFrame < 1 || timelineFrame > duration) continue;
+
+    const x = frameToX(timelineFrame);
+
+    // Semi-transparent fill behind the line
+    ctx.fillStyle = color;
+    ctx.globalAlpha = 0.25;
+    ctx.fillRect(x - 1, trackY, 3, trackHeight);
+    ctx.globalAlpha = 1.0;
+
+    // Solid vertical line
+    ctx.fillStyle = color;
+    ctx.fillRect(x - 0.5, trackY, 1, trackHeight);
+  }
+}
+
+/**
  * Draw annotation triangles (small upward-pointing triangles below the track).
  */
 export function drawAnnotationTriangles(

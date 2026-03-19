@@ -10,6 +10,7 @@ import {
   drawPlayedRegion,
   drawMarkLines,
   drawAnnotationTriangles,
+  drawMissingFrameMarkers,
 } from './timelineRenderHelpers';
 
 function createMockCtx(): CanvasRenderingContext2D {
@@ -186,6 +187,75 @@ describe('timelineRenderHelpers', () => {
       drawAnnotationTriangles(ctx, annotatedFrames, frameToX, 0, 42, '#123456', 100);
 
       expect(ctx.fillStyle).toBe('#123456');
+    });
+  });
+
+  describe('drawMissingFrameMarkers', () => {
+    it('TRHELP-MF-001: draws background rect and line for each missing frame', () => {
+      const frameToX = (f: number) => 60 + (f - 1) * 10;
+
+      drawMissingFrameMarkers(ctx, [3, 7], 1, frameToX, 0, 42, '#ff6b6b', 10);
+
+      // Each missing frame draws 2 fillRects (background + line) = 4 total
+      expect(ctx.fillRect).toHaveBeenCalledTimes(4);
+    });
+
+    it('TRHELP-MF-002: does nothing when missingFrames is empty', () => {
+      const frameToX = (f: number) => 60 + (f - 1) * 10;
+
+      drawMissingFrameMarkers(ctx, [], 1, frameToX, 0, 42, '#ff6b6b', 10);
+
+      expect(ctx.fillRect).not.toHaveBeenCalled();
+    });
+
+    it('TRHELP-MF-003: skips frames outside duration range', () => {
+      const frameToX = (f: number) => 60 + (f - 1) * 10;
+
+      // startFrame=1, duration=10, so valid timeline frames are 1..10
+      // absolute frame 0 => timeline frame 0 (< 1, skip)
+      // absolute frame 15 => timeline frame 15 (> 10, skip)
+      drawMissingFrameMarkers(ctx, [0, 15], 1, frameToX, 0, 42, '#ff6b6b', 10);
+
+      expect(ctx.fillRect).not.toHaveBeenCalled();
+    });
+
+    it('TRHELP-MF-004: sets globalAlpha to 0.25 for background and restores to 1.0', () => {
+      const frameToX = (f: number) => 60 + (f - 1) * 10;
+      const alphaValues: number[] = [];
+      Object.defineProperty(ctx, 'globalAlpha', {
+        set(v: number) { alphaValues.push(v); },
+        get() { return alphaValues[alphaValues.length - 1] ?? 1; },
+      });
+
+      drawMissingFrameMarkers(ctx, [5], 1, frameToX, 0, 42, '#ff6b6b', 10);
+
+      expect(alphaValues).toContain(0.25);
+      expect(alphaValues).toContain(1.0);
+      // 0.25 should come before 1.0
+      expect(alphaValues.indexOf(0.25)).toBeLessThan(alphaValues.indexOf(1.0));
+    });
+
+    it('TRHELP-MF-005: correctly converts absolute frame numbers with non-1 startFrame', () => {
+      const frameToX = vi.fn((f: number) => 60 + (f - 1) * 10);
+
+      // startFrame=1001, missing frame 1003 => timeline frame 3
+      drawMissingFrameMarkers(ctx, [1003], 1001, frameToX, 0, 42, '#ff6b6b', 10);
+
+      // frameToX should have been called with timeline frame 3
+      expect(frameToX).toHaveBeenCalledWith(3);
+    });
+
+    it('TRHELP-MF-006: uses the specified color', () => {
+      const frameToX = (f: number) => 60 + (f - 1) * 10;
+      const fillStyles: string[] = [];
+      Object.defineProperty(ctx, 'fillStyle', {
+        set(v: string) { fillStyles.push(v); },
+        get() { return fillStyles[fillStyles.length - 1] || ''; },
+      });
+
+      drawMissingFrameMarkers(ctx, [2], 1, frameToX, 0, 42, '#ff6b6b', 10);
+
+      expect(fillStyles).toContain('#ff6b6b');
     });
   });
 });

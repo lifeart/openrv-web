@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { FalseColor, DEFAULT_FALSE_COLOR_STATE } from './FalseColor';
+import { FalseColor, DEFAULT_FALSE_COLOR_STATE, type ColorRange } from './FalseColor';
 
 // Helper to create test ImageData
 function createTestImageData(
@@ -593,6 +593,234 @@ describe('FalseColor', () => {
       expect(imageData1.data[0]).toBe(imageData2.data[0]);
       expect(imageData1.data[1]).toBe(imageData2.data[1]);
       expect(imageData1.data[2]).toBe(imageData2.data[2]);
+    });
+  });
+
+  describe('custom preset support (#487)', () => {
+    it('FC-200: getPresets includes custom preset', () => {
+      const presets = falseColor.getPresets();
+      expect(presets).toContainEqual({ key: 'custom', label: 'Custom' });
+    });
+
+    it('FC-201: setCustomPalette switches to custom preset and applies palette', () => {
+      const handler = vi.fn();
+      falseColor.on('stateChanged', handler);
+
+      const customRanges: ColorRange[] = [
+        { min: 0, max: 127, color: [255, 0, 0], label: 'Dark half' },
+        { min: 128, max: 255, color: [0, 255, 0], label: 'Bright half' },
+      ];
+      falseColor.setCustomPalette(customRanges);
+
+      expect(falseColor.getState().preset).toBe('custom');
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ preset: 'custom' }));
+    });
+
+    it('FC-202: custom palette actually maps luminance to user-defined colors', () => {
+      falseColor.setCustomPalette([
+        { min: 0, max: 127, color: [255, 0, 0], label: 'Dark half' },
+        { min: 128, max: 255, color: [0, 255, 0], label: 'Bright half' },
+      ]);
+      falseColor.enable();
+
+      // Dark pixel (luminance 50) should map to red
+      const darkImage = createTestImageData(1, 1, { r: 50, g: 50, b: 50, a: 255 });
+      falseColor.apply(darkImage);
+      expect(darkImage.data[0]).toBe(255);
+      expect(darkImage.data[1]).toBe(0);
+      expect(darkImage.data[2]).toBe(0);
+
+      // Bright pixel (luminance 200) should map to green
+      const brightImage = createTestImageData(1, 1, { r: 200, g: 200, b: 200, a: 255 });
+      falseColor.apply(brightImage);
+      expect(brightImage.data[0]).toBe(0);
+      expect(brightImage.data[1]).toBe(255);
+      expect(brightImage.data[2]).toBe(0);
+    });
+
+    it('FC-203: getCustomPalette returns a deep copy', () => {
+      const customRanges: ColorRange[] = [
+        { min: 0, max: 255, color: [100, 100, 100], label: 'All grey' },
+      ];
+      falseColor.setCustomPalette(customRanges);
+
+      const retrieved = falseColor.getCustomPalette();
+      retrieved[0]!.color[0] = 0;
+      retrieved[0]!.label = 'Modified';
+
+      const retrieved2 = falseColor.getCustomPalette();
+      expect(retrieved2[0]!.color[0]).toBe(100);
+      expect(retrieved2[0]!.label).toBe('All grey');
+    });
+
+    it('FC-204: setCustomPalette deep copies input (no external mutation)', () => {
+      const customRanges: ColorRange[] = [
+        { min: 0, max: 255, color: [100, 100, 100], label: 'All grey' },
+      ];
+      falseColor.setCustomPalette(customRanges);
+
+      // Mutate original input
+      customRanges[0]!.color[0] = 0;
+      customRanges[0]!.label = 'Mutated';
+
+      const retrieved = falseColor.getCustomPalette();
+      expect(retrieved[0]!.color[0]).toBe(100);
+      expect(retrieved[0]!.label).toBe('All grey');
+    });
+
+    it('FC-205: setCustomPalette throws on empty palette', () => {
+      expect(() => falseColor.setCustomPalette([])).toThrow('at least one color range');
+    });
+
+    it('FC-206: custom preset LUT differs from standard', () => {
+      const standardLUT = new Uint8Array(falseColor.getColorLUT());
+
+      falseColor.setCustomPalette([
+        { min: 0, max: 255, color: [42, 42, 42], label: 'Uniform' },
+      ]);
+
+      const customLUT = falseColor.getColorLUT();
+      let differences = 0;
+      for (let i = 0; i < standardLUT.length; i++) {
+        if (standardLUT[i] !== customLUT[i]) differences++;
+      }
+      expect(differences).toBeGreaterThan(0);
+    });
+
+    it('FC-207: custom preset legend reflects user-defined labels', () => {
+      falseColor.setCustomPalette([
+        { min: 0, max: 100, color: [255, 0, 0], label: 'My shadows' },
+        { min: 101, max: 200, color: [0, 255, 0], label: 'My midtones' },
+        { min: 201, max: 255, color: [0, 0, 255], label: 'My highlights' },
+      ]);
+
+      const legend = falseColor.getLegend();
+      const labels = legend.map((l) => l.label);
+      expect(labels).toContain('My shadows');
+      expect(labels).toContain('My midtones');
+      expect(labels).toContain('My highlights');
+    });
+
+    it('FC-208: switching from custom to builtin and back preserves custom palette', () => {
+      const customRanges: ColorRange[] = [
+        { min: 0, max: 255, color: [42, 42, 42], label: 'Uniform' },
+      ];
+      falseColor.setCustomPalette(customRanges);
+      const customLUT = new Uint8Array(falseColor.getColorLUT());
+
+      // Switch to standard
+      falseColor.setPreset('standard');
+      expect(falseColor.getState().preset).toBe('standard');
+
+      // Switch back to custom
+      falseColor.setPreset('custom');
+      expect(falseColor.getState().preset).toBe('custom');
+
+      // LUT should match what we set
+      const backToCustomLUT = falseColor.getColorLUT();
+      for (let i = 0; i < customLUT.length; i++) {
+        expect(backToCustomLUT[i]).toBe(customLUT[i]);
+      }
+    });
+
+    it('FC-209: setCustomPalette rebuilds LUT immediately', () => {
+      falseColor.enable();
+
+      // First custom palette: everything red
+      falseColor.setCustomPalette([
+        { min: 0, max: 255, color: [255, 0, 0], label: 'Red' },
+      ]);
+      const img1 = createTestImageData(1, 1, { r: 128, g: 128, b: 128, a: 255 });
+      falseColor.apply(img1);
+      expect(img1.data[0]).toBe(255);
+      expect(img1.data[1]).toBe(0);
+
+      // Second custom palette: everything blue
+      falseColor.setCustomPalette([
+        { min: 0, max: 255, color: [0, 0, 255], label: 'Blue' },
+      ]);
+      const img2 = createTestImageData(1, 1, { r: 128, g: 128, b: 128, a: 255 });
+      falseColor.apply(img2);
+      expect(img2.data[0]).toBe(0);
+      expect(img2.data[2]).toBe(255);
+    });
+
+    it('FC-210: default custom palette matches standard palette', () => {
+      // Before any setCustomPalette call, custom palette defaults to standard
+      const standardPalette = falseColor.getCustomPalette();
+      expect(standardPalette.length).toBeGreaterThan(0);
+      expect(standardPalette[0]!.label).toBe('Black crush');
+    });
+
+    it('FC-211: overlapping ranges use first-match-wins behavior', () => {
+      falseColor.setCustomPalette([
+        { min: 0, max: 200, color: [255, 0, 0], label: 'Red zone' },
+        { min: 100, max: 255, color: [0, 255, 0], label: 'Green zone' },
+      ]);
+      falseColor.enable();
+
+      // Luminance 150 falls in both ranges; first match (red) should win
+      const imageData = createTestImageData(1, 1, { r: 150, g: 150, b: 150, a: 255 });
+      falseColor.apply(imageData);
+      expect(imageData.data[0]).toBe(255); // R from first range
+      expect(imageData.data[1]).toBe(0);
+      expect(imageData.data[2]).toBe(0);
+    });
+
+    it('FC-212: gaps in ranges fall back to grey', () => {
+      falseColor.setCustomPalette([
+        { min: 0, max: 50, color: [255, 0, 0], label: 'Low' },
+        { min: 200, max: 255, color: [0, 0, 255], label: 'High' },
+      ]);
+      falseColor.enable();
+
+      // Luminance 128 is in the gap — should fall back to default grey (128,128,128)
+      const imageData = createTestImageData(1, 1, { r: 128, g: 128, b: 128, a: 255 });
+      falseColor.apply(imageData);
+      expect(imageData.data[0]).toBe(128);
+      expect(imageData.data[1]).toBe(128);
+      expect(imageData.data[2]).toBe(128);
+    });
+
+    it('FC-213: min > max is auto-corrected by swapping', () => {
+      falseColor.setCustomPalette([
+        { min: 200, max: 100, color: [255, 0, 0], label: 'Swapped' },
+      ]);
+
+      const palette = falseColor.getCustomPalette();
+      expect(palette[0]!.min).toBe(100);
+      expect(palette[0]!.max).toBe(200);
+    });
+
+    it('FC-214: min/max values are clamped to 0-255 and rounded to integers', () => {
+      falseColor.setCustomPalette([
+        { min: -10, max: 300, color: [128, 128, 128], label: 'Out of range' },
+      ]);
+
+      const palette = falseColor.getCustomPalette();
+      expect(palette[0]!.min).toBe(0);
+      expect(palette[0]!.max).toBe(255);
+    });
+
+    it('FC-215: non-integer min/max values are rounded', () => {
+      falseColor.setCustomPalette([
+        { min: 10.7, max: 50.2, color: [128, 128, 128], label: 'Fractional' },
+      ]);
+
+      const palette = falseColor.getCustomPalette();
+      expect(palette[0]!.min).toBe(11);
+      expect(palette[0]!.max).toBe(50);
+    });
+
+    it('FC-216: color channel values are clamped to 0-255', () => {
+      falseColor.setCustomPalette([
+        { min: 0, max: 255, color: [-10, 300, 128.7] as [number, number, number], label: 'Bad colors' },
+      ]);
+
+      const palette = falseColor.getCustomPalette();
+      expect(palette[0]!.color[0]).toBe(0);
+      expect(palette[0]!.color[1]).toBe(255);
+      expect(palette[0]!.color[2]).toBe(129);
     });
   });
 });

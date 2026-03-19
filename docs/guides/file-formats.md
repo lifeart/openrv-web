@@ -110,7 +110,7 @@ JPEG XL is a next-generation image format designed for both lossy and lossless c
 - **Browser path**: When the browser natively supports JPEG XL (currently Firefox), the decoder can use the browser's built-in path for faster decode
 - **Detection**: Bare codestream magic (`0xFF 0x0A`) or ISOBMFF container with `jxl ` brand in `ftyp` box
 
-**Color space**: Varies (sRGB, linear, Display P3, Rec.2020, etc.). Decoded to Float32 with metadata indicating the original color space.
+**Color space**: Varies (sRGB, linear, Display P3, Rec.2020, etc.). The SDR decode path parses the original color space from the JXL container's `colr(nclx)` box (CICP primaries + transfer characteristics) or from the bare codestream's `colour_encoding` header. The detected color space is returned in both the top-level `colorSpace` field and the `metadata.colorSpace` field of the decode result. When an ICC profile is embedded (`want_icc`), the color space is reported as `'icc'`. If parsing fails, the decoder falls back to `'srgb'`.
 
 **Industry context**: JPEG XL is positioned as the successor to JPEG, offering superior compression ratios at equivalent quality, progressive decoding, and HDR support. It is gaining adoption in photography workflows and web content delivery. Its HDR encoding capability makes it particularly relevant for VFX review, as it can store scene-referred HDR images in a format that is more compact than EXR while maintaining high fidelity.
 
@@ -322,8 +322,7 @@ When multiple image files are loaded together, the `SequenceLoader` utility:
 When a sequence has gaps in its frame numbering, the viewer:
 
 - Detects missing frames during sequence scanning
-- Displays a visual overlay indicating which frames are absent
-- Holds the last available frame during playback when a gap is encountered
+- Handles gaps according to the selected **missing-frame mode** (Off, Frame, Hold, or Black — configurable in the View tab). The default **Frame** mode displays a warning-icon overlay on the current image; **Hold** shows the nearest preceding frame; **Black** replaces the viewer with a solid black frame. See [Overlays — Missing Frame Indicator](../advanced/overlays.md#missing-frame-indicator) for full details.
 
 ### Playback and Caching
 

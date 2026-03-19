@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EventEmitter } from '../../utils/EventEmitter';
 import { createPanel } from '../../ui/components/shared/Panel';
 import { buildViewTab } from './buildViewTab';
@@ -262,6 +262,11 @@ function createTestDeps() {
 }
 
 describe('buildViewTab', () => {
+  afterEach(() => {
+    // Clean up any dropdowns/menus appended to document.body by tests
+    document.body.innerHTML = '';
+  });
+
   it('adds a matte overlay toggle button wired to the overlay', () => {
     const deps = createTestDeps();
 
@@ -530,6 +535,212 @@ describe('buildViewTab', () => {
 
       document.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       expect(button.classList.contains('active')).toBe(false);
+    });
+  });
+
+  describe('Reference view mode dropdown', () => {
+    it('renders the reference view mode dropdown', () => {
+      const deps = createTestDeps();
+      const result = buildViewTab(deps);
+
+      const container = result.element.querySelector('[data-testid="ref-view-mode-select"]');
+      expect(container).not.toBeNull();
+
+      const button = container!.querySelector('button');
+      expect(button).not.toBeNull();
+      expect(button!.title).toBe('Reference comparison mode');
+    });
+
+    it('opens the dropdown on click and lists all view modes', () => {
+      const deps = createTestDeps();
+      const result = buildViewTab(deps);
+
+      const container = result.element.querySelector('[data-testid="ref-view-mode-select"]')!;
+      const button = container.querySelector('button')!;
+
+      button.click();
+
+      const dropdown = document.querySelector<HTMLElement>('[data-testid="ref-view-mode-dropdown"]')!;
+      expect(dropdown.style.display).toBe('flex');
+
+      const options = dropdown.querySelectorAll('button');
+      expect(options.length).toBe(5);
+      expect(options[0]!.textContent).toBe('Split H');
+      expect(options[1]!.textContent).toBe('Split V');
+      expect(options[2]!.textContent).toBe('Overlay');
+      expect(options[3]!.textContent).toBe('Side by Side');
+      expect(options[4]!.textContent).toBe('Toggle');
+    });
+
+    it('selects a view mode and calls setViewMode on the reference manager', () => {
+      const deps = createTestDeps();
+      const result = buildViewTab(deps);
+
+      const container = result.element.querySelector('[data-testid="ref-view-mode-select"]')!;
+      const button = container.querySelector('button')!;
+      button.click();
+
+      const dropdown = document.querySelector<HTMLElement>('[data-testid="ref-view-mode-dropdown"]')!;
+      const overlayOption = dropdown.querySelector<HTMLButtonElement>('[data-value="overlay"]')!;
+      overlayOption.click();
+
+      expect(deps.registry.referenceManager.setViewMode).toHaveBeenCalledWith('overlay');
+      expect(dropdown.style.display).toBe('none');
+    });
+  });
+
+  describe('Reference opacity slider', () => {
+    it('renders the opacity slider', () => {
+      const deps = createTestDeps();
+      const result = buildViewTab(deps);
+
+      const slider = result.element.querySelector('[data-testid="ref-opacity-slider"]');
+      expect(slider).not.toBeNull();
+    });
+
+    it('calls setOpacity on the reference manager when changed', () => {
+      const deps = createTestDeps();
+      const result = buildViewTab(deps);
+
+      const container = result.element.querySelector<HTMLElement>('[data-testid="ref-opacity-slider"]')!;
+      const slider = container.querySelector<HTMLInputElement>('input[type="range"]')!;
+      slider.value = '75';
+      slider.dispatchEvent(new Event('input', { bubbles: true }));
+
+      expect(deps.registry.referenceManager.setOpacity).toHaveBeenCalledWith(0.75);
+    });
+
+    it('is visible for overlay mode and hidden for split-h mode', () => {
+      const deps = createTestDeps();
+      const result = buildViewTab(deps);
+
+      // Default is split-h, so opacity slider should be hidden
+      const opacitySlider = result.element.querySelector<HTMLElement>('[data-testid="ref-opacity-slider"]')!;
+      expect(opacitySlider.style.display).toBe('none');
+
+      // Switch to overlay mode via dropdown
+      const container = result.element.querySelector('[data-testid="ref-view-mode-select"]')!;
+      container.querySelector('button')!.click();
+      const dropdown = document.querySelector<HTMLElement>('[data-testid="ref-view-mode-dropdown"]')!;
+      dropdown.querySelector<HTMLButtonElement>('[data-value="overlay"]')!.click();
+
+      expect(opacitySlider.style.display).toBe('flex');
+    });
+  });
+
+  describe('Reference wipe position slider', () => {
+    it('renders the wipe position slider', () => {
+      const deps = createTestDeps();
+      const result = buildViewTab(deps);
+
+      const slider = result.element.querySelector('[data-testid="ref-wipe-slider"]');
+      expect(slider).not.toBeNull();
+    });
+
+    it('calls setWipePosition on the reference manager when changed', () => {
+      const deps = createTestDeps();
+      const result = buildViewTab(deps);
+
+      const container = result.element.querySelector<HTMLElement>('[data-testid="ref-wipe-slider"]')!;
+      const slider = container.querySelector<HTMLInputElement>('input[type="range"]')!;
+      slider.value = '30';
+      slider.dispatchEvent(new Event('input', { bubbles: true }));
+
+      expect(deps.registry.referenceManager.setWipePosition).toHaveBeenCalledWith(0.3);
+    });
+
+    it('is visible for split-h mode and hidden for overlay mode', () => {
+      const deps = createTestDeps();
+      const result = buildViewTab(deps);
+
+      // Default is split-h, so wipe slider should be visible
+      const wipeSlider = result.element.querySelector<HTMLElement>('[data-testid="ref-wipe-slider"]')!;
+      expect(wipeSlider.style.display).toBe('flex');
+
+      // Switch to overlay mode via dropdown
+      const container = result.element.querySelector('[data-testid="ref-view-mode-select"]')!;
+      container.querySelector('button')!.click();
+      const dropdown = document.querySelector<HTMLElement>('[data-testid="ref-view-mode-dropdown"]')!;
+      dropdown.querySelector<HTMLButtonElement>('[data-value="overlay"]')!.click();
+
+      expect(wipeSlider.style.display).toBe('none');
+    });
+  });
+
+  describe('Reference controls sync with external state changes', () => {
+    it('updates dropdown label and slider visibility when viewMode changes externally', () => {
+      const deps = createTestDeps();
+      const result = buildViewTab(deps);
+
+      const opacitySlider = result.element.querySelector<HTMLElement>('[data-testid="ref-opacity-slider"]')!;
+      const wipeSlider = result.element.querySelector<HTMLElement>('[data-testid="ref-wipe-slider"]')!;
+
+      // Initially split-h: wipe visible, opacity hidden
+      expect(wipeSlider.style.display).toBe('flex');
+      expect(opacitySlider.style.display).toBe('none');
+
+      // Simulate external state change to overlay mode
+      deps.registry.referenceManager.emit('stateChanged', {
+        enabled: false,
+        referenceImage: null,
+        viewMode: 'overlay',
+        opacity: 0.5,
+        wipePosition: 0.5,
+      });
+
+      // Now overlay: opacity visible, wipe hidden
+      expect(opacitySlider.style.display).toBe('flex');
+      expect(wipeSlider.style.display).toBe('none');
+    });
+  });
+
+  describe('Dropdown cleanup on dispose', () => {
+    it('removes the ref-view-mode dropdown from document.body when unsubscribers run', () => {
+      const deps = createTestDeps();
+      const result = buildViewTab(deps);
+
+      // Open the dropdown so it gets appended to document.body
+      const container = result.element.querySelector('[data-testid="ref-view-mode-select"]')!;
+      container.querySelector('button')!.click();
+
+      const dropdown = document.querySelector('[data-testid="ref-view-mode-dropdown"]');
+      expect(dropdown).not.toBeNull();
+      expect(document.body.contains(dropdown)).toBe(true);
+
+      // Run all unsubscribers (simulates dispose)
+      for (const unsub of deps.unsubscribers) unsub();
+
+      expect(document.body.contains(dropdown)).toBe(false);
+    });
+
+    it('removes the missing-frame-mode dropdown from document.body when unsubscribers run', () => {
+      const deps = createTestDeps();
+      const result = buildViewTab(deps);
+
+      // Open the dropdown so it gets appended to document.body
+      const container = result.element.querySelector('[data-testid="missing-frame-mode-select"]')!;
+      container.querySelector('button')!.click();
+
+      const dropdown = document.querySelector('[data-testid="missing-frame-mode-dropdown"]');
+      expect(dropdown).not.toBeNull();
+      expect(document.body.contains(dropdown)).toBe(true);
+
+      // Run all unsubscribers (simulates dispose)
+      for (const unsub of deps.unsubscribers) unsub();
+
+      expect(document.body.contains(dropdown)).toBe(false);
+    });
+
+    it('cleans up dropdowns even if they were never opened', () => {
+      const deps = createTestDeps();
+      buildViewTab(deps);
+
+      // Run all unsubscribers without ever opening the dropdowns
+      // Should not throw
+      for (const unsub of deps.unsubscribers) unsub();
+
+      expect(document.querySelector('[data-testid="ref-view-mode-dropdown"]')).toBeNull();
+      expect(document.querySelector('[data-testid="missing-frame-mode-dropdown"]')).toBeNull();
     });
   });
 

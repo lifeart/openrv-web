@@ -133,9 +133,237 @@ export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
   });
   addUnsubscriber(() => referenceComparisonSettingsMenu.dispose());
 
+  // --- Reference view mode dropdown ---
+  type RefViewMode = 'split-h' | 'split-v' | 'overlay' | 'side-by-side' | 'toggle';
+  const refViewModes: Array<{ label: string; value: RefViewMode }> = [
+    { label: 'Split H', value: 'split-h' },
+    { label: 'Split V', value: 'split-v' },
+    { label: 'Overlay', value: 'overlay' },
+    { label: 'Side by Side', value: 'side-by-side' },
+    { label: 'Toggle', value: 'toggle' },
+  ];
+  let currentRefViewMode: RefViewMode = registry.referenceManager.getState().viewMode as RefViewMode;
+  let isRefModeDropdownOpen = false;
+
+  const refModeContainer = document.createElement('div');
+  refModeContainer.dataset.testid = 'ref-view-mode-select';
+  refModeContainer.style.cssText = 'display: flex; align-items: center; position: relative;';
+
+  const refModeButton = document.createElement('button');
+  refModeButton.type = 'button';
+  refModeButton.title = 'Reference comparison mode';
+  refModeButton.setAttribute('aria-haspopup', 'true');
+  refModeButton.setAttribute('aria-expanded', 'false');
+  refModeButton.style.cssText = `
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-muted);
+    padding: 6px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.12s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 80px;
+    gap: 4px;
+    outline: none;
+  `;
+
+  const updateRefModeLabel = () => {
+    const current = refViewModes.find((m) => m.value === currentRefViewMode);
+    refModeButton.innerHTML = `${getIconSvg('layers', 'sm')}<span style="margin-left: 4px;">Ref: ${current?.label ?? 'Split H'}</span><span style="margin-left: 4px; font-size: 8px;">&#9660;</span>`;
+  };
+  updateRefModeLabel();
+
+  const refModeDropdown = document.createElement('div');
+  refModeDropdown.dataset.testid = 'ref-view-mode-dropdown';
+  refModeDropdown.style.cssText = `
+    position: fixed;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-primary);
+    border-radius: 4px;
+    padding: 4px;
+    z-index: 9999;
+    display: none;
+    flex-direction: column;
+    min-width: 140px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  `;
+
+  const updateRefModeOptionStyles = () => {
+    refModeDropdown.querySelectorAll<HTMLButtonElement>('button').forEach((opt) => {
+      if (opt.dataset.value === currentRefViewMode) {
+        opt.style.background = 'rgba(var(--accent-primary-rgb), 0.2)';
+        opt.style.color = 'var(--accent-primary)';
+      } else {
+        opt.style.background = 'transparent';
+        opt.style.color = 'var(--text-primary)';
+      }
+    });
+  };
+
+  const positionRefModeDropdown = () => {
+    if (!isRefModeDropdownOpen) return;
+    const rect = refModeButton.getBoundingClientRect();
+    refModeDropdown.style.top = `${rect.bottom + 4}px`;
+    refModeDropdown.style.left = `${rect.left}px`;
+  };
+
+  const closeRefModeDropdown = () => {
+    isRefModeDropdownOpen = false;
+    refModeDropdown.style.display = 'none';
+    refModeButton.setAttribute('aria-expanded', 'false');
+    refModeButton.style.background = 'transparent';
+    refModeButton.style.borderColor = 'transparent';
+    refModeButton.style.color = 'var(--text-muted)';
+    document.removeEventListener('click', handleRefModeOutsideClick);
+    window.removeEventListener('scroll', positionRefModeDropdown, true);
+    window.removeEventListener('resize', positionRefModeDropdown);
+  };
+
+  const openRefModeDropdown = () => {
+    if (!document.body.contains(refModeDropdown)) {
+      document.body.appendChild(refModeDropdown);
+    }
+    isRefModeDropdownOpen = true;
+    positionRefModeDropdown();
+    refModeDropdown.style.display = 'flex';
+    refModeButton.setAttribute('aria-expanded', 'true');
+    refModeButton.style.background = 'var(--bg-hover)';
+    refModeButton.style.borderColor = 'var(--border-primary)';
+    document.addEventListener('click', handleRefModeOutsideClick);
+    window.addEventListener('scroll', positionRefModeDropdown, true);
+    window.addEventListener('resize', positionRefModeDropdown);
+  };
+
+  const handleRefModeOutsideClick = (e: MouseEvent) => {
+    if (!refModeButton.contains(e.target as Node) && !refModeDropdown.contains(e.target as Node)) {
+      closeRefModeDropdown();
+    }
+  };
+
+  /** Update slider visibility based on the current reference view mode. */
+  const updateRefSliderVisibility = (mode: RefViewMode) => {
+    // Opacity is relevant for overlay and toggle modes
+    refOpacitySlider.style.display = (mode === 'overlay' || mode === 'toggle') ? 'flex' : 'none';
+    // Wipe position is relevant for split-h and split-v modes
+    refWipeSlider.style.display = (mode === 'split-h' || mode === 'split-v') ? 'flex' : 'none';
+  };
+
+  for (const mode of refViewModes) {
+    const opt = document.createElement('button');
+    opt.type = 'button';
+    opt.dataset.value = mode.value;
+    opt.textContent = mode.label;
+    opt.style.cssText = `
+      background: transparent;
+      border: none;
+      color: var(--text-primary);
+      padding: 6px 10px;
+      text-align: left;
+      cursor: pointer;
+      font-size: 12px;
+      border-radius: 3px;
+      transition: background 0.12s ease;
+    `;
+    if (mode.value === currentRefViewMode) {
+      opt.style.background = 'rgba(var(--accent-primary-rgb), 0.2)';
+      opt.style.color = 'var(--accent-primary)';
+    }
+    opt.addEventListener('pointerenter', () => {
+      opt.style.background = 'var(--bg-hover)';
+    });
+    opt.addEventListener('pointerleave', () => {
+      if (mode.value !== currentRefViewMode) {
+        opt.style.background = 'transparent';
+      }
+    });
+    opt.addEventListener('click', (e) => {
+      e.stopPropagation();
+      currentRefViewMode = mode.value;
+      registry.referenceManager.setViewMode(mode.value);
+      updateRefModeLabel();
+      updateRefModeOptionStyles();
+      updateRefSliderVisibility(mode.value);
+      closeRefModeDropdown();
+    });
+    refModeDropdown.appendChild(opt);
+  }
+
+  refModeButton.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (isRefModeDropdownOpen) closeRefModeDropdown();
+    else openRefModeDropdown();
+  });
+  refModeButton.addEventListener('pointerenter', () => {
+    if (!isRefModeDropdownOpen) {
+      refModeButton.style.background = 'var(--bg-hover)';
+      refModeButton.style.borderColor = 'var(--border-primary)';
+      refModeButton.style.color = 'var(--text-primary)';
+    }
+  });
+  refModeButton.addEventListener('pointerleave', () => {
+    if (!isRefModeDropdownOpen) {
+      refModeButton.style.background = 'transparent';
+      refModeButton.style.borderColor = 'transparent';
+      refModeButton.style.color = 'var(--text-muted)';
+    }
+  });
+  applyA11yFocus(refModeButton);
+
+  refModeContainer.appendChild(refModeButton);
+  viewContent.appendChild(refModeContainer);
+
+  // Cleanup: close the dropdown (removes window/document listeners) and remove from DOM
+  addUnsubscriber(() => {
+    closeRefModeDropdown();
+    refModeDropdown.remove();
+  });
+
+  // --- Reference opacity slider (for overlay / toggle modes) ---
+  const refOpacitySlider = ContextToolbar.createSlider('Opacity', {
+    min: 0,
+    max: 100,
+    step: 1,
+    value: Math.round(registry.referenceManager.getState().opacity * 100),
+    width: '70px',
+    onChange: (value) => {
+      registry.referenceManager.setOpacity(value / 100);
+    },
+  });
+  refOpacitySlider.dataset.testid = 'ref-opacity-slider';
+  viewContent.appendChild(refOpacitySlider);
+
+  // --- Reference wipe position slider (for split-h / split-v modes) ---
+  const refWipeSlider = ContextToolbar.createSlider('Wipe', {
+    min: 0,
+    max: 100,
+    step: 1,
+    value: Math.round(registry.referenceManager.getState().wipePosition * 100),
+    width: '70px',
+    onChange: (value) => {
+      registry.referenceManager.setWipePosition(value / 100);
+    },
+  });
+  refWipeSlider.dataset.testid = 'ref-wipe-slider';
+  viewContent.appendChild(refWipeSlider);
+
+  // Set initial slider visibility
+  updateRefSliderVisibility(currentRefViewMode);
+
   addUnsubscriber(
     registry.referenceManager.on('stateChanged', (state) => {
       setButtonActive(toggleRefButton, state.enabled, 'icon');
+
+      // Keep dropdown label and slider visibility in sync with external state changes
+      if (state.viewMode !== currentRefViewMode) {
+        currentRefViewMode = state.viewMode as RefViewMode;
+        updateRefModeLabel();
+        updateRefModeOptionStyles();
+        updateRefSliderVisibility(currentRefViewMode);
+      }
 
       if (state.enabled && state.referenceImage) {
         const ref = state.referenceImage;
@@ -376,6 +604,12 @@ export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
 
   missingFrameContainer.appendChild(missingButton);
   viewContent.appendChild(missingFrameContainer);
+
+  // Cleanup: close the dropdown (removes window/document listeners) and remove from DOM
+  addUnsubscriber(() => {
+    closeMissingDropdown();
+    missingDropdown.remove();
+  });
 
   // Timeline editor toggle button
   const timelineEditorButton = ContextToolbar.createIconButton(

@@ -61,7 +61,7 @@ export type FalseColorPreset = 'standard' | 'arri' | 'red' | 'custom';
  */
 
 // IRE values are mapped to 0-255 range (0 IRE = 0, 100 IRE = 255)
-interface ColorRange {
+export interface ColorRange {
   min: number; // Min luminance (0-255)
   max: number; // Max luminance (0-255)
   color: [number, number, number]; // RGB color
@@ -137,11 +137,10 @@ const RED_PALETTE: ColorRange[] = [
   { min: 243, max: 255, color: [255, 0, 255], label: 'Clipped' },
 ];
 
-const PALETTES: Record<FalseColorPreset, ColorRange[]> = {
+const BUILTIN_PALETTES: Record<Exclude<FalseColorPreset, 'custom'>, ColorRange[]> = {
   standard: STANDARD_PALETTE,
   arri: ARRI_PALETTE,
   red: RED_PALETTE,
-  custom: STANDARD_PALETTE, // Use standard as default for custom
 };
 
 export const DEFAULT_FALSE_COLOR_STATE: FalseColorState = {
@@ -155,6 +154,9 @@ export class FalseColor extends EventEmitter<FalseColorEvents> {
   // Pre-computed LUT for fast lookup (256 entries, each [R, G, B])
   private colorLUT: Uint8Array = new Uint8Array(256 * 3);
 
+  // User-defined custom palette (defaults to standard palette copy)
+  private customPalette: ColorRange[] = STANDARD_PALETTE.map((r) => ({ ...r, color: [...r.color] }));
+
   constructor() {
     super();
     this.buildColorLUT();
@@ -163,8 +165,15 @@ export class FalseColor extends EventEmitter<FalseColorEvents> {
   /**
    * Build the color lookup table from the current palette
    */
+  private getPalette(): ColorRange[] {
+    if (this.state.preset === 'custom') {
+      return this.customPalette;
+    }
+    return BUILTIN_PALETTES[this.state.preset];
+  }
+
   private buildColorLUT(): void {
-    const palette = PALETTES[this.state.preset];
+    const palette = this.getPalette();
 
     for (let i = 0; i < 256; i++) {
       // Find the color range for this luminance value
@@ -271,6 +280,7 @@ export class FalseColor extends EventEmitter<FalseColorEvents> {
       { key: 'standard', label: 'Standard' },
       { key: 'arri', label: 'ARRI' },
       { key: 'red', label: 'RED' },
+      { key: 'custom', label: 'Custom' },
     ];
   }
 
@@ -285,10 +295,62 @@ export class FalseColor extends EventEmitter<FalseColorEvents> {
    * Get color legend for UI display
    */
   getLegend(): Array<{ color: string; label: string }> {
-    const palette = PALETTES[this.state.preset];
+    const palette = this.getPalette();
     return palette.map((range) => ({
       color: `rgb(${range.color[0]}, ${range.color[1]}, ${range.color[2]})`,
       label: range.label,
+    }));
+  }
+
+  /**
+   * Set a custom palette with user-defined color-to-exposure mappings.
+   * Automatically switches the active preset to 'custom'.
+   *
+   * Each range must have min/max in 0-255 (mapping to 0-100 IRE),
+   * an RGB color tuple, and a human-readable label.
+   *
+   * @throws {Error} if the palette is empty
+   */
+  setCustomPalette(ranges: ColorRange[]): void {
+    if (ranges.length === 0) {
+      throw new Error('Custom palette must contain at least one color range');
+    }
+    // Deep copy with validation to avoid external mutation and invalid values
+    this.customPalette = ranges.map((r) => {
+      // Clamp and round min/max to valid 0-255 integer range
+      let min = Math.round(Math.max(0, Math.min(255, r.min)));
+      let max = Math.round(Math.max(0, Math.min(255, r.max)));
+      // Swap if min > max
+      if (min > max) {
+        [min, max] = [max, min];
+      }
+      return {
+        min,
+        max,
+        // Clamp color channels to 0-255
+        color: [
+          Math.round(Math.max(0, Math.min(255, r.color[0]))),
+          Math.round(Math.max(0, Math.min(255, r.color[1]))),
+          Math.round(Math.max(0, Math.min(255, r.color[2]))),
+        ] as [number, number, number],
+        label: r.label,
+      };
+    });
+    this.state.preset = 'custom';
+    this.buildColorLUT();
+    this.emit('stateChanged', { ...this.state });
+  }
+
+  /**
+   * Get the current custom palette definition.
+   * Returns a deep copy so external code cannot mutate internal state.
+   */
+  getCustomPalette(): ColorRange[] {
+    return this.customPalette.map((r) => ({
+      min: r.min,
+      max: r.max,
+      color: [r.color[0], r.color[1], r.color[2]],
+      label: r.label,
     }));
   }
 

@@ -51,7 +51,14 @@ if (window.openrv.sequence.isFrameMissing(5)) {
 }
 ```
 
-When playback reaches a missing frame, the application holds the last available frame rather than displaying a blank screen.
+When playback reaches a missing frame, the behavior depends on the selected **missing-frame mode** (configurable in the **View** tab toolbar):
+
+- **Off**: No indication; the viewer draws whatever is available.
+- **Frame** (default): The current source frame continues to display with a centered warning-icon overlay showing the missing frame number.
+- **Hold**: The nearest available preceding frame is shown in place of the missing frame.
+- **Black**: The viewer is replaced with a solid black frame.
+
+For full details on each mode and the overlay appearance, see [Overlays and Guides — Missing Frame Indicator](../advanced/overlays.md#missing-frame-indicator).
 
 ## Frame Range
 
@@ -82,9 +89,9 @@ Image sequences can consume significant memory. OpenRV Web uses several strategi
 
 - **Preload window** -- 5 frames ahead and behind the current frame are loaded proactively
 - **Keep window** -- up to 20 frames are kept in memory at a time
-- **Blob URL lifecycle** -- blob URLs are created when a frame loads and revoked when released
-- **Distance-based release** -- frames far from the current position are released automatically via `releaseDistantFrames()`
-- **Dispose** -- all blob URLs and image references are cleaned up when switching sources
+- **Direct decode** -- frames are decoded directly from `File` objects using `createImageBitmap(frame.file, ...)` for browser-native formats (PNG, JPEG, WebP, etc.) or through the decoder registry for pro formats (EXR, DPX, Cineon, HDR, TIFF). No intermediate blob URLs are created during loading.
+- **Distance-based release** -- frames far from the current position are released automatically via `releaseDistantFrames()`, which closes `ImageBitmap` handles and drops decoded `Float32Array` data
+- **Dispose** -- all `ImageBitmap` handles and decoded data references are cleaned up when switching sources. The `SequenceFrame.url` field is vestigial; no production code assigns it during file-based loading, but cleanup paths (`releaseDistantFrames`, `disposeSequence`) defensively revoke it if present.
 
 ## Supported Image Formats
 
