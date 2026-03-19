@@ -33,9 +33,7 @@ function fileExists(relPath: string): boolean {
 
 function getEventNames(): string[] {
   const source = readFile('src/api/EventsAPI.ts');
-  const match = source.match(
-    /export type OpenRVEventName\s*=\s*([\s\S]*?);/,
-  );
+  const match = source.match(/export type OpenRVEventName\s*=\s*([\s\S]*?);/);
   if (!match?.[1]) return [];
   const results: string[] = [];
   for (const m of match[1].matchAll(/'([^']+)'/g)) {
@@ -46,9 +44,7 @@ function getEventNames(): string[] {
 
 function getAPIClassFiles(): string[] {
   const dir = path.join(ROOT, 'src/api');
-  return (fs.readdirSync(dir) as string[]).filter(
-    (f: string) => f.endsWith('API.ts') && !f.endsWith('.test.ts'),
-  );
+  return (fs.readdirSync(dir) as string[]).filter((f: string) => f.endsWith('API.ts') && !f.endsWith('.test.ts'));
 }
 
 function getAPIClassNames(): string[] {
@@ -76,9 +72,7 @@ function getRegisteredNodes(): string[] {
 
 function getBuiltinFormats(): string[] {
   const source = readFile('src/formats/DecoderRegistry.ts');
-  const match = source.match(
-    /export type BuiltinFormatName\s*=\s*([\s\S]*?);/,
-  );
+  const match = source.match(/export type BuiltinFormatName\s*=\s*([\s\S]*?);/);
   if (!match?.[1]) return [];
   const results: string[] = [];
   for (const m of match[1].matchAll(/'([^']+)'/g)) {
@@ -174,12 +168,8 @@ describe('Documentation consistency', () => {
     for (const file of filesToCheck) {
       if (!fileExists(file)) continue;
       const content = readFile(file);
-      expect(content).not.toMatch(
-        /tetrahedral\s+interpolation\s+(in|on|for)\s+(the\s+)?GPU/i,
-      );
-      expect(content).not.toMatch(
-        /GPU\s+(uses?|performs?)\s+tetrahedral/i,
-      );
+      expect(content).not.toMatch(/tetrahedral\s+interpolation\s+(in|on|for)\s+(the\s+)?GPU/i);
+      expect(content).not.toMatch(/GPU\s+(uses?|performs?)\s+tetrahedral/i);
     }
   });
 
@@ -194,10 +184,7 @@ describe('Documentation consistency', () => {
     const refs = getScreenshotRefsInDocs();
     expect(refs.length).toBeGreaterThan(0);
 
-    const screenshotDirs = [
-      'docs/public/assets/screenshots',
-      'docs/assets/screenshots',
-    ];
+    const screenshotDirs = ['docs/public/assets/screenshots', 'docs/assets/screenshots'];
 
     for (const ref of refs) {
       const exists = screenshotDirs.some((dir) => fileExists(path.join(dir, ref)));
@@ -226,12 +213,8 @@ describe('Documentation consistency', () => {
     expect(readme).toMatch(/trilinear/i);
     const lines = readme.split('\n');
     for (const line of lines) {
-      expect(line).not.toMatch(
-        /tetrahedral\s+interpolation\s+(in|on|for)\s+(the\s+)?GPU/i,
-      );
-      expect(line).not.toMatch(
-        /GPU\s+(uses?|performs?)\s+tetrahedral/i,
-      );
+      expect(line).not.toMatch(/tetrahedral\s+interpolation\s+(in|on|for)\s+(the\s+)?GPU/i);
+      expect(line).not.toMatch(/GPU\s+(uses?|performs?)\s+tetrahedral/i);
     }
   });
 
@@ -284,10 +267,7 @@ describe('Documentation consistency', () => {
     expect(shortcutsDoc).toMatch(/\| `H` \| Fit to height \| Histogram \(QC tab\) \|/);
 
     // Should NOT claim H is a standalone histogram toggle outside contextual table
-    const nonContextualFiles = [
-      'docs/getting-started/ui-overview.md',
-      'docs/scopes/histogram.md',
-    ];
+    const nonContextualFiles = ['docs/getting-started/ui-overview.md', 'docs/scopes/histogram.md'];
     for (const file of nonContextualFiles) {
       if (!fileExists(file)) continue;
       const content = readFile(file);
@@ -301,10 +281,7 @@ describe('Documentation consistency', () => {
     expect(shortcutsDoc).toMatch(/\| `W` \| Fit to width \| Waveform \(QC tab\) \|/);
 
     // Should NOT claim W is a standalone waveform toggle outside contextual table
-    const nonContextualFiles = [
-      'docs/getting-started/ui-overview.md',
-      'docs/scopes/waveform.md',
-    ];
+    const nonContextualFiles = ['docs/getting-started/ui-overview.md', 'docs/scopes/waveform.md'];
     for (const file of nonContextualFiles) {
       if (!fileExists(file)) continue;
       const content = readFile(file);

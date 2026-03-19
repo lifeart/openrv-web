@@ -456,7 +456,7 @@ describe('KeyBindings', () => {
      *
      * No binding should reference a context that is never activated in production.
      */
-    const PRODUCTION_CONTEXTS = new Set(['global', 'paint', 'viewer', 'panel', 'transform']);
+    const PRODUCTION_CONTEXTS = new Set(['global', 'paint', 'viewer', 'panel', 'transform', 'color']);
 
     it('KB-U090: no binding references a dead context', () => {
       for (const [action, binding] of Object.entries(DEFAULT_KEY_BINDINGS)) {
@@ -477,16 +477,16 @@ describe('KeyBindings', () => {
         transform: 'transform',
         view: 'viewer',
         qc: 'panel',
-        // color, effects -> 'global' (default)
+        color: 'color',
+        // effects -> 'global' (default)
       };
       const activatedContexts = new Set([...Object.values(TAB_CONTEXT_MAP), 'global']);
 
       for (const [action, binding] of Object.entries(DEFAULT_KEY_BINDINGS)) {
         const ctx = binding.context ?? 'global';
-        expect(
-          activatedContexts.has(ctx),
-          `Binding "${action}" uses context "${ctx}" which no tab activates`,
-        ).toBe(true);
+        expect(activatedContexts.has(ctx), `Binding "${action}" uses context "${ctx}" which no tab activates`).toBe(
+          true,
+        );
       }
     });
 
@@ -591,7 +591,7 @@ describe('KeyBindings', () => {
       ).toHaveLength(0);
     });
 
-    it('KB-U109: keyboard-shortcuts.md has no cross-section duplicates for modifier shortcuts', async () => {
+    it('KB-U109: keyboard-shortcuts.md cross-section duplicates are only contextual shortcuts', async () => {
       // @ts-ignore -- Node modules available in test environment
       const fs = await import('fs');
       // @ts-ignore -- Node modules available in test environment
@@ -600,12 +600,22 @@ describe('KeyBindings', () => {
       const docPath = path.resolve(__dirname, '../../../docs/reference/keyboard-shortcuts.md');
       const content = fs.readFileSync(docPath, 'utf-8');
 
-      // Modifier shortcuts (Shift+X, Ctrl+X, Alt+X) should not appear in multiple sections.
-      // Bare single-key shortcuts (R, O, L, etc.) are allowed to repeat across sections
-      // because they are context-dependent (e.g., Annotations tab vs global).
+      // Modifier shortcuts may appear in multiple sections when they are contextual
+      // (same key does different things on different tabs). The Contextual Shortcuts
+      // section intentionally duplicates these. Non-contextual modifier shortcuts
+      // should not appear in multiple sections.
       const sections = content.split(/^## /m).slice(1);
       const modifierShortcuts = new Map<string, string>(); // shortcut -> "section: action"
       const duplicates: string[] = [];
+
+      // Known contextual shortcuts that intentionally appear in multiple sections
+      const contextualShortcuts = new Set([
+        'Shift+R',
+        'Shift+B',
+        'Shift+N',
+        'Shift+L',
+        'Shift+Alt+N', // notes panel appears in both Panels and Notes Navigation
+      ]);
 
       for (const section of sections) {
         const sectionName = section.split('\n')[0].trim();
@@ -622,11 +632,12 @@ describe('KeyBindings', () => {
           // Only check shortcuts with modifiers (Shift+, Ctrl+, Alt+)
           if (!shortcut.includes('+')) continue;
 
+          // Skip known contextual shortcuts
+          if (contextualShortcuts.has(shortcut)) continue;
+
           const key = shortcut;
           if (modifierShortcuts.has(key)) {
-            duplicates.push(
-              `"${key}" appears in [${modifierShortcuts.get(key)}] and [${sectionName}: ${action}]`,
-            );
+            duplicates.push(`"${key}" appears in [${modifierShortcuts.get(key)}] and [${sectionName}: ${action}]`);
           } else {
             modifierShortcuts.set(key, `${sectionName}: ${action}`);
           }
@@ -639,7 +650,7 @@ describe('KeyBindings', () => {
       ).toHaveLength(0);
     });
 
-    it('KB-U108: CONTEXTUAL_DEFAULTS channel shortcuts are not listed as active in the doc', async () => {
+    it('KB-U108: contextual channel shortcuts are documented with tab-specific notes', async () => {
       // @ts-ignore -- Node modules available in test environment
       const fs = await import('fs');
       // @ts-ignore -- Node modules available in test environment
@@ -648,27 +659,31 @@ describe('KeyBindings', () => {
       const docPath = path.resolve(__dirname, '../../../docs/reference/keyboard-shortcuts.md');
       const content = fs.readFileSync(docPath, 'utf-8');
 
-      // These channel shortcuts are suppressed in production by CONTEXTUAL_DEFAULTS
-      // They should NOT appear as active table rows in the doc
-      const suppressedShortcuts = [
-        { combo: 'Shift+R', action: 'channel.red', label: 'Red channel' },
-        { combo: 'Shift+B', action: 'channel.blue', label: 'Blue channel' },
-        { combo: 'Shift+N', action: 'channel.none', label: 'channel reset' },
+      // Channel shortcuts (Shift+R/B/N) are global but overridden on specific tabs.
+      // The docs should list them in the Channel View section AND document
+      // the contextual behavior (which tab overrides them).
+      const contextualShortcuts = [
+        { combo: 'Shift+R', label: 'Red channel' },
+        { combo: 'Shift+B', label: 'Blue channel' },
+        { combo: 'Shift+N', label: 'channel reset' },
       ];
 
-      // Extract shortcuts from the Channel View section table rows only
+      // Verify they appear in the Channel View section
       const channelSectionMatch = content.match(/## Channel View\s*\n([\s\S]*?)(?=\n## |\n>|$)/);
       expect(channelSectionMatch).not.toBeNull();
-
       const channelSection = channelSectionMatch![1];
 
-      for (const { combo, label } of suppressedShortcuts) {
+      for (const { combo, label } of contextualShortcuts) {
         const rowPattern = new RegExp(`^\\|\\s*\`${combo.replace('+', '\\+')}\`\\s*\\|`, 'm');
         expect(
           rowPattern.test(channelSection),
-          `"${combo}" (${label}) should not appear as an active shortcut in the Channel View table — it is suppressed by CONTEXTUAL_DEFAULTS`,
-        ).toBe(false);
+          `"${combo}" (${label}) should appear in the Channel View table as a global shortcut`,
+        ).toBe(true);
       }
+
+      // Verify contextual overrides are documented
+      const contextualSectionMatch = content.match(/## Contextual Shortcuts/);
+      expect(contextualSectionMatch, 'Contextual Shortcuts section should exist').not.toBeNull();
     });
   });
 

@@ -404,7 +404,7 @@ describe('Conflicting defaults have context metadata', () => {
     expect(binding!.context).toBeUndefined();
   });
 
-  it('KW-044: channel.blue is defined with context channel in DEFAULT_KEY_BINDINGS', () => {
+  it('KW-044: channel.blue is defined in DEFAULT_KEY_BINDINGS', () => {
     const binding = DEFAULT_KEY_BINDINGS['channel.blue'];
     expect(binding).toBeDefined();
     expect(binding!.code).toBe('KeyB');
@@ -413,7 +413,7 @@ describe('Conflicting defaults have context metadata', () => {
     // but it's registered via contextual manager
   });
 
-  it('KW-045: channel.none is defined with context channel in DEFAULT_KEY_BINDINGS', () => {
+  it('KW-045: channel.none is defined in DEFAULT_KEY_BINDINGS', () => {
     const binding = DEFAULT_KEY_BINDINGS['channel.none'];
     expect(binding).toBeDefined();
     expect(binding!.code).toBe('KeyN');

@@ -46,7 +46,7 @@ describe('ActiveContextManager', () => {
     });
 
     it('ACM-006: supports all context types', () => {
-      const contexts: BindingContext[] = ['global', 'paint', 'viewer', 'panel', 'transform'];
+      const contexts: BindingContext[] = ['global', 'paint', 'viewer', 'panel', 'transform', 'color'];
       for (const ctx of contexts) {
         manager.setContext(ctx);
         expect(manager.activeContext).toBe(ctx);
