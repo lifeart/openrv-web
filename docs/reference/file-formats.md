@@ -8,8 +8,8 @@ This page lists all file formats supported by OpenRV Web.
 |--------|-----------|---------|-----|-------|
 | PNG | `.png` | Browser native | No | Lossless, supports transparency |
 | JPEG | `.jpg`, `.jpeg` | Browser native | No | Lossy compression |
-| WebP | `.webp` | Browser native | No | Modern format |
-| GIF | `.gif` | Browser native | No | Animated GIF support |
+| WebP | `.webp` | Browser native | No | Modern format; loaded as single-frame still (animated playback not supported) |
+| GIF | `.gif` | Browser native | No | Loaded as single-frame still (animated playback not supported) |
 | BMP | `.bmp` | Browser native | No | Uncompressed bitmap |
 | AVIF | `.avif` | Browser native | No | AV1-based still image |
 | HEIC/HEIF | `.heic`, `.heif` | Native (Safari) / libheif WASM (other browsers) | No | Apple image format |

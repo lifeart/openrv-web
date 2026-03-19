@@ -6,7 +6,12 @@
 
 ## Overview
 
-OpenRV Web supports a wide range of image, video, and session file formats, spanning professional VFX interchange formats, HDR photography formats, web-native media, and editorial interchange. All image decoding produces **Float32Array** pixel data in RGBA layout, ensuring consistent precision throughout the rendering pipeline regardless of the source format's native bit depth.
+OpenRV Web supports a wide range of image, video, and session file formats, spanning professional VFX interchange formats, HDR photography formats, web-native media, and editorial interchange. Image decoding follows a **dual-path** architecture:
+
+- **Decoder-backed formats** (EXR, DPX, Cineon, Float TIFF, Radiance HDR, JPEG Gainmap HDR, HEIC/AVIF Gainmap HDR, JPEG XL HDR, HEIC SDR via WASM, JP2) are decoded into **Float32Array** pixel data in RGBA layout and stored as `IPImage` objects. This ensures full floating-point precision for HDR and professional VFX formats throughout the rendering pipeline.
+- **Browser-native formats** (PNG, JPEG, WebP, GIF, BMP, SVG, ICO, standard AVIF, standard TIFF, RAW preview (extracted by custom parser, then rendered via browser `<img>`)) are decoded by the browser's built-in `<img>` element and stored as **`HTMLImageElement`** sources -- no Float32Array conversion takes place. The browser handles color management and compositing for these standard formats directly.
+
+> **Note on `process()` conversion**: When browser-native images flow through the node graph's `process()` method (e.g., for color corrections or compositing), the `HTMLImageElement` is rasterized into a **uint8 `IPImage`** (8 bits per channel, RGBA). This is distinct from the **float32 `IPImage`** that decoder-backed formats produce. The uint8 path is sufficient for standard-dynamic-range content but does not preserve the floating-point precision available in HDR workflows.
 
 Format detection uses a **two-tier** strategy. The fast path classifies files by MIME type and extension via `detectMediaTypeFromFile()`. When neither is recognized (extensionless or misnamed files), the fallback path reads the first bytes and checks them against the `DecoderRegistry`'s magic-number detectors (`detectMediaTypeFromFileBytes()`). This combination keeps the common case fast while still handling misnamed or extensionless files correctly -- any file whose bytes match a registered decoder will be loaded even if the extension is wrong or absent.
 
@@ -153,7 +158,7 @@ The AVIF equivalent of HEIC gainmap, using the same ISO 21496-1 gain map standar
 
 Standard AVIF images without gain maps:
 
-- **Decoder**: Browser-native decode via `createImageBitmap()` with WASM fallback (`avif.ts`)
+- **Decoder**: Browser-native only -- uses `createImageBitmap()` to decode via the browser's built-in AVIF support (`avif.ts`). No alternate decoder is provided; browsers without native AVIF support (e.g., older Safari versions) cannot decode plain AVIF files
 - **Detection**: `ftyp` box with AVIF brands, without gain map auxiliary items
 - **Ordering**: Placed after the AVIF gainmap decoder in the registry chain so gainmap AVIFs are matched first
 
@@ -189,14 +194,16 @@ The following formats are decoded by the browser's built-in image decoder via `<
 |--------|-----------|-------|
 | PNG | .png | Lossless, 8/16-bit, alpha channel |
 | JPEG | .jpg, .jpeg | Lossy, 8-bit, most common web format |
-| WebP | .webp | Lossy and lossless, alpha, animation |
-| GIF | .gif | 256-color palette, animation |
+| WebP | .webp | Lossy and lossless, alpha; loaded as single-frame still (animated playback not supported) |
+| GIF | .gif | 256-color palette; loaded as single-frame still (animated playback not supported) |
 | BMP | .bmp | Uncompressed bitmap |
 | HEIC/HEIF | .heic, .heif | Safari native; other browsers via WASM |
 | SVG | .svg | Vector graphics (rasterized by browser) |
 | ICO | .ico | Icon format |
 
-These formats are handled at the `Session.loadImage()` level using the browser's `<img>` element, bypassing the `DecoderRegistry` entirely.
+When opened as **local files** (drag-and-drop or file picker), these formats are routed through `SessionMedia.loadImageFile()`, which creates a `FileSourceNode` and calls `fileSourceNode.loadFile(file)`. `FileSourceNode.loadFile()` performs format-specific branching for professional and HDR formats (EXR, DPX, TIFF, JPEG gainmap, AVIF, JXL, HEIC, JP2, RAW) first; when none of those matchers apply, it falls through to standard browser-native image loading via `this.load(url, name)`, which uses the browser's `<img>` element. This means even browser-native formats pass through `FileSourceNode` for uniform metadata tracking and node-graph integration.
+
+When opened by **URL or `HTMLImageElement`** (e.g., remote URLs, session restore, or the public API), images go through `SessionMedia.loadImage(name, url)`, which creates an `<img>` element directly and bypasses both `FileSourceNode` and the `DecoderRegistry`.
 
 ---
 
@@ -398,7 +405,7 @@ The following table compares format support between desktop OpenRV and OpenRV We
 | JPEG Gainmap | .jpg | No | Yes | JavaScript | Yes |
 | HEIC Gainmap | .heic | No | Yes | JS + WASM | Yes |
 | AVIF Gainmap | .avif | No | Yes | JavaScript | Yes |
-| AVIF | .avif | No | Yes | Native/WASM | No |
+| AVIF | .avif | No | Yes | Native | No |
 | JPEG 2000 | .jp2, .j2k | No | Yes | WASM | No |
 | RAW Preview | .cr2, .nef, etc. | No | Yes | JavaScript | No |
 | SGI | .sgi, .rgb | Yes | No | -- | No |
@@ -450,7 +457,7 @@ Each decoder implements the generic `FormatDecoder<TOptions>` interface:
 
 - **`formatName: string`** -- Human-readable format name (e.g., `"OpenEXR"`, `"DPX"`)
 - **`canDecode(buffer: ArrayBuffer): boolean`** -- Tests magic bytes for format identification
-- **`decode(buffer: ArrayBuffer, options?: TOptions): Promise<DecodeResult>`** -- Performs the actual decode, returning width, height, Float32Array data, channel count, color space, and metadata
+- **`decode(buffer: ArrayBuffer, options?: TOptions): Promise<DecodeResult>`** -- Performs the actual decode, returning width, height, Float32Array data, channel count, color space, and metadata. Note: only formats matched by a registered decoder produce Float32Array/IPImage output. Browser-native formats (PNG, JPEG, WebP, etc.) bypass the decoder registry entirely and are loaded as `HTMLImageElement` sources
 
 The generic `TOptions` parameter allows each decoder to declare its own strongly typed options (e.g., EXR layer selection, DPX log-to-linear parameters) while the registry operates on the common `FormatDecoder` base.
 

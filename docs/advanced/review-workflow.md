@@ -163,7 +163,7 @@ For remote reviews and client presentations, OpenRV Web supports sharing the vie
 
 ### Secondary Browser Window
 
-OpenRV Web can open a secondary browser window that mirrors the viewer output via the BroadcastChannel API. The secondary window displays the same frame, playback state, and color corrections in real time, synced with the primary window. This is useful for dual-monitor setups where the review UI runs on one screen and a clean full-frame presentation runs on a projector or client monitor. The secondary window updates are same-origin and require no network connection.
+OpenRV Web can open a secondary browser window via the BroadcastChannel API. The secondary window displays text-only status information (frame number, playback state, and color setting values) synchronized with the primary window. It does not render the actual viewer image or mirror the rendered frame. This is useful for dual-monitor setups where a supervisor needs metadata visibility on a second screen while the review UI runs on the primary display. The secondary window updates are same-origin and require no network connection. Full viewer mirroring is tracked in issue #29.
 
 ### Screen Sharing
 

@@ -4136,3 +4136,134 @@ Wired into `AppNetworkBridge` (subscribes to syncCursor, usersChanged, userLeft,
 - `docs/reference/faq.md`
 - `docs/getting-started/installation.md`
 - `src/docs-collaboration-signaling.test.ts` (new)
+
+## Issue #460: The browser-support docs present External Presentation as a working BroadcastChannel feature, but the shipped feature is already broken at runtime
+
+**Root cause**: The browser-requirements page, browser-compatibility matrix, review-workflow guide, and UI overview all described External Presentation as if it fully "synchronizes frame, playback, and color state" via BroadcastChannel. In reality, the shipped `ExternalPresentation` component only displays text/metadata overlays (frame number, playback state, color settings) — it does not render the actual viewer image. The presentation window contains a canvas element but has no WebGL context, no shader pipeline, and no image rendering code. The real limitation is the feature itself (issue #29), not browser API availability.
+
+**Fix**: Updated all four documentation files to accurately describe External Presentation as providing text-only status information. Removed claims of full synchronization. Added explicit notes that the presentation window does not render the actual viewer image. Added references to issue #29 for the missing full viewer mirroring. Updated the browser-compatibility matrix to indicate the feature is partial/text-only. Updated `ExternalPresentation.ts` JSDoc to document the text-only limitation. Updated `README.md` with corrected feature description.
+
+**Tests added**: 25 regression tests in `ExternalPresentation.docs.test.ts` covering documentation content accuracy (browser-requirements, review-workflow, ui-overview, browser-compatibility) and runtime behavior verification (BroadcastChannel usage, text-only presentation HTML, no WebGL/image rendering, JSDoc accuracy).
+
+**Files changed**:
+- `docs/getting-started/browser-requirements.md`
+- `docs/reference/browser-compatibility.md`
+- `docs/advanced/review-workflow.md`
+- `docs/getting-started/ui-overview.md`
+- `README.md`
+- `src/ui/components/ExternalPresentation.ts`
+- `src/ui/components/ExternalPresentation.docs.test.ts` (new)
+
+## Issue #462: The UI overview says all interactive controls are semantic and properly labeled, but the shipped UI still has mouse-only/non-semantic interactions
+
+**Root cause**: The docs claimed "All interactive controls use semantic HTML elements with appropriate ARIA labels and roles" but PixelProbe value rows use divs with ARIA roles (not semantic buttons), CollapsibleSection accordion headers use divs (not buttons), and history items are mouse-only with no keyboard support or ARIA roles.
+
+**Fix**: Rewrote the Accessibility section in `ui-overview.md` to honestly describe what IS accessible and acknowledge known gaps. References issues #65 and #75.
+
+**Tests added**: 17 regression tests in `src/ui/accessibility-docs-accuracy.test.ts`.
+
+**Files changed**:
+- `docs/getting-started/ui-overview.md`
+- `src/ui/accessibility-docs-accuracy.test.ts` (new)
+
+## Issue #472: The advanced-compare docs present Quad View as a shipped feature, but the live UI itself marks it as preview-only and unwired
+
+**Root cause**: The advanced-compare documentation described Quad View in present tense as a working comparison mode where four quadrants each display a different source and stay in sync during playback. However, the shipped CompareControl UI labels Quad View with a "preview" badge and an explicit tooltip saying it is "not yet connected to the viewer rendering pipeline." Production view wiring (AppViewWiring) only subscribes to wipe, A/B, difference matte, and blend-mode events; quad-view changes only produce a warning log.
+
+**Fix**: Rewrote the Quad View section in `advanced-compare.md` with a (Preview) qualifier, a status note clarifying it is not yet connected to the rendering pipeline, future tense throughout, and a workflow annotation. Updated the intro paragraph to signal preview status early so readers know before reaching the Quad View details.
+
+**Tests added**: 12 regression tests in `src/issue472-quad-view-preview.test.ts` covering UI badge presence, wiring behavior (warning-only for quad-view events), and documentation accuracy (preview qualifier, future tense, status note).
+
+**Files changed**:
+- `docs/compare/advanced-compare.md`
+- `src/issue472-quad-view-preview.test.ts` (new)
+
+## Issue #475: The advanced-compare docs say comparison annotations follow the underlying source, but production still keys them to the active A/B slot
+
+**Root cause**: Docs claimed annotations are "tied to the source they were drawn on" but production routes annotation display via `session.currentAB` (slot label `'A'`/`'B'`), not source identity. `ABCompareManager` only tracks slot state. A contradictory source comment in `LayoutOrchestrator` also said "follow the source — not the slot."
+
+**Fix**: Rewrote the annotations section in `advanced-compare.md` to accurately describe slot-based annotation behavior. Fixed the contradictory comment in `LayoutOrchestrator.ts` to distinguish provenance recording (`sourceIndex`) from display routing (slot-based).
+
+**Tests added**: 11 regression tests in `src/services/LayoutOrchestrator.issue475.test.ts`.
+
+**Files changed**:
+- `docs/compare/advanced-compare.md`
+- `src/services/LayoutOrchestrator.ts`
+- `src/services/LayoutOrchestrator.issue475.test.ts` (new)
+
+## Issue #494: The gamut-diagram docs describe a target-gamut compliance tool, but the shipped diagram only overlays scatter against fixed input/working/display triangles
+
+**Root cause**: Docs described a target-gamut compliance tool with inside/outside classification, clip/compress gamut mapping modes, and delivery-spec verification. The shipped GamutDiagram only draws pixel chromaticity scatter over three gamut triangles (input/working/display) with no target-gamut selection, compliance classification, or out-of-gamut marking.
+
+**Fix**: Rewrote `docs/scopes/gamut-diagram.md` to accurately describe the scatter+triangles visualization. Removed all compliance/target-gamut language. Documented the three color space roles and their visual styles. Added explicit note that there is no target-gamut selector or compliance classification.
+
+**Tests added**: 19 regression tests in `src/ui/components/GamutDiagram.issue494.test.ts`.
+
+**Files changed**:
+- `docs/scopes/gamut-diagram.md`
+
+## Issue #497: The browser-compatibility guide overstates mobile support as "touch-optimized" even though parts of the shipped UI still depend on hover-only or non-touch interaction models
+
+**Root cause**: Docs marked iOS Safari and Android Chrome as "Functional (touch-optimized)" but VolumeControl uses hover-only pointerenter/pointerleave to expose its slider (issue #116), and VirtualSliderController explicitly excludes pointerType === 'touch'.
+
+**Fix**: Changed mobile status to "Functional with limitations (desktop-optimized)". Documented specific touch gaps (volume control hover dependency, virtual slider exclusion, keyboard shortcuts). Added Known Issues entries and cross-reference from browser-requirements.md.
+
+**Tests added**: 6 behavioral tests in `src/ui/components/issue497-touch-limitations.test.ts`, 7 doc tests in `src/docs-mobile-touch-limitations.test.ts`.
+
+**Files changed**:
+- `docs/reference/browser-compatibility.md`
+- `docs/getting-started/browser-requirements.md`
+- `src/ui/components/issue497-touch-limitations.test.ts` (new)
+- `src/docs-mobile-touch-limitations.test.ts` (new)
+
+## Issue #499: The format docs overstate GIF and animated WebP support as if the app treated them like real animated media, but the shipped loader still models them as single-frame image sources
+
+**Root cause**: Docs advertised "Animated GIF support" and described GIF/WebP as supporting "animation", but the shipped loader classifies both as plain image formats (not video/timeline media) and creates MediaSource entries with type: 'image' and hardcoded duration: 1.
+
+**Fix**: Corrected GIF and WebP entries in both `docs/reference/file-formats.md` and `docs/guides/file-formats.md` to state "loaded as single-frame still (animated playback not supported)". Used consistent parenthetical punctuation.
+
+**Tests added**: 14 tests in `src/utils/media/SupportedMediaFormats.issue499.test.ts`, 4 tests in `src/core/session/SessionMedia.issue499.test.ts`.
+
+**Files changed**:
+- `docs/reference/file-formats.md`
+- `docs/guides/file-formats.md`
+- `src/utils/media/SupportedMediaFormats.issue499.test.ts` (new)
+- `src/core/session/SessionMedia.issue499.test.ts` (new)
+
+## Issue #500: The file-format guide says browser-native images are handled at `Session.loadImage()` level, but real local-file opens route through `FileSourceNode` first
+
+**Root cause**: Docs claimed browser-native formats are "handled at the `Session.loadImage()` level using the browser's `<img>` element, bypassing the `DecoderRegistry` entirely" but the real local-file path routes through `SessionMedia.loadImageFile()` → `FileSourceNode.loadFile()` with format-specific branching before falling through to standard image loading. `Session.loadImage()` is only used for the URL/HTMLImageElement path.
+
+**Fix**: Rewrote the image loading architecture section in `docs/guides/file-formats.md` to accurately describe both entry points: local files through `FileSourceNode` and URL/HTMLImageElement through `loadImage()`.
+
+**Tests added**: 6 behavioral tests in `src/core/session/SessionMedia.issue500.test.ts`, 4 doc tests in `src/docs-image-loading-architecture.test.ts`.
+
+**Files changed**:
+- `docs/guides/file-formats.md`
+- `src/core/session/SessionMedia.issue500.test.ts` (new)
+- `src/docs-image-loading-architecture.test.ts` (new)
+- `src/ui/components/GamutDiagram.issue494.test.ts` (new)
+
+## Issue #503: The file-format guide says all image decoding yields Float32Array RGBA data, but standard browser-native image loads still stay as HTMLImageElement sources
+
+**Root cause**: Docs claimed "All image decoding produces Float32Array pixel data in RGBA layout" but standard browser-native images (PNG, JPEG, WebP, GIF, BMP, SVG, etc.) are loaded via HTMLImageElement and never converted to Float32Array. Only decoder-backed formats (EXR, DPX, Cineon, Float TIFF, JPEG gainmap HDR, etc.) produce Float32Array/IPImage output.
+
+**Fix**: Rewrote the decode output section in `docs/guides/file-formats.md` to describe the dual-path architecture. Documented that browser-native formats stay as HTMLImageElement at load time, and are converted to uint8 IPImage (not float32) when flowing through `process()`. Clarified RAW preview hybrid nature. Added note to decoder registry section.
+
+**Tests added**: 12 regression tests in `src/nodes/sources/FileSourceNode.issue503.test.ts`.
+
+**Files changed**:
+- `docs/guides/file-formats.md`
+- `src/nodes/sources/FileSourceNode.issue503.test.ts` (new)
+
+## Issue #504: The plain-AVIF docs promise a WASM fallback, but the shipped AVIF path is browser-native only
+
+**Root cause**: Docs claimed plain AVIF uses "Browser-native decode via `createImageBitmap()` with WASM fallback (`avif.ts`)" but `avif.ts` only implements `createImageBitmap()` with no WASM decoder. `FileSourceNode`'s AVIF path uses blob URL + `Image` element, also with no WASM fallback. Browsers without native AVIF support cannot decode plain AVIF files.
+
+**Fix**: Updated the plain AVIF section in `docs/guides/file-formats.md` to state "Browser-native only" and note that no alternate decoder is provided. Changed comparison table from "Native/WASM" to "Native" for AVIF.
+
+**Tests added**: 13 regression tests in `src/formats/avif-browser-native-only.test.ts`.
+
+**Files changed**:
+- `docs/guides/file-formats.md`
+- `src/formats/avif-browser-native-only.test.ts` (new)

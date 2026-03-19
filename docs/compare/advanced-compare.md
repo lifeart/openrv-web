@@ -2,13 +2,15 @@
 
 ![Quad view showing four sources simultaneously](/assets/screenshots/56-quad-view.png)
 
-Beyond the standard A/B comparison tools, OpenRV Web provides quad view, reference image management, matte overlay, and multi-layer stack capabilities for complex review scenarios.
+Beyond the standard A/B comparison tools, OpenRV Web provides reference image management, matte overlay, multi-layer stack capabilities, and a preview of quad view for complex review scenarios.
 
-## Quad View
+## Quad View (Preview)
 
-Quad view divides the viewer into four quadrants, each displaying a different source (A, B, C, D). This mode is useful for comparing multiple versions or render passes simultaneously without switching between sources.
+> **Status: Preview / Experimental.** Quad View is not yet connected to the viewer rendering pipeline. The UI controls are available for early feedback, but enabling Quad View will not render a quad layout in the viewer. The information below describes the planned behavior.
 
-Each quadrant operates independently, showing its assigned source at the current frame. All four quadrants stay in sync during playback.
+Quad view will divide the viewer into four quadrants, each displaying a different source (A, B, C, D). This mode will be useful for comparing multiple versions or render passes simultaneously without switching between sources.
+
+Each quadrant will operate independently, showing its assigned source at the current frame. All four quadrants will stay in sync during playback.
 
 ## Reference Image Manager
 
@@ -73,7 +75,7 @@ The stack is ordered from bottom (background) to top (foreground), following sta
 
 ## Comparison Annotations
 
-Annotations can be drawn during A/B compare mode. Annotations are tied to the source they were drawn on, so switching between A and B preserves each source's annotation layer independently.
+Annotations can be drawn during A/B compare mode. Annotations are keyed to the A/B slot assignment, not to the underlying media source. This means that swapping which source is assigned to slot A vs. slot B will also swap which annotations are visible in each slot. If you reassign a different source to slot A, the annotations previously drawn in slot A remain attached to that slot and will appear over the new source.
 
 ## Practical Workflows
 
@@ -96,7 +98,7 @@ Annotations can be drawn during A/B compare mode. Annotations are tied to the so
 ### Multi-Version Comparison
 
 1. Load up to four versions of a shot
-2. Enable quad view to see all versions simultaneously
+2. Enable quad view to see all versions simultaneously *(planned -- quad view is currently a preview feature and does not yet render in the viewer)*
 3. Play through the shot to compare motion and timing
 4. Switch to A/B toggle for detailed frame-by-frame comparison
 

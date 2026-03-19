@@ -64,7 +64,7 @@ WebGPU enables the experimental HDR rendering backend with `rgba16float` texture
 
 ### BroadcastChannel
 
-The BroadcastChannel API enables the External Presentation feature, which synchronizes frame, playback, and color state between multiple browser windows on the same origin. Available in Chrome 54+, Firefox 38+, and Safari 15.4+.
+The BroadcastChannel API enables the External Presentation feature, which opens secondary browser windows and synchronizes frame number, playback state, and color metadata as text overlays via same-origin messaging. Available in Chrome 54+, Firefox 38+, and Safari 15.4+. Note: the presentation window does not render the actual viewer image — it displays a blank canvas with frame/playback/color information as text only. Full viewer synchronization is not yet implemented (see issue #29).
 
 ### Fullscreen API
 
@@ -84,7 +84,7 @@ OpenRV Web automatically detects `devicePixelRatio` and renders all canvas-based
 
 ## Mobile Browser Support
 
-OpenRV Web works on mobile browsers with WebGL2 support, including Safari on iOS 15+ and Chrome on Android. Touch interactions (pinch-to-zoom, tap-to-seek) are supported. However, the interface is optimized for desktop displays, and some features (keyboard shortcuts, drag-and-drop) are limited on mobile devices.
+OpenRV Web works on mobile browsers with WebGL2 support, including Safari on iOS 15+ and Chrome on Android. Touch interactions (pinch-to-zoom, tap-to-seek) are supported. See the [Browser Compatibility Matrix](../reference/browser-compatibility.md#mobile-support) for known touch interaction limitations. However, the interface is optimized for desktop displays, and some features (keyboard shortcuts, drag-and-drop) are limited on mobile devices.
 
 ## Compatibility Check
 

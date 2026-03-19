@@ -1,13 +1,18 @@
 /**
  * ExternalPresentation - Multi-device presentation via secondary browser windows.
  *
- * Opens a secondary window (or multiple windows) showing only the viewer canvas
- * without UI controls. Frame/playback state is synchronized between windows
+ * Opens a secondary window (or multiple windows) that display frame, playback,
+ * and color metadata as text overlays. State is synchronized between windows
  * using the BroadcastChannel API for low-latency, same-origin communication.
+ *
+ * **Limitation:** The presentation window contains a canvas element but does not
+ * render the actual viewer image. Only text status information (frame number,
+ * playback state, color settings) is displayed. Full viewer rendering
+ * synchronization is not yet implemented (see issue #29).
  *
  * Features:
  * - Open/close presentation windows
- * - Sync frame number, playback state, and color settings
+ * - Sync frame number, playback state, and color settings as text overlays
  * - BroadcastChannel-based message passing (no server required)
  * - Window lifecycle management (detect external close)
  */
@@ -130,7 +135,8 @@ const DEFAULT_WINDOW_FEATURES =
 
 /**
  * Generate the HTML content for a presentation window.
- * This creates a minimal page with just a canvas element for rendering.
+ * This creates a minimal page with a canvas placeholder and text-only status
+ * overlays. It does not render the actual viewer image (see issue #29).
  */
 /** Escape a string for safe inclusion in a JS string literal. */
 function escapeJSString(s: string): string {

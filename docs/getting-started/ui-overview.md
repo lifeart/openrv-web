@@ -229,11 +229,19 @@ Press `F11` to toggle native fullscreen mode. The browser chrome disappears, giv
 
 Press `Ctrl+Shift+P` to enter Presentation mode. This hides all UI elements (header, toolbar, timeline) and displays only the image. The cursor auto-hides after a period of inactivity. This mode is ideal for client reviews and dailies sessions.
 
-The External Presentation feature (`BroadcastChannel`-based) opens a second browser window that syncs frame, playback, and color state with the main window. Use this to present on a secondary display while maintaining controls on the primary screen.
+The External Presentation feature (`BroadcastChannel`-based) opens a second browser window that displays text-only status information (frame number, playback state, and color setting values) synchronized with the main window. It does not render the actual viewer image. Use this to show metadata on a secondary display while maintaining controls on the primary screen. Full viewer mirroring is tracked in issue #29.
 
 ## Accessibility
 
-OpenRV Web includes an ARIA announcer that provides screen reader support for key UI actions. State changes such as playback start/stop, frame navigation, source loading, and tool selection are announced via a live region so that assistive technology users receive audio feedback. All interactive controls use semantic HTML elements with appropriate ARIA labels and roles.
+OpenRV Web includes an ARIA announcer that provides screen reader support for key UI actions. State changes such as playback start/stop, frame navigation, source loading, and tool selection are announced via a live region so that assistive technology users receive audio feedback.
+
+Many controls include ARIA attributes and keyboard support. For example, the collapsible section headers in the inspector panels use `role="button"`, `aria-expanded`, and respond to Enter/Space keys. The Pixel Probe value rows similarly use `role="button"` with `tabindex="0"` and keyboard handlers for copy-to-clipboard. Format selection buttons, sample size buttons, and source mode toggles use semantic `<button>` elements with `aria-label` and `aria-pressed` attributes.
+
+However, not all interactive elements meet full semantic HTML standards yet. Known gaps include:
+
+- The Pixel Probe value rows use `<div>` elements with ARIA roles rather than semantic `<button>` elements (see [#75](https://github.com/AcademySoftwareFoundation/openrv-web/issues/75)).
+- The inspector accordion headers use `<div>` elements with ARIA roles rather than semantic `<button>` elements (see [#65](https://github.com/AcademySoftwareFoundation/openrv-web/issues/65)).
+- Some list items (e.g., history entries) are mouse-only click targets without keyboard operability or ARIA roles.
 
 ---
 

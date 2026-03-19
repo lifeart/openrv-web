@@ -328,7 +328,7 @@ A professional web-based image and video review tool inspired by [OpenRV](https:
 - **Dark/Light Theme** with auto (system) mode
 - **Fullscreen Mode** via F11 or toolbar button
 - **Presentation Mode** -- clean display with all UI hidden and cursor auto-hide on inactivity
-- **External Presentation** -- secondary browser window via BroadcastChannel with synced frame/playback/color
+- **External Presentation** -- secondary browser window via BroadcastChannel with synced frame/playback/color (text-only metadata; full viewer mirroring tracked in issue #29)
 - **Background Pattern Selector** -- checkerboard, grey 18%/50%, white, black, crosshatch, custom color
 - **History Panel** -- visual undo/redo with jump to any state
 - **Floating Info Panel** -- filename, resolution, frame, FPS, cursor color readout

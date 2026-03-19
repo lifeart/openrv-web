@@ -674,8 +674,9 @@ export class LayoutOrchestrator {
     });
 
     // Sync annotation version filter and source index when A/B source changes.
-    // The sourceIndex on the paint engine ensures new annotations record which
-    // media source they were drawn on, so they follow the source — not the slot.
+    // The sourceIndex on the paint engine records which media source was active
+    // when the annotation was drawn (for provenance), while setAnnotationVersion
+    // controls which slot's annotations are displayed.
     const onAbSourceChanged = (...args: unknown[]) => {
       const info = args[0] as { current: 'A' | 'B'; sourceIndex: number } | undefined;
       controls.paintToolbar.setAnnotationVersion(session.currentAB);
