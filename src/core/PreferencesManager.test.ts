@@ -893,7 +893,11 @@ describe('Issue #152: preferences wiring', () => {
 
 function createMockPluginSettingsProvider(
   data: Record<string, Record<string, unknown>> = {},
-): PluginSettingsProvider & { _data: Record<string, Record<string, unknown>>; importAllCalls: number; clearAllCalls: number } {
+): PluginSettingsProvider & {
+  _data: Record<string, Record<string, unknown>>;
+  importAllCalls: number;
+  clearAllCalls: number;
+} {
   return {
     _data: { ...data },
     importAllCalls: 0,

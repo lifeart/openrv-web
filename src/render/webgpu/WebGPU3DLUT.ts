@@ -159,8 +159,10 @@ export class WebGPU3DLUT {
    */
   setDomain(slot: LUTSlot, domainMin: [number, number, number], domainMax: [number, number, number]): void {
     const state = this.getSlotStateOrThrow(slot);
-    const minChanged = state.domainMin[0] !== domainMin[0] || state.domainMin[1] !== domainMin[1] || state.domainMin[2] !== domainMin[2];
-    const maxChanged = state.domainMax[0] !== domainMax[0] || state.domainMax[1] !== domainMax[1] || state.domainMax[2] !== domainMax[2];
+    const minChanged =
+      state.domainMin[0] !== domainMin[0] || state.domainMin[1] !== domainMin[1] || state.domainMin[2] !== domainMin[2];
+    const maxChanged =
+      state.domainMax[0] !== domainMax[0] || state.domainMax[1] !== domainMax[1] || state.domainMax[2] !== domainMax[2];
     if (minChanged || maxChanged) {
       state.domainMin = [...domainMin];
       state.domainMax = [...domainMax];

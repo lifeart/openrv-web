@@ -6,7 +6,12 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
-import { TimecodeOverlay, type OverlayPosition, type TimecodeDisplayFormat, DEFAULT_TIMECODE_OVERLAY_STATE } from './TimecodeOverlay';
+import {
+  TimecodeOverlay,
+  type OverlayPosition,
+  type TimecodeDisplayFormat,
+  DEFAULT_TIMECODE_OVERLAY_STATE,
+} from './TimecodeOverlay';
 import { frameToTimecode, formatTimecode } from './TimecodeDisplay';
 
 // Mock Session

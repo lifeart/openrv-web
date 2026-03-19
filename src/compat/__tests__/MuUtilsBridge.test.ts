@@ -66,11 +66,7 @@ describe('MuUtilsBridge', () => {
       const result = bridge.openUrl('https://example.com');
 
       expect(result).toBe(true);
-      expect(openSpy).toHaveBeenCalledWith(
-        'https://example.com',
-        '_blank',
-        'noopener,noreferrer',
-      );
+      expect(openSpy).toHaveBeenCalledWith('https://example.com', '_blank', 'noopener,noreferrer');
       expect(warnSpy).not.toHaveBeenCalled();
     });
 
@@ -81,10 +77,7 @@ describe('MuUtilsBridge', () => {
 
       expect(result).toBe(false);
       expect(warnSpy).toHaveBeenCalledOnce();
-      expect(warnSpy).toHaveBeenCalledWith(
-        '[MuUtilsBridge] Popup blocked for URL: %s',
-        'https://example.com',
-      );
+      expect(warnSpy).toHaveBeenCalledWith('[MuUtilsBridge] Popup blocked for URL: %s', 'https://example.com');
     });
 
     it('passes correct arguments to window.open', () => {
@@ -92,11 +85,7 @@ describe('MuUtilsBridge', () => {
 
       bridge.openUrl('https://test.example.org/path?q=1');
 
-      expect(openSpy).toHaveBeenCalledWith(
-        'https://test.example.org/path?q=1',
-        '_blank',
-        'noopener,noreferrer',
-      );
+      expect(openSpy).toHaveBeenCalledWith('https://test.example.org/path?q=1', '_blank', 'noopener,noreferrer');
     });
   });
 
@@ -487,9 +476,7 @@ describe('MuUtilsBridge', () => {
     });
 
     it('detects image file with signed URL (multiple query params)', () => {
-      expect(bridge.fileKind('https://cdn.example.com/shot.exr?token=abc&sig=xyz&exp=123')).toBe(
-        FileKind.ImageFile,
-      );
+      expect(bridge.fileKind('https://cdn.example.com/shot.exr?token=abc&sig=xyz&exp=123')).toBe(FileKind.ImageFile);
     });
 
     it('detects movie file with query string', () => {
@@ -537,9 +524,7 @@ describe('MuUtilsBridge', () => {
 
       await promise;
 
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('waitForProgressiveLoading timed out'),
-      );
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('waitForProgressiveLoading timed out'));
 
       warnSpy.mockRestore();
       vi.spyOn(Date, 'now').mockImplementation(realDateNow);

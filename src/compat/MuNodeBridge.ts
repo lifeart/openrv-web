@@ -160,10 +160,7 @@ export class MuNodeBridge {
       }
     }
     this._viewHistory = filtered;
-    this._viewHistoryIndex = Math.min(
-      Math.max(oldIndex - removedBeforeOrAt, 0),
-      this._viewHistory.length - 1,
-    );
+    this._viewHistoryIndex = Math.min(Math.max(oldIndex - removedBeforeOrAt, 0), this._viewHistory.length - 1);
     if (this._viewHistory.length === 0) {
       this._viewHistoryIndex = -1;
     }
@@ -419,10 +416,10 @@ export class MuNodeBridge {
     if (!node) throw new Error(`Node not found: "${name}"`);
 
     // Try to read width/height from the node's properties
-    const width = (node.properties.getValue<number>('width') ?? 0);
-    const height = (node.properties.getValue<number>('height') ?? 0);
-    const pixelAspect = (node.properties.getValue<number>('pixelAspect') ?? 1.0);
-    const orientation = (node.properties.getValue<string>('orientation') ?? 'normal');
+    const width = node.properties.getValue<number>('width') ?? 0;
+    const height = node.properties.getValue<number>('height') ?? 0;
+    const pixelAspect = node.properties.getValue<number>('pixelAspect') ?? 1.0;
+    const orientation = node.properties.getValue<string>('orientation') ?? 'normal';
 
     return { width, height, pixelAspect, orientation };
   }
@@ -446,11 +443,7 @@ export class MuNodeBridge {
    * If `name` is a group node (has members), recurse into its children;
    * otherwise append it to `result`. Uses `visited` to prevent infinite loops.
    */
-  private _collectLeafNodes(
-    name: string,
-    result: string[],
-    visited: Set<string>,
-  ): void {
+  private _collectLeafNodes(name: string, result: string[], visited: Set<string>): void {
     if (visited.has(name)) return;
     visited.add(name);
 

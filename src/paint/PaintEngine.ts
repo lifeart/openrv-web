@@ -642,15 +642,28 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
   /**
    * Check if a specific frame has any annotations
    */
-  hasAnnotationsOnFrame(frame: number, versionFilter?: 'A' | 'B', eyeFilter?: 'left' | 'right', sourceIndexFilter?: number): boolean {
+  hasAnnotationsOnFrame(
+    frame: number,
+    versionFilter?: 'A' | 'B',
+    eyeFilter?: 'left' | 'right',
+    sourceIndexFilter?: number,
+  ): boolean {
     const annotations = this.state.annotations.get(frame);
     if (!annotations || annotations.length === 0) return false;
     if (!versionFilter && !eyeFilter && sourceIndexFilter === undefined) return true;
-    return annotations.some((a) => this.matchesSourceOrVersionFilter(a, versionFilter, sourceIndexFilter) && this.matchesEyeFilter(a, eyeFilter));
+    return annotations.some(
+      (a) =>
+        this.matchesSourceOrVersionFilter(a, versionFilter, sourceIndexFilter) && this.matchesEyeFilter(a, eyeFilter),
+    );
   }
 
   // Get annotations for display
-  getAnnotationsForFrame(frame: number, versionFilter?: 'A' | 'B', eyeFilter?: 'left' | 'right', sourceIndexFilter?: number): Annotation[] {
+  getAnnotationsForFrame(
+    frame: number,
+    versionFilter?: 'A' | 'B',
+    eyeFilter?: 'left' | 'right',
+    sourceIndexFilter?: number,
+  ): Annotation[] {
     if (!this.state.show) return [];
 
     const result: Annotation[] = [];
@@ -876,15 +889,9 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
    * @param point - Normalized click point (0-1 range)
    * @param tolerance - Distance threshold in normalized coordinates (default 0.05)
    */
-  hitTestTextAnnotations(
-    frame: number,
-    point: { x: number; y: number },
-    tolerance = 0.05,
-  ): TextAnnotation | null {
+  hitTestTextAnnotations(frame: number, point: { x: number; y: number }, tolerance = 0.05): TextAnnotation | null {
     const annotations = this.getAnnotationsForFrame(frame);
-    const textAnnotations = annotations.filter(
-      (a): a is TextAnnotation => a.type === 'text',
-    );
+    const textAnnotations = annotations.filter((a): a is TextAnnotation => a.type === 'text');
 
     // Iterate in reverse order so topmost (last-added) annotation wins
     for (let i = textAnnotations.length - 1; i >= 0; i--) {

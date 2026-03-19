@@ -278,13 +278,7 @@ describe('renderWorker', () => {
         },
       });
 
-      expect(setLookLUT).toHaveBeenCalledWith(
-        expect.any(Float32Array),
-        4,
-        0.85,
-        [-0.1, 0, 0.1],
-        [1.1, 1.2, 1.3],
-      );
+      expect(setLookLUT).toHaveBeenCalledWith(expect.any(Float32Array), 4, 0.85, [-0.1, 0, 0.1], [1.1, 1.2, 1.3]);
     });
 
     it('RW-029: syncState forwards file LUT payload to renderer.setFileLUT', () => {

@@ -282,7 +282,7 @@ export class SessionGraph extends EventEmitter<SessionGraphEvents> {
       }
     }
 
-    const outputNode = data.outputNodeId ? nodeMap.get(data.outputNodeId) ?? null : null;
+    const outputNode = data.outputNodeId ? (nodeMap.get(data.outputNodeId) ?? null) : null;
     if (outputNode) {
       graph.setOutputNode(outputNode);
     }
@@ -550,7 +550,10 @@ export class SessionGraph extends EventEmitter<SessionGraphEvents> {
 
       // Emit degraded modes warning if any composite modes were downgraded
       if (result.degradedModes.length > 0) {
-        log.warn('Import degraded composite modes:', result.degradedModes.map((d) => `${d.originalMode} → ${d.fallbackMode}`).join(', '));
+        log.warn(
+          'Import degraded composite modes:',
+          result.degradedModes.map((d) => `${d.originalMode} → ${d.fallbackMode}`).join(', '),
+        );
         this.emit('degradedModes', result.degradedModes);
       }
 

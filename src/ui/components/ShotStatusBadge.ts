@@ -7,11 +7,7 @@
  */
 
 import type { Session } from '../../core/session/Session';
-import {
-  STATUS_COLORS,
-  VALID_STATUSES,
-  type ShotStatus,
-} from '../../core/session/StatusManager';
+import { STATUS_COLORS, VALID_STATUSES, type ShotStatus } from '../../core/session/StatusManager';
 import { DropdownMenu } from './shared/DropdownMenu';
 
 /** Human-readable labels for each status */

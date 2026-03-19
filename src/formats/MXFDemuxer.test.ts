@@ -1077,9 +1077,7 @@ describe('MXF Demuxer', () => {
 
       expect(metadata.startTimecode).toBeUndefined();
       expect(metadata.startTimecodeFrames).toBe(90000);
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Cannot resolve start timecode'),
-      );
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Cannot resolve start timecode'));
       warnSpy.mockRestore();
     });
 
@@ -1088,9 +1086,7 @@ describe('MXF Demuxer', () => {
       const partitionBytes = buildHeaderPartitionKLV(OP1A_UL, 2000);
 
       // Edit rate with denominator 0 (invalid)
-      const trackValue = buildLocalSetValue([
-        { tag: 0x4801, value: buildRational(25, 0) },
-      ]);
+      const trackValue = buildLocalSetValue([{ tag: 0x4801, value: buildRational(25, 0) }]);
       const trackKLV = buildKLV(TIMELINE_TRACK_UL, trackValue);
 
       const tcValue = buildLocalSetValue([
@@ -1105,18 +1101,14 @@ describe('MXF Demuxer', () => {
 
       expect(metadata.startTimecode).toBeUndefined();
       expect(metadata.startTimecodeFrames).toBe(48000);
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Cannot resolve start timecode'),
-      );
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Cannot resolve start timecode'));
       warnSpy.mockRestore();
     });
 
     it('MXF-TC-COMP-006: should set startTimecodeFrames alongside startTimecode when editRate is valid', () => {
       const partitionBytes = buildHeaderPartitionKLV(OP1A_UL, 2000);
 
-      const trackValue = buildLocalSetValue([
-        { tag: 0x4801, value: buildRational(25, 1) },
-      ]);
+      const trackValue = buildLocalSetValue([{ tag: 0x4801, value: buildRational(25, 1) }]);
       const trackKLV = buildKLV(TIMELINE_TRACK_UL, trackValue);
 
       const tcValue = buildLocalSetValue([
@@ -1351,9 +1343,7 @@ describe('MXF Demuxer', () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       parseMXFHeader(buffer);
 
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Skipping KLV with indefinite BER length'),
-      );
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Skipping KLV with indefinite BER length'));
       warnSpy.mockRestore();
     });
 
@@ -1426,7 +1416,7 @@ describe('MXF Demuxer', () => {
       const bytes: number[] = new Array(19).fill(0);
       writeUL(bytes, 0, HEADER_PARTITION_UL);
       bytes[16] = 0x81; // long form, 1 byte
-      bytes[17] = 42;   // length = 42
+      bytes[17] = 42; // length = 42
       const buffer = bytesToBuffer(bytes);
       const view = new DataView(buffer);
 

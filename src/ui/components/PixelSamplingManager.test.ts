@@ -376,7 +376,19 @@ describe('PixelSamplingManager', () => {
       webglManager.onMouseMoveForPixelSampling(event);
 
       expect(readPixelFloat).not.toHaveBeenCalled();
-      expect(mockPixelProbe.updateFromHDRValues).toHaveBeenCalledWith(200, 150, 0.5, 0.25, 0.75, 1.0, 800, 600, false, 1920, 1080);
+      expect(mockPixelProbe.updateFromHDRValues).toHaveBeenCalledWith(
+        200,
+        150,
+        0.5,
+        0.25,
+        0.75,
+        1.0,
+        800,
+        600,
+        false,
+        1920,
+        1080,
+      );
       expect(callback).toHaveBeenCalledWith(
         { r: Math.round(0.5 * 255), g: Math.round(0.25 * 255), b: Math.round(0.75 * 255) },
         { x: 200, y: 150 },

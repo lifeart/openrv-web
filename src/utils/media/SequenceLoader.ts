@@ -896,12 +896,13 @@ export async function createSequenceInfoFromPattern(
 
   // Derive a human-readable name from the pattern
   const patternFilename = pattern.split('/').pop() ?? pattern;
-  const baseName = patternFilename
-    .replace(/##+/g, '')
-    .replace(/%\d*d/g, '')
-    .replace(/@+/g, '')
-    .replace(/[._-]?\.[^.]+$/, '')
-    .replace(/[._-]$/, '') || 'sequence';
+  const baseName =
+    patternFilename
+      .replace(/##+/g, '')
+      .replace(/%\d*d/g, '')
+      .replace(/@+/g, '')
+      .replace(/[._-]?\.[^.]+$/, '')
+      .replace(/[._-]$/, '') || 'sequence';
 
   return {
     name: baseName,

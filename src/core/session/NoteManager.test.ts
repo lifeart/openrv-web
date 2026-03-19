@@ -447,11 +447,11 @@ describe('NoteManager', () => {
       const notes = manager2.getNotes();
       expect(notes.length).toBe(2);
 
-      const highComp = notes.find(n => n.text === 'High comp')!;
+      const highComp = notes.find((n) => n.text === 'High comp')!;
       expect(highComp.priority).toBe('high');
       expect(highComp.category).toBe('comp');
 
-      const lowAnim = notes.find(n => n.text === 'Low anim')!;
+      const lowAnim = notes.find((n) => n.text === 'Low anim')!;
       expect(lowAnim.priority).toBe('low');
       expect(lowAnim.category).toBe('anim');
 

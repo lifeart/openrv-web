@@ -127,9 +127,9 @@ function createMockLayoutManager() {
     getTopSection: vi.fn().mockReturnValue(topEl),
     getViewerSlot: vi.fn().mockReturnValue(viewerSlot),
     getBottomSlot: vi.fn().mockReturnValue(bottomSlot),
-    getPanelWrapper: vi.fn().mockImplementation((panelId: 'left' | 'right') =>
-      panelId === 'left' ? leftPanelWrapper : rightPanelWrapper,
-    ),
+    getPanelWrapper: vi
+      .fn()
+      .mockImplementation((panelId: 'left' | 'right') => (panelId === 'left' ? leftPanelWrapper : rightPanelWrapper)),
     addPanelTab: vi.fn(),
     _rootEl: rootEl,
     _topEl: topEl,
@@ -665,9 +665,7 @@ describe('LayoutOrchestrator', () => {
     d.mocks.session.currentSource = { name: 'movie.exr', width: 3840, height: 2160, duration: 200 };
     d.mocks.session._emit('sourceLoaded', d.mocks.session.currentSource);
 
-    expect(d.mocks.controls.infoPanel.update).toHaveBeenCalledWith(
-      expect.objectContaining({ filename: 'movie.exr' }),
-    );
+    expect(d.mocks.controls.infoPanel.update).toHaveBeenCalledWith(expect.objectContaining({ filename: 'movie.exr' }));
   });
 
   it('LO-032: updates info panel with resolution on sourceLoaded', () => {
@@ -687,9 +685,7 @@ describe('LayoutOrchestrator', () => {
     d.mocks.session.currentFrame = 42;
     d.mocks.session._emit('frameChanged');
 
-    expect(d.mocks.controls.infoPanel.update).toHaveBeenCalledWith(
-      expect.objectContaining({ currentFrame: 42 }),
-    );
+    expect(d.mocks.controls.infoPanel.update).toHaveBeenCalledWith(expect.objectContaining({ currentFrame: 42 }));
   });
 
   it('LO-034: updates info panel with FPS on sourceLoaded', () => {
@@ -699,9 +695,7 @@ describe('LayoutOrchestrator', () => {
     d.mocks.session.currentSource = { name: 'clip.mov', width: 1920, height: 1080, duration: 300 };
     d.mocks.session._emit('sourceLoaded', d.mocks.session.currentSource);
 
-    expect(d.mocks.controls.infoPanel.update).toHaveBeenCalledWith(
-      expect.objectContaining({ fps: 30 }),
-    );
+    expect(d.mocks.controls.infoPanel.update).toHaveBeenCalledWith(expect.objectContaining({ fps: 30 }));
   });
 
   it('LO-035: updates info panel when source changes', () => {
@@ -717,9 +711,7 @@ describe('LayoutOrchestrator', () => {
 
     const calls = d.mocks.controls.infoPanel.update.mock.calls;
     // Find calls with filename to filter out cursor-color calls
-    const metadataCalls = calls.filter(
-      (c: unknown[]) => (c[0] as Record<string, unknown>).filename !== undefined,
-    );
+    const metadataCalls = calls.filter((c: unknown[]) => (c[0] as Record<string, unknown>).filename !== undefined);
     expect(metadataCalls.length).toBeGreaterThanOrEqual(2);
     expect((metadataCalls[metadataCalls.length - 1]![0] as Record<string, unknown>).filename).toBe('second.dpx');
     expect((metadataCalls[metadataCalls.length - 1]![0] as Record<string, unknown>).width).toBe(4096);
@@ -735,9 +727,7 @@ describe('LayoutOrchestrator', () => {
     d.mocks.session._emit('frameChanged');
 
     const calls = d.mocks.controls.infoPanel.update.mock.calls;
-    const frameCalls = calls.filter(
-      (c: unknown[]) => (c[0] as Record<string, unknown>).currentFrame !== undefined,
-    );
+    const frameCalls = calls.filter((c: unknown[]) => (c[0] as Record<string, unknown>).currentFrame !== undefined);
     expect(frameCalls.length).toBeGreaterThanOrEqual(2);
     expect((frameCalls[frameCalls.length - 1]![0] as Record<string, unknown>).currentFrame).toBe(20);
   });
@@ -823,10 +813,7 @@ describe('LayoutOrchestrator', () => {
   it('LO-032: warning lists the unmatched selectors', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     d.mocks.clientMode.isEnabled.mockReturnValue(true);
-    d.mocks.clientMode.getRestrictedElements.mockReturnValue([
-      '[data-panel="color"]',
-      '[data-toolbar="editing"]',
-    ]);
+    d.mocks.clientMode.getRestrictedElements.mockReturnValue(['[data-panel="color"]', '[data-toolbar="editing"]']);
 
     orchestrator.createLayout();
 
@@ -855,10 +842,7 @@ describe('LayoutOrchestrator', () => {
   it('LO-034: warns only about unmatched selectors when some match', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     d.mocks.clientMode.isEnabled.mockReturnValue(true);
-    d.mocks.clientMode.getRestrictedElements.mockReturnValue([
-      '[data-panel="color"]',
-      '[data-toolbar="editing"]',
-    ]);
+    d.mocks.clientMode.getRestrictedElements.mockReturnValue(['[data-panel="color"]', '[data-toolbar="editing"]']);
 
     // Only add an element matching the first selector
     const el = document.createElement('div');

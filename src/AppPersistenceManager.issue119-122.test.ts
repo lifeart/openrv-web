@@ -86,14 +86,45 @@ function createMockContext(overrides?: Partial<PersistenceManagerContext>): Pers
       getGamutMappingState: () => ({ mode: 'off' }),
       getColorInversion: () => false,
       getCurves: () => ({
-        master: { points: [{ x: 0, y: 0 }, { x: 1, y: 1 }], enabled: true },
-        red: { points: [{ x: 0, y: 0 }, { x: 1, y: 1 }], enabled: true },
-        green: { points: [{ x: 0, y: 0 }, { x: 1, y: 1 }], enabled: true },
-        blue: { points: [{ x: 0, y: 0 }, { x: 1, y: 1 }], enabled: true },
+        master: {
+          points: [
+            { x: 0, y: 0 },
+            { x: 1, y: 1 },
+          ],
+          enabled: true,
+        },
+        red: {
+          points: [
+            { x: 0, y: 0 },
+            { x: 1, y: 1 },
+          ],
+          enabled: true,
+        },
+        green: {
+          points: [
+            { x: 0, y: 0 },
+            { x: 1, y: 1 },
+          ],
+          enabled: true,
+        },
+        blue: {
+          points: [
+            { x: 0, y: 0 },
+            { x: 1, y: 1 },
+          ],
+          enabled: true,
+        },
       }),
       getDeinterlaceParams: () => ({ method: 'bob', fieldOrder: 'tff', enabled: false }),
       getFilmEmulationParams: () => ({ enabled: false, stock: 'kodak-portra-400', intensity: 1.0 }),
-      getPerspectiveParams: () => ({ enabled: false, topLeft: { x: 0, y: 0 }, topRight: { x: 1, y: 0 }, bottomRight: { x: 1, y: 1 }, bottomLeft: { x: 0, y: 1 }, quality: 'bilinear' }),
+      getPerspectiveParams: () => ({
+        enabled: false,
+        topLeft: { x: 0, y: 0 },
+        topRight: { x: 1, y: 0 },
+        bottomRight: { x: 1, y: 1 },
+        bottomLeft: { x: 0, y: 1 },
+        quality: 'bilinear',
+      }),
       getStabilizationParams: () => ({ enabled: false }),
       isUncropActive: () => false,
       getLUTPipeline: () => ({
@@ -242,7 +273,18 @@ describe('AppPersistenceManager - issue #120: syncControlsFromState syncs PAR an
       createdAt: '',
       modifiedAt: '',
       media: [],
-      playback: { currentFrame: 1, inPoint: 1, outPoint: 100, fps: 24, loopMode: 'loop' as const, playbackMode: 'forward' as const, volume: 0.7, muted: false, marks: [], currentSourceIndex: 0 },
+      playback: {
+        currentFrame: 1,
+        inPoint: 1,
+        outPoint: 100,
+        fps: 24,
+        loopMode: 'loop' as const,
+        playbackMode: 'forward' as const,
+        volume: 0.7,
+        muted: false,
+        marks: [],
+        currentSourceIndex: 0,
+      },
       paint: { nextId: 0, show: true, frames: {}, effects: {} },
       view: { zoom: 1, panX: 0, panY: 0 },
       color: {},
@@ -330,14 +372,45 @@ describe('SessionSerializer.fromJSON - issue #121: clears session before import'
       getGamutMappingState: () => ({ mode: 'off' }),
       getColorInversion: () => false,
       getCurves: () => ({
-        master: { points: [{ x: 0, y: 0 }, { x: 1, y: 1 }], enabled: true },
-        red: { points: [{ x: 0, y: 0 }, { x: 1, y: 1 }], enabled: true },
-        green: { points: [{ x: 0, y: 0 }, { x: 1, y: 1 }], enabled: true },
-        blue: { points: [{ x: 0, y: 0 }, { x: 1, y: 1 }], enabled: true },
+        master: {
+          points: [
+            { x: 0, y: 0 },
+            { x: 1, y: 1 },
+          ],
+          enabled: true,
+        },
+        red: {
+          points: [
+            { x: 0, y: 0 },
+            { x: 1, y: 1 },
+          ],
+          enabled: true,
+        },
+        green: {
+          points: [
+            { x: 0, y: 0 },
+            { x: 1, y: 1 },
+          ],
+          enabled: true,
+        },
+        blue: {
+          points: [
+            { x: 0, y: 0 },
+            { x: 1, y: 1 },
+          ],
+          enabled: true,
+        },
       }),
       getDeinterlaceParams: () => ({ method: 'bob', fieldOrder: 'tff', enabled: false }),
       getFilmEmulationParams: () => ({ enabled: false, stock: 'kodak-portra-400', intensity: 1.0 }),
-      getPerspectiveParams: () => ({ enabled: false, topLeft: { x: 0, y: 0 }, topRight: { x: 1, y: 0 }, bottomRight: { x: 1, y: 1 }, bottomLeft: { x: 0, y: 1 }, quality: 'bilinear' }),
+      getPerspectiveParams: () => ({
+        enabled: false,
+        topLeft: { x: 0, y: 0 },
+        topRight: { x: 1, y: 0 },
+        bottomRight: { x: 1, y: 1 },
+        bottomLeft: { x: 0, y: 1 },
+        quality: 'bilinear',
+      }),
       getStabilizationParams: () => ({ enabled: false }),
       isUncropActive: () => false,
       getLUTPipeline: () => ({
@@ -377,7 +450,15 @@ describe('SessionSerializer.fromJSON - issue #121: clears session before import'
 
     const state = SessionSerializer.createEmpty('test');
     state.media = [
-      { path: 'http://example.com/test.jpg', name: 'test.jpg', type: 'image', width: 100, height: 100, duration: 0, fps: 0 },
+      {
+        path: 'http://example.com/test.jpg',
+        name: 'test.jpg',
+        type: 'image',
+        width: 100,
+        height: 100,
+        duration: 0,
+        fps: 0,
+      },
     ];
 
     await SessionSerializer.fromJSON(state, { session, paintEngine, viewer });
@@ -440,14 +521,45 @@ describe('Session.setPlaybackState - issue #122: restores currentSourceIndex', (
       getGamutMappingState: () => ({ mode: 'off' }),
       getColorInversion: () => false,
       getCurves: () => ({
-        master: { points: [{ x: 0, y: 0 }, { x: 1, y: 1 }], enabled: true },
-        red: { points: [{ x: 0, y: 0 }, { x: 1, y: 1 }], enabled: true },
-        green: { points: [{ x: 0, y: 0 }, { x: 1, y: 1 }], enabled: true },
-        blue: { points: [{ x: 0, y: 0 }, { x: 1, y: 1 }], enabled: true },
+        master: {
+          points: [
+            { x: 0, y: 0 },
+            { x: 1, y: 1 },
+          ],
+          enabled: true,
+        },
+        red: {
+          points: [
+            { x: 0, y: 0 },
+            { x: 1, y: 1 },
+          ],
+          enabled: true,
+        },
+        green: {
+          points: [
+            { x: 0, y: 0 },
+            { x: 1, y: 1 },
+          ],
+          enabled: true,
+        },
+        blue: {
+          points: [
+            { x: 0, y: 0 },
+            { x: 1, y: 1 },
+          ],
+          enabled: true,
+        },
       }),
       getDeinterlaceParams: () => ({ method: 'bob', fieldOrder: 'tff', enabled: false }),
       getFilmEmulationParams: () => ({ enabled: false, stock: 'kodak-portra-400', intensity: 1.0 }),
-      getPerspectiveParams: () => ({ enabled: false, topLeft: { x: 0, y: 0 }, topRight: { x: 1, y: 0 }, bottomRight: { x: 1, y: 1 }, bottomLeft: { x: 0, y: 1 }, quality: 'bilinear' }),
+      getPerspectiveParams: () => ({
+        enabled: false,
+        topLeft: { x: 0, y: 0 },
+        topRight: { x: 1, y: 0 },
+        bottomRight: { x: 1, y: 1 },
+        bottomLeft: { x: 0, y: 1 },
+        quality: 'bilinear',
+      }),
       getStabilizationParams: () => ({ enabled: false }),
       isUncropActive: () => false,
       getLUTPipeline: () => ({

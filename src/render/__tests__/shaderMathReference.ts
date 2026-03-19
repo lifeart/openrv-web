@@ -179,18 +179,9 @@ export function applyBrightness(val: number, brightness: number): number {
  * Saturation (luminance-weighted)
  * Port of GLSL `mix(vec3(luma), color.rgb, u_saturation)` (line ~1093-1094)
  */
-export function applySaturation(
-  r: number,
-  g: number,
-  b: number,
-  saturation: number,
-): [number, number, number] {
+export function applySaturation(r: number, g: number, b: number, saturation: number): [number, number, number] {
   const luma = luminanceRec709(r, g, b);
-  return [
-    luma + (r - luma) * saturation,
-    luma + (g - luma) * saturation,
-    luma + (b - luma) * saturation,
-  ];
+  return [luma + (r - luma) * saturation, luma + (g - luma) * saturation, luma + (b - luma) * saturation];
 }
 
 /**
@@ -286,11 +277,7 @@ export function hslToRgb(h: number, s: number, l: number): [number, number, numb
   const p = 2.0 * l - q;
   const hNorm = h / 360.0;
 
-  return [
-    hueToRgb(p, q, hNorm + 1.0 / 3.0),
-    hueToRgb(p, q, hNorm),
-    hueToRgb(p, q, hNorm - 1.0 / 3.0),
-  ];
+  return [hueToRgb(p, q, hNorm + 1.0 / 3.0), hueToRgb(p, q, hNorm), hueToRgb(p, q, hNorm - 1.0 / 3.0)];
 }
 
 // =============================================================================
@@ -400,14 +387,7 @@ export function applyVibrance(
   const [vibH, vibS, vibL] = rgbToHsl(clamped[0], clamped[1], clamped[2]);
 
   let skinProt = 1.0;
-  if (
-    skinProtection &&
-    vibH >= 20.0 &&
-    vibH <= 50.0 &&
-    vibS < 0.6 &&
-    vibL > 0.2 &&
-    vibL < 0.8
-  ) {
+  if (skinProtection && vibH >= 20.0 && vibH <= 50.0 && vibS < 0.6 && vibL > 0.2 && vibL < 0.8) {
     const hueDistance = Math.abs(vibH - 35.0) / 15.0;
     skinProt = 0.3 + hueDistance * 0.7;
   }
@@ -512,11 +492,7 @@ export function colorWheelZoneWeights(luma: number): {
  * @param processedLuminance - Luminance of the processed pixel (for midtone mask)
  * @returns Additive correction to apply to each channel
  */
-export function clarityFilter(
-  pixels5x5: number[],
-  clarityAmount: number,
-  processedLuminance: number,
-): number {
+export function clarityFilter(pixels5x5: number[], clarityAmount: number, processedLuminance: number): number {
   // 5x5 Gaussian blur (separable weights: 1,4,6,4,1)
   const weights = [1, 4, 6, 4, 1];
   let blurred = 0;
@@ -553,11 +529,7 @@ export function clarityFilter(
  * @param amount - Sharpen amount (u_sharpenAmount)
  * @returns Sharpened value (clamped to >= 0)
  */
-export function sharpenFilter(
-  center: number,
-  neighbors4: [number, number, number, number],
-  amount: number,
-): number {
+export function sharpenFilter(center: number, neighbors4: [number, number, number, number], amount: number): number {
   const sum = neighbors4[0] + neighbors4[1] + neighbors4[2] + neighbors4[3];
   const detail = center * 4.0 - sum;
   return Math.max(center + detail * amount, 0.0);
@@ -577,22 +549,22 @@ export function sharpenFilter(
  * @param mode - 1=R, 2=G, 3=B, 4=A(1.0), 5=luma
  * @returns [r, g, b] with isolated channel replicated
  */
-export function channelIsolation(
-  r: number,
-  g: number,
-  b: number,
-  mode: number,
-): [number, number, number] {
+export function channelIsolation(r: number, g: number, b: number, mode: number): [number, number, number] {
   switch (mode) {
-    case 1: return [r, r, r];
-    case 2: return [g, g, g];
-    case 3: return [b, b, b];
-    case 4: return [1.0, 1.0, 1.0]; // alpha channel (assumed 1.0)
+    case 1:
+      return [r, r, r];
+    case 2:
+      return [g, g, g];
+    case 3:
+      return [b, b, b];
+    case 4:
+      return [1.0, 1.0, 1.0]; // alpha channel (assumed 1.0)
     case 5: {
       const luma = LUMA_R * r + LUMA_G * g + LUMA_B * b;
       return [luma, luma, luma];
     }
-    default: return [r, g, b];
+    default:
+      return [r, g, b];
   }
 }
 
@@ -606,14 +578,9 @@ export function channelIsolation(
  */
 export function bayerDither8x8(x: number, y: number): number {
   const bayer = [
-     0, 32,  8, 40,  2, 34, 10, 42,
-    48, 16, 56, 24, 50, 18, 58, 26,
-    12, 44,  4, 36, 14, 46,  6, 38,
-    60, 28, 52, 20, 62, 30, 54, 22,
-     3, 35, 11, 43,  1, 33,  9, 41,
-    51, 19, 59, 27, 49, 17, 57, 25,
-    15, 47,  7, 39, 13, 45,  5, 37,
-    63, 31, 55, 23, 61, 29, 53, 21,
+    0, 32, 8, 40, 2, 34, 10, 42, 48, 16, 56, 24, 50, 18, 58, 26, 12, 44, 4, 36, 14, 46, 6, 38, 60, 28, 52, 20, 62, 30,
+    54, 22, 3, 35, 11, 43, 1, 33, 9, 41, 51, 19, 59, 27, 49, 17, 57, 25, 15, 47, 7, 39, 13, 45, 5, 37, 63, 31, 55, 23,
+    61, 29, 53, 21,
   ];
   const ix = x & 7;
   const iy = y & 7;
@@ -678,9 +645,15 @@ export function buildHueRotationMatrix(angleDegrees: number): number[] {
   const dB = LUMA_B - oo;
 
   // P = rot * T
-  const p00 = r00 + dR, p01 = r01 + dG, p02 = r02 + dB;
-  const p10 = r10 + dR, p11 = r11 + dG, p12 = r12 + dB;
-  const p20 = r20 + dR, p21 = r21 + dG, p22 = r22 + dB;
+  const p00 = r00 + dR,
+    p01 = r01 + dG,
+    p02 = r02 + dB;
+  const p10 = r10 + dR,
+    p11 = r11 + dG,
+    p12 = r12 + dB;
+  const p20 = r20 + dR,
+    p21 = r21 + dG,
+    p22 = r22 + dB;
 
   // M = TInv * P
   const col0 = dR * p00 + dG * p10 + dB * p20;
@@ -688,11 +661,7 @@ export function buildHueRotationMatrix(angleDegrees: number): number[] {
   const col2 = dR * p02 + dG * p12 + dB * p22;
 
   // Column-major order
-  return [
-    p00 - col0, p10 - col0, p20 - col0,
-    p01 - col1, p11 - col1, p21 - col1,
-    p02 - col2, p12 - col2, p22 - col2,
-  ];
+  return [p00 - col0, p10 - col0, p20 - col0, p01 - col1, p11 - col1, p21 - col1, p02 - col2, p12 - col2, p22 - col2];
 }
 
 /**
@@ -838,11 +807,7 @@ export function applyLUT3DTrilinear(
   }
 
   // Blend with original by intensity
-  return [
-    r + (out[0] - r) * intensity,
-    g + (out[1] - g) * intensity,
-    b + (out[2] - b) * intensity,
-  ];
+  return [r + (out[0] - r) * intensity, g + (out[1] - g) * intensity, b + (out[2] - b) * intensity];
 }
 
 // =============================================================================
@@ -853,12 +818,7 @@ export function applyLUT3DTrilinear(
  * Premultiply alpha: multiply RGB by alpha.
  * Port of GLSL `color.rgb *= color.a` (line ~1504-1505)
  */
-export function premultiplyAlpha(
-  r: number,
-  g: number,
-  b: number,
-  a: number,
-): [number, number, number, number] {
+export function premultiplyAlpha(r: number, g: number, b: number, a: number): [number, number, number, number] {
   return [r * a, g * a, b * a, a];
 }
 
@@ -866,12 +826,7 @@ export function premultiplyAlpha(
  * Unpremultiply alpha: divide RGB by alpha, guarding a=0.
  * Port of GLSL `color.rgb /= color.a` with `color.a > 1e-5` guard (line ~1036-1039)
  */
-export function unpremultiplyAlpha(
-  r: number,
-  g: number,
-  b: number,
-  a: number,
-): [number, number, number, number] {
+export function unpremultiplyAlpha(r: number, g: number, b: number, a: number): [number, number, number, number] {
   if (a > 1e-5) {
     return [r / a, g / a, b / a, a];
   }
@@ -932,34 +887,19 @@ export function hslQualifierMatte(
   if (hueDist > 180.0) hueDist = 360.0 - hueDist;
   const hueInner = hueWidth / 2.0;
   const hueOuter = hueInner + (hueSoftness * hueWidth) / 100.0;
-  const hueMatch =
-    hueDist <= hueInner
-      ? 1.0
-      : hueDist >= hueOuter
-        ? 0.0
-        : smoothstep(hueOuter, hueInner, hueDist);
+  const hueMatch = hueDist <= hueInner ? 1.0 : hueDist >= hueOuter ? 0.0 : smoothstep(hueOuter, hueInner, hueDist);
 
   // Saturation match
   const satDist = Math.abs(qS - satCenter);
   const satInner = satWidth / 2.0;
   const satOuter = satInner + (satSoftness * satWidth) / 100.0;
-  const satMatch =
-    satDist <= satInner
-      ? 1.0
-      : satDist >= satOuter
-        ? 0.0
-        : smoothstep(satOuter, satInner, satDist);
+  const satMatch = satDist <= satInner ? 1.0 : satDist >= satOuter ? 0.0 : smoothstep(satOuter, satInner, satDist);
 
   // Luminance match
   const lumDist = Math.abs(qL - lumCenter);
   const lumInner = lumWidth / 2.0;
   const lumOuter = lumInner + (lumSoftness * lumWidth) / 100.0;
-  const lumMatch =
-    lumDist <= lumInner
-      ? 1.0
-      : lumDist >= lumOuter
-        ? 0.0
-        : smoothstep(lumOuter, lumInner, lumDist);
+  const lumMatch = lumDist <= lumInner ? 1.0 : lumDist >= lumOuter ? 0.0 : smoothstep(lumOuter, lumInner, lumDist);
 
   return hueMatch * satMatch * lumMatch;
 }

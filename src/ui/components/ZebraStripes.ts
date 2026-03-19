@@ -223,10 +223,17 @@ export class ZebraStripes extends EventEmitter<ZebraStripesEvents> {
     container.appendChild(highSection);
 
     // High threshold slider (upper bound supports HDR content above 100 IRE)
-    const highThresholdRow = this.createSliderRow('Threshold', this.state.highThreshold, 50, MAX_ZEBRA_THRESHOLD_IRE, '%', (value) => {
-      this.setHighThreshold(value);
-      onUpdate();
-    });
+    const highThresholdRow = this.createSliderRow(
+      'Threshold',
+      this.state.highThreshold,
+      50,
+      MAX_ZEBRA_THRESHOLD_IRE,
+      '%',
+      (value) => {
+        this.setHighThreshold(value);
+        onUpdate();
+      },
+    );
     container.appendChild(highThresholdRow);
 
     // Separator

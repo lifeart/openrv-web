@@ -121,7 +121,10 @@ export function isTIFFFile(buffer: ArrayBuffer): boolean {
 export function isFloatTIFF(buffer: ArrayBuffer): boolean {
   const info = getTIFFInfo(buffer);
   if (!info) return false;
-  return info.sampleFormat === 'float' && (info.bitsPerSample === 16 || info.bitsPerSample === 32 || info.bitsPerSample === 64);
+  return (
+    info.sampleFormat === 'float' &&
+    (info.bitsPerSample === 16 || info.bitsPerSample === 32 || info.bitsPerSample === 64)
+  );
 }
 
 /**
@@ -1043,7 +1046,14 @@ async function decodeTiledTIFF(
         // For predictors, we use tileWidth as the row width and tileLength as the row count,
         // since the tile data is stored as a full-sized tile
         if (predictor !== PREDICTOR_NONE) {
-          decompressed = applyPredictor(decompressed, predictor, tileWidth, samplesPerPixel, bytesPerSample, tileLength);
+          decompressed = applyPredictor(
+            decompressed,
+            predictor,
+            tileWidth,
+            samplesPerPixel,
+            bytesPerSample,
+            tileLength,
+          );
         }
 
         const tileView = new DataView(decompressed.buffer, decompressed.byteOffset, decompressed.byteLength);

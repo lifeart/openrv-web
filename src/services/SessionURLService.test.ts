@@ -467,7 +467,7 @@ describe('SessionURLService', () => {
     it('SU-018d: truncated base64 in #s= shows info', async () => {
       deps = createDeps({
         getLocationSearch: () => '',
-        getLocationHash: () => '#s=eyJmIjox',  // truncated JSON
+        getLocationHash: () => '#s=eyJmIjox', // truncated JSON
       });
       service = new SessionURLService(deps);
 
@@ -600,9 +600,7 @@ describe('SessionURLService', () => {
       await service.applySessionURLState(state);
 
       // User-facing notification should be shown
-      expect(deps.networkControl.showInfo).toHaveBeenCalledWith(
-        'Failed to load shared media: Expired signed URL',
-      );
+      expect(deps.networkControl.showInfo).toHaveBeenCalledWith('Failed to load shared media: Expired signed URL');
       // Console warning should still be present for debugging
       expect(warnSpy).toHaveBeenCalled();
       // View state should still be applied despite load failure
@@ -626,9 +624,7 @@ describe('SessionURLService', () => {
 
       await service.applySessionURLState(state);
 
-      expect(deps.networkControl.showInfo).toHaveBeenCalledWith(
-        'Failed to load shared media: network timeout',
-      );
+      expect(deps.networkControl.showInfo).toHaveBeenCalledWith('Failed to load shared media: network timeout');
 
       warnSpy.mockRestore();
     });
@@ -1107,9 +1103,7 @@ describe('SessionURLService', () => {
         'Connected as guest via WebRTC. Copy the response token (or response URL) and send it to the host.',
       );
       // Should NOT have the error message
-      expect(deps.networkControl.showInfo).not.toHaveBeenCalledWith(
-        expect.stringContaining('could not be processed'),
-      );
+      expect(deps.networkControl.showInfo).not.toHaveBeenCalledWith(expect.stringContaining('could not be processed'));
     });
 
     it('SU-046: answer link still shows guidance message', async () => {
@@ -1454,10 +1448,7 @@ describe('SessionURLService', () => {
 
     it('SU-025: navigates to existing source instead of duplicating', async () => {
       deps.session.sourceCount = 2;
-      deps.session.allSources = [
-        { url: 'https://example.com/a.mp4' },
-        { url: 'https://example.com/shared.mp4' },
-      ];
+      deps.session.allSources = [{ url: 'https://example.com/a.mp4' }, { url: 'https://example.com/shared.mp4' }];
 
       const state: SessionURLState = {
         frame: 5,
@@ -1631,18 +1622,12 @@ describe('SessionURLService', () => {
 
       await service.handleURLBootstrap();
 
-      expect(deps.networkSyncManager.joinServerlessRoomFromOfferToken).toHaveBeenCalledWith(
-        token,
-        'User',
-        undefined,
-      );
+      expect(deps.networkSyncManager.joinServerlessRoomFromOfferToken).toHaveBeenCalledWith(token, 'User', undefined);
       // Success message, not error
       expect(deps.networkControl.showInfo).toHaveBeenCalledWith(
         'Connected as guest via WebRTC. Copy the response token (or response URL) and send it to the host.',
       );
-      expect(deps.networkControl.showInfo).not.toHaveBeenCalledWith(
-        expect.stringContaining('malformed'),
-      );
+      expect(deps.networkControl.showInfo).not.toHaveBeenCalledWith(expect.stringContaining('malformed'));
       // Response URL and token should be set
       expect(deps.networkControl.setShareLink).toHaveBeenCalled();
       expect(deps.networkControl.setShareLinkKind).toHaveBeenCalledWith('response');
@@ -1651,15 +1636,17 @@ describe('SessionURLService', () => {
 
     it('SU-071: WebRTC token with unrecognized type shows malformed error', async () => {
       // A valid base64 JSON object but with type neither 'offer' nor 'answer'
-      const badSignal = btoa(JSON.stringify({
-        version: 1,
-        type: 'negotiate',
-        roomId: 'room-1',
-        roomCode: 'ZZZZ',
-        hostUserId: 'h1',
-        createdAt: Date.now(),
-        sdp: 'v=0\r\n',
-      }))
+      const badSignal = btoa(
+        JSON.stringify({
+          version: 1,
+          type: 'negotiate',
+          roomId: 'room-1',
+          roomCode: 'ZZZZ',
+          hostUserId: 'h1',
+          createdAt: Date.now(),
+          sdp: 'v=0\r\n',
+        }),
+      )
         .replace(/\+/g, '-')
         .replace(/\//g, '_')
         .replace(/=+$/g, '');
@@ -1718,27 +1705,19 @@ describe('SessionURLService', () => {
 
   describe('multi-source A/B compare', () => {
     it('SU-023: capture includes sourceUrls when multiple sources have URLs', () => {
-      deps.session.allSources = [
-        { url: 'https://example.com/shot_a.exr' },
-        { url: 'https://example.com/shot_b.exr' },
-      ];
+      deps.session.allSources = [{ url: 'https://example.com/shot_a.exr' }, { url: 'https://example.com/shot_b.exr' }];
       deps.session.currentSource = { url: 'https://example.com/shot_a.exr' };
       deps.session.sourceBIndex = 1;
 
       const state = service.captureSessionURLState();
 
-      expect(state.sourceUrls).toEqual([
-        'https://example.com/shot_a.exr',
-        'https://example.com/shot_b.exr',
-      ]);
+      expect(state.sourceUrls).toEqual(['https://example.com/shot_a.exr', 'https://example.com/shot_b.exr']);
       // sourceUrl is still set for backward compat
       expect(state.sourceUrl).toBe('https://example.com/shot_a.exr');
     });
 
     it('SU-024: capture omits sourceUrls when only one source loaded', () => {
-      deps.session.allSources = [
-        { url: 'https://example.com/shot_a.exr' },
-      ];
+      deps.session.allSources = [{ url: 'https://example.com/shot_a.exr' }];
       deps.session.currentSource = { url: 'https://example.com/shot_a.exr' };
 
       const state = service.captureSessionURLState();
@@ -1781,10 +1760,7 @@ describe('SessionURLService', () => {
         frame: 1,
         fps: 24,
         sourceIndex: 0,
-        sourceUrls: [
-          'https://example.com/shot_a.exr',
-          'https://example.com/shot_b.exr',
-        ],
+        sourceUrls: ['https://example.com/shot_a.exr', 'https://example.com/shot_b.exr'],
         sourceAIndex: 0,
         sourceBIndex: 1,
       };
@@ -1817,10 +1793,7 @@ describe('SessionURLService', () => {
         frame: 1,
         fps: 24,
         sourceIndex: 0,
-        sourceUrls: [
-          'https://example.com/shot_a.exr',
-          'https://example.com/shot_b.exr',
-        ],
+        sourceUrls: ['https://example.com/shot_a.exr', 'https://example.com/shot_b.exr'],
         sourceAIndex: 0,
         sourceBIndex: 1,
       };
@@ -1850,10 +1823,7 @@ describe('SessionURLService', () => {
         frame: 1,
         fps: 24,
         sourceIndex: 0,
-        sourceUrls: [
-          'https://example.com/shot_a.exr',
-          'https://example.com/shot_b.exr',
-        ],
+        sourceUrls: ['https://example.com/shot_a.exr', 'https://example.com/shot_b.exr'],
         sourceAIndex: 0,
         sourceBIndex: 1,
       };
@@ -1886,10 +1856,7 @@ describe('SessionURLService', () => {
 
     it('SU-030: round-trip capture → encode → decode → apply reconstructs A/B compare', async () => {
       // Set up a session with two sources in A/B compare mode
-      deps.session.allSources = [
-        { url: 'https://example.com/shot_a.exr' },
-        { url: 'https://example.com/shot_b.exr' },
-      ];
+      deps.session.allSources = [{ url: 'https://example.com/shot_a.exr' }, { url: 'https://example.com/shot_b.exr' }];
       deps.session.currentSource = { url: 'https://example.com/shot_a.exr' };
       deps.session.sourceAIndex = 0;
       deps.session.sourceBIndex = 1;
@@ -1897,8 +1864,11 @@ describe('SessionURLService', () => {
       deps.compareControl.getWipeMode.mockReturnValue('horizontal');
       deps.compareControl.getWipePosition.mockReturnValue(0.4);
       deps.viewer.getTransform.mockReturnValue({
-        rotation: 0, flipH: false, flipV: false,
-        scale: { x: 1, y: 1 }, translate: { x: 0, y: 0 },
+        rotation: 0,
+        flipH: false,
+        flipV: false,
+        scale: { x: 1, y: 1 },
+        translate: { x: 0, y: 0 },
       });
 
       // Capture
@@ -1909,10 +1879,7 @@ describe('SessionURLService', () => {
       const encoded = encodeSessionState(captured);
       const decoded = decodeSessionState(encoded);
       expect(decoded).not.toBeNull();
-      expect(decoded!.sourceUrls).toEqual([
-        'https://example.com/shot_a.exr',
-        'https://example.com/shot_b.exr',
-      ]);
+      expect(decoded!.sourceUrls).toEqual(['https://example.com/shot_a.exr', 'https://example.com/shot_b.exr']);
 
       // Apply on a fresh session
       let loadCount = 0;
@@ -2118,8 +2085,11 @@ describe('SessionURLService', () => {
       deps.session.allSources = [{ url: 'https://example.com/shot.exr' }];
       deps.session.currentSource = { url: 'https://example.com/shot.exr' };
       deps.viewer.getTransform.mockReturnValue({
-        rotation: 0, flipH: false, flipV: false,
-        scale: { x: 1, y: 1 }, translate: { x: 0, y: 0 },
+        rotation: 0,
+        flipH: false,
+        flipV: false,
+        scale: { x: 1, y: 1 },
+        translate: { x: 0, y: 0 },
       });
       (deps.session as any).getActiveRepresentation = vi.fn((sourceIndex: number) => {
         if (sourceIndex === 0) {
@@ -2186,10 +2156,7 @@ describe('SessionURLService', () => {
     });
 
     it('SU-081: capture includes representations for multiple sources', () => {
-      deps.session.allSources = [
-        { url: 'https://example.com/shot_a.exr' },
-        { url: 'https://example.com/shot_b.exr' },
-      ];
+      deps.session.allSources = [{ url: 'https://example.com/shot_a.exr' }, { url: 'https://example.com/shot_b.exr' }];
       deps.session.currentSource = { url: 'https://example.com/shot_a.exr' };
       (deps.session as any).getActiveRepresentation = vi.fn((sourceIndex: number) => {
         if (sourceIndex === 0) {
@@ -2234,8 +2201,8 @@ describe('SessionURLService', () => {
             resolution: { width: 4096, height: 2160 },
             loaderConfig: {
               url: 'https://example.com/frame.exr',
-              file: new File([], 'frame.exr'),  // non-serializable
-              files: [new File([], 'f1.exr')],  // non-serializable
+              file: new File([], 'frame.exr'), // non-serializable
+              files: [new File([], 'f1.exr')], // non-serializable
               pattern: 'shot.####.exr',
             },
           };

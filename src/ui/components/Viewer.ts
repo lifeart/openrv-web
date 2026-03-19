@@ -1522,10 +1522,7 @@ export class Viewer {
     const source = this.session.currentSource;
 
     // Sync stereo input format from source metadata or file source node
-    const detectedStereoFormat =
-      source?.stereoInputFormat ??
-      source?.fileSourceNode?.stereoInputFormat ??
-      null;
+    const detectedStereoFormat = source?.stereoInputFormat ?? source?.fileSourceNode?.stereoInputFormat ?? null;
     if (detectedStereoFormat) {
       this.stereoManager.setStereoInputFormat(detectedStereoFormat);
       // Pass right-eye image data for 'separate' stereo (multi-view EXR)
@@ -2342,7 +2339,12 @@ export class Viewer {
     const version = this.paintEngine.annotationVersion;
     const versionFilter = version === 'all' ? undefined : version;
     const sourceIndexFilter = this.paintEngine.sourceIndex;
-    const annotations = this.paintEngine.getAnnotationsWithGhost(this.session.currentFrame, versionFilter, undefined, sourceIndexFilter);
+    const annotations = this.paintEngine.getAnnotationsWithGhost(
+      this.session.currentFrame,
+      versionFilter,
+      undefined,
+      sourceIndexFilter,
+    );
 
     if (annotations.length === 0) {
       // Only clear if we previously had content
@@ -2444,7 +2446,9 @@ export class Viewer {
    */
   addViewChangeListener(callback: (panX: number, panY: number, zoom: number) => void): () => void {
     this._viewChangeListeners.add(callback);
-    return () => { this._viewChangeListeners.delete(callback); };
+    return () => {
+      this._viewChangeListeners.delete(callback);
+    };
   }
 
   /**
@@ -2616,8 +2620,7 @@ export class Viewer {
     const sourceConfig = pipeline.getSourceConfig(sourceId);
     const state = pipeline.getState();
     const preCache = sourceConfig?.preCacheLUT;
-    const hasPreCache3D =
-      !!preCache?.lutData && isLUT3D(preCache.lutData) && preCache.enabled;
+    const hasPreCache3D = !!preCache?.lutData && isLUT3D(preCache.lutData) && preCache.enabled;
 
     const gpuChain = this.colorPipeline.gpuLUTChain;
     if (!gpuChain) {
@@ -4062,7 +4065,13 @@ export class Viewer {
    * live image canvas using the given viewMode and opacity.
    * Pass `null` to disable the reference overlay.
    */
-  setReferenceImage(imageData: ImageData | null, viewMode: string, opacity: number, wipePosition = 0.5, showingReference = true): void {
+  setReferenceImage(
+    imageData: ImageData | null,
+    viewMode: string,
+    opacity: number,
+    wipePosition = 0.5,
+    showingReference = true,
+  ): void {
     if (!imageData || viewMode === 'off') {
       // Hide the overlay canvas if present
       if (this._referenceCanvas) {

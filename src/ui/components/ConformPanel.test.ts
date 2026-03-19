@@ -649,10 +649,7 @@ describe('ConformPanel', () => {
     });
 
     it('CONFORM-026: folder relink with fileHandler skips weak matches', async () => {
-      setup(
-        [makeClip({ id: 'clip-1', originalUrl: '/old/shot_010.exr' })],
-        [makeSource()],
-      );
+      setup([makeClip({ id: 'clip-1', originalUrl: '/old/shot_010.exr' })], [makeSource()]);
 
       const fileHandler = vi.fn().mockResolvedValue(5);
       panel.setFileHandler(fileHandler);

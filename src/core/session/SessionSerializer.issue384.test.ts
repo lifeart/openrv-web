@@ -104,15 +104,25 @@ function createMockComponents(): SessionComponents {
       getLensParams: vi.fn().mockReturnValue({}),
       getWipeState: vi.fn().mockReturnValue({}),
       getStackLayers: vi.fn().mockReturnValue([]),
-      getNoiseReductionParams: vi.fn().mockReturnValue({ strength: 0, luminanceStrength: 50, chromaStrength: 75, radius: 2 }),
+      getNoiseReductionParams: vi
+        .fn()
+        .mockReturnValue({ strength: 0, luminanceStrength: 50, chromaStrength: 75, radius: 2 }),
       getWatermarkState: vi.fn().mockReturnValue({
-        enabled: false, imageUrl: null, position: 'bottom-right',
-        customX: 0.9, customY: 0.9, scale: 1, opacity: 0.7, margin: 20,
+        enabled: false,
+        imageUrl: null,
+        position: 'bottom-right',
+        customX: 0.9,
+        customY: 0.9,
+        scale: 1,
+        opacity: 0.7,
+        margin: 20,
       }),
       getLUT: vi.fn().mockReturnValue(undefined),
       getLUTIntensity: vi.fn().mockReturnValue(1.0),
       getPARState: vi.fn().mockReturnValue({ enabled: false, par: 1.0, preset: 'square' }),
-      getBackgroundPatternState: vi.fn().mockReturnValue({ pattern: 'black', checkerSize: 'medium', customColor: '#1a1a1a' }),
+      getBackgroundPatternState: vi
+        .fn()
+        .mockReturnValue({ pattern: 'black', checkerSize: 'medium', customColor: '#1a1a1a' }),
       isOCIOEnabled: vi.fn().mockReturnValue(false),
       getDisplayColorState: vi.fn().mockReturnValue({ ...DEFAULT_DISPLAY_COLOR_STATE }),
       getGamutMappingState: vi.fn().mockReturnValue({ ...DEFAULT_GAMUT_MAPPING_STATE }),
@@ -128,7 +138,16 @@ function createMockComponents(): SessionComponents {
       getStereoAlignMode: vi.fn().mockReturnValue(DEFAULT_STEREO_ALIGN_MODE),
       getDeinterlaceParams: vi.fn().mockReturnValue({ method: 'bob', fieldOrder: 'tff', enabled: false }),
       getFilmEmulationParams: vi.fn().mockReturnValue({ enabled: false, stock: 'kodak-portra-400', intensity: 1.0 }),
-      getPerspectiveParams: vi.fn().mockReturnValue({ enabled: false, topLeft: { x: 0, y: 0 }, topRight: { x: 1, y: 0 }, bottomRight: { x: 1, y: 1 }, bottomLeft: { x: 0, y: 1 }, quality: 'bilinear' }),
+      getPerspectiveParams: vi
+        .fn()
+        .mockReturnValue({
+          enabled: false,
+          topLeft: { x: 0, y: 0 },
+          topRight: { x: 1, y: 0 },
+          bottomRight: { x: 1, y: 1 },
+          bottomLeft: { x: 0, y: 1 },
+          quality: 'bilinear',
+        }),
       getStabilizationParams: vi.fn().mockReturnValue({ enabled: false, smoothingStrength: 50 }),
       isUncropActive: vi.fn().mockReturnValue(false),
       setColorAdjustments: vi.fn(),
@@ -169,14 +188,42 @@ function createMockComponents(): SessionComponents {
           activeSourceId: null,
         }),
       }),
-      getTimecodeOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_TIMECODE_OVERLAY_STATE }), setState: vi.fn() }),
-      getSafeAreasOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_SAFE_AREAS_STATE }), setState: vi.fn() }),
-      getClippingOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_CLIPPING_OVERLAY_STATE }), setState: vi.fn() }),
-      getInfoStripOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_INFO_STRIP_OVERLAY_STATE }), setState: vi.fn() }),
-      getSpotlightOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_SPOTLIGHT_STATE }), setState: vi.fn() }),
-      getBugOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_BUG_OVERLAY_STATE }), setState: vi.fn() }),
-      getEXRWindowOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_EXR_WINDOW_OVERLAY_STATE }), setState: vi.fn() }),
-      getFPSIndicator: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_FPS_INDICATOR_STATE }), setState: vi.fn() }),
+      getTimecodeOverlay: vi
+        .fn()
+        .mockReturnValue({
+          getState: vi.fn().mockReturnValue({ ...DEFAULT_TIMECODE_OVERLAY_STATE }),
+          setState: vi.fn(),
+        }),
+      getSafeAreasOverlay: vi
+        .fn()
+        .mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_SAFE_AREAS_STATE }), setState: vi.fn() }),
+      getClippingOverlay: vi
+        .fn()
+        .mockReturnValue({
+          getState: vi.fn().mockReturnValue({ ...DEFAULT_CLIPPING_OVERLAY_STATE }),
+          setState: vi.fn(),
+        }),
+      getInfoStripOverlay: vi
+        .fn()
+        .mockReturnValue({
+          getState: vi.fn().mockReturnValue({ ...DEFAULT_INFO_STRIP_OVERLAY_STATE }),
+          setState: vi.fn(),
+        }),
+      getSpotlightOverlay: vi
+        .fn()
+        .mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_SPOTLIGHT_STATE }), setState: vi.fn() }),
+      getBugOverlay: vi
+        .fn()
+        .mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_BUG_OVERLAY_STATE }), setState: vi.fn() }),
+      getEXRWindowOverlay: vi
+        .fn()
+        .mockReturnValue({
+          getState: vi.fn().mockReturnValue({ ...DEFAULT_EXR_WINDOW_OVERLAY_STATE }),
+          setState: vi.fn(),
+        }),
+      getFPSIndicator: vi
+        .fn()
+        .mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_FPS_INDICATOR_STATE }), setState: vi.fn() }),
     },
   } as any;
 }
@@ -298,17 +345,14 @@ describe('Issue #384: Sequence reload should not collapse to single image', () =
 
   it('ISS-384-005: non-blob sequence type also uses sequence reload prompt', async () => {
     const components = createMockComponents();
-    const seqFiles = [
-      new File(['a'], 'img.0001.png'),
-      new File(['b'], 'img.0002.png'),
-    ];
+    const seqFiles = [new File(['a'], 'img.0001.png'), new File(['b'], 'img.0002.png')];
     vi.mocked(showSequenceReloadPrompt).mockResolvedValue(seqFiles);
 
     const state = SessionSerializer.createEmpty();
     state.media = [
       {
         name: 'img.####.png',
-        path: 'file:///some/path',  // non-blob, non-empty path but type=sequence
+        path: 'file:///some/path', // non-blob, non-empty path but type=sequence
         type: 'sequence',
         width: 800,
         height: 600,

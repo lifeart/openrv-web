@@ -24,19 +24,49 @@ export class MuNetworkBridge {
   private defaultPermission = 0;
 
   /** Handler for incoming remote messages */
-  private _onRemoteMessage: ((connectionId: string, messages: string[], senderContactName: string) => void) | null = null;
+  private _onRemoteMessage: ((connectionId: string, messages: string[], senderContactName: string) => void) | null =
+    null;
 
   /** Handler for incoming remote events */
-  private _onRemoteEvent: ((connectionId: string, eventName: string, targetName: string, contents: string, interp: string[], senderContactName: string) => void) | null = null;
+  private _onRemoteEvent:
+    | ((
+        connectionId: string,
+        eventName: string,
+        targetName: string,
+        contents: string,
+        interp: string[],
+        senderContactName: string,
+      ) => void)
+    | null = null;
 
   /** Handler for incoming remote data events */
-  private _onRemoteDataEvent: ((connectionId: string, eventName: string, targetName: string, contents: string, data: Uint8Array, interp: string[], senderContactName: string) => void) | null = null;
+  private _onRemoteDataEvent:
+    | ((
+        connectionId: string,
+        eventName: string,
+        targetName: string,
+        contents: string,
+        data: Uint8Array,
+        interp: string[],
+        senderContactName: string,
+      ) => void)
+    | null = null;
 
   /** Pending data event headers awaiting binary follow-up, keyed by connection ID */
-  private pendingDataEvents = new Map<string, {
-    header: { event: string; target: string; contents: string; interp: string[]; dataLength: number; senderContactName: string };
-    timeoutId: ReturnType<typeof setTimeout>;
-  }>();
+  private pendingDataEvents = new Map<
+    string,
+    {
+      header: {
+        event: string;
+        target: string;
+        contents: string;
+        interp: string[];
+        dataLength: number;
+        senderContactName: string;
+      };
+      timeoutId: ReturnType<typeof setTimeout>;
+    }
+  >();
 
   /** Timeout in ms for binary follow-up after a dataEvent header */
   private static readonly DATA_EVENT_TIMEOUT_MS = 5000;
@@ -48,11 +78,7 @@ export class MuNetworkBridge {
    * Mu signature: httpGet(url, headers, callback, progressCallback)
    * Web: Returns Promise<MuHttpResponse>.
    */
-  async httpGet(
-    url: string,
-    headers: Record<string, string> = {},
-    timeout?: number,
-  ): Promise<MuHttpResponse> {
+  async httpGet(url: string, headers: Record<string, string> = {}, timeout?: number): Promise<MuHttpResponse> {
     return this.fetchWithMethod('GET', url, undefined, headers, timeout);
   }
 
@@ -194,23 +220,20 @@ export class MuNetworkBridge {
       console.warn(`[MuNetworkBridge] No open connection for ${connectionId}`);
       return;
     }
-    ws.send(JSON.stringify({
-      type: 'message',
-      data: messages,
-      senderContactName: this.localContactName || 'anonymous',
-    }));
+    ws.send(
+      JSON.stringify({
+        type: 'message',
+        data: messages,
+        senderContactName: this.localContactName || 'anonymous',
+      }),
+    );
   }
 
   /**
    * Send an event to a remote connection.
    * Mu signature: remoteSendEvent(eventName, targetName, contents, interp)
    */
-  remoteSendEvent(
-    eventName: string,
-    targetName: string,
-    contents: string,
-    interp: string[] = [],
-  ): void {
+  remoteSendEvent(eventName: string, targetName: string, contents: string, interp: string[] = []): void {
     // Broadcast to all open connections
     const payload = JSON.stringify({
       type: 'event',
@@ -335,17 +358,42 @@ export class MuNetworkBridge {
   }
 
   /** Register a handler for incoming remote messages. */
-  setOnRemoteMessage(handler: ((connectionId: string, messages: string[], senderContactName: string) => void) | null): void {
+  setOnRemoteMessage(
+    handler: ((connectionId: string, messages: string[], senderContactName: string) => void) | null,
+  ): void {
     this._onRemoteMessage = handler;
   }
 
   /** Register a handler for incoming remote events. */
-  setOnRemoteEvent(handler: ((connectionId: string, eventName: string, targetName: string, contents: string, interp: string[], senderContactName: string) => void) | null): void {
+  setOnRemoteEvent(
+    handler:
+      | ((
+          connectionId: string,
+          eventName: string,
+          targetName: string,
+          contents: string,
+          interp: string[],
+          senderContactName: string,
+        ) => void)
+      | null,
+  ): void {
     this._onRemoteEvent = handler;
   }
 
   /** Register a handler for incoming remote data events. */
-  setOnRemoteDataEvent(handler: ((connectionId: string, eventName: string, targetName: string, contents: string, data: Uint8Array, interp: string[], senderContactName: string) => void) | null): void {
+  setOnRemoteDataEvent(
+    handler:
+      | ((
+          connectionId: string,
+          eventName: string,
+          targetName: string,
+          contents: string,
+          data: Uint8Array,
+          interp: string[],
+          senderContactName: string,
+        ) => void)
+      | null,
+  ): void {
     this._onRemoteDataEvent = handler;
   }
 
@@ -385,9 +433,7 @@ export class MuNetworkBridge {
         clearTimeout(pending.timeoutId);
         this.pendingDataEvents.delete(connectionId);
 
-        const data = event.data instanceof ArrayBuffer
-          ? new Uint8Array(event.data)
-          : new Uint8Array(0);
+        const data = event.data instanceof ArrayBuffer ? new Uint8Array(event.data) : new Uint8Array(0);
 
         if (this._onRemoteDataEvent) {
           this._onRemoteDataEvent(
@@ -415,7 +461,10 @@ export class MuNetworkBridge {
         return;
       }
       // Permission 1 = read-only → reject write-style messages
-      if (this.defaultPermission === 1 && (msg.type === 'message' || msg.type === 'event' || msg.type === 'dataEvent')) {
+      if (
+        this.defaultPermission === 1 &&
+        (msg.type === 'message' || msg.type === 'event' || msg.type === 'dataEvent')
+      ) {
         console.warn(
           `[MuNetworkBridge] Rejecting incoming "${msg.type}" from ${connectionId}: permission is "read" (1)`,
         );
@@ -499,7 +548,7 @@ export class MuNetworkBridge {
       const response = await fetch(url, {
         method,
         headers,
-        body: body as BodyInit | undefined ?? undefined,
+        body: (body as BodyInit | undefined) ?? undefined,
         signal: controller.signal,
       });
 

@@ -1556,10 +1556,7 @@ describe('Issue #419: Inactive CDL/Transform/Lens nodes return defaults instead 
 
   describe('parseLens', () => {
     it('returns default lens params when node is inactive (active=0)', () => {
-      const dto = createLensWarpMockDTO(
-        { k1: 0.5, k2: 0.3, center: [0.5, 0.5] },
-        { active: 0 },
-      );
+      const dto = createLensWarpMockDTO({ k1: 0.5, k2: 0.3, center: [0.5, 0.5] }, { active: 0 });
 
       const result = parseLens(dto);
 
@@ -1574,10 +1571,7 @@ describe('Issue #419: Inactive CDL/Transform/Lens nodes return defaults instead 
     });
 
     it('returns parsed lens params when active', () => {
-      const dto = createLensWarpMockDTO(
-        { k1: 0.5, k2: 0.3, center: [0.6, 0.4] },
-        { active: 1 },
-      );
+      const dto = createLensWarpMockDTO({ k1: 0.5, k2: 0.3, center: [0.6, 0.4] }, { active: 1 });
 
       const result = parseLens(dto);
 
@@ -1916,9 +1910,7 @@ describe('GTOSettingsParser — Issue #420: inactive RVColor/RVDisplayColor flag
 
   describe('RVColor active=0', () => {
     it('returns null when RVColor has active=0 and no other nodes', () => {
-      const dto = createFullMockDTO(
-        { active: 0, exposure: 2.5, gamma: 1.8, saturation: 0.5, contrast: 1.5 },
-      );
+      const dto = createFullMockDTO({ active: 0, exposure: 2.5, gamma: 1.8, saturation: 0.5, contrast: 1.5 });
       const result = parseColorAdjustments(dto);
       // No adjustments should be parsed from the inactive RVColor node
       expect(result).toBeNull();
@@ -1943,11 +1935,7 @@ describe('GTOSettingsParser — Issue #420: inactive RVColor/RVDisplayColor flag
 
     it('still parses luminanceLUT even when RVColor color component is inactive', () => {
       const lutData = new Array(768).fill(0).map((_, i) => i / 768);
-      const dto = createFullMockDTO(
-        { active: 0, exposure: 2.5 },
-        undefined,
-        { active: 1, lut: lutData },
-      );
+      const dto = createFullMockDTO({ active: 0, exposure: 2.5 }, undefined, { active: 1, lut: lutData });
       const result = parseColorAdjustments(dto);
       expect(result).not.toBeNull();
       // luminanceLUT has its own active flag and should still be parsed
@@ -1965,9 +1953,7 @@ describe('GTOSettingsParser — Issue #420: inactive RVColor/RVDisplayColor flag
 
   describe('RVColor active=1 or absent', () => {
     it('parses normally when RVColor active=1', () => {
-      const dto = createFullMockDTO(
-        { active: 1, exposure: 2.5, gamma: 1.8 },
-      );
+      const dto = createFullMockDTO({ active: 1, exposure: 2.5, gamma: 1.8 });
       const result = parseColorAdjustments(dto);
       expect(result).not.toBeNull();
       expect(result!.exposure).toBe(2.5);
@@ -1975,9 +1961,7 @@ describe('GTOSettingsParser — Issue #420: inactive RVColor/RVDisplayColor flag
     });
 
     it('parses normally when RVColor has no active property (defaults to active)', () => {
-      const dto = createFullMockDTO(
-        { exposure: 1.0, saturation: 0.8 },
-      );
+      const dto = createFullMockDTO({ exposure: 1.0, saturation: 0.8 });
       const result = parseColorAdjustments(dto);
       expect(result).not.toBeNull();
       expect(result!.exposure).toBe(1.0);
@@ -1991,20 +1975,14 @@ describe('GTOSettingsParser — Issue #420: inactive RVColor/RVDisplayColor flag
 
   describe('RVDisplayColor active=0', () => {
     it('does not extract brightness/gamma from inactive RVDisplayColor', () => {
-      const dto = createFullMockDTO(
-        undefined,
-        { active: 0, brightness: 0.7, gamma: 2.2 },
-      );
+      const dto = createFullMockDTO(undefined, { active: 0, brightness: 0.7, gamma: 2.2 });
       const result = parseColorAdjustments(dto);
       // Inactive display color node — no adjustments extracted
       expect(result).toBeNull();
     });
 
     it('still extracts RVColor adjustments when RVDisplayColor is inactive', () => {
-      const dto = createFullMockDTO(
-        { active: 1, exposure: 1.5 },
-        { active: 0, brightness: 0.7, gamma: 2.2 },
-      );
+      const dto = createFullMockDTO({ active: 1, exposure: 1.5 }, { active: 0, brightness: 0.7, gamma: 2.2 });
       const result = parseColorAdjustments(dto);
       expect(result).not.toBeNull();
       expect(result!.exposure).toBe(1.5);
@@ -2013,20 +1991,14 @@ describe('GTOSettingsParser — Issue #420: inactive RVColor/RVDisplayColor flag
     });
 
     it('parseOutOfRange returns 0 (off) when RVDisplayColor active=0', () => {
-      const dto = createFullMockDTO(
-        undefined,
-        { active: 0, outOfRange: 1 },
-      );
+      const dto = createFullMockDTO(undefined, { active: 0, outOfRange: 1 });
       const result = parseOutOfRange(dto);
       // Inactive display color → forced to mode 0 (off)
       expect(result).toBe(0);
     });
 
     it('parseOutOfRange returns 0 even when outOfRange=1 but display is inactive', () => {
-      const dto = createFullMockDTO(
-        undefined,
-        { active: 0, outOfRange: 1, brightness: 0.5 },
-      );
+      const dto = createFullMockDTO(undefined, { active: 0, outOfRange: 1, brightness: 0.5 });
       const result = parseOutOfRange(dto);
       expect(result).toBe(0);
     });
@@ -2038,10 +2010,7 @@ describe('GTOSettingsParser — Issue #420: inactive RVColor/RVDisplayColor flag
 
   describe('RVDisplayColor active=1 or absent', () => {
     it('parses normally when RVDisplayColor active=1', () => {
-      const dto = createFullMockDTO(
-        undefined,
-        { active: 1, brightness: 0.7, gamma: 2.2 },
-      );
+      const dto = createFullMockDTO(undefined, { active: 1, brightness: 0.7, gamma: 2.2 });
       const result = parseColorAdjustments(dto);
       expect(result).not.toBeNull();
       expect(result!.brightness).toBe(0.7);
@@ -2049,29 +2018,20 @@ describe('GTOSettingsParser — Issue #420: inactive RVColor/RVDisplayColor flag
     });
 
     it('parses normally when RVDisplayColor has no active property', () => {
-      const dto = createFullMockDTO(
-        undefined,
-        { brightness: 0.3 },
-      );
+      const dto = createFullMockDTO(undefined, { brightness: 0.3 });
       const result = parseColorAdjustments(dto);
       expect(result).not.toBeNull();
       expect(result!.brightness).toBe(0.3);
     });
 
     it('parseOutOfRange works normally when active=1', () => {
-      const dto = createFullMockDTO(
-        undefined,
-        { active: 1, outOfRange: 1 },
-      );
+      const dto = createFullMockDTO(undefined, { active: 1, outOfRange: 1 });
       const result = parseOutOfRange(dto);
       expect(result).toBe(2);
     });
 
     it('parseOutOfRange works normally when active flag is absent', () => {
-      const dto = createFullMockDTO(
-        undefined,
-        { outOfRange: 1 },
-      );
+      const dto = createFullMockDTO(undefined, { outOfRange: 1 });
       const result = parseOutOfRange(dto);
       expect(result).toBe(2);
     });
@@ -2083,19 +2043,13 @@ describe('GTOSettingsParser — Issue #420: inactive RVColor/RVDisplayColor flag
 
   describe('both RVColor and RVDisplayColor inactive', () => {
     it('returns null when both nodes are inactive', () => {
-      const dto = createFullMockDTO(
-        { active: 0, exposure: 2.5, gamma: 1.8 },
-        { active: 0, brightness: 0.7 },
-      );
+      const dto = createFullMockDTO({ active: 0, exposure: 2.5, gamma: 1.8 }, { active: 0, brightness: 0.7 });
       const result = parseColorAdjustments(dto);
       expect(result).toBeNull();
     });
 
     it('parseOutOfRange returns 0 when both are inactive', () => {
-      const dto = createFullMockDTO(
-        { active: 0 },
-        { active: 0, outOfRange: 1 },
-      );
+      const dto = createFullMockDTO({ active: 0 }, { active: 0, outOfRange: 1 });
       const result = parseOutOfRange(dto);
       expect(result).toBe(0);
     });
@@ -2107,10 +2061,7 @@ describe('GTOSettingsParser — Issue #420: inactive RVColor/RVDisplayColor flag
 // =================================================================
 
 describe('GTOSettingsParser.parseFilterSettings', () => {
-  function createFilterDTO(
-    gaussianProps?: Record<string, unknown>,
-    unsharpProps?: Record<string, unknown>,
-  ): GTODTO {
+  function createFilterDTO(gaussianProps?: Record<string, unknown>, unsharpProps?: Record<string, unknown>): GTODTO {
     const mockComponent = (props: Record<string, unknown> | undefined) => ({
       exists: () => props !== undefined,
       property: (name: string) => ({
@@ -2461,10 +2412,7 @@ describe('GTOSettingsParser.parseStereoAlignMode (Issue #418)', () => {
  * Helper to create a mock GTODTO with a standalone RVColorCDL or RVColorACESLogCDL node.
  * These store CDL properties on the 'node' component (not 'CDL').
  */
-function createStandaloneCDLMockDTO(
-  nodeProps?: Record<string, unknown>,
-  protocol: string = 'RVColorCDL',
-): GTODTO {
+function createStandaloneCDLMockDTO(nodeProps?: Record<string, unknown>, protocol: string = 'RVColorCDL'): GTODTO {
   const mockComponent = (props: Record<string, unknown> | undefined) => ({
     exists: () => props !== undefined,
     property: (name: string) => ({
@@ -2721,11 +2669,9 @@ describe('GTOSettingsParser.parseColorAdjustments – standalone color-node fall
     });
 
     it('does NOT override exposure already set by RVColor', () => {
-      const dto = createStandaloneColorMockDTO(
-        { exposure: 0.5 },
-        undefined,
-        { RVColorExposure: { active: 1, exposure: 99 } },
-      );
+      const dto = createStandaloneColorMockDTO({ exposure: 0.5 }, undefined, {
+        RVColorExposure: { active: 1, exposure: 99 },
+      });
       const result = parseColorAdjustments(dto);
       expect(result).not.toBeNull();
       expect(result!.exposure).toBe(0.5);
@@ -2751,11 +2697,9 @@ describe('GTOSettingsParser.parseColorAdjustments – standalone color-node fall
     });
 
     it('does NOT override saturation already set by RVColor', () => {
-      const dto = createStandaloneColorMockDTO(
-        { saturation: 1.2 },
-        undefined,
-        { RVColorSaturation: { active: 1, saturation: 0.1 } },
-      );
+      const dto = createStandaloneColorMockDTO({ saturation: 1.2 }, undefined, {
+        RVColorSaturation: { active: 1, saturation: 0.1 },
+      });
       const result = parseColorAdjustments(dto);
       expect(result).not.toBeNull();
       expect(result!.saturation).toBe(1.2);
@@ -2784,11 +2728,9 @@ describe('GTOSettingsParser.parseColorAdjustments – standalone color-node fall
       // RVColor doesn't have a vibrance property, but if it did set one
       // this test ensures the standalone wouldn't override. Since RVColor
       // doesn't set vibrance, we verify the standalone IS used here.
-      const dto = createStandaloneColorMockDTO(
-        { exposure: 1.0 },
-        undefined,
-        { RVColorVibrance: { active: 1, vibrance: 0.8 } },
-      );
+      const dto = createStandaloneColorMockDTO({ exposure: 1.0 }, undefined, {
+        RVColorVibrance: { active: 1, vibrance: 0.8 },
+      });
       const result = parseColorAdjustments(dto);
       expect(result).not.toBeNull();
       expect(result!.vibrance).toBe(0.8);
@@ -2852,17 +2794,13 @@ describe('GTOSettingsParser.parseColorAdjustments – standalone color-node fall
     });
 
     it('RVColor values take precedence over standalone nodes for overlapping fields', () => {
-      const dto = createStandaloneColorMockDTO(
-        { exposure: 0.1, saturation: 1.5 },
-        undefined,
-        {
-          RVColorExposure: { active: 1, exposure: 99 },
-          RVColorSaturation: { active: 1, saturation: 99 },
-          RVColorVibrance: { active: 1, vibrance: 0.4 },
-          RVColorShadow: { active: 1, shadow: -0.1 },
-          RVColorHighlight: { active: 1, highlight: 0.2 },
-        },
-      );
+      const dto = createStandaloneColorMockDTO({ exposure: 0.1, saturation: 1.5 }, undefined, {
+        RVColorExposure: { active: 1, exposure: 99 },
+        RVColorSaturation: { active: 1, saturation: 99 },
+        RVColorVibrance: { active: 1, vibrance: 0.4 },
+        RVColorShadow: { active: 1, shadow: -0.1 },
+        RVColorHighlight: { active: 1, highlight: 0.2 },
+      });
       const result = parseColorAdjustments(dto);
       expect(result).not.toBeNull();
       // RVColor wins for exposure and saturation

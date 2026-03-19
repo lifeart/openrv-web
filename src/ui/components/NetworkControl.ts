@@ -8,7 +8,14 @@
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
-import type { ConnectionState, SyncUser, SyncSettings, RoomInfo, ParticipantRole, ParticipantPermission } from '../../network/types';
+import type {
+  ConnectionState,
+  SyncUser,
+  SyncSettings,
+  RoomInfo,
+  ParticipantRole,
+  ParticipantPermission,
+} from '../../network/types';
 import { DEFAULT_SYNC_SETTINGS, USER_COLORS } from '../../network/types';
 
 /**
@@ -1327,8 +1334,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
 
     // Show reconnect panel when retries are exhausted, otherwise normal disconnected panel
     this.reconnectPanel.style.display = isDisconnectedOrError && reconnectExhausted ? 'block' : 'none';
-    this.disconnectedPanel.style.display =
-      isDisconnectedOrError && !reconnectExhausted ? 'block' : 'none';
+    this.disconnectedPanel.style.display = isDisconnectedOrError && !reconnectExhausted ? 'block' : 'none';
     this.connectingPanel.style.display =
       connectionState === 'connecting' || connectionState === 'reconnecting' ? 'block' : 'none';
     this.connectedPanel.style.display =
@@ -1474,13 +1480,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
 
       // User badge: "You (Host)", "You", "Host", or nothing
       const isLocalUser = this.state.localUserId != null && user.id === this.state.localUserId;
-      const badgeText = isLocalUser && user.isHost
-        ? 'You (Host)'
-        : isLocalUser
-          ? 'You'
-          : user.isHost
-            ? 'Host'
-            : null;
+      const badgeText = isLocalUser && user.isHost ? 'You (Host)' : isLocalUser ? 'You' : user.isHost ? 'Host' : null;
 
       if (badgeText) {
         const badge = document.createElement('span');

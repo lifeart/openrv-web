@@ -466,9 +466,7 @@ describe('StereoControl', () => {
       expect(options).toHaveLength(10);
 
       // Verify each mode is present in the dropdown
-      const dropdownModes = Array.from(options).map(
-        (opt) => (opt as HTMLElement).dataset.stereoMode,
-      );
+      const dropdownModes = Array.from(options).map((opt) => (opt as HTMLElement).dataset.stereoMode);
       expect(dropdownModes).toEqual(ALL_STEREO_MODES);
     });
   });

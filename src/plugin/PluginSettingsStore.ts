@@ -289,9 +289,7 @@ export class PluginSettingsStore {
         return undefined as T;
       },
       set(key: string, _value: unknown): boolean {
-        console.warn(
-          `[plugin:${pluginId}] Attempted to set setting "${key}" but this plugin has no settingsSchema`,
-        );
+        console.warn(`[plugin:${pluginId}] Attempted to set setting "${key}" but this plugin has no settingsSchema`);
         return false;
       },
       getAll(): Record<string, unknown> {

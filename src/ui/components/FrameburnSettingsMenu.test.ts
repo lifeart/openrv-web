@@ -53,10 +53,7 @@ describe('FrameburnSettingsMenu', () => {
     expect(defaults.frameburnConfig).toEqual(
       expect.objectContaining({
         enabled: true,
-        fields: [
-          { type: 'timecode' },
-          { type: 'custom', label: 'Client', value: 'ACME' },
-        ],
+        fields: [{ type: 'timecode' }, { type: 'custom', label: 'Client', value: 'ACME' }],
       }),
     );
   });

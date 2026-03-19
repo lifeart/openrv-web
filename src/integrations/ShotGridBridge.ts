@@ -157,7 +157,7 @@ import type { NoteStatus } from '../core/session/NoteManager';
 const NOTE_LOCAL_TO_SG: Record<NoteStatus, string> = {
   open: 'opn',
   resolved: 'clsd',
-  wontfix: 'clsd',  // ShotGrid has no distinct "wontfix" status; map to Closed (terminal state)
+  wontfix: 'clsd', // ShotGrid has no distinct "wontfix" status; map to Closed (terminal state)
 };
 
 const NOTE_SG_TO_LOCAL: Record<string, NoteStatus> = {
@@ -166,7 +166,7 @@ const NOTE_SG_TO_LOCAL: Record<string, NoteStatus> = {
   // to the more common case ('resolved'). This means 'wontfix' loses fidelity
   // on round-trip through ShotGrid since SG has no distinct wontfix status.
   clsd: 'resolved',
-  ip: 'open',     // "In Progress" -> open
+  ip: 'open', // "In Progress" -> open
 };
 
 /**
@@ -305,9 +305,7 @@ export class ShotGridBridge {
    * Get a single Version by its ID.
    */
   async getVersionById(versionId: number): Promise<ShotGridVersion | null> {
-    const url =
-      `${this.serverUrl}/api/v1/entity/versions/${versionId}` +
-      `?fields=${VERSION_FIELDS}`;
+    const url = `${this.serverUrl}/api/v1/entity/versions/${versionId}` + `?fields=${VERSION_FIELDS}`;
 
     const response = await this.request(url);
     const data = await response.json();

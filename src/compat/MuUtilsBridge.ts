@@ -120,9 +120,7 @@ export class MuUtilsBridge {
     }
 
     // Movie formats
-    if (
-      ['mov', 'mp4', 'avi', 'mkv', 'webm', 'mxf', 'r3d', 'ari', 'braw', 'dng'].includes(ext)
-    ) {
+    if (['mov', 'mp4', 'avi', 'mkv', 'webm', 'mxf', 'r3d', 'ari', 'braw', 'dng'].includes(ext)) {
       return FileKind.MovieFile;
     }
 
@@ -288,7 +286,7 @@ export class MuUtilsBridge {
         } else if (Date.now() - startTime >= TIMEOUT_MS) {
           console.warn(
             `[MuUtilsBridge] waitForProgressiveLoading timed out after ${TIMEOUT_MS / 1000}s ` +
-            `(loadCount=${this._loadCount}, loadTotal=${this._loadTotal})`,
+              `(loadCount=${this._loadCount}, loadTotal=${this._loadTotal})`,
           );
           resolve();
         } else {

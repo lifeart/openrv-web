@@ -2007,7 +2007,13 @@ describe('ViewerGLRenderer', () => {
       vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(state);
 
       if (opts.autoExposure) {
-        glRenderer.setAutoExposure({ enabled: true, targetKey: 0.18, adaptationSpeed: 1, minExposure: -6, maxExposure: 6 });
+        glRenderer.setAutoExposure({
+          enabled: true,
+          targetKey: 0.18,
+          adaptationSpeed: 1,
+          minExposure: -6,
+          maxExposure: 6,
+        });
       }
 
       return { glRenderer };

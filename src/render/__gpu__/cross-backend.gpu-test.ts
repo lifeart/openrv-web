@@ -20,7 +20,8 @@ import { setupIdentityPipeline } from './helpers/pipeline';
 import viewerVertSrc from '../shaders/viewer.vert.glsl?raw';
 import viewerFragSrc from '../shaders/viewer.frag.glsl?raw';
 
-const W = 1, H = 1;
+const W = 1,
+  H = 1;
 
 function createFloatFBO(gl: WebGL2RenderingContext, width: number, height: number) {
   const fbo = gl.createFramebuffer()!;
@@ -31,14 +32,22 @@ function createFloatFBO(gl: WebGL2RenderingContext, width: number, height: numbe
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
   gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
-  return { fbo, dispose: () => { gl.deleteFramebuffer(fbo); gl.deleteTexture(tex); } };
+  return {
+    fbo,
+    dispose: () => {
+      gl.deleteFramebuffer(fbo);
+      gl.deleteTexture(tex);
+    },
+  };
 }
 
 /**
  * Renders through the WebGL2 viewer pipeline and returns float pixels.
  */
 function renderWebGL2(
-  inputR: number, inputG: number, inputB: number,
+  inputR: number,
+  inputG: number,
+  inputB: number,
   setUniforms?: (gl: WebGL2RenderingContext, program: WebGLProgram) => void,
 ): {
   pixels: Float32Array;
@@ -92,20 +101,12 @@ function referenceExposure(r: number, g: number, b: number, stops: number): [num
 }
 
 function referenceContrast(r: number, g: number, b: number, contrast: number): [number, number, number] {
-  return [
-    (r - 0.5) * contrast + 0.5,
-    (g - 0.5) * contrast + 0.5,
-    (b - 0.5) * contrast + 0.5,
-  ];
+  return [(r - 0.5) * contrast + 0.5, (g - 0.5) * contrast + 0.5, (b - 0.5) * contrast + 0.5];
 }
 
 function referenceSaturation(r: number, g: number, b: number, sat: number): [number, number, number] {
   const luma = r * 0.2126 + g * 0.7152 + b * 0.0722;
-  return [
-    luma + sat * (r - luma),
-    luma + sat * (g - luma),
-    luma + sat * (b - luma),
-  ];
+  return [luma + sat * (r - luma), luma + sat * (g - luma), luma + sat * (b - luma)];
 }
 
 describe('Cross-Backend Parity (WebGL2 vs Reference)', () => {
@@ -183,7 +184,9 @@ describe('Cross-Backend Parity (WebGL2 vs Reference)', () => {
     });
 
     it('multi-stage: exposure+contrast+saturation matches reference', () => {
-      const r = 0.4, g = 0.6, b = 0.2;
+      const r = 0.4,
+        g = 0.6,
+        b = 0.2;
       // Exposure +1: multiply by 2
       let [rr, rg, rb] = referenceExposure(r, g, b, 1);
       // Brightness is 0, temperature is 0 -- skip

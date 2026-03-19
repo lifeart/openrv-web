@@ -331,7 +331,7 @@ export async function decodeDPX(buffer: ArrayBuffer, options?: DPXDecodeOptions)
     const totalPixels = width * height;
     for (let i = 0; i < totalPixels; i++) {
       const idx = i * 4;
-      const a = rgbaData[idx]!;     // originally A
+      const a = rgbaData[idx]!; // originally A
       const b = rgbaData[idx + 1]!; // originally B
       const g = rgbaData[idx + 2]!; // originally G
       const r = rgbaData[idx + 3]!; // originally R

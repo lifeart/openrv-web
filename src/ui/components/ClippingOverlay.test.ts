@@ -662,7 +662,7 @@ describe('ClippingOverlay', () => {
       clippingOverlay.enable();
       clippingOverlay.setState({
         opacity: 1.0,
-        shadowThreshold: 0.5,    // shadowLimit = floor(0.5 * 253 + 1) = 127
+        shadowThreshold: 0.5, // shadowLimit = floor(0.5 * 253 + 1) = 127
         highlightThreshold: 0.3, // highlightLimit = ceil(0.3 * 253 + 1) = 77
       });
 

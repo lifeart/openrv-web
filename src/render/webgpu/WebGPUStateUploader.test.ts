@@ -34,7 +34,9 @@ function createMockDevice() {
     createBindGroup: vi.fn().mockReturnValue({}),
     createBuffer: vi.fn().mockImplementation(() => createMockBuffer()),
     createCommandEncoder: vi.fn().mockReturnValue({
-      beginRenderPass: vi.fn().mockReturnValue({ setPipeline: vi.fn(), setBindGroup: vi.fn(), draw: vi.fn(), end: vi.fn() }),
+      beginRenderPass: vi
+        .fn()
+        .mockReturnValue({ setPipeline: vi.fn(), setBindGroup: vi.fn(), draw: vi.fn(), end: vi.fn() }),
       finish: vi.fn().mockReturnValue({}),
     }),
     queue: {
@@ -80,9 +82,17 @@ function readU32(view: DataView, slotIndex: number): number {
 // ---------------------------------------------------------------------------
 
 const ALL_STAGES: StageId[] = [
-  'inputDecode', 'linearize', 'primaryGrade', 'secondaryGrade',
-  'spatialEffects', 'colorPipeline', 'sceneAnalysis', 'spatialEffectsPost',
-  'displayOutput', 'diagnostics', 'compositing',
+  'inputDecode',
+  'linearize',
+  'primaryGrade',
+  'secondaryGrade',
+  'spatialEffects',
+  'colorPipeline',
+  'sceneAnalysis',
+  'spatialEffectsPost',
+  'displayOutput',
+  'diagnostics',
+  'compositing',
 ];
 
 // ---------------------------------------------------------------------------
@@ -591,7 +601,9 @@ describe('WebGPUStateUploader', () => {
       uploader.uploadStageUniforms(device, 'primaryGrade', state);
       uploader.uploadStageUniforms(device, 'displayOutput', state);
 
-      const buffers = device.createBuffer.mock.results.map((r: { value: unknown }) => r.value as ReturnType<typeof createMockBuffer>);
+      const buffers = device.createBuffer.mock.results.map(
+        (r: { value: unknown }) => r.value as ReturnType<typeof createMockBuffer>,
+      );
 
       uploader.dispose();
 

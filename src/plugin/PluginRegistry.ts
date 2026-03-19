@@ -462,10 +462,7 @@ export class PluginRegistry {
       registerUIPanel: (panel: UIPanelContribution) => {
         registry.uiPanelRegistry.set(panel.id, panel);
         reg.uiPanels.push(panel.id);
-        registry.uiPanelRegistered.emit(
-          { pluginId: manifest.id, panel },
-          { pluginId: manifest.id, panel },
-        );
+        registry.uiPanelRegistered.emit({ pluginId: manifest.id, panel }, { pluginId: manifest.id, panel });
       },
       get api() {
         if (!registry.apiRef) throw new Error('OpenRV API not yet initialized');
@@ -527,10 +524,7 @@ export class PluginRegistry {
       for (const name of reg.exporters) {
         try {
           ExporterRegistry.unregister(name);
-          this.exporterUnregistered.emit(
-            { pluginId, name },
-            { pluginId, name },
-          );
+          this.exporterUnregistered.emit({ pluginId, name }, { pluginId, name });
         } catch (e) {
           console.warn(`[plugin:${pluginId}] Failed to unregister exporter "${name}":`, e);
         }
@@ -551,10 +545,7 @@ export class PluginRegistry {
           const panel = this.uiPanelRegistry.get(id);
           panel?.destroy?.();
           this.uiPanelRegistry.delete(id);
-          this.uiPanelUnregistered.emit(
-            { pluginId, panelId: id },
-            { pluginId, panelId: id },
-          );
+          this.uiPanelUnregistered.emit({ pluginId, panelId: id }, { pluginId, panelId: id });
         } catch (e) {
           console.warn(`[plugin:${pluginId}] Failed to unregister UI panel "${id}":`, e);
         }

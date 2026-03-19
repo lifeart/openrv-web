@@ -2,11 +2,7 @@ import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { type ExportFormat } from '../../utils/export/FrameExporter';
 import { getIconSvg, type IconName } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
-import {
-  type PreferencesManager,
-  type ExportDefaults,
-  getCorePreferencesManager,
-} from '../../core/PreferencesManager';
+import { type PreferencesManager, type ExportDefaults, getCorePreferencesManager } from '../../core/PreferencesManager';
 import { FrameburnSettingsMenu } from './FrameburnSettingsMenu';
 
 export interface ExportRequest {

@@ -69,9 +69,11 @@ function createFullMockDevice() {
 }
 
 /** Set up a WebGPU backend with full mock device, initialize + initAsync */
-async function initWebGPUBackend(
-  overrides?: { configureFn?: ReturnType<typeof vi.fn>; unconfigureFn?: ReturnType<typeof vi.fn>; device?: ReturnType<typeof createFullMockDevice> },
-) {
+async function initWebGPUBackend(overrides?: {
+  configureFn?: ReturnType<typeof vi.fn>;
+  unconfigureFn?: ReturnType<typeof vi.fn>;
+  device?: ReturnType<typeof createFullMockDevice>;
+}) {
   const backend = new WebGPUBackend();
   const canvas = document.createElement('canvas');
 

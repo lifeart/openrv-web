@@ -959,8 +959,14 @@ describe('BlendModes', () => {
       const base = new ImageData(10, 10);
       const top = new ImageData(10, 10);
       for (let i = 0; i < base.data.length; i += 4) {
-        base.data[i] = 100; base.data[i + 1] = 100; base.data[i + 2] = 100; base.data[i + 3] = 255;
-        top.data[i] = 200; top.data[i + 1] = 200; top.data[i + 2] = 200; top.data[i + 3] = 255;
+        base.data[i] = 100;
+        base.data[i + 1] = 100;
+        base.data[i + 2] = 100;
+        base.data[i + 3] = 255;
+        top.data[i] = 200;
+        top.data[i + 1] = 200;
+        top.data[i + 2] = 200;
+        top.data[i + 3] = 255;
       }
       const result1 = compositeImageData(base, top, 'dissolve', 1.0);
       const result2 = compositeImageData(base, top, 'dissolve', 1.0);
@@ -971,8 +977,14 @@ describe('BlendModes', () => {
       const base = new ImageData(10, 10);
       const top = new ImageData(10, 10);
       for (let i = 0; i < base.data.length; i += 4) {
-        base.data[i] = 50; base.data[i + 1] = 60; base.data[i + 2] = 70; base.data[i + 3] = 255;
-        top.data[i] = 200; top.data[i + 1] = 200; top.data[i + 2] = 200; top.data[i + 3] = 255;
+        base.data[i] = 50;
+        base.data[i + 1] = 60;
+        base.data[i + 2] = 70;
+        base.data[i + 3] = 255;
+        top.data[i] = 200;
+        top.data[i + 1] = 200;
+        top.data[i + 2] = 200;
+        top.data[i + 3] = 255;
       }
       const result = compositeImageData(base, top, 'dissolve', 0);
       for (let i = 0; i < result.data.length; i += 4) {
@@ -986,11 +998,18 @@ describe('BlendModes', () => {
       const base = new ImageData(20, 20);
       const top = new ImageData(20, 20);
       for (let i = 0; i < base.data.length; i += 4) {
-        base.data[i] = 0; base.data[i + 1] = 0; base.data[i + 2] = 0; base.data[i + 3] = 255;
-        top.data[i] = 255; top.data[i + 1] = 255; top.data[i + 2] = 255; top.data[i + 3] = 255;
+        base.data[i] = 0;
+        base.data[i + 1] = 0;
+        base.data[i + 2] = 0;
+        base.data[i + 3] = 255;
+        top.data[i] = 255;
+        top.data[i + 1] = 255;
+        top.data[i + 2] = 255;
+        top.data[i + 3] = 255;
       }
       const result = compositeImageData(base, top, 'dissolve', 0.5);
-      let baseCount = 0, topCount = 0;
+      let baseCount = 0,
+        topCount = 0;
       for (let i = 0; i < result.data.length; i += 4) {
         if (result.data[i] === 0) baseCount++;
         else if (result.data[i] === 255) topCount++;
@@ -1004,8 +1023,14 @@ describe('BlendModes', () => {
       const base = new ImageData(4, 4);
       const top = new ImageData(4, 4);
       for (let i = 0; i < base.data.length; i += 4) {
-        base.data[i] = 0; base.data[i + 1] = 0; base.data[i + 2] = 0; base.data[i + 3] = 255;
-        top.data[i] = 200; top.data[i + 1] = 200; top.data[i + 2] = 200; top.data[i + 3] = 255;
+        base.data[i] = 0;
+        base.data[i + 1] = 0;
+        base.data[i + 2] = 0;
+        base.data[i + 3] = 255;
+        top.data[i] = 200;
+        top.data[i + 1] = 200;
+        top.data[i + 2] = 200;
+        top.data[i + 3] = 255;
       }
       const result = compositeImageData(base, top, 'dissolve', 1.0);
       for (let i = 0; i < result.data.length; i += 4) {
@@ -1023,8 +1048,14 @@ describe('BlendModes', () => {
       const base = new ImageData(4, 4);
       const top = new ImageData(4, 4);
       for (let i = 0; i < base.data.length; i += 4) {
-        base.data[i] = 100; base.data[i + 1] = 100; base.data[i + 2] = 100; base.data[i + 3] = 255;
-        top.data[i] = 200; top.data[i + 1] = 200; top.data[i + 2] = 200; top.data[i + 3] = 255;
+        base.data[i] = 100;
+        base.data[i + 1] = 100;
+        base.data[i + 2] = 100;
+        base.data[i + 3] = 255;
+        top.data[i] = 200;
+        top.data[i + 1] = 200;
+        top.data[i + 2] = 200;
+        top.data[i + 3] = 255;
       }
       const result = compositeImageData(base, top, 'topmost', 1.0);
       for (let i = 0; i < result.data.length; i += 4) {
@@ -1039,15 +1070,28 @@ describe('BlendModes', () => {
       const layer2Data = new ImageData(4, 4);
       const layer3Data = new ImageData(4, 4);
       for (let i = 0; i < layer1Data.data.length; i += 4) {
-        layer1Data.data[i] = 10; layer1Data.data[i + 1] = 10; layer1Data.data[i + 2] = 10; layer1Data.data[i + 3] = 255;
-        layer2Data.data[i] = 20; layer2Data.data[i + 1] = 20; layer2Data.data[i + 2] = 20; layer2Data.data[i + 3] = 255;
-        layer3Data.data[i] = 30; layer3Data.data[i + 1] = 30; layer3Data.data[i + 2] = 30; layer3Data.data[i + 3] = 255;
+        layer1Data.data[i] = 10;
+        layer1Data.data[i + 1] = 10;
+        layer1Data.data[i + 2] = 10;
+        layer1Data.data[i + 3] = 255;
+        layer2Data.data[i] = 20;
+        layer2Data.data[i + 1] = 20;
+        layer2Data.data[i + 2] = 20;
+        layer2Data.data[i + 3] = 255;
+        layer3Data.data[i] = 30;
+        layer3Data.data[i + 1] = 30;
+        layer3Data.data[i + 2] = 30;
+        layer3Data.data[i + 3] = 255;
       }
-      const result = compositeMultipleLayers([
-        { imageData: layer1Data, blendMode: 'topmost', opacity: 1, visible: true },
-        { imageData: layer2Data, blendMode: 'topmost', opacity: 1, visible: true },
-        { imageData: layer3Data, blendMode: 'topmost', opacity: 1, visible: true },
-      ], 4, 4);
+      const result = compositeMultipleLayers(
+        [
+          { imageData: layer1Data, blendMode: 'topmost', opacity: 1, visible: true },
+          { imageData: layer2Data, blendMode: 'topmost', opacity: 1, visible: true },
+          { imageData: layer3Data, blendMode: 'topmost', opacity: 1, visible: true },
+        ],
+        4,
+        4,
+      );
       // Last visible layer (layer3) should be the output
       expect(result.data[0]).toBe(30);
       expect(result.data[1]).toBe(30);
@@ -1058,15 +1102,28 @@ describe('BlendModes', () => {
       const layer2Data = new ImageData(4, 4);
       const layer3Data = new ImageData(4, 4);
       for (let i = 0; i < layer1Data.data.length; i += 4) {
-        layer1Data.data[i] = 10; layer1Data.data[i + 1] = 10; layer1Data.data[i + 2] = 10; layer1Data.data[i + 3] = 255;
-        layer2Data.data[i] = 20; layer2Data.data[i + 1] = 20; layer2Data.data[i + 2] = 20; layer2Data.data[i + 3] = 255;
-        layer3Data.data[i] = 30; layer3Data.data[i + 1] = 30; layer3Data.data[i + 2] = 30; layer3Data.data[i + 3] = 255;
+        layer1Data.data[i] = 10;
+        layer1Data.data[i + 1] = 10;
+        layer1Data.data[i + 2] = 10;
+        layer1Data.data[i + 3] = 255;
+        layer2Data.data[i] = 20;
+        layer2Data.data[i + 1] = 20;
+        layer2Data.data[i + 2] = 20;
+        layer2Data.data[i + 3] = 255;
+        layer3Data.data[i] = 30;
+        layer3Data.data[i + 1] = 30;
+        layer3Data.data[i + 2] = 30;
+        layer3Data.data[i + 3] = 255;
       }
-      const result = compositeMultipleLayers([
-        { imageData: layer1Data, blendMode: 'topmost', opacity: 1, visible: true },
-        { imageData: layer2Data, blendMode: 'topmost', opacity: 1, visible: true },
-        { imageData: layer3Data, blendMode: 'topmost', opacity: 1, visible: false }, // invisible
-      ], 4, 4);
+      const result = compositeMultipleLayers(
+        [
+          { imageData: layer1Data, blendMode: 'topmost', opacity: 1, visible: true },
+          { imageData: layer2Data, blendMode: 'topmost', opacity: 1, visible: true },
+          { imageData: layer3Data, blendMode: 'topmost', opacity: 1, visible: false }, // invisible
+        ],
+        4,
+        4,
+      );
       // Layer3 is invisible, so layer2 (next from top) should be used
       expect(result.data[0]).toBe(20);
       expect(result.data[1]).toBe(20);

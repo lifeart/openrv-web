@@ -525,6 +525,8 @@ export class MuCommands {
 
   /** Get all marked frames as an integer array. (Mu #51) */
   markedFrames(): number[] {
-    return getOpenRV().markers.getAll().map((m: { frame: number }) => m.frame);
+    return getOpenRV()
+      .markers.getAll()
+      .map((m: { frame: number }) => m.frame);
   }
 }

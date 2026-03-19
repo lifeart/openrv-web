@@ -348,9 +348,9 @@ export class LayoutOrchestrator {
       container: layoutManager.getPanelWrapper('left'),
       getItems: () =>
         Array.from(
-          layoutManager.getPanelWrapper('left').querySelectorAll<HTMLElement>(
-            'button:not([disabled]), input, [tabindex="0"]',
-          ),
+          layoutManager
+            .getPanelWrapper('left')
+            .querySelectorAll<HTMLElement>('button:not([disabled]), input, [tabindex="0"]'),
         ).filter((el) => isVisible(el, layoutManager.getPanelWrapper('left'))),
       orientation: 'vertical',
     } as FocusZone);
@@ -359,9 +359,9 @@ export class LayoutOrchestrator {
       container: layoutManager.getPanelWrapper('right'),
       getItems: () =>
         Array.from(
-          layoutManager.getPanelWrapper('right').querySelectorAll<HTMLElement>(
-            'button:not([disabled]), input, [tabindex="0"]',
-          ),
+          layoutManager
+            .getPanelWrapper('right')
+            .querySelectorAll<HTMLElement>('button:not([disabled]), input, [tabindex="0"]'),
         ).filter((el) => isVisible(el, layoutManager.getPanelWrapper('right'))),
       orientation: 'vertical',
     } as FocusZone);

@@ -59,9 +59,11 @@ describe('Keyboard registration tests (M-25)', () => {
     registrationHandler.setup();
 
     // Plain KeyG (no modifiers) should be skipped (context-managed)
-    const keyGBindings = km.getBindings().filter(
-      (binding) => binding.combo.code === 'KeyG' && !binding.combo.ctrl && !binding.combo.shift && !binding.combo.alt,
-    );
+    const keyGBindings = km
+      .getBindings()
+      .filter(
+        (binding) => binding.combo.code === 'KeyG' && !binding.combo.ctrl && !binding.combo.shift && !binding.combo.alt,
+      );
     expect(keyGBindings).toHaveLength(0);
   });
 
@@ -80,9 +82,11 @@ describe('Keyboard registration tests (M-25)', () => {
     registrationHandler.setup();
 
     // Both use bare KeyH — both are context-managed, so neither should be directly registered
-    const bareKeyHBindings = km.getBindings().filter(
-      (binding) => binding.combo.code === 'KeyH' && !binding.combo.shift && !binding.combo.alt && !binding.combo.ctrl,
-    );
+    const bareKeyHBindings = km
+      .getBindings()
+      .filter(
+        (binding) => binding.combo.code === 'KeyH' && !binding.combo.shift && !binding.combo.alt && !binding.combo.ctrl,
+      );
     expect(bareKeyHBindings).toHaveLength(0);
   });
 
@@ -124,9 +128,7 @@ describe('Keyboard registration tests (M-25)', () => {
     registrationHandler.setup();
 
     // Neither should be directly registered — they are resolved by the contextual manager
-    const shiftLBindings = km.getBindings().filter(
-      (binding) => binding.combo.code === 'KeyL' && binding.combo.shift,
-    );
+    const shiftLBindings = km.getBindings().filter((binding) => binding.combo.code === 'KeyL' && binding.combo.shift);
     expect(shiftLBindings).toHaveLength(0);
   });
 
@@ -227,21 +229,15 @@ describe('Scope shortcut regression tests (Issues #1, #2, #3)', () => {
 
     const bindings = km.getBindings();
     // Bare KeyH should NOT be directly registered (context-managed)
-    const hBindings = bindings.filter(
-      (b) => b.combo.code === 'KeyH' && !b.combo.ctrl && !b.combo.shift,
-    );
+    const hBindings = bindings.filter((b) => b.combo.code === 'KeyH' && !b.combo.ctrl && !b.combo.shift);
     expect(hBindings).toHaveLength(0);
 
     // Bare KeyW should NOT be directly registered (context-managed)
-    const wBindings = bindings.filter(
-      (b) => b.combo.code === 'KeyW' && !b.combo.ctrl && !b.combo.shift,
-    );
+    const wBindings = bindings.filter((b) => b.combo.code === 'KeyW' && !b.combo.ctrl && !b.combo.shift);
     expect(wBindings).toHaveLength(0);
 
     // Bare KeyG should NOT be directly registered (context-managed)
-    const gBindings = bindings.filter(
-      (b) => b.combo.code === 'KeyG' && !b.combo.ctrl && !b.combo.shift,
-    );
+    const gBindings = bindings.filter((b) => b.combo.code === 'KeyG' && !b.combo.ctrl && !b.combo.shift);
     expect(gBindings).toHaveLength(0);
   });
 
@@ -261,9 +257,7 @@ describe('Scope shortcut regression tests (Issues #1, #2, #3)', () => {
 
     const bindings = km.getBindings();
     // Shift+L should NOT be directly registered (context-managed)
-    const shiftLBindings = bindings.filter(
-      (b) => b.combo.code === 'KeyL' && b.combo.shift,
-    );
+    const shiftLBindings = bindings.filter((b) => b.combo.code === 'KeyL' && b.combo.shift);
     expect(shiftLBindings).toHaveLength(0);
   });
 

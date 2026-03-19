@@ -65,9 +65,7 @@ describe('MuPropertyBridge', () => {
 
     it('throws if property already exists', () => {
       bridge.newProperty('node.comp.gamma', MuPropertyType.Float, 1);
-      expect(() => bridge.newProperty('node.comp.gamma', MuPropertyType.Float, 1)).toThrow(
-        'Property already exists',
-      );
+      expect(() => bridge.newProperty('node.comp.gamma', MuPropertyType.Float, 1)).toThrow('Property already exists');
     });
 
     it('throws for invalid path', () => {
@@ -341,9 +339,7 @@ describe('MuPropertyBridge', () => {
 
     it('throws when setting string values on a float property', () => {
       bridge.newProperty('node.color.val', MuPropertyType.Float, 1);
-      expect(() => bridge.setStringProperty('node.color.val', ['hello'])).toThrow(
-        'not a string property',
-      );
+      expect(() => bridge.setStringProperty('node.color.val', ['hello'])).toThrow('not a string property');
     });
   });
 
@@ -426,9 +422,7 @@ describe('MuPropertyBridge', () => {
 
     it('throws for non-string property', () => {
       bridge.newProperty('node.color.val', MuPropertyType.Float, 1);
-      expect(() => bridge.insertStringProperty('node.color.val', ['x'], 0)).toThrow(
-        'not a string property',
-      );
+      expect(() => bridge.insertStringProperty('node.color.val', ['x'], 0)).toThrow('not a string property');
     });
   });
 
@@ -720,7 +714,7 @@ describe('MuPropertyBridge', () => {
       bridge.newNDProperty('node.transform.matrix', MuPropertyType.Float, [4, 4]);
       expect(() => bridge.setFloatProperty('node.transform.matrix', new Array(10).fill(0))).toThrow(TypeError);
       expect(() => bridge.setFloatProperty('node.transform.matrix', new Array(10).fill(0))).toThrow(
-        /Property "node\.transform\.matrix": ND property set requires exactly 16 values \(dimensions: \[4,4\]\), got 10/
+        /Property "node\.transform\.matrix": ND property set requires exactly 16 values \(dimensions: \[4,4\]\), got 10/,
       );
     });
 
@@ -728,7 +722,7 @@ describe('MuPropertyBridge', () => {
       bridge.newNDProperty('node.transform.matrix', MuPropertyType.Float, [4, 4]);
       expect(() => bridge.insertFloatProperty('node.transform.matrix', [1, 2, 3], 0)).toThrow(TypeError);
       expect(() => bridge.insertFloatProperty('node.transform.matrix', [1, 2, 3], 0)).toThrow(
-        /Property "node\.transform\.matrix": ND property insert requires value count to be a multiple of inner size 4 \(dimensions: \[4,4\]\), got 3/
+        /Property "node\.transform\.matrix": ND property insert requires value count to be a multiple of inner size 4 \(dimensions: \[4,4\]\), got 3/,
       );
     });
 
@@ -736,7 +730,7 @@ describe('MuPropertyBridge', () => {
       bridge.newNDProperty('node.data.grid', MuPropertyType.String, [2, 3]);
       expect(() => bridge.setStringProperty('node.data.grid', ['a', 'b'])).toThrow(TypeError);
       expect(() => bridge.setStringProperty('node.data.grid', ['a', 'b'])).toThrow(
-        /Property "node\.data\.grid": ND property set requires exactly 6 values \(dimensions: \[2,3\]\), got 2/
+        /Property "node\.data\.grid": ND property set requires exactly 6 values \(dimensions: \[2,3\]\), got 2/,
       );
     });
 
@@ -744,7 +738,7 @@ describe('MuPropertyBridge', () => {
       bridge.newNDProperty('node.data.grid', MuPropertyType.String, [2, 3]);
       expect(() => bridge.insertStringProperty('node.data.grid', ['a', 'b'], 0)).toThrow(TypeError);
       expect(() => bridge.insertStringProperty('node.data.grid', ['a', 'b'], 0)).toThrow(
-        /Property "node\.data\.grid": ND property insert requires value count to be a multiple of inner size 3 \(dimensions: \[2,3\]\), got 2/
+        /Property "node\.data\.grid": ND property insert requires value count to be a multiple of inner size 3 \(dimensions: \[2,3\]\), got 2/,
       );
     });
 
@@ -765,7 +759,7 @@ describe('MuPropertyBridge', () => {
       // innerSize = 4, index 2 is not aligned
       expect(() => bridge.insertFloatProperty('node.transform.matrix', [1, 2, 3, 4], 2)).toThrow(TypeError);
       expect(() => bridge.insertFloatProperty('node.transform.matrix', [1, 2, 3, 4], 2)).toThrow(
-        /Property "node\.transform\.matrix": ND property insert requires index to be aligned to inner size 4.*got index 2/
+        /Property "node\.transform\.matrix": ND property insert requires index to be aligned to inner size 4.*got index 2/,
       );
     });
   });

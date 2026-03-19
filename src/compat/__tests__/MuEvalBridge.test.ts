@@ -39,7 +39,13 @@ function createTestGraph(): { graph: Graph; nodes: Record<string, IPNode> } {
   return { graph, nodes: { source1, color1, seq1, display1 } };
 }
 
-function makeRenderedImage(name: string, index: number, width: number, height: number, tag?: string): RenderedImageInfo {
+function makeRenderedImage(
+  name: string,
+  index: number,
+  width: number,
+  height: number,
+  tag?: string,
+): RenderedImageInfo {
   return {
     name,
     index,
@@ -222,10 +228,7 @@ describe('MuEvalBridge', () => {
     });
 
     it('returns the set rendered images', () => {
-      const images = [
-        makeRenderedImage('img1', 0, 1920, 1080),
-        makeRenderedImage('img2', 1, 3840, 2160),
-      ];
+      const images = [makeRenderedImage('img1', 0, 1920, 1080), makeRenderedImage('img2', 1, 3840, 2160)];
       bridge.setRenderedImages(images);
       const result = bridge.renderedImages();
       expect(result).toHaveLength(2);
@@ -249,17 +252,17 @@ describe('MuEvalBridge', () => {
 
   describe('imagesAtPixel', () => {
     beforeEach(() => {
-      bridge.setViewTransform(defaultViewTransform({
-        viewWidth: 800,
-        viewHeight: 600,
-        scale: 1,
-        translation: [0, 0],
-        imageWidth: 200,
-        imageHeight: 100,
-      }));
-      bridge.setRenderedImages([
-        makeRenderedImage('testImg', 0, 200, 100),
-      ]);
+      bridge.setViewTransform(
+        defaultViewTransform({
+          viewWidth: 800,
+          viewHeight: 600,
+          scale: 1,
+          translation: [0, 0],
+          imageWidth: 200,
+          imageHeight: 100,
+        }),
+      );
+      bridge.setRenderedImages([makeRenderedImage('testImg', 0, 200, 100)]);
     });
 
     it('reports inside=true when point is within image bounds', () => {
@@ -288,7 +291,7 @@ describe('MuEvalBridge', () => {
       // Center of viewport, image centered
       const result = bridge.imagesAtPixel([400, 300]);
       expect(result[0]!.px).toBeCloseTo(100, 0); // center of 200-wide image
-      expect(result[0]!.py).toBeCloseTo(50, 0);  // center of 100-tall image
+      expect(result[0]!.py).toBeCloseTo(50, 0); // center of 100-tall image
     });
 
     it('includes model matrix in the result', () => {
@@ -308,15 +311,15 @@ describe('MuEvalBridge', () => {
 
   describe('imageGeometry', () => {
     beforeEach(() => {
-      bridge.setViewTransform(defaultViewTransform({
-        viewWidth: 800,
-        viewHeight: 600,
-        scale: 1,
-        translation: [0, 0],
-      }));
-      bridge.setRenderedImages([
-        makeRenderedImage('img1', 0, 200, 100),
-      ]);
+      bridge.setViewTransform(
+        defaultViewTransform({
+          viewWidth: 800,
+          viewHeight: 600,
+          scale: 1,
+          translation: [0, 0],
+        }),
+      );
+      bridge.setRenderedImages([makeRenderedImage('img1', 0, 200, 100)]);
     });
 
     it('returns 4 corner points for a known image', () => {
@@ -353,12 +356,14 @@ describe('MuEvalBridge', () => {
     });
 
     it('accounts for scale', () => {
-      bridge.setViewTransform(defaultViewTransform({
-        viewWidth: 800,
-        viewHeight: 600,
-        scale: 2,
-        translation: [0, 0],
-      }));
+      bridge.setViewTransform(
+        defaultViewTransform({
+          viewWidth: 800,
+          viewHeight: 600,
+          scale: 2,
+          translation: [0, 0],
+        }),
+      );
 
       const corners = bridge.imageGeometry('img1');
       expect(corners).toHaveLength(4);
@@ -372,12 +377,14 @@ describe('MuEvalBridge', () => {
     });
 
     it('accounts for translation', () => {
-      bridge.setViewTransform(defaultViewTransform({
-        viewWidth: 800,
-        viewHeight: 600,
-        scale: 1,
-        translation: [50, 30],
-      }));
+      bridge.setViewTransform(
+        defaultViewTransform({
+          viewWidth: 800,
+          viewHeight: 600,
+          scale: 1,
+          translation: [50, 30],
+        }),
+      );
 
       const corners = bridge.imageGeometry('img1');
       expect(corners).toHaveLength(4);
@@ -397,10 +404,7 @@ describe('MuEvalBridge', () => {
   describe('imageGeometryByIndex', () => {
     beforeEach(() => {
       bridge.setViewTransform(defaultViewTransform());
-      bridge.setRenderedImages([
-        makeRenderedImage('img0', 0, 100, 100),
-        makeRenderedImage('img1', 1, 200, 200),
-      ]);
+      bridge.setRenderedImages([makeRenderedImage('img0', 0, 100, 100), makeRenderedImage('img1', 1, 200, 200)]);
     });
 
     it('returns corners for valid index', () => {
@@ -530,15 +534,15 @@ describe('MuEvalBridge', () => {
 
   describe('eventToImageSpace', () => {
     beforeEach(() => {
-      bridge.setViewTransform(defaultViewTransform({
-        viewWidth: 800,
-        viewHeight: 600,
-        scale: 1,
-        translation: [0, 0],
-      }));
-      bridge.setRenderedImages([
-        makeRenderedImage('testImg', 0, 200, 100),
-      ]);
+      bridge.setViewTransform(
+        defaultViewTransform({
+          viewWidth: 800,
+          viewHeight: 600,
+          scale: 1,
+          translation: [0, 0],
+        }),
+      );
+      bridge.setRenderedImages([makeRenderedImage('testImg', 0, 200, 100)]);
     });
 
     it('converts screen center to image center', () => {
@@ -557,12 +561,14 @@ describe('MuEvalBridge', () => {
     });
 
     it('handles scaled view', () => {
-      bridge.setViewTransform(defaultViewTransform({
-        viewWidth: 800,
-        viewHeight: 600,
-        scale: 2,
-        translation: [0, 0],
-      }));
+      bridge.setViewTransform(
+        defaultViewTransform({
+          viewWidth: 800,
+          viewHeight: 600,
+          scale: 2,
+          translation: [0, 0],
+        }),
+      );
 
       // At scale 2, image (200x100) occupies 400x200 in screen space
       // Centered in 800x600 -> top-left at (200, 200)
@@ -586,10 +592,12 @@ describe('MuEvalBridge', () => {
 
   describe('eventToCameraSpace', () => {
     beforeEach(() => {
-      bridge.setViewTransform(defaultViewTransform({
-        viewWidth: 800,
-        viewHeight: 600,
-      }));
+      bridge.setViewTransform(
+        defaultViewTransform({
+          viewWidth: 800,
+          viewHeight: 600,
+        }),
+      );
     });
 
     it('maps viewport center to (0, 0)', () => {
@@ -666,16 +674,16 @@ describe('MuEvalBridge', () => {
 
   describe('pixel aspect ratio', () => {
     it('affects screen-to-image conversion', () => {
-      bridge.setViewTransform(defaultViewTransform({
-        viewWidth: 800,
-        viewHeight: 600,
-        scale: 1,
-        translation: [0, 0],
-        pixelAspect: 2,
-      }));
-      bridge.setRenderedImages([
-        makeRenderedImage('wideImg', 0, 200, 100),
-      ]);
+      bridge.setViewTransform(
+        defaultViewTransform({
+          viewWidth: 800,
+          viewHeight: 600,
+          scale: 1,
+          translation: [0, 0],
+          pixelAspect: 2,
+        }),
+      );
+      bridge.setRenderedImages([makeRenderedImage('wideImg', 0, 200, 100)]);
 
       // With pixelAspect=2, the image takes 400x100 screen pixels (200*2 x 100)
       // Centered in 800x600 -> top-left at (200, 250)
@@ -686,16 +694,16 @@ describe('MuEvalBridge', () => {
     });
 
     it('affects image geometry corners', () => {
-      bridge.setViewTransform(defaultViewTransform({
-        viewWidth: 800,
-        viewHeight: 600,
-        scale: 1,
-        translation: [0, 0],
-        pixelAspect: 2,
-      }));
-      bridge.setRenderedImages([
-        makeRenderedImage('wideImg', 0, 200, 100),
-      ]);
+      bridge.setViewTransform(
+        defaultViewTransform({
+          viewWidth: 800,
+          viewHeight: 600,
+          scale: 1,
+          translation: [0, 0],
+          pixelAspect: 2,
+        }),
+      );
+      bridge.setRenderedImages([makeRenderedImage('wideImg', 0, 200, 100)]);
 
       const corners = bridge.imageGeometry('wideImg');
       expect(corners).toHaveLength(4);

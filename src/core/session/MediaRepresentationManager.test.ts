@@ -344,7 +344,12 @@ describe('MediaRepresentationManager', () => {
       manager.removeRepresentation(0, 'rep-1');
 
       expect(changedEvents.length).toBe(1);
-      const event = changedEvents[0] as { sourceIndex: number; previousRepId: string; newRepId: string; representation: MediaRepresentation };
+      const event = changedEvents[0] as {
+        sourceIndex: number;
+        previousRepId: string;
+        newRepId: string;
+        representation: MediaRepresentation;
+      };
       expect(event.sourceIndex).toBe(0);
       expect(event.previousRepId).toBe('rep-1');
       expect(event.newRepId).toBe('rep-2');
@@ -603,7 +608,12 @@ describe('MediaRepresentationManager', () => {
       expect(result).toBe(true);
       expect(fallbackEvents.length).toBe(1);
       expect(changedEvents.length).toBe(1);
-      const event = changedEvents[0] as { sourceIndex: number; previousRepId: string; newRepId: string; representation: MediaRepresentation };
+      const event = changedEvents[0] as {
+        sourceIndex: number;
+        previousRepId: string;
+        newRepId: string;
+        representation: MediaRepresentation;
+      };
       expect(event.sourceIndex).toBe(0);
       expect(event.previousRepId).toBe('rep-1');
       expect(event.newRepId).toBe('rep-2');

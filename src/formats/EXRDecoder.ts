@@ -710,11 +710,7 @@ function parseChannels(reader: EXRDataReader, size: number): EXRChannel[] {
     // Validate pixel type
     // UINT (type 0), HALF (type 1), and FLOAT (type 2) are the three EXR spec pixel types.
     // UINT channels are parsed but skipped during decoding (only HALF and FLOAT are decoded).
-    if (
-      pixelType !== EXRPixelType.UINT &&
-      pixelType !== EXRPixelType.HALF &&
-      pixelType !== EXRPixelType.FLOAT
-    ) {
+    if (pixelType !== EXRPixelType.UINT && pixelType !== EXRPixelType.HALF && pixelType !== EXRPixelType.FLOAT) {
       throw new DecoderError('EXR', `Invalid pixel type ${pixelType} for channel '${name}'`);
     }
 
@@ -1251,11 +1247,7 @@ function numMipLevels(size: number, roundingMode: EXRRoundingMode): number {
  * Compute total number of offset table entries for a tiled image,
  * accounting for level mode (ONE_LEVEL, MIPMAP_LEVELS, RIPMAP_LEVELS).
  */
-function computeTotalTileOffsets(
-  width: number,
-  height: number,
-  tileDesc: EXRTileDesc,
-): number {
+function computeTotalTileOffsets(width: number, height: number, tileDesc: EXRTileDesc): number {
   const { xSize, ySize, levelMode, roundingMode } = tileDesc;
 
   if (levelMode === EXRLevelMode.ONE_LEVEL) {
@@ -2283,9 +2275,7 @@ async function decodeMultiPart(
     partHeaders[partIndex]!.type &&
     UNSUPPORTED_DEEP_DATA_TYPES.includes(partHeaders[partIndex]!.type!)
   ) {
-    const fallbackIndex = partHeaders.findIndex(
-      (ph) => !ph.type || !UNSUPPORTED_DEEP_DATA_TYPES.includes(ph.type),
-    );
+    const fallbackIndex = partHeaders.findIndex((ph) => !ph.type || !UNSUPPORTED_DEEP_DATA_TYPES.includes(ph.type));
     if (fallbackIndex >= 0) {
       partIndex = fallbackIndex;
     }

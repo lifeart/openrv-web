@@ -5,10 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import {
-  DisplayProfileIndicator,
-  DEFAULT_DISPLAY_PROFILE_INDICATOR_STATE,
-} from './DisplayProfileIndicator';
+import { DisplayProfileIndicator, DEFAULT_DISPLAY_PROFILE_INDICATOR_STATE } from './DisplayProfileIndicator';
 import {
   DEFAULT_DISPLAY_COLOR_STATE,
   PROFILE_LABELS,

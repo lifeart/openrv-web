@@ -30,7 +30,11 @@ import { ExportProgressDialog } from './ui/components/ExportProgress';
 import { showAlert, showAnnotationImportDialog } from './ui/components/shared/Modal';
 import { generateSlateFrame } from './export/SlateRenderer';
 import { generateReport } from './export/ReportExporter';
-import { downloadAnnotationsJSON, parseAnnotationsJSON, applyAnnotationsJSON } from './utils/export/AnnotationJSONExporter';
+import {
+  downloadAnnotationsJSON,
+  parseAnnotationsJSON,
+  applyAnnotationsJSON,
+} from './utils/export/AnnotationJSONExporter';
 import { exportAnnotationsPDF } from './utils/export/AnnotationPDFExporter';
 import { DisposableSubscriptionManager } from './utils/DisposableSubscriptionManager';
 import { isAudioScrubAvailable } from './utils/media/SourceUIState';
@@ -58,9 +62,7 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
   subs.add(headerBar.on('showCustomKeyBindings', () => deps.getKeyboardHandler().showCustomBindingsDialog()));
   subs.add(headerBar.on('saveProject', () => persistenceManager.saveProject()));
   subs.add(
-    headerBar.on('openProject', ({ file, availableFiles }) =>
-      persistenceManager.openProject(file, availableFiles),
-    ),
+    headerBar.on('openProject', ({ file, availableFiles }) => persistenceManager.openProject(file, availableFiles)),
   );
 
   // Wire auto-checkpoint before media file drops (only fires when sources already exist)

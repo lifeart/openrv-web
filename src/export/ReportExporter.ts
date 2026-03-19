@@ -82,9 +82,7 @@ export function computeReportStatistics(rows: ReportRow[]): ReportStatistics {
   }
 
   const approvedCount = countsByStatus['approved'] ?? 0;
-  const approvalRate = totalShots > 0
-    ? Math.round((approvedCount / totalShots) * 1000) / 10
-    : 0;
+  const approvalRate = totalShots > 0 ? Math.round((approvedCount / totalShots) * 1000) / 10 : 0;
 
   return { totalShots, approvedCount, approvalRate, countsByStatus };
 }
@@ -290,9 +288,7 @@ export function buildReportRows(
  */
 export function formatVersionHistory(history: ReportVersionHistoryEntry[]): string {
   if (history.length === 0) return '';
-  return history
-    .map((h) => (h.isCurrent ? `*${h.label} (current)*` : h.label))
-    .join(', ');
+  return history.map((h) => (h.isCurrent ? `*${h.label} (current)*` : h.label)).join(', ');
 }
 
 // ---------------------------------------------------------------------------
@@ -386,13 +382,7 @@ function buildHTMLHeaders(options: ReportOptions): string {
  */
 function formatVersionHistoryHTML(history: ReportVersionHistoryEntry[]): string {
   if (history.length === 0) return '';
-  return history
-    .map((h) =>
-      h.isCurrent
-        ? `<strong>${escapeHTML(h.label)}</strong>`
-        : escapeHTML(h.label),
-    )
-    .join(', ');
+  return history.map((h) => (h.isCurrent ? `<strong>${escapeHTML(h.label)}</strong>` : escapeHTML(h.label))).join(', ');
 }
 
 function statusBadgeHTML(status: ShotStatus): string {
@@ -411,9 +401,10 @@ export function generateHTML(rows: ReportRow[], options: ReportOptions): string 
   if (options.sessionDate) metadataItems.push(`<strong>Session Date:</strong> ${escapeHTML(options.sessionDate)}`);
   if (options.supervisorName) metadataItems.push(`<strong>Supervisor:</strong> ${escapeHTML(options.supervisorName)}`);
   if (options.projectId) metadataItems.push(`<strong>Project:</strong> ${escapeHTML(options.projectId)}`);
-  const metadataHTML = metadataItems.length > 0
-    ? `<div class="session-metadata" style="margin:0.5em 0;">${metadataItems.join(' &nbsp;|&nbsp; ')}</div>`
-    : '';
+  const metadataHTML =
+    metadataItems.length > 0
+      ? `<div class="session-metadata" style="margin:0.5em 0;">${metadataItems.join(' &nbsp;|&nbsp; ')}</div>`
+      : '';
 
   const stats = computeReportStatistics(rows);
   const statsHTML = `<div class="report-statistics" style="margin:0.5em 0 1em;"><strong>Total Shots:</strong> ${stats.totalShots} &nbsp; <strong>Approval Rate:</strong> ${stats.approvalRate}%</div>`;
@@ -438,7 +429,10 @@ export function generateHTML(rows: ReportRow[], options: ReportOptions): string 
   }
   const categoryParts = Object.entries(categoryCounts)
     .sort((a, b) => b[1] - a[1])
-    .map(([cat, count]) => `<span style="display:inline-block;padding:2px 8px;border-radius:4px;background:#e2e8f0;color:#1a1a2e;font-size:0.85em;">${escapeHTML(cat)}: ${count}</span>`)
+    .map(
+      ([cat, count]) =>
+        `<span style="display:inline-block;padding:2px 8px;border-radius:4px;background:#e2e8f0;color:#1a1a2e;font-size:0.85em;">${escapeHTML(cat)}: ${count}</span>`,
+    )
     .join(' &nbsp; ');
   const categorySection = categoryParts
     ? `<div class="category-stats" style="margin:0.5em 0;"><strong>Notes by category:</strong> ${categoryParts}</div>`

@@ -571,50 +571,32 @@ describe('parseShotGridInput', () => {
   });
 
   it('parses /detail/Version/ID URL', () => {
-    const result = parseShotGridInput(
-      'https://studio.shotgrid.autodesk.com/detail/Version/12345',
-      'playlist',
-    );
+    const result = parseShotGridInput('https://studio.shotgrid.autodesk.com/detail/Version/12345', 'playlist');
     expect(result).toEqual({ mode: 'version', id: 12345 });
   });
 
   it('parses /detail/Shot/ID URL', () => {
-    const result = parseShotGridInput(
-      'https://studio.shotgunstudio.com/detail/Shot/67890',
-      'playlist',
-    );
+    const result = parseShotGridInput('https://studio.shotgunstudio.com/detail/Shot/67890', 'playlist');
     expect(result).toEqual({ mode: 'shot', id: 67890 });
   });
 
   it('parses /detail/Playlist/ID URL', () => {
-    const result = parseShotGridInput(
-      'https://studio.shotgrid.autodesk.com/detail/Playlist/100',
-      'version',
-    );
+    const result = parseShotGridInput('https://studio.shotgrid.autodesk.com/detail/Playlist/100', 'version');
     expect(result).toEqual({ mode: 'playlist', id: 100 });
   });
 
   it('parses fragment-based URL (#Version_12345)', () => {
-    const result = parseShotGridInput(
-      'https://studio.shotgrid.autodesk.com/page/1234#Version_12345',
-      'playlist',
-    );
+    const result = parseShotGridInput('https://studio.shotgrid.autodesk.com/page/1234#Version_12345', 'playlist');
     expect(result).toEqual({ mode: 'version', id: 12345 });
   });
 
   it('parses fragment-based URL (#Shot_67890)', () => {
-    const result = parseShotGridInput(
-      'https://studio.shotgrid.autodesk.com/page/99#Shot_67890',
-      'playlist',
-    );
+    const result = parseShotGridInput('https://studio.shotgrid.autodesk.com/page/99#Shot_67890', 'playlist');
     expect(result).toEqual({ mode: 'shot', id: 67890 });
   });
 
   it('returns null for URL with unknown entity type', () => {
-    expect(parseShotGridInput(
-      'https://studio.shotgrid.autodesk.com/detail/Asset/123',
-      'playlist',
-    )).toBeNull();
+    expect(parseShotGridInput('https://studio.shotgrid.autodesk.com/detail/Asset/123', 'playlist')).toBeNull();
   });
 
   it('returns null for non-ShotGrid URL', () => {
@@ -622,10 +604,7 @@ describe('parseShotGridInput', () => {
   });
 
   it('is case-insensitive for entity types in URLs', () => {
-    const result = parseShotGridInput(
-      'https://studio.shotgrid.autodesk.com/detail/version/999',
-      'playlist',
-    );
+    const result = parseShotGridInput('https://studio.shotgrid.autodesk.com/detail/version/999', 'playlist');
     expect(result).toEqual({ mode: 'version', id: 999 });
   });
 });

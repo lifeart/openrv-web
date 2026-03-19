@@ -36,9 +36,9 @@ export interface SafeAreasState {
  * Used when multiple safe zones are active simultaneously for visual clarity.
  */
 export const SAFE_ZONE_COLORS: Record<'title' | 'action' | 'custom', string> = {
-  title: '#00ff00',   // green
-  action: '#ffffff',  // white
-  custom: '#ff9900',  // orange
+  title: '#00ff00', // green
+  action: '#ffffff', // white
+  custom: '#ff9900', // orange
 };
 
 export type AspectRatioGuide = '16:9' | '4:3' | '1:1' | '2.39:1' | '2.35:1' | '1.85:1' | '9:16' | 'custom';
@@ -285,7 +285,13 @@ export class SafeAreasOverlay extends CanvasOverlay<SafeAreasEvents> {
     }
 
     if (this.state.customSafeArea) {
-      this.drawSafeArea(this.state.customSafeAreaPercentage / 100, this.getSafeZoneColor('custom'), alpha, 'custom', 32);
+      this.drawSafeArea(
+        this.state.customSafeAreaPercentage / 100,
+        this.getSafeZoneColor('custom'),
+        alpha,
+        'custom',
+        32,
+      );
     }
 
     if (this.state.ruleOfThirds) {
@@ -300,7 +306,13 @@ export class SafeAreasOverlay extends CanvasOverlay<SafeAreasEvents> {
   /**
    * Draw a safe area rectangle
    */
-  private drawSafeArea(percentage: number, color: string, alpha: number, type: 'title' | 'action' | 'custom', labelOffset: number = 4): void {
+  private drawSafeArea(
+    percentage: number,
+    color: string,
+    alpha: number,
+    type: 'title' | 'action' | 'custom',
+    labelOffset: number = 4,
+  ): void {
     const { ctx } = this;
     const { eOffsetX, eOffsetY, eWidth, eHeight } = this.getEffectiveBounds();
 

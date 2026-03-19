@@ -71,15 +71,10 @@ export class InfoPanelSettingsMenu {
     const positions: InfoPanelPosition[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
     for (const pos of positions) {
       const isChecked = pos === currentPosition;
-      const item = this.createCheckableItem(
-        POSITION_LABELS[pos],
-        isChecked,
-        'menuitemradio',
-        () => {
-          this.infoPanel.setPosition(pos);
-          this.hide();
-        },
-      );
+      const item = this.createCheckableItem(POSITION_LABELS[pos], isChecked, 'menuitemradio', () => {
+        this.infoPanel.setPosition(pos);
+        this.hide();
+      });
       menu.appendChild(item);
     }
 
@@ -94,16 +89,11 @@ export class InfoPanelSettingsMenu {
     const fieldKeys = Object.keys(FIELD_LABELS) as (keyof InfoPanelFields)[];
     for (const field of fieldKeys) {
       const isChecked = currentFields[field];
-      const item = this.createCheckableItem(
-        FIELD_LABELS[field],
-        isChecked,
-        'menuitemcheckbox',
-        () => {
-          this.infoPanel.toggleField(field);
-          // Update the checkmark in-place without closing the menu
-          this.updateFieldCheckmarks(menu);
-        },
-      );
+      const item = this.createCheckableItem(FIELD_LABELS[field], isChecked, 'menuitemcheckbox', () => {
+        this.infoPanel.toggleField(field);
+        // Update the checkmark in-place without closing the menu
+        this.updateFieldCheckmarks(menu);
+      });
       item.dataset.field = field;
       menu.appendChild(item);
     }

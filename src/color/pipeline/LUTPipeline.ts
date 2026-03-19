@@ -352,7 +352,7 @@ export class LUTPipeline extends EventEmitter<PipelineEventMap> {
     this.activeSourceId =
       state.activeSourceId && this.sources.has(state.activeSourceId)
         ? state.activeSourceId
-        : this.sources.keys().next().value ?? null;
+        : (this.sources.keys().next().value ?? null);
     this.emit('reset', undefined);
   }
 }

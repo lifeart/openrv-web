@@ -639,9 +639,7 @@ describe('FalseColor', () => {
     });
 
     it('FC-203: getCustomPalette returns a deep copy', () => {
-      const customRanges: ColorRange[] = [
-        { min: 0, max: 255, color: [100, 100, 100], label: 'All grey' },
-      ];
+      const customRanges: ColorRange[] = [{ min: 0, max: 255, color: [100, 100, 100], label: 'All grey' }];
       falseColor.setCustomPalette(customRanges);
 
       const retrieved = falseColor.getCustomPalette();
@@ -654,9 +652,7 @@ describe('FalseColor', () => {
     });
 
     it('FC-204: setCustomPalette deep copies input (no external mutation)', () => {
-      const customRanges: ColorRange[] = [
-        { min: 0, max: 255, color: [100, 100, 100], label: 'All grey' },
-      ];
+      const customRanges: ColorRange[] = [{ min: 0, max: 255, color: [100, 100, 100], label: 'All grey' }];
       falseColor.setCustomPalette(customRanges);
 
       // Mutate original input
@@ -675,9 +671,7 @@ describe('FalseColor', () => {
     it('FC-206: custom preset LUT differs from standard', () => {
       const standardLUT = new Uint8Array(falseColor.getColorLUT());
 
-      falseColor.setCustomPalette([
-        { min: 0, max: 255, color: [42, 42, 42], label: 'Uniform' },
-      ]);
+      falseColor.setCustomPalette([{ min: 0, max: 255, color: [42, 42, 42], label: 'Uniform' }]);
 
       const customLUT = falseColor.getColorLUT();
       let differences = 0;
@@ -702,9 +696,7 @@ describe('FalseColor', () => {
     });
 
     it('FC-208: switching from custom to builtin and back preserves custom palette', () => {
-      const customRanges: ColorRange[] = [
-        { min: 0, max: 255, color: [42, 42, 42], label: 'Uniform' },
-      ];
+      const customRanges: ColorRange[] = [{ min: 0, max: 255, color: [42, 42, 42], label: 'Uniform' }];
       falseColor.setCustomPalette(customRanges);
       const customLUT = new Uint8Array(falseColor.getColorLUT());
 
@@ -727,18 +719,14 @@ describe('FalseColor', () => {
       falseColor.enable();
 
       // First custom palette: everything red
-      falseColor.setCustomPalette([
-        { min: 0, max: 255, color: [255, 0, 0], label: 'Red' },
-      ]);
+      falseColor.setCustomPalette([{ min: 0, max: 255, color: [255, 0, 0], label: 'Red' }]);
       const img1 = createTestImageData(1, 1, { r: 128, g: 128, b: 128, a: 255 });
       falseColor.apply(img1);
       expect(img1.data[0]).toBe(255);
       expect(img1.data[1]).toBe(0);
 
       // Second custom palette: everything blue
-      falseColor.setCustomPalette([
-        { min: 0, max: 255, color: [0, 0, 255], label: 'Blue' },
-      ]);
+      falseColor.setCustomPalette([{ min: 0, max: 255, color: [0, 0, 255], label: 'Blue' }]);
       const img2 = createTestImageData(1, 1, { r: 128, g: 128, b: 128, a: 255 });
       falseColor.apply(img2);
       expect(img2.data[0]).toBe(0);
@@ -783,9 +771,7 @@ describe('FalseColor', () => {
     });
 
     it('FC-213: min > max is auto-corrected by swapping', () => {
-      falseColor.setCustomPalette([
-        { min: 200, max: 100, color: [255, 0, 0], label: 'Swapped' },
-      ]);
+      falseColor.setCustomPalette([{ min: 200, max: 100, color: [255, 0, 0], label: 'Swapped' }]);
 
       const palette = falseColor.getCustomPalette();
       expect(palette[0]!.min).toBe(100);
@@ -793,9 +779,7 @@ describe('FalseColor', () => {
     });
 
     it('FC-214: min/max values are clamped to 0-255 and rounded to integers', () => {
-      falseColor.setCustomPalette([
-        { min: -10, max: 300, color: [128, 128, 128], label: 'Out of range' },
-      ]);
+      falseColor.setCustomPalette([{ min: -10, max: 300, color: [128, 128, 128], label: 'Out of range' }]);
 
       const palette = falseColor.getCustomPalette();
       expect(palette[0]!.min).toBe(0);
@@ -803,9 +787,7 @@ describe('FalseColor', () => {
     });
 
     it('FC-215: non-integer min/max values are rounded', () => {
-      falseColor.setCustomPalette([
-        { min: 10.7, max: 50.2, color: [128, 128, 128], label: 'Fractional' },
-      ]);
+      falseColor.setCustomPalette([{ min: 10.7, max: 50.2, color: [128, 128, 128], label: 'Fractional' }]);
 
       const palette = falseColor.getCustomPalette();
       expect(palette[0]!.min).toBe(11);

@@ -31,7 +31,7 @@ export function setupIdentityPipeline(gl: WebGL2RenderingContext, program: WebGL
 
   // Hue rotation: disabled
   gl.uniform1i(gl.getUniformLocation(program, 'u_hueRotationEnabled'), 0);
-  gl.uniformMatrix3fv(gl.getUniformLocation(program, 'u_hueRotationMatrix'), false, [1,0,0, 0,1,0, 0,0,1]);
+  gl.uniformMatrix3fv(gl.getUniformLocation(program, 'u_hueRotationMatrix'), false, [1, 0, 0, 0, 1, 0, 0, 0, 1]);
 
   // Tone mapping: off
   gl.uniform1i(gl.getUniformLocation(program, 'u_toneMappingOperator'), 0);

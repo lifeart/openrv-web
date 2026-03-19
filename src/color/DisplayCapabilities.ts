@@ -510,11 +510,7 @@ export async function detectWebGPUHDR(): Promise<boolean> {
  * Media queries monitored for display capability changes.
  * Exported for testing purposes.
  */
-export const DISPLAY_MEDIA_QUERIES = [
-  '(dynamic-range: high)',
-  '(color-gamut: p3)',
-  '(color-gamut: rec2020)',
-] as const;
+export const DISPLAY_MEDIA_QUERIES = ['(dynamic-range: high)', '(color-gamut: p3)', '(color-gamut: rec2020)'] as const;
 
 /**
  * Watch for display capability changes (HDR, color gamut) via matchMedia

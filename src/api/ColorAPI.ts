@@ -562,9 +562,7 @@ export class ColorAPI extends DisposableAPI {
     if (Object.prototype.hasOwnProperty.call(options, 'operator')) {
       const validOperators = TONE_MAPPING_OPERATORS.map((op) => op.key);
       if (!validOperators.includes(options.operator as ToneMappingOperator)) {
-        throw new ValidationError(
-          `setToneMapping() "operator" must be one of: ${validOperators.join(', ')}`,
-        );
+        throw new ValidationError(`setToneMapping() "operator" must be one of: ${validOperators.join(', ')}`);
       }
       merged.operator = options.operator as ToneMappingOperator;
     }

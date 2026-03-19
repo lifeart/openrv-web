@@ -1,9 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import {
-  handleBufferingChanged,
-  handleFrameDecodeTimeout,
-  cleanupBufferingOverlay,
-} from './bufferingHandlers';
+import { handleBufferingChanged, handleFrameDecodeTimeout, cleanupBufferingOverlay } from './bufferingHandlers';
 
 // Mock the Modal module
 vi.mock('../ui/components/shared/Modal', () => ({

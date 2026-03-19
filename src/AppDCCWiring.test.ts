@@ -1,5 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
-import { fetchAndApplyLUT, wireDCCBridge, validateMediaPath, type DCCWiringState, type DCCWiringColorControls, type DCCWiringViewer, type DCCWiringDeps } from './AppDCCWiring';
+import {
+  fetchAndApplyLUT,
+  wireDCCBridge,
+  validateMediaPath,
+  type DCCWiringState,
+  type DCCWiringColorControls,
+  type DCCWiringViewer,
+  type DCCWiringDeps,
+} from './AppDCCWiring';
 import { DisposableSubscriptionManager } from './utils/DisposableSubscriptionManager';
 import { NoteManager } from './core/session/NoteManager';
 
@@ -351,14 +359,16 @@ describe('NoteManager — noteAdded event (#445)', () => {
     const note = manager.addNote(0, 10, 20, 'Test', 'Alice');
 
     expect(listener).toHaveBeenCalledTimes(1);
-    expect(listener).toHaveBeenCalledWith(expect.objectContaining({
-      id: note.id,
-      text: 'Test',
-      author: 'Alice',
-      frameStart: 10,
-      frameEnd: 20,
-      status: 'open',
-    }));
+    expect(listener).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: note.id,
+        text: 'Test',
+        author: 'Alice',
+        frameStart: 10,
+        frameEnd: 20,
+        status: 'open',
+      }),
+    );
 
     manager.dispose();
   });
@@ -605,11 +615,7 @@ describe('wireDCCBridge — loadMedia path validation (#525)', () => {
     loadMediaHandlers[0]!({ type: 'loadMedia', path: '\\\\server\\share\\file.exr' });
 
     expect(bridge.sendError).toHaveBeenCalledTimes(1);
-    expect(bridge.sendError).toHaveBeenCalledWith(
-      'INVALID_MEDIA_PATH',
-      expect.stringContaining('UNC path'),
-      undefined,
-    );
+    expect(bridge.sendError).toHaveBeenCalledWith('INVALID_MEDIA_PATH', expect.stringContaining('UNC path'), undefined);
     expect(session.loadImage).not.toHaveBeenCalled();
     expect(session.loadVideo).not.toHaveBeenCalled();
   });

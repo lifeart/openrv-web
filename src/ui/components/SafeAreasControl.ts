@@ -566,7 +566,9 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
       select.value = state.aspectRatio || '';
     }
 
-    const customContainer = this.dropdown.querySelector('[data-testid="safe-areas-custom-aspect-container"]') as HTMLElement;
+    const customContainer = this.dropdown.querySelector(
+      '[data-testid="safe-areas-custom-aspect-container"]',
+    ) as HTMLElement;
     const customInput = this.dropdown.querySelector('[data-testid="safe-areas-custom-aspect"]') as HTMLInputElement;
     if (customContainer && customInput) {
       customContainer.style.display = state.aspectRatio === 'custom' ? 'flex' : 'none';

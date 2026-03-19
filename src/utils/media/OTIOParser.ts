@@ -450,11 +450,7 @@ export function parseOTIO(jsonString: string): OTIOParseResult | null {
  * Parse an array of OTIO markers into ParsedOTIOMarker objects.
  * The timelineOffset is added to each marker's position.
  */
-function parseMarkers(
-  markers: OTIOMarker[] | undefined,
-  fps: number,
-  timelineOffset: number,
-): ParsedOTIOMarker[] {
+function parseMarkers(markers: OTIOMarker[] | undefined, fps: number, timelineOffset: number): ParsedOTIOMarker[] {
   if (!markers || !Array.isArray(markers)) return [];
 
   const result: ParsedOTIOMarker[] = [];

@@ -37,9 +37,15 @@ function createMockSession() {
   session.pause = vi.fn();
   session.togglePlayback = vi.fn();
   session.stop = vi.fn();
-  session.goToFrame = vi.fn((frame: number) => { session.currentFrame = frame; });
-  session.stepForward = vi.fn(() => { session.currentFrame = session._currentFrame + 1; });
-  session.stepBackward = vi.fn(() => { session.currentFrame = Math.max(1, session._currentFrame - 1); });
+  session.goToFrame = vi.fn((frame: number) => {
+    session.currentFrame = frame;
+  });
+  session.stepForward = vi.fn(() => {
+    session.currentFrame = session._currentFrame + 1;
+  });
+  session.stepBackward = vi.fn(() => {
+    session.currentFrame = Math.max(1, session._currentFrame - 1);
+  });
   session.playbackSpeed = 1;
   session.playDirection = 1;
   session.playbackMode = 'realtime';

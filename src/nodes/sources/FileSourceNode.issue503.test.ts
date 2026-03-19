@@ -350,9 +350,7 @@ describe('Issue #503: Dual-path decode behavior', () => {
       expect(content).toContain('HTMLImageElement');
 
       // Should NOT contain the old incorrect claim that ALL decoding produces Float32Array
-      expect(content).not.toContain(
-        'All image decoding produces **Float32Array** pixel data in RGBA layout',
-      );
+      expect(content).not.toContain('All image decoding produces **Float32Array** pixel data in RGBA layout');
     });
 
     it('file-formats.md lists decoder-backed formats correctly', () => {

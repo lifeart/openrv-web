@@ -3,13 +3,7 @@
 /**
  * Read pixels from a WebGL2 context (RGBA, unsigned byte).
  */
-export function readPixelsGL(
-  gl: WebGL2RenderingContext,
-  x = 0,
-  y = 0,
-  width?: number,
-  height?: number
-): Uint8Array {
+export function readPixelsGL(gl: WebGL2RenderingContext, x = 0, y = 0, width?: number, height?: number): Uint8Array {
   const w = width ?? gl.drawingBufferWidth;
   const h = height ?? gl.drawingBufferHeight;
   const buf = new Uint8Array(w * h * 4);
@@ -24,7 +18,7 @@ export function readPixelsGLFloat(
   gl: WebGL2RenderingContext,
   fbo: WebGLFramebuffer,
   width: number,
-  height: number
+  height: number,
 ): Float32Array {
   gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
   const buf = new Float32Array(width * height * 4);
@@ -43,7 +37,7 @@ export async function readPixelsGPU(
   device: GPUDevice,
   texture: GPUTexture,
   width: number,
-  height: number
+  height: number,
 ): Promise<Float32Array> {
   const bytesPerRow = Math.ceil((width * 16) / 256) * 256;
   const bufferSize = bytesPerRow * height;
@@ -52,11 +46,7 @@ export async function readPixelsGPU(
     usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
   });
   const encoder = device.createCommandEncoder();
-  encoder.copyTextureToBuffer(
-    { texture },
-    { buffer: readBuffer, bytesPerRow },
-    { width, height }
-  );
+  encoder.copyTextureToBuffer({ texture }, { buffer: readBuffer, bytesPerRow }, { width, height });
   device.queue.submit([encoder.finish()]);
   await readBuffer.mapAsync(GPUMapMode.READ);
   const mapped = new Float32Array(readBuffer.getMappedRange().slice(0));
@@ -65,10 +55,7 @@ export async function readPixelsGPU(
   const result = new Float32Array(width * height * 4);
   const floatsPerRow = bytesPerRow / 4;
   for (let row = 0; row < height; row++) {
-    result.set(
-      mapped.subarray(row * floatsPerRow, row * floatsPerRow + width * 4),
-      row * width * 4
-    );
+    result.set(mapped.subarray(row * floatsPerRow, row * floatsPerRow + width * 4), row * width * 4);
   }
   return result;
 }
@@ -90,7 +77,7 @@ export function expectPixel(
   x: number,
   y: number,
   expected: RGBA,
-  epsilon: number
+  epsilon: number,
 ): void {
   const idx = (y * width + x) * 4;
   const actual: RGBA = {
@@ -109,7 +96,7 @@ export function expectPixel(
   if (maxDiff > epsilon) {
     throw new Error(
       `Pixel (${x},${y}) mismatch: expected RGBA(${expected.r},${expected.g},${expected.b},${expected.a}) ` +
-        `got RGBA(${actual.r.toFixed(4)},${actual.g.toFixed(4)},${actual.b.toFixed(4)},${actual.a.toFixed(4)}), max diff=${maxDiff.toFixed(6)}, epsilon=${epsilon}`
+        `got RGBA(${actual.r.toFixed(4)},${actual.g.toFixed(4)},${actual.b.toFixed(4)},${actual.a.toFixed(4)}), max diff=${maxDiff.toFixed(6)}, epsilon=${epsilon}`,
     );
   }
 }
@@ -117,11 +104,7 @@ export function expectPixel(
 /**
  * Compare two pixel arrays element-wise with tolerance.
  */
-export function comparePixelArrays(
-  a: Uint8Array | Float32Array,
-  b: Uint8Array | Float32Array,
-  epsilon: number
-): void {
+export function comparePixelArrays(a: Uint8Array | Float32Array, b: Uint8Array | Float32Array, epsilon: number): void {
   if (a.length !== b.length) {
     throw new Error(`Pixel array length mismatch: ${a.length} vs ${b.length}`);
   }
@@ -140,7 +123,7 @@ export function comparePixelArrays(
     const chName = ['R', 'G', 'B', 'A'][ch];
     throw new Error(
       `Pixel arrays differ: max diff=${maxDiff.toFixed(6)} at pixel ${px} channel ${chName}, ` +
-        `a=${a[maxDiffIdx]!.toFixed(4)}, b=${b[maxDiffIdx]!.toFixed(4)}, epsilon=${epsilon}`
+        `a=${a[maxDiffIdx]!.toFixed(4)}, b=${b[maxDiffIdx]!.toFixed(4)}, epsilon=${epsilon}`,
     );
   }
 }

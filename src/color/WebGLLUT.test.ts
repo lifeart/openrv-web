@@ -497,7 +497,7 @@ describe('WebGLLUTProcessor', () => {
       const data = new Float32Array(size * 3);
       for (let i = 0; i < size; i++) {
         const v = i / (size - 1);
-        data[i * 3] = v;     // R
+        data[i * 3] = v; // R
         data[i * 3 + 1] = v; // G
         data[i * 3 + 2] = v; // B
       }

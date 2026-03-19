@@ -602,7 +602,9 @@ describe('BackgroundPatternControl - edge cases', () => {
       button.click();
 
       const dropdown = document.querySelector('[data-testid="background-pattern-dropdown"]') as HTMLElement;
-      const focusable = Array.from(dropdown.querySelectorAll<HTMLElement>('[role="radio"], button, input, [tabindex="0"]'));
+      const focusable = Array.from(
+        dropdown.querySelectorAll<HTMLElement>('[role="radio"], button, input, [tabindex="0"]'),
+      );
       expect(focusable.length).toBeGreaterThan(1);
 
       focusable[0]!.focus();
@@ -622,7 +624,9 @@ describe('BackgroundPatternControl - edge cases', () => {
       button.click();
 
       const dropdown = document.querySelector('[data-testid="background-pattern-dropdown"]') as HTMLElement;
-      const focusable = Array.from(dropdown.querySelectorAll<HTMLElement>('[role="radio"], button, input, [tabindex="0"]'));
+      const focusable = Array.from(
+        dropdown.querySelectorAll<HTMLElement>('[role="radio"], button, input, [tabindex="0"]'),
+      );
 
       focusable[1]!.focus();
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
@@ -639,7 +643,9 @@ describe('BackgroundPatternControl - edge cases', () => {
       button.click();
 
       const dropdown = document.querySelector('[data-testid="background-pattern-dropdown"]') as HTMLElement;
-      const focusable = Array.from(dropdown.querySelectorAll<HTMLElement>('[role="radio"], button, input, [tabindex="0"]'));
+      const focusable = Array.from(
+        dropdown.querySelectorAll<HTMLElement>('[role="radio"], button, input, [tabindex="0"]'),
+      );
 
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }));
       expect(document.activeElement).toBe(focusable[focusable.length - 1]);

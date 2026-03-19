@@ -77,23 +77,20 @@ export class FPSIndicatorSettingsMenu {
     droppedItem.dataset.setting = 'show-dropped';
     menu.appendChild(droppedItem);
 
-    const targetItem = this.createCheckableItem(
-      'Show Target FPS',
-      state.showTargetFps,
-      'menuitemcheckbox',
-      () => {
-        const next = !this.indicator.getState().showTargetFps;
-        this.indicator.setState({ showTargetFps: next });
-        this.updateCheckbox(targetItem, next);
-      },
-    );
+    const targetItem = this.createCheckableItem('Show Target FPS', state.showTargetFps, 'menuitemcheckbox', () => {
+      const next = !this.indicator.getState().showTargetFps;
+      this.indicator.setState({ showTargetFps: next });
+      this.updateCheckbox(targetItem, next);
+    });
     targetItem.dataset.setting = 'show-target';
     menu.appendChild(targetItem);
 
-    menu.appendChild(this.createSliderControl('Background', 'fps-bg', state.backgroundOpacity, (value) => {
-      this.indicator.setBackgroundOpacity(value);
-      return this.indicator.getState().backgroundOpacity;
-    }));
+    menu.appendChild(
+      this.createSliderControl('Background', 'fps-bg', state.backgroundOpacity, (value) => {
+        this.indicator.setBackgroundOpacity(value);
+        return this.indicator.getState().backgroundOpacity;
+      }),
+    );
 
     menu.appendChild(this.createSeparator());
     menu.appendChild(this.createSectionHeader('Thresholds'));

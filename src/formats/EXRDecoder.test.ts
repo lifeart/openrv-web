@@ -3752,8 +3752,10 @@ function createTiledTestEXR(
 
   if (levelMode === EXRLevelMode.ONE_LEVEL) {
     allLevels.push({
-      levelX: 0, levelY: 0,
-      levelWidth: dataWidth, levelHeight: dataHeight,
+      levelX: 0,
+      levelY: 0,
+      levelWidth: dataWidth,
+      levelHeight: dataHeight,
       numXTiles: Math.ceil(dataWidth / tileXSize),
       numYTiles: Math.ceil(dataHeight / tileYSize),
     });
@@ -3763,8 +3765,10 @@ function createTiledTestEXR(
       const lw = mipLevelSize(dataWidth, l);
       const lh = mipLevelSize(dataHeight, l);
       allLevels.push({
-        levelX: l, levelY: l,
-        levelWidth: lw, levelHeight: lh,
+        levelX: l,
+        levelY: l,
+        levelWidth: lw,
+        levelHeight: lh,
         numXTiles: Math.ceil(lw / tileXSize),
         numYTiles: Math.ceil(lh / tileYSize),
       });
@@ -3778,8 +3782,10 @@ function createTiledTestEXR(
         const lw = mipLevelSize(dataWidth, lx);
         const lh = mipLevelSize(dataHeight, ly);
         allLevels.push({
-          levelX: lx, levelY: ly,
-          levelWidth: lw, levelHeight: lh,
+          levelX: lx,
+          levelY: ly,
+          levelWidth: lw,
+          levelHeight: lh,
           numXTiles: Math.ceil(lw / tileXSize),
           numYTiles: Math.ceil(lh / tileYSize),
         });
@@ -3837,7 +3843,8 @@ function createTiledTestEXR(
               let value = 0;
               if (ch === 'R') value = (globalX + globalY * lvl.levelWidth) / (lvl.levelWidth * lvl.levelHeight);
               else if (ch === 'G') value = 0.5;
-              else if (ch === 'B') value = 1.0 - (globalX + globalY * lvl.levelWidth) / (lvl.levelWidth * lvl.levelHeight);
+              else if (ch === 'B')
+                value = 1.0 - (globalX + globalY * lvl.levelWidth) / (lvl.levelWidth * lvl.levelHeight);
               else if (ch === 'A') value = 1.0;
               else if (ch === 'Y') value = (globalX + globalY * lvl.levelWidth) / (lvl.levelWidth * lvl.levelHeight);
 

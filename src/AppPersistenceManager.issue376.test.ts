@@ -74,10 +74,12 @@ function createMockAutoSaveManager() {
   };
 }
 
-function createMockContext(overrides?: Partial<{
-  allSources: any[];
-  annotatedFrames: Set<number>;
-}>): {
+function createMockContext(
+  overrides?: Partial<{
+    allSources: any[];
+    annotatedFrames: Set<number>;
+  }>,
+): {
   ctx: PersistenceManagerContext;
   snapshotManager: ReturnType<typeof createMockSnapshotManager>;
 } {
@@ -160,10 +162,7 @@ describe('Issue #376: auto-checkpoints before destructive operations', () => {
       await manager.checkpointBeforeMediaLoad();
 
       expect(snapshotManager.createAutoCheckpoint).toHaveBeenCalledTimes(1);
-      expect(snapshotManager.createAutoCheckpoint).toHaveBeenCalledWith(
-        'Before Media Load',
-        expect.any(Object),
-      );
+      expect(snapshotManager.createAutoCheckpoint).toHaveBeenCalledWith('Before Media Load', expect.any(Object));
     });
 
     it('I376-002: does NOT create checkpoint when no sources exist (empty session)', async () => {
@@ -201,10 +200,7 @@ describe('Issue #376: auto-checkpoints before destructive operations', () => {
       await manager.checkpointBeforeClearAnnotations();
 
       expect(snapshotManager.createAutoCheckpoint).toHaveBeenCalledTimes(1);
-      expect(snapshotManager.createAutoCheckpoint).toHaveBeenCalledWith(
-        'Before Clear Annotations',
-        expect.any(Object),
-      );
+      expect(snapshotManager.createAutoCheckpoint).toHaveBeenCalledWith('Before Clear Annotations', expect.any(Object));
     });
 
     it('I376-011: does NOT create checkpoint when no annotations exist', async () => {
@@ -232,10 +228,7 @@ describe('Issue #376: auto-checkpoints before destructive operations', () => {
       await manager.checkpointBeforeClearSources();
 
       expect(snapshotManager.createAutoCheckpoint).toHaveBeenCalledTimes(1);
-      expect(snapshotManager.createAutoCheckpoint).toHaveBeenCalledWith(
-        'Before Clear Sources',
-        expect.any(Object),
-      );
+      expect(snapshotManager.createAutoCheckpoint).toHaveBeenCalledWith('Before Clear Sources', expect.any(Object));
     });
 
     it('I376-021: does NOT create checkpoint when no sources exist', async () => {

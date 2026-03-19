@@ -28,10 +28,18 @@ const { MockFileSourceNode } = vi.hoisted(() => {
     constructor(_name: string) {
       // name stored internally by real FileSourceNode
     }
-    get width() { return 100; }
-    get height() { return 100; }
-    get formatName() { return 'standard'; }
-    isHDR() { return false; }
+    get width() {
+      return 100;
+    }
+    get height() {
+      return 100;
+    }
+    get formatName() {
+      return 'standard';
+    }
+    isHDR() {
+      return false;
+    }
     dispose() {}
     async loadFile(_file: any) {}
   }

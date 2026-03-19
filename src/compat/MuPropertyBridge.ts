@@ -13,12 +13,7 @@
  * All set* methods accept typed arrays and an optional `quiet` flag.
  */
 
-import {
-  MuPropertyType,
-  MuPropertyTypeNames,
-  type MuPropertyInfo,
-  type MuPropertyTypeValue,
-} from './types';
+import { MuPropertyType, MuPropertyTypeNames, type MuPropertyInfo, type MuPropertyTypeValue } from './types';
 
 // --- Internal property value store ---
 
@@ -164,7 +159,7 @@ export class MuPropertyBridge {
       const expectedTotal = prop.dimensions.reduce((a, b) => a * b, 1);
       if (values.length !== expectedTotal) {
         throw new TypeError(
-          `Property "${path}": ND property set requires exactly ${expectedTotal} values (dimensions: [${prop.dimensions.join(',')}]), got ${values.length}`
+          `Property "${path}": ND property set requires exactly ${expectedTotal} values (dimensions: [${prop.dimensions.join(',')}]), got ${values.length}`,
         );
       }
     }
@@ -198,12 +193,12 @@ export class MuPropertyBridge {
       const innerSize = prop.dimensions.slice(1).reduce((a, b) => a * b, 1);
       if (values.length % innerSize !== 0) {
         throw new TypeError(
-          `Property "${path}": ND property insert requires value count to be a multiple of inner size ${innerSize} (dimensions: [${prop.dimensions.join(',')}]), got ${values.length}`
+          `Property "${path}": ND property insert requires value count to be a multiple of inner size ${innerSize} (dimensions: [${prop.dimensions.join(',')}]), got ${values.length}`,
         );
       }
       if (index % innerSize !== 0) {
         throw new TypeError(
-          `Property "${path}": ND property insert requires index to be aligned to inner size ${innerSize} (dimensions: [${prop.dimensions.join(',')}]), got index ${index}`
+          `Property "${path}": ND property insert requires index to be aligned to inner size ${innerSize} (dimensions: [${prop.dimensions.join(',')}]), got index ${index}`,
         );
       }
     }
@@ -243,9 +238,7 @@ export class MuPropertyBridge {
       throw new Error(`Property already exists: "${path}"`);
     }
     const isString = type === MuPropertyType.String;
-    const data: number[] | string[] = isString
-      ? new Array(size).fill('')
-      : new Array(size).fill(0);
+    const data: number[] | string[] = isString ? new Array(size).fill('') : new Array(size).fill(0);
     this._store.set(key, {
       type,
       dimensions: [size],
@@ -271,9 +264,7 @@ export class MuPropertyBridge {
     }
     const totalSize = dimensions.reduce((a, b) => a * b, 1);
     const isString = type === MuPropertyType.String;
-    const data: number[] | string[] = isString
-      ? new Array(totalSize).fill('')
-      : new Array(totalSize).fill(0);
+    const data: number[] | string[] = isString ? new Array(totalSize).fill('') : new Array(totalSize).fill(0);
     this._store.set(key, {
       type,
       dimensions: [...dimensions],
@@ -331,11 +322,7 @@ export class MuPropertyBridge {
 
       // Use the highest-priority tier that has matches;
       // if exact matches exist use only those, otherwise suffix, otherwise substring
-      const matchingNodes = exactNodes.size > 0
-        ? exactNodes
-        : suffixNodes.size > 0
-          ? suffixNodes
-          : substringNodes;
+      const matchingNodes = exactNodes.size > 0 ? exactNodes : suffixNodes.size > 0 ? suffixNodes : substringNodes;
 
       for (const key of this._store.keys()) {
         const firstDot = key.indexOf('.');
@@ -479,9 +466,7 @@ export class MuPropertyBridge {
     if (!prop) throw new Error(`Property not found: "${path}"`);
     // Allow numeric type compatibility: float, int, half, byte are all numeric
     if (prop.type === MuPropertyType.String) {
-      throw new TypeError(
-        `Property "${path}" is a string property, expected ${MuPropertyTypeNames[expectedType]}`
-      );
+      throw new TypeError(`Property "${path}" is a string property, expected ${MuPropertyTypeNames[expectedType]}`);
     }
     return this._slice(prop.data as number[], start, count);
   }
@@ -493,7 +478,7 @@ export class MuPropertyBridge {
     if (!prop) throw new Error(`Property not found: "${path}"`);
     if (prop.type === MuPropertyType.String) {
       throw new TypeError(
-        `Property "${path}" is a string property, cannot set ${MuPropertyTypeNames[expectedType]} values`
+        `Property "${path}" is a string property, cannot set ${MuPropertyTypeNames[expectedType]} values`,
       );
     }
     if (prop.dimensions.length > 1) {
@@ -501,7 +486,7 @@ export class MuPropertyBridge {
       const expectedTotal = prop.dimensions.reduce((a, b) => a * b, 1);
       if (values.length !== expectedTotal) {
         throw new TypeError(
-          `Property "${path}": ND property set requires exactly ${expectedTotal} values (dimensions: [${prop.dimensions.join(',')}]), got ${values.length}`
+          `Property "${path}": ND property set requires exactly ${expectedTotal} values (dimensions: [${prop.dimensions.join(',')}]), got ${values.length}`,
         );
       }
     }
@@ -524,7 +509,7 @@ export class MuPropertyBridge {
     if (!prop) throw new Error(`Property not found: "${path}"`);
     if (prop.type === MuPropertyType.String) {
       throw new TypeError(
-        `Property "${path}" is a string property, cannot insert ${MuPropertyTypeNames[expectedType]} values`
+        `Property "${path}" is a string property, cannot insert ${MuPropertyTypeNames[expectedType]} values`,
       );
     }
     const data = prop.data as number[];
@@ -532,12 +517,12 @@ export class MuPropertyBridge {
       const innerSize = prop.dimensions.slice(1).reduce((a, b) => a * b, 1);
       if (values.length % innerSize !== 0) {
         throw new TypeError(
-          `Property "${path}": ND property insert requires value count to be a multiple of inner size ${innerSize} (dimensions: [${prop.dimensions.join(',')}]), got ${values.length}`
+          `Property "${path}": ND property insert requires value count to be a multiple of inner size ${innerSize} (dimensions: [${prop.dimensions.join(',')}]), got ${values.length}`,
         );
       }
       if (index % innerSize !== 0) {
         throw new TypeError(
-          `Property "${path}": ND property insert requires index to be aligned to inner size ${innerSize} (dimensions: [${prop.dimensions.join(',')}]), got index ${index}`
+          `Property "${path}": ND property insert requires index to be aligned to inner size ${innerSize} (dimensions: [${prop.dimensions.join(',')}]), got index ${index}`,
         );
       }
     }

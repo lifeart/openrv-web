@@ -189,9 +189,9 @@ describe('buildQCTab eyedropper coordinate conversion', () => {
     const data = new Uint8ClampedArray(width * height * 4);
     // Set pixel at (2, 1) to red
     const idx = (1 * width + 2) * 4;
-    data[idx] = 255;     // R
-    data[idx + 1] = 0;   // G
-    data[idx + 2] = 0;   // B
+    data[idx] = 255; // R
+    data[idx + 1] = 0; // G
+    data[idx + 2] = 0; // B
     data[idx + 3] = 255; // A
 
     const imageData = new ImageData(data, width, height);

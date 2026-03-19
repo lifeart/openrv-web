@@ -66,24 +66,22 @@ export class MuExtraCommands {
    * In the web layer this logs to console and stores the message for
    * retrieval. A full HUD overlay implementation can be plugged in later.
    */
-  displayFeedback(
-    message: string,
-    duration: number = 2.0,
-    _glyph?: string | null,
-    _position?: number[],
-  ): void {
+  displayFeedback(message: string, duration: number = 2.0, _glyph?: string | null, _position?: number[]): void {
     this._currentFeedback = message;
     if (typeof console !== 'undefined') {
       console.info(`[RV Feedback] ${message}`);
     }
     // Auto-clear after duration, then drain queue
     if (typeof setTimeout !== 'undefined') {
-      setTimeout(() => {
-        if (this._currentFeedback === message) {
-          this._currentFeedback = null;
-          this.drainFeedbackQueue();
-        }
-      }, Math.max(0, duration * 1000));
+      setTimeout(
+        () => {
+          if (this._currentFeedback === message) {
+            this._currentFeedback = null;
+            this.drainFeedbackQueue();
+          }
+        },
+        Math.max(0, duration * 1000),
+      );
     }
   }
 
@@ -99,12 +97,7 @@ export class MuExtraCommands {
   /**
    * Queue a feedback message (displayed after current one). (Mu #249)
    */
-  displayFeedbackQueue(
-    message: string,
-    duration: number = 2.0,
-    _glyph?: string | null,
-    _position?: number[],
-  ): void {
+  displayFeedbackQueue(message: string, duration: number = 2.0, _glyph?: string | null, _position?: number[]): void {
     this.feedbackQueue.push({ message, duration, timestamp: Date.now() });
     // If nothing is currently showing, show this one
     if (this._currentFeedback === null) {
@@ -123,11 +116,7 @@ export class MuExtraCommands {
   /**
    * Feedback display with custom font sizes. (Mu #251)
    */
-  displayFeedbackWithSizes(
-    message: string,
-    duration: number = 2.0,
-    _sizes?: number[],
-  ): void {
+  displayFeedbackWithSizes(message: string, duration: number = 2.0, _sizes?: number[]): void {
     this.displayFeedback(message, duration);
   }
 

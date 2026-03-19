@@ -1696,7 +1696,15 @@ describe('Timeline', () => {
       const tl = new TestTimeline(seqSession, paintEngine);
       const container = tl.render();
       vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
-        width: 1000, height: 100, top: 0, left: 0, bottom: 100, right: 1000, x: 0, y: 0, toJSON: () => {},
+        width: 1000,
+        height: 100,
+        top: 0,
+        left: 0,
+        bottom: 100,
+        right: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => {},
       } as DOMRect);
       tl.setSize(1000, 100);
       flushRaf();
@@ -1717,8 +1725,12 @@ describe('Timeline', () => {
       const expectedX7 = 60 + ((7 - 1) / 9) * 880; // ~646.7
 
       // Find fillRect calls near the expected X positions (within ±5px tolerance)
-      const nearX3 = fillRectCalls.filter((c) => Math.abs(c.x - expectedX3) < 5 || Math.abs(c.x - (expectedX3 - 0.5)) < 5);
-      const nearX7 = fillRectCalls.filter((c) => Math.abs(c.x - expectedX7) < 5 || Math.abs(c.x - (expectedX7 - 0.5)) < 5);
+      const nearX3 = fillRectCalls.filter(
+        (c) => Math.abs(c.x - expectedX3) < 5 || Math.abs(c.x - (expectedX3 - 0.5)) < 5,
+      );
+      const nearX7 = fillRectCalls.filter(
+        (c) => Math.abs(c.x - expectedX7) < 5 || Math.abs(c.x - (expectedX7 - 0.5)) < 5,
+      );
 
       expect(nearX3.length).toBeGreaterThanOrEqual(2); // background rect + line
       expect(nearX7.length).toBeGreaterThanOrEqual(2);
@@ -1732,8 +1744,13 @@ describe('Timeline', () => {
       const globalAlphaValues: number[] = [];
       let currentAlpha = 1;
       Object.defineProperty(ctx, 'globalAlpha', {
-        set(v: number) { currentAlpha = v; globalAlphaValues.push(v); },
-        get() { return currentAlpha; },
+        set(v: number) {
+          currentAlpha = v;
+          globalAlphaValues.push(v);
+        },
+        get() {
+          return currentAlpha;
+        },
         configurable: true,
       });
 
@@ -1754,7 +1771,15 @@ describe('Timeline', () => {
       const tl = new TestTimeline(seqSession, paintEngine);
       const container = tl.render();
       vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
-        width: 1000, height: 100, top: 0, left: 0, bottom: 100, right: 1000, x: 0, y: 0, toJSON: () => {},
+        width: 1000,
+        height: 100,
+        top: 0,
+        left: 0,
+        bottom: 100,
+        right: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => {},
       } as DOMRect);
       tl.setSize(1000, 100);
       flushRaf();
@@ -1771,8 +1796,13 @@ describe('Timeline', () => {
       const fillStyleValues: string[] = [];
       let lastStyle = '';
       Object.defineProperty(ctx, 'fillStyle', {
-        set(v: string) { lastStyle = v; fillStyleValues.push(v); },
-        get() { return lastStyle; },
+        set(v: string) {
+          lastStyle = v;
+          fillStyleValues.push(v);
+        },
+        get() {
+          return lastStyle;
+        },
         configurable: true,
       });
       fillRectSpy.mockRestore();
@@ -1795,7 +1825,15 @@ describe('Timeline', () => {
       const tl = new TestTimeline(seqSession, paintEngine);
       const container = tl.render();
       vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
-        width: 1000, height: 100, top: 0, left: 0, bottom: 100, right: 1000, x: 0, y: 0, toJSON: () => {},
+        width: 1000,
+        height: 100,
+        top: 0,
+        left: 0,
+        bottom: 100,
+        right: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => {},
       } as DOMRect);
       tl.setSize(1000, 100);
       flushRaf();
@@ -1804,8 +1842,13 @@ describe('Timeline', () => {
       const fillStyleValues: string[] = [];
       let lastStyle = '';
       Object.defineProperty(ctx, 'fillStyle', {
-        set(v: string) { lastStyle = v; fillStyleValues.push(v); },
-        get() { return lastStyle; },
+        set(v: string) {
+          lastStyle = v;
+          fillStyleValues.push(v);
+        },
+        get() {
+          return lastStyle;
+        },
         configurable: true,
       });
 

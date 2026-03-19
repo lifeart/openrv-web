@@ -28,7 +28,9 @@ import { DEFAULT_FPS_INDICATOR_STATE } from '../../ui/components/FPSIndicator';
 
 // Mock Modal functions
 vi.mock('../../ui/components/shared/Modal', async () => {
-  const actual = await vi.importActual<typeof import('../../ui/components/shared/Modal')>('../../ui/components/shared/Modal');
+  const actual = await vi.importActual<typeof import('../../ui/components/shared/Modal')>(
+    '../../ui/components/shared/Modal',
+  );
   return {
     ...actual,
     showFileReloadPrompt: vi.fn(),
@@ -99,15 +101,25 @@ function createMockComponents(): SessionComponents {
       getLensParams: vi.fn().mockReturnValue({}),
       getWipeState: vi.fn().mockReturnValue({}),
       getStackLayers: vi.fn().mockReturnValue([]),
-      getNoiseReductionParams: vi.fn().mockReturnValue({ strength: 0, luminanceStrength: 50, chromaStrength: 75, radius: 2 }),
+      getNoiseReductionParams: vi
+        .fn()
+        .mockReturnValue({ strength: 0, luminanceStrength: 50, chromaStrength: 75, radius: 2 }),
       getWatermarkState: vi.fn().mockReturnValue({
-        enabled: false, imageUrl: null, position: 'bottom-right',
-        customX: 0.9, customY: 0.9, scale: 1, opacity: 0.7, margin: 20,
+        enabled: false,
+        imageUrl: null,
+        position: 'bottom-right',
+        customX: 0.9,
+        customY: 0.9,
+        scale: 1,
+        opacity: 0.7,
+        margin: 20,
       }),
       getLUT: vi.fn().mockReturnValue(undefined),
       getLUTIntensity: vi.fn().mockReturnValue(1.0),
       getPARState: vi.fn().mockReturnValue({ enabled: false, par: 1.0, preset: 'square' }),
-      getBackgroundPatternState: vi.fn().mockReturnValue({ pattern: 'black', checkerSize: 'medium', customColor: '#1a1a1a' }),
+      getBackgroundPatternState: vi
+        .fn()
+        .mockReturnValue({ pattern: 'black', checkerSize: 'medium', customColor: '#1a1a1a' }),
       isOCIOEnabled: vi.fn().mockReturnValue(false),
       getDisplayColorState: vi.fn().mockReturnValue({ ...DEFAULT_DISPLAY_COLOR_STATE }),
       getGamutMappingState: vi.fn().mockReturnValue({ ...DEFAULT_GAMUT_MAPPING_STATE }),
@@ -123,7 +135,16 @@ function createMockComponents(): SessionComponents {
       getStereoAlignMode: vi.fn().mockReturnValue(DEFAULT_STEREO_ALIGN_MODE),
       getDeinterlaceParams: vi.fn().mockReturnValue({ method: 'bob', fieldOrder: 'tff', enabled: false }),
       getFilmEmulationParams: vi.fn().mockReturnValue({ enabled: false, stock: 'kodak-portra-400', intensity: 1.0 }),
-      getPerspectiveParams: vi.fn().mockReturnValue({ enabled: false, topLeft: { x: 0, y: 0 }, topRight: { x: 1, y: 0 }, bottomRight: { x: 1, y: 1 }, bottomLeft: { x: 0, y: 1 }, quality: 'bilinear' }),
+      getPerspectiveParams: vi
+        .fn()
+        .mockReturnValue({
+          enabled: false,
+          topLeft: { x: 0, y: 0 },
+          topRight: { x: 1, y: 0 },
+          bottomRight: { x: 1, y: 1 },
+          bottomLeft: { x: 0, y: 1 },
+          quality: 'bilinear',
+        }),
       getStabilizationParams: vi.fn().mockReturnValue({ enabled: false, smoothingStrength: 50 }),
       isUncropActive: vi.fn().mockReturnValue(false),
       setColorAdjustments: vi.fn(),
@@ -165,14 +186,42 @@ function createMockComponents(): SessionComponents {
         }),
       }),
       // Overlay accessors (fix #485)
-      getTimecodeOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_TIMECODE_OVERLAY_STATE }), setState: vi.fn() }),
-      getSafeAreasOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_SAFE_AREAS_STATE }), setState: vi.fn() }),
-      getClippingOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_CLIPPING_OVERLAY_STATE }), setState: vi.fn() }),
-      getInfoStripOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_INFO_STRIP_OVERLAY_STATE }), setState: vi.fn() }),
-      getSpotlightOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_SPOTLIGHT_STATE }), setState: vi.fn() }),
-      getBugOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_BUG_OVERLAY_STATE }), setState: vi.fn() }),
-      getEXRWindowOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_EXR_WINDOW_OVERLAY_STATE }), setState: vi.fn() }),
-      getFPSIndicator: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_FPS_INDICATOR_STATE }), setState: vi.fn() }),
+      getTimecodeOverlay: vi
+        .fn()
+        .mockReturnValue({
+          getState: vi.fn().mockReturnValue({ ...DEFAULT_TIMECODE_OVERLAY_STATE }),
+          setState: vi.fn(),
+        }),
+      getSafeAreasOverlay: vi
+        .fn()
+        .mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_SAFE_AREAS_STATE }), setState: vi.fn() }),
+      getClippingOverlay: vi
+        .fn()
+        .mockReturnValue({
+          getState: vi.fn().mockReturnValue({ ...DEFAULT_CLIPPING_OVERLAY_STATE }),
+          setState: vi.fn(),
+        }),
+      getInfoStripOverlay: vi
+        .fn()
+        .mockReturnValue({
+          getState: vi.fn().mockReturnValue({ ...DEFAULT_INFO_STRIP_OVERLAY_STATE }),
+          setState: vi.fn(),
+        }),
+      getSpotlightOverlay: vi
+        .fn()
+        .mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_SPOTLIGHT_STATE }), setState: vi.fn() }),
+      getBugOverlay: vi
+        .fn()
+        .mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_BUG_OVERLAY_STATE }), setState: vi.fn() }),
+      getEXRWindowOverlay: vi
+        .fn()
+        .mockReturnValue({
+          getState: vi.fn().mockReturnValue({ ...DEFAULT_EXR_WINDOW_OVERLAY_STATE }),
+          setState: vi.fn(),
+        }),
+      getFPSIndicator: vi
+        .fn()
+        .mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_FPS_INDICATOR_STATE }), setState: vi.fn() }),
     },
   } as any;
 }
@@ -203,9 +252,7 @@ describe('Issue #383: File-reload dialog must have a Cancel path that aborts res
       },
     ];
 
-    await expect(SessionSerializer.fromJSON(state, components)).rejects.toThrow(
-      'Session restore cancelled by user',
-    );
+    await expect(SessionSerializer.fromJSON(state, components)).rejects.toThrow('Session restore cancelled by user');
     // loadFile should never have been called
     expect(components.session.loadFile).not.toHaveBeenCalled();
   });
@@ -228,9 +275,7 @@ describe('Issue #383: File-reload dialog must have a Cancel path that aborts res
       },
     ];
 
-    await expect(SessionSerializer.fromJSON(state, components)).rejects.toThrow(
-      'Session restore cancelled by user',
-    );
+    await expect(SessionSerializer.fromJSON(state, components)).rejects.toThrow('Session restore cancelled by user');
     expect(components.session.loadSequence).not.toHaveBeenCalled();
   });
 
@@ -298,9 +343,7 @@ describe('Issue #383: File-reload dialog must have a Cancel path that aborts res
       },
     ];
 
-    await expect(SessionSerializer.fromJSON(state, components)).rejects.toThrow(
-      'Session restore cancelled by user',
-    );
+    await expect(SessionSerializer.fromJSON(state, components)).rejects.toThrow('Session restore cancelled by user');
 
     // First file was loaded, second triggered cancel, third never prompted
     expect(components.session.loadFile).toHaveBeenCalledTimes(1);
@@ -325,9 +368,7 @@ describe('Issue #383: File-reload dialog must have a Cancel path that aborts res
       },
     ];
 
-    await expect(SessionSerializer.fromJSON(state, components)).rejects.toThrow(
-      'Session restore cancelled by user',
-    );
+    await expect(SessionSerializer.fromJSON(state, components)).rejects.toThrow('Session restore cancelled by user');
     expect(components.session.loadSequence).not.toHaveBeenCalled();
   });
 });

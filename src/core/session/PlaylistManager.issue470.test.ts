@@ -154,10 +154,7 @@ describe('PlaylistManager.fromOTIO -- Issue #470', () => {
         {
           name: 'Video 1',
           kind: 'Video',
-          children: [
-            buildClip('shot_01', 0, 48, '/media/shot_01.exr'),
-            buildClip('shot_02', 10, 72),
-          ],
+          children: [buildClip('shot_01', 0, 48, '/media/shot_01.exr'), buildClip('shot_02', 10, 72)],
         },
       ]);
 
@@ -363,11 +360,7 @@ describe('PlaylistManager.fromOTIO -- Issue #470', () => {
         {
           name: 'Video 1',
           kind: 'Video',
-          children: [
-            buildClip('shot_01', 0, 24),
-            buildGap(12),
-            buildClip('shot_02', 0, 24),
-          ],
+          children: [buildClip('shot_01', 0, 24), buildGap(12), buildClip('shot_02', 0, 24)],
         },
       ]);
 
@@ -384,10 +377,7 @@ describe('PlaylistManager.fromOTIO -- Issue #470', () => {
         {
           name: 'Video 1',
           kind: 'Video',
-          children: [
-            buildGap(10),
-            buildClip('shot_01', 0, 24),
-          ],
+          children: [buildGap(10), buildClip('shot_01', 0, 24)],
         },
       ]);
 
@@ -431,9 +421,7 @@ describe('PlaylistManager.fromOTIO -- Issue #470', () => {
         {
           name: 'Video 1',
           kind: 'Video',
-          children: [
-            buildClip('shot_01', 0, 48, undefined, { artist: 'John', version: 3 }),
-          ],
+          children: [buildClip('shot_01', 0, 48, undefined, { artist: 'John', version: 3 })],
         },
       ]);
 
@@ -475,9 +463,7 @@ describe('PlaylistManager.fromOTIO -- Issue #470', () => {
           },
         ],
         {
-          markers: [
-            buildMarker('ReviewNote', 10, 0, 'RED', { note: 'Fix color' }),
-          ],
+          markers: [buildMarker('ReviewNote', 10, 0, 'RED', { note: 'Fix color' })],
         },
       );
 
@@ -499,9 +485,7 @@ describe('PlaylistManager.fromOTIO -- Issue #470', () => {
           kind: 'Video',
           children: [
             buildClip('shot_01', 0, 48),
-            buildClip('shot_02', 0, 48, undefined, undefined, [
-              buildMarker('ClipMarker', 5, 3, 'GREEN'),
-            ]),
+            buildClip('shot_02', 0, 48, undefined, undefined, [buildMarker('ClipMarker', 5, 3, 'GREEN')]),
           ],
         },
       ]);

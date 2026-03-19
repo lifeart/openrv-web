@@ -412,9 +412,7 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
       parts.push(`${invalidCount} invalid ${invalidCount !== 1 ? 'entries' : 'entry'} skipped.`);
     }
     if (mode === 'merge' && collisionCount > 0) {
-      parts.push(
-        `${collisionCount} marker${collisionCount > 1 ? 's' : ''} skipped due to frame collisions.`,
-      );
+      parts.push(`${collisionCount} marker${collisionCount > 1 ? 's' : ''} skipped due to frame collisions.`);
     }
 
     await showAlert(parts.join(' '));

@@ -209,7 +209,9 @@ function createTestDeps() {
         }),
         onEnabledChange: vi.fn((listener: (enabled: boolean) => void) => {
           listeners.add(listener);
-          return () => { listeners.delete(listener); };
+          return () => {
+            listeners.delete(listener);
+          };
         }),
         getProjectionUniforms: vi.fn(() => ({
           u_sphericalEnabled: 0,
@@ -300,7 +302,13 @@ describe('buildViewTab', () => {
 
     expect(button.classList.contains('active')).toBe(false);
 
-    deps.matteOverlay.emit('settingsChanged', { show: true, aspect: 1.78, opacity: 0.66, heightVisible: -1, centerPoint: [0, 0] });
+    deps.matteOverlay.emit('settingsChanged', {
+      show: true,
+      aspect: 1.78,
+      opacity: 0.66,
+      heightVisible: -1,
+      centerPoint: [0, 0],
+    });
     expect(button.classList.contains('active')).toBe(true);
   });
 
@@ -310,10 +318,22 @@ describe('buildViewTab', () => {
     const result = buildViewTab(deps);
     const button = result.element.querySelector<HTMLButtonElement>('[data-testid="matte-overlay-toggle-btn"]')!;
 
-    deps.matteOverlay.emit('settingsChanged', { show: true, aspect: 1.78, opacity: 0.66, heightVisible: -1, centerPoint: [0, 0] });
+    deps.matteOverlay.emit('settingsChanged', {
+      show: true,
+      aspect: 1.78,
+      opacity: 0.66,
+      heightVisible: -1,
+      centerPoint: [0, 0],
+    });
     expect(button.classList.contains('active')).toBe(true);
 
-    deps.matteOverlay.emit('settingsChanged', { show: false, aspect: 1.78, opacity: 0.66, heightVisible: -1, centerPoint: [0, 0] });
+    deps.matteOverlay.emit('settingsChanged', {
+      show: false,
+      aspect: 1.78,
+      opacity: 0.66,
+      heightVisible: -1,
+      centerPoint: [0, 0],
+    });
     expect(button.classList.contains('active')).toBe(false);
   });
 

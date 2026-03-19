@@ -770,9 +770,7 @@ FCM: NON-DROP FRAME
 
       expect(markerImporter).toHaveBeenCalledTimes(1);
       expect(markerImporter).toHaveBeenCalledWith(
-        expect.arrayContaining([
-          expect.objectContaining({ name: 'ReviewNote', color: '#ff4444', timelineFrame: 10 }),
-        ]),
+        expect.arrayContaining([expect.objectContaining({ name: 'ReviewNote', color: '#ff4444', timelineFrame: 10 })]),
       );
     });
 

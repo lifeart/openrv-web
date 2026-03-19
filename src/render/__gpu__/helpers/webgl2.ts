@@ -1,7 +1,10 @@
 /**
  * Creates a WebGL2 context with predictable settings for testing.
  */
-export function createTestGL(width = 64, height = 64): {
+export function createTestGL(
+  width = 64,
+  height = 64,
+): {
   gl: WebGL2RenderingContext;
   canvas: HTMLCanvasElement;
   dispose: () => void;
@@ -30,11 +33,7 @@ export function createTestGL(width = 64, height = 64): {
  * Compiles a shader and returns the WebGLShader handle.
  * Throws with the info log on failure.
  */
-export function compileShader(
-  gl: WebGL2RenderingContext,
-  type: number,
-  source: string
-): WebGLShader {
+export function compileShader(gl: WebGL2RenderingContext, type: number, source: string): WebGLShader {
   const shader = gl.createShader(type)!;
   gl.shaderSource(shader, source);
   gl.compileShader(shader);
@@ -53,7 +52,7 @@ export function compileShader(
 export function linkProgram(
   gl: WebGL2RenderingContext,
   vertShader: WebGLShader,
-  fragShader: WebGLShader
+  fragShader: WebGLShader,
 ): WebGLProgram {
   const program = gl.createProgram()!;
   gl.attachShader(program, vertShader);
@@ -80,12 +79,7 @@ export function createFullscreenQuad(gl: WebGL2RenderingContext): {
   const vao = gl.createVertexArray()!;
   gl.bindVertexArray(vao);
 
-  const data = new Float32Array([
-    -1, -1, 0, 0,
-     1, -1, 1, 0,
-    -1,  1, 0, 1,
-     1,  1, 1, 1,
-  ]);
+  const data = new Float32Array([-1, -1, 0, 0, 1, -1, 1, 0, -1, 1, 0, 1, 1, 1, 1, 1]);
   const buf = gl.createBuffer()!;
   gl.bindBuffer(gl.ARRAY_BUFFER, buf);
   gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);

@@ -3322,7 +3322,10 @@ describe('GC Pressure: Pre-allocated offset/scale buffers', () => {
 
     const mockFrame = { close: vi.fn(), format: 'RGBA' };
     const img = new IPImage({
-      width: 10, height: 10, channels: 4, dataType: 'float32',
+      width: 10,
+      height: 10,
+      channels: 4,
+      dataType: 'float32',
       metadata: { transferFunction: 'hlg', colorPrimaries: 'bt2020' },
     });
     img.managedVideoFrame = { frame: mockFrame, release: vi.fn() } as any;
@@ -3342,9 +3345,7 @@ describe('GC Pressure: Pre-allocated offset/scale buffers', () => {
     // VideoFrame should have been released
     expect(img.managedVideoFrame).toBeNull();
     // Warning should mention SDR fallback
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('falling back to SDR'),
-    );
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('falling back to SDR'));
     warnSpy.mockRestore();
   });
 
@@ -3374,9 +3375,7 @@ describe('GC Pressure: Pre-allocated offset/scale buffers', () => {
     expect(mockRelease).toHaveBeenCalled();
     expect(img.managedVideoFrame).toBeNull();
     // Warning should mention blank frame
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('frame will appear blank'),
-    );
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('frame will appear blank'));
     warnSpy.mockRestore();
   });
 
@@ -3396,7 +3395,9 @@ describe('GC Pressure: Pre-allocated offset/scale buffers', () => {
     const OriginalOffscreenCanvas = globalThis.OffscreenCanvas;
     globalThis.OffscreenCanvas = class MockOffscreenCanvas {
       constructor(_w: number, _h: number) {}
-      getContext() { return mockCtx; }
+      getContext() {
+        return mockCtx;
+      }
     } as any;
 
     try {

@@ -97,9 +97,7 @@ describe('ExternalPresentation documentation accuracy', () => {
     it('should NOT claim full synchronization of frame, playback, and color state without qualification', () => {
       // The old docs said "synchronizes frame, playback, and color state" implying full sync.
       // The corrected docs should qualify that it is text/metadata only.
-      expect(content).not.toMatch(
-        /which synchronizes frame,\s*playback,\s*and color state between/,
-      );
+      expect(content).not.toMatch(/which synchronizes frame,\s*playback,\s*and color state between/);
     });
 
     it('should mention that the presentation window does not render the viewer image', () => {
@@ -292,10 +290,10 @@ describe('ExternalPresentation runtime behavior matches documentation claims', (
       expect(html).toContain('<canvas id="viewer">');
 
       // But no WebGL context creation
-      expect(html).not.toContain('getContext(\'webgl');
+      expect(html).not.toContain("getContext('webgl");
       expect(html).not.toContain('getContext("webgl');
       expect(html).not.toContain('getContext(`webgl');
-      expect(html).not.toContain('getContext(\'2d');
+      expect(html).not.toContain("getContext('2d");
       expect(html).not.toContain('getContext("2d');
 
       // No drawImage, texImage2D, or other rendering calls
@@ -319,9 +317,7 @@ describe('ExternalPresentation runtime behavior matches documentation claims', (
       const html = generatePresentationHTML('test-win', 'test-channel', 'test-session');
 
       // The color handler explicitly warns that it cannot apply color without WebGL
-      expect(html).toContain(
-        'Color settings received but cannot be applied without WebGL viewer',
-      );
+      expect(html).toContain('Color settings received but cannot be applied without WebGL viewer');
     });
 
     it('presentation HTML has no image rendering pipeline', () => {

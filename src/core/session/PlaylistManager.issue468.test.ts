@@ -88,12 +88,10 @@ describe('PlaylistManager – issue #468: OTIO metadata preserved on playlist cl
 
   it('should preserve nested metadata objects', () => {
     const meta = {
-      'ftrack': { shotId: 'abc-123', taskId: 'xyz-789' },
-      'openrv': { colorSpace: 'ACEScg' },
+      ftrack: { shotId: 'abc-123', taskId: 'xyz-789' },
+      openrv: { colorSpace: 'ACEScg' },
     };
-    const otio = buildOTIOWithMetadata([
-      { name: 'shot_030', inFrame: 10, outFrame: 59, metadata: meta },
-    ]);
+    const otio = buildOTIOWithMetadata([{ name: 'shot_030', inFrame: 10, outFrame: 59, metadata: meta }]);
 
     pm.fromOTIO(otio, resolver);
     const clip = pm.getClips()[0]!;
@@ -103,9 +101,7 @@ describe('PlaylistManager – issue #468: OTIO metadata preserved on playlist cl
 
   it('should make metadata accessible via getClip()', () => {
     const meta = { status: 'approved' };
-    const otio = buildOTIOWithMetadata([
-      { name: 'shot_040', inFrame: 0, outFrame: 11, metadata: meta },
-    ]);
+    const otio = buildOTIOWithMetadata([{ name: 'shot_040', inFrame: 0, outFrame: 11, metadata: meta }]);
 
     pm.fromOTIO(otio, resolver);
     const clips = pm.getClips();
@@ -116,9 +112,7 @@ describe('PlaylistManager – issue #468: OTIO metadata preserved on playlist cl
 
   it('should make metadata accessible via getClipAtFrame()', () => {
     const meta = { note: 'check edge' };
-    const otio = buildOTIOWithMetadata([
-      { name: 'shot_050', inFrame: 0, outFrame: 23, metadata: meta },
-    ]);
+    const otio = buildOTIOWithMetadata([{ name: 'shot_050', inFrame: 0, outFrame: 23, metadata: meta }]);
 
     pm.fromOTIO(otio, resolver);
     const mapping = pm.getClipAtFrame(1);
@@ -152,9 +146,7 @@ describe('PlaylistManager – issue #468: OTIO metadata preserved on playlist cl
 
   it('should preserve metadata through state serialization round-trip', () => {
     const meta = { review: 'pending' };
-    const otio = buildOTIOWithMetadata([
-      { name: 'shot_060', inFrame: 0, outFrame: 47, metadata: meta },
-    ]);
+    const otio = buildOTIOWithMetadata([{ name: 'shot_060', inFrame: 0, outFrame: 47, metadata: meta }]);
 
     pm.fromOTIO(otio, resolver);
     const state = pm.getState();

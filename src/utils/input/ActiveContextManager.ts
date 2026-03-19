@@ -23,13 +23,7 @@ import { Signal } from '../../core/graph/Signal';
  *   annotate tab  -> 'paint'
  *   qc tab        -> 'panel'
  */
-export type BindingContext =
-  | 'global'
-  | 'paint'
-  | 'viewer'
-  | 'panel'
-  | 'transform'
-  | 'color';
+export type BindingContext = 'global' | 'paint' | 'viewer' | 'panel' | 'transform' | 'color';
 
 export class ActiveContextManager {
   private _activeContext: BindingContext = 'global';

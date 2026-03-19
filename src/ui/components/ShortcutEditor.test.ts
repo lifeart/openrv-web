@@ -397,7 +397,11 @@ describe('ShortcutEditor', () => {
           mockInput = el as HTMLInputElement;
           vi.spyOn(mockInput, 'click').mockImplementation(mockInputClick);
           const originalAddEventListener = mockInput.addEventListener.bind(mockInput);
-          vi.spyOn(mockInput, 'addEventListener').mockImplementation(((type: string, listener: EventListenerOrEventListenerObject, opts?: boolean | AddEventListenerOptions) => {
+          vi.spyOn(mockInput, 'addEventListener').mockImplementation(((
+            type: string,
+            listener: EventListenerOrEventListenerObject,
+            opts?: boolean | AddEventListenerOptions,
+          ) => {
             if (type === 'change') {
               capturedChangeHandler = () => {
                 if (typeof listener === 'function') {

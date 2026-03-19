@@ -550,16 +550,12 @@ describe('AppPersistenceManager', () => {
     it('APM-088b: openProject passes availableFiles to loadFromGTO for .gto files', async () => {
       const file = new File(['gto-data'], 'session.gto');
       const clipFile = new File(['exr-data'], 'clip.exr');
-      const availableFiles = new Map<string, File>([
-        ['clip.exr', clipFile],
-      ]);
+      const availableFiles = new Map<string, File>([['clip.exr', clipFile]]);
 
       await manager.openProject(file, availableFiles);
 
       // openProject converts Map<string, File> to Map<string, File[]>
-      const expectedFilesArray = new Map<string, File[]>([
-        ['clip.exr', [clipFile]],
-      ]);
+      const expectedFilesArray = new Map<string, File[]>([['clip.exr', [clipFile]]]);
       expect(fullCtx.session.loadFromGTO).toHaveBeenCalledWith(expect.any(ArrayBuffer), expectedFilesArray);
     });
 

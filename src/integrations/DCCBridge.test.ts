@@ -684,10 +684,7 @@ describe('DCCBridge', () => {
           .map((m) => JSON.parse(m))
           .filter((m: any) => m.type === 'error' && m.code === 'UNKNOWN_TYPE');
 
-        expect(
-          errorMessages,
-          `"${msgType}" should be accepted but got UNKNOWN_TYPE`,
-        ).toHaveLength(0);
+        expect(errorMessages, `"${msgType}" should be accepted but got UNKNOWN_TYPE`).toHaveLength(0);
       }
 
       bridge.dispose();
@@ -759,10 +756,7 @@ describe('DCCBridge', () => {
           .map((m) => JSON.parse(m))
           .filter((m: any) => m.type === 'error' && m.code === 'UNKNOWN_TYPE');
 
-        expect(
-          errorMessages,
-          `"${msgType}" should be rejected as UNKNOWN_TYPE`,
-        ).toHaveLength(1);
+        expect(errorMessages, `"${msgType}" should be rejected as UNKNOWN_TYPE`).toHaveLength(1);
       }
 
       bridge.dispose();

@@ -492,9 +492,9 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
 
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Home' || e.key === 'End') {
       e.preventDefault();
-      const focusable = Array.from(
-        this.dropdown.querySelectorAll<HTMLElement>('button, input, [tabindex="0"]'),
-      ).filter((el) => !el.hidden && (el as HTMLButtonElement).disabled !== true);
+      const focusable = Array.from(this.dropdown.querySelectorAll<HTMLElement>('button, input, [tabindex="0"]')).filter(
+        (el) => !el.hidden && (el as HTMLButtonElement).disabled !== true,
+      );
       if (focusable.length === 0) return;
 
       const currentIndex = focusable.indexOf(document.activeElement as HTMLElement);

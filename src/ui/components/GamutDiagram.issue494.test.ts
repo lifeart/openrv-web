@@ -127,9 +127,7 @@ describe('Issue #494 – three gamut spaces are the only gamut state', () => {
 
   it('setColorSpaces is the only color-space setter on the public API', () => {
     const proto = Object.getOwnPropertyNames(Object.getPrototypeOf(diagram));
-    const colorSpaceSetters = proto.filter(
-      (name) => /color/i.test(name) && /set/i.test(name),
-    );
+    const colorSpaceSetters = proto.filter((name) => /color/i.test(name) && /set/i.test(name));
     expect(colorSpaceSetters).toEqual(['setColorSpaces']);
   });
 
@@ -137,20 +135,14 @@ describe('Issue #494 – three gamut spaces are the only gamut state', () => {
     const proto = Object.getOwnPropertyNames(Object.getPrototypeOf(diagram));
     // Filter out EventEmitter inherited methods and constructor
     const publicMethods = proto.filter(
-      (name) =>
-        name !== 'constructor' &&
-        typeof (diagram as unknown as Record<string, unknown>)[name] === 'function',
+      (name) => name !== 'constructor' && typeof (diagram as unknown as Record<string, unknown>)[name] === 'function',
     );
 
     // The public methods should be limited to: show, hide, toggle, isVisible,
     // render, dispose, update, updateFloat, setColorSpaces, and EventEmitter methods.
     // None should relate to target-gamut analysis or compliance.
     const gamutAnalysisMethods = publicMethods.filter(
-      (name) =>
-        /target/i.test(name) ||
-        /compliance/i.test(name) ||
-        /classify/i.test(name) ||
-        /outOfGamut/i.test(name),
+      (name) => /target/i.test(name) || /compliance/i.test(name) || /classify/i.test(name) || /outOfGamut/i.test(name),
     );
     expect(gamutAnalysisMethods).toEqual([]);
   });

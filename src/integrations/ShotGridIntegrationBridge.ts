@@ -11,7 +11,16 @@
  * - Race condition prevention via generation counter
  */
 
-import { ShotGridBridge, ShotGridAPIError, mapStatusFromShotGrid, mapNoteStatusToShotGrid, mapNoteStatusFromShotGrid, type ShotGridNote, type ShotGridVersion, type AnnotationSummary } from './ShotGridBridge';
+import {
+  ShotGridBridge,
+  ShotGridAPIError,
+  mapStatusFromShotGrid,
+  mapNoteStatusToShotGrid,
+  mapNoteStatusFromShotGrid,
+  type ShotGridNote,
+  type ShotGridVersion,
+  type AnnotationSummary,
+} from './ShotGridBridge';
 import type { ShotGridConfigUI } from './ShotGridConfig';
 import type { ShotGridPanel } from '../ui/components/ShotGridPanel';
 import type { Session } from '../core/session/Session';
@@ -417,9 +426,13 @@ export class ShotGridIntegrationBridge {
    * Shared by both individual loadVersion events and batch playlist building.
    */
   private async loadVersionMedia(version: ShotGridVersion, mediaUrl: string): Promise<void> {
-    const isFrameSequencePath = mediaUrl === version.sg_path_to_frames &&
+    const isFrameSequencePath =
+      mediaUrl === version.sg_path_to_frames &&
       !version.sg_uploaded_movie?.url &&
-      !(version.sg_path_to_movie && (version.sg_path_to_movie.startsWith('http://') || version.sg_path_to_movie.startsWith('https://')));
+      !(
+        version.sg_path_to_movie &&
+        (version.sg_path_to_movie.startsWith('http://') || version.sg_path_to_movie.startsWith('https://'))
+      );
 
     if (isFrameSequencePath && isSequencePattern(mediaUrl)) {
       console.info(`[ShotGrid] Loading frame sequence path: ${mediaUrl}`);
@@ -427,12 +440,7 @@ export class ShotGridIntegrationBridge {
       const startFrame = version.sg_first_frame ?? 1;
       const endFrame = version.sg_last_frame ?? this.parseEndFrameFromRange(version.frame_range, startFrame);
 
-      await this.session.loadImageSequenceFromPattern(
-        version.code,
-        mediaUrl,
-        startFrame,
-        endFrame,
-      );
+      await this.session.loadImageSequenceFromPattern(version.code, mediaUrl, startFrame, endFrame);
     } else {
       const cleanUrl = mediaUrl.split('?')[0]!.split('#')[0]!;
       const rawExt = cleanUrl.split('.').pop() ?? '';

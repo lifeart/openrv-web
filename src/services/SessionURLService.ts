@@ -6,7 +6,11 @@
  * top-level orchestrator.
  */
 
-import { decodeSessionState, type SessionURLState, type RepresentationURLState } from '../core/session/SessionURLManager';
+import {
+  decodeSessionState,
+  type SessionURLState,
+  type RepresentationURLState,
+} from '../core/session/SessionURLManager';
 import { decodeWebRTCURLSignal, WEBRTC_URL_SIGNAL_PARAM } from '../network/WebRTCURLSignaling';
 import type { Transform2D } from '../core/types/transform';
 import { DEFAULT_TRANSFORM } from '../core/types/transform';
@@ -312,9 +316,8 @@ export class SessionURLService {
 
       if (typeof state.sourceAIndex === 'number') {
         // Clamp sourceAIndex to valid range (0 to sourceCount-1)
-        const clampedA = session.sourceCount > 0
-          ? Math.max(0, Math.min(session.sourceCount - 1, state.sourceAIndex))
-          : 0;
+        const clampedA =
+          session.sourceCount > 0 ? Math.max(0, Math.min(session.sourceCount - 1, state.sourceAIndex)) : 0;
         session.setSourceA(clampedA);
 
         // When the share link is compare-aware (sourceAIndex present) but has
@@ -345,7 +348,11 @@ export class SessionURLService {
         viewer.setTransform(state.transform);
       } else {
         // Reset transform to default when omitted (compact encoding strips defaults)
-        viewer.setTransform({ ...DEFAULT_TRANSFORM, scale: { ...DEFAULT_TRANSFORM.scale }, translate: { ...DEFAULT_TRANSFORM.translate } });
+        viewer.setTransform({
+          ...DEFAULT_TRANSFORM,
+          scale: { ...DEFAULT_TRANSFORM.scale },
+          translate: { ...DEFAULT_TRANSFORM.translate },
+        });
       }
 
       if (typeof state.wipeMode === 'string') {
@@ -385,7 +392,12 @@ export class SessionURLService {
       }
 
       // Restore active representations
-      if (state.representations && state.representations.length > 0 && session.addRepresentationToSource && session.activateRepresentation) {
+      if (
+        state.representations &&
+        state.representations.length > 0 &&
+        session.addRepresentationToSource &&
+        session.activateRepresentation
+      ) {
         for (const repState of state.representations) {
           try {
             const rep = session.addRepresentationToSource(repState.sourceIndex, {
@@ -468,9 +480,7 @@ export class SessionURLService {
       } else {
         // signal is null (malformed/corrupt token) or has an unrecognized type
         handledServerlessOffer = true;
-        networkControl.showInfo(
-          'The WebRTC link is malformed or corrupted and could not be processed.',
-        );
+        networkControl.showInfo('The WebRTC link is malformed or corrupted and could not be processed.');
       }
     }
 
@@ -483,9 +493,7 @@ export class SessionURLService {
     if (sharedState) {
       await this.applySessionURLState(sharedState);
     } else if (this.hashContainsSessionParam(locationHash)) {
-      networkControl.showInfo(
-        'Could not restore shared session state: the link may be corrupted or incomplete.',
-      );
+      networkControl.showInfo('Could not restore shared session state: the link may be corrupted or incomplete.');
     }
   }
 

@@ -550,10 +550,7 @@ describe('MultiSourceLayoutStore', () => {
 
       // Advance past debounce timer
       vi.advanceTimersByTime(350);
-      expect(setItemSpy).toHaveBeenCalledWith(
-        'openrv-multi-source-layout',
-        expect.stringContaining('"mode":"column"'),
-      );
+      expect(setItemSpy).toHaveBeenCalledWith('openrv-multi-source-layout', expect.stringContaining('"mode":"column"'));
 
       setItemSpy.mockRestore();
       vi.useRealTimers();
@@ -607,10 +604,7 @@ describe('MultiSourceLayoutStore', () => {
       store.setMode('manual');
       store.flushSave();
 
-      expect(setItemSpy).toHaveBeenCalledWith(
-        'openrv-multi-source-layout',
-        expect.stringContaining('"mode":"manual"'),
-      );
+      expect(setItemSpy).toHaveBeenCalledWith('openrv-multi-source-layout', expect.stringContaining('"mode":"manual"'));
 
       setItemSpy.mockRestore();
     });

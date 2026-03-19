@@ -464,9 +464,7 @@ describe('PluginSettingsStore', () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const result = accessor.set('key', 'value');
       expect(result).toBe(false);
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('no settingsSchema'),
-      );
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('no settingsSchema'));
       warnSpy.mockRestore();
     });
 

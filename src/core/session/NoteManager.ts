@@ -110,7 +110,15 @@ export class NoteManager {
     frameEnd: number,
     text: string,
     author: string,
-    options?: { parentId?: string; color?: string; priority?: NotePriority; category?: string; createdAt?: string; status?: NoteStatus; externalId?: string },
+    options?: {
+      parentId?: string;
+      color?: string;
+      priority?: NotePriority;
+      category?: string;
+      createdAt?: string;
+      status?: NoteStatus;
+      externalId?: string;
+    },
   ): Note {
     const now = new Date().toISOString();
     const createdAt = options?.createdAt ?? now;
@@ -141,7 +149,10 @@ export class NoteManager {
    * Update an existing note's text, status, or color.
    * Returns the updated note copy, or null if not found.
    */
-  updateNote(noteId: string, updates: Partial<Pick<Note, 'text' | 'status' | 'color' | 'priority' | 'category'>>): Note | null {
+  updateNote(
+    noteId: string,
+    updates: Partial<Pick<Note, 'text' | 'status' | 'color' | 'priority' | 'category'>>,
+  ): Note | null {
     const note = this._notes.get(noteId);
     if (!note) return null;
 

@@ -227,5 +227,4 @@ describe('Issue #500: Image loading architecture', () => {
       expect(source!.url).toBe('https://cdn.example.com/img.jpg');
     });
   });
-
 });

@@ -8,14 +8,7 @@ import { ModeManager } from '../ModeManager';
 import { MuSettingsBridge } from '../MuSettingsBridge';
 import { MuUtilsBridge } from '../MuUtilsBridge';
 import { MuNetworkBridge } from '../MuNetworkBridge';
-import {
-  isSupported,
-  getStubFunctions,
-  stereoSupported,
-  getRendererType,
-  cacheMode,
-  sessionFileName,
-} from '../stubs';
+import { isSupported, getStubFunctions, stereoSupported, getRendererType, cacheMode, sessionFileName } from '../stubs';
 import type { MuEvent } from '../types';
 import { FileKind } from '../types';
 
@@ -58,9 +51,7 @@ describe('ModeManager', () => {
     it('warns when activating an undefined mode', () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       manager.activateMode('nonexistent');
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('nonexistent'),
-      );
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('nonexistent'));
       warnSpy.mockRestore();
     });
 
@@ -101,12 +92,7 @@ describe('ModeManager', () => {
     it('dispatches events to active mode global bindings', () => {
       const handler = vi.fn();
 
-      manager.defineMinorMode(
-        'mode1',
-        0,
-        [['key-down--a', handler, 'Press A']],
-        [],
-      );
+      manager.defineMinorMode('mode1', 0, [['key-down--a', handler, 'Press A']], []);
       manager.activateMode('mode1');
 
       const event: MuEvent = {
@@ -712,9 +698,7 @@ describe('ModeManager regex dispatch', () => {
 
   it('regex bindings work in override tables', () => {
     const handler = vi.fn();
-    manager.defineMinorMode('m', 0, [], [
-      ['__regex__key-down--.*', handler, 'override regex'],
-    ]);
+    manager.defineMinorMode('m', 0, [], [['__regex__key-down--.*', handler, 'override regex']]);
     manager.activateMode('m');
 
     expect(manager.dispatchEvent(makeEvent('key-down--z'))).toBe(true);
@@ -723,9 +707,7 @@ describe('ModeManager regex dispatch', () => {
 
   it('regex bindings work in global tables', () => {
     const handler = vi.fn();
-    manager.defineMinorMode('m', 0, [
-      ['__regex__pointer--.*', handler, 'global regex'],
-    ], []);
+    manager.defineMinorMode('m', 0, [['__regex__pointer--.*', handler, 'global regex']], []);
     manager.activateMode('m');
 
     expect(manager.dispatchEvent(makeEvent('pointer--move'))).toBe(true);
@@ -737,7 +719,9 @@ describe('ModeManager regex dispatch', () => {
     const tableHandler = vi.fn();
     const globalHandler = vi.fn();
 
-    manager.defineMinorMode('m', 0,
+    manager.defineMinorMode(
+      'm',
+      0,
       [['__regex__ev--.*', globalHandler, 'global']],
       [['__regex__ev--.*', overrideHandler, 'override']],
     );
@@ -757,10 +741,7 @@ describe('ModeManager regex dispatch', () => {
     const tableHandler = vi.fn();
     const globalHandler = vi.fn();
 
-    manager.defineMinorMode('m', 0,
-      [['__regex__ev--.*', globalHandler, 'global']],
-      [],
-    );
+    manager.defineMinorMode('m', 0, [['__regex__ev--.*', globalHandler, 'global']], []);
     manager.activateMode('m');
 
     manager.pushEventTable('t');
@@ -773,10 +754,14 @@ describe('ModeManager regex dispatch', () => {
   });
 
   it('rejected regex binding passes to next handler', () => {
-    const rejectHandler = vi.fn((e: MuEvent) => { e.reject = true; });
+    const rejectHandler = vi.fn((e: MuEvent) => {
+      e.reject = true;
+    });
     const globalHandler = vi.fn();
 
-    manager.defineMinorMode('m', 0,
+    manager.defineMinorMode(
+      'm',
+      0,
       [['__regex__ev--.*', globalHandler, 'global']],
       [['__regex__ev--.*', rejectHandler, 'override reject']],
     );
@@ -1391,9 +1376,7 @@ describe('MuNetworkBridge', () => {
   it('warns when connecting without enabling network', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     network.remoteConnect('test', 'localhost', 9876);
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('not enabled'),
-    );
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('not enabled'));
     warnSpy.mockRestore();
   });
 
@@ -1607,9 +1590,7 @@ describe('MuNetworkBridge wire protocol', () => {
 
     triggerMessage(JSON.stringify({ type: 'message', data: ['hello'] }));
 
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Rejecting incoming "message"'),
-    );
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Rejecting incoming "message"'));
     warnSpy.mockRestore();
   });
 
@@ -1621,9 +1602,7 @@ describe('MuNetworkBridge wire protocol', () => {
 
     triggerMessage(JSON.stringify({ type: 'event', event: 'play' }));
 
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Rejecting incoming "event"'),
-    );
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Rejecting incoming "event"'));
     warnSpy.mockRestore();
   });
 
@@ -1635,9 +1614,7 @@ describe('MuNetworkBridge wire protocol', () => {
 
     triggerMessage(JSON.stringify({ type: 'message', data: ['hello'] }));
 
-    expect(warnSpy).not.toHaveBeenCalledWith(
-      expect.stringContaining('Rejecting'),
-    );
+    expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Rejecting'));
     warnSpy.mockRestore();
   });
 
@@ -1649,9 +1626,7 @@ describe('MuNetworkBridge wire protocol', () => {
 
     triggerMessage(JSON.stringify({ type: 'handshake', contactName: 'peer' }));
 
-    expect(warnSpy).not.toHaveBeenCalledWith(
-      expect.stringContaining('Rejecting'),
-    );
+    expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Rejecting'));
     warnSpy.mockRestore();
   });
 
@@ -1689,14 +1664,16 @@ describe('MuNetworkBridge wire protocol', () => {
     const handler = vi.fn();
     network.setOnRemoteEvent(handler);
 
-    triggerMessage(JSON.stringify({
-      type: 'event',
-      event: 'play',
-      target: 'viewer',
-      contents: 'frame=1',
-      interp: ['mu'],
-      senderContactName: 'peer',
-    }));
+    triggerMessage(
+      JSON.stringify({
+        type: 'event',
+        event: 'play',
+        target: 'viewer',
+        contents: 'frame=1',
+        interp: ['mu'],
+        senderContactName: 'peer',
+      }),
+    );
 
     expect(handler).toHaveBeenCalledWith('ws://localhost:9876', 'play', 'viewer', 'frame=1', ['mu'], 'peer');
   });
@@ -1711,15 +1688,17 @@ describe('MuNetworkBridge wire protocol', () => {
     network.setOnRemoteDataEvent(handler);
 
     // Send the JSON header first
-    triggerMessage(JSON.stringify({
-      type: 'dataEvent',
-      event: 'upload',
-      target: 'target',
-      contents: 'meta',
-      interp: ['mu'],
-      dataLength: 4,
-      senderContactName: 'peer',
-    }));
+    triggerMessage(
+      JSON.stringify({
+        type: 'dataEvent',
+        event: 'upload',
+        target: 'target',
+        contents: 'meta',
+        interp: ['mu'],
+        dataLength: 4,
+        senderContactName: 'peer',
+      }),
+    );
 
     expect(handler).not.toHaveBeenCalled();
 
@@ -1820,15 +1799,17 @@ describe('MuNetworkBridge dataEvent edge cases', () => {
     const handler = vi.fn();
     network.setOnRemoteDataEvent(handler);
 
-    triggerMessage(JSON.stringify({
-      type: 'dataEvent',
-      event: 'upload',
-      target: 'tgt',
-      contents: '',
-      interp: [],
-      dataLength: 4,
-      senderContactName: 'peer',
-    }));
+    triggerMessage(
+      JSON.stringify({
+        type: 'dataEvent',
+        event: 'upload',
+        target: 'tgt',
+        contents: '',
+        interp: [],
+        dataLength: 4,
+        senderContactName: 'peer',
+      }),
+    );
 
     // Advance past the 5 000 ms timeout
     vi.advanceTimersByTime(5000);
@@ -1853,13 +1834,15 @@ describe('MuNetworkBridge dataEvent edge cases', () => {
     const handler = vi.fn();
     network.setOnRemoteEvent(handler);
 
-    triggerMessage(JSON.stringify({
-      type: 'event',
-      event: 'play',
-      target: 'viewer',
-      contents: '',
-      interp: [],
-    }));
+    triggerMessage(
+      JSON.stringify({
+        type: 'event',
+        event: 'play',
+        target: 'viewer',
+        contents: '',
+        interp: [],
+      }),
+    );
 
     expect(handler).toHaveBeenCalledWith('ws://localhost:9876', 'play', 'viewer', '', [], '');
   });
@@ -1872,15 +1855,17 @@ describe('MuNetworkBridge dataEvent edge cases', () => {
     const handler = vi.fn();
     network.setOnRemoteDataEvent(handler);
 
-    triggerMessage(JSON.stringify({
-      type: 'dataEvent',
-      event: 'upload',
-      target: 'tgt',
-      contents: '',
-      interp: [],
-      dataLength: 4,
-      senderContactName: 'peer',
-    }));
+    triggerMessage(
+      JSON.stringify({
+        type: 'dataEvent',
+        event: 'upload',
+        target: 'tgt',
+        contents: '',
+        interp: [],
+        dataLength: 4,
+        senderContactName: 'peer',
+      }),
+    );
 
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Rejecting incoming "dataEvent"'));
 
@@ -1898,15 +1883,17 @@ describe('MuNetworkBridge dataEvent edge cases', () => {
     const handler = vi.fn();
     network.setOnRemoteDataEvent(handler);
 
-    triggerMessage(JSON.stringify({
-      type: 'dataEvent',
-      event: 'upload',
-      target: 'tgt',
-      contents: '',
-      interp: [],
-      dataLength: 4,
-      senderContactName: 'peer',
-    }));
+    triggerMessage(
+      JSON.stringify({
+        type: 'dataEvent',
+        event: 'upload',
+        target: 'tgt',
+        contents: '',
+        interp: [],
+        dataLength: 4,
+        senderContactName: 'peer',
+      }),
+    );
 
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Rejecting incoming "dataEvent"'));
 
@@ -1922,29 +1909,33 @@ describe('MuNetworkBridge dataEvent edge cases', () => {
     network.setOnRemoteDataEvent(handler);
 
     // First header
-    triggerMessage(JSON.stringify({
-      type: 'dataEvent',
-      event: 'first',
-      target: 'tgt',
-      contents: 'c1',
-      interp: [],
-      dataLength: 2,
-      senderContactName: 'peer',
-    }));
+    triggerMessage(
+      JSON.stringify({
+        type: 'dataEvent',
+        event: 'first',
+        target: 'tgt',
+        contents: 'c1',
+        interp: [],
+        dataLength: 2,
+        senderContactName: 'peer',
+      }),
+    );
 
     // Second header arrives before binary follow-up
-    triggerMessage(JSON.stringify({
-      type: 'dataEvent',
-      event: 'second',
-      target: 'tgt',
-      contents: 'c2',
-      interp: [],
-      dataLength: 2,
-      senderContactName: 'peer',
-    }));
+    triggerMessage(
+      JSON.stringify({
+        type: 'dataEvent',
+        event: 'second',
+        target: 'tgt',
+        contents: 'c2',
+        interp: [],
+        dataLength: 2,
+        senderContactName: 'peer',
+      }),
+    );
 
     // Binary follow-up — should match the second header
-    triggerMessage(new Uint8Array([0xAB, 0xCD]).buffer);
+    triggerMessage(new Uint8Array([0xab, 0xcd]).buffer);
 
     expect(handler).toHaveBeenCalledTimes(1);
     expect(handler).toHaveBeenCalledWith(
@@ -1952,7 +1943,7 @@ describe('MuNetworkBridge dataEvent edge cases', () => {
       'second',
       'tgt',
       'c2',
-      new Uint8Array([0xAB, 0xCD]),
+      new Uint8Array([0xab, 0xcd]),
       [],
       'peer',
     );
@@ -2079,9 +2070,7 @@ describe('stubs', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     stereoSupported();
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('stereoSupported'),
-    );
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('stereoSupported'));
 
     warnSpy.mockRestore();
   });

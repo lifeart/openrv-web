@@ -247,9 +247,9 @@ export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
   /** Update slider visibility based on the current reference view mode. */
   const updateRefSliderVisibility = (mode: RefViewMode) => {
     // Opacity is relevant for overlay and toggle modes
-    refOpacitySlider.style.display = (mode === 'overlay' || mode === 'toggle') ? 'flex' : 'none';
+    refOpacitySlider.style.display = mode === 'overlay' || mode === 'toggle' ? 'flex' : 'none';
     // Wipe position is relevant for split-h and split-v modes
-    refWipeSlider.style.display = (mode === 'split-h' || mode === 'split-v') ? 'flex' : 'none';
+    refWipeSlider.style.display = mode === 'split-h' || mode === 'split-v' ? 'flex' : 'none';
   };
 
   for (const mode of refViewModes) {
@@ -377,7 +377,13 @@ export function buildViewTab(deps: BuildViewTabDeps): BuildViewTabResult {
           }
           refImageData = new ImageData(u8, ref.width, ref.height);
         }
-        viewer.setReferenceImage(refImageData, state.viewMode, state.opacity, state.wipePosition, state.showingReference);
+        viewer.setReferenceImage(
+          refImageData,
+          state.viewMode,
+          state.opacity,
+          state.wipePosition,
+          state.showingReference,
+        );
       } else {
         viewer.setReferenceImage(null, 'off', 0);
       }

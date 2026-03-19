@@ -292,10 +292,7 @@ describe('RepresentationSelector', () => {
     });
 
     it('REP-UI-014: returns representations from current source', () => {
-      const reps = [
-        createMockRepresentation({ id: 'r1' }),
-        createMockRepresentation({ id: 'r2' }),
-      ];
+      const reps = [createMockRepresentation({ id: 'r1' }), createMockRepresentation({ id: 'r2' })];
       session = createMockSession(reps, 0);
       selector = new RepresentationSelector(session);
       expect(selector.getRepresentations()).toHaveLength(2);
@@ -304,10 +301,7 @@ describe('RepresentationSelector', () => {
 
   describe('data-testid', () => {
     it('REP-UI-015: renders with correct test IDs', () => {
-      const reps = [
-        createMockRepresentation({ id: 'r1' }),
-        createMockRepresentation({ id: 'r2' }),
-      ];
+      const reps = [createMockRepresentation({ id: 'r1' }), createMockRepresentation({ id: 'r2' })];
       session = createMockSession(reps, 0);
       selector = new RepresentationSelector(session);
       const el = selector.render();
@@ -320,10 +314,7 @@ describe('RepresentationSelector', () => {
 
   describe('dispose', () => {
     it('REP-UI-016: disposes cleanly without errors', () => {
-      const reps = [
-        createMockRepresentation({ id: 'r1' }),
-        createMockRepresentation({ id: 'r2' }),
-      ];
+      const reps = [createMockRepresentation({ id: 'r1' }), createMockRepresentation({ id: 'r2' })];
       session = createMockSession(reps, 0);
       selector = new RepresentationSelector(session);
       selector.render();

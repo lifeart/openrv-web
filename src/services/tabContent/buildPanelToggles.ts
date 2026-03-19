@@ -169,7 +169,11 @@ export function buildPanelToggles(deps: BuildPanelTogglesDeps): PanelTogglesResu
   // --- Plugin panel toggle management ---
   const pluginPanelEntries = new Map<string, { button: HTMLButtonElement; container: HTMLElement }>();
 
-  function addPluginPanel(id: string, label: string, icon?: string): { button: HTMLButtonElement; container: HTMLElement } {
+  function addPluginPanel(
+    id: string,
+    label: string,
+    icon?: string,
+  ): { button: HTMLButtonElement; container: HTMLElement } {
     // Create the floating container for plugin panel content
     const container = document.createElement('div');
     container.dataset.pluginPanelId = id;

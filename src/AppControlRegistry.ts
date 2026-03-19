@@ -606,7 +606,13 @@ export class AppControlRegistry {
       return input;
     };
 
-    const createNumberField = (label: string, testid: string, value: number, min?: number, max?: number): HTMLInputElement => {
+    const createNumberField = (
+      label: string,
+      testid: string,
+      value: number,
+      min?: number,
+      max?: number,
+    ): HTMLInputElement => {
       const input = createField(label, 'number', testid);
       input.value = String(value);
       if (min !== undefined) input.min = String(min);
@@ -858,7 +864,9 @@ export class AppControlRegistry {
       logoPositionSelect.appendChild(option);
     }
     logoPositionSelect.addEventListener('change', () => {
-      this.slateEditor.setLogoPosition(logoPositionSelect.value as 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right');
+      this.slateEditor.setLogoPosition(
+        logoPositionSelect.value as 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right',
+      );
     });
     logoSection.appendChild(logoPositionSelect);
 
@@ -931,7 +939,10 @@ export class AppControlRegistry {
     container.appendChild(resolutionRow);
 
     const updateResolution = () => {
-      this.slateEditor.setResolution(Number.parseInt(widthInput.value || '0', 10), Number.parseInt(heightInput.value || '0', 10));
+      this.slateEditor.setResolution(
+        Number.parseInt(widthInput.value || '0', 10),
+        Number.parseInt(heightInput.value || '0', 10),
+      );
       const { width, height } = this.slateEditor.getResolution();
       widthInput.value = String(width);
       heightInput.value = String(height);

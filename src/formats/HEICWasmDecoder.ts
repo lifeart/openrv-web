@@ -37,10 +37,7 @@ function inferPrimaryIndexFromMetadata(buffer: ArrayBuffer, decodedImageCount: n
   return primaryIndex;
 }
 
-function resolvePrimaryImageIndex(
-  buffer: ArrayBuffer,
-  images: import('libheif-js').HeifImage[],
-): number {
+function resolvePrimaryImageIndex(buffer: ArrayBuffer, images: import('libheif-js').HeifImage[]): number {
   let primaryUnavailable = false;
 
   try {

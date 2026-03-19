@@ -59,11 +59,7 @@ export interface PixelReadbackProvider {
    * Read a single pixel from the named source at (x, y).
    * Returns [R, G, B, A] floats, or null if readback is not possible.
    */
-  readSourcePixel(
-    sourceName: string,
-    x: number,
-    y: number,
-  ): [number, number, number, number] | null;
+  readSourcePixel(sourceName: string, x: number, y: number): [number, number, number, number] | null;
 }
 
 /** Shape of the openrv public API that this bridge may consume. */
@@ -304,11 +300,7 @@ export class MuSourceBridge {
    * Add multiple sources at once.
    * Equivalent to Mu's `commands.addSources(paths, tag, mergeIntoOne)`. (Mu #54)
    */
-  async addSources(
-    pathGroups: string[][],
-    tag: string = 'default',
-    _mergeIntoOne: boolean = false,
-  ): Promise<void> {
+  async addSources(pathGroups: string[][], tag: string = 'default', _mergeIntoOne: boolean = false): Promise<void> {
     if (!Array.isArray(pathGroups)) {
       throw new TypeError('addSources() requires an array of path arrays');
     }
@@ -339,10 +331,7 @@ export class MuSourceBridge {
    * Add multiple sources and return the created node names.
    * Equivalent to Mu's `commands.addSourcesVerbose(pathGroups, ...)`. (Mu #56)
    */
-  async addSourcesVerbose(
-    pathGroups: string[][],
-    tag: string = 'default',
-  ): Promise<string[]> {
+  async addSourcesVerbose(pathGroups: string[][], tag: string = 'default'): Promise<string[]> {
     const names: string[] = [];
     for (const paths of pathGroups) {
       const name = await this.addSourceVerbose(paths, tag);
@@ -493,9 +482,7 @@ export class MuSourceBridge {
    */
   sourceMediaInfoList(): SourceMediaInfo[] {
     this._ensureFallbackSourceRegistered();
-    return Array.from(this._sources.values()).map((src) =>
-      this.sourceMediaInfo(src.name),
-    );
+    return Array.from(this._sources.values()).map((src) => this.sourceMediaInfo(src.name));
   }
 
   // =====================================================================
@@ -593,23 +580,16 @@ export class MuSourceBridge {
    *
    * @returns The created source name
    */
-  newImageSource(
-    name: string,
-    width: number,
-    height: number,
-    channels: number = 4,
-  ): string {
+  newImageSource(name: string, width: number, height: number, channels: number = 4): string {
     if (typeof name !== 'string' || !name) {
       throw new TypeError('newImageSource() requires a non-empty name');
     }
     if (width <= 0 || height <= 0) {
       throw new TypeError('newImageSource() requires positive width and height');
     }
-    const pendingInBatch = this._batchQueue.some(entry => entry.name === name);
+    const pendingInBatch = this._batchQueue.some((entry) => entry.name === name);
     if (this._sources.has(name) || this._imageSources.has(name) || pendingInBatch) {
-      throw new TypeError(
-        `Source '${name}' already exists. Use a unique name or delete the existing source first.`,
-      );
+      throw new TypeError(`Source '${name}' already exists. Use a unique name or delete the existing source first.`);
     }
 
     const record = this._createSourceRecord([name], 'image');
@@ -618,13 +598,7 @@ export class MuSourceBridge {
     record.width = width;
     record.height = height;
     record.channelNames =
-      channels >= 4
-        ? ['R', 'G', 'B', 'A']
-        : channels === 3
-          ? ['R', 'G', 'B']
-          : channels === 2
-            ? ['R', 'G']
-            : ['R'];
+      channels >= 4 ? ['R', 'G', 'B', 'A'] : channels === 3 ? ['R', 'G', 'B'] : channels === 2 ? ['R', 'G'] : ['R'];
 
     // Replace the auto-generated name entry with the custom name
     this._sources.delete(autoName);
@@ -645,23 +619,16 @@ export class MuSourceBridge {
    * Set pixel data for an in-memory image source.
    * Equivalent to Mu's `commands.newImageSourcePixels(name, frame, pixels, ...)`. (Mu #70)
    */
-  newImageSourcePixels(
-    name: string,
-    _frame: number,
-    pixels: Float32Array | number[],
-  ): void {
+  newImageSourcePixels(name: string, _frame: number, pixels: Float32Array | number[]): void {
     const imageData = this._imageSources.get(name);
     if (!imageData) {
       throw new Error(`Image source not found: "${name}"`);
     }
 
-    const floatPixels =
-      pixels instanceof Float32Array ? pixels : new Float32Array(pixels);
+    const floatPixels = pixels instanceof Float32Array ? pixels : new Float32Array(pixels);
 
     if (floatPixels.length !== imageData.data.length) {
-      throw new Error(
-        `Pixel data length mismatch: expected ${imageData.data.length}, got ${floatPixels.length}`,
-      );
+      throw new Error(`Pixel data length mismatch: expected ${imageData.data.length}, got ${floatPixels.length}`);
     }
 
     imageData.data.set(floatPixels);
@@ -723,22 +690,14 @@ export class MuSourceBridge {
    *
    * @returns The representation node name (empty string when no graph is attached)
    */
-  addSourceMediaRep(
-    sourceName: string,
-    repName: string,
-    paths: string[],
-  ): string {
+  addSourceMediaRep(sourceName: string, repName: string, paths: string[]): string {
     const source = this._getSource(sourceName);
 
     // Only fabricate node names when a real graph is attached so that the
     // returned names always correspond to actual graph nodes.  Without a
     // graph the names would be meaningless placeholders (Issue #258).
-    const nodeName = this._graph
-      ? `${sourceName}_${repName}_source`
-      : '';
-    const switchNodeName = this._graph
-      ? `${sourceName}_switch`
-      : '';
+    const nodeName = this._graph ? `${sourceName}_${repName}_source` : '';
+    const switchNodeName = this._graph ? `${sourceName}_switch` : '';
 
     source.representations.push({
       name: repName,
@@ -776,9 +735,7 @@ export class MuSourceBridge {
     const source = this._getSource(sourceName);
     const rep = source.representations.find((r) => r.name === repName);
     if (!rep) {
-      throw new Error(
-        `Media representation "${repName}" not found on source "${sourceName}"`,
-      );
+      throw new Error(`Media representation "${repName}" not found on source "${sourceName}"`);
     }
     source.activeRep = repName;
 
@@ -786,9 +743,7 @@ export class MuSourceBridge {
     if (this._graph) {
       const activeIdx = source.representations.findIndex((r) => r.name === repName);
       if (activeIdx >= 0) {
-        const switchNode = this._graph.getAllNodes().find(
-          (n) => n.name === rep.switchNodeName,
-        );
+        const switchNode = this._graph.getAllNodes().find((n) => n.name === rep.switchNodeName);
         if (switchNode && switchNode instanceof MediaRepNode) {
           switchNode.setActiveInput(activeIdx);
         }
@@ -826,9 +781,7 @@ export class MuSourceBridge {
    * List media representation name-node pairs for a source.
    * Equivalent to Mu's `commands.sourceMediaRepsAndNodes(sourceName)`. (Mu #76)
    */
-  sourceMediaRepsAndNodes(
-    sourceName: string,
-  ): Array<[string, string]> {
+  sourceMediaRepsAndNodes(sourceName: string): Array<[string, string]> {
     const source = this._getSource(sourceName);
     return source.representations.map((r) => [r.name, r.nodeName]);
   }
@@ -862,9 +815,7 @@ export class MuSourceBridge {
    * Get the image geometry of a source.
    * Returns { width, height, pixelAspect } for the named source.
    */
-  sourceGeometry(
-    sourceName: string,
-  ): { width: number; height: number; pixelAspect: number } {
+  sourceGeometry(sourceName: string): { width: number; height: number; pixelAspect: number } {
     const source = this._getSource(sourceName);
     return {
       width: source.width,
@@ -888,11 +839,7 @@ export class MuSourceBridge {
   /**
    * Set a binary data attribute on a source (bridge helper).
    */
-  setSourceDataAttribute(
-    sourceName: string,
-    key: string,
-    data: Uint8Array,
-  ): void {
+  setSourceDataAttribute(sourceName: string, key: string, data: Uint8Array): void {
     const source = this._getSource(sourceName);
     source.dataAttributes.set(key, data);
   }
@@ -908,12 +855,7 @@ export class MuSourceBridge {
   /**
    * Set source dimensions (bridge helper).
    */
-  setSourceDimensions(
-    sourceName: string,
-    width: number,
-    height: number,
-    pixelAspect?: number,
-  ): void {
+  setSourceDimensions(sourceName: string, width: number, height: number, pixelAspect?: number): void {
     const source = this._getSource(sourceName);
     source.width = width;
     source.height = height;
@@ -925,11 +867,7 @@ export class MuSourceBridge {
   /**
    * Set source frame range (bridge helper).
    */
-  setSourceFrameRange(
-    sourceName: string,
-    startFrame: number,
-    endFrame: number,
-  ): void {
+  setSourceFrameRange(sourceName: string, startFrame: number, endFrame: number): void {
     const source = this._getSource(sourceName);
     source.startFrame = startFrame;
     source.endFrame = endFrame;
@@ -976,9 +914,7 @@ export class MuSourceBridge {
    * current openrv media source as a fallback. Returns the current source info
    * from the openrv API if one was found, or undefined otherwise.
    */
-  private _ensureFallbackSourceRegistered():
-    | ReturnType<OpenRVMediaAPI['getCurrentSource']>
-    | undefined {
+  private _ensureFallbackSourceRegistered(): ReturnType<OpenRVMediaAPI['getCurrentSource']> | undefined {
     if (this._sources.size !== 0) return undefined;
     try {
       const current = getOpenRV().media.getCurrentSource();
@@ -999,11 +935,7 @@ export class MuSourceBridge {
   /**
    * Create a new source record and register it.
    */
-  private _createSourceRecord(
-    paths: string[],
-    tag: string,
-    preGeneratedName?: string,
-  ): SourceRecord {
+  private _createSourceRecord(paths: string[], tag: string, preGeneratedName?: string): SourceRecord {
     const name = preGeneratedName ?? this._generateSourceName();
     const record: SourceRecord = {
       name,
@@ -1042,9 +974,7 @@ export class MuSourceBridge {
    */
   private _getActiveMediaPaths(source: SourceRecord): string[] {
     if (source.activeRep) {
-      const rep = source.representations.find(
-        (r) => r.name === source.activeRep,
-      );
+      const rep = source.representations.find((r) => r.name === source.activeRep);
       if (rep && rep.mediaPaths.length > 0) {
         return rep.mediaPaths;
       }
@@ -1092,11 +1022,7 @@ export class MuSourceBridge {
    * - One switch node per source, shared across all reps (type `RVMediaRepSwitch`)
    * - Source nodes are wired as inputs to the switch node.
    */
-  private _ensureRepNodes(
-    source: SourceRecord,
-    sourceNodeName: string,
-    switchNodeName: string,
-  ): void {
+  private _ensureRepNodes(source: SourceRecord, sourceNodeName: string, switchNodeName: string): void {
     if (!this._graph) return;
 
     // Create the source node for this rep
@@ -1120,9 +1046,7 @@ export class MuSourceBridge {
     this._graph.connect(sourceNode, switchNode);
 
     // Set the switch's active input to the currently active rep index
-    const activeIdx = source.representations.findIndex(
-      (r) => r.name === source.activeRep,
-    );
+    const activeIdx = source.representations.findIndex((r) => r.name === source.activeRep);
     if (activeIdx >= 0 && switchNode instanceof MediaRepNode) {
       switchNode.setActiveInput(activeIdx);
     }

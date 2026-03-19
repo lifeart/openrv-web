@@ -60,9 +60,7 @@ import { showAlert } from './ui/components/shared/Modal';
 // Context factory
 // ---------------------------------------------------------------------------
 
-function createMockContext(overrides?: {
-  checkpointShouldFail?: boolean;
-}): PersistenceManagerContext {
+function createMockContext(overrides?: { checkpointShouldFail?: boolean }): PersistenceManagerContext {
   const shouldFail = overrides?.checkpointShouldFail ?? false;
 
   return {
@@ -195,9 +193,7 @@ describe('AppPersistenceManager - issue #191: checkpoint failure warns user', ()
       expect(SessionSerializer.fromJSON).toHaveBeenCalled();
 
       // Should also show restore success alert
-      const restoreAlerts = alertFn.mock.calls.filter(
-        (call: any[]) => call[1]?.title === 'Snapshot Restored',
-      );
+      const restoreAlerts = alertFn.mock.calls.filter((call: any[]) => call[1]?.title === 'Snapshot Restored');
       expect(restoreAlerts.length).toBe(1);
     });
 
@@ -208,9 +204,7 @@ describe('AppPersistenceManager - issue #191: checkpoint failure warns user', ()
       await manager.restoreSnapshot('snap-1');
 
       const alertFn = showAlert as ReturnType<typeof vi.fn>;
-      const checkpointWarnings = alertFn.mock.calls.filter(
-        (call: any[]) => call[1]?.title === 'Checkpoint Warning',
-      );
+      const checkpointWarnings = alertFn.mock.calls.filter((call: any[]) => call[1]?.title === 'Checkpoint Warning');
       expect(checkpointWarnings.length).toBe(0);
 
       // Restore should still proceed
@@ -256,9 +250,7 @@ describe('AppPersistenceManager - issue #191: checkpoint failure warns user', ()
       await manager.openProject(file);
 
       const alertFn = showAlert as ReturnType<typeof vi.fn>;
-      const checkpointWarnings = alertFn.mock.calls.filter(
-        (call: any[]) => call[1]?.title === 'Checkpoint Warning',
-      );
+      const checkpointWarnings = alertFn.mock.calls.filter((call: any[]) => call[1]?.title === 'Checkpoint Warning');
       expect(checkpointWarnings.length).toBe(0);
 
       // Load should still proceed
@@ -303,9 +295,7 @@ describe('AppPersistenceManager - issue #191: checkpoint failure warns user', ()
       await manager.openProject(file);
 
       const alertFn = showAlert as ReturnType<typeof vi.fn>;
-      const checkpointWarnings = alertFn.mock.calls.filter(
-        (call: any[]) => call[1]?.title === 'Checkpoint Warning',
-      );
+      const checkpointWarnings = alertFn.mock.calls.filter((call: any[]) => call[1]?.title === 'Checkpoint Warning');
       expect(checkpointWarnings.length).toBe(0);
 
       // Load should still proceed

@@ -6,7 +6,13 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { SafeAreasOverlay, type AspectRatioGuide, ASPECT_RATIOS, DEFAULT_SAFE_AREAS_STATE, SAFE_ZONE_COLORS } from './SafeAreasOverlay';
+import {
+  SafeAreasOverlay,
+  type AspectRatioGuide,
+  ASPECT_RATIOS,
+  DEFAULT_SAFE_AREAS_STATE,
+  SAFE_ZONE_COLORS,
+} from './SafeAreasOverlay';
 import type { CropRegion } from './CropControl';
 
 // Canvas mocks are provided by test/setup.ts
@@ -582,9 +588,7 @@ describe('SMPTE RP 2046-2:2018 safe area percentages (Issue #482)', () => {
     overlay.render();
 
     // Title safe: 90% of 1000 = 900, margin = (1-0.9)/2 * 1000 = 50
-    const titleCall = strokeRectSpy.mock.calls.find(
-      ([_x, _y, w, h]) => Math.abs(w - 900) < 1 && Math.abs(h - 900) < 1,
-    );
+    const titleCall = strokeRectSpy.mock.calls.find(([_x, _y, w, h]) => Math.abs(w - 900) < 1 && Math.abs(h - 900) < 1);
     expect(titleCall).toBeDefined();
     expect(titleCall![0]).toBeCloseTo(50, 0); // x offset
     expect(titleCall![1]).toBeCloseTo(50, 0); // y offset
@@ -739,9 +743,7 @@ describe('Safe areas crop-region support (Issue #480)', () => {
     // width = 500 * 0.9 = 450, height = 500 * 0.9 = 450
     // margin = 500 * 0.05 = 25
     // x = 250 + 25 = 275, y = 250 + 25 = 275
-    const titleCall = strokeRectSpy.mock.calls.find(
-      ([_x, _y, w, h]) => Math.abs(w - 450) < 1 && Math.abs(h - 450) < 1,
-    );
+    const titleCall = strokeRectSpy.mock.calls.find(([_x, _y, w, h]) => Math.abs(w - 450) < 1 && Math.abs(h - 450) < 1);
     expect(titleCall).toBeDefined();
     expect(titleCall![0]).toBeCloseTo(275, 0);
     expect(titleCall![1]).toBeCloseTo(275, 0);
@@ -1178,8 +1180,9 @@ describe('Distinct zone colors (Issue #483)', () => {
 
     const ctx = (overlay as unknown as { ctx: CanvasRenderingContext2D }).ctx;
     const strokeStyleSets: string[] = [];
-    const origSet = Object.getOwnPropertyDescriptor(ctx, 'strokeStyle')?.set
-      ?? Object.getOwnPropertyDescriptor(Object.getPrototypeOf(ctx), 'strokeStyle')?.set;
+    const origSet =
+      Object.getOwnPropertyDescriptor(ctx, 'strokeStyle')?.set ??
+      Object.getOwnPropertyDescriptor(Object.getPrototypeOf(ctx), 'strokeStyle')?.set;
     Object.defineProperty(ctx, 'strokeStyle', {
       set(val: string) {
         strokeStyleSets.push(val);
@@ -1210,8 +1213,9 @@ describe('Distinct zone colors (Issue #483)', () => {
 
     const ctx = (overlay as unknown as { ctx: CanvasRenderingContext2D }).ctx;
     const strokeStyleSets: string[] = [];
-    const origSet = Object.getOwnPropertyDescriptor(ctx, 'strokeStyle')?.set
-      ?? Object.getOwnPropertyDescriptor(Object.getPrototypeOf(ctx), 'strokeStyle')?.set;
+    const origSet =
+      Object.getOwnPropertyDescriptor(ctx, 'strokeStyle')?.set ??
+      Object.getOwnPropertyDescriptor(Object.getPrototypeOf(ctx), 'strokeStyle')?.set;
     Object.defineProperty(ctx, 'strokeStyle', {
       set(val: string) {
         strokeStyleSets.push(val);
@@ -1252,9 +1256,7 @@ describe('Distinct zone colors (Issue #483)', () => {
     expect(actionCall).toBeDefined();
 
     // Title safe: 900x900
-    const titleCall = strokeRectSpy.mock.calls.find(
-      ([_x, _y, w, h]) => Math.abs(w - 900) < 1 && Math.abs(h - 900) < 1,
-    );
+    const titleCall = strokeRectSpy.mock.calls.find(([_x, _y, w, h]) => Math.abs(w - 900) < 1 && Math.abs(h - 900) < 1);
     expect(titleCall).toBeDefined();
   });
 });

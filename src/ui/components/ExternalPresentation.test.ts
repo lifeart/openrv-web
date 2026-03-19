@@ -811,9 +811,7 @@ describe('ExternalPresentation', () => {
       const result = presenter.openWindow();
 
       expect(result).toBeNull();
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('window.open() returned null'),
-      );
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('window.open() returned null'));
       warnSpy.mockRestore();
     });
 
@@ -838,7 +836,7 @@ describe('ExternalPresentation', () => {
       // bypassing updateInfoDisplay() which would include playback and color state.
       // This is the domain expert observation — syncFrame loses enriched display temporarily.
       expect(html).toContain(
-        "document.getElementById('info').textContent =\n            'Frame: ' + msg.frame + ' / ' + msg.totalFrames;"
+        "document.getElementById('info').textContent =\n            'Frame: ' + msg.frame + ' / ' + msg.totalFrames;",
       );
 
       // Confirm syncPlayback and syncColor use updateInfoDisplay() instead

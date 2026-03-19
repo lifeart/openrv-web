@@ -59,8 +59,16 @@ export class ClippingOverlay extends EventEmitter<ClippingOverlayEvents> {
     if (!this.state.enabled) return;
 
     const data = imageData.data;
-    const { showHighlights, showShadows, highlightColor, shadowColor, bothColor, opacity, shadowThreshold, highlightThreshold } =
-      this.state;
+    const {
+      showHighlights,
+      showShadows,
+      highlightColor,
+      shadowColor,
+      bothColor,
+      opacity,
+      shadowThreshold,
+      highlightThreshold,
+    } = this.state;
     const len = data.length;
 
     // Pre-calculate blended colors

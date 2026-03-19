@@ -68,9 +68,8 @@ export class MediaRepresentationManager extends EventEmitter<RepresentationManag
 
     // Capture the currently active representation object before sort
     const activeIndex = this._accessor.getActiveRepresentationIndex(sourceIndex);
-    const previouslyActive = activeIndex >= 0 && activeIndex < representations.length
-      ? representations[activeIndex]
-      : null;
+    const previouslyActive =
+      activeIndex >= 0 && activeIndex < representations.length ? representations[activeIndex] : null;
 
     representations.push(representation);
 
@@ -347,10 +346,7 @@ export class MediaRepresentationManager extends EventEmitter<RepresentationManag
    * Compute the mapped frame when switching from one representation to another.
    * Returns undefined if no remapping is needed (same startFrame or no previous rep).
    */
-  private _computeMappedFrame(
-    fromRep: MediaRepresentation | null,
-    toRep: MediaRepresentation,
-  ): number | undefined {
+  private _computeMappedFrame(fromRep: MediaRepresentation | null, toRep: MediaRepresentation): number | undefined {
     if (!this._accessor || !fromRep) return undefined;
     if (fromRep.startFrame === toRep.startFrame) return undefined;
 

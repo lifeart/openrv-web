@@ -105,15 +105,25 @@ function createMockComponents(): SessionComponents & { playlistManager: any } {
       getLensParams: vi.fn().mockReturnValue({}),
       getWipeState: vi.fn().mockReturnValue({}),
       getStackLayers: vi.fn().mockReturnValue([]),
-      getNoiseReductionParams: vi.fn().mockReturnValue({ strength: 0, luminanceStrength: 50, chromaStrength: 75, radius: 2 }),
+      getNoiseReductionParams: vi
+        .fn()
+        .mockReturnValue({ strength: 0, luminanceStrength: 50, chromaStrength: 75, radius: 2 }),
       getWatermarkState: vi.fn().mockReturnValue({
-        enabled: false, imageUrl: null, position: 'bottom-right',
-        customX: 0.9, customY: 0.9, scale: 1, opacity: 0.7, margin: 20,
+        enabled: false,
+        imageUrl: null,
+        position: 'bottom-right',
+        customX: 0.9,
+        customY: 0.9,
+        scale: 1,
+        opacity: 0.7,
+        margin: 20,
       }),
       getLUT: vi.fn().mockReturnValue(undefined),
       getLUTIntensity: vi.fn().mockReturnValue(1.0),
       getPARState: vi.fn().mockReturnValue({ enabled: false, par: 1.0, preset: 'square' }),
-      getBackgroundPatternState: vi.fn().mockReturnValue({ pattern: 'black', checkerSize: 'medium', customColor: '#1a1a1a' }),
+      getBackgroundPatternState: vi
+        .fn()
+        .mockReturnValue({ pattern: 'black', checkerSize: 'medium', customColor: '#1a1a1a' }),
       isOCIOEnabled: vi.fn().mockReturnValue(false),
       getDisplayColorState: vi.fn().mockReturnValue({ ...DEFAULT_DISPLAY_COLOR_STATE }),
       getGamutMappingState: vi.fn().mockReturnValue({ ...DEFAULT_GAMUT_MAPPING_STATE }),
@@ -129,7 +139,16 @@ function createMockComponents(): SessionComponents & { playlistManager: any } {
       getStereoAlignMode: vi.fn().mockReturnValue(DEFAULT_STEREO_ALIGN_MODE),
       getDeinterlaceParams: vi.fn().mockReturnValue({ method: 'bob', fieldOrder: 'tff', enabled: false }),
       getFilmEmulationParams: vi.fn().mockReturnValue({ enabled: false, stock: 'kodak-portra-400', intensity: 1.0 }),
-      getPerspectiveParams: vi.fn().mockReturnValue({ enabled: false, topLeft: { x: 0, y: 0 }, topRight: { x: 1, y: 0 }, bottomRight: { x: 1, y: 1 }, bottomLeft: { x: 0, y: 1 }, quality: 'bilinear' }),
+      getPerspectiveParams: vi
+        .fn()
+        .mockReturnValue({
+          enabled: false,
+          topLeft: { x: 0, y: 0 },
+          topRight: { x: 1, y: 0 },
+          bottomRight: { x: 1, y: 1 },
+          bottomLeft: { x: 0, y: 1 },
+          quality: 'bilinear',
+        }),
       getStabilizationParams: vi.fn().mockReturnValue({ enabled: false, smoothingStrength: 50 }),
       isUncropActive: vi.fn().mockReturnValue(false),
       setColorAdjustments: vi.fn(),
@@ -170,14 +189,42 @@ function createMockComponents(): SessionComponents & { playlistManager: any } {
           activeSourceId: null,
         }),
       }),
-      getTimecodeOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_TIMECODE_OVERLAY_STATE }), setState: vi.fn() }),
-      getSafeAreasOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_SAFE_AREAS_STATE }), setState: vi.fn() }),
-      getClippingOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_CLIPPING_OVERLAY_STATE }), setState: vi.fn() }),
-      getInfoStripOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_INFO_STRIP_OVERLAY_STATE }), setState: vi.fn() }),
-      getSpotlightOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_SPOTLIGHT_STATE }), setState: vi.fn() }),
-      getBugOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_BUG_OVERLAY_STATE }), setState: vi.fn() }),
-      getEXRWindowOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_EXR_WINDOW_OVERLAY_STATE }), setState: vi.fn() }),
-      getFPSIndicator: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_FPS_INDICATOR_STATE }), setState: vi.fn() }),
+      getTimecodeOverlay: vi
+        .fn()
+        .mockReturnValue({
+          getState: vi.fn().mockReturnValue({ ...DEFAULT_TIMECODE_OVERLAY_STATE }),
+          setState: vi.fn(),
+        }),
+      getSafeAreasOverlay: vi
+        .fn()
+        .mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_SAFE_AREAS_STATE }), setState: vi.fn() }),
+      getClippingOverlay: vi
+        .fn()
+        .mockReturnValue({
+          getState: vi.fn().mockReturnValue({ ...DEFAULT_CLIPPING_OVERLAY_STATE }),
+          setState: vi.fn(),
+        }),
+      getInfoStripOverlay: vi
+        .fn()
+        .mockReturnValue({
+          getState: vi.fn().mockReturnValue({ ...DEFAULT_INFO_STRIP_OVERLAY_STATE }),
+          setState: vi.fn(),
+        }),
+      getSpotlightOverlay: vi
+        .fn()
+        .mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_SPOTLIGHT_STATE }), setState: vi.fn() }),
+      getBugOverlay: vi
+        .fn()
+        .mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_BUG_OVERLAY_STATE }), setState: vi.fn() }),
+      getEXRWindowOverlay: vi
+        .fn()
+        .mockReturnValue({
+          getState: vi.fn().mockReturnValue({ ...DEFAULT_EXR_WINDOW_OVERLAY_STATE }),
+          setState: vi.fn(),
+        }),
+      getFPSIndicator: vi
+        .fn()
+        .mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_FPS_INDICATOR_STATE }), setState: vi.fn() }),
     },
   } as any;
 }
@@ -196,7 +243,7 @@ function makePlaylistState(clips: Array<{ sourceIndex: number; sourceName: strin
       inPoint: 1,
       outPoint: 100,
       globalStartFrame: globalStart,
-      duration: (globalStart += 100, 100),
+      duration: ((globalStart += 100), 100),
     })),
     enabled: true,
     currentFrame: 1,
@@ -308,9 +355,7 @@ describe('Issue #411: Playlist clip source indices remapped during partial resto
       makeImageRef('img2.exr', '/img2.exr'),
     ];
     // Only a clip for the middle source (which will fail)
-    state.playlist = makePlaylistState([
-      { sourceIndex: 1, sourceName: 'img1.exr' },
-    ]);
+    state.playlist = makePlaylistState([{ sourceIndex: 1, sourceName: 'img1.exr' }]);
 
     await SessionSerializer.fromJSON(state, components);
 
@@ -322,10 +367,7 @@ describe('Issue #411: Playlist clip source indices remapped during partial resto
     const components = createMockComponents();
 
     const state = SessionSerializer.createEmpty();
-    state.media = [
-      makeImageRef('img0.exr', '/img0.exr'),
-      makeImageRef('img1.exr', '/img1.exr'),
-    ];
+    state.media = [makeImageRef('img0.exr', '/img0.exr'), makeImageRef('img1.exr', '/img1.exr')];
     state.playlist = makePlaylistState([
       { sourceIndex: 0, sourceName: 'img0.exr' },
       { sourceIndex: 1, sourceName: 'img1.exr' },
@@ -355,10 +397,7 @@ describe('Issue #411: Note source indices remapped during partial restore', () =
       makeImageRef('img1.exr', '/img1.exr'),
       makeImageRef('img2.exr', '/img2.exr'),
     ];
-    state.notes = [
-      makeNote(1, 'Note on source 1'),
-      makeNote(2, 'Note on source 2'),
-    ];
+    state.notes = [makeNote(1, 'Note on source 1'), makeNote(2, 'Note on source 2')];
 
     await SessionSerializer.fromJSON(state, components);
 
@@ -373,14 +412,8 @@ describe('Issue #411: Note source indices remapped during partial restore', () =
     setupFirstSourceFails(components);
 
     const state = SessionSerializer.createEmpty();
-    state.media = [
-      makeImageRef('img0.exr', '/img0.exr'),
-      makeImageRef('img1.exr', '/img1.exr'),
-    ];
-    state.notes = [
-      makeNote(0, 'Note on source 0 (will be lost)'),
-      makeNote(1, 'Note on source 1 (survives)'),
-    ];
+    state.media = [makeImageRef('img0.exr', '/img0.exr'), makeImageRef('img1.exr', '/img1.exr')];
+    state.notes = [makeNote(0, 'Note on source 0 (will be lost)'), makeNote(1, 'Note on source 1 (survives)')];
 
     await SessionSerializer.fromJSON(state, components);
 
@@ -394,14 +427,8 @@ describe('Issue #411: Note source indices remapped during partial restore', () =
     const components = createMockComponents();
 
     const state = SessionSerializer.createEmpty();
-    state.media = [
-      makeImageRef('img0.exr', '/img0.exr'),
-      makeImageRef('img1.exr', '/img1.exr'),
-    ];
-    state.notes = [
-      makeNote(0, 'Note A'),
-      makeNote(1, 'Note B'),
-    ];
+    state.media = [makeImageRef('img0.exr', '/img0.exr'), makeImageRef('img1.exr', '/img1.exr')];
+    state.notes = [makeNote(0, 'Note A'), makeNote(1, 'Note B')];
 
     await SessionSerializer.fromJSON(state, components);
 
@@ -427,9 +454,7 @@ describe('Issue #411: Version group source indices remapped during partial resto
       makeImageRef('img1.exr', '/img1.exr'),
       makeImageRef('img2.exr', '/img2.exr'),
     ];
-    state.versionGroups = [
-      makeVersionGroup('shot_ABC', [1, 2]),
-    ];
+    state.versionGroups = [makeVersionGroup('shot_ABC', [1, 2])];
 
     await SessionSerializer.fromJSON(state, components);
 
@@ -445,15 +470,9 @@ describe('Issue #411: Version group source indices remapped during partial resto
     setupFirstSourceFails(components);
 
     const state = SessionSerializer.createEmpty();
-    state.media = [
-      makeImageRef('img0.exr', '/img0.exr'),
-      makeImageRef('img1.exr', '/img1.exr'),
-    ];
+    state.media = [makeImageRef('img0.exr', '/img0.exr'), makeImageRef('img1.exr', '/img1.exr')];
     // Group with only lost source
-    state.versionGroups = [
-      makeVersionGroup('shot_lost', [0]),
-      makeVersionGroup('shot_ok', [1]),
-    ];
+    state.versionGroups = [makeVersionGroup('shot_lost', [0]), makeVersionGroup('shot_ok', [1])];
 
     await SessionSerializer.fromJSON(state, components);
 
@@ -504,13 +523,8 @@ describe('Issue #411: Version group source indices remapped during partial resto
     const components = createMockComponents();
 
     const state = SessionSerializer.createEmpty();
-    state.media = [
-      makeImageRef('img0.exr', '/img0.exr'),
-      makeImageRef('img1.exr', '/img1.exr'),
-    ];
-    state.versionGroups = [
-      makeVersionGroup('shot_A', [0, 1]),
-    ];
+    state.media = [makeImageRef('img0.exr', '/img0.exr'), makeImageRef('img1.exr', '/img1.exr')];
+    state.versionGroups = [makeVersionGroup('shot_A', [0, 1])];
 
     await SessionSerializer.fromJSON(state, components);
 
@@ -536,10 +550,7 @@ describe('Issue #411: Status entry source indices remapped during partial restor
       makeImageRef('img1.exr', '/img1.exr'),
       makeImageRef('img2.exr', '/img2.exr'),
     ];
-    state.statuses = [
-      makeStatus(1, 'approved'),
-      makeStatus(2, 'needs-work'),
-    ];
+    state.statuses = [makeStatus(1, 'approved'), makeStatus(2, 'needs-work')];
 
     await SessionSerializer.fromJSON(state, components);
 
@@ -556,10 +567,7 @@ describe('Issue #411: Status entry source indices remapped during partial restor
     setupFirstSourceFails(components);
 
     const state = SessionSerializer.createEmpty();
-    state.media = [
-      makeImageRef('img0.exr', '/img0.exr'),
-      makeImageRef('img1.exr', '/img1.exr'),
-    ];
+    state.media = [makeImageRef('img0.exr', '/img0.exr'), makeImageRef('img1.exr', '/img1.exr')];
     state.statuses = [
       makeStatus(0, 'approved'), // source 0 will fail
       makeStatus(1, 'needs-work'),
@@ -577,14 +585,8 @@ describe('Issue #411: Status entry source indices remapped during partial restor
     const components = createMockComponents();
 
     const state = SessionSerializer.createEmpty();
-    state.media = [
-      makeImageRef('img0.exr', '/img0.exr'),
-      makeImageRef('img1.exr', '/img1.exr'),
-    ];
-    state.statuses = [
-      makeStatus(0, 'approved'),
-      makeStatus(1, 'needs-work'),
-    ];
+    state.media = [makeImageRef('img0.exr', '/img0.exr'), makeImageRef('img1.exr', '/img1.exr')];
+    state.statuses = [makeStatus(0, 'approved'), makeStatus(1, 'needs-work')];
 
     await SessionSerializer.fromJSON(state, components);
 
@@ -616,19 +618,9 @@ describe('Issue #411: All subsystems remapped together during partial restore', 
       { sourceIndex: 1, sourceName: 'img1.exr' },
       { sourceIndex: 2, sourceName: 'img2.exr' },
     ]);
-    state.notes = [
-      makeNote(0, 'Note on 0'),
-      makeNote(1, 'Note on 1 (lost)'),
-      makeNote(2, 'Note on 2'),
-    ];
-    state.versionGroups = [
-      makeVersionGroup('shot', [0, 1, 2]),
-    ];
-    state.statuses = [
-      makeStatus(0, 'approved'),
-      makeStatus(1, 'needs-work'),
-      makeStatus(2, 'pending'),
-    ];
+    state.notes = [makeNote(0, 'Note on 0'), makeNote(1, 'Note on 1 (lost)'), makeNote(2, 'Note on 2')];
+    state.versionGroups = [makeVersionGroup('shot', [0, 1, 2])];
+    state.statuses = [makeStatus(0, 'approved'), makeStatus(1, 'needs-work'), makeStatus(2, 'pending')];
     state.playback.currentSourceIndex = 2;
 
     await SessionSerializer.fromJSON(state, components);
@@ -667,10 +659,7 @@ describe('Issue #411: All subsystems remapped together during partial restore', 
     const components = createMockComponents();
 
     const state = SessionSerializer.createEmpty();
-    state.media = [
-      makeImageRef('img0.exr', '/img0.exr'),
-      makeImageRef('img1.exr', '/img1.exr'),
-    ];
+    state.media = [makeImageRef('img0.exr', '/img0.exr'), makeImageRef('img1.exr', '/img1.exr')];
 
     const note0 = makeNote(0, 'A');
     const note1 = makeNote(1, 'B');

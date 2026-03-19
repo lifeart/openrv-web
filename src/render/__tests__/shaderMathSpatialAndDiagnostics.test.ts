@@ -25,9 +25,7 @@ import {
 
 // CPU implementations for cross-verification
 import { applyDisplayTransfer } from '../../color/DisplayTransfer';
-import {
-  buildHueRotationMatrix as cpuBuildHueRotationMatrix,
-} from '../../color/HueRotation';
+import { buildHueRotationMatrix as cpuBuildHueRotationMatrix } from '../../color/HueRotation';
 
 const LUMA_R = 0.2126;
 const LUMA_G = 0.7152;

@@ -207,14 +207,7 @@ describe('ClientMode E2E', () => {
       // Note: export, paint (as panel), channel, stereo, and network are now gated
       // by isActionAllowed() rather than DOM hiding, since they lack dedicated
       // panel DOM elements (#194).
-      const expectedPanels = [
-        'color',
-        'effects',
-        'transform',
-        'annotate',
-        'notes',
-        'snapshots',
-      ];
+      const expectedPanels = ['color', 'effects', 'transform', 'annotate', 'notes', 'snapshots'];
       for (const panel of expectedPanels) {
         expect(selectorString).toContain(`data-panel="${panel}"`);
       }

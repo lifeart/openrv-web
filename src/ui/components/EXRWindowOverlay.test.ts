@@ -491,10 +491,7 @@ describe('Auto-enable/disable on window mismatch (#353)', () => {
     overlay.enable();
     expect(overlay.getState().enabled).toBe(true);
     // Set mismatched windows — enabled stays true
-    overlay.setWindows(
-      { xMin: 10, yMin: 10, xMax: 90, yMax: 90 },
-      { xMin: 0, yMin: 0, xMax: 99, yMax: 99 },
-    );
+    overlay.setWindows({ xMin: 10, yMin: 10, xMax: 90, yMax: 90 }, { xMin: 0, yMin: 0, xMax: 99, yMax: 99 });
     expect(overlay.getState().enabled).toBe(true);
     // Set matching windows — enabled still stays true (no auto-disable)
     const window: EXRBox2i = { xMin: 0, yMin: 0, xMax: 99, yMax: 99 };

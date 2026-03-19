@@ -10,9 +10,7 @@ import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import type { Session } from '../../core/session/Session';
 import type { MediaRepresentation } from '../../core/types/representation';
 import { DropdownMenu } from './shared/DropdownMenu';
-import {
-  createButton as sharedCreateButton,
-} from './shared/Button';
+import { createButton as sharedCreateButton } from './shared/Button';
 import { getIconSvg } from './shared/Icons';
 
 export interface RepresentationSelectorEvents extends EventMap {

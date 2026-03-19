@@ -6,7 +6,13 @@
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { loadGTOGraph, getGraphSummary, formatSkippedNodesWarning, formatDegradedModesWarning, resolveAvailableFile } from './GTOGraphLoader';
+import {
+  loadGTOGraph,
+  getGraphSummary,
+  formatSkippedNodesWarning,
+  formatDegradedModesWarning,
+  resolveAvailableFile,
+} from './GTOGraphLoader';
 import type { GTOParseResult, SkippedNodeInfo } from './GTOGraphLoader';
 import type { DegradedModeInfo } from '../../composite/BlendModes';
 import type { GTODTO } from 'gto-js';
@@ -2250,9 +2256,7 @@ describe('GTOGraphLoader', () => {
   describe('skippedNodes tracking (Issue #20)', () => {
     it('GTO-SKIP-001: reports unregistered node types in skippedNodes', () => {
       // RVColor is mapped in PROTOCOL_TO_NODE_TYPE but not registered in NodeFactory
-      vi.spyOn(NodeFactory, 'isRegistered').mockImplementation(
-        (type: string) => type === 'RVSequenceGroup',
-      );
+      vi.spyOn(NodeFactory, 'isRegistered').mockImplementation((type: string) => type === 'RVSequenceGroup');
       vi.spyOn(NodeFactory, 'create').mockReturnValue({
         type: 'RVSequenceGroup',
         name: 'seq',
@@ -2295,9 +2299,7 @@ describe('GTOGraphLoader', () => {
 
       const dto = createMockDTO({
         sessions: [{ name: 'TestSession' }],
-        objects: [
-          { name: 'custom1', protocol: 'SomeCustomPlugin', components: { mode: { inputs: [] } } },
-        ],
+        objects: [{ name: 'custom1', protocol: 'SomeCustomPlugin', components: { mode: { inputs: [] } } }],
       });
 
       const result = loadGTOGraph(dto as never);
@@ -2320,9 +2322,7 @@ describe('GTOGraphLoader', () => {
 
       const dto = createMockDTO({
         sessions: [{ name: 'TestSession' }],
-        objects: [
-          { name: 'seq', protocol: 'RVSequenceGroup', components: { mode: { inputs: [] } } },
-        ],
+        objects: [{ name: 'seq', protocol: 'RVSequenceGroup', components: { mode: { inputs: [] } } }],
       });
 
       const result = loadGTOGraph(dto as never);
@@ -2332,9 +2332,7 @@ describe('GTOGraphLoader', () => {
 
     it('GTO-SKIP-004: console.warn is emitted for unregistered nodes', () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      vi.spyOn(NodeFactory, 'isRegistered').mockImplementation(
-        (type: string) => type === 'RVSequenceGroup',
-      );
+      vi.spyOn(NodeFactory, 'isRegistered').mockImplementation((type: string) => type === 'RVSequenceGroup');
       vi.spyOn(NodeFactory, 'create').mockReturnValue({
         type: 'RVSequenceGroup',
         name: 'seq',
@@ -2353,9 +2351,7 @@ describe('GTOGraphLoader', () => {
 
       loadGTOGraph(dto as never);
 
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Skipped 1 mapped-but-unimplemented node(s)'),
-      );
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Skipped 1 mapped-but-unimplemented node(s)'));
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('RVColor'));
 
       warnSpy.mockRestore();
@@ -2374,16 +2370,12 @@ describe('GTOGraphLoader', () => {
 
       const dto = createMockDTO({
         sessions: [{ name: 'TestSession' }],
-        objects: [
-          { name: 'seq', protocol: 'RVSequenceGroup', components: { mode: { inputs: [] } } },
-        ],
+        objects: [{ name: 'seq', protocol: 'RVSequenceGroup', components: { mode: { inputs: [] } } }],
       });
 
       loadGTOGraph(dto as never);
 
-      expect(warnSpy).not.toHaveBeenCalledWith(
-        expect.stringContaining('mapped-but-unimplemented'),
-      );
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('mapped-but-unimplemented'));
 
       warnSpy.mockRestore();
     });
@@ -2458,9 +2450,7 @@ describe('GTOGraphLoader', () => {
     });
 
     it('GTO-DEGRADE-003: reports topmost degradation', () => {
-      const degraded: DegradedModeInfo[] = [
-        { nodeName: 'stack_001', originalMode: 'topmost', fallbackMode: 'normal' },
-      ];
+      const degraded: DegradedModeInfo[] = [{ nodeName: 'stack_001', originalMode: 'topmost', fallbackMode: 'normal' }];
       const msg = formatDegradedModesWarning(degraded);
       expect(msg).toContain('1 composite mode(s) were degraded');
       expect(msg).toContain('"topmost"');
@@ -2550,9 +2540,7 @@ describe('GTOGraphLoader', () => {
       expect(result).toBe(fileFromShotB);
 
       // Should have warned about duplicate
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Duplicate basename "plate.exr"'),
-      );
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Duplicate basename "plate.exr"'));
       warnSpy.mockRestore();
     });
 
@@ -2564,9 +2552,7 @@ describe('GTOGraphLoader', () => {
 
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       resolveAvailableFile('/some/path/grade.cdl', map);
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('2 files share this name'),
-      );
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('2 files share this name'));
       warnSpy.mockRestore();
     });
 

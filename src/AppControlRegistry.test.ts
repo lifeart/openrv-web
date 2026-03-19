@@ -785,9 +785,7 @@ describe('AppControlRegistry', () => {
       sizeSelect.value = 'large';
       sizeSelect.dispatchEvent(new Event('change', { bubbles: true }));
 
-      expect(registry.slateEditor.getCustomFields()).toEqual([
-        { label: 'Codec', value: 'ProRes 4444', size: 'large' },
-      ]);
+      expect(registry.slateEditor.getCustomFields()).toEqual([{ label: 'Codec', value: 'ProRes 4444', size: 'large' }]);
 
       panel.querySelector<HTMLButtonElement>('[data-testid="slate-custom-field-remove-0"]')!.click();
       expect(registry.slateEditor.getCustomFields()).toEqual([]);

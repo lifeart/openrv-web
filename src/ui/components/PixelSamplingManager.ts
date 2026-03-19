@@ -204,7 +204,15 @@ export class PixelSamplingManager {
       }
 
       const { width: sourceWidth, height: sourceHeight } = this.context.getSourceDimensions();
-      this.context.pixelProbe.updateFromCanvas(position.x, position.y, imageData, displayWidth, displayHeight, sourceWidth, sourceHeight);
+      this.context.pixelProbe.updateFromCanvas(
+        position.x,
+        position.y,
+        imageData,
+        displayWidth,
+        displayHeight,
+        sourceWidth,
+        sourceHeight,
+      );
       this.context.pixelProbe.setOverlayPosition(e.clientX, e.clientY);
     }
 

@@ -31,11 +31,15 @@ function createMockSession() {
 
   Object.defineProperty(session, 'inPoint', {
     get: () => session._inPoint,
-    set: (v: number) => { session._inPoint = v; },
+    set: (v: number) => {
+      session._inPoint = v;
+    },
   });
   Object.defineProperty(session, 'outPoint', {
     get: () => session._outPoint,
-    set: (v: number) => { session._outPoint = v; },
+    set: (v: number) => {
+      session._outPoint = v;
+    },
   });
 
   session.play = vi.fn(() => {

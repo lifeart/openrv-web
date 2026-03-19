@@ -168,7 +168,7 @@ export class StereoManager {
     if (isDefaultStereoState(this._stereoState)) return;
 
     const imageData = ctx.getImageData(0, 0, width, height);
-    const rightEye = this._stereoInputFormat === 'separate' ? this._rightEyeImageData ?? undefined : undefined;
+    const rightEye = this._stereoInputFormat === 'separate' ? (this._rightEyeImageData ?? undefined) : undefined;
     const processedData = applyStereoModeUtil(imageData, this._stereoState, this._stereoInputFormat, rightEye);
     ctx.putImageData(processedData, 0, 0);
   }
@@ -180,7 +180,7 @@ export class StereoManager {
     if (isDefaultStereoState(this._stereoState)) return;
 
     const imageData = ctx.getImageData(0, 0, width, height);
-    const rightEye = this._stereoInputFormat === 'separate' ? this._rightEyeImageData ?? undefined : undefined;
+    const rightEye = this._stereoInputFormat === 'separate' ? (this._rightEyeImageData ?? undefined) : undefined;
     const processedData = applyStereoModeWithEyeTransformsUtil(
       imageData,
       this._stereoState,

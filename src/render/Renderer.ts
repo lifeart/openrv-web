@@ -1,7 +1,14 @@
 import { type IPImage, type DataType, type ColorPrimaries } from '../core/image/Image';
 import { ShaderProgram } from './ShaderProgram';
 import { getRotationMatrix2x2, normalizeAngle } from '../utils/rotation';
-import type { ColorAdjustments, ColorWheelsState, ChannelMode, HSLQualifierState, LinearizeState, ChannelSwizzle } from '../core/types/color';
+import type {
+  ColorAdjustments,
+  ColorWheelsState,
+  ChannelMode,
+  HSLQualifierState,
+  LinearizeState,
+  ChannelSwizzle,
+} from '../core/types/color';
 import type {
   ToneMappingState,
   ZebraState,

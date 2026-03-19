@@ -101,9 +101,7 @@ const ALLOWED_URL_SCHEMES = ['http:', 'https:', 'blob:', 'data:', 'file:'];
  * When `valid` is true the `url` field contains the browser-loadable URL.
  * When `valid` is false the `error` field describes what went wrong.
  */
-export type MediaPathValidationResult =
-  | { valid: true; url: string }
-  | { valid: false; error: string };
+export type MediaPathValidationResult = { valid: true; url: string } | { valid: false; error: string };
 
 /**
  * Check whether a raw path string from a DCC `loadMedia` message is a
@@ -212,7 +210,9 @@ export async function fetchAndApplyLUT(
 
     // Discard stale result if a newer request has started
     if (state.lutGeneration !== generation) {
-      log.info(`Discarding stale LUT response for "${lutPath}" (generation ${generation}, current ${state.lutGeneration})`);
+      log.info(
+        `Discarding stale LUT response for "${lutPath}" (generation ${generation}, current ${state.lutGeneration})`,
+      );
       return;
     }
 
@@ -225,7 +225,9 @@ export async function fetchAndApplyLUT(
 
     // Check again after second await
     if (state.lutGeneration !== generation) {
-      log.info(`Discarding stale LUT response for "${lutPath}" (generation ${generation}, current ${state.lutGeneration})`);
+      log.info(
+        `Discarding stale LUT response for "${lutPath}" (generation ${generation}, current ${state.lutGeneration})`,
+      );
       return;
     }
 
@@ -263,8 +265,8 @@ export function mapAnnotationType(annotation: Annotation): 'pen' | 'text' | 'sha
 export function wireDCCBridge(deps: DCCWiringDeps): DCCWiringState {
   const { dccBridge, session, viewer, colorControls, paintEngine, noteManager } = deps;
   const fetchFn = deps.fetchFn ?? globalThis.fetch.bind(globalThis);
-  const alertFn = deps.showAlertFn ?? ((msg: string, opts?: { type?: string; title?: string }) =>
-    showAlert(msg, opts as any));
+  const alertFn =
+    deps.showAlertFn ?? ((msg: string, opts?: { type?: string; title?: string }) => showAlert(msg, opts as any));
 
   const subs = new DisposableSubscriptionManager();
 
@@ -388,11 +390,7 @@ export function wireDCCBridge(deps: DCCWiringDeps): DCCWiringState {
   if (paintEngine) {
     subs.add(
       paintEngine.on('strokeAdded', (annotation: Annotation) => {
-        const sent = dccBridge.sendAnnotationAdded(
-          annotation.frame,
-          mapAnnotationType(annotation),
-          annotation.id,
-        );
+        const sent = dccBridge.sendAnnotationAdded(annotation.frame, mapAnnotationType(annotation), annotation.id);
         if (!sent) {
           log.warn('DCC annotation sync dropped: bridge is not writable');
         }
@@ -404,13 +402,7 @@ export function wireDCCBridge(deps: DCCWiringDeps): DCCWiringState {
   if (noteManager) {
     subs.add(
       noteManager.on('noteAdded', (note: Note) => {
-        const sent = dccBridge.sendNoteAdded(
-          note.frameStart,
-          note.text,
-          note.author,
-          note.status,
-          note.id,
-        );
+        const sent = dccBridge.sendNoteAdded(note.frameStart, note.text, note.author, note.status, note.id);
         if (!sent) {
           log.warn('DCC note sync dropped: bridge is not writable');
         }

@@ -99,7 +99,10 @@ export class ColorPipelineManager {
     try {
       this._lutProcessor = new WebGLLUTProcessor();
     } catch (e) {
-      console.warn('WebGL LUT processor not available — no CPU fallback exists, LUT processing will be unavailable:', e);
+      console.warn(
+        'WebGL LUT processor not available — no CPU fallback exists, LUT processing will be unavailable:',
+        e,
+      );
       this._lutProcessor = null;
     }
     return this._lutProcessor;
@@ -209,9 +212,7 @@ export class ColorPipelineManager {
       this._lutProcessor.setLUT(lut);
     } else if (lut !== null) {
       // Warn when a LUT is set but no processor exists to apply it (fix #144).
-      console.warn(
-        '[ColorPipelineManager] LUT set but no GPU processor available — the LUT will have no effect.',
-      );
+      console.warn('[ColorPipelineManager] LUT set but no GPU processor available — the LUT will have no effect.');
     }
   }
 
@@ -254,10 +255,7 @@ export class ColorPipelineManager {
 
     if (activeStages.length === 0) return null;
 
-    const size = Math.max(
-      2,
-      ...activeStages.map(({ stage }) => stage.lutData.size),
-    );
+    const size = Math.max(2, ...activeStages.map(({ stage }) => stage.lutData.size));
     const denominator = Math.max(size - 1, 1);
     const data = new Float32Array(size * size * size * 3);
 
@@ -277,9 +275,7 @@ export class ColorPipelineManager {
       }
     }
 
-    const title = activeStages
-      .map(({ label, stage }) => stage.lutName ?? stage.lutData.title ?? label)
-      .join(' -> ');
+    const title = activeStages.map(({ label, stage }) => stage.lutName ?? stage.lutData.title ?? label).join(' -> ');
 
     return {
       type: '3d',
@@ -295,9 +291,7 @@ export class ColorPipelineManager {
     color: [number, number, number],
     stage: LUTStageState & { lutData: LUT3D },
   ): [number, number, number] {
-    const input = stage.inMatrix
-      ? applyColorMatrix(color[0], color[1], color[2], stage.inMatrix)
-      : color;
+    const input = stage.inMatrix ? applyColorMatrix(color[0], color[1], color[2], stage.inMatrix) : color;
     const sampled = applyLUT3D(stage.lutData, input[0], input[1], input[2]);
     const intensity = Math.max(0, Math.min(1, stage.intensity));
     let output: [number, number, number] = [

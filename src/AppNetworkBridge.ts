@@ -178,7 +178,10 @@ export class AppNetworkBridge {
           networkControl.reportCopyResult(true);
         } catch (error) {
           if (error instanceof Error && /clipboard/i.test(error.message)) {
-            networkControl.reportCopyResult(false, 'Clipboard unavailable. Copy Share URL from the Network Sync panel.');
+            networkControl.reportCopyResult(
+              false,
+              'Clipboard unavailable. Copy Share URL from the Network Sync panel.',
+            );
             return;
           }
           networkControl.reportCopyResult(

@@ -215,7 +215,6 @@ export class MediaAPI extends DisposableAPI {
   loadProceduralSource(
     pattern: PatternName,
     options?: {
-
       width?: number;
       height?: number;
       color?: [number, number, number, number];
@@ -281,12 +280,7 @@ export class MediaAPI extends DisposableAPI {
    * await openrv.media.addSourceFromPattern('frame.%04d.png', 1, 48, 30);
    * ```
    */
-  async addSourceFromPattern(
-    pattern: string,
-    startFrame?: number,
-    endFrame?: number,
-    fps?: number,
-  ): Promise<void> {
+  async addSourceFromPattern(pattern: string, startFrame?: number, endFrame?: number, fps?: number): Promise<void> {
     this.assertNotDisposed();
     return this.session.loadSequenceFromPatternString(pattern, startFrame, endFrame, fps);
   }

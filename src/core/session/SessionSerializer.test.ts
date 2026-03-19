@@ -1003,7 +1003,10 @@ describe('SessionSerializer', () => {
       const components = createMockComponents();
       // Make some gaps active
       (components.viewer.isOCIOEnabled as ReturnType<typeof vi.fn>).mockReturnValue(true);
-      (components.viewer.getToneMappingState as ReturnType<typeof vi.fn>).mockReturnValue({ enabled: true, operator: 'reinhard' });
+      (components.viewer.getToneMappingState as ReturnType<typeof vi.fn>).mockReturnValue({
+        enabled: true,
+        operator: 'reinhard',
+      });
       const state = SessionSerializer.createEmpty();
 
       const result = await SessionSerializer.fromJSON(state, components);
@@ -1085,9 +1088,7 @@ describe('SessionSerializer', () => {
 
       await SessionSerializer.fromJSON(state, components);
 
-      expect(infoSpy).not.toHaveBeenCalledWith(
-        expect.stringContaining('representations are saved but not restored'),
-      );
+      expect(infoSpy).not.toHaveBeenCalledWith(expect.stringContaining('representations are saved but not restored'));
       infoSpy.mockRestore();
     });
 
@@ -1215,9 +1216,7 @@ describe('SessionSerializer', () => {
 
       const result = await SessionSerializer.fromJSON(state, components);
 
-      expect(result.warnings).toContain(
-        'Failed to restore active representation "rep-1" for "test"',
-      );
+      expect(result.warnings).toContain('Failed to restore active representation "rep-1" for "test"');
     });
 
     it('SER-REP-005: fromJSON handles media with no representations (no-op)', async () => {
@@ -1316,9 +1315,7 @@ describe('SessionSerializer', () => {
       const result = await SessionSerializer.fromJSON(state, components);
 
       // No gap-related warnings since all states are at defaults
-      const gapWarning = result.warnings.find((w) =>
-        w.includes('viewer states are not saved in project files'),
-      );
+      const gapWarning = result.warnings.find((w) => w.includes('viewer states are not saved in project files'));
       expect(gapWarning).toBeUndefined();
     });
   });
@@ -1453,9 +1450,7 @@ describe('SessionSerializer', () => {
     it('SER-EDL-003: fromJSON restores edlEntries into the session', async () => {
       const components = createMockComponents();
       const state = SessionSerializer.createEmpty('EDLRestore');
-      state.edlEntries = [
-        { sourcePath: '/path/to/clip.mov', inFrame: 10, outFrame: 50 },
-      ];
+      state.edlEntries = [{ sourcePath: '/path/to/clip.mov', inFrame: 10, outFrame: 50 }];
 
       await SessionSerializer.fromJSON(state, components);
 
@@ -1531,9 +1526,7 @@ describe('SessionSerializer', () => {
     it('SER-EDL-009: restoring project with no EDL clears old EDL entries (fix #315)', async () => {
       const components = createMockComponents();
       // Simulate pre-existing EDL entries from a previous session
-      (components.session as any).edlEntries = [
-        { sourcePath: '/old/clip.mov', inFrame: 1, outFrame: 500 },
-      ];
+      (components.session as any).edlEntries = [{ sourcePath: '/old/clip.mov', inFrame: 1, outFrame: 500 }];
 
       // Restore a project that has no EDL entries
       const state = SessionSerializer.createEmpty('NoEDLProject');
@@ -1692,9 +1685,7 @@ describe('SessionSerializer', () => {
       // User provides files but loadSequence fails
       const fakeFiles = [new File(['x'], 'broken.0001.png')];
       (showSequenceReloadPrompt as ReturnType<typeof vi.fn>).mockResolvedValueOnce(fakeFiles);
-      (components.session.loadSequence as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
-        new Error('decode error'),
-      );
+      (components.session.loadSequence as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('decode error'));
 
       const result = await SessionSerializer.fromJSON(state, components);
 
@@ -1834,7 +1825,16 @@ function createMockComponents(): SessionComponents {
       getStereoAlignMode: vi.fn().mockReturnValue(DEFAULT_STEREO_ALIGN_MODE),
       getDeinterlaceParams: vi.fn().mockReturnValue({ method: 'bob', fieldOrder: 'tff', enabled: false }),
       getFilmEmulationParams: vi.fn().mockReturnValue({ enabled: false, stock: 'kodak-portra-400', intensity: 1.0 }),
-      getPerspectiveParams: vi.fn().mockReturnValue({ enabled: false, topLeft: { x: 0, y: 0 }, topRight: { x: 1, y: 0 }, bottomRight: { x: 1, y: 1 }, bottomLeft: { x: 0, y: 1 }, quality: 'bilinear' }),
+      getPerspectiveParams: vi
+        .fn()
+        .mockReturnValue({
+          enabled: false,
+          topLeft: { x: 0, y: 0 },
+          topRight: { x: 1, y: 0 },
+          bottomRight: { x: 1, y: 1 },
+          bottomLeft: { x: 0, y: 1 },
+          quality: 'bilinear',
+        }),
       getStabilizationParams: vi.fn().mockReturnValue({ enabled: false, smoothingStrength: 50 }),
       isUncropActive: vi.fn().mockReturnValue(false),
       setColorAdjustments: vi.fn(),
@@ -1864,14 +1864,42 @@ function createMockComponents(): SessionComponents {
       // LUT pipeline (fix #146)
       getLUTPipeline: vi.fn().mockReturnValue(lutPipeline),
       // Overlay accessors (fix #485)
-      getTimecodeOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_TIMECODE_OVERLAY_STATE }), setState: vi.fn() }),
-      getSafeAreasOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_SAFE_AREAS_STATE }), setState: vi.fn() }),
-      getClippingOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_CLIPPING_OVERLAY_STATE }), setState: vi.fn() }),
-      getInfoStripOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_INFO_STRIP_OVERLAY_STATE }), setState: vi.fn() }),
-      getSpotlightOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_SPOTLIGHT_STATE }), setState: vi.fn() }),
-      getBugOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_BUG_OVERLAY_STATE }), setState: vi.fn() }),
-      getEXRWindowOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_EXR_WINDOW_OVERLAY_STATE }), setState: vi.fn() }),
-      getFPSIndicator: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_FPS_INDICATOR_STATE }), setState: vi.fn() }),
+      getTimecodeOverlay: vi
+        .fn()
+        .mockReturnValue({
+          getState: vi.fn().mockReturnValue({ ...DEFAULT_TIMECODE_OVERLAY_STATE }),
+          setState: vi.fn(),
+        }),
+      getSafeAreasOverlay: vi
+        .fn()
+        .mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_SAFE_AREAS_STATE }), setState: vi.fn() }),
+      getClippingOverlay: vi
+        .fn()
+        .mockReturnValue({
+          getState: vi.fn().mockReturnValue({ ...DEFAULT_CLIPPING_OVERLAY_STATE }),
+          setState: vi.fn(),
+        }),
+      getInfoStripOverlay: vi
+        .fn()
+        .mockReturnValue({
+          getState: vi.fn().mockReturnValue({ ...DEFAULT_INFO_STRIP_OVERLAY_STATE }),
+          setState: vi.fn(),
+        }),
+      getSpotlightOverlay: vi
+        .fn()
+        .mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_SPOTLIGHT_STATE }), setState: vi.fn() }),
+      getBugOverlay: vi
+        .fn()
+        .mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_BUG_OVERLAY_STATE }), setState: vi.fn() }),
+      getEXRWindowOverlay: vi
+        .fn()
+        .mockReturnValue({
+          getState: vi.fn().mockReturnValue({ ...DEFAULT_EXR_WINDOW_OVERLAY_STATE }),
+          setState: vi.fn(),
+        }),
+      getFPSIndicator: vi
+        .fn()
+        .mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_FPS_INDICATOR_STATE }), setState: vi.fn() }),
     },
   } as any;
 }

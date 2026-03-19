@@ -11,10 +11,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { PlaylistManager } from './PlaylistManager';
 
 /** Build a minimal OTIO JSON string with the given track children */
-function makeOTIOJson(
-  trackChildren: unknown[],
-  overrides: Record<string, unknown> = {},
-): string {
+function makeOTIOJson(trackChildren: unknown[], overrides: Record<string, unknown> = {}): string {
   return JSON.stringify({
     OTIO_SCHEMA: 'Timeline.1',
     name: 'Test Timeline',
@@ -189,11 +186,7 @@ describe('PlaylistManager - Issue #469: OTIO gap and transition preservation', (
 
   describe('transitions exposed in import result', () => {
     it('I469-007: lastOTIOImportResult contains transitions', () => {
-      const json = makeOTIOJson([
-        clip('shot_01', 0, 48),
-        transition('Dissolve', 6, 6),
-        clip('shot_02', 0, 48),
-      ]);
+      const json = makeOTIOJson([clip('shot_01', 0, 48), transition('Dissolve', 6, 6), clip('shot_02', 0, 48)]);
 
       manager.fromOTIO(json, defaultResolver);
 
@@ -268,11 +261,7 @@ describe('PlaylistManager - Issue #469: OTIO gap and transition preservation', (
       // This is tested indirectly through the fallback path.
       // We verify via the lastOTIOImportResult which uses the single-track
       // parser's transitions when the multi-track parser returns the same data.
-      const json = makeOTIOJson([
-        clip('shot_01', 0, 48),
-        transition('Dissolve', 6, 6),
-        clip('shot_02', 0, 48),
-      ]);
+      const json = makeOTIOJson([clip('shot_01', 0, 48), transition('Dissolve', 6, 6), clip('shot_02', 0, 48)]);
 
       manager.fromOTIO(json, defaultResolver);
 

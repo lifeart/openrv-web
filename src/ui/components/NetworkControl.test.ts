@@ -308,9 +308,7 @@ describe('NetworkControl', () => {
 
     it('NCC-027: without localUserId set, host shows plain "Host" badge', () => {
       setupConnected();
-      control.setUsers([
-        { id: 'u1', name: 'Alice', color: '#4a9eff', isHost: true, joinedAt: Date.now() },
-      ]);
+      control.setUsers([{ id: 'u1', name: 'Alice', color: '#4a9eff', isHost: true, joinedAt: Date.now() }]);
 
       expect(getBadgeText('u1')).toBe('Host');
     });
@@ -832,9 +830,7 @@ describe('NetworkControl', () => {
         createdAt: Date.now(),
         maxUsers: 10,
       });
-      control.setUsers([
-        { id: 'u1', name: 'Alice', color: '#4a9eff', isHost: true, joinedAt: Date.now() },
-      ]);
+      control.setUsers([{ id: 'u1', name: 'Alice', color: '#4a9eff', isHost: true, joinedAt: Date.now() }]);
       control.openPanel();
 
       const indicator = document.querySelector('[data-testid="network-role-indicator"]') as HTMLElement;

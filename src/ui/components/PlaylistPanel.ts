@@ -61,7 +61,8 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
   private activeClipId: string | null = null;
   private fps = 24;
   private sourceUrlResolver: ((sourceIndex: number) => string | null) | null = null;
-  private sourceNameResolver: ((name: string, url?: string) => { index: number; frameCount: number } | null) | null = null;
+  private sourceNameResolver: ((name: string, url?: string) => { index: number; frameCount: number } | null) | null =
+    null;
 
   constructor(playlistManager: PlaylistManager) {
     super();

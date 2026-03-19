@@ -8,12 +8,7 @@
  * - Event tables can be pushed/popped independently of modes
  */
 
-import type {
-  MinorModeDefinition,
-  EventTable,
-  MuEvent,
-  MuEventCallback,
-} from './types';
+import type { MinorModeDefinition, EventTable, MuEvent, MuEventCallback } from './types';
 
 /** Sentinel prefix for regex-bound event keys */
 const REGEX_PREFIX = '__regex__';
@@ -146,14 +141,7 @@ export class ModeManager {
   /**
    * Set BBox constraint for an event table.
    */
-  setEventTableBBox(
-    tableName: string,
-    tag: string,
-    x: number,
-    y: number,
-    w: number,
-    h: number,
-  ): void {
+  setEventTableBBox(tableName: string, tag: string, x: number, y: number, w: number, h: number): void {
     this.eventTableBBoxes.set(tableName, { tag, x, y, w, h });
   }
 
@@ -418,16 +406,11 @@ export class ModeManager {
     return table;
   }
 
-  private createEventTable(
-    name: string,
-    bindings: Array<[string, MuEventCallback, string]>,
-  ): EventTable {
+  private createEventTable(name: string, bindings: Array<[string, MuEventCallback, string]>): EventTable {
     const table: EventTable = { name, bindings: new Map(), regexCount: 0 };
     for (const [eventName, callback, doc] of bindings) {
       const isRegex = eventName.startsWith(REGEX_PREFIX);
-      const regex = isRegex
-        ? new RegExp(eventName.slice(REGEX_PREFIX.length))
-        : undefined;
+      const regex = isRegex ? new RegExp(eventName.slice(REGEX_PREFIX.length)) : undefined;
       table.bindings.set(eventName, {
         eventName,
         callback,

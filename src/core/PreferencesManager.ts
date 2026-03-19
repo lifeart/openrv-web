@@ -20,12 +20,7 @@ import type { CustomKeyBindingsManager } from '../utils/input/CustomKeyBindingsM
 import type { OCIOStateManager } from '../ui/components/OCIOStateManager';
 import type { DisplayColorState } from '../color/DisplayTransfer';
 import type { TimecodeDisplayMode } from '../utils/media/Timecode';
-import {
-  DCC_STORAGE_KEY,
-  DEFAULT_DCC_PREFS,
-  sanitizeDCCPrefs,
-  type DCCPrefs,
-} from '../integrations/DCCSettings';
+import { DCC_STORAGE_KEY, DEFAULT_DCC_PREFS, sanitizeDCCPrefs, type DCCPrefs } from '../integrations/DCCSettings';
 
 export type MissingFrameMode = 'off' | 'show-frame' | 'hold' | 'black';
 

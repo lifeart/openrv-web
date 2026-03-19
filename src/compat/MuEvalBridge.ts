@@ -18,11 +18,7 @@
 import { Graph } from '../core/graph/Graph';
 import type { IPNode } from '../nodes/base/IPNode';
 import type { MuNodeBridge } from './MuNodeBridge';
-import type {
-  MetaEvalInfo,
-  PixelImageInfo,
-  RenderedImageInfo,
-} from './types';
+import type { MetaEvalInfo, PixelImageInfo, RenderedImageInfo } from './types';
 
 /**
  * View transform state needed for coordinate conversions.
@@ -245,10 +241,7 @@ export class MuEvalBridge {
 
       // Check if the point is inside the image bounds
       const inside = ix >= 0 && ix < img.width && iy >= 0 && iy < img.height;
-      const edge =
-        !inside &&
-        ix >= -1 && ix <= img.width &&
-        iy >= -1 && iy <= img.height;
+      const edge = !inside && ix >= -1 && ix <= img.width && iy >= -1 && iy <= img.height;
 
       results.push({
         name: img.name,
@@ -309,9 +302,7 @@ export class MuEvalBridge {
   imageGeometryByTag(imageName: string, tag: string): [number, number][] {
     // First, try to find an image matching both name and tag
     if (tag) {
-      const img = this._renderedImages.find(
-        (i) => i.name === imageName && i.tag === tag,
-      );
+      const img = this._renderedImages.find((i) => i.name === imageName && i.tag === tag);
       if (img) return this._computeImageCorners(img);
     }
 
@@ -360,8 +351,8 @@ export class MuEvalBridge {
     if (vt.viewWidth === 0 || vt.viewHeight === 0) return [0, 0];
 
     // Map event coords to normalized device coordinates [-1, 1]
-    const ndcX = ((eventPoint[0] / vt.viewWidth) * 2) - 1;
-    const ndcY = 1 - ((eventPoint[1] / vt.viewHeight) * 2); // Y is flipped
+    const ndcX = (eventPoint[0] / vt.viewWidth) * 2 - 1;
+    const ndcY = 1 - (eventPoint[1] / vt.viewHeight) * 2; // Y is flipped
 
     return [ndcX, ndcY];
   }
@@ -446,11 +437,7 @@ export class MuEvalBridge {
    * Convert screen coordinates to image pixel coordinates for a specific rendered image.
    * Returns null if the image has zero dimensions.
    */
-  private _screenToImage(
-    sx: number,
-    sy: number,
-    img: RenderedImageInfo,
-  ): [number, number] | null {
+  private _screenToImage(sx: number, sy: number, img: RenderedImageInfo): [number, number] | null {
     if (img.width === 0 || img.height === 0) return null;
 
     const vt = this._viewTransform;
@@ -509,10 +496,10 @@ export class MuEvalBridge {
     const bottom = top + imgScreenH;
 
     return [
-      [left, bottom],   // bottom-left
-      [right, bottom],  // bottom-right
-      [right, top],     // top-right
-      [left, top],      // top-left
+      [left, bottom], // bottom-left
+      [right, bottom], // bottom-right
+      [right, top], // top-right
+      [left, top], // top-left
     ];
   }
 
@@ -521,11 +508,6 @@ export class MuEvalBridge {
    * In a full implementation this would include the image's transform stack.
    */
   private _getImageModelMatrix(_img: RenderedImageInfo): number[] {
-    return [
-      1, 0, 0, 0,
-      0, 1, 0, 0,
-      0, 0, 1, 0,
-      0, 0, 0, 1,
-    ];
+    return [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
   }
 }

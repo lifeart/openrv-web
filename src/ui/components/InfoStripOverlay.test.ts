@@ -358,9 +358,7 @@ describe('InfoStripOverlay', () => {
   describe('sourceLoaded event', () => {
     it('IS-070: sourceLoaded event triggers update', () => {
       // Get the sourceLoaded callback that was registered
-      const sourceLoadedCall = mockSession.on.mock.calls.find(
-        (call: unknown[]) => call[0] === 'sourceLoaded',
-      );
+      const sourceLoadedCall = mockSession.on.mock.calls.find((call: unknown[]) => call[0] === 'sourceLoaded');
       expect(sourceLoadedCall).toBeDefined();
 
       const callback = sourceLoadedCall![1];
@@ -520,5 +518,4 @@ describe('InfoStripOverlay', () => {
       expect(overlay.getState().showFullPath).toBe(false);
     });
   });
-
 });

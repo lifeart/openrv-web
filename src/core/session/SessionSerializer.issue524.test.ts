@@ -16,10 +16,7 @@ import { DEFAULT_DISPLAY_COLOR_STATE } from '../../color/DisplayTransfer';
 import { DEFAULT_DIFFERENCE_MATTE_STATE } from '../../ui/components/DifferenceMatteControl';
 import { DEFAULT_BLEND_MODE_STATE } from '../../ui/components/ComparisonManager';
 import { createDefaultCurvesData } from '../../color/ColorCurves';
-import {
-  DEFAULT_STEREO_EYE_TRANSFORM_STATE,
-  DEFAULT_STEREO_ALIGN_MODE,
-} from '../../stereo/StereoRenderer';
+import { DEFAULT_STEREO_EYE_TRANSFORM_STATE, DEFAULT_STEREO_ALIGN_MODE } from '../../stereo/StereoRenderer';
 import { LUTPipeline } from '../../color/pipeline/LUTPipeline';
 import { DEFAULT_TIMECODE_OVERLAY_STATE } from '../../ui/components/TimecodeOverlay';
 import { DEFAULT_SAFE_AREAS_STATE } from '../../ui/components/SafeAreasOverlay';
@@ -93,9 +90,7 @@ function createMockComponents(): SessionComponents {
       edlEntries: [] as any[],
       addSource: vi.fn(),
       addRepresentationToSource: vi.fn().mockReturnValue({ id: 'mock-rep' }),
-      switchRepresentation: vi
-        .fn<(sourceIndex: number, repId: string) => Promise<boolean>>()
-        .mockResolvedValue(true),
+      switchRepresentation: vi.fn<(sourceIndex: number, repId: string) => Promise<boolean>>().mockResolvedValue(true),
     },
     paintEngine,
     viewer: {
@@ -136,21 +131,13 @@ function createMockComponents(): SessionComponents {
       getStereoState: vi.fn().mockReturnValue({ ...DEFAULT_STEREO_STATE }),
       getChannelMode: vi.fn().mockReturnValue('rgb'),
       getDifferenceMatteState: vi.fn().mockReturnValue({ ...DEFAULT_DIFFERENCE_MATTE_STATE }),
-      getBlendModeState: vi
-        .fn()
-        .mockReturnValue({ ...DEFAULT_BLEND_MODE_STATE, flickerFrame: 0 }),
+      getBlendModeState: vi.fn().mockReturnValue({ ...DEFAULT_BLEND_MODE_STATE, flickerFrame: 0 }),
       getColorInversion: vi.fn().mockReturnValue(false),
       getCurves: vi.fn().mockReturnValue(createDefaultCurvesData()),
-      getStereoEyeTransforms: vi
-        .fn()
-        .mockReturnValue({ ...DEFAULT_STEREO_EYE_TRANSFORM_STATE }),
+      getStereoEyeTransforms: vi.fn().mockReturnValue({ ...DEFAULT_STEREO_EYE_TRANSFORM_STATE }),
       getStereoAlignMode: vi.fn().mockReturnValue(DEFAULT_STEREO_ALIGN_MODE),
-      getDeinterlaceParams: vi
-        .fn()
-        .mockReturnValue({ method: 'bob', fieldOrder: 'tff', enabled: false }),
-      getFilmEmulationParams: vi
-        .fn()
-        .mockReturnValue({ enabled: false, stock: 'kodak-portra-400', intensity: 1.0 }),
+      getDeinterlaceParams: vi.fn().mockReturnValue({ method: 'bob', fieldOrder: 'tff', enabled: false }),
+      getFilmEmulationParams: vi.fn().mockReturnValue({ enabled: false, stock: 'kodak-portra-400', intensity: 1.0 }),
       getPerspectiveParams: vi.fn().mockReturnValue({
         enabled: false,
         topLeft: { x: 0, y: 0 },
@@ -159,9 +146,7 @@ function createMockComponents(): SessionComponents {
         bottomLeft: { x: 0, y: 1 },
         quality: 'bilinear',
       }),
-      getStabilizationParams: vi
-        .fn()
-        .mockReturnValue({ enabled: false, smoothingStrength: 50 }),
+      getStabilizationParams: vi.fn().mockReturnValue({ enabled: false, smoothingStrength: 50 }),
       isUncropActive: vi.fn().mockReturnValue(false),
       setColorAdjustments: vi.fn(),
       setCDL: vi.fn(),
@@ -292,9 +277,7 @@ describe('Issue #524: Decoder-backed images must round-trip through FileSourceNo
       const result = await SessionSerializer.fromJSON(state, components);
 
       expect(result.loadedMedia).toBe(1);
-      expect((components.session as any).loadSourceFromUrl).toHaveBeenCalledWith(
-        'https://cdn.example.com/render.exr',
-      );
+      expect((components.session as any).loadSourceFromUrl).toHaveBeenCalledWith('https://cdn.example.com/render.exr');
       expect((components.session as any).loadImage).not.toHaveBeenCalled();
     });
 
@@ -317,9 +300,7 @@ describe('Issue #524: Decoder-backed images must round-trip through FileSourceNo
       const result = await SessionSerializer.fromJSON(state, components);
 
       expect(result.loadedMedia).toBe(1);
-      expect((components.session as any).loadSourceFromUrl).toHaveBeenCalledWith(
-        'https://cdn.example.com/render.exr',
-      );
+      expect((components.session as any).loadSourceFromUrl).toHaveBeenCalledWith('https://cdn.example.com/render.exr');
       expect((components.session as any).loadImage).not.toHaveBeenCalled();
     });
 
@@ -364,9 +345,7 @@ describe('Issue #524: Decoder-backed images must round-trip through FileSourceNo
       const result = await SessionSerializer.fromJSON(state, components);
 
       expect(result.loadedMedia).toBe(1);
-      expect((components.session as any).loadSourceFromUrl).toHaveBeenCalledWith(
-        'https://cdn.example.com/frame.dpx',
-      );
+      expect((components.session as any).loadSourceFromUrl).toHaveBeenCalledWith('https://cdn.example.com/frame.dpx');
     });
 
     it('ISS-524-007: detects TIFF extension as decoder-backed without flag', async () => {
@@ -386,9 +365,7 @@ describe('Issue #524: Decoder-backed images must round-trip through FileSourceNo
       const result = await SessionSerializer.fromJSON(state, components);
 
       expect(result.loadedMedia).toBe(1);
-      expect((components.session as any).loadSourceFromUrl).toHaveBeenCalledWith(
-        'https://cdn.example.com/scan.tiff',
-      );
+      expect((components.session as any).loadSourceFromUrl).toHaveBeenCalledWith('https://cdn.example.com/scan.tiff');
     });
 
     it('ISS-524-008: PNG image does not use decoder-backed path', async () => {
@@ -458,10 +435,7 @@ describe('Issue #524: Decoder-backed images must round-trip through FileSourceNo
       const result = await SessionSerializer.fromJSON(state, components);
 
       expect(result.loadedMedia).toBe(1);
-      expect((components.session as any).loadImage).toHaveBeenCalledWith(
-        'render.exr',
-        '/local/render.exr',
-      );
+      expect((components.session as any).loadImage).toHaveBeenCalledWith('render.exr', '/local/render.exr');
       expect((components.session as any).loadSourceFromUrl).not.toHaveBeenCalled();
     });
 
@@ -505,9 +479,7 @@ describe('Issue #524: Decoder-backed images must round-trip through FileSourceNo
         'photo.jpg',
         'https://cdn.example.com/photo.jpg',
       );
-      expect((components.session as any).loadSourceFromUrl).toHaveBeenCalledWith(
-        'https://cdn.example.com/render.exr',
-      );
+      expect((components.session as any).loadSourceFromUrl).toHaveBeenCalledWith('https://cdn.example.com/render.exr');
       expect((components.session as any).loadVideo).toHaveBeenCalledWith(
         'clip.mp4',
         'https://cdn.example.com/clip.mp4',

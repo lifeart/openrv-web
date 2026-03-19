@@ -69,10 +69,7 @@ describe('MediaCacheManager error surfacing', () => {
 
     manager.emit('error', { message: 'Initialization failed: test' });
 
-    expect(warnSpy).toHaveBeenCalledWith(
-      '[OpenRV] Media cache error:',
-      'Initialization failed: test',
-    );
+    expect(warnSpy).toHaveBeenCalledWith('[OpenRV] Media cache error:', 'Initialization failed: test');
   });
 
   it('ERROR-SURF-005: multiple error events are all delivered to subscribers', () => {

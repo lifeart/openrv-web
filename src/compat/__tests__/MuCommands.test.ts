@@ -9,13 +9,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MuCommands } from '../MuCommands';
 import { MuExtraCommands } from '../MuExtraCommands';
 import { registerMuCompat } from '../index';
-import {
-  PlayLoop,
-  PlayOnce,
-  PlayPingPong,
-  FilterNearest,
-  FilterLinear,
-} from '../constants';
+import { PlayLoop, PlayOnce, PlayPingPong, FilterNearest, FilterLinear } from '../constants';
 
 // =====================================================================
 // Mock openrv API
@@ -147,14 +141,53 @@ describe('MuCommands', () => {
     it('isSupported never returns stub for any command (#555)', () => {
       // Regression: isSupported used to return 'stub' for some commands,
       // which violates the CommandSupportStatus type contract (true | false | 'partial').
-      const allCommands = ['play', 'stop', 'isPlaying', 'setFrame', 'frame', 'frameEnd',
-        'fps', 'setRealtime', 'isRealtime', 'setPlayMode', 'playMode', 'inPoint', 'outPoint',
-        'setInPoint', 'setOutPoint', 'frameStart', 'setFPS', 'realFPS', 'setInc', 'inc',
-        'skipped', 'isCurrentFrameIncomplete', 'isCurrentFrameError', 'isBuffering', 'mbps',
-        'resetMbps', 'scrubAudio', 'redraw', 'viewSize', 'setViewSize', 'resizeFit',
-        'fullScreenMode', 'isFullScreen', 'setWindowTitle', 'setFiltering', 'getFiltering',
-        'setBGMethod', 'bgMethod', 'setMargins', 'margins', 'contentAspect', 'devicePixelRatio',
-        'markFrame', 'isMarked', 'markedFrames'];
+      const allCommands = [
+        'play',
+        'stop',
+        'isPlaying',
+        'setFrame',
+        'frame',
+        'frameEnd',
+        'fps',
+        'setRealtime',
+        'isRealtime',
+        'setPlayMode',
+        'playMode',
+        'inPoint',
+        'outPoint',
+        'setInPoint',
+        'setOutPoint',
+        'frameStart',
+        'setFPS',
+        'realFPS',
+        'setInc',
+        'inc',
+        'skipped',
+        'isCurrentFrameIncomplete',
+        'isCurrentFrameError',
+        'isBuffering',
+        'mbps',
+        'resetMbps',
+        'scrubAudio',
+        'redraw',
+        'viewSize',
+        'setViewSize',
+        'resizeFit',
+        'fullScreenMode',
+        'isFullScreen',
+        'setWindowTitle',
+        'setFiltering',
+        'getFiltering',
+        'setBGMethod',
+        'bgMethod',
+        'setMargins',
+        'margins',
+        'contentAspect',
+        'devicePixelRatio',
+        'markFrame',
+        'isMarked',
+        'markedFrames',
+      ];
       for (const name of allCommands) {
         const status = cmd.isSupported(name);
         expect(status).not.toBe('stub');
@@ -737,7 +770,11 @@ describe('MuCommands', () => {
     });
 
     it('bgMethod() reads from the real API, not local cache', () => {
-      mockOpenRV.view.getBackgroundPattern.mockReturnValue({ pattern: 'checker', checkerSize: 'medium', customColor: '#1a1a1a' });
+      mockOpenRV.view.getBackgroundPattern.mockReturnValue({
+        pattern: 'checker',
+        checkerSize: 'medium',
+        customColor: '#1a1a1a',
+      });
       expect(cmd.bgMethod()).toBe('checker');
       expect(mockOpenRV.view.getBackgroundPattern).toHaveBeenCalled();
     });

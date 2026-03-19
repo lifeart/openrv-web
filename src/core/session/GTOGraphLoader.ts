@@ -2308,9 +2308,7 @@ export function getGraphSummary(result: GTOParseResult): string {
 }
 
 export function formatSkippedNodesWarning(skipped: SkippedNodeInfo[]): string | null {
-  const meaningful = skipped.filter(
-    (s) => s.reason === 'unregistered_type' || s.reason === 'creation_failed',
-  );
+  const meaningful = skipped.filter((s) => s.reason === 'unregistered_type' || s.reason === 'creation_failed');
   if (meaningful.length === 0) return null;
 
   const counts = new Map<string, number>();

@@ -549,7 +549,7 @@ describe('DPXDecoder', () => {
       // Overwrite pixel data: A=10, B=20, G=30, R=40
       const pixelStart = 2048;
       const bytes = new Uint8Array(buffer);
-      bytes[pixelStart] = 10;     // A
+      bytes[pixelStart] = 10; // A
       bytes[pixelStart + 1] = 20; // B
       bytes[pixelStart + 2] = 30; // G
       bytes[pixelStart + 3] = 40; // R
@@ -557,10 +557,10 @@ describe('DPXDecoder', () => {
       const result = await decodeDPX(buffer);
 
       // After swizzle, output should be RGBA: R=40, G=30, B=20, A=10
-      expect(result.data[0]).toBeCloseTo(40 / 255, 4);  // R
-      expect(result.data[1]).toBeCloseTo(30 / 255, 4);  // G
-      expect(result.data[2]).toBeCloseTo(20 / 255, 4);  // B
-      expect(result.data[3]).toBeCloseTo(10 / 255, 4);  // A
+      expect(result.data[0]).toBeCloseTo(40 / 255, 4); // R
+      expect(result.data[1]).toBeCloseTo(30 / 255, 4); // G
+      expect(result.data[2]).toBeCloseTo(20 / 255, 4); // B
+      expect(result.data[3]).toBeCloseTo(10 / 255, 4); // A
     });
 
     it('should swizzle ABGR to RGBA for descriptor 52 with 16-bit data', async () => {
@@ -598,7 +598,7 @@ describe('DPXDecoder', () => {
       });
       const pixelStart = 2048;
       const bytes = new Uint8Array(buffer);
-      bytes[pixelStart] = 10;     // R
+      bytes[pixelStart] = 10; // R
       bytes[pixelStart + 1] = 20; // G
       bytes[pixelStart + 2] = 30; // B
       bytes[pixelStart + 3] = 40; // A
@@ -606,10 +606,10 @@ describe('DPXDecoder', () => {
       const result = await decodeDPX(buffer);
 
       // No swizzle — data stays as R=10, G=20, B=30, A=40
-      expect(result.data[0]).toBeCloseTo(10 / 255, 4);  // R
-      expect(result.data[1]).toBeCloseTo(20 / 255, 4);  // G
-      expect(result.data[2]).toBeCloseTo(30 / 255, 4);  // B
-      expect(result.data[3]).toBeCloseTo(40 / 255, 4);  // A
+      expect(result.data[0]).toBeCloseTo(10 / 255, 4); // R
+      expect(result.data[1]).toBeCloseTo(20 / 255, 4); // G
+      expect(result.data[2]).toBeCloseTo(30 / 255, 4); // B
+      expect(result.data[3]).toBeCloseTo(40 / 255, 4); // A
     });
 
     it('should report descriptor 52 in metadata for ABGR', async () => {

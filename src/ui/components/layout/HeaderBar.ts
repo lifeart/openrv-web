@@ -304,7 +304,6 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this.versionSelectorContainer = this.createVersionSelector();
     this.container.appendChild(this.versionSelectorContainer);
 
-
     // === AUTO-SAVE INDICATOR SLOT ===
     this.autoSaveSlot = document.createElement('div');
     this.autoSaveSlot.className = 'autosave-slot';
@@ -642,7 +641,12 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     container.dataset.testid = 'version-selector';
     container.style.cssText = `display: none; align-items: center; gap: 2px; margin-left: 8px; flex-shrink: 0;`;
 
-    const prevBtn = this.createIconButton('chevron-left', '', () => this.navigateVersion('previous'), 'Previous version (Alt+[)');
+    const prevBtn = this.createIconButton(
+      'chevron-left',
+      '',
+      () => this.navigateVersion('previous'),
+      'Previous version (Alt+[)',
+    );
     prevBtn.dataset.testid = 'version-prev-button';
     prevBtn.style.cssText += '; min-width: 24px; padding: 4px;';
     container.appendChild(prevBtn);
@@ -655,7 +659,12 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     labelBtn.addEventListener('click', () => this.showVersionMenu(labelBtn));
     container.appendChild(labelBtn);
 
-    const nextBtn = this.createIconButton('chevron-right', '', () => this.navigateVersion('next'), 'Next version (Alt+])');
+    const nextBtn = this.createIconButton(
+      'chevron-right',
+      '',
+      () => this.navigateVersion('next'),
+      'Next version (Alt+])',
+    );
     nextBtn.dataset.testid = 'version-next-button';
     nextBtn.style.cssText += '; min-width: 24px; padding: 4px;';
     container.appendChild(nextBtn);
@@ -671,7 +680,9 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
 
   updateVersionSelector(): void {
     const group = this.getActiveVersionGroup();
-    const labelBtn = this.versionSelectorContainer.querySelector('[data-testid="version-label-button"]') as HTMLButtonElement | null;
+    const labelBtn = this.versionSelectorContainer.querySelector(
+      '[data-testid="version-label-button"]',
+    ) as HTMLButtonElement | null;
     if (!group || group.versions.length < 2) {
       this.versionSelectorContainer.style.display = 'none';
       return;
@@ -688,9 +699,10 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   navigateVersion(direction: 'next' | 'previous'): void {
     const group = this.getActiveVersionGroup();
     if (!group) return;
-    const entry = direction === 'next'
-      ? this.session.versionManager.nextVersion(group.id)
-      : this.session.versionManager.previousVersion(group.id);
+    const entry =
+      direction === 'next'
+        ? this.session.versionManager.nextVersion(group.id)
+        : this.session.versionManager.previousVersion(group.id);
     if (entry) {
       this.session.setCurrentSource(entry.sourceIndex);
     }
@@ -735,19 +747,33 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     menu.addEventListener('keydown', (e: KeyboardEvent) => {
       const items: HTMLElement[] = Array.from(menu.querySelectorAll('[role="menuitemradio"]'));
       const ci = items.indexOf(document.activeElement as HTMLElement);
-      if (e.key === 'ArrowDown') { e.preventDefault(); items[(ci + 1) % items.length]?.focus(); }
-      else if (e.key === 'ArrowUp') { e.preventDefault(); items[ci > 0 ? ci - 1 : items.length - 1]?.focus(); }
-      else if (e.key === 'Escape' || e.key === 'Tab') { e.preventDefault(); removeMenu(); anchor.focus(); }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        items[(ci + 1) % items.length]?.focus();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        items[ci > 0 ? ci - 1 : items.length - 1]?.focus();
+      } else if (e.key === 'Escape' || e.key === 'Tab') {
+        e.preventDefault();
+        removeMenu();
+        anchor.focus();
+      }
     });
 
     const rect = anchor.getBoundingClientRect();
     menu.style.left = `${rect.left}px`;
     menu.style.top = `${rect.bottom + 4}px`;
     document.body.appendChild(menu);
-    (activeItem || menu.querySelector('[role="menuitemradio"]') as HTMLElement)?.focus();
+    (activeItem || (menu.querySelector('[role="menuitemradio"]') as HTMLElement))?.focus();
 
-    const removeMenu = () => { menu.remove(); document.removeEventListener('click', closeMenu); this._activeVersionMenuCleanup = null; };
-    const closeMenu = (e: MouseEvent) => { if (!menu.contains(e.target as Node)) removeMenu(); };
+    const removeMenu = () => {
+      menu.remove();
+      document.removeEventListener('click', closeMenu);
+      this._activeVersionMenuCleanup = null;
+    };
+    const closeMenu = (e: MouseEvent) => {
+      if (!menu.contains(e.target as Node)) removeMenu();
+    };
     setTimeout(() => document.addEventListener('click', closeMenu), 0);
     this._activeVersionMenuCleanup = removeMenu;
   }
@@ -1562,11 +1588,18 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       // Extra .rv/.gto files are excluded — the app only loads one session at a time
       const availableFiles = new Map<string, File>();
       for (const file of fileArray) {
-        if (file !== sessionFile && !file.name.toLowerCase().endsWith('.rv') && !file.name.toLowerCase().endsWith('.gto')) {
+        if (
+          file !== sessionFile &&
+          !file.name.toLowerCase().endsWith('.rv') &&
+          !file.name.toLowerCase().endsWith('.gto')
+        ) {
           availableFiles.set(file.name, file);
         }
       }
-      this.emit('openProject', { file: sessionFile, availableFiles: availableFiles.size > 0 ? availableFiles : undefined });
+      this.emit('openProject', {
+        file: sessionFile,
+        availableFiles: availableFiles.size > 0 ? availableFiles : undefined,
+      });
 
       // Clear input
       input.value = '';

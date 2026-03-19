@@ -68,21 +68,13 @@ describe('Issue #499 – GIF and WebP classified as image formats', () => {
 describe('Issue #499 – documentation reflects single-frame behavior', () => {
   // @ts-ignore -- __dirname available in test environment
   const docsRoot = resolve(__dirname, '../../../docs');
-  const referenceDoc = readFileSync(
-    resolve(docsRoot, 'reference/file-formats.md'),
-    'utf-8',
-  );
-  const guideDoc = readFileSync(
-    resolve(docsRoot, 'guides/file-formats.md'),
-    'utf-8',
-  );
+  const referenceDoc = readFileSync(resolve(docsRoot, 'reference/file-formats.md'), 'utf-8');
+  const guideDoc = readFileSync(resolve(docsRoot, 'guides/file-formats.md'), 'utf-8');
 
   it('reference doc GIF entry does not claim "Animated GIF support" without qualification', () => {
     // The old text was: "Animated GIF support"
     // The fix should remove or qualify that claim.
-    const gifLine = referenceDoc
-      .split('\n')
-      .find((line: string) => line.includes('`.gif`') || line.includes('.gif'));
+    const gifLine = referenceDoc.split('\n').find((line: string) => line.includes('`.gif`') || line.includes('.gif'));
     expect(gifLine).toBeDefined();
     // Must NOT contain "Animated GIF support" as a standalone claim
     expect(gifLine).not.toMatch(/Animated GIF support(?! is not| not supported)/i);
@@ -99,18 +91,14 @@ describe('Issue #499 – documentation reflects single-frame behavior', () => {
   });
 
   it('guide doc GIF entry does not claim unqualified animation support', () => {
-    const gifLine = guideDoc
-      .split('\n')
-      .find((line: string) => line.includes('.gif') && line.includes('|'));
+    const gifLine = guideDoc.split('\n').find((line: string) => line.includes('.gif') && line.includes('|'));
     expect(gifLine).toBeDefined();
     // Should not just say "animation" without qualifying it as unsupported
     expect(gifLine).toMatch(/single-frame|not supported|still/i);
   });
 
   it('guide doc WebP entry does not claim unqualified animation support', () => {
-    const webpLine = guideDoc
-      .split('\n')
-      .find((line: string) => line.includes('.webp') && line.includes('|'));
+    const webpLine = guideDoc.split('\n').find((line: string) => line.includes('.webp') && line.includes('|'));
     expect(webpLine).toBeDefined();
     expect(webpLine).toMatch(/single-frame|not supported|still/i);
   });

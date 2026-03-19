@@ -287,9 +287,7 @@ describe('RightPanelContent', () => {
 
     it('RP-016: scope buttons update styling when stateChanged fires', () => {
       // Get the stateChanged callback that was registered
-      const stateChangedCall = mockScopes.on.mock.calls.find(
-        (call: any[]) => call[0] === 'stateChanged',
-      );
+      const stateChangedCall = mockScopes.on.mock.calls.find((call: any[]) => call[0] === 'stateChanged');
       expect(stateChangedCall).not.toBeUndefined();
       const callback = stateChangedCall![1];
 

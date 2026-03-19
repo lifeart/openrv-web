@@ -141,9 +141,7 @@ describe('AutoSaveManager issue #377 — auto-save armed after recovery', () => 
       manager = createManager();
       await manager.initialize();
 
-      const beforeUnloadCalls = addSpy.mock.calls.filter(
-        (call) => call[0] === 'beforeunload',
-      );
+      const beforeUnloadCalls = addSpy.mock.calls.filter((call) => call[0] === 'beforeunload');
       expect(beforeUnloadCalls.length).toBeGreaterThanOrEqual(1);
     } finally {
       addSpy.mockRestore();
@@ -218,9 +216,7 @@ describe('AutoSaveManager issue #377 — auto-save armed after recovery', () => 
       expect((manager as any).saveTimer).not.toBeNull();
 
       // beforeunload should be registered
-      const beforeUnloadCalls = addSpy.mock.calls.filter(
-        (call) => call[0] === 'beforeunload',
-      );
+      const beforeUnloadCalls = addSpy.mock.calls.filter((call) => call[0] === 'beforeunload');
       expect(beforeUnloadCalls.length).toBeGreaterThanOrEqual(1);
     } finally {
       addSpy.mockRestore();
@@ -237,12 +233,8 @@ describe('AutoSaveManager issue #377 — auto-save armed after recovery', () => 
       await manager.armSession();
 
       // Should remove before adding to avoid duplicates
-      const removeCalls = removeSpy.mock.calls.filter(
-        (call) => call[0] === 'beforeunload',
-      );
-      const addCalls = addSpy.mock.calls.filter(
-        (call) => call[0] === 'beforeunload',
-      );
+      const removeCalls = removeSpy.mock.calls.filter((call) => call[0] === 'beforeunload');
+      const addCalls = addSpy.mock.calls.filter((call) => call[0] === 'beforeunload');
       expect(removeCalls.length).toBe(1);
       expect(addCalls.length).toBe(1);
     } finally {

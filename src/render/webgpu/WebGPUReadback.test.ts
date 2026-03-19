@@ -400,9 +400,7 @@ describe('WebGPUReadback', () => {
       void readback.readRegion(device, 0, 0, 1, 1, texture);
 
       // Third read would try buffer 0 again, which is still mapping
-      await expect(readback.readRegion(device, 0, 0, 1, 1, texture)).rejects.toThrow(
-        /still mapped/,
-      );
+      await expect(readback.readRegion(device, 0, 0, 1, 1, texture)).rejects.toThrow(/still mapped/);
     });
 
     it('WGPU-RB-057: double dispose does not throw', async () => {

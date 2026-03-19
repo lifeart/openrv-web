@@ -201,9 +201,7 @@ describe('MultiSourceLayoutControl', () => {
 
       const tiles = manager.getTiles();
       const tileId = tiles[0]!.id;
-      const select = document.querySelector(
-        `[data-testid="layout-tile-source-select-${tileId}"]`,
-      ) as HTMLSelectElement;
+      const select = document.querySelector(`[data-testid="layout-tile-source-select-${tileId}"]`) as HTMLSelectElement;
 
       // Change the source to index 3
       select.value = '3';

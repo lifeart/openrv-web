@@ -36,7 +36,12 @@ import type { RendererBackend, TextureHandle } from './RendererBackend';
 import type { CDLValues } from '../color/CDL';
 import type { CurveLUTs } from '../color/ColorCurves';
 import type { RenderState } from './RenderState';
-import type { RenderWorkerMessage, RenderWorkerResult, RendererLUTSyncState, RendererSyncState } from './renderWorker.messages';
+import type {
+  RenderWorkerMessage,
+  RenderWorkerResult,
+  RendererLUTSyncState,
+  RendererSyncState,
+} from './renderWorker.messages';
 import {
   DATA_TYPE_CODES,
   TRANSFER_FUNCTION_CODES,
@@ -889,7 +894,10 @@ export class RenderWorkerProxy implements RendererBackend {
     };
   }
 
-  private copyLUTStateForTransfer(key: 'lut' | 'lookLUT' | 'fileLUT' | 'displayLUT', transferables: Transferable[]): void {
+  private copyLUTStateForTransfer(
+    key: 'lut' | 'lookLUT' | 'fileLUT' | 'displayLUT',
+    transferables: Transferable[],
+  ): void {
     const stage = this.dirtyState[key];
     if (!stage?.lutData) return;
 

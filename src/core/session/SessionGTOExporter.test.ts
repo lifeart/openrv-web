@@ -495,7 +495,7 @@ describe('SessionGTOExporter.buildSessionObject', () => {
 
     // Duration marker at frame 10 has endFrame 30; point marker at frame 20 has -1
     const endFrames = markerEndFramesProp.data as number[];
-    const marks = (sessionComp.properties.marks.data as number[]);
+    const marks = sessionComp.properties.marks.data as number[];
     const idx10 = marks.indexOf(10);
     const idx20 = marks.indexOf(20);
     expect(endFrames[idx10]).toBe(30);

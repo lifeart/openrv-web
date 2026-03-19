@@ -1009,7 +1009,17 @@ describe('ViewerExport', () => {
       ];
       source.sequenceFrames = frames;
       source.sequenceFrameMap = new Map(frames.map((f) => [f.frameNumber, f]));
-      source.sequenceInfo = { name: 'f####.png', pattern: 'f####.png', frames: frames as any, startFrame: 1, endFrame: 2, width: 320, height: 180, fps: 24, missingFrames: [] };
+      source.sequenceInfo = {
+        name: 'f####.png',
+        pattern: 'f####.png',
+        frames: frames as any,
+        startFrame: 1,
+        endFrame: 2,
+        width: 320,
+        height: 180,
+        fps: 24,
+        missingFrames: [],
+      };
       mockSession.currentFrame = 2;
       (mockSession.getSourceByIndex as any).mockReturnValue(source);
 
@@ -1663,7 +1673,10 @@ describe('ViewerExport', () => {
       };
     }
 
-    function createTestCanvas(width = 800, height = 600): {
+    function createTestCanvas(
+      width = 800,
+      height = 600,
+    ): {
       canvas: HTMLCanvasElement;
       ctx: CanvasRenderingContext2D;
     } {

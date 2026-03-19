@@ -720,9 +720,7 @@ describe('FalseColorControl', () => {
     });
 
     it('FALSE-C008: add button appends a new range', () => {
-      falseColor.setCustomPalette([
-        { min: 0, max: 100, color: [255, 0, 0], label: 'Low' },
-      ]);
+      falseColor.setCustomPalette([{ min: 0, max: 100, color: [255, 0, 0], label: 'Low' }]);
       const dropdown = openDropdown();
       const addBtn = dropdown.querySelector('[data-testid="custom-range-add"]') as HTMLButtonElement;
       addBtn.click();
@@ -757,9 +755,7 @@ describe('FalseColorControl', () => {
     });
 
     it('FALSE-C012: color picker uses change event, not input event', () => {
-      falseColor.setCustomPalette([
-        { min: 0, max: 255, color: [255, 0, 0], label: 'All red' },
-      ]);
+      falseColor.setCustomPalette([{ min: 0, max: 255, color: [255, 0, 0], label: 'All red' }]);
       const dropdown = openDropdown();
       const colorInput = dropdown.querySelector('[data-testid="custom-range-color-0"]') as HTMLInputElement;
       expect(colorInput).not.toBeNull();
@@ -779,9 +775,7 @@ describe('FalseColorControl', () => {
     });
 
     it('FALSE-C011: legend updates to reflect custom palette', () => {
-      falseColor.setCustomPalette([
-        { min: 0, max: 255, color: [42, 42, 42], label: 'Studio Grey' },
-      ]);
+      falseColor.setCustomPalette([{ min: 0, max: 255, color: [42, 42, 42], label: 'Studio Grey' }]);
       const dropdown = openDropdown();
       const legendItems = dropdown.querySelector('.legend-items') as HTMLElement;
       expect(legendItems.textContent).toContain('Studio Grey');

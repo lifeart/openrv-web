@@ -26,7 +26,7 @@ function createSideBySideTestImage(width: number, height: number): ImageData {
     for (let x = 0; x < width; x++) {
       const idx = (y * width + x) * 4;
       if (x < halfWidth) {
-        data[idx] = 255;     // R - left eye red
+        data[idx] = 255; // R - left eye red
         data[idx + 1] = 0;
         data[idx + 2] = 0;
       } else {
@@ -52,11 +52,11 @@ function createOverUnderTestImage(width: number, height: number): ImageData {
       const idx = (y * width + x) * 4;
       if (y < halfHeight) {
         data[idx] = 0;
-        data[idx + 1] = 255;  // G - left/top eye green
+        data[idx + 1] = 255; // G - left/top eye green
         data[idx + 2] = 0;
       } else {
         data[idx] = 255;
-        data[idx + 1] = 255;  // Y - right/bottom eye yellow
+        data[idx + 1] = 255; // Y - right/bottom eye yellow
         data[idx + 2] = 0;
       }
       data[idx + 3] = 255;
@@ -233,7 +233,7 @@ describe('Stereo Input Format', () => {
       // Anaglyph: R from left (255), G from right (255), B from right (0)
       expect(result.data[0]).toBe(255); // red from left
       expect(result.data[1]).toBe(255); // green from right
-      expect(result.data[2]).toBe(0);   // blue from right
+      expect(result.data[2]).toBe(0); // blue from right
     });
   });
 

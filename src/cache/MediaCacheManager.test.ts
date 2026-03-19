@@ -645,9 +645,7 @@ describe('MediaCacheManager', () => {
       await noWritableManager.initialize();
 
       // Should not throw, just returns false
-      await expect(
-        noWritableManager.put('key-2', new ArrayBuffer(50), makeMeta()),
-      ).resolves.toBe(false);
+      await expect(noWritableManager.put('key-2', new ArrayBuffer(50), makeMeta())).resolves.toBe(false);
     });
 
     it('get returns null (no data was written)', async () => {

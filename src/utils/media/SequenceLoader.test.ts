@@ -1885,29 +1885,17 @@ describe('SequenceLoader', () => {
   describe('expandPatternToURLs', () => {
     it('SLD-URL-005: expands hash pattern to frame URLs', () => {
       const urls = expandPatternToURLs('/path/shot.####.exr', 1001, 1003);
-      expect(urls).toEqual([
-        '/path/shot.1001.exr',
-        '/path/shot.1002.exr',
-        '/path/shot.1003.exr',
-      ]);
+      expect(urls).toEqual(['/path/shot.1001.exr', '/path/shot.1002.exr', '/path/shot.1003.exr']);
     });
 
     it('SLD-URL-006: expands printf pattern to frame URLs', () => {
       const urls = expandPatternToURLs('/path/shot.%04d.exr', 1, 3);
-      expect(urls).toEqual([
-        '/path/shot.0001.exr',
-        '/path/shot.0002.exr',
-        '/path/shot.0003.exr',
-      ]);
+      expect(urls).toEqual(['/path/shot.0001.exr', '/path/shot.0002.exr', '/path/shot.0003.exr']);
     });
 
     it('SLD-URL-007: expands at-sign pattern to frame URLs', () => {
       const urls = expandPatternToURLs('frame.@@.png', 5, 7);
-      expect(urls).toEqual([
-        'frame.05.png',
-        'frame.06.png',
-        'frame.07.png',
-      ]);
+      expect(urls).toEqual(['frame.05.png', 'frame.06.png', 'frame.07.png']);
     });
 
     it('SLD-URL-008: returns empty for non-pattern string', () => {
@@ -2050,8 +2038,9 @@ describe('SequenceLoader', () => {
       });
 
       it('SLD-520-013: createSequenceInfoFromPattern rejects invalid patterns', async () => {
-        await expect(createSequenceInfoFromPattern('not_a_pattern.exr', 1, 10))
-          .rejects.toThrow('Invalid sequence pattern');
+        await expect(createSequenceInfoFromPattern('not_a_pattern.exr', 1, 10)).rejects.toThrow(
+          'Invalid sequence pattern',
+        );
       });
     });
 

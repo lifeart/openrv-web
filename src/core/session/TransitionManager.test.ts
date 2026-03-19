@@ -630,11 +630,7 @@ describe('TransitionManager', () => {
       const callback = vi.fn();
       manager.on('transitionsReset', callback);
 
-      manager.setState([
-        { type: 'crossfade', durationFrames: 12 },
-        null,
-        { type: 'wipe-left', durationFrames: 8 },
-      ]);
+      manager.setState([{ type: 'crossfade', durationFrames: 12 }, null, { type: 'wipe-left', durationFrames: 8 }]);
 
       expect(callback).toHaveBeenCalledTimes(1);
     });

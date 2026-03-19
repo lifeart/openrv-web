@@ -198,4 +198,3 @@ describe('Issue #497: VirtualSliderController excludes touch pointerType', () =>
     expect(controller.getState()).toBe(VirtualSliderState.ARMED);
   });
 });
-

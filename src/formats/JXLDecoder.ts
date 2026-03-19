@@ -463,9 +463,15 @@ function parseCodestreamColorSpace(buffer: ArrayBuffer, codestreamOffset: number
 
   let cicpPrimaries: number;
   switch (primariesEnum) {
-    case 3: cicpPrimaries = 9; break;   // BT.2020
-    case 4: cicpPrimaries = 12; break;  // Display P3
-    default: cicpPrimaries = 1; break;  // BT.709/sRGB (1 or unknown)
+    case 3:
+      cicpPrimaries = 9;
+      break; // BT.2020
+    case 4:
+      cicpPrimaries = 12;
+      break; // Display P3
+    default:
+      cicpPrimaries = 1;
+      break; // BT.709/sRGB (1 or unknown)
   }
 
   let cicpTransfer: number;
@@ -473,14 +479,28 @@ function parseCodestreamColorSpace(buffer: ArrayBuffer, codestreamOffset: number
     cicpTransfer = 13; // approximate as sRGB
   } else {
     switch (transferEnum) {
-      case 3: cicpTransfer = 8; break;   // Linear
-      case 13: cicpTransfer = 16; break; // PQ
-      case 17: cicpTransfer = 18; break; // HLG
-      case 8: cicpTransfer = 13; break;  // sRGB
+      case 3:
+        cicpTransfer = 8;
+        break; // Linear
+      case 13:
+        cicpTransfer = 16;
+        break; // PQ
+      case 17:
+        cicpTransfer = 18;
+        break; // HLG
+      case 8:
+        cicpTransfer = 13;
+        break; // sRGB
       case 1:
-      case 18: cicpTransfer = 1; break;  // BT.709
-      case 16: cicpTransfer = 13; break; // DCI → treat as sRGB-like
-      default: cicpTransfer = 13; break; // Default to sRGB
+      case 18:
+        cicpTransfer = 1;
+        break; // BT.709
+      case 16:
+        cicpTransfer = 13;
+        break; // DCI → treat as sRGB-like
+      default:
+        cicpTransfer = 13;
+        break; // Default to sRGB
     }
   }
 

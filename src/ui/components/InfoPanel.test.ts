@@ -526,9 +526,7 @@ describe('InfoPanel', () => {
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
       panel.enable();
       // No customization hint should be logged; only the #101 unwired-fields hint is allowed
-      const customizationCalls = infoSpy.mock.calls.filter((args) =>
-        String(args[0]).includes('customiz'),
-      );
+      const customizationCalls = infoSpy.mock.calls.filter((args) => String(args[0]).includes('customiz'));
       expect(customizationCalls).toHaveLength(0);
     });
 
@@ -537,9 +535,7 @@ describe('InfoPanel', () => {
       panel.enable();
       panel.disable();
       panel.enable();
-      const customizationCalls = infoSpy.mock.calls.filter((args) =>
-        String(args[0]).includes('customiz'),
-      );
+      const customizationCalls = infoSpy.mock.calls.filter((args) => String(args[0]).includes('customiz'));
       expect(customizationCalls).toHaveLength(0);
     });
   });

@@ -53,10 +53,21 @@ function createMockVersionManager() {
 
 function createMockSession(sourceCountRef: { value: number }) {
   return {
-    get sourceCount() { return sourceCountRef.value; },
-    loadImage: vi.fn().mockImplementation(() => { sourceCountRef.value++; return Promise.resolve(); }),
-    loadVideo: vi.fn().mockImplementation(() => { sourceCountRef.value++; return Promise.resolve(); }),
-    loadImageSequenceFromPattern: vi.fn().mockImplementation(() => { sourceCountRef.value++; return Promise.resolve(); }),
+    get sourceCount() {
+      return sourceCountRef.value;
+    },
+    loadImage: vi.fn().mockImplementation(() => {
+      sourceCountRef.value++;
+      return Promise.resolve();
+    }),
+    loadVideo: vi.fn().mockImplementation(() => {
+      sourceCountRef.value++;
+      return Promise.resolve();
+    }),
+    loadImageSequenceFromPattern: vi.fn().mockImplementation(() => {
+      sourceCountRef.value++;
+      return Promise.resolve();
+    }),
     getSourceByIndex: vi.fn().mockImplementation((idx: number) => ({
       type: 'video',
       name: `source-${idx}`,
@@ -306,16 +317,18 @@ describe('ShotGridIntegrationBridge – Issue #323: loadPlaylist builds review p
       expect(playlistManager.getClipCount()).toBe(1);
     });
 
-    expect(session.versionManager.createGroup).toHaveBeenCalledWith(
-      'shot010',
-      [0],
-      { labels: ['shot010_v1'] },
-    );
+    expect(session.versionManager.createGroup).toHaveBeenCalledWith('shot010', [0], { labels: ['shot010_v1'] });
   });
 
   it('SG-INT-323-006: loadPlaylist skips versions without media URL', async () => {
     const v1 = makeVersion({ id: 101, code: 'shot_v1' });
-    const v2 = makeVersion({ id: 102, code: 'shot_v2_no_media', sg_uploaded_movie: null, sg_path_to_movie: '', sg_path_to_frames: '' });
+    const v2 = makeVersion({
+      id: 102,
+      code: 'shot_v2_no_media',
+      sg_uploaded_movie: null,
+      sg_path_to_movie: '',
+      sg_path_to_frames: '',
+    });
     const v3 = makeVersion({ id: 103, code: 'shot_v3' });
 
     panel.resolveMediaUrl.mockImplementation((v: ShotGridVersion) => {

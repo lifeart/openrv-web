@@ -381,9 +381,7 @@ describe('PlaylistPanel', () => {
 
       // Should have an import button
       const importBtn = Array.from(buttons).find(
-        (btn) =>
-          btn.title?.toLowerCase().includes('import') ||
-          btn.textContent?.toLowerCase().includes('import'),
+        (btn) => btn.title?.toLowerCase().includes('import') || btn.textContent?.toLowerCase().includes('import'),
       );
       expect(importBtn).toBeDefined();
     });
@@ -448,9 +446,7 @@ describe('PlaylistPanel', () => {
         edlContent,
         expect.any(Function),
       );
-      expect(importedHandler).toHaveBeenCalledWith(
-        expect.objectContaining({ format: 'edl', importedCount: 2 }),
-      );
+      expect(importedHandler).toHaveBeenCalledWith(expect.objectContaining({ format: 'edl', importedCount: 2 }));
 
       document.body.removeChild(panel.render());
     });

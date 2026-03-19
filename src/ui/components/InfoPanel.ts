@@ -124,7 +124,7 @@ export class InfoPanel extends EventEmitter<InfoPanelEvents> {
       this._unwiredHintLogged = true;
       console.info(
         'Most fields in InfoPanel are not yet wired to live data. ' +
-        'See issue #101 for the tracking list of remaining connections.',
+          'See issue #101 for the tracking list of remaining connections.',
       );
     }
   }

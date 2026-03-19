@@ -93,15 +93,25 @@ function createMockComponents(): SessionComponents {
       getLensParams: vi.fn().mockReturnValue({}),
       getWipeState: vi.fn().mockReturnValue({}),
       getStackLayers: vi.fn().mockReturnValue([]),
-      getNoiseReductionParams: vi.fn().mockReturnValue({ strength: 0, luminanceStrength: 50, chromaStrength: 75, radius: 2 }),
+      getNoiseReductionParams: vi
+        .fn()
+        .mockReturnValue({ strength: 0, luminanceStrength: 50, chromaStrength: 75, radius: 2 }),
       getWatermarkState: vi.fn().mockReturnValue({
-        enabled: false, imageUrl: null, position: 'bottom-right',
-        customX: 0.9, customY: 0.9, scale: 1, opacity: 0.7, margin: 20,
+        enabled: false,
+        imageUrl: null,
+        position: 'bottom-right',
+        customX: 0.9,
+        customY: 0.9,
+        scale: 1,
+        opacity: 0.7,
+        margin: 20,
       }),
       getLUT: vi.fn().mockReturnValue(undefined),
       getLUTIntensity: vi.fn().mockReturnValue(1.0),
       getPARState: vi.fn().mockReturnValue({ enabled: false, par: 1.0, preset: 'square' }),
-      getBackgroundPatternState: vi.fn().mockReturnValue({ pattern: 'black', checkerSize: 'medium', customColor: '#1a1a1a' }),
+      getBackgroundPatternState: vi
+        .fn()
+        .mockReturnValue({ pattern: 'black', checkerSize: 'medium', customColor: '#1a1a1a' }),
       isOCIOEnabled: vi.fn().mockReturnValue(false),
       getDisplayColorState: vi.fn().mockReturnValue({ ...DEFAULT_DISPLAY_COLOR_STATE }),
       getGamutMappingState: vi.fn().mockReturnValue({ ...DEFAULT_GAMUT_MAPPING_STATE }),
@@ -117,7 +127,16 @@ function createMockComponents(): SessionComponents {
       getStereoAlignMode: vi.fn().mockReturnValue(DEFAULT_STEREO_ALIGN_MODE),
       getDeinterlaceParams: vi.fn().mockReturnValue({ method: 'bob', fieldOrder: 'tff', enabled: false }),
       getFilmEmulationParams: vi.fn().mockReturnValue({ enabled: false, stock: 'kodak-portra-400', intensity: 1.0 }),
-      getPerspectiveParams: vi.fn().mockReturnValue({ enabled: false, topLeft: { x: 0, y: 0 }, topRight: { x: 1, y: 0 }, bottomRight: { x: 1, y: 1 }, bottomLeft: { x: 0, y: 1 }, quality: 'bilinear' }),
+      getPerspectiveParams: vi
+        .fn()
+        .mockReturnValue({
+          enabled: false,
+          topLeft: { x: 0, y: 0 },
+          topRight: { x: 1, y: 0 },
+          bottomRight: { x: 1, y: 1 },
+          bottomLeft: { x: 0, y: 1 },
+          quality: 'bilinear',
+        }),
       getStabilizationParams: vi.fn().mockReturnValue({ enabled: false, smoothingStrength: 50 }),
       isUncropActive: vi.fn().mockReturnValue(false),
       setColorAdjustments: vi.fn(),
@@ -158,14 +177,42 @@ function createMockComponents(): SessionComponents {
           activeSourceId: null,
         }),
       }),
-      getTimecodeOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_TIMECODE_OVERLAY_STATE }), setState: vi.fn() }),
-      getSafeAreasOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_SAFE_AREAS_STATE }), setState: vi.fn() }),
-      getClippingOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_CLIPPING_OVERLAY_STATE }), setState: vi.fn() }),
-      getInfoStripOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_INFO_STRIP_OVERLAY_STATE }), setState: vi.fn() }),
-      getSpotlightOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_SPOTLIGHT_STATE }), setState: vi.fn() }),
-      getBugOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_BUG_OVERLAY_STATE }), setState: vi.fn() }),
-      getEXRWindowOverlay: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_EXR_WINDOW_OVERLAY_STATE }), setState: vi.fn() }),
-      getFPSIndicator: vi.fn().mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_FPS_INDICATOR_STATE }), setState: vi.fn() }),
+      getTimecodeOverlay: vi
+        .fn()
+        .mockReturnValue({
+          getState: vi.fn().mockReturnValue({ ...DEFAULT_TIMECODE_OVERLAY_STATE }),
+          setState: vi.fn(),
+        }),
+      getSafeAreasOverlay: vi
+        .fn()
+        .mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_SAFE_AREAS_STATE }), setState: vi.fn() }),
+      getClippingOverlay: vi
+        .fn()
+        .mockReturnValue({
+          getState: vi.fn().mockReturnValue({ ...DEFAULT_CLIPPING_OVERLAY_STATE }),
+          setState: vi.fn(),
+        }),
+      getInfoStripOverlay: vi
+        .fn()
+        .mockReturnValue({
+          getState: vi.fn().mockReturnValue({ ...DEFAULT_INFO_STRIP_OVERLAY_STATE }),
+          setState: vi.fn(),
+        }),
+      getSpotlightOverlay: vi
+        .fn()
+        .mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_SPOTLIGHT_STATE }), setState: vi.fn() }),
+      getBugOverlay: vi
+        .fn()
+        .mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_BUG_OVERLAY_STATE }), setState: vi.fn() }),
+      getEXRWindowOverlay: vi
+        .fn()
+        .mockReturnValue({
+          getState: vi.fn().mockReturnValue({ ...DEFAULT_EXR_WINDOW_OVERLAY_STATE }),
+          setState: vi.fn(),
+        }),
+      getFPSIndicator: vi
+        .fn()
+        .mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_FPS_INDICATOR_STATE }), setState: vi.fn() }),
     },
   } as any;
 }
@@ -185,18 +232,14 @@ describe('Issue #410: currentSourceIndex remapped during partial restore', () =>
     // Simulate: source 0 fails, source 1 succeeds → mediaIndexMap = {1→0}
     // loadVideo for first call rejects (source 0 skipped), second call resolves (source 1 loaded as live index 0)
     let callCount = 0;
-    (components.session as any).loadImage
-      .mockImplementation(() => {
-        callCount++;
-        if (callCount === 1) return Promise.reject(new Error('fail'));
-        return Promise.resolve();
-      });
+    (components.session as any).loadImage.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) return Promise.reject(new Error('fail'));
+      return Promise.resolve();
+    });
 
     const state = SessionSerializer.createEmpty();
-    state.media = [
-      makeImageRef('img0.exr', '/img0.exr'),
-      makeImageRef('img1.exr', '/img1.exr'),
-    ];
+    state.media = [makeImageRef('img0.exr', '/img0.exr'), makeImageRef('img1.exr', '/img1.exr')];
     // Saved state had source index 1 active (the second image)
     state.playback.currentSourceIndex = 1;
 
@@ -213,18 +256,14 @@ describe('Issue #410: currentSourceIndex remapped during partial restore', () =>
 
     // source 0 fails, source 1 succeeds → saved currentSourceIndex was 0 (skipped)
     let callCount = 0;
-    (components.session as any).loadImage
-      .mockImplementation(() => {
-        callCount++;
-        if (callCount === 1) return Promise.reject(new Error('fail'));
-        return Promise.resolve();
-      });
+    (components.session as any).loadImage.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) return Promise.reject(new Error('fail'));
+      return Promise.resolve();
+    });
 
     const state = SessionSerializer.createEmpty();
-    state.media = [
-      makeImageRef('img0.exr', '/img0.exr'),
-      makeImageRef('img1.exr', '/img1.exr'),
-    ];
+    state.media = [makeImageRef('img0.exr', '/img0.exr'), makeImageRef('img1.exr', '/img1.exr')];
     // Saved state had source index 0 active — but that source failed to load
     state.playback.currentSourceIndex = 0;
 
@@ -241,12 +280,11 @@ describe('Issue #410: currentSourceIndex remapped during partial restore', () =>
 
     // 3 sources: 0 fails, 1 succeeds (→0), 2 succeeds (→1)
     let callCount = 0;
-    (components.session as any).loadImage
-      .mockImplementation(() => {
-        callCount++;
-        if (callCount === 1) return Promise.reject(new Error('fail'));
-        return Promise.resolve();
-      });
+    (components.session as any).loadImage.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) return Promise.reject(new Error('fail'));
+      return Promise.resolve();
+    });
 
     const state = SessionSerializer.createEmpty();
     state.media = [
@@ -297,12 +335,11 @@ describe('Issue #410: currentSourceIndex remapped during partial restore', () =>
 
     // 3 sources: 0 succeeds (→0), 1 fails, 2 succeeds (→1)
     let callCount = 0;
-    (components.session as any).loadImage
-      .mockImplementation(() => {
-        callCount++;
-        if (callCount === 2) return Promise.reject(new Error('fail'));
-        return Promise.resolve();
-      });
+    (components.session as any).loadImage.mockImplementation(() => {
+      callCount++;
+      if (callCount === 2) return Promise.reject(new Error('fail'));
+      return Promise.resolve();
+    });
 
     const state = SessionSerializer.createEmpty();
     state.media = [
@@ -327,18 +364,14 @@ describe('Issue #410: currentSourceIndex remapped during partial restore', () =>
 
     // Source 0 fails, source 1 succeeds
     let callCount = 0;
-    (components.session as any).loadImage
-      .mockImplementation(() => {
-        callCount++;
-        if (callCount === 1) return Promise.reject(new Error('fail'));
-        return Promise.resolve();
-      });
+    (components.session as any).loadImage.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) return Promise.reject(new Error('fail'));
+      return Promise.resolve();
+    });
 
     const state = SessionSerializer.createEmpty();
-    state.media = [
-      makeImageRef('img0.exr', '/img0.exr'),
-      makeImageRef('img1.exr', '/img1.exr'),
-    ];
+    state.media = [makeImageRef('img0.exr', '/img0.exr'), makeImageRef('img1.exr', '/img1.exr')];
     state.playback.currentSourceIndex = 1;
     state.playback.sourceAIndex = 1;
     state.playback.sourceBIndex = -1; // No B source assigned

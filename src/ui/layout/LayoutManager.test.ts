@@ -279,9 +279,7 @@ describe('LayoutManager', () => {
       const buttons = tabBar.querySelectorAll('[role="tab"]');
 
       // Focus first tab and press ArrowRight
-      (buttons[0] as HTMLElement).dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }),
-      );
+      (buttons[0] as HTMLElement).dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
       expect(store.panels.right.activeTab).toBe(1);
     });
 
@@ -296,9 +294,7 @@ describe('LayoutManager', () => {
       const tabBar = root.querySelector('.layout-panel-tabs-right') as HTMLElement;
       const buttons = tabBar.querySelectorAll('[role="tab"]');
 
-      (buttons[0] as HTMLElement).dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }),
-      );
+      (buttons[0] as HTMLElement).dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
       expect(store.panels.right.activeTab).toBe(1);
     });
 
@@ -316,9 +312,7 @@ describe('LayoutManager', () => {
       const tabBar = root.querySelector('.layout-panel-tabs-right') as HTMLElement;
       const buttons = tabBar.querySelectorAll('[role="tab"]');
 
-      (buttons[2] as HTMLElement).dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'Home', bubbles: true }),
-      );
+      (buttons[2] as HTMLElement).dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
       expect(store.panels.right.activeTab).toBe(0);
     });
 
@@ -335,9 +329,7 @@ describe('LayoutManager', () => {
       const tabBar = root.querySelector('.layout-panel-tabs-right') as HTMLElement;
       const buttons = tabBar.querySelectorAll('[role="tab"]');
 
-      (buttons[0] as HTMLElement).dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'End', bubbles: true }),
-      );
+      (buttons[0] as HTMLElement).dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }));
       expect(store.panels.right.activeTab).toBe(2);
     });
 

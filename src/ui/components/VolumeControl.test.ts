@@ -297,9 +297,7 @@ describe('VolumeControl', () => {
       // Hover to expand
       element.dispatchEvent(new MouseEvent('pointerenter', { bubbles: true }));
 
-      const scrubCheckbox = element.querySelector(
-        'input[type="checkbox"]',
-      ) as HTMLInputElement;
+      const scrubCheckbox = element.querySelector('input[type="checkbox"]') as HTMLInputElement;
       expect(scrubCheckbox).toBeInstanceOf(HTMLInputElement);
       expect(scrubCheckbox.disabled).toBe(false);
 
@@ -330,9 +328,7 @@ describe('VolumeControl', () => {
 
       const sliderContainer = element.querySelector('div')!;
 
-      element.dispatchEvent(
-        new MouseEvent('pointerenter', { bubbles: true }),
-      );
+      element.dispatchEvent(new MouseEvent('pointerenter', { bubbles: true }));
       expect(sliderContainer.style.width).toBe('160px');
     });
   });

@@ -1,9 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
-import {
-  installGlobalErrorHandler,
-  uninstallGlobalErrorHandler,
-  _resetForTesting,
-} from './globalErrorHandler';
+import { installGlobalErrorHandler, uninstallGlobalErrorHandler, _resetForTesting } from './globalErrorHandler';
 import { Logger, LogLevel, type LogSink } from './Logger';
 
 describe('globalErrorHandler', () => {

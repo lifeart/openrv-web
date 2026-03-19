@@ -10,10 +10,7 @@
  * 3. No DCC bridge (default)
  */
 
-import {
-  type PreferencesManager,
-  getPreferencesManager,
-} from '../utils/preferences/PreferencesManager';
+import { type PreferencesManager, getPreferencesManager } from '../utils/preferences/PreferencesManager';
 
 // ---------------------------------------------------------------------------
 // Storage key
@@ -70,19 +67,14 @@ export function sanitizeDCCPrefs(value: unknown): DCCPrefs {
 /**
  * Load persisted DCC preferences from storage.
  */
-export function getDCCPrefs(
-  storage: PreferencesManager = getPreferencesManager(),
-): DCCPrefs {
+export function getDCCPrefs(storage: PreferencesManager = getPreferencesManager()): DCCPrefs {
   return sanitizeDCCPrefs(storage.getJSON<unknown>(DCC_STORAGE_KEY));
 }
 
 /**
  * Persist DCC preferences to storage.
  */
-export function setDCCPrefs(
-  prefs: Partial<DCCPrefs>,
-  storage: PreferencesManager = getPreferencesManager(),
-): void {
+export function setDCCPrefs(prefs: Partial<DCCPrefs>, storage: PreferencesManager = getPreferencesManager()): void {
   const current = getDCCPrefs(storage);
   const merged = sanitizeDCCPrefs({ ...current, ...prefs });
   storage.setJSON(DCC_STORAGE_KEY, merged);
@@ -91,9 +83,7 @@ export function setDCCPrefs(
 /**
  * Remove persisted DCC preferences from storage.
  */
-export function clearDCCPrefs(
-  storage: PreferencesManager = getPreferencesManager(),
-): void {
+export function clearDCCPrefs(storage: PreferencesManager = getPreferencesManager()): void {
   storage.remove(DCC_STORAGE_KEY);
 }
 
@@ -109,9 +99,7 @@ export function clearDCCPrefs(
  * Returns `null` when no DCC bridge should be created.
  */
 export function resolveDCCEndpoint(
-  searchParams: URLSearchParams = new URLSearchParams(
-    typeof window !== 'undefined' ? window.location.search : '',
-  ),
+  searchParams: URLSearchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : ''),
   storage: PreferencesManager = getPreferencesManager(),
 ): string | null {
   // 1. Query param takes highest priority

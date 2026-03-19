@@ -43,16 +43,14 @@ describe('fetchUrlAsFile', () => {
       statusText: 'Not Found',
     } as unknown as Response);
 
-    await expect(
-      fetchUrlAsFile('https://cdn.example.com/missing.exr', 'missing.exr'),
-    ).rejects.toThrow('Failed to fetch URL (404)');
+    await expect(fetchUrlAsFile('https://cdn.example.com/missing.exr', 'missing.exr')).rejects.toThrow(
+      'Failed to fetch URL (404)',
+    );
   });
 
   it('throws on network errors', async () => {
     vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(new TypeError('fetch failed'));
 
-    await expect(
-      fetchUrlAsFile('https://cdn.example.com/render.exr', 'render.exr'),
-    ).rejects.toThrow('fetch failed');
+    await expect(fetchUrlAsFile('https://cdn.example.com/render.exr', 'render.exr')).rejects.toThrow('fetch failed');
   });
 });

@@ -179,17 +179,13 @@ describe('Issue #360 – recoveryAvailable event is wired in production', () => 
     await manager.init();
 
     // Verify that on('recoveryAvailable', ...) was called
-    const recoveryCall = autoSaveManager.on.mock.calls.find(
-      (call) => call[0] === 'recoveryAvailable',
-    );
+    const recoveryCall = autoSaveManager.on.mock.calls.find((call) => call[0] === 'recoveryAvailable');
     expect(recoveryCall).toBeDefined();
 
     // Verify the subscription was registered before initialize was called
     const onCallOrder = autoSaveManager.on.mock.invocationCallOrder;
     const initCallOrder = autoSaveManager.initialize.mock.invocationCallOrder;
-    const recoveryOnIdx = autoSaveManager.on.mock.calls.findIndex(
-      (call) => call[0] === 'recoveryAvailable',
-    );
+    const recoveryOnIdx = autoSaveManager.on.mock.calls.findIndex((call) => call[0] === 'recoveryAvailable');
     expect(onCallOrder[recoveryOnIdx]).toBeLessThan(initCallOrder[0]!);
   });
 
@@ -282,9 +278,6 @@ describe('Issue #360 – recoveryAvailable event is wired in production', () => 
     await manager.init();
 
     // Should prompt with the first (most recent) entry
-    expect(showConfirm).toHaveBeenCalledWith(
-      expect.stringContaining('Dailies Review'),
-      expect.anything(),
-    );
+    expect(showConfirm).toHaveBeenCalledWith(expect.stringContaining('Dailies Review'), expect.anything());
   });
 });

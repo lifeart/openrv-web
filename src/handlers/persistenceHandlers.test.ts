@@ -432,9 +432,7 @@ describe('bindPersistenceHandlers', () => {
 
   it('PERH-U038: degradedModes event triggers a user notification with degraded mode info', () => {
     expect(handlers.degradedModes).toBeDefined();
-    const degraded: DegradedModeInfo[] = [
-      { nodeName: 'stack1', originalMode: 'dissolve', fallbackMode: 'over' },
-    ];
+    const degraded: DegradedModeInfo[] = [{ nodeName: 'stack1', originalMode: 'dissolve', fallbackMode: 'over' }];
     handlers.degradedModes!(degraded);
 
     expect(showAlert).toHaveBeenCalledWith(

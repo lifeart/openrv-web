@@ -151,10 +151,7 @@ describe('Issue #412 – session label derivation', () => {
       const getter = (ctx.autoSaveManager as any).markDirty.mock.calls[0][0];
       getter();
 
-      expect(SessionSerializer.toJSON).toHaveBeenCalledWith(
-        expect.anything(),
-        'My Review Session',
-      );
+      expect(SessionSerializer.toJSON).toHaveBeenCalledWith(expect.anything(), 'My Review Session');
     });
 
     it('ISS-412-002: falls back to source name when no displayName', () => {
@@ -166,10 +163,7 @@ describe('Issue #412 – session label derivation', () => {
       const getter = (ctx.autoSaveManager as any).markDirty.mock.calls[0][0];
       getter();
 
-      expect(SessionSerializer.toJSON).toHaveBeenCalledWith(
-        expect.anything(),
-        'dailies_v03.exr',
-      );
+      expect(SessionSerializer.toJSON).toHaveBeenCalledWith(expect.anything(), 'dailies_v03.exr');
     });
 
     it('ISS-412-003: falls back to "Untitled" when neither displayName nor source', () => {
@@ -181,10 +175,7 @@ describe('Issue #412 – session label derivation', () => {
       const getter = (ctx.autoSaveManager as any).markDirty.mock.calls[0][0];
       getter();
 
-      expect(SessionSerializer.toJSON).toHaveBeenCalledWith(
-        expect.anything(),
-        'Untitled',
-      );
+      expect(SessionSerializer.toJSON).toHaveBeenCalledWith(expect.anything(), 'Untitled');
     });
   });
 
@@ -197,10 +188,7 @@ describe('Issue #412 – session label derivation', () => {
 
       mgr.retryAutoSave();
 
-      expect(SessionSerializer.toJSON).toHaveBeenCalledWith(
-        expect.anything(),
-        'Color Review',
-      );
+      expect(SessionSerializer.toJSON).toHaveBeenCalledWith(expect.anything(), 'Color Review');
     });
 
     it('ISS-412-005: falls back to source name when no displayName', () => {
@@ -209,10 +197,7 @@ describe('Issue #412 – session label derivation', () => {
 
       mgr.retryAutoSave();
 
-      expect(SessionSerializer.toJSON).toHaveBeenCalledWith(
-        expect.anything(),
-        'shot_010.dpx',
-      );
+      expect(SessionSerializer.toJSON).toHaveBeenCalledWith(expect.anything(), 'shot_010.dpx');
     });
 
     it('ISS-412-006: falls back to "Untitled" when neither available', () => {
@@ -221,10 +206,7 @@ describe('Issue #412 – session label derivation', () => {
 
       mgr.retryAutoSave();
 
-      expect(SessionSerializer.toJSON).toHaveBeenCalledWith(
-        expect.anything(),
-        'Untitled',
-      );
+      expect(SessionSerializer.toJSON).toHaveBeenCalledWith(expect.anything(), 'Untitled');
     });
   });
 
@@ -237,10 +219,7 @@ describe('Issue #412 – session label derivation', () => {
 
       await mgr.createQuickSnapshot();
 
-      expect(SessionSerializer.toJSON).toHaveBeenCalledWith(
-        expect.anything(),
-        'VFX Dailies',
-      );
+      expect(SessionSerializer.toJSON).toHaveBeenCalledWith(expect.anything(), 'VFX Dailies');
     });
 
     it('ISS-412-008: falls back to source name when no displayName', async () => {
@@ -249,10 +228,7 @@ describe('Issue #412 – session label derivation', () => {
 
       await mgr.createQuickSnapshot();
 
-      expect(SessionSerializer.toJSON).toHaveBeenCalledWith(
-        expect.anything(),
-        'plate.exr',
-      );
+      expect(SessionSerializer.toJSON).toHaveBeenCalledWith(expect.anything(), 'plate.exr');
     });
 
     it('ISS-412-009: falls back to "Untitled" when neither available', async () => {
@@ -261,10 +237,7 @@ describe('Issue #412 – session label derivation', () => {
 
       await mgr.createQuickSnapshot();
 
-      expect(SessionSerializer.toJSON).toHaveBeenCalledWith(
-        expect.anything(),
-        'Untitled',
-      );
+      expect(SessionSerializer.toJSON).toHaveBeenCalledWith(expect.anything(), 'Untitled');
     });
   });
 
@@ -277,10 +250,7 @@ describe('Issue #412 – session label derivation', () => {
 
       await mgr.createAutoCheckpoint('Before Restore');
 
-      expect(SessionSerializer.toJSON).toHaveBeenCalledWith(
-        expect.anything(),
-        'Final Grade',
-      );
+      expect(SessionSerializer.toJSON).toHaveBeenCalledWith(expect.anything(), 'Final Grade');
     });
 
     it('ISS-412-011: falls back to source name when no displayName', async () => {
@@ -289,10 +259,7 @@ describe('Issue #412 – session label derivation', () => {
 
       await mgr.createAutoCheckpoint('Before Restore');
 
-      expect(SessionSerializer.toJSON).toHaveBeenCalledWith(
-        expect.anything(),
-        'reel_a.mov',
-      );
+      expect(SessionSerializer.toJSON).toHaveBeenCalledWith(expect.anything(), 'reel_a.mov');
     });
 
     it('ISS-412-012: falls back to "Untitled" when neither available', async () => {
@@ -301,10 +268,7 @@ describe('Issue #412 – session label derivation', () => {
 
       await mgr.createAutoCheckpoint('Before Restore');
 
-      expect(SessionSerializer.toJSON).toHaveBeenCalledWith(
-        expect.anything(),
-        'Untitled',
-      );
+      expect(SessionSerializer.toJSON).toHaveBeenCalledWith(expect.anything(), 'Untitled');
     });
   });
 });

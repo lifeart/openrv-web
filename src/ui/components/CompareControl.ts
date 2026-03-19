@@ -919,9 +919,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
             const isUnavailable = quadSources[i as 0 | 1 | 2 | 3] === 'C' || quadSources[i as 0 | 1 | 2 | 3] === 'D';
             select.style.opacity = isUnavailable ? '0.5' : '1';
             select.style.borderColor = isUnavailable ? 'var(--warning-color, #e8a838)' : 'var(--border-secondary)';
-            select.title = isUnavailable
-              ? 'This source has no production assignment path'
-              : '';
+            select.title = isUnavailable ? 'This source has no production assignment path' : '';
           }
         }
       }
@@ -1240,7 +1238,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
   setQuadViewSource(quadrant: 0 | 1 | 2 | 3, source: ABSource): void {
     if (source === 'C' || source === 'D') {
       console.warn(
-        `[CompareControl] Source "${source}" selected for quadrant ${quadrant}, but sources C and D have no production assignment path. Only A and B are bound to real media sources.`
+        `[CompareControl] Source "${source}" selected for quadrant ${quadrant}, but sources C and D have no production assignment path. Only A and B are bound to real media sources.`,
       );
     }
     this.manager.setQuadSource(quadrant, source);

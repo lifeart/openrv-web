@@ -101,9 +101,7 @@ describe('InfoPanelSettingsMenu', () => {
       infoPanel.setPosition('top-left');
       menu.show(100, 100);
       const radios = document.querySelectorAll('[role="menuitemradio"]');
-      const checkedRadios = Array.from(radios).filter(
-        (r) => r.getAttribute('aria-checked') === 'true',
-      );
+      const checkedRadios = Array.from(radios).filter((r) => r.getAttribute('aria-checked') === 'true');
       expect(checkedRadios.length).toBe(1);
     });
   });

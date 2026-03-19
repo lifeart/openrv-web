@@ -27,12 +27,15 @@ describe('MuNetworkBridge remoteConnect scheme selection', () => {
     bridge.remoteNetwork(true);
     createdSockets.length = 0;
 
-    vi.stubGlobal('WebSocket', class extends MockWebSocket {
-      constructor(url: string) {
-        super(url);
-        createdSockets.push(this);
-      }
-    });
+    vi.stubGlobal(
+      'WebSocket',
+      class extends MockWebSocket {
+        constructor(url: string) {
+          super(url);
+          createdSockets.push(this);
+        }
+      },
+    );
 
     // Save original location descriptor
     originalLocation = Object.getOwnPropertyDescriptor(window, 'location');
@@ -110,18 +113,21 @@ describe('MuNetworkBridge remoteContacts', () => {
     createdSockets.length = 0;
     messageListeners.clear();
 
-    vi.stubGlobal('WebSocket', class extends MockWebSocket {
-      constructor(url: string) {
-        super(url);
-        createdSockets.push(this);
-        // Capture addEventListener calls to extract the 'message' handler
-        this.addEventListener = vi.fn().mockImplementation((type: string, handler: (...args: unknown[]) => void) => {
-          if (type === 'message') {
-            messageListeners.set(url, handler as (event: { data: string }) => void);
-          }
-        });
-      }
-    });
+    vi.stubGlobal(
+      'WebSocket',
+      class extends MockWebSocket {
+        constructor(url: string) {
+          super(url);
+          createdSockets.push(this);
+          // Capture addEventListener calls to extract the 'message' handler
+          this.addEventListener = vi.fn().mockImplementation((type: string, handler: (...args: unknown[]) => void) => {
+            if (type === 'message') {
+              messageListeners.set(url, handler as (event: { data: string }) => void);
+            }
+          });
+        }
+      },
+    );
   });
 
   afterEach(() => {

@@ -148,8 +148,8 @@ describe('HeaderBar', () => {
     it('HDR-U024: project file input accepts project and companion media formats', () => {
       const el = headerBar.render();
       const inputs = el.querySelectorAll('input[type="file"]');
-      const projectInput = Array.from(inputs).find(
-        (input) => (input as HTMLInputElement).accept.includes('.orvproject'),
+      const projectInput = Array.from(inputs).find((input) =>
+        (input as HTMLInputElement).accept.includes('.orvproject'),
       ) as HTMLInputElement;
       expect(projectInput).not.toBeNull();
       // Should accept project formats and media formats for companion files
@@ -163,8 +163,8 @@ describe('HeaderBar', () => {
     it('HDR-U025: project file input does NOT allow multiple selection (#388)', () => {
       const el = headerBar.render();
       const inputs = el.querySelectorAll('input[type="file"]');
-      const projectInput = Array.from(inputs).find(
-        (input) => (input as HTMLInputElement).accept.includes('.orvproject'),
+      const projectInput = Array.from(inputs).find((input) =>
+        (input as HTMLInputElement).accept.includes('.orvproject'),
       ) as HTMLInputElement;
       expect(projectInput).not.toBeNull();
       expect(projectInput.multiple).toBe(false);
@@ -730,8 +730,8 @@ describe('HeaderBar', () => {
 
       const el = headerBar.render();
       const inputs = el.querySelectorAll('input[type="file"]');
-      const projectInput = Array.from(inputs).find(
-        (input) => (input as HTMLInputElement).accept.includes('.orvproject'),
+      const projectInput = Array.from(inputs).find((input) =>
+        (input as HTMLInputElement).accept.includes('.orvproject'),
       ) as HTMLInputElement;
 
       // Create a mock file and dispatch change event
@@ -1869,9 +1869,7 @@ describe('HeaderBar', () => {
 
       // Wait for async handleFileSelect to complete
       await vi.waitFor(() => {
-        expect(openProjectSpy).toHaveBeenCalledWith(
-          expect.objectContaining({ file: rvFile }),
-        );
+        expect(openProjectSpy).toHaveBeenCalledWith(expect.objectContaining({ file: rvFile }));
       });
     });
 
@@ -2016,7 +2014,10 @@ describe('HeaderBar', () => {
       const openProjectSpy = vi.fn();
       headerBar.on('openProject', openProjectSpy);
 
-      const edlFile = new File(['001 src V C 01:00:00:00 01:00:10:00 01:00:00:00 01:00:10:00\n* FROM CLIP NAME: test.exr'], 'test.rvedl');
+      const edlFile = new File(
+        ['001 src V C 01:00:00:00 01:00:10:00 01:00:00:00 01:00:10:00\n* FROM CLIP NAME: test.exr'],
+        'test.rvedl',
+      );
       const rvFile = new File(['rv-data'], 'session.rv');
       Object.defineProperty(input, 'files', { value: [edlFile, rvFile], configurable: true });
       input.dispatchEvent(new Event('change'));
@@ -2190,8 +2191,8 @@ describe('HeaderBar', () => {
     it('HDR-U050: file input accept attribute includes .otio', () => {
       headerBar.render();
       const inputs = headerBar.getContainer().querySelectorAll('input[type="file"]');
-      const mediaInput = Array.from(inputs).find(
-        (input) => (input as HTMLInputElement).accept.includes('.rv'),
+      const mediaInput = Array.from(inputs).find((input) =>
+        (input as HTMLInputElement).accept.includes('.rv'),
       ) as HTMLInputElement;
 
       expect(mediaInput).toBeDefined();
@@ -2214,8 +2215,8 @@ describe('HeaderBar', () => {
       headerBar.onOTIOFileOpen = callback;
 
       const inputs = headerBar.getContainer().querySelectorAll('input[type="file"]');
-      const mediaInput = Array.from(inputs).find(
-        (input) => (input as HTMLInputElement).accept.includes('.otio'),
+      const mediaInput = Array.from(inputs).find((input) =>
+        (input as HTMLInputElement).accept.includes('.otio'),
       ) as HTMLInputElement;
 
       const otioFile = new File(['{"OTIO_SCHEMA": "Timeline.1"}'], 'timeline.otio');
@@ -2236,8 +2237,8 @@ describe('HeaderBar', () => {
       const alertSpy = vi.spyOn(Modal, 'showAlert').mockImplementation(() => Promise.resolve());
 
       const inputs = headerBar.getContainer().querySelectorAll('input[type="file"]');
-      const mediaInput = Array.from(inputs).find(
-        (input) => (input as HTMLInputElement).accept.includes('.otio'),
+      const mediaInput = Array.from(inputs).find((input) =>
+        (input as HTMLInputElement).accept.includes('.otio'),
       ) as HTMLInputElement;
 
       const otioFile = new File(['{}'], 'timeline.otio');
@@ -2262,8 +2263,8 @@ describe('HeaderBar', () => {
       const loadFileSpy = vi.spyOn(session, 'loadFile').mockResolvedValue();
 
       const inputs = headerBar.getContainer().querySelectorAll('input[type="file"]');
-      const mediaInput = Array.from(inputs).find(
-        (input) => (input as HTMLInputElement).accept.includes('.otio'),
+      const mediaInput = Array.from(inputs).find((input) =>
+        (input as HTMLInputElement).accept.includes('.otio'),
       ) as HTMLInputElement;
 
       const otioFile = new File(['{}'], 'timeline.otio');

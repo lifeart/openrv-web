@@ -924,9 +924,7 @@ describe('MarkerListPanel', () => {
         version: 1,
         exportedAt: new Date().toISOString(),
         fps: 24,
-        markers: [
-          { frame: 30, note: 'New marker', color: '#4444ff' },
-        ],
+        markers: [{ frame: 30, note: 'New marker', color: '#4444ff' }],
       };
 
       await applyImport(panel, importData, 'merge');
@@ -958,12 +956,8 @@ describe('MarkerListPanel', () => {
       await applyImport(panel, importData, 'merge');
 
       // Should report 2 collisions and 1 imported
-      expect(alertMock).toHaveBeenCalledWith(
-        expect.stringContaining('2 markers skipped due to frame collisions'),
-      );
-      expect(alertMock).toHaveBeenCalledWith(
-        expect.stringContaining('1 marker imported'),
-      );
+      expect(alertMock).toHaveBeenCalledWith(expect.stringContaining('2 markers skipped due to frame collisions'));
+      expect(alertMock).toHaveBeenCalledWith(expect.stringContaining('1 marker imported'));
       // Existing markers unchanged
       expect(session.getMarker(10)?.note).toBe('Existing A');
       expect(session.getMarker(20)?.note).toBe('Existing B');
@@ -989,9 +983,7 @@ describe('MarkerListPanel', () => {
 
       await applyImport(panel, importData, 'merge');
 
-      expect(alertMock).toHaveBeenCalledWith(
-        expect.stringContaining('1 marker skipped due to frame collisions'),
-      );
+      expect(alertMock).toHaveBeenCalledWith(expect.stringContaining('1 marker skipped due to frame collisions'));
     });
 
     it('MARK-U157: merge mode with no collisions does NOT mention collisions in alert', async () => {
@@ -1004,20 +996,14 @@ describe('MarkerListPanel', () => {
         version: 1,
         exportedAt: new Date().toISOString(),
         fps: 24,
-        markers: [
-          { frame: 30, note: 'No collision', color: '#4444ff' },
-        ],
+        markers: [{ frame: 30, note: 'No collision', color: '#4444ff' }],
       };
 
       await applyImport(panel, importData, 'merge');
 
       // Should show import summary but no collision message
-      expect(alertMock).toHaveBeenCalledWith(
-        expect.stringContaining('1 marker imported'),
-      );
-      expect(alertMock).not.toHaveBeenCalledWith(
-        expect.stringContaining('collision'),
-      );
+      expect(alertMock).toHaveBeenCalledWith(expect.stringContaining('1 marker imported'));
+      expect(alertMock).not.toHaveBeenCalledWith(expect.stringContaining('collision'));
     });
 
     it('MARK-U158: import reports invalid entry count when entries fail validation', async () => {
@@ -1038,12 +1024,8 @@ describe('MarkerListPanel', () => {
 
       await applyImport(panel, importData);
 
-      expect(alertMock).toHaveBeenCalledWith(
-        expect.stringContaining('1 marker imported'),
-      );
-      expect(alertMock).toHaveBeenCalledWith(
-        expect.stringContaining('3 invalid entries skipped'),
-      );
+      expect(alertMock).toHaveBeenCalledWith(expect.stringContaining('1 marker imported'));
+      expect(alertMock).toHaveBeenCalledWith(expect.stringContaining('3 invalid entries skipped'));
       expect(session.marks.size).toBe(1);
     });
 
@@ -1063,12 +1045,8 @@ describe('MarkerListPanel', () => {
 
       await applyImport(panel, importData);
 
-      expect(alertMock).toHaveBeenCalledWith(
-        expect.stringContaining('2 markers imported'),
-      );
-      expect(alertMock).not.toHaveBeenCalledWith(
-        expect.stringContaining('invalid'),
-      );
+      expect(alertMock).toHaveBeenCalledWith(expect.stringContaining('2 markers imported'));
+      expect(alertMock).not.toHaveBeenCalledWith(expect.stringContaining('invalid'));
     });
 
     it('MARK-U160A: import with mix of valid, invalid, and collisions shows all counts', async () => {
@@ -1113,9 +1091,7 @@ describe('MarkerListPanel', () => {
 
       await applyImport(panel, importData);
 
-      expect(alertMock).toHaveBeenCalledWith(
-        expect.stringContaining('1 invalid entry skipped'),
-      );
+      expect(alertMock).toHaveBeenCalledWith(expect.stringContaining('1 invalid entry skipped'));
     });
   });
 

@@ -64,10 +64,15 @@ export class TimecodeOverlaySettingsMenu {
 
     menu.appendChild(this.createSectionHeader('Position'));
     for (const pos of ['top-left', 'top-right', 'bottom-left', 'bottom-right'] as OverlayPosition[]) {
-      const item = this.createCheckableItem(POSITION_LABELS[pos], currentState.position === pos, 'menuitemradio', () => {
-        this.overlay.setPosition(pos);
-        this.updateRadioGroup(menu, 'data-position', pos);
-      });
+      const item = this.createCheckableItem(
+        POSITION_LABELS[pos],
+        currentState.position === pos,
+        'menuitemradio',
+        () => {
+          this.overlay.setPosition(pos);
+          this.updateRadioGroup(menu, 'data-position', pos);
+        },
+      );
       item.dataset.position = pos;
       menu.appendChild(item);
     }
@@ -287,7 +292,11 @@ export class TimecodeOverlaySettingsMenu {
     return sep;
   }
 
-  private updateRadioGroup(menu: HTMLDivElement, datasetKey: 'data-position' | 'data-font-size' | 'data-display-format', selectedValue: string): void {
+  private updateRadioGroup(
+    menu: HTMLDivElement,
+    datasetKey: 'data-position' | 'data-font-size' | 'data-display-format',
+    selectedValue: string,
+  ): void {
     const attrMap: Record<string, string> = {
       'data-position': 'position',
       'data-font-size': 'fontSize',

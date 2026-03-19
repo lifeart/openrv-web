@@ -570,8 +570,12 @@ export class ShotGridPanel extends EventEmitter<ShotGridPanelEvents> {
 
     // Media availability indicator
     const mediaUrl = this.resolveMediaUrl(version);
-    const isFrameSequence = !version.sg_uploaded_movie?.url &&
-      !(version.sg_path_to_movie && (version.sg_path_to_movie.startsWith('http://') || version.sg_path_to_movie.startsWith('https://'))) &&
+    const isFrameSequence =
+      !version.sg_uploaded_movie?.url &&
+      !(
+        version.sg_path_to_movie &&
+        (version.sg_path_to_movie.startsWith('http://') || version.sg_path_to_movie.startsWith('https://'))
+      ) &&
       !!version.sg_path_to_frames;
     if (isFrameSequence) {
       const framesLabel = document.createElement('div');

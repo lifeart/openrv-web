@@ -13,7 +13,11 @@ describe('VolumeManager', () => {
     onVolumeChanged = vi.fn();
     onMutedChanged = vi.fn();
     onPreservesPitchChanged = vi.fn();
-    callbacks = { onVolumeChanged: onVolumeChanged as any, onMutedChanged: onMutedChanged as any, onPreservesPitchChanged: onPreservesPitchChanged as any };
+    callbacks = {
+      onVolumeChanged: onVolumeChanged as any,
+      onMutedChanged: onMutedChanged as any,
+      onPreservesPitchChanged: onPreservesPitchChanged as any,
+    };
     manager.setCallbacks(callbacks);
   });
 

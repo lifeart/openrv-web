@@ -756,7 +756,11 @@ describe('EXR Layer Support', () => {
       const maliciousName = '<img src=x onerror=alert(1)>';
       const layers: EXRLayerInfo[] = [
         { name: 'RGBA', channels: ['R', 'G', 'B', 'A'], fullChannelNames: ['R', 'G', 'B', 'A'] },
-        { name: maliciousName, channels: ['R', 'G', 'B'], fullChannelNames: [`${maliciousName}.R`, `${maliciousName}.G`, `${maliciousName}.B`] },
+        {
+          name: maliciousName,
+          channels: ['R', 'G', 'B'],
+          fullChannelNames: [`${maliciousName}.R`, `${maliciousName}.G`, `${maliciousName}.B`],
+        },
       ];
       control.setEXRLayers(layers);
       control.setEXRLayer(maliciousName);

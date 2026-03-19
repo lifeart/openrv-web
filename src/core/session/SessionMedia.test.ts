@@ -28,8 +28,12 @@ const { MockVideoSourceNode, MockFileSourceNode, MockSequenceSourceNodeWrapper }
       this._sequenceInfo = sequenceInfo;
       this._frames = frames;
     }
-    get sequenceInfo() { return this._sequenceInfo; }
-    get frames() { return this._frames; }
+    get sequenceInfo() {
+      return this._sequenceInfo;
+    }
+    get frames() {
+      return this._frames;
+    }
     getElement(frame: number) {
       const idx = frame - 1;
       return this._frames[idx]?.image ?? null;
@@ -136,7 +140,17 @@ function makeSequenceSource(overrides?: Partial<MediaSource>): MediaSource {
     duration: 48,
     fps: 24,
     sequenceFrames: [],
-    sequenceInfo: { name: 'seq_####.exr', pattern: 'seq_####.exr', frames: [], startFrame: 1, endFrame: 48, width: 1920, height: 1080, fps: 24, missingFrames: [] },
+    sequenceInfo: {
+      name: 'seq_####.exr',
+      pattern: 'seq_####.exr',
+      frames: [],
+      startFrame: 1,
+      endFrame: 48,
+      width: 1920,
+      height: 1080,
+      fps: 24,
+      missingFrames: [],
+    },
     sequenceFrameMap: new Map(),
     ...overrides,
   };
@@ -1186,9 +1200,7 @@ describe('SessionMedia', () => {
 
     it('SM-051: does not resume playback when switch throws', async () => {
       (host.getIsPlaying as ReturnType<typeof vi.fn>).mockReturnValue(true);
-      vi.spyOn(media.representationManager, 'switchRepresentation').mockRejectedValue(
-        new Error('load failed'),
-      );
+      vi.spyOn(media.representationManager, 'switchRepresentation').mockRejectedValue(new Error('load failed'));
 
       await expect(media.switchRepresentation(0, 'rep-1')).rejects.toThrow('load failed');
 
@@ -1496,11 +1508,7 @@ describe('SessionMedia', () => {
       const rep = makeRepresentation({ sourceNode: mockNode, loaderConfig: { url: 'https://cdn/proxy.mp4' } });
       (media as any).applyRepresentationShim(0, rep);
 
-      expect(host.loadAudioFromVideo).toHaveBeenCalledWith(
-        source.element,
-        0.7,
-        false,
-      );
+      expect(host.loadAudioFromVideo).toHaveBeenCalledWith(source.element, 0.7, false);
     });
 
     it('SM-110: falls back to source.url when loaderConfig has no url or file', () => {
@@ -2056,9 +2064,7 @@ describe('SessionMedia', () => {
       }
 
       // Verify the initial preload call uses windowSize = 10
-      const matchingCall = preloadMock.mock.calls.find(
-        (args: any[]) => args[2] === 10,
-      );
+      const matchingCall = preloadMock.mock.calls.find((args: any[]) => args[2] === 10);
       expect(matchingCall).toBeDefined();
       expect(matchingCall![2]).toBe(10);
     });
@@ -2097,9 +2103,7 @@ describe('SessionMedia', () => {
 
       await media.getSequenceFrameImage(5);
 
-      const matchingCall = preloadMock.mock.calls.find(
-        (args: any[]) => args[2] === 5,
-      );
+      const matchingCall = preloadMock.mock.calls.find((args: any[]) => args[2] === 5);
       expect(matchingCall).toBeDefined();
       expect(matchingCall![2]).toBe(5);
     });
@@ -2138,9 +2142,7 @@ describe('SessionMedia', () => {
 
       await media.getSequenceFrameImage(10);
 
-      const matchingCall = releaseMock.mock.calls.find(
-        (args: any[]) => args[2] === 20,
-      );
+      const matchingCall = releaseMock.mock.calls.find((args: any[]) => args[2] === 20);
       expect(matchingCall).toBeDefined();
       expect(matchingCall![2]).toBe(20);
     });

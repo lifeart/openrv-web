@@ -37,7 +37,16 @@ export const STATUS_COLORS: Record<ShotStatus, string> = {
 /**
  * All valid status values
  */
-export const VALID_STATUSES: ShotStatus[] = ['pending', 'in-review', 'approved', 'needs-work', 'cbb', 'final', 'on-hold', 'omit'];
+export const VALID_STATUSES: ShotStatus[] = [
+  'pending',
+  'in-review',
+  'approved',
+  'needs-work',
+  'cbb',
+  'final',
+  'on-hold',
+  'omit',
+];
 
 /**
  * Callback interface for StatusManager to notify Session of changes
@@ -185,9 +194,7 @@ export class StatusManager {
     this._statuses.clear();
     for (const entry of entries) {
       // Validate status against VALID_STATUSES; default unknown values to 'pending'
-      const validatedStatus = (VALID_STATUSES as readonly string[]).includes(entry.status)
-        ? entry.status
-        : 'pending';
+      const validatedStatus = (VALID_STATUSES as readonly string[]).includes(entry.status) ? entry.status : 'pending';
       this._statuses.set(entry.sourceIndex, { ...entry, status: validatedStatus as ShotStatus });
     }
     this.notifyChange();

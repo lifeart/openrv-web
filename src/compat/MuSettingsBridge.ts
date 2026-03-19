@@ -177,11 +177,7 @@ export class MuSettingsBridge {
     }
 
     // If types don't match, accept any valid SettingsValue type
-    if (
-      typeof parsed === 'number' ||
-      typeof parsed === 'string' ||
-      typeof parsed === 'boolean'
-    ) {
+    if (typeof parsed === 'number' || typeof parsed === 'string' || typeof parsed === 'boolean') {
       return parsed;
     }
     if (Array.isArray(parsed)) {

@@ -986,10 +986,7 @@ describe('handleSourceLoaded', () => {
     );
 
     // Source A should be keyed by its URL
-    expect(processorA.setSourceInputColorSpace).toHaveBeenCalledWith(
-      'blob:http://localhost/abc-123',
-      'Linear sRGB',
-    );
+    expect(processorA.setSourceInputColorSpace).toHaveBeenCalledWith('blob:http://localhost/abc-123', 'Linear sRGB');
 
     // Simulate source B with same display name but different URL
     const contextB = createMockContext({
@@ -1009,10 +1006,7 @@ describe('handleSourceLoaded', () => {
     );
 
     // Source B should be keyed by ITS URL, not sharing key with source A
-    expect(processorB.setSourceInputColorSpace).toHaveBeenCalledWith(
-      'blob:http://localhost/def-456',
-      'Linear sRGB',
-    );
+    expect(processorB.setSourceInputColorSpace).toHaveBeenCalledWith('blob:http://localhost/def-456', 'Linear sRGB');
 
     // The two source IDs are different even though the names are the same
     const sourceIdA = (processorA.setActiveSource as ReturnType<typeof vi.fn>).mock.calls[0]![0];
@@ -1178,7 +1172,9 @@ describe('handleSourceLoaded', () => {
   // ---- Preference wiring: defaultExposure / defaultGamma ----
 
   it('SLH-U070: applies defaultExposure from preferences when adjustments are at default', () => {
-    const mockGetCorePreferencesManager = PreferencesManagerModule.getCorePreferencesManager as ReturnType<typeof vi.fn>;
+    const mockGetCorePreferencesManager = PreferencesManagerModule.getCorePreferencesManager as ReturnType<
+      typeof vi.fn
+    >;
     mockGetCorePreferencesManager.mockReturnValue({
       getColorDefaults: () => ({
         ...PreferencesManagerModule.DEFAULT_COLOR_DEFAULTS,
@@ -1204,7 +1200,9 @@ describe('handleSourceLoaded', () => {
   });
 
   it('SLH-U071: does NOT apply defaultExposure when adjustments are already non-default', () => {
-    const mockGetCorePreferencesManager = PreferencesManagerModule.getCorePreferencesManager as ReturnType<typeof vi.fn>;
+    const mockGetCorePreferencesManager = PreferencesManagerModule.getCorePreferencesManager as ReturnType<
+      typeof vi.fn
+    >;
     mockGetCorePreferencesManager.mockReturnValue({
       getColorDefaults: () => ({
         ...PreferencesManagerModule.DEFAULT_COLOR_DEFAULTS,
@@ -1237,7 +1235,9 @@ describe('handleSourceLoaded', () => {
   });
 
   it('SLH-U072: applies defaultGamma from preferences when adjustments are at default', () => {
-    const mockGetCorePreferencesManager = PreferencesManagerModule.getCorePreferencesManager as ReturnType<typeof vi.fn>;
+    const mockGetCorePreferencesManager = PreferencesManagerModule.getCorePreferencesManager as ReturnType<
+      typeof vi.fn
+    >;
     mockGetCorePreferencesManager.mockReturnValue({
       getColorDefaults: () => ({
         ...PreferencesManagerModule.DEFAULT_COLOR_DEFAULTS,
@@ -1263,7 +1263,9 @@ describe('handleSourceLoaded', () => {
   });
 
   it('SLH-U073: does NOT apply defaultGamma when adjustments are already non-default', () => {
-    const mockGetCorePreferencesManager = PreferencesManagerModule.getCorePreferencesManager as ReturnType<typeof vi.fn>;
+    const mockGetCorePreferencesManager = PreferencesManagerModule.getCorePreferencesManager as ReturnType<
+      typeof vi.fn
+    >;
     mockGetCorePreferencesManager.mockReturnValue({
       getColorDefaults: () => ({
         ...PreferencesManagerModule.DEFAULT_COLOR_DEFAULTS,
@@ -1298,7 +1300,9 @@ describe('handleSourceLoaded', () => {
   // ---- Preference wiring: defaultInputColorSpace ----
 
   it('SLH-U074: uses defaultInputColorSpace as fallback when extension detection returns null', () => {
-    const mockGetCorePreferencesManager = PreferencesManagerModule.getCorePreferencesManager as ReturnType<typeof vi.fn>;
+    const mockGetCorePreferencesManager = PreferencesManagerModule.getCorePreferencesManager as ReturnType<
+      typeof vi.fn
+    >;
     mockGetCorePreferencesManager.mockReturnValue({
       getColorDefaults: () => ({
         ...PreferencesManagerModule.DEFAULT_COLOR_DEFAULTS,
@@ -1326,7 +1330,9 @@ describe('handleSourceLoaded', () => {
   });
 
   it('SLH-U075: defaultInputColorSpace "Auto" is a no-op (does not set color space)', () => {
-    const mockGetCorePreferencesManager = PreferencesManagerModule.getCorePreferencesManager as ReturnType<typeof vi.fn>;
+    const mockGetCorePreferencesManager = PreferencesManagerModule.getCorePreferencesManager as ReturnType<
+      typeof vi.fn
+    >;
     mockGetCorePreferencesManager.mockReturnValue({
       getColorDefaults: () => ({
         ...PreferencesManagerModule.DEFAULT_COLOR_DEFAULTS,
@@ -1370,7 +1376,15 @@ describe('handleSourceLoaded', () => {
       updateVectorscope,
     );
 
-    const session = context.getSession() as ReturnType<typeof createMockContext extends (...a: any) => infer R ? R extends { getSession: () => infer S } ? () => S : never : never> extends () => infer S ? S : never;
+    const session = context.getSession() as ReturnType<
+      typeof createMockContext extends (...a: any) => infer R
+        ? R extends { getSession: () => infer S }
+          ? () => S
+          : never
+        : never
+    > extends () => infer S
+      ? S
+      : never;
     expect((session as any).setDisplayName).toHaveBeenCalledWith('my_video.mp4');
     expect((session as any).metadata.displayName).toBe('my_video.mp4');
   });

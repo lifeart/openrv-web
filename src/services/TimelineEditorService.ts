@@ -225,9 +225,11 @@ export class TimelineEditorService {
    * source index 0 as a best-effort fallback (the source file may not have
    * been loaded yet) so the cut structure is still visible.
    */
-  buildEDLFromRVEDLEntries(
-    entries: readonly TimelineRVEDLEntry[],
-  ): { edl: TimelineEDLEntry[]; labels: string[]; unresolvedPaths: string[] } {
+  buildEDLFromRVEDLEntries(entries: readonly TimelineRVEDLEntry[]): {
+    edl: TimelineEDLEntry[];
+    labels: string[];
+    unresolvedPaths: string[];
+  } {
     const edl: TimelineEDLEntry[] = [];
     const labels: string[] = [];
     const unresolvedPaths: string[] = [];

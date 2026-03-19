@@ -27,7 +27,7 @@ describe('Image loading architecture docs (Issue #500)', () => {
 
   it('docs do NOT claim browser-native formats bypass FileSourceNode for local files', () => {
     expect(content).not.toContain(
-      'handled at the `Session.loadImage()` level using the browser\'s `<img>` element, bypassing the `DecoderRegistry` entirely',
+      "handled at the `Session.loadImage()` level using the browser's `<img>` element, bypassing the `DecoderRegistry` entirely",
     );
   });
 

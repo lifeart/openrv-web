@@ -31,20 +31,22 @@ function createMockVersionManager() {
       groups.set(id, group);
       return { ...group, versions: [...group.versions] };
     }),
-    addVersionToGroup: vi.fn((groupId: string, sourceIndex: number, options?: { label?: string; metadata?: Record<string, string> }) => {
-      const group = groups.get(groupId);
-      if (!group) return null;
-      const maxVersion = group.versions.reduce((max: number, v: any) => Math.max(max, v.versionNumber), 0);
-      const entry = {
-        versionNumber: maxVersion + 1,
-        sourceIndex,
-        label: options?.label ?? `v${maxVersion + 1}`,
-        addedAt: new Date().toISOString(),
-        metadata: options?.metadata,
-      };
-      group.versions.push(entry);
-      return { ...entry };
-    }),
+    addVersionToGroup: vi.fn(
+      (groupId: string, sourceIndex: number, options?: { label?: string; metadata?: Record<string, string> }) => {
+        const group = groups.get(groupId);
+        if (!group) return null;
+        const maxVersion = group.versions.reduce((max: number, v: any) => Math.max(max, v.versionNumber), 0);
+        const entry = {
+          versionNumber: maxVersion + 1,
+          sourceIndex,
+          label: options?.label ?? `v${maxVersion + 1}`,
+          addedAt: new Date().toISOString(),
+          metadata: options?.metadata,
+        };
+        group.versions.push(entry);
+        return { ...entry };
+      },
+    ),
     getGroups: vi.fn(() => Array.from(groups.values()).map((g: any) => ({ ...g, versions: [...g.versions] }))),
     getGroup: vi.fn((id: string) => {
       const g = groups.get(id);
@@ -300,7 +302,10 @@ describe('ShotGridIntegrationBridge', () => {
     });
 
     await vi.waitFor(() => {
-      expect(session.loadVideo).toHaveBeenCalledWith('shot010_comp_v003', 'https://s3.example.com/movie.mov?token=abc123');
+      expect(session.loadVideo).toHaveBeenCalledWith(
+        'shot010_comp_v003',
+        'https://s3.example.com/movie.mov?token=abc123',
+      );
     });
   });
 
@@ -571,9 +576,7 @@ describe('ShotGridIntegrationBridge', () => {
     // Should NOT have called loadImage
     expect(session.loadImage).not.toHaveBeenCalled();
 
-    expect(consoleSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Loading frame sequence path'),
-    );
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Loading frame sequence path'));
 
     consoleSpy.mockRestore();
   });
@@ -618,14 +621,12 @@ describe('ShotGridIntegrationBridge', () => {
       expect(session.noteManager.addNote).toHaveBeenCalledTimes(1);
     });
 
-    expect(session.noteManager.addNote).toHaveBeenCalledWith(
-      0,
-      1045,
-      1052,
-      'Check frames 1045-1052',
-      'Reviewer',
-      { createdAt: '2024-04-10T09:00:00Z', externalId: '800', parentId: undefined, status: 'open' },
-    );
+    expect(session.noteManager.addNote).toHaveBeenCalledWith(0, 1045, 1052, 'Check frames 1045-1052', 'Reviewer', {
+      createdAt: '2024-04-10T09:00:00Z',
+      externalId: '800',
+      parentId: undefined,
+      status: 'open',
+    });
   });
 
   it('SG-INT-016: pullNotes falls back to frame_range string when sg_first/last_frame are null', async () => {
@@ -668,14 +669,12 @@ describe('ShotGridIntegrationBridge', () => {
       expect(session.noteManager.addNote).toHaveBeenCalledTimes(1);
     });
 
-    expect(session.noteManager.addNote).toHaveBeenCalledWith(
-      0,
-      100,
-      200,
-      'Check range',
-      'Reviewer',
-      { createdAt: '2024-04-10T10:00:00Z', externalId: '801', parentId: undefined, status: 'open' },
-    );
+    expect(session.noteManager.addNote).toHaveBeenCalledWith(0, 100, 200, 'Check range', 'Reviewer', {
+      createdAt: '2024-04-10T10:00:00Z',
+      externalId: '801',
+      parentId: undefined,
+      status: 'open',
+    });
   });
 
   it('SG-INT-017: pullNotes falls back to 1-1 when no frame fields are available', async () => {
@@ -718,14 +717,12 @@ describe('ShotGridIntegrationBridge', () => {
       expect(session.noteManager.addNote).toHaveBeenCalledTimes(1);
     });
 
-    expect(session.noteManager.addNote).toHaveBeenCalledWith(
-      0,
-      1,
-      1,
-      'General feedback',
-      'Reviewer',
-      { createdAt: '2024-04-10T11:00:00Z', externalId: '802', parentId: undefined, status: 'open' },
-    );
+    expect(session.noteManager.addNote).toHaveBeenCalledWith(0, 1, 1, 'General feedback', 'Reviewer', {
+      createdAt: '2024-04-10T11:00:00Z',
+      externalId: '802',
+      parentId: undefined,
+      status: 'open',
+    });
   });
 
   it('SG-INT-018: pullNotes preserves original created_at from ShotGrid', async () => {
@@ -770,7 +767,12 @@ describe('ShotGridIntegrationBridge', () => {
 
     // Verify created_at is passed through in options
     const callArgs = session.noteManager.addNote.mock.calls[0]!;
-    expect(callArgs[5]).toEqual({ createdAt: '2023-06-15T08:30:00Z', externalId: '803', parentId: undefined, status: 'open' });
+    expect(callArgs[5]).toEqual({
+      createdAt: '2023-06-15T08:30:00Z',
+      externalId: '803',
+      parentId: undefined,
+      status: 'open',
+    });
   });
 
   it('SG-INT-019: pullNotes passes undefined createdAt when created_at is empty', async () => {
@@ -960,14 +962,12 @@ describe('ShotGridIntegrationBridge', () => {
     });
 
     // Only note 902 should have been added
-    expect(session.noteManager.addNote).toHaveBeenCalledWith(
-      0,
-      10,
-      20,
-      'Brand new feedback',
-      'Supervisor',
-      { createdAt: '2024-05-02T12:00:00Z', externalId: '902', parentId: undefined, status: 'open' },
-    );
+    expect(session.noteManager.addNote).toHaveBeenCalledWith(0, 10, 20, 'Brand new feedback', 'Supervisor', {
+      createdAt: '2024-05-02T12:00:00Z',
+      externalId: '902',
+      parentId: undefined,
+      status: 'open',
+    });
   });
 
   it('SG-INT-022: pullNotes passes externalId as string to addNote', async () => {
@@ -1036,11 +1036,7 @@ describe('ShotGridIntegrationBridge', () => {
       expect(session.versionManager.createGroup).toHaveBeenCalledTimes(1);
     });
 
-    expect(session.versionManager.createGroup).toHaveBeenCalledWith(
-      'shot010',
-      [0],
-      { labels: ['shot010_comp_v003'] },
-    );
+    expect(session.versionManager.createGroup).toHaveBeenCalledWith('shot010', [0], { labels: ['shot010_comp_v003'] });
   });
 
   it('SG-INT-024: multiple versions of same shot are grouped together', async () => {
@@ -1080,14 +1076,10 @@ describe('ShotGridIntegrationBridge', () => {
 
     // Should have added to existing group, not created a new one
     expect(session.versionManager.createGroup).toHaveBeenCalledTimes(1);
-    expect(session.versionManager.addVersionToGroup).toHaveBeenCalledWith(
-      'group-1',
-      1,
-      {
-        label: 'shot010_comp_v002',
-        metadata: { sgVersionId: '102', sgStatus: 'rev' },
-      },
-    );
+    expect(session.versionManager.addVersionToGroup).toHaveBeenCalledWith('group-1', 1, {
+      label: 'shot010_comp_v002',
+      metadata: { sgVersionId: '102', sgStatus: 'rev' },
+    });
   });
 
   it('SG-INT-025: version labels match ShotGrid version code', async () => {
@@ -1103,7 +1095,11 @@ describe('ShotGridIntegrationBridge', () => {
     });
 
     panel.emit('loadVersion', {
-      version: makeVersion({ id: 201, code: 'hero_shot_final_v007', entity: { type: 'Shot', id: 20, name: 'hero_shot' } }),
+      version: makeVersion({
+        id: 201,
+        code: 'hero_shot_final_v007',
+        entity: { type: 'Shot', id: 20, name: 'hero_shot' },
+      }),
       mediaUrl: 'https://s3.example.com/hero.mp4',
     });
 
@@ -1111,11 +1107,9 @@ describe('ShotGridIntegrationBridge', () => {
       expect(session.versionManager.createGroup).toHaveBeenCalledTimes(1);
     });
 
-    expect(session.versionManager.createGroup).toHaveBeenCalledWith(
-      'hero_shot',
-      [0],
-      { labels: ['hero_shot_final_v007'] },
-    );
+    expect(session.versionManager.createGroup).toHaveBeenCalledWith('hero_shot', [0], {
+      labels: ['hero_shot_final_v007'],
+    });
   });
 
   it('SG-INT-026: different shots create separate version groups', async () => {
@@ -1179,9 +1173,7 @@ describe('ShotGridIntegrationBridge', () => {
       expect(session.loadVideo).toHaveBeenCalled();
     });
 
-    expect(consoleSpy).not.toHaveBeenCalledWith(
-      expect.stringContaining('Loading frame sequence path'),
-    );
+    expect(consoleSpy).not.toHaveBeenCalledWith(expect.stringContaining('Loading frame sequence path'));
 
     consoleSpy.mockRestore();
   });
@@ -1295,8 +1287,8 @@ describe('ShotGridIntegrationBridge', () => {
       expect(session.loadImageSequenceFromPattern).toHaveBeenCalledWith(
         'shot010_comp_v003',
         '/renders/shot.####.exr',
-        1,       // startFrame defaults to 1 when sg_first_frame is null
-        1100,    // endFrame parsed from frame_range
+        1, // startFrame defaults to 1 when sg_first_frame is null
+        1100, // endFrame parsed from frame_range
       );
     });
   });
@@ -1397,10 +1389,6 @@ describe('ShotGridIntegrationBridge', () => {
     await vi.waitFor(() => {
       expect(panel.mapVersionToSource).toHaveBeenCalledWith(101, 0);
     });
-    expect(session.versionManager.createGroup).toHaveBeenCalledWith(
-      'shot010',
-      [0],
-      { labels: ['shot010_comp_v003'] },
-    );
+    expect(session.versionManager.createGroup).toHaveBeenCalledWith('shot010', [0], { labels: ['shot010_comp_v003'] });
   });
 });

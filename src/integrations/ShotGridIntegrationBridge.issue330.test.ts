@@ -67,10 +67,12 @@ function createMockSession() {
     loadImageSequenceFromPattern: vi.fn().mockResolvedValue(undefined),
     noteManager: {
       getNotesForSource: vi.fn().mockReturnValue([]),
-      addNote: vi.fn().mockImplementation((_si: number, _fs: number, _fe: number, _text: string, _author: string, opts?: any) => ({
-        id: `local-${crypto.randomUUID().slice(0, 8)}`,
-        ...opts,
-      })),
+      addNote: vi
+        .fn()
+        .mockImplementation((_si: number, _fs: number, _fe: number, _text: string, _author: string, opts?: any) => ({
+          id: `local-${crypto.randomUUID().slice(0, 8)}`,
+          ...opts,
+        })),
       findNoteByExternalId: vi.fn().mockReturnValue(undefined),
     },
     statusManager: {
@@ -341,9 +343,9 @@ describe('Issue #330: ShotGrid note threading and status sync', () => {
       expect(pushOrder).toEqual(['R', 'C', 'GC']);
 
       // Status mappings
-      expect(mockBridgeInstance.pushNote.mock.calls[0]![1].noteStatus).toBe('clsd');  // wontfix -> clsd
-      expect(mockBridgeInstance.pushNote.mock.calls[1]![1].noteStatus).toBe('clsd');  // resolved
-      expect(mockBridgeInstance.pushNote.mock.calls[2]![1].noteStatus).toBe('opn');   // open
+      expect(mockBridgeInstance.pushNote.mock.calls[0]![1].noteStatus).toBe('clsd'); // wontfix -> clsd
+      expect(mockBridgeInstance.pushNote.mock.calls[1]![1].noteStatus).toBe('clsd'); // resolved
+      expect(mockBridgeInstance.pushNote.mock.calls[2]![1].noteStatus).toBe('opn'); // open
 
       // Reply chain: root has no parent, child replies to root(801), grandchild replies to child(802)
       expect(mockBridgeInstance.pushNote.mock.calls[0]![1].replyToNoteId).toBeUndefined();
@@ -667,9 +669,9 @@ describe('Issue #330: ShotGrid note threading and status sync', () => {
 
       const callArgs = session.noteManager.addNote.mock.calls[0]!;
       expect(callArgs[3]).toBe('Old note without new fields'); // text
-      expect(callArgs[4]).toBe('Reviewer');                    // author
-      expect(callArgs[5].status).toBe('open');                 // default
-      expect(callArgs[5].parentId).toBeUndefined();            // no parent
+      expect(callArgs[4]).toBe('Reviewer'); // author
+      expect(callArgs[5].status).toBe('open'); // default
+      expect(callArgs[5].parentId).toBeUndefined(); // no parent
       expect(callArgs[5].externalId).toBe('5000');
     });
 
@@ -703,19 +705,24 @@ describe('Issue #330: ShotGrid note threading and status sync', () => {
   describe('ShotGridBridge push payload', () => {
     it('ISS330-BRIDGE-001: pushNote includes sg_status_list in attributes', async () => {
       // Use real ShotGridBridge to test payload construction
-      const { ShotGridBridge: RealBridge } = await vi.importActual<typeof import('./ShotGridBridge')>('./ShotGridBridge');
+      const { ShotGridBridge: RealBridge } =
+        await vi.importActual<typeof import('./ShotGridBridge')>('./ShotGridBridge');
 
       const mockFetch = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>();
       // Auth response
       mockFetch.mockResolvedValueOnce({
-        ok: true, status: 200, statusText: 'OK',
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         headers: new Headers(),
         json: () => Promise.resolve({ access_token: 'token', expires_in: 300 }),
         text: () => Promise.resolve(''),
       } as Response);
       // Note creation response
       mockFetch.mockResolvedValueOnce({
-        ok: true, status: 201, statusText: 'Created',
+        ok: true,
+        status: 201,
+        statusText: 'Created',
         headers: new Headers(),
         json: () => Promise.resolve({ data: { id: 999, subject: 'Test' } }),
         text: () => Promise.resolve(''),
@@ -736,17 +743,22 @@ describe('Issue #330: ShotGrid note threading and status sync', () => {
     });
 
     it('ISS330-BRIDGE-002: pushNote includes reply_to_entity in relationships', async () => {
-      const { ShotGridBridge: RealBridge } = await vi.importActual<typeof import('./ShotGridBridge')>('./ShotGridBridge');
+      const { ShotGridBridge: RealBridge } =
+        await vi.importActual<typeof import('./ShotGridBridge')>('./ShotGridBridge');
 
       const mockFetch = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>();
       mockFetch.mockResolvedValueOnce({
-        ok: true, status: 200, statusText: 'OK',
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         headers: new Headers(),
         json: () => Promise.resolve({ access_token: 'token', expires_in: 300 }),
         text: () => Promise.resolve(''),
       } as Response);
       mockFetch.mockResolvedValueOnce({
-        ok: true, status: 201, statusText: 'Created',
+        ok: true,
+        status: 201,
+        statusText: 'Created',
         headers: new Headers(),
         json: () => Promise.resolve({ data: { id: 1000, subject: 'Reply' } }),
         text: () => Promise.resolve(''),
@@ -769,17 +781,22 @@ describe('Issue #330: ShotGrid note threading and status sync', () => {
     });
 
     it('ISS330-BRIDGE-003: pushNote omits reply_to_entity when not provided', async () => {
-      const { ShotGridBridge: RealBridge } = await vi.importActual<typeof import('./ShotGridBridge')>('./ShotGridBridge');
+      const { ShotGridBridge: RealBridge } =
+        await vi.importActual<typeof import('./ShotGridBridge')>('./ShotGridBridge');
 
       const mockFetch = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>();
       mockFetch.mockResolvedValueOnce({
-        ok: true, status: 200, statusText: 'OK',
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         headers: new Headers(),
         json: () => Promise.resolve({ access_token: 'token', expires_in: 300 }),
         text: () => Promise.resolve(''),
       } as Response);
       mockFetch.mockResolvedValueOnce({
-        ok: true, status: 201, statusText: 'Created',
+        ok: true,
+        status: 201,
+        statusText: 'Created',
         headers: new Headers(),
         json: () => Promise.resolve({ data: { id: 1001, subject: 'Top' } }),
         text: () => Promise.resolve(''),
@@ -797,17 +814,22 @@ describe('Issue #330: ShotGrid note threading and status sync', () => {
     });
 
     it('ISS330-BRIDGE-004: pushNote omits sg_status_list when not provided', async () => {
-      const { ShotGridBridge: RealBridge } = await vi.importActual<typeof import('./ShotGridBridge')>('./ShotGridBridge');
+      const { ShotGridBridge: RealBridge } =
+        await vi.importActual<typeof import('./ShotGridBridge')>('./ShotGridBridge');
 
       const mockFetch = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>();
       mockFetch.mockResolvedValueOnce({
-        ok: true, status: 200, statusText: 'OK',
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         headers: new Headers(),
         json: () => Promise.resolve({ access_token: 'token', expires_in: 300 }),
         text: () => Promise.resolve(''),
       } as Response);
       mockFetch.mockResolvedValueOnce({
-        ok: true, status: 201, statusText: 'Created',
+        ok: true,
+        status: 201,
+        statusText: 'Created',
         headers: new Headers(),
         json: () => Promise.resolve({ data: { id: 1002, subject: 'No status' } }),
         text: () => Promise.resolve(''),
@@ -831,17 +853,22 @@ describe('Issue #330: ShotGrid note threading and status sync', () => {
 
   describe('getNotesForVersion fields', () => {
     it('ISS330-BRIDGE-005: getNotesForVersion requests sg_status_list and reply_to_entity', async () => {
-      const { ShotGridBridge: RealBridge } = await vi.importActual<typeof import('./ShotGridBridge')>('./ShotGridBridge');
+      const { ShotGridBridge: RealBridge } =
+        await vi.importActual<typeof import('./ShotGridBridge')>('./ShotGridBridge');
 
       const mockFetch = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>();
       mockFetch.mockResolvedValueOnce({
-        ok: true, status: 200, statusText: 'OK',
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         headers: new Headers(),
         json: () => Promise.resolve({ access_token: 'token', expires_in: 300 }),
         text: () => Promise.resolve(''),
       } as Response);
       mockFetch.mockResolvedValueOnce({
-        ok: true, status: 200, statusText: 'OK',
+        ok: true,
+        status: 200,
+        statusText: 'OK',
         headers: new Headers(),
         json: () => Promise.resolve({ data: [] }),
         text: () => Promise.resolve(''),

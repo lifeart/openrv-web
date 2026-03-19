@@ -897,12 +897,13 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
     }
 
     const patternFilename = pattern.split('/').pop() ?? pattern;
-    const name = patternFilename
-      .replace(/##+/g, '')
-      .replace(/%\d*d/g, '')
-      .replace(/@+/g, '')
-      .replace(/[._-]?\.[^.]+$/, '')
-      .replace(/[._-]$/, '') || 'sequence';
+    const name =
+      patternFilename
+        .replace(/##+/g, '')
+        .replace(/%\d*d/g, '')
+        .replace(/@+/g, '')
+        .replace(/[._-]?\.[^.]+$/, '')
+        .replace(/[._-]$/, '') || 'sequence';
 
     return this.loadImageSequenceFromPattern(name, pattern, startFrame, endFrame, fps);
   }
@@ -1071,9 +1072,7 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
     // URL-based frames (from pattern loading) use URL fetching; file-based
     // frames (from local file drops) go through the decoder pipeline.
     const isURLFrame = frame.url && frame.file.size === 0;
-    const image = isURLFrame
-      ? await loadFrameImageFromURL(frame)
-      : await loadFrameImage(frame);
+    const image = isURLFrame ? await loadFrameImageFromURL(frame) : await loadFrameImage(frame);
     preloadFrames(source.sequenceFrames, frame.index, 5);
     releaseDistantFrames(source.sequenceFrames, frame.index, 20);
 
@@ -1409,9 +1408,7 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
       // work the same way as a normal video load path.
       const videoUrl =
         representation.loaderConfig.url ??
-        (representation.loaderConfig.file
-          ? URL.createObjectURL(representation.loaderConfig.file)
-          : source.url);
+        (representation.loaderConfig.file ? URL.createObjectURL(representation.loaderConfig.file) : source.url);
 
       if (videoUrl) {
         const video = document.createElement('video');
@@ -1426,11 +1423,7 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
         video.load();
 
         source.element = video;
-        this._host!.loadAudioFromVideo(
-          video,
-          this._host!.getEffectiveVolume(),
-          this._host!.getMuted(),
-        );
+        this._host!.loadAudioFromVideo(video, this._host!.getEffectiveVolume(), this._host!.getMuted());
       }
     } else if (sourceNode instanceof FileSourceNode) {
       source.fileSourceNode = sourceNode;

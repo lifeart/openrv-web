@@ -48,9 +48,7 @@ vi.mock('./ui/components/shared/Modal', () => ({
 // Context factory
 // ---------------------------------------------------------------------------
 
-function createMockContext(
-  overrides: { initializeError?: Error } = {},
-): PersistenceManagerContext {
+function createMockContext(overrides: { initializeError?: Error } = {}): PersistenceManagerContext {
   const { initializeError } = overrides;
 
   return {
@@ -93,7 +91,9 @@ function createMockContext(
     autoSaveManager: {
       on: vi.fn(() => vi.fn()),
       initialize: initializeError
-        ? vi.fn(async () => { throw initializeError; })
+        ? vi.fn(async () => {
+            throw initializeError;
+          })
         : vi.fn(async () => false),
       markDirty: vi.fn(),
       saveNow: vi.fn(),
@@ -165,10 +165,7 @@ describe('Issue #437 – auto-save failure alert references correct save mechani
 
     await mgr.init();
 
-    expect(showAlert).toHaveBeenCalledWith(
-      expect.stringContaining('IndexedDB not available'),
-      expect.anything(),
-    );
+    expect(showAlert).toHaveBeenCalledWith(expect.stringContaining('IndexedDB not available'), expect.anything());
   });
 
   it('ISS-437-003: alert references toolbar Save button, not File > Save Project', async () => {
@@ -180,7 +177,8 @@ describe('Issue #437 – auto-save failure alert references correct save mechani
     await mgr.init();
 
     const alertMessage = (showAlert as ReturnType<typeof vi.fn>).mock.calls.find(
-      (call: unknown[]) => typeof call[0] === 'string' && (call[0] as string).includes('Auto-save could not be initialized'),
+      (call: unknown[]) =>
+        typeof call[0] === 'string' && (call[0] as string).includes('Auto-save could not be initialized'),
     );
     expect(alertMessage).toBeDefined();
     const message = alertMessage![0] as string;
@@ -203,7 +201,8 @@ describe('Issue #437 – auto-save failure alert references correct save mechani
     // showAlert may be called for other reasons (snapshot init, etc.)
     // but NOT for auto-save failure
     const autoSaveAlerts = (showAlert as ReturnType<typeof vi.fn>).mock.calls.filter(
-      (call: unknown[]) => typeof call[0] === 'string' && (call[0] as string).includes('Auto-save could not be initialized'),
+      (call: unknown[]) =>
+        typeof call[0] === 'string' && (call[0] as string).includes('Auto-save could not be initialized'),
     );
     expect(autoSaveAlerts).toHaveLength(0);
   });

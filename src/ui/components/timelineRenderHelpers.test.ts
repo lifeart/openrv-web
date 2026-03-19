@@ -223,8 +223,12 @@ describe('timelineRenderHelpers', () => {
       const frameToX = (f: number) => 60 + (f - 1) * 10;
       const alphaValues: number[] = [];
       Object.defineProperty(ctx, 'globalAlpha', {
-        set(v: number) { alphaValues.push(v); },
-        get() { return alphaValues[alphaValues.length - 1] ?? 1; },
+        set(v: number) {
+          alphaValues.push(v);
+        },
+        get() {
+          return alphaValues[alphaValues.length - 1] ?? 1;
+        },
       });
 
       drawMissingFrameMarkers(ctx, [5], 1, frameToX, 0, 42, '#ff6b6b', 10);
@@ -249,8 +253,12 @@ describe('timelineRenderHelpers', () => {
       const frameToX = (f: number) => 60 + (f - 1) * 10;
       const fillStyles: string[] = [];
       Object.defineProperty(ctx, 'fillStyle', {
-        set(v: string) { fillStyles.push(v); },
-        get() { return fillStyles[fillStyles.length - 1] || ''; },
+        set(v: string) {
+          fillStyles.push(v);
+        },
+        get() {
+          return fillStyles[fillStyles.length - 1] || '';
+        },
       });
 
       drawMissingFrameMarkers(ctx, [2], 1, frameToX, 0, 42, '#ff6b6b', 10);

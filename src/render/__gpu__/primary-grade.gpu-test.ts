@@ -15,7 +15,8 @@ import { setupIdentityPipeline } from './helpers/pipeline';
 import viewerVertSrc from '../shaders/viewer.vert.glsl?raw';
 import viewerFragSrc from '../shaders/viewer.frag.glsl?raw';
 
-const W = 1, H = 1;
+const W = 1,
+  H = 1;
 
 function createFloatFBO(gl: WebGL2RenderingContext, width: number, height: number) {
   const fbo = gl.createFramebuffer()!;
@@ -26,7 +27,13 @@ function createFloatFBO(gl: WebGL2RenderingContext, width: number, height: numbe
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
   gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
-  return { fbo, dispose: () => { gl.deleteFramebuffer(fbo); gl.deleteTexture(tex); } };
+  return {
+    fbo,
+    dispose: () => {
+      gl.deleteFramebuffer(fbo);
+      gl.deleteTexture(tex);
+    },
+  };
 }
 
 describe('Primary Grade — Pixel Accuracy (real GPU)', () => {
@@ -56,7 +63,9 @@ describe('Primary Grade — Pixel Accuracy (real GPU)', () => {
 
   /** Renders with a specific uniform override applied on top of identity pipeline. */
   function renderWith(
-    inputR: number, inputG: number, inputB: number,
+    inputR: number,
+    inputG: number,
+    inputB: number,
     setUniforms: (gl: WebGL2RenderingContext, program: WebGLProgram) => void,
   ): Float32Array {
     setupIdentityPipeline(gl, program);
@@ -182,7 +191,9 @@ describe('Primary Grade — Pixel Accuracy (real GPU)', () => {
   describe('Saturation', () => {
     it('saturation 0.0: color -> grayscale (luma)', () => {
       setup();
-      const r = 0.8, g = 0.2, b = 0.5;
+      const r = 0.8,
+        g = 0.2,
+        b = 0.5;
       const luma = r * 0.2126 + g * 0.7152 + b * 0.0722;
       const pixels = renderWith(r, g, b, (gl, prog) => {
         gl.uniform1f(gl.getUniformLocation(prog, 'u_saturation'), 0);
@@ -200,7 +211,9 @@ describe('Primary Grade — Pixel Accuracy (real GPU)', () => {
 
     it('saturation 2.0: double saturation on colored input', () => {
       setup();
-      const r = 0.6, g = 0.4, b = 0.2;
+      const r = 0.6,
+        g = 0.4,
+        b = 0.2;
       const luma = r * 0.2126 + g * 0.7152 + b * 0.0722;
       // mix(luma, color, 2.0) = luma + 2*(color - luma)
       const er = luma + 2 * (r - luma);
@@ -248,7 +261,7 @@ describe('Primary Grade — Pixel Accuracy (real GPU)', () => {
     it('temperature +50: shifts red up, blue down', () => {
       setup();
       // temp/100 * 0.1 = 0.05 shift
-      const t = 50 / 100.0 * 0.1; // 0.05
+      const t = (50 / 100.0) * 0.1; // 0.05
       const pixels = renderWith(0.5, 0.5, 0.5, (gl, prog) => {
         gl.uniform1f(gl.getUniformLocation(prog, 'u_temperature'), 50);
       });
@@ -257,17 +270,24 @@ describe('Primary Grade — Pixel Accuracy (real GPU)', () => {
 
     it('tint +50: shifts green up, red/blue down slightly', () => {
       setup();
-      const g_shift = 50 / 100.0 * 0.1;  // +0.05
-      const rb_shift = 50 / 100.0 * 0.05; // -0.025
+      const g_shift = (50 / 100.0) * 0.1; // +0.05
+      const rb_shift = (50 / 100.0) * 0.05; // -0.025
       const pixels = renderWith(0.5, 0.5, 0.5, (gl, prog) => {
         gl.uniform1f(gl.getUniformLocation(prog, 'u_tint'), 50);
       });
-      expectPixel(pixels, W, 0, 0, {
-        r: 0.5 - rb_shift,
-        g: 0.5 + g_shift,
-        b: 0.5 - rb_shift,
-        a: 1.0,
-      }, EPSILON.HDR_HALF);
+      expectPixel(
+        pixels,
+        W,
+        0,
+        0,
+        {
+          r: 0.5 - rb_shift,
+          g: 0.5 + g_shift,
+          b: 0.5 - rb_shift,
+          a: 1.0,
+        },
+        EPSILON.HDR_HALF,
+      );
     });
   });
 });

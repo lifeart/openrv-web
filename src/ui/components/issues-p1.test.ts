@@ -19,12 +19,8 @@ describe('Issue #101: InfoPanel unwired fields documentation', () => {
     const panel = new InfoPanel();
     panel.enable();
 
-    expect(spy).toHaveBeenCalledWith(
-      expect.stringContaining('Most fields'),
-    );
-    expect(spy).toHaveBeenCalledWith(
-      expect.stringContaining('#101'),
-    );
+    expect(spy).toHaveBeenCalledWith(expect.stringContaining('Most fields'));
+    expect(spy).toHaveBeenCalledWith(expect.stringContaining('#101'));
 
     panel.dispose();
   });
@@ -36,9 +32,7 @@ describe('Issue #101: InfoPanel unwired fields documentation', () => {
     panel.disable();
     panel.enable();
 
-    const matchingCalls = spy.mock.calls.filter((args) =>
-      String(args[0]).includes('#101'),
-    );
+    const matchingCalls = spy.mock.calls.filter((args) => String(args[0]).includes('#101'));
     expect(matchingCalls).toHaveLength(1);
 
     panel.dispose();

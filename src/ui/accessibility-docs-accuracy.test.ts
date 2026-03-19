@@ -38,9 +38,7 @@ describe('PixelProbe value row accessibility', () => {
   it('createValueRow produces <div> elements, not <button>', () => {
     const body = getCreateValueRowBody(readSourceFile('components/PixelProbe.ts'));
 
-    const rowMatch = body.match(
-      /const row = document\.createElement\(['"](\w+)['"]\)/,
-    );
+    const rowMatch = body.match(/const row = document\.createElement\(['"](\w+)['"]\)/);
     expect(rowMatch).not.toBeNull();
     expect(rowMatch![1]).toBe('div');
   });
@@ -74,9 +72,7 @@ describe('CollapsibleSection accordion header accessibility', () => {
     const source = readSourceFile('layout/panels/CollapsibleSection.ts');
 
     // The header is created with document.createElement('div')
-    const headerMatch = source.match(
-      /this\.header\s*=\s*document\.createElement\(['"](\w+)['"]\)/,
-    );
+    const headerMatch = source.match(/this\.header\s*=\s*document\.createElement\(['"](\w+)['"]\)/);
     expect(headerMatch).not.toBeNull();
     expect(headerMatch![1]).toBe('div');
   });
@@ -111,9 +107,7 @@ describe('LeftPanelContent history item accessibility', () => {
 
     // The renderHistory method creates items with document.createElement('div')
     const renderHistorySection = source.slice(source.indexOf('renderHistory'));
-    const itemMatch = renderHistorySection.match(
-      /const item = document\.createElement\(['"](\w+)['"]\)/,
-    );
+    const itemMatch = renderHistorySection.match(/const item = document\.createElement\(['"](\w+)['"]\)/);
     expect(itemMatch).not.toBeNull();
     expect(itemMatch![1]).toBe('div');
 

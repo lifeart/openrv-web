@@ -748,8 +748,14 @@ describe('DecoderRegistry', () => {
       const buffer = new ArrayBuffer(64);
       const bytes = new Uint8Array(buffer);
       // SMPTE UL prefix for partition pack
-      bytes[0] = 0x06; bytes[1] = 0x0e; bytes[2] = 0x2b; bytes[3] = 0x34;
-      bytes[4] = 0x02; bytes[5] = 0x05; bytes[6] = 0x01; bytes[7] = 0x01;
+      bytes[0] = 0x06;
+      bytes[1] = 0x0e;
+      bytes[2] = 0x2b;
+      bytes[3] = 0x34;
+      bytes[4] = 0x02;
+      bytes[5] = 0x05;
+      bytes[6] = 0x01;
+      bytes[7] = 0x01;
 
       const registry = new DecoderRegistry();
       // MXF should NOT be detected — it routes through video/container classification
@@ -771,8 +777,14 @@ describe('DecoderRegistry', () => {
       const buffer = new ArrayBuffer(64);
       const bytes = new Uint8Array(buffer);
       // SMPTE UL prefix
-      bytes[0] = 0x06; bytes[1] = 0x0e; bytes[2] = 0x2b; bytes[3] = 0x34;
-      bytes[4] = 0x02; bytes[5] = 0x05; bytes[6] = 0x01; bytes[7] = 0x01;
+      bytes[0] = 0x06;
+      bytes[1] = 0x0e;
+      bytes[2] = 0x2b;
+      bytes[3] = 0x34;
+      bytes[4] = 0x02;
+      bytes[5] = 0x05;
+      bytes[6] = 0x01;
+      bytes[7] = 0x01;
 
       const registry = new DecoderRegistry();
       const result = await registry.detectAndDecode(buffer);
@@ -783,9 +795,9 @@ describe('DecoderRegistry', () => {
       const registry = new DecoderRegistry();
       const buffer = new ArrayBuffer(64);
       // decodeAs with 'mxf' (as a string) should throw because no decoder is registered
-      await expect(
-        decodeAs(registry, 'mxf' as keyof DecoderOptionsMap, buffer),
-      ).rejects.toThrow(/no decoder registered/i);
+      await expect(decodeAs(registry, 'mxf' as keyof DecoderOptionsMap, buffer)).rejects.toThrow(
+        /no decoder registered/i,
+      );
     });
 
     it('DR-MXF-005: mxf is not in BuiltinFormatName (type-level guard)', () => {

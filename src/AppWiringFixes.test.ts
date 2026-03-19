@@ -572,10 +572,7 @@ describe('DCCBridge loadMedia error reporting', () => {
     });
 
     await vi.waitFor(() => {
-      expect(session.loadVideo).toHaveBeenCalledWith(
-        'clip.mp4',
-        'https://cdn.example.com/clip.mp4#t=10',
-      );
+      expect(session.loadVideo).toHaveBeenCalledWith('clip.mp4', 'https://cdn.example.com/clip.mp4#t=10');
     });
     expect(session.loadImage).not.toHaveBeenCalled();
   });
@@ -590,10 +587,7 @@ describe('DCCBridge loadMedia error reporting', () => {
     });
 
     await vi.waitFor(() => {
-      expect(session.loadImage).toHaveBeenCalledWith(
-        'plate.exr',
-        'https://cdn.example.com/plate.exr?sig=xyz',
-      );
+      expect(session.loadImage).toHaveBeenCalledWith('plate.exr', 'https://cdn.example.com/plate.exr?sig=xyz');
     });
     expect(session.loadVideo).not.toHaveBeenCalled();
   });
@@ -805,11 +799,21 @@ describe('DCCBridge outbound message drop detection (#443)', () => {
 
     session.emit('frameChanged', 1);
     colorControls.emit('adjustmentsChanged', {
-      exposure: 0, gamma: 1, temperature: 0, tint: 0, saturation: 1, contrast: 1,
+      exposure: 0,
+      gamma: 1,
+      temperature: 0,
+      tint: 0,
+      saturation: 1,
+      contrast: 1,
     });
     paintEngine.emit('strokeAdded', {
-      type: 'pen', id: 'x', frame: 1, user: 'u',
-      color: [1, 0, 0, 1], width: 1, points: [{ x: 0, y: 0 }],
+      type: 'pen',
+      id: 'x',
+      frame: 1,
+      user: 'u',
+      color: [1, 0, 0, 1],
+      width: 1,
+      points: [{ x: 0, y: 0 }],
     });
 
     // Logger.warn calls console.warn — none should have been called with "dropped"

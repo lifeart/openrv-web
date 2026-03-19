@@ -143,10 +143,7 @@ describe('Version Selector Integration', () => {
       }
 
       // Add a new source and re-detect
-      const updatedSources = [
-        ...sources,
-        { name: 'shot_v3.exr', index: 2 },
-      ];
+      const updatedSources = [...sources, { name: 'shot_v3.exr', index: 2 }];
       const groups = session.versionManager.autoDetectGroups(updatedSources);
       expect(groups).toHaveLength(1);
       expect(groups[0]!.versions).toHaveLength(3);

@@ -28,10 +28,18 @@ function createMockContext(overrides: Partial<PersistenceManagerContext> = {}): 
         bgColor: [0.18, 0.18, 0.18, 1.0],
       },
       getPlaybackState: vi.fn().mockReturnValue({
-        currentFrame: 1, inPoint: 1, outPoint: 100, fps: 24,
-        loopMode: 'loop', playbackMode: 'realtime', volume: 1,
-        muted: false, preservesPitch: true, audioScrubEnabled: true,
-        marks: [], currentSourceIndex: 0,
+        currentFrame: 1,
+        inPoint: 1,
+        outPoint: 100,
+        fps: 24,
+        loopMode: 'loop',
+        playbackMode: 'realtime',
+        volume: 1,
+        muted: false,
+        preservesPitch: true,
+        audioScrubEnabled: true,
+        marks: [],
+        currentSourceIndex: 0,
       }),
       setPlaybackState: vi.fn(),
       clearSources: vi.fn(),
@@ -76,14 +84,45 @@ function createMockContext(overrides: Partial<PersistenceManagerContext> = {}): 
       getGamutMappingState: () => ({ mode: 'off' }),
       getColorInversion: () => false,
       getCurves: () => ({
-        master: { points: [{ x: 0, y: 0 }, { x: 1, y: 1 }], enabled: true },
-        red: { points: [{ x: 0, y: 0 }, { x: 1, y: 1 }], enabled: true },
-        green: { points: [{ x: 0, y: 0 }, { x: 1, y: 1 }], enabled: true },
-        blue: { points: [{ x: 0, y: 0 }, { x: 1, y: 1 }], enabled: true },
+        master: {
+          points: [
+            { x: 0, y: 0 },
+            { x: 1, y: 1 },
+          ],
+          enabled: true,
+        },
+        red: {
+          points: [
+            { x: 0, y: 0 },
+            { x: 1, y: 1 },
+          ],
+          enabled: true,
+        },
+        green: {
+          points: [
+            { x: 0, y: 0 },
+            { x: 1, y: 1 },
+          ],
+          enabled: true,
+        },
+        blue: {
+          points: [
+            { x: 0, y: 0 },
+            { x: 1, y: 1 },
+          ],
+          enabled: true,
+        },
       }),
       getDeinterlaceParams: () => ({ method: 'bob', fieldOrder: 'tff', enabled: false }),
       getFilmEmulationParams: () => ({ enabled: false, stock: 'kodak-portra-400', intensity: 1.0 }),
-      getPerspectiveParams: () => ({ enabled: false, topLeft: { x: 0, y: 0 }, topRight: { x: 1, y: 0 }, bottomRight: { x: 1, y: 1 }, bottomLeft: { x: 0, y: 1 }, quality: 'bilinear' }),
+      getPerspectiveParams: () => ({
+        enabled: false,
+        topLeft: { x: 0, y: 0 },
+        topRight: { x: 1, y: 0 },
+        bottomRight: { x: 1, y: 1 },
+        bottomLeft: { x: 0, y: 1 },
+        quality: 'bilinear',
+      }),
       getStabilizationParams: () => ({ enabled: false }),
       isUncropActive: () => false,
       getLUTPipeline: () => ({

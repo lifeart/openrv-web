@@ -73,9 +73,18 @@ function createMockComponents(): SessionComponents {
     session: {
       allSources: [],
       getPlaybackState: vi.fn().mockReturnValue({
-        currentFrame: 1, fps: 24, loopMode: 'loop', playbackMode: 'realtime',
-        volume: 1, muted: false, marks: [], currentSourceIndex: 0,
-        sourceAIndex: 0, sourceBIndex: -1, currentAB: 'A', audioScrubEnabled: true,
+        currentFrame: 1,
+        fps: 24,
+        loopMode: 'loop',
+        playbackMode: 'realtime',
+        volume: 1,
+        muted: false,
+        marks: [],
+        currentSourceIndex: 0,
+        sourceAIndex: 0,
+        sourceBIndex: -1,
+        currentAB: 'A',
+        audioScrubEnabled: true,
       }),
       setPlaybackState: vi.fn(),
       clearSources: vi.fn(),
@@ -105,15 +114,25 @@ function createMockComponents(): SessionComponents {
       getLensParams: vi.fn().mockReturnValue({}),
       getWipeState: vi.fn().mockReturnValue({}),
       getStackLayers: vi.fn().mockReturnValue([]),
-      getNoiseReductionParams: vi.fn().mockReturnValue({ strength: 0, luminanceStrength: 50, chromaStrength: 75, radius: 2 }),
+      getNoiseReductionParams: vi
+        .fn()
+        .mockReturnValue({ strength: 0, luminanceStrength: 50, chromaStrength: 75, radius: 2 }),
       getWatermarkState: vi.fn().mockReturnValue({
-        enabled: false, imageUrl: null, position: 'bottom-right',
-        customX: 0.9, customY: 0.9, scale: 1, opacity: 0.7, margin: 20,
+        enabled: false,
+        imageUrl: null,
+        position: 'bottom-right',
+        customX: 0.9,
+        customY: 0.9,
+        scale: 1,
+        opacity: 0.7,
+        margin: 20,
       }),
       getLUT: vi.fn().mockReturnValue(undefined),
       getLUTIntensity: vi.fn().mockReturnValue(1.0),
       getPARState: vi.fn().mockReturnValue({ enabled: false, par: 1.0, preset: 'square' }),
-      getBackgroundPatternState: vi.fn().mockReturnValue({ pattern: 'black', checkerSize: 'medium', customColor: '#1a1a1a' }),
+      getBackgroundPatternState: vi
+        .fn()
+        .mockReturnValue({ pattern: 'black', checkerSize: 'medium', customColor: '#1a1a1a' }),
       isOCIOEnabled: vi.fn().mockReturnValue(false),
       getDisplayColorState: vi.fn().mockReturnValue({ ...DEFAULT_DISPLAY_COLOR_STATE }),
       getGamutMappingState: vi.fn().mockReturnValue({ ...DEFAULT_GAMUT_MAPPING_STATE }),
@@ -129,7 +148,16 @@ function createMockComponents(): SessionComponents {
       getStereoAlignMode: vi.fn().mockReturnValue(DEFAULT_STEREO_ALIGN_MODE),
       getDeinterlaceParams: vi.fn().mockReturnValue({ method: 'bob', fieldOrder: 'tff', enabled: false }),
       getFilmEmulationParams: vi.fn().mockReturnValue({ enabled: false, stock: 'kodak-portra-400', intensity: 1.0 }),
-      getPerspectiveParams: vi.fn().mockReturnValue({ enabled: false, topLeft: { x: 0, y: 0 }, topRight: { x: 1, y: 0 }, bottomRight: { x: 1, y: 1 }, bottomLeft: { x: 0, y: 1 }, quality: 'bilinear' }),
+      getPerspectiveParams: vi
+        .fn()
+        .mockReturnValue({
+          enabled: false,
+          topLeft: { x: 0, y: 0 },
+          topRight: { x: 1, y: 0 },
+          bottomRight: { x: 1, y: 1 },
+          bottomLeft: { x: 0, y: 1 },
+          quality: 'bilinear',
+        }),
       getStabilizationParams: vi.fn().mockReturnValue({ enabled: false, smoothingStrength: 50 }),
       isUncropActive: vi.fn().mockReturnValue(false),
       setColorAdjustments: vi.fn(),
@@ -158,7 +186,14 @@ function createMockComponents(): SessionComponents {
       getLUTPipeline: vi.fn().mockReturnValue({
         getSerializableState: vi.fn().mockReturnValue({
           sources: {},
-          displayLUT: { enabled: false, lutName: null, intensity: 1, source: 'manual', inMatrix: null, outMatrix: null },
+          displayLUT: {
+            enabled: false,
+            lutName: null,
+            intensity: 1,
+            source: 'manual',
+            inMatrix: null,
+            outMatrix: null,
+          },
           activeSourceId: null,
         }),
         loadSerializableState: vi.fn(),
@@ -182,69 +217,113 @@ describe('Issue #485: Overlay states must round-trip through serialization', () 
 
     // Configure non-default overlay states
     const timecodeState: TimecodeOverlayState = {
-      enabled: true, position: 'bottom-right', fontSize: 'large',
-      showFrameCounter: false, backgroundOpacity: 0.8, displayFormat: 'smpte',
-      sourceTimecode: undefined, showSourceTimecode: true,
+      enabled: true,
+      position: 'bottom-right',
+      fontSize: 'large',
+      showFrameCounter: false,
+      backgroundOpacity: 0.8,
+      displayFormat: 'smpte',
+      sourceTimecode: undefined,
+      showSourceTimecode: true,
     };
     const safeAreasState: SafeAreasState = {
-      enabled: true, titleSafe: false, actionSafe: true,
-      customSafeArea: false, customSafeAreaPercentage: 85,
-      centerCrosshair: true, ruleOfThirds: true,
-      aspectRatio: '2.39:1', guideColor: '#ff0000', guideOpacity: 0.9,
+      enabled: true,
+      titleSafe: false,
+      actionSafe: true,
+      customSafeArea: false,
+      customSafeAreaPercentage: 85,
+      centerCrosshair: true,
+      ruleOfThirds: true,
+      aspectRatio: '2.39:1',
+      guideColor: '#ff0000',
+      guideOpacity: 0.9,
     };
     const clippingState: ClippingOverlayState = {
-      enabled: true, showHighlights: true, showShadows: false,
+      enabled: true,
+      showHighlights: true,
+      showShadows: false,
       highlightColor: { r: 200, g: 0, b: 0 },
       shadowColor: { r: 0, g: 0, b: 200 },
       bothColor: { r: 200, g: 200, b: 0 },
-      opacity: 0.5, shadowThreshold: 0.1, highlightThreshold: 0.9,
+      opacity: 0.5,
+      shadowThreshold: 0.1,
+      highlightThreshold: 0.9,
     };
     const infoStripState: InfoStripOverlayState = {
-      enabled: true, showFullPath: true, backgroundOpacity: 0.3,
+      enabled: true,
+      showFullPath: true,
+      backgroundOpacity: 0.3,
     };
     const spotlightState: SpotlightState = {
-      enabled: true, shape: 'rectangle', x: 0.3, y: 0.4,
-      width: 0.15, height: 0.25, dimAmount: 0.6, feather: 0.1,
+      enabled: true,
+      shape: 'rectangle',
+      x: 0.3,
+      y: 0.4,
+      width: 0.15,
+      height: 0.25,
+      dimAmount: 0.6,
+      feather: 0.1,
     };
     const bugState: BugOverlayState = {
-      enabled: true, imageUrl: 'https://example.com/logo.png',
-      position: 'top-left', size: 0.12, opacity: 0.9, margin: 8,
+      enabled: true,
+      imageUrl: 'https://example.com/logo.png',
+      position: 'top-left',
+      size: 0.12,
+      opacity: 0.9,
+      margin: 8,
     };
     const exrWindowState: EXRWindowOverlayState = {
-      enabled: true, showDataWindow: true, showDisplayWindow: false,
-      dataWindowColor: '#00ff00', displayWindowColor: '#ff00ff',
-      lineWidth: 3, dashPattern: [8, 4], showLabels: false,
+      enabled: true,
+      showDataWindow: true,
+      showDisplayWindow: false,
+      dataWindowColor: '#00ff00',
+      displayWindowColor: '#ff00ff',
+      lineWidth: 3,
+      dashPattern: [8, 4],
+      showLabels: false,
     };
     const fpsState: FPSIndicatorState = {
-      enabled: false, position: 'bottom-left', showDroppedFrames: false,
-      showTargetFps: false, backgroundOpacity: 0.4,
-      warningThreshold: 0.9, criticalThreshold: 0.8,
+      enabled: false,
+      position: 'bottom-left',
+      showDroppedFrames: false,
+      showTargetFps: false,
+      backgroundOpacity: 0.4,
+      warningThreshold: 0.9,
+      criticalThreshold: 0.8,
     };
 
-    (components.viewer.getTimecodeOverlay as ReturnType<typeof vi.fn>).mockReturnValue(
-      { getState: vi.fn().mockReturnValue(timecodeState), setState: vi.fn() },
-    );
-    (components.viewer.getSafeAreasOverlay as ReturnType<typeof vi.fn>).mockReturnValue(
-      { getState: vi.fn().mockReturnValue(safeAreasState), setState: vi.fn() },
-    );
-    (components.viewer.getClippingOverlay as ReturnType<typeof vi.fn>).mockReturnValue(
-      { getState: vi.fn().mockReturnValue(clippingState), setState: vi.fn() },
-    );
-    (components.viewer.getInfoStripOverlay as ReturnType<typeof vi.fn>).mockReturnValue(
-      { getState: vi.fn().mockReturnValue(infoStripState), setState: vi.fn() },
-    );
-    (components.viewer.getSpotlightOverlay as ReturnType<typeof vi.fn>).mockReturnValue(
-      { getState: vi.fn().mockReturnValue(spotlightState), setState: vi.fn() },
-    );
-    (components.viewer.getBugOverlay as ReturnType<typeof vi.fn>).mockReturnValue(
-      { getState: vi.fn().mockReturnValue(bugState), setState: vi.fn() },
-    );
-    (components.viewer.getEXRWindowOverlay as ReturnType<typeof vi.fn>).mockReturnValue(
-      { getState: vi.fn().mockReturnValue(exrWindowState), setState: vi.fn() },
-    );
-    (components.viewer.getFPSIndicator as ReturnType<typeof vi.fn>).mockReturnValue(
-      { getState: vi.fn().mockReturnValue(fpsState), setState: vi.fn() },
-    );
+    (components.viewer.getTimecodeOverlay as ReturnType<typeof vi.fn>).mockReturnValue({
+      getState: vi.fn().mockReturnValue(timecodeState),
+      setState: vi.fn(),
+    });
+    (components.viewer.getSafeAreasOverlay as ReturnType<typeof vi.fn>).mockReturnValue({
+      getState: vi.fn().mockReturnValue(safeAreasState),
+      setState: vi.fn(),
+    });
+    (components.viewer.getClippingOverlay as ReturnType<typeof vi.fn>).mockReturnValue({
+      getState: vi.fn().mockReturnValue(clippingState),
+      setState: vi.fn(),
+    });
+    (components.viewer.getInfoStripOverlay as ReturnType<typeof vi.fn>).mockReturnValue({
+      getState: vi.fn().mockReturnValue(infoStripState),
+      setState: vi.fn(),
+    });
+    (components.viewer.getSpotlightOverlay as ReturnType<typeof vi.fn>).mockReturnValue({
+      getState: vi.fn().mockReturnValue(spotlightState),
+      setState: vi.fn(),
+    });
+    (components.viewer.getBugOverlay as ReturnType<typeof vi.fn>).mockReturnValue({
+      getState: vi.fn().mockReturnValue(bugState),
+      setState: vi.fn(),
+    });
+    (components.viewer.getEXRWindowOverlay as ReturnType<typeof vi.fn>).mockReturnValue({
+      getState: vi.fn().mockReturnValue(exrWindowState),
+      setState: vi.fn(),
+    });
+    (components.viewer.getFPSIndicator as ReturnType<typeof vi.fn>).mockReturnValue({
+      getState: vi.fn().mockReturnValue(fpsState),
+      setState: vi.fn(),
+    });
 
     const state = SessionSerializer.toJSON(components);
 
@@ -263,43 +342,79 @@ describe('Issue #485: Overlay states must round-trip through serialization', () 
     const state = SessionSerializer.createEmpty('test');
 
     const timecodeState: TimecodeOverlayState = {
-      enabled: true, position: 'top-right', fontSize: 'small',
-      showFrameCounter: true, backgroundOpacity: 0.4, displayFormat: 'both',
-      sourceTimecode: undefined, showSourceTimecode: true,
+      enabled: true,
+      position: 'top-right',
+      fontSize: 'small',
+      showFrameCounter: true,
+      backgroundOpacity: 0.4,
+      displayFormat: 'both',
+      sourceTimecode: undefined,
+      showSourceTimecode: true,
     };
     const safeAreasState: SafeAreasState = {
-      enabled: true, titleSafe: true, actionSafe: false,
-      customSafeArea: false, customSafeAreaPercentage: 85,
-      centerCrosshair: false, ruleOfThirds: true,
-      aspectRatio: '16:9', guideColor: '#00ff00', guideOpacity: 0.7,
+      enabled: true,
+      titleSafe: true,
+      actionSafe: false,
+      customSafeArea: false,
+      customSafeAreaPercentage: 85,
+      centerCrosshair: false,
+      ruleOfThirds: true,
+      aspectRatio: '16:9',
+      guideColor: '#00ff00',
+      guideOpacity: 0.7,
     };
     const clippingState: ClippingOverlayState = {
-      enabled: true, showHighlights: false, showShadows: true,
+      enabled: true,
+      showHighlights: false,
+      showShadows: true,
       highlightColor: { r: 255, g: 100, b: 0 },
       shadowColor: { r: 0, g: 50, b: 255 },
       bothColor: { r: 255, g: 255, b: 0 },
-      opacity: 0.6, shadowThreshold: 0.05, highlightThreshold: 0.95,
+      opacity: 0.6,
+      shadowThreshold: 0.05,
+      highlightThreshold: 0.95,
     };
     const infoStripState: InfoStripOverlayState = {
-      enabled: true, showFullPath: false, backgroundOpacity: 0.7,
+      enabled: true,
+      showFullPath: false,
+      backgroundOpacity: 0.7,
     };
     const spotlightState: SpotlightState = {
-      enabled: true, shape: 'circle', x: 0.6, y: 0.7,
-      width: 0.3, height: 0.3, dimAmount: 0.5, feather: 0.02,
+      enabled: true,
+      shape: 'circle',
+      x: 0.6,
+      y: 0.7,
+      width: 0.3,
+      height: 0.3,
+      dimAmount: 0.5,
+      feather: 0.02,
     };
     const bugState: BugOverlayState = {
-      enabled: false, imageUrl: null,
-      position: 'top-right', size: 0.1, opacity: 0.5, margin: 16,
+      enabled: false,
+      imageUrl: null,
+      position: 'top-right',
+      size: 0.1,
+      opacity: 0.5,
+      margin: 16,
     };
     const exrWindowState: EXRWindowOverlayState = {
-      enabled: false, showDataWindow: false, showDisplayWindow: true,
-      dataWindowColor: '#ff0000', displayWindowColor: '#00ccff',
-      lineWidth: 1, dashPattern: [4, 2], showLabels: true,
+      enabled: false,
+      showDataWindow: false,
+      showDisplayWindow: true,
+      dataWindowColor: '#ff0000',
+      displayWindowColor: '#00ccff',
+      lineWidth: 1,
+      dashPattern: [4, 2],
+      showLabels: true,
     };
     const fpsState: FPSIndicatorState = {
-      enabled: true, position: 'top-left', showDroppedFrames: true,
-      showTargetFps: true, backgroundOpacity: 0.5,
-      warningThreshold: 0.95, criticalThreshold: 0.8,
+      enabled: true,
+      position: 'top-left',
+      showDroppedFrames: true,
+      showTargetFps: true,
+      backgroundOpacity: 0.5,
+      warningThreshold: 0.95,
+      criticalThreshold: 0.8,
     };
 
     state.timecodeOverlay = timecodeState;
@@ -355,12 +470,19 @@ describe('Issue #485: Overlay states must round-trip through serialization', () 
     const components = createMockComponents();
 
     const spotlightState: SpotlightState = {
-      enabled: true, shape: 'rectangle', x: 0.25, y: 0.75,
-      width: 0.1, height: 0.2, dimAmount: 0.8, feather: 0.03,
+      enabled: true,
+      shape: 'rectangle',
+      x: 0.25,
+      y: 0.75,
+      width: 0.1,
+      height: 0.2,
+      dimAmount: 0.8,
+      feather: 0.03,
     };
-    (components.viewer.getSpotlightOverlay as ReturnType<typeof vi.fn>).mockReturnValue(
-      { getState: vi.fn().mockReturnValue(spotlightState), setState: vi.fn() },
-    );
+    (components.viewer.getSpotlightOverlay as ReturnType<typeof vi.fn>).mockReturnValue({
+      getState: vi.fn().mockReturnValue(spotlightState),
+      setState: vi.fn(),
+    });
 
     const state = SessionSerializer.toJSON(components);
     const json = JSON.stringify(state);

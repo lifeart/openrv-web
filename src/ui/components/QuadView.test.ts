@@ -406,12 +406,8 @@ describe('CompareControl C/D source unavailability warnings', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     control.setQuadViewSource(0, 'C');
     expect(warnSpy).toHaveBeenCalledTimes(1);
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Source "C" selected')
-    );
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('no production assignment path')
-    );
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Source "C" selected'));
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('no production assignment path'));
     warnSpy.mockRestore();
   });
 
@@ -419,12 +415,8 @@ describe('CompareControl C/D source unavailability warnings', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     control.setQuadViewSource(1, 'D');
     expect(warnSpy).toHaveBeenCalledTimes(1);
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Source "D" selected')
-    );
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('no production assignment path')
-    );
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Source "D" selected'));
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('no production assignment path'));
     warnSpy.mockRestore();
   });
 

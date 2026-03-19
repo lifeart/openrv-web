@@ -37,10 +37,7 @@ describe('Issue #504: Plain AVIF is browser-native only (no WASM fallback)', () 
       const lines = avifSource.split('\n');
       const decodeLines = lines.filter(
         (line: string) =>
-          line.includes('decode') &&
-          !line.includes('decodeAvif') &&
-          !line.includes('//') &&
-          !line.includes('*'),
+          line.includes('decode') && !line.includes('decodeAvif') && !line.includes('//') && !line.includes('*'),
       );
       for (const line of decodeLines) {
         expect(line).not.toMatch(/fallback|wasm|alternative/i);
@@ -122,12 +119,7 @@ describe('Issue #504: Plain AVIF is browser-native only (no WASM fallback)', () 
     it('format comparison table lists AVIF decoder type as Native (not Native/WASM)', () => {
       const avifRow = docsSource
         .split('\n')
-        .find(
-          (line: string) =>
-            line.includes('| AVIF') &&
-            line.includes('.avif') &&
-            !line.includes('Gainmap'),
-        );
+        .find((line: string) => line.includes('| AVIF') && line.includes('.avif') && !line.includes('Gainmap'));
       expect(avifRow).toBeDefined();
       expect(avifRow).toContain('| Native |');
       expect(avifRow).not.toContain('Native/WASM');

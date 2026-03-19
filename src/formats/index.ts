@@ -73,7 +73,15 @@ export {
   type AVIFGainmapInfo,
   type ISOBMFFTransformInfo,
 } from './AVIFGainmapDecoder';
-export { isJXLFile, isJXLContainer, decodeJXL, parseJXLColorSpace, mapCICPToColorSpace, type JXLDecodeResult, type JXLColorSpaceInfo } from './JXLDecoder';
+export {
+  isJXLFile,
+  isJXLContainer,
+  decodeJXL,
+  parseJXLColorSpace,
+  mapCICPToColorSpace,
+  type JXLDecodeResult,
+  type JXLColorSpaceInfo,
+} from './JXLDecoder';
 export {
   isHEICFile,
   isGainmapHEIC,

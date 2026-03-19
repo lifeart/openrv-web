@@ -636,7 +636,11 @@ export class WebGLLUTProcessor {
   }
 
   /** Upload matrix uniforms to the GPU */
-  private uploadMatrixUniforms(program: ShaderProgram, uHasIn: WebGLUniformLocation | null, uHasOut: WebGLUniformLocation | null): void {
+  private uploadMatrixUniforms(
+    program: ShaderProgram,
+    uHasIn: WebGLUniformLocation | null,
+    uHasOut: WebGLUniformLocation | null,
+  ): void {
     const gl = this.gl;
     const hasIn = this._inMatrix !== null;
     const hasOut = this._outMatrix !== null;
@@ -647,11 +651,7 @@ export class WebGLLUTProcessor {
     // Upload with transpose=true: row-major -> column-major for GLSL
     // NOTE: We use gl.uniformMatrix4fv directly (not shaderProgram.setUniformMatrix4)
     // because ShaderProgram hardcodes transpose=false, but we need transpose=true here.
-    gl.uniformMatrix4fv(
-      program.getUniformLocation('u_inMatrix'),
-      true,
-      hasIn ? this._inMatrix! : IDENTITY_MATRIX_4X4,
-    );
+    gl.uniformMatrix4fv(program.getUniformLocation('u_inMatrix'), true, hasIn ? this._inMatrix! : IDENTITY_MATRIX_4X4);
     gl.uniformMatrix4fv(
       program.getUniformLocation('u_outMatrix'),
       true,

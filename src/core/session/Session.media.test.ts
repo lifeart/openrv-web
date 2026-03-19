@@ -206,7 +206,17 @@ describe('Session', () => {
         fps: 24,
         sequenceFrames: frames,
         sequenceFrameMap: new Map([[1, frames[0]]]),
-        sequenceInfo: { name: 's', pattern: 's', frames, startFrame: 1, endFrame: 10, width: 100, height: 100, fps: 24, missingFrames: [] },
+        sequenceInfo: {
+          name: 's',
+          pattern: 's',
+          frames,
+          startFrame: 1,
+          endFrame: 10,
+          width: 100,
+          height: 100,
+          fps: 24,
+          missingFrames: [],
+        },
       };
       session.setSources([source]);
 
@@ -229,7 +239,17 @@ describe('Session', () => {
         fps: 24,
         sequenceFrames: frames,
         sequenceFrameMap: new Map([[1, frames[0]]]),
-        sequenceInfo: { name: 's', pattern: 's', frames, startFrame: 1, endFrame: 10, width: 100, height: 100, fps: 24, missingFrames: [] },
+        sequenceInfo: {
+          name: 's',
+          pattern: 's',
+          frames,
+          startFrame: 1,
+          endFrame: 10,
+          width: 100,
+          height: 100,
+          fps: 24,
+          missingFrames: [],
+        },
       };
       session.setSources([source]);
       expect(session.getSequenceFrameSync(1)).toBe(mockImg);
@@ -258,8 +278,15 @@ describe('Session', () => {
           [1004, frames[2]],
         ]),
         sequenceInfo: {
-          name: 'seq', pattern: 'seq.####.png', frames, startFrame: 1001, endFrame: 1004,
-          width: 100, height: 100, fps: 24, missingFrames: [1003],
+          name: 'seq',
+          pattern: 'seq.####.png',
+          frames,
+          startFrame: 1001,
+          endFrame: 1004,
+          width: 100,
+          height: 100,
+          fps: 24,
+          missingFrames: [1003],
         },
       };
       session.setSources([source]);

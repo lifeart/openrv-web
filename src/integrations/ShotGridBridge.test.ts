@@ -95,7 +95,16 @@ describe('Status mapping', () => {
   });
 
   it('SG-MAP-005: round-trip preserves distinct statuses through ShotGrid mapping', () => {
-    const statuses: ShotStatus[] = ['pending', 'in-review', 'approved', 'needs-work', 'cbb', 'final', 'on-hold', 'omit'];
+    const statuses: ShotStatus[] = [
+      'pending',
+      'in-review',
+      'approved',
+      'needs-work',
+      'cbb',
+      'final',
+      'on-hold',
+      'omit',
+    ];
     for (const status of statuses) {
       const sgCode = mapStatusToShotGrid(status);
       const roundTripped = mapStatusFromShotGrid(sgCode);
@@ -615,9 +624,7 @@ describe('ShotGridBridge', () => {
 
   describe('uploadAttachment', () => {
     it('SG-003j: sends FormData with file to the correct URL', async () => {
-      mockFetch
-        .mockResolvedValueOnce(authResponse())
-        .mockResolvedValueOnce(jsonResponse({ data: { id: 1001 } }));
+      mockFetch.mockResolvedValueOnce(authResponse()).mockResolvedValueOnce(jsonResponse({ data: { id: 1001 } }));
 
       const blob = new Blob(['test-data'], { type: 'image/png' });
       await bridge.uploadAttachment(999, blob, 'thumb.png');
@@ -645,7 +652,16 @@ describe('ShotGridBridge', () => {
 
   describe('pushStatus', () => {
     it('SG-004: maps local status to ShotGrid codes', async () => {
-      const statuses: ShotStatus[] = ['pending', 'in-review', 'approved', 'needs-work', 'cbb', 'final', 'on-hold', 'omit'];
+      const statuses: ShotStatus[] = [
+        'pending',
+        'in-review',
+        'approved',
+        'needs-work',
+        'cbb',
+        'final',
+        'on-hold',
+        'omit',
+      ];
       const expected = ['pnd', 'ip', 'apr', 'rev', 'cbb', 'fin', 'hld', 'omt'];
 
       for (let i = 0; i < statuses.length; i++) {

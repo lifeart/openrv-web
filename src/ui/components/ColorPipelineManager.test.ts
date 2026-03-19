@@ -840,9 +840,7 @@ describe('ColorPipelineManager', () => {
 
       manager.applyLUTToCanvas(ctx, 2, 2);
 
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('LUT processing unavailable'),
-      );
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('LUT processing unavailable'));
       warnSpy.mockRestore();
     });
 
@@ -852,9 +850,7 @@ describe('ColorPipelineManager', () => {
 
       manager.setLUT(createMockLUT());
 
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('no GPU processor available'),
-      );
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('no GPU processor available'));
       warnSpy.mockRestore();
     });
   });

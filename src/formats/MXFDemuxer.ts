@@ -897,8 +897,7 @@ export function parseMXFHeader(buffer: ArrayBuffer): MXFMetadata {
       }
       if (startTC >= 0 && !metadata.startTimecode) {
         metadata.startTimecodeFrames = startTC;
-        const hasValidEditRate =
-          metadata.editRate != null && metadata.editRate.den !== 0;
+        const hasValidEditRate = metadata.editRate != null && metadata.editRate.den !== 0;
         if (hasValidEditRate) {
           const fps = metadata.editRate!.num / metadata.editRate!.den;
           if (dropFrame) {
@@ -907,9 +906,7 @@ export function parseMXFHeader(buffer: ArrayBuffer): MXFMetadata {
             metadata.startTimecode = framesToTimecode(startTC, fps);
           }
         } else {
-          console.warn(
-            `MXF: Cannot resolve start timecode (frame ${startTC}) — edit rate is missing or invalid`,
-          );
+          console.warn(`MXF: Cannot resolve start timecode (frame ${startTC}) — edit rate is missing or invalid`);
         }
       }
     }

@@ -15,38 +15,27 @@ describe('API docs source links (Issue #563)', () => {
   const content = readFileSync(apiDocPath, 'utf-8');
 
   it('should not contain hardcoded GitHub commit hashes in links', () => {
-    const githubBlobPattern =
-      /github\.com\/[^/]+\/[^/]+\/blob\/[0-9a-f]{7,40}\//;
-    const matches = content.match(
-      new RegExp(githubBlobPattern.source, 'g'),
-    );
+    const githubBlobPattern = /github\.com\/[^/]+\/[^/]+\/blob\/[0-9a-f]{7,40}\//;
+    const matches = content.match(new RegExp(githubBlobPattern.source, 'g'));
     expect(matches, 'Found hardcoded GitHub blob URLs with commit hashes').toBeNull();
   });
 
   it('should use relative paths for all "Defined in" links', () => {
-    const definedInLinks = [
-      ...content.matchAll(/Defined in:\s*\[([^\]]+)\]\(([^)]+)\)/g),
-    ];
+    const definedInLinks = [...content.matchAll(/Defined in:\s*\[([^\]]+)\]\(([^)]+)\)/g)];
     expect(definedInLinks.length).toBeGreaterThan(0);
 
     for (const match of definedInLinks) {
       const linkText = match[1];
       const linkUrl = match[2];
-      expect(
-        linkUrl,
-        `"Defined in" link for "${linkText}" should be a relative path, not an absolute URL`,
-      ).not.toMatch(/^https?:\/\//);
-      expect(
-        linkUrl,
-        `"Defined in" link for "${linkText}" should start with a relative path`,
-      ).toMatch(/^\.\.\/|^\.\//);
+      expect(linkUrl, `"Defined in" link for "${linkText}" should be a relative path, not an absolute URL`).not.toMatch(
+        /^https?:\/\//,
+      );
+      expect(linkUrl, `"Defined in" link for "${linkText}" should start with a relative path`).toMatch(/^\.\.\/|^\.\//);
     }
   });
 
   it('should reference source files that actually exist', () => {
-    const definedInLinks = [
-      ...content.matchAll(/Defined in:\s*\[([^\]]+)\]\(([^)]+)\)/g),
-    ];
+    const definedInLinks = [...content.matchAll(/Defined in:\s*\[([^\]]+)\]\(([^)]+)\)/g)];
     expect(definedInLinks.length).toBeGreaterThan(0);
 
     // @ts-ignore -- __dirname available in test environment
@@ -58,10 +47,9 @@ describe('API docs source links (Issue #563)', () => {
       // Strip the #L<line> anchor if present
       const filePath = linkUrl.replace(/#.*$/, '');
       const absolutePath = resolve(apiDir, filePath);
-      expect(
-        existsSync(absolutePath),
-        `Source file referenced by "${linkText}" does not exist: ${absolutePath}`,
-      ).toBe(true);
+      expect(existsSync(absolutePath), `Source file referenced by "${linkText}" does not exist: ${absolutePath}`).toBe(
+        true,
+      );
     }
   });
 
@@ -71,13 +59,7 @@ describe('API docs source links (Issue #563)', () => {
     const typedocContent = readFileSync(typedocPath, 'utf-8');
     const config = JSON.parse(typedocContent);
     expect(config.sourceLinkTemplate).toBeDefined();
-    expect(
-      config.sourceLinkTemplate,
-      'sourceLinkTemplate should not contain github.com',
-    ).not.toMatch(/github\.com/);
-    expect(
-      config.sourceLinkTemplate,
-      'sourceLinkTemplate should use a relative path',
-    ).toMatch(/^\.\.\//);
+    expect(config.sourceLinkTemplate, 'sourceLinkTemplate should not contain github.com').not.toMatch(/github\.com/);
+    expect(config.sourceLinkTemplate, 'sourceLinkTemplate should use a relative path').toMatch(/^\.\.\//);
   });
 });

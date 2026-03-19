@@ -658,5 +658,4 @@ describe('Compositing: display:none for inactive overlay', () => {
     expect(overlay.getElement().style.display).toBe('none');
     overlay.dispose();
   });
-
 });

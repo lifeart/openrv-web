@@ -90,7 +90,12 @@ function createMockSession() {
   });
   Object.defineProperty(session, 'inPoint', { get: () => session._inPoint });
   Object.defineProperty(session, 'outPoint', { get: () => session._outPoint });
-  Object.defineProperty(session, 'fps', { get: () => session._fps, set: (v: number) => { session._fps = v; } });
+  Object.defineProperty(session, 'fps', {
+    get: () => session._fps,
+    set: (v: number) => {
+      session._fps = v;
+    },
+  });
   Object.defineProperty(session, 'playDirection', { get: () => session._playDirection });
   Object.defineProperty(session, 'marks', { get: () => session._marks });
   Object.defineProperty(session, 'sourceCount', { get: () => session.sources?.length ?? 0 });
@@ -1209,7 +1214,9 @@ describe('ViewAPI', () => {
 
   it('API-U055: setBackgroundPattern() throws after dispose', () => {
     view.dispose();
-    expect(() => view.setBackgroundPattern({ pattern: 'black', checkerSize: 'medium', customColor: '#1a1a1a' })).toThrow();
+    expect(() =>
+      view.setBackgroundPattern({ pattern: 'black', checkerSize: 'medium', customColor: '#1a1a1a' }),
+    ).toThrow();
   });
 
   it('API-U056: getBackgroundPattern() throws after dispose', () => {
@@ -1363,17 +1370,47 @@ function createMockPixelProbeProvider() {
       sourceMode: 'rendered' as 'rendered' | 'source',
       floatPrecision: 3 as 3 | 6,
     },
-    enable: vi.fn(function (this: typeof probe) { this._enabled = true; this._state.enabled = true; }),
-    disable: vi.fn(function (this: typeof probe) { this._enabled = false; this._locked = false; this._state.enabled = false; this._state.locked = false; }),
-    isEnabled: vi.fn(function (this: typeof probe) { return this._enabled; }),
-    toggleLock: vi.fn(function (this: typeof probe) { this._locked = !this._locked; this._state.locked = this._locked; }),
-    isLocked: vi.fn(function (this: typeof probe) { return this._locked; }),
-    getState: vi.fn(function (this: typeof probe) { return { ...this._state, rgb: { ...this._state.rgb }, hsl: { ...this._state.hsl } }; }),
-    setFormat: vi.fn(function (this: typeof probe, format: string) { this._format = format as any; this._state.format = format as any; }),
-    setSampleSize: vi.fn(function (this: typeof probe, size: number) { this._sampleSize = size as any; this._state.sampleSize = size as any; }),
-    getSampleSize: vi.fn(function (this: typeof probe) { return this._sampleSize; }),
-    setSourceMode: vi.fn(function (this: typeof probe, mode: string) { this._sourceMode = mode as any; this._state.sourceMode = mode as any; }),
-    getSourceMode: vi.fn(function (this: typeof probe) { return this._sourceMode; }),
+    enable: vi.fn(function (this: typeof probe) {
+      this._enabled = true;
+      this._state.enabled = true;
+    }),
+    disable: vi.fn(function (this: typeof probe) {
+      this._enabled = false;
+      this._locked = false;
+      this._state.enabled = false;
+      this._state.locked = false;
+    }),
+    isEnabled: vi.fn(function (this: typeof probe) {
+      return this._enabled;
+    }),
+    toggleLock: vi.fn(function (this: typeof probe) {
+      this._locked = !this._locked;
+      this._state.locked = this._locked;
+    }),
+    isLocked: vi.fn(function (this: typeof probe) {
+      return this._locked;
+    }),
+    getState: vi.fn(function (this: typeof probe) {
+      return { ...this._state, rgb: { ...this._state.rgb }, hsl: { ...this._state.hsl } };
+    }),
+    setFormat: vi.fn(function (this: typeof probe, format: string) {
+      this._format = format as any;
+      this._state.format = format as any;
+    }),
+    setSampleSize: vi.fn(function (this: typeof probe, size: number) {
+      this._sampleSize = size as any;
+      this._state.sampleSize = size as any;
+    }),
+    getSampleSize: vi.fn(function (this: typeof probe) {
+      return this._sampleSize;
+    }),
+    setSourceMode: vi.fn(function (this: typeof probe, mode: string) {
+      this._sourceMode = mode as any;
+      this._state.sourceMode = mode as any;
+    }),
+    getSourceMode: vi.fn(function (this: typeof probe) {
+      return this._sourceMode;
+    }),
   };
   return probe;
 }
@@ -1588,49 +1625,106 @@ function createMockLUTProvider() {
   return {
     _lut: null as any,
     _intensity: 1.0,
-    setLUT: vi.fn(function (this: any, lut: any) { this._lut = lut; }),
-    getLUT: vi.fn(function (this: any) { return this._lut; }),
-    setLUTIntensity: vi.fn(function (this: any, intensity: number) { this._intensity = intensity; }),
-    getLUTIntensity: vi.fn(function (this: any) { return this._intensity; }),
+    setLUT: vi.fn(function (this: any, lut: any) {
+      this._lut = lut;
+    }),
+    getLUT: vi.fn(function (this: any) {
+      return this._lut;
+    }),
+    setLUTIntensity: vi.fn(function (this: any, intensity: number) {
+      this._intensity = intensity;
+    }),
+    getLUTIntensity: vi.fn(function (this: any) {
+      return this._intensity;
+    }),
   };
 }
 
 function createMockToneMappingProvider() {
   return {
-    _state: { enabled: false, operator: 'off' as const, reinhardWhitePoint: 4.0, filmicExposureBias: 2.0, filmicWhitePoint: 11.2, dragoBias: 0.85, dragoLwa: 0.2, dragoLmax: 1.5, dragoBrightness: 2.0 },
-    getToneMappingState: vi.fn(function (this: any) { return { ...this._state }; }),
-    setToneMappingState: vi.fn(function (this: any, state: any) { this._state = { ...state }; }),
-    resetToneMappingState: vi.fn(function (this: any) { this._state = { enabled: false, operator: 'off' }; }),
+    _state: {
+      enabled: false,
+      operator: 'off' as const,
+      reinhardWhitePoint: 4.0,
+      filmicExposureBias: 2.0,
+      filmicWhitePoint: 11.2,
+      dragoBias: 0.85,
+      dragoLwa: 0.2,
+      dragoLmax: 1.5,
+      dragoBrightness: 2.0,
+    },
+    getToneMappingState: vi.fn(function (this: any) {
+      return { ...this._state };
+    }),
+    setToneMappingState: vi.fn(function (this: any, state: any) {
+      this._state = { ...state };
+    }),
+    resetToneMappingState: vi.fn(function (this: any) {
+      this._state = { enabled: false, operator: 'off' };
+    }),
   };
 }
 
 function createMockDisplayProvider() {
   return {
     _state: { transferFunction: 'srgb' as const, displayGamma: 1.0, displayBrightness: 1.0, customGamma: 2.2 },
-    getDisplayColorState: vi.fn(function (this: any) { return { ...this._state }; }),
-    setDisplayColorState: vi.fn(function (this: any, state: any) { this._state = { ...state }; }),
-    resetDisplayColorState: vi.fn(function (this: any) { this._state = { transferFunction: 'srgb', displayGamma: 1.0, displayBrightness: 1.0, customGamma: 2.2 }; }),
+    getDisplayColorState: vi.fn(function (this: any) {
+      return { ...this._state };
+    }),
+    setDisplayColorState: vi.fn(function (this: any, state: any) {
+      this._state = { ...state };
+    }),
+    resetDisplayColorState: vi.fn(function (this: any) {
+      this._state = { transferFunction: 'srgb', displayGamma: 1.0, displayBrightness: 1.0, customGamma: 2.2 };
+    }),
   };
 }
 
 function createMockDisplayCapabilitiesProvider() {
   return {
     getDisplayCapabilities: vi.fn(() => ({
-      canvasP3: false, webglP3: false, displayGamut: 'srgb' as const, displayHDR: false,
-      webglHLG: false, webglPQ: false, canvasHLG: false, canvasFloat16: false,
-      webgpuAvailable: false, webgpuHDR: false, webglDrawingBufferStorage: false,
-      canvasExtendedHDR: false, heicDecode: false, videoFrameTexImage: false,
-      canvasHDRResize: false, canvasHDRResizeTier: 'none' as const,
-      activeColorSpace: 'srgb' as const, activeHDRMode: 'sdr' as const,
+      canvasP3: false,
+      webglP3: false,
+      displayGamut: 'srgb' as const,
+      displayHDR: false,
+      webglHLG: false,
+      webglPQ: false,
+      canvasHLG: false,
+      canvasFloat16: false,
+      webgpuAvailable: false,
+      webgpuHDR: false,
+      webglDrawingBufferStorage: false,
+      canvasExtendedHDR: false,
+      heicDecode: false,
+      videoFrameTexImage: false,
+      canvasHDRResize: false,
+      canvasHDRResizeTier: 'none' as const,
+      activeColorSpace: 'srgb' as const,
+      activeHDRMode: 'sdr' as const,
     })),
   };
 }
 
 function createMockOCIOProvider() {
   return {
-    _state: { enabled: false, configName: 'aces_1.2', customConfigPath: null, inputColorSpace: 'Auto', detectedColorSpace: null, workingColorSpace: 'ACEScg', display: 'sRGB', view: 'ACES 1.0 SDR-video', look: 'None', lookDirection: 'forward' as const },
-    getOCIOState: vi.fn(function (this: any) { return { ...this._state }; }),
-    setOCIOState: vi.fn(function (this: any, state: any) { Object.assign(this._state, state); }),
+    _state: {
+      enabled: false,
+      configName: 'aces_1.2',
+      customConfigPath: null,
+      inputColorSpace: 'Auto',
+      detectedColorSpace: null,
+      workingColorSpace: 'ACEScg',
+      display: 'sRGB',
+      view: 'ACES 1.0 SDR-video',
+      look: 'None',
+      lookDirection: 'forward' as const,
+    },
+    getOCIOState: vi.fn(function (this: any) {
+      return { ...this._state };
+    }),
+    setOCIOState: vi.fn(function (this: any, state: any) {
+      Object.assign(this._state, state);
+    }),
   };
 }
 
@@ -1971,17 +2065,44 @@ describe('ColorAPI', () => {
 
   it('API-U280d: importCurvesJSON() applies imported curves', () => {
     const curvesData = {
-      master: { enabled: true, points: [{ x: 0, y: 0.1 }, { x: 1, y: 0.9 }] },
-      red: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
-      green: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
-      blue: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
+      master: {
+        enabled: true,
+        points: [
+          { x: 0, y: 0.1 },
+          { x: 1, y: 0.9 },
+        ],
+      },
+      red: {
+        enabled: true,
+        points: [
+          { x: 0, y: 0 },
+          { x: 1, y: 1 },
+        ],
+      },
+      green: {
+        enabled: true,
+        points: [
+          { x: 0, y: 0 },
+          { x: 1, y: 1 },
+        ],
+      },
+      blue: {
+        enabled: true,
+        points: [
+          { x: 0, y: 0 },
+          { x: 1, y: 1 },
+        ],
+      },
     };
     const json = JSON.stringify(curvesData);
     curvesControl.setCurves.mockClear();
     color.importCurvesJSON(json);
     expect(curvesControl.setCurves).toHaveBeenCalledTimes(1);
     const arg = curvesControl.setCurves.mock.calls[0][0];
-    expect(arg.master.points).toEqual([{ x: 0, y: 0.1 }, { x: 1, y: 0.9 }]);
+    expect(arg.master.points).toEqual([
+      { x: 0, y: 0.1 },
+      { x: 1, y: 0.9 },
+    ]);
   });
 
   it('API-U280e: importCurvesJSON() rejects invalid JSON', () => {
@@ -1994,7 +2115,13 @@ describe('ColorAPI', () => {
 
   it('API-U280g: exportCurvesJSON() roundtrips with importCurvesJSON()', () => {
     color.setCurves({
-      red: { points: [{ x: 0, y: 0.2 }, { x: 0.5, y: 0.6 }, { x: 1, y: 0.8 }] },
+      red: {
+        points: [
+          { x: 0, y: 0.2 },
+          { x: 0.5, y: 0.6 },
+          { x: 1, y: 0.8 },
+        ],
+      },
     });
     const json = color.exportCurvesJSON();
     curvesControl.setCurves.mockClear();
@@ -2004,7 +2131,14 @@ describe('ColorAPI', () => {
 
   // --- LUT methods ---
   it('API-U280h: loadLUT() delegates to LUT provider', () => {
-    const fakeLut = { type: '3d', title: 'test', size: 2, domainMin: [0, 0, 0], domainMax: [1, 1, 1], data: new Float32Array(24) } as any;
+    const fakeLut = {
+      type: '3d',
+      title: 'test',
+      size: 2,
+      domainMin: [0, 0, 0],
+      domainMax: [1, 1, 1],
+      data: new Float32Array(24),
+    } as any;
     color.loadLUT(fakeLut);
     expect(lutProvider.setLUT).toHaveBeenCalledWith(fakeLut);
   });
@@ -2583,33 +2717,50 @@ describe('EventsAPI', () => {
 
     // Load first source
     session.emit('sourceLoaded', {
-      name: 'first.mp4', type: 'video', width: 1920, height: 1080, duration: 100, fps: 24,
+      name: 'first.mp4',
+      type: 'video',
+      width: 1920,
+      height: 1080,
+      duration: 100,
+      fps: 24,
     });
     handler.mockClear();
 
     // Load second source
     session.emit('sourceLoaded', {
-      name: 'second.mp4', type: 'video', width: 3840, height: 2160, duration: 200, fps: 30,
+      name: 'second.mp4',
+      type: 'video',
+      width: 3840,
+      height: 2160,
+      duration: 200,
+      fps: 30,
     });
     handler.mockClear();
 
     // Switch back to first source
     session._currentSource = {
-      name: 'first.mp4', type: 'video', width: 1920, height: 1080, duration: 100, fps: 24,
+      name: 'first.mp4',
+      type: 'video',
+      width: 1920,
+      height: 1080,
+      duration: 100,
+      fps: 24,
     };
     session.emit('currentSourceChanged', 0);
 
     expect(handler).toHaveBeenCalledTimes(1);
     expect(handler).toHaveBeenCalledWith({
-      images: [{
-        name: 'first.mp4',
-        index: 0,
-        imageMin: [0, 0],
-        imageMax: [1920, 1080],
-        width: 1920,
-        height: 1080,
-        nodeName: 'first.mp4',
-      }],
+      images: [
+        {
+          name: 'first.mp4',
+          index: 0,
+          imageMin: [0, 0],
+          imageMax: [1920, 1080],
+          width: 1920,
+          height: 1080,
+          nodeName: 'first.mp4',
+        },
+      ],
     });
   });
 
@@ -2621,7 +2772,12 @@ describe('EventsAPI', () => {
     events.on('renderedImagesChanged', handler);
 
     session.emit('sourceLoaded', {
-      name: 'clip.mp4', type: 'video', width: 1920, height: 1080, duration: 100, fps: 24,
+      name: 'clip.mp4',
+      type: 'video',
+      width: 1920,
+      height: 1080,
+      duration: 100,
+      fps: 24,
     });
 
     expect(handler).toHaveBeenCalledTimes(1);
@@ -2648,7 +2804,12 @@ describe('EventsAPI', () => {
 
     // Load source A (triggers emitCurrentRenderedImages)
     session.emit('sourceLoaded', {
-      name: 'clipA.mp4', type: 'video', width: 1920, height: 1080, duration: 100, fps: 24,
+      name: 'clipA.mp4',
+      type: 'video',
+      width: 1920,
+      height: 1080,
+      duration: 100,
+      fps: 24,
     });
 
     expect(handler).toHaveBeenCalledTimes(1);
@@ -2681,7 +2842,9 @@ describe('EventsAPI', () => {
       ...viewer,
       addViewChangeListener: vi.fn((cb: any) => {
         registeredListener = cb;
-        return () => { registeredListener = null; };
+        return () => {
+          registeredListener = null;
+        };
       }),
       getViewportSize: vi.fn(() => ({ width: 800, height: 600 })),
       getSourceDimensions: vi.fn(() => ({ width: 1920, height: 1080 })),
@@ -2716,7 +2879,9 @@ describe('EventsAPI', () => {
       ...viewer,
       addViewChangeListener: vi.fn((cb: any) => {
         registeredListener = cb;
-        return () => { registeredListener = null; };
+        return () => {
+          registeredListener = null;
+        };
       }),
       getViewportSize: vi.fn(() => ({ width: 800, height: 600 })),
       getSourceDimensions: vi.fn(() => ({ width: 1920, height: 1080, pixelAspect: 1.0 })),
@@ -2729,9 +2894,11 @@ describe('EventsAPI', () => {
     registeredListener!(10, 20, 2);
 
     expect(handler).toHaveBeenCalledTimes(1);
-    expect(handler).toHaveBeenCalledWith(expect.objectContaining({
-      pixelAspect: 1.0,
-    }));
+    expect(handler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pixelAspect: 1.0,
+      }),
+    );
 
     localEvents.dispose();
   });
@@ -2744,7 +2911,9 @@ describe('EventsAPI', () => {
       ...viewer,
       addViewChangeListener: vi.fn((cb: any) => {
         registeredListener = cb;
-        return () => { registeredListener = null; };
+        return () => {
+          registeredListener = null;
+        };
       }),
       getViewportSize: vi.fn(() => ({ width: 800, height: 600 })),
       getSourceDimensions: vi.fn(() => ({ width: 1920, height: 1080, pixelAspect: 2.0 })),
@@ -2757,11 +2926,13 @@ describe('EventsAPI', () => {
     registeredListener!(0, 0, 1);
 
     expect(handler).toHaveBeenCalledTimes(1);
-    expect(handler).toHaveBeenCalledWith(expect.objectContaining({
-      pixelAspect: 2.0,
-      imageWidth: 1920,
-      imageHeight: 1080,
-    }));
+    expect(handler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pixelAspect: 2.0,
+        imageWidth: 1920,
+        imageHeight: 1080,
+      }),
+    );
 
     localEvents.dispose();
   });
@@ -2773,7 +2944,9 @@ describe('EventsAPI', () => {
       ...viewer,
       addViewChangeListener: vi.fn((cb: any) => {
         registeredListener = cb;
-        return () => { registeredListener = null; };
+        return () => {
+          registeredListener = null;
+        };
       }),
       getViewportSize: vi.fn(() => ({ width: 800, height: 600 })),
       getSourceDimensions: vi.fn(() => ({ width: 1920, height: 1080 })),
@@ -2786,9 +2959,11 @@ describe('EventsAPI', () => {
     registeredListener!(0, 0, 1);
 
     expect(handler).toHaveBeenCalledTimes(1);
-    expect(handler).toHaveBeenCalledWith(expect.objectContaining({
-      pixelAspect: 1,
-    }));
+    expect(handler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pixelAspect: 1,
+      }),
+    );
 
     localEvents.dispose();
   });
@@ -3626,7 +3801,9 @@ describe('Sub-API disposed guards', () => {
   });
 
   it('API-U138c: view.setBackgroundPattern() throws after dispose', () => {
-    expect(() => api.view.setBackgroundPattern({ pattern: 'black', checkerSize: 'medium', customColor: '#1a1a1a' })).toThrow(DISPOSED_MSG);
+    expect(() =>
+      api.view.setBackgroundPattern({ pattern: 'black', checkerSize: 'medium', customColor: '#1a1a1a' }),
+    ).toThrow(DISPOSED_MSG);
   });
 
   it('API-U138d: view.getBackgroundPattern() throws after dispose', () => {
@@ -3722,7 +3899,15 @@ describe('Sub-API disposed guards', () => {
 
   // -- Plugins --
   it('API-U159: plugins.register() throws after dispose', () => {
-    expect(() => api.plugins.register({ id: 'test', name: 'Test', version: '1.0.0', activate: vi.fn(), deactivate: vi.fn() } as any)).toThrow(DISPOSED_MSG);
+    expect(() =>
+      api.plugins.register({
+        id: 'test',
+        name: 'Test',
+        version: '1.0.0',
+        activate: vi.fn(),
+        deactivate: vi.fn(),
+      } as any),
+    ).toThrow(DISPOSED_MSG);
   });
 
   it('API-U160: plugins.activate() throws after dispose', () => {

@@ -153,12 +153,7 @@ describe('Issue #125: empty GTO metadata clears old data', () => {
 
     await graph.loadFromGTO('GTOa mock session');
 
-    expect(annotations.markerManager.setFromFrameNumbers).toHaveBeenCalledWith(
-      [],
-      undefined,
-      undefined,
-      undefined,
-    );
+    expect(annotations.markerManager.setFromFrameNumbers).toHaveBeenCalledWith([], undefined, undefined, undefined);
     expect(host.loadVideoSourcesFromGraph).toHaveBeenCalledTimes(1);
   });
 

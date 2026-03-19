@@ -1359,8 +1359,7 @@ describe('ViewerInputHandler – Single-file sequence inference on drop (Issue #
     await vi.waitFor(() => {
       // getBestSequence should handle this, loadSequence or loadFile should be called
       expect(
-        (mockSession.loadSequence as any).mock.calls.length +
-          (mockSession.loadFile as any).mock.calls.length,
+        (mockSession.loadSequence as any).mock.calls.length + (mockSession.loadFile as any).mock.calls.length,
       ).toBeGreaterThan(0);
     });
 

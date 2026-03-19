@@ -25,7 +25,9 @@ function createMockSession() {
 
   Object.defineProperty(session, 'currentFrame', {
     get: () => session._currentFrame,
-    set: (v: number) => { session._currentFrame = v; },
+    set: (v: number) => {
+      session._currentFrame = v;
+    },
   });
   Object.defineProperty(session, 'currentSource', {
     get: () => session._currentSource,

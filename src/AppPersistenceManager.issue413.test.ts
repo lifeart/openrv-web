@@ -146,12 +146,9 @@ describe('Issue #413 – RV/GTO export filename derivation', () => {
 
       await mgr.saveRvSession('rv');
 
-      expect(SessionGTOExporter.saveToFile).toHaveBeenCalledWith(
-        ctx.session,
-        ctx.paintEngine,
-        'My Review Session.rv',
-        { binary: false },
-      );
+      expect(SessionGTOExporter.saveToFile).toHaveBeenCalledWith(ctx.session, ctx.paintEngine, 'My Review Session.rv', {
+        binary: false,
+      });
     });
 
     it('ISS-413-002: uses session displayName for .gto filename when available', async () => {
@@ -160,12 +157,9 @@ describe('Issue #413 – RV/GTO export filename derivation', () => {
 
       await mgr.saveRvSession('gto');
 
-      expect(SessionGTOExporter.saveToFile).toHaveBeenCalledWith(
-        ctx.session,
-        ctx.paintEngine,
-        'Color Dailies.gto',
-        { binary: true },
-      );
+      expect(SessionGTOExporter.saveToFile).toHaveBeenCalledWith(ctx.session, ctx.paintEngine, 'Color Dailies.gto', {
+        binary: true,
+      });
     });
 
     it('ISS-413-003: falls back to source name when no displayName', async () => {
@@ -174,12 +168,9 @@ describe('Issue #413 – RV/GTO export filename derivation', () => {
 
       await mgr.saveRvSession('rv');
 
-      expect(SessionGTOExporter.saveToFile).toHaveBeenCalledWith(
-        ctx.session,
-        ctx.paintEngine,
-        'dailies_v03.exr.rv',
-        { binary: false },
-      );
+      expect(SessionGTOExporter.saveToFile).toHaveBeenCalledWith(ctx.session, ctx.paintEngine, 'dailies_v03.exr.rv', {
+        binary: false,
+      });
     });
 
     it('ISS-413-004: falls back to "session" when neither displayName nor source', async () => {
@@ -188,12 +179,9 @@ describe('Issue #413 – RV/GTO export filename derivation', () => {
 
       await mgr.saveRvSession('gto');
 
-      expect(SessionGTOExporter.saveToFile).toHaveBeenCalledWith(
-        ctx.session,
-        ctx.paintEngine,
-        'session.gto',
-        { binary: true },
-      );
+      expect(SessionGTOExporter.saveToFile).toHaveBeenCalledWith(ctx.session, ctx.paintEngine, 'session.gto', {
+        binary: true,
+      });
     });
 
     it('ISS-413-005: prefers displayName over source name in multi-source scenario', async () => {

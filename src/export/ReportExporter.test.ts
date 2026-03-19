@@ -32,7 +32,9 @@ function createMockSession(
   };
 }
 
-function createMockNoteManager(notes: Record<number, { text: string; priority?: string; category?: string }[]>): ReportNoteManager {
+function createMockNoteManager(
+  notes: Record<number, { text: string; priority?: string; category?: string }[]>,
+): ReportNoteManager {
   return {
     getNotesForSource: (i: number) => notes[i] ?? [],
   };
@@ -121,14 +123,10 @@ function createSampleRows(): ReportRow[] {
     {
       shotName: 'vfx_010_030',
       versionLabel: 'v1',
-      versionHistory: [
-        { label: 'v1', isCurrent: true },
-      ],
+      versionHistory: [{ label: 'v1', isCurrent: true }],
       status: 'needs-work',
       notes: ['Fix edge blending'],
-      noteEntries: [
-        { text: 'Fix edge blending', priority: 'high', category: 'comp' },
-      ],
+      noteEntries: [{ text: 'Fix edge blending', priority: 'high', category: 'comp' }],
       frameRange: '1-120',
       timecodeIn: '00:00:00:00',
       timecodeOut: '00:00:05:00',
@@ -501,12 +499,7 @@ describe('ReportExporter', () => {
         createMockVersionManager({}),
       );
       expect(rows).toHaveLength(4);
-      expect(rows.map((r) => r.shotName)).toEqual([
-        'shot_A.exr',
-        'shot_B.exr',
-        'shot_C.exr',
-        'shot_D.exr',
-      ]);
+      expect(rows.map((r) => r.shotName)).toEqual(['shot_A.exr', 'shot_B.exr', 'shot_C.exr', 'shot_D.exr']);
     });
 
     it('includes all sources when playlist is undefined', () => {
@@ -532,12 +525,7 @@ describe('ReportExporter', () => {
         playlist,
       );
       expect(rows).toHaveLength(4);
-      expect(rows.map((r) => r.shotName)).toEqual([
-        'shot_A.exr',
-        'shot_B.exr',
-        'shot_C.exr',
-        'shot_D.exr',
-      ]);
+      expect(rows.map((r) => r.shotName)).toEqual(['shot_A.exr', 'shot_B.exr', 'shot_C.exr', 'shot_D.exr']);
     });
 
     it('only includes playlist clips when a playlist is active', () => {
@@ -844,10 +832,12 @@ describe('ReportExporter', () => {
       const session = createMockSession([{ name: 'shot.exr', duration: 48, fps: 24 }]);
       const rows = buildReportRows(
         session,
-        createMockNoteManager({ 0: [
-          { text: 'Fix edge', priority: 'high', category: 'comp' },
-          { text: 'Minor issue', priority: 'low', category: 'paint' },
-        ] }),
+        createMockNoteManager({
+          0: [
+            { text: 'Fix edge', priority: 'high', category: 'comp' },
+            { text: 'Minor issue', priority: 'low', category: 'paint' },
+          ],
+        }),
         createMockStatusManager({}),
         createMockVersionManager({}),
       );
@@ -981,9 +971,7 @@ describe('ReportExporter', () => {
       });
 
       it('handles single version that is current', () => {
-        const history: ReportVersionHistoryEntry[] = [
-          { label: 'v1', isCurrent: true },
-        ];
+        const history: ReportVersionHistoryEntry[] = [{ label: 'v1', isCurrent: true }];
         expect(formatVersionHistory(history)).toBe('*v1 (current)*');
       });
 
@@ -1015,12 +1003,7 @@ describe('ReportExporter', () => {
             activeSourceIndex: 2,
           },
         ]);
-        const rows = buildReportRows(
-          session,
-          createMockNoteManager({}),
-          createMockStatusManager({}),
-          versionManager,
-        );
+        const rows = buildReportRows(session, createMockNoteManager({}), createMockStatusManager({}), versionManager);
         // Source 0 should see itself as current, others not
         expect(rows[0]!.versionHistory).toEqual([
           { label: 'v1', isCurrent: true },

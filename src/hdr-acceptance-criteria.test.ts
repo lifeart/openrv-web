@@ -180,7 +180,9 @@ describe('Phase 1: Wide Color Gamut (Display P3)', () => {
       renderer.initialize(canvas, makeCaps());
 
       // Verify getContext was called with webgl2 and standard options
-      const webgl2Call = (getContextSpy.mock.calls as unknown as [string, unknown][]).find((call) => call[0] === 'webgl2');
+      const webgl2Call = (getContextSpy.mock.calls as unknown as [string, unknown][]).find(
+        (call) => call[0] === 'webgl2',
+      );
       expect(webgl2Call).toBeDefined();
       const options = webgl2Call![1] as unknown as Record<string, unknown>;
       expect(options.alpha).toBe(false);
@@ -1392,7 +1394,12 @@ describe('Phase 4: WebGPU Migration Path', () => {
       const noop = () => {};
       const mockBindGroupLayout = {};
       const mockPipeline = { getBindGroupLayout: () => mockBindGroupLayout };
-      const mockBuffer = { getMappedRange: () => new ArrayBuffer(0), unmap: noop, destroy: noop, mapAsync: () => Promise.resolve() };
+      const mockBuffer = {
+        getMappedRange: () => new ArrayBuffer(0),
+        unmap: noop,
+        destroy: noop,
+        mapAsync: () => Promise.resolve(),
+      };
       return {
         createShaderModule: () => ({}),
         createRenderPipeline: () => mockPipeline,

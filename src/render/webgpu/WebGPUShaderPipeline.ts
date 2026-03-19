@@ -446,9 +446,10 @@ export class WebGPUShaderPipeline {
       });
     }
 
-    const sampler = this._defaultFilterMode === 'nearest'
-      ? (this.nearestSampler ?? this.linearSampler)
-      : (this.linearSampler ?? this.nearestSampler);
+    const sampler =
+      this._defaultFilterMode === 'nearest'
+        ? (this.nearestSampler ?? this.linearSampler)
+        : (this.linearSampler ?? this.nearestSampler);
     if (!sampler) return;
 
     const textureBindGroup = device.createBindGroup({
@@ -521,9 +522,10 @@ export class WebGPUShaderPipeline {
     let sampler: WGPUSampler | null;
     if (isFirstStage) {
       // First stage: user's filter mode determines sampling of the source image
-      sampler = this._defaultFilterMode === 'nearest'
-        ? (this.nearestSampler ?? this.linearSampler)
-        : (this.linearSampler ?? this.nearestSampler);
+      sampler =
+        this._defaultFilterMode === 'nearest'
+          ? (this.nearestSampler ?? this.linearSampler)
+          : (this.linearSampler ?? this.nearestSampler);
     } else if (stage.needsBilinearInput) {
       // Intermediate stage that needs bilinear (e.g. clarity, sharpen)
       sampler = this.linearSampler ?? this.nearestSampler;

@@ -317,12 +317,13 @@ describe('representation types', () => {
 
     it('should assign distinct default priorities to each valid kind', () => {
       const kinds: RepresentationKind[] = ['frames', 'movie', 'proxy'];
-      const priorities = kinds.map((kind) =>
-        createRepresentation({
-          kind,
-          resolution: { width: 100, height: 100 },
-          loaderConfig: {},
-        }).priority,
+      const priorities = kinds.map(
+        (kind) =>
+          createRepresentation({
+            kind,
+            resolution: { width: 100, height: 100 },
+            loaderConfig: {},
+          }).priority,
       );
       expect(new Set(priorities).size).toBe(kinds.length);
     });

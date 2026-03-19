@@ -292,9 +292,7 @@ describe('wireViewControls', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     (controls.toneMappingControl as EventEmitter).emit('hdrModeChanged', { mode: 'pq', previousMode: 'sdr' });
     expect(viewer.setHDROutputMode).toHaveBeenCalledWith('pq');
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('rejected by the renderer'),
-    );
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('rejected by the renderer'));
     expect(controls.toneMappingControl.syncHDROutputMode).toHaveBeenCalledWith('sdr');
     warnSpy.mockRestore();
   });

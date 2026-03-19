@@ -141,8 +141,7 @@ export class PlaybackAPI extends DisposableAPI {
 
       if (this.session.loopMode === 'loop') {
         // Wrap around within in/out range using modular arithmetic
-        targetFrame =
-          ((((targetFrame - rangeStart) % rangeLength) + rangeLength) % rangeLength) + rangeStart;
+        targetFrame = ((((targetFrame - rangeStart) % rangeLength) + rangeLength) % rangeLength) + rangeStart;
       } else if (this.session.loopMode === 'pingpong') {
         // Reflect off boundaries like a bouncing ball
         let offset = targetFrame - rangeStart;

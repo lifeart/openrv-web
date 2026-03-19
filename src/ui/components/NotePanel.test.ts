@@ -968,7 +968,9 @@ describe('NotePanel', () => {
       expect(panel.getElement().querySelector(`[data-testid="note-priority-${low.id}"]`)!.textContent).toBe('low');
       expect(panel.getElement().querySelector(`[data-testid="note-priority-${med.id}"]`)!.textContent).toBe('medium');
       expect(panel.getElement().querySelector(`[data-testid="note-priority-${high.id}"]`)!.textContent).toBe('high');
-      expect(panel.getElement().querySelector(`[data-testid="note-priority-${crit.id}"]`)!.textContent).toBe('critical');
+      expect(panel.getElement().querySelector(`[data-testid="note-priority-${crit.id}"]`)!.textContent).toBe(
+        'critical',
+      );
     });
   });
 });

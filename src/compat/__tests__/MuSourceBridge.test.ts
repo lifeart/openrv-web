@@ -216,10 +216,7 @@ describe('MuSourceBridge', () => {
 
   describe('addSources', () => {
     it('adds multiple sources', async () => {
-      await bridge.addSources(
-        [['/a.mov'], ['/b.mov'], ['/c.exr']],
-        'batch',
-      );
+      await bridge.addSources([['/a.mov'], ['/b.mov'], ['/c.exr']], 'batch');
       expect(bridge.sourceCount()).toBe(3);
     });
 
@@ -243,10 +240,7 @@ describe('MuSourceBridge', () => {
 
   describe('addSourcesVerbose', () => {
     it('returns all created names', async () => {
-      const names = await bridge.addSourcesVerbose(
-        [['/a.mov'], ['/b.exr']],
-        'multi',
-      );
+      const names = await bridge.addSourcesVerbose([['/a.mov'], ['/b.exr']], 'multi');
       expect(names).toHaveLength(2);
       expect(names[0]).not.toBe(names[1]);
     });
@@ -323,9 +317,7 @@ describe('MuSourceBridge', () => {
       bridge.addSourceBegin();
       const batchName = await bridge.addSourceVerbose(['/a.mov'], 'tag');
       expect(() => bridge.newImageSource(batchName, 10, 10, 4)).toThrow(TypeError);
-      expect(() => bridge.newImageSource(batchName, 10, 10, 4)).toThrow(
-        /already exists/,
-      );
+      expect(() => bridge.newImageSource(batchName, 10, 10, 4)).toThrow(/already exists/);
       // Batch queue entry is preserved and commit still succeeds
       await bridge.addSourceEnd();
       expect(bridge.sourceCount()).toBe(1);
@@ -346,9 +338,7 @@ describe('MuSourceBridge', () => {
     });
 
     it('throws for non-existent source', () => {
-      expect(() => bridge.addToSource('nope', '/x.mov')).toThrow(
-        'Source not found',
-      );
+      expect(() => bridge.addToSource('nope', '/x.mov')).toThrow('Source not found');
     });
   });
 
@@ -356,10 +346,7 @@ describe('MuSourceBridge', () => {
     it('replaces media paths', async () => {
       const name = await bridge.addSourceVerbose(['/old.mov']);
       bridge.setSourceMedia(name, ['/new1.mov', '/new2.mov']);
-      expect(bridge.sourceMedia(name).media).toEqual([
-        '/new1.mov',
-        '/new2.mov',
-      ]);
+      expect(bridge.sourceMedia(name).media).toEqual(['/new1.mov', '/new2.mov']);
     });
 
     it('throws on non-array', async () => {
@@ -576,9 +563,7 @@ describe('MuSourceBridge', () => {
 
     it('reads from in-memory image source', () => {
       const name = bridge.newImageSource('testImg', 2, 2, 4);
-      const pixels = new Float32Array([
-        1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1, 1, 1, 1, 1, 1,
-      ]);
+      const pixels = new Float32Array([1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1, 1, 1, 1, 1, 1]);
       bridge.newImageSourcePixels(name, 0, pixels);
 
       expect(bridge.sourcePixelValue(name, 0, 0)).toEqual([1, 0, 0, 1]);
@@ -589,11 +574,7 @@ describe('MuSourceBridge', () => {
 
     it('returns null for out-of-bounds coordinates on in-memory source', () => {
       const name = bridge.newImageSource('testImg', 2, 2, 4);
-      bridge.newImageSourcePixels(
-        name,
-        0,
-        new Float32Array(2 * 2 * 4),
-      );
+      bridge.newImageSourcePixels(name, 0, new Float32Array(2 * 2 * 4));
       expect(bridge.sourcePixelValue(name, -1, 0)).toBeNull();
       expect(bridge.sourcePixelValue(name, 5, 5)).toBeNull();
     });
@@ -605,9 +586,7 @@ describe('MuSourceBridge', () => {
     });
 
     it('throws for non-existent source', () => {
-      expect(() => bridge.sourcePixelValue('nope', 0, 0)).toThrow(
-        'Source not found',
-      );
+      expect(() => bridge.sourcePixelValue('nope', 0, 0)).toThrow('Source not found');
     });
 
     it('delegates to PixelReadbackProvider for GPU-backed sources', async () => {
@@ -634,9 +613,7 @@ describe('MuSourceBridge', () => {
 
     it('prefers in-memory data over readback provider', () => {
       const name = bridge.newImageSource('testImg', 2, 2, 4);
-      const pixels = new Float32Array([
-        1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1, 1, 1, 1, 1, 1,
-      ]);
+      const pixels = new Float32Array([1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1, 1, 1, 1, 1, 1]);
       bridge.newImageSourcePixels(name, 0, pixels);
 
       const mockProvider: PixelReadbackProvider = {
@@ -665,24 +642,13 @@ describe('MuSourceBridge', () => {
   describe('sourceDisplayChannelNames', () => {
     it('returns default RGBA when no channels set', async () => {
       const name = await bridge.addSourceVerbose(['/a.mov']);
-      expect(bridge.sourceDisplayChannelNames(name)).toEqual([
-        'R',
-        'G',
-        'B',
-        'A',
-      ]);
+      expect(bridge.sourceDisplayChannelNames(name)).toEqual(['R', 'G', 'B', 'A']);
     });
 
     it('returns custom channel names when set', async () => {
       const name = await bridge.addSourceVerbose(['/a.exr']);
       bridge.setSourceChannelNames(name, ['R', 'G', 'B', 'A', 'Z']);
-      expect(bridge.sourceDisplayChannelNames(name)).toEqual([
-        'R',
-        'G',
-        'B',
-        'A',
-        'Z',
-      ]);
+      expect(bridge.sourceDisplayChannelNames(name)).toEqual(['R', 'G', 'B', 'A', 'Z']);
     });
   });
 
@@ -726,9 +692,7 @@ describe('MuSourceBridge', () => {
     it('throws TypeError when creating a source with a duplicate name', () => {
       bridge.newImageSource('foo', 10, 10, 4);
       expect(() => bridge.newImageSource('foo', 20, 20, 3)).toThrow(TypeError);
-      expect(() => bridge.newImageSource('foo', 20, 20, 3)).toThrow(
-        /Source 'foo' already exists/,
-      );
+      expect(() => bridge.newImageSource('foo', 20, 20, 3)).toThrow(/Source 'foo' already exists/);
     });
 
     it('preserves the original source after duplicate name rejection', () => {
@@ -774,16 +738,12 @@ describe('MuSourceBridge', () => {
     });
 
     it('throws for non-existent image source', () => {
-      expect(() =>
-        bridge.newImageSourcePixels('nope', 0, new Float32Array(4)),
-      ).toThrow('Image source not found');
+      expect(() => bridge.newImageSourcePixels('nope', 0, new Float32Array(4))).toThrow('Image source not found');
     });
 
     it('throws on data length mismatch', () => {
       const name = bridge.newImageSource('img', 2, 2, 4);
-      expect(() =>
-        bridge.newImageSourcePixels(name, 0, new Float32Array(8)),
-      ).toThrow('length mismatch');
+      expect(() => bridge.newImageSourcePixels(name, 0, new Float32Array(8))).toThrow('length mismatch');
     });
   });
 
@@ -815,9 +775,7 @@ describe('MuSourceBridge', () => {
       const name = bridge.newImageSource('img', 2, 2, 4);
       bridge.newImageSourcePixels(name, 0, new Float32Array(16));
       bridge.clearSession();
-      expect(() => bridge.sourcePixelValue('img', 0, 0)).toThrow(
-        'Source not found',
-      );
+      expect(() => bridge.sourcePixelValue('img', 0, 0)).toThrow('Source not found');
     });
   });
 
@@ -828,9 +786,7 @@ describe('MuSourceBridge', () => {
   describe('addSourceMediaRep', () => {
     it('returns empty string when no graph is attached (Issue #258)', async () => {
       const name = await bridge.addSourceVerbose(['/full.mov']);
-      const repNode = bridge.addSourceMediaRep(name, 'proxy', [
-        '/proxy.mov',
-      ]);
+      const repNode = bridge.addSourceMediaRep(name, 'proxy', ['/proxy.mov']);
       expect(repNode).toBe('');
     });
 
@@ -852,9 +808,7 @@ describe('MuSourceBridge', () => {
 
     it('throws for non-existent representation', async () => {
       const name = await bridge.addSourceVerbose(['/full.mov']);
-      expect(() =>
-        bridge.setActiveSourceMediaRep(name, 'nonexistent'),
-      ).toThrow('not found');
+      expect(() => bridge.setActiveSourceMediaRep(name, 'nonexistent')).toThrow('not found');
     });
   });
 
@@ -871,11 +825,7 @@ describe('MuSourceBridge', () => {
       bridge.addSourceMediaRep(name, 'full', ['/full.mov']);
       bridge.addSourceMediaRep(name, 'proxy', ['/proxy.mov']);
       bridge.addSourceMediaRep(name, 'editorial', ['/edit.mov']);
-      expect(bridge.sourceMediaReps(name)).toEqual([
-        'full',
-        'proxy',
-        'editorial',
-      ]);
+      expect(bridge.sourceMediaReps(name)).toEqual(['full', 'proxy', 'editorial']);
     });
 
     it('returns empty array when no reps', async () => {
@@ -1082,24 +1032,12 @@ describe('MuSourceBridge', () => {
 
   describe('error handling', () => {
     it('throws when accessing non-existent source', () => {
-      expect(() => bridge.sourceMedia('nonexistent')).toThrow(
-        'Source not found',
-      );
-      expect(() => bridge.sourceMediaInfo('nonexistent')).toThrow(
-        'Source not found',
-      );
-      expect(() => bridge.sourceAttributes('nonexistent')).toThrow(
-        'Source not found',
-      );
-      expect(() => bridge.sourceGeometry('nonexistent')).toThrow(
-        'Source not found',
-      );
-      expect(() => bridge.sourceMediaRep('nonexistent')).toThrow(
-        'Source not found',
-      );
-      expect(() => bridge.sourceMediaReps('nonexistent')).toThrow(
-        'Source not found',
-      );
+      expect(() => bridge.sourceMedia('nonexistent')).toThrow('Source not found');
+      expect(() => bridge.sourceMediaInfo('nonexistent')).toThrow('Source not found');
+      expect(() => bridge.sourceAttributes('nonexistent')).toThrow('Source not found');
+      expect(() => bridge.sourceGeometry('nonexistent')).toThrow('Source not found');
+      expect(() => bridge.sourceMediaRep('nonexistent')).toThrow('Source not found');
+      expect(() => bridge.sourceMediaReps('nonexistent')).toThrow('Source not found');
     });
 
     it('works when openrv is not available', async () => {
@@ -1117,16 +1055,12 @@ describe('MuSourceBridge', () => {
   describe('session integration', () => {
     it('addSource loads http URLs into the real session', async () => {
       await bridge.addSource(['https://example.com/movie.mp4']);
-      expect(mockOpenRV.media.addSourceFromURL).toHaveBeenCalledWith(
-        'https://example.com/movie.mp4',
-      );
+      expect(mockOpenRV.media.addSourceFromURL).toHaveBeenCalledWith('https://example.com/movie.mp4');
     });
 
     it('addSource loads .movieproc paths via loadMovieProc', async () => {
       await bridge.addSource(['smpte_bars,width=1920.movieproc']);
-      expect(mockOpenRV.media.loadMovieProc).toHaveBeenCalledWith(
-        'smpte_bars,width=1920.movieproc',
-      );
+      expect(mockOpenRV.media.loadMovieProc).toHaveBeenCalledWith('smpte_bars,width=1920.movieproc');
     });
 
     it('addSource skips local file paths (no session call)', async () => {
@@ -1138,21 +1072,13 @@ describe('MuSourceBridge', () => {
     });
 
     it('addSourceVerbose loads into session and returns name', async () => {
-      const name = await bridge.addSourceVerbose(
-        ['https://cdn.example.com/clip.mov'],
-        'movie',
-      );
+      const name = await bridge.addSourceVerbose(['https://cdn.example.com/clip.mov'], 'movie');
       expect(name).toMatch(/^sourceGroup\d{6}$/);
-      expect(mockOpenRV.media.addSourceFromURL).toHaveBeenCalledWith(
-        'https://cdn.example.com/clip.mov',
-      );
+      expect(mockOpenRV.media.addSourceFromURL).toHaveBeenCalledWith('https://cdn.example.com/clip.mov');
     });
 
     it('addSources loads multiple URLs into session', async () => {
-      await bridge.addSources([
-        ['https://example.com/a.mp4'],
-        ['https://example.com/b.mp4'],
-      ]);
+      await bridge.addSources([['https://example.com/a.mp4'], ['https://example.com/b.mp4']]);
       expect(mockOpenRV.media.addSourceFromURL).toHaveBeenCalledTimes(2);
     });
 
@@ -1203,9 +1129,7 @@ describe('MuSourceBridge', () => {
       bridge.setSourceMedia(name, ['https://example.com/new.mp4']);
       // Allow async propagation to flush
       await vi.waitFor(() => {
-        expect(mockOpenRV.media.addSourceFromURL).toHaveBeenCalledWith(
-          'https://example.com/new.mp4',
-        );
+        expect(mockOpenRV.media.addSourceFromURL).toHaveBeenCalledWith('https://example.com/new.mp4');
       });
     });
 
@@ -1214,9 +1138,7 @@ describe('MuSourceBridge', () => {
       mockOpenRV.media.addSourceFromURL.mockClear();
       bridge.relocateSource(name, 'https://example.com/relocated.mp4');
       await vi.waitFor(() => {
-        expect(mockOpenRV.media.addSourceFromURL).toHaveBeenCalledWith(
-          'https://example.com/relocated.mp4',
-        );
+        expect(mockOpenRV.media.addSourceFromURL).toHaveBeenCalledWith('https://example.com/relocated.mp4');
       });
     });
 
@@ -1225,9 +1147,7 @@ describe('MuSourceBridge', () => {
       mockOpenRV.media.addSourceFromURL.mockClear();
       bridge.addToSource(name, 'https://example.com/layer2.mp4');
       await vi.waitFor(() => {
-        expect(mockOpenRV.media.addSourceFromURL).toHaveBeenCalledWith(
-          'https://example.com/layer2.mp4',
-        );
+        expect(mockOpenRV.media.addSourceFromURL).toHaveBeenCalledWith('https://example.com/layer2.mp4');
       });
     });
 
@@ -1236,32 +1156,24 @@ describe('MuSourceBridge', () => {
       mockOpenRV.media.loadMovieProc.mockClear();
       bridge.addToSource(name, 'color.movieproc');
       await vi.waitFor(() => {
-        expect(mockOpenRV.media.loadMovieProc).toHaveBeenCalledWith(
-          'color.movieproc',
-        );
+        expect(mockOpenRV.media.loadMovieProc).toHaveBeenCalledWith('color.movieproc');
       });
     });
 
     it('setActiveSourceMediaRep propagates rep media to session', async () => {
       const name = await bridge.addSourceVerbose(['/full.mov']);
       bridge.addSourceMediaRep(name, 'full', ['/full.mov']);
-      bridge.addSourceMediaRep(name, 'proxy', [
-        'https://cdn.example.com/proxy.mp4',
-      ]);
+      bridge.addSourceMediaRep(name, 'proxy', ['https://cdn.example.com/proxy.mp4']);
       mockOpenRV.media.addSourceFromURL.mockClear();
       bridge.setActiveSourceMediaRep(name, 'proxy');
       await vi.waitFor(() => {
-        expect(mockOpenRV.media.addSourceFromURL).toHaveBeenCalledWith(
-          'https://cdn.example.com/proxy.mp4',
-        );
+        expect(mockOpenRV.media.addSourceFromURL).toHaveBeenCalledWith('https://cdn.example.com/proxy.mp4');
       });
     });
 
     it('gracefully handles session load errors', async () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      mockOpenRV.media.addSourceFromURL.mockRejectedValue(
-        new Error('Network error'),
-      );
+      mockOpenRV.media.addSourceFromURL.mockRejectedValue(new Error('Network error'));
       // Should not throw — error is caught and logged
       await bridge.addSource(['https://example.com/fail.mp4']);
       expect(bridge.sourceCount()).toBe(1); // shadow state still works
@@ -1285,51 +1197,32 @@ describe('MuSourceBridge', () => {
 
     it('addSource routes http:// (non-TLS) URLs to addSourceFromURL', async () => {
       await bridge.addSource(['http://example.com/clip.mp4']);
-      expect(mockOpenRV.media.addSourceFromURL).toHaveBeenCalledWith(
-        'http://example.com/clip.mp4',
-      );
+      expect(mockOpenRV.media.addSourceFromURL).toHaveBeenCalledWith('http://example.com/clip.mp4');
     });
 
     it('addSource handles mixed path types in a single call', async () => {
       // addSource accepts an array of paths; each path is routed independently
-      await bridge.addSource([
-        'https://example.com/movie.mp4',
-        'smpte_bars.movieproc',
-        '/local/path.mov',
-      ]);
-      expect(mockOpenRV.media.addSourceFromURL).toHaveBeenCalledWith(
-        'https://example.com/movie.mp4',
-      );
-      expect(mockOpenRV.media.loadMovieProc).toHaveBeenCalledWith(
-        'smpte_bars.movieproc',
-      );
+      await bridge.addSource(['https://example.com/movie.mp4', 'smpte_bars.movieproc', '/local/path.mov']);
+      expect(mockOpenRV.media.addSourceFromURL).toHaveBeenCalledWith('https://example.com/movie.mp4');
+      expect(mockOpenRV.media.loadMovieProc).toHaveBeenCalledWith('smpte_bars.movieproc');
       // Local path should not trigger any session call beyond the above two
       expect(mockOpenRV.media.addSourceFromURL).toHaveBeenCalledTimes(1);
       expect(mockOpenRV.media.loadMovieProc).toHaveBeenCalledTimes(1);
       // Shadow state tracks all three paths
       expect(bridge.sourceCount()).toBe(1);
       const media = bridge.sourceMedia(bridge.sources()[0]!.name);
-      expect(media.media).toEqual([
-        'https://example.com/movie.mp4',
-        'smpte_bars.movieproc',
-        '/local/path.mov',
-      ]);
+      expect(media.media).toEqual(['https://example.com/movie.mp4', 'smpte_bars.movieproc', '/local/path.mov']);
     });
 
     it('addSourceVerbose in batch mode defers session loading until addSourceEnd', async () => {
       bridge.addSourceBegin();
-      const name = await bridge.addSourceVerbose(
-        ['https://example.com/batch.mp4'],
-        'movie',
-      );
+      const name = await bridge.addSourceVerbose(['https://example.com/batch.mp4'], 'movie');
       expect(typeof name).toBe('string');
       // No session call yet
       expect(mockOpenRV.media.addSourceFromURL).not.toHaveBeenCalled();
 
       await bridge.addSourceEnd();
-      expect(mockOpenRV.media.addSourceFromURL).toHaveBeenCalledWith(
-        'https://example.com/batch.mp4',
-      );
+      expect(mockOpenRV.media.addSourceFromURL).toHaveBeenCalledWith('https://example.com/batch.mp4');
     });
 
     it('batch mode defers movieproc loading until addSourceEnd', async () => {
@@ -1338,9 +1231,7 @@ describe('MuSourceBridge', () => {
       expect(mockOpenRV.media.loadMovieProc).not.toHaveBeenCalled();
 
       await bridge.addSourceEnd();
-      expect(mockOpenRV.media.loadMovieProc).toHaveBeenCalledWith(
-        'checkerboard.movieproc',
-      );
+      expect(mockOpenRV.media.loadMovieProc).toHaveBeenCalledWith('checkerboard.movieproc');
     });
 
     it('clearSession clears both real session AND shadow state atomically', async () => {
@@ -1364,14 +1255,10 @@ describe('MuSourceBridge', () => {
     it('setSourceMedia shadow state updated even when session propagation fails', async () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const name = await bridge.addSourceVerbose(['/old.mov']);
-      mockOpenRV.media.addSourceFromURL.mockRejectedValue(
-        new Error('Network error'),
-      );
+      mockOpenRV.media.addSourceFromURL.mockRejectedValue(new Error('Network error'));
       bridge.setSourceMedia(name, ['https://example.com/fail.mp4']);
       // Shadow state reflects the new media immediately
-      expect(bridge.sourceMedia(name).media).toEqual([
-        'https://example.com/fail.mp4',
-      ]);
+      expect(bridge.sourceMedia(name).media).toEqual(['https://example.com/fail.mp4']);
       // Wait for fire-and-forget propagation to flush
       await vi.waitFor(() => {
         expect(warnSpy).toHaveBeenCalled();
@@ -1382,14 +1269,10 @@ describe('MuSourceBridge', () => {
     it('relocateSource shadow state updated even when session propagation fails', async () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const name = await bridge.addSourceVerbose(['/old.mov']);
-      mockOpenRV.media.addSourceFromURL.mockRejectedValue(
-        new Error('Network error'),
-      );
+      mockOpenRV.media.addSourceFromURL.mockRejectedValue(new Error('Network error'));
       bridge.relocateSource(name, 'https://example.com/fail.mp4');
       // Shadow state has the new path
-      expect(bridge.sourceMedia(name).media[0]).toBe(
-        'https://example.com/fail.mp4',
-      );
+      expect(bridge.sourceMedia(name).media[0]).toBe('https://example.com/fail.mp4');
       await vi.waitFor(() => {
         expect(warnSpy).toHaveBeenCalled();
       });
@@ -1399,15 +1282,10 @@ describe('MuSourceBridge', () => {
     it('addToSource shadow state updated even when session propagation fails', async () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const name = await bridge.addSourceVerbose(['/old.mov']);
-      mockOpenRV.media.addSourceFromURL.mockRejectedValue(
-        new Error('Network error'),
-      );
+      mockOpenRV.media.addSourceFromURL.mockRejectedValue(new Error('Network error'));
       bridge.addToSource(name, 'https://example.com/fail.mp4');
       // Shadow state reflects the appended media immediately
-      expect(bridge.sourceMedia(name).media).toEqual([
-        '/old.mov',
-        'https://example.com/fail.mp4',
-      ]);
+      expect(bridge.sourceMedia(name).media).toEqual(['/old.mov', 'https://example.com/fail.mp4']);
       await vi.waitFor(() => {
         expect(warnSpy).toHaveBeenCalled();
       });
@@ -1418,12 +1296,8 @@ describe('MuSourceBridge', () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const name = await bridge.addSourceVerbose(['/full.mov']);
       bridge.addSourceMediaRep(name, 'full', ['/full.mov']);
-      bridge.addSourceMediaRep(name, 'proxy', [
-        'https://cdn.example.com/proxy.mp4',
-      ]);
-      mockOpenRV.media.addSourceFromURL.mockRejectedValue(
-        new Error('CDN error'),
-      );
+      bridge.addSourceMediaRep(name, 'proxy', ['https://cdn.example.com/proxy.mp4']);
+      mockOpenRV.media.addSourceFromURL.mockRejectedValue(new Error('CDN error'));
       bridge.setActiveSourceMediaRep(name, 'proxy');
       // Shadow state switched immediately
       expect(bridge.sourceMediaRep(name)).toBe('proxy');
@@ -1617,9 +1491,7 @@ describe('MuSourceBridge', () => {
       gb.addSourceMediaRep(name, 'full', ['/full.mov']);
       gb.addSourceMediaRep(name, 'proxy', ['/proxy.mov']);
       // Only one switch node in the graph
-      const switchNodes = graph
-        .getAllNodes()
-        .filter((n) => n.name === `${name}_switch`);
+      const switchNodes = graph.getAllNodes().filter((n) => n.name === `${name}_switch`);
       expect(switchNodes).toHaveLength(1);
       // The switch node should have 2 inputs (one per rep)
       expect(switchNodes[0]!.inputs).toHaveLength(2);
@@ -1700,12 +1572,18 @@ describe('MuSourceBridge', () => {
       const ctx = { frame: 0, fps: 24, stereoEye: 'left' } as unknown as import('../../core/graph/Graph').EvalContext;
 
       // activeInputIndex defaults to 0 → should return first input
-      const result0 = (switchNode as unknown as { process(ctx: unknown, inputs: unknown[]): unknown }).process(ctx, [imgA, imgB]);
+      const result0 = (switchNode as unknown as { process(ctx: unknown, inputs: unknown[]): unknown }).process(ctx, [
+        imgA,
+        imgB,
+      ]);
       expect(result0).toBe(imgA);
 
       // Switch to index 1 → should return second input
       gb.setActiveSourceMediaRep(name, 'proxy');
-      const result1 = (switchNode as unknown as { process(ctx: unknown, inputs: unknown[]): unknown }).process(ctx, [imgA, imgB]);
+      const result1 = (switchNode as unknown as { process(ctx: unknown, inputs: unknown[]): unknown }).process(ctx, [
+        imgA,
+        imgB,
+      ]);
       expect(result1).toBe(imgB);
     });
 

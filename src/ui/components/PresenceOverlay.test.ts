@@ -85,10 +85,7 @@ describe('PresenceOverlay', () => {
   });
 
   it('PO-007: each avatar shows user initials', () => {
-    const users = [
-      createUser({ id: 'u1', name: 'Alice' }),
-      createUser({ id: 'u2', name: 'bob' }),
-    ];
+    const users = [createUser({ id: 'u1', name: 'Alice' }), createUser({ id: 'u2', name: 'bob' })];
     overlay.show();
     overlay.setUsers(users);
 
@@ -98,10 +95,7 @@ describe('PresenceOverlay', () => {
   });
 
   it('PO-008: each avatar has a test ID based on user ID', () => {
-    const users = [
-      createUser({ id: 'user-alpha', name: 'Alpha' }),
-      createUser({ id: 'user-beta', name: 'Beta' }),
-    ];
+    const users = [createUser({ id: 'user-alpha', name: 'Alpha' }), createUser({ id: 'user-beta', name: 'Beta' })];
     overlay.show();
     overlay.setUsers(users);
 
@@ -130,19 +124,13 @@ describe('PresenceOverlay', () => {
     overlay.setUsers([createUser({ id: 'u1', name: 'Alice' })]);
     expect(overlay.getElement().children.length).toBe(1);
 
-    overlay.setUsers([
-      createUser({ id: 'u1', name: 'Alice' }),
-      createUser({ id: 'u2', name: 'Bob' }),
-    ]);
+    overlay.setUsers([createUser({ id: 'u1', name: 'Alice' }), createUser({ id: 'u2', name: 'Bob' })]);
     expect(overlay.getElement().children.length).toBe(2);
   });
 
   it('PO-011: avatars update when a user leaves', () => {
     overlay.show();
-    overlay.setUsers([
-      createUser({ id: 'u1', name: 'Alice' }),
-      createUser({ id: 'u2', name: 'Bob' }),
-    ]);
+    overlay.setUsers([createUser({ id: 'u1', name: 'Alice' }), createUser({ id: 'u2', name: 'Bob' })]);
     expect(overlay.getElement().children.length).toBe(2);
 
     overlay.setUsers([createUser({ id: 'u1', name: 'Alice' })]);

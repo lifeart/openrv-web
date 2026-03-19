@@ -85,9 +85,7 @@ vi.mock('./utils/export/AnnotationPDFExporter', () => ({
 }));
 
 const showAlertSpy = vi.spyOn(Modal, 'showAlert').mockReturnValue(Promise.resolve());
-const showAnnotationImportDialogSpy = vi
-  .spyOn(Modal, 'showAnnotationImportDialog')
-  .mockResolvedValue(null);
+const showAnnotationImportDialogSpy = vi.spyOn(Modal, 'showAnnotationImportDialog').mockResolvedValue(null);
 
 function createMockVolumeControl() {
   const emitter = new EventEmitter();
@@ -591,11 +589,10 @@ describe('wirePlaybackControls', () => {
     exportControl.emit('annotationsJSONImportRequested', undefined);
 
     await vi.waitFor(() => {
-      expect(mockApplyAnnotationsJSON).toHaveBeenCalledWith(
-        expect.anything(),
-        fakeData,
-        { mode: 'replace', frameOffset: 50 },
-      );
+      expect(mockApplyAnnotationsJSON).toHaveBeenCalledWith(expect.anything(), fakeData, {
+        mode: 'replace',
+        frameOffset: 50,
+      });
     });
 
     await vi.waitFor(() => {
@@ -646,11 +643,10 @@ describe('wirePlaybackControls', () => {
     exportControl.emit('annotationsJSONImportRequested', undefined);
 
     await vi.waitFor(() => {
-      expect(mockApplyAnnotationsJSON).toHaveBeenCalledWith(
-        expect.anything(),
-        fakeData,
-        { mode: 'replace', frameOffset: 0 },
-      );
+      expect(mockApplyAnnotationsJSON).toHaveBeenCalledWith(expect.anything(), fakeData, {
+        mode: 'replace',
+        frameOffset: 0,
+      });
     });
 
     await vi.waitFor(() => {
@@ -718,13 +714,10 @@ describe('wirePlaybackControls', () => {
       },
     });
 
-    expect(showAlertSpy).toHaveBeenCalledWith(
-      'Switched to fallback representation: SDR Proxy (1920x1080)',
-      {
-        type: 'info',
-        title: 'Fallback Activated',
-      },
-    );
+    expect(showAlertSpy).toHaveBeenCalledWith('Switched to fallback representation: SDR Proxy (1920x1080)', {
+      type: 'info',
+      title: 'Fallback Activated',
+    });
   });
 
   describe('disposal', () => {

@@ -220,8 +220,7 @@ describe('HotReloadManager', () => {
     });
 
     it('PHOT-021: retry succeeds after transient reload failure', async () => {
-      (registry.loadFromURL as ReturnType<typeof vi.fn>)
-        .mockRejectedValueOnce(new Error('network error'));
+      (registry.loadFromURL as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('network error'));
 
       manager.trackURL('test.plugin', 'http://localhost:3000/plugin.js');
 

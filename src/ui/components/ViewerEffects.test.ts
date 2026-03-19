@@ -236,13 +236,7 @@ describe('applyHighlightsShadowsHDR', () => {
   it('clamps output to [0, 255]', () => {
     const img = makePixel(0, 0, 0);
     const hdr = new Float32Array([2.0, 2.0, 2.0]);
-    applyHighlightsShadowsHDR(
-      img,
-      { highlights: -100, shadows: 100, whites: 100, blacks: 100 },
-      hdr,
-      3,
-      2.0,
-    );
+    applyHighlightsShadowsHDR(img, { highlights: -100, shadows: 100, whites: 100, blacks: 100 }, hdr, 3, 2.0);
     for (let c = 0; c < 3; c++) {
       expect(img.data[c]!).toBeGreaterThanOrEqual(0);
       expect(img.data[c]!).toBeLessThanOrEqual(255);

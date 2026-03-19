@@ -806,5 +806,4 @@ describe('SlateEditor', () => {
       }
     });
   });
-
 });

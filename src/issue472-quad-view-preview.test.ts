@@ -215,9 +215,7 @@ describe('Issue #472: AppViewWiring quad-view produces warning only', () => {
     });
 
     // Should have warned
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Quad View is not yet connected to the viewer'),
-    );
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Quad View is not yet connected to the viewer'));
 
     // Should NOT have called any viewer rendering method for quad layout
     // (no setQuadViewState or similar exists on the viewer)
@@ -240,9 +238,7 @@ describe('Issue #472: AppViewWiring quad-view produces warning only', () => {
     });
 
     // The warn for quad view should NOT fire when enabled is false
-    const quadWarns = warnSpy.mock.calls.filter((args) =>
-      typeof args[0] === 'string' && args[0].includes('Quad View'),
-    );
+    const quadWarns = warnSpy.mock.calls.filter((args) => typeof args[0] === 'string' && args[0].includes('Quad View'));
     expect(quadWarns).toHaveLength(0);
 
     // Confirm disabled is truly a no-op: no viewer methods were called
@@ -270,7 +266,12 @@ describe('Issue #472: AppViewWiring quad-view produces warning only', () => {
     expect(viewer.setDifferenceMatteState).toHaveBeenCalled();
 
     // Blend mode is wired
-    controls.compareControl.emit('blendModeChanged', { mode: 'onionskin', onionOpacity: 0.5, flickerRate: 5, blendRatio: 0.5 });
+    controls.compareControl.emit('blendModeChanged', {
+      mode: 'onionskin',
+      onionOpacity: 0.5,
+      flickerRate: 5,
+      blendRatio: 0.5,
+    });
     expect(viewer.setBlendModeState).toHaveBeenCalled();
   });
 });

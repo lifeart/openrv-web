@@ -283,13 +283,7 @@ export class AppPersistenceManager {
    * Restore a snapshot by ID
    */
   async restoreSnapshot(id: string): Promise<void> {
-    const {
-      session,
-      paintEngine,
-      viewer,
-      snapshotManager,
-      snapshotPanel,
-    } = this.ctx;
+    const { session, paintEngine, viewer, snapshotManager, snapshotPanel } = this.ctx;
     try {
       const state = await snapshotManager.getSnapshot(id);
       if (!state) {
@@ -356,7 +350,12 @@ export class AppPersistenceManager {
 
     try {
       const displayColor = (viewer as any).getDisplayColorState?.();
-      if (displayColor && displayColor.transferFunction && displayColor.transferFunction !== 'srgb' && displayColor.transferFunction !== 'sRGB') {
+      if (
+        displayColor &&
+        displayColor.transferFunction &&
+        displayColor.transferFunction !== 'srgb' &&
+        displayColor.transferFunction !== 'sRGB'
+      ) {
         warnings.push('Custom display color settings may not be fully preserved.');
       }
     } catch {
@@ -388,10 +387,10 @@ export class AppPersistenceManager {
       // Check for serialization gaps and warn
       const gapWarnings = this.getSerializationGapWarnings();
       if (gapWarnings.length > 0) {
-        showAlert(
-          `The following settings are active but may not be fully saved:\n\n${gapWarnings.join('\n')}`,
-          { type: 'warning', title: 'Save Warning' },
-        );
+        showAlert(`The following settings are active but may not be fully saved:\n\n${gapWarnings.join('\n')}`, {
+          type: 'warning',
+          title: 'Save Warning',
+        });
       }
 
       await SessionSerializer.saveToFile(state, `${name}.orvproject`);
@@ -467,9 +466,7 @@ export class AppPersistenceManager {
       } else if (ext === 'rv' || ext === 'gto') {
         const content = await file.arrayBuffer();
         // Convert Map<string, File> to Map<string, File[]> expected by loadFromGTO
-        const filesArray = availableFiles
-          ? new Map([...availableFiles].map(([k, v]) => [k, [v]]))
-          : undefined;
+        const filesArray = availableFiles ? new Map([...availableFiles].map(([k, v]) => [k, [v]])) : undefined;
         await session.loadFromGTO(content, filesArray);
       } else if (ext === 'rvedl') {
         const text = await file.text();

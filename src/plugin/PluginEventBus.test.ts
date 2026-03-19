@@ -359,7 +359,10 @@ describe('PluginEventBus', () => {
 
       expect(cb).toHaveBeenCalledTimes(3);
       expect(cb).toHaveBeenNthCalledWith(1, { message: 'Audio error: autoplay blocked', code: 'AUDIO_AUTOPLAY' });
-      expect(cb).toHaveBeenNthCalledWith(2, { message: 'Unsupported codec "av1" in test.mp4', code: 'UNSUPPORTED_CODEC' });
+      expect(cb).toHaveBeenNthCalledWith(2, {
+        message: 'Unsupported codec "av1" in test.mp4',
+        code: 'UNSUPPORTED_CODEC',
+      });
       expect(cb).toHaveBeenNthCalledWith(3, { message: 'Frame 42 decode timed out', code: 'FRAME_DECODE_TIMEOUT' });
     });
 

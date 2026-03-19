@@ -369,47 +369,47 @@ export function parseColorAdjustments(dto: GTODTO): Partial<ColorAdjustments> | 
         // Node explicitly inactive — do not extract any color adjustments from RVColor.
         // Fall through to RVDisplayColor parsing below.
       } else {
-      // Exposure: default 0 (stops)
-      const exposureResult = extractScalarAndRGB(colorComp.property('exposure').value(), 0);
-      if (typeof exposureResult.scalar === 'number') adjustments.exposure = exposureResult.scalar;
-      if (exposureResult.rgb) adjustments.exposureRGB = exposureResult.rgb;
+        // Exposure: default 0 (stops)
+        const exposureResult = extractScalarAndRGB(colorComp.property('exposure').value(), 0);
+        if (typeof exposureResult.scalar === 'number') adjustments.exposure = exposureResult.scalar;
+        if (exposureResult.rgb) adjustments.exposureRGB = exposureResult.rgb;
 
-      // Gamma: default 1
-      const gammaResult = extractScalarAndRGB(colorComp.property('gamma').value(), 1);
-      if (typeof gammaResult.scalar === 'number') adjustments.gamma = gammaResult.scalar;
-      if (gammaResult.rgb) adjustments.gammaRGB = gammaResult.rgb;
+        // Gamma: default 1
+        const gammaResult = extractScalarAndRGB(colorComp.property('gamma').value(), 1);
+        if (typeof gammaResult.scalar === 'number') adjustments.gamma = gammaResult.scalar;
+        if (gammaResult.rgb) adjustments.gammaRGB = gammaResult.rgb;
 
-      // Contrast: default 1 (0 means identity in OpenRV, map to 1)
-      const contrastResult = extractScalarAndRGB(colorComp.property('contrast').value(), 1);
-      if (typeof contrastResult.scalar === 'number') {
-        adjustments.contrast = contrastResult.scalar === 0 ? 1 : contrastResult.scalar;
-      }
-      if (contrastResult.rgb) {
-        adjustments.contrastRGB = [
-          contrastResult.rgb[0] === 0 ? 1 : contrastResult.rgb[0],
-          contrastResult.rgb[1] === 0 ? 1 : contrastResult.rgb[1],
-          contrastResult.rgb[2] === 0 ? 1 : contrastResult.rgb[2],
-        ];
-      }
+        // Contrast: default 1 (0 means identity in OpenRV, map to 1)
+        const contrastResult = extractScalarAndRGB(colorComp.property('contrast').value(), 1);
+        if (typeof contrastResult.scalar === 'number') {
+          adjustments.contrast = contrastResult.scalar === 0 ? 1 : contrastResult.scalar;
+        }
+        if (contrastResult.rgb) {
+          adjustments.contrastRGB = [
+            contrastResult.rgb[0] === 0 ? 1 : contrastResult.rgb[0],
+            contrastResult.rgb[1] === 0 ? 1 : contrastResult.rgb[1],
+            contrastResult.rgb[2] === 0 ? 1 : contrastResult.rgb[2],
+          ];
+        }
 
-      // Scale: default 1 (multiplicative, identity)
-      const scaleResult = extractScalarAndRGB(colorComp.property('scale').value(), 1);
-      if (typeof scaleResult.scalar === 'number') adjustments.scale = scaleResult.scalar;
-      if (scaleResult.rgb) adjustments.scaleRGB = scaleResult.rgb;
+        // Scale: default 1 (multiplicative, identity)
+        const scaleResult = extractScalarAndRGB(colorComp.property('scale').value(), 1);
+        if (typeof scaleResult.scalar === 'number') adjustments.scale = scaleResult.scalar;
+        if (scaleResult.rgb) adjustments.scaleRGB = scaleResult.rgb;
 
-      // Offset: default 0 (additive, identity)
-      // Per-channel float[3] → offsetRGB; scalar → offset (also used as brightness fallback)
-      const offsetResult = extractScalarAndRGB(colorComp.property('offset').value(), 0);
-      if (typeof offsetResult.scalar === 'number') adjustments.offset = offsetResult.scalar;
-      if (offsetResult.rgb) adjustments.offsetRGB = offsetResult.rgb;
+        // Offset: default 0 (additive, identity)
+        // Per-channel float[3] → offsetRGB; scalar → offset (also used as brightness fallback)
+        const offsetResult = extractScalarAndRGB(colorComp.property('offset').value(), 0);
+        if (typeof offsetResult.scalar === 'number') adjustments.offset = offsetResult.scalar;
+        if (offsetResult.rgb) adjustments.offsetRGB = offsetResult.rgb;
 
-      const saturation = getNumberValue(colorComp.property('saturation').value());
+        const saturation = getNumberValue(colorComp.property('saturation').value());
 
-      if (typeof saturation === 'number') adjustments.saturation = saturation;
-      // Scalar offset doubles as brightness fallback when no explicit brightness is set
-      if (typeof offsetResult.scalar === 'number' && !offsetResult.rgb && adjustments.brightness === undefined) {
-        adjustments.brightness = offsetResult.scalar;
-      }
+        if (typeof saturation === 'number') adjustments.saturation = saturation;
+        // Scalar offset doubles as brightness fallback when no explicit brightness is set
+        if (typeof offsetResult.scalar === 'number' && !offsetResult.rgb && adjustments.brightness === undefined) {
+          adjustments.brightness = offsetResult.scalar;
+        }
       } // end else (rvColorActive !== 0)
     }
 
@@ -1052,18 +1052,22 @@ function parseEyeTransformComponent(
   return {
     flipH: flipH === 1,
     flipV: flipV === 1,
-    rotation: typeof rotation === 'number' && Number.isFinite(rotation)
-      ? Math.max(-180, Math.min(180, rotation))
-      : DEFAULT_EYE_TRANSFORM.rotation,
-    scale: typeof scale === 'number' && Number.isFinite(scale)
-      ? Math.max(0.5, Math.min(2.0, scale))
-      : DEFAULT_EYE_TRANSFORM.scale,
-    translateX: typeof translateX === 'number' && Number.isFinite(translateX)
-      ? Math.max(-100, Math.min(100, translateX))
-      : DEFAULT_EYE_TRANSFORM.translateX,
-    translateY: typeof translateY === 'number' && Number.isFinite(translateY)
-      ? Math.max(-100, Math.min(100, translateY))
-      : DEFAULT_EYE_TRANSFORM.translateY,
+    rotation:
+      typeof rotation === 'number' && Number.isFinite(rotation)
+        ? Math.max(-180, Math.min(180, rotation))
+        : DEFAULT_EYE_TRANSFORM.rotation,
+    scale:
+      typeof scale === 'number' && Number.isFinite(scale)
+        ? Math.max(0.5, Math.min(2.0, scale))
+        : DEFAULT_EYE_TRANSFORM.scale,
+    translateX:
+      typeof translateX === 'number' && Number.isFinite(translateX)
+        ? Math.max(-100, Math.min(100, translateX))
+        : DEFAULT_EYE_TRANSFORM.translateX,
+    translateY:
+      typeof translateY === 'number' && Number.isFinite(translateY)
+        ? Math.max(-100, Math.min(100, translateY))
+        : DEFAULT_EYE_TRANSFORM.translateY,
   };
 }
 

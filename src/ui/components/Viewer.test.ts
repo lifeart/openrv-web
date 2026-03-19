@@ -1710,16 +1710,7 @@ describe('Viewer', () => {
       pipeline.setActiveSource('test');
       const config = pipeline.getSourceConfig('test');
       if (config) {
-        const redLUTData = new Float32Array([
-          1, 0, 0,
-          1, 0, 0,
-          1, 0, 0,
-          1, 0, 0,
-          1, 0, 0,
-          1, 0, 0,
-          1, 0, 0,
-          1, 0, 0,
-        ]);
+        const redLUTData = new Float32Array([1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0]);
         config.fileLUT.lutData = {
           type: '3d',
           title: 'File LUT',

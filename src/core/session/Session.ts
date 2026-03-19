@@ -375,7 +375,15 @@ export class Session extends EventEmitter<SessionEvents> {
     });
 
     // Forward SessionGraph events
-    const graphEvents = ['graphLoaded', 'settingsLoaded', 'sessionLoaded', 'edlLoaded', 'metadataChanged', 'skippedNodes', 'degradedModes'] as const;
+    const graphEvents = [
+      'graphLoaded',
+      'settingsLoaded',
+      'sessionLoaded',
+      'edlLoaded',
+      'metadataChanged',
+      'skippedNodes',
+      'degradedModes',
+    ] as const;
     for (const event of graphEvents) {
       this._sessionGraph.on(event as any, (data: any) => this.emit(event as any, data));
     }
@@ -1217,7 +1225,22 @@ export class Session extends EventEmitter<SessionEvents> {
     const pathname = new URL(url).pathname;
     const name = decodeURIComponent(basename(pathname));
     const ext = name.includes('.') ? name.split('.').pop()!.toLowerCase() : '';
-    const videoExts = new Set(['mp4', 'm4v', '3gp', '3g2', 'mov', 'qt', 'mkv', 'mk3d', 'webm', 'ogg', 'ogv', 'ogm', 'ogx', 'avi']);
+    const videoExts = new Set([
+      'mp4',
+      'm4v',
+      '3gp',
+      '3g2',
+      'mov',
+      'qt',
+      'mkv',
+      'mk3d',
+      'webm',
+      'ogg',
+      'ogv',
+      'ogm',
+      'ogx',
+      'avi',
+    ]);
     if (videoExts.has(ext)) {
       return this.loadVideo(name, url);
     }
@@ -1245,12 +1268,13 @@ export class Session extends EventEmitter<SessionEvents> {
     fps?: number,
   ): Promise<void> {
     const patternFilename = pattern.split('/').pop() ?? pattern;
-    const name = patternFilename
-      .replace(/##+/g, '')
-      .replace(/%\d*d/g, '')
-      .replace(/@+/g, '')
-      .replace(/[._-]?\.[^.]+$/, '')
-      .replace(/[._-]$/, '') || 'sequence';
+    const name =
+      patternFilename
+        .replace(/##+/g, '')
+        .replace(/%\d*d/g, '')
+        .replace(/@+/g, '')
+        .replace(/[._-]?\.[^.]+$/, '')
+        .replace(/[._-]$/, '') || 'sequence';
 
     return this.loadImageSequenceFromPattern(name, pattern, startFrame, endFrame, fps);
   }

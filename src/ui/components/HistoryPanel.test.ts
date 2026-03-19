@@ -261,9 +261,7 @@ describe('HistoryPanel', () => {
       await panel.clearHistory();
 
       expect(mockShowConfirm).toHaveBeenCalledTimes(1);
-      expect(mockShowConfirm).toHaveBeenCalledWith(
-        expect.stringContaining('Are you sure'),
-      );
+      expect(mockShowConfirm).toHaveBeenCalledWith(expect.stringContaining('Are you sure'));
     });
 
     it('HP-037: does not clear history when confirmation is cancelled', async () => {

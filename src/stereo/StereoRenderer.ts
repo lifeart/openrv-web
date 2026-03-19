@@ -251,7 +251,11 @@ export function extractStereoEyes(
     // otherwise fall back to duplicating the source (left eye)
     leftData = new ImageData(new Uint8ClampedArray(data), width, height);
     if (rightEyeImageData) {
-      rightData = new ImageData(new Uint8ClampedArray(rightEyeImageData.data), rightEyeImageData.width, rightEyeImageData.height);
+      rightData = new ImageData(
+        new Uint8ClampedArray(rightEyeImageData.data),
+        rightEyeImageData.width,
+        rightEyeImageData.height,
+      );
     } else {
       rightData = new ImageData(new Uint8ClampedArray(data), width, height);
     }

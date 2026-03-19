@@ -540,5 +540,4 @@ describe('FPSIndicator', () => {
       expect(indicator.getState()).toEqual(stateBefore);
     });
   });
-
 });

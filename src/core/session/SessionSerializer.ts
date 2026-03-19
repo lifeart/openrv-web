@@ -44,10 +44,7 @@ import { DEFAULT_DISPLAY_COLOR_STATE } from '../../color/DisplayTransfer';
 import { DEFAULT_DIFFERENCE_MATTE_STATE } from '../../ui/components/DifferenceMatteControl';
 import { DEFAULT_BLEND_MODE_STATE } from '../../ui/components/ComparisonManager';
 import { isDefaultCurves } from '../../color/ColorCurves';
-import {
-  isDefaultStereoEyeTransformState,
-  DEFAULT_STEREO_ALIGN_MODE,
-} from '../../stereo/StereoRenderer';
+import { isDefaultStereoEyeTransformState, DEFAULT_STEREO_ALIGN_MODE } from '../../stereo/StereoRenderer';
 import { isDeinterlaceActive } from '../../filters/Deinterlace';
 import { isFilmEmulationActive } from '../../filters/FilmEmulation';
 import { isPerspectiveActive } from '../../transform/PerspectiveCorrection';
@@ -627,14 +624,10 @@ export class SessionSerializer {
         try {
           const switched = await session.switchRepresentation(sourceIndex, ref.activeRepresentationId);
           if (!switched) {
-            warnings.push(
-              `Failed to restore active representation "${ref.activeRepresentationId}" for "${ref.name}"`,
-            );
+            warnings.push(`Failed to restore active representation "${ref.activeRepresentationId}" for "${ref.name}"`);
           }
         } catch (_err) {
-          warnings.push(
-            `Failed to restore active representation "${ref.activeRepresentationId}" for "${ref.name}"`,
-          );
+          warnings.push(`Failed to restore active representation "${ref.activeRepresentationId}" for "${ref.name}"`);
         }
       }
     }
@@ -811,10 +804,7 @@ export class SessionSerializer {
    * point at the correct surviving sources. Entries referencing lost
    * sources are dropped.
    */
-  private static remapSubsystemSourceIndices(
-    migrated: SessionState,
-    mediaIndexMap: Map<number, number>,
-  ): void {
+  private static remapSubsystemSourceIndices(migrated: SessionState, mediaIndexMap: Map<number, number>): void {
     // Playlist clips: remap sourceIndex, drop clips whose source was lost
     if (migrated.playlist?.clips) {
       migrated.playlist.clips = migrated.playlist.clips.filter((clip) => {
@@ -909,9 +899,7 @@ export class SessionSerializer {
     migrated.spotlightOverlay = migrated.spotlightOverlay
       ? { ...DEFAULT_SPOTLIGHT_STATE, ...migrated.spotlightOverlay }
       : undefined;
-    migrated.bugOverlay = migrated.bugOverlay
-      ? { ...DEFAULT_BUG_OVERLAY_STATE, ...migrated.bugOverlay }
-      : undefined;
+    migrated.bugOverlay = migrated.bugOverlay ? { ...DEFAULT_BUG_OVERLAY_STATE, ...migrated.bugOverlay } : undefined;
     migrated.exrWindowOverlay = migrated.exrWindowOverlay
       ? { ...DEFAULT_EXR_WINDOW_OVERLAY_STATE, ...migrated.exrWindowOverlay }
       : undefined;

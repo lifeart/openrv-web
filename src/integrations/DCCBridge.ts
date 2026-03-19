@@ -23,7 +23,14 @@ import type { ManagerBase } from '../core/ManagerBase';
 export type DCCInboundMessageType = 'loadMedia' | 'syncFrame' | 'syncColor' | 'ping' | 'pong';
 
 /** All supported outbound message types */
-export type DCCOutboundMessageType = 'frameChanged' | 'colorChanged' | 'annotationAdded' | 'noteAdded' | 'ping' | 'pong' | 'error';
+export type DCCOutboundMessageType =
+  | 'frameChanged'
+  | 'colorChanged'
+  | 'annotationAdded'
+  | 'noteAdded'
+  | 'ping'
+  | 'pong'
+  | 'error';
 
 /** Base message structure */
 export interface DCCMessage {

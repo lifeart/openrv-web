@@ -9,7 +9,12 @@
  * Viewer because it needs deep session/canvas coupling.
  */
 
-import { DEFAULT_WIPE_STATE, DEFAULT_STENCIL_BOX, computeHorizontalWipeBoxes, computeVerticalWipeBoxes } from '../../core/types/wipe';
+import {
+  DEFAULT_WIPE_STATE,
+  DEFAULT_STENCIL_BOX,
+  computeHorizontalWipeBoxes,
+  computeVerticalWipeBoxes,
+} from '../../core/types/wipe';
 import type { WipeState, WipeMode, StencilBox } from '../../core/types/wipe';
 import {
   createWipeUIElements,

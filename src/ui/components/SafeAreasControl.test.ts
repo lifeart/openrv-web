@@ -369,7 +369,9 @@ describe('SafeAreasControl', () => {
       button.click();
 
       const select = document.querySelector('[data-testid="safe-areas-aspect-ratio"]') as HTMLSelectElement;
-      const customContainer = document.querySelector('[data-testid="safe-areas-custom-aspect-container"]') as HTMLElement;
+      const customContainer = document.querySelector(
+        '[data-testid="safe-areas-custom-aspect-container"]',
+      ) as HTMLElement;
 
       expect(customContainer.style.display).toBe('none');
       select.value = 'custom';
@@ -711,5 +713,4 @@ describe('SafeAreasControl', () => {
       expect(el.style.position).toBe('relative');
     });
   });
-
 });

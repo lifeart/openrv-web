@@ -860,7 +860,13 @@ describe('PluginRegistry', () => {
     });
 
     it('PREG-049: deactivation emits uiPanelUnregistered signal for each panel', async () => {
-      const panel: UIPanelContribution = { id: 'unreg-panel', label: 'U', location: 'right', render: vi.fn(), destroy: vi.fn() };
+      const panel: UIPanelContribution = {
+        id: 'unreg-panel',
+        label: 'U',
+        location: 'right',
+        render: vi.fn(),
+        destroy: vi.fn(),
+      };
       const signalData: Array<{ pluginId: string; panelId: string }> = [];
       registry.uiPanelUnregistered.connect((data) => {
         signalData.push(data);
@@ -1019,27 +1025,21 @@ describe('PluginRegistry', () => {
       const plugin = createPlugin({
         manifest: { id: 'ev.newer', engineVersion: '99.0.0' },
       });
-      expect(() => registry.register(plugin)).toThrow(
-        'requires engine version >=99.0.0',
-      );
+      expect(() => registry.register(plugin)).toThrow('requires engine version >=99.0.0');
     });
 
     it('PREG-058: register throws when engineVersion is newer than host (minor)', () => {
       const plugin = createPlugin({
         manifest: { id: 'ev.minor', engineVersion: '1.99.0' },
       });
-      expect(() => registry.register(plugin)).toThrow(
-        'requires engine version >=1.99.0',
-      );
+      expect(() => registry.register(plugin)).toThrow('requires engine version >=1.99.0');
     });
 
     it('PREG-059: register throws when engineVersion is newer than host (patch)', () => {
       const plugin = createPlugin({
         manifest: { id: 'ev.patch', engineVersion: '1.0.99' },
       });
-      expect(() => registry.register(plugin)).toThrow(
-        'requires engine version >=1.0.99',
-      );
+      expect(() => registry.register(plugin)).toThrow('requires engine version >=1.0.99');
     });
 
     it('PREG-060: register succeeds when engineVersion is not specified', () => {
@@ -1135,7 +1135,9 @@ describe('PluginRegistry', () => {
       let capturedContext: PluginContext | undefined;
       const plugin = createPlugin({
         manifest: { id: 'detach.test.070' },
-        activate: (ctx: PluginContext) => { capturedContext = ctx; },
+        activate: (ctx: PluginContext) => {
+          capturedContext = ctx;
+        },
       });
       registry.register(plugin);
       await registry.activate('detach.test.070');
@@ -1185,7 +1187,9 @@ describe('PluginRegistry', () => {
       let capturedContext: PluginContext | undefined;
       const plugin = createPlugin({
         manifest: { id: 'detach.test.073' },
-        activate: (ctx: PluginContext) => { capturedContext = ctx; },
+        activate: (ctx: PluginContext) => {
+          capturedContext = ctx;
+        },
       });
       registry.register(plugin);
       await registry.activate('detach.test.073');

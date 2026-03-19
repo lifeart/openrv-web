@@ -81,10 +81,7 @@ describe('RemoteCursorsOverlay', () => {
     beforeEach(() => {
       overlay.setActive(true);
       overlay.setViewerDimensions(800, 600);
-      overlay.setUsers([
-        makeUser('u1', 'Alice', '#ff0000'),
-        makeUser('u2', 'Bob', '#00ff00'),
-      ]);
+      overlay.setUsers([makeUser('u1', 'Alice', '#ff0000'), makeUser('u2', 'Bob', '#00ff00')]);
     });
 
     it('RCO-020: should create a cursor element for a remote user', () => {
@@ -248,10 +245,7 @@ describe('RemoteCursorsOverlay', () => {
     it('RCO-051: individual cursor should be removed on user leave', () => {
       overlay.setActive(true);
       overlay.setViewerDimensions(800, 600);
-      overlay.setUsers([
-        makeUser('u1', 'Alice', '#ff0000'),
-        makeUser('u2', 'Bob', '#00ff00'),
-      ]);
+      overlay.setUsers([makeUser('u1', 'Alice', '#ff0000'), makeUser('u2', 'Bob', '#00ff00')]);
       overlay.updateCursor(makeCursorPayload('u1', 0.3, 0.3));
       overlay.updateCursor(makeCursorPayload('u2', 0.7, 0.7));
       expect(overlay.getCursors().size).toBe(2);

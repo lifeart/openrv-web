@@ -160,9 +160,7 @@ describe('SnapshotPanel', () => {
       document.body.appendChild(el);
 
       // Make importSnapshot reject
-      (manager.importSnapshot as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
-        new Error('Invalid snapshot format'),
-      );
+      (manager.importSnapshot as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('Invalid snapshot format'));
 
       // Create a mock file
       const file = new File(['invalid'], 'bad.json', { type: 'application/json' });

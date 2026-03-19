@@ -100,7 +100,6 @@ const APP_EVENT_TO_API: Partial<Record<AppEventName, OpenRVEventName>> = {
   'app:markerChange': 'markerChange',
   'app:sourceLoaded': 'sourceLoaded',
   'app:error': 'error',
-
 };
 
 // ---------------------------------------------------------------------------

@@ -92,15 +92,7 @@ export class MuEventBridge {
     deactivate?: () => void,
     icon?: string,
   ): void {
-    this.modeManager.defineMinorMode(
-      name,
-      order,
-      globalBindings,
-      overrideBindings,
-      activate,
-      deactivate,
-      icon,
-    );
+    this.modeManager.defineMinorMode(name, order, globalBindings, overrideBindings, activate, deactivate, icon);
   }
 
   /**
@@ -157,14 +149,7 @@ export class MuEventBridge {
   /**
    * Set a bounding-box constraint for event table hit-testing.
    */
-  setEventTableBBox(
-    tableName: string,
-    tag: string,
-    x: number,
-    y: number,
-    w: number,
-    h: number,
-  ): void {
+  setEventTableBBox(tableName: string, tag: string, x: number, y: number, w: number, h: number): void {
     this.modeManager.setEventTableBBox(tableName, tag, x, y, w, h);
   }
 

@@ -146,9 +146,9 @@ interface CompactState {
 }
 
 interface CompactRepresentation {
-  si: number;  // sourceIndex
+  si: number; // sourceIndex
   id: string;
-  l: string;   // label
+  l: string; // label
   k: RepresentationKind;
   res: RepresentationResolution;
   lc: Omit<RepresentationLoaderConfig, 'file' | 'files'>;

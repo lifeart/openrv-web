@@ -164,9 +164,7 @@ export class FPSIndicator extends EventEmitter<FPSIndicatorEvents> {
     this.subs.add(this.session.on('abSourceChanged', () => this.scheduleUpdate()));
 
     // Subscribe to external preference changes (import/reset)
-    this.subs.add(
-      this.preferences.on('fpsIndicatorPrefsChanged', (prefs) => this.onPrefsChanged(prefs)),
-    );
+    this.subs.add(this.preferences.on('fpsIndicatorPrefsChanged', (prefs) => this.onPrefsChanged(prefs)));
   }
 
   /**

@@ -362,11 +362,7 @@ describe('ShotGridIntegrationBridge – Issue #325: pushNotes includes annotatio
 
     const noteOpts = mockBridgeInstance.pushNote.mock.calls[0]![1];
     expect(noteOpts.thumbnailBlob).toBeInstanceOf(Blob);
-    expect(thumbnailRenderer.renderAnnotationThumbnail).toHaveBeenCalledWith(
-      [penStroke],
-      960,
-      540,
-    );
+    expect(thumbnailRenderer.renderAnnotationThumbnail).toHaveBeenCalledWith([penStroke], 960, 540);
   });
 
   // ---- Backward compatibility ----
@@ -440,7 +436,14 @@ describe('ShotGridIntegrationBridge – Issue #325: pushNotes includes annotatio
 
   it('SG-INT-325-008: pushNotes collects annotations across multi-frame range', async () => {
     const stroke1 = makePenStroke({ id: '1', frame: 10 });
-    const stroke2 = makePenStroke({ id: '2', frame: 12, points: [{ x: 0.1, y: 0.2 }, { x: 0.9, y: 0.8 }] });
+    const stroke2 = makePenStroke({
+      id: '2',
+      frame: 12,
+      points: [
+        { x: 0.1, y: 0.2 },
+        { x: 0.9, y: 0.8 },
+      ],
+    });
 
     (annotationProvider.getAnnotationsForFrame as ReturnType<typeof vi.fn>).mockImplementation((frame: number) => {
       if (frame === 10) return [stroke1];
@@ -481,9 +484,7 @@ describe('ShotGridIntegrationBridge – Issue #325: pushNotes includes annotatio
     createBridge();
     await connect();
 
-    session.noteManager.getNotesForSource.mockReturnValue([
-      { id: 'n1', text: 'Range', frameStart: 5, frameEnd: 6 },
-    ]);
+    session.noteManager.getNotesForSource.mockReturnValue([{ id: 'n1', text: 'Range', frameStart: 5, frameEnd: 6 }]);
 
     panel.emit('pushNotes', { versionId: 101, sourceIndex: 0 });
 
@@ -520,11 +521,7 @@ describe('ShotGridIntegrationBridge – Issue #325: pushNotes includes annotatio
     });
 
     // Thumbnail should be rendered from first frame's annotations
-    expect(thumbnailRenderer.renderAnnotationThumbnail).toHaveBeenCalledWith(
-      [stroke1],
-      960,
-      540,
-    );
+    expect(thumbnailRenderer.renderAnnotationThumbnail).toHaveBeenCalledWith([stroke1], 960, 540);
   });
 
   it('SG-INT-325-011: pushNotes handles thumbnail renderer returning null gracefully', async () => {

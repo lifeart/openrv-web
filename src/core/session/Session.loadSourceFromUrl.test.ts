@@ -3,7 +3,9 @@ import { Session } from './Session';
 
 // Mock SequenceLoader — import the real isSequencePattern so pattern detection works
 vi.mock('../../utils/media/SequenceLoader', async () => {
-  const actual = await vi.importActual<typeof import('../../utils/media/SequenceLoader')>('../../utils/media/SequenceLoader');
+  const actual = await vi.importActual<typeof import('../../utils/media/SequenceLoader')>(
+    '../../utils/media/SequenceLoader',
+  );
   return {
     createSequenceInfo: vi.fn(),
     createSequenceInfoFromPattern: vi.fn(),
@@ -23,9 +25,9 @@ vi.mock('../../utils/media/SequenceLoader', async () => {
 
 // Mock fetchUrlAsFile so we don't actually fetch anything
 vi.mock('../../utils/media/fetchUrlAsFile', () => ({
-  fetchUrlAsFile: vi.fn().mockImplementation((_url: string, name: string) =>
-    Promise.resolve(new File([new ArrayBuffer(8)], name)),
-  ),
+  fetchUrlAsFile: vi
+    .fn()
+    .mockImplementation((_url: string, name: string) => Promise.resolve(new File([new ArrayBuffer(8)], name))),
 }));
 
 import { fetchUrlAsFile } from '../../utils/media/fetchUrlAsFile';
@@ -148,10 +150,7 @@ describe('Session.loadSourceFromUrl', () => {
 
     it('routes .exr with query params through loadImageFile', async () => {
       await session.loadSourceFromUrl('https://cdn.example.com/image.exr?v=2&sig=xyz');
-      expect(fetchUrlAsFile).toHaveBeenCalledWith(
-        'https://cdn.example.com/image.exr?v=2&sig=xyz',
-        'image.exr',
-      );
+      expect(fetchUrlAsFile).toHaveBeenCalledWith('https://cdn.example.com/image.exr?v=2&sig=xyz', 'image.exr');
       expect(loadImageFileSpy).toHaveBeenCalled();
       expect(loadVideoSpy).not.toHaveBeenCalled();
     });
@@ -204,10 +203,12 @@ describe('Session.loadSourceFromUrl', () => {
 
   describe('error handling for failed URL fetches', () => {
     it('propagates fetch errors for decoder-backed formats', async () => {
-      vi.mocked(fetchUrlAsFile).mockRejectedValueOnce(new Error('Failed to fetch URL (404): https://cdn.example.com/missing.exr'));
-      await expect(
-        session.loadSourceFromUrl('https://cdn.example.com/missing.exr'),
-      ).rejects.toThrow('Failed to fetch URL (404)');
+      vi.mocked(fetchUrlAsFile).mockRejectedValueOnce(
+        new Error('Failed to fetch URL (404): https://cdn.example.com/missing.exr'),
+      );
+      await expect(session.loadSourceFromUrl('https://cdn.example.com/missing.exr')).rejects.toThrow(
+        'Failed to fetch URL (404)',
+      );
     });
   });
 

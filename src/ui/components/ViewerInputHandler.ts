@@ -737,10 +737,10 @@ export class ViewerInputHandler {
         const companionFiles = fileArray.filter((f) => f !== projectFile);
         this.onProjectFileDrop(projectFile, companionFiles);
       } else {
-        showAlert(
-          `Cannot open ${projectFile.name}: project loading is not available in this context.`,
-          { type: 'warning', title: 'Unsupported Drop' },
-        );
+        showAlert(`Cannot open ${projectFile.name}: project loading is not available in this context.`, {
+          type: 'warning',
+          title: 'Unsupported Drop',
+        });
       }
       return;
     }
@@ -761,10 +761,7 @@ export class ViewerInputHandler {
       }
       // Remove the EDL file and any session files from the array so remaining media files can still be loaded
       const remainingFiles = fileArray.filter(
-        (f) =>
-          f !== edlFile &&
-          !f.name.toLowerCase().endsWith('.rv') &&
-          !f.name.toLowerCase().endsWith('.gto'),
+        (f) => f !== edlFile && !f.name.toLowerCase().endsWith('.rv') && !f.name.toLowerCase().endsWith('.gto'),
       );
       try {
         const text = await edlFile.text();

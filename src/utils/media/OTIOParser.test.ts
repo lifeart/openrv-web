@@ -1511,9 +1511,7 @@ describe('parseOTIOMultiTrack', () => {
 
     it('OTIO-M032: clip-level markers include timeline offset', () => {
       const clipWithMarker = buildClip('shot_02', 0, 48);
-      (clipWithMarker as Record<string, unknown>).markers = [
-        buildMarker('ClipNote', 5, 3, 'GREEN'),
-      ];
+      (clipWithMarker as Record<string, unknown>).markers = [buildMarker('ClipNote', 5, 3, 'GREEN')];
 
       const json = buildMultiTrackOTIOJson([
         {
@@ -1650,9 +1648,7 @@ describe('parseOTIOMultiTrack', () => {
 
     it('OTIO-M039: per-track markers field is populated', () => {
       const clipWithMarker = buildClip('shot_02', 0, 48);
-      (clipWithMarker as Record<string, unknown>).markers = [
-        buildMarker('ClipM', 5, 0, 'CYAN'),
-      ];
+      (clipWithMarker as Record<string, unknown>).markers = [buildMarker('ClipM', 5, 0, 'CYAN')];
 
       const json = buildMultiTrackOTIOJson([
         {
@@ -1672,9 +1668,7 @@ describe('parseOTIOMultiTrack', () => {
 
     it('OTIO-M040: parseOTIO (single-track) collects markers', () => {
       const clipWithMarker = buildClip('shot_01', 0, 48);
-      (clipWithMarker as Record<string, unknown>).markers = [
-        buildMarker('ClipMarker', 5, 2, 'GREEN'),
-      ];
+      (clipWithMarker as Record<string, unknown>).markers = [buildMarker('ClipMarker', 5, 2, 'GREEN')];
 
       const json = JSON.stringify({
         OTIO_SCHEMA: 'Timeline.1',
@@ -1735,7 +1729,19 @@ describe('parseOTIOMultiTrack', () => {
     });
 
     it('OTIO_MARKER_COLOR_MAP has all standard colors', () => {
-      const expected = ['RED', 'PINK', 'ORANGE', 'YELLOW', 'GREEN', 'CYAN', 'BLUE', 'PURPLE', 'MAGENTA', 'WHITE', 'BLACK'];
+      const expected = [
+        'RED',
+        'PINK',
+        'ORANGE',
+        'YELLOW',
+        'GREEN',
+        'CYAN',
+        'BLUE',
+        'PURPLE',
+        'MAGENTA',
+        'WHITE',
+        'BLACK',
+      ];
       for (const c of expected) {
         expect(OTIO_MARKER_COLOR_MAP[c]).toBeDefined();
       }

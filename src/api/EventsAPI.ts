@@ -385,19 +385,13 @@ export class EventsAPI extends DisposableAPI {
     // Unsupported codec errors (media cannot be decoded)
     const unsubCodec = this.session.on('unsupportedCodec', (info) => {
       const codec = info.codec ?? 'unknown';
-      this.emitError(
-        `Unsupported codec "${codec}" in ${info.filename}`,
-        'UNSUPPORTED_CODEC',
-      );
+      this.emitError(`Unsupported codec "${codec}" in ${info.filename}`, 'UNSUPPORTED_CODEC');
     });
     this.internalUnsubscribers.push(unsubCodec);
 
     // Media representation switch failures
     const unsubRepError = this.session.on('representationError', (data) => {
-      this.emitError(
-        `Representation error for source ${data.sourceIndex}: ${data.error}`,
-        'REPRESENTATION_ERROR',
-      );
+      this.emitError(`Representation error for source ${data.sourceIndex}: ${data.error}`, 'REPRESENTATION_ERROR');
     });
     this.internalUnsubscribers.push(unsubRepError);
 
@@ -437,10 +431,7 @@ export class EventsAPI extends DisposableAPI {
 
     // Frame decode timeout in play-all-frames mode
     const unsubDecodeTimeout = this.session.on('frameDecodeTimeout', (frame) => {
-      this.emitError(
-        `Frame ${frame} decode timed out`,
-        'FRAME_DECODE_TIMEOUT',
-      );
+      this.emitError(`Frame ${frame} decode timed out`, 'FRAME_DECODE_TIMEOUT');
     });
     this.internalUnsubscribers.push(unsubDecodeTimeout);
 
@@ -498,15 +489,17 @@ export class EventsAPI extends DisposableAPI {
       height: number;
       nodeName: string;
       tag?: string;
-    }> = [{
-      name,
-      index: 0,
-      imageMin: [0, 0],
-      imageMax: [width, height],
-      width,
-      height,
-      nodeName: name,
-    }];
+    }> = [
+      {
+        name,
+        index: 0,
+        imageMin: [0, 0],
+        imageMax: [width, height],
+        width,
+        height,
+        nodeName: name,
+      },
+    ];
 
     // When A/B compare is active, include the B source as a second image
     if (this.session.abCompareAvailable) {

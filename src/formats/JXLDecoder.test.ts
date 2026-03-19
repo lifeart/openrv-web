@@ -68,16 +68,18 @@ class BitWriter {
  * @param opts.primaries - JXL primaries enum (1=sRGB, 3=BT.2020, 4=P3)
  * @param opts.transfer - JXL transfer enum (1=709, 3=linear, 8=sRGB, 13=PQ, 17=HLG)
  */
-function buildCodestream(opts: {
-  allDefault?: boolean;
-  ceAllDefault?: boolean;
-  wantICC?: boolean;
-  colourSpace?: number;
-  primaries?: number;
-  transfer?: number;
-  /** Extra channels to include. Each entry is { type: number } where type is the JXL enum value (0=kAlpha, 1=kDepth, etc.). */
-  extraChannels?: Array<{ type: number }>;
-} = {}): ArrayBuffer {
+function buildCodestream(
+  opts: {
+    allDefault?: boolean;
+    ceAllDefault?: boolean;
+    wantICC?: boolean;
+    colourSpace?: number;
+    primaries?: number;
+    transfer?: number;
+    /** Extra channels to include. Each entry is { type: number } where type is the JXL enum value (0=kAlpha, 1=kDepth, etc.). */
+    extraChannels?: Array<{ type: number }>;
+  } = {},
+): ArrayBuffer {
   const w = new BitWriter();
 
   // Signature: 0xFF 0x0A
@@ -524,10 +526,22 @@ describe('JXLDecoder', () => {
         width: 2,
         height: 2,
         data: new Uint8ClampedArray([
-          255, 0, 0, 255, // red
-          0, 255, 0, 255, // green
-          0, 0, 255, 255, // blue
-          255, 255, 255, 255, // white
+          255,
+          0,
+          0,
+          255, // red
+          0,
+          255,
+          0,
+          255, // green
+          0,
+          0,
+          255,
+          255, // blue
+          255,
+          255,
+          255,
+          255, // white
         ]),
       };
 
@@ -682,8 +696,14 @@ describe('JXLDecoder', () => {
         width: 2,
         height: 1,
         data: new Uint8ClampedArray([
-          0, 0, 0, 0,       // all zeros
-          255, 255, 255, 255, // all max
+          0,
+          0,
+          0,
+          0, // all zeros
+          255,
+          255,
+          255,
+          255, // all max
         ]),
       };
 

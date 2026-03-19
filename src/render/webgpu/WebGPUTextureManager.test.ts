@@ -661,7 +661,9 @@ describe('WebGPUTextureManager', () => {
       const device = createMockDevice();
       const manager = new WebGPUTextureManager();
 
-      expect(() => manager.upload1DLUT(device, 'curves', new Uint8Array(0), 0, 4)).toThrow(/Width must be greater than 0/);
+      expect(() => manager.upload1DLUT(device, 'curves', new Uint8Array(0), 0, 4)).toThrow(
+        /Width must be greater than 0/,
+      );
     });
   });
 });

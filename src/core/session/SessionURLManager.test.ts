@@ -346,18 +346,12 @@ describe('SessionURLManager', () => {
     it('round-trips sourceUrls array through encode/decode', () => {
       const state: SessionURLState = {
         ...createMinimalState(),
-        sourceUrls: [
-          'https://example.com/shot_a.exr',
-          'https://example.com/shot_b.exr',
-        ],
+        sourceUrls: ['https://example.com/shot_a.exr', 'https://example.com/shot_b.exr'],
       };
       const hash = encodeSessionState(state);
       const decoded = decodeSessionState(hash);
       expect(decoded).not.toBeNull();
-      expect(decoded!.sourceUrls).toEqual([
-        'https://example.com/shot_a.exr',
-        'https://example.com/shot_b.exr',
-      ]);
+      expect(decoded!.sourceUrls).toEqual(['https://example.com/shot_a.exr', 'https://example.com/shot_b.exr']);
     });
 
     it('omits sourceUrls when empty', () => {
@@ -383,19 +377,13 @@ describe('SessionURLManager', () => {
       const state: SessionURLState = {
         ...createMinimalState(),
         sourceUrl: 'https://example.com/shot_a.exr',
-        sourceUrls: [
-          'https://example.com/shot_a.exr',
-          'https://example.com/shot_b.exr',
-        ],
+        sourceUrls: ['https://example.com/shot_a.exr', 'https://example.com/shot_b.exr'],
       };
       const hash = encodeSessionState(state);
       const decoded = decodeSessionState(hash);
       expect(decoded).not.toBeNull();
       expect(decoded!.sourceUrl).toBe('https://example.com/shot_a.exr');
-      expect(decoded!.sourceUrls).toEqual([
-        'https://example.com/shot_a.exr',
-        'https://example.com/shot_b.exr',
-      ]);
+      expect(decoded!.sourceUrls).toEqual(['https://example.com/shot_a.exr', 'https://example.com/shot_b.exr']);
     });
 
     it('rejects sourceUrls with non-string elements', () => {

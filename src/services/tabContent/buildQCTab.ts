@@ -96,7 +96,13 @@ export function buildQCTab(deps: BuildQCTabDeps): HTMLElement {
         const imageData = viewer.getImageData();
         if (imageData) {
           const position = viewer.getPixelCoordinatesFromClient(e.clientX, e.clientY);
-          if (position && position.x >= 0 && position.x < imageData.width && position.y >= 0 && position.y < imageData.height) {
+          if (
+            position &&
+            position.x >= 0 &&
+            position.x < imageData.width &&
+            position.y >= 0 &&
+            position.y < imageData.height
+          ) {
             const idx = (position.y * imageData.width + position.x) * 4;
             const r = imageData.data[idx]!;
             const g = imageData.data[idx + 1]!;
