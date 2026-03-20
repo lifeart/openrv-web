@@ -110,15 +110,19 @@ export function createMockRendererGL(
     generateMipmap: vi.fn(),
     getParameter: vi.fn((pname: number) => {
       if (pname === 0x0ba2 /* VIEWPORT */) return new Int32Array([0, 0, 800, 600]);
+      if (pname === 0x0c10 /* SCISSOR_BOX */) return new Int32Array([0, 0, 800, 600]);
       return null;
     }),
+    isEnabled: vi.fn((_cap: number) => false),
     enable: vi.fn(),
     disable: vi.fn(),
     scissor: vi.fn(),
     isContextLost: vi.fn(() => false),
+    isTexture: vi.fn(() => true),
     // Constants
     VIEWPORT: 0x0ba2,
     SCISSOR_TEST: 0x0c11,
+    SCISSOR_BOX: 0x0c10,
     VERTEX_SHADER: 0x8b31,
     FRAGMENT_SHADER: 0x8b30,
     LINK_STATUS: 0x8b82,

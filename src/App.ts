@@ -922,6 +922,10 @@ export class App {
       clearTimeout(this.colorWiringState.state.colorHistoryTimer);
       this.colorWiringState.state.colorHistoryTimer = null;
     }
+    if (this.colorWiringState?.state?.colorWheelsHistoryTimer) {
+      clearTimeout(this.colorWiringState.state.colorWheelsHistoryTimer);
+      this.colorWiringState.state.colorWheelsHistoryTimer = null;
+    }
 
     // Dispose layout orchestrator (cleans up fullscreen, focus, a11y, cheat sheet, timers)
     this.layoutOrchestrator?.dispose();

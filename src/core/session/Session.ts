@@ -317,6 +317,7 @@ export class Session extends EventEmitter<SessionEvents> {
       'abSourceChanged',
       'fpsUpdated',
       'frameDecodeTimeout',
+      'playbackStarved',
     ] as const;
     for (const event of playbackEvents) {
       this._playback.on(event as any, (data: any) => this.emit(event as any, data));
@@ -692,6 +693,23 @@ export class Session extends EventEmitter<SessionEvents> {
 
   get isBuffering(): boolean {
     return this._playback.isBuffering;
+  }
+
+  /**
+   * Whether the current pause state was caused by frame starvation.
+   * Returns `true` only when paused due to starvation; clears on manual play/pause.
+   */
+  get isStarved(): boolean {
+    return this._playback.isStarved;
+  }
+
+  /**
+   * The reason for the most recent pause.
+   * - `'starvation'` if paused due to frame buffer underrun
+   * - `'user'` for all other pauses (manual, end-of-range, etc.)
+   */
+  get pauseReason(): import('./PlaybackEngine').PauseReason {
+    return this._playback.pauseReason;
   }
 
   get loopMode(): LoopMode {

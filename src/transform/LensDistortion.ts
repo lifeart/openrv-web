@@ -268,9 +268,11 @@ export function applyLensDistortion(sourceData: ImageData, params: LensDistortio
       // Bilinear interpolation for smooth results
       const dstIdx = (dy * width + dx) * 4;
 
-      if (sx >= 0 && sx < width - 1 && sy >= 0 && sy < height - 1) {
-        const x0 = Math.floor(sx);
-        const y0 = Math.floor(sy);
+      const x0 = Math.floor(sx);
+      const y0 = Math.floor(sy);
+
+      if (x0 >= 0 && x0 < width - 1 && y0 >= 0 && y0 < height - 1) {
+        // Fast path: all 4 bilinear neighbors are in bounds
         const x1 = x0 + 1;
         const y1 = y0 + 1;
 
@@ -292,12 +294,30 @@ export function applyLensDistortion(sourceData: ImageData, params: LensDistortio
             src[idx00 + c]! * w00 + src[idx10 + c]! * w10 + src[idx01 + c]! * w01 + src[idx11 + c]! * w11,
           );
         }
+      } else if (x0 >= -1 && x0 < width && y0 >= -1 && y0 < height) {
+        // Boundary path: at least one bilinear neighbor is in bounds.
+        // Sample each neighbor with bounds checking (OOB neighbors contribute 0).
+        const fx = sx - x0;
+        const fy = sy - y0;
+
+        const w00 = (1 - fx) * (1 - fy);
+        const w10 = fx * (1 - fy);
+        const w01 = (1 - fx) * fy;
+        const w11 = fx * fy;
+
+        for (let c = 0; c < 4; c++) {
+          const v00 = x0 >= 0 && x0 < width && y0 >= 0 && y0 < height ? src[(y0 * width + x0) * 4 + c]! : 0;
+          const v10 = x0 + 1 >= 0 && x0 + 1 < width && y0 >= 0 && y0 < height ? src[(y0 * width + x0 + 1) * 4 + c]! : 0;
+          const v01 = x0 >= 0 && x0 < width && y0 + 1 >= 0 && y0 + 1 < height ? src[((y0 + 1) * width + x0) * 4 + c]! : 0;
+          const v11 = x0 + 1 >= 0 && x0 + 1 < width && y0 + 1 >= 0 && y0 + 1 < height ? src[((y0 + 1) * width + x0 + 1) * 4 + c]! : 0;
+          dst[dstIdx + c] = Math.round(v00 * w00 + v10 * w10 + v01 * w01 + v11 * w11);
+        }
       } else {
-        // Outside source bounds - transparent or black
+        // Fully outside source bounds - transparent
         dst[dstIdx] = 0;
         dst[dstIdx + 1] = 0;
         dst[dstIdx + 2] = 0;
-        dst[dstIdx + 3] = 255;
+        dst[dstIdx + 3] = 0;
       }
     }
   }

@@ -184,8 +184,18 @@ export abstract class IPNode {
   // Abstract method for node-specific processing
   protected abstract process(context: EvalContext, inputs: (IPImage | null)[]): IPImage | null;
 
+  /**
+   * Disconnect all downstream nodes that have this node as an input.
+   */
+  disconnectAllOutputs(): void {
+    for (const output of [...this._outputs]) {
+      output.disconnectInput(this);
+    }
+  }
+
   // Cleanup
   dispose(): void {
+    this.disconnectAllOutputs();
     this.disconnectAllInputs();
     this.properties.dispose();
     this.inputsChanged.disconnectAll();

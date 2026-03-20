@@ -5,7 +5,7 @@
  * and loading OpenRV Web projects (.orvproject files).
  */
 
-import type { ColorAdjustments } from '../../core/types/color';
+import type { ColorAdjustments, ColorWheelsState } from '../../core/types/color';
 import type { FilterSettings } from '../../core/types/filter';
 import type { Transform2D, CropState } from '../../core/types/transform';
 import type { BackgroundPatternState } from '../../core/types/background';
@@ -163,6 +163,8 @@ export interface SessionState {
   exrWindowOverlay?: EXRWindowOverlayState;
   /** FPS indicator overlay state */
   fpsIndicatorOverlay?: FPSIndicatorState;
+  /** Color wheels (lift/gamma/gain/master) state */
+  colorWheels?: ColorWheelsState;
   /** LUT file path (not embedded) */
   lutPath?: string;
   /** LUT intensity blend */

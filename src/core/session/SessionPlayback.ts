@@ -16,7 +16,7 @@ import type { LoopMode, PlaybackMode } from '../types/session';
 import type { MediaSource, AudioPlaybackError } from './SessionTypes';
 import type { SubFramePosition } from '../../utils/media/FrameInterpolator';
 import { PlaybackEngine } from './PlaybackEngine';
-import type { FPSMeasurement } from './PlaybackEngine';
+import type { FPSMeasurement, PlaybackStarvedEvent, PauseReason } from './PlaybackEngine';
 import { VolumeManager } from './VolumeManager';
 import { ABCompareManager } from './ABCompareManager';
 import { AudioCoordinator } from '../../audio/AudioCoordinator';
@@ -72,6 +72,7 @@ export interface SessionPlaybackEvents extends EventMap {
   abSourceChanged: { current: 'A' | 'B'; sourceIndex: number };
   fpsUpdated: FPSMeasurement;
   frameDecodeTimeout: number;
+  playbackStarved: PlaybackStarvedEvent;
 }
 
 // ---------------------------------------------------------------------------
@@ -147,6 +148,14 @@ export class SessionPlayback extends EventEmitter<SessionPlaybackEvents> {
   }
   get isBuffering(): boolean {
     return this._playbackEngine.isBuffering;
+  }
+
+  get isStarved(): boolean {
+    return this._playbackEngine.isStarved;
+  }
+
+  get pauseReason(): PauseReason {
+    return this._playbackEngine.pauseReason;
   }
 
   get loopMode(): LoopMode {
@@ -614,6 +623,7 @@ export class SessionPlayback extends EventEmitter<SessionPlaybackEvents> {
     pe.on('buffering', (buffering) => this.emit('buffering', buffering));
     pe.on('fpsUpdated', (measurement) => this.emit('fpsUpdated', measurement));
     pe.on('frameDecodeTimeout', (frame) => this.emit('frameDecodeTimeout', frame));
+    pe.on('playbackStarved', (event) => this.emit('playbackStarved', event));
   }
 
   // ---- Dispose ----

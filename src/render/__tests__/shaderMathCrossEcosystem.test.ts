@@ -588,6 +588,58 @@ describe('applyTemperature', () => {
     expect(g).toBeCloseTo(0.55, 10);
     expect(b).toBeCloseTo(0.425, 10);
   });
+
+  // --- MED-48 regression: negative value clamping ---
+
+  it('XE-073b: extreme negative temp on dark pixel clamps to zero (MED-48)', () => {
+    // Input: very dark pixel (0.02, 0.02, 0.02), temp = -100
+    // t = -1.0: R = 0.02 - 0.1 = -0.08 -> clamped to 0
+    //           B = 0.02 + 0.1 = 0.12 (positive, preserved)
+    const [r, g, b] = applyTemperature(0.02, 0.02, 0.02, -100, 0);
+    expect(r).toBe(0); // was -0.08 before fix
+    expect(g).toBeCloseTo(0.02, 10);
+    expect(b).toBeCloseTo(0.12, 10);
+  });
+
+  it('XE-073c: extreme positive temp on dark pixel clamps blue to zero (MED-48)', () => {
+    // Input: very dark pixel (0.02, 0.02, 0.02), temp = +100
+    // t = 1.0: R = 0.02 + 0.1 = 0.12
+    //          B = 0.02 - 0.1 = -0.08 -> clamped to 0
+    const [r, g, b] = applyTemperature(0.02, 0.02, 0.02, 100, 0);
+    expect(r).toBeCloseTo(0.12, 10);
+    expect(g).toBeCloseTo(0.02, 10);
+    expect(b).toBe(0); // was -0.08 before fix
+  });
+
+  it('XE-073d: extreme tint on dark pixel clamps negatives (MED-48)', () => {
+    // Input: (0.01, 0.5, 0.01), tint = +100
+    // g = 100/100 = 1.0
+    // R = 0.01 - 1.0*0.05 = -0.04 -> clamped to 0
+    // G = 0.5 + 1.0*0.1 = 0.6
+    // B = 0.01 - 1.0*0.05 = -0.04 -> clamped to 0
+    const [r, g, b] = applyTemperature(0.01, 0.5, 0.01, 0, 100);
+    expect(r).toBe(0);
+    expect(g).toBeCloseTo(0.6, 10);
+    expect(b).toBe(0);
+  });
+
+  it('XE-073e: HDR values > 1.0 are preserved after temperature (MED-48)', () => {
+    // HDR input (2.0, 2.0, 2.0), temp = +50
+    // R = 2.0 + 0.05 = 2.05 (> 1.0, preserved for HDR headroom)
+    // B = 2.0 - 0.05 = 1.95 (> 1.0, preserved for HDR headroom)
+    const [r, g, b] = applyTemperature(2.0, 2.0, 2.0, 50, 0);
+    expect(r).toBeCloseTo(2.05, 10);
+    expect(g).toBeCloseTo(2.0, 10);
+    expect(b).toBeCloseTo(1.95, 10);
+  });
+
+  it('XE-073f: all channels never go negative regardless of extreme values (MED-48)', () => {
+    // Worst case: black pixel (0,0,0) with max negative temp and tint
+    const [r, g, b] = applyTemperature(0, 0, 0, -100, -100);
+    expect(r).toBeGreaterThanOrEqual(0);
+    expect(g).toBeGreaterThanOrEqual(0);
+    expect(b).toBeGreaterThanOrEqual(0);
+  });
 });
 
 // =============================================================================

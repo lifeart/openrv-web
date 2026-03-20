@@ -4,6 +4,7 @@
  * Handles:
  * - Color inversion toggle -> viewer
  * - Color controls adjustments -> viewer (with debounced history recording)
+ * - Color wheels (lift/gamma/gain/master) -> viewer (with debounced history recording)
  * - LUT loaded/intensity -> viewer
  * - CDL control -> viewer
  * - Curves control -> viewer
@@ -17,6 +18,7 @@ import { withSideEffects, type WiringSideEffects } from './utils/WiringHelpers';
 import type { AppWiringContext, StatefulWiringResult } from './AppWiringContext';
 import type { OCIOState } from './color/OCIOConfig';
 import type { ColorControls } from './ui/components/ColorControls';
+import type { ColorWheelsState } from './core/types/color';
 
 export const DEFAULT_OCIO_BAKE_SIZE = 33;
 export const ACES_OCIO_BAKE_SIZE = 65;
@@ -46,6 +48,8 @@ export function resolveOCIOBakeSize(state: OCIOState): number {
 export interface ColorWiringState {
   colorHistoryTimer: ReturnType<typeof setTimeout> | null;
   colorHistoryPrevious: ReturnType<ColorControls['getAdjustments']> | null;
+  colorWheelsHistoryTimer: ReturnType<typeof setTimeout> | null;
+  colorWheelsHistoryPrevious: ColorWheelsState | null;
 }
 
 /**
@@ -64,6 +68,8 @@ export function wireColorControls(ctx: AppWiringContext): StatefulWiringResult<C
   const state: ColorWiringState = {
     colorHistoryTimer: null,
     colorHistoryPrevious: controls.colorControls.getAdjustments(),
+    colorWheelsHistoryTimer: null,
+    colorWheelsHistoryPrevious: viewer.getColorWheels().getState(),
   };
 
   // Color inversion toggle -> viewer
@@ -139,6 +145,52 @@ export function wireColorControls(ctx: AppWiringContext): StatefulWiringResult<C
 
         state.colorHistoryPrevious = currentSnapshot;
         state.colorHistoryTimer = null;
+      }, 500);
+    }),
+  );
+
+  // Color wheels (lift/gamma/gain/master) -> viewer with debounced history recording
+  subs.add(
+    viewer.getColorWheels().on('stateChanged', (_wheelState: ColorWheelsState) => {
+      viewer.onColorWheelsChanged();
+      sessionBridge.scheduleUpdateScopes();
+      persistenceManager.syncGTOStore();
+
+      // Debounced history recording — same pattern as color adjustments above.
+      if (state.colorWheelsHistoryTimer) {
+        clearTimeout(state.colorWheelsHistoryTimer);
+      }
+
+      const previousSnapshot: ColorWheelsState = JSON.parse(JSON.stringify(state.colorWheelsHistoryPrevious));
+      state.colorWheelsHistoryTimer = setTimeout(() => {
+        const currentSnapshot = viewer.getColorWheels().getState();
+
+        // Check if anything actually changed
+        const prev = JSON.stringify(previousSnapshot);
+        const curr = JSON.stringify(currentSnapshot);
+
+        if (prev !== curr) {
+          const historyManager = getGlobalHistoryManager();
+          historyManager.recordAction(
+            'Adjust color wheels',
+            'color',
+            () => {
+              // Undo: restore previous state
+              viewer.getColorWheels().setState(previousSnapshot);
+              viewer.onColorWheelsChanged();
+              sessionBridge.scheduleUpdateScopes();
+            },
+            () => {
+              // Redo: restore current state
+              viewer.getColorWheels().setState(currentSnapshot);
+              viewer.onColorWheelsChanged();
+              sessionBridge.scheduleUpdateScopes();
+            },
+          );
+        }
+
+        state.colorWheelsHistoryPrevious = currentSnapshot;
+        state.colorWheelsHistoryTimer = null;
       }, 500);
     }),
   );

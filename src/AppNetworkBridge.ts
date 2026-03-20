@@ -34,6 +34,7 @@ import { createThrottle, type Throttled } from './utils/throttle';
 import { showConfirm } from './ui/components/shared/Modal';
 
 const MEDIA_CHUNK_SIZE_BYTES = 48 * 1024;
+const MEDIA_TRANSFER_TIMEOUT_MS = 30_000;
 
 interface PreparedMediaFile extends MediaTransferFileDescriptor {
   bytes: Uint8Array;
@@ -85,6 +86,7 @@ export class AppNetworkBridge {
   private pendingStateByTransferId = new Map<string, SessionURLState>();
   private outgoingMediaTransfers = new Map<string, OutgoingMediaTransfer>();
   private incomingMediaTransfers = new Map<string, IncomingMediaTransfer>();
+  private incomingTransferTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
   private colorSyncThrottle: Throttled<[ColorSyncPayload]> | null = null;
   private frameSyncThrottle: Throttled<[number]> | null = null;
   private lastPlaybackSyncFrame = -1;
@@ -354,6 +356,8 @@ export class AppNetworkBridge {
           sources,
           totalBytes,
         });
+
+        this.startTransferTimeout(transferId);
       }),
     );
 
@@ -387,6 +391,8 @@ export class AppNetworkBridge {
         if (payload.chunkIndex < 0 || payload.chunkIndex >= payload.totalChunks) return;
 
         fileState.chunks.set(payload.chunkIndex, payload.data);
+
+        this.startTransferTimeout(payload.transferId);
       }),
     );
 
@@ -404,6 +410,7 @@ export class AppNetworkBridge {
             `Failed to import synced media: ${error instanceof Error ? error.message : 'unknown error'}`,
           );
         } finally {
+          this.clearTransferTimeout(transferId);
           this.incomingMediaTransfers.delete(transferId);
           this.pendingStateByTransferId.delete(transferId);
         }
@@ -1135,6 +1142,37 @@ export class AppNetworkBridge {
     return bytes;
   }
 
+  private startTransferTimeout(transferId: string): void {
+    this.clearTransferTimeout(transferId);
+    const timer = setTimeout(() => {
+      const transfer = this.incomingMediaTransfers.get(transferId);
+      if (transfer) {
+        console.warn(
+          `[AppNetworkBridge] Media transfer "${transferId}" timed out after ${MEDIA_TRANSFER_TIMEOUT_MS}ms — cleaning up leaked chunks.`,
+        );
+        this.incomingMediaTransfers.delete(transferId);
+        this.pendingStateByTransferId.delete(transferId);
+      }
+      this.incomingTransferTimeouts.delete(transferId);
+    }, MEDIA_TRANSFER_TIMEOUT_MS);
+    this.incomingTransferTimeouts.set(transferId, timer);
+  }
+
+  private clearTransferTimeout(transferId: string): void {
+    const existing = this.incomingTransferTimeouts.get(transferId);
+    if (existing !== undefined) {
+      clearTimeout(existing);
+      this.incomingTransferTimeouts.delete(transferId);
+    }
+  }
+
+  private clearAllTransferTimeouts(): void {
+    for (const timer of this.incomingTransferTimeouts.values()) {
+      clearTimeout(timer);
+    }
+    this.incomingTransferTimeouts.clear();
+  }
+
   private formatByteSize(bytes: number): string {
     if (bytes <= 0) return '0 B';
     if (bytes < 1024) return `${bytes} B`;
@@ -1219,6 +1257,7 @@ export class AppNetworkBridge {
     this.colorSyncThrottle = null;
     this.frameSyncThrottle?.cancel();
     this.frameSyncThrottle = null;
+    this.clearAllTransferTimeouts();
     this.pendingStateByTransferId.clear();
     this.outgoingMediaTransfers.clear();
     this.incomingMediaTransfers.clear();

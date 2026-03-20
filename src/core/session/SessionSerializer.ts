@@ -12,7 +12,7 @@ import { DEFAULT_PLAYLIST_STATE } from './PlaylistManager';
 import type { PlaylistManager } from './PlaylistManager';
 import type { PaintEngine } from '../../paint/PaintEngine';
 import type { Viewer } from '../../ui/components/Viewer';
-import { DEFAULT_COLOR_ADJUSTMENTS } from '../../core/types/color';
+import { DEFAULT_COLOR_ADJUSTMENTS, DEFAULT_COLOR_WHEELS_STATE } from '../../core/types/color';
 import { DEFAULT_FILTER_SETTINGS } from '../../core/types/filter';
 import { DEFAULT_TRANSFORM, DEFAULT_CROP_STATE, DEFAULT_CROP_REGION } from '../../core/types/transform';
 import { DEFAULT_BACKGROUND_PATTERN_STATE } from '../../core/types/background';
@@ -332,6 +332,7 @@ export class SessionSerializer {
       view: viewState,
 
       color: viewer.getColorAdjustments(),
+      colorWheels: viewer.getColorWheels().getState(),
       cdl: viewer.getCDL(),
       filters: viewer.getFilterSettings(),
       transform: viewer.getTransform(),
@@ -694,6 +695,9 @@ export class SessionSerializer {
 
     // Restore viewer state
     viewer.setColorAdjustments(migrated.color);
+    if (migrated.colorWheels) {
+      viewer.getColorWheels().setState(migrated.colorWheels);
+    }
     viewer.setCDL(migrated.cdl);
     viewer.setFilterSettings(migrated.filters);
     viewer.setTransform(migrated.transform);
@@ -719,12 +723,8 @@ export class SessionSerializer {
     if (typeof viewer.syncLUTPipeline === 'function') {
       viewer.syncLUTPipeline();
     }
-    if (migrated.par) {
-      viewer.setPARState(migrated.par);
-    }
-    if (migrated.backgroundPattern) {
-      viewer.setBackgroundPatternState(migrated.backgroundPattern);
-    }
+    viewer.setPARState(migrated.par ?? DEFAULT_PAR_STATE);
+    viewer.setBackgroundPatternState(migrated.backgroundPattern ?? DEFAULT_BACKGROUND_PATTERN_STATE);
     viewer.setZoom(migrated.view.zoom);
     viewer.setPan(migrated.view.panX, migrated.view.panY);
 
@@ -871,6 +871,9 @@ export class SessionSerializer {
     migrated.playback = { ...DEFAULT_PLAYBACK_STATE, ...migrated.playback };
     migrated.view = { ...DEFAULT_VIEW_STATE, ...migrated.view };
     migrated.color = { ...DEFAULT_COLOR_ADJUSTMENTS, ...migrated.color };
+    migrated.colorWheels = migrated.colorWheels
+      ? JSON.parse(JSON.stringify({ ...DEFAULT_COLOR_WHEELS_STATE, ...migrated.colorWheels }))
+      : undefined;
     migrated.cdl = migrated.cdl ?? JSON.parse(JSON.stringify(DEFAULT_CDL));
     migrated.filters = { ...DEFAULT_FILTER_SETTINGS, ...migrated.filters };
     migrated.transform = { ...DEFAULT_TRANSFORM, ...migrated.transform };

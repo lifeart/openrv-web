@@ -124,21 +124,23 @@ describe('LensDistortion', () => {
       expect(result).not.toBe(imageData);
     });
 
-    it('LENS-007: handles out-of-bounds with black pixels', () => {
+    it('LENS-007: handles out-of-bounds with transparent pixels', () => {
       const imageData = createTestImageData(20, 20, { r: 255, g: 255, b: 255, a: 255 });
       const params: LensDistortionParams = {
         ...DEFAULT_LENS_PARAMS,
-        k1: -0.8, // Strong barrel distortion
-        scale: 0.5, // Will cause sampling outside bounds
+        k1: 0.8, // Strong pincushion - corners map outside source bounds
       };
 
       const result = applyLensDistortion(imageData, params);
 
-      // Check corners - they should be black (out of bounds)
+      // Check corners - they should be transparent (out of bounds)
       // Corner (0, 0)
       const cornerIdx = 0;
-      // With strong distortion, corners may sample outside
-      expect(result.data[cornerIdx + 3]).toBe(255); // Alpha preserved
+      // With strong pincushion distortion, corners sample outside
+      expect(result.data[cornerIdx]).toBe(0);
+      expect(result.data[cornerIdx + 1]).toBe(0);
+      expect(result.data[cornerIdx + 2]).toBe(0);
+      expect(result.data[cornerIdx + 3]).toBe(0); // Alpha should be transparent
     });
 
     it('uses bilinear interpolation for smooth results', () => {
@@ -179,6 +181,155 @@ describe('LensDistortion', () => {
       // Check center pixel alpha
       const centerIdx = (5 * 10 + 5) * 4;
       expect(result.data[centerIdx + 3]).toBeCloseTo(200, -1);
+    });
+
+    it('LENS-013: OOB pixels are fully transparent for compositing (regression)', () => {
+      // Strong pincushion pushes corners far outside source bounds
+      const size = 20;
+      const imageData = createTestImageData(size, size, { r: 200, g: 100, b: 50, a: 180 });
+      const params: LensDistortionParams = {
+        ...DEFAULT_LENS_PARAMS,
+        k1: 0.8, // Strong pincushion - corners will be OOB
+      };
+
+      const result = applyLensDistortion(imageData, params);
+
+      // All four corners should be fully transparent
+      const corners = [
+        0, // top-left
+        (size - 1) * 4, // top-right
+        ((size - 1) * size) * 4, // bottom-left
+        ((size - 1) * size + (size - 1)) * 4, // bottom-right
+      ];
+
+      for (const idx of corners) {
+        expect(result.data[idx]).toBe(0); // R
+        expect(result.data[idx + 1]).toBe(0); // G
+        expect(result.data[idx + 2]).toBe(0); // B
+        expect(result.data[idx + 3]).toBe(0); // A must be 0 (transparent), not 255
+      }
+    });
+
+    it('LENS-014: in-bounds pixels preserve source alpha', () => {
+      const size = 20;
+      const alpha = 180;
+      const imageData = createTestImageData(size, size, { r: 128, g: 128, b: 128, a: alpha });
+      const params: LensDistortionParams = {
+        ...DEFAULT_LENS_PARAMS,
+        k1: -0.1, // Mild barrel - center stays in bounds
+      };
+
+      const result = applyLensDistortion(imageData, params);
+
+      // Center pixel should preserve source alpha through bilinear interpolation
+      const centerIdx = (10 * size + 10) * 4;
+      expect(result.data[centerIdx + 3]).toBeCloseTo(alpha, -1);
+    });
+
+    it('LENS-015: zero distortion with non-default scale produces transparent OOB', () => {
+      const size = 10;
+      const imageData = createTestImageData(size, size, { r: 255, g: 255, b: 255, a: 255 });
+      const params: LensDistortionParams = {
+        ...DEFAULT_LENS_PARAMS,
+        k1: 0, // No radial distortion
+        scale: 2.0, // Large scale zooms out, causing edges to map outside source
+      };
+
+      const result = applyLensDistortion(imageData, params);
+
+      // Some edge pixels should be OOB and transparent
+      let foundTransparent = false;
+      for (let i = 0; i < result.data.length; i += 4) {
+        if (result.data[i + 3] === 0) {
+          // Verify the whole pixel is [0,0,0,0]
+          expect(result.data[i]).toBe(0);
+          expect(result.data[i + 1]).toBe(0);
+          expect(result.data[i + 2]).toBe(0);
+          foundTransparent = true;
+        }
+      }
+      expect(foundTransparent).toBe(true);
+    });
+
+    it('LENS-016: extreme distortion - all OOB pixels are transparent', () => {
+      const size = 10;
+      const imageData = createTestImageData(size, size, { r: 255, g: 0, b: 0, a: 255 });
+      const params: LensDistortionParams = {
+        ...DEFAULT_LENS_PARAMS,
+        k1: 1.0, // Maximum pincushion
+        k2: 1.0,
+      };
+
+      const result = applyLensDistortion(imageData, params);
+
+      // With extreme distortion, many pixels will be OOB
+      // Verify no pixel has alpha=255 with RGB=0 (the old bug pattern)
+      for (let i = 0; i < result.data.length; i += 4) {
+        const r = result.data[i]!;
+        const g = result.data[i + 1]!;
+        const b = result.data[i + 2]!;
+        const a = result.data[i + 3]!;
+        if (r === 0 && g === 0 && b === 0) {
+          // If RGB is all zero, alpha must also be 0 (transparent), not 255
+          expect(a).toBe(0);
+        }
+      }
+    });
+
+    it('LENS-017: boundary pixels have partially blended alpha (smooth edge transition)', () => {
+      // Use a moderate pincushion that pushes edges just outside bounds,
+      // creating boundary pixels that should be partially transparent.
+      const size = 30;
+      const imageData = createTestImageData(size, size, { r: 200, g: 100, b: 50, a: 255 });
+      const params: LensDistortionParams = {
+        ...DEFAULT_LENS_PARAMS,
+        k1: 0.4, // Moderate pincushion - edges partially OOB
+      };
+
+      const result = applyLensDistortion(imageData, params);
+
+      // Scan all pixels and collect alpha values
+      const alphaValues = new Set<number>();
+      for (let i = 0; i < result.data.length; i += 4) {
+        alphaValues.add(result.data[i + 3]!);
+      }
+
+      // There should be intermediate alpha values between 0 and 255
+      // (boundary interpolation blending), not just 0 and 255
+      const intermediateAlphas = [...alphaValues].filter((a) => a > 0 && a < 255);
+      expect(intermediateAlphas.length).toBeGreaterThan(0);
+    });
+
+    it('LENS-018: smooth transition from in-bounds to OOB (no hard 1px border)', () => {
+      // Create image with uniform color and alpha=255
+      const size = 40;
+      const imageData = createTestImageData(size, size, { r: 128, g: 128, b: 128, a: 255 });
+      const params: LensDistortionParams = {
+        ...DEFAULT_LENS_PARAMS,
+        k1: 0.3, // Pincushion causes edges to go OOB
+      };
+
+      const result = applyLensDistortion(imageData, params);
+
+      // Walk along the middle row from center to edge.
+      // Alpha should decrease monotonically (or stay the same) as we approach OOB.
+      const midY = Math.floor(size / 2);
+      let lastAlpha = 255;
+      let foundDecreasingAlpha = false;
+      for (let x = Math.floor(size / 2); x < size; x++) {
+        const idx = (midY * size + x) * 4;
+        const alpha = result.data[idx + 3]!;
+        if (alpha < lastAlpha && alpha > 0) {
+          foundDecreasingAlpha = true;
+        }
+        // Once alpha hits 0, we are fully OOB; no need to check further
+        if (alpha === 0) break;
+        lastAlpha = alpha;
+      }
+
+      // We should have found at least one pixel with decreasing (but non-zero) alpha
+      // at the boundary, proving the transition is smooth, not a hard cutoff.
+      expect(foundDecreasingAlpha).toBe(true);
     });
 
     it('applies k2 secondary radial distortion', () => {

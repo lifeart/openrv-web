@@ -3436,3 +3436,85 @@ describe('GC Pressure: Pre-allocated offset/scale buffers', () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// renderTiledImages – GL state save/restore (MED-01 regression)
+// ---------------------------------------------------------------------------
+describe('Renderer renderTiledImages GL state restore', () => {
+  function setupTiledRenderer() {
+    const renderer = new Renderer();
+    const mockGL = initRendererWithMockGL(renderer);
+
+    // Create a minimal tile with a mock image
+    const image = new IPImage({ width: 2, height: 2, channels: 4, dataType: 'uint8' });
+    const tiles = [
+      { image, viewport: { x: 0, y: 0, width: 100, height: 100 } },
+    ];
+
+    return { renderer, mockGL, tiles };
+  }
+
+  it('MED-01-A: restores scissor test disabled state when it was disabled before', () => {
+    const { renderer, mockGL, tiles } = setupTiledRenderer();
+
+    // Scissor test is disabled before the call (default mock behavior)
+    (mockGL.isEnabled as ReturnType<typeof vi.fn>).mockReturnValue(false);
+
+    renderer.renderTiledImages(tiles);
+
+    // Should have called disable(SCISSOR_TEST) to restore the disabled state
+    expect(mockGL.disable).toHaveBeenCalledWith(mockGL.SCISSOR_TEST);
+  });
+
+  it('MED-01-B: preserves scissor test enabled state when it was enabled before', () => {
+    const { renderer, mockGL, tiles } = setupTiledRenderer();
+
+    // Scissor test is enabled before the call
+    (mockGL.isEnabled as ReturnType<typeof vi.fn>).mockReturnValue(true);
+
+    renderer.renderTiledImages(tiles);
+
+    // Should NOT have called disable(SCISSOR_TEST) since it was already enabled
+    const disableCalls = (mockGL.disable as ReturnType<typeof vi.fn>).mock.calls;
+    const scissorDisableCalls = disableCalls.filter(
+      (call: unknown[]) => call[0] === mockGL.SCISSOR_TEST,
+    );
+    expect(scissorDisableCalls.length).toBe(0);
+  });
+
+  it('MED-01-C: restores previous scissor rect after rendering', () => {
+    const { renderer, mockGL, tiles } = setupTiledRenderer();
+
+    const prevScissorBox = new Int32Array([10, 20, 300, 400]);
+    (mockGL.getParameter as ReturnType<typeof vi.fn>).mockImplementation((pname: number) => {
+      if (pname === mockGL.VIEWPORT) return new Int32Array([0, 0, 800, 600]);
+      if (pname === (mockGL as any).SCISSOR_BOX) return prevScissorBox;
+      return null;
+    });
+
+    renderer.renderTiledImages(tiles);
+
+    // The last scissor call should restore the previous scissor rect
+    const scissorCalls = (mockGL.scissor as ReturnType<typeof vi.fn>).mock.calls;
+    const lastScissorCall = scissorCalls[scissorCalls.length - 1];
+    expect(lastScissorCall).toEqual([10, 20, 300, 400]);
+  });
+
+  it('MED-01-D: restores previous viewport after rendering', () => {
+    const { renderer, mockGL, tiles } = setupTiledRenderer();
+
+    const prevViewport = new Int32Array([50, 60, 1024, 768]);
+    (mockGL.getParameter as ReturnType<typeof vi.fn>).mockImplementation((pname: number) => {
+      if (pname === mockGL.VIEWPORT) return prevViewport;
+      if (pname === (mockGL as any).SCISSOR_BOX) return new Int32Array([0, 0, 800, 600]);
+      return null;
+    });
+
+    renderer.renderTiledImages(tiles);
+
+    // The last viewport call should restore the previous viewport
+    const viewportCalls = (mockGL.viewport as ReturnType<typeof vi.fn>).mock.calls;
+    const lastViewportCall = viewportCalls[viewportCalls.length - 1];
+    expect(lastViewportCall).toEqual([50, 60, 1024, 768]);
+  });
+});

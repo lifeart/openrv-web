@@ -54,6 +54,7 @@ function createMockContext(overrides: Partial<PersistenceManagerContext> = {}): 
       getPan: () => ({ x: 0, y: 0 }),
       getZoom: () => 1,
       getColorAdjustments: () => ({}),
+      getColorWheels: vi.fn(() => ({ getState: vi.fn(() => ({ lift: { r: 0, g: 0, b: 0, y: 0 }, gamma: { r: 0, g: 0, b: 0, y: 0 }, gain: { r: 0, g: 0, b: 0, y: 0 }, master: { r: 0, g: 0, b: 0, y: 0 }, linked: false })), setState: vi.fn(), on: vi.fn() })),
       getCDL: () => ({}),
       getFilterSettings: () => ({}),
       getTransform: () => ({}),

@@ -5,6 +5,10 @@ import { PaintEngine } from './paint/PaintEngine';
 import { NoteManager } from './core/session/NoteManager';
 import { encodeSessionState } from './core/session/SessionURLManager';
 
+vi.mock('./ui/components/shared/Modal', () => ({
+  showConfirm: vi.fn().mockResolvedValue(true),
+}));
+
 // ---------------------------------------------------------------------------
 // Mocks
 // ---------------------------------------------------------------------------
@@ -65,6 +69,10 @@ class MockNetworkSyncManager extends EventEmitter {
   leaveRoom = vi.fn();
   setSyncSettings = vi.fn();
   requestMediaSync = vi.fn(() => '');
+  sendMediaResponse = vi.fn();
+  sendMediaOffer = vi.fn();
+  sendMediaChunk = vi.fn();
+  sendMediaComplete = vi.fn();
   roomInfo = null;
   isHost = false;
   userId = 'test-user-id';
@@ -1601,6 +1609,160 @@ describe('AppNetworkBridge', () => {
 
       expect(ctx._networkControl.showInfo).not.toHaveBeenCalled();
       expect(ctx._networkControl.showError).not.toHaveBeenCalled();
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Media transfer timeout (MED-17)
+  // -----------------------------------------------------------------------
+  describe('media transfer timeout', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    const TIMEOUT_MS = 30_000;
+
+    function simulateOffer(transferId: string, senderUserId = 'sender-1') {
+      ctx._networkSyncManager.emit('mediaSyncOffered', {
+        transferId,
+        senderUserId,
+        totalBytes: 1024,
+        files: [
+          { id: 'file-0', name: 'test.png', type: 'image/png', size: 1024, lastModified: Date.now() },
+        ],
+        sources: [{ kind: 'image', fileIds: ['file-0'], fps: 24 }],
+      });
+    }
+
+    function simulateChunk(transferId: string, senderUserId = 'sender-1', chunkIndex = 0) {
+      ctx._networkSyncManager.emit('mediaSyncChunkReceived', {
+        transferId,
+        senderUserId,
+        fileId: 'file-0',
+        chunkIndex,
+        totalChunks: 2,
+        data: 'AAAA',
+      });
+    }
+
+    it('ANB-200: timeout fires and cleans up stale transfer after 30s', async () => {
+      bridge.setup();
+
+      simulateOffer('tx-1');
+      // Wait for the async mediaSyncOffered handler (confirmMediaSync)
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect((bridge as any).incomingMediaTransfers.size).toBe(1);
+
+      // Advance past timeout
+      vi.advanceTimersByTime(TIMEOUT_MS);
+
+      expect((bridge as any).incomingMediaTransfers.size).toBe(0);
+      expect((bridge as any).incomingTransferTimeouts.size).toBe(0);
+    });
+
+    it('ANB-201: timeout is reset on each chunk received', async () => {
+      bridge.setup();
+
+      simulateOffer('tx-2');
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Advance 25s (before timeout)
+      vi.advanceTimersByTime(25_000);
+      expect((bridge as any).incomingMediaTransfers.size).toBe(1);
+
+      // Receive a chunk — should reset the timer
+      simulateChunk('tx-2', 'sender-1', 0);
+
+      // Advance another 25s (50s total, but only 25s since last chunk)
+      vi.advanceTimersByTime(25_000);
+      expect((bridge as any).incomingMediaTransfers.size).toBe(1);
+
+      // Advance past the reset timeout
+      vi.advanceTimersByTime(6_000);
+      expect((bridge as any).incomingMediaTransfers.size).toBe(0);
+    });
+
+    it('ANB-202: timeout is cleared on successful completion', async () => {
+      bridge.setup();
+
+      simulateOffer('tx-3');
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect((bridge as any).incomingTransferTimeouts.size).toBe(1);
+
+      // Complete the transfer
+      ctx._networkSyncManager.emit('mediaSyncCompleted', {
+        transferId: 'tx-3',
+        senderUserId: 'sender-1',
+      });
+      // mediaSyncCompleted handler is async, flush microtasks
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect((bridge as any).incomingTransferTimeouts.size).toBe(0);
+      expect((bridge as any).incomingMediaTransfers.size).toBe(0);
+
+      // Advancing past timeout should not cause issues (no double cleanup)
+      vi.advanceTimersByTime(TIMEOUT_MS);
+      expect((bridge as any).incomingMediaTransfers.size).toBe(0);
+    });
+
+    it('ANB-203: dispose clears all pending transfer timeouts', async () => {
+      bridge.setup();
+
+      simulateOffer('tx-4');
+      await vi.advanceTimersByTimeAsync(0);
+      simulateOffer('tx-5');
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect((bridge as any).incomingTransferTimeouts.size).toBe(2);
+
+      bridge.dispose();
+
+      expect((bridge as any).incomingTransferTimeouts.size).toBe(0);
+      expect((bridge as any).incomingMediaTransfers.size).toBe(0);
+
+      // Advancing past timeout should not cause issues
+      vi.advanceTimersByTime(TIMEOUT_MS);
+    });
+
+    it('ANB-204: transfer map is empty after timeout cleanup', async () => {
+      bridge.setup();
+
+      simulateOffer('tx-6');
+      await vi.advanceTimersByTimeAsync(0);
+
+      simulateChunk('tx-6', 'sender-1', 0);
+
+      // Advance past timeout — accumulated chunks should be freed
+      vi.advanceTimersByTime(TIMEOUT_MS);
+
+      expect((bridge as any).incomingMediaTransfers.size).toBe(0);
+      expect((bridge as any).incomingTransferTimeouts.size).toBe(0);
+      expect((bridge as any).pendingStateByTransferId.size).toBe(0);
+    });
+
+    it('ANB-205: timeout logs a warning', async () => {
+      bridge.setup();
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      simulateOffer('tx-7');
+      await vi.advanceTimersByTimeAsync(0);
+
+      vi.advanceTimersByTime(TIMEOUT_MS);
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('tx-7'),
+      );
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('timed out'),
+      );
+
+      warnSpy.mockRestore();
     });
   });
 });

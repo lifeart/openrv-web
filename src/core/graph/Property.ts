@@ -29,6 +29,8 @@ export interface PropertyInfo<T> {
   persistent?: boolean;
   /** Whether the property supports keyframe animation (defaults to false) */
   animatable?: boolean;
+  /** Optional transform applied to values before they are stored (e.g., clamping array elements) */
+  transform?: (value: T) => T;
 }
 
 export class Property<T> {
@@ -46,6 +48,7 @@ export class Property<T> {
   readonly group?: string;
   readonly persistent: boolean;
   readonly animatable: boolean;
+  readonly transform?: (value: T) => T;
 
   constructor(info: PropertyInfo<T>) {
     this.name = info.name;
@@ -58,6 +61,7 @@ export class Property<T> {
     this.group = info.group;
     this.persistent = info.persistent ?? false;
     this.animatable = info.animatable ?? false;
+    this.transform = info.transform;
   }
 
   get value(): T {
@@ -65,6 +69,11 @@ export class Property<T> {
   }
 
   set value(newValue: T) {
+    // Apply custom transform if defined (e.g., clamping array elements)
+    if (this.transform) {
+      newValue = this.transform(newValue);
+    }
+
     // Clamp numeric values before equality check
     if (typeof newValue === 'number') {
       if (this.min !== undefined) newValue = Math.max(this.min, newValue as number) as T;

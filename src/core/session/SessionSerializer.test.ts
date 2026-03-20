@@ -25,6 +25,8 @@ import { DEFAULT_SPOTLIGHT_STATE } from '../../ui/components/SpotlightOverlay';
 import { DEFAULT_BUG_OVERLAY_STATE } from '../../ui/components/BugOverlay';
 import { DEFAULT_EXR_WINDOW_OVERLAY_STATE } from '../../ui/components/EXRWindowOverlay';
 import { DEFAULT_FPS_INDICATOR_STATE } from '../../ui/components/FPSIndicator';
+import { DEFAULT_PAR_STATE } from '../../utils/media/PixelAspectRatio';
+import { DEFAULT_BACKGROUND_PATTERN_STATE } from '../../core/types/background';
 
 // Mock the showFileReloadPrompt dialog
 vi.mock('../../ui/components/shared/Modal', () => ({
@@ -754,6 +756,69 @@ describe('SessionSerializer', () => {
       expect(setEnabled).toHaveBeenCalledWith(false);
       expect(setLoopMode).toHaveBeenCalledWith('none');
       expect(setCurrentFrame).toHaveBeenCalledWith(1);
+    });
+
+    it('SER-011d: resets PAR to defaults when missing from session', async () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty();
+      delete (state as any).par;
+
+      await SessionSerializer.fromJSON(state, components);
+      expect(components.viewer.setPARState).toHaveBeenCalledWith(DEFAULT_PAR_STATE);
+    });
+
+    it('SER-011e: resets background pattern to defaults when missing from session', async () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty();
+      delete (state as any).backgroundPattern;
+
+      await SessionSerializer.fromJSON(state, components);
+      expect(components.viewer.setBackgroundPatternState).toHaveBeenCalledWith(DEFAULT_BACKGROUND_PATTERN_STATE);
+    });
+
+    it('SER-011f: restores PAR state when present in session', async () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty();
+      state.par = { enabled: true, par: 2.0, preset: 'anamorphic-2x' };
+
+      await SessionSerializer.fromJSON(state, components);
+      expect(components.viewer.setPARState).toHaveBeenCalledWith({ enabled: true, par: 2.0, preset: 'anamorphic-2x' });
+    });
+
+    it('SER-011g: restores background pattern state when present in session', async () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty();
+      state.backgroundPattern = { pattern: 'checker', checkerSize: 'large', customColor: '#ff0000' };
+
+      await SessionSerializer.fromJSON(state, components);
+      expect(components.viewer.setBackgroundPatternState).toHaveBeenCalledWith({ pattern: 'checker', checkerSize: 'large', customColor: '#ff0000' });
+    });
+
+    it('SER-011h: old session without PAR/background gets same defaults as fresh session', async () => {
+      const components = createMockComponents();
+      // Simulate old session format with no PAR or background fields
+      const oldState: Partial<SessionState> = {
+        version: 1,
+        name: 'OldProject',
+        createdAt: new Date().toISOString(),
+        modifiedAt: new Date().toISOString(),
+        media: [],
+        playback: {
+          currentFrame: 1,
+          inPoint: 1,
+          outPoint: 1,
+          fps: 24,
+          loopMode: 'loop',
+          volume: 1,
+          muted: false,
+          marks: [],
+          currentSourceIndex: 0,
+        } as any,
+      };
+
+      await SessionSerializer.fromJSON(oldState as SessionState, components);
+      expect(components.viewer.setPARState).toHaveBeenCalledWith(DEFAULT_PAR_STATE);
+      expect(components.viewer.setBackgroundPatternState).toHaveBeenCalledWith(DEFAULT_BACKGROUND_PATTERN_STATE);
     });
   });
 
@@ -1820,6 +1885,10 @@ function createMockComponents(): SessionComponents {
       getDifferenceMatteState: vi.fn().mockReturnValue({ ...DEFAULT_DIFFERENCE_MATTE_STATE }),
       getBlendModeState: vi.fn().mockReturnValue({ ...DEFAULT_BLEND_MODE_STATE, flickerFrame: 0 }),
       getColorInversion: vi.fn().mockReturnValue(false),
+      getColorWheels: vi.fn().mockReturnValue({
+        getState: vi.fn().mockReturnValue({ lift: { r: 0, g: 0, b: 0, y: 0 }, gamma: { r: 0, g: 0, b: 0, y: 0 }, gain: { r: 0, g: 0, b: 0, y: 0 }, master: { r: 0, g: 0, b: 0, y: 0 }, linked: false }),
+        setState: vi.fn(),
+      }),
       getCurves: vi.fn().mockReturnValue(createDefaultCurvesData()),
       getStereoEyeTransforms: vi.fn().mockReturnValue({ ...DEFAULT_STEREO_EYE_TRANSFORM_STATE }),
       getStereoAlignMode: vi.fn().mockReturnValue(DEFAULT_STEREO_ALIGN_MODE),

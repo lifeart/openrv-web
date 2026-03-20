@@ -429,4 +429,46 @@ describe('applyColorTransform', () => {
     const [, g] = applyColorTransform(0.5, 0.5, 0.5, params);
     expect(g).toBeGreaterThan(0.5);
   });
+
+  it('ACT-010: tint cross-channel effects match shader (R and B decrease)', () => {
+    // Shader: color.r -= g * 0.05; color.b -= g * 0.05 where g = tint / 100
+    // CacheLUTNode tint is [-1,1] (pre-divided by 100), so cross-channel = tint * 0.05
+    const tint = 1;
+    const params: ColorTransformParams = { ...DEFAULT_TRANSFORM_PARAMS, tint };
+    const [r, g, b] = applyColorTransform(0.5, 0.5, 0.5, params);
+
+    // G increases by tint * 0.1 = 0.1
+    expect(g).toBeCloseTo(0.5 + tint * 0.1, 5);
+    // R decreases by tint * 0.05 = 0.05
+    expect(r).toBeCloseTo(0.5 - tint * 0.05, 5);
+    // B decreases by tint * 0.05 = 0.05
+    expect(b).toBeCloseTo(0.5 - tint * 0.05, 5);
+  });
+
+  it('ACT-011: temperature coefficients match shader reference', () => {
+    // Shader: color.r += t * 0.1; color.b -= t * 0.1 where t = temp / 100
+    // CacheLUTNode temp is [-1,1] (pre-divided by 100), so effect = temp * 0.1
+    const temp = 0.5;
+    const params: ColorTransformParams = { ...DEFAULT_TRANSFORM_PARAMS, temperature: temp };
+    const [r, g, b] = applyColorTransform(0.5, 0.5, 0.5, params);
+
+    expect(r).toBeCloseTo(0.5 + temp * 0.1, 5);
+    expect(g).toBeCloseTo(0.5, 5);
+    expect(b).toBeCloseTo(0.5 - temp * 0.1, 5);
+  });
+
+  it('ACT-012: combined temperature+tint matches shader math', () => {
+    // Both temp and tint active: verify all cross-channel effects accumulate correctly
+    const temp = 0.6;
+    const tint = 0.4;
+    const params: ColorTransformParams = { ...DEFAULT_TRANSFORM_PARAMS, temperature: temp, tint };
+    const [r, g, b] = applyColorTransform(0.5, 0.5, 0.5, params);
+
+    // R = 0.5 + temp*0.1 - tint*0.05
+    expect(r).toBeCloseTo(0.5 + temp * 0.1 - tint * 0.05, 5);
+    // G = 0.5 + tint*0.1
+    expect(g).toBeCloseTo(0.5 + tint * 0.1, 5);
+    // B = 0.5 - temp*0.1 - tint*0.05
+    expect(b).toBeCloseTo(0.5 - temp * 0.1 - tint * 0.05, 5);
+  });
 });
