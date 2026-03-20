@@ -982,4 +982,137 @@ describe('RenderWorkerProxy', () => {
       await promise;
     });
   });
+
+  // =============================================================================
+  // Multi-point LUT pipeline (Issue #19)
+  // =============================================================================
+
+  describe('Multi-point LUT pipeline (#19)', () => {
+    it('RWP-LUT-001: supportsMultiPointLUT returns true', () => {
+      expect(proxy.supportsMultiPointLUT()).toBe(true);
+    });
+
+    it('RWP-LUT-002: setFileLUT syncs file LUT payload with domains', async () => {
+      mockWorker.simulateMessage({ type: 'ready' });
+      proxy.setFileLUT(new Float32Array(64), 4, 0.6, [-0.2, -0.1, 0], [1.2, 1.1, 1.0]);
+
+      const promise = proxy.renderSDRFrameAsync(createMockBitmap());
+      const syncMsg = mockWorker.messageHistory.find((m) => m.type === 'syncState') as SyncStateMessage;
+
+      expect(syncMsg.state.fileLUT).toMatchObject({
+        lutSize: 4,
+        intensity: 0.6,
+        domainMin: [-0.2, -0.1, 0],
+        domainMax: [1.2, 1.1, 1.0],
+      });
+      expect(syncMsg.state.fileLUT?.lutData).toBeInstanceOf(Float32Array);
+
+      const renderMsg = mockWorker.messageHistory.find((m) => m.type === 'renderSDR');
+      if (renderMsg && 'id' in renderMsg) {
+        mockWorker.simulateMessage({ type: 'renderDone', id: (renderMsg as any).id });
+      }
+      await promise;
+    });
+
+    it('RWP-LUT-003: setLookLUT syncs look LUT payload and supersedes legacy lut field', async () => {
+      mockWorker.simulateMessage({ type: 'ready' });
+      proxy.setLUT(new Float32Array(64), 4, 0.2);
+      proxy.setLookLUT(new Float32Array(64), 4, 0.9, [0, 0, 0], [1.5, 1.5, 1.5]);
+
+      const promise = proxy.renderSDRFrameAsync(createMockBitmap());
+      const syncMsg = mockWorker.messageHistory.find((m) => m.type === 'syncState') as SyncStateMessage;
+
+      expect(syncMsg.state.lut).toBeUndefined();
+      expect(syncMsg.state.lookLUT).toMatchObject({
+        lutSize: 4,
+        intensity: 0.9,
+        domainMin: [0, 0, 0],
+        domainMax: [1.5, 1.5, 1.5],
+      });
+
+      const renderMsg = mockWorker.messageHistory.find((m) => m.type === 'renderSDR');
+      if (renderMsg && 'id' in renderMsg) {
+        mockWorker.simulateMessage({ type: 'renderDone', id: (renderMsg as any).id });
+      }
+      await promise;
+    });
+
+    it('RWP-LUT-004: setDisplayLUT syncs display LUT payload', async () => {
+      mockWorker.simulateMessage({ type: 'ready' });
+      proxy.setDisplayLUT(new Float32Array(64), 4, 0.75, [0.1, 0.2, 0.3], [0.9, 0.95, 1.0]);
+
+      const promise = proxy.renderSDRFrameAsync(createMockBitmap());
+      const syncMsg = mockWorker.messageHistory.find((m) => m.type === 'syncState') as SyncStateMessage;
+
+      expect(syncMsg.state.displayLUT).toMatchObject({
+        lutSize: 4,
+        intensity: 0.75,
+        domainMin: [0.1, 0.2, 0.3],
+        domainMax: [0.9, 0.95, 1.0],
+      });
+
+      const renderMsg = mockWorker.messageHistory.find((m) => m.type === 'renderSDR');
+      if (renderMsg && 'id' in renderMsg) {
+        mockWorker.simulateMessage({ type: 'renderDone', id: (renderMsg as any).id });
+      }
+      await promise;
+    });
+
+    it('RWP-LUT-005: clearing file LUT syncs a null payload instead of warning', async () => {
+      mockWorker.simulateMessage({ type: 'ready' });
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      proxy.setFileLUT(null, 0, 0);
+
+      const promise = proxy.renderSDRFrameAsync(createMockBitmap());
+      const syncMsg = mockWorker.messageHistory.find((m) => m.type === 'syncState') as SyncStateMessage;
+
+      expect(syncMsg.state.fileLUT).toEqual({ lutData: null, lutSize: 0, intensity: 0 });
+      expect(warnSpy).not.toHaveBeenCalled();
+
+      const renderMsg = mockWorker.messageHistory.find((m) => m.type === 'renderSDR');
+      if (renderMsg && 'id' in renderMsg) {
+        mockWorker.simulateMessage({ type: 'renderDone', id: (renderMsg as any).id });
+      }
+      await promise;
+      warnSpy.mockRestore();
+    });
+
+    it('RWP-LUT-006: clearing look LUT syncs a null payload instead of warning', async () => {
+      mockWorker.simulateMessage({ type: 'ready' });
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      proxy.setLookLUT(null, 0, 0);
+
+      const promise = proxy.renderSDRFrameAsync(createMockBitmap());
+      const syncMsg = mockWorker.messageHistory.find((m) => m.type === 'syncState') as SyncStateMessage;
+
+      expect(syncMsg.state.lookLUT).toEqual({ lutData: null, lutSize: 0, intensity: 0 });
+      expect(warnSpy).not.toHaveBeenCalled();
+
+      const renderMsg = mockWorker.messageHistory.find((m) => m.type === 'renderSDR');
+      if (renderMsg && 'id' in renderMsg) {
+        mockWorker.simulateMessage({ type: 'renderDone', id: (renderMsg as any).id });
+      }
+      await promise;
+      warnSpy.mockRestore();
+    });
+
+    it('RWP-LUT-007: clearing display LUT syncs a null payload instead of warning', async () => {
+      mockWorker.simulateMessage({ type: 'ready' });
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      proxy.setDisplayLUT(null, 0, 0);
+
+      const promise = proxy.renderSDRFrameAsync(createMockBitmap());
+      const syncMsg = mockWorker.messageHistory.find((m) => m.type === 'syncState') as SyncStateMessage;
+
+      expect(syncMsg.state.displayLUT).toEqual({ lutData: null, lutSize: 0, intensity: 0 });
+      expect(warnSpy).not.toHaveBeenCalled();
+
+      const renderMsg = mockWorker.messageHistory.find((m) => m.type === 'renderSDR');
+      if (renderMsg && 'id' in renderMsg) {
+        mockWorker.simulateMessage({ type: 'renderDone', id: (renderMsg as any).id });
+      }
+      await promise;
+      warnSpy.mockRestore();
+    });
+  });
 });

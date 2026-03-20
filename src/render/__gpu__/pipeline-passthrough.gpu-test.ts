@@ -16,7 +16,8 @@ import { setupIdentityPipeline as setupIdentityPipelineBase } from './helpers/pi
 import viewerVertSrc from '../shaders/viewer.vert.glsl?raw';
 import viewerFragSrc from '../shaders/viewer.frag.glsl?raw';
 
-const W = 4, H = 4;
+const W = 4,
+  H = 4;
 
 /**
  * Wraps the shared identity pipeline with overrides specific to this test file:
@@ -51,7 +52,10 @@ describe('Full Pipeline Integration (real GPU)', () => {
   });
 
   function renderToCanvas(
-    inputR: number, inputG: number, inputB: number, inputA: number,
+    inputR: number,
+    inputG: number,
+    inputB: number,
+    inputA: number,
     setUniforms?: (gl: WebGL2RenderingContext, program: WebGLProgram) => void,
   ): Uint8Array {
     setupIdentityPipeline(gl, program);
@@ -113,11 +117,12 @@ describe('Full Pipeline Integration (real GPU)', () => {
     it('all 4x4 pixels are identical for solid input', () => {
       setup();
       const pixels = renderToCanvas(0.6, 0.3, 0.1, 1);
-      const p0r = pixels[0]!, p0g = pixels[1]!, p0b = pixels[2]!;
+      const p0r = pixels[0]!,
+        p0g = pixels[1]!,
+        p0b = pixels[2]!;
       for (let y = 0; y < H; y++) {
         for (let x = 0; x < W; x++) {
-          expectPixel(pixels, W, x, y,
-            { r: p0r, g: p0g, b: p0b, a: 255 }, EPSILON.SDR_INT);
+          expectPixel(pixels, W, x, y, { r: p0r, g: p0g, b: p0b, a: 255 }, EPSILON.SDR_INT);
         }
       }
     });
@@ -160,7 +165,9 @@ describe('Full Pipeline Integration (real GPU)', () => {
 
     it('saturation 0 + invert: grayscale then invert', () => {
       setup();
-      const r = 0.8, g = 0.2, b = 0.5;
+      const r = 0.8,
+        g = 0.2,
+        b = 0.5;
       const luma = r * 0.2126 + g * 0.7152 + b * 0.0722;
       const inverted = 1 - luma;
       const expected = Math.round(Math.min(Math.max(inverted, 0), 1) * 255);
@@ -204,7 +211,9 @@ describe('Full Pipeline Integration (real GPU)', () => {
 
     it('luminance mode (mode=5)', () => {
       setup();
-      const r = 0.8, g = 0.3, b = 0.5;
+      const r = 0.8,
+        g = 0.3,
+        b = 0.5;
       const luma = r * 0.2126 + g * 0.7152 + b * 0.0722;
       const expected = Math.round(luma * 255);
       const pixels = renderToCanvas(r, g, b, 1, (gl, prog) => {
@@ -229,7 +238,13 @@ describe('Full Pipeline Integration (real GPU)', () => {
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
         gl.bindFramebuffer(gl.FRAMEBUFFER, f);
         gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0);
-        return { fbo: f, dispose: () => { gl.deleteFramebuffer(f); gl.deleteTexture(t); } };
+        return {
+          fbo: f,
+          dispose: () => {
+            gl.deleteFramebuffer(f);
+            gl.deleteTexture(t);
+          },
+        };
       })();
 
       setupIdentityPipeline(gl, program);

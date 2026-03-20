@@ -14,6 +14,7 @@ import type { MuEvent, MuEventCallback } from './types';
 export class MuEventBridge {
   private modeManager: ModeManager;
   private domListenerCleanups: Array<() => void> = [];
+  private wiredTargets = new WeakSet<EventTarget>();
 
   constructor(modeManager?: ModeManager) {
     this.modeManager = modeManager ?? new ModeManager();
@@ -31,49 +32,50 @@ export class MuEventBridge {
   /**
    * Bind an event handler in a named table.
    * Mu signature: bind(modeName, tableName, eventName, callback, documentation)
+   *
+   * If modeName is non-empty and not "default", the binding is scoped to
+   * the named mode and only dispatches when that mode is active.
    */
   bind(
-    _modeName: string,
+    modeName: string,
     tableName: string,
     eventName: string,
     callback: MuEventCallback,
     documentation: string = '',
   ): void {
-    this.modeManager.bind(tableName, eventName, callback, documentation);
+    this.modeManager.bind(tableName, eventName, callback, documentation, undefined, modeName);
   }
 
   /**
    * Bind with regex matching (stores pattern, matches at dispatch time).
    */
   bindRegex(
-    _modeName: string,
+    modeName: string,
     tableName: string,
     eventPattern: RegExp,
     callback: MuEventCallback,
     documentation: string = '',
   ): void {
-    // Store with a sentinel key; dispatch handles regex matching
     const key = `__regex__${eventPattern.source}`;
-    this.modeManager.bind(tableName, key, (event: MuEvent) => {
-      if (eventPattern.test(event.name)) {
-        callback(event);
-      }
-    }, documentation);
+    this.modeManager.bind(tableName, key, callback, documentation, eventPattern, modeName);
   }
 
   /**
    * Unbind an event handler from a table.
+   *
+   * If modeName is non-empty and not "default", the binding is removed
+   * from the mode-scoped table.
    */
-  unbind(_modeName: string, tableName: string, eventName: string): void {
-    this.modeManager.unbind(tableName, eventName);
+  unbind(modeName: string, tableName: string, eventName: string): void {
+    this.modeManager.unbind(tableName, eventName, modeName);
   }
 
   /**
    * Unbind a regex-bound handler.
    */
-  unbindRegex(_modeName: string, tableName: string, eventPattern: RegExp): void {
+  unbindRegex(modeName: string, tableName: string, eventPattern: RegExp): void {
     const key = `__regex__${eventPattern.source}`;
-    this.modeManager.unbind(tableName, key);
+    this.modeManager.unbind(tableName, key, modeName);
   }
 
   // ── Mu mode management ──
@@ -90,15 +92,7 @@ export class MuEventBridge {
     deactivate?: () => void,
     icon?: string,
   ): void {
-    this.modeManager.defineMinorMode(
-      name,
-      order,
-      globalBindings,
-      overrideBindings,
-      activate,
-      deactivate,
-      icon,
-    );
+    this.modeManager.defineMinorMode(name, order, globalBindings, overrideBindings, activate, deactivate, icon);
   }
 
   /**
@@ -155,14 +149,7 @@ export class MuEventBridge {
   /**
    * Set a bounding-box constraint for event table hit-testing.
    */
-  setEventTableBBox(
-    tableName: string,
-    tag: string,
-    x: number,
-    y: number,
-    w: number,
-    h: number,
-  ): void {
+  setEventTableBBox(tableName: string, tag: string, x: number, y: number, w: number, h: number): void {
     this.modeManager.setEventTableBBox(tableName, tag, x, y, w, h);
   }
 
@@ -187,8 +174,11 @@ export class MuEventBridge {
   /**
    * Send an internal event through the mode system.
    * Mu signature: sendInternalEvent(eventName, contents, sender)
+   *
+   * @returns The value of `event.returnContents` after dispatch, allowing
+   *          handlers to communicate a response back to the caller.
    */
-  sendInternalEvent(eventName: string, contents: string = '', sender: string = ''): void {
+  sendInternalEvent(eventName: string, contents: string = '', sender: string = ''): string {
     const event: MuEvent = {
       name: eventName,
       sender,
@@ -197,6 +187,7 @@ export class MuEventBridge {
       reject: false,
     };
     this.modeManager.dispatchEvent(event);
+    return event.returnContents;
   }
 
   // ── DOM event wiring ──
@@ -206,6 +197,9 @@ export class MuEventBridge {
    * Translates keyboard, pointer, and wheel events into Mu event names.
    */
   wireDOMEvents(target: EventTarget): void {
+    if (this.wiredTargets.has(target)) return;
+    this.wiredTargets.add(target);
+
     const wire = (type: string, handler: (e: Event) => void) => {
       target.addEventListener(type, handler);
       this.domListenerCleanups.push(() => target.removeEventListener(type, handler));
@@ -227,6 +221,7 @@ export class MuEventBridge {
       cleanup();
     }
     this.domListenerCleanups = [];
+    this.wiredTargets = new WeakSet<EventTarget>();
     this.modeManager.dispose();
   }
 

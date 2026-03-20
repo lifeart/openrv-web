@@ -4,15 +4,23 @@
  * Handles:
  * - Inbound syncFrame with loop-protection flag
  * - Inbound loadMedia (dispatches to session.loadImage or session.loadVideo)
- * - Inbound syncColor (applies exposure/gamma/temperature/tint)
+ * - Inbound syncColor (applies exposure/gamma/temperature/tint + LUT loading)
  * - Outbound frameChanged (suppressed during inbound sync)
  * - Outbound colorChanged (forwards color adjustments to DCC bridge)
  */
 
 import type { DCCBridge, SyncColorMessage } from './integrations/DCCBridge';
 import type { ColorAdjustments } from './core/types/color';
+import type { LUT } from './color/LUTLoader';
+import { isLUT3D } from './color/LUTLoader';
+import { parseLUT } from './color/LUTFormatDetect';
+import type { Annotation } from './paint/types';
+import type { Note } from './core/session/NoteManager';
 import { Logger } from './utils/Logger';
 import { DisposableSubscriptionManager } from './utils/DisposableSubscriptionManager';
+import { basename } from './utils/path';
+import { detectMediaTypeFromUrl } from './utils/media/SupportedMediaFormats';
+import { showAlert } from './ui/components/shared/Modal';
 
 const log = new Logger('AppDCCWiring');
 
@@ -33,12 +41,24 @@ export interface DCCWiringSession {
 /** Minimal viewer surface needed by DCC wiring. */
 export interface DCCWiringViewer {
   setColorAdjustments(adjustments: ColorAdjustments): void;
+  setLUT(lut: LUT | null): void;
 }
 
 /** Minimal colorControls surface needed by DCC wiring. */
 export interface DCCWiringColorControls {
   setAdjustments(adjustments: Partial<ColorAdjustments>): void;
   getAdjustments(): ColorAdjustments;
+  setLUT(lut: LUT | null): void;
+  on(event: string, handler: (...args: any[]) => void): any;
+}
+
+/** Minimal paintEngine surface needed by DCC wiring. */
+export interface DCCWiringPaintEngine {
+  on(event: string, handler: (...args: any[]) => void): any;
+}
+
+/** Minimal noteManager surface needed by DCC wiring. */
+export interface DCCWiringNoteManager {
   on(event: string, handler: (...args: any[]) => void): any;
 }
 
@@ -51,19 +71,188 @@ export interface DCCWiringDeps {
   session: DCCWiringSession;
   viewer: DCCWiringViewer;
   colorControls: DCCWiringColorControls;
+  /** Optional paint engine for forwarding annotation events to the DCC bridge. */
+  paintEngine?: DCCWiringPaintEngine;
+  /** Optional note manager for forwarding note events to the DCC bridge. */
+  noteManager?: DCCWiringNoteManager;
+  /** Optional fetch implementation for loading LUT files (defaults to globalThis.fetch). */
+  fetchFn?: typeof globalThis.fetch;
+  /** Optional alert function for surfacing errors to the user (defaults to showAlert). */
+  showAlertFn?: (message: string, options?: { type?: string; title?: string }) => void;
 }
 
 /** Mutable state owned by the DCC wiring (exposed for loop-protection tests). */
 export interface DCCWiringState {
   suppressFrameSync: boolean;
   subscriptions: DisposableSubscriptionManager;
+  /** Generation counter for "latest LUT request wins" ordering. */
+  lutGeneration: number;
 }
 
 // ---------------------------------------------------------------------------
-// Video extension list (shared constant)
+// Media path validation
 // ---------------------------------------------------------------------------
 
-export const VIDEO_EXTENSIONS = ['mp4', 'webm', 'mov', 'avi', 'mkv', 'ogv'];
+/** URL schemes that the browser can load directly into media elements. */
+const ALLOWED_URL_SCHEMES = ['http:', 'https:', 'blob:', 'data:', 'file:'];
+
+/**
+ * Result of validating a media path received from a DCC tool.
+ * When `valid` is true the `url` field contains the browser-loadable URL.
+ * When `valid` is false the `error` field describes what went wrong.
+ */
+export type MediaPathValidationResult = { valid: true; url: string } | { valid: false; error: string };
+
+/**
+ * Check whether a raw path string from a DCC `loadMedia` message is a
+ * browser-loadable URL.
+ *
+ * Accepted inputs:
+ * - Absolute URLs with an allowed scheme (http, https, blob, data, file)
+ * - Protocol-relative URLs (//host/path — treated as https)
+ *
+ * Rejected inputs:
+ * - Empty / whitespace-only strings
+ * - Unix filesystem paths (`/mnt/renders/shot.exr`)
+ * - Windows filesystem paths (`C:\renders\shot.exr`)
+ * - UNC paths (`\\server\share\file.exr`)
+ * - Any other string that is not a valid URL the browser can fetch
+ */
+export function validateMediaPath(raw: string): MediaPathValidationResult {
+  const trimmed = raw.trim();
+
+  if (trimmed.length === 0) {
+    return { valid: false, error: 'Empty path. Provide an HTTP(S), blob:, data:, or file: URL.' };
+  }
+
+  // UNC path: \\server\share\...
+  if (/^\\\\/.test(trimmed)) {
+    return {
+      valid: false,
+      error:
+        `UNC path "${trimmed}" cannot be loaded by the browser. ` +
+        'Serve the file over HTTP or convert to a file:// URL.',
+    };
+  }
+
+  // Windows drive path: C:\..., D:/...
+  if (/^[A-Za-z]:[/\\]/.test(trimmed)) {
+    return {
+      valid: false,
+      error:
+        `Windows path "${trimmed}" cannot be loaded by the browser. ` +
+        'Serve the file over HTTP or convert to a file:// URL (e.g. file:///C:/renders/shot.exr).',
+    };
+  }
+
+  // Unix absolute path that is NOT a URL with a scheme
+  // A bare "/foo/bar" has no scheme, so URL parsing would fail or produce garbage.
+  if (trimmed.startsWith('/') && !trimmed.startsWith('//')) {
+    return {
+      valid: false,
+      error:
+        `Local filesystem path "${trimmed}" cannot be loaded by the browser. ` +
+        'Serve the file over HTTP or convert to a file:// URL (e.g. file:///mnt/renders/shot.exr).',
+    };
+  }
+
+  // Protocol-relative URL: //host/path → upgrade to https
+  if (trimmed.startsWith('//')) {
+    return { valid: true, url: `https:${trimmed}` };
+  }
+
+  // Try to parse as a URL and check the scheme
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return {
+      valid: false,
+      error:
+        `"${trimmed}" is not a valid URL. ` +
+        'Provide an HTTP(S), blob:, data:, or file: URL that the browser can load.',
+    };
+  }
+
+  if (!ALLOWED_URL_SCHEMES.includes(parsed.protocol)) {
+    return {
+      valid: false,
+      error:
+        `Unsupported URL scheme "${parsed.protocol}" in "${trimmed}". ` +
+        `Supported schemes: ${ALLOWED_URL_SCHEMES.join(', ')}.`,
+    };
+  }
+
+  return { valid: true, url: trimmed };
+}
+
+// ---------------------------------------------------------------------------
+// LUT loading helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch a LUT file from a URL/path, parse it, and apply it to the viewer.
+ * Uses a generation counter from `state` to implement "latest request wins":
+ * if a newer request starts before this one completes, the stale result is discarded.
+ * Failures are logged as warnings and never propagate to break the sync handler.
+ */
+export async function fetchAndApplyLUT(
+  lutPath: string,
+  fetchFn: typeof globalThis.fetch,
+  colorControls: DCCWiringColorControls,
+  viewer: DCCWiringViewer,
+  state: DCCWiringState,
+): Promise<void> {
+  const generation = ++state.lutGeneration;
+
+  try {
+    const response = await fetchFn(lutPath);
+
+    // Discard stale result if a newer request has started
+    if (state.lutGeneration !== generation) {
+      log.info(
+        `Discarding stale LUT response for "${lutPath}" (generation ${generation}, current ${state.lutGeneration})`,
+      );
+      return;
+    }
+
+    if (!response.ok) {
+      log.warn(`Failed to fetch LUT from "${lutPath}": HTTP ${response.status}`);
+      return;
+    }
+
+    const content = await response.text();
+
+    // Check again after second await
+    if (state.lutGeneration !== generation) {
+      log.info(
+        `Discarding stale LUT response for "${lutPath}" (generation ${generation}, current ${state.lutGeneration})`,
+      );
+      return;
+    }
+
+    const filename = basename(lutPath);
+    const lut = parseLUT(filename, content);
+
+    colorControls.setLUT(lut);
+    viewer.setLUT(lut);
+    log.info(`Applied LUT from DCC: "${lutPath}" (${lut.title}, size ${lut.size}${isLUT3D(lut) ? '^3' : ''})`);
+  } catch (err) {
+    log.warn(`Failed to load LUT from "${lutPath}":`, err);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Annotation type mapping
+// ---------------------------------------------------------------------------
+
+/**
+ * Map an Annotation's `type` field to the DCC protocol annotation type.
+ * PaintEngine uses 'pen' | 'text' | 'shape'; the DCC protocol expects the same.
+ */
+export function mapAnnotationType(annotation: Annotation): 'pen' | 'text' | 'shape' {
+  return annotation.type;
+}
 
 // ---------------------------------------------------------------------------
 // Wiring function
@@ -74,11 +263,31 @@ export const VIDEO_EXTENSIONS = ['mp4', 'webm', 'mov', 'avi', 'mkv', 'ogv'];
  * (App) can inspect or override the frame-sync suppression flag.
  */
 export function wireDCCBridge(deps: DCCWiringDeps): DCCWiringState {
-  const { dccBridge, session, viewer, colorControls } = deps;
+  const { dccBridge, session, viewer, colorControls, paintEngine, noteManager } = deps;
+  const fetchFn = deps.fetchFn ?? globalThis.fetch.bind(globalThis);
+  const alertFn =
+    deps.showAlertFn ?? ((msg: string, opts?: { type?: string; title?: string }) => showAlert(msg, opts as any));
 
   const subs = new DisposableSubscriptionManager();
 
-  const state: DCCWiringState = { suppressFrameSync: false, subscriptions: subs };
+  const state: DCCWiringState = { suppressFrameSync: false, subscriptions: subs, lutGeneration: 0 };
+
+  // Error event: surface DCC bridge errors to the user with throttling
+  const ERROR_THROTTLE_MS = 5_000;
+  let lastErrorAlertTime = 0;
+  subs.add(
+    dccBridge.on('error', (err: Error) => {
+      const now = Date.now();
+      if (now - lastErrorAlertTime >= ERROR_THROTTLE_MS) {
+        lastErrorAlertTime = now;
+        alertFn(`DCC connection error: ${err.message}`, {
+          type: 'warning',
+          title: 'DCC Bridge',
+        });
+      }
+      log.warn('DCC bridge error:', err.message);
+    }),
+  );
 
   // Inbound: syncFrame with loop protection
   subs.add(
@@ -92,35 +301,41 @@ export function wireDCCBridge(deps: DCCWiringDeps): DCCWiringState {
     }),
   );
 
-  // Inbound: loadMedia - dispatch to image or video loader
+  // Inbound: loadMedia - validate path, then dispatch to image or video loader
   subs.add(
     dccBridge.on('loadMedia', (msg) => {
-      const path = msg.path;
-      const ext = path.split('.').pop()?.toLowerCase() ?? '';
-      const name = path.split('/').pop() ?? path;
-      if (VIDEO_EXTENSIONS.includes(ext)) {
-        session
-          .loadVideo(name, path)
-          .then(() => {
-            if (typeof msg.frame === 'number') {
-              session.goToFrame(msg.frame);
-            }
-          })
-          .catch((err) => {
-            log.error('Failed to load video from DCC:', err);
-          });
-      } else {
-        session
-          .loadImage(name, path)
-          .then(() => {
-            if (typeof msg.frame === 'number') {
-              session.goToFrame(msg.frame);
-            }
-          })
-          .catch((err) => {
-            log.error('Failed to load image from DCC:', err);
-          });
+      const rawPath = msg.path;
+      const validation = validateMediaPath(rawPath);
+
+      if (!validation.valid) {
+        log.error(`DCC loadMedia path rejected: ${validation.error}`);
+        dccBridge.sendError('INVALID_MEDIA_PATH', validation.error, msg.id);
+        return;
       }
+
+      const url = validation.url;
+      const name = basename(url);
+      detectMediaTypeFromUrl(url)
+        .then((mediaType) => {
+          if (mediaType === 'video') {
+            return session.loadVideo(name, url);
+          } else {
+            return session.loadImage(name, url);
+          }
+        })
+        .then(() => {
+          if (typeof msg.frame === 'number') {
+            session.goToFrame(msg.frame);
+          }
+        })
+        .catch((err) => {
+          log.error('Failed to load media from DCC:', err);
+          dccBridge.sendError(
+            'LOAD_MEDIA_FAILED',
+            `Failed to load media "${url}": ${err instanceof Error ? err.message : String(err)}`,
+            msg.id,
+          );
+        });
     }),
   );
 
@@ -136,6 +351,11 @@ export function wireDCCBridge(deps: DCCWiringDeps): DCCWiringState {
         colorControls.setAdjustments(adjustments);
         viewer.setColorAdjustments(colorControls.getAdjustments());
       }
+
+      // Handle LUT path: fetch, parse, and apply
+      if (typeof msg.lutPath === 'string' && msg.lutPath.length > 0) {
+        fetchAndApplyLUT(msg.lutPath, fetchFn, colorControls, viewer, state);
+      }
     }),
   );
 
@@ -143,7 +363,10 @@ export function wireDCCBridge(deps: DCCWiringDeps): DCCWiringState {
   subs.add(
     session.on('frameChanged', () => {
       if (!state.suppressFrameSync) {
-        dccBridge.sendFrameChanged(session.currentFrame, session.frameCount);
+        const sent = dccBridge.sendFrameChanged(session.currentFrame, session.frameCount);
+        if (!sent) {
+          log.warn('DCC frame sync dropped: bridge is not writable');
+        }
       }
     }),
   );
@@ -151,14 +374,41 @@ export function wireDCCBridge(deps: DCCWiringDeps): DCCWiringState {
   // Outbound: adjustmentsChanged -> send color to DCC bridge
   subs.add(
     colorControls.on('adjustmentsChanged', (adjustments: ColorAdjustments) => {
-      dccBridge.sendColorChanged({
+      const sent = dccBridge.sendColorChanged({
         exposure: adjustments.exposure,
         gamma: adjustments.gamma,
         temperature: adjustments.temperature,
         tint: adjustments.tint,
       });
+      if (!sent) {
+        log.warn('DCC color sync dropped: bridge is not writable');
+      }
     }),
   );
+
+  // Outbound: strokeAdded -> send annotationAdded to DCC bridge
+  if (paintEngine) {
+    subs.add(
+      paintEngine.on('strokeAdded', (annotation: Annotation) => {
+        const sent = dccBridge.sendAnnotationAdded(annotation.frame, mapAnnotationType(annotation), annotation.id);
+        if (!sent) {
+          log.warn('DCC annotation sync dropped: bridge is not writable');
+        }
+      }),
+    );
+  }
+
+  // Outbound: noteAdded -> send noteAdded to DCC bridge
+  if (noteManager) {
+    subs.add(
+      noteManager.on('noteAdded', (note: Note) => {
+        const sent = dccBridge.sendNoteAdded(note.frameStart, note.text, note.author, note.status, note.id);
+        if (!sent) {
+          log.warn('DCC note sync dropped: bridge is not writable');
+        }
+      }),
+    );
+  }
 
   return state;
 }

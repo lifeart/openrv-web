@@ -33,6 +33,8 @@ export interface MuEvent {
   key?: string;
   /** Button index if pointer event */
   button?: number;
+  /** Tag for scoped hit-testing (e.g. widget identifier) */
+  tag?: string;
   /** Modifier state */
   modifiers?: {
     shift: boolean;
@@ -47,12 +49,16 @@ export interface EventTableBinding {
   eventName: string;
   callback: MuEventCallback;
   documentation: string;
+  /** Optional compiled regex for regex-based bindings */
+  regex?: RegExp;
 }
 
 /** Event table: named collection of bindings */
 export interface EventTable {
   name: string;
   bindings: Map<string, EventTableBinding>;
+  /** Number of regex-based bindings in this table */
+  regexCount: number;
 }
 
 /** Minor mode definition */
@@ -106,6 +112,10 @@ export interface RemoteConnectionInfo {
   host: string;
   port: number;
   connected: boolean;
+  /** Peer's contact name received during handshake */
+  peerContactName?: string;
+  /** Peer's permission level received during handshake */
+  peerPermission?: number;
 }
 
 /** File kind constants (matching Mu's enum) */
@@ -231,6 +241,8 @@ export interface RenderedImageInfo {
   height: number;
   /** Node name that produced this image */
   nodeName: string;
+  /** Source tag/type hint (e.g. "default", "movie", "smptebars") */
+  tag?: string;
 }
 
 // --- Phase 4: Source Management types ---

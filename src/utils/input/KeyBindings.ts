@@ -72,7 +72,6 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   },
   'timeline.setOutPoint': {
     code: 'KeyO',
-    context: 'timeline',
     description: 'Set out point',
   },
   'timeline.setOutPointAlt': {
@@ -103,7 +102,6 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   },
   'timeline.resetInOut': {
     code: 'KeyR',
-    context: 'timeline',
     description: 'Reset in/out points to full range',
   },
   'timeline.cycleLoopMode': {
@@ -208,6 +206,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   },
   'panel.waveform': {
     code: 'KeyW',
+    context: 'panel',
     description: 'Toggle waveform scope',
   },
   'panel.vectorscope': {
@@ -225,6 +224,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   },
   'panel.histogram': {
     code: 'KeyH',
+    context: 'panel',
     description: 'Toggle histogram',
   },
   'panel.ocio': {
@@ -396,7 +396,6 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   'channel.red': {
     code: 'KeyR',
     shift: true,
-    context: 'channel',
     description: 'Select red channel',
   },
   'channel.green': {
@@ -428,6 +427,14 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     code: 'KeyN',
     shift: true,
     description: 'Select no channel',
+  },
+
+  // LUT panel toggle
+  'lut.togglePanel': {
+    code: 'KeyL',
+    shift: true,
+    context: 'color',
+    description: 'Toggle LUT panel',
   },
 
   // Stereo controls (handled by StereoControl component)
@@ -606,7 +613,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   // Notes quick-add + navigation
   'notes.addNote': {
     code: 'KeyN',
-    context: 'annotate',
+    context: 'paint',
     description: 'Add note at current frame',
   },
   'notes.next': {
@@ -620,6 +627,18 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     alt: true,
     shift: true,
     description: 'Go to previous note',
+  },
+
+  // Version navigation
+  'version.next': {
+    code: 'BracketRight',
+    alt: true,
+    description: 'Go to next version in version group',
+  },
+  'version.previous': {
+    code: 'BracketLeft',
+    alt: true,
+    description: 'Go to previous version in version group',
   },
 
   // Info panel
@@ -641,6 +660,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   'view.cycleBackgroundPattern': {
     code: 'KeyB',
     shift: true,
+    context: 'viewer',
     description: 'Cycle background pattern (Black/Grey18/Grey50/Checker)',
   },
   'view.toggleCheckerboard': {
@@ -666,6 +686,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   'network.togglePanel': {
     code: 'KeyN',
     shift: true,
+    context: 'panel',
     description: 'Toggle network sync panel',
   },
   'network.disconnect': {
@@ -848,6 +869,13 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     ctrl: true,
     shift: true,
     description: 'Zoom to 1:8 (12.5%) pixel ratio',
+  },
+
+  // Cache mode cycling
+  'cache.cycleCacheMode': {
+    code: 'KeyC',
+    shift: true,
+    description: 'Cycle frame cache mode (None / Nearby / Playback Buffer)',
   },
 };
 /**

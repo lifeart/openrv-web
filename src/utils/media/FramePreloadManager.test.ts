@@ -1518,4 +1518,34 @@ describe('FramePreloadManager', () => {
       expect(manager).toBeDefined();
     });
   });
+
+  describe('documentation regression — DEFAULT_PRELOAD_CONFIG values', () => {
+    // These tests verify that the default config values match what is documented
+    // in docs/playback/image-sequences.md under the "Node-Graph Path" section.
+    // If any of these fail, update the documentation to match the new defaults.
+
+    it('FPM-053: maxCacheSize default is 100', () => {
+      expect(DEFAULT_PRELOAD_CONFIG.maxCacheSize).toBe(100);
+    });
+
+    it('FPM-054: preloadAhead default is 30', () => {
+      expect(DEFAULT_PRELOAD_CONFIG.preloadAhead).toBe(30);
+    });
+
+    it('FPM-055: preloadBehind default is 5', () => {
+      expect(DEFAULT_PRELOAD_CONFIG.preloadBehind).toBe(5);
+    });
+
+    it('FPM-056: scrubWindow default is 10', () => {
+      expect(DEFAULT_PRELOAD_CONFIG.scrubWindow).toBe(10);
+    });
+
+    it('FPM-057: maxConcurrent default is 3', () => {
+      expect(DEFAULT_PRELOAD_CONFIG.maxConcurrent).toBe(3);
+    });
+
+    it('FPM-058: priorityDecayRate default is 1.0', () => {
+      expect(DEFAULT_PRELOAD_CONFIG.priorityDecayRate).toBe(1.0);
+    });
+  });
 });

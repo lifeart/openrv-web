@@ -16,6 +16,14 @@ import type { StackLayer } from '../../ui/components/StackControl';
 import type { PARState } from '../../utils/media/PixelAspectRatio';
 import type { NoiseReductionParams } from '../../filters/NoiseReduction';
 import type { WatermarkState } from '../../ui/components/WatermarkOverlay';
+import type { TimecodeOverlayState } from '../../ui/components/TimecodeOverlay';
+import type { SafeAreasState } from '../../ui/components/SafeAreasOverlay';
+import type { ClippingOverlayState } from '../../ui/components/ClippingOverlay';
+import type { InfoStripOverlayState } from '../../ui/components/InfoStripOverlay';
+import type { SpotlightState } from '../../ui/components/SpotlightOverlay';
+import type { BugOverlayState } from '../../ui/components/BugOverlay';
+import type { EXRWindowOverlayState } from '../../ui/components/EXRWindowOverlay';
+import type { FPSIndicatorState } from '../../ui/components/FPSIndicator';
 import type { Annotation, PaintEffects } from '../../paint/types';
 import type { LoopMode, MediaType, PlaybackMode } from '../types/session';
 import type { Marker } from './Session';
@@ -25,6 +33,8 @@ import type { Note } from './NoteManager';
 import type { VersionGroup } from './VersionManager';
 import type { StatusEntry } from './StatusManager';
 import type { SerializedGraph } from './SessionManagerTypes';
+import type { RVEDLEntry } from '../../formats/RVEDLParser';
+import type { SerializableLUTPipelineState } from '../../color/pipeline/LUTPipelineState';
 
 /** Schema version for migration support */
 export const SESSION_STATE_VERSION = 2;
@@ -57,6 +67,8 @@ export interface MediaReference {
   representations?: SerializedRepresentation[];
   /** Active representation ID */
   activeRepresentationId?: string;
+  /** True if the image was loaded through the decoder-backed pipeline (FileSourceNode) */
+  decoderBacked?: boolean;
 }
 
 /** Playback state */
@@ -71,6 +83,12 @@ export interface PlaybackState {
   muted: boolean;
   marks: Marker[] | number[]; // Support both old format (number[]) and new format (Marker[])
   currentSourceIndex: number;
+  /** A/B compare source A assignment (optional for backward compat) */
+  sourceAIndex?: number;
+  /** A/B compare source B assignment (-1 or omitted means unassigned) */
+  sourceBIndex?: number;
+  /** Active A/B side (optional for backward compat, defaults to 'A') */
+  currentAB?: 'A' | 'B';
   /** Whether audio scrub is enabled (optional for backward compat, defaults to true) */
   audioScrubEnabled?: boolean;
 }
@@ -129,10 +147,28 @@ export interface SessionState {
   noiseReduction?: NoiseReductionParams;
   /** Watermark overlay state */
   watermark?: WatermarkState;
+  /** Timecode overlay state */
+  timecodeOverlay?: TimecodeOverlayState;
+  /** Safe areas overlay state */
+  safeAreasOverlay?: SafeAreasState;
+  /** Clipping overlay state */
+  clippingOverlay?: ClippingOverlayState;
+  /** Info strip overlay state */
+  infoStripOverlay?: InfoStripOverlayState;
+  /** Spotlight overlay state */
+  spotlightOverlay?: SpotlightState;
+  /** Bug overlay state */
+  bugOverlay?: BugOverlayState;
+  /** EXR window overlay state */
+  exrWindowOverlay?: EXRWindowOverlayState;
+  /** FPS indicator overlay state */
+  fpsIndicatorOverlay?: FPSIndicatorState;
   /** LUT file path (not embedded) */
   lutPath?: string;
   /** LUT intensity blend */
   lutIntensity: number;
+  /** Multi-stage LUT pipeline settings (binary LUT data omitted) */
+  lutPipeline?: SerializableLUTPipelineState;
   /** Pixel Aspect Ratio correction (optional, defaults to disabled square pixels) */
   par?: PARState;
   /** Background pattern for alpha visualization (optional, defaults to black) */
@@ -147,6 +183,8 @@ export interface SessionState {
   statuses?: StatusEntry[];
   /** Node graph topology (optional, absent in legacy v1 projects) */
   graph?: SerializedGraph;
+  /** EDL (Edit Decision List) entries (optional) */
+  edlEntries?: RVEDLEntry[];
 }
 
 /** Default values for empty state */
@@ -167,5 +205,8 @@ export const DEFAULT_PLAYBACK_STATE: PlaybackState = {
   muted: false,
   marks: [],
   currentSourceIndex: 0,
+  sourceAIndex: 0,
+  sourceBIndex: -1,
+  currentAB: 'A',
   audioScrubEnabled: true,
 };

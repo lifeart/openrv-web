@@ -76,8 +76,10 @@ export class EXRWindowOverlay extends CanvasOverlay<EXRWindowOverlayEvents> {
   setWindows(dataWindow: EXRBox2i, displayWindow: EXRBox2i): void {
     this.dataWindow = { ...dataWindow };
     this.displayWindow = { ...displayWindow };
+
     this.updateCanvasDisplay();
     this.render();
+    this.emit('stateChanged', { ...this.state });
   }
 
   /**
@@ -88,6 +90,7 @@ export class EXRWindowOverlay extends CanvasOverlay<EXRWindowOverlayEvents> {
     this.displayWindow = null;
     this.updateCanvasDisplay();
     this.render();
+    this.emit('stateChanged', { ...this.state });
   }
 
   /**
@@ -164,6 +167,22 @@ export class EXRWindowOverlay extends CanvasOverlay<EXRWindowOverlayEvents> {
 
   setDisplayWindowColor(color: string): void {
     this.setState({ displayWindowColor: color });
+  }
+
+  // -------------------------------------------------------------------------
+  // Style
+  // -------------------------------------------------------------------------
+
+  setShowLabels(show: boolean): void {
+    this.setState({ showLabels: show });
+  }
+
+  setLineWidth(width: number): void {
+    this.setState({ lineWidth: width });
+  }
+
+  setDashPattern(pattern: [number, number]): void {
+    this.setState({ dashPattern: pattern });
   }
 
   // -------------------------------------------------------------------------

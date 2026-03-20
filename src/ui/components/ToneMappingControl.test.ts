@@ -332,6 +332,82 @@ describe('ToneMappingControl', () => {
       control.toggle();
       expect(control.getState().enabled).toBe(false);
     });
+
+    it('TONE-U072: toggle from fresh state (operator=off) selects a default operator', () => {
+      // Fresh state: enabled=false, operator='off'
+      expect(control.getState().operator).toBe('off');
+      expect(control.getState().enabled).toBe(false);
+
+      control.toggle();
+
+      const state = control.getState();
+      expect(state.enabled).toBe(true);
+      expect(state.operator).not.toBe('off');
+      // Should pick 'reinhard' as the first non-off operator
+      expect(state.operator).toBe('reinhard');
+    });
+
+    it('TONE-U073: toggle off preserves the operator', () => {
+      // Set up an active state with a specific operator
+      control.setOperator('aces');
+      expect(control.getState().enabled).toBe(true);
+      expect(control.getState().operator).toBe('aces');
+
+      // Toggle off
+      control.toggle();
+
+      const state = control.getState();
+      expect(state.enabled).toBe(false);
+      // Operator should be preserved, not reset to 'off'
+      expect(state.operator).toBe('aces');
+    });
+
+    it('TONE-U074: toggle back on re-enables with preserved operator', () => {
+      // Set up an active state, then toggle off, then back on
+      control.setOperator('filmic');
+      expect(control.getState().operator).toBe('filmic');
+
+      control.toggle(); // off
+      expect(control.getState().enabled).toBe(false);
+      expect(control.getState().operator).toBe('filmic');
+
+      control.toggle(); // back on
+      const state = control.getState();
+      expect(state.enabled).toBe(true);
+      expect(state.operator).toBe('filmic');
+    });
+
+    it('TONE-U075: toggle with non-off operator works normally without changing operator', () => {
+      // Set a non-off operator, disable, then toggle
+      control.setState({ enabled: false, operator: 'agx' });
+      expect(control.getState().operator).toBe('agx');
+
+      control.toggle();
+
+      const state = control.getState();
+      expect(state.enabled).toBe(true);
+      expect(state.operator).toBe('agx');
+    });
+
+    it('TONE-U076: toggle from fresh state makes isEnabled() return true', () => {
+      // isEnabled() requires both enabled=true AND operator!='off'
+      expect(control.isEnabled()).toBe(false);
+
+      control.toggle();
+
+      expect(control.isEnabled()).toBe(true);
+    });
+
+    it('TONE-U077: toggle via keyboard shortcut from fresh state selects default operator', () => {
+      expect(control.getState().operator).toBe('off');
+
+      control.handleKeyboard('j', true, true);
+
+      const state = control.getState();
+      expect(state.enabled).toBe(true);
+      expect(state.operator).toBe('reinhard');
+      expect(control.isEnabled()).toBe(true);
+    });
   });
 
   describe('setState', () => {
@@ -602,12 +678,12 @@ describe('ToneMappingControl', () => {
       expect(control.isEnabled()).toBe(false);
     });
 
-    it('TONE-U091: isEnabled returns false when enabled but operator is off', () => {
-      // When setEnabled(true) is called with operator='off', isEnabled still returns false
-      // because isEnabled checks both enabled state AND operator !== 'off'
+    it('TONE-U091: isEnabled returns true when setEnabled(true) auto-selects non-off operator', () => {
+      // Fix #114: setEnabled(true) now auto-selects a non-off operator when operator is 'off',
+      // so isEnabled() returns true because both enabled=true AND operator!='off'.
       control.setEnabled(true);
-      // operator is still 'off', so isEnabled should be false
-      expect(control.isEnabled()).toBe(false);
+      expect(control.isEnabled()).toBe(true);
+      expect(control.getState().operator).not.toBe('off');
     });
 
     it('TONE-U092: isEnabled returns true when enabled with valid operator', () => {
@@ -952,6 +1028,76 @@ describe('TONE_MAPPING_OPERATORS', () => {
       expect(op.label).toBeDefined();
       expect(op.description).toBeDefined();
     }
+  });
+});
+
+describe('ToneMappingControl HDR mode (issues #224/#225)', () => {
+  let control: ToneMappingControl;
+
+  beforeEach(() => {
+    control = new ToneMappingControl();
+  });
+
+  afterEach(() => {
+    control.dispose();
+  });
+
+  it('TONE-HDR-001: setHDROutputMode emits event with mode and previousMode', () => {
+    const listener = vi.fn();
+    control.on('hdrModeChanged', listener);
+
+    control.setHDROutputMode('hlg');
+
+    expect(listener).toHaveBeenCalledWith({ mode: 'hlg', previousMode: 'sdr' });
+  });
+
+  it('TONE-HDR-002: setHDROutputMode emits correct previousMode on successive changes', () => {
+    const listener = vi.fn();
+
+    control.setHDROutputMode('hlg');
+    control.on('hdrModeChanged', listener);
+    control.setHDROutputMode('pq');
+
+    expect(listener).toHaveBeenCalledWith({ mode: 'pq', previousMode: 'hlg' });
+  });
+
+  it('TONE-HDR-003: syncHDROutputMode updates state without emitting', () => {
+    const listener = vi.fn();
+    control.on('hdrModeChanged', listener);
+
+    control.syncHDROutputMode('pq');
+
+    expect(control.getHDROutputMode()).toBe('pq');
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('TONE-HDR-004: syncHDROutputMode is a no-op when mode is the same', () => {
+    control.setHDROutputMode('hlg');
+    const listener = vi.fn();
+    control.on('hdrModeChanged', listener);
+
+    control.syncHDROutputMode('hlg');
+
+    expect(control.getHDROutputMode()).toBe('hlg');
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('TONE-HDR-005: syncHDROutputMode reverts state after rejected mode change', () => {
+    // Simulate: UI sets mode to 'pq', then wiring reverts because renderer rejected
+    control.setHDROutputMode('pq');
+    expect(control.getHDROutputMode()).toBe('pq');
+
+    control.syncHDROutputMode('sdr');
+    expect(control.getHDROutputMode()).toBe('sdr');
+  });
+
+  it('TONE-HDR-006: setHDROutputMode does not emit when mode is unchanged', () => {
+    const listener = vi.fn();
+    control.on('hdrModeChanged', listener);
+
+    control.setHDROutputMode('sdr'); // already sdr
+
+    expect(listener).not.toHaveBeenCalled();
   });
 });
 

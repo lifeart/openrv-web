@@ -6,8 +6,10 @@
  */
 
 import type { Session } from '../core/session/Session';
+import type { PlaylistManager } from '../core/session/PlaylistManager';
 import type { ViewerProvider } from './types';
 import { ValidationError } from '../core/errors';
+import { DisposableAPI } from './Disposable';
 
 /**
  * Events that can be subscribed to via the public API
@@ -24,7 +26,14 @@ export type OpenRVEventName =
   | 'loopModeChange'
   | 'inOutChange'
   | 'markerChange'
+  | 'sourceLoadingStarted'
   | 'sourceLoaded'
+  | 'sourceLoadFailed'
+  | 'viewTransformChanged'
+  | 'renderedImagesChanged'
+  | 'representationChanged'
+  | 'fallbackActivated'
+  | 'playlistEnded'
   | 'error';
 
 /**
@@ -41,8 +50,48 @@ export interface OpenRVEventData {
   audioScrubEnabledChange: { enabled: boolean };
   loopModeChange: { mode: string };
   inOutChange: { inPoint: number; outPoint: number };
-  markerChange: { markers: Array<{ frame: number; note: string; color: string }> };
+  markerChange: { markers: Array<{ frame: number; note: string; color: string; endFrame?: number }> };
+  sourceLoadingStarted: { name: string };
   sourceLoaded: { name: string; type: string; width: number; height: number; duration: number; fps: number };
+  sourceLoadFailed: { name: string };
+  viewTransformChanged: {
+    viewWidth: number;
+    viewHeight: number;
+    scale: number;
+    translation: [number, number];
+    imageWidth: number;
+    imageHeight: number;
+    pixelAspect: number;
+  };
+  renderedImagesChanged: {
+    images: Array<{
+      name: string;
+      index: number;
+      imageMin: [number, number];
+      imageMax: [number, number];
+      width: number;
+      height: number;
+      nodeName: string;
+      tag?: string;
+    }>;
+  };
+  representationChanged: {
+    sourceIndex: number;
+    previousRepId: string | null;
+    newRepId: string;
+    label: string;
+    width: number;
+    height: number;
+  };
+  fallbackActivated: {
+    sourceIndex: number;
+    failedRepId: string;
+    fallbackRepId: string;
+    label: string;
+    width: number;
+    height: number;
+  };
+  playlistEnded: void;
   error: { message: string; code?: string };
 }
 
@@ -60,19 +109,40 @@ const VALID_EVENTS: ReadonlySet<OpenRVEventName> = new Set([
   'loopModeChange',
   'inOutChange',
   'markerChange',
+  'sourceLoadingStarted',
   'sourceLoaded',
+  'sourceLoadFailed',
+  'viewTransformChanged',
+  'renderedImagesChanged',
+  'representationChanged',
+  'fallbackActivated',
+  'playlistEnded',
   'error',
 ]);
 
-export class EventsAPI {
+export class EventsAPI extends DisposableAPI {
   private listeners = new Map<OpenRVEventName, Set<EventCallback>>();
   private internalUnsubscribers: Array<() => void> = [];
   private session: Session;
+  private viewer: ViewerProvider;
+  private playlistManager: PlaylistManager | null = null;
 
-  constructor(session: Session, _viewer: ViewerProvider) {
+  /** Last loaded source info, used to build RenderedImageInfo on view changes */
+  private _lastLoadedSource: { name: string; width: number; height: number } | null = null;
+
+  constructor(session: Session, viewer: ViewerProvider) {
+    super();
     this.session = session;
-    // Viewer parameter accepted for future extension (e.g., zoom/pan change events)
+    this.viewer = viewer;
     this.wireInternalEvents();
+  }
+
+  /**
+   * Set the playlist manager for playlist-aware frame events.
+   * @internal Called by the bootstrap wiring, not intended for external use.
+   */
+  setPlaylistManager(pm: PlaylistManager): void {
+    this.playlistManager = pm;
   }
 
   /**
@@ -90,6 +160,7 @@ export class EventsAPI {
    * ```
    */
   on<K extends OpenRVEventName>(event: K, callback: EventCallback<OpenRVEventData[K]>): () => void {
+    this.assertNotDisposed();
     this.validateEventName(event);
     this.validateCallback(callback);
 
@@ -120,6 +191,7 @@ export class EventsAPI {
    * ```
    */
   off<K extends OpenRVEventName>(event: K, callback: EventCallback<OpenRVEventData[K]>): void {
+    this.assertNotDisposed();
     this.listeners.get(event)?.delete(callback as EventCallback);
   }
 
@@ -137,6 +209,7 @@ export class EventsAPI {
    * ```
    */
   once<K extends OpenRVEventName>(event: K, callback: EventCallback<OpenRVEventData[K]>): () => void {
+    this.assertNotDisposed();
     this.validateEventName(event);
     this.validateCallback(callback);
 
@@ -158,6 +231,7 @@ export class EventsAPI {
    * ```
    */
   getEventNames(): OpenRVEventName[] {
+    this.assertNotDisposed();
     return Array.from(VALID_EVENTS);
   }
 
@@ -190,9 +264,13 @@ export class EventsAPI {
    * Wire internal Session/Viewer events to the public API events
    */
   private wireInternalEvents(): void {
-    // Frame changes
+    // Frame changes — emit global playlist frame when playlist is active
     const unsubFrame = this.session.on('frameChanged', (frame) => {
-      this.emit('frameChange', { frame });
+      if (this.playlistManager?.isEnabled()) {
+        this.emit('frameChange', { frame: this.playlistManager.getCurrentFrame() });
+      } else {
+        this.emit('frameChange', { frame });
+      }
     });
     this.internalUnsubscribers.push(unsubFrame);
 
@@ -205,6 +283,18 @@ export class EventsAPI {
       }
     });
     this.internalUnsubscribers.push(unsubPlayback);
+
+    // Stop (pause + return to start)
+    const unsubStop = this.session.on('playbackStopped', () => {
+      this.emit('stop', undefined as void);
+    });
+    this.internalUnsubscribers.push(unsubStop);
+
+    // Playlist ended (playhead reached end of playlist without looping)
+    const unsubPlaylistEnded = this.session.on('playlistEnded', () => {
+      this.emit('playlistEnded', undefined as void);
+    });
+    this.internalUnsubscribers.push(unsubPlaylistEnded);
 
     // Speed changes
     const unsubSpeed = this.session.on('playbackSpeedChanged', (speed) => {
@@ -244,14 +334,26 @@ export class EventsAPI {
 
     // Marker changes
     const unsubMarks = this.session.on('marksChanged', (marks) => {
-      const markers = Array.from(marks.values()).map((m) => ({
-        frame: m.frame,
-        note: m.note,
-        color: m.color,
-      }));
+      const markers = Array.from(marks.values()).map((m) => {
+        const entry: { frame: number; note: string; color: string; endFrame?: number } = {
+          frame: m.frame,
+          note: m.note,
+          color: m.color,
+        };
+        if (m.endFrame !== undefined) {
+          entry.endFrame = m.endFrame;
+        }
+        return entry;
+      });
       this.emit('markerChange', { markers });
     });
     this.internalUnsubscribers.push(unsubMarks);
+
+    // Source loading started
+    const unsubSourceStart = this.session.on('sourceLoadingStarted', (data) => {
+      this.emit('sourceLoadingStarted', { name: data.name });
+    });
+    this.internalUnsubscribers.push(unsubSourceStart);
 
     // Source loaded
     const unsubSource = this.session.on('sourceLoaded', (source) => {
@@ -265,6 +367,157 @@ export class EventsAPI {
       });
     });
     this.internalUnsubscribers.push(unsubSource);
+
+    // Source load failed
+    const unsubSourceFail = this.session.on('sourceLoadFailed', (data) => {
+      this.emit('sourceLoadFailed', { name: data.name });
+    });
+    this.internalUnsubscribers.push(unsubSourceFail);
+
+    // Error bridging — wire internal Session error events to the public error channel
+
+    // Audio playback errors (autoplay blocked, decode failures, network issues)
+    const unsubAudioError = this.session.on('audioError', (err) => {
+      this.emitError(`Audio error: ${err.message}`, `AUDIO_${err.type.toUpperCase()}`);
+    });
+    this.internalUnsubscribers.push(unsubAudioError);
+
+    // Unsupported codec errors (media cannot be decoded)
+    const unsubCodec = this.session.on('unsupportedCodec', (info) => {
+      const codec = info.codec ?? 'unknown';
+      this.emitError(`Unsupported codec "${codec}" in ${info.filename}`, 'UNSUPPORTED_CODEC');
+    });
+    this.internalUnsubscribers.push(unsubCodec);
+
+    // Media representation switch failures
+    const unsubRepError = this.session.on('representationError', (data) => {
+      this.emitError(`Representation error for source ${data.sourceIndex}: ${data.error}`, 'REPRESENTATION_ERROR');
+    });
+    this.internalUnsubscribers.push(unsubRepError);
+
+    // Representation changed — update cached source metadata and notify consumers
+    const unsubRepChanged = this.session.on('representationChanged', (data) => {
+      const { width, height } = data.representation.resolution;
+      const name = data.representation.label;
+      this._lastLoadedSource = { name, width, height };
+      this.emit('representationChanged', {
+        sourceIndex: data.sourceIndex,
+        previousRepId: data.previousRepId,
+        newRepId: data.newRepId,
+        label: name,
+        width,
+        height,
+      });
+      this.emitCurrentRenderedImages();
+    });
+    this.internalUnsubscribers.push(unsubRepChanged);
+
+    // Fallback activated — update cached source metadata and notify consumers
+    const unsubFallback = this.session.on('fallbackActivated', (data) => {
+      const { width, height } = data.fallbackRepresentation.resolution;
+      const name = data.fallbackRepresentation.label;
+      this._lastLoadedSource = { name, width, height };
+      this.emit('fallbackActivated', {
+        sourceIndex: data.sourceIndex,
+        failedRepId: data.failedRepId,
+        fallbackRepId: data.fallbackRepId,
+        label: name,
+        width,
+        height,
+      });
+      this.emitCurrentRenderedImages();
+    });
+    this.internalUnsubscribers.push(unsubFallback);
+
+    // Frame decode timeout in play-all-frames mode
+    const unsubDecodeTimeout = this.session.on('frameDecodeTimeout', (frame) => {
+      this.emitError(`Frame ${frame} decode timed out`, 'FRAME_DECODE_TIMEOUT');
+    });
+    this.internalUnsubscribers.push(unsubDecodeTimeout);
+
+    // View transform changes — subscribe to viewer's view change listener if available
+    if (this.viewer.addViewChangeListener) {
+      const unsubView = this.viewer.addViewChangeListener((panX, panY, zoom) => {
+        const { width: viewWidth, height: viewHeight } = this.viewer.getViewportSize();
+        const source = this.viewer.getSourceDimensions?.() ?? { width: 0, height: 0 };
+        this.emit('viewTransformChanged', {
+          viewWidth,
+          viewHeight,
+          scale: zoom,
+          translation: [panX, panY],
+          imageWidth: source.width,
+          imageHeight: source.height,
+          pixelAspect: source.pixelAspect ?? 1,
+        });
+        // Also update rendered images on view change (same source, new transform)
+        if (this._lastLoadedSource) {
+          this.emitCurrentRenderedImages();
+        }
+      });
+      this.internalUnsubscribers.push(unsubView);
+    }
+
+    // Rendered images — emit when a source finishes loading
+    const unsubSourceRendered = this.session.on('sourceLoaded', (source) => {
+      this._lastLoadedSource = { name: source.name, width: source.width, height: source.height };
+      this.emitCurrentRenderedImages();
+    });
+    this.internalUnsubscribers.push(unsubSourceRendered);
+
+    // Current source changed — update rendered images for the newly active source
+    const unsubSourceChanged = this.session.on('currentSourceChanged', () => {
+      const source = this.session.currentSource;
+      if (source) {
+        this._lastLoadedSource = { name: source.name, width: source.width, height: source.height };
+        this.emitCurrentRenderedImages();
+      }
+    });
+    this.internalUnsubscribers.push(unsubSourceChanged);
+  }
+
+  /** Emit the current rendered images state based on the last loaded source. */
+  private emitCurrentRenderedImages(): void {
+    if (!this._lastLoadedSource) return;
+    const { name, width, height } = this._lastLoadedSource;
+
+    const images: Array<{
+      name: string;
+      index: number;
+      imageMin: [number, number];
+      imageMax: [number, number];
+      width: number;
+      height: number;
+      nodeName: string;
+      tag?: string;
+    }> = [
+      {
+        name,
+        index: 0,
+        imageMin: [0, 0],
+        imageMax: [width, height],
+        width,
+        height,
+        nodeName: name,
+      },
+    ];
+
+    // When A/B compare is active, include the B source as a second image
+    if (this.session.abCompareAvailable) {
+      const sourceB = this.session.sourceB;
+      if (sourceB) {
+        images.push({
+          name: sourceB.name,
+          index: 1,
+          imageMin: [0, 0],
+          imageMax: [sourceB.width, sourceB.height],
+          width: sourceB.width,
+          height: sourceB.height,
+          nodeName: sourceB.name,
+        });
+      }
+    }
+
+    this.emit('renderedImagesChanged', { images });
   }
 
   /**
@@ -278,10 +531,25 @@ export class EventsAPI {
   }
 
   /**
+   * Emit a view transform changed event (for external wiring).
+   */
+  emitViewTransformChanged(data: OpenRVEventData['viewTransformChanged']): void {
+    this.emit('viewTransformChanged', data);
+  }
+
+  /**
+   * Emit a rendered images changed event (for external wiring).
+   */
+  emitRenderedImagesChanged(data: OpenRVEventData['renderedImagesChanged']): void {
+    this.emit('renderedImagesChanged', data);
+  }
+
+  /**
    * Clean up all listeners and internal subscriptions.
    * After calling this, the EventsAPI instance should not be used.
    */
-  dispose(): void {
+  override dispose(): void {
+    super.dispose();
     // Remove all internal subscriptions
     for (const unsub of this.internalUnsubscribers) {
       unsub();

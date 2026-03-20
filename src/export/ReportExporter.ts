@@ -14,11 +14,24 @@ import { frameToTimecode, formatTimecode } from '../ui/components/TimecodeDispla
 // Data Model
 // ---------------------------------------------------------------------------
 
+export interface ReportNoteEntry {
+  text: string;
+  priority: string;
+  category: string;
+}
+
+export interface ReportVersionHistoryEntry {
+  label: string;
+  isCurrent: boolean;
+}
+
 export interface ReportRow {
   shotName: string;
   versionLabel: string;
+  versionHistory: ReportVersionHistoryEntry[];
   status: ShotStatus;
   notes: string[];
+  noteEntries: ReportNoteEntry[];
   frameRange: string;
   timecodeIn: string;
   timecodeOut: string;
@@ -34,6 +47,44 @@ export interface ReportOptions {
   includeVersions: boolean;
   title: string;
   dateRange?: string;
+  /** Session date (ISO 8601 or display string) */
+  sessionDate?: string;
+  /** Name of the supervisor running the review */
+  supervisorName?: string;
+  /** Project identifier (e.g. session displayName or project code) */
+  projectId?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Category-based statistics
+// ---------------------------------------------------------------------------
+
+export interface ReportStatistics {
+  /** Total number of shots reviewed (rows in the report) */
+  totalShots: number;
+  /** Number of shots with 'approved' status */
+  approvedCount: number;
+  /** Approval rate as a percentage (0-100), rounded to one decimal */
+  approvalRate: number;
+  /** Counts per status category */
+  countsByStatus: Record<string, number>;
+}
+
+/**
+ * Compute category-based statistics from report rows.
+ */
+export function computeReportStatistics(rows: ReportRow[]): ReportStatistics {
+  const totalShots = rows.length;
+  const countsByStatus: Record<string, number> = {};
+
+  for (const row of rows) {
+    countsByStatus[row.status] = (countsByStatus[row.status] ?? 0) + 1;
+  }
+
+  const approvedCount = countsByStatus['approved'] ?? 0;
+  const approvalRate = totalShots > 0 ? Math.round((approvedCount / totalShots) * 1000) / 10 : 0;
+
+  return { totalShots, approvedCount, approvalRate, countsByStatus };
 }
 
 // ---------------------------------------------------------------------------
@@ -49,7 +100,7 @@ export interface ReportSource {
 }
 
 export interface ReportNoteManager {
-  getNotesForSource(sourceIndex: number): { text: string }[];
+  getNotesForSource(sourceIndex: number): { text: string; priority?: string; category?: string }[];
 }
 
 export interface ReportStatusManager {
@@ -73,12 +124,23 @@ export interface ReportSession {
   fps: number;
 }
 
+/** Minimal playlist clip shape for report generation */
+export interface ReportPlaylistClip {
+  sourceIndex: number;
+  sourceName: string;
+}
+
+/** Optional playlist data to scope the report to a curated clip list */
+export interface ReportPlaylist {
+  clips: ReportPlaylistClip[];
+}
+
 // ---------------------------------------------------------------------------
 // CSV helpers (RFC 4180)
 // ---------------------------------------------------------------------------
 
 const CSV_HEADER_CORE = ['Shot', 'Status'];
-const CSV_HEADER_VERSION = ['Version'];
+const CSV_HEADER_VERSION = ['Version', 'Version History'];
 const CSV_HEADER_NOTES = ['Notes'];
 const CSV_HEADER_TC = ['Frame In', 'Frame Out', 'TC In', 'TC Out'];
 const CSV_HEADER_TAIL = ['Duration', 'Reviewed By', 'Status Date'];
@@ -100,71 +162,133 @@ export function escapeCSVField(value: string): string {
 // ---------------------------------------------------------------------------
 
 /**
- * Build report rows from session data. One row per source.
+ * Build a single report row for a source at the given index.
+ */
+function buildRowForSource(
+  sourceIndex: number,
+  session: ReportSession,
+  noteManager: ReportNoteManager,
+  statusManager: ReportStatusManager,
+  versionManager: ReportVersionManager,
+): ReportRow | null {
+  const source = session.getSourceByIndex(sourceIndex);
+  if (!source) return null;
+
+  const fps = source.fps || session.fps || 24;
+  const duration = source.duration || 0;
+
+  // Shot name: prefer version group shot name, fall back to source name
+  const versionGroup = versionManager.getGroupForSource(sourceIndex);
+  const shotName = versionGroup?.shotName ?? source.name;
+
+  // Version label and history
+  let versionLabel = '';
+  const versionHistory: ReportVersionHistoryEntry[] = [];
+  if (versionGroup) {
+    const entry = versionGroup.versions.find((v) => v.sourceIndex === sourceIndex);
+    versionLabel = entry?.label ?? '';
+    for (const v of versionGroup.versions) {
+      versionHistory.push({
+        label: v.label,
+        isCurrent: v.sourceIndex === sourceIndex,
+      });
+    }
+  }
+
+  // Status
+  const status = statusManager.getStatus(sourceIndex);
+  const statusEntry = statusManager.getStatusEntry(sourceIndex);
+  const setBy = statusEntry?.setBy ?? '';
+  const setAt = statusEntry?.setAt ?? '';
+
+  // Notes
+  const rawNotes = noteManager.getNotesForSource(sourceIndex);
+  const notes = rawNotes.map((n) => n.text);
+  const noteEntries: ReportNoteEntry[] = rawNotes.map((n) => ({
+    text: n.text,
+    priority: n.priority ?? 'medium',
+    category: n.category ?? '',
+  }));
+
+  // Frame range using editorial start frame
+  const startFrame = source.startFrame ?? 1;
+  const frameIn = startFrame;
+  const frameOut = startFrame + duration - 1;
+  const frameRange = duration > 0 ? `${frameIn}-${frameOut}` : '';
+
+  // Timecodes (TC Out is exclusive: first frame after last)
+  const tcIn = formatTimecode(frameToTimecode(frameIn, fps, 0));
+  const tcOut = duration > 0 ? formatTimecode(frameToTimecode(frameOut + 1, fps, 0)) : tcIn;
+
+  // Duration string
+  const durationStr = duration > 0 ? `${duration} frames` : '0 frames';
+
+  return {
+    shotName,
+    versionLabel,
+    versionHistory,
+    status,
+    notes,
+    noteEntries,
+    frameRange,
+    timecodeIn: tcIn,
+    timecodeOut: tcOut,
+    duration: durationStr,
+    setBy,
+    setAt,
+  };
+}
+
+/**
+ * Build report rows from session data.
+ *
+ * When a playlist is provided with clips, only the sources referenced by
+ * those clips are included and the playlist clip order is preserved.
+ * When no playlist is provided (or the playlist has no clips), falls back
+ * to iterating all loaded sources.
  */
 export function buildReportRows(
   session: ReportSession,
   noteManager: ReportNoteManager,
   statusManager: ReportStatusManager,
   versionManager: ReportVersionManager,
+  playlist?: ReportPlaylist,
 ): ReportRow[] {
   const rows: ReportRow[] = [];
 
-  for (let i = 0; i < session.sourceCount; i++) {
-    const source = session.getSourceByIndex(i);
-    if (!source) continue;
-
-    const fps = source.fps || session.fps || 24;
-    const duration = source.duration || 0;
-
-    // Shot name: prefer version group shot name, fall back to source name
-    const versionGroup = versionManager.getGroupForSource(i);
-    const shotName = versionGroup?.shotName ?? source.name;
-
-    // Version label
-    let versionLabel = '';
-    if (versionGroup) {
-      const entry = versionGroup.versions.find((v) => v.sourceIndex === i);
-      versionLabel = entry?.label ?? '';
+  // When an active playlist with clips is provided, use playlist order
+  if (playlist && playlist.clips.length > 0) {
+    for (const clip of playlist.clips) {
+      const row = buildRowForSource(clip.sourceIndex, session, noteManager, statusManager, versionManager);
+      if (row) {
+        rows.push(row);
+      }
     }
+    return rows;
+  }
 
-    // Status
-    const status = statusManager.getStatus(i);
-    const statusEntry = statusManager.getStatusEntry(i);
-    const setBy = statusEntry?.setBy ?? '';
-    const setAt = statusEntry?.setAt ?? '';
-
-    // Notes
-    const notes = noteManager.getNotesForSource(i).map((n) => n.text);
-
-    // Frame range using editorial start frame
-    const startFrame = source.startFrame ?? 1;
-    const frameIn = startFrame;
-    const frameOut = startFrame + duration - 1;
-    const frameRange = duration > 0 ? `${frameIn}-${frameOut}` : '';
-
-    // Timecodes (TC Out is exclusive: first frame after last)
-    const tcIn = formatTimecode(frameToTimecode(frameIn, fps, 0));
-    const tcOut = duration > 0 ? formatTimecode(frameToTimecode(frameOut + 1, fps, 0)) : tcIn;
-
-    // Duration string
-    const durationStr = duration > 0 ? `${duration} frames` : '0 frames';
-
-    rows.push({
-      shotName,
-      versionLabel,
-      status,
-      notes,
-      frameRange,
-      timecodeIn: tcIn,
-      timecodeOut: tcOut,
-      duration: durationStr,
-      setBy,
-      setAt,
-    });
+  // Fallback: iterate all loaded sources
+  for (let i = 0; i < session.sourceCount; i++) {
+    const row = buildRowForSource(i, session, noteManager, statusManager, versionManager);
+    if (row) {
+      rows.push(row);
+    }
   }
 
   return rows;
+}
+
+// ---------------------------------------------------------------------------
+// Version history formatting
+// ---------------------------------------------------------------------------
+
+/**
+ * Format version history entries for CSV display.
+ * Current version is marked with an asterisk: "v1, v2, *v3 (current)*"
+ */
+export function formatVersionHistory(history: ReportVersionHistoryEntry[]): string {
+  if (history.length === 0) return '';
+  return history.map((h) => (h.isCurrent ? `*${h.label} (current)*` : h.label)).join(', ');
 }
 
 // ---------------------------------------------------------------------------
@@ -189,15 +313,40 @@ function buildCSVHeaders(options: ReportOptions): string[] {
 export function generateCSV(rows: ReportRow[], options: ReportOptions): string {
   const lines: string[] = [];
 
+  // Session metadata preamble
+  if (options.sessionDate) lines.push(`Session Date,${escapeCSVField(options.sessionDate)}`);
+  if (options.supervisorName) lines.push(`Supervisor,${escapeCSVField(options.supervisorName)}`);
+  if (options.projectId) lines.push(`Project,${escapeCSVField(options.projectId)}`);
+
+  // Statistics
+  const stats = computeReportStatistics(rows);
+  lines.push(`Total Shots,${stats.totalShots}`);
+  lines.push(`Approval Rate,${stats.approvalRate}%`);
+  for (const [status, count] of Object.entries(stats.countsByStatus)) {
+    lines.push(`${escapeCSVField(status)},${count}`);
+  }
+  lines.push(''); // blank separator before data table
+
   // Header
   lines.push(buildCSVHeaders(options).map(escapeCSVField).join(','));
 
   // Data rows
   for (const row of rows) {
     const fields: string[] = [row.shotName];
-    if (options.includeVersions) fields.push(row.versionLabel);
+    if (options.includeVersions) {
+      fields.push(row.versionLabel);
+      fields.push(formatVersionHistory(row.versionHistory));
+    }
     fields.push(row.status);
-    if (options.includeNotes) fields.push(row.notes.join('; '));
+    if (options.includeNotes) {
+      const noteTexts = row.noteEntries.map((entry) => {
+        const tags: string[] = [];
+        if (entry.priority && entry.priority !== 'medium') tags.push(`[${entry.priority}]`);
+        if (entry.category) tags.push(`[${entry.category}]`);
+        return (tags.length > 0 ? tags.join(' ') + ' ' : '') + entry.text;
+      });
+      fields.push(noteTexts.join('; '));
+    }
     if (options.includeTimecodes) {
       fields.push(
         row.frameRange.split('-')[0] ?? '',
@@ -219,12 +368,21 @@ export function generateCSV(rows: ReportRow[], options: ReportOptions): string {
 
 function buildHTMLHeaders(options: ReportOptions): string {
   const ths: string[] = ['<th>Shot</th>'];
-  if (options.includeVersions) ths.push('<th>Version</th>');
+  if (options.includeVersions) ths.push('<th>Version</th>', '<th>Version History</th>');
   ths.push('<th>Status</th>');
   if (options.includeNotes) ths.push('<th>Notes</th>');
   if (options.includeTimecodes) ths.push('<th>Frame Range</th>', '<th>TC In</th>', '<th>TC Out</th>');
   ths.push('<th>Duration</th>', '<th>Reviewed By</th>', '<th>Status Date</th>');
   return ths.join('');
+}
+
+/**
+ * Format version history entries for HTML display.
+ * Current version is highlighted with bold styling.
+ */
+function formatVersionHistoryHTML(history: ReportVersionHistoryEntry[]): string {
+  if (history.length === 0) return '';
+  return history.map((h) => (h.isCurrent ? `<strong>${escapeHTML(h.label)}</strong>` : escapeHTML(h.label))).join(', ');
 }
 
 function statusBadgeHTML(status: ShotStatus): string {
@@ -239,6 +397,18 @@ export function generateHTML(rows: ReportRow[], options: ReportOptions): string 
   const title = options.title || 'Dailies Report';
   const dateRange = options.dateRange ? `<p style="color:#666;">${escapeHTML(options.dateRange)}</p>` : '';
 
+  const metadataItems: string[] = [];
+  if (options.sessionDate) metadataItems.push(`<strong>Session Date:</strong> ${escapeHTML(options.sessionDate)}`);
+  if (options.supervisorName) metadataItems.push(`<strong>Supervisor:</strong> ${escapeHTML(options.supervisorName)}`);
+  if (options.projectId) metadataItems.push(`<strong>Project:</strong> ${escapeHTML(options.projectId)}`);
+  const metadataHTML =
+    metadataItems.length > 0
+      ? `<div class="session-metadata" style="margin:0.5em 0;">${metadataItems.join(' &nbsp;|&nbsp; ')}</div>`
+      : '';
+
+  const stats = computeReportStatistics(rows);
+  const statsHTML = `<div class="report-statistics" style="margin:0.5em 0 1em;"><strong>Total Shots:</strong> ${stats.totalShots} &nbsp; <strong>Approval Rate:</strong> ${stats.approvalRate}%</div>`;
+
   // Summary counts
   const counts: Record<string, number> = {};
   for (const row of rows) {
@@ -248,13 +418,52 @@ export function generateHTML(rows: ReportRow[], options: ReportOptions): string 
     .map(([s, c]) => `${statusBadgeHTML(s as ShotStatus)} ${c}`)
     .join(' &nbsp; ');
 
+  // Category-based statistics
+  const categoryCounts: Record<string, number> = {};
+  for (const row of rows) {
+    for (const entry of row.noteEntries) {
+      if (entry.category) {
+        categoryCounts[entry.category] = (categoryCounts[entry.category] ?? 0) + 1;
+      }
+    }
+  }
+  const categoryParts = Object.entries(categoryCounts)
+    .sort((a, b) => b[1] - a[1])
+    .map(
+      ([cat, count]) =>
+        `<span style="display:inline-block;padding:2px 8px;border-radius:4px;background:#e2e8f0;color:#1a1a2e;font-size:0.85em;">${escapeHTML(cat)}: ${count}</span>`,
+    )
+    .join(' &nbsp; ');
+  const categorySection = categoryParts
+    ? `<div class="category-stats" style="margin:0.5em 0;"><strong>Notes by category:</strong> ${categoryParts}</div>`
+    : '';
+
   // Table rows (columns match dynamic headers)
   const tableRows = rows
     .map((row) => {
       const cells: string[] = [`<td>${escapeHTML(row.shotName)}</td>`];
-      if (options.includeVersions) cells.push(`<td>${escapeHTML(row.versionLabel)}</td>`);
+      if (options.includeVersions) {
+        cells.push(`<td>${escapeHTML(row.versionLabel)}</td>`);
+        cells.push(`<td>${formatVersionHistoryHTML(row.versionHistory)}</td>`);
+      }
       cells.push(`<td>${statusBadgeHTML(row.status)}</td>`);
-      if (options.includeNotes) cells.push(`<td>${row.notes.map((n) => escapeHTML(n)).join('<br>')}</td>`);
+      if (options.includeNotes) {
+        const noteLines = row.noteEntries.map((entry) => {
+          let line = escapeHTML(entry.text);
+          const tags: string[] = [];
+          if (entry.priority && entry.priority !== 'medium') {
+            tags.push(`<span style="font-size:0.8em;color:#666;">[${escapeHTML(entry.priority)}]</span>`);
+          }
+          if (entry.category) {
+            tags.push(`<span style="font-size:0.8em;color:#666;">[${escapeHTML(entry.category)}]</span>`);
+          }
+          if (tags.length > 0) {
+            line = tags.join(' ') + ' ' + line;
+          }
+          return line;
+        });
+        cells.push(`<td>${noteLines.join('<br>')}</td>`);
+      }
       if (options.includeTimecodes) {
         cells.push(
           `<td>${escapeHTML(row.frameRange)}</td>`,
@@ -293,7 +502,9 @@ export function generateHTML(rows: ReportRow[], options: ReportOptions): string 
 <body>
 <h1>${escapeHTML(title)}</h1>
 ${dateRange}
+${metadataHTML}${statsHTML}
 <div class="summary">${summaryParts}</div>
+${categorySection}
 <table>
 <thead>
 <tr>
@@ -318,6 +529,9 @@ function escapeHTML(text: string): string {
 
 /**
  * Generate report and trigger browser download.
+ *
+ * When a playlist is provided, the report is scoped to the playlist clips
+ * in playlist order. Otherwise all loaded sources are included.
  */
 export function generateReport(
   session: ReportSession,
@@ -325,8 +539,9 @@ export function generateReport(
   statusManager: ReportStatusManager,
   versionManager: ReportVersionManager,
   options: ReportOptions,
+  playlist?: ReportPlaylist,
 ): void {
-  const rows = buildReportRows(session, noteManager, statusManager, versionManager);
+  const rows = buildReportRows(session, noteManager, statusManager, versionManager, playlist);
 
   let content: string;
   let mimeType: string;

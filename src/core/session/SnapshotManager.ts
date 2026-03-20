@@ -533,10 +533,26 @@ export class SnapshotManager extends EventEmitter<SnapshotManagerEvents> {
     };
 
     await this.putSnapshot(snapshot, data.state);
+
+    // Prune to enforce retention limits (same as createSnapshot/createAutoCheckpoint)
+    if (snapshot.isAutoCheckpoint) {
+      await this.pruneSnapshots(true, MAX_AUTO_CHECKPOINTS);
+    } else {
+      await this.pruneSnapshots(false, MAX_MANUAL_SNAPSHOTS);
+    }
+
     this.emit('snapshotCreated', { snapshot });
     this.notifySnapshotsChanged();
 
     return snapshot;
+  }
+
+  /**
+   * Notify listeners that a snapshot was restored.
+   * Called by AppPersistenceManager after a successful restore.
+   */
+  notifyRestored(snapshot: Snapshot): void {
+    this.emit('snapshotRestored', { snapshot });
   }
 
   /**
@@ -547,7 +563,9 @@ export class SnapshotManager extends EventEmitter<SnapshotManagerEvents> {
       const snapshots = await this.listSnapshots();
       this.emit('snapshotsChanged', { snapshots });
     } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
       console.error('Failed to notify snapshots changed:', err);
+      this.emit('error', { error });
     }
   }
 

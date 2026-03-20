@@ -1,23 +1,28 @@
 # Overlays and Guides
 
-OpenRV Web provides a comprehensive set of visual overlays and guide systems that display metadata, safety zones, diagnostic information, and production graphics on top of the viewed image. Overlays are non-destructive and render independently of the source media. All overlay settings are saved with the session state.
+OpenRV Web includes visual overlays and guide systems that display metadata, safety zones, diagnostic information, and production graphics on top of the viewed image. Overlays are non-destructive and render independently of the source media. All overlay settings are saved with the session state.
 
 ---
 
 ## Timecode Overlay
 
-The timecode overlay displays the current frame position in SMPTE timecode format (HH:MM:SS:FF) on the viewer canvas. This overlay is essential for frame-accurate communication during review sessions.
+The timecode overlay displays the current frame position in SMPTE timecode format (HH:MM:SS:FF) on the viewer canvas.
 
 ### Display Options
 
 - **Position**: Top-left, top-right, bottom-left, or bottom-right corner of the viewer
-- **Format**: SMPTE timecode (HH:MM:SS:FF), frame number, or both
+- **Display format**: Configurable via the `displayFormat` setting:
+  - **SMPTE Timecode** (`smpte`): Shows only the SMPTE timecode (HH:MM:SS:FF). This is the default.
+  - **Frame Number** (`frame`): Shows only the frame number (e.g. "Frame 42 / 100").
+  - **Both** (`both`): Shows both SMPTE timecode and frame number.
 - **Background**: Semi-transparent background box for readability against any image content
 - **Font size**: Small, medium, or large
 
-The timecode is derived from the current frame number and the session frame rate. For sources with embedded timecode metadata, the source timecode is displayed alongside the session timecode.
+The display format can be changed from the right-click settings menu on the timecode overlay button in the **View** tab toolbar.
 
-Toggle the timecode overlay from the Overlays menu or the context toolbar.
+The timecode is derived from the current frame number and the session frame rate. For sources with embedded timecode metadata (e.g. MXF files with a start timecode), the source timecode is displayed in a separate row below the session timecode. This can be toggled via the "Show Source Timecode" checkbox in the right-click settings menu.
+
+Toggle the timecode overlay from its dedicated button in the **View** tab toolbar (keyboard shortcut: Alt+Shift+T). Right-click the button to access display settings.
 
 ---
 
@@ -29,17 +34,21 @@ Safe area overlays mark the broadcast-safe and title-safe regions of the frame, 
 
 ### Standard Safe Areas
 
-| Zone | Percentage | Purpose |
-|------|-----------|---------|
-| Action safe | 93% | All important action must fall within this area to avoid being cut off by consumer displays |
-| Title safe | 90% | All text and graphics must fall within this area for legibility on edge-cropping displays |
-| Custom | User-defined | Specify any percentage for production-specific safe zones |
+| Zone | Percentage | Default Color | Purpose |
+|------|-----------|---------------|---------|
+| Action safe | 93% | White | All important action must fall within this area to avoid being cut off by consumer displays |
+| Title safe | 90% | Green | All text and graphics must fall within this area for legibility on edge-cropping displays |
+| Custom | User-defined (1-99%) | Orange | Specify any percentage for production-specific safe zones |
 
 ### Display
 
-Safe areas are rendered as semi-transparent bordered rectangles centered on the frame. The border color and opacity are configurable. When multiple safe zones are active simultaneously, each uses a distinct color for clarity.
+Safe areas are rendered as semi-transparent bordered rectangles centered on the frame. The border color and opacity are configurable via the Appearance section of the safe areas dropdown. When multiple safe zones are active simultaneously, each uses a distinct color for clarity: white for action safe, green for title safe, and orange for custom. When only a single zone is active, it uses the user-configured guide color instead.
 
-Safe area overlays respect the current crop settings. If crop is active, safe areas are calculated relative to the cropped region rather than the full image.
+### Custom Safe Area
+
+The custom safe area allows specifying any percentage between 1% and 99%. Enable "Custom Safe Area" in the safe areas dropdown, then enter the desired percentage in the input field that appears. This is useful for production-specific safe zones that differ from the standard SMPTE title/action safe areas.
+
+Safe area overlays respect the current crop settings. When crop is active with a non-full crop region, all safe area guides (title safe, action safe, aspect ratio, center crosshair, and rule of thirds) are calculated relative to the cropped region rather than the full image. When crop is disabled or the crop region covers the full frame, guides revert to full-display positioning.
 
 ---
 
@@ -61,13 +70,33 @@ The clipping thresholds can be adjusted from their default 0.0/1.0 positions. Fo
 
 ## Missing Frame Indicator
 
-When an image sequence has gaps (missing frame numbers), the missing frame indicator replaces the viewer content with a clearly visible warning state:
+When an image sequence has gaps (missing frame numbers), the missing frame indicator helps users identify and handle those gaps. The **View** tab toolbar exposes a **Missing Frame Mode** dropdown with four modes:
 
-- A **red X** pattern fills the viewer area
-- The missing frame number is displayed prominently
-- The timeline highlights the missing frame position
+### Modes
 
-This overlay prevents the common mistake of assuming a missing frame is simply a duplicate of the previous frame. Missing frame detection is automatic for image sequences and requires no manual configuration.
+| Mode | UI Label | Internal Value | Behavior |
+|------|----------|---------------|----------|
+| **Off** | Off | `off` | No missing-frame indication. Gaps are ignored and the viewer draws whatever is available (or nothing). |
+| **Frame** (default) | Frame | `show-frame` | The current source frame continues to render in the viewer while a centered **warning icon** and **"MISSING FRAME"** label with the frame number are shown as a semi-transparent overlay on top. This is the default mode. |
+| **Hold** | Hold | `hold` | The nearest available preceding frame is displayed in place of the missing frame, so the viewer always shows real image content. The overlay is not shown. |
+| **Black** | Black | `black` | The viewer content is replaced entirely with a black frame. The overlay is not shown. |
+
+### Overlay Appearance
+
+When the mode is **Frame** (the default), the overlay consists of:
+
+- A **warning icon** (triangle with exclamation mark) rendered in red, centered in the viewer
+- A **"MISSING FRAME"** label in red uppercase text below the icon
+- The **frame number** (e.g. "Frame 42") displayed below the label in muted text
+- A **semi-transparent dark background** (75% opacity black) covering the viewer area
+
+The overlay is non-interactive (pointer events pass through to the viewer).
+
+### Timeline Markers
+
+The **timeline highlights each missing-frame position** with a thin red vertical line and a semi-transparent red region on the track bar, so gaps are visible at a glance even when scrubbing. Timeline markers appear regardless of which missing-frame mode is selected.
+
+Missing frame detection is automatic for image sequences and requires no manual configuration. The selected mode is persisted in local storage across sessions.
 
 ---
 
@@ -83,7 +112,7 @@ When the data window differs from the display window, this overlay draws:
 
 This is particularly useful when reviewing overscan content, partial renders, or multi-pass compositing where different elements have different data extents.
 
-The EXR window overlay is enabled from the Overlays menu and activates automatically when an EXR file with mismatched data/display windows is detected.
+The EXR window overlay is enabled from its dedicated button in the **View** tab toolbar. Right-click the button to access settings. The overlay activates automatically when an EXR file with mismatched data/display windows is detected.
 
 ---
 
@@ -97,11 +126,18 @@ The matte overlay applies an opaque or semi-transparent mask to simulate a deliv
 - **Opacity**: Control the darkness of the matte region, from fully transparent (0%) to fully opaque (100%)
 - **Center point**: Offset the matte from the image center for asymmetric framing evaluation
 
-The matte overlay is accessible via the API:
+The matte overlay is toggled from its dedicated button in the **View** tab toolbar. Right-click the button to access settings. It can also be configured via the scripting API:
 
 ```javascript
 // Enable matte with 2.39:1 aspect and 80% opacity
-openrv.matte.enable({ aspect: 2.39, opacity: 0.8 });
+openrv.view.setMatte({ aspect: 2.39, opacity: 0.8 });
+
+// Query current matte settings
+const matte = openrv.view.getMatte();
+console.log(matte.aspect, matte.opacity, matte.show);
+
+// Disable the matte overlay
+openrv.view.clearMatte();
 ```
 
 Matte settings persist when changing frames and are saved with the session state.
@@ -123,25 +159,25 @@ The bug overlay places a small, persistent logo or graphic element in a corner o
 - **Size**: Scale relative to the frame dimensions
 - **Opacity**: Control transparency for subtle watermarking
 
-The bug overlay is also used during video export to burn the logo into the output file.
+When a bug overlay is enabled and has an image loaded, it is automatically composited (burned) into each frame during video and image export. The exported logo matches the viewer's configured position, size, opacity, and margin. The bug overlay is drawn after annotations but before frameburn text, so timecode and metadata overlays remain readable on top of the logo.
 
 ---
 
 ## Watermark Overlay
 
-The watermark overlay tiles a text string or image across the entire frame at low opacity. This is used for:
+The watermark overlay places a single image at a chosen position on the frame. This is used for:
 
-- Marking review copies as confidential or for internal use only
+- Marking review copies with a logo or badge
 - Adding recipient identification to distributed media
 - Deterring unauthorized distribution of pre-release content
 
 ### Controls
 
-- **Text**: The watermark message (e.g., "CONFIDENTIAL", "FOR REVIEW ONLY", recipient name)
-- **Font size**: Relative to frame dimensions
-- **Opacity**: Low opacity values (10-20%) provide visible marking without obscuring content
-- **Rotation**: Angle of the tiled text pattern (default: -30 degrees)
-- **Color**: Watermark text color
+- **Image**: Upload a PNG, JPEG, WebP, or SVG file for the watermark graphic
+- **Position**: Nine preset positions on a 3x3 grid (top-left through bottom-right) or a custom X/Y coordinate
+- **Scale**: Resize the image relative to its original dimensions (10%-200%)
+- **Opacity**: Control transparency (0-100%)
+- **Margin**: Pixel offset from the frame edge when using a preset position
 
 The watermark renders as an overlay and does not modify the source image. For permanent watermarking, use the frameburn feature during video export.
 
@@ -149,37 +185,113 @@ The watermark renders as an overlay and does not modify the source image. For pe
 
 ## Perspective Grid
 
-The perspective grid overlay draws a configurable grid pattern on the viewer for composition analysis and alignment verification.
+The perspective grid overlay is a perspective-correction mesh used for verifying and adjusting perspective distortion in the viewed image. It is not a composition guide — for rule-of-thirds, center crosshair, and aspect-ratio guides, see [Safe Areas](#safe-areas).
 
-### Grid Types
+### How It Works
 
-- **Rule of thirds**: Divides the frame into a 3x3 grid for classical composition evaluation
-- **Golden ratio**: Places grid lines at the golden section points (approximately 0.382 and 0.618 of each dimension)
-- **Custom grid**: User-defined row and column count for arbitrary grid divisions
-- **Crosshair**: Simple center crosshair for alignment checks
+The overlay draws an 8x8 subdivision grid that is mapped to four draggable corner handles. Dragging any corner repositions the grid lines to follow a perspective transform, allowing you to visually align the grid with vanishing points and architectural lines in the image.
 
-### Display Options
+### Controls
 
-- **Color**: Grid line color (default: white with 50% opacity)
-- **Line width**: Thin (1px), medium (2px), or thick (3px)
-- **Diagonal lines**: Optional diagonal guides from corner to corner
+- **Corner handles**: Four circular handles at each corner of the grid. Drag a handle to warp the grid into the desired perspective
+- **Grid lines**: Fixed 8x8 subdivision mesh rendered in a light blue color
+- **Enable/disable**: The overlay can be toggled on or off; when disabled the grid and handles are hidden
 
-The grid overlay is particularly useful for evaluating composition in dailies reviews and verifying that CG camera framing matches the plate.
+The perspective grid overlay emits a `cornersChanged` event whenever a handle is moved, which feeds into the perspective-correction transform pipeline.
 
 ---
 
 ## Note Overlay
 
-The note overlay displays review notes and annotations as persistent text overlays on the viewer. Unlike the annotation system (which provides per-frame drawing tools), the note overlay shows text associated with the current frame's markers or review notes in a fixed position on screen.
+The note overlay draws colored bars on the timeline canvas to indicate frame ranges that have review notes. It is a timeline-level feature, not a viewer overlay.
 
 ### Display
 
-- Notes are shown in a semi-transparent panel at the bottom of the viewer
-- Each note shows the frame number, author (if available), and note text
-- Multiple notes for the same frame are stacked vertically
-- Navigation arrows allow stepping between noted frames
+- Each note is rendered as a thin horizontal bar just below the timeline track
+- Bars are color-coded by status: amber for open, green for resolved, gray for won't-fix
+- Bar width corresponds to the note's frame range; single-frame notes have a minimum width of 2px for visibility
+- Only top-level notes are shown (replies are excluded)
+- Only notes matching the current source index are drawn
 
-The note overlay integrates with the marker system. When a marker with a note exists at the current frame, the note text appears automatically in the overlay.
+The note overlay listens for `notesChanged` events on the session and triggers a timeline redraw when notes are added, updated, or removed.
+
+---
+
+## Spotlight Overlay
+
+The spotlight overlay highlights a region of interest while dimming the surrounding area. It is useful during review sessions to draw attention to a specific part of the frame.
+
+### Shape
+
+The spotlight supports two shapes:
+
+- **Circle**: A circular highlight with uniform radius. Resize handles appear at the four cardinal points (N, S, E, W).
+- **Rectangle**: A rectangular highlight with independent width and height. Resize handles appear at all eight positions (four corners and four edge midpoints).
+
+### Interaction
+
+- **Drag to position**: Click inside the spotlight region and drag to move it. The cursor changes to a move icon.
+- **Resize**: Click and drag any resize handle to change the spotlight size. The cursor changes to the appropriate resize direction (e.g., `ns-resize`, `nwse-resize`).
+- Position and size use **normalized 0--1 coordinates** relative to the image dimensions.
+
+### Controls
+
+| Setting | Range | Default | Description |
+|---------|-------|---------|-------------|
+| **Dim amount** | 0--1 | 0.7 | How dark the area outside the spotlight becomes. 0 = no dimming, 1 = fully black. |
+| **Feather** | 0--0.5 | 0.05 | How soft the edge transition is. 0 = hard edge, higher values = smoother gradient. |
+| **Shape** | circle / rectangle | circle | The shape of the highlighted region. |
+
+The spotlight outline is drawn as a dashed white line (50% opacity) for visual feedback. The overlay is toggled from its dedicated button in the **View** tab toolbar.
+
+---
+
+## Info Strip Overlay
+
+The info strip overlay displays a semi-transparent bar at the bottom of the viewer showing the current source filename. It provides at-a-glance identification of which file is loaded.
+
+### Display
+
+- **Basename mode** (default): Shows only the filename (e.g., `shot_010_comp_v03.exr`)
+- **Full path mode**: Shows the complete URL or file path, with right-to-left truncation so the filename end remains visible when the path is long
+
+Toggle between modes by clicking the toggle icon button on the right side of the strip, or by pressing `Shift+F7`.
+
+### Settings
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| **Background opacity** | 0.5 | Controls the darkness of the strip background (0 = transparent, 1 = fully opaque) |
+
+The strip uses a monospace font (SF Mono / Fira Code / Consolas) with a text shadow for readability against any image content. Toggle visibility with `F7` (matching desktop OpenRV). The overlay passes pointer events through to the viewer canvas so it does not interfere with interaction.
+
+---
+
+## FPS Indicator
+
+The FPS indicator is a heads-up display that shows real-time playback performance metrics on the viewer canvas. It appears automatically during playback and hides 2 seconds after playback stops.
+
+### Display
+
+- **Actual FPS**: The measured frame rate, smoothed with exponential moving average (EMA) for stable readout. Color-coded based on performance:
+  - **Green**: At or above 97% of target FPS (good)
+  - **Yellow**: Between 85% and 97% of target (warning)
+  - **Red**: Below 85% of target (critical)
+- **Target FPS**: Shown below the actual FPS. When playback speed is not 1x, displays the effective target FPS with the speed multiplier (e.g., "/ 48 eff. fps (2x)").
+- **Dropped frames**: A counter of skipped frames during the current playback session. Displayed in red when drops have occurred.
+
+### Settings
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| **Position** | top-right | Corner placement (top-left, top-right, bottom-left, bottom-right) |
+| **Show dropped frames** | Enabled | Toggle the skipped frame counter |
+| **Show target FPS** | Enabled | Toggle the target FPS line |
+| **Background opacity** | 0.6 | Darkness of the indicator background |
+| **Warning threshold** | 0.97 | Ratio below which the color turns yellow |
+| **Critical threshold** | 0.85 | Ratio below which the color turns red |
+
+Settings are persisted in user preferences and survive page reloads.
 
 ---
 
@@ -195,14 +307,15 @@ When multiple overlays are active simultaneously, they are composited in a fixed
 
 1. EXR data/display window
 2. Matte overlay
-3. Clipping indicators
-4. Safe area guides
-5. Perspective grid
-6. Watermark
-7. Bug overlay
-8. Timecode display
-9. Note overlay
-10. Missing frame indicator (replaces all others when active)
+3. Spotlight overlay
+4. Clipping indicators
+5. Safe area guides
+6. Perspective grid
+7. Watermark
+8. Bug overlay
+9. Timecode display
+10. Note overlay
+11. Missing frame indicator (in **Frame** mode, overlays on top of the current image; in **Black** mode, replaces the image entirely; see [Missing Frame Indicator](#missing-frame-indicator) for all modes)
 
 This ordering ensures that diagnostic overlays remain visible above decorative elements, and that the missing frame indicator is never obscured.
 
@@ -210,7 +323,7 @@ This ordering ensures that diagnostic overlays remain visible above decorative e
 
 ## Enabling and Disabling Overlays
 
-All overlays can be toggled from the **Overlays** submenu in the View tab, or from the Overlays section of the context toolbar. Each overlay has an independent enable/disable toggle. A master "Clear All Overlays" option disables all overlays at once.
+Most overlays are controlled from individual toggle buttons in the **View** tab toolbar (spotlight, matte, bug, EXR window, info strip, timecode, FPS indicator, missing frame indicator). The watermark overlay is controlled from the **Effects** tab. Each overlay has an independent enable/disable toggle, and right-clicking a button opens its settings menu.
 
 Overlay states are included in the session state and are preserved in `.orvproject` files and snapshots.
 

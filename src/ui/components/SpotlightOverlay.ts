@@ -239,7 +239,7 @@ export class SpotlightOverlay extends CanvasOverlay<SpotlightEvents> {
   private getResizeHandle(x: number, y: number): 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw' | null {
     const { x: cx, y: cy, width, height, shape } = this.state;
     // Hit area size for handles (4% of display for easier clicking)
-    const handleSize = 0.04;
+    const handleSize = 0.06;
 
     if (shape === 'circle') {
       // Only check the 4 cardinal points for circle
@@ -462,7 +462,7 @@ export class SpotlightOverlay extends CanvasOverlay<SpotlightEvents> {
 
   private drawResizeHandles(cx: number, cy: number, rx: number, ry: number): void {
     const { ctx } = this;
-    const handleSize = 6;
+    const handleSize = 8;
 
     ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
@@ -486,7 +486,7 @@ export class SpotlightOverlay extends CanvasOverlay<SpotlightEvents> {
 
   private drawRectangleHandles(left: number, top: number, right: number, bottom: number): void {
     const { ctx } = this;
-    const handleSize = 6;
+    const handleSize = 8;
     const cx = (left + right) / 2;
     const cy = (top + bottom) / 2;
 

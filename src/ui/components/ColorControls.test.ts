@@ -4,7 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ColorControls, DEFAULT_COLOR_ADJUSTMENTS } from './ColorControls';
-import type { LUT3D } from '../../color/ColorProcessingFacade';
+import type { LUT3D, LUT1D } from '../../color/ColorProcessingFacade';
 
 describe('ColorControls', () => {
   let controls: ColorControls;
@@ -300,6 +300,7 @@ describe('ColorControls', () => {
       controls.on('lutLoaded', handler);
 
       const mockLUT: LUT3D = {
+        type: '3d',
         title: 'Test LUT',
         size: 17,
         data: new Float32Array(17 * 17 * 17 * 3),
@@ -313,6 +314,7 @@ describe('ColorControls', () => {
 
     it('COL-024: clearLUT sets LUT to null', () => {
       const mockLUT: LUT3D = {
+        type: '3d',
         title: 'Test LUT',
         size: 17,
         data: new Float32Array(17 * 17 * 17 * 3),
@@ -329,6 +331,7 @@ describe('ColorControls', () => {
     it('COL-025: clearLUT emits lutLoaded with null', () => {
       const handler = vi.fn();
       const mockLUT: LUT3D = {
+        type: '3d',
         title: 'Test LUT',
         size: 17,
         data: new Float32Array(17 * 17 * 17 * 3),
@@ -573,6 +576,164 @@ describe('ColorControls', () => {
 
       addSpy.mockRestore();
       removeSpy.mockRestore();
+    });
+  });
+
+  describe('1D LUT support (issue #279)', () => {
+    it('COL-279a: setLUT accepts a 1D LUT without error', () => {
+      const mockLUT1D: LUT1D = {
+        type: '1d',
+        title: 'Test 1D LUT',
+        size: 16,
+        data: new Float32Array(16 * 3),
+        domainMin: [0, 0, 0] as [number, number, number],
+        domainMax: [1, 1, 1] as [number, number, number],
+      };
+      expect(() => controls.setLUT(mockLUT1D)).not.toThrow();
+      expect(controls.getLUT()).toBe(mockLUT1D);
+    });
+
+    it('COL-279b: setLUT emits lutLoaded event with a 1D LUT', () => {
+      const handler = vi.fn();
+      controls.on('lutLoaded', handler);
+
+      const mockLUT1D: LUT1D = {
+        type: '1d',
+        title: 'Test 1D LUT',
+        size: 16,
+        data: new Float32Array(16 * 3),
+        domainMin: [0, 0, 0] as [number, number, number],
+        domainMax: [1, 1, 1] as [number, number, number],
+      };
+      controls.setLUT(mockLUT1D);
+
+      expect(handler).toHaveBeenCalledWith(mockLUT1D);
+    });
+
+    it('COL-279c: setLUT still accepts 3D LUTs as before', () => {
+      const mockLUT3D: LUT3D = {
+        type: '3d',
+        title: 'Test 3D LUT',
+        size: 17,
+        data: new Float32Array(17 * 17 * 17 * 3),
+        domainMin: [0, 0, 0] as [number, number, number],
+        domainMax: [1, 1, 1] as [number, number, number],
+      };
+      expect(() => controls.setLUT(mockLUT3D)).not.toThrow();
+      expect(controls.getLUT()).toBe(mockLUT3D);
+    });
+
+    it('COL-279d: clearLUT works after loading a 1D LUT', () => {
+      const mockLUT1D: LUT1D = {
+        type: '1d',
+        title: 'Test 1D LUT',
+        size: 16,
+        data: new Float32Array(16 * 3),
+        domainMin: [0, 0, 0] as [number, number, number],
+        domainMax: [1, 1, 1] as [number, number, number],
+      };
+      controls.setLUT(mockLUT1D);
+      expect(controls.getLUT()).not.toBeNull();
+
+      controls.clearLUT();
+      expect(controls.getLUT()).toBeNull();
+    });
+
+    it('COL-279e: handleLUTFile does not reject 1D LUT files', async () => {
+      const handler = vi.fn();
+      controls.on('lutLoaded', handler);
+
+      // Create a mock .cube file with 1D LUT content
+      const cubeContent = [
+        'TITLE "Identity 1D"',
+        'LUT_1D_SIZE 4',
+        'DOMAIN_MIN 0.0 0.0 0.0',
+        'DOMAIN_MAX 1.0 1.0 1.0',
+        '0.000000 0.000000 0.000000',
+        '0.333333 0.333333 0.333333',
+        '0.666667 0.666667 0.666667',
+        '1.000000 1.000000 1.000000',
+      ].join('\n');
+
+      const file = new File([cubeContent], 'identity1d.cube', { type: 'text/plain' });
+      const input = document.createElement('input');
+      Object.defineProperty(input, 'files', { value: [file] });
+
+      // Trigger the handler directly via the private method
+      await (controls as any).handleLUTFile({ target: input } as unknown as Event);
+
+      // Should have emitted lutLoaded (not thrown an error)
+      expect(handler).toHaveBeenCalledTimes(1);
+      const loadedLUT = handler.mock.calls[0]![0];
+      expect(loadedLUT).not.toBeNull();
+      expect(loadedLUT.title).toBe('Identity 1D');
+    });
+
+    it('COL-279f: handleLUTFile still works with 3D LUT files', async () => {
+      const handler = vi.fn();
+      controls.on('lutLoaded', handler);
+
+      const cubeContent = [
+        'TITLE "Identity 3D"',
+        'LUT_3D_SIZE 2',
+        'DOMAIN_MIN 0.0 0.0 0.0',
+        'DOMAIN_MAX 1.0 1.0 1.0',
+        '0.000000 0.000000 0.000000',
+        '1.000000 0.000000 0.000000',
+        '0.000000 1.000000 0.000000',
+        '1.000000 1.000000 0.000000',
+        '0.000000 0.000000 1.000000',
+        '1.000000 0.000000 1.000000',
+        '0.000000 1.000000 1.000000',
+        '1.000000 1.000000 1.000000',
+      ].join('\n');
+
+      const file = new File([cubeContent], 'identity3d.cube', { type: 'text/plain' });
+      const input = document.createElement('input');
+      Object.defineProperty(input, 'files', { value: [file] });
+
+      await (controls as any).handleLUTFile({ target: input } as unknown as Event);
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      const loadedLUT = handler.mock.calls[0]![0];
+      expect(loadedLUT).not.toBeNull();
+      expect(loadedLUT.title).toBe('Identity 3D');
+    });
+
+    it('COL-279g: handleLUTFile logs error for invalid/empty LUT content', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const file = new File(['not a valid LUT'], 'bad.cube', { type: 'text/plain' });
+      const input = document.createElement('input');
+      Object.defineProperty(input, 'files', { value: [file] });
+
+      await (controls as any).handleLUTFile({ target: input } as unknown as Event);
+
+      // The catch block logs the error
+      expect(errorSpy).toHaveBeenCalledWith('Failed to load LUT:', expect.any(Error));
+
+      errorSpy.mockRestore();
+    });
+
+    it('COL-279h: LUT name label updates for 1D LUT', () => {
+      // Render to create the name label
+      controls.render();
+
+      const mockLUT1D: LUT1D = {
+        type: '1d',
+        title: 'Warm 1D LUT',
+        size: 16,
+        data: new Float32Array(16 * 3),
+        domainMin: [0, 0, 0] as [number, number, number],
+        domainMax: [1, 1, 1] as [number, number, number],
+      };
+      controls.setLUT(mockLUT1D);
+
+      // Access the private lutNameLabel to verify it shows the LUT title
+      const nameLabel = (controls as any).lutNameLabel as HTMLSpanElement;
+      if (nameLabel) {
+        expect(nameLabel.textContent).toBe('Warm 1D LUT');
+      }
     });
   });
 });

@@ -35,10 +35,10 @@ export class HotReloadManager {
    *
    * Steps:
    * 1. Capture state (if plugin implements getState())
-   * 2. Deactivate and dispose the plugin
-   * 3. Unregister the old plugin
-   * 4. Re-import the module with cache-busting
-   * 5. Register and activate the new version
+   * 2. Re-import the module with cache-busting (old plugin stays intact on failure)
+   * 3. Deactivate and dispose the old plugin
+   * 4. Unregister the old plugin
+   * 5. Activate the new version
    * 6. Restore state (if captured and plugin implements restoreState())
    */
   async reload(pluginId: PluginId): Promise<void> {
@@ -64,24 +64,17 @@ export class HotReloadManager {
         }
       }
 
-      // 2. Deactivate and dispose
+      // 2. Re-import with cache-busting BEFORE disposing old plugin
+      const cacheBustUrl = `${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`;
+      const newId = await this.registry.loadFromURL(cacheBustUrl);
+
+      // 3. Deactivate and dispose old plugin (only after new one loaded successfully)
       await this.registry.dispose(pluginId);
 
-      // 3. Unregister (need this to re-register with same ID)
+      // 4. Unregister old plugin
       this.registry.unregister(pluginId);
 
-      // 4. Re-import with cache-busting
-      const cacheBustUrl = `${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`;
-      let newId: PluginId;
-      try {
-        newId = await this.registry.loadFromURL(cacheBustUrl);
-      } catch (err) {
-        // Plugin is already disposed/unregistered — clean up tracking
-        this.pluginURLs.delete(pluginId);
-        throw err;
-      }
-
-      // 5. Activate
+      // 5. Activate new plugin
       await this.registry.activate(newId);
 
       // 6. Restore state if available

@@ -14,7 +14,7 @@ This guide covers every stereo display mode, the supported input formats, conver
 
 ## Stereo Display Modes
 
-OpenRV Web supports ten stereo display modes, selectable from the View menu or by pressing **Shift+3** to cycle through them. The modes are defined by the `StereoMode` type in the viewer core:
+OpenRV Web supports ten stereo display modes, selectable from the **Stereo** dropdown in the View tab toolbar or by pressing **Shift+3** to cycle through them. The modes are defined by the `StereoMode` type in the viewer core:
 
 ### Off
 
@@ -102,7 +102,7 @@ In OpenRV Web, separate stereo sources are combined as layers in a stack view, w
 
 ### Convergence Offset
 
-The convergence offset controls the horizontal displacement between the left and right eye images, expressed as a percentage of image width. The range is **-50 to +50** (stored as the `offset` field in `StereoState`).
+The convergence offset controls the horizontal displacement between the left and right eye images, expressed as a percentage of image width. The range is **-20 to +20** with a step size of **0.5** (stored as the `offset` field in `StereoState`).
 
 - **Positive offset**: Pushes the stereo window further away from the viewer (increases screen-plane depth)
 - **Negative offset**: Pulls the stereo window closer to the viewer (objects appear to float in front of the screen)
@@ -179,16 +179,6 @@ Per-eye geometric transforms (translate, rotate, scale) allow fine-grained align
 - Scale differences due to lens matching imperfections
 
 The eye transform state is persisted in the session and applied in the rendering pipeline before stereo compositing.
-
-### Stereo Eye Transform
-
-Per-eye geometric transforms (translate, rotate, scale) allow fine-grained alignment correction of each eye independently. This compensates for:
-
-- Vertical misalignment between stereo rig cameras
-- Rotation (tilt) differences between cameras
-- Scale differences due to lens matching imperfections
-
-The eye transform state is persisted in the session and applied in the rendering pipeline before stereo compositing. The `StereoEyeTransform` module provides transform state management with configurable alignment modes.
 
 ### Session Persistence
 

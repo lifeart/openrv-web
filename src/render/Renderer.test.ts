@@ -3298,4 +3298,141 @@ describe('GC Pressure: Pre-allocated offset/scale buffers', () => {
     expect(scaleBuf[0]).toBe(3.0);
     expect(scaleBuf[1]).toBe(4.0);
   });
+
+  // =========================================================================
+  // Issue #148: SDR fallback when HDR VideoFrame texture upload fails
+  // =========================================================================
+  it('REN-VF-148: SDR fallback is used when VideoFrame texImage2D fails and OffscreenCanvas is available', () => {
+    const renderer = new Renderer();
+    const gl = initRendererWithMockGL(renderer, { supportHLG: true });
+
+    // Override texImage2D to throw when a VideoFrame-like source is passed
+    (gl as any).texImage2D = vi.fn(function (...args: unknown[]) {
+      if (args.length === 6 && args[5] && typeof args[5] === 'object' && 'close' in (args[5] as object)) {
+        throw new Error('VideoFrame not supported');
+      }
+    });
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    // Mock _extractSDRFromVideoFrame to return valid SDR pixel data
+    const sdrData = new Uint8Array(10 * 10 * 4);
+    sdrData.fill(128); // grey pixels
+    (renderer as any)._extractSDRFromVideoFrame = vi.fn(() => sdrData);
+
+    const mockFrame = { close: vi.fn(), format: 'RGBA' };
+    const img = new IPImage({
+      width: 10,
+      height: 10,
+      channels: 4,
+      dataType: 'float32',
+      metadata: { transferFunction: 'hlg', colorPrimaries: 'bt2020' },
+    });
+    img.managedVideoFrame = { frame: mockFrame, release: vi.fn() } as any;
+
+    (renderer as any).updateTexture(img);
+
+    // SDR fallback should have overridden the image data
+    expect(img.dataType).toBe('uint8');
+    expect(img.channels).toBe(4);
+    expect(new Uint8Array(img.data)).toEqual(sdrData);
+    // HDR metadata should be cleared
+    expect(img.metadata.transferFunction).toBeUndefined();
+    expect(img.metadata.colorPrimaries).toBeUndefined();
+    // Texture should NOT be the shared VideoFrame texture (it was nulled,
+    // then the typed-array path created a fresh one via gl.createTexture)
+    expect(img.texture).not.toBe((renderer as any)._videoFrameTexture);
+    // VideoFrame should have been released
+    expect(img.managedVideoFrame).toBeNull();
+    // Warning should mention SDR fallback
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('falling back to SDR'));
+    warnSpy.mockRestore();
+  });
+
+  it('REN-VF-148-B: blank frame when SDR fallback also fails', () => {
+    const renderer = new Renderer();
+    const gl = initRendererWithMockGL(renderer, { supportHLG: true });
+
+    (gl as any).texImage2D = vi.fn(function (...args: unknown[]) {
+      if (args.length === 6 && args[5] && typeof args[5] === 'object' && 'close' in (args[5] as object)) {
+        throw new Error('VideoFrame not supported');
+      }
+    });
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    // Mock _extractSDRFromVideoFrame to return null (OffscreenCanvas unavailable)
+    (renderer as any)._extractSDRFromVideoFrame = vi.fn(() => null);
+
+    const mockRelease = vi.fn();
+    const mockFrame = { close: vi.fn(), format: 'RGBA' };
+    const img = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'uint8' });
+    img.managedVideoFrame = { frame: mockFrame, release: mockRelease } as any;
+
+    (renderer as any).updateTexture(img);
+
+    // VideoFrame should have been released
+    expect(mockRelease).toHaveBeenCalled();
+    expect(img.managedVideoFrame).toBeNull();
+    // Warning should mention blank frame
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('frame will appear blank'));
+    warnSpy.mockRestore();
+  });
+
+  it('REN-VF-148-C: _extractSDRFromVideoFrame returns pixel data when OffscreenCanvas works', () => {
+    const renderer = new Renderer();
+    initRendererWithMockGL(renderer);
+
+    // Create mock pixel data
+    const mockImageData = { data: new Uint8ClampedArray(4 * 4 * 4) }; // 4x4 RGBA
+    mockImageData.data.fill(200);
+
+    // Mock OffscreenCanvas at global level using a class so `new` works correctly
+    const mockCtx = {
+      drawImage: vi.fn(),
+      getImageData: vi.fn(() => mockImageData),
+    };
+    const OriginalOffscreenCanvas = globalThis.OffscreenCanvas;
+    globalThis.OffscreenCanvas = class MockOffscreenCanvas {
+      constructor(_w: number, _h: number) {}
+      getContext() {
+        return mockCtx;
+      }
+    } as any;
+
+    try {
+      const mockVideoFrame = { close: vi.fn(), format: 'RGBA' };
+      const result = (renderer as any)._extractSDRFromVideoFrame(mockVideoFrame, 4, 4);
+
+      expect(result).toBeInstanceOf(Uint8Array);
+      expect(result!.length).toBe(4 * 4 * 4);
+      expect(result![0]).toBe(200);
+      expect(mockCtx.drawImage).toHaveBeenCalledWith(mockVideoFrame, 0, 0, 4, 4);
+    } finally {
+      if (OriginalOffscreenCanvas) {
+        globalThis.OffscreenCanvas = OriginalOffscreenCanvas;
+      } else {
+        delete (globalThis as any).OffscreenCanvas;
+      }
+    }
+  });
+
+  it('REN-VF-148-D: _extractSDRFromVideoFrame returns null when OffscreenCanvas is unavailable', () => {
+    const renderer = new Renderer();
+    initRendererWithMockGL(renderer);
+
+    // Ensure OffscreenCanvas is not available
+    const OriginalOffscreenCanvas = globalThis.OffscreenCanvas;
+    delete (globalThis as any).OffscreenCanvas;
+
+    try {
+      const mockVideoFrame = { close: vi.fn(), format: 'RGBA' };
+      const result = (renderer as any)._extractSDRFromVideoFrame(mockVideoFrame, 4, 4);
+      expect(result).toBeNull();
+    } finally {
+      if (OriginalOffscreenCanvas) {
+        globalThis.OffscreenCanvas = OriginalOffscreenCanvas;
+      }
+    }
+  });
 });

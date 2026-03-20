@@ -137,6 +137,63 @@ function installDisposeSpies(registry: AppControlRegistry) {
 }
 
 function createMockDeps() {
+  const makeOverlay = () => ({
+    toggle: vi.fn(),
+    hasImage: vi.fn(() => false),
+    getState: vi.fn(() => ({
+      enabled: false,
+      imageUrl: null,
+      position: 'top-left',
+      size: 0.1,
+      opacity: 1,
+      margin: 12,
+      showFullPath: false,
+      showDataWindow: true,
+      showDisplayWindow: true,
+      dataWindowColor: '#00ff00',
+      displayWindowColor: '#00ccff',
+      lineWidth: 2,
+      dashPattern: [6, 4],
+      showLabels: true,
+      fontSize: 'medium',
+      showFrameCounter: true,
+      backgroundOpacity: 0.6,
+      showDroppedFrames: true,
+      showTargetFps: true,
+      warningThreshold: 0.97,
+      criticalThreshold: 0.85,
+    })),
+    getSettings: vi.fn(() => ({
+      show: false,
+      aspect: 1.78,
+      opacity: 0.66,
+      heightVisible: -1,
+      centerPoint: [0, 0],
+    })),
+    loadImage: vi.fn(),
+    removeImage: vi.fn(),
+    setPosition: vi.fn(),
+    setFontSize: vi.fn(),
+    setShowFrameCounter: vi.fn(),
+    setBackgroundOpacity: vi.fn(),
+    setShowFullPath: vi.fn(),
+    setShowDataWindow: vi.fn(),
+    setShowDisplayWindow: vi.fn(),
+    setShowLabels: vi.fn(),
+    setDataWindowColor: vi.fn(),
+    setDisplayWindowColor: vi.fn(),
+    setLineWidth: vi.fn(),
+    setDashPattern: vi.fn(),
+    setAspect: vi.fn(),
+    setOpacity: vi.fn(),
+    setCenterPoint: vi.fn(),
+    setShape: vi.fn(),
+    setSize: vi.fn(),
+    setDimAmount: vi.fn(),
+    setFeather: vi.fn(),
+    on: vi.fn(() => vi.fn()),
+  });
+
   return {
     session: { currentFrame: 1, frameCount: 1, on: vi.fn(() => vi.fn()) } as any,
     viewer: {
@@ -146,6 +203,22 @@ function createMockDeps() {
       getZebraStripes: vi.fn(() => ({})),
       getHSLQualifier: vi.fn(() => ({})),
       getWatermarkOverlay: vi.fn(() => undefined),
+      getBugOverlay: vi.fn(() => makeOverlay()),
+      getMatteOverlay: vi.fn(() => makeOverlay()),
+      getEXRWindowOverlay: vi.fn(() => makeOverlay()),
+      getInfoStripOverlay: vi.fn(() => makeOverlay()),
+      getTimecodeOverlay: vi.fn(() => makeOverlay()),
+      getFPSIndicator: vi.fn(() => makeOverlay()),
+      getSpotlightOverlay: vi.fn(() => makeOverlay()),
+      getStereoPair: vi.fn(() => null),
+      getImageData: vi.fn(() => null),
+      setReferenceImage: vi.fn(),
+      getDisplayWidth: vi.fn(() => 1920),
+      getDisplayHeight: vi.fn(() => 1080),
+      setSphericalProjectionRef: vi.fn(),
+      setSphericalProjection: vi.fn(),
+      getMissingFrameMode: vi.fn(() => 'off'),
+      setMissingFrameMode: vi.fn(),
       getLUTPipeline: vi.fn(() => ({
         registerSource: vi.fn(),
         setActiveSource: vi.fn(),
@@ -361,13 +434,15 @@ describe('AppControlRegistry', () => {
         getLuminanceVisualization: vi.fn(() => ({})),
         getZebraStripes: vi.fn(() => ({})),
         getHSLQualifier: vi.fn(() => ({ pickColor: vi.fn() })),
+        getBugOverlay: vi.fn(() => createMockOverlay()),
+        getMatteOverlay: vi.fn(() => createMockOverlay()),
         getSpotlightOverlay: vi.fn(() => createMockOverlay()),
         getMissingFrameMode: vi.fn(() => 'off'),
         setMissingFrameMode: vi.fn(),
         getPixelProbe: vi.fn(() => createMockOverlay()),
         getContainer: vi.fn(() => document.createElement('div')),
         getImageData: vi.fn(() => null),
-        getClippingOverlay: vi.fn(() => ({ enable: vi.fn(), disable: vi.fn() })),
+        getClippingOverlay: vi.fn(() => createMockOverlay()),
         getCanvasContainer: vi.fn(() => document.createElement('div')),
         getColorWheels: vi.fn(() => createMockOverlay()),
         refresh: vi.fn(),
@@ -377,7 +452,10 @@ describe('AppControlRegistry', () => {
         getEXRWindowOverlay: vi.fn(() => createMockOverlay()),
         getFPSIndicator: vi.fn(() => createMockOverlay()),
         getInfoStripOverlay: vi.fn(() => createMockOverlay()),
+        getTimecodeOverlay: vi.fn(() => createMockOverlay()),
         setSphericalProjection: vi.fn(),
+        getStereoPair: vi.fn(() => null),
+        setReferenceImage: vi.fn(),
       } as any;
       const sessionBridge = { updateInfoPanel: vi.fn() } as any;
 
@@ -636,6 +714,98 @@ describe('AppControlRegistry', () => {
       expect(registry.scopesControl).toBe(registry.analysis.scopesControl);
       expect(registry.historyPanel).toBe(registry.panel.historyPanel);
       expect(registry.autoSaveManager).toBe(registry.playback.autoSaveManager);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // #92: logoError event listener is wired
+  // -------------------------------------------------------------------------
+  describe('logoError wiring (#92)', () => {
+    it('ACR-023: logoError event triggers console.warn', () => {
+      const deps = createMockDeps();
+      const registry = new AppControlRegistry(deps);
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        // Emit logoError on the real slateEditor instance
+        registry.slateEditor.emit('logoError', new Error('test upload failure'));
+        expect(warnSpy).toHaveBeenCalledTimes(1);
+        expect(warnSpy.mock.calls[0]![0]).toContain('[SlateEditor]');
+        expect(warnSpy.mock.calls[0]![1]).toBe('test upload failure');
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+  });
+
+  describe('slate editor panel surface (#91)', () => {
+    it('ACR-024: exposes text and accent color plus resolution controls', () => {
+      const deps = createMockDeps();
+      const registry = new AppControlRegistry(deps);
+      const panel = (registry as any).slateEditorPanel.element as HTMLElement;
+
+      const textColor = panel.querySelector<HTMLInputElement>('[data-testid="slate-text-color"]')!;
+      textColor.value = '#112233';
+      textColor.dispatchEvent(new Event('input', { bubbles: true }));
+
+      const accentColor = panel.querySelector<HTMLInputElement>('[data-testid="slate-accent-color"]')!;
+      accentColor.value = '#445566';
+      accentColor.dispatchEvent(new Event('input', { bubbles: true }));
+
+      const widthInput = panel.querySelector<HTMLInputElement>('[data-testid="slate-resolution-width"]')!;
+      widthInput.value = '3840';
+      widthInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+      const heightInput = panel.querySelector<HTMLInputElement>('[data-testid="slate-resolution-height"]')!;
+      heightInput.value = '2160';
+      heightInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+      expect(registry.slateEditor.getColors().text).toBe('#112233');
+      expect(registry.slateEditor.getColors().accent).toBe('#445566');
+      expect(registry.slateEditor.getResolution()).toEqual({ width: 3840, height: 2160 });
+    });
+
+    it('ACR-025: exposes custom field CRUD controls', () => {
+      const deps = createMockDeps();
+      const registry = new AppControlRegistry(deps);
+      const panel = (registry as any).slateEditorPanel.element as HTMLElement;
+
+      const addButton = panel.querySelector<HTMLButtonElement>('[data-testid="slate-custom-field-add"]')!;
+      addButton.click();
+
+      const labelInput = panel.querySelector<HTMLInputElement>('[data-testid="slate-custom-field-label-0"]')!;
+      labelInput.value = 'Codec';
+      labelInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+      const valueInput = panel.querySelector<HTMLInputElement>('[data-testid="slate-custom-field-value-0"]')!;
+      valueInput.value = 'ProRes 4444';
+      valueInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+      const sizeSelect = panel.querySelector<HTMLSelectElement>('[data-testid="slate-custom-field-size-0"]')!;
+      sizeSelect.value = 'large';
+      sizeSelect.dispatchEvent(new Event('change', { bubbles: true }));
+
+      expect(registry.slateEditor.getCustomFields()).toEqual([{ label: 'Codec', value: 'ProRes 4444', size: 'large' }]);
+
+      panel.querySelector<HTMLButtonElement>('[data-testid="slate-custom-field-remove-0"]')!.click();
+      expect(registry.slateEditor.getCustomFields()).toEqual([]);
+    });
+
+    it('ACR-026: exposes logo position and scale controls', () => {
+      const deps = createMockDeps();
+      const registry = new AppControlRegistry(deps);
+      const panel = (registry as any).slateEditorPanel.element as HTMLElement;
+
+      const positionSelect = panel.querySelector<HTMLSelectElement>('[data-testid="slate-logo-position"]')!;
+      positionSelect.value = 'top-left';
+      positionSelect.dispatchEvent(new Event('change', { bubbles: true }));
+
+      const scaleSlider = panel.querySelector<HTMLInputElement>('[data-testid="slate-logo-scale"]')!;
+      scaleSlider.value = '28';
+      scaleSlider.dispatchEvent(new Event('input', { bubbles: true }));
+
+      expect(registry.slateEditor.getLogoPosition()).toBe('top-left');
+      expect(registry.slateEditor.getLogoScale()).toBe(0.28);
     });
   });
 });

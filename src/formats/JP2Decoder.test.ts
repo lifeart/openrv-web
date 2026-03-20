@@ -13,7 +13,7 @@
  * - JP2-DIM: Dimension validation
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   isJP2File,
   parseJP2Header,
@@ -984,6 +984,130 @@ describe('JP2Decoder', () => {
       const result = await decodeJP2(buffer);
       expect(result.width).toBe(128);
       expect(result.height).toBe(128);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // findCodestreamOffset -- extended box handling (Issue #220)
+  // -----------------------------------------------------------------------
+  describe('parseJP2Header -- extended box handling', () => {
+    /**
+     * Build a JP2 buffer where the ftyp box uses an extended (64-bit) length field.
+     * @param hiLen - High 32 bits of the extended length
+     * @param loLen - Low 32 bits of the extended length (actual box size including 16-byte header)
+     */
+    function makeJP2WithExtendedBox(hiLen: number, loLen: number): ArrayBuffer {
+      const boxes: Uint8Array[] = [];
+
+      // 1. JP2 Signature box (12 bytes)
+      const sigBox = new ArrayBuffer(12);
+      const sigView = new DataView(sigBox);
+      sigView.setUint32(0, 12, false);
+      sigView.setUint8(4, 0x6a); // 'j'
+      sigView.setUint8(5, 0x50); // 'P'
+      sigView.setUint8(6, 0x20); // ' '
+      sigView.setUint8(7, 0x20); // ' '
+      sigView.setUint32(8, 0x0d0a870a, false);
+      boxes.push(new Uint8Array(sigBox));
+
+      // 2. ftyp box with extended length (boxLen field = 1, then 8-byte extended length)
+      // Extended header = 16 bytes; actual payload = loLen - 16 (when hiLen == 0)
+      const ftypPayloadSize = 12; // brand(4) + version(4) + compat(4)
+      const ftypTotalSize = 16 + ftypPayloadSize; // extended header + payload
+      const ftypBox = new ArrayBuffer(ftypTotalSize);
+      const ftypView = new DataView(ftypBox);
+      ftypView.setUint32(0, 1, false); // boxLen = 1 → extended
+      const ftypStr = 'ftyp';
+      for (let i = 0; i < 4; i++) ftypView.setUint8(4 + i, ftypStr.charCodeAt(i));
+      ftypView.setUint32(8, hiLen, false); // high 32 bits
+      ftypView.setUint32(12, loLen, false); // low 32 bits (== ftypTotalSize when hiLen==0)
+      const brand = 'jp2 ';
+      for (let i = 0; i < 4; i++) ftypView.setUint8(16 + i, brand.charCodeAt(i));
+      ftypView.setUint32(20, 0, false); // minor version
+      for (let i = 0; i < 4; i++) ftypView.setUint8(24 + i, brand.charCodeAt(i));
+      boxes.push(new Uint8Array(ftypBox));
+
+      // 3. jp2h superbox with ihdr
+      const ihdrBox = new ArrayBuffer(22);
+      const ihdrView = new DataView(ihdrBox);
+      ihdrView.setUint32(0, 22, false);
+      const ihdrStr = 'ihdr';
+      for (let i = 0; i < 4; i++) ihdrView.setUint8(4 + i, ihdrStr.charCodeAt(i));
+      ihdrView.setUint32(8, 64, false); // height
+      ihdrView.setUint32(12, 64, false); // width
+      ihdrView.setUint16(16, 3, false); // numComponents
+      ihdrView.setUint8(18, 7); // bpc = 8-1 = 7
+      ihdrView.setUint8(19, 7); // compression
+      ihdrView.setUint8(20, 0);
+      ihdrView.setUint8(21, 0);
+
+      const jp2hLen = 8 + ihdrBox.byteLength;
+      const jp2hBox = new ArrayBuffer(jp2hLen);
+      const jp2hView = new DataView(jp2hBox);
+      jp2hView.setUint32(0, jp2hLen, false);
+      const jp2hStr = 'jp2h';
+      for (let i = 0; i < 4; i++) jp2hView.setUint8(4 + i, jp2hStr.charCodeAt(i));
+      new Uint8Array(jp2hBox).set(new Uint8Array(ihdrBox), 8);
+      boxes.push(new Uint8Array(jp2hBox));
+
+      // 4. jp2c box with minimal codestream
+      const csBytes = makeJ2KCodestream({
+        width: 64,
+        height: 64,
+        numComponents: 3,
+        bitsPerComponent: 8,
+      });
+      const jp2cLen = 8 + csBytes.byteLength;
+      const jp2cBox = new ArrayBuffer(jp2cLen);
+      const jp2cView = new DataView(jp2cBox);
+      jp2cView.setUint32(0, jp2cLen, false);
+      const jp2cStr = 'jp2c';
+      for (let i = 0; i < 4; i++) jp2cView.setUint8(4 + i, jp2cStr.charCodeAt(i));
+      new Uint8Array(jp2cBox).set(new Uint8Array(csBytes), 8);
+      boxes.push(new Uint8Array(jp2cBox));
+
+      // Concatenate
+      const totalLen = boxes.reduce((sum, b) => sum + b.byteLength, 0);
+      const result = new Uint8Array(totalLen);
+      let off = 0;
+      for (const box of boxes) {
+        result.set(box, off);
+        off += box.byteLength;
+      }
+      return result.buffer as ArrayBuffer;
+    }
+
+    it('JP2-EXT-001: normal JP2 boxes still parse correctly', () => {
+      const buffer = makeJP2Buffer({ width: 128, height: 128, numComponents: 3, bitsPerComponent: 8 });
+      const info = parseJP2Header(buffer);
+      expect(info.width).toBe(128);
+      expect(info.height).toBe(128);
+      expect(info.numComponents).toBe(3);
+    });
+
+    it('JP2-EXT-002: extended box with high 32 bits = 0 still works', () => {
+      // ftyp box: extended header (16) + payload (12) = 28
+      const buffer = makeJP2WithExtendedBox(0, 28);
+      const info = parseJP2Header(buffer);
+      expect(info.width).toBe(64);
+      expect(info.height).toBe(64);
+      expect(info.numComponents).toBe(3);
+    });
+
+    it('JP2-EXT-003: extended box with high 32 bits > 0 emits warning and stops parsing', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        // hiLen > 0 means > 4GB box; parser should warn and stop before finding jp2c
+        const buffer = makeJP2WithExtendedBox(1, 28);
+        // parseJP2Header should fail because findCodestreamOffset returns -1
+        expect(() => parseJP2Header(buffer)).toThrow();
+        expect(warnSpy).toHaveBeenCalledTimes(1);
+        const warnMsg = String(warnSpy.mock.calls[0]![0]);
+        expect(warnMsg).toContain('ftyp');
+        expect(warnMsg).toContain('>4 GB');
+      } finally {
+        warnSpy.mockRestore();
+      }
     });
   });
 

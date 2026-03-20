@@ -6,9 +6,15 @@
  * top-level orchestrator.
  */
 
-import { decodeSessionState, type SessionURLState } from '../core/session/SessionURLManager';
+import {
+  decodeSessionState,
+  type SessionURLState,
+  type RepresentationURLState,
+} from '../core/session/SessionURLManager';
 import { decodeWebRTCURLSignal, WEBRTC_URL_SIGNAL_PARAM } from '../network/WebRTCURLSignaling';
 import type { Transform2D } from '../core/types/transform';
+import { DEFAULT_TRANSFORM } from '../core/types/transform';
+import type { AddRepresentationConfig, MediaRepresentation } from '../core/types/representation';
 
 // ---------------------------------------------------------------------------
 // Dependency interfaces (structural typing)
@@ -22,6 +28,7 @@ export interface URLSession {
   readonly outPoint: number;
   readonly currentSourceIndex: number;
   readonly currentSource: { url?: string } | null;
+  readonly allSources: ReadonlyArray<{ url?: string }>;
   readonly sourceAIndex: number;
   readonly sourceBIndex: number;
   readonly currentAB: 'A' | 'B';
@@ -32,7 +39,16 @@ export interface URLSession {
   setOutPoint(frame: number): void;
   setSourceA(index: number): void;
   setSourceB(index: number): void;
+  clearSourceB(): void;
   setCurrentAB(ab: 'A' | 'B'): void;
+  /** Load media from a URL. Used to reconstruct shared media on a clean session. */
+  loadSourceFromUrl?(url: string): Promise<void>;
+  /** Get the active representation for a source. Returns null if none. */
+  getActiveRepresentation?(sourceIndex: number): MediaRepresentation | null;
+  /** Add a representation to a source. Returns the created representation or null. */
+  addRepresentationToSource?(sourceIndex: number, config: AddRepresentationConfig): MediaRepresentation | null;
+  /** Switch the active representation for a source. Returns true on success. */
+  activateRepresentation?(sourceIndex: number, repId: string): Promise<boolean>;
 }
 
 /** Subset of Viewer used by URL state management. */
@@ -97,6 +113,12 @@ export interface SessionURLDeps {
   getLocationSearch: () => string;
   getLocationHash: () => string;
   getLocationHref: () => string;
+  /**
+   * Optional callback to load a source from URL into the session,
+   * returning the new source index (or -1 on failure).
+   * Used when the session already has media loaded.
+   */
+  loadSourceFromUrl?: (url: string) => Promise<number>;
 }
 
 // ---------------------------------------------------------------------------
@@ -116,6 +138,41 @@ export class SessionURLService {
     const ocioState = ocioControl.getState();
     const source = session.currentSource;
 
+    // Collect all source URLs when multiple sources are loaded
+    // (enables multi-source A/B compare reconstruction on the receiving end)
+    let sourceUrls: string[] | undefined;
+    if (session.allSources.length > 1) {
+      const urls = session.allSources
+        .map((s) => s.url)
+        .filter((u): u is string => typeof u === 'string' && u.length > 0);
+      if (urls.length > 1) {
+        sourceUrls = urls;
+      }
+    }
+
+    // Collect active representations for each source
+    let representations: RepresentationURLState[] | undefined;
+    if (session.getActiveRepresentation) {
+      const reps: RepresentationURLState[] = [];
+      for (let i = 0; i < session.allSources.length; i++) {
+        const rep = session.getActiveRepresentation(i);
+        if (rep) {
+          const { file: _file, files: _files, ...serializableConfig } = rep.loaderConfig;
+          reps.push({
+            sourceIndex: i,
+            id: rep.id,
+            label: rep.label,
+            kind: rep.kind,
+            resolution: { ...rep.resolution },
+            loaderConfig: { ...serializableConfig },
+          });
+        }
+      }
+      if (reps.length > 0) {
+        representations = reps;
+      }
+    }
+
     return {
       frame: session.currentFrame,
       fps: session.fps,
@@ -123,6 +180,7 @@ export class SessionURLService {
       outPoint: session.outPoint,
       sourceIndex: session.currentSourceIndex,
       sourceUrl: source?.url,
+      sourceUrls,
       sourceAIndex: session.sourceAIndex,
       sourceBIndex: session.sourceBIndex >= 0 ? session.sourceBIndex : undefined,
       currentAB: session.currentAB,
@@ -139,17 +197,110 @@ export class SessionURLService {
             look: ocioState.look,
           }
         : undefined,
+      representations,
     };
   }
 
+  /**
+   * Find the index of an already-loaded source by URL match.
+   * Returns -1 if no match found.
+   */
+  private findSourceIndexByUrl(url: string): number {
+    const { session } = this.deps;
+    for (let i = 0; i < session.allSources.length; i++) {
+      if (session.allSources[i]?.url === url) return i;
+    }
+    return -1;
+  }
+
+  /**
+   * Load multiple source URLs in order, skipping any that are already loaded.
+   * Used to reconstruct multi-source A/B compare sessions from share links.
+   */
+  private async loadMultipleSources(urls: string[]): Promise<void> {
+    const { session } = this.deps;
+
+    for (const url of urls) {
+      // Skip if already loaded
+      if (this.findSourceIndexByUrl(url) >= 0) {
+        console.info(`[SessionURLService] Source already loaded, skipping: ${url}`);
+        continue;
+      }
+
+      try {
+        console.info(`[SessionURLService] Loading source from share link: ${url}`);
+        if (session.sourceCount === 0 && session.loadSourceFromUrl) {
+          await session.loadSourceFromUrl(url);
+        } else if (this.deps.loadSourceFromUrl) {
+          await this.deps.loadSourceFromUrl(url);
+        } else {
+          console.warn(`[SessionURLService] No loader available for source: ${url}`);
+        }
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err);
+        console.warn(`[SessionURLService] Failed to load source: ${url}`, err);
+        this.deps.networkControl.showInfo(`Failed to load shared media: ${reason}`);
+      }
+    }
+  }
+
   /** Apply a decoded session state to the session/viewer. */
-  applySessionURLState(state: SessionURLState): void {
+  async applySessionURLState(state: SessionURLState): Promise<void> {
     const { session, viewer, compareControl, ocioControl, networkSyncManager } = this.deps;
+
+    // Phase 1: Resolve shared media (always, regardless of session state)
+    // If sourceUrls (multi-source) or sourceUrl (single-source) is present,
+    // ensure that media is available in the session before applying view/compare state.
+    let resolvedSourceIndex = state.sourceIndex;
+
+    if (state.sourceUrls && state.sourceUrls.length > 0) {
+      // Multi-source share link: load all source URLs in order
+      await this.loadMultipleSources(state.sourceUrls);
+      // resolvedSourceIndex stays as state.sourceIndex — the indices should
+      // match because we loaded sources in the same order they were captured.
+      resolvedSourceIndex = Math.min(state.sourceIndex, Math.max(0, session.sourceCount - 1));
+    } else if (state.sourceUrl) {
+      // Legacy single-source share link
+      // First, check if the URL is already loaded
+      const existingIndex = this.findSourceIndexByUrl(state.sourceUrl);
+      if (existingIndex >= 0) {
+        // Already loaded — just navigate to it
+        resolvedSourceIndex = existingIndex;
+        console.info(`[SessionURLService] Shared media already loaded at index ${existingIndex}`);
+      } else {
+        // Not loaded yet — attempt to load it
+        try {
+          console.info(`[SessionURLService] Loading media from share link: ${state.sourceUrl}`);
+          if (session.sourceCount === 0 && session.loadSourceFromUrl) {
+            // Empty session: use session's own loadSourceFromUrl
+            await session.loadSourceFromUrl(state.sourceUrl);
+            // After loading, the new source should be the last one
+            resolvedSourceIndex = Math.max(0, session.sourceCount - 1);
+          } else if (this.deps.loadSourceFromUrl) {
+            // Non-empty session: use the deps callback to add a new source
+            const newIndex = await this.deps.loadSourceFromUrl(state.sourceUrl);
+            if (newIndex >= 0) {
+              resolvedSourceIndex = newIndex;
+            } else {
+              console.warn('[SessionURLService] loadSourceFromUrl returned -1, using original sourceIndex');
+            }
+          }
+        } catch (err) {
+          const reason = err instanceof Error ? err.message : String(err);
+          console.warn(
+            '[SessionURLService] Failed to load media from share link sourceUrl, continuing with view state:',
+            err,
+          );
+          this.deps.networkControl.showInfo(`Failed to load shared media: ${reason}`);
+        }
+      }
+    }
+
     const syncStateManager = networkSyncManager.getSyncStateManager();
     syncStateManager.beginApplyRemote();
     try {
       if (session.sourceCount > 0) {
-        const sourceIndex = Math.max(0, Math.min(session.sourceCount - 1, state.sourceIndex));
+        const sourceIndex = Math.max(0, Math.min(session.sourceCount - 1, resolvedSourceIndex));
         session.setCurrentSource(sourceIndex);
       }
 
@@ -164,10 +315,26 @@ export class SessionURLService {
       }
 
       if (typeof state.sourceAIndex === 'number') {
-        session.setSourceA(state.sourceAIndex);
+        // Clamp sourceAIndex to valid range (0 to sourceCount-1)
+        const clampedA =
+          session.sourceCount > 0 ? Math.max(0, Math.min(session.sourceCount - 1, state.sourceAIndex)) : 0;
+        session.setSourceA(clampedA);
+
+        // When the share link is compare-aware (sourceAIndex present) but has
+        // no B assignment, explicitly clear the recipient's B source so it
+        // matches the sender's "no B" state.  Links without any compare state
+        // (older versions) leave B untouched for backward compat.
+        if (typeof state.sourceBIndex !== 'number') {
+          session.clearSourceB();
+        }
       }
       if (typeof state.sourceBIndex === 'number') {
-        session.setSourceB(state.sourceBIndex);
+        // Validate sourceBIndex: if out of range, clear B instead of setting invalid index
+        if (session.sourceCount > 0 && state.sourceBIndex >= 0 && state.sourceBIndex < session.sourceCount) {
+          session.setSourceB(state.sourceBIndex);
+        } else {
+          session.clearSourceB();
+        }
       }
       if (state.currentAB === 'A' || state.currentAB === 'B') {
         session.setCurrentAB(state.currentAB);
@@ -179,13 +346,31 @@ export class SessionURLService {
 
       if (state.transform) {
         viewer.setTransform(state.transform);
+      } else {
+        // Reset transform to default when omitted (compact encoding strips defaults)
+        viewer.setTransform({
+          ...DEFAULT_TRANSFORM,
+          scale: { ...DEFAULT_TRANSFORM.scale },
+          translate: { ...DEFAULT_TRANSFORM.translate },
+        });
       }
 
       if (typeof state.wipeMode === 'string') {
         compareControl.setWipeMode(state.wipeMode);
+      } else {
+        // Reset wipe to 'off' when omitted (compact encoding strips 'off')
+        compareControl.setWipeMode('off');
       }
       if (typeof state.wipePosition === 'number') {
         compareControl.setWipePosition(state.wipePosition);
+      } else {
+        // Reset wipe position to center when omitted (compact encoding strips 0.5)
+        compareControl.setWipePosition(0.5);
+      }
+
+      if (state.currentAB == null) {
+        // Reset to 'A' when omitted (compact encoding strips 'A')
+        session.setCurrentAB('A');
       }
 
       if (state.ocio) {
@@ -198,6 +383,40 @@ export class SessionURLService {
           view: state.ocio.view ?? currentOcio.view,
           look: state.ocio.look ?? currentOcio.look,
         });
+      } else {
+        // Reset OCIO to disabled when omitted (compact encoding strips disabled OCIO)
+        const currentOcio = ocioControl.getState();
+        if (currentOcio.enabled) {
+          ocioControl.setState({ ...currentOcio, enabled: false });
+        }
+      }
+
+      // Restore active representations
+      if (
+        state.representations &&
+        state.representations.length > 0 &&
+        session.addRepresentationToSource &&
+        session.activateRepresentation
+      ) {
+        for (const repState of state.representations) {
+          try {
+            const rep = session.addRepresentationToSource(repState.sourceIndex, {
+              id: repState.id,
+              label: repState.label,
+              kind: repState.kind,
+              resolution: repState.resolution,
+              loaderConfig: repState.loaderConfig,
+            });
+            if (rep) {
+              await session.activateRepresentation(repState.sourceIndex, rep.id);
+            }
+          } catch (err) {
+            console.warn(
+              `[SessionURLService] Failed to restore representation "${repState.label}" for source ${repState.sourceIndex}:`,
+              err,
+            );
+          }
+        }
       }
     } finally {
       syncStateManager.endApplyRemote();
@@ -248,23 +467,41 @@ export class SessionURLService {
           networkControl.showInfo(
             'Connected as guest via WebRTC. Copy the response token (or response URL) and send it to the host.',
           );
+        } else {
+          networkControl.showInfo(
+            'The WebRTC invite link could not be processed. It may be malformed, expired, or the connection is already in use.',
+          );
         }
       } else if (signal?.type === 'answer') {
         handledServerlessOffer = true;
         networkControl.showInfo(
           'This is a WebRTC response link. Paste it into the host Network Sync panel and click Apply.',
         );
+      } else {
+        // signal is null (malformed/corrupt token) or has an unrecognized type
+        handledServerlessOffer = true;
+        networkControl.showInfo('The WebRTC link is malformed or corrupted and could not be processed.');
       }
     }
 
-    if (!handledServerlessOffer && roomCode && pinCode) {
-      networkSyncManager.joinRoom(roomCode.toUpperCase(), 'User', pinCode);
+    if (!handledServerlessOffer && roomCode) {
+      networkSyncManager.joinRoom(roomCode.toUpperCase(), 'User', pinCode ?? undefined);
     }
 
-    const sharedState = decodeSessionState(this.deps.getLocationHash());
+    const locationHash = this.deps.getLocationHash();
+    const sharedState = decodeSessionState(locationHash);
     if (sharedState) {
-      this.applySessionURLState(sharedState);
+      await this.applySessionURLState(sharedState);
+    } else if (this.hashContainsSessionParam(locationHash)) {
+      networkControl.showInfo('Could not restore shared session state: the link may be corrupted or incomplete.');
     }
+  }
+
+  /** Check whether the hash fragment contains a `s=` session parameter. */
+  private hashContainsSessionParam(hash: string): boolean {
+    const cleaned = hash.startsWith('#') ? hash.slice(1) : hash;
+    if (!cleaned) return false;
+    return cleaned.startsWith('s=') || cleaned.includes('&s=');
   }
 
   /** Release references. */

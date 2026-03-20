@@ -1,5 +1,6 @@
 import { type GTODTO, type GTOData } from 'gto-js';
 import { EventEmitter } from '../../utils/EventEmitter';
+import { basename } from '../../utils/path';
 import type { RVEDLEntry } from '../../formats/RVEDLParser';
 import type { PatternName, GradientDirection } from '../../nodes/sources/ProceduralSourceNode';
 import type { HDRResizeTier } from '../../utils/media/HDRFrameResizer';
@@ -37,11 +38,16 @@ import { MARKER_COLORS, type Marker, type MarkerColor } from './MarkerManager';
 import type { NoteManager } from './NoteManager';
 import type { VersionManager } from './VersionManager';
 import type { StatusManager } from './StatusManager';
+import type { SerializedGraph } from './SessionManagerTypes';
 import { SessionAnnotations } from './SessionAnnotations';
 import { SessionGraph } from './SessionGraph';
 import { SessionMedia } from './SessionMedia';
 import { SessionPlayback } from './SessionPlayback';
+import { SessionManager } from './SessionManager';
 import type { AudioPlaybackManager } from '../../audio/AudioPlaybackManager';
+import { isDecoderBackedExtension } from '../../utils/media/SupportedMediaFormats';
+import { fetchUrlAsFile } from '../../utils/media/fetchUrlAsFile';
+import { isSequencePattern } from '../../utils/media/SequenceLoader';
 // Logger removed — playback logging now lives in SessionPlayback.
 
 // Re-export types from SessionTypes for backward compatibility
@@ -90,6 +96,9 @@ export class Session extends EventEmitter<SessionEvents> {
 
   // Media source management service
   private _media = new SessionMedia();
+
+  // Graph mutation / view-history orchestrator
+  private _sessionManager = new SessionManager();
 
   // Static constant for starvation threshold - kept for backward compatibility
   static readonly MAX_CONSECUTIVE_STARVATION_SKIPS = MAX_CONSECUTIVE_STARVATION_SKIPS;
@@ -321,12 +330,20 @@ export class Session extends EventEmitter<SessionEvents> {
       'matteChanged',
       'notesChanged',
       'versionsChanged',
+      'activeVersionChanged',
       'statusChanged',
       'statusesChanged',
     ] as const;
     for (const event of annotationEvents) {
       this._annotations.on(event as any, (data: any) => this.emit(event as any, data));
     }
+
+    // Wire active-version changes to source switching
+    this._annotations.on('activeVersionChanged', ({ entry }) => {
+      if (typeof entry.sourceIndex === 'number' && entry.sourceIndex >= 0 && entry.sourceIndex < this.sourceCount) {
+        this.setCurrentSource(entry.sourceIndex);
+      }
+    });
 
     // Wire SessionGraph host
     this._sessionGraph.setHost({
@@ -348,6 +365,9 @@ export class Session extends EventEmitter<SessionEvents> {
       setPlaybackMode: (mode) => {
         this.playbackMode = mode;
       },
+      setAudioScrubEnabled: (enabled) => {
+        this.audioScrubEnabled = enabled;
+      },
       emitInOutChanged: (inP, outP) => this.emit('inOutChanged', { inPoint: inP, outPoint: outP }),
       emitFrameIncrementChanged: (inc) => this.emit('frameIncrementChanged', inc),
       getAnnotations: () => this._annotations,
@@ -355,7 +375,15 @@ export class Session extends EventEmitter<SessionEvents> {
     });
 
     // Forward SessionGraph events
-    const graphEvents = ['graphLoaded', 'settingsLoaded', 'sessionLoaded', 'edlLoaded', 'metadataChanged'] as const;
+    const graphEvents = [
+      'graphLoaded',
+      'settingsLoaded',
+      'sessionLoaded',
+      'edlLoaded',
+      'metadataChanged',
+      'skippedNodes',
+      'degradedModes',
+    ] as const;
     for (const event of graphEvents) {
       this._sessionGraph.on(event as any, (data: any) => this.emit(event as any, data));
     }
@@ -377,6 +405,7 @@ export class Session extends EventEmitter<SessionEvents> {
         this._currentFrame = v;
       },
       pause: () => this.pause(),
+      play: () => this.play(),
       getIsPlaying: () => this._isPlaying,
       getMuted: () => this._playback._volumeManager.muted,
       getEffectiveVolume: () => this._playback._volumeManager.getEffectiveVolume(),
@@ -384,22 +413,46 @@ export class Session extends EventEmitter<SessionEvents> {
       onSourceAdded: (c) => this._playback._abCompareManager.onSourceAdded(c),
       emitABChanged: (i) => this._playback._abCompareManager.emitChanged(i),
       loadAudioFromVideo: (video, vol, muted) => this._playback._audioCoordinator.loadFromVideo(video, vol, muted),
-      clearGraphData: () => this._sessionGraph.clearData(),
+      clearGraphData: () => {
+        this._sessionGraph.clearData();
+        this._sessionManager.onGraphCleared();
+      },
       emitFpsChanged: (fps) => this.emit('fpsChanged', fps),
       emitInOutChanged: (inP, outP) => this.emit('inOutChanged', { inPoint: inP, outPoint: outP }),
     });
 
     // Forward SessionMedia events
     const mediaEvents = [
+      'sourceLoadingStarted',
       'sourceLoaded',
+      'sourceLoadFailed',
       'durationChanged',
+      'currentSourceChanged',
       'unsupportedCodec',
+      'hdrDowngraded',
       'representationChanged',
       'representationError',
       'fallbackActivated',
     ] as const;
     for (const event of mediaEvents) {
       this._media.on(event as any, (data: any) => this.emit(event as any, data));
+    }
+
+    // Wire SessionManager host — gives it access to the current graph
+    this._sessionManager.setHost({
+      getGraph: () => this._sessionGraph.graph,
+    });
+
+    // Connect SessionManager to graph lifecycle events:
+    // When a new graph is loaded (GTO import), re-subscribe to graph signals.
+    this._sessionGraph.on('graphLoaded', () => {
+      this._sessionManager.onGraphCreated();
+    });
+
+    // Forward SessionManager events to Session events
+    const sessionManagerEvents = ['viewNodeChanged', 'graphStructureChanged', 'viewHistoryChanged'] as const;
+    for (const event of sessionManagerEvents) {
+      this._sessionManager.on(event as any, (data: any) => this.emit(event as any, data));
     }
   }
 
@@ -408,7 +461,7 @@ export class Session extends EventEmitter<SessionEvents> {
     return this._media;
   }
 
-  protected addSource(source: MediaSource): void {
+  addSource(source: MediaSource): void {
     this._media.addSource(source);
   }
 
@@ -428,6 +481,21 @@ export class Session extends EventEmitter<SessionEvents> {
 
   get gtoData(): GTOData | null {
     return this._sessionGraph.gtoData;
+  }
+
+  /**
+   * Serialize the current live node graph for .orvproject persistence.
+   */
+  toSerializedGraph(): SerializedGraph | null {
+    return this._sessionGraph.toSerializedGraph();
+  }
+
+  /**
+   * Restore a live node graph from .orvproject serialized graph data.
+   * Returns non-fatal warnings for skipped nodes or broken connections.
+   */
+  loadSerializedGraph(data: SerializedGraph): string[] {
+    return this._sessionGraph.loadSerializedGraph(data);
   }
 
   /**
@@ -515,6 +583,14 @@ export class Session extends EventEmitter<SessionEvents> {
     return this._sessionGraph.edlEntries;
   }
 
+  /**
+   * Replace the stored EDL entries and emit `edlLoaded` when non-empty.
+   * Used by project restore to rehydrate previously-saved EDL state.
+   */
+  setEdlEntries(entries: RVEDLEntry[]): void {
+    this._sessionGraph.setEdlEntries(entries);
+  }
+
   /** Aggregated annotation services (markers, notes, versions, statuses, annotation store) */
   get annotations(): SessionAnnotations {
     return this._annotations;
@@ -548,6 +624,11 @@ export class Session extends EventEmitter<SessionEvents> {
   /** Shot status tracking (review workflow) */
   get statusManager(): StatusManager {
     return this._annotations.statusManager;
+  }
+
+  /** Graph mutation / view-history orchestrator */
+  get sessionManager(): SessionManager {
+    return this._sessionManager;
   }
 
   /** Session metadata (name, comment, version, origin) */
@@ -771,6 +852,17 @@ export class Session extends EventEmitter<SessionEvents> {
     this._playback.pause();
   }
 
+  /**
+   * Stop playback: pause and return to the start (in point).
+   * Emits `playbackStopped` after the seek so listeners can distinguish
+   * a stop from a regular pause.
+   */
+  stop(): void {
+    this._playback.pause();
+    this._playback.goToStart();
+    this.emit('playbackStopped', undefined as void);
+  }
+
   togglePlayback(): void {
     this._playback.togglePlayback();
   }
@@ -781,6 +873,10 @@ export class Session extends EventEmitter<SessionEvents> {
 
   get playDirection(): number {
     return this._playback.playDirection;
+  }
+
+  set playDirection(value: number) {
+    this._playback.playDirection = value;
   }
 
   /**
@@ -906,7 +1002,7 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   // Session loading — delegated to SessionGraph
-  async loadFromGTO(data: ArrayBuffer | string, availableFiles?: Map<string, File>): Promise<void> {
+  async loadFromGTO(data: ArrayBuffer | string, availableFiles?: Map<string, File[]>): Promise<void> {
     return this._sessionGraph.loadFromGTO(data, availableFiles);
   }
 
@@ -1087,6 +1183,102 @@ export class Session extends EventEmitter<SessionEvents> {
     return this._media.loadSequence(files, fps);
   }
 
+  async loadImageSequenceFromPattern(
+    name: string,
+    pattern: string,
+    startFrame: number,
+    endFrame: number,
+    fps?: number,
+  ): Promise<void> {
+    return this._media.loadImageSequenceFromPattern(name, pattern, startFrame, endFrame, fps);
+  }
+
+  /**
+   * Load media from a URL, auto-detecting whether it is a video or image
+   * based on the file extension. Used to reconstruct shared media from a
+   * share-link sourceUrl on a clean session.
+   *
+   * For decoder-backed image formats (EXR, DPX, TIFF, etc.) the URL is
+   * fetched and routed through the FileSourceNode pipeline via loadImageFile().
+   */
+  async loadSourceFromUrl(url: string): Promise<void> {
+    // Detect sequence pattern strings (e.g. shot.####.exr, frame.%04d.exr, render.@@@@.exr).
+    // Only treat non-URL strings as patterns — a full URL like
+    // https://cdn.example.com/clip.mp4#signed must not be matched by the
+    // hash-pattern detector (the '#' in the URL fragment would be a false positive).
+    const looksLikeUrl = /^https?:\/\//i.test(url);
+    if (!looksLikeUrl && isSequencePattern(url)) {
+      return this.loadSequenceFromPatternString(url);
+    }
+
+    const allowedSchemes = ['http:', 'https:'];
+    try {
+      const parsed = new URL(url);
+      if (!allowedSchemes.includes(parsed.protocol)) {
+        throw new Error(`Unsupported URL scheme: ${parsed.protocol}`);
+      }
+    } catch (e) {
+      if (e instanceof Error && e.message.startsWith('Unsupported')) throw e;
+      throw new Error('Invalid source URL');
+    }
+
+    const pathname = new URL(url).pathname;
+    const name = decodeURIComponent(basename(pathname));
+    const ext = name.includes('.') ? name.split('.').pop()!.toLowerCase() : '';
+    const videoExts = new Set([
+      'mp4',
+      'm4v',
+      '3gp',
+      '3g2',
+      'mov',
+      'qt',
+      'mkv',
+      'mk3d',
+      'webm',
+      'ogg',
+      'ogv',
+      'ogm',
+      'ogx',
+      'avi',
+    ]);
+    if (videoExts.has(ext)) {
+      return this.loadVideo(name, url);
+    }
+    if (isDecoderBackedExtension(ext)) {
+      const file = await fetchUrlAsFile(url, name);
+      return this.loadImageFile(file);
+    }
+    return this.loadImage(name, url);
+  }
+
+  /**
+   * Load a sequence from a pattern string like `shot.####.exr`, `frame.%04d.exr`,
+   * or `render.@@@@.exr`. Uses default frame range 1-100 unless specified via
+   * `loadImageSequenceFromPattern()` directly.
+   *
+   * @param pattern - A path/filename with a frame placeholder (`####`, `%04d`, or `@@@@`)
+   * @param startFrame - First frame number (inclusive, default: 1)
+   * @param endFrame - Last frame number (inclusive, default: 100)
+   * @param fps - Frame rate (default: session fps)
+   */
+  async loadSequenceFromPatternString(
+    pattern: string,
+    startFrame: number = 1,
+    endFrame: number = 100,
+    fps?: number,
+  ): Promise<void> {
+    const patternFilename = pattern.split('/').pop() ?? pattern;
+    const name =
+      patternFilename
+        .replace(/##+/g, '')
+        .replace(/%\d*d/g, '')
+        .replace(/@+/g, '')
+        .replace(/[._-]?\.[^.]+$/, '')
+        .replace(/[._-]$/, '') || 'sequence';
+
+    return this.loadImageSequenceFromPattern(name, pattern, startFrame, endFrame, fps);
+  }
+
   // Frame access — delegated to SessionMedia
   async getSequenceFrameImage(frameIndex?: number): Promise<ImageBitmap | null> {
     return this._media.getSequenceFrameImage(frameIndex);
@@ -1164,6 +1356,14 @@ export class Session extends EventEmitter<SessionEvents> {
 
   clearVideoCache(): void {
     this._media.clearVideoCache();
+  }
+
+  /**
+   * Clear all loaded media sources, releasing associated resources.
+   * Used before loading a new project to replace the session (fix #121).
+   */
+  clearSources(): void {
+    this._media.clearSources();
   }
 
   setCurrentSource(index: number): void {
@@ -1280,6 +1480,9 @@ export class Session extends EventEmitter<SessionEvents> {
     audioScrubEnabled: boolean;
     marks: Marker[];
     currentSourceIndex: number;
+    sourceAIndex: number;
+    sourceBIndex: number;
+    currentAB: 'A' | 'B';
   } {
     return {
       currentFrame: this._currentFrame,
@@ -1294,6 +1497,9 @@ export class Session extends EventEmitter<SessionEvents> {
       audioScrubEnabled: this._playback.audioScrubEnabled,
       marks: this._annotations.markerManager.toArray(),
       currentSourceIndex: this._currentSourceIndex,
+      sourceAIndex: this.sourceAIndex,
+      sourceBIndex: this.sourceBIndex,
+      currentAB: this.currentAB,
     };
   }
 
@@ -1314,6 +1520,9 @@ export class Session extends EventEmitter<SessionEvents> {
       audioScrubEnabled: boolean;
       marks: Marker[] | number[]; // Support both old and new format
       currentSourceIndex: number;
+      sourceAIndex: number;
+      sourceBIndex: number;
+      currentAB: 'A' | 'B';
     }>,
   ): void {
     if (state.fps !== undefined) this.fps = state.fps;
@@ -1332,6 +1541,23 @@ export class Session extends EventEmitter<SessionEvents> {
     if (state.marks) {
       this._annotations.markerManager.setFromArray(state.marks);
     }
+    // Restore current source selection after media is loaded.
+    if (state.currentSourceIndex !== undefined && state.currentSourceIndex >= 0) {
+      this.setCurrentSource(state.currentSourceIndex);
+    }
+    if (state.sourceAIndex !== undefined && state.sourceAIndex >= 0) {
+      this.setSourceA(state.sourceAIndex);
+    }
+    if (state.sourceBIndex !== undefined) {
+      if (state.sourceBIndex >= 0) {
+        this.setSourceB(state.sourceBIndex);
+      } else {
+        this.clearSourceB();
+      }
+    }
+    if (state.currentAB === 'A' || state.currentAB === 'B') {
+      this.setCurrentAB(state.currentAB);
+    }
   }
 
   /**
@@ -1346,5 +1572,6 @@ export class Session extends EventEmitter<SessionEvents> {
     this._media.dispose();
     this._annotations.dispose();
     this._sessionGraph.dispose();
+    this._sessionManager.dispose();
   }
 }

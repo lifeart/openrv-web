@@ -72,6 +72,8 @@ export interface VideoMetadata {
   isProfessionalCodec: boolean;
   /** True if the video track has HDR (Dolby Vision, HLG, PQ) */
   isHDR: boolean;
+  /** True if the video was detected as HDR but was downgraded to SDR because VideoSampleSink setup failed */
+  hdrDowngraded: boolean;
   /** VideoColorSpaceInit from the video track (primaries, transfer, matrix, fullRange) */
   colorSpace: VideoColorSpaceInit | null;
 }
@@ -308,11 +310,13 @@ export class MediabunnyFrameExtractor {
       }
 
       // Create VideoSampleSink for HDR frame extraction when HDR is detected
+      let hdrDowngraded = false;
       if (isHDR) {
         try {
           this.videoSampleSink = new VideoSampleSink(this.videoTrack);
         } catch (e) {
           log.warn('VideoSampleSink creation failed, HDR frames will use SDR fallback:', e);
+          hdrDowngraded = true;
           isHDR = false;
         }
       }
@@ -335,6 +339,7 @@ export class MediabunnyFrameExtractor {
         canDecode,
         isProfessionalCodec: isProfessionalCodec(codecFamily),
         isHDR,
+        hdrDowngraded,
         colorSpace: videoColorSpace,
       };
 
@@ -470,6 +475,7 @@ export class MediabunnyFrameExtractor {
             log.warn('VideoSampleSink recreation failed after frame index build, falling back to SDR:', e);
             this.videoSampleSink = null;
             this.metadata.isHDR = false;
+            this.metadata.hdrDowngraded = true;
           }
         }
       }

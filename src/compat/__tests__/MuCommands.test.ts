@@ -9,13 +9,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MuCommands } from '../MuCommands';
 import { MuExtraCommands } from '../MuExtraCommands';
 import { registerMuCompat } from '../index';
-import {
-  PlayLoop,
-  PlayOnce,
-  PlayPingPong,
-  FilterNearest,
-  FilterLinear,
-} from '../constants';
+import { PlayLoop, PlayOnce, PlayPingPong, FilterNearest, FilterLinear } from '../constants';
 
 // =====================================================================
 // Mock openrv API
@@ -34,14 +28,22 @@ function createMockOpenRV() {
       setPlaybackMode: vi.fn(),
       getPlaybackMode: vi.fn((): string => 'realtime'),
       step: vi.fn(),
+      getMeasuredFPS: vi.fn((): number => 0),
       setSpeed: vi.fn(),
       getSpeed: vi.fn(() => 1),
+      setPlayDirection: vi.fn(),
+      getPlayDirection: vi.fn(() => 1),
       stop: vi.fn(),
+      isBuffering: vi.fn((): boolean => false),
+      getDroppedFrameCount: vi.fn((): number => 0),
     },
     media: {
       getFPS: vi.fn((): number => 24),
+      getPlaybackFPS: vi.fn((): number => 24),
+      setPlaybackFPS: vi.fn(),
       getResolution: vi.fn((): { width: number; height: number } => ({ width: 1920, height: 1080 })),
       hasMedia: vi.fn((): boolean => true),
+      getStartFrame: vi.fn((): number => 1),
       getCurrentSource: vi.fn(() => null),
       getDuration: vi.fn(() => 100),
       getSourceCount: vi.fn(() => 1),
@@ -73,6 +75,11 @@ function createMockOpenRV() {
       getPan: vi.fn((): { x: number; y: number } => ({ x: 0, y: 0 })),
       setChannel: vi.fn(),
       getChannel: vi.fn(() => 'rgb'),
+      setTextureFilterMode: vi.fn(),
+      getTextureFilterMode: vi.fn((): string => 'linear'),
+      setBackgroundPattern: vi.fn(),
+      getBackgroundPattern: vi.fn(() => ({ pattern: 'black', checkerSize: 'medium', customColor: '#1a1a1a' })),
+      getViewportSize: vi.fn((): { width: number; height: number } => ({ width: 1280, height: 720 })),
     },
     markers: {
       add: vi.fn(),
@@ -131,6 +138,71 @@ describe('MuCommands', () => {
       expect(cmd.isSupported('nonExistentCommand')).toBe(false);
     });
 
+    it('isSupported never returns stub for any command (#555)', () => {
+      // Regression: isSupported used to return 'stub' for some commands,
+      // which violates the CommandSupportStatus type contract (true | false | 'partial').
+      const allCommands = [
+        'play',
+        'stop',
+        'isPlaying',
+        'setFrame',
+        'frame',
+        'frameEnd',
+        'fps',
+        'setRealtime',
+        'isRealtime',
+        'setPlayMode',
+        'playMode',
+        'inPoint',
+        'outPoint',
+        'setInPoint',
+        'setOutPoint',
+        'frameStart',
+        'setFPS',
+        'realFPS',
+        'setInc',
+        'inc',
+        'skipped',
+        'isCurrentFrameIncomplete',
+        'isCurrentFrameError',
+        'isBuffering',
+        'mbps',
+        'resetMbps',
+        'scrubAudio',
+        'redraw',
+        'viewSize',
+        'setViewSize',
+        'resizeFit',
+        'fullScreenMode',
+        'isFullScreen',
+        'setWindowTitle',
+        'setFiltering',
+        'getFiltering',
+        'setBGMethod',
+        'bgMethod',
+        'setMargins',
+        'margins',
+        'contentAspect',
+        'devicePixelRatio',
+        'markFrame',
+        'isMarked',
+        'markedFrames',
+      ];
+      for (const name of allCommands) {
+        const status = cmd.isSupported(name);
+        expect(status).not.toBe('stub');
+        expect([true, false, 'partial']).toContain(status);
+      }
+    });
+
+    it('isSupported marks stub-like commands as partial, not stub (#555)', () => {
+      // These commands exist but only provide local-only behavior,
+      // so they are 'partial' rather than the previously-used 'stub'.
+      expect(cmd.isSupported('setViewSize')).toBe('partial');
+      expect(cmd.isSupported('setMargins')).toBe('partial');
+      expect(cmd.isSupported('margins')).toBe('partial');
+    });
+
     it('isAsync returns true for async commands', () => {
       expect(cmd.isAsync('fullScreenMode')).toBe(true);
     });
@@ -182,8 +254,23 @@ describe('MuCommands', () => {
       expect(cmd.frame()).toBe(42);
     });
 
-    it('frameStart() returns 1 by default', () => {
+    it('frameStart() delegates to openrv.media.getStartFrame()', () => {
+      mockOpenRV.media.getStartFrame.mockReturnValue(1);
       expect(cmd.frameStart()).toBe(1);
+      expect(mockOpenRV.media.getStartFrame).toHaveBeenCalled();
+    });
+
+    it('frameStart() returns real source start frame, not a hardcoded default', () => {
+      mockOpenRV.media.getStartFrame.mockReturnValue(1001);
+      expect(cmd.frameStart()).toBe(1001);
+    });
+
+    it('frameStart() reads from real API on every call (no local cache)', () => {
+      mockOpenRV.media.getStartFrame.mockReturnValue(1);
+      expect(cmd.frameStart()).toBe(1);
+
+      mockOpenRV.media.getStartFrame.mockReturnValue(86400);
+      expect(cmd.frameStart()).toBe(86400);
     });
 
     it('frameEnd() returns total frames', () => {
@@ -191,10 +278,30 @@ describe('MuCommands', () => {
       expect(cmd.frameEnd()).toBe(200);
     });
 
-    it('setFPS() / fps() manage FPS override', () => {
-      expect(cmd.fps()).toBe(24); // default from media
+    it('setFPS() calls the real API to change session playback FPS', () => {
       cmd.setFPS(30);
-      expect(cmd.fps()).toBe(30); // override
+      expect(mockOpenRV.media.setPlaybackFPS).toHaveBeenCalledWith(30);
+    });
+
+    it('fps() returns real session playback FPS after setFPS()', () => {
+      // Simulate the real API updating the playback FPS
+      mockOpenRV.media.getPlaybackFPS.mockReturnValue(30);
+      expect(cmd.fps()).toBe(30);
+    });
+
+    it('setFPS() affects playback state via the real API, not just local readback', () => {
+      cmd.setFPS(60);
+      expect(mockOpenRV.media.setPlaybackFPS).toHaveBeenCalledWith(60);
+      // fps() reads from the real API, not a local cache
+      mockOpenRV.media.getPlaybackFPS.mockReturnValue(60);
+      expect(cmd.fps()).toBe(60);
+      expect(mockOpenRV.media.getPlaybackFPS).toHaveBeenCalled();
+    });
+
+    it('fps() returns playback FPS (not source FPS) when no override', () => {
+      mockOpenRV.media.getPlaybackFPS.mockReturnValue(48);
+      mockOpenRV.media.getFPS.mockReturnValue(24);
+      expect(cmd.fps()).toBe(48);
     });
 
     it('setFPS() throws on invalid input', () => {
@@ -203,10 +310,32 @@ describe('MuCommands', () => {
       expect(() => cmd.setFPS(NaN)).toThrow(TypeError);
     });
 
-    it('realFPS() returns same as fps()', () => {
-      expect(cmd.realFPS()).toBe(24);
+    it('realFPS() returns measured FPS from playback engine', () => {
+      mockOpenRV.playback.getMeasuredFPS.mockReturnValue(23.5);
+      expect(cmd.realFPS()).toBe(23.5);
+      expect(mockOpenRV.playback.getMeasuredFPS).toHaveBeenCalled();
+    });
+
+    it('realFPS() differs from nominal fps() when playback is slower', () => {
+      // Nominal FPS is 24
+      expect(cmd.fps()).toBe(24);
+      // Measured FPS is lower due to slow playback
+      mockOpenRV.playback.getMeasuredFPS.mockReturnValue(18.2);
+      expect(cmd.realFPS()).toBe(18.2);
+      expect(cmd.realFPS()).not.toBe(cmd.fps());
+    });
+
+    it('realFPS() returns 0 when not playing', () => {
+      mockOpenRV.playback.getMeasuredFPS.mockReturnValue(0);
+      expect(cmd.realFPS()).toBe(0);
+    });
+
+    it('realFPS() is independent of setFPS()', () => {
       cmd.setFPS(60);
-      expect(cmd.realFPS()).toBe(60);
+      mockOpenRV.media.getPlaybackFPS.mockReturnValue(60);
+      expect(cmd.fps()).toBe(60); // nominal from real API
+      mockOpenRV.playback.getMeasuredFPS.mockReturnValue(58.7);
+      expect(cmd.realFPS()).toBe(58.7); // measured, not the nominal
     });
 
     it('setRealtime(true) sets realtime mode', () => {
@@ -227,23 +356,39 @@ describe('MuCommands', () => {
       expect(cmd.isRealtime()).toBe(false);
     });
 
-    it('setInc() / inc() manage playback direction', () => {
-      expect(cmd.inc()).toBe(1); // default forward
+    it('setInc() delegates to openrv.playback.setPlayDirection()', () => {
       cmd.setInc(-1);
-      expect(cmd.inc()).toBe(-1);
+      expect(mockOpenRV.playback.setPlayDirection).toHaveBeenCalledWith(-1);
       cmd.setInc(1);
-      expect(cmd.inc()).toBe(1);
+      expect(mockOpenRV.playback.setPlayDirection).toHaveBeenCalledWith(1);
     });
 
-    it('setInc() normalizes to +1/-1', () => {
-      cmd.setInc(5);
+    it('inc() reads from the real API via getPlayDirection()', () => {
+      mockOpenRV.playback.getPlayDirection.mockReturnValue(1);
       expect(cmd.inc()).toBe(1);
-      cmd.setInc(-3);
+      expect(mockOpenRV.playback.getPlayDirection).toHaveBeenCalled();
+
+      mockOpenRV.playback.getPlayDirection.mockReturnValue(-1);
       expect(cmd.inc()).toBe(-1);
+    });
+
+    it('setInc() forwards raw value to the real API (normalization is done by PlaybackEngine)', () => {
+      cmd.setInc(5);
+      expect(mockOpenRV.playback.setPlayDirection).toHaveBeenCalledWith(5);
+      cmd.setInc(-3);
+      expect(mockOpenRV.playback.setPlayDirection).toHaveBeenCalledWith(-3);
     });
 
     it('setInc() throws on invalid input', () => {
       expect(() => cmd.setInc(NaN)).toThrow(TypeError);
+    });
+
+    it('setInc() does not use local state — inc() always reads from real API', () => {
+      // Simulate the real API returning -1 even though setInc was called with 1
+      cmd.setInc(1);
+      mockOpenRV.playback.getPlayDirection.mockReturnValue(-1);
+      expect(cmd.inc()).toBe(-1);
+      expect(mockOpenRV.playback.getPlayDirection).toHaveBeenCalled();
     });
 
     it('setPlayMode() maps Mu constants to loop modes', () => {
@@ -292,26 +437,91 @@ describe('MuCommands', () => {
       expect(() => cmd.setOutPoint('abc' as unknown as number)).toThrow(TypeError);
     });
 
-    it('skipped() returns 0 by default', () => {
+    it('skipped() delegates to playback.getDroppedFrameCount()', () => {
+      mockOpenRV.playback.getDroppedFrameCount.mockReturnValue(0);
       expect(cmd.skipped()).toBe(0);
+
+      mockOpenRV.playback.getDroppedFrameCount.mockReturnValue(5);
+      expect(cmd.skipped()).toBe(5);
     });
 
-    it('isCurrentFrameIncomplete() returns false', () => {
+    it('skipped() reads from session dropped frame count', () => {
+      mockOpenRV.playback.getDroppedFrameCount.mockReturnValue(5);
+      expect(cmd.skipped()).toBe(5);
+    });
+
+    it('skipped() tracks real skips as count increases', () => {
+      mockOpenRV.playback.getDroppedFrameCount.mockReturnValue(1);
+      expect(cmd.skipped()).toBe(1);
+      mockOpenRV.playback.getDroppedFrameCount.mockReturnValue(3);
+      expect(cmd.skipped()).toBe(3);
+    });
+
+    it('isCurrentFrameIncomplete() returns false (unsupported)', () => {
       expect(cmd.isCurrentFrameIncomplete()).toBe(false);
     });
 
-    it('isCurrentFrameError() returns false', () => {
+    it('isCurrentFrameError() returns false (unsupported)', () => {
       expect(cmd.isCurrentFrameError()).toBe(false);
     });
 
-    it('isBuffering() returns false', () => {
+    it('isBuffering() returns false by default', () => {
       expect(cmd.isBuffering()).toBe(false);
     });
 
-    it('mbps() / resetMbps() manage throughput counter', () => {
+    it('isBuffering() reflects session buffering state', () => {
+      mockOpenRV.playback.isBuffering.mockReturnValue(true);
+      expect(cmd.isBuffering()).toBe(true);
+    });
+
+    it('isBuffering() delegates to playback.isBuffering()', () => {
+      mockOpenRV.playback.isBuffering.mockReturnValue(false);
+      expect(cmd.isBuffering()).toBe(false);
+
+      mockOpenRV.playback.isBuffering.mockReturnValue(true);
+      expect(cmd.isBuffering()).toBe(true);
+    });
+
+    it('mbps() always returns 0 (unsupported)', () => {
       expect(cmd.mbps()).toBe(0);
-      cmd.resetMbps();
+    });
+
+    it('resetMbps() is a no-op (unsupported)', () => {
+      expect(() => cmd.resetMbps()).not.toThrow();
       expect(cmd.mbps()).toBe(0);
+    });
+
+    it('health commands return safe defaults when no session', () => {
+      delete (globalThis as Record<string, unknown>).openrv;
+      expect(cmd.isBuffering()).toBe(false);
+      expect(cmd.skipped()).toBe(0);
+      expect(cmd.isCurrentFrameIncomplete()).toBe(false);
+      expect(cmd.isCurrentFrameError()).toBe(false);
+      expect(cmd.mbps()).toBe(0);
+    });
+
+    it('isCurrentFrameIncomplete is marked unsupported', () => {
+      expect(cmd.isSupported('isCurrentFrameIncomplete')).toBe(false);
+    });
+
+    it('isCurrentFrameError is marked unsupported', () => {
+      expect(cmd.isSupported('isCurrentFrameError')).toBe(false);
+    });
+
+    it('mbps is marked unsupported', () => {
+      expect(cmd.isSupported('mbps')).toBe(false);
+    });
+
+    it('resetMbps is marked unsupported', () => {
+      expect(cmd.isSupported('resetMbps')).toBe(false);
+    });
+
+    it('skipped is marked supported', () => {
+      expect(cmd.isSupported('skipped')).toBe(true);
+    });
+
+    it('isBuffering is marked supported', () => {
+      expect(cmd.isSupported('isBuffering')).toBe(true);
     });
   });
 
@@ -339,12 +549,45 @@ describe('MuCommands', () => {
       expect(() => cmd.redraw()).not.toThrow();
     });
 
-    it('viewSize() returns [width, height]', () => {
+    it('viewSize() reads from openrv.view.getViewportSize(), not DOM canvas', () => {
+      mockOpenRV.view.getViewportSize.mockReturnValue({ width: 1920, height: 1080 });
+      const size = cmd.viewSize();
+      expect(size).toEqual([1920, 1080]);
+      expect(mockOpenRV.view.getViewportSize).toHaveBeenCalled();
+    });
+
+    it('viewSize() returns [width, height] from the real viewer API', () => {
+      mockOpenRV.view.getViewportSize.mockReturnValue({ width: 800, height: 600 });
       const size = cmd.viewSize();
       expect(Array.isArray(size)).toBe(true);
       expect(size).toHaveLength(2);
-      expect(typeof size[0]).toBe('number');
-      expect(typeof size[1]).toBe('number');
+      expect(size[0]).toBe(800);
+      expect(size[1]).toBe(600);
+    });
+
+    it('viewSize() does not query document.querySelector("canvas")', () => {
+      const spy = vi.spyOn(document, 'querySelector');
+      cmd.viewSize();
+      expect(spy).not.toHaveBeenCalled();
+      spy.mockRestore();
+    });
+
+    it('setViewSize() is marked as partial', () => {
+      expect(cmd.isSupported('setViewSize')).toBe('partial');
+    });
+
+    it('setViewSize() validates arguments but does not modify DOM', () => {
+      expect(() => cmd.setViewSize(NaN, 100)).toThrow(TypeError);
+      expect(() => cmd.setViewSize(100, NaN)).toThrow(TypeError);
+      // Valid call does not throw
+      expect(() => cmd.setViewSize(800, 600)).not.toThrow();
+    });
+
+    it('setViewSize() does not query document.querySelector("canvas")', () => {
+      const spy = vi.spyOn(document, 'querySelector');
+      cmd.setViewSize(800, 600);
+      expect(spy).not.toHaveBeenCalled();
+      spy.mockRestore();
     });
 
     it('resizeFit() delegates to view.fitToWindow()', () => {
@@ -352,8 +595,131 @@ describe('MuCommands', () => {
       expect(mockOpenRV.view.fitToWindow).toHaveBeenCalledOnce();
     });
 
-    it('isFullScreen() returns a boolean', () => {
-      expect(typeof cmd.isFullScreen()).toBe('boolean');
+    it('isFullScreen() returns false when not fullscreen', () => {
+      expect(cmd.isFullScreen()).toBe(false);
+    });
+
+    it('isFullScreen() detects webkitFullscreenElement', () => {
+      Object.defineProperty(document, 'webkitFullscreenElement', {
+        value: document.documentElement,
+        configurable: true,
+      });
+      expect(cmd.isFullScreen()).toBe(true);
+      Object.defineProperty(document, 'webkitFullscreenElement', {
+        value: undefined,
+        configurable: true,
+      });
+    });
+
+    it('fullScreenMode(true) falls back to webkitRequestFullscreen', async () => {
+      const origRFS = document.documentElement.requestFullscreen;
+      const webkitMock = vi.fn();
+      (document.documentElement as any).requestFullscreen = undefined;
+      (document.documentElement as any).webkitRequestFullscreen = webkitMock;
+
+      await cmd.fullScreenMode(true);
+      expect(webkitMock).toHaveBeenCalledOnce();
+
+      document.documentElement.requestFullscreen = origRFS;
+      delete (document.documentElement as any).webkitRequestFullscreen;
+    });
+
+    it('fullScreenMode(false) falls back to webkitExitFullscreen', async () => {
+      const origEFS = document.exitFullscreen;
+      const webkitMock = vi.fn();
+      (document as any).exitFullscreen = undefined;
+      (document as any).webkitExitFullscreen = webkitMock;
+
+      await cmd.fullScreenMode(false);
+      expect(webkitMock).toHaveBeenCalledOnce();
+
+      document.exitFullscreen = origEFS;
+      delete (document as any).webkitExitFullscreen;
+    });
+
+    it('fullScreenMode(true) prefers standard requestFullscreen over webkit', async () => {
+      const standardMock = vi.fn().mockResolvedValue(undefined);
+      const webkitMock = vi.fn();
+      const origRFS = document.documentElement.requestFullscreen;
+      document.documentElement.requestFullscreen = standardMock;
+      (document.documentElement as any).webkitRequestFullscreen = webkitMock;
+
+      await cmd.fullScreenMode(true);
+      expect(standardMock).toHaveBeenCalledOnce();
+      expect(webkitMock).not.toHaveBeenCalled();
+
+      document.documentElement.requestFullscreen = origRFS;
+      delete (document.documentElement as any).webkitRequestFullscreen;
+    });
+
+    it('fullScreenMode(true) handles promise rejection', async () => {
+      const origRFS = document.documentElement.requestFullscreen;
+      document.documentElement.requestFullscreen = vi.fn().mockRejectedValue(new Error('denied'));
+
+      // Should not throw — rejection is caught internally
+      await cmd.fullScreenMode(true);
+
+      document.documentElement.requestFullscreen = origRFS;
+    });
+
+    it('fullScreenMode(false) handles exit fullscreen promise rejection', async () => {
+      const origEFS = document.exitFullscreen;
+      document.exitFullscreen = vi.fn().mockRejectedValue(new Error('not in fullscreen'));
+
+      // Should not throw — rejection is caught internally
+      await cmd.fullScreenMode(false);
+
+      document.exitFullscreen = origEFS;
+    });
+
+    it('fullScreenMode(true) handles webkit promise rejection', async () => {
+      const origRFS = document.documentElement.requestFullscreen;
+      (document.documentElement as any).requestFullscreen = undefined;
+      (document.documentElement as any).webkitRequestFullscreen = vi.fn().mockRejectedValue(new Error('webkit denied'));
+
+      // Should not throw — rejection is caught internally
+      await cmd.fullScreenMode(true);
+
+      document.documentElement.requestFullscreen = origRFS;
+      delete (document.documentElement as any).webkitRequestFullscreen;
+    });
+
+    it('fullScreenMode(false) handles webkit exit promise rejection', async () => {
+      const origEFS = document.exitFullscreen;
+      (document as any).exitFullscreen = undefined;
+      (document as any).webkitExitFullscreen = vi.fn().mockRejectedValue(new Error('webkit exit denied'));
+
+      // Should not throw — rejection is caught internally
+      await cmd.fullScreenMode(false);
+
+      document.exitFullscreen = origEFS;
+      delete (document as any).webkitExitFullscreen;
+    });
+
+    it('fullScreenMode returns a Promise', () => {
+      const result = cmd.fullScreenMode(true);
+      expect(result).toBeInstanceOf(Promise);
+    });
+
+    it('fullScreenMode resolves without error', async () => {
+      await expect(cmd.fullScreenMode(true)).resolves.toBeUndefined();
+    });
+
+    it('fullScreenMode(false) returns a Promise that resolves', async () => {
+      const result = cmd.fullScreenMode(false);
+      expect(result).toBeInstanceOf(Promise);
+      await expect(result).resolves.toBeUndefined();
+    });
+
+    it('isAsync matches actual return type for all ASYNC_COMMANDS', () => {
+      const asyncCommands = ['fullScreenMode'];
+      for (const name of asyncCommands) {
+        expect(cmd.isAsync(name)).toBe(true);
+        const method = (cmd as any)[name];
+        expect(typeof method).toBe('function');
+        const result = method.call(cmd, true);
+        expect(result).toBeInstanceOf(Promise);
+      }
     });
 
     it('setWindowTitle() sets document.title', () => {
@@ -367,32 +733,62 @@ describe('MuCommands', () => {
       expect(() => cmd.setWindowTitle(123 as unknown as string)).toThrow(TypeError);
     });
 
-    it('setFiltering() / getFiltering() manage filter mode', () => {
-      expect(cmd.getFiltering()).toBe(FilterLinear); // default
-
+    it('setFiltering() calls the real API to set texture filter mode', () => {
       cmd.setFiltering(FilterNearest);
-      expect(cmd.getFiltering()).toBe(FilterNearest);
+      expect(mockOpenRV.view.setTextureFilterMode).toHaveBeenCalledWith('nearest');
 
       cmd.setFiltering(FilterLinear);
+      expect(mockOpenRV.view.setTextureFilterMode).toHaveBeenCalledWith('linear');
+    });
+
+    it('getFiltering() reads from the real API, not local cache', () => {
+      mockOpenRV.view.getTextureFilterMode.mockReturnValue('linear');
       expect(cmd.getFiltering()).toBe(FilterLinear);
+
+      mockOpenRV.view.getTextureFilterMode.mockReturnValue('nearest');
+      expect(cmd.getFiltering()).toBe(FilterNearest);
+      expect(mockOpenRV.view.getTextureFilterMode).toHaveBeenCalled();
+    });
+
+    it('setFiltering() affects viewer state via real API, not just local readback', () => {
+      cmd.setFiltering(FilterNearest);
+      expect(mockOpenRV.view.setTextureFilterMode).toHaveBeenCalledWith('nearest');
+      // Verify getFiltering reads from API, not local state
+      mockOpenRV.view.getTextureFilterMode.mockReturnValue('nearest');
+      expect(cmd.getFiltering()).toBe(FilterNearest);
     });
 
     it('setFiltering() throws on invalid mode', () => {
       expect(() => cmd.setFiltering(99)).toThrow(TypeError);
     });
 
-    it('setBGMethod() / bgMethod() manage background method', () => {
-      expect(cmd.bgMethod()).toBe('black'); // default
-
+    it('setBGMethod() calls the real API to set background pattern', () => {
       cmd.setBGMethod('checker');
+      expect(mockOpenRV.view.setBackgroundPattern).toHaveBeenCalledWith(
+        expect.objectContaining({ pattern: 'checker' }),
+      );
+    });
+
+    it('bgMethod() reads from the real API, not local cache', () => {
+      mockOpenRV.view.getBackgroundPattern.mockReturnValue({
+        pattern: 'checker',
+        checkerSize: 'medium',
+        customColor: '#1a1a1a',
+      });
       expect(cmd.bgMethod()).toBe('checker');
+      expect(mockOpenRV.view.getBackgroundPattern).toHaveBeenCalled();
     });
 
     it('setBGMethod() throws on non-string', () => {
       expect(() => cmd.setBGMethod(123 as unknown as string)).toThrow(TypeError);
     });
 
-    it('setMargins() / margins() manage viewport margins', () => {
+    it('setMargins/margins are marked as partial, not fully supported', () => {
+      expect(cmd.isSupported('setMargins')).toBe('partial');
+      expect(cmd.isSupported('margins')).toBe('partial');
+    });
+
+    it('setMargins() / margins() manage viewport margins (local-only stub)', () => {
       expect(cmd.margins()).toEqual([0, 0, 0, 0]); // default
 
       cmd.setMargins([10, 20, 10, 20], false);
@@ -421,8 +817,7 @@ describe('MuCommands', () => {
       expect(cmd.contentAspect()).toBe(1);
     });
 
-    it('devicePixelRatio() returns a number', () => {
-      expect(typeof cmd.devicePixelRatio()).toBe('number');
+    it('devicePixelRatio() returns a positive number', () => {
       expect(cmd.devicePixelRatio()).toBeGreaterThan(0);
     });
   });
@@ -521,6 +916,174 @@ describe('MuExtraCommands', () => {
       expect(() => extra.displayFeedbackQueue('queued')).not.toThrow();
       spy.mockRestore();
     });
+
+    describe('feedback queue drain', () => {
+      beforeEach(() => {
+        vi.useFakeTimers();
+      });
+
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
+      it('displays all 3 queued messages in order', () => {
+        const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+        extra.displayFeedbackQueue('msg1', 1.0);
+        extra.displayFeedbackQueue('msg2', 1.0);
+        extra.displayFeedbackQueue('msg3', 1.0);
+
+        // msg1 shown immediately
+        expect(spy).toHaveBeenCalledWith('[RV Feedback] msg1');
+        expect(spy).toHaveBeenCalledTimes(1);
+
+        // After 1s, msg1 expires → msg2 shown
+        vi.advanceTimersByTime(1000);
+        expect(spy).toHaveBeenCalledWith('[RV Feedback] msg2');
+        expect(spy).toHaveBeenCalledTimes(2);
+
+        // After another 1s, msg2 expires → msg3 shown
+        vi.advanceTimersByTime(1000);
+        expect(spy).toHaveBeenCalledWith('[RV Feedback] msg3');
+        expect(spy).toHaveBeenCalledTimes(3);
+
+        spy.mockRestore();
+      });
+
+      it('each message is displayed only after the previous timeout expires', () => {
+        const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+        extra.displayFeedbackQueue('a', 2.0);
+        extra.displayFeedbackQueue('b', 1.0);
+
+        expect(spy).toHaveBeenCalledTimes(1);
+
+        // Half-way through first message — second should not appear yet
+        vi.advanceTimersByTime(1000);
+        expect(spy).toHaveBeenCalledTimes(1);
+
+        // First message expires
+        vi.advanceTimersByTime(1000);
+        expect(spy).toHaveBeenCalledTimes(2);
+        expect(spy).toHaveBeenLastCalledWith('[RV Feedback] b');
+
+        spy.mockRestore();
+      });
+
+      it('messages added during drain are also eventually displayed', () => {
+        const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+        extra.displayFeedbackQueue('first', 1.0);
+
+        // While first is showing, add another
+        extra.displayFeedbackQueue('second', 1.0);
+
+        vi.advanceTimersByTime(1000);
+        expect(spy).toHaveBeenCalledWith('[RV Feedback] second');
+
+        // Add one more during second
+        extra.displayFeedbackQueue('third', 1.0);
+
+        vi.advanceTimersByTime(1000);
+        expect(spy).toHaveBeenCalledWith('[RV Feedback] third');
+        expect(spy).toHaveBeenCalledTimes(3);
+
+        spy.mockRestore();
+      });
+
+      it('queue is fully empty after all messages are shown', () => {
+        const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+        extra.displayFeedbackQueue('x', 0.5);
+        extra.displayFeedbackQueue('y', 0.5);
+
+        vi.advanceTimersByTime(500);
+        vi.advanceTimersByTime(500);
+
+        // Access private feedbackQueue via cast
+        const queue = (extra as unknown as { feedbackQueue: unknown[] }).feedbackQueue;
+        expect(queue).toHaveLength(0);
+
+        spy.mockRestore();
+      });
+
+      it('zero-duration middle message does not stall the drain loop', () => {
+        const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+        extra.displayFeedbackQueue('first', 1.0);
+        extra.displayFeedbackQueue('mid-zero', 0);
+        extra.displayFeedbackQueue('last', 1.0);
+
+        // first shown immediately
+        expect(spy).toHaveBeenCalledWith('[RV Feedback] first');
+        expect(spy).toHaveBeenCalledTimes(1);
+
+        // After 1s first expires → mid-zero shown
+        vi.advanceTimersByTime(1000);
+        expect(spy).toHaveBeenCalledWith('[RV Feedback] mid-zero');
+        expect(spy).toHaveBeenCalledTimes(2);
+
+        // Flush the setTimeout(cb, 0) for mid-zero → last shown
+        vi.advanceTimersByTime(1);
+        expect(spy).toHaveBeenCalledWith('[RV Feedback] last');
+        expect(spy).toHaveBeenCalledTimes(3);
+
+        // After last expires, _currentFeedback is cleared
+        vi.advanceTimersByTime(1000);
+        const current = (extra as unknown as { _currentFeedback: string | null })._currentFeedback;
+        expect(current).toBeNull();
+
+        spy.mockRestore();
+      });
+
+      it('zero-duration first message still drains to normal second message', () => {
+        const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+        extra.displayFeedbackQueue('zero-first', 0);
+        extra.displayFeedbackQueue('normal-second', 1.0);
+
+        // zero-first shown immediately
+        expect(spy).toHaveBeenCalledWith('[RV Feedback] zero-first');
+        expect(spy).toHaveBeenCalledTimes(1);
+
+        // Flush the setTimeout(cb, 0) → zero-first cleared → normal-second shown
+        vi.advanceTimersByTime(1);
+        expect(spy).toHaveBeenCalledWith('[RV Feedback] normal-second');
+        expect(spy).toHaveBeenCalledTimes(2);
+
+        // After 1s, normal-second cleared
+        vi.advanceTimersByTime(1000);
+        const current = (extra as unknown as { _currentFeedback: string | null })._currentFeedback;
+        expect(current).toBeNull();
+
+        spy.mockRestore();
+      });
+
+      it('_currentFeedback is null after last zero-duration message drains', () => {
+        const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+        extra.displayFeedbackQueue('only-zero', 0);
+
+        expect(spy).toHaveBeenCalledWith('[RV Feedback] only-zero');
+
+        // Flush the setTimeout(cb, 0) → cleared
+        vi.advanceTimersByTime(1);
+        const current = (extra as unknown as { _currentFeedback: string | null })._currentFeedback;
+        expect(current).toBeNull();
+
+        const queue = (extra as unknown as { feedbackQueue: unknown[] }).feedbackQueue;
+        expect(queue).toHaveLength(0);
+
+        spy.mockRestore();
+      });
+
+      it('single displayFeedback() call still works without queue', () => {
+        const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+        extra.displayFeedback('standalone', 1.0);
+        expect(spy).toHaveBeenCalledWith('[RV Feedback] standalone');
+
+        vi.advanceTimersByTime(1000);
+        // No errors, _currentFeedback cleared
+        const current = (extra as unknown as { _currentFeedback: string | null })._currentFeedback;
+        expect(current).toBeNull();
+        expect(spy).toHaveBeenCalledTimes(1);
+
+        spy.mockRestore();
+      });
+    });
   });
 
   // --- Session State Queries ---
@@ -538,6 +1101,7 @@ describe('MuExtraCommands', () => {
 
     it('isNarrowed() returns false when in/out match range', () => {
       // frameStart=1, frameEnd=100, inPoint=1, outPoint=100
+      mockOpenRV.media.getStartFrame.mockReturnValue(1);
       mockOpenRV.loop.getInPoint.mockReturnValue(1);
       mockOpenRV.loop.getOutPoint.mockReturnValue(100);
       mockOpenRV.playback.getTotalFrames.mockReturnValue(100);
@@ -550,36 +1114,76 @@ describe('MuExtraCommands', () => {
       expect(extra.isNarrowed()).toBe(true);
     });
 
+    it('isNarrowed() uses real frameStart (not hardcoded 1) for comparison', () => {
+      // Sequence starts at frame 1001, in/out match the full range
+      mockOpenRV.media.getStartFrame.mockReturnValue(1001);
+      mockOpenRV.loop.getInPoint.mockReturnValue(1001);
+      mockOpenRV.loop.getOutPoint.mockReturnValue(100);
+      mockOpenRV.playback.getTotalFrames.mockReturnValue(100);
+      expect(extra.isNarrowed()).toBe(false);
+    });
+
+    it('isNarrowed() detects narrowing with non-default frameStart', () => {
+      mockOpenRV.media.getStartFrame.mockReturnValue(1001);
+      mockOpenRV.loop.getInPoint.mockReturnValue(1010);
+      mockOpenRV.loop.getOutPoint.mockReturnValue(100);
+      mockOpenRV.playback.getTotalFrames.mockReturnValue(100);
+      expect(extra.isNarrowed()).toBe(true);
+    });
+
     it('isPlayable() returns true when range > 1 frame', () => {
       mockOpenRV.playback.getTotalFrames.mockReturnValue(100);
       expect(extra.isPlayable()).toBe(true);
     });
 
     it('isPlayable() returns false for single-frame source', () => {
+      mockOpenRV.media.getStartFrame.mockReturnValue(1);
       mockOpenRV.playback.getTotalFrames.mockReturnValue(1);
       expect(extra.isPlayable()).toBe(false);
     });
 
+    it('isPlayable() uses real frameStart for comparison', () => {
+      // frameStart=1001, frameEnd=1001 -> not playable (single frame)
+      mockOpenRV.media.getStartFrame.mockReturnValue(1001);
+      mockOpenRV.playback.getTotalFrames.mockReturnValue(1001);
+      expect(extra.isPlayable()).toBe(false);
+
+      // frameStart=1001, frameEnd=1100 -> playable
+      mockOpenRV.playback.getTotalFrames.mockReturnValue(1100);
+      expect(extra.isPlayable()).toBe(true);
+    });
+
     it('isPlayingForwards() returns true when playing forward', () => {
       mockOpenRV.playback.isPlaying.mockReturnValue(true);
-      cmd.setInc(1);
+      mockOpenRV.playback.getPlayDirection.mockReturnValue(1);
       expect(extra.isPlayingForwards()).toBe(true);
     });
 
     it('isPlayingForwards() returns false when not playing', () => {
       mockOpenRV.playback.isPlaying.mockReturnValue(false);
+      mockOpenRV.playback.getPlayDirection.mockReturnValue(1);
       expect(extra.isPlayingForwards()).toBe(false);
     });
 
     it('isPlayingBackwards() returns true when playing backward', () => {
       mockOpenRV.playback.isPlaying.mockReturnValue(true);
-      cmd.setInc(-1);
+      mockOpenRV.playback.getPlayDirection.mockReturnValue(-1);
       expect(extra.isPlayingBackwards()).toBe(true);
     });
 
     it('isPlayingBackwards() returns false when playing forward', () => {
       mockOpenRV.playback.isPlaying.mockReturnValue(true);
-      cmd.setInc(1);
+      mockOpenRV.playback.getPlayDirection.mockReturnValue(1);
+      expect(extra.isPlayingBackwards()).toBe(false);
+    });
+
+    it('isPlayingBackwards() reflects real playback state, not local bookkeeping', () => {
+      mockOpenRV.playback.isPlaying.mockReturnValue(true);
+      // Real API says reverse
+      mockOpenRV.playback.getPlayDirection.mockReturnValue(-1);
+      expect(extra.isPlayingBackwards()).toBe(true);
+      // Real API changes to forward
+      mockOpenRV.playback.getPlayDirection.mockReturnValue(1);
       expect(extra.isPlayingBackwards()).toBe(false);
     });
   });
@@ -592,12 +1196,14 @@ describe('MuExtraCommands', () => {
       expect(mockOpenRV.playback.toggle).toHaveBeenCalledOnce();
     });
 
-    it('toggleForwardsBackwards() flips direction', () => {
-      expect(cmd.inc()).toBe(1);
+    it('toggleForwardsBackwards() flips direction via real API', () => {
+      mockOpenRV.playback.getPlayDirection.mockReturnValue(1);
       extra.toggleForwardsBackwards();
-      expect(cmd.inc()).toBe(-1);
+      expect(mockOpenRV.playback.setPlayDirection).toHaveBeenCalledWith(-1);
+
+      mockOpenRV.playback.getPlayDirection.mockReturnValue(-1);
       extra.toggleForwardsBackwards();
-      expect(cmd.inc()).toBe(1);
+      expect(mockOpenRV.playback.setPlayDirection).toHaveBeenCalledWith(1);
     });
 
     it('toggleRealtime() flips realtime mode', () => {

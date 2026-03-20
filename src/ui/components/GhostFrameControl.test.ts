@@ -54,4 +54,14 @@ describe('GhostFrameControl', () => {
       expect(dropdown.getAttribute('aria-label')).toBe('Ghost Frame Settings');
     });
   });
+
+  describe('tooltip copy', () => {
+    it('GFC-U020: button title describes both click configuration and Ctrl+G toggle behavior', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="ghost-frame-button"]') as HTMLButtonElement;
+      expect(button.title).toMatch(/click/i);
+      expect(button.title).toMatch(/Ctrl\+G/i);
+      expect(button.title).toMatch(/toggle/i);
+    });
+  });
 });

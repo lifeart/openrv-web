@@ -237,6 +237,78 @@ describe('createPanel', () => {
     });
   });
 
+  describe('onVisibilityChange', () => {
+    let anchor: HTMLElement;
+
+    beforeEach(() => {
+      anchor = document.createElement('button');
+      document.body.appendChild(anchor);
+    });
+
+    afterEach(() => {
+      if (document.body.contains(anchor)) {
+        document.body.removeChild(anchor);
+      }
+    });
+
+    it('PANEL-U056: listener is called with true when panel is shown', () => {
+      panel = createPanel();
+      const listener = vi.fn();
+      panel.onVisibilityChange(listener);
+      panel.show(anchor);
+      expect(listener).toHaveBeenCalledWith(true);
+    });
+
+    it('PANEL-U057: listener is called with false when panel is hidden', () => {
+      panel = createPanel();
+      const listener = vi.fn();
+      panel.onVisibilityChange(listener);
+      panel.show(anchor);
+      panel.hide();
+      expect(listener).toHaveBeenCalledWith(false);
+    });
+
+    it('PANEL-U058: listener is called with false when panel is closed via Escape', () => {
+      panel = createPanel();
+      const listener = vi.fn();
+      panel.onVisibilityChange(listener);
+      panel.show(anchor);
+      listener.mockClear();
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      expect(listener).toHaveBeenCalledWith(false);
+    });
+
+    it('PANEL-U059: listener is called with false when panel is closed via outside click', () => {
+      panel = createPanel();
+      const listener = vi.fn();
+      panel.onVisibilityChange(listener);
+      panel.show(anchor);
+      listener.mockClear();
+      // Click outside both panel and anchor
+      document.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      expect(listener).toHaveBeenCalledWith(false);
+    });
+
+    it('PANEL-U059a: unsubscribe stops notifications', () => {
+      panel = createPanel();
+      const listener = vi.fn();
+      const unsub = panel.onVisibilityChange(listener);
+      unsub();
+      panel.show(anchor);
+      expect(listener).not.toHaveBeenCalled();
+    });
+
+    it('PANEL-U059b: listener is called on toggle', () => {
+      panel = createPanel();
+      const listener = vi.fn();
+      panel.onVisibilityChange(listener);
+      panel.toggle(anchor);
+      expect(listener).toHaveBeenCalledWith(true);
+      panel.toggle(anchor);
+      expect(listener).toHaveBeenCalledWith(false);
+    });
+  });
+
   describe('escape key handling', () => {
     let anchor: HTMLElement;
 

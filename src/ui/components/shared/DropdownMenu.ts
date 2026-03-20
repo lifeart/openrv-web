@@ -36,6 +36,8 @@ export interface DropdownMenuItem {
   label: string;
   /** Optional text icon (emoji/unicode) to display before label. HTML is not supported for security. */
   icon?: string;
+  /** Optional SVG icon markup (from Icons module) to display before label. Only use with trusted content from getIconSvg(). */
+  iconSvg?: string;
   /** Optional shortcut hint to display after label */
   shortcut?: string;
   /** Optional color indicator */
@@ -109,6 +111,7 @@ export class DropdownMenu {
       display: none;
       flex-direction: column;
       min-width: ${this.options.minWidth};
+      max-width: calc(100vw - 16px);
       max-height: ${this.options.maxHeight};
       overflow-y: auto;
       box-shadow: ${COLORS.shadowDropdown};
@@ -187,10 +190,15 @@ export class DropdownMenu {
       leftPart.appendChild(checkmark);
     }
 
-    if (item.icon) {
+    if (item.iconSvg) {
+      const iconSpan = document.createElement('span');
+      // Trusted SVG content from getIconSvg() - safe to use innerHTML
+      iconSpan.innerHTML = item.iconSvg;
+      iconSpan.style.cssText = 'display: flex; align-items: center;';
+      leftPart.appendChild(iconSpan);
+    } else if (item.icon) {
       const iconSpan = document.createElement('span');
       // Only allow plain text icons (emoji, unicode symbols, etc.)
-      // HTML/SVG content is not supported for security reasons - use the Icons module instead
       iconSpan.textContent = item.icon;
       iconSpan.style.cssText = 'display: flex; align-items: center;';
       leftPart.appendChild(iconSpan);

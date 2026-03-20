@@ -72,7 +72,7 @@ The session management feature is **fully implemented** with comprehensive funct
 ## UI/UX Specification
 
 ### Save Project Flow
-1. User clicks "Save" button in header bar or presses `Ctrl+S`
+1. User clicks "Save" button in header bar (no keyboard shortcut; `Ctrl+S` is wired to frame export)
 2. `SessionSerializer.toJSON()` captures current state from all components
 3. For blob URLs (local files), sets `requiresReload: true` and clears path
 4. Downloads `.orvproject` JSON file with project name
@@ -333,7 +333,7 @@ interface AutoSaveConfig {
 ## User Flow Verification
 
 ### Save Project Flow
-1. User clicks Save button or presses Ctrl+S
+1. User clicks Save button in header bar (no keyboard shortcut for project save)
 2. `SessionSerializer.toJSON()` collects state from session, paintEngine, viewer
 3. File downloads as `.orvproject` JSON
 4. Blob URLs are handled with `requiresReload` flag

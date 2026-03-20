@@ -12,6 +12,16 @@
 import { FileKind, MuCursor } from './types';
 import type { FileKindValue } from './types';
 
+/**
+ * Minimal event subscription interface for connecting to the real media event system.
+ * Compatible with EventsAPI.on() signature.
+ */
+export interface LoadingEventSource {
+  on(event: 'sourceLoadingStarted', cb: (data: { name: string }) => void): () => void;
+  on(event: 'sourceLoaded', cb: (data: { name: string }) => void): () => void;
+  on(event: 'sourceLoadFailed', cb: (data: { name: string }) => void): () => void;
+}
+
 export class MuUtilsBridge {
   // ── Timer State ──
   private timerStartTime: number | null = null;
@@ -22,6 +32,8 @@ export class MuUtilsBridge {
   private _progressiveSourceLoading = true;
   private _loadTotal = 0;
   private _loadCount = 0;
+  private _eventUnsubscribers: Array<() => void> = [];
+  private _disposed = false;
 
   // ── Timer Commands ──
 
@@ -108,9 +120,7 @@ export class MuUtilsBridge {
     }
 
     // Movie formats
-    if (
-      ['mov', 'mp4', 'avi', 'mkv', 'webm', 'mxf', 'r3d', 'ari', 'braw', 'dng'].includes(ext)
-    ) {
+    if (['mov', 'mp4', 'avi', 'mkv', 'webm', 'mxf', 'r3d', 'ari', 'braw', 'dng'].includes(ext)) {
       return FileKind.MovieFile;
     }
 
@@ -146,10 +156,17 @@ export class MuUtilsBridge {
 
   /**
    * Open a URL in a new browser tab.
-   * Mu signature: openUrl(void; string)
+   * Mu signature: openUrl(bool; string)
+   *
+   * Returns `true` if the popup was opened, `false` if the browser blocked it.
    */
-  openUrl(url: string): void {
-    window.open(url, '_blank', 'noopener,noreferrer');
+  openUrl(url: string): boolean {
+    const win = window.open(url, '_blank', 'noopener,noreferrer');
+    if (!win) {
+      console.warn('[MuUtilsBridge] Popup blocked for URL: %s', url);
+      return false;
+    }
+    return true;
   }
 
   /**
@@ -255,13 +272,22 @@ export class MuUtilsBridge {
   /**
    * Wait for all progressive loading to complete.
    * Returns a promise that resolves when loadCount >= loadTotal.
+   * Includes a 30-second safety timeout to prevent infinite polling.
    */
   async waitForProgressiveLoading(): Promise<void> {
     if (this._loadCount >= this._loadTotal) return;
 
     return new Promise<void>((resolve) => {
+      const TIMEOUT_MS = 30_000;
+      const startTime = Date.now();
       const check = () => {
-        if (this._loadCount >= this._loadTotal) {
+        if (this._disposed || this._loadCount >= this._loadTotal) {
+          resolve();
+        } else if (Date.now() - startTime >= TIMEOUT_MS) {
+          console.warn(
+            `[MuUtilsBridge] waitForProgressiveLoading timed out after ${TIMEOUT_MS / 1000}s ` +
+              `(loadCount=${this._loadCount}, loadTotal=${this._loadTotal})`,
+          );
           resolve();
         } else {
           setTimeout(check, 100);
@@ -293,6 +319,53 @@ export class MuUtilsBridge {
     this._loadCount = count;
   }
 
+  /**
+   * Connect to real session media loading events.
+   *
+   * Subscribes to `sourceLoadingStarted` and `sourceLoaded` so that
+   * `loadTotal()`, `loadCount()`, `progressiveSourceLoading()`, and
+   * `waitForProgressiveLoading()` reflect actual media loading state.
+   *
+   * Safe to call multiple times; previous subscriptions are cleaned up first.
+   */
+  connectToEvents(events: LoadingEventSource): void {
+    this.dispose();
+    this._disposed = false;
+
+    const unsubStart = events.on('sourceLoadingStarted', () => {
+      this._loadTotal++;
+      this._progressiveSourceLoading = true;
+    });
+    this._eventUnsubscribers.push(unsubStart);
+
+    const unsubLoaded = events.on('sourceLoaded', () => {
+      this._loadCount++;
+      if (this._loadCount >= this._loadTotal) {
+        this._progressiveSourceLoading = false;
+      }
+    });
+    this._eventUnsubscribers.push(unsubLoaded);
+
+    const unsubFailed = events.on('sourceLoadFailed', () => {
+      this._loadCount++;
+      if (this._loadCount >= this._loadTotal) {
+        this._progressiveSourceLoading = false;
+      }
+    });
+    this._eventUnsubscribers.push(unsubFailed);
+  }
+
+  /**
+   * Disconnect from session events and clean up subscriptions.
+   */
+  dispose(): void {
+    this._disposed = true;
+    for (const unsub of this._eventUnsubscribers) {
+      unsub();
+    }
+    this._eventUnsubscribers = [];
+  }
+
   // ── Window Title ──
 
   /**
@@ -311,13 +384,26 @@ export class MuUtilsBridge {
    */
   fullScreenMode(enter: boolean): void {
     if (enter) {
-      document.documentElement.requestFullscreen?.().catch(() => {
-        console.warn('[MuUtilsBridge] Fullscreen request denied');
-      });
+      const el = document.documentElement;
+      if (el.requestFullscreen) {
+        el.requestFullscreen().catch(() => {
+          console.warn('[MuUtilsBridge] Fullscreen request denied');
+        });
+      } else if ((el as any).webkitRequestFullscreen) {
+        Promise.resolve((el as any).webkitRequestFullscreen()).catch(() => {
+          console.warn('[MuUtilsBridge] Fullscreen request denied (webkit)');
+        });
+      }
     } else {
-      document.exitFullscreen?.().catch(() => {
-        // May already be out of fullscreen
-      });
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {
+          // May already be out of fullscreen
+        });
+      } else if ((document as any).webkitExitFullscreen) {
+        Promise.resolve((document as any).webkitExitFullscreen()).catch(() => {
+          // May already be out of fullscreen (webkit)
+        });
+      }
     }
   }
 
@@ -326,7 +412,7 @@ export class MuUtilsBridge {
    * Mu signature: isFullScreen(bool;)
    */
   isFullScreen(): boolean {
-    return document.fullscreenElement !== null;
+    return !!(document.fullscreenElement ?? (document as any).webkitFullscreenElement);
   }
 
   /**
@@ -349,8 +435,10 @@ export class MuUtilsBridge {
   // ── Private Helpers ──
 
   private getExtension(path: string): string {
-    const lastDot = path.lastIndexOf('.');
+    const cleaned = path.split('?')[0] ?? '';
+    const pathWithoutHash = cleaned.split('#')[0] ?? '';
+    const lastDot = pathWithoutHash.lastIndexOf('.');
     if (lastDot === -1) return '';
-    return path.slice(lastDot + 1);
+    return pathWithoutHash.slice(lastDot + 1);
   }
 }

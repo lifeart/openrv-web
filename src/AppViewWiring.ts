@@ -20,6 +20,18 @@ import { DisposableSubscriptionManager } from './utils/DisposableSubscriptionMan
 import { withSideEffects, type WiringSideEffects } from './utils/WiringHelpers';
 
 /**
+ * Derive meaningful labels for A/B compare overlays from session source names.
+ * Falls back to 'A'/'B' when source names are unavailable.
+ */
+export function deriveCompareLabels(session: AppWiringContext['session']): { labelA: string; labelB: string } {
+  const sourceA = session.sourceA;
+  const sourceB = session.sourceB;
+  const labelA = sourceA?.name || 'A';
+  const labelB = sourceB?.name || 'B';
+  return { labelA, labelB };
+}
+
+/**
  * Wire all view-related controls to the viewer and bridges.
  */
 export function wireViewControls(ctx: AppWiringContext): WiringResult {
@@ -92,6 +104,11 @@ export function wireViewControls(ctx: AppWiringContext): WiringResult {
         position: controls.compareControl.getWipePosition(),
         showOriginal: mode === 'horizontal' ? 'left' : 'top',
       });
+      // Update overlay labels from source names when compare mode activates
+      if (mode !== 'off') {
+        const { labelA, labelB } = deriveCompareLabels(session);
+        viewer.setWipeLabels(labelA, labelB);
+      }
     }),
   );
   subs.add(
@@ -133,6 +150,16 @@ export function wireViewControls(ctx: AppWiringContext): WiringResult {
       });
     }),
   );
+  subs.add(
+    controls.compareControl.on('quadViewChanged', (state) => {
+      if (state.enabled) {
+        console.warn(
+          '[OpenRV] Quad View is not yet connected to the viewer. ' +
+            'The UI reflects the selected state but the viewer will not render a quad layout.',
+        );
+      }
+    }),
+  );
 
   // Layout control -> viewer (mutual exclusion with compare)
   const layoutManager = controls.layoutControl.getManager();
@@ -145,6 +172,16 @@ export function wireViewControls(ctx: AppWiringContext): WiringResult {
     if (cc.getBlendMode() !== 'off') cc.setBlendMode('off');
     if (cc.isQuadViewEnabled()) cc.setQuadViewEnabled(false);
   });
+
+  // Wire layout control source tracking from session
+  controls.layoutControl.setSourceCount(session.sourceCount);
+  controls.layoutControl.setCurrentSourceIndex(session.currentSourceIndex);
+  subs.add(
+    session.on('sourceLoaded', () => {
+      controls.layoutControl.setSourceCount(session.sourceCount);
+      controls.layoutControl.setCurrentSourceIndex(session.currentSourceIndex);
+    }),
+  );
 
   // Wire mutual exclusion: when a compare mode is activated, deactivate layout
   subs.add(
@@ -168,6 +205,13 @@ export function wireViewControls(ctx: AppWiringContext): WiringResult {
       }
     }),
   );
+  subs.add(
+    controls.compareControl.on('quadViewChanged', (state) => {
+      if (state.enabled && layoutManager.enabled) {
+        layoutManager.disable();
+      }
+    }),
+  );
 
   // Tone mapping control -> viewer
   subs.add(
@@ -177,8 +221,12 @@ export function wireViewControls(ctx: AppWiringContext): WiringResult {
     ),
   );
   subs.add(
-    controls.toneMappingControl.on('hdrModeChanged', (mode) => {
-      viewer.setHDROutputMode(mode);
+    controls.toneMappingControl.on('hdrModeChanged', ({ mode, previousMode }) => {
+      const accepted = viewer.setHDROutputMode(mode);
+      if (!accepted) {
+        console.warn(`HDR output mode '${mode}' was rejected by the renderer`);
+        controls.toneMappingControl.syncHDROutputMode(previousMode);
+      }
     }),
   );
 
@@ -260,19 +308,10 @@ export function wireViewControls(ctx: AppWiringContext): WiringResult {
     const stereoState = viewer.getStereoState();
     if (stereoState.mode === 'off') return;
 
-    const rect = viewerContainer.getBoundingClientRect();
-    const canvas = viewerContainer.querySelector('canvas');
-    if (!canvas) return;
+    const position = viewer.getPixelCoordinatesFromClient(mouseEvent.clientX, mouseEvent.clientY);
+    if (!position) return;
 
-    const imageData = viewer.getImageData();
-    if (!imageData) return;
-
-    const scaleX = imageData.width / canvas.clientWidth;
-    const scaleY = imageData.height / canvas.clientHeight;
-    const x = (mouseEvent.clientX - rect.left) * scaleX;
-    const y = (mouseEvent.clientY - rect.top) * scaleY;
-
-    controls.convergenceMeasure.setCursorPosition(x, y);
+    controls.convergenceMeasure.setCursorPosition(position.x, position.y);
 
     const pair = viewer.getStereoPair();
     if (pair) {
@@ -291,6 +330,13 @@ export function wireViewControls(ctx: AppWiringContext): WiringResult {
 
       const result = detectFloatingWindowViolations(pair.left, pair.right);
       controls.convergenceMeasure.emit('floatingWindowViolation' as never, result as never);
+    }),
+  );
+
+  // Clear floating window QC result when source changes to avoid stale state
+  subs.add(
+    session.on('currentSourceChanged', () => {
+      controls.floatingWindowControl.clearResult();
     }),
   );
 

@@ -13,7 +13,7 @@ import { type PaintEngine, type PaintTool } from '../../paint/PaintEngine';
 import { type PaintRenderer } from '../../paint/PaintRenderer';
 import { type StrokePoint, ShapeType, type Point } from '../../paint/types';
 import { type Session } from '../../core/session/Session';
-import { filterImageFiles, getBestSequence } from '../../utils/media/SequenceLoader';
+import { filterImageFiles, getBestSequence, inferSequenceFromSingleFile } from '../../utils/media/SequenceLoader';
 import { showAlert } from './shared/Modal';
 import {
   type PointerState,
@@ -137,6 +137,24 @@ export class ViewerInputHandler {
 
   // Text input overlay state
   private activeTextOverlay: HTMLTextAreaElement | null = null;
+
+  /**
+   * Optional callback invoked when an `.orvproject` file is dropped.
+   * The Viewer wires this to the persistence manager's openProject flow.
+   */
+  onProjectFileDrop: ((file: File, companionFiles: File[]) => void) | null = null;
+
+  /**
+   * Optional async callback invoked before loading media files (not project files).
+   * Used to create an auto-checkpoint before destructive media load operations.
+   */
+  onBeforeMediaLoad: (() => Promise<void>) | null = null;
+
+  /**
+   * Optional callback invoked when an `.otio` file is dropped.
+   * The app wires this to the playlist panel's OTIO import flow.
+   */
+  onOTIOFileDrop: ((file: File) => void) | null = null;
 
   constructor(
     private ctx: ViewerInputContext,
@@ -341,6 +359,12 @@ export class ViewerInputHandler {
       } else if (tool === 'text') {
         const point = this.getCanvasPoint(e.clientX, e.clientY);
         if (point) {
+          // Check if the click hits an existing text annotation first
+          const hit = paintEngine.hitTestTextAnnotations(session.currentFrame, point);
+          if (hit) {
+            paintEngine.emit('annotationSelected', { annotation: hit, frame: session.currentFrame });
+            return;
+          }
           this.showTextInputOverlay(e.clientX, e.clientY, point);
         }
       } else if (this.isShapeTool(tool)) {
@@ -706,6 +730,133 @@ export class ViewerInputHandler {
     const fileArray = Array.from(files);
     const session = this.ctx.getSession();
 
+    // Check for .orvproject file among dropped files (before other session formats)
+    const projectFile = fileArray.find((f) => f.name.toLowerCase().endsWith('.orvproject'));
+    if (projectFile) {
+      if (this.onProjectFileDrop) {
+        const companionFiles = fileArray.filter((f) => f !== projectFile);
+        this.onProjectFileDrop(projectFile, companionFiles);
+      } else {
+        showAlert(`Cannot open ${projectFile.name}: project loading is not available in this context.`, {
+          type: 'warning',
+          title: 'Unsupported Drop',
+        });
+      }
+      return;
+    }
+
+    // Check for .rvedl file among dropped files (before session/sequence detection)
+    const edlFile = fileArray.find((f) => f.name.toLowerCase().endsWith('.rvedl'));
+    if (edlFile) {
+      // Warn if session files (.rv/.gto) are also present — they will be ignored
+      const sessionFile = fileArray.find(
+        (f) => f.name.toLowerCase().endsWith('.rv') || f.name.toLowerCase().endsWith('.gto'),
+      );
+      if (sessionFile) {
+        showAlert(
+          `Mixed drop: "${edlFile.name}" (EDL) and "${sessionFile.name}" (session) ` +
+            `were both dropped. Loading the EDL file only — the session file was skipped.`,
+          { type: 'warning', title: 'Mixed Selection' },
+        );
+      }
+      // Remove the EDL file and any session files from the array so remaining media files can still be loaded
+      const remainingFiles = fileArray.filter(
+        (f) => f !== edlFile && !f.name.toLowerCase().endsWith('.rv') && !f.name.toLowerCase().endsWith('.gto'),
+      );
+      try {
+        const text = await edlFile.text();
+        const entries = session.loadEDL(text);
+        if (entries.length > 0) {
+          const uniqueSources = new Set(
+            entries.map((e) => {
+              const parts = e.sourcePath.split('/');
+              return parts[parts.length - 1] || e.sourcePath;
+            }),
+          );
+          const sourceList = Array.from(uniqueSources).slice(0, 5).join(', ');
+          const moreCount = uniqueSources.size > 5 ? ` and ${uniqueSources.size - 5} more` : '';
+          const mediaHint =
+            remainingFiles.length > 0
+              ? `\n\n${remainingFiles.length} accompanying media ${remainingFiles.length === 1 ? 'file' : 'files'} will also be loaded.`
+              : `\n\nSource paths are local filesystem references. ` +
+                `Load the corresponding media files to resolve them.`;
+          showAlert(
+            `Loaded ${entries.length} EDL ${entries.length === 1 ? 'entry' : 'entries'} ` +
+              `from ${edlFile.name} referencing ${uniqueSources.size} ` +
+              `${uniqueSources.size === 1 ? 'source' : 'sources'}: ${sourceList}${moreCount}.` +
+              mediaHint,
+            { type: 'info', title: 'EDL Loaded' },
+          );
+        } else {
+          showAlert(`No valid entries found in ${edlFile.name}.`, { type: 'warning', title: 'EDL Empty' });
+        }
+      } catch (err) {
+        console.error('Failed to load RVEDL file:', err);
+        showAlert(`Failed to load ${edlFile.name}: ${err}`, { type: 'error', title: 'Load Error' });
+      }
+      // If no remaining media files, we're done
+      if (remainingFiles.length === 0) {
+        return;
+      }
+      // Continue to load remaining media files below
+      fileArray.length = 0;
+      fileArray.push(...remainingFiles);
+    }
+
+    // Check for .otio file among dropped files — route to playlist OTIO import
+    const otioFile = fileArray.find((f) => f.name.toLowerCase().endsWith('.otio'));
+    if (otioFile) {
+      if (this.onOTIOFileDrop) {
+        this.onOTIOFileDrop(otioFile);
+      } else {
+        showAlert(
+          `Cannot import ${otioFile.name}: OTIO import is not available in this context. ` +
+            `Open the Playlist panel to import OTIO files.`,
+          { type: 'warning', title: 'OTIO Import Unavailable' },
+        );
+      }
+      return;
+    }
+
+    // Check for .rv or .gto session file among dropped files (before sequence detection)
+    const sessionFile = fileArray.find(
+      (f) => f.name.toLowerCase().endsWith('.rv') || f.name.toLowerCase().endsWith('.gto'),
+    );
+
+    if (sessionFile) {
+      // Build availableFiles map from non-session files (sidecar media/CDL)
+      // Extra .rv/.gto files are excluded — the app only loads one session at a time
+      const availableFiles = new Map<string, File[]>();
+      for (const file of fileArray) {
+        if (file !== sessionFile) {
+          const lowerName = file.name.toLowerCase();
+          if (!lowerName.endsWith('.rv') && !lowerName.endsWith('.gto')) {
+            const key = file.name;
+            const existing = availableFiles.get(key);
+            if (existing) {
+              existing.push(file);
+            } else {
+              availableFiles.set(key, [file]);
+            }
+          }
+        }
+      }
+
+      try {
+        // Create auto-checkpoint before loading session file (destructive)
+        await this.onBeforeMediaLoad?.();
+        const content = await sessionFile.arrayBuffer();
+        await session.loadFromGTO(content, availableFiles);
+      } catch (err) {
+        console.error('Failed to load session file:', err);
+        showAlert(`Failed to load ${sessionFile.name}: ${err}`, { type: 'error', title: 'Load Error' });
+      }
+      return;
+    }
+
+    // Create auto-checkpoint before loading new media (when sources exist)
+    await this.onBeforeMediaLoad?.();
+
     // Check for sequence
     const imageFiles = filterImageFiles(fileArray);
     if (imageFiles.length > 1) {
@@ -722,15 +873,26 @@ export class ViewerInputHandler {
       }
     }
 
-    // Single file or mixed files
+    // Single image file - try to infer a sequence from available files
+    if (imageFiles.length === 1) {
+      const singleFile = imageFiles[0]!;
+      try {
+        const sequenceInfo = await inferSequenceFromSingleFile(singleFile, fileArray);
+        if (sequenceInfo) {
+          const sequenceFiles = sequenceInfo.frames.map((f) => f.file);
+          await session.loadSequence(sequenceFiles);
+          return;
+        }
+      } catch (err) {
+        console.error('Failed to infer sequence:', err);
+        // Fall through to single file loading
+      }
+    }
+
+    // Single file or mixed non-session files
     for (const file of fileArray) {
       try {
-        if (file.name.toLowerCase().endsWith('.rv') || file.name.toLowerCase().endsWith('.gto')) {
-          const content = await file.arrayBuffer();
-          await session.loadFromGTO(content);
-        } else {
-          await session.loadFile(file);
-        }
+        await session.loadFile(file);
       } catch (err) {
         console.error('Failed to load file:', err);
         showAlert(`Failed to load ${file.name}: ${err}`, { type: 'error', title: 'Load Error' });

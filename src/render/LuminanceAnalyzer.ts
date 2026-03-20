@@ -48,11 +48,24 @@ export class LuminanceAnalyzer {
   private pboFences: [WebGLSync | null, WebGLSync | null] = [null, null];
   private cachedResult: LuminanceStats = { avg: 0.18, linearAvg: 1.0 };
   private initialized = false;
+  private available = false;
   private firstFrame = true;
   private nanWarned = false;
 
   constructor(gl: WebGL2RenderingContext) {
     this.gl = gl;
+  }
+
+  /**
+   * Returns true if the analyzer can perform real GPU-based scene luminance analysis.
+   * When false, computeLuminanceStats() returns fixed fallback values (avg: 0.18, linearAvg: 1.0).
+   * This happens when EXT_color_buffer_float is not available on the current GPU/browser.
+   */
+  isAvailable(): boolean {
+    if (!this.initialized) {
+      this.init();
+    }
+    return this.available;
   }
 
   /**
@@ -220,6 +233,7 @@ export class LuminanceAnalyzer {
     // Restore FBO
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
+    this.available = true;
     this.initialized = true;
   }
 
@@ -266,6 +280,7 @@ export class LuminanceAnalyzer {
       this.pboFences[1] = null;
     }
     this.initialized = false;
+    this.available = false;
     this.firstFrame = true;
   }
 }

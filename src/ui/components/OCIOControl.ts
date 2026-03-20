@@ -95,7 +95,7 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
     // Create toggle button
     this.toggleButton = document.createElement('button');
     this.toggleButton.innerHTML = `${getIconSvg('palette', 'sm')}<span style="margin-left: 6px;">OCIO</span>`;
-    this.toggleButton.title = 'Toggle OCIO color management panel (Shift+O)';
+    this.toggleButton.title = 'Toggle OCIO color management panel (O)';
     this.toggleButton.dataset.testid = 'ocio-panel-button';
     this.toggleButton.style.cssText = `
       background: transparent;
@@ -484,9 +484,9 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
     valueLabel.style.cssText = 'flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
 
     const arrow = document.createElement('span');
-    arrow.textContent = '\u25BC';
+    arrow.innerHTML = getIconSvg('chevron-down', 'sm');
     arrow.setAttribute('aria-hidden', 'true');
-    arrow.style.cssText = 'font-size: 8px; color: var(--text-muted);';
+    arrow.style.cssText = 'color: var(--text-muted); display: inline-flex; align-items: center;';
 
     selectButton.appendChild(valueLabel);
     selectButton.appendChild(arrow);
@@ -606,8 +606,8 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
       padding-bottom: 4px;
     `;
     const arrow = document.createElement('span');
-    arrow.textContent = '\u25B6';
-    arrow.style.cssText = 'font-size: 8px; transition: transform 0.15s ease;';
+    arrow.innerHTML = getIconSvg('chevron-right', 'sm');
+    arrow.style.cssText = 'display: inline-flex; align-items: center; transition: transform 0.15s ease;';
     const label = document.createElement('span');
     label.textContent = 'Quick Presets';
     header.appendChild(arrow);
@@ -1030,8 +1030,30 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
 
     // Position relative to button
     const rect = this.toggleButton.getBoundingClientRect();
-    this.panel.style.top = `${rect.bottom + 4}px`;
-    this.panel.style.left = `${Math.min(rect.left, window.innerWidth - 360)}px`;
+    const panelRect = this.panel.getBoundingClientRect();
+    const viewportPadding = 8;
+
+    let top = rect.bottom + 4;
+    let left = rect.left;
+
+    // Prefer rendering below, then flip above if needed.
+    if (top + panelRect.height > window.innerHeight - viewportPadding) {
+      top = rect.top - panelRect.height - 4;
+    }
+
+    // Clamp to viewport edges.
+    if (top < viewportPadding) {
+      top = viewportPadding;
+    }
+    if (left + panelRect.width > window.innerWidth - viewportPadding) {
+      left = window.innerWidth - panelRect.width - viewportPadding;
+    }
+    if (left < viewportPadding) {
+      left = viewportPadding;
+    }
+
+    this.panel.style.top = `${top}px`;
+    this.panel.style.left = `${left}px`;
 
     this.isExpanded = true;
     this.panel.style.display = 'block';

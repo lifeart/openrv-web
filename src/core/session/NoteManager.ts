@@ -4,6 +4,11 @@
 export type NoteStatus = 'open' | 'resolved' | 'wontfix';
 
 /**
+ * Note priority levels
+ */
+export type NotePriority = 'low' | 'medium' | 'high' | 'critical';
+
+/**
  * A note/comment attached to a frame range on a specific media source
  */
 export interface Note {
@@ -18,6 +23,9 @@ export interface Note {
   status: NoteStatus;
   parentId: string | null; // null = top-level, string = reply
   color: string; // Hex color (default '#fbbf24')
+  priority: NotePriority; // Priority level (default 'medium')
+  category: string; // Category/department tag (default '')
+  externalId: string | null; // Remote system ID (e.g. ShotGrid note ID) for deduplication
 }
 
 /**
@@ -27,6 +35,16 @@ export interface Note {
 export interface NoteManagerCallbacks {
   onNotesChanged(): void;
 }
+
+/**
+ * Event types emitted by NoteManager.
+ */
+export interface NoteManagerEvents {
+  /** Emitted when a new note is added. Payload is a copy of the created note. */
+  noteAdded: Note;
+}
+
+type NoteManagerEventCallback<K extends keyof NoteManagerEvents> = (data: NoteManagerEvents[K]) => void;
 
 /**
  * NoteManager owns note/comment state and operations:
@@ -40,6 +58,7 @@ export interface NoteManagerCallbacks {
 export class NoteManager {
   private _notes = new Map<string, Note>();
   private _callbacks: NoteManagerCallbacks | null = null;
+  private _eventListeners = new Map<keyof NoteManagerEvents, Set<NoteManagerEventCallback<any>>>();
 
   /**
    * Set the callbacks object. Called once by Session after construction.
@@ -50,6 +69,33 @@ export class NoteManager {
 
   private notifyChange(): void {
     this._callbacks?.onNotesChanged();
+  }
+
+  // ---- Events ----
+
+  /**
+   * Subscribe to a NoteManager event.
+   * Returns an unsubscribe function.
+   */
+  on<K extends keyof NoteManagerEvents>(event: K, callback: NoteManagerEventCallback<K>): () => void {
+    if (!this._eventListeners.has(event)) {
+      this._eventListeners.set(event, new Set());
+    }
+    this._eventListeners.get(event)!.add(callback);
+    return () => {
+      this._eventListeners.get(event)?.delete(callback);
+    };
+  }
+
+  private emitEvent<K extends keyof NoteManagerEvents>(event: K, data: NoteManagerEvents[K]): void {
+    this._eventListeners.get(event)?.forEach((callback) => {
+      try {
+        callback(data);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error(`Error in NoteManager event listener for "${String(event)}":`, err);
+      }
+    });
   }
 
   // ---- CRUD ----
@@ -64,9 +110,18 @@ export class NoteManager {
     frameEnd: number,
     text: string,
     author: string,
-    options?: { parentId?: string; color?: string },
+    options?: {
+      parentId?: string;
+      color?: string;
+      priority?: NotePriority;
+      category?: string;
+      createdAt?: string;
+      status?: NoteStatus;
+      externalId?: string;
+    },
   ): Note {
     const now = new Date().toISOString();
+    const createdAt = options?.createdAt ?? now;
     const note: Note = {
       id: crypto.randomUUID(),
       sourceIndex,
@@ -74,28 +129,38 @@ export class NoteManager {
       frameEnd,
       text,
       author,
-      createdAt: now,
+      createdAt,
       modifiedAt: now,
-      status: 'open',
+      status: options?.status ?? 'open',
       parentId: options?.parentId ?? null,
       color: options?.color ?? '#fbbf24',
+      priority: options?.priority ?? 'medium',
+      category: options?.category ?? '',
+      externalId: options?.externalId ?? null,
     };
     this._notes.set(note.id, note);
     this.notifyChange();
-    return { ...note };
+    const copy = { ...note };
+    this.emitEvent('noteAdded', copy);
+    return copy;
   }
 
   /**
    * Update an existing note's text, status, or color.
    * Returns the updated note copy, or null if not found.
    */
-  updateNote(noteId: string, updates: Partial<Pick<Note, 'text' | 'status' | 'color'>>): Note | null {
+  updateNote(
+    noteId: string,
+    updates: Partial<Pick<Note, 'text' | 'status' | 'color' | 'priority' | 'category'>>,
+  ): Note | null {
     const note = this._notes.get(noteId);
     if (!note) return null;
 
     if (updates.text !== undefined) note.text = updates.text;
     if (updates.status !== undefined) note.status = updates.status;
     if (updates.color !== undefined) note.color = updates.color;
+    if (updates.priority !== undefined) note.priority = updates.priority;
+    if (updates.category !== undefined) note.category = updates.category;
     note.modifiedAt = new Date().toISOString();
 
     this.notifyChange();
@@ -180,6 +245,18 @@ export class NoteManager {
   }
 
   /**
+   * Find a note by its external system ID (e.g. ShotGrid note ID).
+   */
+  findNoteByExternalId(externalId: string): Note | undefined {
+    for (const note of this._notes.values()) {
+      if (note.externalId === externalId) {
+        return { ...note };
+      }
+    }
+    return undefined;
+  }
+
+  /**
    * Get all direct replies to a note
    */
   getReplies(parentId: string): Note[] {
@@ -255,5 +332,6 @@ export class NoteManager {
   dispose(): void {
     this._notes.clear();
     this._callbacks = null;
+    this._eventListeners.clear();
   }
 }

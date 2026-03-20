@@ -20,10 +20,17 @@ import type { ManagerBase } from '../core/ManagerBase';
 // ---------------------------------------------------------------------------
 
 /** All supported inbound message types */
-export type DCCInboundMessageType = 'loadMedia' | 'syncFrame' | 'syncColor' | 'ping';
+export type DCCInboundMessageType = 'loadMedia' | 'syncFrame' | 'syncColor' | 'ping' | 'pong';
 
 /** All supported outbound message types */
-export type DCCOutboundMessageType = 'frameChanged' | 'colorChanged' | 'annotationAdded' | 'pong' | 'error';
+export type DCCOutboundMessageType =
+  | 'frameChanged'
+  | 'colorChanged'
+  | 'annotationAdded'
+  | 'noteAdded'
+  | 'ping'
+  | 'pong'
+  | 'error';
 
 /** Base message structure */
 export interface DCCMessage {
@@ -34,10 +41,31 @@ export interface DCCMessage {
   timestamp?: string;
 }
 
-/** Inbound: load a media file */
+/**
+ * Inbound: load a media file.
+ *
+ * The `path` field must be a browser-loadable URL. Supported URL schemes:
+ * - `http:` / `https:` — served over the network (recommended for DCC integration)
+ * - `blob:` — in-memory blob URL created by the browser
+ * - `data:` — inline data URL
+ * - `file:` — local file URL (e.g. `file:///C:/renders/shot.exr`); note that
+ *   browser security policies may restrict `file:` access depending on context
+ *
+ * Raw filesystem paths (e.g. `/mnt/renders/shot.exr`, `C:\renders\shot.exr`,
+ * `\\server\share\file.exr`) are **not** supported. The browser sandbox cannot
+ * access the local filesystem directly. If the DCC tool has files on disk, the
+ * bridge server should either:
+ * 1. Serve them over a local HTTP server and send the `http://localhost:…` URL, or
+ * 2. Convert to a `file://` URL (e.g. `file:///mnt/renders/shot.exr`).
+ */
 export interface LoadMediaMessage extends DCCMessage {
   type: 'loadMedia';
-  /** File path or URL */
+  /**
+   * Browser-loadable URL for the media file.
+   *
+   * Must use one of the supported URL schemes: http, https, blob, data, or file.
+   * Raw filesystem paths are rejected with an `INVALID_MEDIA_PATH` error.
+   */
   path: string;
   /** Optional frame to seek to after loading */
   frame?: number;
@@ -70,7 +98,7 @@ export interface PingMessage extends DCCMessage {
 }
 
 /** All inbound message types */
-export type DCCInboundMessage = LoadMediaMessage | SyncFrameMessage | SyncColorMessage | PingMessage;
+export type DCCInboundMessage = LoadMediaMessage | SyncFrameMessage | SyncColorMessage | PingMessage | PongMessage;
 
 /** Outbound: frame changed notification */
 export interface FrameChangedMessage extends DCCMessage {
@@ -96,6 +124,16 @@ export interface AnnotationAddedMessage extends DCCMessage {
   annotationId: string;
 }
 
+/** Outbound: note added notification */
+export interface NoteAddedMessage extends DCCMessage {
+  type: 'noteAdded';
+  frame: number;
+  text: string;
+  author: string;
+  status: string;
+  noteId: string;
+}
+
 /** Outbound: pong (heartbeat response) */
 export interface PongMessage extends DCCMessage {
   type: 'pong';
@@ -113,6 +151,8 @@ export type DCCOutboundMessage =
   | FrameChangedMessage
   | ColorChangedMessage
   | AnnotationAddedMessage
+  | NoteAddedMessage
+  | PingMessage
   | PongMessage
   | ErrorMessage;
 
@@ -129,9 +169,12 @@ export interface DCCBridgeEvents extends EventMap {
   syncFrame: SyncFrameMessage;
   syncColor: SyncColorMessage;
   ping: PingMessage;
+  pong: PongMessage;
   error: Error;
   messageReceived: DCCInboundMessage;
   messageSent: DCCOutboundMessage;
+  /** Emitted when a message could not be sent because the bridge is not writable. */
+  messageDropped: DCCOutboundMessage;
 }
 
 // ---------------------------------------------------------------------------
@@ -196,6 +239,7 @@ export class DCCBridge extends EventEmitter<DCCBridgeEvents> implements ManagerB
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private heartbeatTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
   private _lastPongTime = 0;
+  private _droppedMessageCount = 0;
   private disposed = false;
 
   /** Custom WebSocket constructor for testing (defaults to globalThis.WebSocket) */
@@ -224,6 +268,11 @@ export class DCCBridge extends EventEmitter<DCCBridgeEvents> implements ManagerB
   /** Timestamp of the last received pong. */
   get lastPongTime(): number {
     return this._lastPongTime;
+  }
+
+  /** Number of outbound messages dropped because the bridge was not writable. */
+  get droppedMessageCount(): number {
+    return this._droppedMessageCount;
   }
 
   /**
@@ -264,7 +313,11 @@ export class DCCBridge extends EventEmitter<DCCBridgeEvents> implements ManagerB
    * Send a typed outbound message.
    */
   send(message: DCCOutboundMessage): boolean {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return false;
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      this._droppedMessageCount++;
+      this.emit('messageDropped', message);
+      return false;
+    }
 
     const envelope: DCCOutboundMessage = {
       ...message,
@@ -299,6 +352,32 @@ export class DCCBridge extends EventEmitter<DCCBridgeEvents> implements ManagerB
     return this.send({
       type: 'colorChanged',
       ...settings,
+    });
+  }
+
+  /**
+   * Send an error message back to the DCC tool.
+   */
+  sendError(code: string, message: string, id?: string): boolean {
+    return this.send({
+      type: 'error',
+      code,
+      message,
+      ...(id !== undefined ? { id } : {}),
+    });
+  }
+
+  /**
+   * Send a note-added notification.
+   */
+  sendNoteAdded(frame: number, text: string, author: string, status: string, noteId: string): boolean {
+    return this.send({
+      type: 'noteAdded',
+      frame,
+      text,
+      author,
+      status,
+      noteId,
     });
   }
 
@@ -409,6 +488,9 @@ export class DCCBridge extends EventEmitter<DCCBridgeEvents> implements ManagerB
       case 'ping':
         this.handlePing(message as PingMessage);
         break;
+      case 'pong':
+        this.handlePong(message as PongMessage);
+        break;
       default:
         this.send({
           type: 'error',
@@ -450,8 +532,15 @@ export class DCCBridge extends EventEmitter<DCCBridgeEvents> implements ManagerB
 
   private handlePing(message: PingMessage): void {
     this._lastPongTime = Date.now();
+    this.resetHeartbeatTimeout();
     this.send({ type: 'pong', id: message.id });
     this.emit('ping', message);
+  }
+
+  private handlePong(_message: PongMessage): void {
+    this._lastPongTime = Date.now();
+    this.resetHeartbeatTimeout();
+    this.emit('pong', _message);
   }
 
   // ---------------------------------------------------------------------------
@@ -497,12 +586,40 @@ export class DCCBridge extends EventEmitter<DCCBridgeEvents> implements ManagerB
     if (this.config.heartbeatInterval <= 0) return;
 
     this.stopHeartbeat();
+    this._lastPongTime = Date.now();
 
     this.heartbeatTimer = setInterval(() => {
       if (this.ws?.readyState === WebSocket.OPEN) {
-        this.send({ type: 'pong' }); // We send a keepalive; the DCC tool should ping us
+        this.send({ type: 'ping' });
+        this.scheduleHeartbeatTimeout();
       }
     }, this.config.heartbeatInterval);
+  }
+
+  private scheduleHeartbeatTimeout(): void {
+    if (this.config.heartbeatTimeout <= 0) return;
+
+    // Clear any existing timeout before scheduling a new one
+    if (this.heartbeatTimeoutTimer !== null) {
+      clearTimeout(this.heartbeatTimeoutTimer);
+      this.heartbeatTimeoutTimer = null;
+    }
+
+    this.heartbeatTimeoutTimer = setTimeout(() => {
+      this.heartbeatTimeoutTimer = null;
+      this.emit('error', new Error('Heartbeat timeout: no response from DCC peer'));
+      // Force-close the connection so reconnect logic kicks in
+      if (this.ws) {
+        this.ws.close(4000, 'Heartbeat timeout');
+      }
+    }, this.config.heartbeatTimeout);
+  }
+
+  private resetHeartbeatTimeout(): void {
+    if (this.heartbeatTimeoutTimer !== null) {
+      clearTimeout(this.heartbeatTimeoutTimer);
+      this.heartbeatTimeoutTimer = null;
+    }
   }
 
   private stopHeartbeat(): void {

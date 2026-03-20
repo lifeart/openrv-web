@@ -374,5 +374,75 @@ describe('ShortcutEditor', () => {
 
       removeSpy.mockRestore();
     });
+
+    it('SHORTCUT-U110: issue #110 regression - import failure logs console.warn', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const invalidFile = new File(['{ invalid json'], 'bad-shortcuts.json', { type: 'application/json' });
+      const originalCreateElement = document.createElement.bind(document);
+      const mockInputClick = vi.fn();
+      let capturedChangeHandler: (() => void) | null = null;
+      let mockInput: HTMLInputElement | null = null;
+
+      class MockFileReader {
+        result: string | ArrayBuffer | null = '{ invalid json';
+        onload: ((this: FileReader, ev: ProgressEvent<FileReader>) => unknown) | null = null;
+        readAsText = vi.fn(() => {
+          this.onload?.call(this as unknown as FileReader, {} as ProgressEvent<FileReader>);
+        });
+      }
+
+      vi.spyOn(document, 'createElement').mockImplementation(((tagName: string, options?: ElementCreationOptions) => {
+        const el = originalCreateElement(tagName, options);
+        if (tagName === 'input') {
+          mockInput = el as HTMLInputElement;
+          vi.spyOn(mockInput, 'click').mockImplementation(mockInputClick);
+          const originalAddEventListener = mockInput.addEventListener.bind(mockInput);
+          vi.spyOn(mockInput, 'addEventListener').mockImplementation(((
+            type: string,
+            listener: EventListenerOrEventListenerObject,
+            opts?: boolean | AddEventListenerOptions,
+          ) => {
+            if (type === 'change') {
+              capturedChangeHandler = () => {
+                if (typeof listener === 'function') {
+                  listener(new Event('change'));
+                } else {
+                  listener.handleEvent(new Event('change'));
+                }
+              };
+            }
+            return originalAddEventListener(type, listener, opts);
+          }) as HTMLInputElement['addEventListener']);
+        }
+        return el;
+      }) as typeof document.createElement);
+
+      vi.stubGlobal('FileReader', MockFileReader);
+
+      const buttons = Array.from(container.querySelectorAll('button'));
+      const importButton = buttons.find((btn) => btn.textContent?.includes('Import')) as HTMLButtonElement;
+      expect(importButton).toBeTruthy();
+
+      importButton.click();
+      expect(mockInputClick).toHaveBeenCalled();
+      expect(mockInput).not.toBeNull();
+      Object.defineProperty(mockInput!, 'files', { configurable: true, value: [invalidFile] });
+      expect(capturedChangeHandler).not.toBeNull();
+      capturedChangeHandler!();
+
+      const status = container.querySelector('.shortcut-import-status') as HTMLElement;
+      expect(warnSpy).toHaveBeenCalledWith('[ShortcutEditor] Import failed:', expect.any(Error));
+      expect(status.textContent).toBe('Import failed: invalid file format');
+
+      vi.unstubAllGlobals();
+      vi.restoreAllMocks();
+      warnSpy.mockRestore();
+    });
+
+    it('SHORTCUT-U111: issue #110 regression - importBindings throws on invalid format', () => {
+      expect(() => importBindings(manager, 'not json')).toThrow();
+      expect(() => importBindings(manager, '{"version":2}')).toThrow();
+      expect(() => importBindings(manager, '{"version":1,"bindings":"wrong"}')).toThrow();
+    });
   });
 });

@@ -23,6 +23,88 @@ import {
   type FrameburnContext,
 } from './FrameburnCompositor';
 import { safeCanvasContext2D } from '../../color/ColorProcessingFacade';
+import type { BugPosition } from './BugOverlay';
+
+// ---------------------------------------------------------------------------
+// Bug overlay export compositing
+// ---------------------------------------------------------------------------
+
+/**
+ * Configuration for burning the bug overlay into exported frames.
+ * Mirrors the viewer-side BugOverlayState but carries the loaded image
+ * directly so the export path does not depend on DOM state.
+ */
+export interface BugOverlayExportConfig {
+  enabled: boolean;
+  image: CanvasImageSource;
+  imageWidth: number;
+  imageHeight: number;
+  position: BugPosition;
+  /** Size as fraction of output width (0.02 - 0.3). */
+  size: number;
+  /** Opacity (0 - 1). */
+  opacity: number;
+  /** Margin from edge in pixels. */
+  margin: number;
+}
+
+/**
+ * Composite a bug overlay image onto an export canvas.
+ *
+ * Replicates the same sizing / positioning logic used by BugOverlay.render()
+ * so the exported frame matches what the user sees in the viewer.
+ */
+export function compositeBugOverlay(
+  ctx: CanvasRenderingContext2D,
+  canvasWidth: number,
+  canvasHeight: number,
+  config: BugOverlayExportConfig | null | undefined,
+): void {
+  if (!config?.enabled) return;
+  if (canvasWidth <= 0 || canvasHeight <= 0) return;
+  if (config.imageWidth <= 0 || config.imageHeight <= 0) return;
+
+  const { position, size, opacity, margin, image, imageWidth, imageHeight } = config;
+
+  // Calculate rendered size maintaining aspect ratio (same as BugOverlay.render)
+  const safeImageWidth = Math.max(1, imageWidth);
+  const safeImageHeight = Math.max(1, imageHeight);
+  const renderWidth = canvasWidth * size;
+  const aspect = safeImageWidth / safeImageHeight;
+  const renderHeight = renderWidth / aspect;
+
+  // Clamp margin so it doesn't exceed half the canvas dimension
+  const maxMarginX = canvasWidth / 2;
+  const maxMarginY = canvasHeight / 2;
+  const clampedMargin = Math.min(margin, maxMarginX, maxMarginY);
+
+  // Calculate position (no offset since export canvas has no letterboxing)
+  let x: number, y: number;
+  switch (position) {
+    case 'top-left':
+      x = clampedMargin;
+      y = clampedMargin;
+      break;
+    case 'top-right':
+      x = canvasWidth - renderWidth - clampedMargin;
+      y = clampedMargin;
+      break;
+    case 'bottom-left':
+      x = clampedMargin;
+      y = canvasHeight - renderHeight - clampedMargin;
+      break;
+    case 'bottom-right':
+    default:
+      x = canvasWidth - renderWidth - clampedMargin;
+      y = canvasHeight - renderHeight - clampedMargin;
+      break;
+  }
+
+  ctx.save();
+  ctx.globalAlpha = opacity;
+  ctx.drawImage(image, x, y, renderWidth, renderHeight);
+  ctx.restore();
+}
 
 const log = new Logger('ViewerExport');
 
@@ -166,6 +248,7 @@ export function createExportCanvas(
   frameburnOptions?: FrameburnTimecodeOptions | null,
   frameburnConfig?: FrameburnConfig | null,
   frameburnContext?: FrameburnContext | null,
+  bugOverlayConfig?: BugOverlayExportConfig | null,
 ): HTMLCanvasElement | null {
   const source = session.currentSource;
   if (!source) return null;
@@ -232,7 +315,10 @@ export function createExportCanvas(
     }
   }
 
-  // Composite frameburn last so it stays readable over annotations.
+  // Composite bug overlay so the logo is burned into the export.
+  compositeBugOverlay(ctx, outputWidth, outputHeight, bugOverlayConfig);
+
+  // Composite frameburn last so it stays readable over annotations and bug overlay.
   compositeTimecodeFrameburn(ctx, outputWidth, outputHeight, frameburnOptions);
   if (frameburnConfig && frameburnContext) {
     compositeFrameburn(ctx, outputWidth, outputHeight, frameburnConfig, frameburnContext);
@@ -286,6 +372,7 @@ export async function renderFrameToCanvas(
   frameburnOptions?: FrameburnTimecodeOptions | null,
   frameburnConfig?: FrameburnConfig | null,
   frameburnContext?: FrameburnContext | null,
+  bugOverlayConfig?: BugOverlayExportConfig | null,
 ): Promise<HTMLCanvasElement | null> {
   const source = session.currentSource;
   if (!source) return null;
@@ -396,7 +483,10 @@ export async function renderFrameToCanvas(
       }
     }
 
-    // Composite frameburn last so it stays readable over annotations.
+    // Composite bug overlay so the logo is burned into the export.
+    compositeBugOverlay(ctx, outputWidth, outputHeight, bugOverlayConfig);
+
+    // Composite frameburn last so it stays readable over annotations and bug overlay.
     compositeTimecodeFrameburn(ctx, outputWidth, outputHeight, frameburnOptions);
     if (frameburnConfig && frameburnContext) {
       compositeFrameburn(ctx, outputWidth, outputHeight, frameburnConfig, frameburnContext);
@@ -426,8 +516,10 @@ export function renderSourceToImageData(
   let element: CanvasImageSource | null = source.element ?? null;
 
   // Use sequence frame image for the current frame when available.
-  if (source.type === 'sequence' && source.sequenceFrames) {
-    const seqFrame = source.sequenceFrames[frame - 1]?.image;
+  if (source.type === 'sequence' && source.sequenceFrameMap) {
+    const startFrame = source.sequenceInfo?.startFrame ?? 1;
+    const frameNumber = startFrame + frame - 1;
+    const seqFrame = source.sequenceFrameMap.get(frameNumber)?.image;
     if (seqFrame) {
       element = seqFrame;
     }

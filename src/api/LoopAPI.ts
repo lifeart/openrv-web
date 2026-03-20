@@ -7,13 +7,15 @@
 import type { Session } from '../core/session/Session';
 import type { LoopMode } from '../core/types/session';
 import { ValidationError } from '../core/errors';
+import { DisposableAPI } from './Disposable';
 
 const VALID_LOOP_MODES: ReadonlySet<LoopMode> = new Set(['once', 'loop', 'pingpong']);
 
-export class LoopAPI {
+export class LoopAPI extends DisposableAPI {
   private session: Session;
 
   constructor(session: Session) {
+    super();
     this.session = session;
   }
 
@@ -30,6 +32,7 @@ export class LoopAPI {
    * ```
    */
   setMode(mode: string): void {
+    this.assertNotDisposed();
     if (typeof mode !== 'string' || !VALID_LOOP_MODES.has(mode as LoopMode)) {
       throw new ValidationError(`Invalid loop mode: "${mode}". Valid modes: once, loop, pingpong`);
     }
@@ -47,6 +50,7 @@ export class LoopAPI {
    * ```
    */
   getMode(): string {
+    this.assertNotDisposed();
     return this.session.loopMode;
   }
 
@@ -62,10 +66,14 @@ export class LoopAPI {
    * ```
    */
   setInPoint(frame: number): void {
+    this.assertNotDisposed();
     if (typeof frame !== 'number' || isNaN(frame)) {
       throw new ValidationError('setInPoint() requires a valid frame number');
     }
-    this.session.setInPoint(frame);
+    if (!isFinite(frame)) {
+      throw new ValidationError('setInPoint() requires a finite frame number');
+    }
+    this.session.setInPoint(Math.round(frame));
   }
 
   /**
@@ -80,10 +88,14 @@ export class LoopAPI {
    * ```
    */
   setOutPoint(frame: number): void {
+    this.assertNotDisposed();
     if (typeof frame !== 'number' || isNaN(frame)) {
       throw new ValidationError('setOutPoint() requires a valid frame number');
     }
-    this.session.setOutPoint(frame);
+    if (!isFinite(frame)) {
+      throw new ValidationError('setOutPoint() requires a finite frame number');
+    }
+    this.session.setOutPoint(Math.round(frame));
   }
 
   /**
@@ -97,6 +109,7 @@ export class LoopAPI {
    * ```
    */
   getInPoint(): number {
+    this.assertNotDisposed();
     return this.session.inPoint;
   }
 
@@ -111,6 +124,7 @@ export class LoopAPI {
    * ```
    */
   getOutPoint(): number {
+    this.assertNotDisposed();
     return this.session.outPoint;
   }
 
@@ -123,6 +137,7 @@ export class LoopAPI {
    * ```
    */
   clearInOut(): void {
+    this.assertNotDisposed();
     this.session.resetInOutPoints();
   }
 }

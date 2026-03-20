@@ -264,6 +264,92 @@ describe('LayoutManager', () => {
     });
   });
 
+  describe('Panel tab keyboard navigation', () => {
+    it('LM-026: ArrowRight moves to next tab', () => {
+      const tab1 = document.createElement('div');
+      const tab2 = document.createElement('div');
+      const tab3 = document.createElement('div');
+      manager.addPanelTab('right', 'Tab 1', tab1);
+      manager.addPanelTab('right', 'Tab 2', tab2);
+      manager.addPanelTab('right', 'Tab 3', tab3);
+      store.setPanelCollapsed('right', false);
+
+      const root = manager.getElement();
+      const tabBar = root.querySelector('.layout-panel-tabs-right') as HTMLElement;
+      const buttons = tabBar.querySelectorAll('[role="tab"]');
+
+      // Focus first tab and press ArrowRight
+      (buttons[0] as HTMLElement).dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+      expect(store.panels.right.activeTab).toBe(1);
+    });
+
+    it('LM-027: ArrowLeft wraps to last tab from first', () => {
+      const tab1 = document.createElement('div');
+      const tab2 = document.createElement('div');
+      manager.addPanelTab('right', 'Tab 1', tab1);
+      manager.addPanelTab('right', 'Tab 2', tab2);
+      store.setPanelCollapsed('right', false);
+
+      const root = manager.getElement();
+      const tabBar = root.querySelector('.layout-panel-tabs-right') as HTMLElement;
+      const buttons = tabBar.querySelectorAll('[role="tab"]');
+
+      (buttons[0] as HTMLElement).dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+      expect(store.panels.right.activeTab).toBe(1);
+    });
+
+    it('LM-028: Home moves to first tab', () => {
+      const tab1 = document.createElement('div');
+      const tab2 = document.createElement('div');
+      const tab3 = document.createElement('div');
+      manager.addPanelTab('right', 'Tab 1', tab1);
+      manager.addPanelTab('right', 'Tab 2', tab2);
+      manager.addPanelTab('right', 'Tab 3', tab3);
+      store.setPanelCollapsed('right', false);
+      store.setActiveTab('right', 2);
+
+      const root = manager.getElement();
+      const tabBar = root.querySelector('.layout-panel-tabs-right') as HTMLElement;
+      const buttons = tabBar.querySelectorAll('[role="tab"]');
+
+      (buttons[2] as HTMLElement).dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
+      expect(store.panels.right.activeTab).toBe(0);
+    });
+
+    it('LM-029: End moves to last tab', () => {
+      const tab1 = document.createElement('div');
+      const tab2 = document.createElement('div');
+      const tab3 = document.createElement('div');
+      manager.addPanelTab('right', 'Tab 1', tab1);
+      manager.addPanelTab('right', 'Tab 2', tab2);
+      manager.addPanelTab('right', 'Tab 3', tab3);
+      store.setPanelCollapsed('right', false);
+
+      const root = manager.getElement();
+      const tabBar = root.querySelector('.layout-panel-tabs-right') as HTMLElement;
+      const buttons = tabBar.querySelectorAll('[role="tab"]');
+
+      (buttons[0] as HTMLElement).dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }));
+      expect(store.panels.right.activeTab).toBe(2);
+    });
+
+    it('LM-029b: tab buttons have correct tabindex (roving tabindex)', () => {
+      const tab1 = document.createElement('div');
+      const tab2 = document.createElement('div');
+      manager.addPanelTab('right', 'Tab 1', tab1);
+      manager.addPanelTab('right', 'Tab 2', tab2);
+      store.setPanelCollapsed('right', false);
+
+      const root = manager.getElement();
+      const tabBar = root.querySelector('.layout-panel-tabs-right') as HTMLElement;
+      const buttons = tabBar.querySelectorAll('[role="tab"]');
+
+      // Active tab (0) has tabindex 0, inactive has -1
+      expect((buttons[0] as HTMLElement).getAttribute('tabindex')).toBe('0');
+      expect((buttons[1] as HTMLElement).getAttribute('tabindex')).toBe('-1');
+    });
+  });
+
   describe('Preset switching', () => {
     it('LM-030: applying preset through store updates panel collapse state', () => {
       // Register content on both panels so they can expand

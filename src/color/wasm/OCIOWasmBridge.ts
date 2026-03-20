@@ -300,6 +300,7 @@ export class OCIOWasmBridge extends EventEmitter<OCIOWasmBridgeEvents> {
     try {
       const rawData = this.module.getProcessorLUT3D(this.processorHandle, size);
       return {
+        type: '3d',
         title: 'OCIO WASM LUT',
         size,
         domainMin: [0, 0, 0],

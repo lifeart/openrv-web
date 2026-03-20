@@ -21,24 +21,17 @@ import { ContextualKeyboardManager } from '../utils/input/ContextualKeyboardMana
 type TabId = 'view' | 'color' | 'effects' | 'transform' | 'annotate' | 'qc';
 
 /**
- * Replicates the updateActiveContext logic from App.ts (lines 853-869)
+ * Replicates the tab-to-context mapping from App.ts.
+ * Production context map: { annotate: 'paint', transform: 'transform', view: 'viewer', qc: 'panel' }
  */
 function updateActiveContext(manager: ActiveContextManager, tabId: TabId): void {
-  switch (tabId) {
-    case 'annotate':
-      manager.setContext('paint');
-      break;
-    case 'transform':
-      manager.setContext('transform');
-      break;
-    case 'view':
-    case 'qc':
-      manager.setContext('viewer');
-      break;
-    default:
-      manager.setContext('global');
-      break;
-  }
+  const contextMap: Record<string, BindingContext> = {
+    annotate: 'paint',
+    transform: 'transform',
+    view: 'viewer',
+    qc: 'panel',
+  };
+  manager.setContext(contextMap[tabId] ?? 'global');
 }
 
 describe('ActiveContextManager E2E', () => {
@@ -56,9 +49,9 @@ describe('ActiveContextManager E2E', () => {
       expect(contextManager.activeContext).toBe('viewer');
     });
 
-    it('E2E-ACM-002: qc tab sets viewer context', () => {
+    it('E2E-ACM-002: qc tab sets panel context', () => {
       updateActiveContext(contextManager, 'qc');
-      expect(contextManager.activeContext).toBe('viewer');
+      expect(contextManager.activeContext).toBe('panel');
     });
 
     it('E2E-ACM-003: annotate tab sets paint context', () => {
@@ -86,7 +79,7 @@ describe('ActiveContextManager E2E', () => {
       for (const tab of allTabs) {
         updateActiveContext(contextManager, tab);
         // Every tab should result in a known context
-        const validContexts: BindingContext[] = ['global', 'viewer', 'paint', 'transform'];
+        const validContexts: BindingContext[] = ['global', 'viewer', 'paint', 'transform', 'panel'];
         expect(validContexts).toContain(contextManager.activeContext);
       }
     });
@@ -115,7 +108,7 @@ describe('ActiveContextManager E2E', () => {
       updateActiveContext(contextManager, 'transform');
       updateActiveContext(contextManager, 'qc');
 
-      expect(contextManager.activeContext).toBe('viewer');
+      expect(contextManager.activeContext).toBe('panel');
     });
 
     it('E2E-ACM-012: switching same tab twice is idempotent', () => {
@@ -200,7 +193,7 @@ describe('ActiveContextManager E2E', () => {
     it('E2E-ACM-023: reset clears everything', () => {
       contextManager.pushContext('paint');
       contextManager.pushContext('viewer');
-      contextManager.pushContext('timeline');
+      contextManager.pushContext('panel');
 
       contextManager.reset();
 
@@ -248,10 +241,10 @@ describe('ActiveContextManager E2E', () => {
     it('E2E-ACM-030: tab changes affect key binding resolution', () => {
       // Register conflicting bindings
       keyManager.register('paint.rectangle', { code: 'KeyR' }, vi.fn(), 'paint');
-      keyManager.register('timeline.resetInOut', { code: 'KeyR' }, vi.fn(), 'timeline');
+      keyManager.register('timeline.resetInOut', { code: 'KeyR' }, vi.fn(), 'global');
       keyManager.register('playback.toggle', { code: 'Space' }, vi.fn(), 'global');
 
-      // On annotate tab -> paint context
+      // On annotate tab -> paint context: paint.rectangle wins over global
       updateActiveContext(contextManager, 'annotate');
       const result1 = keyManager.resolve({ code: 'KeyR' });
       expect(result1).not.toBeNull();
@@ -263,22 +256,23 @@ describe('ActiveContextManager E2E', () => {
       expect(spaceResult!.action).toBe('playback.toggle');
     });
 
-    it('E2E-ACM-031: view tab context does not match paint or timeline bindings', () => {
+    it('E2E-ACM-031: view tab context falls through to global for non-viewer bindings', () => {
       keyManager.register('paint.rectangle', { code: 'KeyR' }, vi.fn(), 'paint');
-      keyManager.register('timeline.resetInOut', { code: 'KeyR' }, vi.fn(), 'timeline');
+      keyManager.register('timeline.resetInOut', { code: 'KeyR' }, vi.fn(), 'global');
 
       updateActiveContext(contextManager, 'view');
-      // viewer context has no binding for KeyR, and neither paint nor timeline match
+      // viewer context has no binding for KeyR, falls through to global
       const result = keyManager.resolve({ code: 'KeyR' });
-      expect(result).toBeNull();
+      expect(result).not.toBeNull();
+      expect(result!.action).toBe('timeline.resetInOut');
     });
 
-    it('E2E-ACM-032: transform tab resolves transform-context bindings', () => {
+    it('E2E-ACM-032: transform tab resolves transform-context bindings over global', () => {
       const transformHandler = vi.fn();
       const channelHandler = vi.fn();
 
+      keyManager.register('channel.red', { code: 'KeyR', shift: true }, channelHandler, 'global');
       keyManager.register('transform.rotateLeft', { code: 'KeyR', shift: true }, transformHandler, 'transform');
-      keyManager.register('channel.red', { code: 'KeyR', shift: true }, channelHandler, 'channel');
 
       updateActiveContext(contextManager, 'transform');
       const result = keyManager.resolve({ code: 'KeyR', shift: true });
@@ -302,7 +296,7 @@ describe('ActiveContextManager E2E', () => {
       expect(result!.action).toBe('global.default');
     });
 
-    it('E2E-ACM-034: effects tab (global context) falls back to global bindings', () => {
+    it('E2E-ACM-034: effects tab (global context) uses global bindings only', () => {
       keyManager.register('paint.toggleGhost', { code: 'KeyG' }, vi.fn(), 'paint');
       keyManager.register('panel.gamutDiagram', { code: 'KeyG' }, vi.fn(), 'panel');
       keyManager.register('playback.toggle', { code: 'Space' }, vi.fn(), 'global');
@@ -310,7 +304,7 @@ describe('ActiveContextManager E2E', () => {
       updateActiveContext(contextManager, 'effects');
       expect(contextManager.activeContext).toBe('global');
 
-      // KeyG has no global binding, so returns null
+      // KeyG has no global binding, so returns null (paint and panel are not active)
       const gResult = keyManager.resolve({ code: 'KeyG' });
       expect(gResult).toBeNull();
 
@@ -322,19 +316,19 @@ describe('ActiveContextManager E2E', () => {
 
     it('E2E-ACM-035: push/pop context affects key resolution', () => {
       keyManager.register('paint.rectangle', { code: 'KeyR' }, vi.fn(), 'paint');
-      keyManager.register('timeline.resetInOut', { code: 'KeyR' }, vi.fn(), 'timeline');
+      keyManager.register('viewer.action', { code: 'KeyR' }, vi.fn(), 'viewer');
 
-      // Set base context to timeline via tab
-      contextManager.setContext('timeline');
-      expect(keyManager.resolve({ code: 'KeyR' })!.action).toBe('timeline.resetInOut');
+      // Set base context to viewer via view tab
+      contextManager.setContext('viewer');
+      expect(keyManager.resolve({ code: 'KeyR' })!.action).toBe('viewer.action');
 
       // Push paint for a modal/overlay
       contextManager.pushContext('paint');
       expect(keyManager.resolve({ code: 'KeyR' })!.action).toBe('paint.rectangle');
 
-      // Pop back to timeline
+      // Pop back to viewer
       contextManager.popContext();
-      expect(keyManager.resolve({ code: 'KeyR' })!.action).toBe('timeline.resetInOut');
+      expect(keyManager.resolve({ code: 'KeyR' })!.action).toBe('viewer.action');
     });
 
     it('E2E-ACM-036: full tab cycle with key resolution', () => {
@@ -398,13 +392,14 @@ describe('ActiveContextManager E2E', () => {
 
       // These are properly wired in the ContextualKeyboardManager
       keyManager.register('paint.rectangle', { code: 'KeyR' }, vi.fn(), 'paint');
-      keyManager.register('timeline.resetInOut', { code: 'KeyR' }, vi.fn(), 'timeline');
+      keyManager.register('timeline.resetInOut', { code: 'KeyR' }, vi.fn(), 'global');
 
-      // If it were wired, tab-based context changes would resolve collisions
+      // Tab-based context changes resolve collisions
       contextManager.setContext('paint');
       expect(keyManager.resolve({ code: 'KeyR' })!.action).toBe('paint.rectangle');
 
-      contextManager.setContext('timeline');
+      contextManager.setContext('viewer');
+      // In viewer context, paint binding doesn't match, falls back to global
       expect(keyManager.resolve({ code: 'KeyR' })!.action).toBe('timeline.resetInOut');
 
       // This proves the mechanism works; it just needs to be connected in App.ts
@@ -422,13 +417,12 @@ describe('ActiveContextManager E2E', () => {
       }
     });
 
-    it('E2E-ACM-051: viewer context active only on view/qc tabs', () => {
+    it('E2E-ACM-051: viewer context active only on view tab', () => {
       const allTabs: TabId[] = ['view', 'color', 'effects', 'transform', 'annotate', 'qc'];
-      const viewerTabs = new Set<TabId>(['view', 'qc']);
 
       for (const tab of allTabs) {
         updateActiveContext(contextManager, tab);
-        if (viewerTabs.has(tab)) {
+        if (tab === 'view') {
           expect(contextManager.isContextActive('viewer')).toBe(true);
         } else {
           expect(contextManager.isContextActive('viewer')).toBe(false);
@@ -543,8 +537,8 @@ describe('ActiveContextManager E2E', () => {
       contextManager.pushContext('viewer');
 
       // setContext replaces active but does not touch stack
-      contextManager.setContext('timeline');
-      expect(contextManager.activeContext).toBe('timeline');
+      contextManager.setContext('panel');
+      expect(contextManager.activeContext).toBe('panel');
       expect(contextManager.stackDepth).toBe(2);
 
       // Pop should restore the saved context from pushContext('viewer')

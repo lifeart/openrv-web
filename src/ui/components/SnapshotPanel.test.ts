@@ -29,6 +29,7 @@ class StubSnapshotManager extends EventEmitter<SnapshotManagerEvents> {
   listSnapshots = vi.fn().mockResolvedValue([]);
   deleteSnapshot = vi.fn().mockResolvedValue(undefined);
   renameSnapshot = vi.fn().mockResolvedValue(undefined);
+  updateDescription = vi.fn().mockResolvedValue(undefined);
   exportSnapshot = vi.fn().mockResolvedValue('{"metadata":{},"state":{}}');
   clearAll = vi.fn().mockResolvedValue(undefined);
 }
@@ -359,6 +360,114 @@ describe('SnapshotPanel', () => {
         expect(showConfirm).toHaveBeenCalled();
         expect(manager.deleteSnapshot).toHaveBeenCalledWith('snap-delete');
       });
+
+      document.body.removeChild(panel.render());
+    });
+
+    it('SNAP-044: edit description button calls showPrompt and emits descriptionUpdated', async () => {
+      const snapshots = [createMockSnapshot({ id: 'snap-desc', name: 'Desc Test', description: 'Old desc' })];
+      manager.listSnapshots.mockResolvedValue(snapshots);
+      vi.mocked(showPrompt).mockResolvedValue('New description');
+
+      document.body.appendChild(panel.render());
+      panel.show();
+
+      const handler = vi.fn();
+      panel.on('descriptionUpdated', handler);
+
+      await vi.waitFor(() => {
+        const descBtn = panel.render().querySelector('button[title="Edit Description"]');
+        expect(descBtn).not.toBeNull();
+        (descBtn as HTMLButtonElement).click();
+      });
+
+      await vi.waitFor(() => {
+        expect(showPrompt).toHaveBeenCalledWith('Enter description:', {
+          title: 'Edit Description',
+          defaultValue: 'Old desc',
+          confirmText: 'Save',
+        });
+        expect(handler).toHaveBeenCalledWith({ snapshotId: 'snap-desc', description: 'New description' });
+      });
+
+      document.body.removeChild(panel.render());
+    });
+
+    it('SNAP-045: edit description does not emit when user cancels prompt', async () => {
+      const snapshots = [createMockSnapshot({ id: 'snap-cancel-desc', name: 'Cancel Desc' })];
+      manager.listSnapshots.mockResolvedValue(snapshots);
+      vi.mocked(showPrompt).mockResolvedValue(null);
+
+      document.body.appendChild(panel.render());
+      panel.show();
+
+      const handler = vi.fn();
+      panel.on('descriptionUpdated', handler);
+
+      await vi.waitFor(() => {
+        const descBtn = panel.render().querySelector('button[title="Edit Description"]');
+        expect(descBtn).not.toBeNull();
+        (descBtn as HTMLButtonElement).click();
+      });
+
+      // Give async operation time to resolve
+      await new Promise((r) => setTimeout(r, 10));
+
+      expect(handler).not.toHaveBeenCalled();
+
+      document.body.removeChild(panel.render());
+    });
+
+    it('SNAP-046: edit description pre-populates with empty string when no existing description', async () => {
+      const snapshots = [createMockSnapshot({ id: 'snap-no-desc', name: 'No Desc' })];
+      manager.listSnapshots.mockResolvedValue(snapshots);
+      vi.mocked(showPrompt).mockResolvedValue('Brand new description');
+
+      document.body.appendChild(panel.render());
+      panel.show();
+
+      const handler = vi.fn();
+      panel.on('descriptionUpdated', handler);
+
+      await vi.waitFor(() => {
+        const descBtn = panel.render().querySelector('button[title="Edit Description"]');
+        expect(descBtn).not.toBeNull();
+        (descBtn as HTMLButtonElement).click();
+      });
+
+      await vi.waitFor(() => {
+        expect(showPrompt).toHaveBeenCalledWith('Enter description:', {
+          title: 'Edit Description',
+          defaultValue: '',
+          confirmText: 'Save',
+        });
+        expect(handler).toHaveBeenCalledWith({ snapshotId: 'snap-no-desc', description: 'Brand new description' });
+      });
+
+      document.body.removeChild(panel.render());
+    });
+
+    it('SNAP-047: edit description does not emit when description unchanged', async () => {
+      const snapshots = [createMockSnapshot({ id: 'snap-same', name: 'Same Desc', description: 'Same text' })];
+      manager.listSnapshots.mockResolvedValue(snapshots);
+      vi.mocked(showPrompt).mockResolvedValue('Same text');
+
+      document.body.appendChild(panel.render());
+      panel.show();
+
+      const handler = vi.fn();
+      panel.on('descriptionUpdated', handler);
+
+      await vi.waitFor(() => {
+        const descBtn = panel.render().querySelector('button[title="Edit Description"]');
+        expect(descBtn).not.toBeNull();
+        (descBtn as HTMLButtonElement).click();
+      });
+
+      // Give async operation time to resolve
+      await new Promise((r) => setTimeout(r, 10));
+
+      expect(handler).not.toHaveBeenCalled();
 
       document.body.removeChild(panel.render());
     });

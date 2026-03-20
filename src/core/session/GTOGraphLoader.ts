@@ -13,6 +13,17 @@ import type { VersionGroup, VersionEntry } from './VersionManager';
 import { VALID_STATUSES } from './StatusManager';
 import type { StatusEntry, ShotStatus } from './StatusManager';
 import type { IPNode } from '../../nodes/base/IPNode';
+import type { DegradedModeInfo } from '../../composite/BlendModes';
+
+/**
+ * Information about a node that was skipped during graph construction
+ */
+export interface SkippedNodeInfo {
+  name: string;
+  protocol: string;
+  mappedType: string | null;
+  reason: 'unmapped_protocol' | 'unregistered_type' | 'creation_failed';
+}
 
 /**
  * Parsed node information from GTO
@@ -31,6 +42,8 @@ export interface GTOParseResult {
   graph: Graph;
   nodes: Map<string, IPNode>;
   rootNode: IPNode | null;
+  skippedNodes: SkippedNodeInfo[];
+  degradedModes: DegradedModeInfo[];
   sessionInfo: {
     name: string;
     viewNode?: string;
@@ -43,6 +56,8 @@ export interface GTOParseResult {
     markerNotes?: string[];
     /** Marker colors (parallel array to marks) */
     markerColors?: string[];
+    /** Marker end frames (parallel array to marks) */
+    markerEndFrames?: number[];
     /** Real-time playback rate from GTO (0 means use fps) */
     realtime?: number;
     /** Frame increment for playback */
@@ -183,7 +198,7 @@ const PROTOCOL_TO_NODE_TYPE: Record<string, string> = {
  * @param dto - Pre-parsed GTODTO object
  * @returns Parsed graph result with nodes and connections
  */
-export function loadGTOGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOParseResult {
+export function loadGTOGraph(dto: GTODTO, availableFiles?: Map<string, File[]>): GTOParseResult {
   try {
     return parseGTOToGraph(dto, availableFiles);
   } catch (err) {
@@ -195,7 +210,7 @@ export function loadGTOGraph(dto: GTODTO, availableFiles?: Map<string, File>): G
 /**
  * Parse GTODTO into a Graph
  */
-function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOParseResult {
+function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File[]>): GTOParseResult {
   const graph = new Graph();
   const nodes = new Map<string, IPNode>();
   let rootNode: IPNode | null = null;
@@ -269,9 +284,7 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
       const marksValue = sessionComp.property('marks').value();
       if (Array.isArray(marksValue)) {
         const marks = marksValue.filter((value): value is number => typeof value === 'number');
-        if (marks.length > 0) {
-          sessionInfo.marks = marks;
-        }
+        sessionInfo.marks = marks;
       }
 
       // Parse marker notes (parallel array to marks)
@@ -292,12 +305,25 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
         }
       }
 
+      // Parse marker end frames (parallel array to marks)
+      const markerEndFramesValue = sessionComp.property('markerEndFrames').value();
+      if (Array.isArray(markerEndFramesValue)) {
+        const markerEndFrames = markerEndFramesValue.filter((value): value is number => typeof value === 'number');
+        if (markerEndFrames.length > 0) {
+          sessionInfo.markerEndFrames = markerEndFrames;
+        }
+      }
+
       // Prefer 'realtime' (actual playback fps) over 'fps' if both exist
       const fps = sessionComp.property('fps').value() as number;
       const realtime = sessionComp.property('realtime').value() as number;
-      if (typeof realtime === 'number' && realtime > 0) {
-        sessionInfo.fps = realtime;
+      if (typeof realtime === 'number') {
         sessionInfo.realtime = realtime;
+        if (realtime > 0) {
+          sessionInfo.fps = realtime;
+        } else if (typeof fps === 'number' && fps > 0) {
+          sessionInfo.fps = fps;
+        }
       } else if (typeof fps === 'number' && fps > 0) {
         sessionInfo.fps = fps;
       }
@@ -418,7 +444,9 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
     const notesComp = session.component('notes');
     if (notesComp?.exists()) {
       const totalNotes = notesComp.property('totalNotes').value() as number;
-      if (typeof totalNotes === 'number' && totalNotes > 0) {
+      if (typeof totalNotes === 'number' && totalNotes === 0) {
+        sessionInfo.notes = [];
+      } else if (typeof totalNotes === 'number' && totalNotes > 0) {
         const notes: Note[] = [];
         for (let i = 1; i <= totalNotes; i++) {
           const p = `note_${String(i).padStart(3, '0')}`;
@@ -447,12 +475,22 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
               status: status === 'open' || status === 'resolved' || status === 'wontfix' ? status : 'open',
               parentId: typeof parentId === 'string' && parentId.length > 0 ? parentId : null,
               color: typeof color === 'string' ? color : '#fbbf24',
+              priority: (() => {
+                const val = notesComp.property(`${p}_priority`)?.value() as string | undefined;
+                return val === 'low' || val === 'medium' || val === 'high' || val === 'critical' ? val : 'medium';
+              })(),
+              category: (() => {
+                const val = notesComp.property(`${p}_category`)?.value() as string | undefined;
+                return typeof val === 'string' ? val : '';
+              })(),
+              externalId: (() => {
+                const val = notesComp.property(`${p}_externalId`)?.value() as string | undefined;
+                return typeof val === 'string' && val.length > 0 ? val : null;
+              })(),
             });
           }
         }
-        if (notes.length > 0) {
-          sessionInfo.notes = notes;
-        }
+        sessionInfo.notes = notes;
       }
     }
 
@@ -460,7 +498,9 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
     const versionsComp = session.component('versions');
     if (versionsComp?.exists()) {
       const groupCount = versionsComp.property('groupCount').value() as number;
-      if (typeof groupCount === 'number' && groupCount > 0) {
+      if (typeof groupCount === 'number' && groupCount === 0) {
+        sessionInfo.versionGroups = [];
+      } else if (typeof groupCount === 'number' && groupCount > 0) {
         const versionGroups: VersionGroup[] = [];
         for (let g = 0; g < groupCount; g++) {
           const gp = `group_${String(g).padStart(3, '0')}`;
@@ -562,8 +602,10 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
   // references the group name, not the source node directly.
   const sourceGroupChildren = new Map<string, string[]>();
   const parsedStatuses: StatusEntry[] = [];
+  let hasSourceGroups = false;
   for (const obj of allObjects) {
     if (obj.protocol === 'RVSourceGroup') {
+      hasSourceGroups = true;
       // Find child source nodes by naming convention: <groupName>_source
       const groupName = obj.name;
       const children: string[] = [];
@@ -604,7 +646,7 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
       }
     }
   }
-  if (parsedStatuses.length > 0) {
+  if (hasSourceGroups) {
     sessionInfo.statuses = parsedStatuses;
   }
 
@@ -673,7 +715,8 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
 
             if (basename && availableFiles.has(basename)) {
               // Found a match! Use the blob URL for loading
-              const file = availableFiles.get(basename)!;
+              const files = availableFiles.get(basename)!;
+              const file = files[0]!;
               const blobUrl = URL.createObjectURL(file);
 
               nodeInfo.properties.url = blobUrl;
@@ -1303,13 +1346,22 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
         }
       }
 
-      // Parse per-layer opacities from output component
-      const outputComp = obj.component('output');
-      if (outputComp?.exists()) {
-        const opacities = outputComp.property('opacity').value() as number[];
+      // Parse per-layer opacities and visibility from layerOutput component
+      const layerOutputComp = obj.component('layerOutput');
+      if (layerOutputComp?.exists()) {
+        const opacities = layerOutputComp.property('opacity').value() as number[];
         if (Array.isArray(opacities)) {
           nodeInfo.properties.layerOpacities = opacities;
         }
+        const visible = layerOutputComp.property('visible').value() as number[];
+        if (Array.isArray(visible)) {
+          nodeInfo.properties.layerVisible = visible.map((v) => v !== 0);
+        }
+      }
+
+      // Parse output component for audio/range settings
+      const outputComp = obj.component('output');
+      if (outputComp?.exists()) {
         const chosenAudio = outputComp.property('chosenAudioInput').value() as number;
         if (typeof chosenAudio === 'number') {
           nodeInfo.properties.chosenAudioInput = chosenAudio;
@@ -1950,7 +2002,7 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
         if (typeof file === 'string' && file && availableFiles && availableFiles.size > 0) {
           const basename = file.split(/[/\\]/).pop();
           if (basename && availableFiles.has(basename)) {
-            nodeInfo.properties.cdlFileResolved = availableFiles.get(basename)!;
+            nodeInfo.properties.cdlFileResolved = availableFiles.get(basename)![0]!;
           } else {
             console.warn(`CDL file "${file}" not found in available files, using inline CDL values`);
           }
@@ -2104,21 +2156,25 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
   }
 
   // Create nodes
+  const skippedNodes: SkippedNodeInfo[] = [];
   for (const [name, info] of nodeInfos) {
     const nodeType = PROTOCOL_TO_NODE_TYPE[info.protocol];
     if (!nodeType) {
       // Unknown protocol - skip silently (many RV internals aren't needed)
+      skippedNodes.push({ name, protocol: info.protocol, mappedType: null, reason: 'unmapped_protocol' });
       continue;
     }
 
     if (!NodeFactory.isRegistered(nodeType)) {
       // Node type mapped but not implemented yet - skip silently
+      skippedNodes.push({ name, protocol: info.protocol, mappedType: nodeType, reason: 'unregistered_type' });
       continue;
     }
 
     const node = NodeFactory.create(nodeType);
     if (!node) {
       console.warn(`Failed to create node: ${nodeType}`);
+      skippedNodes.push({ name, protocol: info.protocol, mappedType: nodeType, reason: 'creation_failed' });
       continue;
     }
 
@@ -2134,6 +2190,13 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
 
     nodes.set(name, node);
     graph.addNode(node);
+  }
+
+  // Warn about unregistered but mapped nodes
+  const unregistered = skippedNodes.filter((s) => s.reason === 'unregistered_type' || s.reason === 'creation_failed');
+  if (unregistered.length > 0) {
+    const types = [...new Set(unregistered.map((s) => s.mappedType))].join(', ');
+    console.warn(`Skipped ${unregistered.length} mapped-but-unimplemented node(s): ${types}`);
   }
 
   // Establish connections from mode.inputs (authoritative per-node source)
@@ -2211,6 +2274,8 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
     graph,
     nodes,
     rootNode,
+    skippedNodes,
+    degradedModes: [],
     sessionInfo,
   };
 }
@@ -2231,5 +2296,71 @@ export function getGraphSummary(result: GTOParseResult): string {
     lines.push(`  ${name} (${node.type}) <- [${inputs}]`);
   }
 
+  if (result.skippedNodes && result.skippedNodes.length > 0) {
+    lines.push('');
+    lines.push(`Skipped: ${result.skippedNodes.length}`);
+    for (const s of result.skippedNodes) {
+      lines.push(`  ${s.name} (${s.protocol}) - ${s.reason}`);
+    }
+  }
+
   return lines.join('\n');
+}
+
+export function formatSkippedNodesWarning(skipped: SkippedNodeInfo[]): string | null {
+  const meaningful = skipped.filter((s) => s.reason === 'unregistered_type' || s.reason === 'creation_failed');
+  if (meaningful.length === 0) return null;
+
+  const counts = new Map<string, number>();
+  for (const s of meaningful) {
+    const key = s.protocol;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  const parts = [...counts.entries()].map(([proto, count]) => `${count} ${proto}`);
+  return `${meaningful.length} node(s) were skipped during import: ${parts.join(', ')}`;
+}
+
+export function formatDegradedModesWarning(degraded: DegradedModeInfo[]): string | null {
+  if (degraded.length === 0) return null;
+
+  const uniqueDescs = new Set<string>();
+  for (const d of degraded) {
+    uniqueDescs.add(`"${d.originalMode}" → "${d.fallbackMode}"`);
+  }
+  return `${degraded.length} composite mode(s) were degraded: ${[...uniqueDescs].join(', ')}. Compositing may differ from OpenRV.`;
+}
+
+export function resolveAvailableFile(originalPath: string, availableFiles: Map<string, File[]>): File | undefined {
+  // Extract basename from original path (supports both Unix and Windows separators)
+  const basename = originalPath.split(/[/\\]/).pop();
+  if (!basename) return undefined;
+
+  const files = availableFiles.get(basename);
+  if (!files || files.length === 0) return undefined;
+
+  if (files.length === 1) {
+    return files[0];
+  }
+
+  // Multiple files with the same basename — disambiguate by path suffix matching
+  console.warn(`Duplicate basename "${basename}": ${files.length} files share this name, resolving by path suffix`);
+
+  // Normalize original path to use forward slashes for comparison
+  const normalizedOriginal = originalPath.replace(/\\/g, '/');
+
+  let bestMatch: File | undefined;
+  let bestMatchLength = 0;
+
+  for (const file of files) {
+    const relativePath = (file.webkitRelativePath || file.name).replace(/\\/g, '/');
+    // Check how much of the suffix matches
+    if (normalizedOriginal.endsWith(relativePath)) {
+      if (relativePath.length > bestMatchLength) {
+        bestMatchLength = relativePath.length;
+        bestMatch = file;
+      }
+    }
+  }
+
+  return bestMatch ?? files[0];
 }

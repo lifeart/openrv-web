@@ -20,16 +20,27 @@ export { MuNodeBridge } from './MuNodeBridge';
 export { MuEventBridge } from './MuEventBridge';
 export { ModeManager } from './ModeManager';
 export { MuSourceBridge } from './MuSourceBridge';
+export type { PixelReadbackProvider } from './MuSourceBridge';
 export { MuEvalBridge } from './MuEvalBridge';
 export { MuNetworkBridge } from './MuNetworkBridge';
 export { MuSettingsBridge } from './MuSettingsBridge';
 export { MuUtilsBridge } from './MuUtilsBridge';
+export type { LoadingEventSource } from './MuUtilsBridge';
 export * as stubs from './stubs';
 export * from './types';
 export * from './constants';
 
 import { MuCommands } from './MuCommands';
 import { MuExtraCommands } from './MuExtraCommands';
+
+let _cachedResult: { commands: MuCommands; extra_commands: MuExtraCommands } | null = null;
+
+/**
+ * Reset the internal registration cache. Intended for testing only.
+ */
+export function _resetMuCompatCache(): void {
+  _cachedResult = null;
+}
 
 /**
  * Register the Mu compatibility layer on `window.rv`.
@@ -40,15 +51,26 @@ import { MuExtraCommands } from './MuExtraCommands';
  * @returns The MuCommands instance for programmatic access.
  */
 export function registerMuCompat(): { commands: MuCommands; extra_commands: MuExtraCommands } {
-  const commands = new MuCommands();
-  const extraCommands = new MuExtraCommands(commands);
+  if (_cachedResult) {
+    return _cachedResult;
+  }
 
   if (typeof globalThis !== 'undefined') {
     const g = globalThis as unknown as { rv?: { commands: MuCommands; extra_commands: MuExtraCommands } };
-    if (!g.rv) {
-      g.rv = { commands, extra_commands: extraCommands };
+    if (g.rv) {
+      _cachedResult = { commands: g.rv.commands, extra_commands: g.rv.extra_commands };
+      return _cachedResult;
     }
+
+    const commands = new MuCommands();
+    const extraCommands = new MuExtraCommands(commands);
+    g.rv = { commands, extra_commands: extraCommands };
+    _cachedResult = { commands, extra_commands: extraCommands };
+    return _cachedResult;
   }
 
-  return { commands, extra_commands: extraCommands };
+  const commands = new MuCommands();
+  const extraCommands = new MuExtraCommands(commands);
+  _cachedResult = { commands, extra_commands: extraCommands };
+  return _cachedResult;
 }

@@ -452,8 +452,30 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
 
   private positionDropdown(): void {
     const rect = this.toggleButton.getBoundingClientRect();
-    this.dropdown.style.top = `${rect.bottom + 4}px`;
-    this.dropdown.style.left = `${rect.left}px`;
+    const dropdownRect = this.dropdown.getBoundingClientRect();
+    const viewportPadding = 8;
+
+    let top = rect.bottom + 4;
+    let left = rect.left;
+
+    // Prefer rendering below, then flip above if needed.
+    if (top + dropdownRect.height > window.innerHeight - viewportPadding) {
+      top = rect.top - dropdownRect.height - 4;
+    }
+
+    // Clamp to viewport edges.
+    if (top < viewportPadding) {
+      top = viewportPadding;
+    }
+    if (left + dropdownRect.width > window.innerWidth - viewportPadding) {
+      left = window.innerWidth - dropdownRect.width - viewportPadding;
+    }
+    if (left < viewportPadding) {
+      left = viewportPadding;
+    }
+
+    this.dropdown.style.top = `${top}px`;
+    this.dropdown.style.left = `${left}px`;
   }
 
   private handleOutsideClick = (e: MouseEvent): void => {
@@ -465,6 +487,30 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
   private handleDocumentKeydown = (e: KeyboardEvent): void => {
     if (e.key === 'Escape') {
       this.closeDropdown();
+      return;
+    }
+
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Home' || e.key === 'End') {
+      e.preventDefault();
+      const focusable = Array.from(this.dropdown.querySelectorAll<HTMLElement>('button, input, [tabindex="0"]')).filter(
+        (el) => !el.hidden && (el as HTMLButtonElement).disabled !== true,
+      );
+      if (focusable.length === 0) return;
+
+      const currentIndex = focusable.indexOf(document.activeElement as HTMLElement);
+      let nextIndex: number;
+
+      if (e.key === 'Home') {
+        nextIndex = 0;
+      } else if (e.key === 'End') {
+        nextIndex = focusable.length - 1;
+      } else if (e.key === 'ArrowDown') {
+        nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % focusable.length;
+      } else {
+        nextIndex = currentIndex <= 0 ? focusable.length - 1 : currentIndex - 1;
+      }
+
+      focusable[nextIndex]?.focus();
     }
   };
 }

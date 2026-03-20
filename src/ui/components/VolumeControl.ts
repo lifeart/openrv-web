@@ -24,7 +24,6 @@ export class VolumeControl extends EventEmitter<VolumeControlEvents> {
   private _muted = false;
   private _previousVolume = 0.7;
   private _audioScrubEnabled = true;
-  private _sliderExpanded = false;
   private _boundDocumentClick: (e: MouseEvent) => void;
   private _cleanupA11yFocus: (() => void) | null = null;
   private scrubToggle: HTMLLabelElement | null = null;
@@ -36,6 +35,7 @@ export class VolumeControl extends EventEmitter<VolumeControlEvents> {
     // Create container
     this.container = document.createElement('div');
     this.container.className = 'volume-control-container';
+    this.container.dataset.testid = 'volume-control';
     this.container.style.cssText = `
       display: flex;
       align-items: center;
@@ -46,7 +46,8 @@ export class VolumeControl extends EventEmitter<VolumeControlEvents> {
     // Create mute button
     this.muteButton = document.createElement('button');
     this.updateMuteButton();
-    this.muteButton.title = 'Toggle mute (M in video mode)';
+    this.muteButton.dataset.testid = 'mute-button';
+    this.muteButton.title = 'Toggle mute (Shift+M in video mode)';
     this.muteButton.setAttribute('aria-label', 'Toggle mute');
     this.muteButton.style.cssText = `
       background: transparent;
@@ -65,7 +66,10 @@ export class VolumeControl extends EventEmitter<VolumeControlEvents> {
 
     this.muteButton.addEventListener('click', () => {
       this.toggleMute();
-      this.toggleSliderExpanded();
+    });
+    // Expand slider on focus (keyboard a11y — Tab into mute button reveals slider)
+    this.muteButton.addEventListener('focus', () => {
+      this.volumeContainer.style.width = '160px';
     });
     this.muteButton.addEventListener('pointerenter', () => {
       this.muteButton.style.background = 'var(--bg-hover)';
@@ -98,6 +102,7 @@ export class VolumeControl extends EventEmitter<VolumeControlEvents> {
     this.volumeSlider.max = '1';
     this.volumeSlider.step = '0.01';
     this.volumeSlider.value = String(this._volume);
+    this.volumeSlider.dataset.testid = 'volume-slider';
     this.volumeSlider.style.cssText = `
       width: 80px;
       height: 4px;
@@ -146,13 +151,13 @@ export class VolumeControl extends EventEmitter<VolumeControlEvents> {
     this.volumeContainer.appendChild(this.volumeSlider);
     this.volumeContainer.appendChild(this.scrubToggle);
 
-    // Show slider on hover (but don't collapse if pinned open via click)
+    // Show slider on hover
     this.container.addEventListener('pointerenter', () => {
-      this.volumeContainer.style.width = '96px';
+      this.volumeContainer.style.width = '160px';
     });
 
     this.container.addEventListener('pointerleave', () => {
-      if (!this._sliderExpanded) {
+      if (!this.container.contains(document.activeElement)) {
         this.volumeContainer.style.width = '0';
       }
     });
@@ -163,17 +168,11 @@ export class VolumeControl extends EventEmitter<VolumeControlEvents> {
       if (relatedTarget && this.container.contains(relatedTarget)) {
         return; // Focus moved within the control, keep expanded
       }
-      if (this._sliderExpanded) {
-        this.collapseSlider();
-      }
+      this.volumeContainer.style.width = '0';
     });
 
-    // Collapse slider when clicking outside the volume control area
-    this._boundDocumentClick = (e: MouseEvent) => {
-      if (this._sliderExpanded && !this.container.contains(e.target as Node)) {
-        this.collapseSlider();
-      }
-    };
+    // No longer needed: outside-click collapse (hover/focus handles disclosure)
+    this._boundDocumentClick = () => {};
     document.addEventListener('click', this._boundDocumentClick);
 
     this.container.appendChild(this.muteButton);
@@ -190,21 +189,10 @@ export class VolumeControl extends EventEmitter<VolumeControlEvents> {
     }
   }
 
-  /** Toggle the slider expanded (pinned open) state. */
-  private toggleSliderExpanded(): void {
-    this._sliderExpanded = !this._sliderExpanded;
-    this.volumeContainer.style.width = this._sliderExpanded ? '96px' : '0';
-  }
-
-  /** Collapse the slider and clear the expanded flag. */
-  private collapseSlider(): void {
-    this._sliderExpanded = false;
-    this.volumeContainer.style.width = '0';
-  }
-
-  /** Returns whether the slider is currently pinned open via click/tap. */
+  /** Returns whether the slider is currently expanded (visible). */
   isSliderExpanded(): boolean {
-    return this._sliderExpanded;
+    const w = this.volumeContainer.style.width;
+    return w !== '0' && w !== '0px' && w !== '';
   }
 
   toggleMute(): void {

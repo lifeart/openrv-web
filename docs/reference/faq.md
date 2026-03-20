@@ -12,7 +12,7 @@ Yes. OpenRV Web is released under the MIT license. It is free to use, modify, an
 
 ### Does OpenRV Web send my files to a server?
 
-No. All processing happens locally in the browser. Files loaded through drag-and-drop or the file picker never leave the machine. There is no server-side component. Even the collaborative review features use peer-to-peer WebRTC connections.
+No server upload is required for viewing. All decoding and rendering happens locally in the browser -- files loaded through drag-and-drop or the file picker are never uploaded to a server for processing. However, when you join a collaborative review session, the media-sync feature may transmit file data to other participants over the session's peer-to-peer or WebSocket transport so that all reviewers can view the same content. Outside of collaboration, your files stay entirely on your machine.
 
 ### What is the relationship to the original OpenRV?
 
@@ -20,13 +20,13 @@ OpenRV Web is a web-based reimplementation inspired by the original C++ [OpenRV]
 
 ### Can I self-host OpenRV Web?
 
-Yes. Build the project with `pnpm build` and deploy the static files in the `dist/` directory to any web server or static hosting service. See the [Installation](../getting-started/installation.md) guide for details.
+Yes. Build the project with `pnpm build` and deploy the static files in the `dist/` directory to any web server or static hosting service. The core viewer (file loading, playback, color grading, annotations) works entirely from static files with no server-side runtime. However, the **collaborative review** feature requires a WebSocket signaling server for room creation, joining, and real-time message relay. If you need collaboration, you must also deploy or point to a signaling server and set the `VITE_NETWORK_SIGNALING_SERVERS` environment variable before building. See the [Installation](../getting-started/installation.md) guide for details.
 
 ## File Loading
 
 ### What file formats are supported?
 
-OpenRV Web supports a wide range of image formats (PNG, JPEG, WebP, EXR, DPX, Cineon, HDR, TIFF, JPEG XL, JPEG 2000, HEIC, AVIF, gainmap HDR variants), video formats (MP4, MOV, MKV, WebM, OGG, AVI, MXF), and session formats (RV, GTO, OTIO). See the [File Formats](file-formats.md) reference for the complete list.
+OpenRV Web supports a wide range of image formats (PNG, JPEG, WebP, EXR, DPX, Cineon, HDR, TIFF, JPEG XL, JPEG 2000, HEIC, AVIF, gainmap HDR variants), video formats (MP4, MOV, MKV, WebM, OGG, AVI), and session formats (RV, GTO, OTIO). See the [File Formats](file-formats.md) reference for the complete list.
 
 ### How do I load an image sequence?
 
@@ -38,7 +38,7 @@ Frame-accurate video playback requires the WebCodecs API, which is available in 
 
 ### Can I load files from a URL?
 
-URL-based loading is not currently implemented. Files must be loaded from the local filesystem through drag-and-drop or the file picker.
+Yes. URL-based loading is supported through share links that include a `sourceUrl` parameter. When you open a share link containing a media URL, OpenRV Web fetches and loads the file automatically via `session.loadSourceFromUrl()`. There is no standalone "paste a URL" input in the UI yet, but the share-link bootstrap flow provides full URL-based loading.
 
 ## Color Management
 
@@ -66,17 +66,17 @@ Audio is automatically muted during reverse playback because reversed audio does
 
 ### What loop modes are available?
 
-Three loop modes are available: **Loop** (continuous repetition), **Ping-pong** (reverse at boundaries), and **Once** (stop at boundary). Press `L` to cycle between them.
+Three loop modes are available: **Loop** (continuous repetition), **Ping-pong** (reverse at boundaries), and **Once** (stop at boundary). Press `Ctrl+L` to cycle between them.
 
 ## Collaboration
 
 ### How does collaborative review work?
 
-OpenRV Web uses WebRTC peer-to-peer connections for real-time collaboration. Create a room, share the room code with other viewers, and sync playback position, zoom, color adjustments, annotations, and cursor position. PIN-based encryption secures the session.
+OpenRV Web uses WebSocket (server-relayed) connections as its primary transport for real-time collaboration. Create a room, share the room code with other viewers, and sync playback position, zoom, color adjustments, annotations, and cursor position. When available, WebRTC peer-to-peer connections are attempted first for session state transfer, with WebSocket used as a fallback. Both state sync and media transfer can flow through either transport path depending on availability. PIN-based encryption secures the session.
 
 ### Is a server required for collaboration?
 
-A signaling server is needed to establish the initial WebRTC connection. OpenRV Web uses public STUN/TURN servers (Google, Cloudflare, OpenRelay) by default. URL-based signaling provides a serverless P2P alternative. No media passes through any server -- all data flows directly between peers.
+A WebSocket server is used for room creation, joining, and as the default transport for real-time sync messages and media transfer requests. When WebRTC is available, session state responses are sent peer-to-peer first and fall back to the WebSocket relay if the peer channel is unavailable. Public STUN/TURN servers (Google, Cloudflare, OpenRelay) assist WebRTC connection establishment. URL-based signaling provides a serverless P2P alternative for WebRTC. Note: when media sync is active, file data may be transmitted to other participants through either transport so everyone can review the same content.
 
 ## Export
 

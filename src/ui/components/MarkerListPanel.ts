@@ -47,7 +47,7 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
   private editingFrame: number | null = null;
   private lastHighlightedFrame: number | null = null;
   private focusedMarkerIndex = -1;
-  private exclusivePanel: ExclusivePanelRef | null = null;
+  private exclusivePanels: ExclusivePanelRef[] = [];
 
   // Bound event handlers for cleanup
   private boundOnMarksChanged: () => void;
@@ -172,10 +172,10 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
 
     const importBtn = document.createElement('button');
     importBtn.textContent = 'Import';
-    importBtn.title = 'Import markers from JSON file (merge)';
+    importBtn.title = 'Import markers from JSON file';
     importBtn.dataset.testid = 'marker-import-btn';
     importBtn.style.cssText = actionBtnStyle;
-    importBtn.addEventListener('click', () => this.importMarkers('merge'));
+    importBtn.addEventListener('click', () => this.importMarkersWithModeChoice());
 
     const clearBtn = document.createElement('button');
     clearBtn.textContent = 'Clear All';
@@ -224,18 +224,20 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
     return this.container;
   }
 
-  /** Register another panel for mutual exclusion - opening this panel will close the other */
+  /** Register another panel for mutual exclusion - opening this panel will close the other(s) */
   setExclusiveWith(panel: ExclusivePanelRef): void {
-    this.exclusivePanel = panel;
+    this.exclusivePanels.push(panel);
   }
 
   /**
    * Show the panel
    */
   show(): void {
-    // Close exclusive panel if it is open
-    if (this.exclusivePanel?.isVisible()) {
-      this.exclusivePanel.hide();
+    // Close exclusive panels if they are open
+    for (const ep of this.exclusivePanels) {
+      if (ep.isVisible()) {
+        ep.hide();
+      }
     }
     this.visible = true;
     this.container.style.display = 'flex';
@@ -322,6 +324,28 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
   }
 
   /**
+   * Prompt user for import mode then trigger file import
+   */
+  private async importMarkersWithModeChoice(): Promise<void> {
+    const hasExisting = this.session.marks.size > 0;
+    let mode: 'replace' | 'merge' = 'merge';
+
+    if (hasExisting) {
+      const replace = await showConfirm(
+        'Replace existing markers? Choose "OK" to replace all current markers, or "Cancel" to merge (keep existing markers and add new ones).',
+        {
+          title: 'Import Markers',
+          confirmText: 'Replace',
+          cancelText: 'Merge',
+        },
+      );
+      mode = replace ? 'replace' : 'merge';
+    }
+
+    this.importMarkers(mode);
+  }
+
+  /**
    * Import markers from a JSON file
    * @param mode 'merge' preserves existing markers, 'replace' clears them first
    */
@@ -337,7 +361,7 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
       reader.onload = async () => {
         try {
           const data = JSON.parse(reader.result as string);
-          this.applyImportedMarkers(data, mode);
+          await this.applyImportedMarkers(data, mode);
         } catch {
           await showAlert('Invalid JSON file. Could not parse marker data.');
         }
@@ -357,7 +381,8 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
       await showAlert('Invalid marker file. Expected { version, markers: [...] } format.');
       return;
     }
-    const validMarkers = (data as MarkerExportData).markers.filter(
+    const allMarkers = (data as MarkerExportData).markers;
+    const validMarkers = allMarkers.filter(
       (m) =>
         typeof m.frame === 'number' &&
         Number.isFinite(m.frame) &&
@@ -365,17 +390,32 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
         typeof m.note === 'string' &&
         typeof m.color === 'string',
     );
+    const invalidCount = allMarkers.length - validMarkers.length;
 
     if (mode === 'replace') {
       this.session.clearMarks();
     }
 
+    let collisionCount = 0;
     for (const m of validMarkers) {
       if (mode === 'merge' && this.session.hasMarker(m.frame)) {
+        collisionCount++;
         continue;
       }
       this.session.setMarker(m.frame, m.note, m.color, m.endFrame);
     }
+
+    const importedCount = validMarkers.length - collisionCount;
+    const parts: string[] = [];
+    parts.push(`${importedCount} marker${importedCount !== 1 ? 's' : ''} imported.`);
+    if (invalidCount > 0) {
+      parts.push(`${invalidCount} invalid ${invalidCount !== 1 ? 'entries' : 'entry'} skipped.`);
+    }
+    if (mode === 'merge' && collisionCount > 0) {
+      parts.push(`${collisionCount} marker${collisionCount > 1 ? 's' : ''} skipped due to frame collisions.`);
+    }
+
+    await showAlert(parts.join(' '));
   }
 
   /**
@@ -553,7 +593,16 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
       color: ${isCurrentFrame ? 'var(--accent-primary)' : 'var(--text-primary)'};
       font-weight: ${isCurrentFrame ? '600' : '400'};
     `;
+    frameInfo.setAttribute('tabindex', '0');
+    frameInfo.setAttribute('role', 'button');
+    frameInfo.setAttribute('aria-label', `Go to frame ${marker.frame}`);
     frameInfo.addEventListener('click', () => this.goToMarker(marker.frame));
+    frameInfo.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        this.goToMarker(marker.frame);
+      }
+    });
 
     // Edit note button
     const editBtn = document.createElement('button');
@@ -738,7 +787,16 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
         word-break: break-word;
         cursor: pointer;
       `;
+      noteText.setAttribute('tabindex', '0');
+      noteText.setAttribute('role', 'button');
+      noteText.setAttribute('aria-label', 'Edit marker note');
       noteText.addEventListener('click', () => this.startEditingNote(marker.frame));
+      noteText.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          this.startEditingNote(marker.frame);
+        }
+      });
       noteRow.appendChild(noteText);
     } else {
       // Empty note hint
@@ -750,7 +808,16 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
         font-style: italic;
         cursor: pointer;
       `;
+      hintText.setAttribute('tabindex', '0');
+      hintText.setAttribute('role', 'button');
+      hintText.setAttribute('aria-label', 'Add a note to this marker');
       hintText.addEventListener('click', () => this.startEditingNote(marker.frame));
+      hintText.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          this.startEditingNote(marker.frame);
+        }
+      });
       noteRow.appendChild(hintText);
     }
 

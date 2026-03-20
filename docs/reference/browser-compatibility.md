@@ -33,7 +33,7 @@ Firefox users should be aware that video playback uses the HTMLVideoElement fall
 | Feature | Chrome | Firefox | Safari | Edge |
 |---------|--------|---------|--------|------|
 | WebGPU (experimental HDR) | 113+ (flag) | Not supported | Not supported | 113+ (flag) |
-| BroadcastChannel (ext. presentation) | 54+ | 38+ | 15.4+ | 79+ |
+| BroadcastChannel (ext. presentation, text-only) | 54+ | 38+ | 15.4+ | 79+ |
 | Fullscreen API | Yes | Yes | Yes | Yes |
 | Clipboard API (copy frame) | Yes | Yes | Yes | Yes |
 | IndexedDB (auto-save, snapshots) | Yes | Yes | Yes | Yes |
@@ -53,7 +53,7 @@ Video export relies on WebCodecs for encoding. Browsers without WebCodecs suppor
 
 | Decoder | Chrome | Firefox | Safari | Edge |
 |---------|--------|---------|--------|------|
-| EXR (WASM) | Yes | Yes | Yes | Yes |
+| EXR (TypeScript) | Yes | Yes | Yes | Yes |
 | JPEG XL (WASM) | Yes | Yes | Yes | Yes |
 | JPEG 2000 / HTJ2K (WASM) | Yes | Yes | Yes | Yes |
 | HEIC (WASM fallback) | Yes | Yes | Native | Yes |
@@ -65,11 +65,16 @@ WASM decoders work across all supported browsers. Safari uses native HEIC decodi
 
 | Platform | Browser | Status |
 |----------|---------|--------|
-| iOS 15+ | Safari | Functional (touch-optimized) |
-| Android | Chrome | Functional (touch-optimized) |
-| Android | Firefox | Limited (no WebCodecs) |
+| iOS 15+ | Safari | Functional with limitations (desktop-optimized) |
+| Android | Chrome | Functional with limitations (desktop-optimized) |
+| Android | Firefox | Limited (no WebCodecs, desktop-optimized) |
 
-Mobile browsers support core functionality including touch gestures (pinch-to-zoom, tap-to-seek). The desktop-optimized interface may be less comfortable on smaller screens. Keyboard shortcuts are unavailable without an external keyboard.
+Mobile browsers support core functionality including basic touch gestures (pinch-to-zoom, tap-to-seek). However, the interface is **desktop-optimized** and several UI components rely on interaction patterns that do not translate well to touch devices:
+
+- **Volume control**: The volume slider is hidden by default and only appears on pointer hover (`pointerenter`/`pointerleave`). On touch devices without hover capability, the slider cannot be revealed through normal interaction. See issue #116.
+- **Virtual slider controls**: The color-adjustment virtual sliders (key-hold-and-drag for exposure, saturation, etc.) explicitly exclude touch input (`pointerType === 'touch'` is ignored), so these controls are mouse/pen only.
+- **Keyboard shortcuts**: Unavailable without an external keyboard.
+- **General layout**: The interface is designed for desktop-sized viewports and may be cramped on smaller screens.
 
 ## Known Issues
 
@@ -80,6 +85,9 @@ Mobile browsers support core functionality including touch gestures (pinch-to-zo
 | All browsers | CORS restrictions on cross-origin media | Ensure media servers include CORS headers |
 | All browsers | Autoplay restrictions | First play requires user interaction |
 | Safari | Limited WebGPU support | Falls back to WebGL2 |
+| All browsers | External Presentation shows text-only status (no viewer rendering) | Feature is partial; see issue #29 |
+| Mobile (all) | Volume slider inaccessible without hover | No current workaround; see issue #116 |
+| Mobile (all) | Virtual slider color controls unavailable | Use the color panel UI instead |
 
 ---
 

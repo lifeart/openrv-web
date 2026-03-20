@@ -10,6 +10,7 @@ import {
   resetCorePreferencesManagerForTests,
   type ColorDefaults,
   type FPSIndicatorPrefs,
+  type PluginSettingsProvider,
   type PreferencesExportPayload,
 } from './PreferencesManager';
 import {
@@ -357,6 +358,10 @@ describe('PreferencesManager export/import', () => {
     expect(parsed).toHaveProperty('colorDefaults');
     expect(parsed).toHaveProperty('exportDefaults');
     expect(parsed).toHaveProperty('generalPrefs');
+    expect(parsed).toHaveProperty('fpsIndicatorPrefs');
+    expect(parsed).toHaveProperty('displayProfile');
+    expect(parsed).toHaveProperty('timelineDisplayMode');
+    expect(parsed).toHaveProperty('missingFrameMode');
   });
 
   it('CPRF-052: export then import is a round-trip', () => {
@@ -752,5 +757,874 @@ describe('FPS Indicator Preferences', () => {
     storage.setItem(CORE_PREFERENCE_STORAGE_KEYS.fpsIndicator, 'not-valid-json{{{');
     const prefs = manager.getFPSIndicatorPrefs();
     expect(prefs).toEqual(DEFAULT_FPS_INDICATOR_PREFS);
+  });
+
+  it('CPRF-FPS-011: buildExportPayload includes fpsIndicatorPrefs', () => {
+    const { manager } = createManager();
+    manager.setFPSIndicatorPrefs({ enabled: false, position: 'bottom-left' });
+    const parsed = JSON.parse(manager.exportAll()) as PreferencesExportPayload;
+    expect(parsed.fpsIndicatorPrefs).toBeDefined();
+    expect(parsed.fpsIndicatorPrefs.enabled).toBe(false);
+    expect(parsed.fpsIndicatorPrefs.position).toBe('bottom-left');
+  });
+
+  it('CPRF-FPS-012: importAll restores fpsIndicatorPrefs', () => {
+    const { manager } = createManager();
+    const payload = {
+      fpsIndicatorPrefs: { enabled: false, position: 'bottom-right', backgroundOpacity: 0.3 },
+    };
+    manager.importAll(JSON.stringify(payload));
+    const prefs = manager.getFPSIndicatorPrefs();
+    expect(prefs.enabled).toBe(false);
+    expect(prefs.position).toBe('bottom-right');
+    expect(prefs.backgroundOpacity).toBe(0.3);
+  });
+
+  it('CPRF-FPS-013: importAll with null fpsIndicatorPrefs resets to default', () => {
+    const { manager } = createManager();
+    manager.setFPSIndicatorPrefs({ enabled: false, position: 'bottom-left' });
+    manager.importAll(JSON.stringify({ fpsIndicatorPrefs: null }));
+    expect(manager.getFPSIndicatorPrefs()).toEqual(DEFAULT_FPS_INDICATOR_PREFS);
+  });
+
+  it('CPRF-FPS-014: resetAll emits fpsIndicatorPrefsChanged with defaults', () => {
+    const { manager } = createManager();
+    manager.setFPSIndicatorPrefs({ enabled: false, position: 'bottom-left' });
+    const handler = vi.fn();
+    manager.on('fpsIndicatorPrefsChanged', handler);
+    manager.resetAll();
+    expect(handler).toHaveBeenCalledWith(DEFAULT_FPS_INDICATOR_PREFS);
+  });
+
+  it('CPRF-FPS-015: export then import round-trips FPS indicator settings', () => {
+    const { manager: m1 } = createManager();
+    m1.setFPSIndicatorPrefs({
+      enabled: false,
+      position: 'bottom-left',
+      showDroppedFrames: false,
+      showTargetFps: false,
+      backgroundOpacity: 0.4,
+      warningThreshold: 0.9,
+      criticalThreshold: 0.7,
+    });
+
+    const json = m1.exportAll();
+
+    const { manager: m2 } = createManager();
+    m2.importAll(json);
+
+    const prefs = m2.getFPSIndicatorPrefs();
+    expect(prefs.enabled).toBe(false);
+    expect(prefs.position).toBe('bottom-left');
+    expect(prefs.showDroppedFrames).toBe(false);
+    expect(prefs.showTargetFps).toBe(false);
+    expect(prefs.backgroundOpacity).toBe(0.4);
+    expect(prefs.warningThreshold).toBe(0.9);
+    expect(prefs.criticalThreshold).toBe(0.7);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #152 — storage-only advisory & regression
+// ---------------------------------------------------------------------------
+
+describe('Issue #152: preferences wiring', () => {
+  afterEach(() => {
+    resetCorePreferencesManagerForTests();
+    vi.restoreAllMocks();
+  });
+
+  it('CPRF-152-003: colorDefaults get/set/export/import remain functional', () => {
+    const { manager } = createManager();
+    manager.setColorDefaults({ defaultExposure: 7, defaultGamma: 1.8 });
+    expect(manager.getColorDefaults().defaultExposure).toBe(7);
+    expect(manager.getColorDefaults().defaultGamma).toBe(1.8);
+
+    const json = manager.exportAll();
+    const parsed = JSON.parse(json) as PreferencesExportPayload;
+    expect(parsed.colorDefaults.defaultExposure).toBe(7);
+
+    const { manager: m2 } = createManager();
+    m2.importAll(json);
+    expect(m2.getColorDefaults().defaultExposure).toBe(7);
+  });
+
+  it('CPRF-152-004: exportDefaults get/set/export/import remain functional', () => {
+    const { manager } = createManager();
+    manager.setExportDefaults({ defaultFormat: 'webp', frameburnEnabled: true });
+    expect(manager.getExportDefaults().defaultFormat).toBe('webp');
+    expect(manager.getExportDefaults().frameburnEnabled).toBe(true);
+
+    const json = manager.exportAll();
+    const parsed = JSON.parse(json) as PreferencesExportPayload;
+    expect(parsed.exportDefaults.defaultFormat).toBe('webp');
+
+    const { manager: m2 } = createManager();
+    m2.importAll(json);
+    expect(m2.getExportDefaults().defaultFormat).toBe('webp');
+    expect(m2.getExportDefaults().frameburnEnabled).toBe(true);
+  });
+
+  it('CPRF-152-005: generalPrefs fields get/set/export/import remain functional', () => {
+    const { manager } = createManager();
+    manager.setGeneralPrefs({ autoPlayOnLoad: true, showWelcome: false, defaultFps: 60 });
+    const prefs = manager.getGeneralPrefs();
+    expect(prefs.autoPlayOnLoad).toBe(true);
+    expect(prefs.showWelcome).toBe(false);
+    expect(prefs.defaultFps).toBe(60);
+
+    const json = manager.exportAll();
+    const parsed = JSON.parse(json) as PreferencesExportPayload;
+    expect(parsed.generalPrefs.autoPlayOnLoad).toBe(true);
+    expect(parsed.generalPrefs.showWelcome).toBe(false);
+    expect(parsed.generalPrefs.defaultFps).toBe(60);
+
+    const { manager: m2 } = createManager();
+    m2.importAll(json);
+    expect(m2.getGeneralPrefs().autoPlayOnLoad).toBe(true);
+    expect(m2.getGeneralPrefs().showWelcome).toBe(false);
+    expect(m2.getGeneralPrefs().defaultFps).toBe(60);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #159 — Plugin settings in backup flow
+// ---------------------------------------------------------------------------
+
+function createMockPluginSettingsProvider(
+  data: Record<string, Record<string, unknown>> = {},
+): PluginSettingsProvider & {
+  _data: Record<string, Record<string, unknown>>;
+  importAllCalls: number;
+  clearAllCalls: number;
+} {
+  return {
+    _data: { ...data },
+    importAllCalls: 0,
+    clearAllCalls: 0,
+    exportAll() {
+      return { ...this._data };
+    },
+    importAll(incoming: Record<string, Record<string, unknown>>) {
+      this.importAllCalls++;
+      this._data = { ...incoming };
+    },
+    clearAll() {
+      this.clearAllCalls++;
+      this._data = {};
+    },
+  };
+}
+
+describe('Issue #159: plugin settings in preferences backup flow', () => {
+  afterEach(() => {
+    resetCorePreferencesManagerForTests();
+  });
+
+  it('CPRF-159-001: exportAll includes pluginSettings when provider is set', () => {
+    const { manager } = createManager();
+    const provider = createMockPluginSettingsProvider({
+      'my-plugin': { theme: 'dark', fontSize: 14 },
+    });
+    manager.setPluginSettingsProvider(provider);
+
+    const parsed = JSON.parse(manager.exportAll()) as PreferencesExportPayload;
+    expect(parsed.pluginSettings).toEqual({
+      'my-plugin': { theme: 'dark', fontSize: 14 },
+    });
+  });
+
+  it('CPRF-159-002: exportAll omits pluginSettings when provider is not set', () => {
+    const { manager } = createManager();
+    const parsed = JSON.parse(manager.exportAll()) as PreferencesExportPayload;
+    expect(parsed.pluginSettings).toBeUndefined();
+  });
+
+  it('CPRF-159-003: importAll restores plugin settings via provider', () => {
+    const { manager } = createManager();
+    const provider = createMockPluginSettingsProvider();
+    manager.setPluginSettingsProvider(provider);
+
+    const payload = {
+      pluginSettings: { 'my-plugin': { color: '#ff0000' } },
+    };
+    manager.importAll(JSON.stringify(payload));
+
+    expect(provider.importAllCalls).toBe(1);
+    expect(provider._data).toEqual({ 'my-plugin': { color: '#ff0000' } });
+  });
+
+  it('CPRF-159-004: importAll with no provider does not crash when pluginSettings present', () => {
+    const { manager } = createManager();
+    // No provider set — should not throw
+    const payload = {
+      pluginSettings: { 'my-plugin': { color: '#ff0000' } },
+    };
+    expect(() => manager.importAll(JSON.stringify(payload))).not.toThrow();
+  });
+
+  it('CPRF-159-005: importAll ignores pluginSettings when value is not an object', () => {
+    const { manager } = createManager();
+    const provider = createMockPluginSettingsProvider({ existing: { key: 'val' } });
+    manager.setPluginSettingsProvider(provider);
+
+    manager.importAll(JSON.stringify({ pluginSettings: 'invalid' }));
+    expect(provider.importAllCalls).toBe(0);
+    expect(provider._data).toEqual({ existing: { key: 'val' } });
+  });
+
+  it('CPRF-159-006: resetAll clears plugin settings via provider', () => {
+    const { manager } = createManager();
+    const provider = createMockPluginSettingsProvider({
+      'my-plugin': { theme: 'dark' },
+    });
+    manager.setPluginSettingsProvider(provider);
+
+    manager.resetAll();
+
+    expect(provider.clearAllCalls).toBe(1);
+    expect(provider._data).toEqual({});
+  });
+
+  it('CPRF-159-007: resetAll does not crash when provider is not set', () => {
+    const { manager } = createManager();
+    expect(() => manager.resetAll()).not.toThrow();
+  });
+
+  it('CPRF-159-008: setPluginSettingsProvider(null) removes provider', () => {
+    const { manager } = createManager();
+    const provider = createMockPluginSettingsProvider({
+      'my-plugin': { theme: 'dark' },
+    });
+    manager.setPluginSettingsProvider(provider);
+    manager.setPluginSettingsProvider(null);
+
+    const parsed = JSON.parse(manager.exportAll()) as PreferencesExportPayload;
+    expect(parsed.pluginSettings).toBeUndefined();
+  });
+
+  it('CPRF-159-009: export then import round-trips plugin settings', () => {
+    const pluginData = {
+      'plugin-a': { enabled: true, color: '#00ff00' },
+      'plugin-b': { volume: 0.8 },
+    };
+
+    const { manager: m1 } = createManager();
+    const provider1 = createMockPluginSettingsProvider(pluginData);
+    m1.setPluginSettingsProvider(provider1);
+
+    const json = m1.exportAll();
+
+    const { manager: m2 } = createManager();
+    const provider2 = createMockPluginSettingsProvider();
+    m2.setPluginSettingsProvider(provider2);
+    m2.importAll(json);
+
+    expect(provider2._data).toEqual(pluginData);
+  });
+
+  it('CPRF-159-010: imported event payload includes pluginSettings', () => {
+    const { manager } = createManager();
+    const provider = createMockPluginSettingsProvider({
+      'my-plugin': { key: 'value' },
+    });
+    manager.setPluginSettingsProvider(provider);
+
+    const cb = vi.fn();
+    manager.on('imported', cb);
+
+    manager.importAll(JSON.stringify({ pluginSettings: { 'other-plugin': { x: 1 } } }));
+
+    expect(cb).toHaveBeenCalledTimes(1);
+    const emittedPayload = cb.mock.calls[0]![0] as PreferencesExportPayload;
+    // After import, the provider now has the imported data, so buildExportPayload reflects it
+    expect(emittedPayload.pluginSettings).toEqual({ 'other-plugin': { x: 1 } });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Filter mode in export/import/reset (#165)
+// ---------------------------------------------------------------------------
+
+describe('PreferencesManager filterMode (#165)', () => {
+  it('CPRF-165-001: exportAll includes filterMode when set', () => {
+    const { manager } = createManager();
+    manager.setFilterMode('nearest');
+    const parsed = JSON.parse(manager.exportAll()) as PreferencesExportPayload;
+    expect(parsed.filterMode).toBe('nearest');
+  });
+
+  it('CPRF-165-002: exportAll includes filterMode as null when not set', () => {
+    const { manager } = createManager();
+    const parsed = JSON.parse(manager.exportAll()) as PreferencesExportPayload;
+    expect(parsed.filterMode).toBeNull();
+  });
+
+  it('CPRF-165-003: importAll restores filterMode nearest', () => {
+    const { manager } = createManager();
+    manager.importAll(JSON.stringify({ filterMode: 'nearest' }));
+    expect(manager.getFilterMode()).toBe('nearest');
+  });
+
+  it('CPRF-165-004: importAll restores filterMode linear', () => {
+    const { manager } = createManager();
+    manager.setFilterMode('nearest');
+    manager.importAll(JSON.stringify({ filterMode: 'linear' }));
+    expect(manager.getFilterMode()).toBe('linear');
+  });
+
+  it('CPRF-165-005: importAll with null filterMode clears it', () => {
+    const { manager } = createManager();
+    manager.setFilterMode('nearest');
+    manager.importAll(JSON.stringify({ filterMode: null }));
+    expect(manager.getFilterMode()).toBeNull();
+  });
+
+  it('CPRF-165-006: importAll with invalid filterMode clears it', () => {
+    const { manager } = createManager();
+    manager.setFilterMode('nearest');
+    manager.importAll(JSON.stringify({ filterMode: 'invalid-value' }));
+    expect(manager.getFilterMode()).toBeNull();
+  });
+
+  it('CPRF-165-007: importAll without filterMode key does not change existing value', () => {
+    const { manager } = createManager();
+    manager.setFilterMode('nearest');
+    manager.importAll(JSON.stringify({ generalPrefs: { defaultFps: 30 } }));
+    expect(manager.getFilterMode()).toBe('nearest');
+  });
+
+  it('CPRF-165-008: resetAll clears filterMode', () => {
+    const { manager } = createManager();
+    manager.setFilterMode('nearest');
+    manager.resetAll();
+    expect(manager.getFilterMode()).toBeNull();
+  });
+
+  it('CPRF-165-009: full round-trip export/import preserves filterMode', () => {
+    const { manager: m1 } = createManager();
+    m1.setFilterMode('nearest');
+    const json = m1.exportAll();
+
+    const { manager: m2 } = createManager();
+    m2.importAll(json);
+    expect(m2.getFilterMode()).toBe('nearest');
+  });
+
+  it('CPRF-165-010: getFilterMode returns null for unknown stored value', () => {
+    const { manager, storage } = createManager();
+    storage.setItem!('openrv-prefs-filter-mode', 'bicubic');
+    expect(manager.getFilterMode()).toBeNull();
+  });
+
+  it('CPRF-165-011: setFilterMode(null) removes the key', () => {
+    const { manager, storage } = createManager();
+    manager.setFilterMode('nearest');
+    expect(storage.getItem!('openrv-prefs-filter-mode')).toBe('nearest');
+    manager.setFilterMode(null);
+    expect(storage.getItem!('openrv-prefs-filter-mode')).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #166: Display profile in unified preferences
+// ---------------------------------------------------------------------------
+
+describe('PreferencesManager displayProfile (#166)', () => {
+  it('CPRF-166-001: getDisplayProfile returns null when storage is empty', () => {
+    const { manager } = createManager();
+    expect(manager.getDisplayProfile()).toBeNull();
+  });
+
+  it('CPRF-166-002: setDisplayProfile persists valid state', () => {
+    const { manager } = createManager();
+    const profile = {
+      transferFunction: 'rec709' as const,
+      displayGamma: 1.2,
+      displayBrightness: 0.8,
+      customGamma: 2.4,
+    };
+    manager.setDisplayProfile(profile);
+    expect(manager.getDisplayProfile()).toEqual(profile);
+  });
+
+  it('CPRF-166-003: setDisplayProfile(null) clears the profile', () => {
+    const { manager } = createManager();
+    manager.setDisplayProfile({
+      transferFunction: 'srgb',
+      displayGamma: 1.0,
+      displayBrightness: 1.0,
+      customGamma: 2.2,
+    });
+    manager.setDisplayProfile(null);
+    expect(manager.getDisplayProfile()).toBeNull();
+  });
+
+  it('CPRF-166-004: exportAll includes displayProfile', () => {
+    const { manager } = createManager();
+    const profile = {
+      transferFunction: 'gamma2.2' as const,
+      displayGamma: 1.0,
+      displayBrightness: 1.0,
+      customGamma: 2.2,
+    };
+    manager.setDisplayProfile(profile);
+    const parsed = JSON.parse(manager.exportAll()) as PreferencesExportPayload;
+    expect(parsed.displayProfile).toEqual(profile);
+  });
+
+  it('CPRF-166-005: exportAll includes displayProfile as null when not set', () => {
+    const { manager } = createManager();
+    const parsed = JSON.parse(manager.exportAll()) as PreferencesExportPayload;
+    expect(parsed.displayProfile).toBeNull();
+  });
+
+  it('CPRF-166-006: importAll restores displayProfile', () => {
+    const { manager } = createManager();
+    const profile = {
+      transferFunction: 'rec709',
+      displayGamma: 1.5,
+      displayBrightness: 0.9,
+      customGamma: 2.2,
+    };
+    manager.importAll(JSON.stringify({ displayProfile: profile }));
+    const restored = manager.getDisplayProfile();
+    expect(restored).not.toBeNull();
+    expect(restored!.transferFunction).toBe('rec709');
+    expect(restored!.displayGamma).toBe(1.5);
+    expect(restored!.displayBrightness).toBe(0.9);
+  });
+
+  it('CPRF-166-007: importAll with null displayProfile clears it', () => {
+    const { manager } = createManager();
+    manager.setDisplayProfile({
+      transferFunction: 'srgb',
+      displayGamma: 1.0,
+      displayBrightness: 1.0,
+      customGamma: 2.2,
+    });
+    manager.importAll(JSON.stringify({ displayProfile: null }));
+    expect(manager.getDisplayProfile()).toBeNull();
+  });
+
+  it('CPRF-166-008: importAll with invalid displayProfile is ignored', () => {
+    const { manager } = createManager();
+    manager.setDisplayProfile({
+      transferFunction: 'srgb',
+      displayGamma: 1.0,
+      displayBrightness: 1.0,
+      customGamma: 2.2,
+    });
+    // Invalid: missing required fields
+    manager.importAll(JSON.stringify({ displayProfile: { transferFunction: 'srgb' } }));
+    // Original value preserved since invalid data is skipped
+    expect(manager.getDisplayProfile()!.transferFunction).toBe('srgb');
+  });
+
+  it('CPRF-166-009: importAll without displayProfile key does not change existing value', () => {
+    const { manager } = createManager();
+    manager.setDisplayProfile({
+      transferFunction: 'rec709',
+      displayGamma: 1.0,
+      displayBrightness: 1.0,
+      customGamma: 2.2,
+    });
+    manager.importAll(JSON.stringify({ generalPrefs: { defaultFps: 30 } }));
+    expect(manager.getDisplayProfile()!.transferFunction).toBe('rec709');
+  });
+
+  it('CPRF-166-010: resetAll clears displayProfile', () => {
+    const { manager } = createManager();
+    manager.setDisplayProfile({
+      transferFunction: 'gamma2.4',
+      displayGamma: 1.0,
+      displayBrightness: 1.0,
+      customGamma: 2.2,
+    });
+    manager.resetAll();
+    expect(manager.getDisplayProfile()).toBeNull();
+  });
+
+  it('CPRF-166-011: full round-trip export/import preserves displayProfile', () => {
+    const { manager: m1 } = createManager();
+    m1.setDisplayProfile({
+      transferFunction: 'custom',
+      displayGamma: 1.3,
+      displayBrightness: 0.7,
+      customGamma: 3.0,
+      outputGamut: 'display-p3',
+    });
+    const json = m1.exportAll();
+
+    const { manager: m2 } = createManager();
+    m2.importAll(json);
+    const profile = m2.getDisplayProfile();
+    expect(profile).not.toBeNull();
+    expect(profile!.transferFunction).toBe('custom');
+    expect(profile!.displayGamma).toBe(1.3);
+    expect(profile!.displayBrightness).toBe(0.7);
+    expect(profile!.customGamma).toBe(3.0);
+    expect(profile!.outputGamut).toBe('display-p3');
+  });
+
+  it('CPRF-166-012: getDisplayProfile clamps out-of-range values', () => {
+    const { manager, storage } = createManager();
+    storage.setItem!(
+      'openrv-display-profile',
+      JSON.stringify({
+        transferFunction: 'srgb',
+        displayGamma: 100,
+        displayBrightness: -5,
+        customGamma: 999,
+      }),
+    );
+    const profile = manager.getDisplayProfile();
+    expect(profile).not.toBeNull();
+    expect(profile!.displayGamma).toBe(4.0);
+    expect(profile!.displayBrightness).toBe(0.0);
+    expect(profile!.customGamma).toBe(10.0);
+  });
+
+  it('CPRF-166-013: getDisplayProfile returns null for corrupt JSON', () => {
+    const { manager, storage } = createManager();
+    storage.setItem!('openrv-display-profile', 'not-json');
+    expect(manager.getDisplayProfile()).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #167: Timeline display mode in unified preferences
+// ---------------------------------------------------------------------------
+
+describe('PreferencesManager timelineDisplayMode (#167)', () => {
+  it('CPRF-167-001: getTimelineDisplayMode returns null when storage is empty', () => {
+    const { manager } = createManager();
+    expect(manager.getTimelineDisplayMode()).toBeNull();
+  });
+
+  it('CPRF-167-002: setTimelineDisplayMode persists valid mode', () => {
+    const { manager } = createManager();
+    manager.setTimelineDisplayMode('timecode');
+    expect(manager.getTimelineDisplayMode()).toBe('timecode');
+  });
+
+  it('CPRF-167-003: setTimelineDisplayMode(null) clears the mode', () => {
+    const { manager } = createManager();
+    manager.setTimelineDisplayMode('seconds');
+    manager.setTimelineDisplayMode(null);
+    expect(manager.getTimelineDisplayMode()).toBeNull();
+  });
+
+  it('CPRF-167-004: exportAll includes timelineDisplayMode', () => {
+    const { manager } = createManager();
+    manager.setTimelineDisplayMode('footage');
+    const parsed = JSON.parse(manager.exportAll()) as PreferencesExportPayload;
+    expect(parsed.timelineDisplayMode).toBe('footage');
+  });
+
+  it('CPRF-167-005: exportAll includes timelineDisplayMode as null when not set', () => {
+    const { manager } = createManager();
+    const parsed = JSON.parse(manager.exportAll()) as PreferencesExportPayload;
+    expect(parsed.timelineDisplayMode).toBeNull();
+  });
+
+  it('CPRF-167-006: importAll restores timelineDisplayMode', () => {
+    const { manager } = createManager();
+    manager.importAll(JSON.stringify({ timelineDisplayMode: 'timecode' }));
+    expect(manager.getTimelineDisplayMode()).toBe('timecode');
+  });
+
+  it('CPRF-167-007: importAll with invalid timelineDisplayMode clears it', () => {
+    const { manager } = createManager();
+    manager.setTimelineDisplayMode('seconds');
+    manager.importAll(JSON.stringify({ timelineDisplayMode: 'invalid-mode' }));
+    expect(manager.getTimelineDisplayMode()).toBeNull();
+  });
+
+  it('CPRF-167-008: importAll with null timelineDisplayMode clears it', () => {
+    const { manager } = createManager();
+    manager.setTimelineDisplayMode('frames');
+    manager.importAll(JSON.stringify({ timelineDisplayMode: null }));
+    expect(manager.getTimelineDisplayMode()).toBeNull();
+  });
+
+  it('CPRF-167-009: importAll without timelineDisplayMode key does not change existing value', () => {
+    const { manager } = createManager();
+    manager.setTimelineDisplayMode('footage');
+    manager.importAll(JSON.stringify({ generalPrefs: { defaultFps: 30 } }));
+    expect(manager.getTimelineDisplayMode()).toBe('footage');
+  });
+
+  it('CPRF-167-010: resetAll clears timelineDisplayMode', () => {
+    const { manager } = createManager();
+    manager.setTimelineDisplayMode('timecode');
+    manager.resetAll();
+    expect(manager.getTimelineDisplayMode()).toBeNull();
+  });
+
+  it('CPRF-167-011: full round-trip export/import preserves timelineDisplayMode', () => {
+    const { manager: m1 } = createManager();
+    m1.setTimelineDisplayMode('seconds');
+    const json = m1.exportAll();
+
+    const { manager: m2 } = createManager();
+    m2.importAll(json);
+    expect(m2.getTimelineDisplayMode()).toBe('seconds');
+  });
+
+  it('CPRF-167-012: all four display modes are valid', () => {
+    const { manager } = createManager();
+    for (const mode of ['frames', 'timecode', 'seconds', 'footage'] as const) {
+      manager.setTimelineDisplayMode(mode);
+      expect(manager.getTimelineDisplayMode()).toBe(mode);
+    }
+  });
+
+  it('CPRF-167-013: getTimelineDisplayMode returns null for unknown stored value', () => {
+    const { manager, storage } = createManager();
+    storage.setItem!(CORE_PREFERENCE_STORAGE_KEYS.timelineDisplayMode, 'unknown-mode');
+    expect(manager.getTimelineDisplayMode()).toBeNull();
+  });
+
+  it('CPRF-167-014: setTimelineDisplayMode ignores invalid mode strings', () => {
+    const { manager } = createManager();
+    manager.setTimelineDisplayMode('timecode');
+    manager.setTimelineDisplayMode('bogus' as any);
+    // Should still be 'timecode' since 'bogus' was rejected
+    expect(manager.getTimelineDisplayMode()).toBe('timecode');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #168: Missing-frame mode in unified preferences
+// ---------------------------------------------------------------------------
+
+describe('PreferencesManager missingFrameMode (#168)', () => {
+  it('CPRF-168-001: getMissingFrameMode returns null when storage is empty', () => {
+    const { manager } = createManager();
+    expect(manager.getMissingFrameMode()).toBeNull();
+  });
+
+  it('CPRF-168-002: setMissingFrameMode persists and getMissingFrameMode reads it back', () => {
+    const { manager } = createManager();
+    manager.setMissingFrameMode('hold');
+    expect(manager.getMissingFrameMode()).toBe('hold');
+  });
+
+  it('CPRF-168-003: setMissingFrameMode(null) clears the value', () => {
+    const { manager } = createManager();
+    manager.setMissingFrameMode('black');
+    manager.setMissingFrameMode(null);
+    expect(manager.getMissingFrameMode()).toBeNull();
+  });
+
+  it('CPRF-168-004: exportAll includes missingFrameMode', () => {
+    const { manager } = createManager();
+    manager.setMissingFrameMode('hold');
+    const parsed = JSON.parse(manager.exportAll()) as PreferencesExportPayload;
+    expect(parsed.missingFrameMode).toBe('hold');
+  });
+
+  it('CPRF-168-005: exportAll includes missingFrameMode as null when not set', () => {
+    const { manager } = createManager();
+    const parsed = JSON.parse(manager.exportAll()) as PreferencesExportPayload;
+    expect(parsed.missingFrameMode).toBeNull();
+  });
+
+  it('CPRF-168-006: importAll restores missingFrameMode', () => {
+    const { manager } = createManager();
+    manager.importAll(JSON.stringify({ missingFrameMode: 'black' }));
+    expect(manager.getMissingFrameMode()).toBe('black');
+  });
+
+  it('CPRF-168-007: importAll with invalid missingFrameMode clears it', () => {
+    const { manager } = createManager();
+    manager.setMissingFrameMode('hold');
+    manager.importAll(JSON.stringify({ missingFrameMode: 'invalid-mode' }));
+    expect(manager.getMissingFrameMode()).toBeNull();
+  });
+
+  it('CPRF-168-008: importAll with null missingFrameMode clears it', () => {
+    const { manager } = createManager();
+    manager.setMissingFrameMode('show-frame');
+    manager.importAll(JSON.stringify({ missingFrameMode: null }));
+    expect(manager.getMissingFrameMode()).toBeNull();
+  });
+
+  it('CPRF-168-009: importAll without missingFrameMode key does not change existing value', () => {
+    const { manager } = createManager();
+    manager.setMissingFrameMode('hold');
+    manager.importAll(JSON.stringify({ generalPrefs: { defaultFps: 30 } }));
+    expect(manager.getMissingFrameMode()).toBe('hold');
+  });
+
+  it('CPRF-168-010: resetAll clears missingFrameMode', () => {
+    const { manager } = createManager();
+    manager.setMissingFrameMode('black');
+    manager.resetAll();
+    expect(manager.getMissingFrameMode()).toBeNull();
+  });
+
+  it('CPRF-168-011: full round-trip export/import preserves missingFrameMode', () => {
+    const { manager: m1 } = createManager();
+    m1.setMissingFrameMode('off');
+    const json = m1.exportAll();
+
+    const { manager: m2 } = createManager();
+    m2.importAll(json);
+    expect(m2.getMissingFrameMode()).toBe('off');
+  });
+
+  it('CPRF-168-012: all four missing-frame modes are valid', () => {
+    const { manager } = createManager();
+    for (const mode of ['off', 'show-frame', 'hold', 'black'] as const) {
+      manager.setMissingFrameMode(mode);
+      expect(manager.getMissingFrameMode()).toBe(mode);
+    }
+  });
+
+  it('CPRF-168-013: getMissingFrameMode returns null for unknown stored value', () => {
+    const { manager, storage } = createManager();
+    storage.setItem!(CORE_PREFERENCE_STORAGE_KEYS.missingFrameMode, 'unknown-mode');
+    expect(manager.getMissingFrameMode()).toBeNull();
+  });
+
+  it('CPRF-168-014: setMissingFrameMode ignores invalid mode strings', () => {
+    const { manager } = createManager();
+    manager.setMissingFrameMode('hold');
+    manager.setMissingFrameMode('bogus' as any);
+    // Should still be 'hold' since 'bogus' was rejected
+    expect(manager.getMissingFrameMode()).toBe('hold');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #277: importAll/resetAll apply live subsystems
+// ---------------------------------------------------------------------------
+
+describe('Issue #277: importAll/resetAll apply live subsystems', () => {
+  function createMockSubsystems() {
+    return {
+      theme: { setMode: vi.fn() } as any,
+      layout: { reloadFromStorage: vi.fn() } as any,
+      keyBindings: { reloadFromStorage: vi.fn() } as any,
+      ocio: { reloadFromStorage: vi.fn() } as any,
+    };
+  }
+
+  it('CPRF-277-001: importAll with theme data calls ThemeManager.setMode', () => {
+    const { manager } = createManager();
+    const subs = createMockSubsystems();
+    manager.setSubsystems(subs);
+
+    manager.importAll(JSON.stringify({ themeMode: 'light' }));
+
+    expect(subs.theme.setMode).toHaveBeenCalledWith('light');
+  });
+
+  it('CPRF-277-002: importAll with invalid themeMode calls setMode("auto")', () => {
+    const { manager } = createManager();
+    const subs = createMockSubsystems();
+    manager.setSubsystems(subs);
+
+    manager.importAll(JSON.stringify({ themeMode: 'neon' }));
+
+    expect(subs.theme.setMode).toHaveBeenCalledWith('auto');
+  });
+
+  it('CPRF-277-003: importAll with null themeMode calls setMode("auto")', () => {
+    const { manager } = createManager();
+    const subs = createMockSubsystems();
+    manager.setSubsystems(subs);
+
+    manager.importAll(JSON.stringify({ themeMode: null }));
+
+    expect(subs.theme.setMode).toHaveBeenCalledWith('auto');
+  });
+
+  it('CPRF-277-004: importAll calls reloadFromStorage on layout, keyBindings, ocio', () => {
+    const { manager } = createManager();
+    const subs = createMockSubsystems();
+    manager.setSubsystems(subs);
+
+    manager.importAll(
+      JSON.stringify({
+        layout: { version: 1 },
+        keyBindings: [],
+        ocioState: { enabled: true },
+      }),
+    );
+
+    expect(subs.layout.reloadFromStorage).toHaveBeenCalled();
+    expect(subs.keyBindings.reloadFromStorage).toHaveBeenCalled();
+    expect(subs.ocio.reloadFromStorage).toHaveBeenCalled();
+  });
+
+  it('CPRF-277-005: importAll without themeMode key does not call theme.setMode', () => {
+    const { manager } = createManager();
+    const subs = createMockSubsystems();
+    manager.setSubsystems(subs);
+
+    manager.importAll(JSON.stringify({ generalPrefs: { userName: 'Alice' } }));
+
+    expect(subs.theme.setMode).not.toHaveBeenCalled();
+  });
+
+  it('CPRF-277-006: resetAll calls setMode("auto") on theme and reloadFromStorage on others', () => {
+    const { manager } = createManager();
+    const subs = createMockSubsystems();
+    manager.setSubsystems(subs);
+
+    manager.resetAll();
+
+    expect(subs.theme.setMode).toHaveBeenCalledWith('auto');
+    expect(subs.layout.reloadFromStorage).toHaveBeenCalled();
+    expect(subs.keyBindings.reloadFromStorage).toHaveBeenCalled();
+    expect(subs.ocio.reloadFromStorage).toHaveBeenCalled();
+  });
+
+  it('CPRF-277-007: importAll with null subsystems does not crash', () => {
+    const { manager } = createManager();
+    // No subsystems wired — should not throw
+    expect(() => {
+      manager.importAll(
+        JSON.stringify({
+          themeMode: 'dark',
+          layout: { version: 1 },
+          keyBindings: [],
+          ocioState: { enabled: true },
+        }),
+      );
+    }).not.toThrow();
+  });
+
+  it('CPRF-277-008: resetAll with null subsystems does not crash', () => {
+    const { manager } = createManager();
+    // No subsystems wired — should not throw
+    expect(() => manager.resetAll()).not.toThrow();
+  });
+
+  it('CPRF-277-009: importAll still emits imported event after applying subsystems', () => {
+    const { manager } = createManager();
+    const subs = createMockSubsystems();
+    manager.setSubsystems(subs);
+
+    const spy = vi.fn();
+    manager.on('imported', spy);
+    manager.importAll(JSON.stringify({ themeMode: 'dark' }));
+
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it('CPRF-277-010: resetAll still emits reset event after applying subsystems', () => {
+    const { manager } = createManager();
+    const subs = createMockSubsystems();
+    manager.setSubsystems(subs);
+
+    const spy = vi.fn();
+    manager.on('reset', spy);
+    manager.resetAll();
+
+    expect(spy).toHaveBeenCalledTimes(1);
   });
 });

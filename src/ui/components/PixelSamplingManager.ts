@@ -59,6 +59,7 @@ export interface PixelSamplingContext {
   getImageCtx(): CanvasRenderingContext2D;
   getSession(): Session;
   getDisplayDimensions(): { width: number; height: number };
+  getSourceDimensions(): { width: number; height: number };
   getCanvasColorSpace(): 'display-p3' | undefined;
   getImageCanvasRect(): DOMRect;
   isViewerContentElement(element: HTMLElement): boolean;
@@ -202,7 +203,16 @@ export class PixelSamplingManager {
         this.context.pixelProbe.setSourceImageData(null);
       }
 
-      this.context.pixelProbe.updateFromCanvas(position.x, position.y, imageData, displayWidth, displayHeight);
+      const { width: sourceWidth, height: sourceHeight } = this.context.getSourceDimensions();
+      this.context.pixelProbe.updateFromCanvas(
+        position.x,
+        position.y,
+        imageData,
+        displayWidth,
+        displayHeight,
+        sourceWidth,
+        sourceHeight,
+      );
       this.context.pixelProbe.setOverlayPosition(e.clientX, e.clientY);
     }
 
@@ -273,8 +283,94 @@ export class PixelSamplingManager {
   };
 
   /**
+   * Sample raw float values from an IPImage at a given display position.
+   * Maps display coordinates to source image coordinates and averages an
+   * NxN area matching sampleSize.
+   *
+   * Returns null if the IPImage has no CPU-accessible data (e.g. VideoFrame-backed).
+   */
+  private sampleFromIPImageSource(
+    image: IPImage,
+    position: { x: number; y: number },
+    displayWidth: number,
+    displayHeight: number,
+    sampleSize: number,
+  ): { r: number; g: number; b: number; a: number } | null {
+    // VideoFrame-backed images have no CPU data
+    if (image.data.byteLength === 0) return null;
+
+    const { width: imgW, height: imgH, channels, dataType } = image;
+    if (imgW <= 0 || imgH <= 0) return null;
+
+    const arr = image.getTypedArray();
+
+    // Map display coordinates to source image coordinates
+    const srcX = Math.max(0, Math.min(imgW - 1, Math.round((position.x / displayWidth) * imgW)));
+    const srcY = Math.max(0, Math.min(imgH - 1, Math.round((position.y / displayHeight) * imgH)));
+
+    // Normalisation factor to bring values into 0-1 float range
+    let norm: number;
+    if (dataType === 'float32') {
+      norm = 1;
+    } else if (dataType === 'uint16') {
+      norm = 65535;
+    } else {
+      norm = 255;
+    }
+
+    const halfSize = Math.floor(sampleSize / 2);
+    let tr = 0,
+      tg = 0,
+      tb = 0,
+      ta = 0;
+    let count = 0;
+
+    for (let dy = -halfSize; dy <= halfSize; dy++) {
+      for (let dx = -halfSize; dx <= halfSize; dx++) {
+        const px = srcX + dx;
+        const py = srcY + dy;
+        if (px < 0 || px >= imgW || py < 0 || py >= imgH) continue;
+
+        const idx = (py * imgW + px) * channels;
+        if (channels === 1) {
+          const v = (arr[idx] ?? 0) / norm;
+          tr += v;
+          tg += v;
+          tb += v;
+          ta += 1;
+        } else if (channels === 3) {
+          tr += (arr[idx] ?? 0) / norm;
+          tg += (arr[idx + 1] ?? 0) / norm;
+          tb += (arr[idx + 2] ?? 0) / norm;
+          ta += 1;
+        } else {
+          // 4 channels (or more – treat as RGBA)
+          tr += (arr[idx] ?? 0) / norm;
+          tg += (arr[idx + 1] ?? 0) / norm;
+          tb += (arr[idx + 2] ?? 0) / norm;
+          ta += (arr[idx + 3] ?? 0) / norm;
+        }
+        count++;
+      }
+    }
+
+    if (count === 0) return null;
+
+    return {
+      r: tr / count,
+      g: tg / count,
+      b: tb / count,
+      a: ta / count,
+    };
+  }
+
+  /**
    * Process pixel probe data from either sync or async readback.
    * Used by both the sync and async (worker) paths.
+   *
+   * When the user selects "Source" mode, the HDR path samples pre-grade values
+   * directly from the last rendered IPImage. Falls back to post-grade readback
+   * when the IPImage has no CPU-accessible data (e.g. VideoFrame-backed).
    */
   handlePixelProbeData(
     pixels: Float32Array | null,
@@ -286,9 +382,38 @@ export class PixelSamplingManager {
     e: MouseEvent,
   ): void {
     const { width: displayWidth, height: displayHeight } = this.context.getDisplayDimensions();
+    const { width: sourceWidth, height: sourceHeight } = this.context.getSourceDimensions();
 
     if (probeEnabled) {
-      if (pixels && pixels.length >= 4) {
+      // Check if user wants source mode and we can provide pre-grade data
+      const wantsSource = this.context.pixelProbe.getSourceMode() === 'source';
+      let usedSource = false;
+
+      if (wantsSource) {
+        const image = this.context.getLastRenderedImage();
+        if (image) {
+          const sampleSize = this.context.pixelProbe.getSampleSize();
+          const sampled = this.sampleFromIPImageSource(image, position, displayWidth, displayHeight, sampleSize);
+          if (sampled) {
+            this.context.pixelProbe.updateFromHDRValues(
+              position.x,
+              position.y,
+              sampled.r,
+              sampled.g,
+              sampled.b,
+              sampled.a,
+              displayWidth,
+              displayHeight,
+              true, // isSource
+              sourceWidth,
+              sourceHeight,
+            );
+            usedSource = true;
+          }
+        }
+      }
+
+      if (!usedSource && pixels && pixels.length >= 4) {
         const count = rw * rh;
         let tr = 0,
           tg = 0,
@@ -309,6 +434,9 @@ export class PixelSamplingManager {
           ta / count,
           displayWidth,
           displayHeight,
+          false,
+          sourceWidth,
+          sourceHeight,
         );
       }
       this.context.pixelProbe.setOverlayPosition(e.clientX, e.clientY);

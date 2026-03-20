@@ -45,7 +45,7 @@ OpenRV provides comprehensive channel management for multi-channel images:
 - Alpha channel visualization (grayscale display with full opacity)
 - Luminance/Grayscale view using Rec.709 coefficients (0.2126R + 0.7152G + 0.0722B)
 - Dropdown UI control (`ChannelSelect` component) with color indicators
-- Keyboard shortcuts: Shift+R (red), Shift+G (green), Shift+B (blue), Shift+A (alpha), Shift+L/Y (luminance), Shift+N (RGB normal)
+- Keyboard shortcuts: Shift+R (red), Shift+G (green), Shift+B (blue), Shift+A (alpha), Shift+Y (luminance), Shift+N (RGB normal)
 - Visual indication of active channel mode (button highlighting, dropdown selection)
 - State persistence across frame changes and tab switches
 - Integration with EffectProcessor for worker-based processing
@@ -120,8 +120,7 @@ OpenRV provides comprehensive channel management for multi-channel images:
 - `Shift+G`: Green
 - `Shift+B`: Blue
 - `Shift+A`: Alpha
-- `Shift+L`: Luminance/Grayscale
-- `Shift+Y`: Luminance/Grayscale (alias for "graY")
+- `Shift+Y`: Luminance/Grayscale
 
 **Accessibility**:
 - A11Y focus handling applied to button
@@ -216,7 +215,7 @@ Channel isolation is supported in the `EffectProcessor` worker:
 | CS-010 | Shift+G selects green channel | Implemented |
 | CS-011 | Shift+B selects blue channel | Implemented |
 | CS-012 | Shift+A selects alpha channel | Implemented |
-| CS-013 | Shift+L selects luminance channel | Implemented |
+| CS-013 | Shift+Y selects luminance channel | Implemented |
 | CS-014 | Shift+N returns to RGB channel | Implemented |
 | CS-015 | Shift+R reserved for rotation (not red) | Implemented |
 | CS-020 | Red channel produces different image than RGB | Implemented |
@@ -280,8 +279,7 @@ Channel isolation is supported in the `EffectProcessor` worker:
 | CH-012 | Shift+G selects green channel | Implemented |
 | CH-013 | Shift+B selects blue channel | Implemented |
 | CH-014 | Shift+A selects alpha channel | Implemented |
-| CH-015 | Shift+L selects luminance channel | Implemented |
-| CH-015b | Shift+Y selects luminance (alias) | Implemented |
+| CH-015 | Shift+Y selects luminance channel | Implemented |
 | CH-016 | Shift+N selects RGB (normal) channel | Implemented |
 | CH-017 | Handles lowercase keys | Implemented |
 | CH-018 | Ignores keys without shift | Implemented |

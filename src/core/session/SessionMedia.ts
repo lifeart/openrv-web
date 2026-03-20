@@ -1,23 +1,30 @@
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import {
   createSequenceInfo,
+  createSequenceInfoFromPattern,
+  isSequencePattern,
   loadFrameImage,
+  loadFrameImageFromURL,
   preloadFrames,
   releaseDistantFrames,
   disposeSequence,
+  buildFrameNumberMap,
+  getSequenceFrameRange,
 } from '../../utils/media/SequenceLoader';
 import { VideoSourceNode } from '../../nodes/sources/VideoSourceNode';
 import { FileSourceNode } from '../../nodes/sources/FileSourceNode';
 import { ProceduralSourceNode, parseMovieProc } from '../../nodes/sources/ProceduralSourceNode';
+import { SequenceSourceNodeWrapper } from './loaders/SequenceRepresentationLoader';
 import type { PatternName, GradientDirection } from '../../nodes/sources/ProceduralSourceNode';
 import type { HDRResizeTier } from '../../utils/media/HDRFrameResizer';
-import type { MediaType } from '../types/session';
 import type { MediaSource, UnsupportedCodecInfo } from './SessionTypes';
 import type { IPImage } from '../../core/image/Image';
 import type { GTOParseResult } from './GTOGraphLoader';
 import { Logger } from '../../utils/Logger';
-import { detectMediaTypeFromFile } from '../../utils/media/SupportedMediaFormats';
+import { detectMediaTypeFromFile, detectMediaTypeFromFileBytes } from '../../utils/media/SupportedMediaFormats';
 import { MediaRepresentationManager } from './MediaRepresentationManager';
+import type { MediaCacheManager, CacheEntryMeta } from '../../cache/MediaCacheManager';
+import { computeCacheKey } from '../../cache/MediaCacheKey';
 import type {
   AddRepresentationConfig,
   MediaRepresentation,
@@ -27,14 +34,19 @@ import type {
 const log = new Logger('SessionMedia');
 
 export interface SessionMediaEvents extends EventMap {
+  sourceLoadingStarted: { name: string };
   sourceLoaded: MediaSource;
+  sourceLoadFailed: { name: string };
   durationChanged: number;
+  currentSourceChanged: number;
   unsupportedCodec: UnsupportedCodecInfo;
+  hdrDowngraded: { filename: string };
   representationChanged: {
     sourceIndex: number;
     previousRepId: string | null;
     newRepId: string;
     representation: MediaRepresentation;
+    mappedFrame?: number;
   };
   representationError: {
     sourceIndex: number;
@@ -65,6 +77,8 @@ export interface SessionMediaHost {
   setCurrentFrame(value: number): void;
   /** Pause playback (when adding source) */
   pause(): void;
+  /** Resume playback */
+  play(): void;
   /** Check if playing */
   getIsPlaying(): boolean;
   /** Get muted state for video element init */
@@ -93,9 +107,16 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
   private _currentSourceIndex = 0;
   private _hdrResizeTier: HDRResizeTier = 'none';
   private _proceduralCounter = 0;
+  private _cacheManager: MediaCacheManager | null = null;
+
+  // Guard to suppress duplicate sourceLoadingStarted in fallback paths
+  private _suppressNextLoadingStarted = false;
 
   /** Representation manager for per-source media representation switching */
   private _representationManager = new MediaRepresentationManager();
+
+  /** Original source identity fields saved before representation overwrite, keyed by source index */
+  private _originalSourceIdentity = new Map<number, { name: string; url: string }>();
 
   /** Public accessor for the representation manager */
   get representationManager(): MediaRepresentationManager {
@@ -125,23 +146,61 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
           source.activeRepresentationIndex = repIndex;
         }
       },
-      applyRepresentationShim: (sourceIndex: number, representation: MediaRepresentation) => {
+      applyRepresentationShim: (sourceIndex: number, representation: MediaRepresentation | null) => {
         this.applyRepresentationShim(sourceIndex, representation);
       },
       getHDRResizeTier: () => this._hdrResizeTier,
       getCurrentFrame: () => this._host?.getCurrentFrame() ?? 1,
+      isSequenceSource: (sourceIndex: number) => {
+        const source = this._sources[sourceIndex];
+        return source?.type === 'sequence';
+      },
     });
 
     // Forward representation manager events
     this._representationManager.on('representationChanged', (data) => {
+      if (data.mappedFrame !== undefined && this._host) {
+        this._host.setCurrentFrame(data.mappedFrame);
+      }
       this.emit('representationChanged', data);
+      // Emit currentSourceChanged so listeners can clear stale per-source state
+      // (e.g. floating-window QC results). Only emit when the representation
+      // switch is on the currently active source.
+      if (data.sourceIndex === this._currentSourceIndex) {
+        this.emit('currentSourceChanged', this._currentSourceIndex);
+      }
     });
     this._representationManager.on('representationError', (data) => {
       this.emit('representationError', data);
     });
     this._representationManager.on('fallbackActivated', (data) => {
       this.emit('fallbackActivated', data);
+      // Also emit currentSourceChanged on fallback activation for the active source,
+      // since the rendered content has changed and per-source state may be stale.
+      if (data.sourceIndex === this._currentSourceIndex) {
+        this.emit('currentSourceChanged', this._currentSourceIndex);
+      }
     });
+  }
+
+  /**
+   * Set the OPFS media cache manager for background caching of loaded files.
+   * When set, file-loading methods will cache raw bytes in OPFS for fast reload.
+   */
+  setCacheManager(cacheManager: MediaCacheManager): void {
+    this._cacheManager = cacheManager;
+  }
+
+  /**
+   * Emit sourceLoadingStarted unless suppressed by a fallback guard.
+   * Used at the start of each loading method to signal that a load has begun.
+   */
+  private emitSourceLoadingStarted(name: string): void {
+    if (this._suppressNextLoadingStarted) {
+      this._suppressNextLoadingStarted = false;
+      return;
+    }
+    this.emit('sourceLoadingStarted', { name });
   }
 
   // --- Source accessors ---
@@ -179,6 +238,33 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
   /** @internal Reset sources without dispose — for test setup only */
   resetSourcesInternal(sources?: MediaSource[]): void {
     this._sources = sources ?? [];
+    this._currentSourceIndex = 0;
+  }
+
+  /**
+   * Clear all loaded media sources, releasing associated resources.
+   * Used before loading a new project to avoid importing on top of the current session (fix #121).
+   */
+  clearSources(): void {
+    for (const source of this._sources) {
+      if (source.url?.startsWith('blob:')) {
+        URL.revokeObjectURL(source.url);
+      }
+      if (source.fileSourceNode) {
+        source.fileSourceNode.dispose();
+      }
+      if (source.proceduralSourceNode) {
+        source.proceduralSourceNode.dispose();
+      }
+      if (source.element instanceof HTMLVideoElement) {
+        source.element.pause();
+        source.element.removeAttribute('src');
+        source.element.load();
+      }
+      this.disposeSequenceSource(source);
+      this.disposeVideoSource(source);
+    }
+    this._sources = [];
     this._currentSourceIndex = 0;
   }
 
@@ -221,6 +307,7 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
         currentSource.element.pause();
       }
 
+      const previousIndex = this._currentSourceIndex;
       this._currentSourceIndex = index;
       const newSource = this.currentSource;
       if (newSource) {
@@ -228,6 +315,9 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
         this._host!.setInPoint(1);
         this._host!.setCurrentFrame(1);
         this.emit('durationChanged', newSource.duration);
+      }
+      if (index !== previousIndex) {
+        this.emit('currentSourceChanged', index);
       }
     }
   }
@@ -259,43 +349,49 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
     },
   ): void {
     this._host!.clearGraphData();
+    this.emitSourceLoadingStarted(pattern);
 
-    const width = options?.width ?? 1920;
-    const height = options?.height ?? 1080;
-    const fps = options?.fps ?? this._host!.getFps();
-    const duration = options?.duration ?? 1;
+    try {
+      const width = options?.width ?? 1920;
+      const height = options?.height ?? 1080;
+      const fps = options?.fps ?? this._host!.getFps();
+      const duration = options?.duration ?? 1;
 
-    const node = new ProceduralSourceNode();
-    node.loadPattern(pattern, width, height, {
-      color: options?.color,
-      direction: options?.direction,
-      cellSize: options?.cellSize,
-      steps: options?.steps,
-      fps,
-      duration,
-    });
+      const node = new ProceduralSourceNode();
+      node.loadPattern(pattern, width, height, {
+        color: options?.color,
+        direction: options?.direction,
+        cellSize: options?.cellSize,
+        steps: options?.steps,
+        fps,
+        duration,
+      });
 
-    const metadata = node.getMetadata();
-    const sourceName = this.generateUniqueSourceName(pattern, metadata.width, metadata.height);
+      const metadata = node.getMetadata();
+      const sourceName = this.generateUniqueSourceName(pattern, metadata.width, metadata.height);
 
-    const source: MediaSource = {
-      type: 'image',
-      name: sourceName,
-      url: `movieproc://${pattern}`,
-      width: metadata.width,
-      height: metadata.height,
-      duration,
-      fps,
-      proceduralSourceNode: node,
-    };
+      const source: MediaSource = {
+        type: 'image',
+        name: sourceName,
+        url: `movieproc://${pattern}`,
+        width: metadata.width,
+        height: metadata.height,
+        duration,
+        fps,
+        proceduralSourceNode: node,
+      };
 
-    this.addSource(source);
-    this._host!.setInPoint(1);
-    this._host!.setOutPoint(duration);
-    this._host!.setCurrentFrame(1);
+      this.addSource(source);
+      this._host!.setInPoint(1);
+      this._host!.setOutPoint(duration);
+      this._host!.setCurrentFrame(1);
 
-    this.emit('sourceLoaded', source);
-    this.emit('durationChanged', duration);
+      this.emit('sourceLoaded', source);
+      this.emit('durationChanged', duration);
+    } catch (err) {
+      this.emit('sourceLoadFailed', { name: pattern });
+      throw err;
+    }
   }
 
   /**
@@ -303,39 +399,57 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
    */
   loadMovieProc(url: string): void {
     this._host!.clearGraphData();
+    this.emitSourceLoadingStarted(url);
 
-    const params = parseMovieProc(url);
-    const node = new ProceduralSourceNode();
-    node.loadFromMovieProc(url);
+    try {
+      const params = parseMovieProc(url);
+      const node = new ProceduralSourceNode();
+      node.loadFromMovieProc(url);
 
-    const metadata = node.getMetadata();
-    const sourceName = this.generateUniqueSourceName(params.pattern, metadata.width, metadata.height);
+      const metadata = node.getMetadata();
+      const sourceName = this.generateUniqueSourceName(params.pattern, metadata.width, metadata.height);
 
-    const source: MediaSource = {
-      type: 'image',
-      name: sourceName,
-      url,
-      width: metadata.width,
-      height: metadata.height,
-      duration: metadata.duration,
-      fps: metadata.fps,
-      proceduralSourceNode: node,
-    };
+      const source: MediaSource = {
+        type: 'image',
+        name: sourceName,
+        url,
+        width: metadata.width,
+        height: metadata.height,
+        duration: metadata.duration,
+        fps: metadata.fps,
+        proceduralSourceNode: node,
+      };
 
-    this.addSource(source);
-    this._host!.setInPoint(1);
-    this._host!.setOutPoint(metadata.duration);
-    this._host!.setCurrentFrame(1);
+      this.addSource(source);
+      this._host!.setInPoint(1);
+      this._host!.setOutPoint(metadata.duration);
+      this._host!.setCurrentFrame(1);
 
-    this.emit('sourceLoaded', source);
-    this.emit('durationChanged', metadata.duration);
+      this.emit('sourceLoaded', source);
+      this.emit('durationChanged', metadata.duration);
+    } catch (err) {
+      this.emit('sourceLoadFailed', { name: url });
+      throw err;
+    }
   }
 
   // --- Loading methods ---
 
   async loadFile(file: File): Promise<void> {
     this._host!.clearGraphData();
-    const type = this.getMediaType(file);
+    let type = this.getMediaType(file);
+
+    // When MIME/extension detection fails, attempt magic-number sniffing
+    // against the decoder registry before rejecting.
+    if (type === 'unknown') {
+      type = await detectMediaTypeFromFileBytes(file);
+    }
+
+    if (type === 'unknown') {
+      const ext = file.name.includes('.') ? file.name.split('.').pop() : '(none)';
+      log.warn(`Unsupported file type: ${file.name} (extension: .${ext})`);
+      throw new Error(`Unsupported file type: ${file.name}`);
+    }
 
     if (type === 'video') {
       await this.loadVideoFile(file);
@@ -344,12 +458,13 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
     }
   }
 
-  private getMediaType(file: File): MediaType {
+  private getMediaType(file: File): 'image' | 'video' | 'unknown' {
     return detectMediaTypeFromFile(file);
   }
 
   async loadImage(name: string, url: string): Promise<void> {
     this._host!.clearGraphData();
+    this.emitSourceLoadingStarted(name);
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.crossOrigin = 'anonymous';
@@ -378,6 +493,7 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
       };
 
       img.onerror = () => {
+        this.emit('sourceLoadFailed', { name });
         reject(new Error(`Failed to load image: ${url}`));
       };
 
@@ -387,6 +503,7 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
 
   async loadImageFile(file: File): Promise<void> {
     this._host!.clearGraphData();
+    this.emitSourceLoadingStarted(file.name);
 
     try {
       const fileSourceNode = new FileSourceNode(file.name);
@@ -414,20 +531,35 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
 
       this.emit('sourceLoaded', source);
       this.emit('durationChanged', 1);
+
+      // Cache file in OPFS for fast reload across sessions
+      this.cacheFileInBackground(file, source);
     } catch (err) {
       log.warn(`FileSourceNode loading failed for ${file.name}, falling back to HTMLImageElement:`, err);
-      const url = URL.createObjectURL(file);
+      // Suppress the next loadingStarted from loadImage to avoid double-counting
+      this._suppressNextLoadingStarted = true;
+      let url: string | undefined;
       try {
+        url = URL.createObjectURL(file);
         await this.loadImage(file.name, url);
       } catch (fallbackErr) {
-        URL.revokeObjectURL(url);
+        if (url) {
+          URL.revokeObjectURL(url);
+        } else {
+          // createObjectURL failed — loadImage was never called
+          this.emit('sourceLoadFailed', { name: file.name });
+        }
+        // If url exists, loadImage already emitted sourceLoadFailed
         throw fallbackErr;
+      } finally {
+        this._suppressNextLoadingStarted = false;
       }
     }
   }
 
   async loadEXRFile(file: File): Promise<void> {
     this._host!.clearGraphData();
+    this.emitSourceLoadingStarted(file.name);
 
     const buffer = await file.arrayBuffer();
     const url = URL.createObjectURL(file);
@@ -454,14 +586,19 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
 
       this.emit('sourceLoaded', source);
       this.emit('durationChanged', 1);
+
+      // Cache file in OPFS for fast reload across sessions
+      this.cacheFileInBackground(file, source);
     } catch (err) {
       URL.revokeObjectURL(url);
+      this.emit('sourceLoadFailed', { name: file.name });
       throw err;
     }
   }
 
   async loadVideo(name: string, url: string): Promise<void> {
     this._host!.clearGraphData();
+    this.emitSourceLoadingStarted(name);
     return new Promise((resolve, reject) => {
       const video = document.createElement('video');
       video.crossOrigin = 'anonymous';
@@ -503,6 +640,7 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
 
       video.onerror = (e) => {
         log.error('Video load error:', e);
+        this.emit('sourceLoadFailed', { name });
         reject(new Error(`Failed to load video: ${url}`));
       };
 
@@ -513,71 +651,84 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
 
   async loadVideoFile(file: File): Promise<void> {
     this._host!.clearGraphData();
+    this.emitSourceLoadingStarted(file.name);
 
-    const videoSourceNode = new VideoSourceNode(file.name);
-    const loadResult = await videoSourceNode.loadFile(file, this._host!.getFps(), this._hdrResizeTier);
+    try {
+      const videoSourceNode = new VideoSourceNode(file.name);
+      const loadResult = await videoSourceNode.loadFile(file, this._host!.getFps(), this._hdrResizeTier);
 
-    if (loadResult.unsupportedCodecError) {
-      this.emit('unsupportedCodec', {
-        filename: file.name,
-        codec: loadResult.codec ?? null,
-        codecFamily: loadResult.codecFamily ?? 'unknown',
-        error: loadResult.unsupportedCodecError,
+      if (loadResult.unsupportedCodecError) {
+        this.emit('unsupportedCodec', {
+          filename: file.name,
+          codec: loadResult.codec ?? null,
+          codecFamily: loadResult.codecFamily ?? 'unknown',
+          error: loadResult.unsupportedCodecError,
+        });
+      }
+
+      if (loadResult.hdrDowngraded) {
+        this.emit('hdrDowngraded', { filename: file.name });
+      }
+
+      const metadata = videoSourceNode.getMetadata();
+      const duration = metadata.duration;
+
+      const url = URL.createObjectURL(file);
+      const video = document.createElement('video');
+      video.crossOrigin = 'anonymous';
+      video.preload = 'auto';
+      video.muted = this._host!.getMuted();
+      video.volume = this._host!.getEffectiveVolume();
+      video.loop = false;
+      video.playsInline = true;
+      this._host!.initVideoPreservesPitch(video);
+
+      await new Promise<void>((resolve, reject) => {
+        video.oncanplay = () => {
+          video.oncanplay = null;
+          resolve();
+        };
+        video.onerror = () => reject(new Error('Failed to load video element'));
+        video.src = url;
+        video.load();
       });
-    }
 
-    const metadata = videoSourceNode.getMetadata();
-    const duration = metadata.duration;
-
-    const url = URL.createObjectURL(file);
-    const video = document.createElement('video');
-    video.crossOrigin = 'anonymous';
-    video.preload = 'auto';
-    video.muted = this._host!.getMuted();
-    video.volume = this._host!.getEffectiveVolume();
-    video.loop = false;
-    video.playsInline = true;
-    this._host!.initVideoPreservesPitch(video);
-
-    await new Promise<void>((resolve, reject) => {
-      video.oncanplay = () => {
-        video.oncanplay = null;
-        resolve();
+      const source: MediaSource = {
+        type: 'video',
+        name: file.name,
+        url,
+        width: metadata.width,
+        height: metadata.height,
+        duration,
+        fps: this._host!.getFps(),
+        element: video,
+        videoSourceNode,
       };
-      video.onerror = () => reject(new Error('Failed to load video element'));
-      video.src = url;
-      video.load();
-    });
 
-    const source: MediaSource = {
-      type: 'video',
-      name: file.name,
-      url,
-      width: metadata.width,
-      height: metadata.height,
-      duration,
-      fps: this._host!.getFps(),
-      element: video,
-      videoSourceNode,
-    };
+      this._host!.loadAudioFromVideo(video, this._host!.getEffectiveVolume(), this._host!.getMuted());
 
-    this._host!.loadAudioFromVideo(video, this._host!.getEffectiveVolume(), this._host!.getMuted());
+      this.addSource(source);
+      this._host!.setInPoint(1);
+      this._host!.setOutPoint(duration);
+      this._host!.setCurrentFrame(1);
 
-    this.addSource(source);
-    this._host!.setInPoint(1);
-    this._host!.setOutPoint(duration);
-    this._host!.setCurrentFrame(1);
+      if (videoSourceNode.isUsingMediabunny()) {
+        videoSourceNode.preloadFrames(1).catch((err) => {
+          log.warn('Initial frame preload error:', err);
+        });
 
-    if (videoSourceNode.isUsingMediabunny()) {
-      videoSourceNode.preloadFrames(1).catch((err) => {
-        log.warn('Initial frame preload error:', err);
-      });
+        this.detectVideoFpsAndDuration(source, videoSourceNode);
+      }
 
-      this.detectVideoFpsAndDuration(source, videoSourceNode);
+      this.emit('sourceLoaded', source);
+      this.emit('durationChanged', duration);
+
+      // Cache file in OPFS for fast reload across sessions
+      this.cacheFileInBackground(file, source);
+    } catch (err) {
+      this.emit('sourceLoadFailed', { name: file.name });
+      throw err;
     }
-
-    this.emit('sourceLoaded', source);
-    this.emit('durationChanged', duration);
   }
 
   private async detectVideoFpsAndDuration(source: MediaSource, videoSourceNode: VideoSourceNode): Promise<void> {
@@ -621,35 +772,140 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
 
   async loadSequence(files: File[], fps?: number): Promise<void> {
     this._host!.clearGraphData();
-    const sequenceInfo = await createSequenceInfo(files, fps ?? this._host!.getFps());
-    if (!sequenceInfo) {
-      throw new Error('No valid image sequence found in the selected files');
+    const sequenceName = files[0]?.name ?? 'sequence';
+    this.emitSourceLoadingStarted(sequenceName);
+
+    try {
+      const sequenceInfo = await createSequenceInfo(files, fps ?? this._host!.getFps());
+      if (!sequenceInfo) {
+        throw new Error('No valid image sequence found in the selected files');
+      }
+
+      const frameRange = getSequenceFrameRange(sequenceInfo);
+      const source: MediaSource = {
+        type: 'sequence',
+        name: sequenceInfo.name,
+        url: '',
+        width: sequenceInfo.width,
+        height: sequenceInfo.height,
+        duration: frameRange,
+        fps: sequenceInfo.fps,
+        sequenceInfo,
+        sequenceFrames: sequenceInfo.frames,
+        sequenceFrameMap: buildFrameNumberMap(sequenceInfo.frames),
+        element: sequenceInfo.frames[0]?.image,
+      };
+
+      this.addSource(source);
+      this._host!.setFps(sequenceInfo.fps);
+      this._host!.emitFpsChanged(sequenceInfo.fps);
+      this._host!.setInPoint(1);
+      this._host!.setOutPoint(frameRange);
+      this._host!.setCurrentFrame(1);
+
+      this.emit('sourceLoaded', source);
+      this.emit('durationChanged', frameRange);
+
+      preloadFrames(sequenceInfo.frames, 0, 10);
+    } catch (err) {
+      this.emit('sourceLoadFailed', { name: sequenceName });
+      throw err;
+    }
+  }
+
+  /**
+   * Load a frame sequence from a URL pattern (e.g. `/path/shot.####.exr`).
+   *
+   * Parses the pattern to extract the frame placeholder, expands it across the
+   * given frame range, and creates a sequence source.  The first frame is
+   * fetched to determine dimensions; subsequent frames are loaded on demand.
+   *
+   * @param name - Display name for the source
+   * @param pattern - URL/path with frame placeholder (`####`, `%04d`, or `@@@@`)
+   * @param startFrame - First frame number (inclusive)
+   * @param endFrame - Last frame number (inclusive)
+   * @param fps - Frame rate (default: session fps)
+   */
+  async loadImageSequenceFromPattern(
+    name: string,
+    pattern: string,
+    startFrame: number,
+    endFrame: number,
+    fps?: number,
+  ): Promise<void> {
+    this._host!.clearGraphData();
+    this.emitSourceLoadingStarted(name);
+
+    const effectiveFps = fps ?? this._host!.getFps();
+
+    try {
+      const sequenceInfo = await createSequenceInfoFromPattern(pattern, startFrame, endFrame, effectiveFps);
+      sequenceInfo.name = name;
+
+      const frameRange = getSequenceFrameRange(sequenceInfo);
+      const source: MediaSource = {
+        type: 'sequence',
+        name,
+        url: pattern,
+        width: sequenceInfo.width,
+        height: sequenceInfo.height,
+        duration: frameRange,
+        fps: sequenceInfo.fps,
+        sequenceInfo,
+        sequenceFrames: sequenceInfo.frames,
+        sequenceFrameMap: buildFrameNumberMap(sequenceInfo.frames),
+        element: sequenceInfo.frames[0]?.image,
+      };
+
+      this.addSource(source);
+      this._host!.setFps(sequenceInfo.fps);
+      this._host!.emitFpsChanged(sequenceInfo.fps);
+      this._host!.setInPoint(1);
+      this._host!.setOutPoint(frameRange);
+      this._host!.setCurrentFrame(1);
+
+      this.emit('sourceLoaded', source);
+      this.emit('durationChanged', frameRange);
+
+      log.info(
+        `Sequence loaded from pattern: ${pattern} [${startFrame}-${endFrame}], ${frameRange} frames @ ${effectiveFps}fps`,
+      );
+    } catch (err) {
+      this.emit('sourceLoadFailed', { name });
+      throw err;
+    }
+  }
+
+  /**
+   * Load a sequence from a pattern string like `shot.####.exr`, `frame.%04d.exr`,
+   * or `render.@@@@.exr`. Derives a display name from the pattern and delegates
+   * to `loadImageSequenceFromPattern`.
+   *
+   * @param pattern - A path/filename with a frame placeholder (`####`, `%04d`, or `@@@@`)
+   * @param startFrame - First frame number (inclusive, default: 1)
+   * @param endFrame - Last frame number (inclusive, default: 100)
+   * @param fps - Frame rate (default: session fps)
+   */
+  async loadSequenceFromPatternString(
+    pattern: string,
+    startFrame: number = 1,
+    endFrame: number = 100,
+    fps?: number,
+  ): Promise<void> {
+    if (!isSequencePattern(pattern)) {
+      throw new Error(`Not a valid sequence pattern: ${pattern}`);
     }
 
-    const source: MediaSource = {
-      type: 'sequence',
-      name: sequenceInfo.name,
-      url: '',
-      width: sequenceInfo.width,
-      height: sequenceInfo.height,
-      duration: sequenceInfo.frames.length,
-      fps: sequenceInfo.fps,
-      sequenceInfo,
-      sequenceFrames: sequenceInfo.frames,
-      element: sequenceInfo.frames[0]?.image,
-    };
+    const patternFilename = pattern.split('/').pop() ?? pattern;
+    const name =
+      patternFilename
+        .replace(/##+/g, '')
+        .replace(/%\d*d/g, '')
+        .replace(/@+/g, '')
+        .replace(/[._-]?\.[^.]+$/, '')
+        .replace(/[._-]$/, '') || 'sequence';
 
-    this.addSource(source);
-    this._host!.setFps(sequenceInfo.fps);
-    this._host!.emitFpsChanged(sequenceInfo.fps);
-    this._host!.setInPoint(1);
-    this._host!.setOutPoint(sequenceInfo.frames.length);
-    this._host!.setCurrentFrame(1);
-
-    this.emit('sourceLoaded', source);
-    this.emit('durationChanged', sequenceInfo.frames.length);
-
-    preloadFrames(sequenceInfo.frames, 0, 10);
+    return this.loadImageSequenceFromPattern(name, pattern, startFrame, endFrame, fps);
   }
 
   /**
@@ -664,124 +920,136 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
 
         if (file) {
           log.debug(`Loading video source "${node.name}" from file: ${file.name}`);
-
-          await node.loadFile(file, this._host!.getFps());
-
-          const metadata = node.getMetadata();
-          const duration = metadata.duration;
-
-          const blobUrl = URL.createObjectURL(file);
-          const video = document.createElement('video');
-          video.crossOrigin = 'anonymous';
-          video.preload = 'auto';
-          video.muted = this._host!.getMuted();
-          video.volume = this._host!.getEffectiveVolume();
-          video.loop = false;
-          video.playsInline = true;
-          this._host!.initVideoPreservesPitch(video);
+          this.emitSourceLoadingStarted(node.name);
 
           try {
+            await node.loadFile(file, this._host!.getFps());
+
+            const metadata = node.getMetadata();
+            const duration = metadata.duration;
+
+            const blobUrl = URL.createObjectURL(file);
+            const video = document.createElement('video');
+            video.crossOrigin = 'anonymous';
+            video.preload = 'auto';
+            video.muted = this._host!.getMuted();
+            video.volume = this._host!.getEffectiveVolume();
+            video.loop = false;
+            video.playsInline = true;
+            this._host!.initVideoPreservesPitch(video);
+
+            try {
+              await new Promise<void>((resolve, reject) => {
+                video.oncanplay = () => {
+                  video.oncanplay = null;
+                  resolve();
+                };
+                video.onerror = () => reject(new Error('Failed to load video element'));
+                video.src = blobUrl;
+                video.load();
+              });
+            } catch (err) {
+              URL.revokeObjectURL(blobUrl);
+              throw err;
+            }
+
+            const source: MediaSource = {
+              type: 'video',
+              name: node.name,
+              url: blobUrl,
+              width: metadata.width,
+              height: metadata.height,
+              duration,
+              fps: this._host!.getFps(),
+              element: video,
+              videoSourceNode: node,
+            };
+
+            if (node.isUsingMediabunny()) {
+              node.preloadFrames(1).catch((err) => {
+                log.warn('Initial frame preload error:', err);
+              });
+            }
+
+            this._host!.loadAudioFromVideo(video, this._host!.getEffectiveVolume(), this._host!.getMuted());
+
+            this.addSource(source);
+
+            // Set in/out points for the first source or when we have valid duration.
+            // Skip if this is an additional source being added (currentFrame > 1 means
+            // we already have content loaded and shouldn't reset playback range).
+            const isFirstSource = this._host!.getCurrentFrame() <= 1;
+            if (isFirstSource || duration > 0) {
+              this._host!.setInPoint(1);
+              this._host!.setOutPoint(duration);
+            }
+
+            if (node.isUsingMediabunny()) {
+              this.detectVideoFpsAndDuration(source, node);
+            }
+
+            this.emit('sourceLoaded', source);
+            this.emit('durationChanged', duration);
+          } catch (err) {
+            this.emit('sourceLoadFailed', { name: node.name });
+            throw err;
+          }
+        } else if (url) {
+          log.debug(`Loading video source "${node.name}" from URL (no mediabunny): ${url}`);
+          this.emitSourceLoadingStarted(node.name);
+
+          try {
+            await node.load(url, node.name, this._host!.getFps());
+
+            const metadata = node.getMetadata();
+            const duration = metadata.duration;
+
+            const video = document.createElement('video');
+            video.crossOrigin = 'anonymous';
+            video.preload = 'auto';
+            video.muted = this._host!.getMuted();
+            video.volume = this._host!.getEffectiveVolume();
+            video.loop = false;
+            video.playsInline = true;
+            this._host!.initVideoPreservesPitch(video);
+
             await new Promise<void>((resolve, reject) => {
               video.oncanplay = () => {
                 video.oncanplay = null;
                 resolve();
               };
               video.onerror = () => reject(new Error('Failed to load video element'));
-              video.src = blobUrl;
+              video.src = url;
               video.load();
             });
+
+            const source: MediaSource = {
+              type: 'video',
+              name: node.name,
+              url,
+              width: metadata.width,
+              height: metadata.height,
+              duration,
+              fps: this._host!.getFps(),
+              element: video,
+              videoSourceNode: node,
+            };
+
+            this._host!.loadAudioFromVideo(video, this._host!.getEffectiveVolume(), this._host!.getMuted());
+
+            this.addSource(source);
+
+            if (duration > 0) {
+              this._host!.setInPoint(1);
+              this._host!.setOutPoint(duration);
+            }
+
+            this.emit('sourceLoaded', source);
+            this.emit('durationChanged', duration);
           } catch (err) {
-            URL.revokeObjectURL(blobUrl);
+            this.emit('sourceLoadFailed', { name: node.name });
             throw err;
           }
-
-          const source: MediaSource = {
-            type: 'video',
-            name: node.name,
-            url: blobUrl,
-            width: metadata.width,
-            height: metadata.height,
-            duration,
-            fps: this._host!.getFps(),
-            element: video,
-            videoSourceNode: node,
-          };
-
-          if (node.isUsingMediabunny()) {
-            node.preloadFrames(1).catch((err) => {
-              log.warn('Initial frame preload error:', err);
-            });
-          }
-
-          this._host!.loadAudioFromVideo(video, this._host!.getEffectiveVolume(), this._host!.getMuted());
-
-          this.addSource(source);
-
-          // Set in/out points for the first source or when we have valid duration.
-          // Skip if this is an additional source being added (currentFrame > 1 means
-          // we already have content loaded and shouldn't reset playback range).
-          const isFirstSource = this._host!.getCurrentFrame() <= 1;
-          if (isFirstSource || duration > 0) {
-            this._host!.setInPoint(1);
-            this._host!.setOutPoint(duration);
-          }
-
-          if (node.isUsingMediabunny()) {
-            this.detectVideoFpsAndDuration(source, node);
-          }
-
-          this.emit('sourceLoaded', source);
-          this.emit('durationChanged', duration);
-        } else if (url) {
-          log.debug(`Loading video source "${node.name}" from URL (no mediabunny): ${url}`);
-
-          await node.load(url, node.name, this._host!.getFps());
-
-          const metadata = node.getMetadata();
-          const duration = metadata.duration;
-
-          const video = document.createElement('video');
-          video.crossOrigin = 'anonymous';
-          video.preload = 'auto';
-          video.muted = this._host!.getMuted();
-          video.volume = this._host!.getEffectiveVolume();
-          video.loop = false;
-          video.playsInline = true;
-          this._host!.initVideoPreservesPitch(video);
-
-          await new Promise<void>((resolve, reject) => {
-            video.oncanplay = () => {
-              video.oncanplay = null;
-              resolve();
-            };
-            video.onerror = () => reject(new Error('Failed to load video element'));
-            video.src = url;
-            video.load();
-          });
-
-          const source: MediaSource = {
-            type: 'video',
-            name: node.name,
-            url,
-            width: metadata.width,
-            height: metadata.height,
-            duration,
-            fps: this._host!.getFps(),
-            element: video,
-            videoSourceNode: node,
-          };
-
-          this._host!.loadAudioFromVideo(video, this._host!.getEffectiveVolume(), this._host!.getMuted());
-
-          this.addSource(source);
-
-          if (duration > 0) {
-            this._host!.setInPoint(1);
-            this._host!.setOutPoint(duration);
-          }
-
-          this.emit('sourceLoaded', source);
-          this.emit('durationChanged', duration);
         }
       }
     }
@@ -795,13 +1063,18 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
       return null;
     }
 
-    const idx = (frameIndex ?? this._host!.getCurrentFrame()) - 1;
-    const frame = source.sequenceFrames[idx];
+    const timelineFrame = frameIndex ?? this._host!.getCurrentFrame();
+    const startFrame = source.sequenceInfo?.startFrame ?? 1;
+    const frameNumber = startFrame + timelineFrame - 1;
+    const frame = source.sequenceFrameMap?.get(frameNumber);
     if (!frame) return null;
 
-    const image = await loadFrameImage(frame);
-    preloadFrames(source.sequenceFrames, idx, 5);
-    releaseDistantFrames(source.sequenceFrames, idx, 20);
+    // URL-based frames (from pattern loading) use URL fetching; file-based
+    // frames (from local file drops) go through the decoder pipeline.
+    const isURLFrame = frame.url && frame.file.size === 0;
+    const image = isURLFrame ? await loadFrameImageFromURL(frame) : await loadFrameImage(frame);
+    preloadFrames(source.sequenceFrames, frame.index, 5);
+    releaseDistantFrames(source.sequenceFrames, frame.index, 20);
 
     return image;
   }
@@ -812,8 +1085,10 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
       return null;
     }
 
-    const idx = (frameIndex ?? this._host!.getCurrentFrame()) - 1;
-    const frame = source.sequenceFrames[idx];
+    const timelineFrame = frameIndex ?? this._host!.getCurrentFrame();
+    const startFrame = source.sequenceInfo?.startFrame ?? 1;
+    const frameNumber = startFrame + timelineFrame - 1;
+    const frame = source.sequenceFrameMap?.get(frameNumber);
     return frame?.image ?? null;
   }
 
@@ -1020,12 +1295,22 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
     repId: string,
     options?: SwitchRepresentationOptions,
   ): Promise<boolean> {
+    // Save playing state before pausing so we can resume after switch
+    const wasPlaying = this._host?.getIsPlaying() ?? false;
+
     // Pause playback before switching to avoid stale state
-    if (this._host?.getIsPlaying()) {
-      this._host.pause();
+    if (wasPlaying) {
+      this._host!.pause();
     }
 
-    return this._representationManager.switchRepresentation(sourceIndex, repId, options);
+    const success = await this._representationManager.switchRepresentation(sourceIndex, repId, options);
+
+    // Resume playback if it was playing before the switch and the switch succeeded
+    if (wasPlaying && success) {
+      this._host!.play();
+    }
+
+    return success;
   }
 
   /**
@@ -1042,20 +1327,73 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
    * @param sourceIndex - Index of the source
    * @param representation - The representation to apply
    */
-  private applyRepresentationShim(sourceIndex: number, representation: MediaRepresentation): void {
+  private applyRepresentationShim(sourceIndex: number, representation: MediaRepresentation | null): void {
     const source = this._sources[sourceIndex];
     if (!source) return;
-
-    // Update the top-level fields from the representation
-    source.width = representation.resolution.width;
-    source.height = representation.resolution.height;
 
     // Clear old source nodes
     source.videoSourceNode = undefined;
     source.fileSourceNode = undefined;
     source.sequenceInfo = undefined;
     source.sequenceFrames = undefined;
+    source.sequenceFrameMap = undefined;
     source.element = undefined;
+
+    // If null, we are clearing the source (no active representation)
+    if (!representation) {
+      // Restore original name/url if they were saved
+      const saved = this._originalSourceIdentity.get(sourceIndex);
+      if (saved) {
+        source.name = saved.name;
+        source.url = saved.url;
+        this._originalSourceIdentity.delete(sourceIndex);
+      }
+      log.info(`Cleared representation shim for source ${sourceIndex}`);
+      return;
+    }
+
+    // Save original name/url before overwriting (only on first representation apply)
+    if (!this._originalSourceIdentity.has(sourceIndex)) {
+      this._originalSourceIdentity.set(sourceIndex, { name: source.name, url: source.url });
+    }
+
+    // Update name from representation label (if available)
+    if (representation.label) {
+      source.name = representation.label;
+    }
+
+    // Update url from representation loaderConfig (prefer url, fall back to path)
+    if (representation.loaderConfig.url) {
+      source.url = representation.loaderConfig.url;
+    } else if (representation.loaderConfig.path) {
+      source.url = representation.loaderConfig.path;
+    }
+
+    // Update the top-level fields from the representation
+    source.width = representation.resolution.width;
+    source.height = representation.resolution.height;
+
+    // Update duration and fps from the representation when available
+    const isCurrentSource = this.currentSource === source;
+
+    if (representation.duration !== undefined && representation.duration > 0) {
+      source.duration = representation.duration;
+      if (isCurrentSource && this._host) {
+        this._host.setOutPoint(representation.duration);
+        this.emit('durationChanged', representation.duration);
+        this._host.emitInOutChanged(1, representation.duration);
+      }
+    }
+
+    if (representation.fps !== undefined && representation.fps > 0) {
+      source.fps = representation.fps;
+      if (isCurrentSource && this._host) {
+        if (representation.fps !== this._host.getFps()) {
+          this._host.setFps(representation.fps);
+          this._host.emitFpsChanged(representation.fps);
+        }
+      }
+    }
 
     // Set the appropriate source node based on the representation's source node type
     const sourceNode = representation.sourceNode;
@@ -1065,12 +1403,46 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
     if (sourceNode instanceof VideoSourceNode) {
       source.videoSourceNode = sourceNode;
       source.type = 'video';
+
+      // Create an HTMLVideoElement so that playback sync & audio wiring
+      // work the same way as a normal video load path.
+      const videoUrl =
+        representation.loaderConfig.url ??
+        (representation.loaderConfig.file ? URL.createObjectURL(representation.loaderConfig.file) : source.url);
+
+      if (videoUrl) {
+        const video = document.createElement('video');
+        video.crossOrigin = 'anonymous';
+        video.preload = 'auto';
+        video.muted = this._host!.getMuted();
+        video.volume = this._host!.getEffectiveVolume();
+        video.loop = false;
+        video.playsInline = true;
+        this._host!.initVideoPreservesPitch(video);
+        video.src = videoUrl;
+        video.load();
+
+        source.element = video;
+        this._host!.loadAudioFromVideo(video, this._host!.getEffectiveVolume(), this._host!.getMuted());
+      }
     } else if (sourceNode instanceof FileSourceNode) {
       source.fileSourceNode = sourceNode;
       source.type = 'image';
+    } else if (sourceNode instanceof SequenceSourceNodeWrapper) {
+      // Sequence representation: restore sequence metadata so the rest of
+      // the app (frame navigation, preloading, disposal) works identically
+      // to the normal sequence load path.
+      source.type = 'sequence';
+      source.sequenceInfo = sourceNode.sequenceInfo;
+      source.sequenceFrames = sourceNode.frames;
+      source.sequenceFrameMap = buildFrameNumberMap(sourceNode.frames);
+
+      const element = sourceNode.getElement(1);
+      if (element) {
+        source.element = element;
+      }
     } else {
-      // Could be a SequenceSourceNodeWrapper or other type
-      // Try to get element from the source node
+      // Unknown source node type – best-effort: grab element and mark as sequence
       const element = sourceNode.getElement(1);
       if (element) {
         source.element = element;
@@ -1079,6 +1451,38 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
     }
 
     log.info(`Applied representation shim: ${representation.label} (${representation.kind}) to source ${sourceIndex}`);
+  }
+
+  // --- Background OPFS caching ---
+
+  /**
+   * Cache a loaded file's raw bytes in OPFS for fast reload across sessions.
+   * Runs in the background and never throws.
+   */
+  private cacheFileInBackground(file: File, source: MediaSource): void {
+    if (!this._cacheManager) return;
+
+    const cache = this._cacheManager;
+
+    computeCacheKey(file)
+      .then(async (cacheKey) => {
+        source.opfsCacheKey = cacheKey;
+
+        const buffer = await file.arrayBuffer();
+        const meta: CacheEntryMeta = {
+          fileName: file.name,
+          fileSize: file.size,
+          lastModified: file.lastModified,
+          mimeType: file.type || undefined,
+          width: source.width,
+          height: source.height,
+        };
+        await cache.put(cacheKey, buffer, meta);
+        log.debug(`Cached file in OPFS: ${file.name} (key=${cacheKey.slice(0, 8)}...)`);
+      })
+      .catch((err) => {
+        log.warn(`Background cache failed for ${file.name}:`, err);
+      });
   }
 
   // --- Disposal ---
@@ -1121,6 +1525,7 @@ export class SessionMedia extends EventEmitter<SessionMediaEvents> {
     this._sources = [];
     this._currentSourceIndex = 0;
     this._representationManager.dispose();
+    this._cacheManager = null;
     this._host = null;
     this.removeAllListeners();
   }

@@ -204,19 +204,10 @@ describe('ClientMode E2E', () => {
       const selectorString = selectors.join(' ');
 
       // All panel types that should be hidden
-      const expectedPanels = [
-        'color',
-        'effects',
-        'transform',
-        'annotate',
-        'export',
-        'paint',
-        'channel',
-        'stereo',
-        'notes',
-        'snapshots',
-        'network',
-      ];
+      // Note: export, paint (as panel), channel, stereo, and network are now gated
+      // by isActionAllowed() rather than DOM hiding, since they lack dedicated
+      // panel DOM elements (#194).
+      const expectedPanels = ['color', 'effects', 'transform', 'annotate', 'notes', 'snapshots'];
       for (const panel of expectedPanels) {
         expect(selectorString).toContain(`data-panel="${panel}"`);
       }

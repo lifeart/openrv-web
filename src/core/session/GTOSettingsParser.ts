@@ -10,11 +10,18 @@ import type { ColorAdjustments, ChannelMode, LinearizeState, ChannelSwizzle } fr
 import { DEFAULT_LINEARIZE_STATE, SWIZZLE_ZERO, SWIZZLE_ONE } from '../../core/types/color';
 import type { NoiseReductionParams } from '../../filters/NoiseReduction';
 import { DEFAULT_NOISE_REDUCTION_PARAMS } from '../../filters/NoiseReduction';
-import type { Transform2D, CropState, UncropState } from '../../core/types/transform';
+import { type Transform2D, DEFAULT_TRANSFORM, type CropState, type UncropState } from '../../core/types/transform';
 import type { ScopesState } from '../../core/types/scopes';
-import type { CDLValues } from '../../color/CDL';
-import type { LensDistortionParams } from '../../transform/LensDistortion';
+import { type CDLValues, DEFAULT_CDL } from '../../color/CDL';
+import { type LensDistortionParams, DEFAULT_LENS_PARAMS } from '../../transform/LensDistortion';
+import type { FilterSettings } from '../../core/types/filter';
 import type { StereoState } from '../types/stereo';
+import type { StereoEyeTransformState, StereoAlignMode, EyeTransform } from '../../stereo/StereoEyeTransform';
+import {
+  DEFAULT_EYE_TRANSFORM,
+  DEFAULT_STEREO_EYE_TRANSFORM_STATE,
+  STEREO_ALIGN_MODES,
+} from '../../stereo/StereoEyeTransform';
 import type { GTOViewSettings } from './SessionTypes';
 
 /**
@@ -30,6 +37,11 @@ export function parseInitialSettings(
   const colorAdjustments = parseColorAdjustments(dto);
   if (colorAdjustments && Object.keys(colorAdjustments).length > 0) {
     settings.colorAdjustments = colorAdjustments;
+  }
+
+  const filterSettings = parseFilterSettings(dto);
+  if (filterSettings) {
+    settings.filterSettings = filterSettings;
   }
 
   const cdl = parseCDL(dto);
@@ -60,6 +72,16 @@ export function parseInitialSettings(
   const stereo = parseStereo(dto);
   if (stereo) {
     settings.stereo = stereo;
+  }
+
+  const stereoEyeTransform = parseStereoEyeTransform(dto);
+  if (stereoEyeTransform) {
+    settings.stereoEyeTransform = stereoEyeTransform;
+  }
+
+  const stereoAlignMode = parseStereoAlignMode(dto);
+  if (stereoAlignMode) {
+    settings.stereoAlignMode = stereoAlignMode;
   }
 
   const scopes = parseScopes(dto);
@@ -126,6 +148,59 @@ export function parseNoiseReduction(dto: GTODTO): NoiseReductionParams | null {
     chromaStrength,
     radius: radiusPx,
   };
+}
+
+/**
+ * Parse filter settings from RVFilterGaussian and RVUnsharpMask protocol nodes.
+ *
+ * Maps GTO properties to the viewer's FilterSettings model:
+ *   - RVFilterGaussian: node.radius → blur (clamped to 0–20, rounded to 0.5 step)
+ *   - RVUnsharpMask: node.amount → sharpen (clamped to 0–100, rounded to integer)
+ *
+ * Returns null when neither node exists or when both values are at defaults (0).
+ */
+export function parseFilterSettings(dto: GTODTO): FilterSettings | null {
+  let blur = 0;
+  let sharpen = 0;
+  let foundAny = false;
+
+  // Parse blur from RVFilterGaussian
+  const gaussianNodes = dto.byProtocol('RVFilterGaussian');
+  if (gaussianNodes.length > 0) {
+    const node = gaussianNodes.first();
+    const nodeComp = node.component('node');
+    if (nodeComp?.exists()) {
+      const radius = getNumberValue(nodeComp.property('radius').value());
+      if (radius !== undefined && radius > 0) {
+        // Round to nearest 0.5 step (matching slider granularity) and clamp to 0–20
+        blur = Math.max(0, Math.min(20, Math.round(radius * 2) / 2));
+        foundAny = true;
+      }
+    }
+  }
+
+  // Parse sharpen from RVUnsharpMask
+  const unsharpNodes = dto.byProtocol('RVUnsharpMask');
+  if (unsharpNodes.length > 0) {
+    const node = unsharpNodes.first();
+    const nodeComp = node.component('node');
+    if (nodeComp?.exists()) {
+      const active = getNumberValue(nodeComp.property('active').value());
+      if (active !== 0) {
+        const amount = getNumberValue(nodeComp.property('amount').value());
+        if (amount !== undefined && amount > 0) {
+          // Clamp to 0–100 and round to integer (matching slider granularity)
+          sharpen = Math.max(0, Math.min(100, Math.round(amount)));
+          foundAny = true;
+        }
+      }
+    }
+  }
+
+  if (!foundAny) return null;
+  if (blur === 0 && sharpen === 0) return null;
+
+  return { blur, sharpen };
 }
 
 /**
@@ -235,6 +310,47 @@ function extractScalarAndRGB(
 }
 
 /**
+ * Read a single numeric value from a standalone color-node protocol and
+ * apply it to `adjustments` as a FALLBACK (only when the target key is
+ * not already set by RVColor / RVDisplayColor).
+ *
+ * Standalone color nodes (e.g. RVColorExposure, RVColorSaturation) store
+ * their value on the `color` component with an `active` flag.
+ *
+ * @param dto          The parsed GTO DTO.
+ * @param adjustments  The adjustment bag being built (mutated in-place).
+ * @param protocol     GTO protocol name, e.g. `'RVColorExposure'`.
+ * @param gtoProp      Property name inside the `color` component, e.g. `'exposure'`.
+ * @param adjKey       Key on `ColorAdjustments` to populate, e.g. `'exposure'`.
+ * @param defaultValue Identity value for this property (used for NaN guard).
+ */
+function applyStandaloneColorNode(
+  dto: GTODTO,
+  adjustments: Partial<ColorAdjustments>,
+  protocol: string,
+  gtoProp: string,
+  adjKey: keyof ColorAdjustments,
+  defaultValue: number,
+): void {
+  // Only act as fallback — skip if the key is already set.
+  if (adjustments[adjKey] !== undefined) return;
+
+  const nodes = dto.byProtocol(protocol);
+  if (nodes.length === 0) return;
+
+  const colorComp = nodes.first().component('color');
+  if (!colorComp?.exists()) return;
+
+  const active = getNumberValue(colorComp.property('active').value());
+  if (active === 0) return;
+
+  const raw = getNumberValue(colorComp.property(gtoProp).value());
+  if (typeof raw !== 'number') return;
+
+  (adjustments as Record<string, unknown>)[adjKey] = sanitizeNumber(raw, defaultValue);
+}
+
+/**
  * Parse color adjustments from RVColor and RVDisplayColor protocol nodes.
  */
 export function parseColorAdjustments(dto: GTODTO): Partial<ColorAdjustments> | null {
@@ -245,50 +361,60 @@ export function parseColorAdjustments(dto: GTODTO): Partial<ColorAdjustments> | 
     const rvColorNode = colorNodes.first();
     const colorComp = rvColorNode.component('color');
     if (colorComp?.exists()) {
-      // Exposure: default 0 (stops)
-      const exposureResult = extractScalarAndRGB(colorComp.property('exposure').value(), 0);
-      if (typeof exposureResult.scalar === 'number') adjustments.exposure = exposureResult.scalar;
-      if (exposureResult.rgb) adjustments.exposureRGB = exposureResult.rgb;
+      // Check if this color node is marked inactive (active=0).
+      // When inactive, skip parsing — the caller will get default/null values
+      // so the restore handler resets to defaults rather than applying stale adjustments.
+      const rvColorActive = getNumberValue(colorComp.property('active').value());
+      if (rvColorActive === 0) {
+        // Node explicitly inactive — do not extract any color adjustments from RVColor.
+        // Fall through to RVDisplayColor parsing below.
+      } else {
+        // Exposure: default 0 (stops)
+        const exposureResult = extractScalarAndRGB(colorComp.property('exposure').value(), 0);
+        if (typeof exposureResult.scalar === 'number') adjustments.exposure = exposureResult.scalar;
+        if (exposureResult.rgb) adjustments.exposureRGB = exposureResult.rgb;
 
-      // Gamma: default 1
-      const gammaResult = extractScalarAndRGB(colorComp.property('gamma').value(), 1);
-      if (typeof gammaResult.scalar === 'number') adjustments.gamma = gammaResult.scalar;
-      if (gammaResult.rgb) adjustments.gammaRGB = gammaResult.rgb;
+        // Gamma: default 1
+        const gammaResult = extractScalarAndRGB(colorComp.property('gamma').value(), 1);
+        if (typeof gammaResult.scalar === 'number') adjustments.gamma = gammaResult.scalar;
+        if (gammaResult.rgb) adjustments.gammaRGB = gammaResult.rgb;
 
-      // Contrast: default 1 (0 means identity in OpenRV, map to 1)
-      const contrastResult = extractScalarAndRGB(colorComp.property('contrast').value(), 1);
-      if (typeof contrastResult.scalar === 'number') {
-        adjustments.contrast = contrastResult.scalar === 0 ? 1 : contrastResult.scalar;
-      }
-      if (contrastResult.rgb) {
-        adjustments.contrastRGB = [
-          contrastResult.rgb[0] === 0 ? 1 : contrastResult.rgb[0],
-          contrastResult.rgb[1] === 0 ? 1 : contrastResult.rgb[1],
-          contrastResult.rgb[2] === 0 ? 1 : contrastResult.rgb[2],
-        ];
-      }
+        // Contrast: default 1 (0 means identity in OpenRV, map to 1)
+        const contrastResult = extractScalarAndRGB(colorComp.property('contrast').value(), 1);
+        if (typeof contrastResult.scalar === 'number') {
+          adjustments.contrast = contrastResult.scalar === 0 ? 1 : contrastResult.scalar;
+        }
+        if (contrastResult.rgb) {
+          adjustments.contrastRGB = [
+            contrastResult.rgb[0] === 0 ? 1 : contrastResult.rgb[0],
+            contrastResult.rgb[1] === 0 ? 1 : contrastResult.rgb[1],
+            contrastResult.rgb[2] === 0 ? 1 : contrastResult.rgb[2],
+          ];
+        }
 
-      // Scale: default 1 (multiplicative, identity)
-      const scaleResult = extractScalarAndRGB(colorComp.property('scale').value(), 1);
-      if (typeof scaleResult.scalar === 'number') adjustments.scale = scaleResult.scalar;
-      if (scaleResult.rgb) adjustments.scaleRGB = scaleResult.rgb;
+        // Scale: default 1 (multiplicative, identity)
+        const scaleResult = extractScalarAndRGB(colorComp.property('scale').value(), 1);
+        if (typeof scaleResult.scalar === 'number') adjustments.scale = scaleResult.scalar;
+        if (scaleResult.rgb) adjustments.scaleRGB = scaleResult.rgb;
 
-      // Offset: default 0 (additive, identity)
-      // Per-channel float[3] → offsetRGB; scalar → offset (also used as brightness fallback)
-      const offsetResult = extractScalarAndRGB(colorComp.property('offset').value(), 0);
-      if (typeof offsetResult.scalar === 'number') adjustments.offset = offsetResult.scalar;
-      if (offsetResult.rgb) adjustments.offsetRGB = offsetResult.rgb;
+        // Offset: default 0 (additive, identity)
+        // Per-channel float[3] → offsetRGB; scalar → offset (also used as brightness fallback)
+        const offsetResult = extractScalarAndRGB(colorComp.property('offset').value(), 0);
+        if (typeof offsetResult.scalar === 'number') adjustments.offset = offsetResult.scalar;
+        if (offsetResult.rgb) adjustments.offsetRGB = offsetResult.rgb;
 
-      const saturation = getNumberValue(colorComp.property('saturation').value());
+        const saturation = getNumberValue(colorComp.property('saturation').value());
 
-      if (typeof saturation === 'number') adjustments.saturation = saturation;
-      // Scalar offset doubles as brightness fallback when no explicit brightness is set
-      if (typeof offsetResult.scalar === 'number' && !offsetResult.rgb && adjustments.brightness === undefined) {
-        adjustments.brightness = offsetResult.scalar;
-      }
+        if (typeof saturation === 'number') adjustments.saturation = saturation;
+        // Scalar offset doubles as brightness fallback when no explicit brightness is set
+        if (typeof offsetResult.scalar === 'number' && !offsetResult.rgb && adjustments.brightness === undefined) {
+          adjustments.brightness = offsetResult.scalar;
+        }
+      } // end else (rvColorActive !== 0)
     }
 
     // Extract luminanceLUT component (separate from 'color' component on RVColor node)
+    // Note: luminanceLUT has its own active flag, checked independently below.
     const lumLutComp = rvColorNode.component('luminanceLUT');
     if (lumLutComp?.exists()) {
       const active = getNumberValue(lumLutComp.property('active').value());
@@ -307,12 +433,27 @@ export function parseColorAdjustments(dto: GTODTO): Partial<ColorAdjustments> | 
   if (displayColorNodes.length > 0) {
     const displayComp = displayColorNodes.first().component('color');
     if (displayComp?.exists()) {
-      const brightness = getNumberValue(displayComp.property('brightness').value());
-      const gamma = getNumberValue(displayComp.property('gamma').value());
-      if (typeof brightness === 'number') adjustments.brightness = brightness;
-      if (typeof gamma === 'number' && adjustments.gamma === undefined) adjustments.gamma = gamma;
+      // Check if this display color node is marked inactive (active=0).
+      // When inactive, skip parsing so the restore handler resets to defaults.
+      const displayColorActive = getNumberValue(displayComp.property('active').value());
+      if (displayColorActive !== 0) {
+        const brightness = getNumberValue(displayComp.property('brightness').value());
+        const gamma = getNumberValue(displayComp.property('gamma').value());
+        if (typeof brightness === 'number') adjustments.brightness = brightness;
+        if (typeof gamma === 'number' && adjustments.gamma === undefined) adjustments.gamma = gamma;
+      }
     }
   }
+
+  // ── Standalone color-node fallbacks ──────────────────────────────
+  // These act as FALLBACK: if RVColor / RVDisplayColor already provided
+  // a value for a given field, the standalone node does NOT override it.
+
+  applyStandaloneColorNode(dto, adjustments, 'RVColorExposure', 'exposure', 'exposure', 0);
+  applyStandaloneColorNode(dto, adjustments, 'RVColorSaturation', 'saturation', 'saturation', 1);
+  applyStandaloneColorNode(dto, adjustments, 'RVColorVibrance', 'vibrance', 'vibrance', 0);
+  applyStandaloneColorNode(dto, adjustments, 'RVColorShadow', 'shadow', 'shadows', 0);
+  applyStandaloneColorNode(dto, adjustments, 'RVColorHighlight', 'highlight', 'highlights', 0);
 
   return Object.keys(adjustments).length > 0 ? adjustments : null;
 }
@@ -345,12 +486,16 @@ export function parseCDL(dto: GTODTO): CDLValues | null {
   };
 
   const readCDLFromNodes = (nodes: ReturnType<GTODTO['byProtocol']>): CDLValues | null => {
+    let foundInactiveComponent = false;
     for (const node of nodes) {
       const cdlComp = node.component('CDL');
       if (!cdlComp?.exists()) continue;
 
       const active = getNumberValue(cdlComp.property('active').value());
       if (active !== undefined && active === 0) {
+        // CDL component exists but is inactive — remember this so we can
+        // return defaults instead of null (resets stale state on import).
+        foundInactiveComponent = true;
         continue;
       }
 
@@ -361,10 +506,40 @@ export function parseCDL(dto: GTODTO): CDLValues | null {
       const cdl = buildCDL({ slope, offset, power, saturation });
       if (cdl) return cdl;
     }
-    return null;
+    // If a CDL component existed but was inactive, return defaults to clear stale state.
+    return foundInactiveComponent ? { ...DEFAULT_CDL } : null;
   };
 
-  return readCDLFromNodes(dto.byProtocol('RVColor')) ?? readCDLFromNodes(dto.byProtocol('RVLinearize'));
+  // Read CDL from standalone RVColorCDL / RVColorACESLogCDL nodes.
+  // These store CDL properties on the 'node' component (not a 'CDL' component).
+  const readCDLFromStandaloneNodes = (nodes: ReturnType<GTODTO['byProtocol']>): CDLValues | null => {
+    let foundInactiveComponent = false;
+    for (const node of nodes) {
+      const nodeComp = node.component('node');
+      if (!nodeComp?.exists()) continue;
+
+      const active = getNumberValue(nodeComp.property('active').value());
+      if (active !== undefined && active === 0) {
+        foundInactiveComponent = true;
+        continue;
+      }
+
+      const slope = getNumberArray(nodeComp.property('slope').value());
+      const offset = getNumberArray(nodeComp.property('offset').value());
+      const power = getNumberArray(nodeComp.property('power').value());
+      const saturation = getNumberValue(nodeComp.property('saturation').value());
+      const cdl = buildCDL({ slope, offset, power, saturation });
+      if (cdl) return cdl;
+    }
+    return foundInactiveComponent ? { ...DEFAULT_CDL } : null;
+  };
+
+  return (
+    readCDLFromNodes(dto.byProtocol('RVColor')) ??
+    readCDLFromNodes(dto.byProtocol('RVLinearize')) ??
+    readCDLFromStandaloneNodes(dto.byProtocol('RVColorCDL')) ??
+    readCDLFromStandaloneNodes(dto.byProtocol('RVColorACESLogCDL'))
+  );
 }
 
 /**
@@ -378,7 +553,10 @@ export function parseTransform(dto: GTODTO): Transform2D | null {
   if (!transformComp?.exists()) return null;
 
   const active = getNumberValue(transformComp.property('active').value());
-  if (active !== undefined && active === 0) return null;
+  if (active !== undefined && active === 0) {
+    // Transform node exists but is inactive — return defaults to clear stale state.
+    return { ...DEFAULT_TRANSFORM };
+  }
 
   const rotationValue = getNumberValue(transformComp.property('rotate').value());
   const flipValue = getNumberValue(transformComp.property('flip').value());
@@ -429,7 +607,10 @@ export function parseLens(dto: GTODTO): LensDistortionParams | null {
   const nodeComp = node.component('node');
   if (nodeComp?.exists()) {
     const active = getNumberValue(nodeComp.property('active').value());
-    if (active !== undefined && active === 0) return null;
+    if (active !== undefined && active === 0) {
+      // Lens node exists but is inactive — return defaults to clear stale state.
+      return { ...DEFAULT_LENS_PARAMS };
+    }
   }
 
   const warpComp = node.component('warp');
@@ -672,9 +853,12 @@ export function parseScopes(dto: GTODTO): ScopesState | null {
     gamutDiagram: false,
   };
 
+  let foundAnyNode = false;
+
   const applyScope = (protocol: string, key: keyof ScopesState): void => {
     const nodes = dto.byProtocol(protocol);
     if (nodes.length === 0) return;
+    foundAnyNode = true;
     const node = nodes.first();
     const nodeComp = node.component('node');
     const active = nodeComp?.exists() ? getNumberValue(nodeComp.property('active').value()) : undefined;
@@ -692,7 +876,7 @@ export function parseScopes(dto: GTODTO): ScopesState | null {
   applyScope('GamutDiagram', 'gamutDiagram');
   applyScope('RVGamutDiagram', 'gamutDiagram');
 
-  if (scopes.histogram || scopes.waveform || scopes.vectorscope || scopes.gamutDiagram) {
+  if (foundAnyNode) {
     return scopes;
   }
 
@@ -751,6 +935,11 @@ export function parseOutOfRange(dto: GTODTO): number | undefined {
 
   const displayComp = nodes.first().component('color');
   if (!displayComp?.exists()) return undefined;
+
+  // When the display color node is inactive (active=0), return mode 0 (off)
+  // so the restore handler explicitly resets out-of-range visualization.
+  const activeFlag = getNumberValue(displayComp.property('active').value());
+  if (activeFlag === 0) return 0;
 
   const rawValue = getNumberValue(displayComp.property('outOfRange').value());
   if (rawValue === undefined) return undefined;
@@ -828,4 +1017,129 @@ export function parseChannelSwizzle(dto: GTODTO): ChannelSwizzle | null {
   }
 
   return swizzle;
+}
+
+/**
+ * Parse a single eye transform from a GTO component.
+ *
+ * Expected properties: flipH (int), flipV (int), rotation (float),
+ * scale (float), translateX (float), translateY (float).
+ */
+function parseEyeTransformComponent(
+  comp: ReturnType<ReturnType<ReturnType<GTODTO['byProtocol']>['first']>['component']>,
+): EyeTransform | null {
+  if (!comp?.exists()) return null;
+
+  const flipH = getNumberValue(comp.property('flipH').value());
+  const flipV = getNumberValue(comp.property('flipV').value());
+  const rotation = getNumberValue(comp.property('rotation').value());
+  const scale = getNumberValue(comp.property('scale').value());
+  const translateX = getNumberValue(comp.property('translateX').value());
+  const translateY = getNumberValue(comp.property('translateY').value());
+
+  // If no properties were found at all, return null
+  if (
+    flipH === undefined &&
+    flipV === undefined &&
+    rotation === undefined &&
+    scale === undefined &&
+    translateX === undefined &&
+    translateY === undefined
+  ) {
+    return null;
+  }
+
+  return {
+    flipH: flipH === 1,
+    flipV: flipV === 1,
+    rotation:
+      typeof rotation === 'number' && Number.isFinite(rotation)
+        ? Math.max(-180, Math.min(180, rotation))
+        : DEFAULT_EYE_TRANSFORM.rotation,
+    scale:
+      typeof scale === 'number' && Number.isFinite(scale)
+        ? Math.max(0.5, Math.min(2.0, scale))
+        : DEFAULT_EYE_TRANSFORM.scale,
+    translateX:
+      typeof translateX === 'number' && Number.isFinite(translateX)
+        ? Math.max(-100, Math.min(100, translateX))
+        : DEFAULT_EYE_TRANSFORM.translateX,
+    translateY:
+      typeof translateY === 'number' && Number.isFinite(translateY)
+        ? Math.max(-100, Math.min(100, translateY))
+        : DEFAULT_EYE_TRANSFORM.translateY,
+  };
+}
+
+/**
+ * Parse stereo eye transform state from RVDisplayStereo protocol nodes.
+ *
+ * Extracts `leftEyeTransform` and `rightEyeTransform` components that
+ * carry per-eye geometric transforms (flipH, flipV, rotation, scale,
+ * translateX, translateY) plus a top-level `linked` flag on the
+ * `eyeTransform` component.
+ *
+ * Returns null when no RVDisplayStereo node exists or when neither
+ * eye transform component is present.
+ */
+export function parseStereoEyeTransform(dto: GTODTO): StereoEyeTransformState | null {
+  const nodes = dto.byProtocol('RVDisplayStereo');
+  if (nodes.length === 0) return null;
+
+  const node = nodes.first();
+
+  const leftComp = node.component('leftEyeTransform');
+  const rightComp = node.component('rightEyeTransform');
+
+  const left = parseEyeTransformComponent(leftComp);
+  const right = parseEyeTransformComponent(rightComp);
+
+  if (!left && !right) return null;
+
+  // Read linked flag from the eyeTransform component
+  const eyeTransformComp = node.component('eyeTransform');
+  let linked = DEFAULT_STEREO_EYE_TRANSFORM_STATE.linked;
+  if (eyeTransformComp?.exists()) {
+    const linkedValue = getNumberValue(eyeTransformComp.property('linked').value());
+    if (linkedValue !== undefined) {
+      linked = linkedValue === 1;
+    }
+  }
+
+  return {
+    left: left ?? { ...DEFAULT_EYE_TRANSFORM },
+    right: right ?? { ...DEFAULT_EYE_TRANSFORM },
+    linked,
+  };
+}
+
+/**
+ * Parse stereo alignment mode from RVDisplayStereo protocol nodes.
+ *
+ * The align mode is stored as a string property `alignMode` on the
+ * `stereo` component.  Valid values: 'off', 'grid', 'crosshair',
+ * 'difference', 'edges'.
+ *
+ * Returns null when no RVDisplayStereo node exists or when the
+ * property is absent or set to 'off' (the default).
+ */
+export function parseStereoAlignMode(dto: GTODTO): StereoAlignMode | null {
+  const nodes = dto.byProtocol('RVDisplayStereo');
+  if (nodes.length === 0) return null;
+
+  const stereoComp = nodes.first().component('stereo');
+  if (!stereoComp?.exists()) return null;
+
+  const alignModeValue = getStringValue(stereoComp.property('alignMode').value());
+  if (!alignModeValue) return null;
+
+  // Validate the mode against the known set
+  if (!(STEREO_ALIGN_MODES as readonly string[]).includes(alignModeValue)) return null;
+
+  const mode = alignModeValue as StereoAlignMode;
+
+  // Return null for 'off' since it's the default (no need to restore)
+  if (mode === 'off') return null;
+
+  return mode;
 }

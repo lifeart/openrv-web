@@ -6,6 +6,7 @@ import { createMockWebGL2Context } from '../../test/mocks';
 // Create a mock LUT3D
 function createMockLUT(): LUT3D {
   return {
+    type: '3d',
     size: 2,
     data: new Float32Array(2 * 2 * 2 * 3).fill(0.5),
     title: 'Test LUT',
@@ -486,6 +487,135 @@ describe('WebGLLUTProcessor', () => {
       // Verify bottom row is still blue (not flipped)
       expect(result.data[8]).toBe(0); // R at bottom-left
       expect(result.data[10]).toBe(255); // B at bottom-left
+    });
+  });
+
+  describe('1D LUT support', () => {
+    function createMock1DLUT(): import('./LUTLoader').LUT1D {
+      // Identity 1D LUT: each channel maps input to same output
+      const size = 4;
+      const data = new Float32Array(size * 3);
+      for (let i = 0; i < size; i++) {
+        const v = i / (size - 1);
+        data[i * 3] = v; // R
+        data[i * 3 + 1] = v; // G
+        data[i * 3 + 2] = v; // B
+      }
+      return {
+        type: '1d',
+        title: 'Test 1D LUT',
+        size,
+        domainMin: [0, 0, 0],
+        domainMax: [1, 1, 1],
+        data,
+      };
+    }
+
+    it('WLUT-030: setLUT with 1D LUT marks ready', () => {
+      const processor = new WebGLLUTProcessor();
+      const lut = createMock1DLUT();
+
+      processor.setLUT(lut);
+
+      expect(processor.hasLUT()).toBe(true);
+      expect(processor.getLUT()).toBe(lut);
+      expect(processor.isReady()).toBe(true);
+    });
+
+    it('WLUT-031: apply() processes imageData with 1D LUT', () => {
+      const processor = new WebGLLUTProcessor();
+      processor.setLUT(createMock1DLUT());
+      const imageData = new ImageData(10, 10);
+
+      const result = processor.apply(imageData, 1.0);
+
+      expect(result).not.toBe(imageData);
+      expect(mockGl.drawArrays).toHaveBeenCalled();
+    });
+
+    it('WLUT-032: apply() sets 1D-specific uniforms', () => {
+      const processor = new WebGLLUTProcessor();
+      const lut = createMock1DLUT();
+      processor.setLUT(lut);
+      const imageData = new ImageData(10, 10);
+
+      processor.apply(imageData, 0.5);
+
+      // Verify intensity and LUT size uniforms were set
+      expect(mockGl.uniform1f).toHaveBeenCalledWith(expect.anything(), 0.5);
+      expect(mockGl.uniform1f).toHaveBeenCalledWith(expect.anything(), lut.size);
+    });
+
+    it('WLUT-033: dispose() cleans up 1D shader program', () => {
+      const processor = new WebGLLUTProcessor();
+      processor.setLUT(createMock1DLUT());
+
+      mockGl.deleteProgram.mockClear();
+      processor.dispose();
+
+      // Both 3D and 1D shader programs are disposed
+      expect(mockGl.deleteProgram).toHaveBeenCalledTimes(2);
+      expect(processor.isReady()).toBe(false);
+    });
+
+    it('WLUT-034: switching from 3D to 1D LUT works', () => {
+      const processor = new WebGLLUTProcessor();
+
+      // Start with 3D
+      processor.setLUT(createMockLUT());
+      expect(processor.hasLUT()).toBe(true);
+
+      // Switch to 1D
+      const lut1d = createMock1DLUT();
+      processor.setLUT(lut1d);
+      expect(processor.getLUT()).toBe(lut1d);
+      expect(processor.isReady()).toBe(true);
+
+      const imageData = new ImageData(10, 10);
+      const result = processor.apply(imageData, 1.0);
+      expect(result).not.toBe(imageData);
+    });
+
+    it('WLUT-035: setLUT(null) after 1D LUT clears state', () => {
+      const processor = new WebGLLUTProcessor();
+      processor.setLUT(createMock1DLUT());
+      processor.setLUT(null);
+
+      expect(processor.hasLUT()).toBe(false);
+      expect(processor.getLUT()).toBe(null);
+    });
+
+    it('WLUT-036: apply() returns original when 1D shader not ready', () => {
+      const COMPLETION_STATUS_KHR = 0x91b1;
+      mockGl.getShaderParameter.mockImplementation((_shader: unknown, pname: number) => {
+        if (pname === COMPLETION_STATUS_KHR) return false;
+        return true;
+      });
+      mockGl.getProgramParameter.mockImplementation((_program: unknown, pname: number) => {
+        if (pname === COMPLETION_STATUS_KHR) return false;
+        return true;
+      });
+
+      const processor = new WebGLLUTProcessor();
+      processor.setLUT(createMock1DLUT());
+      const imageData = new ImageData(10, 10);
+
+      const result = processor.apply(imageData, 1.0);
+      expect(result).toBe(imageData);
+    });
+
+    it('WLUT-037: 1D LUT creates 2D texture (not 3D)', () => {
+      const processor = new WebGLLUTProcessor();
+      const lut = createMock1DLUT();
+
+      mockGl.texImage2D.mockClear();
+      mockGl.texImage3D.mockClear();
+
+      processor.setLUT(lut);
+
+      // 1D LUT should use texImage2D for the LUT texture (not texImage3D)
+      // The call comes from createLUT1DTexture in LUTLoader
+      expect(mockGl.texImage2D).toHaveBeenCalled();
     });
   });
 });

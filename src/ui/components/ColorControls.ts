@@ -1,5 +1,5 @@
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
-import { type LUT3D, isLUT3D, parseLUT } from '../../color/ColorProcessingFacade';
+import { type LUT, parseLUT } from '../../color/ColorProcessingFacade';
 import { showAlert } from './shared/Modal';
 import { getIconSvg } from './shared/Icons';
 import { PANEL_WIDTHS, SHADOWS } from './shared/theme';
@@ -13,7 +13,7 @@ import { DEFAULT_COLOR_ADJUSTMENTS } from '../../core/types/color';
 export interface ColorControlsEvents extends EventMap {
   adjustmentsChanged: ColorAdjustments;
   visibilityChanged: boolean;
-  lutLoaded: LUT3D | null;
+  lutLoaded: LUT | null;
   lutIntensityChanged: number;
 }
 
@@ -30,7 +30,7 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
   private valueLabels: Map<NumericAdjustmentKey, HTMLSpanElement> = new Map();
 
   // LUT state
-  private currentLUT: LUT3D | null = null;
+  private currentLUT: LUT | null = null;
   private lutIntensity = 1.0;
   private lutNameLabel: HTMLSpanElement | null = null;
   private lutIntensitySlider: HTMLInputElement | null = null;
@@ -449,9 +449,6 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
     try {
       const content = await file.text();
       const lut = parseLUT(file.name, content);
-      if (!isLUT3D(lut)) {
-        throw new Error('1D LUTs are not supported. Please load a 3D LUT file.');
-      }
       this.setLUT(lut);
     } catch (err) {
       console.error('Failed to load LUT:', err);
@@ -465,7 +462,7 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
     input.value = '';
   }
 
-  setLUT(lut: LUT3D | null): void {
+  setLUT(lut: LUT | null): void {
     this.currentLUT = lut;
 
     if (this.lutNameLabel) {
@@ -483,7 +480,7 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
     this.setLUT(null);
   }
 
-  getLUT(): LUT3D | null {
+  getLUT(): LUT | null {
     return this.currentLUT;
   }
 

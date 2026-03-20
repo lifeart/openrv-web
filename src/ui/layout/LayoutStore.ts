@@ -408,6 +408,12 @@ export class LayoutStore extends EventEmitter<LayoutStoreEvents> {
     }, SAVE_DEBOUNCE_MS);
   }
 
+  /** Re-read layout from storage and notify listeners (used after preferences import/reset). */
+  reloadFromStorage(): void {
+    this._layout = this.loadFromStorage();
+    this.emit('layoutChanged', this._layout);
+  }
+
   /** Immediately flush pending save (useful for tests or shutdown). */
   flushSave(): void {
     if (this._saveTimer !== null) {

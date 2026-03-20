@@ -608,6 +608,19 @@ function validateHeaderAttributes(
   if (header.channels.length === 0) {
     throw new DecoderError('EXR', `${prefix}EXR file has no channels`);
   }
+
+  // Check that at least some channels are decodable (HALF or FLOAT).
+  // UINT channels are valid per the EXR spec but are skipped during decoding.
+  const decodableChannels = header.channels.filter(
+    (ch) => ch.pixelType === EXRPixelType.HALF || ch.pixelType === EXRPixelType.FLOAT,
+  );
+  if (decodableChannels.length === 0) {
+    const uintNames = header.channels.map((ch) => ch.name).join(', ');
+    throw new DecoderError(
+      'EXR',
+      `${prefix}All channels are UINT pixel type (${uintNames}). Only HALF and FLOAT channels can be decoded.`,
+    );
+  }
 }
 
 /**
@@ -694,15 +707,10 @@ function parseChannels(reader: EXRDataReader, size: number): EXRChannel[] {
 
     const pixelType = reader.readInt32();
 
-    // Validate pixel type - only HALF and FLOAT are supported
-    // UINT (type 0) is defined in EXR spec but not supported by this decoder
-    if (pixelType === EXRPixelType.UINT) {
-      throw new DecoderError(
-        'EXR',
-        `Unsupported pixel type UINT for channel '${name}'. Only HALF and FLOAT are supported.`,
-      );
-    }
-    if (pixelType !== EXRPixelType.HALF && pixelType !== EXRPixelType.FLOAT) {
+    // Validate pixel type
+    // UINT (type 0), HALF (type 1), and FLOAT (type 2) are the three EXR spec pixel types.
+    // UINT channels are parsed but skipped during decoding (only HALF and FLOAT are decoded).
+    if (pixelType !== EXRPixelType.UINT && pixelType !== EXRPixelType.HALF && pixelType !== EXRPixelType.FLOAT) {
       throw new DecoderError('EXR', `Invalid pixel type ${pixelType} for channel '${name}'`);
     }
 
@@ -1052,9 +1060,10 @@ async function decodeScanlineImage(
   const width = dataWindow.xMax - dataWindow.xMin + 1;
   const height = dataWindow.yMax - dataWindow.yMin + 1;
 
-  // Build channel lookup
+  // Build channel lookup, excluding UINT channels (not decodable)
   const channelLookup = new Map<string, EXRChannel>();
   for (const ch of header.channels) {
+    if (ch.pixelType === EXRPixelType.UINT) continue;
     channelLookup.set(ch.name, ch);
   }
 
@@ -1200,7 +1209,79 @@ async function decodeScanlineImage(
 }
 
 /**
- * Decode tiled image data (ONE_LEVEL only)
+ * Compute the dimension of a mip level, respecting the rounding mode.
+ * Per the OpenEXR spec: ROUND_DOWN uses floor, ROUND_UP uses ceil.
+ * The minimum dimension at any level is 1.
+ */
+function levelSize(fullSize: number, level: number, roundingMode: EXRRoundingMode): number {
+  if (level === 0) return fullSize;
+  let size = fullSize;
+  for (let i = 0; i < level; i++) {
+    if (roundingMode === EXRRoundingMode.ROUND_UP) {
+      size = Math.ceil(size / 2);
+    } else {
+      size = Math.max(1, Math.floor(size / 2));
+    }
+  }
+  return Math.max(1, size);
+}
+
+/**
+ * Compute the number of mip levels for a given dimension.
+ */
+function numMipLevels(size: number, roundingMode: EXRRoundingMode): number {
+  let count = 1;
+  let s = size;
+  while (s > 1) {
+    if (roundingMode === EXRRoundingMode.ROUND_UP) {
+      s = Math.ceil(s / 2);
+    } else {
+      s = Math.max(1, Math.floor(s / 2));
+    }
+    count++;
+  }
+  return count;
+}
+
+/**
+ * Compute total number of offset table entries for a tiled image,
+ * accounting for level mode (ONE_LEVEL, MIPMAP_LEVELS, RIPMAP_LEVELS).
+ */
+function computeTotalTileOffsets(width: number, height: number, tileDesc: EXRTileDesc): number {
+  const { xSize, ySize, levelMode, roundingMode } = tileDesc;
+
+  if (levelMode === EXRLevelMode.ONE_LEVEL) {
+    return Math.ceil(width / xSize) * Math.ceil(height / ySize);
+  }
+
+  if (levelMode === EXRLevelMode.MIPMAP_LEVELS) {
+    const nLevels = numMipLevels(Math.max(width, height), roundingMode);
+    let total = 0;
+    for (let l = 0; l < nLevels; l++) {
+      const lw = levelSize(width, l, roundingMode);
+      const lh = levelSize(height, l, roundingMode);
+      total += Math.ceil(lw / xSize) * Math.ceil(lh / ySize);
+    }
+    return total;
+  }
+
+  // RIPMAP_LEVELS
+  const nXLevels = numMipLevels(width, roundingMode);
+  const nYLevels = numMipLevels(height, roundingMode);
+  let total = 0;
+  for (let ly = 0; ly < nYLevels; ly++) {
+    for (let lx = 0; lx < nXLevels; lx++) {
+      const lw = levelSize(width, lx, roundingMode);
+      const lh = levelSize(height, ly, roundingMode);
+      total += Math.ceil(lw / xSize) * Math.ceil(lh / ySize);
+    }
+  }
+  return total;
+}
+
+/**
+ * Decode tiled image data. For multi-level (mipmap/ripmap) files,
+ * only level 0 (full resolution) is decoded.
  */
 async function decodeTiledImage(
   reader: EXRDataReader,
@@ -1214,9 +1295,10 @@ async function decodeTiledImage(
   const tileXSize = tileDesc.xSize;
   const tileYSize = tileDesc.ySize;
 
-  // Build channel lookup (same pattern as decodeScanlineImage)
+  // Build channel lookup, excluding UINT channels (not decodable)
   const channelLookup = new Map<string, EXRChannel>();
   for (const ch of header.channels) {
+    if (ch.pixelType === EXRPixelType.UINT) continue;
     channelLookup.set(ch.name, ch);
   }
 
@@ -1262,24 +1344,33 @@ async function decodeTiledImage(
     }
   }
 
-  // Compute tile grid
+  // Compute tile grid for level 0 (full resolution)
   const numXTiles = Math.ceil(width / tileXSize);
   const numYTiles = Math.ceil(height / tileYSize);
-  const totalTiles = numXTiles * numYTiles;
+  const level0Tiles = numXTiles * numYTiles;
 
-  // Read offset table
+  // Read offset table - for multi-level images, this includes all levels
+  const totalOffsets = computeTotalTileOffsets(width, height, tileDesc);
   const offsets: bigint[] = [];
-  for (let i = 0; i < totalTiles; i++) {
+  for (let i = 0; i < totalOffsets; i++) {
     offsets.push(reader.readUint64());
   }
 
-  // Read and decode each tile
-  for (let tileIdx = 0; tileIdx < totalTiles; tileIdx++) {
+  // Read and decode tiles - only process level 0 tiles, skip others
+  let level0Decoded = 0;
+  for (let tileIdx = 0; level0Decoded < level0Tiles; tileIdx++) {
     const tileX = reader.readInt32();
     const tileY = reader.readInt32();
-    reader.readInt32(); // levelX (unused for ONE_LEVEL)
-    reader.readInt32(); // levelY (unused for ONE_LEVEL)
+    const tileLevelX = reader.readInt32();
+    const tileLevelY = reader.readInt32();
     const packedSize = reader.readInt32();
+
+    // Skip non-level-0 tiles (mipmap/ripmap lower resolution levels)
+    if (tileLevelX !== 0 || tileLevelY !== 0) {
+      reader.skip(packedSize);
+      continue;
+    }
+    level0Decoded++;
 
     // Compute actual tile pixel position and dimensions
     const tilePixelX = tileX * tileXSize;
@@ -1383,8 +1474,10 @@ async function decodeMultiPartTiledImage(
   const tileXSize = tileDesc.xSize;
   const tileYSize = tileDesc.ySize;
 
+  // Build channel lookup, excluding UINT channels (not decodable)
   const channelLookup = new Map<string, EXRChannel>();
   for (const ch of header.channels) {
+    if (ch.pixelType === EXRPixelType.UINT) continue;
     channelLookup.set(ch.name, ch);
   }
 
@@ -1429,14 +1522,16 @@ async function decodeMultiPartTiledImage(
     }
   }
 
+  // Level 0 tile count (full resolution)
   const numXTiles = Math.ceil(width / tileXSize);
   const numYTiles = Math.ceil(height / tileYSize);
-  const totalTiles = numXTiles * numYTiles;
+  const level0Tiles = numXTiles * numYTiles;
 
-  const MAX_CHUNKS = totalTiles * 1024 * 2;
+  const MAX_CHUNKS = level0Tiles * 1024 * 2;
   let totalChunksRead = 0;
+  let level0Decoded = 0;
 
-  for (let tileIdx = 0; tileIdx < totalTiles; tileIdx++) {
+  for (let tileIdx = 0; level0Decoded < level0Tiles; tileIdx++) {
     if (++totalChunksRead > MAX_CHUNKS) {
       throw new DecoderError('EXR', 'Too many chunks read while seeking target part, file may be corrupt');
     }
@@ -1450,15 +1545,21 @@ async function decodeMultiPartTiledImage(
       reader.readInt32(); // levelY
       const packedSize = reader.readInt32();
       reader.skip(packedSize);
-      tileIdx--;
       continue;
     }
 
     const tileX = reader.readInt32();
     const tileY = reader.readInt32();
-    reader.readInt32(); // levelX (unused for ONE_LEVEL)
-    reader.readInt32(); // levelY (unused for ONE_LEVEL)
+    const tileLevelX = reader.readInt32();
+    const tileLevelY = reader.readInt32();
     const packedSize = reader.readInt32();
+
+    // Skip non-level-0 tiles (mipmap/ripmap lower resolution levels)
+    if (tileLevelX !== 0 || tileLevelY !== 0) {
+      reader.skip(packedSize);
+      continue;
+    }
+    level0Decoded++;
 
     const tilePixelX = tileX * tileXSize;
     const tilePixelY = tileY * tileYSize;
@@ -1556,9 +1657,10 @@ async function decodeMultiPartScanlineImage(
   const width = dataWindow.xMax - dataWindow.xMin + 1;
   const height = dataWindow.yMax - dataWindow.yMin + 1;
 
-  // Build channel lookup
+  // Build channel lookup, excluding UINT channels (not decodable)
   const channelLookup = new Map<string, EXRChannel>();
   for (const ch of header.channels) {
+    if (ch.pixelType === EXRPixelType.UINT) continue;
     channelLookup.set(ch.name, ch);
   }
 
@@ -1787,12 +1889,13 @@ async function decodeDeepScanlineImage(reader: EXRDataReader, header: EXRHeader)
   // Build channel info - channels are sorted alphabetically in EXR
   const sortedChannels = [...header.channels].sort((a, b) => a.name.localeCompare(b.name));
 
-  // Find RGBA channel indices in the sorted channel list
+  // Find RGBA channel indices in the sorted channel list, skipping UINT channels
   let rIdx = -1,
     gIdx = -1,
     bIdx = -1,
     aIdx = -1;
   for (let i = 0; i < sortedChannels.length; i++) {
+    if (sortedChannels[i]!.pixelType === EXRPixelType.UINT) continue;
     const name = sortedChannels[i]!.name;
     if (name === 'R') rIdx = i;
     else if (name === 'G') gIdx = i;
@@ -1804,6 +1907,7 @@ async function decodeDeepScanlineImage(reader: EXRDataReader, header: EXRHeader)
   let yIdx = -1;
   if (rIdx === -1) {
     for (let i = 0; i < sortedChannels.length; i++) {
+      if (sortedChannels[i]!.pixelType === EXRPixelType.UINT) continue;
       if (sortedChannels[i]!.name === 'Y') {
         yIdx = i;
         break;
@@ -2070,7 +2174,9 @@ async function decodeSinglePart(
   if (isDeepTile) {
     throw new DecoderError(
       'EXR',
-      'Deep tiled images (deeptile) are not yet supported. Only deepscanline is supported for deep data.',
+      'This file contains deep tiled image data (deeptile) which cannot be decoded. ' +
+        'Deep tiled images store per-pixel depth samples that require specialized rendering. ' +
+        'Only flat (scanline/tiled) and deep scanline EXR formats are currently supported.',
     );
   }
 
@@ -2097,13 +2203,6 @@ async function decodeSinglePart(
   if (header.tiled) {
     if (!header.tileDesc) {
       throw new DecoderError('EXR', 'Tiled EXR file missing tiles attribute');
-    }
-    if (header.tileDesc.levelMode !== EXRLevelMode.ONE_LEVEL) {
-      const modeName = EXRLevelMode[header.tileDesc.levelMode] || `unknown(${header.tileDesc.levelMode})`;
-      throw new DecoderError(
-        'EXR',
-        `Unsupported EXR tile level mode: ${modeName}. Only ONE_LEVEL tiled images are supported.`,
-      );
     }
 
     validateCompression(header.compression);
@@ -2155,7 +2254,8 @@ async function decodeMultiPart(
   partHeaders: EXRHeader[],
   options?: EXRDecodeOptions,
 ): Promise<EXRDecodeResult> {
-  const partIndex = options?.partIndex ?? 0;
+  let partIndex = options?.partIndex ?? 0;
+  const explicitPartIndex = options?.partIndex !== undefined;
 
   if (typeof partIndex !== 'number' || !Number.isFinite(partIndex) || !Number.isInteger(partIndex)) {
     throw new DecoderError('EXR', `Invalid part index: ${partIndex}. Must be a non-negative integer.`);
@@ -2168,16 +2268,46 @@ async function decodeMultiPart(
     );
   }
 
+  // If the selected part is a deeptile and no explicit part was requested,
+  // try to find the first non-deeptile part to decode instead.
+  if (
+    !explicitPartIndex &&
+    partHeaders[partIndex]!.type &&
+    UNSUPPORTED_DEEP_DATA_TYPES.includes(partHeaders[partIndex]!.type!)
+  ) {
+    const fallbackIndex = partHeaders.findIndex((ph) => !ph.type || !UNSUPPORTED_DEEP_DATA_TYPES.includes(ph.type));
+    if (fallbackIndex >= 0) {
+      partIndex = fallbackIndex;
+    }
+  }
+
   const selectedHeader = partHeaders[partIndex]!;
   const partLabel = selectedHeader.name || `part ${partIndex}`;
 
   // Check for unsupported deep data types
   if (selectedHeader.type && UNSUPPORTED_DEEP_DATA_TYPES.includes(selectedHeader.type)) {
+    const decodableParts = partHeaders
+      .map((ph, idx) => ({ idx, name: ph.name, type: ph.type }))
+      .filter((p) => !p.type || !UNSUPPORTED_DEEP_DATA_TYPES.includes(p.type));
+
+    if (decodableParts.length > 0) {
+      const suggestions = decodableParts
+        .map((p) => `part ${p.idx}${p.name ? ` ('${p.name}')` : ''} [${p.type || 'unknown'}]`)
+        .join(', ');
+      throw new DecoderError(
+        'EXR',
+        `Part '${partLabel}' has type '${selectedHeader.type}' which is deep tiled data and cannot be decoded. ` +
+          `Deep tiled images require per-pixel depth samples that are not yet supported. ` +
+          `This file has decodable parts: ${suggestions}. ` +
+          `Use the partIndex option to select one of them.`,
+      );
+    }
+
     throw new DecoderError(
       'EXR',
-      `Part '${partLabel}' has type '${selectedHeader.type}' which is deep tiled data. ` +
-        `Deep tiled images (deeptile) are not yet supported. ` +
-        `Only scanlineimage, tiledimage, and deepscanline parts can be decoded.`,
+      `Part '${partLabel}' has type '${selectedHeader.type}' which is deep tiled data and cannot be decoded. ` +
+        `Deep tiled images require per-pixel depth samples that are not yet supported. ` +
+        `All parts in this file use unsupported deep tile format.`,
     );
   }
 
@@ -2186,14 +2316,6 @@ async function decodeMultiPart(
   if (isTiledPart) {
     if (!selectedHeader.tileDesc) {
       throw new DecoderError('EXR', `Part '${partLabel}': Tiled EXR part missing tiles attribute`);
-    }
-    if (selectedHeader.tileDesc.levelMode !== EXRLevelMode.ONE_LEVEL) {
-      const modeName =
-        EXRLevelMode[selectedHeader.tileDesc.levelMode] || `unknown(${selectedHeader.tileDesc.levelMode})`;
-      throw new DecoderError(
-        'EXR',
-        `Part '${partLabel}': Unsupported EXR tile level mode: ${modeName}. Only ONE_LEVEL tiled images are supported.`,
-      );
     }
   }
 
@@ -2225,9 +2347,7 @@ async function decodeMultiPart(
     const isTiledPartEntry = ph.type === 'tiledimage' || ph.tiled;
     if (isTiledPartEntry && ph.tileDesc) {
       const partWidth = dw.xMax - dw.xMin + 1;
-      const numXTiles = Math.ceil(partWidth / ph.tileDesc.xSize);
-      const numYTiles = Math.ceil(partHeight / ph.tileDesc.ySize);
-      numBlocks = numXTiles * numYTiles;
+      numBlocks = computeTotalTileOffsets(partWidth, partHeight, ph.tileDesc);
     } else {
       const linesPerBlock = getLinesPerBlock(ph.compression);
       numBlocks = Math.ceil(partHeight / linesPerBlock);
@@ -2560,8 +2680,9 @@ export function resolveChannelMapping(header: EXRHeader, options?: EXRDecodeOpti
   const mapping = new Map<string, string>();
   const channelMap = new Map<string, EXRChannel>();
 
-  // Build channel lookup
+  // Build channel lookup, excluding UINT channels (not decodable)
   for (const ch of header.channels) {
+    if (ch.pixelType === EXRPixelType.UINT) continue;
     channelMap.set(ch.name, ch);
   }
 
@@ -2575,7 +2696,9 @@ export function resolveChannelMapping(header: EXRHeader, options?: EXRDecodeOpti
   } else if (options?.layer && options.layer !== 'RGBA') {
     // Layer selection - map layer.R -> R, layer.G -> G, etc.
     const prefix = options.layer + '.';
-    const layerChannels = header.channels.filter((ch) => ch.name.startsWith(prefix));
+    const layerChannels = header.channels.filter(
+      (ch) => ch.name.startsWith(prefix) && ch.pixelType !== EXRPixelType.UINT,
+    );
 
     for (const ch of layerChannels) {
       const suffix = ch.name.substring(prefix.length).toUpperCase();

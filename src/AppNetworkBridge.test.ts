@@ -128,6 +128,8 @@ function createMockNetworkControl() {
     showInfo: vi.fn(),
     hideInfo: vi.fn(),
     setRTT: vi.fn(),
+    setLocalUserId: vi.fn(),
+    reportCopyResult: vi.fn(),
   };
 }
 
@@ -156,6 +158,11 @@ function createMockViewer() {
     getTransform: vi.fn(() => null),
     setTransform: vi.fn(),
     setWipeState: vi.fn(),
+    getPresenceOverlay: vi.fn(() => ({
+      setUsers: vi.fn(),
+      show: vi.fn(),
+      hide: vi.fn(),
+    })),
   };
 }
 
@@ -1172,6 +1179,100 @@ describe('AppNetworkBridge', () => {
   });
 
   // -----------------------------------------------------------------------
+  // roomLeft event handling
+  // -----------------------------------------------------------------------
+  describe('roomLeft event', () => {
+    it('ANB-130: roomLeft event is subscribed to during setup', () => {
+      bridge.setup();
+
+      ctx._networkSyncManager.emit('roomLeft', undefined);
+
+      expect(ctx._networkControl.setConnectionState).toHaveBeenCalledWith('disconnected');
+    });
+
+    it('ANB-131: roomLeft clears room info and users', () => {
+      bridge.setup();
+
+      ctx._networkSyncManager.emit('roomCreated', {
+        roomId: 'r1',
+        roomCode: 'ABCD-1234',
+        hostId: 'h1',
+        users: [{ userId: 'u1', userName: 'Alice', color: '#ff0000' }],
+        createdAt: Date.now(),
+        maxUsers: 10,
+      });
+
+      ctx._networkControl.setConnectionState.mockClear();
+      ctx._networkControl.setIsHost.mockClear();
+      ctx._networkControl.setShareLinkKind.mockClear();
+      ctx._networkControl.setResponseToken.mockClear();
+      ctx._networkControl.setRoomInfo.mockClear();
+      ctx._networkControl.setUsers.mockClear();
+      ctx._networkControl.hideInfo.mockClear();
+
+      ctx._networkSyncManager.emit('roomLeft', undefined);
+
+      expect(ctx._networkControl.setConnectionState).toHaveBeenCalledWith('disconnected');
+      expect(ctx._networkControl.setIsHost).toHaveBeenCalledWith(false);
+      expect(ctx._networkControl.setShareLinkKind).toHaveBeenCalledWith('generic');
+      expect(ctx._networkControl.setResponseToken).toHaveBeenCalledWith('');
+      expect(ctx._networkControl.setRoomInfo).toHaveBeenCalledWith(null);
+      expect(ctx._networkControl.setUsers).toHaveBeenCalledWith([]);
+      expect(ctx._networkControl.hideInfo).toHaveBeenCalled();
+    });
+
+    it('ANB-132: roomLeft clears paintEngine id prefix', () => {
+      bridge.setup();
+
+      ctx._networkSyncManager.emit('roomCreated', {
+        roomId: 'r1',
+        roomCode: 'ABCD-1234',
+        hostId: 'h1',
+        users: [],
+        createdAt: Date.now(),
+        maxUsers: 10,
+      });
+      expect(ctx._paintEngine.idPrefix).toBe('test-user-id');
+
+      ctx._networkSyncManager.emit('roomLeft', undefined);
+
+      expect(ctx._paintEngine.idPrefix).toBe('');
+    });
+
+    it('ANB-133: manual leaveRoom still works independently of roomLeft handler', () => {
+      bridge.setup();
+
+      const leaveRoomCall = (ctx._networkControl.on as ReturnType<typeof vi.fn>).mock.calls.find(
+        (call: unknown[]) => call[0] === 'leaveRoom',
+      );
+      expect(leaveRoomCall).toBeDefined();
+
+      const leaveRoomHandler = leaveRoomCall![1] as unknown as () => void;
+      leaveRoomHandler();
+
+      expect(ctx._networkSyncManager.leaveRoom).toHaveBeenCalled();
+      expect(ctx._networkControl.setConnectionState).toHaveBeenCalledWith('disconnected');
+      expect(ctx._networkControl.setRoomInfo).toHaveBeenCalledWith(null);
+      expect(ctx._networkControl.setUsers).toHaveBeenCalledWith([]);
+    });
+
+    it('ANB-134: roomLeft after dispose does not call networkControl methods', () => {
+      bridge.setup();
+      bridge.dispose();
+
+      ctx._networkControl.setConnectionState.mockClear();
+      ctx._networkControl.setRoomInfo.mockClear();
+      ctx._networkControl.setUsers.mockClear();
+
+      ctx._networkSyncManager.emit('roomLeft', undefined);
+
+      expect(ctx._networkControl.setConnectionState).not.toHaveBeenCalled();
+      expect(ctx._networkControl.setRoomInfo).not.toHaveBeenCalled();
+      expect(ctx._networkControl.setUsers).not.toHaveBeenCalled();
+    });
+  });
+
+  // -----------------------------------------------------------------------
   // Annotations/notes in full state sync
   // -----------------------------------------------------------------------
   describe('annotations/notes in state sync', () => {
@@ -1350,7 +1451,7 @@ describe('AppNetworkBridge', () => {
       });
 
       const notes = [
-        { id: 'n1', frame: 1, startFrame: 1, endFrame: 5, text: 'synced note', author: 'peer', resolved: false },
+        { id: 'n1', sourceIndex: 0, frameStart: 1, frameEnd: 5, text: 'synced note', author: 'peer', status: 'open' },
       ];
 
       ctx._networkSyncManager.emit('sessionStateReceived', {
@@ -1367,6 +1468,139 @@ describe('AppNetworkBridge', () => {
 
       const allNotes = ctx._session.noteManager.toSerializable();
       expect(allNotes[0]!.text).toBe('synced note');
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // copyLink / clipboard reporting
+  // -----------------------------------------------------------------------
+  describe('copyLink clipboard reporting', () => {
+    /** Extract the handler registered for a given event name on the mock control. */
+    function getCopyLinkHandler(): ((baseLink: string) => Promise<void>) | undefined {
+      const calls = ctx._networkControl.on.mock.calls as unknown as Array<[string, (...args: any[]) => any]>;
+      const match = calls.find(([event]) => event === 'copyLink');
+      return match?.[1] as ((baseLink: string) => Promise<void>) | undefined;
+    }
+
+    it('ANB-130: successful clipboard write calls reportCopyResult(true)', async () => {
+      // Provide clipboard mock
+      Object.assign(navigator, {
+        clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
+      });
+
+      bridge.setup();
+      const handler = getCopyLinkHandler();
+      expect(handler).toBeDefined();
+
+      await handler!('http://localhost/?room=ROOM');
+
+      expect(ctx._networkControl.reportCopyResult).toHaveBeenCalledWith(true);
+      expect(ctx._networkControl.showError).not.toHaveBeenCalled();
+    });
+
+    it('ANB-131: clipboard failure calls reportCopyResult(false, ...) with clipboard message', async () => {
+      Object.assign(navigator, {
+        clipboard: {
+          writeText: vi.fn().mockRejectedValue(new Error('Clipboard write failed')),
+        },
+      });
+
+      bridge.setup();
+      const handler = getCopyLinkHandler();
+      expect(handler).toBeDefined();
+
+      await handler!('http://localhost/?room=ROOM');
+
+      expect(ctx._networkControl.reportCopyResult).toHaveBeenCalledWith(
+        false,
+        'Clipboard unavailable. Copy Share URL from the Network Sync panel.',
+      );
+    });
+
+    it('ANB-132: non-clipboard error calls reportCopyResult(false, ...) with error message', async () => {
+      Object.assign(navigator, {
+        clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
+      });
+
+      // Make buildShareURL throw by providing a getSessionURLState that throws
+      bridge = new AppNetworkBridge({
+        session: ctx.session,
+        viewer: ctx.viewer,
+        paintEngine: ctx.paintEngine,
+        colorControls: ctx.colorControls,
+        networkSyncManager: ctx.networkSyncManager,
+        networkControl: ctx.networkControl,
+        headerBar: ctx.headerBar,
+        getSessionURLState: () => {
+          throw new Error('State capture boom');
+        },
+      });
+      bridge.setup();
+      const handler = getCopyLinkHandler();
+      expect(handler).toBeDefined();
+
+      await handler!('http://localhost/?room=ROOM');
+
+      expect(ctx._networkControl.reportCopyResult).toHaveBeenCalledWith(
+        false,
+        'Failed to generate share URL: State capture boom',
+      );
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Toast message wiring
+  // -----------------------------------------------------------------------
+  describe('toast message wiring', () => {
+    it('ANB-140: toastMessage with type "info" calls networkControl.showInfo', () => {
+      bridge.setup();
+
+      ctx._networkSyncManager.emit('toastMessage', {
+        message: 'Alice joined the room',
+        type: 'info',
+      });
+
+      expect(ctx._networkControl.showInfo).toHaveBeenCalledTimes(1);
+      expect(ctx._networkControl.showInfo).toHaveBeenCalledWith('Alice joined the room');
+      expect(ctx._networkControl.showError).not.toHaveBeenCalled();
+    });
+
+    it('ANB-141: toastMessage with type "success" calls networkControl.showInfo', () => {
+      bridge.setup();
+
+      ctx._networkSyncManager.emit('toastMessage', {
+        message: 'Reconnected successfully',
+        type: 'success',
+      });
+
+      expect(ctx._networkControl.showInfo).toHaveBeenCalledTimes(1);
+      expect(ctx._networkControl.showInfo).toHaveBeenCalledWith('Reconnected successfully');
+    });
+
+    it('ANB-142: toastMessage with type "error" calls networkControl.showError', () => {
+      bridge.setup();
+
+      ctx._networkSyncManager.emit('toastMessage', {
+        message: 'Failed to reconnect. Please try again.',
+        type: 'error',
+      });
+
+      expect(ctx._networkControl.showError).toHaveBeenCalledTimes(1);
+      expect(ctx._networkControl.showError).toHaveBeenCalledWith('Failed to reconnect. Please try again.');
+      expect(ctx._networkControl.showInfo).not.toHaveBeenCalled();
+    });
+
+    it('ANB-143: toastMessage subscription is cleaned up on dispose', () => {
+      bridge.setup();
+      bridge.dispose();
+
+      ctx._networkSyncManager.emit('toastMessage', {
+        message: 'Should not appear',
+        type: 'info',
+      });
+
+      expect(ctx._networkControl.showInfo).not.toHaveBeenCalled();
+      expect(ctx._networkControl.showError).not.toHaveBeenCalled();
     });
   });
 });

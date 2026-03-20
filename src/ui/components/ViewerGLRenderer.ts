@@ -168,6 +168,7 @@ export class ViewerGLRenderer {
   private _autoExposureController = new AutoExposureController();
   private _autoExposureState: AutoExposureState = { ...DEFAULT_AUTO_EXPOSURE_STATE };
   private _luminanceAnalyzer: LuminanceAnalyzer | null = null;
+  private _luminanceFallbackWarned = false;
   private _gamutMappingState: GamutMappingState = { ...DEFAULT_GAMUT_MAPPING_STATE };
 
   get glCanvas(): HTMLCanvasElement | null {
@@ -258,22 +259,18 @@ export class ViewerGLRenderer {
       return this._gamutMappingState;
     }
 
-    // When auto primaries normalization is active, the shader has already
-    // converted source primaries → BT.709 working space. Creative gamut
-    // mapping always operates in BT.709 space, so source is always 'srgb'.
-    const hasInputNormalization =
-      image.metadata?.colorPrimaries === 'bt2020' || image.metadata?.colorPrimaries === 'p3';
-
-    const sourceGamut: GamutIdentifier = hasInputNormalization
-      ? 'srgb' // already normalized to BT.709 by input primaries conversion
-      : 'srgb';
+    // Determine source gamut from image color primaries metadata.
+    const primaries = image.metadata?.colorPrimaries;
+    const sourceGamut: GamutIdentifier =
+      primaries === 'bt2020' ? 'rec2020' : primaries === 'p3' ? 'display-p3' : 'srgb';
     const targetGamut: GamutIdentifier =
       this._capabilities?.displayGamut === 'p3' || this._capabilities?.displayGamut === 'rec2020'
         ? 'display-p3'
         : 'srgb';
 
-    // No mapping needed if source matches target or source is sRGB
-    if (sourceGamut === 'srgb' || (sourceGamut as string) === (targetGamut as string)) {
+    // No mapping needed if source matches target or source is already
+    // within the target gamut (sRGB fits in any display gamut).
+    if (sourceGamut === targetGamut || sourceGamut === 'srgb') {
       return { ...this._gamutMappingState, mode: 'off' };
     }
 
@@ -291,8 +288,11 @@ export class ViewerGLRenderer {
 
   private applyHDRDisplayOverrides(state: RenderState): void {
     // HDR output/compositors expect linear-light scene values from the shader.
-    // Keep creative grading controls intact; only neutralize display-referred output transforms.
-    state.displayColor = { ...state.displayColor, transferFunction: 0, displayGamma: 1, displayBrightness: 1 };
+    // Neutralize the display transfer function to avoid double-encoding (the
+    // compositor applies HLG/PQ OETF after the shader).
+    // Preserve displayGamma and displayBrightness — these are user-facing
+    // calibration knobs that should take effect on all output paths.
+    state.displayColor = { ...state.displayColor, transferFunction: 0 };
   }
 
   private applySceneLuminanceAnalysis(renderer: Renderer, image: IPImage, state: RenderState): void {
@@ -306,6 +306,22 @@ export class ViewerGLRenderer {
 
     if (!this._luminanceAnalyzer) {
       this._luminanceAnalyzer = new LuminanceAnalyzer(gl);
+    }
+
+    // When GPU float color buffers are unavailable, luminance analysis returns
+    // fixed synthetic defaults. Warn once so the user knows adaptive features
+    // are not truly scene-driven.
+    if (!this._luminanceAnalyzer.isAvailable()) {
+      if (!this._luminanceFallbackWarned) {
+        const features: string[] = [];
+        if (this._autoExposureState.enabled) features.push('auto-exposure');
+        if (state.toneMappingState.operator === 'drago') features.push('Drago tone mapping');
+        console.warn(
+          `ViewerGLRenderer: ${features.join(' and ')} using fallback luminance values ` +
+            '(GPU does not support EXT_color_buffer_float for scene analysis)',
+        );
+        this._luminanceFallbackWarned = true;
+      }
     }
 
     // Prefer explicit texture prep when available (sync Renderer), fallback to current binding.
@@ -692,11 +708,8 @@ export class ViewerGLRenderer {
       // The browser compositor applies the HLG/PQ OETF after the shader, so we
       // must output linear light. Applying the user's display transfer (sRGB,
       // Rec.709, gamma, etc.) would double-encode the signal.
-      // displayGamma and displayBrightness are also forced to 1 because the HDR
-      // compositor manages display-referred luminance scaling.
-      // TODO: For 'extended' mode (SDR-range P3 drawing buffer), the user's
-      // display transfer, displayGamma, and displayBrightness should be preserved
-      // since that path does not go through HLG/PQ compositing.
+      // displayGamma and displayBrightness are preserved as user-facing
+      // calibration knobs that apply as relative adjustments on all paths.
       this.applyHDRDisplayOverrides(state);
       // Preserve user tone mapping for all HDR sources (including HLG/PQ).
       // Input transfer is decoded to linear in the shader before tone mapping.
@@ -859,11 +872,8 @@ export class ViewerGLRenderer {
     // The WebGPU HDR canvas receives linear-light float pixels and performs its
     // own display-referred encoding (tone mapping, OETF). Applying the user's
     // display transfer (sRGB, Rec.709, gamma) in the shader would double-encode.
-    // displayGamma and displayBrightness are also forced to 1 for the same reason —
-    // the WebGPU compositor handles luminance scaling.
-    // TODO: displayGamma and displayBrightness are calibration knobs that users
-    // expect to work for all content. Consider preserving them here and
-    // compensating in the WebGPU upload step.
+    // displayGamma and displayBrightness are preserved as user-facing
+    // calibration knobs that apply as relative adjustments on all paths.
     PerfTrace.begin('blit.buildRenderState');
     const state = this.buildRenderState();
     this.applyHDRDisplayOverrides(state);
@@ -966,9 +976,8 @@ export class ViewerGLRenderer {
     // The Canvas2D HDR canvas receives linear-light float pixels and handles
     // display-referred encoding itself. Same rationale as the WebGPU blit path:
     // applying display transfer in the shader would double-encode the signal.
-    // TODO: displayGamma and displayBrightness are calibration knobs that users
-    // expect to work for all content. Consider preserving them here and
-    // compensating in the Canvas2D upload step.
+    // displayGamma and displayBrightness are preserved as user-facing
+    // calibration knobs that apply as relative adjustments on all paths.
     PerfTrace.begin('canvas2dBlit.buildRenderState');
     const state = this.buildRenderState();
     this.applyHDRDisplayOverrides(state);
@@ -1477,6 +1486,18 @@ export class ViewerGLRenderer {
     if (!Number.isFinite(headroom) || headroom <= 0) return;
     this._hdrHeadroom = headroom;
     this._glRenderer?.setHDRHeadroom(headroom);
+  }
+
+  setLinearize(state: import('../../core/types/color').LinearizeState): void {
+    this._glRenderer?.setLinearize(state);
+  }
+
+  setOutOfRange(mode: number): void {
+    this._glRenderer?.setOutOfRange(mode);
+  }
+
+  setChannelSwizzle(swizzle: import('../../core/types/color').ChannelSwizzle): void {
+    this._glRenderer?.setChannelSwizzle(swizzle);
   }
 
   /**

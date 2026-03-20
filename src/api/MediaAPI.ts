@@ -6,12 +6,17 @@
 
 import type { Session } from '../core/session/Session';
 import type { PatternName, GradientDirection } from '../nodes/sources/ProceduralSourceNode';
+import type { AppPersistenceManager } from '../AppPersistenceManager';
+import type { MediaRepresentation } from '../core/types/representation';
+import { DisposableAPI } from './Disposable';
+import { getCurrentSourceStartFrame } from '../utils/media/SourceUIState';
 
 /**
  * Public source information returned by the API
  */
 export interface SourceInfo {
   name: string;
+  url: string;
   type: 'image' | 'video' | 'sequence';
   width: number;
   height: number;
@@ -19,11 +24,14 @@ export interface SourceInfo {
   fps: number;
 }
 
-export class MediaAPI {
+export class MediaAPI extends DisposableAPI {
   private session: Session;
+  private persistenceManager: AppPersistenceManager | null;
 
-  constructor(session: Session) {
+  constructor(session: Session, persistenceManager?: AppPersistenceManager | null) {
+    super();
     this.session = session;
+    this.persistenceManager = persistenceManager ?? null;
   }
 
   /**
@@ -39,11 +47,13 @@ export class MediaAPI {
    * ```
    */
   getCurrentSource(): SourceInfo | null {
+    this.assertNotDisposed();
     const source = this.session.currentSource;
     if (!source) return null;
 
     return {
       name: source.name,
+      url: source.url,
       type: source.type,
       width: source.width,
       height: source.height,
@@ -63,13 +73,14 @@ export class MediaAPI {
    * ```
    */
   getDuration(): number {
+    this.assertNotDisposed();
     return this.session.currentSource?.duration ?? 0;
   }
 
   /**
    * Get the frames per second of the current source.
    *
-   * @returns The FPS value for the active session.
+   * @returns The FPS of the current source, or the session playback FPS if no source is loaded.
    *
    * @example
    * ```ts
@@ -77,7 +88,41 @@ export class MediaAPI {
    * ```
    */
   getFPS(): number {
+    this.assertNotDisposed();
+    return this.session.currentSource?.fps ?? this.session.fps;
+  }
+
+  /**
+   * Get the session playback FPS (which may differ from the source FPS if overridden).
+   *
+   * @returns The current session playback rate in frames per second.
+   *
+   * @example
+   * ```ts
+   * const playbackFps = openrv.media.getPlaybackFPS(); // e.g. 48
+   * ```
+   */
+  getPlaybackFPS(): number {
+    this.assertNotDisposed();
     return this.session.fps;
+  }
+
+  /**
+   * Set the session playback FPS (overrides the source FPS for playback timing).
+   *
+   * @param fps - The desired playback rate in frames per second. Must be a positive number.
+   *
+   * @example
+   * ```ts
+   * openrv.media.setPlaybackFPS(48); // play back at 48 fps
+   * ```
+   */
+  setPlaybackFPS(fps: number): void {
+    this.assertNotDisposed();
+    if (typeof fps !== 'number' || isNaN(fps) || fps <= 0) {
+      throw new TypeError('setPlaybackFPS() requires a positive number');
+    }
+    this.session.fps = fps;
   }
 
   /**
@@ -92,6 +137,7 @@ export class MediaAPI {
    * ```
    */
   getResolution(): { width: number; height: number } {
+    this.assertNotDisposed();
     const source = this.session.currentSource;
     return {
       width: source?.width ?? 0,
@@ -110,7 +156,32 @@ export class MediaAPI {
    * ```
    */
   hasMedia(): boolean {
+    this.assertNotDisposed();
     return this.session.currentSource !== null;
+  }
+
+  /**
+   * Get the start frame number of the current source.
+   *
+   * For image sequences this is the first frame number in the sequence
+   * (e.g. 1001 for a VFX sequence starting at frame 1001).
+   * For single images or when no source is loaded, returns 1.
+   *
+   * @returns The start frame number (1-based).
+   *
+   * @example
+   * ```ts
+   * const start = openrv.media.getStartFrame(); // e.g. 1001
+   * ```
+   */
+  getStartFrame(): number {
+    this.assertNotDisposed();
+    const source = this.session.currentSource;
+    if (!source) {
+      // Default to 1 (the standard first frame) when no source is loaded
+      return 1;
+    }
+    return getCurrentSourceStartFrame(source);
   }
 
   /**
@@ -124,6 +195,7 @@ export class MediaAPI {
    * ```
    */
   getSourceCount(): number {
+    this.assertNotDisposed();
     return this.session.sourceCount;
   }
 
@@ -153,6 +225,7 @@ export class MediaAPI {
       duration?: number;
     },
   ): void {
+    this.assertNotDisposed();
     this.session.loadProceduralSource(pattern, options);
   }
 
@@ -167,6 +240,131 @@ export class MediaAPI {
    * ```
    */
   loadMovieProc(url: string): void {
+    this.assertNotDisposed();
     this.session.loadMovieProc(url);
   }
+
+  /**
+   * Load a media source from a URL into the session.
+   *
+   * Validates the URL scheme (only `http:` and `https:` are allowed) and
+   * auto-detects the media type (image vs. video) from the file extension.
+   *
+   * @param url - The HTTP/HTTPS URL to load.
+   *
+   * @example
+   * ```ts
+   * await openrv.media.addSourceFromURL('https://example.com/clip.mp4');
+   * ```
+   */
+  async addSourceFromURL(url: string): Promise<void> {
+    this.assertNotDisposed();
+    return this.session.loadSourceFromUrl(url);
+  }
+
+  /**
+   * Load an image sequence from a pattern string.
+   *
+   * Accepts `####` (hash), `%04d` (printf), or `@@@@` (at-sign) notation to
+   * specify the frame-number placeholder.  The pattern is expanded across the
+   * given frame range and each resulting URL is loaded as a sequence frame.
+   *
+   * @param pattern   - URL/path with a frame placeholder, e.g. `/path/shot.####.exr`
+   * @param startFrame - First frame number (inclusive, default: 1)
+   * @param endFrame   - Last frame number (inclusive, default: 100)
+   * @param fps        - Frame rate (default: session fps)
+   *
+   * @example
+   * ```ts
+   * await openrv.media.addSourceFromPattern('/renders/shot.####.exr', 1001, 1100);
+   * await openrv.media.addSourceFromPattern('frame.%04d.png', 1, 48, 30);
+   * ```
+   */
+  async addSourceFromPattern(pattern: string, startFrame?: number, endFrame?: number, fps?: number): Promise<void> {
+    this.assertNotDisposed();
+    return this.session.loadSequenceFromPatternString(pattern, startFrame, endFrame, fps);
+  }
+
+  /**
+   * Clear all loaded media sources, releasing associated resources.
+   * Creates an auto-checkpoint before clearing when sources exist
+   * and a persistence manager is available.
+   *
+   * @example
+   * ```ts
+   * openrv.media.clearSources();
+   * ```
+   */
+  clearSources(): void {
+    this.assertNotDisposed();
+    // Fire-and-forget checkpoint — clearSources is synchronous so we can't await,
+    // but the checkpoint is best-effort and non-blocking.
+    void this.persistenceManager?.checkpointBeforeClearSources();
+    this.session.clearSources();
+  }
+
+  // --- Representation management ---
+
+  /**
+   * Get all representations for a source.
+   *
+   * @param sourceIndex - Index of the source (defaults to the current source)
+   * @returns Array of representation info objects, or an empty array
+   */
+  getRepresentations(sourceIndex?: number): RepresentationInfo[] {
+    this.assertNotDisposed();
+    const idx = sourceIndex ?? this.session.currentSourceIndex;
+    const source = this.session.getSourceByIndex(idx);
+    if (!source?.representations) return [];
+    return source.representations.map(toRepresentationInfo);
+  }
+
+  /**
+   * Get the currently active representation for a source.
+   *
+   * @param sourceIndex - Index of the source (defaults to the current source)
+   * @returns The active representation info, or null
+   */
+  getActiveRepresentation(sourceIndex?: number): RepresentationInfo | null {
+    this.assertNotDisposed();
+    const idx = sourceIndex ?? this.session.currentSourceIndex;
+    const rep = this.session.getActiveRepresentation(idx);
+    return rep ? toRepresentationInfo(rep) : null;
+  }
+
+  /**
+   * Switch the active representation for a source.
+   *
+   * @param repId - ID of the representation to switch to
+   * @param sourceIndex - Index of the source (defaults to the current source)
+   * @returns Promise that resolves to true if the switch succeeded
+   */
+  async switchRepresentation(repId: string, sourceIndex?: number): Promise<boolean> {
+    this.assertNotDisposed();
+    const idx = sourceIndex ?? this.session.currentSourceIndex;
+    return this.session.switchRepresentation(idx, repId, { userInitiated: true });
+  }
+}
+
+/**
+ * Public representation info returned by the API (no internal objects exposed).
+ */
+export interface RepresentationInfo {
+  id: string;
+  label: string;
+  kind: string;
+  status: string;
+  resolution: { width: number; height: number };
+  priority: number;
+}
+
+function toRepresentationInfo(rep: MediaRepresentation): RepresentationInfo {
+  return {
+    id: rep.id,
+    label: rep.label,
+    kind: rep.kind,
+    status: rep.status,
+    resolution: { width: rep.resolution.width, height: rep.resolution.height },
+    priority: rep.priority,
+  };
 }

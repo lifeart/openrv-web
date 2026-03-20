@@ -1,4 +1,5 @@
 export { PluginRegistry, pluginRegistry } from './PluginRegistry';
+export { ENGINE_VERSION, satisfiesMinVersion, parseSemVer } from './version';
 export { ExporterRegistry } from './ExporterRegistry';
 export type {
   Plugin,

@@ -4,7 +4,8 @@ import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { parseRVEDL, type RVEDLEntry } from '../../formats/RVEDLParser';
 import { type Graph } from '../graph/Graph';
 import { loadGTOGraph } from './GTOGraphLoader';
-import type { GTOParseResult } from './GTOGraphLoader';
+import type { GTOParseResult, SkippedNodeInfo } from './GTOGraphLoader';
+import type { DegradedModeInfo } from '../../composite/BlendModes';
 import { resolveProperty as _resolveProperty, resolveGTOByHash, resolveGTOByAt } from './PropertyResolver';
 import type { HashResolveResult, AtResolveResult, GTOHashResolveResult, GTOAtResolveResult } from './PropertyResolver';
 import { parseInitialSettings as _parseInitialSettings } from './GTOSettingsParser';
@@ -14,6 +15,10 @@ import type { PlaybackMode } from '../types/session';
 import type { UncropState } from '../types/transform';
 import { Logger } from '../../utils/Logger';
 import type { SessionAnnotations } from './SessionAnnotations';
+import type { SerializedGraph, SerializedGraphNode } from './SessionManagerTypes';
+import { NodeFactory } from '../../nodes/base/NodeFactory';
+import { resetNodeIdCounter, type IPNode } from '../../nodes/base/IPNode';
+import { Graph as RuntimeGraph } from '../graph/Graph';
 
 const log = new Logger('SessionGraph');
 
@@ -23,6 +28,10 @@ export interface SessionGraphEvents extends EventMap {
   sessionLoaded: void;
   edlLoaded: RVEDLEntry[];
   metadataChanged: SessionMetadata;
+  /** Emitted when nodes are skipped during GTO import (lossy import warning) */
+  skippedNodes: SkippedNodeInfo[];
+  /** Emitted when composite modes are degraded during GTO import (lossy import warning) */
+  degradedModes: DegradedModeInfo[];
 }
 
 export interface SessionGraphHost {
@@ -33,6 +42,7 @@ export interface SessionGraphHost {
   setOutPoint(value: number): void;
   setFrameIncrement(value: number): void;
   setPlaybackMode(mode: PlaybackMode): void;
+  setAudioScrubEnabled(enabled: boolean): void;
   emitInOutChanged(inPoint: number, outPoint: number): void;
   emitFrameIncrementChanged(inc: number): void;
 
@@ -192,12 +202,139 @@ export class SessionGraph extends EventEmitter<SessionGraphEvents> {
   }
 
   /**
-   * Resets gtoData and graphParseResult (called by media loading methods).
+   * Serialize the current live graph for .orvproject persistence.
+   */
+  toSerializedGraph(): SerializedGraph | null {
+    if (!this._graph) {
+      return null;
+    }
+
+    const allNodes = this._graph.getAllNodes();
+    const outputNode = this._graph.getOutputNode();
+    const viewNodeId = this._graphParseResult?.sessionInfo.viewNode ?? this._graphParseResult?.rootNode?.id ?? null;
+
+    const nodes: SerializedGraphNode[] = allNodes.map((node) => ({
+      id: node.id,
+      type: node.type,
+      name: node.name,
+      properties: node.properties.toPersistentJSON(),
+      inputIds: node.inputs.map((input) => input.id),
+    }));
+
+    return {
+      version: 1,
+      nodes,
+      outputNodeId: outputNode?.id ?? null,
+      viewNodeId,
+    };
+  }
+
+  /**
+   * Restore a live graph from .orvproject serialized graph data.
+   * Returns non-fatal warnings for skipped nodes or broken connections.
+   */
+  loadSerializedGraph(data: SerializedGraph): string[] {
+    const graph = new RuntimeGraph();
+    const warnings: string[] = [];
+    const nodeMap = new Map<string, IPNode>();
+    let maxIdSuffix = 0;
+
+    for (const serializedNode of data.nodes) {
+      const node = NodeFactory.create(serializedNode.type);
+      if (!node) {
+        warnings.push(`Unknown node type "${serializedNode.type}" (id: ${serializedNode.id}), skipping`);
+        continue;
+      }
+
+      (node as { id: string }).id = serializedNode.id;
+      node.name = serializedNode.name;
+
+      if (serializedNode.properties && Object.keys(serializedNode.properties).length > 0) {
+        node.properties.fromJSON(serializedNode.properties);
+      }
+
+      graph.addNode(node);
+      nodeMap.set(serializedNode.id, node);
+
+      const match = serializedNode.id.match(/_(\d+)$/);
+      if (match) {
+        maxIdSuffix = Math.max(maxIdSuffix, parseInt(match[1]!, 10));
+      }
+    }
+
+    for (const serializedNode of data.nodes) {
+      const node = nodeMap.get(serializedNode.id);
+      if (!node) {
+        continue;
+      }
+
+      for (const inputId of serializedNode.inputIds) {
+        const inputNode = nodeMap.get(inputId);
+        if (!inputNode) {
+          warnings.push(`Dangling input reference "${inputId}" in node "${serializedNode.id}", skipping`);
+          continue;
+        }
+        try {
+          graph.connect(inputNode, node);
+        } catch (err) {
+          warnings.push(`Failed to connect "${inputId}" -> "${serializedNode.id}": ${err}`);
+        }
+      }
+    }
+
+    const outputNode = data.outputNodeId ? (nodeMap.get(data.outputNodeId) ?? null) : null;
+    if (outputNode) {
+      graph.setOutputNode(outputNode);
+    }
+
+    const rootNode = (data.viewNodeId ? nodeMap.get(data.viewNodeId) : undefined) ?? outputNode ?? null;
+
+    this._graph = graph;
+    this._gtoData = null;
+    this._graphParseResult = {
+      graph,
+      nodes: nodeMap,
+      rootNode,
+      skippedNodes: [],
+      degradedModes: [],
+      sessionInfo: {
+        name: this._metadata.displayName,
+        ...(data.viewNodeId ? { viewNode: data.viewNodeId } : {}),
+      },
+    };
+
+    resetNodeIdCounter(maxIdSuffix);
+
+    for (const warning of warnings) {
+      console.warn(`[SessionGraph] ${warning}`);
+    }
+
+    this.emit('graphLoaded', this._graphParseResult);
+    return warnings;
+  }
+
+  /**
+   * Resets gtoData, graphParseResult, and session metadata (called by media loading methods).
+   * Fix #131: Also clear metadata, uncropState, and edlEntries so old session
+   * data doesn't leak when loading ordinary media after a GTO/RV session.
    */
   clearData(): void {
     this._graph = null;
     this._gtoData = null;
     this._graphParseResult = null;
+    this._metadata = {
+      displayName: '',
+      comment: '',
+      version: 2,
+      origin: 'openrv-web',
+      creationContext: 0,
+      clipboard: 0,
+      membershipContains: [],
+      realtime: 0,
+      bgColor: [0.18, 0.18, 0.18, 1.0],
+    };
+    this._uncropState = null;
+    this._edlEntries = [];
   }
 
   dispose(): void {
@@ -206,6 +343,17 @@ export class SessionGraph extends EventEmitter<SessionGraphEvents> {
     this._graphParseResult = null;
     this._gtoData = null;
     this.removeAllListeners();
+  }
+
+  /**
+   * Replace the stored EDL entries and emit `edlLoaded` when non-empty.
+   * Used by project restore to rehydrate previously-saved EDL state.
+   */
+  setEdlEntries(entries: RVEDLEntry[]): void {
+    this._edlEntries = entries;
+    if (entries.length > 0) {
+      this.emit('edlLoaded', entries);
+    }
   }
 
   /**
@@ -232,7 +380,21 @@ export class SessionGraph extends EventEmitter<SessionGraphEvents> {
    * Load and parse a GTO file, applying session info to playback state
    * via host callbacks, and emitting graph/session events.
    */
-  async loadFromGTO(data: ArrayBuffer | string, availableFiles?: Map<string, File>): Promise<void> {
+  async loadFromGTO(data: ArrayBuffer | string, availableFiles?: Map<string, File[]>): Promise<void> {
+    // Fix #402: Reset metadata before parsing so that a GTO with no
+    // title/comment doesn't inherit stale values from the previous session.
+    this._metadata = {
+      displayName: '',
+      comment: '',
+      version: 2,
+      origin: 'openrv-web',
+      creationContext: 0,
+      clipboard: 0,
+      membershipContains: [],
+      realtime: 0,
+      bgColor: [0.18, 0.18, 0.18, 1.0],
+    };
+
     const reader = new SimpleReader();
 
     try {
@@ -286,8 +448,14 @@ export class SessionGraph extends EventEmitter<SessionGraphEvents> {
         this._host!.setOutPoint(result.sessionInfo.outPoint);
         this._host!.emitInOutChanged(result.sessionInfo.inPoint, result.sessionInfo.outPoint);
       }
-      if (result.sessionInfo.marks && result.sessionInfo.marks.length > 0) {
-        annotations.markerManager.setFromFrameNumbers(result.sessionInfo.marks);
+      // Fix #125/#423: always call setFromFrameNumbers when marks is defined (even empty) to clear old markers
+      if (result.sessionInfo.marks !== undefined) {
+        annotations.markerManager.setFromFrameNumbers(
+          result.sessionInfo.marks,
+          result.sessionInfo.markerNotes,
+          result.sessionInfo.markerColors,
+          result.sessionInfo.markerEndFrames,
+        );
       }
 
       // Apply frame increment
@@ -306,18 +474,18 @@ export class SessionGraph extends EventEmitter<SessionGraphEvents> {
         annotations.annotationStore.setMatteSettings(result.sessionInfo.matte);
       }
 
-      // Apply notes
-      if (result.sessionInfo.notes && result.sessionInfo.notes.length > 0) {
+      // Apply notes (fix #125: always call, even for empty arrays, to clear old data)
+      if (result.sessionInfo.notes) {
         annotations.noteManager.fromSerializable(result.sessionInfo.notes);
       }
 
-      // Apply version groups
-      if (result.sessionInfo.versionGroups && result.sessionInfo.versionGroups.length > 0) {
+      // Apply version groups (fix #125: always call, even for empty arrays, to clear old data)
+      if (result.sessionInfo.versionGroups) {
         annotations.versionManager.fromSerializable(result.sessionInfo.versionGroups);
       }
 
-      // Apply statuses
-      if (result.sessionInfo.statuses && result.sessionInfo.statuses.length > 0) {
+      // Apply statuses (fix #125: always call, even for empty arrays, to clear old data)
+      if (result.sessionInfo.statuses) {
         annotations.statusManager.fromSerializable(result.sessionInfo.statuses);
       }
 
@@ -326,6 +494,11 @@ export class SessionGraph extends EventEmitter<SessionGraphEvents> {
       if (result.sessionInfo.realtime !== undefined) {
         const gtoRealtime = result.sessionInfo.realtime;
         this._host!.setPlaybackMode(gtoRealtime === 0 ? 'playAllFrames' : 'realtime');
+      }
+
+      // Fix #129: Restore audio scrub state from GTO import
+      if (result.sessionInfo.audioScrubEnabled !== undefined) {
+        this._host!.setAudioScrubEnabled(result.sessionInfo.audioScrubEnabled);
       }
 
       // Apply session metadata
@@ -363,6 +536,26 @@ export class SessionGraph extends EventEmitter<SessionGraphEvents> {
       }
 
       this.emit('graphLoaded', result);
+
+      // Emit skipped nodes warning if any mapped-but-unimplemented nodes were dropped
+      if (result.skippedNodes.length > 0) {
+        const meaningful = result.skippedNodes.filter(
+          (s) => s.reason === 'unregistered_type' || s.reason === 'creation_failed',
+        );
+        if (meaningful.length > 0) {
+          log.warn('Import skipped nodes:', meaningful.map((s) => `${s.name} (${s.protocol})`).join(', '));
+          this.emit('skippedNodes', result.skippedNodes);
+        }
+      }
+
+      // Emit degraded modes warning if any composite modes were downgraded
+      if (result.degradedModes.length > 0) {
+        log.warn(
+          'Import degraded composite modes:',
+          result.degradedModes.map((d) => `${d.originalMode} → ${d.fallbackMode}`).join(', '),
+        );
+        this.emit('degradedModes', result.degradedModes);
+      }
 
       // Load video sources from graph nodes that have file data
       await this._host!.loadVideoSourcesFromGraph(result);
@@ -444,9 +637,8 @@ export class SessionGraph extends EventEmitter<SessionGraphEvents> {
         const marksValue = sessionComp.property('marks').value();
         if (Array.isArray(marksValue)) {
           const marks = marksValue.filter((value): value is number => typeof value === 'number');
-          if (marks.length > 0) {
-            annotations.markerManager.setFromFrameNumbers(marks);
-          }
+          // Fix #423: call even with empty array to clear leftover markers
+          annotations.markerManager.setFromFrameNumbers(marks);
         }
       }
     }
@@ -470,8 +662,8 @@ export class SessionGraph extends EventEmitter<SessionGraphEvents> {
             if (sourceWidth === 0 && sourceHeight === 0) {
               sourceWidth = width;
               sourceHeight = height;
+              aspectRatio = width / height;
             }
-            aspectRatio = width / height;
             log.debug('Source size:', width, 'x', height, 'aspect:', aspectRatio);
           }
         }
@@ -482,6 +674,31 @@ export class SessionGraph extends EventEmitter<SessionGraphEvents> {
         const movieProp = mediaObj.property('movie').value();
         if (movieProp) {
           log.debug('Found source:', movieProp);
+        }
+      }
+    }
+
+    // Issue #424: Also check RVImageSource when RVFileSource yielded no dimensions
+    if (sourceWidth === 0 && sourceHeight === 0) {
+      const imageSources = dto.byProtocol('RVImageSource');
+      log.debug('RVImageSource objects:', imageSources.length);
+      for (const source of imageSources) {
+        const proxyComp = source.component('proxy');
+        if (proxyComp?.exists()) {
+          const sizeValue = proxyComp.property('size').value();
+          const size = getNumberArray(sizeValue);
+          if (size && size.length >= 2) {
+            const width = size[0]!;
+            const height = size[1]!;
+            if (width > 0 && height > 0) {
+              if (sourceWidth === 0 && sourceHeight === 0) {
+                sourceWidth = width;
+                sourceHeight = height;
+                aspectRatio = width / height;
+              }
+              log.debug('Image source size:', width, 'x', height, 'aspect:', aspectRatio);
+            }
+          }
         }
       }
     }

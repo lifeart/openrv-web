@@ -776,6 +776,74 @@ describe('CacheIndicator theme changes', () => {
   });
 });
 
+describe('CacheIndicator showError', () => {
+  let indicator: CacheIndicator;
+  let mockSession: ReturnType<typeof createMockSession>;
+
+  beforeEach(() => {
+    mockSession = createMockSession();
+    indicator = new CacheIndicator(mockSession as any);
+  });
+
+  afterEach(() => {
+    indicator.dispose();
+    vi.clearAllTimers();
+  });
+
+  it('CACHE-U120: showError displays error message in stats span', () => {
+    indicator.showError('Initialization failed: OPFS unavailable');
+    vi.advanceTimersByTime(16);
+
+    const el = indicator.getElement();
+    const stats = el.querySelector('[data-testid="cache-indicator-stats"]') as HTMLSpanElement;
+    expect(stats.textContent).toContain('Cache error:');
+    expect(stats.textContent).toContain('Initialization failed: OPFS unavailable');
+  });
+
+  it('CACHE-U121: showError sets error color on stats span', () => {
+    indicator.showError('put failed: disk full');
+    vi.advanceTimersByTime(16);
+
+    const el = indicator.getElement();
+    const stats = el.querySelector('[data-testid="cache-indicator-stats"]') as HTMLSpanElement;
+    expect(stats.style.color).toContain('--error');
+  });
+
+  it('CACHE-U122: showError(null) clears the error state', () => {
+    indicator.showError('some error');
+    vi.advanceTimersByTime(16);
+
+    indicator.showError(null);
+    vi.advanceTimersByTime(16);
+
+    const el = indicator.getElement();
+    const stats = el.querySelector('[data-testid="cache-indicator-stats"]') as HTMLSpanElement;
+    expect(stats.textContent).not.toContain('Cache error:');
+    expect(stats.style.color).toBe('');
+  });
+
+  it('CACHE-U123: showError(null) restores normal cache stats display', () => {
+    indicator.showError('some error');
+    vi.advanceTimersByTime(16);
+
+    indicator.showError(null);
+    vi.advanceTimersByTime(16);
+
+    const el = indicator.getElement();
+    const stats = el.querySelector('[data-testid="cache-indicator-stats"]') as HTMLSpanElement;
+    expect(stats.textContent).toContain('Cache:');
+    expect(stats.textContent).toContain('frames');
+  });
+
+  it('CACHE-U124: showError schedules an update', () => {
+    const scheduleSpy = vi.spyOn(indicator, 'scheduleUpdate');
+    scheduleSpy.mockClear();
+
+    indicator.showError('test error');
+    expect(scheduleSpy).toHaveBeenCalled();
+  });
+});
+
 describe('CacheIndicator memory formatting', () => {
   let indicator: CacheIndicator;
 

@@ -10,6 +10,43 @@ const TIFF_BE = 0x4d4d; // "MM"
 const TIFF_MAGIC = 42;
 
 /**
+ * Convert a float32 value to a 16-bit half-float representation (for test data writing).
+ */
+function float32ToFloat16(value: number): number {
+  const buf = new ArrayBuffer(4);
+  const fView = new DataView(buf);
+  fView.setFloat32(0, value, true);
+  const bits = fView.getUint32(0, true);
+
+  const sign = (bits >>> 31) & 0x1;
+  const exp = (bits >>> 23) & 0xff;
+  const mant = bits & 0x7fffff;
+
+  if (exp === 0xff) {
+    // Infinity or NaN
+    return (sign << 15) | (0x1f << 10) | (mant ? 0x200 : 0);
+  }
+  if (exp === 0) {
+    // Zero or subnormal (too small for half)
+    return sign << 15;
+  }
+
+  const newExp = exp - 127 + 15;
+  if (newExp >= 0x1f) {
+    // Overflow → Infinity
+    return (sign << 15) | (0x1f << 10);
+  }
+  if (newExp <= 0) {
+    // Underflow → subnormal or zero
+    if (newExp < -10) return sign << 15;
+    const m = (mant | 0x800000) >> (1 - newExp + 13);
+    return (sign << 15) | (m & 0x3ff);
+  }
+
+  return (sign << 15) | (newExp << 10) | (mant >> 13);
+}
+
+/**
  * Create a minimal valid float TIFF file buffer for testing.
  * Creates an uncompressed float32 RGB or RGBA TIFF with strip organization.
  *
@@ -150,9 +187,20 @@ function createTestFloatTIFF(
   }
 
   // === Write pixel data ===
+  // Helper to write a float sample at the appropriate bit depth
+  function writeSample(offset: number, value: number): void {
+    if (bitsPerSample === 16) {
+      view.setUint16(offset, float32ToFloat16(value), le);
+    } else if (bitsPerSample === 64) {
+      view.setFloat64(offset, value, le);
+    } else {
+      view.setFloat32(offset, value, le);
+    }
+  }
+
   if (pixelValues) {
     for (let i = 0; i < pixelValues.length && i < width * height * channels; i++) {
-      view.setFloat32(pixelDataOffset + i * 4, pixelValues[i]!, le);
+      writeSample(pixelDataOffset + i * bytesPerSample, pixelValues[i]!);
     }
   } else {
     // Fill with test pattern
@@ -161,7 +209,7 @@ function createTestFloatTIFF(
         const pixelIdx = (y * width + x) * channels;
         for (let c = 0; c < channels; c++) {
           const value = (x + y * width + c) / (width * height * channels);
-          view.setFloat32(pixelDataOffset + (pixelIdx + c) * 4, value, le);
+          writeSample(pixelDataOffset + (pixelIdx + c) * bytesPerSample, value);
         }
       }
     }
@@ -207,6 +255,16 @@ describe('TIFFFloatDecoder', () => {
   describe('isFloatTIFF', () => {
     it('should return true for 32-bit float TIFF', () => {
       const buffer = createTestFloatTIFF({ sampleFormat: 3, bitsPerSample: 32 });
+      expect(isFloatTIFF(buffer)).toBe(true);
+    });
+
+    it('should return true for 16-bit half-float TIFF', () => {
+      const buffer = createTestFloatTIFF({ sampleFormat: 3, bitsPerSample: 16 });
+      expect(isFloatTIFF(buffer)).toBe(true);
+    });
+
+    it('should return true for 64-bit double float TIFF', () => {
+      const buffer = createTestFloatTIFF({ sampleFormat: 3, bitsPerSample: 64 });
       expect(isFloatTIFF(buffer)).toBe(true);
     });
 
@@ -392,7 +450,7 @@ describe('TIFFFloatDecoder', () => {
     it('should throw for JPEG compressed TIFF', async () => {
       // JPEG compression (7) is not supported
       const buffer = createTestFloatTIFF({ compression: 7, sampleFormat: 3 });
-      await expect(decodeTIFFFloat(buffer)).rejects.toThrow('Unsupported TIFF compression: 7');
+      await expect(decodeTIFFFloat(buffer)).rejects.toThrow('Unsupported TIFF compression: 7 (JPEG)');
     });
 
     it('should produce finite float values', async () => {
@@ -511,8 +569,8 @@ describe('TIFFFloatDecoder', () => {
       await expect(decodeTIFFFloat(buffer)).rejects.toThrow('IFD offset out of range');
     });
 
-    it('should throw for unsupported bits per sample', async () => {
-      // Create a valid 32-bit float TIFF, then patch the BitsPerSample tag to 16
+    it('should throw for unsupported bits per sample with informative message', async () => {
+      // Create a valid 32-bit float TIFF, then patch the BitsPerSample tag to 24 (unsupported)
       const buffer = createTestFloatTIFF({ bitsPerSample: 32, sampleFormat: 3 });
       const view = new DataView(buffer);
       const le = true;
@@ -523,26 +581,91 @@ describe('TIFFFloatDecoder', () => {
         const tagId = view.getUint16(tagPos, le);
         if (tagId === 258) {
           // BitsPerSample
-          // If count=1 and inline, patch inline value
           const count = view.getUint32(tagPos + 4, le);
           if (count === 1) {
-            view.setUint16(tagPos + 8, 16, le);
+            view.setUint16(tagPos + 8, 24, le);
           } else {
-            // Patch the external array
             const extOffset = view.getUint32(tagPos + 8, le);
-            view.setUint16(extOffset, 16, le);
+            view.setUint16(extOffset, 24, le);
           }
           break;
         }
       }
-      await expect(decodeTIFFFloat(buffer)).rejects.toThrow('Unsupported bits per sample: 16');
+      await expect(decodeTIFFFloat(buffer)).rejects.toThrow('Unsupported float bits per sample: 24');
+      await expect(decodeTIFFFloat(buffer)).rejects.toThrow('16-bit half-float, 32-bit float, 64-bit double');
     });
 
-    it('should throw for unsupported samples per pixel (1 channel)', async () => {
-      // Create a TIFF with 1 sample per pixel by building manually
-      const buffer = createTestFloatTIFF({ channels: 3, sampleFormat: 3 });
-      // Manually patch the SamplesPerPixel tag to 1
-      // Need to find and modify the tag in the IFD
+    it('should decode 16-bit half-float TIFF', async () => {
+      const buffer = createTestFloatTIFF({
+        width: 2,
+        height: 2,
+        channels: 3,
+        bitsPerSample: 16,
+        sampleFormat: 3,
+        pixelValues: [0.5, 0.25, 0.75, 1.0, 0.0, 0.5, 0.5, 0.25, 0.75, 1.0, 0.0, 0.5],
+      });
+
+      const result = await decodeTIFFFloat(buffer);
+      expect(result.width).toBe(2);
+      expect(result.height).toBe(2);
+      expect(result.channels).toBe(4);
+      // Check first pixel (half-float has ~3 decimal digits of precision)
+      expect(result.data[0]).toBeCloseTo(0.5, 2); // R
+      expect(result.data[1]).toBeCloseTo(0.25, 2); // G
+      expect(result.data[2]).toBeCloseTo(0.75, 2); // B
+      expect(result.data[3]).toBeCloseTo(1.0, 4); // A (pre-initialized)
+      expect(result.metadata.bitsPerSample).toBe(16);
+    });
+
+    it('should decode 64-bit double float TIFF', async () => {
+      const buffer = createTestFloatTIFF({
+        width: 2,
+        height: 2,
+        channels: 3,
+        bitsPerSample: 64,
+        sampleFormat: 3,
+        pixelValues: [0.5, 0.25, 0.75, 1.0, 0.0, 0.5, 0.5, 0.25, 0.75, 1.0, 0.0, 0.5],
+      });
+
+      const result = await decodeTIFFFloat(buffer);
+      expect(result.width).toBe(2);
+      expect(result.height).toBe(2);
+      expect(result.channels).toBe(4);
+      // Check first pixel (64-bit has full float32 precision after truncation)
+      expect(result.data[0]).toBeCloseTo(0.5, 5); // R
+      expect(result.data[1]).toBeCloseTo(0.25, 5); // G
+      expect(result.data[2]).toBeCloseTo(0.75, 5); // B
+      expect(result.data[3]).toBeCloseTo(1.0, 5); // A (pre-initialized)
+      expect(result.metadata.bitsPerSample).toBe(64);
+    });
+
+    it('should decode 1-channel (grayscale) float TIFF by expanding to RGB', async () => {
+      const grayValue = 0.5;
+      const buffer = createTestFloatTIFF({
+        width: 2,
+        height: 2,
+        channels: 1,
+        sampleFormat: 3,
+        pixelValues: [grayValue, grayValue, grayValue, grayValue],
+      });
+
+      const result = await decodeTIFFFloat(buffer);
+      expect(result.width).toBe(2);
+      expect(result.height).toBe(2);
+      expect(result.channels).toBe(4);
+      // First pixel: grayscale expanded to RGB, alpha = 1.0
+      const approx = (v: number) => expect(v).toBeCloseTo(grayValue, 4);
+      approx(result.data[0]!); // R
+      approx(result.data[1]!); // G
+      approx(result.data[2]!); // B
+      expect(result.data[3]).toBeCloseTo(1.0, 4); // A
+    });
+
+    it('should decode 5+ channel float TIFF by reading first 4 channels', async () => {
+      // Create a 3-channel TIFF and patch SamplesPerPixel to 5
+      // The pixel data only has 3 channels worth of data per the original buffer,
+      // but the decoder should not throw; it reads min(samplesPerPixel, 4) channels
+      const buffer = createTestFloatTIFF({ channels: 4, sampleFormat: 3 });
       const view = new DataView(buffer);
       const le = true;
       const ifdOffset = 8;
@@ -551,32 +674,16 @@ describe('TIFFFloatDecoder', () => {
         const tagPos = ifdOffset + 2 + i * 12;
         const tagId = view.getUint16(tagPos, le);
         if (tagId === 277) {
-          // SamplesPerPixel
-          view.setUint16(tagPos + 8, 1, le); // Set to 1
+          // SamplesPerPixel — set to 5
+          view.setUint16(tagPos + 8, 5, le);
           break;
         }
       }
 
-      await expect(decodeTIFFFloat(buffer)).rejects.toThrow('Unsupported samples per pixel: 1');
-    });
-
-    it('should throw for unsupported samples per pixel (5 channels)', async () => {
-      const buffer = createTestFloatTIFF({ channels: 3, sampleFormat: 3 });
-      const view = new DataView(buffer);
-      const le = true;
-      const ifdOffset = 8;
-      const numTags = view.getUint16(ifdOffset, le);
-      for (let i = 0; i < numTags; i++) {
-        const tagPos = ifdOffset + 2 + i * 12;
-        const tagId = view.getUint16(tagPos, le);
-        if (tagId === 277) {
-          // SamplesPerPixel
-          view.setUint16(tagPos + 8, 5, le); // Set to 5
-          break;
-        }
-      }
-
-      await expect(decodeTIFFFloat(buffer)).rejects.toThrow('Unsupported samples per pixel: 5');
+      // Should not throw — it reads only the first 4 channels
+      const result = await decodeTIFFFloat(buffer);
+      expect(result.channels).toBe(4);
+      expect(result.metadata.originalChannels).toBe(5);
     });
 
     it('should throw for zero-width image', async () => {
@@ -639,9 +746,27 @@ describe('TIFFFloatDecoder', () => {
       await expect(decodeTIFFFloat(buffer)).rejects.toThrow(/exceed maximum/);
     });
 
-    it('should throw for PackBits compression', async () => {
-      const buffer = createTestFloatTIFF({ compression: 32773, sampleFormat: 3 }); // PackBits
-      await expect(decodeTIFFFloat(buffer)).rejects.toThrow('Unsupported TIFF compression: 32773');
+    it('should decode PackBits compression with trivial literal encoding', async () => {
+      // createTestFloatTIFF with compression=32773 sets the tag but writes raw data.
+      // The decoder's PackBits decompressor handles literal-run encoding,
+      // so we need to use the compressed TIFF helper with actual PackBits data.
+      // This simple test just verifies the tag is accepted (no longer throws).
+      const width = 2,
+        height = 2,
+        channels = 3;
+      const rawBytes = createFloatPixelBytes(width, height, channels, true);
+      const compressed = packBitsCompress(rawBytes);
+      const tiffBuffer = createCompressedTIFF(compressed, {
+        width,
+        height,
+        channels,
+        compression: 32773,
+        uncompressedSize: rawBytes.length,
+      });
+      const result = await decodeTIFFFloat(tiffBuffer);
+      expect(result.width).toBe(width);
+      expect(result.height).toBe(height);
+      expect(result.channels).toBe(4);
     });
 
     it('should include metadata with bigEndian and originalChannels', async () => {
@@ -866,6 +991,54 @@ describe('TIFFFloatDecoder', () => {
 
     writeCode(EOI_CODE);
     flush();
+
+    return new Uint8Array(output);
+  }
+
+  /**
+   * Minimal PackBits compressor for TIFF (simple RLE).
+   * Uses a simple strategy: emit literal runs of up to 128 bytes.
+   * This produces valid PackBits output (no repeat runs for simplicity).
+   */
+  function packBitsCompress(input: Uint8Array): Uint8Array {
+    const output: number[] = [];
+    let pos = 0;
+
+    while (pos < input.length) {
+      // Check for a run of repeated bytes (at least 3)
+      let runLen = 1;
+      while (pos + runLen < input.length && runLen < 128 && input[pos + runLen] === input[pos]) {
+        runLen++;
+      }
+
+      if (runLen >= 3) {
+        // Repeated run: header byte = -(runLen - 1), then the repeated byte
+        output.push(256 - (runLen - 1)); // Two's complement for signed byte
+        output.push(input[pos]!);
+        pos += runLen;
+      } else {
+        // Literal run: collect up to 128 non-repeating bytes
+        const litStart = pos;
+        let litLen = 0;
+        while (pos + litLen < input.length && litLen < 128) {
+          // Check if next bytes form a run of 3+
+          if (
+            pos + litLen + 2 < input.length &&
+            input[pos + litLen] === input[pos + litLen + 1] &&
+            input[pos + litLen] === input[pos + litLen + 2]
+          ) {
+            break; // Stop literal, let repeat-run handle it
+          }
+          litLen++;
+        }
+        if (litLen === 0) litLen = 1; // Ensure progress
+        output.push(litLen - 1); // Header byte for literal run
+        for (let i = 0; i < litLen; i++) {
+          output.push(input[litStart + i]!);
+        }
+        pos += litLen;
+      }
+    }
 
     return new Uint8Array(output);
   }
@@ -1690,17 +1863,154 @@ describe('TIFFFloatDecoder', () => {
     });
   });
 
+  // ==================== PackBits Compression Tests ====================
+
+  describe('PackBits compression', () => {
+    it('TIFF-PB001: should decode PackBits compressed RGB float TIFF', async () => {
+      const width = 2,
+        height = 2,
+        channels = 3;
+      const rawBytes = createFloatPixelBytes(width, height, channels, true);
+      const compressed = packBitsCompress(rawBytes);
+      const tiffBuffer = createCompressedTIFF(compressed, {
+        width,
+        height,
+        channels,
+        compression: 32773,
+        uncompressedSize: rawBytes.length,
+      });
+
+      const result = await decodeTIFFFloat(tiffBuffer);
+
+      expect(result.width).toBe(width);
+      expect(result.height).toBe(height);
+      expect(result.channels).toBe(4);
+      expect(result.data.length).toBe(width * height * 4);
+      expect(result.metadata.compression).toBe(32773);
+    });
+
+    it('TIFF-PB002: should decode PackBits compressed RGBA float TIFF', async () => {
+      const width = 2,
+        height = 2,
+        channels = 4;
+      const rawBytes = createFloatPixelBytes(width, height, channels, true);
+      const compressed = packBitsCompress(rawBytes);
+      const tiffBuffer = createCompressedTIFF(compressed, {
+        width,
+        height,
+        channels,
+        compression: 32773,
+        uncompressedSize: rawBytes.length,
+      });
+
+      const result = await decodeTIFFFloat(tiffBuffer);
+
+      expect(result.width).toBe(width);
+      expect(result.height).toBe(height);
+      expect(result.channels).toBe(4);
+    });
+
+    it('TIFF-PB003: should preserve pixel values through PackBits round-trip', async () => {
+      const width = 2,
+        height = 2,
+        channels = 3;
+      const pixelValues = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.0, 0.5];
+      const rawBytes = createFloatPixelBytes(width, height, channels, true, pixelValues);
+      const compressed = packBitsCompress(rawBytes);
+      const tiffBuffer = createCompressedTIFF(compressed, {
+        width,
+        height,
+        channels,
+        compression: 32773,
+        uncompressedSize: rawBytes.length,
+      });
+
+      const result = await decodeTIFFFloat(tiffBuffer);
+
+      // Check first pixel RGB values
+      expect(result.data[0]).toBeCloseTo(0.1, 4);
+      expect(result.data[1]).toBeCloseTo(0.2, 4);
+      expect(result.data[2]).toBeCloseTo(0.3, 4);
+      expect(result.data[3]).toBe(1.0); // Alpha for RGB input
+    });
+
+    it('TIFF-PB004: should decode PackBits data with repeated byte runs', async () => {
+      const width = 4,
+        height = 1,
+        channels = 3;
+      // All zeros — will produce repeated-byte runs in PackBits
+      const pixelValues = new Array(width * channels).fill(0);
+      const rawBytes = createFloatPixelBytes(width, height, channels, true, pixelValues);
+      const compressed = packBitsCompress(rawBytes);
+      const tiffBuffer = createCompressedTIFF(compressed, {
+        width,
+        height,
+        channels,
+        compression: 32773,
+        uncompressedSize: rawBytes.length,
+      });
+
+      const result = await decodeTIFFFloat(tiffBuffer);
+
+      expect(result.width).toBe(width);
+      expect(result.height).toBe(height);
+      // All pixel values should be 0 (RGB) with alpha=1
+      for (let i = 0; i < width; i++) {
+        expect(result.data[i * 4]).toBeCloseTo(0, 4);
+        expect(result.data[i * 4 + 1]).toBeCloseTo(0, 4);
+        expect(result.data[i * 4 + 2]).toBeCloseTo(0, 4);
+        expect(result.data[i * 4 + 3]).toBe(1.0);
+      }
+    });
+
+    it('TIFF-PB005: should produce same output as LZW for identical input', async () => {
+      const width = 2,
+        height = 2,
+        channels = 3;
+      const rawBytes = createFloatPixelBytes(width, height, channels, true);
+
+      const packBitsCompressed = packBitsCompress(rawBytes);
+      const packBitsTiff = createCompressedTIFF(packBitsCompressed, {
+        width,
+        height,
+        channels,
+        compression: 32773,
+        uncompressedSize: rawBytes.length,
+      });
+
+      const lzwCompressed = lzwCompress(rawBytes);
+      const lzwTiff = createCompressedTIFF(lzwCompressed, {
+        width,
+        height,
+        channels,
+        compression: 5,
+        uncompressedSize: rawBytes.length,
+      });
+
+      const packBitsResult = await decodeTIFFFloat(packBitsTiff);
+      const lzwResult = await decodeTIFFFloat(lzwTiff);
+
+      for (let i = 0; i < packBitsResult.data.length; i++) {
+        expect(packBitsResult.data[i]).toBe(lzwResult.data[i]);
+      }
+    });
+  });
+
   // ==================== Compression Error Handling Tests ====================
 
   describe('Compression error handling', () => {
-    it('TIFF-ERR001: should reject JPEG compression (7)', async () => {
+    it('TIFF-ERR001: should reject JPEG compression (7) with descriptive error', async () => {
       const buffer = createTestFloatTIFF({ compression: 7 });
-      await expect(decodeTIFFFloat(buffer)).rejects.toThrow('Unsupported TIFF compression: 7');
+      await expect(decodeTIFFFloat(buffer)).rejects.toThrow(
+        'Unsupported TIFF compression: 7 (JPEG). Supported modes: Uncompressed (1), LZW (5), Deflate (8, 32946), PackBits (32773).',
+      );
     });
 
-    it('TIFF-ERR002: should reject PackBits compression (32773)', async () => {
-      const buffer = createTestFloatTIFF({ compression: 32773 });
-      await expect(decodeTIFFFloat(buffer)).rejects.toThrow('Unsupported TIFF compression: 32773');
+    it('TIFF-ERR002: should reject unknown compression with code and supported list', async () => {
+      const buffer = createTestFloatTIFF({ compression: 99 });
+      await expect(decodeTIFFFloat(buffer)).rejects.toThrow(
+        'Unsupported TIFF compression: 99 (unknown). Supported modes: Uncompressed (1), LZW (5), Deflate (8, 32946), PackBits (32773).',
+      );
     });
 
     it('TIFF-ERR003: should reject unsupported predictor', async () => {
@@ -2470,6 +2780,83 @@ describe('TIFFFloatDecoder', () => {
       for (let i = 0; i < stripResult.data.length; i++) {
         expect(tiledResult.data[i]).toBeCloseTo(stripResult.data[i]!, 4);
       }
+    });
+  });
+
+  describe('non-RGB channel layout support', () => {
+    it('should decode 1-channel grayscale with correct pixel values', async () => {
+      const values = [0.1, 0.5, 0.9, 0.0];
+      const buffer = createTestFloatTIFF({
+        width: 2,
+        height: 2,
+        channels: 1,
+        sampleFormat: 3,
+        pixelValues: values,
+      });
+
+      const result = await decodeTIFFFloat(buffer);
+      expect(result.width).toBe(2);
+      expect(result.height).toBe(2);
+      expect(result.channels).toBe(4);
+      expect(result.data.length).toBe(2 * 2 * 4);
+      expect(result.metadata.originalChannels).toBe(1);
+
+      // Each grayscale value should be replicated to R, G, B with alpha = 1.0
+      for (let i = 0; i < values.length; i++) {
+        const base = i * 4;
+        expect(result.data[base]).toBeCloseTo(values[i]!, 4); // R
+        expect(result.data[base + 1]).toBeCloseTo(values[i]!, 4); // G
+        expect(result.data[base + 2]).toBeCloseTo(values[i]!, 4); // B
+        expect(result.data[base + 3]).toBeCloseTo(1.0, 4); // A
+      }
+    });
+
+    it('should decode 2-channel luminance+alpha with correct pixel values', async () => {
+      // 2x2 image, 2 channels: [lum, alpha] per pixel
+      const values = [0.3, 0.8, 0.6, 0.5, 0.1, 1.0, 0.9, 0.2];
+      const buffer = createTestFloatTIFF({
+        width: 2,
+        height: 2,
+        channels: 2,
+        sampleFormat: 3,
+        pixelValues: values,
+      });
+
+      const result = await decodeTIFFFloat(buffer);
+      expect(result.width).toBe(2);
+      expect(result.height).toBe(2);
+      expect(result.channels).toBe(4);
+      expect(result.data.length).toBe(2 * 2 * 4);
+      expect(result.metadata.originalChannels).toBe(2);
+
+      // Each pair [lum, alpha] should expand to [lum, lum, lum, alpha]
+      for (let i = 0; i < 4; i++) {
+        const lum = values[i * 2]!;
+        const alpha = values[i * 2 + 1]!;
+        const base = i * 4;
+        expect(result.data[base]).toBeCloseTo(lum, 4); // R
+        expect(result.data[base + 1]).toBeCloseTo(lum, 4); // G
+        expect(result.data[base + 2]).toBeCloseTo(lum, 4); // B
+        expect(result.data[base + 3]).toBeCloseTo(alpha, 4); // A
+      }
+    });
+
+    it('should throw for 0 samples per pixel', async () => {
+      const buffer = createTestFloatTIFF({ channels: 3, sampleFormat: 3 });
+      const view = new DataView(buffer);
+      const le = true;
+      const ifdOffset = 8;
+      const numTags = view.getUint16(ifdOffset, le);
+      for (let i = 0; i < numTags; i++) {
+        const tagPos = ifdOffset + 2 + i * 12;
+        const tagId = view.getUint16(tagPos, le);
+        if (tagId === 277) {
+          view.setUint16(tagPos + 8, 0, le);
+          break;
+        }
+      }
+
+      await expect(decodeTIFFFloat(buffer)).rejects.toThrow('Unsupported samples per pixel: 0');
     });
   });
 });

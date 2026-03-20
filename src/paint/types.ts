@@ -67,6 +67,7 @@ export interface PenStroke {
   frame: number;
   user: string;
   version?: AnnotationVersion;
+  sourceIndex?: number;
   eye?: AnnotationEye;
   color: [number, number, number, number]; // RGBA 0-1
   width: number | number[]; // Single or per-point widths
@@ -86,6 +87,7 @@ export interface TextAnnotation {
   frame: number;
   user: string;
   version?: AnnotationVersion;
+  sourceIndex?: number;
   eye?: AnnotationEye;
   position: Point;
   color: [number, number, number, number];
@@ -113,6 +115,7 @@ export interface ShapeAnnotation {
   frame: number;
   user: string;
   version?: AnnotationVersion;
+  sourceIndex?: number;
   eye?: AnnotationEye;
   shapeType: ShapeType;
   // Bounding points (normalized 0-1)

@@ -6,11 +6,13 @@
 
 import type { Session } from '../core/session/Session';
 import { ValidationError } from '../core/errors';
+import { DisposableAPI } from './Disposable';
 
-export class AudioAPI {
+export class AudioAPI extends DisposableAPI {
   private session: Session;
 
   constructor(session: Session) {
+    super();
     this.session = session;
   }
 
@@ -27,6 +29,7 @@ export class AudioAPI {
    * ```
    */
   setVolume(volume: number): void {
+    this.assertNotDisposed();
     if (typeof volume !== 'number' || isNaN(volume)) {
       throw new ValidationError('setVolume() requires a valid number between 0 and 1');
     }
@@ -46,6 +49,7 @@ export class AudioAPI {
    * ```
    */
   getVolume(): number {
+    this.assertNotDisposed();
     return this.session.volume;
   }
 
@@ -58,6 +62,7 @@ export class AudioAPI {
    * ```
    */
   mute(): void {
+    this.assertNotDisposed();
     this.session.muted = true;
   }
 
@@ -70,6 +75,7 @@ export class AudioAPI {
    * ```
    */
   unmute(): void {
+    this.assertNotDisposed();
     this.session.muted = false;
   }
 
@@ -84,6 +90,7 @@ export class AudioAPI {
    * ```
    */
   isMuted(): boolean {
+    this.assertNotDisposed();
     return this.session.muted;
   }
 
@@ -96,6 +103,7 @@ export class AudioAPI {
    * ```
    */
   toggleMute(): void {
+    this.assertNotDisposed();
     this.session.toggleMute();
   }
 
@@ -113,6 +121,7 @@ export class AudioAPI {
    * ```
    */
   setPreservesPitch(preserve: boolean): void {
+    this.assertNotDisposed();
     if (typeof preserve !== 'boolean') {
       throw new ValidationError('setPreservesPitch() requires a boolean value');
     }
@@ -130,6 +139,7 @@ export class AudioAPI {
    * ```
    */
   getPreservesPitch(): boolean {
+    this.assertNotDisposed();
     return this.session.preservesPitch;
   }
 
@@ -142,6 +152,7 @@ export class AudioAPI {
    * ```
    */
   enableAudioScrub(): void {
+    this.assertNotDisposed();
     this.session.audioScrubEnabled = true;
   }
 
@@ -154,6 +165,7 @@ export class AudioAPI {
    * ```
    */
   disableAudioScrub(): void {
+    this.assertNotDisposed();
     this.session.audioScrubEnabled = false;
   }
 
@@ -168,6 +180,7 @@ export class AudioAPI {
    * ```
    */
   isAudioScrubEnabled(): boolean {
+    this.assertNotDisposed();
     return this.session.audioScrubEnabled;
   }
 
@@ -183,6 +196,7 @@ export class AudioAPI {
    * ```
    */
   setAudioScrubEnabled(enabled: boolean): void {
+    this.assertNotDisposed();
     if (typeof enabled !== 'boolean') {
       throw new ValidationError('setAudioScrubEnabled() requires a boolean value');
     }

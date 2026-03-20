@@ -6,6 +6,7 @@
 import { clamp } from '../utils/math';
 
 export interface LUT3D {
+  type: '3d';
   title: string;
   size: number; // Cube dimension (e.g., 33 for 33x33x33)
   domainMin: [number, number, number];
@@ -14,6 +15,7 @@ export interface LUT3D {
 }
 
 export interface LUT1D {
+  type: '1d';
   title: string;
   size: number;
   domainMin: [number, number, number];
@@ -24,13 +26,23 @@ export interface LUT1D {
 export type LUT = LUT3D | LUT1D;
 
 export function isLUT3D(lut: LUT): lut is LUT3D {
-  // Check if it's a 3D LUT by verifying data length matches size^3 * 3
-  return 'size' in lut && lut.data.length === lut.size * lut.size * lut.size * 3;
+  if (lut.type === '1d') return false;
+  if (lut.type === '3d') {
+    return lut.data.length === lut.size * lut.size * lut.size * 3;
+  }
+  // Fallback for objects without a type discriminant
+  const l = lut as LUT3D;
+  return 'size' in l && l.data.length === l.size * l.size * l.size * 3;
 }
 
 export function isLUT1D(lut: LUT): lut is LUT1D {
-  // Check if it's a 1D LUT by verifying data length matches size * 3
-  return 'size' in lut && lut.data.length === lut.size * 3;
+  if (lut.type === '3d') return false;
+  if (lut.type === '1d') {
+    return lut.data.length === lut.size * 3;
+  }
+  // Fallback for objects without a type discriminant
+  const l = lut as LUT1D;
+  return 'size' in l && l.data.length === l.size * 3;
 }
 
 /**
@@ -120,6 +132,7 @@ export function parseCubeLUT(content: string): LUT {
     }
 
     return {
+      type: '1d',
       title,
       size: size1D,
       domainMin,
@@ -150,6 +163,7 @@ export function parseCubeLUT(content: string): LUT {
   }
 
   return {
+    type: '3d',
     title,
     size: size3D,
     domainMin,

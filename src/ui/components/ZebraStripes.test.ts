@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { ZebraStripes, DEFAULT_ZEBRA_STATE } from './ZebraStripes';
+import { ZebraStripes, DEFAULT_ZEBRA_STATE, MAX_ZEBRA_THRESHOLD_IRE } from './ZebraStripes';
 
 describe('ZebraStripes', () => {
   let zebra: ZebraStripes;
@@ -148,9 +148,9 @@ describe('ZebraStripes', () => {
   });
 
   describe('threshold clamping', () => {
-    it('ZEB-U040: setHighThreshold clamps to 0-100 range', () => {
-      zebra.setHighThreshold(150);
-      expect(zebra.getState().highThreshold).toBe(100);
+    it('ZEB-U040: setHighThreshold clamps to 0-MAX_ZEBRA_THRESHOLD_IRE range', () => {
+      zebra.setHighThreshold(MAX_ZEBRA_THRESHOLD_IRE + 1);
+      expect(zebra.getState().highThreshold).toBe(MAX_ZEBRA_THRESHOLD_IRE);
 
       zebra.setHighThreshold(-10);
       expect(zebra.getState().highThreshold).toBe(0);
@@ -161,9 +161,9 @@ describe('ZebraStripes', () => {
       expect(zebra.getState().highThreshold).toBe(80);
     });
 
-    it('ZEB-U042: setLowThreshold clamps to 0-100 range', () => {
-      zebra.setLowThreshold(150);
-      expect(zebra.getState().lowThreshold).toBe(100);
+    it('ZEB-U042: setLowThreshold clamps to 0-MAX_ZEBRA_THRESHOLD_IRE range', () => {
+      zebra.setLowThreshold(MAX_ZEBRA_THRESHOLD_IRE + 1);
+      expect(zebra.getState().lowThreshold).toBe(MAX_ZEBRA_THRESHOLD_IRE);
 
       zebra.setLowThreshold(-10);
       expect(zebra.getState().lowThreshold).toBe(0);
@@ -174,18 +174,40 @@ describe('ZebraStripes', () => {
       expect(zebra.getState().lowThreshold).toBe(15);
     });
 
-    it('ZEB-U044: threshold boundary values 0 and 100', () => {
+    it('ZEB-U044: threshold boundary values 0 and MAX_ZEBRA_THRESHOLD_IRE', () => {
       zebra.setHighThreshold(0);
       expect(zebra.getState().highThreshold).toBe(0);
 
-      zebra.setHighThreshold(100);
-      expect(zebra.getState().highThreshold).toBe(100);
+      zebra.setHighThreshold(MAX_ZEBRA_THRESHOLD_IRE);
+      expect(zebra.getState().highThreshold).toBe(MAX_ZEBRA_THRESHOLD_IRE);
 
       zebra.setLowThreshold(0);
       expect(zebra.getState().lowThreshold).toBe(0);
 
-      zebra.setLowThreshold(100);
-      expect(zebra.getState().lowThreshold).toBe(100);
+      zebra.setLowThreshold(MAX_ZEBRA_THRESHOLD_IRE);
+      expect(zebra.getState().lowThreshold).toBe(MAX_ZEBRA_THRESHOLD_IRE);
+    });
+
+    it('ZEB-U045: setHighThreshold accepts HDR values above 100 IRE', () => {
+      zebra.setHighThreshold(200);
+      expect(zebra.getState().highThreshold).toBe(200);
+
+      zebra.setHighThreshold(1000);
+      expect(zebra.getState().highThreshold).toBe(1000);
+
+      zebra.setHighThreshold(10000);
+      expect(zebra.getState().highThreshold).toBe(10000);
+    });
+
+    it('ZEB-U046: setLowThreshold accepts HDR values above 100 IRE', () => {
+      zebra.setLowThreshold(200);
+      expect(zebra.getState().lowThreshold).toBe(200);
+
+      zebra.setLowThreshold(1000);
+      expect(zebra.getState().lowThreshold).toBe(1000);
+
+      zebra.setLowThreshold(10000);
+      expect(zebra.getState().lowThreshold).toBe(10000);
     });
   });
 

@@ -28,6 +28,7 @@ export interface ReferenceState {
   viewMode: ReferenceViewMode;
   opacity: number;
   wipePosition: number;
+  showingReference: boolean;
 }
 
 export interface ReferenceManagerEvents extends EventMap {
@@ -52,6 +53,7 @@ export class ReferenceManager extends EventEmitter<ReferenceManagerEvents> {
     viewMode: 'split-h',
     opacity: 0.5,
     wipePosition: 0.5,
+    showingReference: false,
   };
 
   private disposed = false;
@@ -130,6 +132,7 @@ export class ReferenceManager extends EventEmitter<ReferenceManagerEvents> {
     if (this.disposed) return;
     if (!this.state.enabled) return;
     this.state.enabled = false;
+    this.state.showingReference = false;
     this.emit('stateChanged', this.getState());
   }
 
@@ -147,6 +150,28 @@ export class ReferenceManager extends EventEmitter<ReferenceManagerEvents> {
     return this.state.enabled;
   }
 
+  // ---- Toggle view (for 'toggle' view mode) ----
+
+  /**
+   * Flip between showing the reference image and the live frame.
+   * Only meaningful when viewMode is 'toggle'; no-op in other modes.
+   */
+  toggleView(): void {
+    if (this.disposed) return;
+    if (this.state.viewMode !== 'toggle') return;
+    this.state.showingReference = !this.state.showingReference;
+    this.emit('stateChanged', this.getState());
+  }
+
+  /**
+   * Whether the reference image is currently being shown in toggle mode.
+   * When false, the live frame is displayed instead.
+   */
+  isShowingReference(): boolean {
+    if (this.disposed) return false;
+    return this.state.showingReference;
+  }
+
   // ---- View mode ----
 
   setViewMode(mode: ReferenceViewMode): void {
@@ -155,6 +180,7 @@ export class ReferenceManager extends EventEmitter<ReferenceManagerEvents> {
     if (this.state.viewMode === mode) return;
 
     this.state.viewMode = mode;
+    this.state.showingReference = false;
     this.emit('viewModeChanged', mode);
     this.emit('stateChanged', this.getState());
   }
@@ -206,6 +232,7 @@ export class ReferenceManager extends EventEmitter<ReferenceManagerEvents> {
         viewMode: 'split-h',
         opacity: 0.5,
         wipePosition: 0.5,
+        showingReference: false,
       };
     }
     return { ...this.state };

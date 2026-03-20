@@ -10,16 +10,18 @@ Each media source loaded into OpenRV Web can be assigned a status that reflects 
 
 ### Status Values
 
-| Status | Color | Meaning |
-|--------|-------|---------|
-| Pending | Gray | Not yet reviewed |
-| In Review | Blue | Currently being evaluated |
-| Revisions Needed | Orange | Feedback provided, artist needs to address notes |
-| Approved | Green | Accepted for delivery or next stage |
-| Final | Gold | Locked, no further changes expected |
-| On Hold | Red | Work paused, awaiting decision |
+| Status | Code | Color | Meaning |
+|--------|------|-------|---------|
+| Pending | `pending` | Gray | Not yet reviewed |
+| In Review | `in-review` | Blue | Currently being evaluated |
+| Approved | `approved` | Green | Accepted for delivery or next stage |
+| Revisions Needed | `needs-work` | Orange | Feedback provided, artist needs to address notes |
+| Could Be Better | `cbb` | Yellow | Acceptable but could be improved |
+| Final | `final` | Gold | Locked, no further changes expected |
+| On Hold | `on-hold` | Red | Work paused, awaiting decision |
+| Omit | `omit` | Slate | Excluded from delivery |
 
-Status is assigned from the Review panel or via the context menu on a source. When connected to ShotGrid or another production tracking system, status changes are propagated automatically.
+Status is assigned from the Review panel, via the context menu on a source, or by clicking the status badge in the header bar. Clicking the badge opens a dropdown listing all available statuses, allowing quick status changes without opening the Review panel. When connected to ShotGrid or another production tracking system, status changes are propagated automatically.
 
 ### Status in the UI
 
@@ -140,7 +142,7 @@ Presentation mode maximizes the viewer area by hiding all toolbars, panels, and 
 
 ### Entering Presentation Mode
 
-Press `F` for fullscreen mode, then press `Ctrl+Shift+P` to activate presentation mode. Alternatively, select **Presentation Mode** from the View menu.
+Press `F` for fullscreen mode, then press `Ctrl+Shift+P` to activate presentation mode. Alternatively, select **Presentation Mode** from the View tab in the toolbar.
 
 In presentation mode:
 
@@ -148,7 +150,6 @@ In presentation mode:
 - The viewer fills the entire browser window (or physical display in fullscreen)
 - Mouse cursor hides automatically after 3 seconds of inactivity
 - Playback controls are accessible via keyboard shortcuts only
-- A minimal HUD appears briefly when playback state changes (play/pause indicator, frame counter)
 
 ### Exiting Presentation Mode
 
@@ -162,7 +163,7 @@ For remote reviews and client presentations, OpenRV Web supports sharing the vie
 
 ### Secondary Browser Window
 
-OpenRV Web can open a secondary browser window that mirrors the viewer output via the BroadcastChannel API. The secondary window displays the same frame, playback state, and color corrections in real time, synced with the primary window. This is useful for dual-monitor setups where the review UI runs on one screen and a clean full-frame presentation runs on a projector or client monitor. The secondary window updates are same-origin and require no network connection.
+OpenRV Web can open a secondary browser window via the BroadcastChannel API. The secondary window displays text-only status information (frame number, playback state, and color setting values) synchronized with the primary window. It does not render the actual viewer image or mirror the rendered frame. This is useful for dual-monitor setups where a supervisor needs metadata visibility on a second screen while the review UI runs on the primary display. The secondary window updates are same-origin and require no network connection. Full viewer mirroring is tracked in issue #29.
 
 ### Screen Sharing
 

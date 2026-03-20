@@ -28,7 +28,11 @@ Click the Save button in the header bar or use the Export menu to save the curre
 | **Layer stack** | Layer blend modes and opacity |
 | **LUT** | LUT file path reference and intensity |
 | **Filters** | Blur, sharpen settings |
+| **LUT pipeline** | Per-source and display LUT stage assignments (names, enabled flags, intensities) |
+| **Overlays** | Timecode overlay, Safe Areas overlay, Clipping overlay, Info Strip overlay, Spotlight overlay, Bug overlay, EXR Window overlay, FPS Indicator overlay |
+| **EDL entries** | Edit Decision List entries |
 | **Playlist** | Clip list with in/out points and loop mode |
+| **Node graph** | Graph topology, node connections, and properties (when a graph is active) |
 
 ## Loading a Session
 
@@ -40,20 +44,26 @@ Files loaded from the local filesystem use temporary blob URLs that become inval
 
 1. The serializer marks those media references with `requiresReload: true`
 2. On load, a file reload dialog appears for each affected reference
-3. The user can select the original file, skip the reference, or cancel
+3. The user can **Browse** to select the original file, **Skip** the reference (continues loading with a warning), or **Cancel** to abort the entire restore flow
 
 A filename mismatch warning appears if the selected file differs from the expected filename.
 
 ## RV/GTO Session Files
 
-OpenRV Web also loads original OpenRV `.rv` and `.gto` session files. The GTO parser reconstructs the node graph and restores:
+OpenRV Web imports and exports original OpenRV `.rv` and `.gto` session files.
+
+### Importing
+
+The GTO parser reconstructs the node graph and restores:
 
 - Playback ranges
 - Channel selection
 - Scope configurations
 - Paint effects and annotations
 
-GTO sessions are read-only imports -- they are not re-exported in GTO format. Session changes are saved as `.orvproject` files.
+### Exporting
+
+The Export menu includes **Save RV Session (.rv)** and **Save RV Session (.gto)** options. These write the current session state back to the original OpenRV format using the GTO serializer. The `.rv` variant writes a text-based GTO file while `.gto` writes a binary GTO file. If the session was originally loaded from a GTO file, the stored GTO graph is updated and saved; otherwise a new GTO graph is generated from the current session and paint state.
 
 ## Migration
 

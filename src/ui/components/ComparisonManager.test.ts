@@ -1205,7 +1205,7 @@ describe('ComparisonManager', () => {
   });
 
   // ===========================================================================
-  // getWipeState (WipeControl compatibility)
+  // getWipeState
   // ===========================================================================
   describe('getWipeState', () => {
     it('CM-169: should return mode off by default', () => {

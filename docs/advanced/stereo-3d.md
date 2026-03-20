@@ -1,6 +1,6 @@
 # Stereo 3D Viewing
 
-Stereo 3D review is essential for visual effects and animated feature production. OpenRV Web delivers a comprehensive set of software-based stereo display modes that run entirely in the browser via WebGL2, requiring no special hardware, drivers, or plugins. Artists can load stereo content, view it through seven primary display modes, adjust convergence in real time, and annotate individual eyes independently.
+OpenRV Web provides ten software-based stereo display modes (nine active modes plus Off) that run entirely in the browser via WebGL2, requiring no special hardware, drivers, or plugins. Artists can load stereo content, adjust convergence in real time, and annotate individual eyes independently.
 
 This guide covers practical workflows for stereo review. For the underlying technical architecture, shader pipeline position, and renderer implementation, see [Stereo 3D Viewing -- Technical Guide](../guides/stereo-3d-viewing.md).
 
@@ -8,7 +8,7 @@ This guide covers practical workflows for stereo review. For the underlying tech
 
 ## Display Modes
 
-OpenRV Web supports seven stereo display modes plus the default Off state. All modes are selectable from the **Stereo** dropdown in the View tab context toolbar, or by pressing `Shift+3` to cycle through them sequentially.
+OpenRV Web supports nine active stereo display modes plus the default Off state (ten modes total). All modes are selectable from the **Stereo** dropdown in the View tab context toolbar, or by pressing `Shift+3` to cycle through them sequentially.
 
 ### Side-by-Side
 
@@ -46,15 +46,23 @@ Alternating pixels from the left and right eye are interleaved in a checkerboard
 
 Alternating horizontal scanlines carry the left and right eye images. This mode targets line-interleaved 3D monitors that use row-based polarization to separate the two eyes. As with checkerboard mode, a compatible display is required for the stereo effect to be visible.
 
+### Left Only
+
+Displays only the left eye image at full resolution. Useful for isolating the left eye during stereo alignment checks, per-eye color grading review, or when one eye has artifacts that need inspection.
+
+### Right Only
+
+Displays only the right eye image at full resolution. The counterpart to Left Only mode for right-eye inspection.
+
 ---
 
 ## Selecting a Display Mode
 
 Three methods are available for selecting the stereo display mode:
 
-1. **Dropdown menu** -- Click the **Stereo** button in the View tab context toolbar. A dropdown appears with all eight options (Off plus seven active modes). The active mode is highlighted.
+1. **Dropdown menu** -- Click the **Stereo** button in the View tab context toolbar. A dropdown appears with all ten options (Off plus nine active modes). The active mode is highlighted.
 
-2. **Keyboard shortcut** -- Press `Shift+3` to cycle through all stereo modes in order: Off, Side-by-Side, Over-Under, Mirror, Anaglyph, Anaglyph (Luma), Checkerboard, Scanline.
+2. **Keyboard shortcut** -- Press `Shift+3` to cycle through all stereo modes in order: Off, Side-by-Side, Over-Under, Mirror, Anaglyph, Anaglyph (Luma), Checkerboard, Scanline, Left Only, Right Only.
 
 3. **Scripting API** -- Use the view API from the browser console or an automation script to set the stereo mode programmatically.
 
@@ -114,7 +122,7 @@ When reviewing stereo content, vertical misalignment between the two eyes is a c
 To use the alignment overlay:
 
 1. Enable a stereo mode (anaglyph modes work best for alignment checks)
-2. Activate the alignment overlay from the View menu
+2. Activate the alignment overlay from the View tab toolbar
 3. Look for vertical offset between corresponding features in the left and right eyes
 4. Note any rotation differences (features that are level in one eye but tilted in the other)
 
@@ -215,6 +223,8 @@ Restoring a session that was saved with an active stereo mode will re-enable tha
 | Anaglyph Luminance | Red/cyan glasses | Convergence evaluation, saturated scenes |
 | Checkerboard | DLP stereo projector | Projection room review |
 | Scanline | Line-interleaved 3D monitor | Desktop stereo monitor review |
+| Left Only | None | Per-eye inspection, alignment checks |
+| Right Only | None | Per-eye inspection, alignment checks |
 
 For day-to-day VFX review without specialized hardware, **Anaglyph** or **Anaglyph Luminance** with inexpensive red/cyan glasses provides the most accessible stereo experience. For delivery verification, use the mode that matches the intended output format (Side-by-Side or Over-Under).
 

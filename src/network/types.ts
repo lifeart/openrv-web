@@ -9,7 +9,7 @@ import type { EventMap } from '../utils/EventEmitter';
 
 // ---- Connection States ----
 
-export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'error';
+export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'error' | 'conflict';
 
 // ---- User / Room ----
 
@@ -370,9 +370,11 @@ export interface NetworkSyncEvents extends EventMap {
     transferId: string;
     senderUserId: string;
   };
+  reconnectExhausted: void;
   error: ErrorPayload;
   rttUpdated: number;
   toastMessage: { message: string; type: 'info' | 'success' | 'warning' | 'error' };
+  syncMessageDropped: { messageType: string; droppedCount: number };
 }
 
 // ---- WebSocket Client Events ----
@@ -382,6 +384,7 @@ export interface WebSocketClientEvents extends EventMap {
   disconnected: { code: number; reason: string };
   message: SyncMessage;
   error: Error;
+  warning: { code: string; message: string; detail?: string };
   reconnecting: { attempt: number; maxAttempts: number };
   reconnected: void;
   reconnectFailed: void;

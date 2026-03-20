@@ -654,4 +654,77 @@ describe('DisplayProfileControl', () => {
       }).not.toThrow();
     });
   });
+
+  describe('keyboard navigation (#80)', () => {
+    it('DPC-110: ArrowDown moves focus to next item in dropdown', () => {
+      control = new DisplayProfileControl();
+      const el = control.render();
+      document.body.appendChild(el);
+
+      // Open dropdown
+      const button = el.querySelector('[data-testid="display-profile-button"]') as HTMLButtonElement;
+      button.click();
+
+      const dropdown = el.querySelector('[data-testid="display-profile-dropdown"]') as HTMLElement;
+      const focusable = Array.from(dropdown.querySelectorAll<HTMLElement>('button, input'));
+      expect(focusable.length).toBeGreaterThan(1);
+
+      // Focus the first item
+      focusable[0]!.focus();
+      expect(document.activeElement).toBe(focusable[0]);
+
+      // Dispatch ArrowDown
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      expect(document.activeElement).toBe(focusable[1]);
+
+      document.body.removeChild(el);
+      control.dispose();
+    });
+
+    it('DPC-111: ArrowUp moves focus to previous item in dropdown', () => {
+      control = new DisplayProfileControl();
+      const el = control.render();
+      document.body.appendChild(el);
+
+      const button = el.querySelector('[data-testid="display-profile-button"]') as HTMLButtonElement;
+      button.click();
+
+      const dropdown = el.querySelector('[data-testid="display-profile-dropdown"]') as HTMLElement;
+      const focusable = Array.from(dropdown.querySelectorAll<HTMLElement>('button, input'));
+
+      // Focus the second item
+      focusable[1]!.focus();
+      expect(document.activeElement).toBe(focusable[1]);
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+      expect(document.activeElement).toBe(focusable[0]);
+
+      document.body.removeChild(el);
+      control.dispose();
+    });
+
+    it('DPC-112: Home moves focus to first item, End to last', () => {
+      control = new DisplayProfileControl();
+      const el = control.render();
+      document.body.appendChild(el);
+
+      const button = el.querySelector('[data-testid="display-profile-button"]') as HTMLButtonElement;
+      button.click();
+
+      const dropdown = el.querySelector('[data-testid="display-profile-dropdown"]') as HTMLElement;
+      const focusable = Array.from(dropdown.querySelectorAll<HTMLElement>('button, input'));
+      const last = focusable[focusable.length - 1]!;
+
+      // End key
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }));
+      expect(document.activeElement).toBe(last);
+
+      // Home key
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
+      expect(document.activeElement).toBe(focusable[0]);
+
+      document.body.removeChild(el);
+      control.dispose();
+    });
+  });
 });

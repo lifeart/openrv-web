@@ -291,6 +291,8 @@ export function createMockWebGL2Context() {
     RGBA16F: 0x881a,
     RGBA8: 0x8058,
     RGB32F: 0x8815,
+    R32F: 0x822e,
+    RED: 0x1903,
     COMPLETION_STATUS_KHR: 0x91B1,
 
     getExtension: vi.fn((name: string) => {
@@ -548,6 +550,7 @@ export function createMockSession(overrides?: Record<string, unknown>) {
     volume: 1,
     muted: false,
     currentSource: { duration: 100, width: 1920, height: 1080 } as Record<string, unknown> | null,
+    allSources: [] as Array<{ url?: string }>,
     currentAB: 'A' as 'A' | 'B',
     sourceAIndex: 0,
     sourceBIndex: -1,
@@ -588,6 +591,7 @@ export function createMockSession(overrides?: Record<string, unknown>) {
     setCurrentAB: vi.fn(),
     setSourceA: vi.fn(),
     setSourceB: vi.fn(),
+    clearSourceB: vi.fn(),
 
     // Audio
     toggleMute: vi.fn(),
@@ -829,6 +833,9 @@ export function createMockSessionBridgeContext(overrides?: Record<string, unknow
     getMatteOverlay: () => matteOverlay,
     setTransform: vi.fn(),
     setNoiseReductionParams: vi.fn(),
+    setLinearize: vi.fn(),
+    setOutOfRange: vi.fn(),
+    setChannelSwizzle: vi.fn(),
     initPrerenderBuffer: vi.fn(),
     refresh: vi.fn(),
     getGLRenderer: vi.fn(() => null),

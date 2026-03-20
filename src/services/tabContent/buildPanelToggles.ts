@@ -2,9 +2,11 @@
  * Builds the panel toggle buttons for the HeaderBar utility area.
  *
  * These are accessible from any tab: Info, Snapshots, Playlist, Conform, ShotGrid.
+ * Also provides helpers for dynamically adding/removing plugin-contributed panel toggles.
  */
 import { ContextToolbar } from '../../ui/components/layout/ContextToolbar';
 import { setButtonActive } from '../../ui/components/shared/Button';
+import { InfoPanelSettingsMenu } from '../../ui/components/InfoPanelSettingsMenu';
 import type { Panel } from '../../ui/components/shared/Panel';
 import type { AppControlRegistry } from '../../AppControlRegistry';
 import type { AppSessionBridge } from '../../AppSessionBridge';
@@ -16,7 +18,19 @@ export interface BuildPanelTogglesDeps {
   addUnsubscriber: (unsub: () => void) => void;
 }
 
-export function buildPanelToggles(deps: BuildPanelTogglesDeps): HTMLElement {
+export interface PanelTogglesResult {
+  /** The container element with all toggle buttons */
+  element: HTMLElement;
+  /**
+   * Add a plugin-contributed panel toggle button.
+   * Returns the created button and a floating container for the panel content.
+   */
+  addPluginPanel(id: string, label: string, icon?: string): { button: HTMLButtonElement; container: HTMLElement };
+  /** Remove a plugin-contributed panel toggle button by ID */
+  removePluginPanel(id: string): void;
+}
+
+export function buildPanelToggles(deps: BuildPanelTogglesDeps): PanelTogglesResult {
   const { registry, sessionBridge, conformPanelElement, addUnsubscriber } = deps;
 
   const panelToggles = document.createElement('div');
@@ -31,10 +45,18 @@ export function buildPanelToggles(deps: BuildPanelTogglesDeps): HTMLElement {
         sessionBridge.updateInfoPanel();
       }
     },
-    { title: 'Info Panel (Shift+Alt+I)' },
+    { title: 'Info Panel (Shift+Alt+I) — Right-click for settings' },
   );
   infoPanelButton.dataset.testid = 'info-panel-toggle';
   panelToggles.appendChild(infoPanelButton);
+
+  // Right-click context menu for InfoPanel settings
+  const infoPanelSettingsMenu = new InfoPanelSettingsMenu(registry.infoPanel);
+  infoPanelButton.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    infoPanelSettingsMenu.show(e.clientX, e.clientY);
+  });
+  addUnsubscriber(() => infoPanelSettingsMenu.dispose());
 
   addUnsubscriber(
     registry.infoPanel.on('visibilityChanged', (visible) => {
@@ -84,12 +106,31 @@ export function buildPanelToggles(deps: BuildPanelTogglesDeps): HTMLElement {
     }),
   );
 
+  // Cache Management Panel toggle button
+  if (registry.cacheManagementPanel) {
+    const cachePanel = registry.cacheManagementPanel;
+    const cachePanelButton = ContextToolbar.createIconButton(
+      'box',
+      () => {
+        cachePanel.toggle();
+      },
+      { title: 'Media Cache' },
+    );
+    cachePanelButton.dataset.testid = 'cache-panel-toggle';
+    panelToggles.appendChild(cachePanelButton);
+
+    addUnsubscriber(
+      cachePanel.on('visibilityChanged', (visible) => {
+        setButtonActive(cachePanelButton, visible, 'icon');
+      }),
+    );
+  }
+
   // Conform / Re-link panel toggle button
   const conformButton = ContextToolbar.createIconButton(
     'link',
     () => {
       conformPanelElement.toggle(conformButton);
-      setButtonActive(conformButton, conformPanelElement.isVisible(), 'icon');
       if (conformPanelElement.isVisible()) {
         registry.conformPanel.render();
       }
@@ -97,6 +138,11 @@ export function buildPanelToggles(deps: BuildPanelTogglesDeps): HTMLElement {
     { title: 'Conform / Re-link' },
   );
   conformButton.dataset.testid = 'conform-panel-toggle';
+  addUnsubscriber(
+    conformPanelElement.onVisibilityChange((visible) => {
+      setButtonActive(conformButton, visible, 'icon');
+    }),
+  );
   panelToggles.appendChild(conformButton);
 
   // ShotGrid Panel toggle button
@@ -120,5 +166,47 @@ export function buildPanelToggles(deps: BuildPanelTogglesDeps): HTMLElement {
     }),
   );
 
-  return panelToggles;
+  // --- Plugin panel toggle management ---
+  const pluginPanelEntries = new Map<string, { button: HTMLButtonElement; container: HTMLElement }>();
+
+  function addPluginPanel(
+    id: string,
+    label: string,
+    icon?: string,
+  ): { button: HTMLButtonElement; container: HTMLElement } {
+    // Create the floating container for plugin panel content
+    const container = document.createElement('div');
+    container.dataset.pluginPanelId = id;
+    container.style.cssText =
+      'display: none; position: absolute; top: 100%; right: 0; z-index: 1000; ' +
+      'background: var(--bg-primary, #1e1e1e); border: 1px solid var(--border-color, #444); ' +
+      'border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); min-width: 200px; padding: 8px;';
+
+    // Use 'grid' as a fallback icon when no icon is provided
+    const iconName = (icon || 'grid') as import('../../ui/components/shared/Icons').IconName;
+    const button = ContextToolbar.createIconButton(
+      iconName,
+      () => {
+        const isVisible = container.style.display !== 'none';
+        container.style.display = isVisible ? 'none' : 'block';
+        setButtonActive(button, !isVisible, 'icon');
+      },
+      { title: label },
+    );
+    button.dataset.testid = `plugin-panel-toggle-${id}`;
+    panelToggles.appendChild(button);
+
+    pluginPanelEntries.set(id, { button, container });
+    return { button, container };
+  }
+
+  function removePluginPanel(id: string): void {
+    const entry = pluginPanelEntries.get(id);
+    if (!entry) return;
+    entry.button.remove();
+    entry.container.remove();
+    pluginPanelEntries.delete(id);
+  }
+
+  return { element: panelToggles, addPluginPanel, removePluginPanel };
 }

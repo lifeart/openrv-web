@@ -66,7 +66,7 @@ export { luminanceRec709 } from './PixelMath';
 // LUT Loader & Format Detection
 // =============================================================================
 export type { LUT3D, LUT1D, LUT } from './LUTLoader';
-export { isLUT3D } from './LUTLoader';
+export { isLUT3D, isLUT1D } from './LUTLoader';
 export { parseLUT } from './LUTFormatDetect';
 
 // =============================================================================

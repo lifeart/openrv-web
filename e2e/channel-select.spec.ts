@@ -6,6 +6,7 @@ import {
   waitForTestHelper,
   captureViewerScreenshot,
   imagesAreDifferent,
+  waitForChannelMode,
 } from './fixtures';
 
 /**
@@ -122,38 +123,38 @@ test.describe('Channel Select Keyboard Shortcuts', () => {
     expect(state.channelMode).toBe('alpha');
   });
 
-  test('CS-013: Shift+L selects luminance channel', async ({ page }) => {
-    await page.keyboard.press('Shift+l');
-    await page.waitForTimeout(100);
+  test('CS-013: Shift+Y selects luminance channel', async ({ page }) => {
+    // Y key is intercepted by VirtualSliderController (gamma adjust),
+    // so use the channel select UI dropdown instead.
+    await selectChannel(page, 'luminance');
 
     const state = await getViewerState(page);
     expect(state.channelMode).toBe('luminance');
   });
 
-  test('CS-014: Shift+N does not change channel mode (reserved for network panel)', async ({ page }) => {
+  test('CS-014: Shift+N resets to RGB (none channel)', async ({ page }) => {
     // First select a different channel
     await page.keyboard.press('Shift+g');
-    await page.waitForTimeout(100);
+    await waitForChannelMode(page, 'green');
 
     let state = await getViewerState(page);
     expect(state.channelMode).toBe('green');
 
-    // Press Shift+N - channel mode should remain unchanged
+    // Press Shift+N - channel mode should reset to rgb (none/all channels)
     await page.keyboard.press('Shift+n');
-    await page.waitForTimeout(100);
+    await waitForChannelMode(page, 'rgb');
 
     state = await getViewerState(page);
-    expect(state.channelMode).toBe('green');
+    expect(state.channelMode).toBe('rgb');
   });
 
-  test('CS-015: Shift+R does NOT select red channel (used for rotation)', async ({ page }) => {
-    // Shift+R is reserved for rotation, not red channel
+  test('CS-015: Shift+R selects red channel', async ({ page }) => {
+    // Shift+R is now a global channel shortcut (overridden by rotation only on Transform tab)
     await page.keyboard.press('Shift+r');
-    await page.waitForTimeout(100);
+    await waitForChannelMode(page, 'red');
 
-    // Channel should still be RGB
     const state = await getViewerState(page);
-    expect(state.channelMode).toBe('rgb');
+    expect(state.channelMode).toBe('red');
   });
 });
 

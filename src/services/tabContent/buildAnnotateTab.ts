@@ -69,6 +69,9 @@ export function buildAnnotateTab(deps: BuildAnnotateTabDeps): HTMLElement {
     { title: 'Toggle notes panel (Shift+Alt+N)', icon: 'note' },
   );
   notesButton.dataset.testid = 'notes-toggle-button';
+  // Mount note count badge on the Notes button
+  const noteBadge = registry.notePanel.createBadge();
+  notesButton.appendChild(noteBadge);
   annotateContent.appendChild(notesButton);
 
   addUnsubscriber(

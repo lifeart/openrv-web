@@ -210,6 +210,9 @@ describe('NoteManager', () => {
           status: 'open',
           parentId: null,
           color: '#fbbf24',
+          priority: 'medium',
+          category: '',
+          externalId: null,
         },
       ];
       onNotesChanged.mockClear();
@@ -383,6 +386,76 @@ describe('NoteManager', () => {
       manager.addNote(0, 30, 30, 'S0 next', 'Alice');
       expect(manager.getNextNoteFrame(0, 10)).toBe(30);
       expect(manager.getNextNoteFrame(1, 10)).toBe(20);
+    });
+  });
+
+  describe('priority and category', () => {
+    it('creates note with default priority (medium) and empty category', () => {
+      const note = manager.addNote(0, 1, 1, 'Test', 'Alice');
+      expect(note.priority).toBe('medium');
+      expect(note.category).toBe('');
+    });
+
+    it('creates note with custom priority', () => {
+      const note = manager.addNote(0, 1, 1, 'Critical issue', 'Alice', { priority: 'critical' });
+      expect(note.priority).toBe('critical');
+    });
+
+    it('creates note with custom category', () => {
+      const note = manager.addNote(0, 1, 1, 'Comp fix', 'Alice', { category: 'comp' });
+      expect(note.category).toBe('comp');
+    });
+
+    it('creates note with both priority and category', () => {
+      const note = manager.addNote(0, 1, 1, 'Fix edge', 'Alice', { priority: 'high', category: 'roto' });
+      expect(note.priority).toBe('high');
+      expect(note.category).toBe('roto');
+    });
+
+    it('updateNote changes priority', () => {
+      const note = manager.addNote(0, 1, 1, 'Test', 'Alice');
+      const updated = manager.updateNote(note.id, { priority: 'critical' });
+      expect(updated!.priority).toBe('critical');
+      expect(updated!.category).toBe(''); // unchanged
+    });
+
+    it('updateNote changes category', () => {
+      const note = manager.addNote(0, 1, 1, 'Test', 'Alice');
+      const updated = manager.updateNote(note.id, { category: 'lighting' });
+      expect(updated!.category).toBe('lighting');
+      expect(updated!.priority).toBe('medium'); // unchanged
+    });
+
+    it('updateNote changes both priority and category', () => {
+      const note = manager.addNote(0, 1, 1, 'Test', 'Alice');
+      const updated = manager.updateNote(note.id, { priority: 'low', category: 'paint' });
+      expect(updated!.priority).toBe('low');
+      expect(updated!.category).toBe('paint');
+    });
+
+    it('priority and category survive serialization round-trip', () => {
+      manager.addNote(0, 1, 1, 'High comp', 'Alice', { priority: 'high', category: 'comp' });
+      manager.addNote(0, 10, 10, 'Low anim', 'Bob', { priority: 'low', category: 'anim' });
+
+      const serialized = manager.toSerializable();
+      const json = JSON.stringify(serialized);
+      const restored = JSON.parse(json) as Note[];
+
+      const manager2 = new NoteManager();
+      manager2.fromSerializable(restored);
+
+      const notes = manager2.getNotes();
+      expect(notes.length).toBe(2);
+
+      const highComp = notes.find((n) => n.text === 'High comp')!;
+      expect(highComp.priority).toBe('high');
+      expect(highComp.category).toBe('comp');
+
+      const lowAnim = notes.find((n) => n.text === 'Low anim')!;
+      expect(lowAnim.priority).toBe('low');
+      expect(lowAnim.category).toBe('anim');
+
+      manager2.dispose();
     });
   });
 });

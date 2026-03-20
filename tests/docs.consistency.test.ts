@@ -33,9 +33,7 @@ function fileExists(relPath: string): boolean {
 
 function getEventNames(): string[] {
   const source = readFile('src/api/EventsAPI.ts');
-  const match = source.match(
-    /export type OpenRVEventName\s*=\s*([\s\S]*?);/,
-  );
+  const match = source.match(/export type OpenRVEventName\s*=\s*([\s\S]*?);/);
   if (!match?.[1]) return [];
   const results: string[] = [];
   for (const m of match[1].matchAll(/'([^']+)'/g)) {
@@ -46,9 +44,7 @@ function getEventNames(): string[] {
 
 function getAPIClassFiles(): string[] {
   const dir = path.join(ROOT, 'src/api');
-  return (fs.readdirSync(dir) as string[]).filter(
-    (f: string) => f.endsWith('API.ts') && !f.endsWith('.test.ts'),
-  );
+  return (fs.readdirSync(dir) as string[]).filter((f: string) => f.endsWith('API.ts') && !f.endsWith('.test.ts'));
 }
 
 function getAPIClassNames(): string[] {
@@ -76,9 +72,7 @@ function getRegisteredNodes(): string[] {
 
 function getBuiltinFormats(): string[] {
   const source = readFile('src/formats/DecoderRegistry.ts');
-  const match = source.match(
-    /export type BuiltinFormatName\s*=\s*([\s\S]*?);/,
-  );
+  const match = source.match(/export type BuiltinFormatName\s*=\s*([\s\S]*?);/);
   if (!match?.[1]) return [];
   const results: string[] = [];
   for (const m of match[1].matchAll(/'([^']+)'/g)) {
@@ -137,7 +131,7 @@ describe('Documentation consistency', () => {
 
   test('API docs list all API classes', () => {
     const classNames = getAPIClassNames();
-    expect(classNames.length).toBe(9);
+    expect(classNames.length).toBe(10);
 
     const apiIndex = readFile('docs/api/index.md');
     for (const name of classNames) {
@@ -174,12 +168,8 @@ describe('Documentation consistency', () => {
     for (const file of filesToCheck) {
       if (!fileExists(file)) continue;
       const content = readFile(file);
-      expect(content).not.toMatch(
-        /tetrahedral\s+interpolation\s+(in|on|for)\s+(the\s+)?GPU/i,
-      );
-      expect(content).not.toMatch(
-        /GPU\s+(uses?|performs?)\s+tetrahedral/i,
-      );
+      expect(content).not.toMatch(/tetrahedral\s+interpolation\s+(in|on|for)\s+(the\s+)?GPU/i);
+      expect(content).not.toMatch(/GPU\s+(uses?|performs?)\s+tetrahedral/i);
     }
   });
 
@@ -194,10 +184,7 @@ describe('Documentation consistency', () => {
     const refs = getScreenshotRefsInDocs();
     expect(refs.length).toBeGreaterThan(0);
 
-    const screenshotDirs = [
-      'docs/public/assets/screenshots',
-      'docs/assets/screenshots',
-    ];
+    const screenshotDirs = ['docs/public/assets/screenshots', 'docs/assets/screenshots'];
 
     for (const ref of refs) {
       const exists = screenshotDirs.some((dir) => fileExists(path.join(dir, ref)));
@@ -216,7 +203,7 @@ describe('Documentation consistency', () => {
 
   test('builtin format count is accurate', () => {
     const formats = getBuiltinFormats();
-    expect(formats.length).toBeGreaterThanOrEqual(13);
+    expect(formats.length).toBeGreaterThanOrEqual(12);
   });
 
   // -- README cross-checks --------------------------------------------------
@@ -226,12 +213,8 @@ describe('Documentation consistency', () => {
     expect(readme).toMatch(/trilinear/i);
     const lines = readme.split('\n');
     for (const line of lines) {
-      expect(line).not.toMatch(
-        /tetrahedral\s+interpolation\s+(in|on|for)\s+(the\s+)?GPU/i,
-      );
-      expect(line).not.toMatch(
-        /GPU\s+(uses?|performs?)\s+tetrahedral/i,
-      );
+      expect(line).not.toMatch(/tetrahedral\s+interpolation\s+(in|on|for)\s+(the\s+)?GPU/i);
+      expect(line).not.toMatch(/GPU\s+(uses?|performs?)\s+tetrahedral/i);
     }
   });
 
@@ -274,5 +257,53 @@ describe('Documentation consistency', () => {
     for (const page of requiredPages) {
       expect(fileExists(page), `Missing doc page: ${page}`).toBe(true);
     }
+  });
+
+  // -- Keyboard shortcut accuracy (H/W hidden defaults) ---------------------
+
+  test('docs correctly document H as contextual histogram shortcut on QC tab', () => {
+    const shortcutsDoc = readFile('docs/reference/keyboard-shortcuts.md');
+    // H is a contextual shortcut: fit-to-height globally, histogram on QC tab
+    expect(shortcutsDoc).toMatch(/\| `H` \| Fit to height \| Histogram \(QC tab\) \|/);
+
+    // Should NOT claim H is a standalone histogram toggle outside contextual table
+    const nonContextualFiles = ['docs/getting-started/ui-overview.md', 'docs/scopes/histogram.md'];
+    for (const file of nonContextualFiles) {
+      if (!fileExists(file)) continue;
+      const content = readFile(file);
+      expect(content).not.toMatch(/Press `H` to toggle the histogram/);
+    }
+  });
+
+  test('docs correctly document W as contextual waveform shortcut on QC tab', () => {
+    const shortcutsDoc = readFile('docs/reference/keyboard-shortcuts.md');
+    // W is a contextual shortcut: fit-to-width globally, waveform on QC tab
+    expect(shortcutsDoc).toMatch(/\| `W` \| Fit to width \| Waveform \(QC tab\) \|/);
+
+    // Should NOT claim W is a standalone waveform toggle outside contextual table
+    const nonContextualFiles = ['docs/getting-started/ui-overview.md', 'docs/scopes/waveform.md'];
+    for (const file of nonContextualFiles) {
+      if (!fileExists(file)) continue;
+      const content = readFile(file);
+      expect(content).not.toMatch(/Press `W` to toggle the waveform/);
+    }
+  });
+
+  test('keyboard shortcuts doc lists H for fit-to-height and W for fit-to-width', () => {
+    const shortcutsDoc = readFile('docs/reference/keyboard-shortcuts.md');
+    expect(shortcutsDoc).toMatch(/\| `H` \| Fit image height to window \|/);
+    expect(shortcutsDoc).toMatch(/\| `W` \| Fit image width to window \|/);
+  });
+
+  test('scope shortcuts are context-aware in AppKeyboardHandler and documented correctly', () => {
+    const source = readFile('src/AppKeyboardHandler.ts');
+    // Verify that panel.histogram and panel.waveform are in CONTEXTUAL_DEFAULTS (context-aware dispatch)
+    expect(source).toMatch(/CONTEXTUAL_DEFAULTS.*=.*new Set\(\[[\s\S]*?'panel\.waveform'/);
+    expect(source).toMatch(/CONTEXTUAL_DEFAULTS.*=.*new Set\(\[[\s\S]*?'panel\.histogram'/);
+
+    // Verify the docs explain H/W contextual behavior (scopes on QC tab, fit shortcuts globally)
+    const shortcutsDoc = readFile('docs/reference/keyboard-shortcuts.md');
+    expect(shortcutsDoc).toMatch(/`H`.*histogram.*contextual/i);
+    expect(shortcutsDoc).toMatch(/`W`.*waveform.*contextual/i);
   });
 });

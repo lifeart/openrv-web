@@ -37,7 +37,30 @@ Matches the false color scale used by RED camera monitoring. The color assignmen
 
 #### Custom Presets
 
-Custom false color presets allow defining specific color-to-exposure mappings for studio-specific or project-specific requirements.
+Custom false color presets allow defining specific color-to-exposure mappings for studio-specific or project-specific requirements. Select the **Custom** preset from the dropdown to reveal the range editor.
+
+Each range maps a luminance band (0-255, corresponding to 0-100 IRE) to a color and label:
+
+| Field | Description |
+|-------|-------------|
+| Color swatch | Click to open a color picker for the range |
+| Min | Minimum luminance value (0-255) |
+| Max | Maximum luminance value (0-255) |
+| Label | Human-readable name shown in the legend |
+
+Use the **+ Add** button to append a new range, or the **x** button to remove an existing one (at least one range must remain).
+
+Programmatic access is also available:
+
+```ts
+falseColor.setCustomPalette([
+  { min: 0, max: 50, color: [128, 0, 128], label: 'Crushed' },
+  { min: 51, max: 128, color: [0, 128, 0], label: 'Mid' },
+  { min: 129, max: 255, color: [255, 0, 0], label: 'Hot' },
+]);
+```
+
+Calling `setCustomPalette()` automatically switches the active preset to **Custom** and rebuilds the lookup table. The custom palette persists when switching to a built-in preset and back.
 
 ### Reading False Color
 

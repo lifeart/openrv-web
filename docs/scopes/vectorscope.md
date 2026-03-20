@@ -36,9 +36,27 @@ During color correction, adjust temperature and tint until skin tone pixels alig
 
 The vectorscope supports zoom levels to magnify the center region. Zooming in is useful for images with low saturation, where the pixel dots cluster near the center and are difficult to interpret at the default zoom.
 
-## GPU Acceleration
+## Rendering Architecture
 
-The vectorscope is rendered using WebGL for real-time performance. It updates live as color adjustments are applied, providing immediate feedback on how grading operations affect the color distribution.
+The vectorscope uses a dual-path rendering strategy: a **WebGL primary path** for real-time performance and a **CPU fallback path** for environments where GPU scopes are unavailable.
+
+### WebGL Primary Path
+
+When the shared GPU scopes processor is initialized and ready, the vectorscope delegates pixel plotting to a WebGL shader. The graticule (grid, color targets, and skin tone line) is always drawn on the 2D canvas, and the GPU then composites the chrominance point cloud on top. This path handles both standard `ImageData` input and HDR float data (`RGBA16F` textures), preserving values above 1.0 that would be clipped in 8-bit processing.
+
+### CPU Fallback Path
+
+When the GPU scopes processor is not available — for example, when WebGL context creation fails, the browser does not support the required extensions, or the processor has not yet been initialized — the vectorscope falls back to CPU-based rendering. In this mode, the component samples the source image, converts each pixel from RGB to YCbCr (ITU-R BT.601), and plots the chrominance values directly onto the 2D canvas via `getImageData`/`putImageData`. For HDR float input, the float data is first converted to 8-bit `ImageData` before the CPU path processes it.
+
+### When Does the Fallback Activate?
+
+The CPU path activates whenever `getSharedScopesProcessor()` returns `null` or the processor reports `isReady() === false`. Common causes include:
+
+- WebGL is disabled or unsupported in the browser
+- The GPU context was lost and has not yet been restored
+- The scopes processor has not been initialized at the time the vectorscope receives its first frame
+
+Both paths produce a visually equivalent vectorscope display. The GPU path is preferred because it offloads per-pixel work to the GPU and avoids the overhead of `getImageData`/`putImageData` round-trips.
 
 ::: tip VFX Use Case
 The **skin tone line** (approximately 123 degrees on the vectorscope, between red and yellow) is the single most important reference for color correction. Regardless of ethnicity, properly white-balanced skin tones cluster along this line -- only the distance from center (saturation) varies. If skin tones drift off the line during comp or grading, the shot will look wrong to the audience even if they cannot articulate why.

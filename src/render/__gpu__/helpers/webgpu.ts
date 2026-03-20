@@ -24,18 +24,12 @@ export async function createTestDevice(): Promise<GPUTestContext | null> {
  * Creates a shader module from WGSL source.
  * Throws if compilation produces errors.
  */
-export async function createShaderModule(
-  device: GPUDevice,
-  code: string,
-  label?: string
-): Promise<GPUShaderModule> {
+export async function createShaderModule(device: GPUDevice, code: string, label?: string): Promise<GPUShaderModule> {
   const module = device.createShaderModule({ code, label });
   const info = await module.getCompilationInfo();
   const errors = info.messages.filter((m) => m.type === 'error');
   if (errors.length > 0) {
-    throw new Error(
-      `WGSL compilation errors:\n${errors.map((e) => `  line ${e.lineNum}: ${e.message}`).join('\n')}`
-    );
+    throw new Error(`WGSL compilation errors:\n${errors.map((e) => `  line ${e.lineNum}: ${e.message}`).join('\n')}`);
   }
   return module;
 }

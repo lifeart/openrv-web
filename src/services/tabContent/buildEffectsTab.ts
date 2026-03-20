@@ -14,10 +14,11 @@ export interface BuildEffectsTabDeps {
   noiseReductionPanel: Panel;
   watermarkPanel: Panel;
   slateEditorPanel: Panel;
+  addUnsubscriber: (unsub: () => void) => void;
 }
 
 export function buildEffectsTab(deps: BuildEffectsTabDeps): HTMLElement {
-  const { registry, noiseReductionPanel, watermarkPanel, slateEditorPanel } = deps;
+  const { registry, noiseReductionPanel, watermarkPanel, slateEditorPanel, addUnsubscriber } = deps;
 
   const effectsContent = document.createElement('div');
   effectsContent.style.cssText = 'display: flex; align-items: center; gap: 6px;';
@@ -38,33 +39,45 @@ export function buildEffectsTab(deps: BuildEffectsTabDeps): HTMLElement {
     'Denoise',
     () => {
       noiseReductionPanel.toggle(noiseReductionButton);
-      setButtonActive(noiseReductionButton, noiseReductionPanel.isVisible(), 'ghost');
     },
     { title: 'Toggle noise reduction panel', icon: 'filter' },
   );
   noiseReductionButton.dataset.testid = 'noise-reduction-toggle-button';
+  addUnsubscriber(
+    noiseReductionPanel.onVisibilityChange((visible) => {
+      setButtonActive(noiseReductionButton, visible, 'ghost');
+    }),
+  );
   effectsContent.appendChild(noiseReductionButton);
 
   const watermarkButton = ContextToolbar.createButton(
     'Watermark',
     () => {
       watermarkPanel.toggle(watermarkButton);
-      setButtonActive(watermarkButton, watermarkPanel.isVisible(), 'ghost');
     },
     { title: 'Toggle watermark panel', icon: 'image' },
   );
   watermarkButton.dataset.testid = 'watermark-toggle-button';
+  addUnsubscriber(
+    watermarkPanel.onVisibilityChange((visible) => {
+      setButtonActive(watermarkButton, visible, 'ghost');
+    }),
+  );
   effectsContent.appendChild(watermarkButton);
 
   const slateButton = ContextToolbar.createButton(
     'Slate',
     () => {
       slateEditorPanel.toggle(slateButton);
-      setButtonActive(slateButton, slateEditorPanel.isVisible(), 'ghost');
     },
     { title: 'Toggle slate/leader editor', icon: 'film' },
   );
   slateButton.dataset.testid = 'slate-editor-toggle-button';
+  addUnsubscriber(
+    slateEditorPanel.onVisibilityChange((visible) => {
+      setButtonActive(slateButton, visible, 'ghost');
+    }),
+  );
   effectsContent.appendChild(slateButton);
 
   return effectsContent;

@@ -119,17 +119,24 @@ function createMockLayoutManager() {
   const topEl = createMockElement();
   const viewerSlot = createMockElement();
   const bottomSlot = createMockElement();
+  const leftPanelWrapper = createMockElement();
+  const rightPanelWrapper = createMockElement();
   return {
     ...et,
     getElement: vi.fn().mockReturnValue(rootEl),
     getTopSection: vi.fn().mockReturnValue(topEl),
     getViewerSlot: vi.fn().mockReturnValue(viewerSlot),
     getBottomSlot: vi.fn().mockReturnValue(bottomSlot),
+    getPanelWrapper: vi
+      .fn()
+      .mockImplementation((panelId: 'left' | 'right') => (panelId === 'left' ? leftPanelWrapper : rightPanelWrapper)),
     addPanelTab: vi.fn(),
     _rootEl: rootEl,
     _topEl: topEl,
     _viewerSlot: viewerSlot,
     _bottomSlot: bottomSlot,
+    _leftPanelWrapper: leftPanelWrapper,
+    _rightPanelWrapper: rightPanelWrapper,
   };
 }
 
@@ -650,6 +657,120 @@ describe('LayoutOrchestrator', () => {
   });
 
   // -------------------------------------------------------------------------
+  // LO-031–LO-038: InfoPanel metadata wiring (#463)
+  // -------------------------------------------------------------------------
+  it('LO-031: updates info panel with filename on sourceLoaded', () => {
+    orchestrator.createLayout();
+
+    d.mocks.session.currentSource = { name: 'movie.exr', width: 3840, height: 2160, duration: 200 };
+    d.mocks.session._emit('sourceLoaded', d.mocks.session.currentSource);
+
+    expect(d.mocks.controls.infoPanel.update).toHaveBeenCalledWith(expect.objectContaining({ filename: 'movie.exr' }));
+  });
+
+  it('LO-032: updates info panel with resolution on sourceLoaded', () => {
+    orchestrator.createLayout();
+
+    d.mocks.session.currentSource = { name: 'test.dpx', width: 2048, height: 1080, duration: 50 };
+    d.mocks.session._emit('sourceLoaded', d.mocks.session.currentSource);
+
+    expect(d.mocks.controls.infoPanel.update).toHaveBeenCalledWith(
+      expect.objectContaining({ width: 2048, height: 1080 }),
+    );
+  });
+
+  it('LO-033: updates info panel with current frame on frameChanged', () => {
+    orchestrator.createLayout();
+
+    d.mocks.session.currentFrame = 42;
+    d.mocks.session._emit('frameChanged');
+
+    expect(d.mocks.controls.infoPanel.update).toHaveBeenCalledWith(expect.objectContaining({ currentFrame: 42 }));
+  });
+
+  it('LO-034: updates info panel with FPS on sourceLoaded', () => {
+    orchestrator.createLayout();
+
+    d.mocks.session.fps = 30;
+    d.mocks.session.currentSource = { name: 'clip.mov', width: 1920, height: 1080, duration: 300 };
+    d.mocks.session._emit('sourceLoaded', d.mocks.session.currentSource);
+
+    expect(d.mocks.controls.infoPanel.update).toHaveBeenCalledWith(expect.objectContaining({ fps: 30 }));
+  });
+
+  it('LO-035: updates info panel when source changes', () => {
+    orchestrator.createLayout();
+
+    // First source
+    d.mocks.session.currentSource = { name: 'first.exr', width: 1920, height: 1080, duration: 100 };
+    d.mocks.session._emit('sourceLoaded', d.mocks.session.currentSource);
+
+    // Second source
+    d.mocks.session.currentSource = { name: 'second.dpx', width: 4096, height: 2160, duration: 200 };
+    d.mocks.session._emit('sourceLoaded', d.mocks.session.currentSource);
+
+    const calls = d.mocks.controls.infoPanel.update.mock.calls;
+    // Find calls with filename to filter out cursor-color calls
+    const metadataCalls = calls.filter((c: unknown[]) => (c[0] as Record<string, unknown>).filename !== undefined);
+    expect(metadataCalls.length).toBeGreaterThanOrEqual(2);
+    expect((metadataCalls[metadataCalls.length - 1]![0] as Record<string, unknown>).filename).toBe('second.dpx');
+    expect((metadataCalls[metadataCalls.length - 1]![0] as Record<string, unknown>).width).toBe(4096);
+  });
+
+  it('LO-036: updates info panel frame on frameChanged event', () => {
+    orchestrator.createLayout();
+
+    d.mocks.session.currentFrame = 10;
+    d.mocks.session._emit('frameChanged');
+
+    d.mocks.session.currentFrame = 20;
+    d.mocks.session._emit('frameChanged');
+
+    const calls = d.mocks.controls.infoPanel.update.mock.calls;
+    const frameCalls = calls.filter((c: unknown[]) => (c[0] as Record<string, unknown>).currentFrame !== undefined);
+    expect(frameCalls.length).toBeGreaterThanOrEqual(2);
+    expect((frameCalls[frameCalls.length - 1]![0] as Record<string, unknown>).currentFrame).toBe(20);
+  });
+
+  it('LO-037: info panel metadata includes timecode and totalFrames', () => {
+    orchestrator.createLayout();
+
+    d.mocks.session.fps = 24;
+    d.mocks.session.currentFrame = 48;
+    d.mocks.session.currentSource = { name: 'test.exr', width: 1920, height: 1080, duration: 240 };
+    d.mocks.session._emit('sourceLoaded', d.mocks.session.currentSource);
+
+    expect(d.mocks.controls.infoPanel.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        totalFrames: 240,
+        timecode: expect.any(String),
+      }),
+    );
+  });
+
+  it('LO-038: cursor-color wiring still works alongside metadata wiring', () => {
+    orchestrator.createLayout();
+
+    // Get the cursor-color callback
+    expect(d.mocks.viewer.onCursorColorChange).toHaveBeenCalledWith(expect.any(Function));
+    const cursorCallback = d.mocks.viewer.onCursorColorChange.mock.calls[0]![0] as (
+      color: { r: number; g: number; b: number } | null,
+      position: { x: number; y: number } | null,
+    ) => void;
+
+    // Enable info panel and call cursor callback
+    d.mocks.controls.infoPanel.isEnabled.mockReturnValue(true);
+    cursorCallback({ r: 128, g: 64, b: 32 }, { x: 100, y: 200 });
+
+    expect(d.mocks.controls.infoPanel.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        colorAtCursor: { r: 128, g: 64, b: 32 },
+        cursorPosition: { x: 100, y: 200 },
+      }),
+    );
+  });
+
+  // -------------------------------------------------------------------------
   // LO-030: Presentation mode exit re-asserts image mode
   // -------------------------------------------------------------------------
   it('LO-030a: dispose() on freshly constructed orchestrator (no createLayout) does not throw', () => {
@@ -672,5 +793,267 @@ describe('LayoutOrchestrator', () => {
 
     expect(timelineEl.style.display).toBe('none');
     expect(d.mocks.headerBar.setImageMode).toHaveBeenCalledWith(true);
+  });
+
+  // -------------------------------------------------------------------------
+  // LO-031: Client mode warns when selectors match zero elements (#52)
+  // -------------------------------------------------------------------------
+  it('LO-031: warns when restriction selectors match zero elements', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    d.mocks.clientMode.isEnabled.mockReturnValue(true);
+
+    // No elements with data-panel or data-toolbar in the container
+    orchestrator.createLayout();
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy.mock.calls[0]![0]).toContain('[ClientMode]');
+    expect(warnSpy.mock.calls[0]![0]).toContain('matched zero elements');
+  });
+
+  it('LO-032: warning lists the unmatched selectors', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    d.mocks.clientMode.isEnabled.mockReturnValue(true);
+    d.mocks.clientMode.getRestrictedElements.mockReturnValue(['[data-panel="color"]', '[data-toolbar="editing"]']);
+
+    orchestrator.createLayout();
+
+    const message = warnSpy.mock.calls[0]![0] as string;
+    expect(message).toContain('[data-panel="color"]');
+    expect(message).toContain('[data-toolbar="editing"]');
+    expect(message).toContain('2 restriction selector(s)');
+  });
+
+  it('LO-033: no warning when all selectors match elements', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    d.mocks.clientMode.isEnabled.mockReturnValue(true);
+    d.mocks.clientMode.getRestrictedElements.mockReturnValue(['[data-panel="color"]']);
+
+    // Add a matching element
+    const el = document.createElement('div');
+    el.setAttribute('data-panel', 'color');
+    d.mocks.container.appendChild(el);
+
+    orchestrator.createLayout();
+
+    expect(warnSpy).not.toHaveBeenCalled();
+    expect(el.style.display).toBe('none');
+  });
+
+  it('LO-034: warns only about unmatched selectors when some match', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    d.mocks.clientMode.isEnabled.mockReturnValue(true);
+    d.mocks.clientMode.getRestrictedElements.mockReturnValue(['[data-panel="color"]', '[data-toolbar="editing"]']);
+
+    // Only add an element matching the first selector
+    const el = document.createElement('div');
+    el.setAttribute('data-panel', 'color');
+    d.mocks.container.appendChild(el);
+
+    orchestrator.createLayout();
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    const message = warnSpy.mock.calls[0]![0] as string;
+    expect(message).toContain('[data-toolbar="editing"]');
+    expect(message).not.toContain('[data-panel="color"]');
+    expect(message).toContain('1 restriction selector(s)');
+    // The matched element should still be hidden
+    expect(el.style.display).toBe('none');
+  });
+
+  // -------------------------------------------------------------------------
+  // LO-035: Focus zones include left and right panels (#64)
+  // -------------------------------------------------------------------------
+  it('LO-035: registers leftPanel and rightPanel focus zones', () => {
+    orchestrator.createLayout();
+
+    const fm = orchestrator.focusManager!;
+    const zones = (fm as unknown as { zones: { name: string }[] }).zones;
+    const zoneNames = zones.map((z) => z.name);
+    expect(zoneNames).toContain('leftPanel');
+    expect(zoneNames).toContain('rightPanel');
+  });
+
+  it('LO-036: leftPanel and rightPanel zones use correct panel wrapper elements', () => {
+    orchestrator.createLayout();
+
+    expect(d.mocks.layoutManager.getPanelWrapper).toHaveBeenCalledWith('left');
+    expect(d.mocks.layoutManager.getPanelWrapper).toHaveBeenCalledWith('right');
+  });
+
+  // -------------------------------------------------------------------------
+  // LO-037/038: Client mode restore (#83)
+  // -------------------------------------------------------------------------
+  it('LO-037: restores hidden elements when client mode is disabled', () => {
+    orchestrator.createLayout();
+
+    // Add restricted elements
+    const el1 = document.createElement('div');
+    el1.setAttribute('data-panel', 'color');
+    el1.style.display = 'flex';
+    d.mocks.container.appendChild(el1);
+
+    const el2 = document.createElement('div');
+    el2.setAttribute('data-panel', 'effects');
+    el2.style.display = 'block';
+    d.mocks.container.appendChild(el2);
+
+    // Enable client mode
+    d.mocks.clientMode._emit('stateChanged', { enabled: true });
+    expect(el1.style.display).toBe('none');
+    expect(el2.style.display).toBe('none');
+
+    // Disable client mode
+    d.mocks.clientMode._emit('stateChanged', { enabled: false });
+    expect(el1.style.display).toBe('flex');
+    expect(el2.style.display).toBe('block');
+  });
+
+  it('LO-038: elements that were originally hidden stay hidden after restore', () => {
+    orchestrator.createLayout();
+
+    // Add an element that is already hidden
+    const el = document.createElement('div');
+    el.setAttribute('data-panel', 'color');
+    el.style.display = 'none';
+    d.mocks.container.appendChild(el);
+
+    // Enable then disable client mode
+    d.mocks.clientMode._emit('stateChanged', { enabled: true });
+    expect(el.style.display).toBe('none');
+
+    d.mocks.clientMode._emit('stateChanged', { enabled: false });
+    // Should restore the original 'none' display
+    expect(el.style.display).toBe('none');
+  });
+
+  // -------------------------------------------------------------------------
+  // LO-039–043: tagClientModeElements regression tests (#194)
+  // -------------------------------------------------------------------------
+  it('LO-039: tagClientModeElements adds data-panel attrs to tab buttons', () => {
+    // Create a realistic tab bar element with tab buttons
+    const tabBarEl = d.mocks.tabBar._renderEl;
+    for (const tabId of ['color', 'effects', 'transform', 'annotate']) {
+      const btn = document.createElement('button');
+      btn.setAttribute('data-tab-id', tabId);
+      tabBarEl.appendChild(btn);
+    }
+
+    orchestrator.createLayout();
+
+    // Verify tab buttons got data-panel attributes
+    for (const tabId of ['color', 'effects', 'transform', 'annotate']) {
+      const btn = tabBarEl.querySelector(`[data-tab-id="${tabId}"]`);
+      expect(btn?.getAttribute('data-panel')).toBe(tabId);
+    }
+  });
+
+  it('LO-040: tagClientModeElements adds data-panel attrs to context toolbar tab panels', () => {
+    // Create realistic context toolbar with tab panels
+    const ctxEl = d.mocks.contextToolbar._renderEl;
+    for (const tabId of ['color', 'effects', 'transform', 'annotate']) {
+      const panel = document.createElement('div');
+      panel.id = `tabpanel-${tabId}`;
+      ctxEl.appendChild(panel);
+    }
+
+    orchestrator.createLayout();
+
+    for (const tabId of ['color', 'effects', 'transform', 'annotate']) {
+      const panel = ctxEl.querySelector(`#tabpanel-${tabId}`);
+      expect(panel?.getAttribute('data-panel')).toBe(tabId);
+    }
+  });
+
+  it('LO-041: tagClientModeElements tags toolbars', () => {
+    orchestrator.createLayout();
+
+    const tabBarEl = d.mocks.tabBar._renderEl;
+    const ctxEl = d.mocks.contextToolbar._renderEl;
+
+    expect(tabBarEl.getAttribute('data-toolbar')).toBe('annotation');
+    expect(ctxEl.getAttribute('data-toolbar')).toBe('editing');
+  });
+
+  it('LO-042: tagClientModeElements tags paint toolbar', () => {
+    orchestrator.createLayout();
+
+    const paintToolbarEl = d.mocks.controls._paintToolbarEl;
+    expect(paintToolbarEl.getAttribute('data-toolbar')).toBe('paint');
+  });
+
+  it('LO-043: client mode actually hides tagged elements when enabled', () => {
+    // Make the mock layout manager's topEl a child of rootEl, so that
+    // elements appended to topSection are discoverable via container.querySelectorAll
+    d.mocks.layoutManager._rootEl.appendChild(d.mocks.layoutManager._topEl);
+
+    // Setup realistic DOM with tab buttons that get tagged
+    const tabBarEl = d.mocks.tabBar._renderEl;
+    const colorBtn = document.createElement('button');
+    colorBtn.setAttribute('data-tab-id', 'color');
+    tabBarEl.appendChild(colorBtn);
+
+    // Use real restricted selectors
+    d.mocks.clientMode.getRestrictedElements.mockReturnValue(['[data-panel="color"]']);
+    d.mocks.clientMode.isEnabled.mockReturnValue(true);
+
+    orchestrator.createLayout();
+
+    // The color tab button should be tagged with data-panel="color" and hidden
+    expect(colorBtn.getAttribute('data-panel')).toBe('color');
+    expect(colorBtn.style.display).toBe('none');
+  });
+
+  // -------------------------------------------------------------------------
+  // LO-044: 360 metadata-based detection — isSpherical
+  // -------------------------------------------------------------------------
+  it('LO-044: enables spherical projection when source has isSpherical=true metadata (non-2:1)', () => {
+    orchestrator.createLayout();
+
+    d.mocks.controls.sphericalProjection.enabled = false;
+    // Non-2:1 aspect ratio but explicit spherical metadata
+    d.mocks.session._emit('sourceLoaded', {
+      name: 'pano.jpg',
+      width: 1920,
+      height: 1080,
+      isSpherical: true,
+    });
+
+    expect(d.mocks.controls.sphericalProjection.enable).toHaveBeenCalled();
+  });
+
+  // -------------------------------------------------------------------------
+  // LO-045: 360 metadata-based detection — projectionType
+  // -------------------------------------------------------------------------
+  it('LO-045: enables spherical projection when source has projectionType=equirectangular', () => {
+    orchestrator.createLayout();
+
+    d.mocks.controls.sphericalProjection.enabled = false;
+    // Non-2:1 aspect ratio but explicit projection type
+    d.mocks.session._emit('sourceLoaded', {
+      name: 'sphere.mp4',
+      width: 1920,
+      height: 1080,
+      projectionType: 'equirectangular',
+    });
+
+    expect(d.mocks.controls.sphericalProjection.enable).toHaveBeenCalled();
+  });
+
+  // -------------------------------------------------------------------------
+  // LO-046: isSpherical=false overrides 2:1 aspect ratio
+  // -------------------------------------------------------------------------
+  it('LO-046: disables spherical projection when isSpherical=false despite 2:1 ratio', () => {
+    orchestrator.createLayout();
+
+    d.mocks.controls.sphericalProjection.enabled = true;
+    // 2:1 aspect ratio but explicitly NOT spherical
+    d.mocks.session._emit('sourceLoaded', {
+      name: 'flat.jpg',
+      width: 4096,
+      height: 2048,
+      isSpherical: false,
+    });
+
+    expect(d.mocks.controls.sphericalProjection.disable).toHaveBeenCalled();
   });
 });

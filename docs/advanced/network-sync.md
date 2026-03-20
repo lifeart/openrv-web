@@ -1,6 +1,6 @@
 # Network Sync and Collaboration
 
-OpenRV Web supports real-time collaborative review sessions where multiple users view the same content simultaneously with synchronized playback, view controls, and annotations. Network sync transforms the application from a single-user viewer into a shared review environment accessible from any browser.
+OpenRV Web supports real-time collaborative review sessions where multiple users view the same content simultaneously with synchronized playback, view controls, and annotations.
 
 ---
 
@@ -32,9 +32,9 @@ Participants join an existing room by entering the room code provided by the hos
 2. Enter the room code in the **Room Code** field
 3. Click **Join Room**
 
-Alternatively, the host can copy a shareable URL using the **Copy Link** button. Opening this URL in a browser automatically populates the room code and initiates a join.
+Alternatively, the host can copy a shareable URL using the **Copy Link** button. Opening this URL in a browser automatically populates the room code and initiates a join attempt. If the room is not PIN-protected, the join completes without any manual steps. If the room requires a PIN and the URL includes the PIN parameter, the join also completes automatically. If the room requires a PIN but the URL does not include one, the room code is prefilled in the UI and the user is prompted to enter the PIN manually.
 
-Invalid or non-existent room codes produce an error message. If the room has reached its maximum participant count, a "Room is full" error is displayed.
+Invalid or non-existent room codes produce an error message. If the room has reached its maximum participant count, a "Room is full" error is displayed. Malformed or corrupted share links display an error notification explaining that the link could not be processed.
 
 ---
 
@@ -42,7 +42,7 @@ Invalid or non-existent room codes produce an error message. If the room has rea
 
 When connected to a room, all participants are visible in the connection panel and as avatar overlays in the viewer.
 
-- The **connection panel** shows a list of connected users with their names and roles. The host is labeled "You (Host)."
+- The **connection panel** shows a list of connected users with their names and roles. Your own entry is labeled "You (Host)" if you are the host, or "You" otherwise. Other host users are labeled "Host."
 - **Presence avatars** appear in the top-right corner of the viewer as colored circles with user initials. Each user is assigned a distinct color. Hovering over an avatar shows the user name.
 - The **network button badge** displays the current participant count.
 
@@ -85,7 +85,7 @@ OpenRV Web uses **WebSocket** connections (Secure WebSocket, `wss://`) as the pr
 
 ### URL-Based Signaling
 
-Room connection is established through URL-based signaling. The shareable room URL encodes the room code and server endpoint, allowing one-click joining without manual code entry.
+Room connection is established through URL-based signaling. The shareable room URL encodes the room code (and optionally a PIN) as query parameters. For rooms without PIN protection, opening the URL joins the room automatically with no manual entry required. For PIN-protected rooms, the URL must include the PIN parameter for automatic joining; otherwise, the room code is prefilled and the user must enter the PIN manually. Malformed or corrupted signaling URLs display an error notification to the user rather than failing silently.
 
 ### PIN Encryption
 
@@ -112,7 +112,7 @@ For remote dailies with a director or client, create the room with a PIN for sec
 
 ## WebRTC Peer Connections
 
-In addition to WebSocket-based sync, OpenRV Web supports direct peer-to-peer connections via WebRTC for lower-latency communication. NAT traversal uses public STUN and TURN servers (Google, Cloudflare, OpenRelay) so peers behind firewalls and NATs can establish direct connections. URL-based signaling enables serverless P2P connection setup -- participants exchange connection offers through encoded URLs without needing a dedicated signaling server.
+In addition to WebSocket-based sync, OpenRV Web supports direct peer-to-peer connections via WebRTC for lower-latency communication. NAT traversal uses public STUN and TURN servers (Google, Cloudflare, OpenRelay) so peers behind firewalls and NATs can establish direct connections. URL-based signaling enables serverless P2P connection setup -- participants exchange connection offers through encoded URLs without needing a dedicated signaling server. If a WebRTC invite link is malformed, expired, or already consumed, the application displays an error notification explaining why the link could not be processed.
 
 ## Media Transfer
 
@@ -143,6 +143,28 @@ A sync status indicator in the header bar shows the current connection state:
 - **Gray icon**: Disconnected / offline
 
 **Quick disconnect**: Press `Shift+Ctrl+N` to disconnect from the current room immediately.
+
+---
+
+## Remote Cursors
+
+When cursor sync is active, each participant's mouse position is broadcast to the room and displayed as a colored cursor overlay on every other participant's viewer.
+
+### Appearance
+
+Each remote cursor is rendered as an **SVG arrow** filled with the participant's assigned color and outlined in dark semi-transparent stroke. A **name label** appears beside the arrow, displayed as white text on a colored badge matching the participant's color. The label uses an 11px font with a 3px border-radius for readability.
+
+### Coordinate Mapping
+
+Cursor positions are transmitted as **normalized coordinates** in the 0--1 range. The overlay maps these values to the current viewer display dimensions, so cursors appear at the correct relative position regardless of each participant's window size or zoom level.
+
+### Fade-Out Behavior
+
+Cursors that have not received an update for **5 seconds** begin a 2-second fade-out transition. Once the fade completes (7 seconds total inactivity), the cursor element is removed from the DOM entirely. Any new movement from that participant recreates the cursor at full opacity.
+
+### Automatic Cleanup
+
+When a participant **disconnects** from the room, their cursor is removed immediately via the `removeCursor` method. When the local user **leaves** the room or the overlay is deactivated, all remote cursors are cleared at once. The overlay itself is hidden (set to `display: none`) when collaboration is not active.
 
 ---
 

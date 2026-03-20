@@ -8,16 +8,18 @@ This page lists all file formats supported by OpenRV Web.
 |--------|-----------|---------|-----|-------|
 | PNG | `.png` | Browser native | No | Lossless, supports transparency |
 | JPEG | `.jpg`, `.jpeg` | Browser native | No | Lossy compression |
-| WebP | `.webp` | Browser native | No | Modern format |
-| GIF | `.gif` | Browser native | No | Animated GIF support |
+| WebP | `.webp` | Browser native | No | Modern format; loaded as single-frame still (animated playback not supported) |
+| GIF | `.gif` | Browser native | No | Loaded as single-frame still (animated playback not supported) |
 | BMP | `.bmp` | Browser native | No | Uncompressed bitmap |
+| SVG | `.svg` | Browser native | No | Vector graphics (rasterized by browser) |
+| ICO | `.ico` | Browser native | No | Icon format |
 | AVIF | `.avif` | Browser native | No | AV1-based still image |
-| HEIC/HEIF | `.heic`, `.heif` | libheif WASM | No | Apple image format |
-| EXR | `.exr`, `.sxr` | WASM decoder | Yes | Float32 HDR, multi-layer, AOV, multi-view stereo |
+| HEIC/HEIF | `.heic`, `.heif` | Native (Safari) / libheif WASM (other browsers) | No | Apple image format |
+| EXR | `.exr`, `.sxr` | TypeScript decoder | Yes | Float32 HDR, multi-layer, AOV; multi-view stereo files are parsed and per-view decoding is wired to the stereo renderer via separate input format |
 | DPX | `.dpx` | Custom decoder | Yes | Log-to-linear conversion |
-| Cineon | `.cin` | Custom decoder | Yes | Configurable film gamma |
+| Cineon | `.cin`, `.cineon` | Custom decoder | Yes | Configurable film gamma |
 | Radiance HDR | `.hdr`, `.pic` | Custom decoder | Yes | RGBE encoding |
-| Float TIFF | `.tiff`, `.tif` | Custom decoder | Yes | 32-bit floating-point |
+| Float TIFF | `.tiff`, `.tif` | Custom decoder | Yes | Float samples only (16/32/64-bit); JPEG compression not supported |
 | JPEG XL | `.jxl` | WASM (libjxl) + browser native HDR | Yes | Modern HDR format |
 | JPEG 2000 | `.jp2`, `.j2k`, `.j2c` | openjph WASM | No | Wavelet compression |
 | HTJ2K | `.jph`, `.jhc` | openjph WASM | No | High-throughput JPEG 2000 |
@@ -30,9 +32,9 @@ This page lists all file formats supported by OpenRV Web.
 
 EXR decoding supports:
 
-- **Compression**: PIZ (wavelet), DWA (DCT), ZIP, ZIPS, RLE, uncompressed
+- **Compression**: NONE (uncompressed), RLE, ZIP, ZIPS, PIZ (wavelet), PXR24 (lossy for float, lossless for half), DWAA and DWAB (DCT)
 - **Multi-layer**: Named layers with AOV selection and channel remapping
-- **Multi-view**: Separate left/right eye views for stereo workflows
+- **Multi-view**: Separate left/right eye views are parsed and per-view decoding is wired to the stereo renderer via the separate input format; the user must enable a stereo display mode to view left/right eyes independently
 - **Data/Display windows**: Separate data and display window regions
 - **Float32 precision**: Full HDR dynamic range
 
@@ -51,12 +53,12 @@ JPEG, HEIC, and AVIF gainmap formats reconstruct HDR images from an SDR base ima
 |--------|-----------|---------|-------|
 | MP4 | `.mp4`, `.m4v` | WebCodecs (mediabunny) | H.264, H.265, AV1 |
 | 3GP | `.3gp`, `.3g2` | WebCodecs (mediabunny) | Mobile video |
-| MOV | `.mov` | WebCodecs (mediabunny) | QuickTime container |
-| MKV | `.mkv` | WebCodecs (mediabunny) | Matroska container |
+| MOV | `.mov`, `.qt` | WebCodecs (mediabunny) | QuickTime container |
+| MKV | `.mkv`, `.mk3d` | WebCodecs (mediabunny) | Matroska container |
 | WebM | `.webm` | WebCodecs (mediabunny) | VP8, VP9, AV1 |
-| OGG | `.ogg`, `.ogv`, `.ogx` | WebCodecs (mediabunny) | Theora, VP8 |
+| OGG | `.ogg`, `.ogv`, `.ogm`, `.ogx` | WebCodecs (mediabunny) | Theora, VP8 |
 | AVI | `.avi` | Browser fallback | Legacy container |
-| MXF | `.mxf` | MXF Demuxer | Container parsing; identifies codec, resolution, FPS |
+| MXF | `.mxf` | MXF Demuxer | Metadata-only; no pixel decode. Parses codec, resolution, FPS from header |
 
 ### HDR Video
 

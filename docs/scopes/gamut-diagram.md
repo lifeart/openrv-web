@@ -1,41 +1,41 @@
 # Gamut Diagram
 
-The gamut diagram displays the CIE 1931 chromaticity diagram with the image's color data plotted on it. This scope visualizes which colors in the image fall within or outside a target color gamut, making it essential for HDR and wide color gamut workflows.
+The gamut diagram displays the CIE 1931 chromaticity diagram with the image's color data plotted on it. Pixel chromaticity coordinates are scattered over the diagram alongside gamut triangles for the current input, working, and display color spaces, giving a visual overview of color coverage.
 
 ![CIE gamut diagram scope](/assets/screenshots/38-gamut-diagram.png)
 
 ## CIE 1931 Display
 
-The diagram shows the familiar horseshoe-shaped CIE 1931 chromaticity space. Standard color gamuts (sRGB, Display P3, Rec. 2020) are drawn as triangles within this space, with their primaries at the vertices.
+The diagram shows the familiar horseshoe-shaped CIE 1931 chromaticity space. Gamut triangles for the input, working, and display color spaces (e.g., sRGB, ACEScg, Display P3, Rec. 2020) are drawn within this space, with their primaries at the vertices and a white-point marker inside each triangle.
 
-The image's pixel colors are plotted as points on the diagram, showing where they fall relative to the target gamut boundary.
+The image's pixel colors are plotted as a scatter overlay on the diagram, showing where they fall relative to the three gamut triangles.
 
 ## Reading the Diagram
 
 | Observation | Interpretation |
 |-------------|---------------|
-| All points inside the triangle | Colors are within the target gamut |
-| Points outside the triangle | Colors exceed the target gamut (out-of-gamut) |
 | Points clustered in one area | Limited color variety in the image |
 | Wide spread across the diagram | Rich, diverse color palette |
-| Points near the triangle edge | Colors approaching the gamut boundary |
+| Points near a triangle edge | Colors approaching that gamut's boundary |
+| Points outside a triangle | Colors that exceed that particular gamut |
+| Points inside all three triangles | Colors representable in every configured space |
 
-## Gamut Compliance
+## Gamut Triangles
 
-Use the gamut diagram to verify that an image's colors conform to a delivery specification. For example:
+The diagram draws up to three gamut triangles, one per configured color space:
 
-- **sRGB delivery**: All pixels should fall within the sRGB triangle
-- **Display P3 mastering**: Pixels may use the wider P3 gamut but should not exceed Rec. 2020
-- **HDR content**: Colors may extend to Rec. 2020, with the diagram showing how much of the wider gamut is utilized
+- **Input color space** (cyan, dashed) — the gamut of the source media
+- **Working color space** (amber, dashed) — the gamut used for internal processing (hidden when it matches the input space)
+- **Display color space** (white, solid) — the gamut of the output display (hidden when it matches the input space)
 
-Out-of-gamut colors are clipped or compressed during display, depending on the gamut mapping setting (clip or soft compress). The diagram reveals which colors will be affected.
+These spaces are set programmatically via `setColorSpaces(input, working, display)`. There is no interactive target-gamut selector or compliance classification; the diagram simply visualizes where the pixel scatter sits relative to each triangle.
 
 ## Practical Uses
 
 - Verify that wide-gamut content is actually utilizing the extended color range
-- Identify specific hues that fall outside the target delivery gamut
-- Evaluate the effectiveness of gamut mapping settings before final output
+- See at a glance which of the three configured gamuts encloses the image's colors
 - Compare color coverage between different grades or versions of the same shot
+- Identify hues that extend beyond a particular gamut triangle
 
 ---
 

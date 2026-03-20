@@ -36,6 +36,7 @@ export class AutoSaveIndicator {
   } | null = null;
   private onRetryCallback: (() => void) | null = null;
   private boundClickHandler: () => void;
+  private boundKeydownHandler: (e: KeyboardEvent) => void;
   private popoverElement: HTMLElement | null = null;
   private boundOutsideClickHandler: ((e: MouseEvent) => void) | null = null;
   private boundEscapeHandler: ((e: KeyboardEvent) => void) | null = null;
@@ -84,9 +85,23 @@ export class AutoSaveIndicator {
     this.container.appendChild(this.iconElement);
     this.container.appendChild(this.textElement);
 
+    // Keyboard accessibility
+    this.container.setAttribute('tabindex', '0');
+    this.container.setAttribute('role', 'button');
+    this.container.setAttribute('aria-label', 'Auto-save settings');
+
     // Setup click handler for retry functionality
     this.boundClickHandler = () => this.handleClick();
     this.container.addEventListener('click', this.boundClickHandler);
+
+    // Setup keyboard handler for Enter/Space activation
+    this.boundKeydownHandler = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        this.handleClick();
+      }
+    };
+    this.container.addEventListener('keydown', this.boundKeydownHandler);
 
     // Update display initially
     this.updateDisplay();
@@ -143,7 +158,6 @@ export class AutoSaveIndicator {
       },
       error: () => {
         this.setStatus('error');
-        this.scheduleStatusReset('idle', 5000);
       },
       configChanged: (config) => {
         if (!config.enabled) {
@@ -302,7 +316,7 @@ export class AutoSaveIndicator {
     const versionsSlider = document.createElement('input');
     versionsSlider.type = 'range';
     versionsSlider.min = '1';
-    versionsSlider.max = '50';
+    versionsSlider.max = '100';
     versionsSlider.value = String(config.maxVersions);
     versionsSlider.dataset.testid = 'autosave-versions-slider';
     versionsSlider.style.cssText = 'width: 100%;';
@@ -628,8 +642,9 @@ export class AutoSaveIndicator {
     // Disconnect from manager (unsubscribe events)
     this.disconnect();
 
-    // Remove click handler
+    // Remove click and keyboard handlers
     this.container.removeEventListener('click', this.boundClickHandler);
+    this.container.removeEventListener('keydown', this.boundKeydownHandler);
 
     // Clear update interval
     if (this.updateInterval) {

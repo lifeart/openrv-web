@@ -85,7 +85,7 @@ export class GhostFrameControl extends EventEmitter<GhostFrameControlEvents> {
     // Create toggle button
     this.button = document.createElement('button');
     this.button.dataset.testid = 'ghost-frame-button';
-    this.button.title = 'Ghost Frames / Onion Skin (Ctrl+G)';
+    this.button.title = 'Click to configure ghost frames, Ctrl+G to toggle on/off';
     this.button.setAttribute('aria-haspopup', 'dialog');
     this.button.setAttribute('aria-expanded', 'false');
     this.button.setAttribute('aria-pressed', 'false');

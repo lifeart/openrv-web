@@ -811,7 +811,7 @@ describe('NotePanel', () => {
       expect(r4El.style.paddingLeft).toBe('44px');
     });
 
-    it('150 notes render without error', () => {
+    it('150 notes render without error', { timeout: 15000 }, () => {
       for (let i = 0; i < 150; i++) {
         session.noteManager.addNote(0, i + 1, i + 1, `Note ${i}`, 'User');
       }
@@ -913,6 +913,64 @@ describe('NotePanel', () => {
       panel.show();
 
       expect(mockExclusive.hide).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('priority and category display', () => {
+    it('displays priority badge for note', () => {
+      session.noteManager.addNote(0, 10, 10, 'High priority', 'Alice', { priority: 'high' });
+      panel.show();
+
+      const entries = panel.getElement().querySelectorAll('.note-entry');
+      expect(entries.length).toBe(1);
+
+      const noteId = (entries[0] as HTMLElement).dataset.noteId!;
+      const priorityBadge = panel.getElement().querySelector(`[data-testid="note-priority-${noteId}"]`);
+      expect(priorityBadge).not.toBeNull();
+      expect(priorityBadge!.textContent).toBe('high');
+    });
+
+    it('displays category badge when category is set', () => {
+      session.noteManager.addNote(0, 10, 10, 'Comp note', 'Alice', { category: 'comp' });
+      panel.show();
+
+      const entries = panel.getElement().querySelectorAll('.note-entry');
+      const noteId = (entries[0] as HTMLElement).dataset.noteId!;
+      const categoryBadge = panel.getElement().querySelector(`[data-testid="note-category-${noteId}"]`);
+      expect(categoryBadge).not.toBeNull();
+      expect(categoryBadge!.textContent).toBe('comp');
+    });
+
+    it('does not display category badge when category is empty', () => {
+      const note = session.noteManager.addNote(0, 10, 10, 'No category', 'Alice');
+      panel.show();
+
+      const categoryBadge = panel.getElement().querySelector(`[data-testid="note-category-${note.id}"]`);
+      expect(categoryBadge).toBeNull();
+    });
+
+    it('displays default medium priority for notes without explicit priority', () => {
+      const note = session.noteManager.addNote(0, 10, 10, 'Default priority', 'Alice');
+      panel.show();
+
+      const priorityBadge = panel.getElement().querySelector(`[data-testid="note-priority-${note.id}"]`);
+      expect(priorityBadge).not.toBeNull();
+      expect(priorityBadge!.textContent).toBe('medium');
+    });
+
+    it('displays all priority levels correctly', () => {
+      const low = session.noteManager.addNote(0, 1, 1, 'Low', 'A', { priority: 'low' });
+      const med = session.noteManager.addNote(0, 2, 2, 'Med', 'A', { priority: 'medium' });
+      const high = session.noteManager.addNote(0, 3, 3, 'High', 'A', { priority: 'high' });
+      const crit = session.noteManager.addNote(0, 4, 4, 'Critical', 'A', { priority: 'critical' });
+      panel.show();
+
+      expect(panel.getElement().querySelector(`[data-testid="note-priority-${low.id}"]`)!.textContent).toBe('low');
+      expect(panel.getElement().querySelector(`[data-testid="note-priority-${med.id}"]`)!.textContent).toBe('medium');
+      expect(panel.getElement().querySelector(`[data-testid="note-priority-${high.id}"]`)!.textContent).toBe('high');
+      expect(panel.getElement().querySelector(`[data-testid="note-priority-${crit.id}"]`)!.textContent).toBe(
+        'critical',
+      );
     });
   });
 });

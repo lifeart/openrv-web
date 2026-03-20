@@ -174,6 +174,17 @@ describe('Session', () => {
       session.fps = 30;
       expect(session.fps).toBe(30);
     });
+
+    it('SES-006b: defaults to 24 fps on new session', () => {
+      const fresh = new Session();
+      expect(fresh.fps).toBe(24);
+    });
+
+    it('SES-006c: fps can be set before loading media to act as defaultFps', () => {
+      const fresh = new Session();
+      fresh.fps = 48;
+      expect(fresh.fps).toBe(48);
+    });
   });
 
   describe('loopMode', () => {
@@ -418,6 +429,16 @@ describe('Session', () => {
   });
 
   describe('playback state', () => {
+    const createPlaybackSource = (name: string): MediaSource => ({
+      type: 'image',
+      name,
+      url: `file://${name}`,
+      width: 100,
+      height: 100,
+      duration: 30,
+      fps: 24,
+    });
+
     it('getPlaybackState() exports current state', () => {
       session.volume = 0.5;
       session.fps = 30;
@@ -459,6 +480,18 @@ describe('Session', () => {
       session.setPlaybackState({ volume: 0.3 });
       expect(session.volume).toBe(0.3);
       expect(session.fps).toBe(24); // Unchanged
+    });
+
+    it('getPlaybackState() exports A/B compare assignment state', () => {
+      session.setSources([createPlaybackSource('source1'), createPlaybackSource('source2')]);
+      session.setSourceB(1);
+      session.setCurrentAB('B');
+
+      const state = session.getPlaybackState();
+
+      expect(state.sourceAIndex).toBe(0);
+      expect(state.sourceBIndex).toBe(1);
+      expect(state.currentAB).toBe('B');
     });
   });
 
@@ -673,6 +706,25 @@ describe('Session', () => {
 
       sessionInternal.addSource(source3);
       expect(session.sourceBIndex).toBe(1); // Still 1, not changed to 2
+    });
+
+    it('AB-021: setPlaybackState restores A/B source assignment and active side', () => {
+      const source1 = createMockSource('source1');
+      const source2 = createMockSource('source2');
+      const source3 = createMockSource('source3');
+
+      session.setSources([source1, source2, source3]);
+
+      session.setPlaybackState({
+        sourceAIndex: 2,
+        sourceBIndex: 1,
+        currentAB: 'B',
+      });
+
+      expect(session.sourceAIndex).toBe(2);
+      expect(session.sourceBIndex).toBe(1);
+      expect(session.currentAB).toBe('B');
+      expect(session.currentSourceIndex).toBe(1);
     });
   });
 
@@ -1963,6 +2015,58 @@ describe('Session', () => {
       session.preservesPitch = false;
 
       expect(spy).toHaveBeenCalledWith(false);
+    });
+  });
+
+  describe('version navigation triggers source switch', () => {
+    it('SES-VER-001: setActiveVersion switches to the corresponding source', () => {
+      const video0 = createMockVideo(10);
+      const video1 = createMockVideo(10);
+      const video2 = createMockVideo(10);
+      session.setSources([
+        { type: 'video', name: 'shot_v1.exr', element: video0, duration: 240, originalFile: null },
+        { type: 'video', name: 'shot_v2.exr', element: video1, duration: 240, originalFile: null },
+        { type: 'video', name: 'shot_v3.exr', element: video2, duration: 240, originalFile: null },
+      ] as any);
+
+      const group = session.versionManager.createGroup('shot', [0, 1, 2]);
+      // activeVersionIndex defaults to 2 (latest), source index 2
+      expect(session.currentSourceIndex).toBe(2);
+
+      session.versionManager.setActiveVersion(group.id, 0);
+      expect(session.currentSourceIndex).toBe(0);
+    });
+
+    it('SES-VER-002: nextVersion switches to the corresponding source', () => {
+      const video0 = createMockVideo(10);
+      const video1 = createMockVideo(10);
+      const video2 = createMockVideo(10);
+      session.setSources([
+        { type: 'video', name: 'shot_v1.exr', element: video0, duration: 240, originalFile: null },
+        { type: 'video', name: 'shot_v2.exr', element: video1, duration: 240, originalFile: null },
+        { type: 'video', name: 'shot_v3.exr', element: video2, duration: 240, originalFile: null },
+      ] as any);
+
+      const group = session.versionManager.createGroup('shot', [0, 1, 2]);
+      // activeVersionIndex starts at 2 (last), nextVersion wraps to 0
+      session.versionManager.nextVersion(group.id);
+      expect(session.currentSourceIndex).toBe(0);
+    });
+
+    it('SES-VER-003: previousVersion switches to the corresponding source', () => {
+      const video0 = createMockVideo(10);
+      const video1 = createMockVideo(10);
+      const video2 = createMockVideo(10);
+      session.setSources([
+        { type: 'video', name: 'shot_v1.exr', element: video0, duration: 240, originalFile: null },
+        { type: 'video', name: 'shot_v2.exr', element: video1, duration: 240, originalFile: null },
+        { type: 'video', name: 'shot_v3.exr', element: video2, duration: 240, originalFile: null },
+      ] as any);
+
+      const group = session.versionManager.createGroup('shot', [0, 1, 2]);
+      // activeVersionIndex starts at 2, previousVersion goes to 1
+      session.versionManager.previousVersion(group.id);
+      expect(session.currentSourceIndex).toBe(1);
     });
   });
 });

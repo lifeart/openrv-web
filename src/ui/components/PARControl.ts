@@ -44,7 +44,7 @@ export class PARControl extends EventEmitter<PARControlEvents> {
     // Create toggle button
     this.button = document.createElement('button');
     this.button.dataset.testid = 'par-control-button';
-    this.button.title = 'Pixel Aspect Ratio (Shift+P)';
+    this.button.title = 'Click to configure PAR, Shift+P to toggle on/off';
     this.button.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
@@ -186,9 +186,11 @@ export class PARControl extends EventEmitter<PARControlEvents> {
       if (Number.isFinite(val) && val >= 0.1 && val <= 4.0) {
         this.state.par = val;
         this.state.preset = 'custom';
+        this.state.enabled = true; // Auto-enable when setting custom PAR (fix #115)
         this.updateButtonLabel();
         this.updateButtonStyle();
         this.updatePresetHighlight();
+        this.updateEnableCheckbox();
         this.emit('stateChanged', { ...this.state });
       } else {
         // Reset input to current valid PAR value on invalid input

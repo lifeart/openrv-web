@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ZebraControl } from './ZebraControl';
 import { ZebraStripes } from './ZebraStripes';
+import { MAX_ZEBRA_THRESHOLD_IRE } from '../../core/types/effects';
 
 describe('ZebraControl', () => {
   let control: ZebraControl;
@@ -233,7 +234,7 @@ describe('ZebraControl', () => {
       expect(zebraStripes.getState().highThreshold).toBe(90);
     });
 
-    it('ZEBRA-U044: high slider has correct min/max', () => {
+    it('ZEBRA-U044: high slider has correct min/max (HDR-capable)', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
       button.click();
@@ -242,7 +243,7 @@ describe('ZebraControl', () => {
       const highSlider = sliders[0] as HTMLInputElement;
 
       expect(highSlider.min).toBe('70');
-      expect(highSlider.max).toBe('100');
+      expect(highSlider.max).toBe(String(MAX_ZEBRA_THRESHOLD_IRE));
     });
   });
 
@@ -297,7 +298,7 @@ describe('ZebraControl', () => {
       expect(zebraStripes.getState().lowThreshold).toBe(10);
     });
 
-    it('ZEBRA-U054: low slider has correct min/max', () => {
+    it('ZEBRA-U054: low slider has correct min/max (HDR-capable)', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
       button.click();
@@ -306,7 +307,51 @@ describe('ZebraControl', () => {
       const lowSlider = sliders[1] as HTMLInputElement;
 
       expect(lowSlider.min).toBe('0');
-      expect(lowSlider.max).toBe('30');
+      expect(lowSlider.max).toBe(String(MAX_ZEBRA_THRESHOLD_IRE));
+    });
+  });
+
+  describe('HDR threshold support', () => {
+    it('ZEBRA-U055: high slider accepts HDR values above 100 IRE', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
+      const sliders = dropdown.querySelectorAll('input[type="range"]');
+      const highSlider = sliders[0] as HTMLInputElement;
+
+      highSlider.value = '500';
+      highSlider.dispatchEvent(new Event('input'));
+
+      expect(zebraStripes.getState().highThreshold).toBe(500);
+    });
+
+    it('ZEBRA-U056: high slider accepts PQ/HDR10 peak value of 10000 IRE', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
+      const sliders = dropdown.querySelectorAll('input[type="range"]');
+      const highSlider = sliders[0] as HTMLInputElement;
+
+      highSlider.value = '10000';
+      highSlider.dispatchEvent(new Event('input'));
+
+      expect(zebraStripes.getState().highThreshold).toBe(10000);
+    });
+
+    it('ZEBRA-U057: low slider accepts HDR values above 100 IRE', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
+      const sliders = dropdown.querySelectorAll('input[type="range"]');
+      const lowSlider = sliders[1] as HTMLInputElement;
+
+      lowSlider.value = '200';
+      lowSlider.dispatchEvent(new Event('input'));
+
+      expect(zebraStripes.getState().lowThreshold).toBe(200);
     });
   });
 

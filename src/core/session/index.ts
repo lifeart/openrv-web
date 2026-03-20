@@ -17,6 +17,9 @@ export type { SessionMediaEvents, SessionMediaHost } from './SessionMedia';
 export { SessionPlayback } from './SessionPlayback';
 export type { SessionPlaybackEvents, SessionPlaybackHost } from './SessionPlayback';
 
+export { SessionManager } from './SessionManager';
+export type { SessionManagerEvents, SessionManagerHost } from './SessionManager';
+
 export { AnnotationStore } from './AnnotationStore';
 export type { AnnotationStoreCallbacks } from './AnnotationStore';
 export { getNumberValue, getBooleanValue, getNumberArray, getStringValue } from './AnnotationStore';
@@ -27,8 +30,8 @@ export type { SessionState, MediaReference, PlaybackState, ViewState, Serialized
 
 export { SESSION_STATE_VERSION, DEFAULT_VIEW_STATE, DEFAULT_PLAYBACK_STATE } from './SessionState';
 
-export { loadGTOGraph, getGraphSummary } from './GTOGraphLoader';
-export type { GTONodeInfo, GTOParseResult } from './GTOGraphLoader';
+export { loadGTOGraph, getGraphSummary, formatSkippedNodesWarning, formatDegradedModesWarning } from './GTOGraphLoader';
+export type { GTONodeInfo, GTOParseResult, SkippedNodeInfo } from './GTOGraphLoader';
 
 export {
   resolveByHash,

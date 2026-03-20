@@ -145,14 +145,29 @@ describe('HeaderBar', () => {
       expect(inputs.length).toBe(2);
     });
 
-    it('HDR-U024: project file input accepts .orvproject files', () => {
+    it('HDR-U024: project file input accepts project and companion media formats', () => {
       const el = headerBar.render();
       const inputs = el.querySelectorAll('input[type="file"]');
-      const projectInput = Array.from(inputs).find(
-        (input) => (input as HTMLInputElement).accept === '.orvproject',
+      const projectInput = Array.from(inputs).find((input) =>
+        (input as HTMLInputElement).accept.includes('.orvproject'),
       ) as HTMLInputElement;
       expect(projectInput).not.toBeNull();
-      expect(projectInput.accept).toBe('.orvproject');
+      // Should accept project formats and media formats for companion files
+      expect(projectInput.accept).toContain('.orvproject');
+      expect(projectInput.accept).toContain('.rv');
+      expect(projectInput.accept).toContain('.gto');
+      expect(projectInput.accept).toContain('.exr');
+      expect(projectInput.accept).toContain('.cdl');
+    });
+
+    it('HDR-U025: project file input does NOT allow multiple selection (#388)', () => {
+      const el = headerBar.render();
+      const inputs = el.querySelectorAll('input[type="file"]');
+      const projectInput = Array.from(inputs).find((input) =>
+        (input as HTMLInputElement).accept.includes('.orvproject'),
+      ) as HTMLInputElement;
+      expect(projectInput).not.toBeNull();
+      expect(projectInput.multiple).toBe(false);
     });
   });
 
@@ -315,6 +330,45 @@ describe('HeaderBar', () => {
       ) as HTMLButtonElement;
 
       expect(loopBtn.getAttribute('aria-label')).toContain('Loop');
+    });
+
+    it('HDR-U052: loop button tooltip reflects current mode', () => {
+      const el = headerBar.render();
+      const buttons = el.querySelectorAll('button');
+      const loopBtn = Array.from(buttons).find((btn) => btn.title?.includes('loop mode')) as HTMLButtonElement;
+
+      // Default mode is loop
+      expect(loopBtn.title).toBe('Loop — Cycle loop mode (L)');
+
+      // Cycle to pingpong
+      loopBtn.click();
+      expect(loopBtn.title).toBe('Ping-Pong — Cycle loop mode (L)');
+
+      // Cycle to once
+      loopBtn.click();
+      expect(loopBtn.title).toBe('Play Once — Cycle loop mode (L)');
+
+      // Cycle back to loop
+      loopBtn.click();
+      expect(loopBtn.title).toBe('Loop — Cycle loop mode (L)');
+    });
+
+    it('HDR-U053: loop button tooltip updates on loopModeChanged event', () => {
+      const el = headerBar.render();
+      const buttons = el.querySelectorAll('button');
+      const loopBtn = Array.from(buttons).find((btn) => btn.title?.includes('loop mode')) as HTMLButtonElement;
+
+      session.loopMode = 'pingpong';
+      session.emit('loopModeChanged', 'pingpong');
+      expect(loopBtn.title).toBe('Ping-Pong — Cycle loop mode (L)');
+
+      session.loopMode = 'once';
+      session.emit('loopModeChanged', 'once');
+      expect(loopBtn.title).toBe('Play Once — Cycle loop mode (L)');
+
+      session.loopMode = 'loop';
+      session.emit('loopModeChanged', 'loop');
+      expect(loopBtn.title).toBe('Loop — Cycle loop mode (L)');
     });
   });
 
@@ -676,16 +730,16 @@ describe('HeaderBar', () => {
 
       const el = headerBar.render();
       const inputs = el.querySelectorAll('input[type="file"]');
-      const projectInput = Array.from(inputs).find(
-        (input) => (input as HTMLInputElement).accept === '.orvproject',
+      const projectInput = Array.from(inputs).find((input) =>
+        (input as HTMLInputElement).accept.includes('.orvproject'),
       ) as HTMLInputElement;
 
       // Create a mock file and dispatch change event
       const file = new File([''], 'test.orvproject');
-      Object.defineProperty(projectInput, 'files', { value: [file] });
+      Object.defineProperty(projectInput, 'files', { value: [file], configurable: true });
       projectInput.dispatchEvent(new Event('change'));
 
-      expect(callback).toHaveBeenCalledWith(file);
+      expect(callback).toHaveBeenCalledWith({ file });
     });
   });
 
@@ -1803,21 +1857,20 @@ describe('HeaderBar', () => {
   });
 
   describe('case-insensitive file extension handling', () => {
-    it('HDR-U025: uppercase .RV file triggers session file branch', async () => {
+    it('HDR-U025: uppercase .RV file triggers openProject event', async () => {
       const el = headerBar.render();
       const input = el.querySelector('input[type="file"]') as HTMLInputElement;
 
-      const loadFromGTOSpy = vi.spyOn(session, 'loadFromGTO').mockResolvedValue();
+      const openProjectSpy = vi.fn();
+      headerBar.on('openProject', openProjectSpy);
       const rvFile = new File(['rv-data'], 'SESSION.RV');
       Object.defineProperty(input, 'files', { value: [rvFile], configurable: true });
       input.dispatchEvent(new Event('change'));
 
       // Wait for async handleFileSelect to complete
       await vi.waitFor(() => {
-        expect(loadFromGTOSpy).toHaveBeenCalled();
+        expect(openProjectSpy).toHaveBeenCalledWith(expect.objectContaining({ file: rvFile }));
       });
-
-      loadFromGTOSpy.mockRestore();
     });
 
     it('HDR-U026: uppercase .RVEDL file triggers EDL branch', async () => {
@@ -1835,6 +1888,394 @@ describe('HeaderBar', () => {
       });
 
       loadEDLSpy.mockRestore();
+    });
+  });
+
+  describe('rv/gto file open unification (issue #395)', () => {
+    it('HDR-U027: .rv file via Open media emits openProject instead of calling loadFromGTO directly', async () => {
+      const el = headerBar.render();
+      const input = el.querySelector('input[type="file"]') as HTMLInputElement;
+
+      const openProjectSpy = vi.fn();
+      headerBar.on('openProject', openProjectSpy);
+      const loadFromGTOSpy = vi.spyOn(session, 'loadFromGTO').mockResolvedValue();
+
+      const rvFile = new File(['rv-data'], 'scene.rv');
+      Object.defineProperty(input, 'files', { value: [rvFile], configurable: true });
+      input.dispatchEvent(new Event('change'));
+
+      await vi.waitFor(() => {
+        expect(openProjectSpy).toHaveBeenCalledWith({
+          file: rvFile,
+          availableFiles: undefined,
+        });
+      });
+
+      // loadFromGTO should NOT be called directly by HeaderBar
+      expect(loadFromGTOSpy).not.toHaveBeenCalled();
+      loadFromGTOSpy.mockRestore();
+    });
+
+    it('HDR-U028: .gto file via Open media emits openProject instead of calling loadFromGTO directly', async () => {
+      const el = headerBar.render();
+      const input = el.querySelector('input[type="file"]') as HTMLInputElement;
+
+      const openProjectSpy = vi.fn();
+      headerBar.on('openProject', openProjectSpy);
+      const loadFromGTOSpy = vi.spyOn(session, 'loadFromGTO').mockResolvedValue();
+
+      const gtoFile = new File(['gto-data'], 'scene.gto');
+      Object.defineProperty(input, 'files', { value: [gtoFile], configurable: true });
+      input.dispatchEvent(new Event('change'));
+
+      await vi.waitFor(() => {
+        expect(openProjectSpy).toHaveBeenCalledWith({
+          file: gtoFile,
+          availableFiles: undefined,
+        });
+      });
+
+      expect(loadFromGTOSpy).not.toHaveBeenCalled();
+      loadFromGTOSpy.mockRestore();
+    });
+
+    it('HDR-U029: .rv file with companion media passes availableFiles in openProject event', async () => {
+      const el = headerBar.render();
+      const input = el.querySelector('input[type="file"]') as HTMLInputElement;
+
+      const openProjectSpy = vi.fn();
+      headerBar.on('openProject', openProjectSpy);
+
+      const rvFile = new File(['rv-data'], 'scene.rv');
+      const mediaFile = new File(['exr-data'], 'clip.exr');
+      Object.defineProperty(input, 'files', { value: [rvFile, mediaFile], configurable: true });
+      input.dispatchEvent(new Event('change'));
+
+      await vi.waitFor(() => {
+        expect(openProjectSpy).toHaveBeenCalledWith({
+          file: rvFile,
+          availableFiles: new Map([['clip.exr', mediaFile]]),
+        });
+      });
+    });
+
+    it('HDR-U031: multiple .rv/.gto files selected — extras excluded from availableFiles (#401)', async () => {
+      const el = headerBar.render();
+      const input = el.querySelector('input[type="file"]') as HTMLInputElement;
+
+      const openProjectSpy = vi.fn();
+      headerBar.on('openProject', openProjectSpy);
+
+      const rvFile1 = new File(['rv-data'], 'session1.rv');
+      const rvFile2 = new File(['rv-data'], 'session2.rv');
+      const gtoFile = new File(['gto-data'], 'backup.gto');
+      const mediaFile = new File(['exr-data'], 'plate.exr');
+      Object.defineProperty(input, 'files', {
+        value: [rvFile1, rvFile2, gtoFile, mediaFile],
+        configurable: true,
+      });
+      input.dispatchEvent(new Event('change'));
+
+      await vi.waitFor(() => {
+        expect(openProjectSpy).toHaveBeenCalledWith({
+          file: rvFile1,
+          availableFiles: new Map([['plate.exr', mediaFile]]),
+        });
+      });
+    });
+
+    it('HDR-U032: extra uppercase .RV/.GTO files are not demoted to sidecars (#401)', async () => {
+      const el = headerBar.render();
+      const input = el.querySelector('input[type="file"]') as HTMLInputElement;
+
+      const openProjectSpy = vi.fn();
+      headerBar.on('openProject', openProjectSpy);
+
+      const gtoFile = new File(['gto-data'], 'main.GTO');
+      const extraRv = new File(['rv-data'], 'OTHER.RV');
+      Object.defineProperty(input, 'files', {
+        value: [gtoFile, extraRv],
+        configurable: true,
+      });
+      input.dispatchEvent(new Event('change'));
+
+      await vi.waitFor(() => {
+        expect(openProjectSpy).toHaveBeenCalledWith({
+          file: gtoFile,
+          availableFiles: undefined,
+        });
+      });
+    });
+
+    it('HDR-U030: mixed .rvedl + .rv selection loads EDL and does not emit openProject', async () => {
+      const el = headerBar.render();
+      const input = el.querySelector('input[type="file"]') as HTMLInputElement;
+
+      const openProjectSpy = vi.fn();
+      headerBar.on('openProject', openProjectSpy);
+
+      const edlFile = new File(
+        ['001 src V C 01:00:00:00 01:00:10:00 01:00:00:00 01:00:10:00\n* FROM CLIP NAME: test.exr'],
+        'test.rvedl',
+      );
+      const rvFile = new File(['rv-data'], 'session.rv');
+      Object.defineProperty(input, 'files', { value: [edlFile, rvFile], configurable: true });
+      input.dispatchEvent(new Event('change'));
+
+      // Wait for async handling to complete
+      await new Promise((r) => setTimeout(r, 50));
+
+      // EDL takes precedence — session file should NOT trigger openProject
+      expect(openProjectSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('shot status badge', () => {
+    it('HDR-U030: renders a shot-status-badge element in the header bar', () => {
+      const el = headerBar.render();
+      const badge = el.querySelector('[data-testid="shot-status-badge"]');
+      expect(badge).toBeInstanceOf(HTMLElement);
+    });
+
+    it('HDR-U031: badge is visible even when no source is loaded (shows default pending)', () => {
+      // Create a fresh session with no sources
+      const emptySession = new Session();
+      const emptyHeader = new HeaderBar(emptySession);
+      const el = emptyHeader.render();
+      const badge = el.querySelector('[data-testid="shot-status-badge"]') as HTMLElement;
+      expect(badge.style.display).toBe('inline-flex');
+      const text = badge.querySelector('[data-testid="shot-status-label"]') as HTMLElement;
+      expect(text.textContent).toBe('Pending');
+      emptyHeader.dispose();
+    });
+
+    it('HDR-U032: badge shows "Pending" status by default when a source is loaded', () => {
+      const el = headerBar.render();
+      const badge = el.querySelector('[data-testid="shot-status-badge"]') as HTMLElement;
+      expect(badge.style.display).toBe('inline-flex');
+      const text = badge.querySelector('[data-testid="shot-status-label"]') as HTMLElement;
+      expect(text.textContent).toBe('Pending');
+    });
+
+    it('HDR-U033: badge shows correct color dot for pending status', () => {
+      const el = headerBar.render();
+      const dot = el.querySelector('[data-testid="shot-status-dot"]') as HTMLElement;
+      // pending color is #94a3b8 (slate-400)
+      expect(dot.style.background).toBe('rgb(148, 163, 184)');
+    });
+
+    it('HDR-U034: badge updates when status is set to approved', () => {
+      headerBar.render();
+      session.statusManager.setStatus(0, 'approved', 'tester');
+
+      const badge = headerBar.getContainer().querySelector('[data-testid="shot-status-badge"]') as HTMLElement;
+      const text = badge.querySelector('[data-testid="shot-status-label"]') as HTMLElement;
+      const dot = badge.querySelector('[data-testid="shot-status-dot"]') as HTMLElement;
+
+      expect(text.textContent).toBe('Approved');
+      // approved color is #22c55e (green-500)
+      expect(dot.style.background).toBe('rgb(34, 197, 94)');
+    });
+
+    it('HDR-U035: badge updates when status is set to needs-work', () => {
+      headerBar.render();
+      session.statusManager.setStatus(0, 'needs-work', 'tester');
+
+      const text = headerBar.getContainer().querySelector('[data-testid="shot-status-label"]') as HTMLElement;
+      expect(text.textContent).toBe('Needs Work');
+    });
+
+    it('HDR-U036: badge updates when status is set to cbb', () => {
+      headerBar.render();
+      session.statusManager.setStatus(0, 'cbb', 'tester');
+
+      const text = headerBar.getContainer().querySelector('[data-testid="shot-status-label"]') as HTMLElement;
+      expect(text.textContent).toBe('Could Be Better');
+    });
+
+    it('HDR-U037: badge updates when status is set to omit', () => {
+      headerBar.render();
+      session.statusManager.setStatus(0, 'omit', 'tester');
+
+      const text = headerBar.getContainer().querySelector('[data-testid="shot-status-label"]') as HTMLElement;
+      const dot = headerBar.getContainer().querySelector('[data-testid="shot-status-dot"]') as HTMLElement;
+
+      expect(text.textContent).toBe('Omit');
+      // omit color is #64748b (slate-500)
+      expect(dot.style.background).toBe('rgb(100, 116, 139)');
+    });
+
+    it('HDR-U038: badge reverts to pending when status is cleared', () => {
+      headerBar.render();
+      session.statusManager.setStatus(0, 'approved', 'tester');
+
+      const text = headerBar.getContainer().querySelector('[data-testid="shot-status-label"]') as HTMLElement;
+      expect(text.textContent).toBe('Approved');
+
+      session.statusManager.clearStatus(0);
+      expect(text.textContent).toBe('Pending');
+    });
+
+    it('HDR-U039: badge has correct aria-label', () => {
+      headerBar.render();
+      const badge = headerBar.getContainer().querySelector('[data-testid="shot-status-badge"]') as HTMLElement;
+      expect(badge.getAttribute('aria-label')).toBe('Shot status: Pending');
+
+      session.statusManager.setStatus(0, 'approved', 'tester');
+      expect(badge.getAttribute('aria-label')).toBe('Shot status: Approved');
+    });
+
+    it('HDR-U040: badge updates when source changes during playlist playback', () => {
+      // Add a second source
+      (session as any).addSource({
+        name: 'shot2.mp4',
+        url: 'blob:test2',
+        type: 'video',
+        duration: 50,
+        fps: 24,
+        width: 1920,
+        height: 1080,
+        element: document.createElement('video'),
+      });
+
+      headerBar.render();
+
+      // Set different statuses for each source
+      session.statusManager.setStatus(0, 'approved', 'tester');
+      session.statusManager.setStatus(1, 'needs-work', 'tester');
+
+      // Initially on source 0
+      const text = headerBar.getContainer().querySelector('[data-testid="shot-status-label"]') as HTMLElement;
+      expect(text.textContent).toBe('Approved');
+
+      // Switch to source 1 by emitting sourceLoaded
+      (session as any)._media._currentSourceIndex = 1;
+      session.emit('sourceLoaded', {} as any);
+
+      expect(text.textContent).toBe('Needs Work');
+    });
+
+    it('HDR-U041: badge is positioned after the session name display', () => {
+      const el = headerBar.render();
+      const sessionName = el.querySelector('[data-testid="session-name-display"]') as HTMLElement;
+      const badge = el.querySelector('[data-testid="shot-status-badge"]') as HTMLElement;
+
+      // Badge should be the next sibling of the session name display
+      expect(sessionName.nextElementSibling).toBe(badge);
+    });
+
+    it('HDR-U042: badge contains both dot and text elements', () => {
+      headerBar.render();
+      const badge = headerBar.getContainer().querySelector('[data-testid="shot-status-badge"]') as HTMLElement;
+      const dot = badge.querySelector('[data-testid="shot-status-dot"]');
+      const text = badge.querySelector('[data-testid="shot-status-label"]');
+
+      expect(dot).toBeInstanceOf(HTMLElement);
+      expect(text).toBeInstanceOf(HTMLElement);
+    });
+
+    it('HDR-U043: badge updates on statusesChanged event (bulk status restore)', () => {
+      headerBar.render();
+
+      // Simulate bulk restore via fromSerializable which fires statusesChanged
+      session.statusManager.fromSerializable([
+        { sourceIndex: 0, status: 'omit', setBy: 'admin', setAt: new Date().toISOString() },
+      ]);
+
+      const text = headerBar.getContainer().querySelector('[data-testid="shot-status-label"]') as HTMLElement;
+      expect(text.textContent).toBe('Omit');
+    });
+  });
+
+  describe('OTIO file picker support (Issue #465)', () => {
+    it('HDR-U050: file input accept attribute includes .otio', () => {
+      headerBar.render();
+      const inputs = headerBar.getContainer().querySelectorAll('input[type="file"]');
+      const mediaInput = Array.from(inputs).find((input) =>
+        (input as HTMLInputElement).accept.includes('.rv'),
+      ) as HTMLInputElement;
+
+      expect(mediaInput).toBeDefined();
+      expect(mediaInput.accept).toContain('.otio');
+    });
+
+    it('HDR-U051: onOTIOFileOpen property defaults to null', () => {
+      expect(headerBar.onOTIOFileOpen).toBeNull();
+    });
+
+    it('HDR-U052: onOTIOFileOpen can be set to a callback', () => {
+      const callback = vi.fn();
+      headerBar.onOTIOFileOpen = callback;
+      expect(headerBar.onOTIOFileOpen).toBe(callback);
+    });
+
+    it('HDR-U053: selecting .otio file invokes onOTIOFileOpen callback', async () => {
+      headerBar.render();
+      const callback = vi.fn();
+      headerBar.onOTIOFileOpen = callback;
+
+      const inputs = headerBar.getContainer().querySelectorAll('input[type="file"]');
+      const mediaInput = Array.from(inputs).find((input) =>
+        (input as HTMLInputElement).accept.includes('.otio'),
+      ) as HTMLInputElement;
+
+      const otioFile = new File(['{"OTIO_SCHEMA": "Timeline.1"}'], 'timeline.otio');
+      Object.defineProperty(mediaInput, 'files', { value: [otioFile], writable: false });
+
+      mediaInput.dispatchEvent(new Event('change'));
+
+      await vi.waitFor(() => {
+        expect(callback).toHaveBeenCalledTimes(1);
+      });
+      expect(callback).toHaveBeenCalledWith(otioFile);
+    });
+
+    it('HDR-U054: selecting .otio file without callback shows alert instead of crashing', async () => {
+      headerBar.render();
+      headerBar.onOTIOFileOpen = null;
+
+      const alertSpy = vi.spyOn(Modal, 'showAlert').mockImplementation(() => Promise.resolve());
+
+      const inputs = headerBar.getContainer().querySelectorAll('input[type="file"]');
+      const mediaInput = Array.from(inputs).find((input) =>
+        (input as HTMLInputElement).accept.includes('.otio'),
+      ) as HTMLInputElement;
+
+      const otioFile = new File(['{}'], 'timeline.otio');
+      Object.defineProperty(mediaInput, 'files', { value: [otioFile], writable: false });
+
+      mediaInput.dispatchEvent(new Event('change'));
+
+      await vi.waitFor(() => {
+        expect(alertSpy).toHaveBeenCalledTimes(1);
+      });
+      expect(alertSpy).toHaveBeenCalledWith(
+        expect.stringContaining('OTIO import is not available'),
+        expect.objectContaining({ type: 'warning' }),
+      );
+    });
+
+    it('HDR-U055: selecting .otio file does not load it as media', async () => {
+      headerBar.render();
+      const callback = vi.fn();
+      headerBar.onOTIOFileOpen = callback;
+
+      const loadFileSpy = vi.spyOn(session, 'loadFile').mockResolvedValue();
+
+      const inputs = headerBar.getContainer().querySelectorAll('input[type="file"]');
+      const mediaInput = Array.from(inputs).find((input) =>
+        (input as HTMLInputElement).accept.includes('.otio'),
+      ) as HTMLInputElement;
+
+      const otioFile = new File(['{}'], 'timeline.otio');
+      Object.defineProperty(mediaInput, 'files', { value: [otioFile], writable: false });
+
+      mediaInput.dispatchEvent(new Event('change'));
+
+      await vi.waitFor(() => {
+        expect(callback).toHaveBeenCalledTimes(1);
+      });
+      expect(loadFileSpy).not.toHaveBeenCalled();
     });
   });
 });

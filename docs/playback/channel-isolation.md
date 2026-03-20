@@ -15,7 +15,11 @@ OpenRV Web provides six channel viewing modes:
 | Green | `Shift+G` | Green channel displayed as grayscale |
 | Blue | `Shift+B` | Blue channel displayed as grayscale |
 | Alpha | `Shift+A` | Alpha channel displayed as grayscale (fully opaque) |
-| Luminance | `Shift+L` or `Shift+Y` | Rec.709 luminance (0.2126R + 0.7152G + 0.0722B) |
+| Luminance | `Shift+L` / `Shift+Y` | Rec.709 luminance (0.2126R + 0.7152G + 0.0722B). `Shift+L` is the primary shortcut but is overridden by the LUT panel on the Color tab; `Shift+Y` always works. |
+
+::: info Contextual Overrides
+`Shift+R`, `Shift+B`, `Shift+N`, and `Shift+L` are **active by default** as global channel shortcuts. However, they are overridden on specific tabs: `Shift+R` triggers rotate-left on the Transform tab, `Shift+B` cycles the background pattern on the View tab, `Shift+N` opens the network panel on the QC tab, and `Shift+L` opens the LUT panel on the Color tab. If a channel shortcut does not respond, check which tab is active or use the Channel Select dropdown in the toolbar.
+:::
 
 ## Channel Select Dropdown
 
@@ -60,7 +64,7 @@ Channel packing is common in VFX pipelines -- for example, packing a utility mat
 - **Render pass review**: Isolate channels to check for artifacts or unexpected values in specific color planes.
 - **Noise analysis**: View individual channels to identify which channel carries the most noise in an image.
 - **Color balance**: Compare the Red, Green, and Blue channels to evaluate overall color balance and identify color casts.
-- **Luminance evaluation**: Switch to luminance (`Shift+L`) to assess the tonal range without color influence.
+- **Luminance evaluation**: Switch to luminance (`Shift+Y`) to assess the tonal range without color influence.
 
 ## Scope Integration
 
@@ -68,7 +72,7 @@ When channel isolation is active, scopes (Histogram, Waveform, Vectorscope) upda
 
 ## State Persistence
 
-The selected channel mode persists across frame changes and tab switches. Switching tabs does not reset the channel selection. To return to normal full-color display, press `Shift+N`.
+The selected channel mode persists across frame changes and tab switches. Switching tabs does not reset the channel selection. To return to normal full-color display, press `Shift+N` or use the Channel Select dropdown in the toolbar.
 
 ---
 

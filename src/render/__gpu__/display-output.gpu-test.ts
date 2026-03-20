@@ -16,7 +16,8 @@ import { setupIdentityPipeline } from './helpers/pipeline';
 import viewerVertSrc from '../shaders/viewer.vert.glsl?raw';
 import viewerFragSrc from '../shaders/viewer.frag.glsl?raw';
 
-const W = 1, H = 1;
+const W = 1,
+  H = 1;
 
 function createFloatFBO(gl: WebGL2RenderingContext, width: number, height: number) {
   const fbo = gl.createFramebuffer()!;
@@ -27,7 +28,13 @@ function createFloatFBO(gl: WebGL2RenderingContext, width: number, height: numbe
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
   gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
-  return { fbo, dispose: () => { gl.deleteFramebuffer(fbo); gl.deleteTexture(tex); } };
+  return {
+    fbo,
+    dispose: () => {
+      gl.deleteFramebuffer(fbo);
+      gl.deleteTexture(tex);
+    },
+  };
 }
 
 // Reference: sRGB inverse EOTF (linear -> sRGB)
@@ -70,7 +77,9 @@ describe('Display Output — Pixel Accuracy (real GPU)', () => {
   });
 
   function renderWith(
-    inputR: number, inputG: number, inputB: number,
+    inputR: number,
+    inputG: number,
+    inputB: number,
     setUniforms: (gl: WebGL2RenderingContext, program: WebGLProgram) => void,
   ): Float32Array {
     setupIdentityPipeline(gl, program);
@@ -95,7 +104,7 @@ describe('Display Output — Pixel Accuracy (real GPU)', () => {
   describe('sRGB display transfer', () => {
     it('linear 0.2140 -> sRGB ~0.5', () => {
       setup();
-      const input = 0.2140;
+      const input = 0.214;
       const expected = displayTransferSRGB(input);
       const pixels = renderWith(input, input, input, (gl, prog) => {
         gl.uniform1i(gl.getUniformLocation(prog, 'u_displayTransfer'), 1);

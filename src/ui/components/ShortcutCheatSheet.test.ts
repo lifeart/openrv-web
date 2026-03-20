@@ -351,4 +351,84 @@ describe('ShortcutCheatSheet', () => {
     expect(() => sheet.toggle()).not.toThrow();
     expect(sheet.isVisible()).toBe(false);
   });
+
+  // -------------------------------------------------------------------------
+  // Outside-click dismiss (Issue #363)
+  // -------------------------------------------------------------------------
+
+  it('CS-023: clicking outside the content area dismisses the overlay', () => {
+    sheet.show();
+    expect(sheet.isVisible()).toBe(true);
+
+    // Simulate a mousedown on an element outside the overlay (e.g. document.body)
+    const event = new MouseEvent('mousedown', { bubbles: true });
+    document.body.dispatchEvent(event);
+
+    expect(sheet.isVisible()).toBe(false);
+  });
+
+  it('CS-024: clicking inside the content area does NOT dismiss the overlay', () => {
+    sheet.show();
+    expect(sheet.isVisible()).toBe(true);
+
+    // Click on a cheatsheet-row inside the content
+    const row = container.querySelector('.cheatsheet-row') as HTMLElement;
+    expect(row).not.toBeNull();
+
+    const event = new MouseEvent('mousedown', { bubbles: true });
+    row.dispatchEvent(event);
+
+    expect(sheet.isVisible()).toBe(true);
+  });
+
+  it('CS-025: clicking on the overlay backdrop (not content) dismisses', () => {
+    sheet.show();
+    expect(sheet.isVisible()).toBe(true);
+
+    // Click directly on the overlay element itself (the backdrop)
+    const overlay = container.querySelector('.cheatsheet-overlay') as HTMLElement;
+    const event = new MouseEvent('mousedown', { bubbles: true });
+    overlay.dispatchEvent(event);
+
+    expect(sheet.isVisible()).toBe(false);
+  });
+
+  it('CS-026: overlay can be shown again after outside-click dismissal', () => {
+    sheet.show();
+    expect(sheet.isVisible()).toBe(true);
+
+    // Dismiss via outside click
+    const event = new MouseEvent('mousedown', { bubbles: true });
+    document.body.dispatchEvent(event);
+    expect(sheet.isVisible()).toBe(false);
+
+    // Show again
+    sheet.show();
+    expect(sheet.isVisible()).toBe(true);
+
+    // Content should be rendered
+    const rows = container.querySelectorAll('.cheatsheet-row');
+    expect(rows.length).toBe(6);
+  });
+
+  it('CS-027: outside-click listener is cleaned up on hide', () => {
+    const removeSpy = vi.spyOn(document, 'removeEventListener');
+
+    sheet.show();
+    sheet.hide();
+
+    expect(removeSpy.mock.calls.some((call) => call[0] === 'mousedown')).toBe(true);
+    removeSpy.mockRestore();
+  });
+
+  it('CS-028: outside-click listener is cleaned up on dispose', () => {
+    sheet.show();
+    expect(sheet.isVisible()).toBe(true);
+
+    sheet.dispose();
+
+    // After dispose, clicking outside should not throw
+    const event = new MouseEvent('mousedown', { bubbles: true });
+    expect(() => document.body.dispatchEvent(event)).not.toThrow();
+  });
 });

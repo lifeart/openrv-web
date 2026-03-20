@@ -72,6 +72,7 @@ import type { SnapshotPanel } from '../../ui/components/SnapshotPanel';
 import type { PlaylistPanel } from '../../ui/components/PlaylistPanel';
 import type { ShotGridConfigUI } from '../../integrations/ShotGridConfig';
 import type { ShotGridPanel } from '../../ui/components/ShotGridPanel';
+import type { CacheManagementPanel } from '../../ui/components/CacheManagementPanel';
 import type { ConformPanel } from '../../ui/components/ConformPanel';
 
 import type { AutoSaveManager } from '../../core/session/AutoSaveManager';
@@ -168,6 +169,7 @@ export interface PanelControlGroup {
   readonly rightPanelContent: RightPanelContent;
   readonly leftPanelContent: LeftPanelContent;
   readonly cacheIndicator: CacheIndicator;
+  readonly cacheManagementPanel: CacheManagementPanel | null;
   readonly snapshotPanel: SnapshotPanel;
   readonly playlistPanel: PlaylistPanel;
   readonly shotGridConfig: ShotGridConfigUI;

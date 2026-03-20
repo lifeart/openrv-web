@@ -200,14 +200,20 @@ test.describe('Keyboard Shortcuts', () => {
     test('KEYS-020: F should fit to window and update zoom state', async ({ page }) => {
       // First zoom in via view dropdown
       await selectZoomPreset(page, '2');
-      await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getViewerState(); return s?.zoom > 1; })()');
+      await waitForCondition(
+        page,
+        '(() => { const s = window.__OPENRV_TEST__?.getViewerState(); return s?.zoom > 1; })()',
+      );
 
       let state = await getViewerState(page);
       const zoomedIn = state.zoom;
       expect(zoomedIn).toBeGreaterThan(1);
 
       await page.keyboard.press('f');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getViewerState(); return s != null && s.zoom < ${zoomedIn}; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getViewerState(); return s != null && s.zoom < ${zoomedIn}; })()`,
+      );
 
       state = await getViewerState(page);
       expect(state.zoom).toBeLessThan(zoomedIn);
@@ -220,7 +226,10 @@ test.describe('Keyboard Shortcuts', () => {
       const fitZoom = (await getViewerState(page)).zoom;
 
       await page.keyboard.press('0');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getViewerState(); return s != null && s.zoom > 0 && s.zoom < ${fitZoom}; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getViewerState(); return s != null && s.zoom > 0 && s.zoom < ${fitZoom}; })()`,
+      );
 
       const state = await getViewerState(page);
       expect(state.zoom).toBeGreaterThan(0);
@@ -275,7 +284,10 @@ test.describe('Keyboard Shortcuts', () => {
       const targetFrame = state.currentFrame;
 
       await page.keyboard.press('i');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.inPoint === ${targetFrame}; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.inPoint === ${targetFrame}; })()`,
+      );
 
       state = await getSessionState(page);
       expect(state.inPoint).toBe(targetFrame);
@@ -286,16 +298,28 @@ test.describe('Keyboard Shortcuts', () => {
       const canvas = page.locator('canvas').first();
       await canvas.click({ force: true });
       await page.keyboard.press('End');
-      await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s != null && s.currentFrame === s.frameCount; })()', 10000);
+      await waitForCondition(
+        page,
+        '(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s != null && s.currentFrame === s.frameCount; })()',
+        10000,
+      );
       await page.waitForTimeout(100);
       await page.keyboard.press('ArrowLeft');
-      await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s != null && s.currentFrame < s.frameCount; })()', 10000);
+      await waitForCondition(
+        page,
+        '(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s != null && s.currentFrame < s.frameCount; })()',
+        10000,
+      );
 
       let state = await getSessionState(page);
       const targetFrame = state.currentFrame;
 
       await page.keyboard.press('o');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.outPoint === ${targetFrame}; })()`, 10000);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.outPoint === ${targetFrame}; })()`,
+        10000,
+      );
 
       state = await getSessionState(page);
       expect(state.outPoint).toBe(targetFrame);
@@ -310,7 +334,10 @@ test.describe('Keyboard Shortcuts', () => {
       const targetFrame = state.currentFrame;
 
       await page.keyboard.press('[');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.inPoint === ${targetFrame}; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.inPoint === ${targetFrame}; })()`,
+      );
 
       state = await getSessionState(page);
       expect(state.inPoint).toBe(targetFrame);
@@ -318,13 +345,19 @@ test.describe('Keyboard Shortcuts', () => {
 
     test('KEYS-033: ] should set out point', async ({ page }) => {
       await page.keyboard.press('End');
-      await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s != null && s.currentFrame === s.frameCount; })()');
+      await waitForCondition(
+        page,
+        '(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s != null && s.currentFrame === s.frameCount; })()',
+      );
 
       let state = await getSessionState(page);
       const targetFrame = state.currentFrame;
 
       await page.keyboard.press(']');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.outPoint === ${targetFrame}; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.outPoint === ${targetFrame}; })()`,
+      );
 
       state = await getSessionState(page);
       expect(state.outPoint).toBe(targetFrame);
@@ -339,14 +372,20 @@ test.describe('Keyboard Shortcuts', () => {
       await page.keyboard.press('ArrowLeft');
       await page.keyboard.press('ArrowLeft');
       await page.keyboard.press('o');
-      await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s != null && s.inPoint > 1 && s.outPoint < s.frameCount; })()');
+      await waitForCondition(
+        page,
+        '(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s != null && s.inPoint > 1 && s.outPoint < s.frameCount; })()',
+      );
 
       let state = await getSessionState(page);
       expect(state.inPoint).toBeGreaterThan(1);
       expect(state.outPoint).toBeLessThan(state.frameCount);
 
       await page.keyboard.press('r');
-      await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s != null && s.inPoint === 1 && s.outPoint === s.frameCount; })()');
+      await waitForCondition(
+        page,
+        '(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s != null && s.inPoint === 1 && s.outPoint === s.frameCount; })()',
+      );
 
       state = await getSessionState(page);
       expect(state.inPoint).toBe(1);
@@ -359,13 +398,19 @@ test.describe('Keyboard Shortcuts', () => {
       expect(state.marks).not.toContain(currentFrame);
 
       await page.keyboard.press('m');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.marks?.includes(${currentFrame}); })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.marks?.includes(${currentFrame}); })()`,
+      );
 
       state = await getSessionState(page);
       expect(state.marks).toContain(currentFrame);
 
       await page.keyboard.press('m');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s != null && !s.marks?.includes(${currentFrame}); })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s != null && !s.marks?.includes(${currentFrame}); })()`,
+      );
 
       state = await getSessionState(page);
       expect(state.marks).not.toContain(currentFrame);
@@ -426,7 +471,9 @@ test.describe('Keyboard Shortcuts', () => {
       await page.keyboard.press('5');
       await waitForTabActive(page, 'annotate');
 
-      await page.keyboard.press('e');
+      // E key is intercepted by VirtualSliderController (exposure adjust),
+      // so click the Eraser button in the toolbar instead.
+      await page.click('button[title*="Eraser"]');
       await waitForTool(page, 'eraser');
 
       const state = await getPaintState(page);
@@ -446,20 +493,31 @@ test.describe('Keyboard Shortcuts', () => {
 
     test('KEYS-044: B should toggle brush type and update brushType state', async ({ page }) => {
       await page.keyboard.press('5');
+      await waitForTabActive(page, 'annotate');
+
       await page.keyboard.press('p');
       await waitForTool(page, 'pen');
 
       let state = await getPaintState(page);
       const initialBrush = state.brushType;
 
-      await page.keyboard.press('b');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s != null && s.brushType !== '${initialBrush}'; })()`);
+      // B key is intercepted by VirtualSliderController (brightness adjust),
+      // so click the brush toggle button in the toolbar instead.
+      const brushButton = page.getByRole('button', { name: /soft\/hard brush/i });
+      await brushButton.click();
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s != null && s.brushType !== '${initialBrush}'; })()`,
+      );
 
       state = await getPaintState(page);
       expect(state.brushType).not.toBe(initialBrush);
 
-      await page.keyboard.press('b');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.brushType === '${initialBrush}'; })()`);
+      await brushButton.click();
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.brushType === '${initialBrush}'; })()`,
+      );
 
       state = await getPaintState(page);
       expect(state.brushType).toBe(initialBrush);
@@ -473,13 +531,19 @@ test.describe('Keyboard Shortcuts', () => {
       const initialGhost = state.ghostMode;
 
       await page.keyboard.press('g');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.ghostMode === ${!initialGhost}; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.ghostMode === ${!initialGhost}; })()`,
+      );
 
       state = await getPaintState(page);
       expect(state.ghostMode).toBe(!initialGhost);
 
       await page.keyboard.press('g');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.ghostMode === ${initialGhost}; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.ghostMode === ${initialGhost}; })()`,
+      );
 
       state = await getPaintState(page);
       expect(state.ghostMode).toBe(initialGhost);
@@ -505,7 +569,10 @@ test.describe('Keyboard Shortcuts', () => {
       const screenshotBefore = await captureViewerScreenshot(page);
 
       await page.keyboard.press('Control+z');
-      await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canRedo === true; })()');
+      await waitForCondition(
+        page,
+        '(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canRedo === true; })()',
+      );
 
       state = await getPaintState(page);
       expect(state.canUndo).toBe(false);
@@ -532,13 +599,19 @@ test.describe('Keyboard Shortcuts', () => {
       const screenshotWithStroke = await captureViewerScreenshot(page);
 
       await page.keyboard.press('Control+z');
-      await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canRedo === true; })()');
+      await waitForCondition(
+        page,
+        '(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canRedo === true; })()',
+      );
 
       let state = await getPaintState(page);
       expect(state.canRedo).toBe(true);
 
       await page.keyboard.press('Control+y');
-      await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === true && s?.canRedo === false; })()');
+      await waitForCondition(
+        page,
+        '(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === true && s?.canRedo === false; })()',
+      );
 
       state = await getPaintState(page);
       expect(state.canUndo).toBe(true);
@@ -577,6 +650,10 @@ test.describe('Keyboard Shortcuts', () => {
 
       const initialScreenshot = await captureViewerScreenshot(page);
 
+      // Shift+R is contextual: channel.red (global) vs transform.rotateLeft (transform tab).
+      // Switch to the Transform tab so Shift+R triggers rotation.
+      await page.click('button[data-tab-id="transform"]');
+      await waitForTabActive(page, 'transform');
       await page.keyboard.press('Shift+r');
       await waitForRotation(page, 270);
 
@@ -612,7 +689,10 @@ test.describe('Keyboard Shortcuts', () => {
       const initialScreenshot = await captureViewerScreenshot(page);
 
       await page.keyboard.press('Alt+h');
-      await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getTransformState(); return s?.flipH === true; })()');
+      await waitForCondition(
+        page,
+        '(() => { const s = window.__OPENRV_TEST__?.getTransformState(); return s?.flipH === true; })()',
+      );
 
       state = await getTransformState(page);
       expect(state.flipH).toBe(true);
@@ -623,7 +703,10 @@ test.describe('Keyboard Shortcuts', () => {
 
       // Toggle back
       await page.keyboard.press('Alt+h');
-      await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getTransformState(); return s?.flipH === false; })()');
+      await waitForCondition(
+        page,
+        '(() => { const s = window.__OPENRV_TEST__?.getTransformState(); return s?.flipH === false; })()',
+      );
 
       state = await getTransformState(page);
       expect(state.flipH).toBe(false);
@@ -634,7 +717,10 @@ test.describe('Keyboard Shortcuts', () => {
 
       // Use keyboard shortcut Shift+V to flip
       await page.keyboard.press('Shift+V');
-      await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getTransformState(); return s?.flipV === true; })()');
+      await waitForCondition(
+        page,
+        '(() => { const s = window.__OPENRV_TEST__?.getTransformState(); return s?.flipV === true; })()',
+      );
 
       // Canvas should visually change after flip
       const flippedScreenshot = await captureViewerScreenshot(page);
@@ -642,7 +728,10 @@ test.describe('Keyboard Shortcuts', () => {
 
       // Flip again to verify toggle
       await page.keyboard.press('Shift+V');
-      await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getTransformState(); return s?.flipV === false; })()');
+      await waitForCondition(
+        page,
+        '(() => { const s = window.__OPENRV_TEST__?.getTransformState(); return s?.flipV === false; })()',
+      );
 
       // Should return to original (or at least different from flipped)
       const restoredScreenshot = await captureViewerScreenshot(page);
@@ -653,7 +742,17 @@ test.describe('Keyboard Shortcuts', () => {
       let state = await getViewerState(page);
       expect(state.cropEnabled).toBe(false);
 
-      await page.keyboard.press('Shift+k');
+      // Shift+K is intercepted by VirtualSliderController (K = contrast adjust),
+      // so toggle crop via the Transform tab Crop button instead.
+      await page.click('button[data-tab-id="transform"]');
+      await waitForTabActive(page, 'transform');
+      const cropButton = page.locator('button:has-text("Crop")').first();
+      await cropButton.click();
+      // Enable crop via the panel toggle
+      const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
+      const enableToggle = cropPanel.getByRole('switch', { name: 'Enable Crop' });
+      await enableToggle.click();
       await waitForCropEnabled(page, true);
 
       state = await getViewerState(page);
@@ -661,7 +760,8 @@ test.describe('Keyboard Shortcuts', () => {
 
       // Crop mode enables overlay on canvas (state is the primary verification)
 
-      await page.keyboard.press('Shift+k');
+      // Toggle off via the same switch
+      await enableToggle.click();
       await waitForCropEnabled(page, false);
 
       state = await getViewerState(page);
@@ -792,7 +892,10 @@ test.describe('Keyboard Shortcuts', () => {
 
       // Add a marker to get a note input
       await page.keyboard.press('m');
-      await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.marks?.length > 0; })()');
+      await waitForCondition(
+        page,
+        '(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.marks?.length > 0; })()',
+      );
 
       const state = await getSessionState(page);
       const editButton = page.locator(`[data-testid="marker-edit-${state.currentFrame}"]`);

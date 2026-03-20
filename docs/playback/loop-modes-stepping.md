@@ -36,7 +36,7 @@ The timeline status bar displays the current loop mode alongside the playback st
 Playing | 24/24 fps | loop
 ```
 
-The loop mode button in the header bar shows an icon and label (e.g., "Loop", "Ping", "Once") and has a minimum width of 70px.
+The loop mode button in the header bar is a compact icon-only control (28px). Hovering over it shows a tooltip with the current mode name (e.g., "Loop", "Ping-Pong", "Play Once"). The button also carries an aria-label for screen readers.
 
 ## In/Out Point Integration
 

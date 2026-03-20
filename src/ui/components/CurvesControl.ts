@@ -226,11 +226,14 @@ export class CurvesControl extends EventEmitter<CurvesControlEvents> {
         const curves = importCurvesJSON(text);
         if (curves) {
           this.setCurves(curves);
+          this.clearImportError();
         } else {
           console.error('Invalid curves JSON file');
+          this.showImportError('Invalid curves JSON file');
         }
       } catch (err) {
         console.error('Failed to import curves:', err);
+        this.showImportError('Failed to import curves');
       }
     });
     input.click();
@@ -344,6 +347,22 @@ export class CurvesControl extends EventEmitter<CurvesControlEvents> {
    */
   render(): HTMLElement {
     return this.draggableContainer.element;
+  }
+
+  private showImportError(message: string): void {
+    this.clearImportError();
+    const el = document.createElement('div');
+    el.className = 'curves-import-error';
+    el.dataset.testid = 'curves-import-error';
+    el.textContent = message;
+    el.style.cssText = 'color: var(--text-danger, red); font-size: 11px; padding: 4px 0;';
+    this.draggableContainer.content.appendChild(el);
+    setTimeout(() => el.remove(), 5000);
+  }
+
+  private clearImportError(): void {
+    const existing = this.draggableContainer.content.querySelector('.curves-import-error');
+    if (existing) existing.remove();
   }
 
   dispose(): void {

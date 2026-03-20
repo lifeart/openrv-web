@@ -203,10 +203,10 @@ describe('AdvancedPaintTools E2E - PaintToolbar buttons', () => {
     const el = toolbar.render();
 
     const expectations: Record<string, string[]> = {
-      dodge: ['Dodge', 'Lighten', '(D)'],
-      burn: ['Burn', 'Darken', '(U)'],
-      clone: ['Clone', 'Alt-click', '(C)'],
-      smudge: ['Smudge', 'blend', '(M)'],
+      dodge: ['Dodge', 'Lighten'],
+      burn: ['Burn', 'Darken'],
+      clone: ['Clone', 'Alt-click'],
+      smudge: ['Smudge', 'blend'],
     };
 
     for (const [tool, keywords] of Object.entries(expectations)) {

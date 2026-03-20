@@ -4,10 +4,14 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Timeline } from './Timeline';
+import { TimelineContextMenu } from './TimelineContextMenu';
 import { Session } from '../../core/session/Session';
 import { PaintEngine } from '../../paint/PaintEngine';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 import type { Annotation } from '../../paint/types';
+import * as Modal from './shared/Modal';
+
+const showAlertSpy = vi.spyOn(Modal, 'showAlert').mockReturnValue(Promise.resolve());
 
 class TestTimeline extends Timeline {
   public drawCount = 0;
@@ -65,7 +69,7 @@ describe('Timeline', () => {
 
     // Clear persisted timeline display mode so each test starts fresh
     try {
-      localStorage.removeItem('openrv.timeline.displayMode');
+      localStorage.removeItem('openrv-prefs-timeline-display-mode');
     } catch {
       /* noop */
     }
@@ -793,6 +797,92 @@ describe('Timeline', () => {
     });
   });
 
+  describe('waveform error indicator (issue #190)', () => {
+    it('TML-WERR-001: shows waveformError when loadWaveform fails', async () => {
+      const waveformRenderer = (timeline as any).waveformRenderer;
+      vi.spyOn(waveformRenderer, 'loadFromVideo').mockResolvedValue(false);
+      vi.spyOn(waveformRenderer, 'getError').mockReturnValue('decode error');
+
+      await (timeline as any).loadWaveform();
+
+      expect((timeline as any).waveformLoaded).toBe(false);
+      expect((timeline as any).waveformError).toBe('decode error');
+    });
+
+    it('TML-WERR-002: clears waveformError on successful load', async () => {
+      // First set an error state
+      (timeline as any).waveformError = 'previous error';
+
+      const waveformRenderer = (timeline as any).waveformRenderer;
+      vi.spyOn(waveformRenderer, 'loadFromBlob').mockResolvedValue(true);
+
+      const mockFile = new File(['audio-data'], 'test.mp4', { type: 'video/mp4' });
+      const currentSource = session.currentSource!;
+      (currentSource as any).videoSourceNode = { getFile: () => mockFile };
+
+      await (timeline as any).loadWaveform();
+
+      expect((timeline as any).waveformLoaded).toBe(true);
+      expect((timeline as any).waveformError).toBeNull();
+    });
+
+    it('TML-WERR-003: draws "Waveform unavailable" text when waveformError is set', () => {
+      timeline.setSize(800, 80);
+      (timeline as any).waveformError = 'decode error';
+      (timeline as any).waveformLoaded = false;
+
+      const ctx = (timeline as any).ctx as CanvasRenderingContext2D;
+      const fillTextSpy = vi.spyOn(ctx, 'fillText');
+
+      timeline.drawCount = 0;
+      (timeline as any).draw();
+
+      const waveformUnavailableCall = fillTextSpy.mock.calls.find(
+        (call: unknown[]) => call[0] === 'Waveform unavailable',
+      );
+      expect(waveformUnavailableCall).toBeDefined();
+    });
+
+    it('TML-WERR-004: does not draw error text when waveform loaded successfully', () => {
+      timeline.setSize(800, 80);
+      (timeline as any).waveformError = null;
+      (timeline as any).waveformLoaded = true;
+
+      const ctx = (timeline as any).ctx as CanvasRenderingContext2D;
+      const fillTextSpy = vi.spyOn(ctx, 'fillText');
+
+      timeline.drawCount = 0;
+      (timeline as any).draw();
+
+      const waveformUnavailableCall = fillTextSpy.mock.calls.find(
+        (call: unknown[]) => call[0] === 'Waveform unavailable',
+      );
+      expect(waveformUnavailableCall).toBeUndefined();
+    });
+
+    it('TML-WERR-005: uses fallback message when getError() returns null', async () => {
+      const waveformRenderer = (timeline as any).waveformRenderer;
+      vi.spyOn(waveformRenderer, 'loadFromVideo').mockResolvedValue(false);
+      vi.spyOn(waveformRenderer, 'getError').mockReturnValue(null);
+
+      await (timeline as any).loadWaveform();
+
+      expect((timeline as any).waveformError).toBe('Waveform unavailable');
+    });
+
+    it('TML-WERR-006: schedules redraw on waveform failure', async () => {
+      const waveformRenderer = (timeline as any).waveformRenderer;
+      vi.spyOn(waveformRenderer, 'loadFromVideo').mockResolvedValue(false);
+      vi.spyOn(waveformRenderer, 'getError').mockReturnValue(null);
+
+      timeline.drawCount = 0;
+      await (timeline as any).loadWaveform();
+      flushRaf();
+
+      expect(timeline.drawCount).toBeGreaterThanOrEqual(1);
+    });
+  });
+
   describe('Task 1.1: rAF Draw Coalescing', () => {
     it('TML-COAL-001: 5x scheduleDraw() results in exactly 1 draw() call', () => {
       timeline.drawCount = 0;
@@ -1492,6 +1582,279 @@ describe('Timeline', () => {
       expect(registeredEvents).toContain('contextmenu');
 
       addEventSpy.mockRestore();
+      tl.dispose();
+    });
+  });
+
+  describe('clipboard error handling (#196)', () => {
+    it('TML-CLIP-001: onCopyTimecode shows alert when clipboard write fails', async () => {
+      showAlertSpy.mockClear();
+
+      // Spy on TimelineContextMenu.show to capture the onCopyTimecode callback
+      const showSpy = vi.spyOn(TimelineContextMenu.prototype, 'show');
+
+      // Trigger context menu
+      const canvas = timeline.render().querySelector('canvas') ?? timeline.render();
+      const contextEvent = new MouseEvent('contextmenu', {
+        clientX: 500,
+        clientY: 50,
+        bubbles: true,
+        cancelable: true,
+      });
+      canvas.dispatchEvent(contextEvent);
+
+      expect(showSpy).toHaveBeenCalled();
+      const options = showSpy.mock.calls[0]![0];
+
+      // Mock clipboard to fail
+      const writeTextMock = vi.fn().mockRejectedValue(new Error('Clipboard denied'));
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { writeText: writeTextMock },
+        writable: true,
+        configurable: true,
+      });
+
+      // Invoke the onCopyTimecode callback
+      options.onCopyTimecode('00:00:01:18');
+
+      await vi.waitFor(() => {
+        expect(showAlertSpy).toHaveBeenCalledWith(
+          'Failed to copy timecode to clipboard. Your browser may have denied clipboard access.',
+          { type: 'warning', title: 'Clipboard Unavailable' },
+        );
+      });
+
+      showSpy.mockRestore();
+    });
+
+    it('TML-CLIP-002: onCopyTimecode does not show alert when clipboard write succeeds', async () => {
+      showAlertSpy.mockClear();
+
+      const showSpy = vi.spyOn(TimelineContextMenu.prototype, 'show');
+
+      const canvas = timeline.render().querySelector('canvas') ?? timeline.render();
+      const contextEvent = new MouseEvent('contextmenu', {
+        clientX: 500,
+        clientY: 50,
+        bubbles: true,
+        cancelable: true,
+      });
+      canvas.dispatchEvent(contextEvent);
+
+      expect(showSpy).toHaveBeenCalled();
+      const options = showSpy.mock.calls[0]![0];
+
+      const writeTextMock = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { writeText: writeTextMock },
+        writable: true,
+        configurable: true,
+      });
+
+      options.onCopyTimecode('00:00:01:18');
+
+      // Wait for the promise to resolve
+      await vi.waitFor(() => {
+        expect(writeTextMock).toHaveBeenCalledWith('00:00:01:18');
+      });
+      expect(showAlertSpy).not.toHaveBeenCalled();
+
+      showSpy.mockRestore();
+    });
+  });
+
+  describe('missing-frame timeline highlighting (issue #481)', () => {
+    function createSequenceSession(missingFrames: number[]): Session {
+      const seq = new Session();
+      (seq as any).addSource({
+        id: 'seq-source',
+        name: 'frame_####.exr',
+        type: 'sequence',
+        duration: 10,
+        fps: 24,
+        width: 1920,
+        height: 1080,
+        sequenceInfo: {
+          name: 'frame',
+          pattern: 'frame_####.exr',
+          frames: [],
+          startFrame: 1,
+          endFrame: 10,
+          width: 1920,
+          height: 1080,
+          fps: 24,
+          missingFrames,
+        },
+        sequenceFrames: [],
+        sequenceFrameMap: new Map(),
+      });
+      return seq;
+    }
+
+    it('TML-MF-001: draws missing-frame markers for a sequence with gaps', () => {
+      const seqSession = createSequenceSession([3, 7]);
+      const tl = new TestTimeline(seqSession, paintEngine);
+      const container = tl.render();
+      vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+        width: 1000,
+        height: 100,
+        top: 0,
+        left: 0,
+        bottom: 100,
+        right: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => {},
+      } as DOMRect);
+      tl.setSize(1000, 100);
+      flushRaf();
+
+      const ctx = (tl as any).ctx as CanvasRenderingContext2D;
+      const fillRectCalls: { x: number; y: number; w: number; h: number }[] = [];
+      vi.spyOn(ctx, 'fillRect').mockImplementation((x: number, y: number, w: number, h: number) => {
+        fillRectCalls.push({ x, y, w, h });
+      });
+
+      (tl as any).draw();
+
+      // The missing-frame draw path sets globalAlpha to 0.25 for the background rect
+      // and 1.0 for the line; we check that fillRect was called with coordinates
+      // corresponding to the missing frames (frame 3 and 7 on a 10-frame timeline).
+      // With padding=60, trackWidth=880, frameToX(f)=60+((f-1)/9)*880
+      const expectedX3 = 60 + ((3 - 1) / 9) * 880; // ~255.6
+      const expectedX7 = 60 + ((7 - 1) / 9) * 880; // ~646.7
+
+      // Find fillRect calls near the expected X positions (within ±5px tolerance)
+      const nearX3 = fillRectCalls.filter(
+        (c) => Math.abs(c.x - expectedX3) < 5 || Math.abs(c.x - (expectedX3 - 0.5)) < 5,
+      );
+      const nearX7 = fillRectCalls.filter(
+        (c) => Math.abs(c.x - expectedX7) < 5 || Math.abs(c.x - (expectedX7 - 0.5)) < 5,
+      );
+
+      expect(nearX3.length).toBeGreaterThanOrEqual(2); // background rect + line
+      expect(nearX7.length).toBeGreaterThanOrEqual(2);
+
+      tl.dispose();
+    });
+
+    it('TML-MF-002: does not draw missing-frame markers for video sources', () => {
+      // Default session from beforeEach has a video source
+      const ctx = (timeline as any).ctx as CanvasRenderingContext2D;
+      const globalAlphaValues: number[] = [];
+      let currentAlpha = 1;
+      Object.defineProperty(ctx, 'globalAlpha', {
+        set(v: number) {
+          currentAlpha = v;
+          globalAlphaValues.push(v);
+        },
+        get() {
+          return currentAlpha;
+        },
+        configurable: true,
+      });
+
+      (timeline as any).draw();
+
+      // For a video source, 0.25 should NOT appear from missing-frame code.
+      // globalAlpha=0.25 is the marker used for missing-frame drawing.
+      expect(globalAlphaValues).not.toContain(0.25);
+
+      delete (ctx as any).globalAlpha;
+    });
+
+    it('TML-MF-003: does not draw markers when missingFrames is empty', () => {
+      const seqSession = createSequenceSession([]);
+      const tl = new TestTimeline(seqSession, paintEngine);
+      const container = tl.render();
+      vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+        width: 1000,
+        height: 100,
+        top: 0,
+        left: 0,
+        bottom: 100,
+        right: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => {},
+      } as DOMRect);
+      tl.setSize(1000, 100);
+      flushRaf();
+
+      const ctx = (tl as any).ctx as CanvasRenderingContext2D;
+      const fillRectSpy = vi.spyOn(ctx, 'fillRect');
+
+      (tl as any).draw();
+
+      // Missing frame markers should not add any extra fillRect calls with the
+      // characteristic 0.25 alpha pattern. We verify by checking the fillStyle
+      // values don't include the missingFrame color (#ff6b6b) at alpha 0.25
+      const colors = (tl as any).getColors();
+      const fillStyleValues: string[] = [];
+      let lastStyle = '';
+      Object.defineProperty(ctx, 'fillStyle', {
+        set(v: string) {
+          lastStyle = v;
+          fillStyleValues.push(v);
+        },
+        get() {
+          return lastStyle;
+        },
+        configurable: true,
+      });
+      fillRectSpy.mockRestore();
+      (tl as any).draw();
+
+      // missingFrame color should not appear because the array is empty
+      expect(fillStyleValues.filter((v) => v === colors.missingFrame)).toHaveLength(0);
+
+      delete (ctx as any).fillStyle;
+      tl.dispose();
+    });
+
+    it('TML-MF-004: missingFrame color is included in cached theme colors', () => {
+      const colors = (timeline as any).getColors();
+      expect(colors.missingFrame).toBe('#ff6b6b');
+    });
+
+    it('TML-MF-005: missing-frame markers use correct color from theme cache', () => {
+      const seqSession = createSequenceSession([5]);
+      const tl = new TestTimeline(seqSession, paintEngine);
+      const container = tl.render();
+      vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+        width: 1000,
+        height: 100,
+        top: 0,
+        left: 0,
+        bottom: 100,
+        right: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => {},
+      } as DOMRect);
+      tl.setSize(1000, 100);
+      flushRaf();
+
+      const ctx = (tl as any).ctx as CanvasRenderingContext2D;
+      const fillStyleValues: string[] = [];
+      let lastStyle = '';
+      Object.defineProperty(ctx, 'fillStyle', {
+        set(v: string) {
+          lastStyle = v;
+          fillStyleValues.push(v);
+        },
+        get() {
+          return lastStyle;
+        },
+        configurable: true,
+      });
+
+      (tl as any).draw();
+
+      // The missing frame color should appear in the fill styles
+      expect(fillStyleValues).toContain('#ff6b6b');
+
+      delete (ctx as any).fillStyle;
       tl.dispose();
     });
   });

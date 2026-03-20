@@ -4,19 +4,23 @@ import type { EvalContext } from '../../../core/graph/Graph';
 import { WebGLNoiseReductionProcessor } from '../../../filters/WebGLNoiseReduction';
 import type { NoiseReductionParams } from '../../../filters/NoiseReduction';
 
+/** Minimal interface for reading noise reduction parameters from the owning node. */
+interface NoiseReductionParamsProvider {
+  readonly strength: number;
+  readonly luminanceStrength: number;
+  readonly chromaStrength: number;
+  readonly radius: number;
+}
+
 /**
  * GPU-accelerated noise reduction processor.
- * Attaches to a NoiseReductionNode via `node.processor = new GPUNoiseReductionProcessor()`.
+ * Attaches to a NoiseReductionNode via `node.processor = new GPUNoiseReductionProcessor(node)`.
  * Falls back to the node's built-in CPU applyEffect() if GPU is unavailable.
- *
- * @experimental This is a stub implementation. Parameters are hardcoded and
- * not yet read from the owning node's properties. A future revision will
- * wire up the node's property bag for full configurability.
  */
 export class GPUNoiseReductionProcessor implements NodeProcessor {
   private gpuProcessor: WebGLNoiseReductionProcessor | null = null;
 
-  constructor() {
+  constructor(private readonly params: NoiseReductionParamsProvider) {
     try {
       const canvas = document.createElement('canvas');
       this.gpuProcessor = new WebGLNoiseReductionProcessor(canvas);
@@ -33,12 +37,11 @@ export class GPUNoiseReductionProcessor implements NodeProcessor {
     const input = inputs[0];
     if (!input || !this.gpuProcessor?.isReady()) return input ?? null;
 
-    // TODO: Read parameters from owning node instead of using hardcoded values
     const params: NoiseReductionParams = {
-      strength: 50,
-      luminanceStrength: 50,
-      chromaStrength: 75,
-      radius: 2,
+      strength: this.params.strength,
+      luminanceStrength: this.params.luminanceStrength,
+      chromaStrength: this.params.chromaStrength,
+      radius: this.params.radius,
     };
     const imageData = input.toImageData();
     const result = this.gpuProcessor.process(imageData, params);

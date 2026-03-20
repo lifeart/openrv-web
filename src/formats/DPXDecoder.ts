@@ -4,7 +4,7 @@
  * Supports:
  * - 8-bit, 10-bit (Method A packed), 12-bit (in 16-bit container), and 16-bit data
  * - Big-endian and little-endian byte order
- * - RGB and RGBA images
+ * - RGB, RGBA, and Luma (grayscale) images
  * - Linear and logarithmic transfer functions
  * - Optional log-to-linear conversion
  *
@@ -35,6 +35,7 @@ export interface DPXInfo {
   transfer: string; // 'linear' | 'logarithmic'
   channels: number;
   dataOffset: number;
+  descriptor: number;
 }
 
 export interface DPXDecodeOptions {
@@ -107,6 +108,9 @@ export function getDPXInfo(buffer: ArrayBuffer): DPXInfo | null {
     const descriptor = view.getUint8(800);
     let channels: number;
     switch (descriptor) {
+      case 6: // Luma (grayscale)
+        channels = 1;
+        break;
       case 50: // RGB
         channels = 3;
         break;
@@ -117,8 +121,7 @@ export function getDPXInfo(buffer: ArrayBuffer): DPXInfo | null {
         channels = 4;
         break;
       default:
-        channels = 3; // Default to RGB
-        break;
+        throw new DecoderError('DPX', `Unsupported DPX descriptor: ${descriptor}`);
     }
 
     return {
@@ -129,8 +132,12 @@ export function getDPXInfo(buffer: ArrayBuffer): DPXInfo | null {
       transfer,
       channels,
       dataOffset,
+      descriptor,
     };
-  } catch {
+  } catch (e) {
+    if (e instanceof DecoderError) {
+      throw e;
+    }
     return null;
   }
 }
@@ -284,7 +291,7 @@ export async function decodeDPX(buffer: ArrayBuffer, options?: DPXDecodeOptions)
     throw new DecoderError('DPX', 'Invalid DPX file');
   }
 
-  const { width, height, bitDepth, bigEndian, transfer, channels: inputChannels, dataOffset } = info;
+  const { width, height, bitDepth, bigEndian, transfer, channels: inputChannels, dataOffset, descriptor } = info;
 
   // Validate dimensions
   validateImageDimensions(width, height, 'DPX');
@@ -319,6 +326,22 @@ export async function decodeDPX(buffer: ArrayBuffer, options?: DPXDecodeOptions)
   // Convert to RGBA
   const rgbaData = toRGBA(componentData, width, height, inputChannels);
 
+  // Swizzle ABGR → RGBA when descriptor is 52
+  if (descriptor === 52) {
+    const totalPixels = width * height;
+    for (let i = 0; i < totalPixels; i++) {
+      const idx = i * 4;
+      const a = rgbaData[idx]!; // originally A
+      const b = rgbaData[idx + 1]!; // originally B
+      const g = rgbaData[idx + 2]!; // originally G
+      const r = rgbaData[idx + 3]!; // originally R
+      rgbaData[idx] = r;
+      rgbaData[idx + 1] = g;
+      rgbaData[idx + 2] = b;
+      rgbaData[idx + 3] = a;
+    }
+  }
+
   // Determine color space
   const isLog = transfer === 'logarithmic';
   let colorSpace: 'linear' | 'log' = isLog ? 'log' : 'linear';
@@ -341,6 +364,7 @@ export async function decodeDPX(buffer: ArrayBuffer, options?: DPXDecodeOptions)
       bigEndian,
       transfer,
       originalChannels: inputChannels,
+      descriptor,
     },
   };
 }

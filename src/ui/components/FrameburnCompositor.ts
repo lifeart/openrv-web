@@ -46,6 +46,27 @@ export interface FrameburnContext {
   date?: string;
 }
 
+const VALID_FRAMEBURN_POSITIONS: ReadonlySet<FrameburnPosition> = new Set([
+  'top-left',
+  'top-center',
+  'top-right',
+  'bottom-left',
+  'bottom-center',
+  'bottom-right',
+]);
+
+const VALID_FRAMEBURN_FIELD_TYPES: ReadonlySet<FrameburnField['type']> = new Set([
+  'timecode',
+  'frame',
+  'shotName',
+  'date',
+  'custom',
+  'resolution',
+  'fps',
+  'colorspace',
+  'codec',
+]);
+
 const FONT_SIZES: Record<TimecodeOverlayState['fontSize'], number> = {
   small: 14,
   medium: 18,
@@ -53,6 +74,17 @@ const FONT_SIZES: Record<TimecodeOverlayState['fontSize'], number> = {
 };
 
 const FONT_FAMILY = "'SF Mono', 'Fira Code', 'Consolas', monospace";
+
+export const DEFAULT_FRAMEBURN_CONFIG: FrameburnConfig = {
+  enabled: false,
+  fields: [{ type: 'timecode' }],
+  font: FONT_FAMILY,
+  fontSize: 16,
+  fontColor: '#ffffff',
+  backgroundColor: 'rgba(0, 0, 0, 0.6)',
+  backgroundPadding: 8,
+  position: 'bottom-left',
+};
 
 function getAnchorPosition(
   position: OverlayPosition | FrameburnPosition,
@@ -121,6 +153,11 @@ export function compositeTimecodeFrameburn(
 ): void {
   if (!options?.enabled) return;
 
+  // Resolve display format with backward compat for showFrameCounter
+  const displayFormat = options.displayFormat ?? (options.showFrameCounter ? 'both' : 'smpte');
+  const showTimecode = displayFormat === 'smpte' || displayFormat === 'both';
+  const showFrame = displayFormat === 'frame' || displayFormat === 'both';
+
   const timecode = formatTimecode(frameToTimecode(options.frame, options.fps, options.startFrame ?? 0));
   const frameCounter = `Frame ${options.frame} / ${options.totalFrames}`;
 
@@ -128,23 +165,25 @@ export function compositeTimecodeFrameburn(
   const counterFontSize = Math.max(11, Math.round(fontSize * 0.75));
   const horizontalPadding = Math.max(10, Math.round(fontSize * 0.66));
   const verticalPadding = Math.max(8, Math.round(fontSize * 0.5));
-  const lineGap = options.showFrameCounter ? Math.max(4, Math.round(fontSize * 0.22)) : 0;
+  const showBothLines = showTimecode && showFrame;
+  const lineGap = showBothLines ? Math.max(4, Math.round(fontSize * 0.22)) : 0;
 
   ctx.save();
   ctx.textBaseline = 'top';
 
   ctx.font = `${fontSize}px ${FONT_FAMILY}`;
-  const timecodeWidth = ctx.measureText(timecode).width;
+  const timecodeWidth = showTimecode ? ctx.measureText(timecode).width : 0;
 
   let maxTextWidth = timecodeWidth;
-  if (options.showFrameCounter) {
+  if (showFrame) {
     ctx.font = `${counterFontSize}px ${FONT_FAMILY}`;
     maxTextWidth = Math.max(maxTextWidth, ctx.measureText(frameCounter).width);
   }
 
+  const primaryLineHeight = showTimecode ? fontSize : counterFontSize;
   const boxWidth = Math.ceil(maxTextWidth + horizontalPadding * 2);
   const boxHeight = Math.ceil(
-    verticalPadding * 2 + fontSize + (options.showFrameCounter ? lineGap + counterFontSize : 0),
+    verticalPadding * 2 + primaryLineHeight + (showBothLines ? lineGap + counterFontSize : 0),
   );
 
   const { x, y } = getAnchorPosition(options.position, canvasWidth, canvasHeight, boxWidth, boxHeight);
@@ -152,14 +191,19 @@ export function compositeTimecodeFrameburn(
   ctx.fillStyle = `rgba(0, 0, 0, ${Math.max(0, Math.min(1, options.backgroundOpacity))})`;
   drawRoundedRect(ctx, x, y, boxWidth, boxHeight, 4);
 
-  ctx.fillStyle = '#ffffff';
-  ctx.font = `${fontSize}px ${FONT_FAMILY}`;
-  ctx.fillText(timecode, x + horizontalPadding, y + verticalPadding);
+  let currentY = y + verticalPadding;
 
-  if (options.showFrameCounter) {
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+  if (showTimecode) {
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `${fontSize}px ${FONT_FAMILY}`;
+    ctx.fillText(timecode, x + horizontalPadding, currentY);
+    currentY += fontSize + lineGap;
+  }
+
+  if (showFrame) {
+    ctx.fillStyle = showTimecode ? 'rgba(255, 255, 255, 0.75)' : '#ffffff';
     ctx.font = `${counterFontSize}px ${FONT_FAMILY}`;
-    ctx.fillText(frameCounter, x + horizontalPadding, y + verticalPadding + fontSize + lineGap);
+    ctx.fillText(frameCounter, x + horizontalPadding, currentY);
   }
 
   ctx.restore();
@@ -210,6 +254,59 @@ export function buildTextLines(fields: FrameburnField[], context: FrameburnConte
     lines.push(prefix + text);
   }
   return lines;
+}
+
+export function sanitizeFrameburnConfig(value: unknown): FrameburnConfig | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const config: FrameburnConfig = { ...DEFAULT_FRAMEBURN_CONFIG, fields: [] };
+
+  if (typeof record.enabled === 'boolean') {
+    config.enabled = record.enabled;
+  }
+  if (typeof record.font === 'string' && record.font.trim()) {
+    config.font = record.font;
+  }
+  if (typeof record.fontSize === 'number' && Number.isFinite(record.fontSize)) {
+    config.fontSize = Math.max(8, Math.min(72, Math.round(record.fontSize)));
+  }
+  if (typeof record.fontColor === 'string' && record.fontColor.trim()) {
+    config.fontColor = record.fontColor;
+  }
+  if (typeof record.backgroundColor === 'string' && record.backgroundColor.trim()) {
+    config.backgroundColor = record.backgroundColor;
+  }
+  if (typeof record.backgroundPadding === 'number' && Number.isFinite(record.backgroundPadding)) {
+    config.backgroundPadding = Math.max(0, Math.min(64, Math.round(record.backgroundPadding)));
+  }
+  if (typeof record.position === 'string' && VALID_FRAMEBURN_POSITIONS.has(record.position as FrameburnPosition)) {
+    config.position = record.position as FrameburnPosition;
+  }
+
+  if (Array.isArray(record.fields)) {
+    config.fields = record.fields.flatMap((field): FrameburnField[] => {
+      if (typeof field !== 'object' || field === null || Array.isArray(field)) {
+        return [];
+      }
+      const raw = field as Record<string, unknown>;
+      if (typeof raw.type !== 'string' || !VALID_FRAMEBURN_FIELD_TYPES.has(raw.type as FrameburnField['type'])) {
+        return [];
+      }
+      const sanitized: FrameburnField = { type: raw.type as FrameburnField['type'] };
+      if (typeof raw.label === 'string' && raw.label.trim()) {
+        sanitized.label = raw.label;
+      }
+      if (typeof raw.value === 'string' && raw.value.trim()) {
+        sanitized.value = raw.value;
+      }
+      return [sanitized];
+    });
+  }
+
+  return config;
 }
 
 /**

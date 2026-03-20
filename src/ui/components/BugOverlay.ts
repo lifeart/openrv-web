@@ -134,6 +134,22 @@ export class BugOverlay extends CanvasOverlay<BugOverlayEvents> {
     return this.bugImage !== null;
   }
 
+  /**
+   * Return the loaded image element, or null if no image is loaded.
+   * Used by the export pipeline to composite the bug into exported frames.
+   */
+  getImage(): HTMLImageElement | null {
+    return this.bugImage;
+  }
+
+  /**
+   * Return the natural dimensions of the loaded image.
+   * Returns { width: 0, height: 0 } if no image is loaded.
+   */
+  getImageDimensions(): { width: number; height: number } {
+    return { width: this.imageWidth, height: this.imageHeight };
+  }
+
   // -------------------------------------------------------------------------
   // State management
   // -------------------------------------------------------------------------

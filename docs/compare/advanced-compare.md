@@ -2,31 +2,39 @@
 
 ![Quad view showing four sources simultaneously](/assets/screenshots/56-quad-view.png)
 
-Beyond the standard A/B comparison tools, OpenRV Web provides quad view, reference image management, matte overlay, and multi-layer stack capabilities for complex review scenarios.
+Beyond the standard A/B comparison tools, OpenRV Web provides reference image management, matte overlay, multi-layer stack capabilities, and a preview of quad view for complex review scenarios.
 
-## Quad View
+## Quad View (Preview)
 
-Quad view divides the viewer into four quadrants, each displaying a different source (A, B, C, D). This mode is useful for comparing multiple versions or render passes simultaneously without switching between sources.
+> **Status: Preview / Experimental.** Quad View is not yet connected to the viewer rendering pipeline. The UI controls are available for early feedback, but enabling Quad View will not render a quad layout in the viewer. The information below describes the planned behavior.
 
-Each quadrant operates independently, showing its assigned source at the current frame. All four quadrants stay in sync during playback.
+Quad view will divide the viewer into four quadrants, each displaying a different source (A, B, C, D). This mode will be useful for comparing multiple versions or render passes simultaneously without switching between sources.
+
+Each quadrant will operate independently, showing its assigned source at the current frame. All four quadrants will stay in sync during playback.
 
 ## Reference Image Manager
 
 The Reference Image Manager captures and stores a snapshot of the current frame as a reference image. This reference can then be compared against live footage using several view modes.
 
-### Capturing a Reference
+### Toolbar Controls
 
-Use the Reference Image Manager to capture the current viewer content. The captured image is stored in memory and remains available throughout the session.
+The View tab toolbar exposes the following reference image controls:
+
+- **Capture** (camera icon) -- captures the current viewer frame as the reference image and enables comparison. Keyboard shortcut: `Alt+Shift+R`.
+- **Toggle** (layers icon) -- enables or disables reference comparison. Keyboard shortcut: `Ctrl+Shift+R`. Right-click this button to open the full settings context menu.
+- **Mode dropdown** (labelled "Ref: ...") -- selects the active comparison view mode (see table below).
+- **Opacity slider** -- adjusts blend opacity (0--100%). Shown when the mode is Overlay or Toggle.
+- **Wipe slider** -- adjusts the split/wipe position (0--100%). Shown when the mode is Split Horizontal or Split Vertical.
 
 ### View Modes
 
 | Mode | Description |
 |------|-------------|
-| Split horizontal | Reference on left, live on right |
-| Split vertical | Reference on top, live on bottom |
+| Split H | Reference on left, live on right, with adjustable wipe position |
+| Split V | Reference on top, live on bottom, with adjustable wipe position |
 | Overlay | Reference overlaid on live with adjustable opacity |
-| Side by side | Reference and live displayed in adjacent panels |
-| Toggle | Press to switch between reference and live |
+| Side by Side | Reference and live displayed in adjacent panels |
+| Toggle | Press to switch between reference and live, with adjustable opacity |
 
 The reference image comparison is independent of the A/B source system. It allows comparing the current graded frame against a previously captured state -- useful for evaluating whether color corrections improve on a starting point.
 
@@ -38,11 +46,18 @@ The matte overlay adds a letterbox or pillarbox mask to the viewer with configur
 - **Safe area reference** -- mask out areas outside the intended crop
 - **Client presentation** -- show final framing during review sessions
 
+### Accessing the Matte Overlay
+
+The matte overlay toggle button (crop icon) is located in the View tab toolbar. Click the button to enable or disable the overlay. Right-click the button to open the settings menu.
+
 ### Configuration
 
-- **Aspect ratio** -- set the matte to any desired ratio (e.g., 1.85:1, 2.39:1, 16:9)
-- **Opacity** -- adjust the darkness of the matte bars (0--100%)
-- **Center point** -- offset the matte center if the composition is not centered
+The settings menu provides the following controls:
+
+- **Aspect ratio presets** -- quick-select buttons for common ratios: 2.39:1, 1.85:1, 16:9, 4:3, 1:1
+- **Custom aspect ratio** -- numeric input for any desired ratio (0.1--10)
+- **Opacity** -- slider to adjust the darkness of the matte bars (0--100%)
+- **Center X / Center Y** -- sliders to offset the matte center if the composition is not centered (-100% to +100%)
 
 Matte settings persist across frame changes and are included in session state.
 
@@ -60,7 +75,7 @@ The stack is ordered from bottom (background) to top (foreground), following sta
 
 ## Comparison Annotations
 
-Annotations can be drawn during A/B compare mode. Annotations are tied to the source they were drawn on, so switching between A and B preserves each source's annotation layer independently.
+Annotations can be drawn during A/B compare mode. Annotations are keyed to the A/B slot assignment, not to the underlying media source. This means that swapping which source is assigned to slot A vs. slot B will also swap which annotations are visible in each slot. If you reassign a different source to slot A, the annotations previously drawn in slot A remain attached to that slot and will appear over the new source.
 
 ## Practical Workflows
 
@@ -83,7 +98,7 @@ Annotations can be drawn during A/B compare mode. Annotations are tied to the so
 ### Multi-Version Comparison
 
 1. Load up to four versions of a shot
-2. Enable quad view to see all versions simultaneously
+2. Enable quad view to see all versions simultaneously *(planned -- quad view is currently a preview feature and does not yet render in the viewer)*
 3. Play through the shot to compare motion and timing
 4. Switch to A/B toggle for detailed frame-by-frame comparison
 

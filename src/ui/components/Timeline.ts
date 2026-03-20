@@ -20,10 +20,13 @@ import {
   drawPlayedRegion,
   drawMarkLines,
   drawAnnotationTriangles,
+  drawMissingFrameMarkers,
 } from './timelineRenderHelpers';
 import type { NoteOverlay } from './NoteOverlay';
 import type { PlaylistManager } from '../../core/session/PlaylistManager';
 import type { TransitionManager } from '../../core/session/TransitionManager';
+import { CORE_PREFERENCE_STORAGE_KEYS } from '../../core/PreferencesManager';
+import { showAlert } from './shared/Modal';
 
 export class Timeline {
   /** Radius of the playhead drag handle circle in pixels */
@@ -38,9 +41,10 @@ export class Timeline {
   private paintEngine: PaintEngine | null = null;
   private waveformRenderer: WaveformRenderer;
   private waveformLoaded = false;
+  private waveformError: string | null = null;
   private thumbnailManager: ThumbnailManager;
   private thumbnailsEnabled = true;
-  private static readonly DISPLAY_MODE_STORAGE_KEY = 'openrv.timeline.displayMode';
+  private static readonly DISPLAY_MODE_STORAGE_KEY = CORE_PREFERENCE_STORAGE_KEYS.timelineDisplayMode;
   private static readonly VALID_DISPLAY_MODES: readonly TimecodeDisplayMode[] = [
     'frames',
     'timecode',
@@ -84,6 +88,7 @@ export class Timeline {
     text: string;
     textDim: string;
     border: string;
+    missingFrame: string;
   } | null = null;
 
   // Colors are resolved from ThemeManager and cached until theme changes
@@ -104,6 +109,7 @@ export class Timeline {
       text: theme.textPrimary,
       textDim: theme.textMuted,
       border: theme.borderPrimary,
+      missingFrame: '#ff6b6b',
     };
     return this.cachedColors;
   }
@@ -246,7 +252,11 @@ export class Timeline {
     );
     this.subs.add(
       this.session.on('sourceLoaded', () => {
-        this.loadWaveform().catch((err) => console.warn('Failed to load waveform:', err));
+        this.loadWaveform().catch((err) => {
+          console.warn('Failed to load waveform:', err);
+          this.waveformError = err instanceof Error ? err.message : String(err);
+          this.scheduleDraw();
+        });
         this.loadThumbnails();
         this.scheduleDraw();
       }),
@@ -339,6 +349,7 @@ export class Timeline {
    */
   private async loadWaveform(): Promise<void> {
     this.waveformLoaded = false;
+    this.waveformError = null;
     this.waveformRenderer.clear();
 
     const source = this.session.currentSource;
@@ -362,8 +373,11 @@ export class Timeline {
 
     this.waveformLoaded = success;
     if (success) {
-      this.scheduleDraw();
+      this.waveformError = null;
+    } else {
+      this.waveformError = this.waveformRenderer.getError() ?? 'Waveform unavailable';
     }
+    this.scheduleDraw();
   }
 
   /**
@@ -578,7 +592,10 @@ export class Timeline {
       onRemoveMark: (f) => this.session.removeMark(f),
       onCopyTimecode: (tc) => {
         navigator.clipboard.writeText(tc).catch(() => {
-          // clipboard may not be available
+          showAlert('Failed to copy timecode to clipboard. Your browser may have denied clipboard access.', {
+            type: 'warning',
+            title: 'Clipboard Unavailable',
+          });
         });
       },
     });
@@ -681,6 +698,16 @@ export class Timeline {
           colors.waveform,
         );
       }
+    } else if (this.waveformError) {
+      // Show subtle inline indicator when waveform extraction failed
+      ctx.save();
+      ctx.font = '9px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.fillStyle = colors.textDim;
+      ctx.globalAlpha = 0.6;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('Waveform unavailable', padding + trackWidth / 2, trackY + trackHeight / 2);
+      ctx.restore();
     }
 
     // Calculate positions based on full duration
@@ -737,6 +764,20 @@ export class Timeline {
     if (this.paintEngine) {
       const annotatedFrames = this.paintEngine.getAnnotatedFrames();
       drawAnnotationTriangles(ctx, annotatedFrames, frameToX, trackY, trackHeight, colors.annotation, duration);
+    }
+
+    // Draw missing-frame markers (for image sequences with gaps)
+    if (source?.type === 'sequence' && source.sequenceInfo?.missingFrames?.length) {
+      drawMissingFrameMarkers(
+        ctx,
+        source.sequenceInfo.missingFrames,
+        source.sequenceInfo.startFrame,
+        frameToX,
+        trackY,
+        trackHeight,
+        colors.missingFrame,
+        duration,
+      );
     }
 
     // Draw marks (within full duration) - with custom colors from Marker data

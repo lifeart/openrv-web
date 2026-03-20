@@ -6,11 +6,16 @@
 
 ## Overview
 
-OpenRV Web supports a wide range of image, video, and session file formats, spanning professional VFX interchange formats, HDR photography formats, web-native media, and editorial interchange. All image decoding produces **Float32Array** pixel data in RGBA layout, ensuring consistent precision throughout the rendering pipeline regardless of the source format's native bit depth.
+OpenRV Web supports a wide range of image, video, and session file formats, spanning professional VFX interchange formats, HDR photography formats, web-native media, and editorial interchange. Image decoding follows a **dual-path** architecture:
 
-Format detection uses a **magic-number-first** strategy: the `DecoderRegistry` inspects the first bytes of each file to identify the format by its binary signature, then dispatches to the appropriate decoder. This is more reliable than extension-based detection and handles misnamed or extensionless files correctly.
+- **Decoder-backed formats** (EXR, DPX, Cineon, Float TIFF, Radiance HDR, JPEG Gainmap HDR, HEIC/AVIF Gainmap HDR, JPEG XL HDR, HEIC SDR via WASM, JP2) are decoded into **Float32Array** pixel data in RGBA layout and stored as `IPImage` objects. This ensures full floating-point precision for HDR and professional VFX formats throughout the rendering pipeline.
+- **Browser-native formats** (PNG, JPEG, WebP, GIF, BMP, SVG, ICO, standard AVIF, standard TIFF, RAW preview (extracted by custom parser, then rendered via browser `<img>`)) are decoded by the browser's built-in `<img>` element and stored as **`HTMLImageElement`** sources -- no Float32Array conversion takes place. The browser handles color management and compositing for these standard formats directly.
 
-Decoders are **lazy-loaded** via dynamic `import()` on first use. Heavy WASM modules (EXR, JXL, JP2, HEIC) are code-split into separate chunks and never included in the initial bundle, keeping startup fast.
+> **Note on `process()` conversion**: When browser-native images flow through the node graph's `process()` method (e.g., for color corrections or compositing), the `HTMLImageElement` is rasterized into a **uint8 `IPImage`** (8 bits per channel, RGBA). This is distinct from the **float32 `IPImage`** that decoder-backed formats produce. The uint8 path is sufficient for standard-dynamic-range content but does not preserve the floating-point precision available in HDR workflows.
+
+Format detection uses a **two-tier** strategy. The fast path classifies files by MIME type and extension via `detectMediaTypeFromFile()`. When neither is recognized (extensionless or misnamed files), the fallback path reads the first bytes and checks them against the `DecoderRegistry`'s magic-number detectors (`detectMediaTypeFromFileBytes()`). This combination keeps the common case fast while still handling misnamed or extensionless files correctly -- any file whose bytes match a registered decoder will be loaded even if the extension is wrong or absent.
+
+Decoders are **lazy-loaded** via dynamic `import()` on first use. Heavy WASM modules (JXL, JP2, HEIC) are code-split into separate chunks and never included in the initial bundle, keeping startup fast.
 
 ---
 
@@ -22,9 +27,9 @@ These formats are the backbone of visual effects pipelines. OpenRV Web provides 
 
 OpenEXR is the industry-standard HDR image format for VFX, developed by Industrial Light & Magic and maintained by the Academy Software Foundation. OpenRV Web provides comprehensive EXR support:
 
-- **Decoder**: WebAssembly-compiled OpenEXR library (`EXRDecoder.ts`)
+- **Decoder**: Pure TypeScript EXR parser (`EXRDecoder.ts`)
 - **Precision**: Full Float32 per channel -- no 8-bit bottleneck
-- **Compression**: PIZ (lossless, wavelet-based) and DWA (lossy, DCT-based) via dedicated codec modules (`EXRPIZCodec.ts`, `EXRDWACodec.ts`)
+- **Compression**: NONE (uncompressed), RLE, ZIP, ZIPS, PIZ (lossless, wavelet-based), PXR24 (lossy for float, lossless for half), DWAA and DWAB (lossy, DCT-based) via dedicated codec modules (`EXRPIZCodec.ts`, `EXRDWACodec.ts`)
 - **Multi-layer AOV selection**: EXR files containing multiple render passes (beauty, diffuse, specular, depth, normals, etc.) can be viewed layer by layer. The decoder exposes layer information and supports channel remapping (`EXRChannelRemapping`)
 - **Data/display window**: OpenEXR's data window (actual pixel extent) and display window (intended viewing area) are respected, with correct offset and cropping applied
 - **Multi-view EXR**: Stereo and multi-view EXR files are parsed by `MultiViewEXR.ts`, which extracts view names, maps channels to views, and enables per-view decoding. View names follow the OpenEXR convention (e.g., `left`, `right`)
@@ -65,7 +70,7 @@ Kodak's original digital film scanning format, the predecessor to DPX. OpenRV We
 
 **Color space**: Logarithmic (Cineon density). Log-to-linear conversion is applied by default during decode.
 
-### Radiance HDR (.hdr, .rgbe)
+### Radiance HDR (.hdr, .pic)
 
 The Radiance High Dynamic Range format, also known as RGBE (Red-Green-Blue-Exponent), stores HDR images using a shared exponent encoding scheme:
 
@@ -85,7 +90,7 @@ The Radiance High Dynamic Range format, also known as RGBE (Red-Green-Blue-Expon
 TIFF files with 32-bit floating-point sample format, commonly used for HDR compositing interchange:
 
 - **Decoder**: Pure JavaScript (`TIFFFloatDecoder.ts`)
-- **Detection**: The decoder specifically identifies TIFF files where SampleFormat=3 (IEEE floating-point) and BitsPerSample=32. Standard 8/16-bit TIFFs are handled by the browser's native `<img>` decoder instead
+- **Detection**: The decoder specifically identifies TIFF files where SampleFormat=3 (IEEE floating-point) and BitsPerSample=16/32/64. Standard 8/16-bit integer TIFFs are handled by the browser's native `<img>` decoder instead
 - **Endianness**: Both Intel (II, little-endian) and Motorola (MM, big-endian) byte orders
 - **Channels**: Supports 1-channel (grayscale), 3-channel (RGB), and 4-channel (RGBA) float TIFF images
 
@@ -110,7 +115,7 @@ JPEG XL is a next-generation image format designed for both lossy and lossless c
 - **Browser path**: When the browser natively supports JPEG XL (currently Firefox), the decoder can use the browser's built-in path for faster decode
 - **Detection**: Bare codestream magic (`0xFF 0x0A`) or ISOBMFF container with `jxl ` brand in `ftyp` box
 
-**Color space**: Varies (sRGB, linear, Display P3, Rec.2020, etc.). Decoded to Float32 with metadata indicating the original color space.
+**Color space**: Varies (sRGB, linear, Display P3, Rec.2020, etc.). The SDR decode path parses the original color space from the JXL container's `colr(nclx)` box (CICP primaries + transfer characteristics) or from the bare codestream's `colour_encoding` header. The detected color space is returned in both the top-level `colorSpace` field and the `metadata.colorSpace` field of the decode result. When an ICC profile is embedded (`want_icc`), the color space is reported as `'icc'`. If parsing fails, the decoder falls back to `'srgb'`.
 
 **Industry context**: JPEG XL is positioned as the successor to JPEG, offering superior compression ratios at equivalent quality, progressive decoding, and HDR support. It is gaining adoption in photography workflows and web content delivery. Its HDR encoding capability makes it particularly relevant for VFX review, as it can store scene-referred HDR images in a format that is more compact than EXR while maintaining high fidelity.
 
@@ -120,7 +125,7 @@ Google's Ultra HDR / Adobe Gainmap HDR format embeds an HDR gain map within a st
 
 - **Decoder**: Pure JavaScript (`JPEGGainmapDecoder.ts`)
 - **Structure**: The file contains a standard SDR JPEG as the primary image, plus a secondary JPEG gain map image referenced via an APP2 MPF marker. XMP metadata describes the headroom and gain parameters
-- **HDR reconstruction**: The decoder applies the gain map formula: `hdr = sdr_linear * (1 + gainMap * headroom)`, where `sdr_linear` is the sRGB-to-linear converted base image, `gainMap` is the decoded gain map, and `headroom` is extracted from XMP metadata
+- **HDR reconstruction**: The decoder applies the ISO 21496-1 exponential gain map formula: `HDR_linear = sRGB_to_linear(base) * exp2(gainmap * headroom)`, where `sRGB_to_linear(base)` is the sRGB-to-linear converted base image, `gainmap` is the decoded gain map, and `headroom` is extracted from XMP metadata
 - **Orientation**: EXIF orientation is extracted and applied via `extractJPEGOrientation()`
 - **Detection**: JPEG SOI marker (`0xFFD8`) followed by an APP2 segment containing `MPF\0` identifier
 
@@ -153,7 +158,7 @@ The AVIF equivalent of HEIC gainmap, using the same ISO 21496-1 gain map standar
 
 Standard AVIF images without gain maps:
 
-- **Decoder**: Browser-native decode via `createImageBitmap()` with WASM fallback (`avif.ts`)
+- **Decoder**: Browser-native only -- uses `createImageBitmap()` to decode via the browser's built-in AVIF support (`avif.ts`). No alternate decoder is provided; browsers without native AVIF support (e.g., older Safari versions) cannot decode plain AVIF files
 - **Detection**: `ftyp` box with AVIF brands, without gain map auxiliary items
 - **Ordering**: Placed after the AVIF gainmap decoder in the registry chain so gainmap AVIFs are matched first
 
@@ -168,7 +173,7 @@ JPEG 2000 and its high-throughput variant HTJ2K, used in digital cinema (DCI) pa
 - **Bit depth**: Supports various bit depths (8, 10, 12, 16-bit) with signed and unsigned samples
 - **Color space**: `colr` box parsing for ICC profiles and enumerated color spaces
 
-### RAW Preview (.cr2, .nef, .arw, .dng, .raf, etc.)
+### RAW Preview (.cr2, .nef, .arw, .dng, .orf, etc.)
 
 Camera RAW files are detected by their TIFF-based container structure, and the largest embedded JPEG preview is extracted:
 
@@ -179,7 +184,7 @@ Camera RAW files are detected by their TIFF-based container structure, and the l
 
 **Color space**: sRGB (embedded preview).
 
-**Supported camera manufacturers**: Canon (CR2, CR3), Nikon (NEF, NRW), Sony (ARW, SR2), Adobe (DNG), Fujifilm (RAF), Olympus/OM System (ORF), Panasonic (RW2), Pentax (PEF), Leica (RWL), Phase One (IIQ), and other TIFF-based RAW formats. The `isRAWExtension()` function in `RAWPreviewDecoder.ts` maintains the full list of recognized extensions.
+**Supported camera manufacturers**: Canon (CR2), Nikon (NEF), Sony (ARW), Adobe (DNG), Olympus/OM System (ORF), Pentax (PEF), Samsung (SRW), and other TIFF-based RAW formats. Non-TIFF RAW containers (Canon CR3, Fujifilm RAF, Panasonic RW2) are not currently supported. The `isRAWExtension()` function in `RAWPreviewDecoder.ts` maintains the full list of recognized extensions.
 
 ### Browser-Native Formats
 
@@ -189,14 +194,16 @@ The following formats are decoded by the browser's built-in image decoder via `<
 |--------|-----------|-------|
 | PNG | .png | Lossless, 8/16-bit, alpha channel |
 | JPEG | .jpg, .jpeg | Lossy, 8-bit, most common web format |
-| WebP | .webp | Lossy and lossless, alpha, animation |
-| GIF | .gif | 256-color palette, animation |
+| WebP | .webp | Lossy and lossless, alpha; loaded as single-frame still (animated playback not supported) |
+| GIF | .gif | 256-color palette; loaded as single-frame still (animated playback not supported) |
 | BMP | .bmp | Uncompressed bitmap |
-| HEIC/HEIF | .heic, .heif | Safari native; other browsers via WASM |
+| HEIC/HEIF | .heic, .heif | Decoder-backed (gainmap HDR via ISOBMFF parser; SDR via WASM libheif). Safari uses its native HEIC decoder for the base image |
 | SVG | .svg | Vector graphics (rasterized by browser) |
 | ICO | .ico | Icon format |
 
-These formats are handled at the `Session.loadImage()` level using the browser's `<img>` element, bypassing the `DecoderRegistry` entirely.
+When opened as **local files** (drag-and-drop or file picker), these formats are routed through `SessionMedia.loadImageFile()`, which creates a `FileSourceNode` and calls `fileSourceNode.loadFile(file)`. `FileSourceNode.loadFile()` performs format-specific branching for professional and HDR formats (EXR, DPX, TIFF, JPEG gainmap, AVIF, JXL, HEIC, JP2, RAW) first; when none of those matchers apply, it falls through to standard browser-native image loading via `this.load(url, name)`, which uses the browser's `<img>` element. This means even browser-native formats pass through `FileSourceNode` for uniform metadata tracking and node-graph integration.
+
+When opened by **URL or `HTMLImageElement`** (e.g., remote URLs, session restore, or the public API), images go through `SessionMedia.loadImage(name, url)`, which creates an `<img>` element directly and bypasses both `FileSourceNode` and the `DecoderRegistry`.
 
 ---
 
@@ -322,8 +329,7 @@ When multiple image files are loaded together, the `SequenceLoader` utility:
 When a sequence has gaps in its frame numbering, the viewer:
 
 - Detects missing frames during sequence scanning
-- Displays a visual overlay indicating which frames are absent
-- Holds the last available frame during playback when a gap is encountered
+- Handles gaps according to the selected **missing-frame mode** (Off, Frame, Hold, or Black — configurable in the View tab). The default **Frame** mode displays a warning-icon overlay on the current image; **Hold** shows the nearest preceding frame; **Black** replaces the viewer with a solid black frame. See [Overlays — Missing Frame Indicator](../advanced/overlays.md#missing-frame-indicator) for full details.
 
 ### Playback and Caching
 
@@ -339,12 +345,13 @@ The `SequenceSourceNode` manages frame loading with:
 
 ### RV/GTO Session Files (.rv)
 
-Desktop OpenRV saves sessions in the GTO (Graph Topology Object) binary format. OpenRV Web can **load and reconstruct** the complete node graph from these files:
+Desktop OpenRV saves sessions in the GTO (Graph Topology Object) binary format. OpenRV Web performs a **best-effort import** of these files — many common node types are reconstructed, but some are skipped or degraded during loading:
 
 - **Parser**: `GTOGraphLoader.ts` uses the `gto-js` library to parse the binary GTO format
-- **Graph reconstruction**: RV node types are mapped to OpenRV Web node types (see [Session Compatibility](session-compatibility.md) for the full mapping table)
+- **Graph reconstruction**: RV node protocols are mapped to OpenRV Web node types where an implementation exists (see [Session Compatibility](session-compatibility.md) for the full mapping table). Nodes whose protocol is unmapped or whose mapped type is not yet implemented are silently skipped.
 - **Property restoration**: GTO properties are mapped to the OpenRV Web `PropertyContainer` system
 - **Supported state**: Source references, view configurations (sequence, stack, layout, switch), color corrections, playback position, markers, stereo settings, EDL data
+- **Known limitations**: The importer emits `skippedNodes` diagnostics so the UI can surface which nodes were dropped. Composite/stack blend mode downgrade infrastructure is scaffolded but not yet active. Import is lossy for sessions that rely on advanced or plugin-defined RV node types
 
 ### RV EDL (.rvedl)
 
@@ -358,17 +365,21 @@ The RV Edit Decision List format describes cut sequences with frame-accurate sou
 
 OpenTimelineIO is the ASWF standard for editorial timeline interchange:
 
-- **Import**: Editorial timelines with clips, gaps, and transitions can be imported
-- **Mapping**: OTIO clips map to source nodes; OTIO tracks map to sequence groups
-- **Interchange**: Provides a bridge between NLE systems (Avid, Premiere, Resolve) and OpenRV Web
+- **Import**: The live import reads the **first video track only** and linearizes its clips into the playlist via `PlaylistManager.fromOTIO()`. Each OTIO clip is added sequentially with `addClip()`
+- **Transitions**: OTIO transitions (e.g. SMPTE_Dissolve) from the first video track are imported into the `TransitionManager` when available
+- **Gaps**: OTIO gaps are parsed and stored in the import result metadata but are **not** represented in the playlist timeline
+- **Markers**: Timeline-level and clip-level markers are parsed and forwarded to the marker importer callback
+- **Multi-track**: A `parseOTIOMultiTrack()` API exists and is attempted first internally, but only the first video track's clips are imported into the playlist. Additional video or audio tracks are not surfaced in the UI
+- **Interchange**: Provides a bridge between NLE systems (Avid, Premiere, Resolve) and OpenRV Web for single-track editorial workflows
 
 ### .orvproject (Native Session Format)
 
-OpenRV Web's native session format is a JSON-based file containing the complete viewer state:
+OpenRV Web's native session format is a JSON-based file containing the majority of the viewer state, though some subsystems are not yet serialized:
 
 - **Serializer**: `SessionSerializer.ts` handles save/load with migration support
 - **Schema version**: Currently version 2, with automatic migration from version 1
-- **Content**: Media references, playback state, annotations, view transform, color adjustments, CDL values, filter settings, 2D transforms, crop, lens distortion, wipe state, layer stack, LUT reference, playlist, notes, version groups, statuses, and node graph topology
+- **Serialized state**: Media references, playback state, annotations, view transform, color adjustments, CDL values, filter settings, 2D transforms, crop, lens distortion, wipe state, layer stack, LUT reference, playlist, notes, version groups, statuses, node graph topology, and EDL entries
+- **Known serialization gaps**: The serializer explicitly tracks viewer states that are **not** persisted and will revert to defaults on reload. Major gaps include: OCIO configuration, display profile (transfer function, display gamma), gamut mapping, color inversion, curves, tone mapping, stereo state (mode, eye transforms, align mode), ghost frames, channel isolation mode, compare state (difference matte, blend mode), and several Effects-tab controls (deinterlace, film emulation, perspective correction, stabilization, uncrop). The `SessionSerializer.getSerializationGaps()` method returns the full list with per-item active/inactive status so the UI can warn users before saving
 - **Blob URL handling**: Local file references use blob URLs which are session-specific. The serializer detects these, sets `requiresReload: true`, and prompts the user to re-select files when loading
 
 ### CMX3600 EDL Export
@@ -385,7 +396,7 @@ The following table compares format support between desktop OpenRV and OpenRV We
 
 | Format | Extension | OpenRV Desktop | OpenRV Web | Decoder Type | HDR |
 |--------|----------|---------------|------------|--------------|-----|
-| OpenEXR | .exr, .sxr | Yes | Yes | WASM | Yes |
+| OpenEXR | .exr, .sxr | Yes | Yes | TypeScript | Yes |
 | DPX | .dpx | Yes | Yes | JavaScript | No (log) |
 | Cineon | .cin | Yes | Yes | JavaScript | No (log) |
 | Radiance HDR | .hdr | Yes | Yes | JavaScript | Yes |
@@ -394,7 +405,7 @@ The following table compares format support between desktop OpenRV and OpenRV We
 | JPEG Gainmap | .jpg | No | Yes | JavaScript | Yes |
 | HEIC Gainmap | .heic | No | Yes | JS + WASM | Yes |
 | AVIF Gainmap | .avif | No | Yes | JavaScript | Yes |
-| AVIF | .avif | No | Yes | Native/WASM | No |
+| AVIF | .avif | No | Yes | Native | No |
 | JPEG 2000 | .jp2, .j2k | No | Yes | WASM | No |
 | RAW Preview | .cr2, .nef, etc. | No | Yes | JavaScript | No |
 | SGI | .sgi, .rgb | Yes | No | -- | No |
@@ -439,14 +450,14 @@ The `DecoderRegistry` class manages all format decoders in a priority-ordered ch
 ```
 EXR -> DPX -> Cineon -> Float TIFF -> RAW Preview -> JPEG Gainmap
     -> HEIC Gainmap -> AVIF Gainmap -> Plain AVIF -> Radiance HDR
-    -> JPEG XL -> JPEG 2000 -> MXF
+    -> JPEG XL -> JPEG 2000
 ```
 
 Each decoder implements the generic `FormatDecoder<TOptions>` interface:
 
 - **`formatName: string`** -- Human-readable format name (e.g., `"OpenEXR"`, `"DPX"`)
 - **`canDecode(buffer: ArrayBuffer): boolean`** -- Tests magic bytes for format identification
-- **`decode(buffer: ArrayBuffer, options?: TOptions): Promise<DecodeResult>`** -- Performs the actual decode, returning width, height, Float32Array data, channel count, color space, and metadata
+- **`decode(buffer: ArrayBuffer, options?: TOptions): Promise<DecodeResult>`** -- Performs the actual decode, returning width, height, Float32Array data, channel count, color space, and metadata. Note: only formats matched by a registered decoder produce Float32Array/IPImage output. Browser-native formats (PNG, JPEG, WebP, etc.) bypass the decoder registry entirely and are loaded as `HTMLImageElement` sources
 
 The generic `TOptions` parameter allows each decoder to declare its own strongly typed options (e.g., EXR layer selection, DPX log-to-linear parameters) while the registry operates on the common `FormatDecoder` base.
 

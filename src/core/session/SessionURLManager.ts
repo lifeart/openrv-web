@@ -8,6 +8,30 @@
 
 import type { Transform2D } from '../types/transform';
 import { DEFAULT_TRANSFORM } from '../types/transform';
+import type { RepresentationKind, RepresentationResolution, RepresentationLoaderConfig } from '../types/representation';
+
+// ---------------------------------------------------------------------------
+// Representation URL State — compact serializable subset for URL sharing
+// ---------------------------------------------------------------------------
+
+/**
+ * Per-source representation state for URL sharing.
+ * Only includes the fields needed to reconstruct the active representation.
+ */
+export interface RepresentationURLState {
+  /** Source index this representation belongs to */
+  sourceIndex: number;
+  /** Active representation ID */
+  id: string;
+  /** Human-readable label */
+  label: string;
+  /** Representation kind (frames, movie, proxy) */
+  kind: RepresentationKind;
+  /** Native resolution */
+  resolution: RepresentationResolution;
+  /** Serializable loader config (url, pattern, frameRange — no File objects) */
+  loaderConfig: Omit<RepresentationLoaderConfig, 'file' | 'files'>;
+}
 
 // ---------------------------------------------------------------------------
 // URL State envelope — the subset of session state that is shareable.
@@ -26,6 +50,8 @@ export interface SessionURLState {
   sourceIndex: number;
   /** Source URL (for reference / re-loading) */
   sourceUrl?: string;
+  /** Multiple source URLs (for multi-source A/B compare links) */
+  sourceUrls?: string[];
   /** A/B compare source indices */
   sourceAIndex?: number;
   sourceBIndex?: number;
@@ -37,6 +63,8 @@ export interface SessionURLState {
   wipePosition?: number;
   /** OCIO state (only non-default fields) */
   ocio?: OCIOURLState;
+  /** Per-source active representation state (only when a non-default representation is active) */
+  representations?: RepresentationURLState[];
 }
 
 export interface OCIOURLState {
@@ -104,6 +132,7 @@ interface CompactState {
   fps: number;
   si: number; // sourceIndex
   su?: string; // sourceUrl
+  sus?: string[]; // sourceUrls
   ip?: number; // inPoint
   op?: number; // outPoint
   sai?: number; // sourceAIndex
@@ -113,6 +142,16 @@ interface CompactState {
   w?: string; // wipeMode
   wp?: number; // wipePosition
   o?: OCIOURLState;
+  reps?: CompactRepresentation[]; // representations
+}
+
+interface CompactRepresentation {
+  si: number; // sourceIndex
+  id: string;
+  l: string; // label
+  k: RepresentationKind;
+  res: RepresentationResolution;
+  lc: Omit<RepresentationLoaderConfig, 'file' | 'files'>;
 }
 
 interface CompactTransform {
@@ -133,6 +172,7 @@ function buildCompactState(state: SessionURLState): CompactState {
   };
 
   if (state.sourceUrl) c.su = state.sourceUrl;
+  if (state.sourceUrls && state.sourceUrls.length > 0) c.sus = state.sourceUrls;
   if (state.inPoint != null) c.ip = state.inPoint;
   if (state.outPoint != null) c.op = state.outPoint;
   if (state.sourceAIndex != null) c.sai = state.sourceAIndex;
@@ -150,6 +190,17 @@ function buildCompactState(state: SessionURLState): CompactState {
 
   if (state.ocio?.enabled) {
     c.o = state.ocio;
+  }
+
+  if (state.representations && state.representations.length > 0) {
+    c.reps = state.representations.map((r) => ({
+      si: r.sourceIndex,
+      id: r.id,
+      l: r.label,
+      k: r.kind,
+      res: r.resolution,
+      lc: r.loaderConfig,
+    }));
   }
 
   return c;
@@ -198,6 +249,9 @@ function parseState(obj: unknown): SessionURLState | null {
   const state: SessionURLState = { frame, fps, sourceIndex };
 
   if (typeof c.su === 'string') state.sourceUrl = c.su;
+  if (Array.isArray(c.sus) && c.sus.length > 0 && c.sus.every((s: unknown) => typeof s === 'string')) {
+    state.sourceUrls = c.sus as string[];
+  }
   if (typeof c.ip === 'number') state.inPoint = c.ip;
   if (typeof c.op === 'number') state.outPoint = c.op;
   if (typeof c.sai === 'number') state.sourceAIndex = c.sai;
@@ -215,6 +269,13 @@ function parseState(obj: unknown): SessionURLState | null {
 
   if (c.o && typeof c.o === 'object') {
     state.ocio = parseOCIO(c.o as Record<string, unknown>);
+  }
+
+  if (Array.isArray(c.reps) && c.reps.length > 0) {
+    const parsed = parseRepresentations(c.reps);
+    if (parsed.length > 0) {
+      state.representations = parsed;
+    }
   }
 
   return state;
@@ -247,6 +308,34 @@ function parseOCIO(o: Record<string, unknown>): OCIOURLState {
   if (typeof o.view === 'string') state.view = o.view;
   if (typeof o.look === 'string') state.look = o.look;
   return state;
+}
+
+const VALID_KINDS = new Set<string>(['frames', 'movie', 'proxy']);
+
+function parseRepresentations(reps: unknown[]): RepresentationURLState[] {
+  const result: RepresentationURLState[] = [];
+  for (const item of reps) {
+    if (!item || typeof item !== 'object') continue;
+    const r = item as Record<string, unknown>;
+    if (typeof r.si !== 'number' || !Number.isFinite(r.si)) continue;
+    if (typeof r.id !== 'string' || !r.id) continue;
+    if (typeof r.l !== 'string') continue;
+    if (typeof r.k !== 'string' || !VALID_KINDS.has(r.k)) continue;
+    if (!r.res || typeof r.res !== 'object') continue;
+    const res = r.res as Record<string, unknown>;
+    if (typeof res.width !== 'number' || typeof res.height !== 'number') continue;
+    if (!r.lc || typeof r.lc !== 'object') continue;
+
+    result.push({
+      sourceIndex: r.si,
+      id: r.id,
+      label: r.l,
+      kind: r.k as RepresentationKind,
+      resolution: { width: res.width, height: res.height },
+      loaderConfig: r.lc as Omit<RepresentationLoaderConfig, 'file' | 'files'>,
+    });
+  }
+  return result;
 }
 
 // ---------------------------------------------------------------------------

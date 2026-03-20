@@ -236,13 +236,7 @@ describe('applyHighlightsShadowsHDR', () => {
   it('clamps output to [0, 255]', () => {
     const img = makePixel(0, 0, 0);
     const hdr = new Float32Array([2.0, 2.0, 2.0]);
-    applyHighlightsShadowsHDR(
-      img,
-      { highlights: -100, shadows: 100, whites: 100, blacks: 100 },
-      hdr,
-      3,
-      2.0,
-    );
+    applyHighlightsShadowsHDR(img, { highlights: -100, shadows: 100, whites: 100, blacks: 100 }, hdr, 3, 2.0);
     for (let c = 0; c < 3; c++) {
       expect(img.data[c]!).toBeGreaterThanOrEqual(0);
       expect(img.data[c]!).toBeLessThanOrEqual(255);
@@ -805,7 +799,7 @@ describe('applySharpenCPU', () => {
     // Higher amount should produce more extreme changes at the same pixel
     // Pick an inner pixel
     const idx = (2 * w + 2) * 4;
-    const original = (2 + 2) % 2 === 0 ? 50 : 200;
+    const original = 50; // pixel at (2,2) in checkerboard: (2+2)%2===0 → light
     const diffLow = Math.abs(imgLow.data[idx]! - original);
     const diffHigh = Math.abs(imgHigh.data[idx]! - original);
     expect(diffHigh).toBeGreaterThanOrEqual(diffLow);

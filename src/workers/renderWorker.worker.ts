@@ -93,7 +93,35 @@ function applySyncState(msg: RenderWorkerMessage): void {
   if (state.channelMode) renderer.setChannelMode(state.channelMode);
   if (state.falseColor) renderer.setFalseColor(state.falseColor);
   if (state.zebraStripes) renderer.setZebraStripes(state.zebraStripes);
-  if (state.lut) renderer.setLUT(state.lut.lutData, state.lut.lutSize, state.lut.intensity);
+  if (state.lookLUT) {
+    renderer.setLookLUT(
+      state.lookLUT.lutData,
+      state.lookLUT.lutSize,
+      state.lookLUT.intensity,
+      state.lookLUT.domainMin,
+      state.lookLUT.domainMax,
+    );
+  } else if (state.lut) {
+    renderer.setLUT(state.lut.lutData, state.lut.lutSize, state.lut.intensity);
+  }
+  if (state.fileLUT) {
+    renderer.setFileLUT(
+      state.fileLUT.lutData,
+      state.fileLUT.lutSize,
+      state.fileLUT.intensity,
+      state.fileLUT.domainMin,
+      state.fileLUT.domainMax,
+    );
+  }
+  if (state.displayLUT) {
+    renderer.setDisplayLUT(
+      state.displayLUT.lutData,
+      state.displayLUT.lutSize,
+      state.displayLUT.intensity,
+      state.displayLUT.domainMin,
+      state.displayLUT.domainMax,
+    );
+  }
   if (state.displayColorState) renderer.setDisplayColorState(state.displayColorState);
   if (state.backgroundPattern) renderer.setBackgroundPattern(state.backgroundPattern);
   if (state.hdrOutputMode) renderer.setHDROutputMode(state.hdrOutputMode.mode, state.hdrOutputMode.capabilities);
@@ -331,6 +359,9 @@ if (typeof window === 'undefined') {
 // Test-only exports for verifying worker internals
 export const __test__ = {
   getRenderer: () => renderer,
+  setRenderer: (value: Renderer | null) => {
+    renderer = value;
+  },
   getCanvas: () => canvas,
   isContextLost: () => isContextLost,
   reconstructIPImage,

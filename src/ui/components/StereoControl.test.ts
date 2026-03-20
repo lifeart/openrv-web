@@ -390,6 +390,87 @@ describe('StereoControl', () => {
     });
   });
 
+  describe('regression: mode count and convergence range match docs', () => {
+    /**
+     * These tests guard against docs drifting out of sync with runtime values.
+     * See GitHub issues #343 and #344.
+     */
+
+    const ALL_STEREO_MODES: StereoMode[] = [
+      'off',
+      'side-by-side',
+      'over-under',
+      'mirror',
+      'anaglyph',
+      'anaglyph-luminance',
+      'checkerboard',
+      'scanline',
+      'left-only',
+      'right-only',
+    ];
+
+    it('STEREO-REG001: there are exactly 10 stereo modes (9 active + off)', () => {
+      // Cycle through all modes and collect them
+      const visited: StereoMode[] = [control.getMode()];
+      for (let i = 0; i < 20; i++) {
+        control.cycleMode();
+        const mode = control.getMode();
+        if (mode === visited[0]) break;
+        visited.push(mode);
+      }
+      expect(visited).toEqual(ALL_STEREO_MODES);
+      expect(visited).toHaveLength(10);
+    });
+
+    it('STEREO-REG002: left-only and right-only are valid modes', () => {
+      control.setMode('left-only');
+      expect(control.getMode()).toBe('left-only');
+      expect(control.isActive()).toBe(true);
+
+      control.setMode('right-only');
+      expect(control.getMode()).toBe('right-only');
+      expect(control.isActive()).toBe(true);
+    });
+
+    it('STEREO-REG003: convergence offset slider range is -20 to +20 with 0.5 steps', () => {
+      const el = control.render();
+      const slider = el.querySelector('[data-testid="stereo-offset-slider"]') as HTMLInputElement;
+      expect(slider.min).toBe('-20');
+      expect(slider.max).toBe('20');
+      expect(slider.step).toBe('0.5');
+    });
+
+    it('STEREO-REG004: setOffset clamps values to -20..+20 range', () => {
+      control.setOffset(-100);
+      expect(control.getOffset()).toBe(-20);
+
+      control.setOffset(100);
+      expect(control.getOffset()).toBe(20);
+
+      control.setOffset(-20);
+      expect(control.getOffset()).toBe(-20);
+
+      control.setOffset(20);
+      expect(control.getOffset()).toBe(20);
+    });
+
+    it('STEREO-REG005: dropdown contains exactly 10 mode options', () => {
+      const el = control.render();
+      // Open the dropdown by clicking the mode button
+      const modeBtn = el.querySelector('[data-testid="stereo-mode-button"]') as HTMLButtonElement;
+      modeBtn.click();
+
+      const dropdown = document.querySelector('[data-testid="stereo-mode-dropdown"]');
+      expect(dropdown).not.toBeNull();
+      const options = dropdown!.querySelectorAll('button[data-stereo-mode]');
+      expect(options).toHaveLength(10);
+
+      // Verify each mode is present in the dropdown
+      const dropdownModes = Array.from(options).map((opt) => (opt as HTMLElement).dataset.stereoMode);
+      expect(dropdownModes).toEqual(ALL_STEREO_MODES);
+    });
+  });
+
   describe('dispose', () => {
     it('STEREO-U090: dispose cleans up without error', () => {
       expect(() => control.dispose()).not.toThrow();

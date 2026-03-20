@@ -7,6 +7,7 @@ import { ContextToolbar } from '../../ui/components/layout/ContextToolbar';
 import { setButtonActive } from '../../ui/components/shared/Button';
 import type { AppControlRegistry } from '../../AppControlRegistry';
 import type { Viewer } from '../../ui/components/Viewer';
+import { ClippingOverlaySettingsMenu } from '../../ui/components/ClippingOverlaySettingsMenu';
 
 export interface BuildQCTabDeps {
   registry: AppControlRegistry;
@@ -16,6 +17,7 @@ export interface BuildQCTabDeps {
 
 export function buildQCTab(deps: BuildQCTabDeps): HTMLElement {
   const { registry, viewer, addUnsubscriber } = deps;
+  const clippingOverlay = viewer.getClippingOverlay();
 
   const qcContent = document.createElement('div');
   qcContent.style.cssText = 'display: flex; align-items: center; gap: 6px; flex-shrink: 0;';
@@ -30,6 +32,24 @@ export function buildQCTab(deps: BuildQCTabDeps): HTMLElement {
   qcContent.appendChild(registry.luminanceVisControl.render());
   qcContent.appendChild(registry.zebraControl.render());
   qcContent.appendChild(registry.hslQualifierControl.render());
+
+  const clippingButton = ContextToolbar.createIconButton(
+    'contrast',
+    () => {
+      clippingOverlay.toggle();
+    },
+    { title: 'Toggle clipping overlay — Right-click for settings' },
+  );
+  clippingButton.dataset.testid = 'clipping-overlay-toggle';
+  qcContent.appendChild(clippingButton);
+
+  const clippingSettingsMenu = new ClippingOverlaySettingsMenu(clippingOverlay);
+  clippingButton.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    clippingSettingsMenu.show(e.clientX, e.clientY);
+  });
+  addUnsubscriber(() => clippingSettingsMenu.dispose());
+
   qcContent.appendChild(ContextToolbar.createDivider());
 
   // --- GROUP 3: Tools (Pixel Probe) ---
@@ -73,24 +93,21 @@ export function buildQCTab(deps: BuildQCTabDeps): HTMLElement {
       viewerContainer.style.cursor = 'crosshair';
       const clickHandler = (e: MouseEvent) => {
         pendingEyedropperHandler = null;
-        const rect = viewerContainer.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
         const imageData = viewer.getImageData();
         if (imageData) {
-          const canvas = viewerContainer.querySelector('canvas');
-          if (canvas) {
-            const scaleX = imageData.width / canvas.clientWidth;
-            const scaleY = imageData.height / canvas.clientHeight;
-            const pixelX = Math.floor(x * scaleX);
-            const pixelY = Math.floor(y * scaleY);
-            if (pixelX >= 0 && pixelX < imageData.width && pixelY >= 0 && pixelY < imageData.height) {
-              const idx = (pixelY * imageData.width + pixelX) * 4;
-              const r = imageData.data[idx]!;
-              const g = imageData.data[idx + 1]!;
-              const b = imageData.data[idx + 2]!;
-              viewer.getHSLQualifier().pickColor(r, g, b);
-            }
+          const position = viewer.getPixelCoordinatesFromClient(e.clientX, e.clientY);
+          if (
+            position &&
+            position.x >= 0 &&
+            position.x < imageData.width &&
+            position.y >= 0 &&
+            position.y < imageData.height
+          ) {
+            const idx = (position.y * imageData.width + position.x) * 4;
+            const r = imageData.data[idx]!;
+            const g = imageData.data[idx + 1]!;
+            const b = imageData.data[idx + 2]!;
+            viewer.getHSLQualifier().pickColor(r, g, b);
           }
         }
         registry.hslQualifierControl.deactivateEyedropper();
@@ -129,9 +146,18 @@ export function buildQCTab(deps: BuildQCTabDeps): HTMLElement {
   addUnsubscriber(
     registry.histogram.on('clippingOverlayToggled', (enabled) => {
       if (enabled) {
-        viewer.getClippingOverlay().enable();
+        clippingOverlay.enable();
       } else {
-        viewer.getClippingOverlay().disable();
+        clippingOverlay.disable();
+      }
+    }),
+  );
+
+  addUnsubscriber(
+    clippingOverlay.on('stateChanged', (state) => {
+      setButtonActive(clippingButton, state.enabled, 'icon');
+      if (typeof registry.histogram.setClippingOverlay === 'function') {
+        registry.histogram.setClippingOverlay(state.enabled);
       }
     }),
   );

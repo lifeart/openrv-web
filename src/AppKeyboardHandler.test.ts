@@ -1,5 +1,5 @@
 /**
- * AppKeyboardHandler - Shortcuts dialog search/filter tests (M-25)
+ * AppKeyboardHandler - Keyboard registration and binding tests
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -8,6 +8,8 @@ import { AppKeyboardHandler } from './AppKeyboardHandler';
 import { KeyboardManager } from './utils/input/KeyboardManager';
 import { CustomKeyBindingsManager } from './utils/input/CustomKeyBindingsManager';
 import { closeModal } from './ui/components/shared/Modal';
+import { DEFAULT_KEY_BINDINGS, describeKeyCombo } from './utils/input/KeyBindings';
+import { ScopesControl } from './ui/components/ScopesControl';
 
 // Stub localStorage so CustomKeyBindingsManager doesn't throw
 const localStorageMock = (() => {
@@ -37,13 +39,313 @@ function createHandler(): AppKeyboardHandler {
   return new AppKeyboardHandler(km, ckm, ctx);
 }
 
-/** Helper: dispatch a native `input` event on the given element */
-function fireInput(el: HTMLInputElement, value: string): void {
-  el.value = value;
-  el.dispatchEvent(new Event('input', { bubbles: true }));
-}
+describe('Keyboard registration tests (M-25)', () => {
+  beforeEach(() => {
+    localStorageMock.clear();
+  });
 
-describe('Shortcuts dialog search/filter (M-25)', () => {
+  it('SK-M25j: context-managed KeyG actions are skipped from direct keyboard registration', () => {
+    const km = new KeyboardManager();
+    const ckm = new CustomKeyBindingsManager();
+    const actionHandlers = {
+      'navigation.gotoFrame': () => undefined,
+      'paint.toggleGhost': () => undefined,
+    };
+    const registrationHandler = new AppKeyboardHandler(km, ckm, {
+      getActionHandlers: () => actionHandlers,
+      getContainer: () => document.body,
+    });
+
+    registrationHandler.setup();
+
+    // Plain KeyG (no modifiers) should be skipped (context-managed)
+    const keyGBindings = km
+      .getBindings()
+      .filter(
+        (binding) => binding.combo.code === 'KeyG' && !binding.combo.ctrl && !binding.combo.shift && !binding.combo.alt,
+      );
+    expect(keyGBindings).toHaveLength(0);
+  });
+
+  it('SK-M25k: fitToHeight (KeyH) and histogram (KeyH, panel context) are both skipped from direct registration', () => {
+    const km = new KeyboardManager();
+    const ckm = new CustomKeyBindingsManager();
+    const actionHandlers = {
+      'view.fitToHeight': () => undefined,
+      'panel.histogram': () => undefined,
+    };
+    const registrationHandler = new AppKeyboardHandler(km, ckm, {
+      getActionHandlers: () => actionHandlers,
+      getContainer: () => document.body,
+    });
+
+    registrationHandler.setup();
+
+    // Both use bare KeyH — both are context-managed, so neither should be directly registered
+    const bareKeyHBindings = km
+      .getBindings()
+      .filter(
+        (binding) => binding.combo.code === 'KeyH' && !binding.combo.shift && !binding.combo.alt && !binding.combo.ctrl,
+      );
+    expect(bareKeyHBindings).toHaveLength(0);
+  });
+
+  it('SK-M25l: histogram shortcut uses bare H with panel context', () => {
+    // Verify the histogram binding uses bare KeyH with panel context
+    const histogramBinding = DEFAULT_KEY_BINDINGS['panel.histogram'];
+    expect(histogramBinding).toBeDefined();
+    expect(histogramBinding!.code).toBe('KeyH');
+    expect(histogramBinding!.ctrl).toBeUndefined();
+    expect(histogramBinding!.shift).toBeUndefined();
+    expect(histogramBinding!.context).toBe('panel');
+    expect(describeKeyCombo({ code: histogramBinding!.code })).toBe('H');
+  });
+
+  it('SK-M25m: histogram (H, panel) and fitToHeight (H, global) are separated by context', () => {
+    // panel.histogram uses bare KeyH with panel context
+    const histogramBinding = DEFAULT_KEY_BINDINGS['panel.histogram'];
+    expect(histogramBinding!.code).toBe('KeyH');
+    expect(histogramBinding!.context).toBe('panel');
+    // view.fitToHeight uses bare KeyH (global context, managed by contextual resolver)
+    const fitToHeightBinding = DEFAULT_KEY_BINDINGS['view.fitToHeight'];
+    expect(fitToHeightBinding!.code).toBe('KeyH');
+    // They share the same key but are resolved by context (panel vs global)
+    expect(histogramBinding!.context).not.toBe(fitToHeightBinding!.context ?? 'global');
+  });
+
+  it('SK-M25n: Shift+L is contextual — both channel.luminance and lut.togglePanel are in CONTEXTUAL_DEFAULTS', () => {
+    const km = new KeyboardManager();
+    const ckm = new CustomKeyBindingsManager();
+    const actionHandlers = {
+      'channel.luminance': () => undefined,
+      'lut.togglePanel': () => undefined,
+    };
+    const registrationHandler = new AppKeyboardHandler(km, ckm, {
+      getActionHandlers: () => actionHandlers,
+      getContainer: () => document.body,
+    });
+
+    registrationHandler.setup();
+
+    // Neither should be directly registered — they are resolved by the contextual manager
+    const shiftLBindings = km.getBindings().filter((binding) => binding.combo.code === 'KeyL' && binding.combo.shift);
+    expect(shiftLBindings).toHaveLength(0);
+  });
+
+  it('SK-M25o: channel.luminance has Shift+L binding; lut.togglePanel also has Shift+L (resolved by context)', () => {
+    const luminanceBinding = DEFAULT_KEY_BINDINGS['channel.luminance'];
+    expect(luminanceBinding).toBeDefined();
+    expect(luminanceBinding!.code).toBe('KeyL');
+    expect(luminanceBinding!.shift).toBe(true);
+
+    const lutBinding = DEFAULT_KEY_BINDINGS['lut.togglePanel'];
+    expect(lutBinding).toBeDefined();
+    expect(lutBinding!.code).toBe('KeyL');
+    expect(lutBinding!.shift).toBe(true);
+  });
+
+  it('SK-M25p: channel.grayscale (Shift+Y) is an alias for luminance', () => {
+    const grayscaleBinding = DEFAULT_KEY_BINDINGS['channel.grayscale'];
+    expect(grayscaleBinding).toBeDefined();
+    expect(grayscaleBinding!.code).toBe('KeyY');
+    expect(grayscaleBinding!.shift).toBe(true);
+  });
+});
+
+describe('Scope shortcut regression tests (Issues #1, #2, #3)', () => {
+  beforeEach(() => {
+    localStorageMock.clear();
+  });
+
+  it('SCOPE-REG01: histogram binding uses bare H with panel context', () => {
+    const binding = DEFAULT_KEY_BINDINGS['panel.histogram'];
+    expect(binding).toBeDefined();
+    expect(binding!.code).toBe('KeyH');
+    expect(binding!.ctrl).toBeUndefined();
+    expect(binding!.shift).toBeUndefined();
+    expect(binding!.context).toBe('panel');
+  });
+
+  it('SCOPE-REG02: waveform binding uses bare W with panel context', () => {
+    const binding = DEFAULT_KEY_BINDINGS['panel.waveform'];
+    expect(binding).toBeDefined();
+    expect(binding!.code).toBe('KeyW');
+    expect(binding!.ctrl).toBeUndefined();
+    expect(binding!.shift).toBeUndefined();
+    expect(binding!.context).toBe('panel');
+  });
+
+  it('SCOPE-REG03: gamut diagram binding uses bare G with panel context', () => {
+    const binding = DEFAULT_KEY_BINDINGS['panel.gamutDiagram'];
+    expect(binding).toBeDefined();
+    expect(binding!.code).toBe('KeyG');
+    expect(binding!.ctrl).toBeUndefined();
+    expect(binding!.shift).toBeUndefined();
+    expect(binding!.context).toBe('panel');
+  });
+
+  it('SCOPE-REG04: histogram and fitToHeight share KeyH but differ by context', () => {
+    const histogram = DEFAULT_KEY_BINDINGS['panel.histogram']!;
+    const fitToHeight = DEFAULT_KEY_BINDINGS['view.fitToHeight']!;
+    expect(histogram.code).toBe('KeyH');
+    expect(fitToHeight.code).toBe('KeyH');
+    // histogram is panel-context, fitToHeight is global (no context = global)
+    expect(histogram.context).toBe('panel');
+    expect(fitToHeight.context).toBeUndefined();
+  });
+
+  it('SCOPE-REG05: waveform and fitToWidth share KeyW but differ by context', () => {
+    const waveform = DEFAULT_KEY_BINDINGS['panel.waveform']!;
+    const fitToWidth = DEFAULT_KEY_BINDINGS['view.fitToWidth']!;
+    expect(waveform.code).toBe('KeyW');
+    expect(fitToWidth.code).toBe('KeyW');
+    expect(waveform.context).toBe('panel');
+    expect(fitToWidth.context).toBeUndefined();
+  });
+
+  it('SCOPE-REG06: gamut diagram and gotoFrame share KeyG but differ by context', () => {
+    const gamut = DEFAULT_KEY_BINDINGS['panel.gamutDiagram']!;
+    const gotoFrame = DEFAULT_KEY_BINDINGS['navigation.gotoFrame']!;
+    expect(gamut.code).toBe('KeyG');
+    expect(gotoFrame.code).toBe('KeyG');
+    expect(gamut.context).toBe('panel');
+    expect(gotoFrame.context).toBeUndefined();
+  });
+
+  it('SCOPE-REG07: scope shortcuts are context-managed (skipped from direct registration)', () => {
+    const km = new KeyboardManager();
+    const ckm = new CustomKeyBindingsManager();
+    const actionHandlers = {
+      'panel.histogram': () => undefined,
+      'panel.waveform': () => undefined,
+      'panel.gamutDiagram': () => undefined,
+    };
+    const registrationHandler = new AppKeyboardHandler(km, ckm, {
+      getActionHandlers: () => actionHandlers,
+      getContainer: () => document.body,
+    });
+
+    registrationHandler.setup();
+
+    const bindings = km.getBindings();
+    // Bare KeyH should NOT be directly registered (context-managed)
+    const hBindings = bindings.filter((b) => b.combo.code === 'KeyH' && !b.combo.ctrl && !b.combo.shift);
+    expect(hBindings).toHaveLength(0);
+
+    // Bare KeyW should NOT be directly registered (context-managed)
+    const wBindings = bindings.filter((b) => b.combo.code === 'KeyW' && !b.combo.ctrl && !b.combo.shift);
+    expect(wBindings).toHaveLength(0);
+
+    // Bare KeyG should NOT be directly registered (context-managed)
+    const gBindings = bindings.filter((b) => b.combo.code === 'KeyG' && !b.combo.ctrl && !b.combo.shift);
+    expect(gBindings).toHaveLength(0);
+  });
+
+  it('SCOPE-REG07b: Shift+L is context-managed (channel.luminance and lut.togglePanel skipped from direct registration)', () => {
+    const km = new KeyboardManager();
+    const ckm = new CustomKeyBindingsManager();
+    const actionHandlers = {
+      'channel.luminance': () => undefined,
+      'lut.togglePanel': () => undefined,
+    };
+    const registrationHandler = new AppKeyboardHandler(km, ckm, {
+      getActionHandlers: () => actionHandlers,
+      getContainer: () => document.body,
+    });
+
+    registrationHandler.setup();
+
+    const bindings = km.getBindings();
+    // Shift+L should NOT be directly registered (context-managed)
+    const shiftLBindings = bindings.filter((b) => b.combo.code === 'KeyL' && b.combo.shift);
+    expect(shiftLBindings).toHaveLength(0);
+  });
+
+  it('SCOPE-REG08: describeKeyCombo produces correct labels for scope shortcuts', () => {
+    expect(describeKeyCombo({ code: 'KeyH' })).toBe('H');
+    expect(describeKeyCombo({ code: 'KeyW' })).toBe('W');
+    expect(describeKeyCombo({ code: 'KeyG' })).toBe('G');
+  });
+});
+
+describe('Scope UI hint regression tests (Issues #1, #2, #3)', () => {
+  it('SCOPE-UI01: ScopesControl shortcut hints show bare keys for context-managed scopes', () => {
+    const control = new ScopesControl();
+    const el = control.render();
+    const button = el.querySelector('[data-testid="scopes-control-button"]') as HTMLButtonElement;
+
+    // The button title should reference bare keys (context-managed via panel context)
+    expect(button.title).toContain('h: histogram');
+    expect(button.title).toContain('w: waveform');
+    expect(button.title).toContain('g: CIE diagram');
+    expect(button.title).toContain('QC tab');
+
+    control.dispose();
+  });
+
+  it('SCOPE-UI02: ScopesControl dropdown shows correct shortcut hints', () => {
+    const control = new ScopesControl();
+    const el = control.render();
+
+    // Open the dropdown
+    const button = el.querySelector('[data-testid="scopes-control-button"]') as HTMLButtonElement;
+    button.click();
+
+    const dropdown = document.querySelector('[data-testid="scopes-dropdown"]') as HTMLElement;
+    expect(dropdown).not.toBeNull();
+
+    const options = dropdown.querySelectorAll('button');
+    // histogram option — bare h
+    expect(options[0]!.textContent).toContain('h');
+    // waveform option — bare w
+    expect(options[1]!.textContent).toContain('w');
+    // vectorscope option (unchanged)
+    expect(options[2]!.textContent).toContain('y');
+    // gamut diagram option — bare g
+    expect(options[3]!.textContent).toContain('g');
+
+    control.dispose();
+  });
+});
+
+describe('Production TAB_CONTEXT_MAP regression tests', () => {
+  // These tests import the actual production mapping to prevent regressions
+  // like the QC tab being mapped to 'viewer' instead of 'panel'.
+  let TAB_CONTEXT_MAP: Record<string, string>;
+
+  beforeEach(async () => {
+    // Dynamic import to get the actual production constant
+    const mod = await import('./App');
+    TAB_CONTEXT_MAP = mod.TAB_CONTEXT_MAP;
+  });
+
+  it('TABCTX-01: QC tab maps to panel context (not viewer)', () => {
+    expect(TAB_CONTEXT_MAP['qc']).toBe('panel');
+  });
+
+  it('TABCTX-02: annotate tab maps to paint context', () => {
+    expect(TAB_CONTEXT_MAP['annotate']).toBe('paint');
+  });
+
+  it('TABCTX-03: transform tab maps to transform context', () => {
+    expect(TAB_CONTEXT_MAP['transform']).toBe('transform');
+  });
+
+  it('TABCTX-04: view tab maps to viewer context', () => {
+    expect(TAB_CONTEXT_MAP['view']).toBe('viewer');
+  });
+
+  it('TABCTX-05: color tab maps to color context', () => {
+    expect(TAB_CONTEXT_MAP['color']).toBe('color');
+  });
+
+  it('TABCTX-06: unmapped tabs fall back to global (effects)', () => {
+    // Tabs not in the map should use the ?? 'global' fallback
+    expect(TAB_CONTEXT_MAP['effects']).toBeUndefined();
+  });
+});
+
+describe('ShortcutEditor integration (Issue #57)', () => {
   let handler: AppKeyboardHandler;
 
   beforeEach(() => {
@@ -55,161 +357,11 @@ describe('Shortcuts dialog search/filter (M-25)', () => {
     closeModal();
   });
 
-  it('SK-M25a: Shortcuts dialog should contain a search/filter input', () => {
-    handler.showShortcutsDialog();
+  it('#57: showCustomBindingsDialog creates a ShortcutEditor in a modal', () => {
+    handler.showCustomBindingsDialog();
 
-    const searchInput = document.querySelector<HTMLInputElement>('[data-testid="shortcuts-search"]');
-    expect(searchInput).not.toBeNull();
-    expect(searchInput!.tagName).toBe('INPUT');
-    expect(searchInput!.type).toBe('text');
-    expect(searchInput!.placeholder).toMatch(/search/i);
-  });
-
-  it('SK-M25b: Typing in the search input should filter displayed shortcuts by description', () => {
-    handler.showShortcutsDialog();
-
-    const searchInput = document.querySelector<HTMLInputElement>('[data-testid="shortcuts-search"]')!;
-    const allRows = document.querySelectorAll<HTMLElement>('[data-shortcut-row]');
-    expect(allRows.length).toBeGreaterThan(0);
-
-    // Search for "toggle play" which matches "Toggle play/pause"
-    fireInput(searchInput, 'toggle play');
-
-    const visibleRows = Array.from(document.querySelectorAll<HTMLElement>('[data-shortcut-row]')).filter(
-      (r) => r.style.display !== 'none',
-    );
-
-    // Should have at least one match and fewer than all rows
-    expect(visibleRows.length).toBeGreaterThan(0);
-    expect(visibleRows.length).toBeLessThan(allRows.length);
-
-    // Every visible row should contain "toggle play" in its description
-    for (const row of visibleRows) {
-      const desc = row.getAttribute('data-shortcut-desc') || '';
-      expect(desc).toContain('toggle play');
-    }
-  });
-
-  it('SK-M25c: Typing a key name (e.g., "Shift") should filter shortcuts containing that modifier', () => {
-    handler.showShortcutsDialog();
-
-    const searchInput = document.querySelector<HTMLInputElement>('[data-testid="shortcuts-search"]')!;
-    const allRows = document.querySelectorAll<HTMLElement>('[data-shortcut-row]');
-
-    fireInput(searchInput, 'shift');
-
-    const visibleRows = Array.from(document.querySelectorAll<HTMLElement>('[data-shortcut-row]')).filter(
-      (r) => r.style.display !== 'none',
-    );
-
-    expect(visibleRows.length).toBeGreaterThan(0);
-    expect(visibleRows.length).toBeLessThan(allRows.length);
-
-    // Every visible row should contain "shift" in key or description
-    for (const row of visibleRows) {
-      const key = row.getAttribute('data-shortcut-key') || '';
-      const desc = row.getAttribute('data-shortcut-desc') || '';
-      expect(key.includes('shift') || desc.includes('shift')).toBe(true);
-    }
-  });
-
-  it('SK-M25d: Clearing the search input should show all shortcuts', () => {
-    handler.showShortcutsDialog();
-
-    const searchInput = document.querySelector<HTMLInputElement>('[data-testid="shortcuts-search"]')!;
-    const allRowsBefore = document.querySelectorAll<HTMLElement>('[data-shortcut-row]');
-    const totalCount = allRowsBefore.length;
-
-    // First filter down
-    fireInput(searchInput, 'toggle play');
-    const visibleAfterFilter = Array.from(document.querySelectorAll<HTMLElement>('[data-shortcut-row]')).filter(
-      (r) => r.style.display !== 'none',
-    );
-    expect(visibleAfterFilter.length).toBeLessThan(totalCount);
-
-    // Clear the search input
-    fireInput(searchInput, '');
-
-    const visibleAfterClear = Array.from(document.querySelectorAll<HTMLElement>('[data-shortcut-row]')).filter(
-      (r) => r.style.display !== 'none',
-    );
-    expect(visibleAfterClear.length).toBe(totalCount);
-  });
-
-  it('SK-M25e: The search input should be auto-focused when the dialog opens', () => {
-    handler.showShortcutsDialog();
-
-    const searchInput = document.querySelector<HTMLInputElement>('[data-testid="shortcuts-search"]')!;
-    expect(document.activeElement).toBe(searchInput);
-  });
-
-  it('SK-M25f: conflicting default scope shortcuts are hidden when not actually registered', () => {
-    handler.showShortcutsDialog();
-
-    const rows = Array.from(document.querySelectorAll<HTMLElement>('[data-shortcut-row]'));
-    const descriptions = rows.map((row) => row.getAttribute('data-shortcut-desc'));
-
-    expect(descriptions).not.toContain('toggle waveform scope');
-    expect(descriptions).not.toContain('toggle histogram');
-  });
-
-  it('SK-M25g: conflicting shortcuts reappear once the user sets a custom binding', () => {
-    const km = new KeyboardManager();
-    const ckm = new CustomKeyBindingsManager();
-    ckm.setCustomBinding('panel.waveform', { code: 'KeyU', ctrl: true });
-
-    const customHandler = new AppKeyboardHandler(km, ckm, {
-      getActionHandlers: () => ({}),
-      getContainer: () => document.body,
-    });
-
-    customHandler.showShortcutsDialog();
-
-    const rows = Array.from(document.querySelectorAll<HTMLElement>('[data-shortcut-row]'));
-    const waveformRow = rows.find((row) => row.getAttribute('data-shortcut-desc') === 'toggle waveform scope');
-
-    expect(waveformRow).toBeTruthy();
-    expect(waveformRow?.getAttribute('data-shortcut-key')).toContain('ctrl');
-    expect(waveformRow?.getAttribute('data-shortcut-key')).toContain('u');
-  });
-
-  it('SK-M25h: context-managed KeyG actions remain visible in the shortcut dialog', () => {
-    handler.showShortcutsDialog();
-
-    const rows = Array.from(document.querySelectorAll<HTMLElement>('[data-shortcut-row]'));
-    const descriptions = rows.map((row) => row.getAttribute('data-shortcut-desc'));
-
-    expect(descriptions).toContain('go to frame (open frame entry)');
-    expect(descriptions).toContain('toggle ghost mode');
-    expect(descriptions).toContain('toggle cie gamut diagram');
-  });
-
-  it('SK-M25i: newly added playback and transform shortcuts are listed', () => {
-    handler.showShortcutsDialog();
-
-    const rows = Array.from(document.querySelectorAll<HTMLElement>('[data-shortcut-row]'));
-    const descriptions = rows.map((row) => row.getAttribute('data-shortcut-desc'));
-
-    expect(descriptions).toContain('toggle between realtime and play all frames');
-    expect(descriptions).toContain('reset rotation to 0');
-  });
-
-  it('SK-M25j: context-managed KeyG actions are skipped from direct keyboard registration', () => {
-    const km = new KeyboardManager();
-    const ckm = new CustomKeyBindingsManager();
-    const actionHandlers = {
-      'navigation.gotoFrame': () => undefined,
-      'paint.toggleGhost': () => undefined,
-      'panel.gamutDiagram': () => undefined,
-    };
-    const registrationHandler = new AppKeyboardHandler(km, ckm, {
-      getActionHandlers: () => actionHandlers,
-      getContainer: () => document.body,
-    });
-
-    registrationHandler.setup();
-
-    const keyGBindings = km.getBindings().filter((binding) => binding.combo.code === 'KeyG');
-    expect(keyGBindings).toHaveLength(0);
+    // ShortcutEditor renders a toolbar with class "shortcut-toolbar"
+    const toolbar = document.querySelector('.shortcut-toolbar');
+    expect(toolbar).not.toBeNull();
   });
 });

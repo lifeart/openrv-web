@@ -72,6 +72,7 @@ export interface LayoutLayoutManager {
   getTopSection(): HTMLElement;
   getViewerSlot(): HTMLElement;
   getBottomSlot(): HTMLElement;
+  getPanelWrapper(panelId: 'left' | 'right'): HTMLElement;
   addPanelTab(panelId: 'left' | 'right', label: string, element: HTMLElement): void;
   on(event: string, handler: (...args: unknown[]) => void): (() => void) | void;
 }
@@ -82,6 +83,7 @@ export interface LayoutLayoutStore {
 
 export interface LayoutControlsSubset {
   cacheIndicator: { getElement(): HTMLElement };
+  cacheManagementPanel: { getElement(): HTMLElement } | null;
   rightPanelContent: {
     getElement(): HTMLElement;
     updateHistogram(data: unknown): void;
@@ -117,6 +119,7 @@ export interface LayoutControlsSubset {
     enabled: boolean;
     enable(): void;
     disable(): void;
+    onEnabledChange(listener: (enabled: boolean) => void): () => void;
   };
   timelineMagnifier?: {
     getElement(): HTMLElement;
@@ -143,6 +146,7 @@ export interface LayoutClientMode {
 
 export interface LayoutPaintEngine {
   clearFrame(frame: number): void;
+  sourceIndex: number | undefined;
 }
 
 export interface LayoutOrchestratorDeps {
@@ -177,6 +181,9 @@ export class LayoutOrchestrator {
 
   // Image mode transition timer
   private _imageTransitionTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // Saved display values for client mode restricted elements
+  private _clientModeOriginalDisplay = new Map<HTMLElement, string>();
 
   // Event handlers tracked for cleanup
   private _sessionHandlers: Array<{ event: string; handler: (...args: unknown[]) => void }> = [];
@@ -337,6 +344,28 @@ export class LayoutOrchestrator {
       orientation: 'horizontal',
     } as FocusZone);
     this._focusManager.addZone({
+      name: 'leftPanel',
+      container: layoutManager.getPanelWrapper('left'),
+      getItems: () =>
+        Array.from(
+          layoutManager
+            .getPanelWrapper('left')
+            .querySelectorAll<HTMLElement>('button:not([disabled]), input, [tabindex="0"]'),
+        ).filter((el) => isVisible(el, layoutManager.getPanelWrapper('left'))),
+      orientation: 'vertical',
+    } as FocusZone);
+    this._focusManager.addZone({
+      name: 'rightPanel',
+      container: layoutManager.getPanelWrapper('right'),
+      getItems: () =>
+        Array.from(
+          layoutManager
+            .getPanelWrapper('right')
+            .querySelectorAll<HTMLElement>('button:not([disabled]), input, [tabindex="0"]'),
+        ).filter((el) => isVisible(el, layoutManager.getPanelWrapper('right'))),
+      orientation: 'vertical',
+    } as FocusZone);
+    this._focusManager.addZone({
       name: 'timeline',
       container: timelineEl,
       getItems: () =>
@@ -382,8 +411,17 @@ export class LayoutOrchestrator {
     // Auto-detect 360 equirectangular content on source load
     const onSourceLoaded360 = (source: unknown) => {
       const sp = controls.sphericalProjection;
-      const s = source as { width?: number; height?: number };
-      const is360 = detect360Content({}, s.width ?? 0, s.height ?? 0);
+      const s = source as {
+        width?: number;
+        height?: number;
+        isSpherical?: boolean;
+        projectionType?: 'equirectangular' | 'cubemap';
+      };
+      const is360 = detect360Content(
+        { isSpherical: s.isSpherical, projectionType: s.projectionType },
+        s.width ?? 0,
+        s.height ?? 0,
+      );
       if (is360 && !sp.enabled) {
         sp.enable();
       } else if (!is360 && sp.enabled) {
@@ -533,6 +571,11 @@ export class LayoutOrchestrator {
     // Add note panel to viewer container
     viewer.getContainer().appendChild(controls.notePanel.getElement());
 
+    // Add cache management panel to viewer container (if available)
+    if (controls.cacheManagementPanel) {
+      viewer.getContainer().appendChild(controls.cacheManagementPanel.getElement());
+    }
+
     // Wire up cursor color updates from viewer to info panel
     viewer.onCursorColorChange((color, position) => {
       if (controls.infoPanel.isEnabled()) {
@@ -542,6 +585,29 @@ export class LayoutOrchestrator {
         });
       }
     });
+
+    // Wire source metadata updates to floating info panel
+    const updateInfoPanelMetadata = () => {
+      const source = session.currentSource;
+      const fps = session.fps;
+      const currentFrame = session.currentFrame;
+      const totalFrames = source?.duration ?? 0;
+      const durationSeconds = totalFrames / (fps || 1);
+      controls.infoPanel.update({
+        filename: source?.name,
+        width: source?.width,
+        height: source?.height,
+        currentFrame,
+        totalFrames,
+        timecode: formatTimecode(currentFrame, fps),
+        duration: formatDuration(durationSeconds),
+        fps,
+      });
+    };
+    session.on('sourceLoaded', updateInfoPanelMetadata);
+    this._sessionHandlers.push({ event: 'sourceLoaded', handler: updateInfoPanelMetadata });
+    session.on('frameChanged', updateInfoPanelMetadata);
+    this._sessionHandlers.push({ event: 'frameChanged', handler: updateInfoPanelMetadata });
 
     // Wire histogram data from scope scheduler to mini histogram in right panel
     sessionBridge.setHistogramDataCallback((data) => {
@@ -579,6 +645,11 @@ export class LayoutOrchestrator {
     });
     if (unsubPresetApplied) this._unsubscribers.push(unsubPresetApplied);
 
+    // === TAG DOM ELEMENTS for client mode restriction selectors ===
+    // Add data-panel / data-toolbar attributes to production DOM elements so
+    // that ClientMode.getRestrictedElements() selectors match real DOM (#194).
+    this.tagClientModeElements(tabBarEl, contextToolbarEl, controls);
+
     // Bind all session event handlers (scopes, info panel, HDR auto-config, etc.)
     sessionBridge.bindSessionEvents();
 
@@ -590,6 +661,8 @@ export class LayoutOrchestrator {
       const s = state as { enabled: boolean };
       if (s.enabled) {
         this.applyClientModeRestrictions();
+      } else {
+        this.restoreClientModeRestrictions();
       }
     });
     if (unsubClientModeState) this._unsubscribers.push(unsubClientModeState);
@@ -600,9 +673,16 @@ export class LayoutOrchestrator {
       paintEngine.clearFrame(session.currentFrame);
     });
 
-    // Sync annotation version filter when A/B source changes
-    const onAbSourceChanged = () => {
+    // Sync annotation version filter and source index when A/B source changes.
+    // The sourceIndex on the paint engine records which media source was active
+    // when the annotation was drawn (for provenance), while setAnnotationVersion
+    // controls which slot's annotations are displayed.
+    const onAbSourceChanged = (...args: unknown[]) => {
+      const info = args[0] as { current: 'A' | 'B'; sourceIndex: number } | undefined;
       controls.paintToolbar.setAnnotationVersion(session.currentAB);
+      if (info) {
+        paintEngine.sourceIndex = info.sourceIndex;
+      }
     };
     session.on('abSourceChanged', onAbSourceChanged);
     this._sessionHandlers.push({ event: 'abSourceChanged', handler: onAbSourceChanged });
@@ -612,15 +692,82 @@ export class LayoutOrchestrator {
   // Client mode
   // -------------------------------------------------------------------------
 
+  /**
+   * Add data-panel / data-toolbar attributes to production DOM elements so that
+   * the CSS selectors in ClientMode.getRestrictedElements() match real elements.
+   * Fixes #194: client mode selectors previously targeted attributes that no
+   * production component provided.
+   */
+  private tagClientModeElements(
+    tabBarEl: HTMLElement,
+    contextToolbarEl: HTMLElement,
+    controls: LayoutControlsSubset,
+  ): void {
+    // Tag tab bar buttons for restricted tabs
+    const restrictedTabs = ['color', 'effects', 'transform', 'annotate'];
+    for (const tabId of restrictedTabs) {
+      const btn = tabBarEl.querySelector(`[data-tab-id="${tabId}"]`);
+      if (btn) btn.setAttribute('data-panel', tabId);
+    }
+
+    // Tag context toolbar tab panel containers
+    const panelMap: Record<string, string> = {
+      color: 'tabpanel-color',
+      effects: 'tabpanel-effects',
+      transform: 'tabpanel-transform',
+      annotate: 'tabpanel-annotate',
+    };
+    for (const [panelName, panelId] of Object.entries(panelMap)) {
+      const panel = contextToolbarEl.querySelector(`#${panelId}`);
+      if (panel) panel.setAttribute('data-panel', panelName);
+    }
+
+    // Tag specific control elements with data-panel / data-toolbar
+    controls.paintToolbar.render().setAttribute('data-toolbar', 'paint');
+    controls.notePanel.getElement().setAttribute('data-panel', 'notes');
+    controls.historyPanel.getElement().setAttribute('data-panel', 'snapshots');
+    controls.leftPanelContent.getElement().setAttribute('data-panel', 'color');
+
+    // Tag the toolbars
+    contextToolbarEl.setAttribute('data-toolbar', 'editing');
+    tabBarEl.setAttribute('data-toolbar', 'annotation');
+  }
+
   applyClientModeRestrictions(): void {
     const { container, clientMode } = this.deps;
     const selectors = clientMode.getRestrictedElements();
+    const unmatchedSelectors: string[] = [];
+
     for (const selector of selectors) {
       const els = container.querySelectorAll<HTMLElement>(selector);
+      if (els.length === 0) {
+        unmatchedSelectors.push(selector);
+      }
       els.forEach((el) => {
+        // Store original display value before hiding (only if not already tracked)
+        if (!this._clientModeOriginalDisplay.has(el)) {
+          this._clientModeOriginalDisplay.set(el, el.style.display);
+        }
         el.style.display = 'none';
       });
     }
+
+    // Keep unmatched-selector warnings so future DOM changes don't silently
+    // break client mode restrictions again.
+    if (unmatchedSelectors.length > 0) {
+      console.warn(
+        `[ClientMode] ${unmatchedSelectors.length} restriction selector(s) matched zero elements. ` +
+          `Client mode may not be hiding the intended UI. Unmatched selectors:\n` +
+          unmatchedSelectors.map((s) => `  - ${s}`).join('\n'),
+      );
+    }
+  }
+
+  restoreClientModeRestrictions(): void {
+    for (const [el, originalDisplay] of this._clientModeOriginalDisplay) {
+      el.style.display = originalDisplay;
+    }
+    this._clientModeOriginalDisplay.clear();
   }
 
   // -------------------------------------------------------------------------

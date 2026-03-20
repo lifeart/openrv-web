@@ -1,7 +1,14 @@
 import { type IPImage, type DataType, type ColorPrimaries } from '../core/image/Image';
 import { ShaderProgram } from './ShaderProgram';
 import { getRotationMatrix2x2, normalizeAngle } from '../utils/rotation';
-import type { ColorAdjustments, ColorWheelsState, ChannelMode, HSLQualifierState } from '../core/types/color';
+import type {
+  ColorAdjustments,
+  ColorWheelsState,
+  ChannelMode,
+  HSLQualifierState,
+  LinearizeState,
+  ChannelSwizzle,
+} from '../core/types/color';
 import type {
   ToneMappingState,
   ZebraState,
@@ -815,6 +822,25 @@ export class Renderer implements RendererBackend {
     }
   }
 
+  /**
+   * Extract SDR (sRGB uint8) pixel data from a VideoFrame by drawing it onto
+   * an OffscreenCanvas and reading back the pixel data.
+   * Returns null if extraction fails (e.g., OffscreenCanvas unavailable).
+   * @internal
+   */
+  private _extractSDRFromVideoFrame(videoFrame: VideoFrame, width: number, height: number): Uint8Array | null {
+    try {
+      const canvas = new OffscreenCanvas(width, height);
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+      ctx.drawImage(videoFrame, 0, 0, width, height);
+      const imageData = ctx.getImageData(0, 0, width, height);
+      return new Uint8Array(imageData.data.buffer);
+    } catch {
+      return null;
+    }
+  }
+
   private updateTexture(image: IPImage): void {
     if (!this.gl) return;
 
@@ -878,15 +904,36 @@ export class Renderer implements RendererBackend {
         // the next frame's IPImage must re-upload its own VideoFrame data.
         return;
       } catch (e) {
-        // VideoFrame texImage2D not supported — release only the VideoFrame to free VRAM.
-        // The IPImage stays in cache but will skip the VideoFrame path on subsequent renders.
-        // For HDR VideoFrame-only IPImages the data buffer is a 4-byte placeholder,
-        // so the typed-array fallback will produce a blank frame. This is acceptable
-        // degradation — the alternative is a VRAM leak.
-        log.warn('VideoFrame texImage2D failed, releasing VideoFrame:', e);
+        // VideoFrame texImage2D not supported — attempt SDR fallback by extracting
+        // sRGB pixel data through a 2D canvas before releasing the VideoFrame.
+        log.warn('VideoFrame texImage2D failed, attempting SDR fallback:', e);
+
+        const sdrPixels = this._extractSDRFromVideoFrame(image.videoFrame!, image.width, image.height);
+
+        // Release the VideoFrame to free VRAM regardless of fallback outcome.
         if (image.managedVideoFrame) {
           image.managedVideoFrame.release();
           image.managedVideoFrame = null;
+        }
+
+        if (sdrPixels) {
+          // SDR fallback succeeded — replace the placeholder data with real pixels.
+          image.overrideData(sdrPixels.buffer as ArrayBuffer, 'uint8', 4);
+          // Clear HDR metadata since we now have SDR data.
+          delete image.metadata.transferFunction;
+          delete image.metadata.colorPrimaries;
+          // Force a fresh texture to be created for the typed-array upload path.
+          image.texture = null;
+          console.warn(
+            '[Renderer] VideoFrame GPU upload failed — falling back to SDR (sRGB uint8). ' +
+              'HDR precision has been lost.',
+          );
+        } else {
+          // SDR fallback also failed — frame will be blank.
+          console.warn(
+            '[Renderer] VideoFrame GPU upload failed and SDR fallback extraction failed — ' +
+              'the frame will appear blank.',
+          );
         }
       }
     }
@@ -1153,6 +1200,30 @@ export class Renderer implements RendererBackend {
 
   getQuantizeBits(): number {
     return this.stateManager.getQuantizeBits();
+  }
+
+  setLinearize(state: LinearizeState): void {
+    this.stateManager.setLinearize(state);
+  }
+
+  getLinearize(): LinearizeState {
+    return this.stateManager.getLinearize();
+  }
+
+  setOutOfRange(mode: number): void {
+    this.stateManager.setOutOfRange(mode);
+  }
+
+  getOutOfRange(): number {
+    return this.stateManager.getOutOfRange();
+  }
+
+  setChannelSwizzle(swizzle: ChannelSwizzle): void {
+    this.stateManager.setChannelSwizzle(swizzle);
+  }
+
+  getChannelSwizzle(): ChannelSwizzle {
+    return this.stateManager.getChannelSwizzle();
   }
 
   setToneMappingState(state: ToneMappingState): void {

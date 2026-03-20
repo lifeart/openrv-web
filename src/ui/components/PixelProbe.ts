@@ -18,6 +18,8 @@ import { getIconSvg } from './shared/Icons';
 import { clamp } from '../../utils/math';
 import { rgbToHsl as rgbToHslFloat } from '../../utils/color';
 import { luminanceRec709 } from '../../color/ColorProcessingFacade';
+import { showAlert } from './shared/Modal';
+import { displayToSourceCoordinates } from './ViewerInteraction';
 
 export interface PixelProbeEvents extends EventMap {
   stateChanged: PixelProbeState;
@@ -38,7 +40,7 @@ export interface PixelProbeState {
   rgb: { r: number; g: number; b: number };
   alpha: number; // Alpha channel value 0-255
   hsl: { h: number; s: number; l: number };
-  ire: number; // Luminance in IRE units (0-100)
+  ire: number; // Luminance in IRE units (0-100 for SDR, can exceed 100 for HDR)
   format: 'rgb' | 'rgb01' | 'hsl' | 'hex' | 'ire';
   sampleSize: SampleSize;
   sourceMode: SourceMode;
@@ -123,6 +125,10 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
 
   // HDR float values (may exceed 0-1 range), set by updateFromHDRValues
   private hdrFloats: { r: number; g: number; b: number; a: number } | null = null;
+
+  // Whether the current values are a rendered fallback (source mode active but no source data)
+  private isRenderedFallback = false;
+  private renderedFallbackWarned = false;
 
   // HDR-specific properties
   private colorSpaceInfo: string = 'sRGB';
@@ -299,6 +305,9 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
 
     // Nits row (HDR luminance in cd/m²)
     const nitsRow = document.createElement('div');
+    nitsRow.setAttribute('tabindex', '0');
+    nitsRow.setAttribute('role', 'button');
+    nitsRow.setAttribute('aria-label', 'Copy Nits value');
     nitsRow.style.cssText = `
       display: none;
       align-items: center;
@@ -315,6 +324,12 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
       nitsRow.style.background = 'transparent';
     });
     nitsRow.addEventListener('click', () => this.copyValue('nits'));
+    nitsRow.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        this.copyValue('nits');
+      }
+    });
 
     const nitsLabelEl = document.createElement('span');
     nitsLabelEl.textContent = 'Nits';
@@ -572,6 +587,9 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
 
   private createValueRow(container: HTMLElement, label: string, initialValue: string, copyKey: string): HTMLElement {
     const row = document.createElement('div');
+    row.setAttribute('tabindex', '0');
+    row.setAttribute('role', 'button');
+    row.setAttribute('aria-label', `Copy ${label} value`);
     row.style.cssText = `
       display: flex;
       align-items: center;
@@ -589,6 +607,12 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
       this.applyValueRowStyle(copyKey, row, false);
     });
     row.addEventListener('click', () => this.copyValue(copyKey));
+    row.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        this.copyValue(copyKey);
+      }
+    });
 
     const labelEl = document.createElement('span');
     labelEl.textContent = label;
@@ -642,16 +666,33 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     imageData: ImageData | null,
     displayWidth: number,
     displayHeight: number,
+    sourceWidth?: number,
+    sourceHeight?: number,
   ): void {
     if (!this.state.enabled || this.state.locked) return;
 
-    // Clamp coordinates
+    // Clamp display coordinates (used for pixel sampling from canvas)
     const px = clamp(Math.floor(x), 0, displayWidth - 1);
     const py = clamp(Math.floor(y), 0, displayHeight - 1);
 
+    // Convert to source image coordinates for display
+    const srcW = sourceWidth ?? displayWidth;
+    const srcH = sourceHeight ?? displayHeight;
+    const src = displayToSourceCoordinates(px, py, displayWidth, displayHeight, srcW, srcH);
+
     // Choose image data based on source mode
-    const activeImageData =
-      this.state.sourceMode === 'source' && this.sourceImageData ? this.sourceImageData : imageData;
+    const wantsSource = this.state.sourceMode === 'source';
+    const hasSourceData = !!this.sourceImageData;
+    this.isRenderedFallback = wantsSource && !hasSourceData;
+
+    if (this.isRenderedFallback && !this.renderedFallbackWarned) {
+      console.warn(
+        'PixelProbe: Source mode active but no source image data available. Displaying rendered values as fallback.',
+      );
+      this.renderedFallbackWarned = true;
+    }
+
+    const activeImageData = wantsSource && hasSourceData ? this.sourceImageData : imageData;
 
     // Get pixel value (with area averaging if sampleSize > 1)
     let r = 0,
@@ -681,9 +722,9 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     const luminance = luminanceRec709(r, g, b);
     const ire = Math.round((luminance / 255) * 100);
 
-    // Update state
-    this.state.x = px;
-    this.state.y = py;
+    // Update state with source-space coordinates
+    this.state.x = src.x;
+    this.state.y = src.y;
     this.state.rgb = { r, g, b };
     this.state.alpha = a;
     this.state.hsl = this.rgbToHsl(r, g, b);
@@ -708,11 +749,30 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     a: number,
     displayWidth: number,
     displayHeight: number,
+    isSource = false,
+    sourceWidth?: number,
+    sourceHeight?: number,
   ): void {
     if (!this.state.enabled || this.state.locked) return;
 
     const px = clamp(Math.floor(x), 0, displayWidth - 1);
     const py = clamp(Math.floor(y), 0, displayHeight - 1);
+
+    // Convert to source image coordinates for display
+    const srcW = sourceWidth ?? displayWidth;
+    const srcH = sourceHeight ?? displayHeight;
+    const src = displayToSourceCoordinates(px, py, displayWidth, displayHeight, srcW, srcH);
+
+    // When isSource=true, we have real pre-grade data; otherwise it's a fallback
+    const wantsSource = this.state.sourceMode === 'source';
+    this.isRenderedFallback = wantsSource && !isSource;
+
+    if (this.isRenderedFallback && !this.renderedFallbackWarned) {
+      console.warn(
+        'PixelProbe: Source mode active but no source image data available on HDR path. Displaying rendered values as fallback.',
+      );
+      this.renderedFallbackWarned = true;
+    }
 
     // Convert float values (0.0-1.0+ range) to 0-255 for legacy display formats
     // but preserve the raw floats for RGB01 display
@@ -722,11 +782,13 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     const a255 = Math.round(clamp(a * 255, 0, 255));
 
     // Calculate luminance in IRE units using float values
+    // HDR content can exceed 100 IRE (super-white), so only clamp the lower bound
     const luminanceFloat = luminanceRec709(r, g, b);
-    const ire = Math.round(clamp(luminanceFloat * 100, 0, 100));
+    const ire = Math.round(Math.max(luminanceFloat * 100, 0));
 
-    this.state.x = px;
-    this.state.y = py;
+    // Store source-space coordinates
+    this.state.x = src.x;
+    this.state.y = src.y;
     this.state.rgb = { r: r255, g: g255, b: b255 };
     this.state.alpha = a255;
     this.state.hsl = this.rgbToHsl(r255, g255, b255);
@@ -744,9 +806,10 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
   private updateDisplay(): void {
     const { x, y, rgb, alpha, hsl, ire, sampleSize } = this.state;
 
-    // Update coordinates with sample size indicator
+    // Update coordinates with sample size indicator and fallback warning
     const sampleLabel = sampleSize > 1 ? ` (${sampleSize}x${sampleSize} avg)` : '';
-    this.coordsLabel.textContent = `X: ${x}, Y: ${y}${sampleLabel}`;
+    const fallbackLabel = this.isRenderedFallback ? ' (rendered fallback)' : '';
+    this.coordsLabel.textContent = `X: ${x}, Y: ${y}${sampleLabel}${fallbackLabel}`;
 
     // Update swatch (with alpha)
     if (alpha < 255) {
@@ -921,6 +984,10 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
       }
     } catch (err) {
       console.warn('Failed to copy to clipboard:', err);
+      showAlert('Failed to copy value to clipboard. Your browser may have denied clipboard access.', {
+        type: 'warning',
+        title: 'Clipboard Unavailable',
+      });
     }
   }
 
@@ -992,6 +1059,10 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
   setSourceMode(mode: SourceMode): void {
     if (this.state.sourceMode === mode) return;
     this.state.sourceMode = mode;
+    if (mode === 'rendered') {
+      this.isRenderedFallback = false;
+      this.renderedFallbackWarned = false;
+    }
     this.updateSourceModeButtons();
     this.emit('stateChanged', { ...this.state });
   }
@@ -1184,6 +1255,14 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
    */
   isLocked(): boolean {
     return this.state.locked;
+  }
+
+  /**
+   * Check if currently displaying rendered fallback values
+   * (source mode is active but source image data is unavailable)
+   */
+  isSourceFallbackActive(): boolean {
+    return this.isRenderedFallback;
   }
 
   /**

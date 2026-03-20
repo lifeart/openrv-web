@@ -5,6 +5,9 @@
  * - Displays cache statistics (entry count, total size in human-readable format)
  * - "Clear All" button to purge the entire cache
  * - Follows the existing DOM-based component pattern (EventEmitter, getElement, dispose)
+ *
+ * Wired into the production layout via buildPanelToggles (toggle button in the
+ * HeaderBar utility area) and mounted in the viewer container by LayoutOrchestrator.
  */
 
 import { EventEmitter } from '../../utils/EventEmitter';

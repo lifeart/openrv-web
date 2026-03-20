@@ -14,6 +14,7 @@ import {
   type SyncFrameMessage,
   type SyncColorMessage,
   type DCCOutboundMessage,
+  type DCCOutboundMessageType,
 } from './DCCBridge';
 
 // ---------------------------------------------------------------------------
@@ -365,10 +366,64 @@ describe('DCCBridge', () => {
       bridge.dispose();
     });
 
+    it('DCC-OUT-009: sendNoteAdded sends correct message (#445)', async () => {
+      const { bridge, ws } = await createConnectedBridge();
+
+      bridge.sendNoteAdded(15, 'Fix edge artifact', 'Alice', 'open', 'note-456');
+
+      const msg = parseSent(ws, 0);
+      expect(msg.type).toBe('noteAdded');
+      expect((msg as { frame: number }).frame).toBe(15);
+      expect((msg as { text: string }).text).toBe('Fix edge artifact');
+      expect((msg as { author: string }).author).toBe('Alice');
+      expect((msg as { status: string }).status).toBe('open');
+      expect((msg as { noteId: string }).noteId).toBe('note-456');
+      bridge.dispose();
+    });
+
     it('DCC-OUT-004: send returns false when disconnected', () => {
       const bridge = new DCCBridge(defaultConfig());
       const result = bridge.sendFrameChanged(1, 10);
       expect(result).toBe(false);
+      bridge.dispose();
+    });
+
+    it('DCC-OUT-006: send increments droppedMessageCount when not writable (#443)', () => {
+      const bridge = new DCCBridge(defaultConfig());
+      expect(bridge.droppedMessageCount).toBe(0);
+
+      bridge.sendFrameChanged(1, 10);
+      expect(bridge.droppedMessageCount).toBe(1);
+
+      bridge.sendColorChanged({ exposure: 1.0 });
+      expect(bridge.droppedMessageCount).toBe(2);
+
+      bridge.sendAnnotationAdded(1, 'pen', 'a1');
+      expect(bridge.droppedMessageCount).toBe(3);
+
+      bridge.dispose();
+    });
+
+    it('DCC-OUT-007: send emits messageDropped when not writable (#443)', () => {
+      const bridge = new DCCBridge(defaultConfig());
+      const listener = vi.fn();
+      bridge.on('messageDropped', listener);
+
+      bridge.sendFrameChanged(1, 10);
+
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(listener.mock.calls[0]![0]).toMatchObject({
+        type: 'frameChanged',
+        frame: 1,
+        totalFrames: 10,
+      });
+      bridge.dispose();
+    });
+
+    it('DCC-OUT-008: successful send does not increment droppedMessageCount (#443)', async () => {
+      const { bridge } = await createConnectedBridge();
+      bridge.sendFrameChanged(1, 10);
+      expect(bridge.droppedMessageCount).toBe(0);
       bridge.dispose();
     });
 
@@ -444,6 +499,266 @@ describe('DCCBridge', () => {
       const after = bridge.lastPongTime;
 
       expect(after).toBeGreaterThanOrEqual(before);
+      bridge.dispose();
+    });
+  });
+
+  describe('heartbeat keepalive', () => {
+    it('DCC-HB-001: heartbeat timer sends ping (not pong) messages', async () => {
+      vi.useFakeTimers();
+      const { bridge, ws } = await createConnectedBridge({
+        heartbeatInterval: 5000,
+        heartbeatTimeout: 10000,
+      });
+
+      // Advance past one heartbeat interval
+      vi.advanceTimersByTime(5000);
+
+      // Should have sent a ping, not a pong
+      expect(ws.sentMessages.length).toBe(1);
+      const msg = parseSent(ws, 0);
+      expect(msg.type).toBe('ping');
+
+      bridge.dispose();
+    });
+
+    it('DCC-HB-002: heartbeat timeout fires when no pong is received', async () => {
+      vi.useFakeTimers();
+      // Use a timeout shorter than the interval so the timeout fires before
+      // the next interval tick reschedules it.
+      const { bridge, ws } = await createConnectedBridge({
+        heartbeatInterval: 5000,
+        heartbeatTimeout: 3000,
+        autoReconnect: false,
+      });
+
+      const errorListener = vi.fn();
+      bridge.on('error', errorListener);
+
+      // Trigger first heartbeat ping at 5000ms
+      vi.advanceTimersByTime(5000);
+
+      // Should have sent a ping
+      const pingMessages = ws.sentMessages.filter((m) => JSON.parse(m).type === 'ping');
+      expect(pingMessages.length).toBe(1);
+
+      // Advance past the heartbeat timeout (3000ms from when ping was sent)
+      // but before the next interval tick (at 10000ms)
+      vi.advanceTimersByTime(3001);
+
+      // Should have emitted a heartbeat timeout error
+      expect(errorListener).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining('Heartbeat timeout') }),
+      );
+
+      bridge.dispose();
+    });
+
+    it('DCC-HB-003: inbound pong resets the heartbeat timeout', async () => {
+      vi.useFakeTimers();
+      const { bridge, ws } = await createConnectedBridge({
+        heartbeatInterval: 5000,
+        heartbeatTimeout: 3000,
+        autoReconnect: false,
+      });
+
+      const errorListener = vi.fn();
+      bridge.on('error', errorListener);
+
+      // Trigger heartbeat ping at 5000ms (timeout would fire at 8000ms)
+      vi.advanceTimersByTime(5000);
+      expect(parseSent(ws, 0).type).toBe('ping');
+
+      // Respond with pong before timeout (at 6500ms)
+      vi.advanceTimersByTime(1500);
+      ws.simulateMessage(JSON.stringify({ type: 'pong' }));
+
+      // Advance past the original timeout deadline (8000ms) — should NOT fire
+      vi.advanceTimersByTime(2000);
+
+      expect(errorListener).not.toHaveBeenCalled();
+      expect(bridge.lastPongTime).toBeGreaterThan(0);
+
+      bridge.dispose();
+    });
+
+    it('DCC-HB-004: inbound pong updates lastPongTime', async () => {
+      vi.useFakeTimers();
+      const { bridge, ws } = await createConnectedBridge({
+        heartbeatInterval: 5000,
+        heartbeatTimeout: 10000,
+      });
+
+      const pongListener = vi.fn();
+      bridge.on('pong', pongListener);
+
+      // Trigger heartbeat ping
+      vi.advanceTimersByTime(5000);
+
+      // Respond with pong
+      ws.simulateMessage(JSON.stringify({ type: 'pong' }));
+
+      expect(pongListener).toHaveBeenCalledTimes(1);
+      expect(bridge.lastPongTime).toBeGreaterThan(0);
+
+      bridge.dispose();
+    });
+
+    it('DCC-HB-005: inbound ping also resets the heartbeat timeout', async () => {
+      vi.useFakeTimers();
+      const { bridge, ws } = await createConnectedBridge({
+        heartbeatInterval: 5000,
+        heartbeatTimeout: 3000,
+        autoReconnect: false,
+      });
+
+      const errorListener = vi.fn();
+      bridge.on('error', errorListener);
+
+      // Trigger heartbeat ping at 5000ms (timeout would fire at 8000ms)
+      vi.advanceTimersByTime(5000);
+
+      // Peer sends a ping (instead of pong) at 6500ms — bridge should still consider the connection alive
+      vi.advanceTimersByTime(1500);
+      ws.simulateMessage(JSON.stringify({ type: 'ping' }));
+
+      // Advance past original timeout deadline (8000ms) — should NOT fire
+      vi.advanceTimersByTime(2000);
+
+      expect(errorListener).not.toHaveBeenCalled();
+
+      bridge.dispose();
+    });
+
+    it('DCC-HB-006: heartbeat timeout closes the WebSocket', async () => {
+      vi.useFakeTimers();
+      const { bridge, ws } = await createConnectedBridge({
+        heartbeatInterval: 5000,
+        heartbeatTimeout: 3000,
+        autoReconnect: false,
+      });
+
+      // Trigger heartbeat ping at 5000ms, timeout fires at 8000ms
+      vi.advanceTimersByTime(8001);
+
+      // The WebSocket should have been closed
+      expect(ws.readyState).toBe(MockWebSocket.CLOSED);
+
+      bridge.dispose();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Regression: documented inbound message types match bridge dispatch
+  // -------------------------------------------------------------------------
+
+  describe('inbound message type coverage (docs/code sync)', () => {
+    /**
+     * This list must stay in sync with docs/advanced/dcc-integration.md.
+     * If you add or remove an inbound command from the bridge, update the
+     * docs AND this list so the two never drift apart again (issue #326).
+     */
+    const DOCUMENTED_INBOUND_TYPES = ['loadMedia', 'syncFrame', 'syncColor', 'ping'];
+
+    it('accepts all documented inbound message types without UNKNOWN_TYPE error', async () => {
+      const { bridge, ws } = await createConnectedBridge({
+        heartbeatInterval: 0,
+        autoReconnect: false,
+      });
+
+      const samplePayloads: Record<string, object> = {
+        loadMedia: { type: 'loadMedia', path: '/tmp/test.exr' },
+        syncFrame: { type: 'syncFrame', frame: 1 },
+        syncColor: { type: 'syncColor', exposure: 0 },
+        ping: { type: 'ping' },
+      };
+
+      for (const msgType of DOCUMENTED_INBOUND_TYPES) {
+        ws.sentMessages.length = 0;
+        const payload = samplePayloads[msgType];
+        expect(payload, `missing sample payload for "${msgType}"`).toBeDefined();
+
+        ws.simulateMessage(JSON.stringify(payload));
+
+        const errorMessages = ws.sentMessages
+          .map((m) => JSON.parse(m))
+          .filter((m: any) => m.type === 'error' && m.code === 'UNKNOWN_TYPE');
+
+        expect(errorMessages, `"${msgType}" should be accepted but got UNKNOWN_TYPE`).toHaveLength(0);
+      }
+
+      bridge.dispose();
+    });
+
+    it('does not include statusChanged in the documented inbound set (#327)', () => {
+      expect(DOCUMENTED_INBOUND_TYPES).not.toContain('statusChanged');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Regression: outbound message types must not include statusChanged (#327)
+  // -------------------------------------------------------------------------
+
+  describe('outbound message type coverage (docs/code sync)', () => {
+    /**
+     * This list must stay in sync with docs/advanced/dcc-integration.md.
+     * If you add or remove an outbound event from the bridge, update the
+     * docs AND this list so the two never drift apart again (issue #327).
+     */
+    const DOCUMENTED_OUTBOUND_TYPES: DCCOutboundMessageType[] = [
+      'frameChanged',
+      'colorChanged',
+      'annotationAdded',
+      'noteAdded',
+      'ping',
+      'pong',
+      'error',
+    ];
+
+    it('statusChanged is NOT a supported outbound message type (#327)', () => {
+      // Regression: the DCC integration docs previously claimed a statusChanged
+      // outbound message existed. It never did. Ensure it never sneaks in.
+      expect(DOCUMENTED_OUTBOUND_TYPES).not.toContain('statusChanged');
+
+      // Also verify at the type level: sending a statusChanged message through
+      // the bridge should produce an outbound message whose type field is one
+      // of the documented types. We check the concrete helpers on DCCBridge
+      // to ensure none of them produce 'statusChanged'.
+      const helperNames = [
+        'sendFrameChanged',
+        'sendColorChanged',
+        'sendAnnotationAdded',
+        'sendNoteAdded',
+        'sendError',
+      ] as const;
+
+      for (const name of helperNames) {
+        expect(typeof DCCBridge.prototype[name]).toBe('function');
+      }
+
+      // Ensure there is no sendStatusChanged helper
+      expect('sendStatusChanged' in DCCBridge.prototype).toBe(false);
+    });
+
+    it('rejects message types NOT in the documented set', async () => {
+      const { bridge, ws } = await createConnectedBridge({
+        heartbeatInterval: 0,
+        autoReconnect: false,
+      });
+
+      const bogusTypes = ['load', 'seek', 'setFrameRange', 'setMetadata', 'setColorSpace'];
+
+      for (const msgType of bogusTypes) {
+        ws.sentMessages.length = 0;
+        ws.simulateMessage(JSON.stringify({ type: msgType }));
+
+        const errorMessages = ws.sentMessages
+          .map((m) => JSON.parse(m))
+          .filter((m: any) => m.type === 'error' && m.code === 'UNKNOWN_TYPE');
+
+        expect(errorMessages, `"${msgType}" should be rejected as UNKNOWN_TYPE`).toHaveLength(1);
+      }
+
       bridge.dispose();
     });
   });

@@ -91,7 +91,7 @@ export function parseFormats(): FormatDescriptor[] {
       notes: 'Standard AVIF (non-gainmap)',
     },
     'raw-preview': {
-      extensions: ['.cr2', '.nef', '.arw', '.dng', '.orf', '.rw2', '.pef', '.srw', '.raf'],
+      extensions: ['.cr2', '.nef', '.arw', '.dng', '.orf', '.pef', '.srw'],
       hdr: false,
       colorSpace: 'sRGB',
       type: 'image',

@@ -8,6 +8,7 @@ import { NotePanel } from '../../ui/components/NotePanel';
 import { RightPanelContent } from '../../ui/layout/panels/RightPanelContent';
 import { LeftPanelContent } from '../../ui/layout/panels/LeftPanelContent';
 import { CacheIndicator } from '../../ui/components/CacheIndicator';
+import { CacheManagementPanel } from '../../ui/components/CacheManagementPanel';
 import { SnapshotPanel } from '../../ui/components/SnapshotPanel';
 import { PlaylistPanel } from '../../ui/components/PlaylistPanel';
 import { ShotGridConfigUI } from '../../integrations/ShotGridConfig';
@@ -29,6 +30,7 @@ import type { ColorControls } from '../../ui/components/ColorControls';
 import type { SnapshotManager } from '../../core/session/SnapshotManager';
 import type { PlaylistManager } from '../../core/session/PlaylistManager';
 import type { TransitionManager } from '../../core/session/TransitionManager';
+import type { MediaCacheManager } from '../../cache/MediaCacheManager';
 
 export interface PanelControlDeps {
   session: Session;
@@ -38,6 +40,7 @@ export interface PanelControlDeps {
   snapshotManager: SnapshotManager;
   playlistManager: PlaylistManager;
   transitionManager: TransitionManager;
+  cacheManager?: MediaCacheManager;
 }
 
 export interface PanelControlGroupInternal extends PanelControlGroup {
@@ -56,9 +59,13 @@ export function createPanelControls(deps: PanelControlDeps): PanelControlGroupIn
   const markerListPanel = new MarkerListPanel(session);
   const notePanel = new NotePanel(session);
 
-  // Mutual exclusion: NotePanel and MarkerListPanel overlap in the same position
+  // Mutual exclusion: HistoryPanel, NotePanel, and MarkerListPanel overlap in the same position
   notePanel.setExclusiveWith(markerListPanel);
+  notePanel.setExclusiveWith(historyPanel);
   markerListPanel.setExclusiveWith(notePanel);
+  markerListPanel.setExclusiveWith(historyPanel);
+  historyPanel.setExclusiveWith(notePanel);
+  historyPanel.setExclusiveWith(markerListPanel);
 
   // --- Layout panel content ---
   const rightPanelContent = new RightPanelContent(scopesControl);
@@ -66,11 +73,17 @@ export function createPanelControls(deps: PanelControlDeps): PanelControlGroupIn
 
   // --- Cache ---
   const cacheIndicator = new CacheIndicator(session, viewer);
+  const cacheManagementPanel = deps.cacheManager ? new CacheManagementPanel(deps.cacheManager) : null;
 
   // --- Snapshot / Playlist panels ---
   const snapshotPanel = new SnapshotPanel(snapshotManager);
   const playlistPanel = new PlaylistPanel(playlistManager);
   playlistPanel.setTransitionManager(transitionManager);
+  playlistPanel.setSourceUrlResolver((sourceIndex: number) => {
+    const sources = session.allSources;
+    if (sourceIndex < 0 || sourceIndex >= sources.length) return null;
+    return sources[sourceIndex]?.url || null;
+  });
 
   // Mutual exclusion: only one panel can be open at a time
   snapshotPanel.setExclusiveWith(playlistPanel);
@@ -119,6 +132,21 @@ export function createPanelControls(deps: PanelControlDeps): PanelControlGroupIn
   };
   const conformPanel = new ConformPanel(conformPanelContainer, conformManager);
 
+  // Wire the file handler so browse buttons open real file pickers
+  conformPanel.setFileHandler(async (file: File): Promise<number | null> => {
+    const countBefore = (session.allSources ?? []).length;
+    try {
+      await session.loadImageFile(file);
+    } catch {
+      return null;
+    }
+    const countAfter = (session.allSources ?? []).length;
+    if (countAfter > countBefore) {
+      return countAfter - 1;
+    }
+    return null;
+  });
+
   return {
     historyPanel,
     infoPanel,
@@ -131,6 +159,7 @@ export function createPanelControls(deps: PanelControlDeps): PanelControlGroupIn
     playlistPanel,
     shotGridConfig,
     shotGridPanel,
+    cacheManagementPanel,
     conformPanel,
     conformPanelElement,
     conformPanelContainer,

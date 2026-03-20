@@ -467,6 +467,87 @@ describe('TransformManager', () => {
   });
 
   // ===========================================================================
+  // onViewChanged callback (notifyViewChanged)
+  // ===========================================================================
+
+  describe('onViewChanged callback', () => {
+    it('zoom setter fires onViewChanged', () => {
+      const callback = vi.fn();
+      tm.setOnViewChanged(callback);
+      tm.zoom = 2.5;
+      expect(callback).toHaveBeenCalledWith(0, 0, 2.5);
+    });
+
+    it('panX setter fires onViewChanged', () => {
+      const callback = vi.fn();
+      tm.setOnViewChanged(callback);
+      tm.panX = 42;
+      expect(callback).toHaveBeenCalledWith(42, 0, 1);
+    });
+
+    it('panY setter fires onViewChanged', () => {
+      const callback = vi.fn();
+      tm.setOnViewChanged(callback);
+      tm.panY = -30;
+      expect(callback).toHaveBeenCalledWith(0, -30, 1);
+    });
+
+    it('setPan fires onViewChanged once', () => {
+      const callback = vi.fn();
+      tm.setOnViewChanged(callback);
+      tm.setPan(10, 20);
+      expect(callback).toHaveBeenCalledTimes(1);
+      expect(callback).toHaveBeenCalledWith(10, 20, 1);
+    });
+
+    it('setZoom fires onViewChanged', () => {
+      const callback = vi.fn();
+      tm.setOnViewChanged(callback);
+      tm.setZoom(3);
+      expect(callback).toHaveBeenCalledWith(0, 0, 3);
+    });
+
+    it('setting callback to null stops notifications', () => {
+      const callback = vi.fn();
+      tm.setOnViewChanged(callback);
+      tm.zoom = 2;
+      expect(callback).toHaveBeenCalledOnce();
+
+      tm.setOnViewChanged(null);
+      tm.zoom = 3;
+      expect(callback).toHaveBeenCalledOnce(); // Not called again
+    });
+
+    it('dispose clears onViewChanged callback', () => {
+      const callback = vi.fn();
+      tm.setOnViewChanged(callback);
+      tm.dispose();
+      tm.zoom = 5;
+      expect(callback).not.toHaveBeenCalled();
+    });
+
+    it('smoothZoomTo with duration 0 fires onViewChanged', () => {
+      const callback = vi.fn();
+      tm.setOnViewChanged(callback);
+      tm.setScheduleRender(() => {});
+      tm.smoothZoomTo(3, 0, 10, 20);
+      expect(callback).toHaveBeenCalledWith(10, 20, 3);
+    });
+
+    it('fitToWindow fires onViewChanged with reset values', () => {
+      const callback = vi.fn();
+      tm.setOnViewChanged(callback);
+      tm.zoom = 2;
+      tm.panX = 50;
+      callback.mockClear();
+
+      tm.fitToWindow();
+      // fitToWindow now notifies listeners so the bridge stays in sync
+      expect(callback).toHaveBeenCalledWith(0, 0, 1);
+    });
+  });
+
+  // ===========================================================================
   // Dispose
   // ===========================================================================
 

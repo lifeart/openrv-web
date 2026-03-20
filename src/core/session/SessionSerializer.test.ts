@@ -7,13 +7,33 @@ import { SessionSerializer, type SessionComponents } from './SessionSerializer';
 import type { SessionState } from './SessionState';
 import { SESSION_STATE_VERSION } from './SessionState';
 import { PaintEngine } from '../../paint/PaintEngine';
+import { DEFAULT_TONE_MAPPING_STATE, DEFAULT_GAMUT_MAPPING_STATE } from '../../core/types/effects';
+import { DEFAULT_STEREO_STATE } from '../../core/types/stereo';
+import { DEFAULT_GHOST_FRAME_STATE } from '../../ui/components/GhostFrameControl';
+import { DEFAULT_DISPLAY_COLOR_STATE } from '../../color/DisplayTransfer';
+import { DEFAULT_DIFFERENCE_MATTE_STATE } from '../../ui/components/DifferenceMatteControl';
+import { DEFAULT_BLEND_MODE_STATE } from '../../ui/components/ComparisonManager';
+import { createDefaultCurvesData } from '../../color/ColorCurves';
+import { DEFAULT_STEREO_EYE_TRANSFORM_STATE, DEFAULT_STEREO_ALIGN_MODE } from '../../stereo/StereoRenderer';
+import { LUTPipeline } from '../../color/pipeline/LUTPipeline';
+import { SUPPORTED_MEDIA_ACCEPT } from '../../utils/media/SupportedMediaFormats';
+import { DEFAULT_TIMECODE_OVERLAY_STATE } from '../../ui/components/TimecodeOverlay';
+import { DEFAULT_SAFE_AREAS_STATE } from '../../ui/components/SafeAreasOverlay';
+import { DEFAULT_CLIPPING_OVERLAY_STATE } from '../../ui/components/ClippingOverlay';
+import { DEFAULT_INFO_STRIP_OVERLAY_STATE } from '../../ui/components/InfoStripOverlay';
+import { DEFAULT_SPOTLIGHT_STATE } from '../../ui/components/SpotlightOverlay';
+import { DEFAULT_BUG_OVERLAY_STATE } from '../../ui/components/BugOverlay';
+import { DEFAULT_EXR_WINDOW_OVERLAY_STATE } from '../../ui/components/EXRWindowOverlay';
+import { DEFAULT_FPS_INDICATOR_STATE } from '../../ui/components/FPSIndicator';
 
 // Mock the showFileReloadPrompt dialog
 vi.mock('../../ui/components/shared/Modal', () => ({
   showFileReloadPrompt: vi.fn(),
+  showSequenceReloadPrompt: vi.fn(),
+  FILE_RELOAD_CANCEL: 'cancel',
 }));
 
-import { showFileReloadPrompt } from '../../ui/components/shared/Modal';
+import { showFileReloadPrompt, showSequenceReloadPrompt } from '../../ui/components/shared/Modal';
 
 describe('SessionSerializer', () => {
   beforeEach(() => {
@@ -380,12 +400,15 @@ describe('SessionSerializer', () => {
 
       const result = await SessionSerializer.fromJSON(state, components);
 
-      // video + img loaded; sequence requires manual selection
-      expect(result.loadedMedia).toBe(2);
+      // video + img loaded; sequence added as placeholder (fix #521)
+      expect(result.loadedMedia).toBe(3);
+      // Warnings: 1 for sequence placeholder (no gap warning since all defaults — fix #137)
       expect(result.warnings.length).toBe(1);
       expect(result.warnings[0]).toContain('seq');
+      expect(result.warnings[0]).toContain('Sequence needs file reload');
       expect(components.session.loadVideo).toHaveBeenCalledWith('video', 'video.mp4');
       expect(components.session.loadImage).toHaveBeenCalledWith('img', 'image.jpg');
+      expect(components.session.addSource).toHaveBeenCalledTimes(1);
       expect(components.viewer.setZoom).toHaveBeenCalled();
       expect(components.paintEngine.loadFromAnnotations).toHaveBeenCalled();
     });
@@ -436,7 +459,7 @@ describe('SessionSerializer', () => {
         'local.mp4',
         expect.objectContaining({
           title: 'Reload File',
-          accept: 'video/*',
+          accept: SUPPORTED_MEDIA_ACCEPT,
         }),
       );
       expect(result.loadedMedia).toBe(1);
@@ -549,17 +572,17 @@ describe('SessionSerializer', () => {
       expect(showFileReloadPrompt).toHaveBeenNthCalledWith(
         1,
         'image1.png',
-        expect.objectContaining({ accept: 'image/*' }),
+        expect.objectContaining({ accept: SUPPORTED_MEDIA_ACCEPT }),
       );
       expect(showFileReloadPrompt).toHaveBeenNthCalledWith(
         2,
         'video1.mp4',
-        expect.objectContaining({ accept: 'video/*' }),
+        expect.objectContaining({ accept: SUPPORTED_MEDIA_ACCEPT }),
       );
       expect(showFileReloadPrompt).toHaveBeenNthCalledWith(
         3,
         'image2.png',
-        expect.objectContaining({ accept: 'image/*' }),
+        expect.objectContaining({ accept: SUPPORTED_MEDIA_ACCEPT }),
       );
 
       // Verify loadFile was called for files 1 and 3 (not 2 which was skipped)
@@ -567,7 +590,7 @@ describe('SessionSerializer', () => {
       expect(components.session.loadFile).toHaveBeenNthCalledWith(1, mockFile1);
       expect(components.session.loadFile).toHaveBeenNthCalledWith(2, mockFile3);
 
-      // Two files loaded, one skipped
+      // Two files loaded, one skipped (no gap warning since all defaults — fix #137)
       expect(result.loadedMedia).toBe(2);
       expect(result.warnings).toHaveLength(1);
       expect(result.warnings).toContain('Skipped reload: video1.mp4');
@@ -587,13 +610,71 @@ describe('SessionSerializer', () => {
       expect(result.warnings[0]).toContain('Failed to load');
     });
 
-    it('SER-011: warns about LUT path', async () => {
+    it('SER-011: warns about LUT path with actionable message', async () => {
       const components = createMockComponents();
       const state = SessionSerializer.createEmpty();
       state.lutPath = 'my.cube';
 
       const result = await SessionSerializer.fromJSON(state, components);
-      expect(result.warnings).toContain('LUT "my.cube" requires manual loading');
+      // 1 LUT warning only (no gap warning since all defaults — fix #137)
+      expect(result.warnings).toHaveLength(1);
+      const warning = result.warnings[0]!;
+      expect(warning).toContain('my.cube');
+      expect(warning).toContain('reloaded manually');
+      expect(warning).toContain('intensity setting has been preserved');
+    });
+
+    it('SER-011-LUT-001: LUT title is preserved in serialization', () => {
+      const components = createMockComponents();
+      (components.viewer.getLUT as ReturnType<typeof vi.fn>).mockReturnValue({ title: 'FilmGrade.cube' });
+
+      const state = SessionSerializer.toJSON(components, 'LutTest');
+      expect(state.lutPath).toBe('FilmGrade.cube');
+    });
+
+    it('SER-011-LUT-002: no LUT warning emitted when no LUT was active', async () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty();
+      // lutPath is undefined by default
+
+      const result = await SessionSerializer.fromJSON(state, components);
+      const lutWarnings = result.warnings.filter((w) => w.toLowerCase().includes('lut'));
+      expect(lutWarnings).toHaveLength(0);
+    });
+
+    it('SER-011-LUT-003: LUT warning includes intensity when not default', async () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty();
+      state.lutPath = 'LogC.cube';
+      state.lutIntensity = 0.75;
+
+      const result = await SessionSerializer.fromJSON(state, components);
+      // 1 LUT warning only (no gap warning since all defaults — fix #137)
+      expect(result.warnings).toHaveLength(1);
+      const warning = result.warnings[0]!;
+      expect(warning).toContain('LogC.cube');
+      expect(warning).toContain('intensity was 0.75');
+    });
+
+    it('SER-011-LUT-004: LUT warning omits intensity note when intensity is 1.0', async () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty();
+      state.lutPath = 'Default.cube';
+      state.lutIntensity = 1.0;
+
+      const result = await SessionSerializer.fromJSON(state, components);
+      const warning = result.warnings[0]!;
+      expect(warning).not.toContain('intensity was');
+    });
+
+    it('SER-011-LUT-005: lutIntensity is still applied on restore even without LUT binary', async () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty();
+      state.lutPath = 'test.cube';
+      state.lutIntensity = 0.5;
+
+      await SessionSerializer.fromJSON(state, components);
+      expect(components.viewer.setLUTIntensity).toHaveBeenCalledWith(0.5);
     });
 
     it('SER-011a: restores noise reduction and watermark state', async () => {
@@ -677,6 +758,277 @@ describe('SessionSerializer', () => {
   });
 
   // =================================================================
+  // Serialization Gaps — transparency for unsaved viewer state
+  // =================================================================
+
+  describe('getSerializationGaps', () => {
+    it('SER-GAP-001: returns all known gap categories', () => {
+      const components = createMockComponents();
+      const gaps = SessionSerializer.getSerializationGaps(components.viewer as any);
+
+      expect(gaps.length).toBeGreaterThanOrEqual(13);
+
+      const names = gaps.map((g) => g.name);
+      expect(names).toContain('OCIO configuration');
+      expect(names).toContain('Display profile');
+      expect(names).toContain('Gamut mapping');
+      expect(names).toContain('Color inversion');
+      expect(names).toContain('Curves');
+      expect(names).toContain('Tone mapping');
+      expect(names).toContain('Ghost frames');
+      expect(names).toContain('Stereo mode');
+      expect(names).toContain('Stereo eye transforms');
+      expect(names).toContain('Stereo align mode');
+      expect(names).toContain('Channel isolation');
+      expect(names).toContain('Difference matte');
+      expect(names).toContain('Blend mode');
+    });
+
+    it('SER-GAP-002: all gaps report inactive when viewer is at defaults', () => {
+      const components = createMockComponents();
+      const gaps = SessionSerializer.getSerializationGaps(components.viewer as any);
+
+      for (const gap of gaps) {
+        expect(gap.isActive).toBe(false);
+      }
+    });
+
+    it('SER-GAP-003: detects active OCIO', () => {
+      const components = createMockComponents();
+      (components.viewer.isOCIOEnabled as ReturnType<typeof vi.fn>).mockReturnValue(true);
+
+      const gaps = SessionSerializer.getSerializationGaps(components.viewer as any);
+      const ocio = gaps.find((g) => g.name === 'OCIO configuration')!;
+      expect(ocio.isActive).toBe(true);
+      expect(ocio.category).toBe('color');
+    });
+
+    it('SER-GAP-004: detects active tone mapping', () => {
+      const components = createMockComponents();
+      (components.viewer.getToneMappingState as ReturnType<typeof vi.fn>).mockReturnValue({
+        ...DEFAULT_TONE_MAPPING_STATE,
+        enabled: true,
+        operator: 'aces',
+      });
+
+      const gaps = SessionSerializer.getSerializationGaps(components.viewer as any);
+      const tm = gaps.find((g) => g.name === 'Tone mapping')!;
+      expect(tm.isActive).toBe(true);
+      expect(tm.category).toBe('view');
+    });
+
+    it('SER-GAP-005: detects active stereo mode', () => {
+      const components = createMockComponents();
+      (components.viewer.getStereoState as ReturnType<typeof vi.fn>).mockReturnValue({
+        mode: 'anaglyph',
+        eyeSwap: false,
+        offset: 0,
+      });
+
+      const gaps = SessionSerializer.getSerializationGaps(components.viewer as any);
+      const stereo = gaps.find((g) => g.name === 'Stereo mode')!;
+      expect(stereo.isActive).toBe(true);
+    });
+
+    it('SER-GAP-006: detects active ghost frames', () => {
+      const components = createMockComponents();
+      (components.viewer.getGhostFrameState as ReturnType<typeof vi.fn>).mockReturnValue({
+        ...DEFAULT_GHOST_FRAME_STATE,
+        enabled: true,
+      });
+
+      const gaps = SessionSerializer.getSerializationGaps(components.viewer as any);
+      const ghost = gaps.find((g) => g.name === 'Ghost frames')!;
+      expect(ghost.isActive).toBe(true);
+    });
+
+    it('SER-GAP-007: detects active channel isolation', () => {
+      const components = createMockComponents();
+      (components.viewer.getChannelMode as ReturnType<typeof vi.fn>).mockReturnValue('red');
+
+      const gaps = SessionSerializer.getSerializationGaps(components.viewer as any);
+      const channel = gaps.find((g) => g.name === 'Channel isolation')!;
+      expect(channel.isActive).toBe(true);
+    });
+
+    it('SER-GAP-008: detects active difference matte', () => {
+      const components = createMockComponents();
+      (components.viewer.getDifferenceMatteState as ReturnType<typeof vi.fn>).mockReturnValue({
+        ...DEFAULT_DIFFERENCE_MATTE_STATE,
+        enabled: true,
+      });
+
+      const gaps = SessionSerializer.getSerializationGaps(components.viewer as any);
+      const dm = gaps.find((g) => g.name === 'Difference matte')!;
+      expect(dm.isActive).toBe(true);
+      expect(dm.category).toBe('compare');
+    });
+
+    it('SER-GAP-009: detects active blend mode', () => {
+      const components = createMockComponents();
+      (components.viewer.getBlendModeState as ReturnType<typeof vi.fn>).mockReturnValue({
+        ...DEFAULT_BLEND_MODE_STATE,
+        mode: 'multiply',
+        flickerFrame: 0,
+      });
+
+      const gaps = SessionSerializer.getSerializationGaps(components.viewer as any);
+      const bm = gaps.find((g) => g.name === 'Blend mode')!;
+      expect(bm.isActive).toBe(true);
+    });
+
+    it('SER-GAP-010: detects active display profile', () => {
+      const components = createMockComponents();
+      (components.viewer.getDisplayColorState as ReturnType<typeof vi.fn>).mockReturnValue({
+        ...DEFAULT_DISPLAY_COLOR_STATE,
+        displayGamma: 2.2,
+      });
+
+      const gaps = SessionSerializer.getSerializationGaps(components.viewer as any);
+      const dp = gaps.find((g) => g.name === 'Display profile')!;
+      expect(dp.isActive).toBe(true);
+    });
+
+    it('SER-GAP-011: detects active gamut mapping', () => {
+      const components = createMockComponents();
+      (components.viewer.getGamutMappingState as ReturnType<typeof vi.fn>).mockReturnValue({
+        ...DEFAULT_GAMUT_MAPPING_STATE,
+        mode: 'clip',
+      });
+
+      const gaps = SessionSerializer.getSerializationGaps(components.viewer as any);
+      const gm = gaps.find((g) => g.name === 'Gamut mapping')!;
+      expect(gm.isActive).toBe(true);
+    });
+
+    it('SER-GAP-013: detects active color inversion', () => {
+      const components = createMockComponents();
+      (components.viewer.getColorInversion as ReturnType<typeof vi.fn>).mockReturnValue(true);
+
+      const gaps = SessionSerializer.getSerializationGaps(components.viewer as any);
+      const ci = gaps.find((g) => g.name === 'Color inversion')!;
+      expect(ci.isActive).toBe(true);
+      expect(ci.category).toBe('color');
+    });
+
+    it('SER-GAP-014: detects active curves', () => {
+      const components = createMockComponents();
+      const nonDefaultCurves = createDefaultCurvesData();
+      nonDefaultCurves.master.points = [
+        { x: 0, y: 0 },
+        { x: 0.5, y: 0.7 },
+        { x: 1, y: 1 },
+      ];
+      (components.viewer.getCurves as ReturnType<typeof vi.fn>).mockReturnValue(nonDefaultCurves);
+
+      const gaps = SessionSerializer.getSerializationGaps(components.viewer as any);
+      const curves = gaps.find((g) => g.name === 'Curves')!;
+      expect(curves.isActive).toBe(true);
+      expect(curves.category).toBe('color');
+    });
+
+    it('SER-GAP-015: detects active stereo eye transforms', () => {
+      const components = createMockComponents();
+      (components.viewer.getStereoEyeTransforms as ReturnType<typeof vi.fn>).mockReturnValue({
+        left: { flipH: true, flipV: false, rotation: 0, scale: 1.0, translateX: 0, translateY: 0 },
+        right: { flipH: false, flipV: false, rotation: 0, scale: 1.0, translateX: 0, translateY: 0 },
+        linked: false,
+      });
+
+      const gaps = SessionSerializer.getSerializationGaps(components.viewer as any);
+      const set = gaps.find((g) => g.name === 'Stereo eye transforms')!;
+      expect(set.isActive).toBe(true);
+      expect(set.category).toBe('view');
+    });
+
+    it('SER-GAP-016: detects active stereo align mode', () => {
+      const components = createMockComponents();
+      (components.viewer.getStereoAlignMode as ReturnType<typeof vi.fn>).mockReturnValue('grid');
+
+      const gaps = SessionSerializer.getSerializationGaps(components.viewer as any);
+      const sam = gaps.find((g) => g.name === 'Stereo align mode')!;
+      expect(sam.isActive).toBe(true);
+      expect(sam.category).toBe('view');
+    });
+
+    it('SER-GAP-012: every gap has non-empty impact description', () => {
+      const components = createMockComponents();
+      const gaps = SessionSerializer.getSerializationGaps(components.viewer as any);
+
+      for (const gap of gaps) {
+        expect(gap.impact.length).toBeGreaterThan(0);
+      }
+    });
+  });
+
+  describe('toJSON gap warnings', () => {
+    it('SER-GAP-020: emits console.warn when active gaps exist during save', () => {
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const components = createMockComponents();
+      (components.viewer.isOCIOEnabled as ReturnType<typeof vi.fn>).mockReturnValue(true);
+      (components.viewer.getToneMappingState as ReturnType<typeof vi.fn>).mockReturnValue({
+        ...DEFAULT_TONE_MAPPING_STATE,
+        enabled: true,
+        operator: 'aces',
+      });
+
+      SessionSerializer.toJSON(components, 'TestGapWarn');
+
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('OCIO configuration'));
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Tone mapping'));
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('NOT saved'));
+
+      consoleSpy.mockRestore();
+    });
+
+    it('SER-GAP-021: no console.warn when all states are at defaults', () => {
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const components = createMockComponents();
+      SessionSerializer.toJSON(components, 'TestNoGapWarn');
+
+      // Should not have been called with the serialization gap message
+      const gapWarnings = consoleSpy.mock.calls.filter(
+        (args) => typeof args[0] === 'string' && args[0].includes('[SessionSerializer]'),
+      );
+      expect(gapWarnings).toHaveLength(0);
+
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('fromJSON gap warnings', () => {
+    it('SER-GAP-030: fromJSON includes gap warning only when active gaps exist (fix #137)', async () => {
+      const components = createMockComponents();
+      // Make some gaps active
+      (components.viewer.isOCIOEnabled as ReturnType<typeof vi.fn>).mockReturnValue(true);
+      (components.viewer.getToneMappingState as ReturnType<typeof vi.fn>).mockReturnValue({
+        enabled: true,
+        operator: 'reinhard',
+      });
+      const state = SessionSerializer.createEmpty();
+
+      const result = await SessionSerializer.fromJSON(state, components);
+
+      const gapWarning = result.warnings.find((w) => w.includes('not saved in project files'));
+      expect(gapWarning).toBeDefined();
+      expect(gapWarning).toContain('OCIO configuration');
+      expect(gapWarning).toContain('Tone mapping');
+    });
+
+    it('SER-GAP-031: fromJSON omits gap warning when all states are at defaults', async () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty();
+
+      const result = await SessionSerializer.fromJSON(state, components);
+
+      const gapWarning = result.warnings.find((w) => w.includes('not saved in project files'));
+      expect(gapWarning).toBeUndefined();
+    });
+  });
+
+  // =================================================================
   // Playback Mode Serialization
   // =================================================================
 
@@ -724,6 +1076,657 @@ describe('SessionSerializer', () => {
       expect(arg.playbackMode).toBe('playAllFrames');
     });
   });
+
+  // -----------------------------------------------------------------------
+  // Issue #134: representations not restored on load
+  // -----------------------------------------------------------------------
+  describe('issue #134: representation restoration', () => {
+    it('SER-REP-001: fromJSON does not log info about missing representation restoration', async () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty();
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+
+      await SessionSerializer.fromJSON(state, components);
+
+      expect(infoSpy).not.toHaveBeenCalledWith(expect.stringContaining('representations are saved but not restored'));
+      infoSpy.mockRestore();
+    });
+
+    it('SER-REP-002: fromJSON restores representations to loaded sources', async () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty();
+      state.media = [
+        {
+          type: 'image' as const,
+          path: 'test.exr',
+          name: 'test',
+          width: 4096,
+          height: 2160,
+          duration: 1,
+          fps: 24,
+          representations: [
+            {
+              id: 'rep-full',
+              label: 'EXR Full',
+              kind: 'frames' as const,
+              priority: 0,
+              resolution: { width: 4096, height: 2160 },
+              par: 1.0,
+              audioTrackPresent: false,
+              startFrame: 0,
+              loaderConfig: { path: 'test.exr' },
+            },
+            {
+              id: 'rep-proxy',
+              label: 'Proxy',
+              kind: 'proxy' as const,
+              priority: 2,
+              resolution: { width: 1920, height: 1080 },
+              par: 1.0,
+              audioTrackPresent: false,
+              startFrame: 0,
+              loaderConfig: { url: 'http://example.com/proxy.mp4' },
+            },
+          ],
+          activeRepresentationId: 'rep-proxy',
+        },
+      ];
+
+      await SessionSerializer.fromJSON(state, components);
+
+      const addRep = components.session.addRepresentationToSource as ReturnType<typeof vi.fn>;
+      expect(addRep).toHaveBeenCalledTimes(2);
+      expect(addRep).toHaveBeenCalledWith(0, expect.objectContaining({ id: 'rep-full', kind: 'frames' }));
+      expect(addRep).toHaveBeenCalledWith(0, expect.objectContaining({ id: 'rep-proxy', kind: 'proxy' }));
+
+      const switchRep = components.session.switchRepresentation as ReturnType<typeof vi.fn>;
+      expect(switchRep).toHaveBeenCalledWith(0, 'rep-proxy');
+    });
+
+    it('SER-REP-003: fromJSON skips representations for failed media loads', async () => {
+      const components = createMockComponents();
+      (components.session.loadImage as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('load failed'));
+      const state = SessionSerializer.createEmpty();
+      state.media = [
+        {
+          type: 'image' as const,
+          path: 'missing.exr',
+          name: 'missing',
+          width: 1920,
+          height: 1080,
+          duration: 1,
+          fps: 24,
+          representations: [
+            {
+              id: 'rep-1',
+              label: 'Full',
+              kind: 'frames' as const,
+              priority: 0,
+              resolution: { width: 1920, height: 1080 },
+              par: 1.0,
+              audioTrackPresent: false,
+              startFrame: 0,
+              loaderConfig: { path: 'missing.exr' },
+            },
+          ],
+          activeRepresentationId: 'rep-1',
+        },
+      ];
+
+      const result = await SessionSerializer.fromJSON(state, components);
+
+      const addRep = components.session.addRepresentationToSource as ReturnType<typeof vi.fn>;
+      expect(addRep).not.toHaveBeenCalled();
+
+      const switchRep = components.session.switchRepresentation as ReturnType<typeof vi.fn>;
+      expect(switchRep).not.toHaveBeenCalled();
+
+      expect(result.warnings).toContain('Failed to load: missing');
+    });
+
+    it('SER-REP-004: fromJSON produces warning when representation switch fails', async () => {
+      const components = createMockComponents();
+      (components.session.switchRepresentation as ReturnType<typeof vi.fn>).mockResolvedValue(false);
+      const state = SessionSerializer.createEmpty();
+      state.media = [
+        {
+          type: 'video' as const,
+          path: 'test.mp4',
+          name: 'test',
+          width: 1920,
+          height: 1080,
+          duration: 100,
+          fps: 24,
+          representations: [
+            {
+              id: 'rep-1',
+              label: 'Full',
+              kind: 'movie' as const,
+              priority: 0,
+              resolution: { width: 1920, height: 1080 },
+              par: 1.0,
+              audioTrackPresent: true,
+              startFrame: 0,
+              loaderConfig: { path: 'test.mp4' },
+            },
+          ],
+          activeRepresentationId: 'rep-1',
+        },
+      ];
+
+      const result = await SessionSerializer.fromJSON(state, components);
+
+      expect(result.warnings).toContain('Failed to restore active representation "rep-1" for "test"');
+    });
+
+    it('SER-REP-005: fromJSON handles media with no representations (no-op)', async () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty();
+      state.media = [
+        {
+          type: 'image' as const,
+          path: 'simple.png',
+          name: 'simple',
+          width: 800,
+          height: 600,
+          duration: 1,
+          fps: 24,
+        },
+      ];
+
+      await SessionSerializer.fromJSON(state, components);
+
+      const addRep = components.session.addRepresentationToSource as ReturnType<typeof vi.fn>;
+      expect(addRep).not.toHaveBeenCalled();
+
+      const switchRep = components.session.switchRepresentation as ReturnType<typeof vi.fn>;
+      expect(switchRep).not.toHaveBeenCalled();
+    });
+
+    it('SER-REP-006: fromJSON handles media with representations but no activeRepresentationId', async () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty();
+      state.media = [
+        {
+          type: 'image' as const,
+          path: 'test.exr',
+          name: 'test',
+          width: 4096,
+          height: 2160,
+          duration: 1,
+          fps: 24,
+          representations: [
+            {
+              id: 'rep-full',
+              label: 'EXR Full',
+              kind: 'frames' as const,
+              priority: 0,
+              resolution: { width: 4096, height: 2160 },
+              par: 1.0,
+              audioTrackPresent: false,
+              startFrame: 0,
+              loaderConfig: { path: 'test.exr' },
+            },
+          ],
+          // No activeRepresentationId
+        },
+      ];
+
+      await SessionSerializer.fromJSON(state, components);
+
+      const addRep = components.session.addRepresentationToSource as ReturnType<typeof vi.fn>;
+      expect(addRep).toHaveBeenCalledTimes(1);
+      expect(addRep).toHaveBeenCalledWith(0, expect.objectContaining({ id: 'rep-full' }));
+
+      const switchRep = components.session.switchRepresentation as ReturnType<typeof vi.fn>;
+      expect(switchRep).not.toHaveBeenCalled();
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Issue #136: omitted viewer states leak from previous session
+  // -----------------------------------------------------------------------
+  describe('issue #136: reset omitted viewer states on load', () => {
+    it('SER-RST-001: fromJSON calls reset methods for omitted viewer states', async () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty();
+
+      await SessionSerializer.fromJSON(state, components);
+
+      const viewer = components.viewer as any;
+      expect(viewer.resetToneMappingState).toHaveBeenCalled();
+      expect(viewer.resetGhostFrameState).toHaveBeenCalled();
+      expect(viewer.resetStereoState).toHaveBeenCalled();
+      expect(viewer.resetStereoEyeTransforms).toHaveBeenCalled();
+      expect(viewer.resetStereoAlignMode).toHaveBeenCalled();
+      expect(viewer.resetChannelMode).toHaveBeenCalled();
+      expect(viewer.resetDifferenceMatteState).toHaveBeenCalled();
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Issue #137: gap warnings even when not active
+  // -----------------------------------------------------------------------
+  describe('issue #137: filter gap warnings by isActive', () => {
+    it('SER-GAP-001: clean load with all defaults produces no gap warnings', async () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty();
+
+      const result = await SessionSerializer.fromJSON(state, components);
+
+      // No gap-related warnings since all states are at defaults
+      const gapWarning = result.warnings.find((w) => w.includes('viewer states are not saved in project files'));
+      expect(gapWarning).toBeUndefined();
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Issue #146: LUT Pipeline project persistence
+  // -----------------------------------------------------------------------
+  describe('issue #146: LUT Pipeline project persistence', () => {
+    it('SER-LUT-001: toJSON includes serializable LUT Pipeline state', () => {
+      const components = createMockComponents();
+      const pipeline = (components.viewer as any).getLUTPipeline();
+      const lut = {
+        title: 'Test LUT',
+        size: 2,
+        domainMin: [0, 0, 0] as [number, number, number],
+        domainMax: [1, 1, 1] as [number, number, number],
+        data: new Float32Array(24),
+      };
+      pipeline.setPreCacheLUT('default', lut, 'decode.cube');
+      pipeline.setPreCacheLUTEnabled('default', false);
+      pipeline.setPreCacheLUTIntensity('default', 0.25);
+      pipeline.setFileLUT('default', lut, 'file.cube');
+      pipeline.setFileLUTIntensity('default', 0.5);
+      pipeline.setDisplayLUT(lut, 'display.cube');
+      pipeline.setDisplayLUTIntensity(0.75);
+
+      const state = SessionSerializer.toJSON(components, 'LUT Project');
+
+      expect(state.lutPipeline).toBeDefined();
+      expect(state.lutPipeline?.sources.default?.preCacheLUT.lutName).toBe('decode.cube');
+      expect(state.lutPipeline?.sources.default?.preCacheLUT.enabled).toBe(false);
+      expect(state.lutPipeline?.sources.default?.fileLUT.intensity).toBeCloseTo(0.5);
+      expect(state.lutPipeline?.displayLUT.lutName).toBe('display.cube');
+    });
+
+    it('SER-LUT-002: fromJSON restores LUT Pipeline metadata and warns to reload named LUTs', async () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty('Restore LUT Pipeline');
+      state.lutPipeline = {
+        sources: {
+          default: {
+            sourceId: 'default',
+            preCacheLUT: {
+              enabled: false,
+              lutName: 'decode.cube',
+              intensity: 0.3,
+              source: 'manual',
+              bitDepth: '16bit',
+              inMatrix: null,
+              outMatrix: null,
+            },
+            fileLUT: {
+              enabled: true,
+              lutName: 'file.cube',
+              intensity: 0.6,
+              source: 'manual',
+              inMatrix: null,
+              outMatrix: null,
+            },
+            lookLUT: {
+              enabled: true,
+              lutName: 'look.cube',
+              intensity: 0.8,
+              source: 'manual',
+              inMatrix: null,
+              outMatrix: null,
+            },
+          },
+        },
+        displayLUT: {
+          enabled: true,
+          lutName: 'display.cube',
+          intensity: 0.9,
+          source: 'manual',
+          inMatrix: null,
+          outMatrix: null,
+        },
+        activeSourceId: 'default',
+      };
+
+      const result = await SessionSerializer.fromJSON(state, components);
+      const pipeline = (components.viewer as any).getLUTPipeline() as LUTPipeline;
+      const restored = pipeline.getState();
+
+      expect(restored.activeSourceId).toBe('default');
+      expect(restored.sources.get('default')?.preCacheLUT.lutName).toBe('decode.cube');
+      expect(restored.sources.get('default')?.preCacheLUT.enabled).toBe(false);
+      expect(restored.sources.get('default')?.fileLUT.intensity).toBeCloseTo(0.6);
+      expect(restored.sources.get('default')?.lookLUT.lutName).toBe('look.cube');
+      expect(restored.displayLUT.lutName).toBe('display.cube');
+      expect((components.viewer as any).syncLUTPipeline).toHaveBeenCalled();
+      expect(result.warnings.some((w) => w.includes('LUT Pipeline assignments need to be reloaded manually'))).toBe(
+        true,
+      );
+    });
+
+    it('SER-LUT-003: getSerializationGaps no longer reports LUT Pipeline as an unserialized gap', () => {
+      const components = createMockComponents();
+      const gaps = SessionSerializer.getSerializationGaps(components.viewer as any);
+      const lutGap = gaps.find((g) => g.name === 'LUT Pipeline');
+      expect(lutGap).toBeUndefined();
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  describe('issue #164: EDL entries persistence', () => {
+    it('SER-EDL-001: toJSON includes edlEntries when present', () => {
+      const components = createMockComponents();
+      const edlEntries = [
+        { sourcePath: '/path/to/clip1.mov', inFrame: 1, outFrame: 100 },
+        { sourcePath: '/path/to/clip2.mov', inFrame: 50, outFrame: 200 },
+      ];
+      (components.session as any).edlEntries = edlEntries;
+
+      const state = SessionSerializer.toJSON(components, 'EDLTest');
+
+      expect(state.edlEntries).toBeDefined();
+      expect(state.edlEntries).toHaveLength(2);
+      expect(state.edlEntries?.[0]?.sourcePath).toBe('/path/to/clip1.mov');
+      expect(state.edlEntries?.[1]?.inFrame).toBe(50);
+    });
+
+    it('SER-EDL-002: toJSON omits edlEntries when empty', () => {
+      const components = createMockComponents();
+      (components.session as any).edlEntries = [];
+
+      const state = SessionSerializer.toJSON(components, 'NoEDL');
+
+      expect(state.edlEntries).toBeUndefined();
+    });
+
+    it('SER-EDL-003: fromJSON restores edlEntries into the session', async () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty('EDLRestore');
+      state.edlEntries = [{ sourcePath: '/path/to/clip.mov', inFrame: 10, outFrame: 50 }];
+
+      await SessionSerializer.fromJSON(state, components);
+
+      expect((components.session as any).setEdlEntries).toHaveBeenCalledWith([
+        { sourcePath: '/path/to/clip.mov', inFrame: 10, outFrame: 50 },
+      ]);
+    });
+
+    it('SER-EDL-004: fromJSON calls setEdlEntries with empty array when edlEntries is absent (fix #315)', async () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty('NoEDL');
+      // edlEntries is undefined by default
+
+      await SessionSerializer.fromJSON(state, components);
+
+      expect((components.session as any).setEdlEntries).toHaveBeenCalledWith([]);
+    });
+
+    it('SER-EDL-005: fromJSON calls setEdlEntries with empty array when edlEntries is empty (fix #315)', async () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty('EmptyEDL');
+      state.edlEntries = [];
+
+      await SessionSerializer.fromJSON(state, components);
+
+      expect((components.session as any).setEdlEntries).toHaveBeenCalledWith([]);
+    });
+
+    it('SER-EDL-006: setEdlEntries triggers edlLoaded event (via SessionGraph)', async () => {
+      // This tests the SessionGraph.setEdlEntries method directly
+      // to verify the edlLoaded event fires for TimelineEditorService
+      const { SessionGraph } = await import('./SessionGraph');
+      const graph = new SessionGraph();
+      const handler = vi.fn();
+      graph.on('edlLoaded', handler);
+
+      const entries = [{ sourcePath: '/clip.mov', inFrame: 1, outFrame: 100 }];
+      graph.setEdlEntries(entries);
+
+      expect(handler).toHaveBeenCalledWith(entries);
+      expect(graph.edlEntries).toEqual(entries);
+    });
+
+    it('SER-EDL-007: setEdlEntries does not fire edlLoaded for empty entries', async () => {
+      const { SessionGraph } = await import('./SessionGraph');
+      const graph = new SessionGraph();
+      const handler = vi.fn();
+      graph.on('edlLoaded', handler);
+
+      graph.setEdlEntries([]);
+
+      expect(handler).not.toHaveBeenCalled();
+      expect(graph.edlEntries).toEqual([]);
+    });
+
+    it('SER-EDL-008: edlEntries round-trips through toJSON/fromJSON', async () => {
+      const components = createMockComponents();
+      const edlEntries = [
+        { sourcePath: '/path/to/clip1.mov', inFrame: 1, outFrame: 100 },
+        { sourcePath: '/path/to/clip2.exr', inFrame: 10, outFrame: 250 },
+      ];
+      (components.session as any).edlEntries = edlEntries;
+
+      const state = SessionSerializer.toJSON(components, 'RoundTrip');
+
+      // Now restore
+      const restoreComponents = createMockComponents();
+      await SessionSerializer.fromJSON(state, restoreComponents);
+
+      expect((restoreComponents.session as any).setEdlEntries).toHaveBeenCalledWith(edlEntries);
+    });
+
+    it('SER-EDL-009: restoring project with no EDL clears old EDL entries (fix #315)', async () => {
+      const components = createMockComponents();
+      // Simulate pre-existing EDL entries from a previous session
+      (components.session as any).edlEntries = [{ sourcePath: '/old/clip.mov', inFrame: 1, outFrame: 500 }];
+
+      // Restore a project that has no EDL entries
+      const state = SessionSerializer.createEmpty('NoEDLProject');
+      // edlEntries is undefined — simulates a project saved without EDL data
+
+      await SessionSerializer.fromJSON(state, components);
+
+      // setEdlEntries must be called with [] to clear stale entries
+      expect((components.session as any).setEdlEntries).toHaveBeenCalledWith([]);
+    });
+  });
+
+  describe('sequence placeholder restore (fix #521)', () => {
+    it('SER-SEQ-001: sequence metadata roundtrips through serialize/deserialize', async () => {
+      // Serialize a source with sequence info
+      const components = createMockComponents();
+      (components.session as any).allSources = [
+        {
+          url: '',
+          name: 'shot_v01',
+          type: 'sequence',
+          width: 1920,
+          height: 1080,
+          duration: 48,
+          fps: 24,
+          sequenceInfo: {
+            pattern: 'shot_v01.%04d.exr',
+            startFrame: 1001,
+            endFrame: 1048,
+            name: 'shot_v01',
+            width: 1920,
+            height: 1080,
+            fps: 24,
+            frames: [],
+            missingFrames: [],
+          },
+        },
+      ];
+
+      const state = SessionSerializer.toJSON(components, 'RoundTrip');
+
+      // Verify serialized state
+      expect(state.media[0]?.sequencePattern).toBe('shot_v01.%04d.exr');
+      expect(state.media[0]?.frameRange).toEqual({ start: 1001, end: 1048 });
+      expect(state.media[0]?.type).toBe('sequence');
+
+      // Deserialize (user skips reload → placeholder created)
+      const restoreComponents = createMockComponents();
+      (showSequenceReloadPrompt as ReturnType<typeof vi.fn>).mockResolvedValueOnce(null);
+      const result = await SessionSerializer.fromJSON(state, restoreComponents);
+
+      // Placeholder was added via addSource
+      expect(restoreComponents.session.addSource).toHaveBeenCalledTimes(1);
+      const placeholder = (restoreComponents.session.addSource as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(placeholder.type).toBe('sequence');
+      expect(placeholder.name).toBe('shot_v01');
+      expect(placeholder.width).toBe(1920);
+      expect(placeholder.height).toBe(1080);
+      expect(placeholder.duration).toBe(48);
+      expect(placeholder.fps).toBe(24);
+      expect(placeholder.sequenceInfo.pattern).toBe('shot_v01.%04d.exr');
+      expect(placeholder.sequenceInfo.startFrame).toBe(1001);
+      expect(placeholder.sequenceInfo.endFrame).toBe(1048);
+      expect(result.loadedMedia).toBe(1);
+    });
+
+    it('SER-SEQ-002: restored sequence placeholder has correct frame range and pattern info', async () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty('SeqTest');
+      state.media = [
+        {
+          name: 'anim',
+          path: '',
+          type: 'sequence',
+          width: 2048,
+          height: 1152,
+          duration: 100,
+          fps: 30,
+          requiresReload: true,
+          sequencePattern: 'anim.%06d.dpx',
+          frameRange: { start: 0, end: 99 },
+        },
+      ];
+
+      (showSequenceReloadPrompt as ReturnType<typeof vi.fn>).mockResolvedValueOnce(null);
+      const result = await SessionSerializer.fromJSON(state, components);
+
+      expect(components.session.addSource).toHaveBeenCalledTimes(1);
+      const placeholder = (components.session.addSource as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(placeholder.sequenceInfo.pattern).toBe('anim.%06d.dpx');
+      expect(placeholder.sequenceInfo.startFrame).toBe(0);
+      expect(placeholder.sequenceInfo.endFrame).toBe(99);
+      expect(placeholder.duration).toBe(100);
+      expect(placeholder.fps).toBe(30);
+      expect(placeholder.sequenceFrames).toEqual([]);
+      expect(placeholder.sequenceFrameMap).toBeInstanceOf(Map);
+      expect(placeholder.sequenceFrameMap.size).toBe(0);
+
+      // Warning includes pattern and frame range info
+      expect(result.warnings.length).toBe(1);
+      expect(result.warnings[0]).toContain('anim.%06d.dpx');
+      expect(result.warnings[0]).toContain('frames 0');
+      expect(result.warnings[0]).toContain('99');
+    });
+
+    it('SER-SEQ-003: backward compat — projects without sequencePattern/frameRange still work', async () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty('LegacyTest');
+      state.media = [
+        {
+          name: 'old_seq',
+          path: '',
+          type: 'sequence',
+          width: 100,
+          height: 100,
+          duration: 10,
+          fps: 24,
+          requiresReload: true,
+          // No sequencePattern or frameRange — legacy project
+        },
+      ];
+
+      (showSequenceReloadPrompt as ReturnType<typeof vi.fn>).mockResolvedValueOnce(null);
+      const result = await SessionSerializer.fromJSON(state, components);
+
+      // Should still create a placeholder without crashing
+      expect(components.session.addSource).toHaveBeenCalledTimes(1);
+      const placeholder = (components.session.addSource as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(placeholder.type).toBe('sequence');
+      expect(placeholder.name).toBe('old_seq');
+      expect(placeholder.sequenceInfo.pattern).toBe('');
+      expect(placeholder.sequenceInfo.startFrame).toBe(1);
+      expect(placeholder.sequenceInfo.endFrame).toBe(10);
+      expect(result.loadedMedia).toBe(1);
+      expect(result.warnings.length).toBe(1);
+    });
+
+    it('SER-SEQ-004: failed sequence reload creates placeholder instead of dropping source', async () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty('FailTest');
+      state.media = [
+        {
+          name: 'broken_seq',
+          path: '',
+          type: 'sequence',
+          width: 800,
+          height: 600,
+          duration: 24,
+          fps: 24,
+          requiresReload: true,
+          sequencePattern: 'broken.%04d.png',
+          frameRange: { start: 1, end: 24 },
+        },
+      ];
+
+      // User provides files but loadSequence fails
+      const fakeFiles = [new File(['x'], 'broken.0001.png')];
+      (showSequenceReloadPrompt as ReturnType<typeof vi.fn>).mockResolvedValueOnce(fakeFiles);
+      (components.session.loadSequence as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('decode error'));
+
+      const result = await SessionSerializer.fromJSON(state, components);
+
+      // Placeholder created on failure
+      expect(components.session.addSource).toHaveBeenCalledTimes(1);
+      const placeholder = (components.session.addSource as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(placeholder.sequenceInfo.pattern).toBe('broken.%04d.png');
+      expect(result.loadedMedia).toBe(1);
+      expect(result.warnings[0]).toContain('Failed to reload sequence');
+      expect(result.warnings[0]).toContain('placeholder');
+    });
+
+    it('SER-SEQ-005: non-requiresReload sequence also creates placeholder when skipped', async () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty('NonBlobSeq');
+      state.media = [
+        {
+          name: 'remote_seq',
+          path: 'remote_seq.jpg',
+          type: 'sequence',
+          width: 1920,
+          height: 1080,
+          duration: 50,
+          fps: 24,
+          sequencePattern: 'remote_seq.%04d.jpg',
+          frameRange: { start: 1, end: 50 },
+        },
+      ];
+
+      // User skips the reload prompt
+      (showSequenceReloadPrompt as ReturnType<typeof vi.fn>).mockResolvedValueOnce(null);
+      const result = await SessionSerializer.fromJSON(state, components);
+
+      expect(components.session.addSource).toHaveBeenCalledTimes(1);
+      const placeholder = (components.session.addSource as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(placeholder.type).toBe('sequence');
+      expect(placeholder.sequenceInfo.pattern).toBe('remote_seq.%04d.jpg');
+      expect(result.loadedMedia).toBe(1);
+      expect(result.warnings[0]).toContain('Sequence needs file reload');
+    });
+  });
 });
 
 /**
@@ -740,15 +1743,21 @@ function createMockComponents(): SessionComponents {
   const paintEngine = new PaintEngine();
   // Spy on loadFromAnnotations so tests can assert it was called
   vi.spyOn(paintEngine, 'loadFromAnnotations');
+  const lutPipeline = new LUTPipeline();
+  lutPipeline.registerSource('default');
+  lutPipeline.setActiveSource('default');
 
   return {
     session: {
       allSources: [{ url: 'test.mp4', name: 'test', type: 'video', width: 1920, height: 1080, duration: 10, fps: 24 }],
       getPlaybackState: vi.fn().mockReturnValue({ currentFrame: 1, fps: 24, loopMode: 'loop' }),
       setPlaybackState: vi.fn(),
+      clearSources: vi.fn(),
       loadImage: vi.fn<(name: string, url: string) => Promise<void>>().mockResolvedValue(undefined),
       loadVideo: vi.fn<(name: string, url: string) => Promise<void>>().mockResolvedValue(undefined),
       loadFile: vi.fn<(file: File) => Promise<void>>().mockResolvedValue(undefined),
+      loadSequence: vi.fn<(files: File[]) => Promise<void>>().mockResolvedValue(undefined),
+      addSource: vi.fn(),
       noteManager: {
         toSerializable: vi.fn().mockReturnValue([]),
         fromSerializable: vi.fn(),
@@ -764,6 +1773,10 @@ function createMockComponents(): SessionComponents {
         fromSerializable: vi.fn(),
         dispose: vi.fn(),
       },
+      edlEntries: [] as any[],
+      setEdlEntries: vi.fn(),
+      addRepresentationToSource: vi.fn().mockReturnValue({ id: 'mock-rep' }),
+      switchRepresentation: vi.fn<(sourceIndex: number, repId: string) => Promise<boolean>>().mockResolvedValue(true),
     },
     paintEngine,
     viewer: {
@@ -796,6 +1809,32 @@ function createMockComponents(): SessionComponents {
       getBackgroundPatternState: vi
         .fn()
         .mockReturnValue({ pattern: 'black', checkerSize: 'medium', customColor: '#1a1a1a' }),
+      // Getters for serialization gap detection
+      isOCIOEnabled: vi.fn().mockReturnValue(false),
+      getDisplayColorState: vi.fn().mockReturnValue({ ...DEFAULT_DISPLAY_COLOR_STATE }),
+      getGamutMappingState: vi.fn().mockReturnValue({ ...DEFAULT_GAMUT_MAPPING_STATE }),
+      getToneMappingState: vi.fn().mockReturnValue({ ...DEFAULT_TONE_MAPPING_STATE }),
+      getGhostFrameState: vi.fn().mockReturnValue({ ...DEFAULT_GHOST_FRAME_STATE }),
+      getStereoState: vi.fn().mockReturnValue({ ...DEFAULT_STEREO_STATE }),
+      getChannelMode: vi.fn().mockReturnValue('rgb'),
+      getDifferenceMatteState: vi.fn().mockReturnValue({ ...DEFAULT_DIFFERENCE_MATTE_STATE }),
+      getBlendModeState: vi.fn().mockReturnValue({ ...DEFAULT_BLEND_MODE_STATE, flickerFrame: 0 }),
+      getColorInversion: vi.fn().mockReturnValue(false),
+      getCurves: vi.fn().mockReturnValue(createDefaultCurvesData()),
+      getStereoEyeTransforms: vi.fn().mockReturnValue({ ...DEFAULT_STEREO_EYE_TRANSFORM_STATE }),
+      getStereoAlignMode: vi.fn().mockReturnValue(DEFAULT_STEREO_ALIGN_MODE),
+      getDeinterlaceParams: vi.fn().mockReturnValue({ method: 'bob', fieldOrder: 'tff', enabled: false }),
+      getFilmEmulationParams: vi.fn().mockReturnValue({ enabled: false, stock: 'kodak-portra-400', intensity: 1.0 }),
+      getPerspectiveParams: vi.fn().mockReturnValue({
+        enabled: false,
+        topLeft: { x: 0, y: 0 },
+        topRight: { x: 1, y: 0 },
+        bottomRight: { x: 1, y: 1 },
+        bottomLeft: { x: 0, y: 1 },
+        quality: 'bilinear',
+      }),
+      getStabilizationParams: vi.fn().mockReturnValue({ enabled: false, smoothingStrength: 50 }),
+      isUncropActive: vi.fn().mockReturnValue(false),
       setColorAdjustments: vi.fn(),
       setCDL: vi.fn(),
       setFilterSettings: vi.fn(),
@@ -811,6 +1850,46 @@ function createMockComponents(): SessionComponents {
       setBackgroundPatternState: vi.fn(),
       setZoom: vi.fn(),
       setPan: vi.fn(),
+      syncLUTPipeline: vi.fn(),
+      // Reset methods for omitted viewer states (fix #136)
+      resetToneMappingState: vi.fn(),
+      resetGhostFrameState: vi.fn(),
+      resetStereoState: vi.fn(),
+      resetStereoEyeTransforms: vi.fn(),
+      resetStereoAlignMode: vi.fn(),
+      resetChannelMode: vi.fn(),
+      resetDifferenceMatteState: vi.fn(),
+      // LUT pipeline (fix #146)
+      getLUTPipeline: vi.fn().mockReturnValue(lutPipeline),
+      // Overlay accessors (fix #485)
+      getTimecodeOverlay: vi.fn().mockReturnValue({
+        getState: vi.fn().mockReturnValue({ ...DEFAULT_TIMECODE_OVERLAY_STATE }),
+        setState: vi.fn(),
+      }),
+      getSafeAreasOverlay: vi
+        .fn()
+        .mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_SAFE_AREAS_STATE }), setState: vi.fn() }),
+      getClippingOverlay: vi.fn().mockReturnValue({
+        getState: vi.fn().mockReturnValue({ ...DEFAULT_CLIPPING_OVERLAY_STATE }),
+        setState: vi.fn(),
+      }),
+      getInfoStripOverlay: vi.fn().mockReturnValue({
+        getState: vi.fn().mockReturnValue({ ...DEFAULT_INFO_STRIP_OVERLAY_STATE }),
+        setState: vi.fn(),
+      }),
+      getSpotlightOverlay: vi
+        .fn()
+        .mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_SPOTLIGHT_STATE }), setState: vi.fn() }),
+      getBugOverlay: vi
+        .fn()
+        .mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_BUG_OVERLAY_STATE }), setState: vi.fn() }),
+      getEXRWindowOverlay: vi.fn().mockReturnValue({
+        getState: vi.fn().mockReturnValue({ ...DEFAULT_EXR_WINDOW_OVERLAY_STATE }),
+        setState: vi.fn(),
+      }),
+      getFPSIndicator: vi
+        .fn()
+        .mockReturnValue({ getState: vi.fn().mockReturnValue({ ...DEFAULT_FPS_INDICATOR_STATE }), setState: vi.fn() }),
     },
   } as any;
 }

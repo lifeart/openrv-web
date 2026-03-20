@@ -146,6 +146,112 @@ describe('MuNodeBridge', () => {
     it('throws for unknown node', () => {
       expect(() => bridge.nodeConnections('nope')).toThrow('Node not found');
     });
+
+    it('traverseGroups=false returns direct connections even when groups exist', () => {
+      // Make color1 a group containing source1
+      const group = new TestNode('RVGroup', 'group1');
+      graph.addNode(group);
+      graph.connect(group, graph.getAllNodes().find((n) => n.name === 'seq1')!);
+      bridge.addNodeToGroup('source1', 'group1');
+      bridge.addNodeToGroup('color1', 'group1');
+
+      // With traverseGroups=false, group1 appears as-is
+      const [inputs] = bridge.nodeConnections('seq1', false);
+      expect(inputs).toContain('color1');
+    });
+
+    it('traverseGroups=true replaces group nodes with their leaf members', () => {
+      // Build: source1 -> groupNode -> seq1
+      // groupNode contains leafA and leafB
+      const groupNode = new TestNode('RVGroup', 'groupNode');
+      const leafA = new TestNode('RVSource', 'leafA');
+      const leafB = new TestNode('RVSource', 'leafB');
+      graph.addNode(groupNode);
+      graph.addNode(leafA);
+      graph.addNode(leafB);
+
+      // Wire groupNode as input to seq1
+      bridge.setNodeInputs('seq1', ['groupNode']);
+      // Register leafA and leafB as members of groupNode
+      bridge.addNodeToGroup('leafA', 'groupNode');
+      bridge.addNodeToGroup('leafB', 'groupNode');
+
+      // traverseGroups=true should resolve groupNode -> [leafA, leafB]
+      const [inputs] = bridge.nodeConnections('seq1', true);
+      expect(inputs).not.toContain('groupNode');
+      expect(inputs).toContain('leafA');
+      expect(inputs).toContain('leafB');
+    });
+
+    it('traverseGroups=true returns same result as false when no groups in path', () => {
+      // source1 -> color1 -> seq1, none are groups
+      const [inputsF, outputsF] = bridge.nodeConnections('color1', false);
+      const [inputsT, outputsT] = bridge.nodeConnections('color1', true);
+      expect(inputsT).toEqual(inputsF);
+      expect(outputsT).toEqual(outputsF);
+    });
+
+    it('traverseGroups=true preserves duplicate leaf when it appears directly and via group', () => {
+      // seq1 has inputs: [leafA, groupNode]
+      // groupNode contains leafA
+      // With old shared visited set: leafA appears once (second via group is skipped)
+      // With per-name visited set: leafA appears twice (once direct, once via group)
+      const groupNode = new TestNode('RVGroup', 'groupNode');
+      const leafA = new TestNode('RVSource', 'leafA');
+      graph.addNode(groupNode);
+      graph.addNode(leafA);
+
+      bridge.setNodeInputs('seq1', ['leafA', 'groupNode']);
+      bridge.addNodeToGroup('leafA', 'groupNode');
+
+      const [inputs] = bridge.nodeConnections('seq1', true);
+      // leafA passes through as-is, groupNode resolves to leafA
+      expect(inputs).toEqual(['leafA', 'leafA']);
+    });
+
+    it('traverseGroups=true handles nested groups', () => {
+      // outerGroup contains innerGroup, innerGroup contains leaf
+      const outerGroup = new TestNode('RVGroup', 'outerGroup');
+      const innerGroup = new TestNode('RVGroup', 'innerGroup');
+      const leaf = new TestNode('RVSource', 'deepLeaf');
+      graph.addNode(outerGroup);
+      graph.addNode(innerGroup);
+      graph.addNode(leaf);
+
+      bridge.setNodeInputs('seq1', ['outerGroup']);
+      bridge.addNodeToGroup('innerGroup', 'outerGroup');
+      bridge.addNodeToGroup('deepLeaf', 'innerGroup');
+
+      const [inputs] = bridge.nodeConnections('seq1', true);
+      expect(inputs).toEqual(['deepLeaf']);
+    });
+
+    it('traverseGroups=true resolves groups in the outputs list', () => {
+      // source1 -> color1 -> groupOut (group containing leafOut)
+      const groupOut = new TestNode('RVGroup', 'groupOut');
+      const leafOut = new TestNode('RVSource', 'leafOut');
+      graph.addNode(groupOut);
+      graph.addNode(leafOut);
+
+      // Wire color1 -> groupOut via setNodeInputs on groupOut
+      bridge.setNodeInputs('groupOut', ['color1']);
+      bridge.addNodeToGroup('leafOut', 'groupOut');
+
+      const [, outputs] = bridge.nodeConnections('color1', true);
+      expect(outputs).not.toContain('groupOut');
+      expect(outputs).toContain('leafOut');
+    });
+
+    it('traverseGroups=true passes empty group through as leaf', () => {
+      const emptyGroup = new TestNode('RVGroup', 'emptyGroup');
+      graph.addNode(emptyGroup);
+
+      // Wire emptyGroup as input to seq1
+      bridge.setNodeInputs('seq1', ['emptyGroup']);
+
+      const [inputs] = bridge.nodeConnections('seq1', true);
+      expect(inputs).toContain('emptyGroup');
+    });
   });
 
   describe('setNodeInputs', () => {
@@ -171,6 +277,86 @@ describe('MuNodeBridge', () => {
       bridge.setNodeInputs('color1', []);
       const [inputs] = bridge.nodeConnections('color1');
       expect(inputs).toEqual([]);
+    });
+
+    it('rolls back to original inputs when a later connection fails', () => {
+      // Setup: source1 -> color1 -> seq1 (from beforeEach)
+      // Adding extra nodes: src2 is valid, but connecting seq1 -> color1
+      // would create a cycle (color1 -> seq1 -> color1).
+      const src2 = new TestNode('RVSource', 'source2');
+      graph.addNode(src2);
+
+      // Verify original state
+      expect(bridge.nodeConnections('color1')[0]).toEqual(['source1']);
+
+      // Try to set inputs to [source2, seq1] — seq1 will cause a cycle
+      expect(() => bridge.setNodeInputs('color1', ['source2', 'seq1'])).toThrow('cycle');
+
+      // Original inputs should be restored
+      const [inputs] = bridge.nodeConnections('color1');
+      expect(inputs).toEqual(['source1']);
+
+      // Verify source2 is not left partially connected
+      const [, src2Outputs] = bridge.nodeConnections('source2');
+      expect(src2Outputs).toEqual([]);
+    });
+
+    it('successful rewire replaces all inputs', () => {
+      const src2 = new TestNode('RVSource', 'source2');
+      const src3 = new TestNode('RVSource', 'source3');
+      graph.addNode(src2);
+      graph.addNode(src3);
+
+      bridge.setNodeInputs('color1', ['source2', 'source3']);
+      const [inputs] = bridge.nodeConnections('color1');
+      expect(inputs).toEqual(['source2', 'source3']);
+
+      // Original source1 should no longer be an input
+      const [, src1Outputs] = bridge.nodeConnections('source1');
+      expect(src1Outputs).not.toContain('color1');
+    });
+
+    it('rolls back ALL original inputs when a later connection fails (multiple originals)', () => {
+      // Setup: connect both source1 AND source2 to color1
+      const src2 = new TestNode('RVSource', 'source2');
+      const src3 = new TestNode('RVSource', 'source3');
+      graph.addNode(src2);
+      graph.addNode(src3);
+      bridge.setNodeInputs('color1', ['source1', 'source2']);
+      expect(bridge.nodeConnections('color1')[0]).toEqual(['source1', 'source2']);
+
+      // Try to rewire to [source3, seq1] — seq1 causes a cycle
+      expect(() => bridge.setNodeInputs('color1', ['source3', 'seq1'])).toThrow('cycle');
+
+      // Both original inputs must be restored
+      const [inputs] = bridge.nodeConnections('color1');
+      expect(inputs).toEqual(['source1', 'source2']);
+
+      // source3 should not be left partially connected
+      const [, src3Outputs] = bridge.nodeConnections('source3');
+      expect(src3Outputs).toEqual([]);
+    });
+
+    it('rolls back when the FIRST connection in the new list fails', () => {
+      // seq1 is an output of color1 (color1 -> seq1), so connecting
+      // seq1 -> color1 creates a cycle.
+      expect(() => bridge.setNodeInputs('color1', ['seq1'])).toThrow('cycle');
+
+      // Original inputs should be restored
+      const [inputs] = bridge.nodeConnections('color1');
+      expect(inputs).toEqual(['source1']);
+    });
+
+    it('is idempotent when setting the same inputs that already exist', () => {
+      // color1 already has source1 as its only input
+      bridge.setNodeInputs('color1', ['source1']);
+
+      const [inputs] = bridge.nodeConnections('color1');
+      expect(inputs).toEqual(['source1']);
+
+      // source1 should still feed into color1
+      const [, src1Outputs] = bridge.nodeConnections('source1');
+      expect(src1Outputs).toContain('color1');
     });
   });
 
@@ -279,28 +465,139 @@ describe('MuNodeBridge', () => {
       expect(bridge.nextViewNode()).toBe('');
     });
 
-    it('navigates back through history', () => {
+    it('A→B→C, back returns B, forward returns C', () => {
       bridge.setViewNode('source1');
       bridge.setViewNode('color1');
       bridge.setViewNode('seq1');
 
-      // Current is seq1, history has [source1, color1]
-      const prev1 = bridge.previousViewNode();
-      expect(prev1).toBe('color1');
+      expect(bridge.previousViewNode()).toBe('color1');
+      expect(bridge.viewNode()).toBe('color1');
+
+      expect(bridge.nextViewNode()).toBe('seq1');
+      expect(bridge.viewNode()).toBe('seq1');
+    });
+
+    it('A→B→C, back×2 returns A, forward×2 returns C', () => {
+      bridge.setViewNode('source1');
+      bridge.setViewNode('color1');
+      bridge.setViewNode('seq1');
+
+      expect(bridge.previousViewNode()).toBe('color1');
+      expect(bridge.previousViewNode()).toBe('source1');
+      expect(bridge.nextViewNode()).toBe('color1');
+      expect(bridge.nextViewNode()).toBe('seq1');
+    });
+
+    it('A→B→C, back to B, setViewNode(D) truncates forward history', () => {
+      // Add a fourth node for this test
+      const d = new TestNode('RVMerge', 'merge1');
+      graph.addNode(d);
+
+      bridge.setViewNode('source1');
+      bridge.setViewNode('color1');
+      bridge.setViewNode('seq1');
+
+      expect(bridge.previousViewNode()).toBe('color1');
+
+      // Navigate to a new node — forward history (seq1) should be truncated
+      bridge.setViewNode('merge1');
+      expect(bridge.nextViewNode()).toBe('');
+      expect(bridge.viewNode()).toBe('merge1');
+
+      // Can still go back through source1 → color1 → merge1
+      expect(bridge.previousViewNode()).toBe('color1');
+      expect(bridge.previousViewNode()).toBe('source1');
+    });
+
+    it('at beginning, previousViewNode returns empty', () => {
+      bridge.setViewNode('source1');
+      expect(bridge.previousViewNode()).toBe('');
+      expect(bridge.viewNode()).toBe('source1');
+    });
+
+    it('at end, nextViewNode returns empty', () => {
+      bridge.setViewNode('source1');
+      bridge.setViewNode('color1');
+      expect(bridge.nextViewNode()).toBe('');
       expect(bridge.viewNode()).toBe('color1');
     });
 
-    it('navigates forward through history after going back', () => {
+    it('single node, back returns empty', () => {
+      bridge.setViewNode('source1');
+      expect(bridge.previousViewNode()).toBe('');
+      expect(bridge.nextViewNode()).toBe('');
+    });
+
+    it('A→B→C, repeated back→forward zigzag is stable', () => {
       bridge.setViewNode('source1');
       bridge.setViewNode('color1');
       bridge.setViewNode('seq1');
 
-      bridge.previousViewNode(); // -> color1
+      expect(bridge.previousViewNode()).toBe('color1');
+      expect(bridge.nextViewNode()).toBe('seq1');
+      expect(bridge.previousViewNode()).toBe('color1');
+      expect(bridge.nextViewNode()).toBe('seq1');
+    });
+  });
 
-      const next = bridge.nextViewNode();
-      // Should go forward to seq1 or color1's successor
-      expect(next).not.toBe('');
-      expect(bridge.viewNode()).toBe(next);
+  describe('deleteNode scrubs _viewHistory', () => {
+    it('A→B→C, delete C, previousViewNode returns B, nextViewNode returns empty', () => {
+      bridge.setViewNode('source1');
+      bridge.setViewNode('color1');
+      bridge.setViewNode('seq1');
+
+      bridge.deleteNode('seq1');
+
+      expect(bridge.previousViewNode()).toBe('source1');
+      // We moved back to source1; forward should be color1 (not deleted C)
+      expect(bridge.nextViewNode()).toBe('color1');
+      // At end now
+      expect(bridge.nextViewNode()).toBe('');
+    });
+
+    it('A→B→C, delete B, history is [A, C] and navigation works', () => {
+      bridge.setViewNode('source1');
+      bridge.setViewNode('color1');
+      bridge.setViewNode('seq1');
+
+      bridge.deleteNode('color1');
+
+      // Cursor should be at C (index adjusted). Going back should reach A.
+      expect(bridge.previousViewNode()).toBe('source1');
+      expect(bridge.nextViewNode()).toBe('seq1');
+    });
+
+    it('A→B→C, delete C, setViewNode(B) should NOT duplicate B in history', () => {
+      bridge.setViewNode('source1');
+      bridge.setViewNode('color1');
+      bridge.setViewNode('seq1');
+
+      bridge.deleteNode('seq1');
+
+      // After deleting C, history is [A, B] with cursor at B.
+      // setViewNode('B') should be a no-op (early return guard).
+      bridge.setViewNode('color1');
+
+      expect(bridge.previousViewNode()).toBe('source1');
+      // No duplicate B, so forward from A should be B only
+      expect(bridge.nextViewNode()).toBe('color1');
+      // At end now
+      expect(bridge.nextViewNode()).toBe('');
+    });
+
+    it('A→B→C, delete C, setViewNode(D), previousViewNode returns B', () => {
+      const d = new TestNode('RVMerge', 'merge1');
+      graph.addNode(d);
+
+      bridge.setViewNode('source1');
+      bridge.setViewNode('color1');
+      bridge.setViewNode('seq1');
+
+      bridge.deleteNode('seq1');
+
+      bridge.setViewNode('merge1');
+      expect(bridge.previousViewNode()).toBe('color1');
+      expect(bridge.previousViewNode()).toBe('source1');
     });
   });
 

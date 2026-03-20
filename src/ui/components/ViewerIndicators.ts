@@ -12,7 +12,11 @@ import type { TextureFilterMode } from '../../core/types/filter';
 import type { Session } from '../../core/session/Session';
 import type { WipeManager } from './WipeManager';
 
-const FILTER_MODE_STORAGE_KEY = 'openrv.filterMode';
+/**
+ * Storage key for filter mode preference.
+ * Matches CORE_PREFERENCE_STORAGE_KEYS.filterMode in PreferencesManager.
+ */
+const FILTER_MODE_STORAGE_KEY = 'openrv-prefs-filter-mode';
 
 /**
  * Create the LUT indicator badge element.

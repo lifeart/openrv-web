@@ -104,6 +104,8 @@ CDL is applied at stage 6b in the rendering pipeline, after color wheels and bef
 
 ## Scripting API
 
+`setCDL()` and `getCDL()` are available on `window.openrv.color`:
+
 ```javascript
 // Set CDL values
 window.openrv.color.setCDL({
@@ -115,8 +117,10 @@ window.openrv.color.setCDL({
 
 // Get current CDL values
 const cdl = window.openrv.color.getCDL();
+```
 
-// Reset CDL to defaults
+```javascript
+// Reset CDL to defaults (slope 1.0, offset 0.0, power 1.0, saturation 1.0)
 window.openrv.color.resetCDL();
 ```
 

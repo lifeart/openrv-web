@@ -104,6 +104,11 @@ vi.mock('./handlers/unsupportedCodecModal', () => ({
   showUnsupportedCodecModal: vi.fn(),
 }));
 
+vi.mock('./handlers/bufferingHandlers', () => ({
+  handleBufferingChanged: vi.fn(),
+  handleFrameDecodeTimeout: vi.fn(),
+}));
+
 // Import the mocked handlers so we can assert on them
 import {
   updateHistogram as _updateHistogram,
@@ -128,6 +133,7 @@ import { handlePlaybackChanged } from './handlers/playbackHandlers';
 import { bindPersistenceHandlers } from './handlers/persistenceHandlers';
 import { bindCompareHandlers } from './handlers/compareHandlers';
 import { showUnsupportedCodecModal } from './handlers/unsupportedCodecModal';
+import { handleBufferingChanged, handleFrameDecodeTimeout } from './handlers/bufferingHandlers';
 
 // ---------------------------------------------------------------------------
 // Mock Session with EventEmitter
@@ -324,6 +330,33 @@ describe('AppSessionBridge', () => {
       );
     });
 
+    it('ASB-007: buffering event triggers handleBufferingChanged', () => {
+      bridge.bindSessionEvents();
+
+      ctx._session.emit('buffering', true);
+
+      expect(handleBufferingChanged).toHaveBeenCalledTimes(1);
+      expect(handleBufferingChanged).toHaveBeenCalledWith(true);
+    });
+
+    it('ASB-008: buffering false triggers handleBufferingChanged(false)', () => {
+      bridge.bindSessionEvents();
+
+      ctx._session.emit('buffering', false);
+
+      expect(handleBufferingChanged).toHaveBeenCalledTimes(1);
+      expect(handleBufferingChanged).toHaveBeenCalledWith(false);
+    });
+
+    it('ASB-009: frameDecodeTimeout triggers handleFrameDecodeTimeout', () => {
+      bridge.bindSessionEvents();
+
+      ctx._session.emit('frameDecodeTimeout', 42);
+
+      expect(handleFrameDecodeTimeout).toHaveBeenCalledTimes(1);
+      expect(handleFrameDecodeTimeout).toHaveBeenCalledWith(42);
+    });
+
     it('ASB-005: bindSessionEvents registers compare handlers', () => {
       bridge.bindSessionEvents();
 
@@ -498,6 +531,22 @@ describe('AppSessionBridge', () => {
       };
       ctx._session.emit('unsupportedCodec', codecInfo);
       expect(showUnsupportedCodecModal).not.toHaveBeenCalled();
+    });
+
+    it('ASB-048: dispose() unbinds buffering events', () => {
+      bridge.bindSessionEvents();
+      bridge.dispose();
+
+      ctx._session.emit('buffering', true);
+      expect(handleBufferingChanged).not.toHaveBeenCalled();
+    });
+
+    it('ASB-049: dispose() unbinds frameDecodeTimeout events', () => {
+      bridge.bindSessionEvents();
+      bridge.dispose();
+
+      ctx._session.emit('frameDecodeTimeout', 10);
+      expect(handleFrameDecodeTimeout).not.toHaveBeenCalled();
     });
 
     it('ASB-043: dispose() is idempotent -- calling it twice does not throw', () => {

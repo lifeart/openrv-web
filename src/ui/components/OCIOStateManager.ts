@@ -335,6 +335,12 @@ export class OCIOStateManager extends EventEmitter<OCIOStateManagerEvents> {
     }
   }
 
+  /** Re-read OCIO state from storage and apply it (used after preferences import/reset). */
+  reloadFromStorage(): void {
+    this.loadState();
+    this.loadPerSourceState();
+  }
+
   /**
    * Save per-source color space mappings to localStorage.
    */

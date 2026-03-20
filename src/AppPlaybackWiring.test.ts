@@ -21,6 +21,8 @@ const {
   mockDialogOnFn,
   mockDownloadAnnotationsJSON,
   mockExportAnnotationsPDF,
+  mockParseAnnotationsJSON,
+  mockApplyAnnotationsJSON,
 } = vi.hoisted(() => ({
   mockEncodeFn: vi.fn(),
   mockCancelFn: vi.fn(),
@@ -32,6 +34,8 @@ const {
   mockDialogOnFn: vi.fn().mockReturnValue(() => {}),
   mockDownloadAnnotationsJSON: vi.fn(),
   mockExportAnnotationsPDF: vi.fn().mockResolvedValue(undefined),
+  mockParseAnnotationsJSON: vi.fn(),
+  mockApplyAnnotationsJSON: vi.fn().mockReturnValue(5),
 }));
 
 vi.mock('./export/VideoExporter', () => {
@@ -72,6 +76,8 @@ vi.mock('./ui/components/ExportProgress', () => ({
 
 vi.mock('./utils/export/AnnotationJSONExporter', () => ({
   downloadAnnotationsJSON: mockDownloadAnnotationsJSON,
+  parseAnnotationsJSON: mockParseAnnotationsJSON,
+  applyAnnotationsJSON: mockApplyAnnotationsJSON,
 }));
 
 vi.mock('./utils/export/AnnotationPDFExporter', () => ({
@@ -79,6 +85,7 @@ vi.mock('./utils/export/AnnotationPDFExporter', () => ({
 }));
 
 const showAlertSpy = vi.spyOn(Modal, 'showAlert').mockReturnValue(Promise.resolve());
+const showAnnotationImportDialogSpy = vi.spyOn(Modal, 'showAnnotationImportDialog').mockResolvedValue(null);
 
 function createMockVolumeControl() {
   const emitter = new EventEmitter();
@@ -154,6 +161,7 @@ function createMockViewer() {
     exportSourceFrame: vi.fn(),
     copyFrameToClipboard: vi.fn(),
     renderFrameToCanvas: vi.fn(),
+    setOnBeforeMediaLoad: vi.fn(),
   };
 }
 
@@ -186,6 +194,9 @@ function createMockControls() {
       toggle: vi.fn(),
     }),
     snapshotPanel: new EventEmitter(),
+    snapshotManager: {
+      updateDescription: vi.fn(),
+    },
     notePanel: new EventEmitter(),
     playlistPanel: Object.assign(new EventEmitter(), {
       setFps: vi.fn(),
@@ -222,8 +233,12 @@ function createMockPersistenceManager() {
     saveProject: vi.fn(),
     openProject: vi.fn(),
     retryAutoSave: vi.fn(),
+    createSnapshot: vi.fn(),
     restoreSnapshot: vi.fn(),
     saveRvSession: vi.fn(),
+    checkpointBeforeMediaLoad: vi.fn().mockResolvedValue(undefined),
+    checkpointBeforeClearAnnotations: vi.fn().mockResolvedValue(undefined),
+    checkpointBeforeClearSources: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -326,10 +341,10 @@ describe('wirePlaybackControls', () => {
     expect(viewer.exportSourceFrame).toHaveBeenCalledWith('jpeg', 0.8);
   });
 
-  it('PW-007: showShortcuts calls keyboardHandler.showShortcutsDialog()', () => {
+  it('PW-007: showShortcuts calls keyboardHandler.showCustomBindingsDialog()', () => {
     headerBar.emit('showShortcuts', undefined);
     const handler = (deps.getKeyboardHandler as ReturnType<typeof vi.fn>).mock.results[0]!.value;
-    expect(handler.showShortcutsDialog).toHaveBeenCalled();
+    expect(handler.showCustomBindingsDialog).toHaveBeenCalled();
   });
 
   it('PW-008: fullscreenToggle calls fullscreenManager.toggle()', () => {
@@ -485,6 +500,165 @@ describe('wirePlaybackControls', () => {
     expect(mockDownloadAnnotationsJSON).toHaveBeenCalledWith(expect.anything(), 'annotations');
   });
 
+  it('PW-014b: annotationsJSONImportRequested opens import dialog', async () => {
+    showAnnotationImportDialogSpy.mockResolvedValue(null); // user cancels
+    const exportControl = headerBar.getExportControl();
+    exportControl.emit('annotationsJSONImportRequested', undefined);
+
+    await vi.waitFor(() => {
+      expect(showAnnotationImportDialogSpy).toHaveBeenCalledWith({ title: 'Import Annotations' });
+    });
+  });
+
+  it('PW-014c: annotationsJSONImportRequested with merge mode calls applyAnnotationsJSON with merge', async () => {
+    const fakeData = { version: 1, source: 'openrv-web', frames: {} };
+    showAnnotationImportDialogSpy.mockResolvedValue({ mode: 'merge', frameOffset: 0 });
+    mockParseAnnotationsJSON.mockReturnValue(fakeData);
+    mockApplyAnnotationsJSON.mockReturnValue(3);
+
+    // Mock file input to simulate file selection
+    const mockFile = new File(['{}'], 'annotations.json', { type: 'application/json' });
+    Object.defineProperty(mockFile, 'text', {
+      value: vi.fn().mockResolvedValue(JSON.stringify(fakeData)),
+    });
+
+    const origCreateElement = document.createElement.bind(document);
+    const createSpy = vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+      if (tag === 'input') {
+        const input = origCreateElement('input') as HTMLInputElement;
+        // Override click to simulate file selection
+        Object.defineProperty(input, 'click', {
+          value: () => {
+            Object.defineProperty(input, 'files', { value: [mockFile], configurable: true });
+            input.dispatchEvent(new Event('change'));
+          },
+        });
+        return input;
+      }
+      return origCreateElement(tag);
+    });
+
+    const exportControl = headerBar.getExportControl();
+    exportControl.emit('annotationsJSONImportRequested', undefined);
+
+    await vi.waitFor(() => {
+      expect(mockApplyAnnotationsJSON).toHaveBeenCalledWith(
+        expect.anything(), // paintEngine
+        fakeData,
+        { mode: 'merge', frameOffset: 0 },
+      );
+    });
+
+    await vi.waitFor(() => {
+      expect(showAlertSpy).toHaveBeenCalledWith(
+        expect.stringContaining('merged'),
+        expect.objectContaining({ type: 'success' }),
+      );
+    });
+
+    createSpy.mockRestore();
+  });
+
+  it('PW-014d: annotationsJSONImportRequested with frame offset applies offset correctly', async () => {
+    const fakeData = { version: 1, source: 'openrv-web', frames: {} };
+    showAnnotationImportDialogSpy.mockResolvedValue({ mode: 'replace', frameOffset: 50 });
+    mockParseAnnotationsJSON.mockReturnValue(fakeData);
+    mockApplyAnnotationsJSON.mockReturnValue(2);
+
+    const mockFile = new File(['{}'], 'annotations.json', { type: 'application/json' });
+    Object.defineProperty(mockFile, 'text', {
+      value: vi.fn().mockResolvedValue(JSON.stringify(fakeData)),
+    });
+
+    const origCreateElement = document.createElement.bind(document);
+    const createSpy = vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+      if (tag === 'input') {
+        const input = origCreateElement('input') as HTMLInputElement;
+        Object.defineProperty(input, 'click', {
+          value: () => {
+            Object.defineProperty(input, 'files', { value: [mockFile], configurable: true });
+            input.dispatchEvent(new Event('change'));
+          },
+        });
+        return input;
+      }
+      return origCreateElement(tag);
+    });
+
+    const exportControl = headerBar.getExportControl();
+    exportControl.emit('annotationsJSONImportRequested', undefined);
+
+    await vi.waitFor(() => {
+      expect(mockApplyAnnotationsJSON).toHaveBeenCalledWith(expect.anything(), fakeData, {
+        mode: 'replace',
+        frameOffset: 50,
+      });
+    });
+
+    await vi.waitFor(() => {
+      expect(showAlertSpy).toHaveBeenCalledWith(
+        expect.stringContaining('replaced'),
+        expect.objectContaining({ type: 'success' }),
+      );
+    });
+
+    // Verify frame offset is mentioned in the message
+    await vi.waitFor(() => {
+      expect(showAlertSpy).toHaveBeenCalledWith(
+        expect.stringContaining('frame offset: 50'),
+        expect.objectContaining({ type: 'success' }),
+      );
+    });
+
+    createSpy.mockRestore();
+  });
+
+  it('PW-014e: annotationsJSONImportRequested with default options (replace, offset 0) works', async () => {
+    const fakeData = { version: 1, source: 'openrv-web', frames: {} };
+    showAnnotationImportDialogSpy.mockResolvedValue({ mode: 'replace', frameOffset: 0 });
+    mockParseAnnotationsJSON.mockReturnValue(fakeData);
+    mockApplyAnnotationsJSON.mockReturnValue(4);
+
+    const mockFile = new File(['{}'], 'annotations.json', { type: 'application/json' });
+    Object.defineProperty(mockFile, 'text', {
+      value: vi.fn().mockResolvedValue(JSON.stringify(fakeData)),
+    });
+
+    const origCreateElement = document.createElement.bind(document);
+    const createSpy = vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+      if (tag === 'input') {
+        const input = origCreateElement('input') as HTMLInputElement;
+        Object.defineProperty(input, 'click', {
+          value: () => {
+            Object.defineProperty(input, 'files', { value: [mockFile], configurable: true });
+            input.dispatchEvent(new Event('change'));
+          },
+        });
+        return input;
+      }
+      return origCreateElement(tag);
+    });
+
+    const exportControl = headerBar.getExportControl();
+    exportControl.emit('annotationsJSONImportRequested', undefined);
+
+    await vi.waitFor(() => {
+      expect(mockApplyAnnotationsJSON).toHaveBeenCalledWith(expect.anything(), fakeData, {
+        mode: 'replace',
+        frameOffset: 0,
+      });
+    });
+
+    await vi.waitFor(() => {
+      expect(showAlertSpy).toHaveBeenCalledWith(
+        expect.stringContaining('replaced'),
+        expect.objectContaining({ type: 'success' }),
+      );
+    });
+
+    createSpy.mockRestore();
+  });
+
   it('PW-015: annotationsPDFExportRequested calls exportAnnotationsPDF', () => {
     const exportControl = headerBar.getExportControl();
     exportControl.emit('annotationsPDFExportRequested', undefined);
@@ -494,6 +668,56 @@ describe('wirePlaybackControls', () => {
       expect.any(Function), // renderFrame callback
       expect.objectContaining({ title: 'Test Session' }),
     );
+  });
+
+  it('PW-016: representationError event shows warning alert to user', () => {
+    session.emit('representationError', {
+      sourceIndex: 0,
+      repId: 'rep-1',
+      error: 'Decoder failed',
+      userInitiated: false,
+    });
+
+    expect(showAlertSpy).toHaveBeenCalledWith('Representation failed: Decoder failed', {
+      type: 'warning',
+      title: 'Representation Error',
+    });
+  });
+
+  it('PW-017: representationError from user-initiated action shows error alert', () => {
+    session.emit('representationError', {
+      sourceIndex: 0,
+      repId: 'rep-1',
+      error: 'Format not supported',
+      userInitiated: true,
+    });
+
+    expect(showAlertSpy).toHaveBeenCalledWith('Representation failed: Format not supported', {
+      type: 'error',
+      title: 'Representation Error',
+    });
+  });
+
+  it('PW-018: fallbackActivated event shows info alert with representation label', () => {
+    session.emit('fallbackActivated', {
+      sourceIndex: 0,
+      failedRepId: 'rep-hdr',
+      fallbackRepId: 'rep-sdr',
+      fallbackRepresentation: {
+        id: 'rep-sdr',
+        label: 'SDR Proxy (1920x1080)',
+        kind: 'proxy',
+        status: 'ready',
+        priority: 10,
+        resolution: { width: 1920, height: 1080 },
+        startFrame: 1,
+      },
+    });
+
+    expect(showAlertSpy).toHaveBeenCalledWith('Switched to fallback representation: SDR Proxy (1920x1080)', {
+      type: 'info',
+      title: 'Fallback Activated',
+    });
   });
 
   describe('disposal', () => {
@@ -804,5 +1028,18 @@ describe('wirePlaybackControls — video export', () => {
     const canvas = await frameProvider(10);
     expect(canvas).toBeInstanceOf(HTMLCanvasElement);
     expect(viewer.renderFrameToCanvas).not.toHaveBeenCalled();
+  });
+
+  // -------------------------------------------------------------------------
+  // Snapshot panel create wiring (Issue #374)
+  // -------------------------------------------------------------------------
+  it('PW-050: createRequested on snapshotPanel calls persistenceManager.createSnapshot with name and description', () => {
+    controls.snapshotPanel.emit('createRequested', { name: 'My Snapshot', description: 'Test desc' });
+    expect(persistenceManager.createSnapshot).toHaveBeenCalledWith('My Snapshot', 'Test desc');
+  });
+
+  it('PW-051: createRequested with no name passes undefined to persistenceManager.createSnapshot', () => {
+    controls.snapshotPanel.emit('createRequested', { name: undefined, description: undefined });
+    expect(persistenceManager.createSnapshot).toHaveBeenCalledWith(undefined, undefined);
   });
 });

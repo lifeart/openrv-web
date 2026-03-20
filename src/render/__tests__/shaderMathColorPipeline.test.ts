@@ -16,12 +16,7 @@
 import { describe, it, expect } from 'vitest';
 
 import { applyCDLToValue, applyCDL, DEFAULT_CDL } from '../../color/CDL';
-import {
-  acescctEncode,
-  acescctDecode,
-  logC3Encode,
-  logC3Decode,
-} from '../../color/TransferFunctions';
+import { acescctEncode, acescctDecode, logC3Encode, logC3Decode } from '../../color/TransferFunctions';
 import { LOG_CURVES } from '../../color/LogCurves';
 import { COLOR_PRIMARIES_MATRICES } from '../ShaderConstants';
 
@@ -74,9 +69,9 @@ function softClipChannel(x: number): number {
 function glslCineonLogToLinear(x: number): number {
   const refBlack = 95.0 / 1023.0;
   const refWhite = 685.0 / 1023.0;
-  const gain = 1.0 / (1.0 - Math.pow(10, (refBlack - refWhite) * 0.002 / 0.6));
+  const gain = 1.0 / (1.0 - Math.pow(10, ((refBlack - refWhite) * 0.002) / 0.6));
   const offset = gain - 1.0;
-  return gain * Math.pow(10, (x - refWhite) * 0.002 / 0.6) - offset;
+  return gain * Math.pow(10, ((x - refWhite) * 0.002) / 0.6) - offset;
 }
 
 /**
@@ -162,11 +157,7 @@ function hslToRgb(h: number, s: number, l: number): [number, number, number] {
   const q = l < 0.5 ? l * (1.0 + s) : l + s - l * s;
   const p = 2.0 * l - q;
   const hNorm = h / 360.0;
-  return [
-    hueToRgb(p, q, hNorm + 1.0 / 3.0),
-    hueToRgb(p, q, hNorm),
-    hueToRgb(p, q, hNorm - 1.0 / 3.0),
-  ];
+  return [hueToRgb(p, q, hNorm + 1.0 / 3.0), hueToRgb(p, q, hNorm), hueToRgb(p, q, hNorm - 1.0 / 3.0)];
 }
 
 // ---------------------------------------------------------------------------
@@ -176,11 +167,7 @@ function hslToRgb(h: number, s: number, l: number): [number, number, number] {
 /** Multiply column-major 3x3 matrix by vec3 (matching GLSL mat3 * vec3) */
 function matMul3ColMajor(m: Float32Array, r: number, g: number, b: number): [number, number, number] {
   // Column-major: m[0..2] = col0, m[3..5] = col1, m[6..8] = col2
-  return [
-    m[0]! * r + m[3]! * g + m[6]! * b,
-    m[1]! * r + m[4]! * g + m[7]! * b,
-    m[2]! * r + m[5]! * g + m[8]! * b,
-  ];
+  return [m[0]! * r + m[3]! * g + m[6]! * b, m[1]! * r + m[4]! * g + m[7]! * b, m[2]! * r + m[5]! * g + m[8]! * b];
 }
 
 // ---------------------------------------------------------------------------
@@ -189,7 +176,9 @@ function matMul3ColMajor(m: Float32Array, r: number, g: number, b: number): [num
 const _TOL_LOG = 1e-4;
 const _TOL_ACESCCT = 1e-5;
 const _TOL_DEFAULT = 1 / 256; // ~0.0039
-void _TOL_LOG; void _TOL_ACESCCT; void _TOL_DEFAULT;
+void _TOL_LOG;
+void _TOL_ACESCCT;
+void _TOL_DEFAULT;
 
 // ============================================================================
 // CDL Tests
@@ -477,7 +466,7 @@ describe('Gamut Soft Clip (XE-GAMUT)', () => {
     const tanhResult = 0.8 + 0.2 * Math.tanh((x - 0.8) / 0.2);
 
     const t = (x - 0.8) / 0.2; // = 0.5
-    const smoothstepResult = 0.8 + (t * t * (3.0 - 2.0 * t)) * 0.2;
+    const smoothstepResult = 0.8 + t * t * (3.0 - 2.0 * t) * 0.2;
 
     // They are different
     expect(Math.abs(tanhResult - smoothstepResult)).toBeGreaterThan(0.001);
@@ -498,8 +487,7 @@ describe('Gamut Soft Clip (XE-GAMUT)', () => {
 // ============================================================================
 
 describe('Color Primaries Matrices (XE-MATRIX)', () => {
-  const { IDENTITY, REC2020_TO_SRGB, P3_TO_SRGB, SRGB_TO_P3, SRGB_TO_REC2020 } =
-    COLOR_PRIMARIES_MATRICES;
+  const { IDENTITY, REC2020_TO_SRGB, P3_TO_SRGB, SRGB_TO_P3, SRGB_TO_REC2020 } = COLOR_PRIMARIES_MATRICES;
 
   it('XE-MATRIX-001: identity matrix preserves values', () => {
     const [r, g, b] = matMul3ColMajor(IDENTITY, 0.5, 0.3, 0.7);

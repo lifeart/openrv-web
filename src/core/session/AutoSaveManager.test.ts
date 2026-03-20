@@ -269,18 +269,13 @@ describe('AutoSaveManager', () => {
       expect(vi.getTimerCount()).toBe(0);
     });
 
-    it('AUTOSAVE-D002: dispose clears the debounce timer from markDirty', async () => {
+    it('AUTOSAVE-D002: markDirty does not create a debounce timer', async () => {
       manager = new AutoSaveManager({ enabled: false });
       const state = createMockSessionState();
 
       manager.markDirty(() => state);
 
-      // markDirty creates a 2-second debounce timer
-      expect(vi.getTimerCount()).toBeGreaterThan(0);
-
-      await manager.dispose();
-
-      // After dispose, debounce timer should be cleared
+      // markDirty should NOT create any timers - saves are handled by the interval timer
       expect(vi.getTimerCount()).toBe(0);
     });
 
@@ -342,7 +337,7 @@ describe('AutoSaveManager', () => {
       expect(mostRecent).toBeNull();
     });
 
-    it('AUTOSAVE-D009: markDirty after dispose still sets dirty flag but debounce timer fires harmlessly', async () => {
+    it('AUTOSAVE-D009: markDirty after dispose still sets dirty flag without side effects', async () => {
       manager = new AutoSaveManager({ enabled: false });
       await manager.dispose();
 
@@ -351,8 +346,8 @@ describe('AutoSaveManager', () => {
       expect(() => manager.markDirty(() => state)).not.toThrow();
       expect(manager.hasUnsavedChanges()).toBe(true);
 
-      // Advance past debounce window - the timer fires but save() will return null
-      vi.advanceTimersByTime(3000);
+      // No timers should be created by markDirty
+      expect(vi.getTimerCount()).toBe(0);
     });
 
     it('AUTOSAVE-D010: setConfig after dispose does not throw', async () => {
@@ -364,7 +359,7 @@ describe('AutoSaveManager', () => {
     });
   });
 
-  describe('debouncing', () => {
+  describe('interval-based saving (Issue #380 regression)', () => {
     beforeEach(() => {
       vi.useFakeTimers();
     });
@@ -373,7 +368,7 @@ describe('AutoSaveManager', () => {
       vi.useRealTimers();
     });
 
-    it('AUTOSAVE-U013: multiple markDirty calls within debounce window are batched', () => {
+    it('AUTOSAVE-U013: multiple markDirty calls are batched by the interval timer', () => {
       manager = new AutoSaveManager();
       const stateGetter = vi.fn().mockReturnValue(createMockSessionState());
 
@@ -385,6 +380,106 @@ describe('AutoSaveManager', () => {
       // Should still just be marked dirty once, and getter not called yet (lazy)
       expect(manager.hasUnsavedChanges()).toBe(true);
       expect(stateGetter).not.toHaveBeenCalled();
+    });
+
+    it('AUTOSAVE-R001: markDirty does not trigger an immediate save bypassing the interval', () => {
+      manager = new AutoSaveManager({ enabled: true, interval: 5 });
+      // Start the interval timer via setConfig
+      manager.setConfig({ enabled: true });
+
+      const saveSpy = vi.spyOn(manager, 'save');
+      const stateGetter = vi.fn().mockReturnValue(createMockSessionState());
+
+      manager.markDirty(stateGetter);
+
+      // Advance 2 seconds (old debounce time) - should NOT trigger a save
+      vi.advanceTimersByTime(2000);
+      expect(saveSpy).not.toHaveBeenCalled();
+
+      // Advance 30 seconds - still within 5-minute interval, no save
+      vi.advanceTimersByTime(28000);
+      expect(saveSpy).not.toHaveBeenCalled();
+    });
+
+    it('AUTOSAVE-R002: the configured interval is respected for auto-saves', () => {
+      // Use 1-minute interval for simpler testing
+      manager = new AutoSaveManager({ enabled: true, interval: 1 });
+      manager.setConfig({ enabled: true });
+
+      const saveSpy = vi.spyOn(manager, 'save');
+      const stateGetter = vi.fn().mockReturnValue(createMockSessionState());
+
+      manager.markDirty(stateGetter);
+
+      // Advance to just before the 1-minute interval
+      vi.advanceTimersByTime(59_999);
+      expect(saveSpy).not.toHaveBeenCalled();
+
+      // Advance past the 1-minute interval
+      vi.advanceTimersByTime(1);
+      // The interval fires and calls saveWithGetter which calls save
+      expect(saveSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('AUTOSAVE-R003: rapid dirty marks are batched and saved on next interval tick', () => {
+      manager = new AutoSaveManager({ enabled: true, interval: 1 });
+      manager.setConfig({ enabled: true });
+
+      const saveSpy = vi.spyOn(manager, 'save');
+
+      // Simulate rapid changes over 10 seconds
+      for (let i = 0; i < 50; i++) {
+        const stateGetter = vi.fn().mockReturnValue(createMockSessionState(`State ${i}`));
+        manager.markDirty(stateGetter);
+        vi.advanceTimersByTime(200);
+      }
+
+      // 50 * 200ms = 10 seconds elapsed, no save yet (interval is 1 minute)
+      expect(saveSpy).not.toHaveBeenCalled();
+
+      // Advance to the 1-minute mark (50 more seconds)
+      vi.advanceTimersByTime(50_000);
+
+      // Now the interval should fire and save once with the latest state
+      expect(saveSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('AUTOSAVE-R004: data is saved within the configured interval after becoming dirty', () => {
+      manager = new AutoSaveManager({ enabled: true, interval: 2 });
+      manager.setConfig({ enabled: true });
+
+      const saveSpy = vi.spyOn(manager, 'save');
+      const stateGetter = vi.fn().mockReturnValue(createMockSessionState());
+
+      manager.markDirty(stateGetter);
+
+      // Advance past the 2-minute interval
+      vi.advanceTimersByTime(2 * 60 * 1000);
+
+      // Save should have been called
+      expect(saveSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('AUTOSAVE-R005: interval timer does not save when not dirty', () => {
+      manager = new AutoSaveManager({ enabled: true, interval: 1 });
+      manager.setConfig({ enabled: true });
+
+      const saveSpy = vi.spyOn(manager, 'save');
+
+      // Don't mark dirty - just let the interval fire
+      vi.advanceTimersByTime(60_000);
+
+      expect(saveSpy).not.toHaveBeenCalled();
+    });
+
+    it('AUTOSAVE-R006: markDirty does not create any timers', () => {
+      manager = new AutoSaveManager({ enabled: false });
+
+      const stateGetter = vi.fn().mockReturnValue(createMockSessionState());
+      manager.markDirty(stateGetter);
+
+      // No timers should be created by markDirty alone (auto-save is disabled)
+      expect(vi.getTimerCount()).toBe(0);
     });
   });
 

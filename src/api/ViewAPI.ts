@@ -4,9 +4,14 @@
  * Wraps the Viewer and ChannelSelect to expose zoom, pan, and channel controls.
  */
 
-import type { ViewerProvider } from './types';
+import type { ViewerProvider, PixelProbeProvider } from './types';
 import type { ChannelMode } from '../core/types/color';
+import type { TextureFilterMode } from '../core/types/filter';
+import type { BackgroundPatternState } from '../core/types/background';
+import type { MatteSettings } from '../core/session/SessionTypes';
+import type { PixelProbeState, SampleSize, SourceMode } from '../ui/components/PixelProbe';
 import { ValidationError } from '../core/errors';
+import { DisposableAPI } from './Disposable';
 
 const VALID_CHANNELS: ReadonlySet<string> = new Set(['rgb', 'red', 'green', 'blue', 'alpha', 'luminance']);
 
@@ -26,18 +31,25 @@ const CHANNEL_ALIASES: Record<string, ChannelMode> = {
   l: 'luminance',
 };
 
-export class ViewAPI {
-  private viewer: ViewerProvider;
+const VALID_SAMPLE_SIZES: ReadonlySet<number> = new Set([1, 3, 5, 9]);
+const VALID_SOURCE_MODES: ReadonlySet<string> = new Set(['rendered', 'source']);
+const VALID_PROBE_FORMATS: ReadonlySet<string> = new Set(['rgb', 'rgb01', 'hsl', 'hex', 'ire']);
 
-  constructor(viewer: ViewerProvider) {
+export class ViewAPI extends DisposableAPI {
+  private viewer: ViewerProvider;
+  private pixelProbe: PixelProbeProvider | null;
+
+  constructor(viewer: ViewerProvider, pixelProbe?: PixelProbeProvider) {
+    super();
     this.viewer = viewer;
+    this.pixelProbe = pixelProbe ?? null;
   }
 
   /**
    * Set the zoom level of the viewport.
    *
    * @param level - Zoom level as a positive number (e.g., 1.0 = 100%, 2.0 = 200%).
-   * @throws {ValidationError} If `level` is not a positive number or is NaN.
+   * @throws {ValidationError} If `level` is not a finite positive number.
    *
    * @example
    * ```ts
@@ -45,8 +57,9 @@ export class ViewAPI {
    * ```
    */
   setZoom(level: number): void {
-    if (typeof level !== 'number' || isNaN(level) || level <= 0) {
-      throw new ValidationError('setZoom() requires a positive number');
+    this.assertNotDisposed();
+    if (typeof level !== 'number' || !Number.isFinite(level) || level <= 0) {
+      throw new ValidationError('setZoom() requires a finite positive number');
     }
     this.viewer.setZoom(level);
   }
@@ -62,6 +75,7 @@ export class ViewAPI {
    * ```
    */
   getZoom(): number {
+    this.assertNotDisposed();
     return this.viewer.getZoom();
   }
 
@@ -74,6 +88,7 @@ export class ViewAPI {
    * ```
    */
   fitToWindow(): void {
+    this.assertNotDisposed();
     this.viewer.fitToWindow();
   }
 
@@ -87,6 +102,7 @@ export class ViewAPI {
    * ```
    */
   fitToWidth(): void {
+    this.assertNotDisposed();
     this.viewer.fitToWidth();
   }
 
@@ -100,6 +116,7 @@ export class ViewAPI {
    * ```
    */
   fitToHeight(): void {
+    this.assertNotDisposed();
     this.viewer.fitToHeight();
   }
 
@@ -114,6 +131,7 @@ export class ViewAPI {
    * ```
    */
   getFitMode(): string | null {
+    this.assertNotDisposed();
     return this.viewer.getFitMode();
   }
 
@@ -122,7 +140,7 @@ export class ViewAPI {
    *
    * @param x - Horizontal pan offset in pixels (positive = right).
    * @param y - Vertical pan offset in pixels (positive = down).
-   * @throws {ValidationError} If `x` or `y` is not a valid number or is NaN.
+   * @throws {ValidationError} If `x` or `y` is not a finite number.
    *
    * @example
    * ```ts
@@ -130,8 +148,9 @@ export class ViewAPI {
    * ```
    */
   setPan(x: number, y: number): void {
-    if (typeof x !== 'number' || typeof y !== 'number' || isNaN(x) || isNaN(y)) {
-      throw new ValidationError('setPan() requires valid x and y coordinates');
+    this.assertNotDisposed();
+    if (typeof x !== 'number' || typeof y !== 'number' || !Number.isFinite(x) || !Number.isFinite(y)) {
+      throw new ValidationError('setPan() requires finite x and y coordinates');
     }
     this.viewer.setPan(x, y);
   }
@@ -147,6 +166,7 @@ export class ViewAPI {
    * ```
    */
   getPan(): { x: number; y: number } {
+    this.assertNotDisposed();
     return this.viewer.getPan();
   }
 
@@ -164,6 +184,7 @@ export class ViewAPI {
    * ```
    */
   setChannel(mode: string): void {
+    this.assertNotDisposed();
     if (typeof mode !== 'string') {
       throw new ValidationError('setChannel() requires a string argument');
     }
@@ -187,6 +208,375 @@ export class ViewAPI {
    * ```
    */
   getChannel(): string {
+    this.assertNotDisposed();
     return this.viewer.getChannelMode();
+  }
+
+  /**
+   * Set the texture filtering mode.
+   *
+   * @param mode - `'nearest'` for pixel-perfect (nearest-neighbor) or `'linear'` for smooth (bilinear).
+   * @throws {ValidationError} If `mode` is not `'nearest'` or `'linear'`.
+   *
+   * @example
+   * ```ts
+   * openrv.view.setTextureFilterMode('nearest');
+   * ```
+   */
+  setTextureFilterMode(mode: TextureFilterMode): void {
+    this.assertNotDisposed();
+    if (mode !== 'nearest' && mode !== 'linear') {
+      throw new ValidationError(`setTextureFilterMode() requires 'nearest' or 'linear', got: "${mode}"`);
+    }
+    this.viewer.setFilterMode(mode);
+  }
+
+  /**
+   * Get the current texture filtering mode.
+   *
+   * @returns `'nearest'` or `'linear'`.
+   *
+   * @example
+   * ```ts
+   * const mode = openrv.view.getTextureFilterMode(); // e.g. 'linear'
+   * ```
+   */
+  getTextureFilterMode(): TextureFilterMode {
+    this.assertNotDisposed();
+    return this.viewer.getFilterMode();
+  }
+
+  /**
+   * Set the background pattern state.
+   *
+   * @param state - The full background pattern state including pattern type, checker size, and custom color.
+   *
+   * @example
+   * ```ts
+   * openrv.view.setBackgroundPattern({ pattern: 'checker', checkerSize: 'medium', customColor: '#1a1a1a' });
+   * ```
+   */
+  setBackgroundPattern(state: BackgroundPatternState): void {
+    this.assertNotDisposed();
+    this.viewer.setBackgroundPatternState(state);
+  }
+
+  /**
+   * Get the current background pattern state.
+   *
+   * @returns The current background pattern state.
+   *
+   * @example
+   * ```ts
+   * const bg = openrv.view.getBackgroundPattern();
+   * ```
+   */
+  getBackgroundPattern(): BackgroundPatternState {
+    this.assertNotDisposed();
+    return this.viewer.getBackgroundPatternState();
+  }
+
+  /**
+   * Get the current viewport size in CSS pixels.
+   *
+   * @returns An object with `width` and `height` representing the viewer's display dimensions.
+   *
+   * @example
+   * ```ts
+   * const { width, height } = openrv.view.getViewportSize();
+   * ```
+   */
+  getViewportSize(): { width: number; height: number } {
+    this.assertNotDisposed();
+    return this.viewer.getViewportSize();
+  }
+
+  /**
+   * Enable the matte overlay and optionally configure it.
+   *
+   * @param options - Optional partial matte settings to apply.
+   *   Supported keys: `aspect` (target aspect ratio, 0.1–10),
+   *   `opacity` (0–1), `centerPoint` ([x, y] normalized offsets).
+   * @throws {ValidationError} If `aspect` is not a positive number, `opacity` is out of range,
+   *   or `centerPoint` is not a two-element numeric array.
+   *
+   * @example
+   * ```ts
+   * openrv.view.setMatte({ aspect: 2.39, opacity: 0.8 });
+   * ```
+   */
+  setMatte(options?: Partial<Pick<MatteSettings, 'aspect' | 'opacity' | 'centerPoint'>>): void {
+    this.assertNotDisposed();
+    const merged: Partial<MatteSettings> = { show: true };
+
+    if (options) {
+      if (typeof options !== 'object') {
+        throw new ValidationError('setMatte() options must be an object');
+      }
+      if (options.aspect !== undefined) {
+        if (typeof options.aspect !== 'number' || isNaN(options.aspect) || options.aspect <= 0) {
+          throw new ValidationError('setMatte() aspect must be a positive number');
+        }
+        merged.aspect = Math.max(0.1, Math.min(10, options.aspect));
+      }
+      if (options.opacity !== undefined) {
+        if (typeof options.opacity !== 'number' || isNaN(options.opacity)) {
+          throw new ValidationError('setMatte() opacity must be a number between 0 and 1');
+        }
+        merged.opacity = Math.max(0, Math.min(1, options.opacity));
+      }
+      if (options.centerPoint !== undefined) {
+        if (
+          !Array.isArray(options.centerPoint) ||
+          options.centerPoint.length !== 2 ||
+          typeof options.centerPoint[0] !== 'number' ||
+          typeof options.centerPoint[1] !== 'number'
+        ) {
+          throw new ValidationError('setMatte() centerPoint must be a [number, number] array');
+        }
+        merged.centerPoint = options.centerPoint;
+      }
+    }
+
+    this.viewer.setMatteSettings(merged);
+  }
+
+  /**
+   * Disable the matte overlay.
+   *
+   * @example
+   * ```ts
+   * openrv.view.clearMatte();
+   * ```
+   */
+  clearMatte(): void {
+    this.assertNotDisposed();
+    this.viewer.setMatteSettings({ show: false });
+  }
+
+  /**
+   * Get the current matte overlay settings.
+   *
+   * @returns The matte settings including `show`, `aspect`, `opacity`, `heightVisible`, and `centerPoint`.
+   *
+   * @example
+   * ```ts
+   * const matte = openrv.view.getMatte();
+   * if (matte.show) console.log(`Matte active at ${matte.aspect}:1`);
+   * ```
+   */
+  getMatte(): MatteSettings {
+    this.assertNotDisposed();
+    return this.viewer.getMatteSettings();
+  }
+
+  // ────────────────────────────────────────────────────────────
+  // Pixel Probe
+  // ────────────────────────────────────────────────────────────
+
+  /**
+   * Guard that throws if no pixel probe provider is configured.
+   * Returns the provider for convenient chaining.
+   */
+  private requireProbe(): PixelProbeProvider {
+    if (!this.pixelProbe) {
+      throw new ValidationError('Pixel probe is not available');
+    }
+    return this.pixelProbe;
+  }
+
+  /**
+   * Enable the pixel probe overlay.
+   *
+   * @throws {ValidationError} If the pixel probe provider is not available.
+   *
+   * @example
+   * ```ts
+   * openrv.view.enableProbe();
+   * ```
+   */
+  enableProbe(): void {
+    this.assertNotDisposed();
+    this.requireProbe().enable();
+  }
+
+  /**
+   * Disable the pixel probe overlay.
+   *
+   * @throws {ValidationError} If the pixel probe provider is not available.
+   *
+   * @example
+   * ```ts
+   * openrv.view.disableProbe();
+   * ```
+   */
+  disableProbe(): void {
+    this.assertNotDisposed();
+    this.requireProbe().disable();
+  }
+
+  /**
+   * Check whether the pixel probe is currently enabled.
+   *
+   * @returns `true` if the probe overlay is visible, `false` otherwise.
+   * @throws {ValidationError} If the pixel probe provider is not available.
+   *
+   * @example
+   * ```ts
+   * if (openrv.view.isProbeEnabled()) { ... }
+   * ```
+   */
+  isProbeEnabled(): boolean {
+    this.assertNotDisposed();
+    return this.requireProbe().isEnabled();
+  }
+
+  /**
+   * Lock or unlock the pixel probe position.
+   *
+   * When locked, the probe values remain fixed at the current position
+   * and mouse movement does not update them.
+   *
+   * @throws {ValidationError} If the pixel probe provider is not available.
+   *
+   * @example
+   * ```ts
+   * openrv.view.toggleProbeLock();
+   * ```
+   */
+  toggleProbeLock(): void {
+    this.assertNotDisposed();
+    this.requireProbe().toggleLock();
+  }
+
+  /**
+   * Check whether the pixel probe position is locked.
+   *
+   * @returns `true` if the probe position is locked, `false` otherwise.
+   * @throws {ValidationError} If the pixel probe provider is not available.
+   *
+   * @example
+   * ```ts
+   * const locked = openrv.view.isProbeLocked();
+   * ```
+   */
+  isProbeLocked(): boolean {
+    this.assertNotDisposed();
+    return this.requireProbe().isLocked();
+  }
+
+  /**
+   * Get the current pixel probe state including position, color values, and settings.
+   *
+   * @returns A deep copy of the current probe state.
+   * @throws {ValidationError} If the pixel probe provider is not available.
+   *
+   * @example
+   * ```ts
+   * const state = openrv.view.getProbeState();
+   * console.log(`Pixel at (${state.x}, ${state.y}): rgb(${state.rgb.r}, ${state.rgb.g}, ${state.rgb.b})`);
+   * ```
+   */
+  getProbeState(): PixelProbeState {
+    this.assertNotDisposed();
+    return this.requireProbe().getState();
+  }
+
+  /**
+   * Set the display format for the pixel probe overlay.
+   *
+   * @param format - One of `'rgb'`, `'rgb01'`, `'hsl'`, `'hex'`, `'ire'`.
+   * @throws {ValidationError} If `format` is not a valid format string.
+   *
+   * @example
+   * ```ts
+   * openrv.view.setProbeFormat('hsl');
+   * ```
+   */
+  setProbeFormat(format: string): void {
+    this.assertNotDisposed();
+    const probe = this.requireProbe();
+    if (typeof format !== 'string' || !VALID_PROBE_FORMATS.has(format)) {
+      throw new ValidationError(
+        `Invalid probe format: "${format}". Valid formats: ${Array.from(VALID_PROBE_FORMATS).join(', ')}`,
+      );
+    }
+    probe.setFormat(format as PixelProbeState['format']);
+  }
+
+  /**
+   * Set the sample size for area averaging in the pixel probe.
+   *
+   * @param size - One of `1`, `3`, `5`, `9` (NxN pixel area).
+   * @throws {ValidationError} If `size` is not a valid sample size.
+   *
+   * @example
+   * ```ts
+   * openrv.view.setProbeSampleSize(3); // 3x3 area average
+   * ```
+   */
+  setProbeSampleSize(size: number): void {
+    this.assertNotDisposed();
+    const probe = this.requireProbe();
+    if (typeof size !== 'number' || !VALID_SAMPLE_SIZES.has(size)) {
+      throw new ValidationError(
+        `Invalid sample size: ${size}. Valid sizes: ${Array.from(VALID_SAMPLE_SIZES).join(', ')}`,
+      );
+    }
+    probe.setSampleSize(size as SampleSize);
+  }
+
+  /**
+   * Get the current sample size for area averaging.
+   *
+   * @returns The current sample size (1, 3, 5, or 9).
+   * @throws {ValidationError} If the pixel probe provider is not available.
+   *
+   * @example
+   * ```ts
+   * const size = openrv.view.getProbeSampleSize(); // e.g. 1
+   * ```
+   */
+  getProbeSampleSize(): SampleSize {
+    this.assertNotDisposed();
+    return this.requireProbe().getSampleSize();
+  }
+
+  /**
+   * Set the source mode for pixel probe values.
+   *
+   * @param mode - `'rendered'` for post-pipeline values or `'source'` for original source values.
+   * @throws {ValidationError} If `mode` is not `'rendered'` or `'source'`.
+   *
+   * @example
+   * ```ts
+   * openrv.view.setProbeSourceMode('source'); // show original values before grading
+   * ```
+   */
+  setProbeSourceMode(mode: string): void {
+    this.assertNotDisposed();
+    const probe = this.requireProbe();
+    if (typeof mode !== 'string' || !VALID_SOURCE_MODES.has(mode)) {
+      throw new ValidationError(
+        `Invalid source mode: "${mode}". Valid modes: ${Array.from(VALID_SOURCE_MODES).join(', ')}`,
+      );
+    }
+    probe.setSourceMode(mode as SourceMode);
+  }
+
+  /**
+   * Get the current source mode for pixel probe values.
+   *
+   * @returns `'rendered'` or `'source'`.
+   * @throws {ValidationError} If the pixel probe provider is not available.
+   *
+   * @example
+   * ```ts
+   * const mode = openrv.view.getProbeSourceMode(); // e.g. 'rendered'
+   * ```
+   */
+  getProbeSourceMode(): SourceMode {
+    this.assertNotDisposed();
+    return this.requireProbe().getSourceMode();
   }
 }

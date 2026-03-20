@@ -185,20 +185,21 @@ test.describe('Network Sync', () => {
 
   test.fixme('NET-005: creating a room generates a shareable code', async ({ page }) => {
     // TODO: Requires mock WebSocket server fixture
-    const networkButton = page.locator('button[data-testid="network-button"]').first();
+    const networkButton = page.locator('[data-testid="network-sync-button"]').first();
     await networkButton.click();
     await page.waitForTimeout(300);
 
-    const panel = page.locator('[data-testid="network-panel"]');
-    await expect(panel).toBeVisible();
+    const disconnectedPanel = page.locator('[data-testid="network-disconnected-panel"]');
+    await expect(disconnectedPanel).toBeVisible();
 
     // Click "Create Room" button
-    const createButton = panel.locator('button:has-text("Create Room"), button:has-text("Create")').first();
+    const createButton = disconnectedPanel.locator('[data-testid="network-create-room-button"]');
     await createButton.click();
     await page.waitForTimeout(500);
 
     // A room code should be displayed
-    const roomCode = panel.locator('[data-testid="room-code"], .room-code');
+    const connectedPanel = page.locator('[data-testid="network-connected-panel"]');
+    const roomCode = connectedPanel.locator('[data-testid="network-room-code-display"]');
     await expect(roomCode).toBeVisible();
     const code = await roomCode.textContent();
     expect(code).toBeTruthy();
@@ -207,80 +208,81 @@ test.describe('Network Sync', () => {
 
   test.fixme('NET-007: join a room using a room code', async ({ page }) => {
     // TODO: Requires mock WebSocket server fixture
-    const networkButton = page.locator('button[data-testid="network-button"]').first();
+    const networkButton = page.locator('[data-testid="network-sync-button"]').first();
     await networkButton.click();
     await page.waitForTimeout(300);
 
-    const panel = page.locator('[data-testid="network-panel"]');
-    await expect(panel).toBeVisible();
+    const disconnectedPanel = page.locator('[data-testid="network-disconnected-panel"]');
+    await expect(disconnectedPanel).toBeVisible();
 
     // Enter a room code in the join input
-    const joinInput = panel.locator('input[data-testid="room-code-input"], input[placeholder*="code" i]').first();
+    const joinInput = disconnectedPanel.locator('[data-testid="network-room-code-input"]');
     await joinInput.fill('TEST1234');
 
     // Click "Join" button
-    const joinButton = panel.locator('button:has-text("Join")').first();
+    const joinButton = disconnectedPanel.locator('[data-testid="network-join-room-button"]');
     await joinButton.click();
     await page.waitForTimeout(500);
 
     // Should show connected status or room info
-    const connectedIndicator = panel.locator('[data-testid="connection-status"], .connection-status, :text("Connected")').first();
-    await expect(connectedIndicator).toBeVisible({ timeout: 5000 });
+    const connectedPanel = page.locator('[data-testid="network-connected-panel"]');
+    await expect(connectedPanel).toBeVisible({ timeout: 5000 });
   });
 
   test.fixme('NET-008: leave room and disconnect', async ({ page }) => {
     // TODO: Requires mock WebSocket server fixture
     // First join a room
-    const networkButton = page.locator('button[data-testid="network-button"]').first();
+    const networkButton = page.locator('[data-testid="network-sync-button"]').first();
     await networkButton.click();
     await page.waitForTimeout(300);
 
-    const panel = page.locator('[data-testid="network-panel"]');
-    const createButton = panel.locator('button:has-text("Create Room"), button:has-text("Create")').first();
+    const disconnectedPanel = page.locator('[data-testid="network-disconnected-panel"]');
+    const createButton = disconnectedPanel.locator('[data-testid="network-create-room-button"]');
     await createButton.click();
     await page.waitForTimeout(500);
 
     // Verify connected
-    const connectedIndicator = panel.locator('[data-testid="connection-status"]');
-    await expect(connectedIndicator).toBeVisible();
+    const connectedPanel = page.locator('[data-testid="network-connected-panel"]');
+    await expect(connectedPanel).toBeVisible();
 
     // Click "Leave" button
-    const leaveButton = panel.locator('button:has-text("Leave"), button:has-text("Disconnect")').first();
+    const leaveButton = connectedPanel.locator('[data-testid="network-leave-button"]');
     await leaveButton.click();
     await page.waitForTimeout(500);
 
-    // Should show disconnected state - the "Create Room" button should reappear
-    await expect(createButton).toBeVisible({ timeout: 3000 });
+    // Should show disconnected state - the disconnected panel should reappear
+    await expect(disconnectedPanel).toBeVisible({ timeout: 3000 });
   });
 
   test.fixme('NET-020: user presence list shows connected users', async ({ page }) => {
     // TODO: Requires mock WebSocket server fixture with multiple simulated clients
-    const networkButton = page.locator('button[data-testid="network-button"]').first();
+    const networkButton = page.locator('[data-testid="network-sync-button"]').first();
     await networkButton.click();
     await page.waitForTimeout(300);
 
-    const panel = page.locator('[data-testid="network-panel"]');
-    const createButton = panel.locator('button:has-text("Create Room"), button:has-text("Create")').first();
+    const disconnectedPanel = page.locator('[data-testid="network-disconnected-panel"]');
+    const createButton = disconnectedPanel.locator('[data-testid="network-create-room-button"]');
     await createButton.click();
     await page.waitForTimeout(500);
 
     // Presence list should exist and show at least the local user
-    const presenceList = panel.locator('[data-testid="user-presence-list"], .user-presence-list, .user-list');
-    await expect(presenceList).toBeVisible();
+    const connectedPanel = page.locator('[data-testid="network-connected-panel"]');
+    const userList = connectedPanel.locator('[data-testid="network-user-list"]');
+    await expect(userList).toBeVisible();
 
-    const userEntries = presenceList.locator('[data-testid="user-entry"], .user-entry, li');
+    const userEntries = userList.locator('[data-testid^="network-user-"]');
     const count = await userEntries.count();
     expect(count).toBeGreaterThanOrEqual(1);
   });
 
   test.fixme('NET-030: playback sync - play/pause propagates to peers', async ({ page }) => {
     // TODO: Requires mock WebSocket server fixture to verify message emission
-    const networkButton = page.locator('button[data-testid="network-button"]').first();
+    const networkButton = page.locator('[data-testid="network-sync-button"]').first();
     await networkButton.click();
     await page.waitForTimeout(300);
 
-    const panel = page.locator('[data-testid="network-panel"]');
-    const createButton = panel.locator('button:has-text("Create Room"), button:has-text("Create")').first();
+    const disconnectedPanel = page.locator('[data-testid="network-disconnected-panel"]');
+    const createButton = disconnectedPanel.locator('[data-testid="network-create-room-button"]');
     await createButton.click();
     await page.waitForTimeout(500);
 
@@ -302,12 +304,12 @@ test.describe('Network Sync', () => {
 
   test.fixme('NET-031: frame position sync propagates to peers', async ({ page }) => {
     // TODO: Requires mock WebSocket server fixture
-    const networkButton = page.locator('button[data-testid="network-button"]').first();
+    const networkButton = page.locator('[data-testid="network-sync-button"]').first();
     await networkButton.click();
     await page.waitForTimeout(300);
 
-    const panel = page.locator('[data-testid="network-panel"]');
-    const createButton = panel.locator('button:has-text("Create Room"), button:has-text("Create")').first();
+    const disconnectedPanel = page.locator('[data-testid="network-disconnected-panel"]');
+    const createButton = disconnectedPanel.locator('[data-testid="network-create-room-button"]');
     await createButton.click();
     await page.waitForTimeout(500);
 
@@ -326,12 +328,12 @@ test.describe('Network Sync', () => {
 
   test.fixme('NET-040: view sync - zoom and pan propagate to peers', async ({ page }) => {
     // TODO: Requires mock WebSocket server fixture
-    const networkButton = page.locator('button[data-testid="network-button"]').first();
+    const networkButton = page.locator('[data-testid="network-sync-button"]').first();
     await networkButton.click();
     await page.waitForTimeout(300);
 
-    const panel = page.locator('[data-testid="network-panel"]');
-    const createButton = panel.locator('button:has-text("Create Room"), button:has-text("Create")').first();
+    const disconnectedPanel = page.locator('[data-testid="network-disconnected-panel"]');
+    const createButton = disconnectedPanel.locator('[data-testid="network-create-room-button"]');
     await createButton.click();
     await page.waitForTimeout(500);
 
@@ -348,12 +350,12 @@ test.describe('Network Sync', () => {
 
   test.fixme('NET-050: reconnection handling after connection drop', async ({ page }) => {
     // TODO: Requires mock WebSocket server fixture with disconnect/reconnect simulation
-    const networkButton = page.locator('button[data-testid="network-button"]').first();
+    const networkButton = page.locator('[data-testid="network-sync-button"]').first();
     await networkButton.click();
     await page.waitForTimeout(300);
 
-    const panel = page.locator('[data-testid="network-panel"]');
-    const createButton = panel.locator('button:has-text("Create Room"), button:has-text("Create")').first();
+    const disconnectedPanel = page.locator('[data-testid="network-disconnected-panel"]');
+    const createButton = disconnectedPanel.locator('[data-testid="network-create-room-button"]');
     await createButton.click();
     await page.waitForTimeout(500);
 
@@ -362,13 +364,11 @@ test.describe('Network Sync', () => {
 
     // After a brief period, the client should attempt to reconnect
     // Verify a reconnecting indicator appears
-    const reconnectingIndicator = page.locator(
-      '[data-testid="reconnecting-indicator"], .reconnecting, :text("Reconnecting")'
-    ).first();
-    await expect(reconnectingIndicator).toBeVisible({ timeout: 10000 });
+    const connectingPanel = page.locator('[data-testid="network-connecting-panel"]');
+    await expect(connectingPanel).toBeVisible({ timeout: 10000 });
 
     // After the mock server accepts the reconnection, verify connected state
-    const connectedIndicator = panel.locator('[data-testid="connection-status"]');
-    await expect(connectedIndicator).toBeVisible({ timeout: 10000 });
+    const connectedPanel = page.locator('[data-testid="network-connected-panel"]');
+    await expect(connectedPanel).toBeVisible({ timeout: 10000 });
   });
 });

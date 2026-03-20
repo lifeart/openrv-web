@@ -473,4 +473,202 @@ describe('Comparison Annotations', () => {
       expect(engine.getAnnotationsForFrame(20, 'B')).toHaveLength(1);
     });
   });
+
+  describe('COMP-008: Source-identity-based annotation tracking (#334)', () => {
+    it('COMP-008a: new annotations get sourceIndex stamped', () => {
+      engine.annotationVersion = 'A';
+      engine.sourceIndex = 0;
+      engine.beginStroke(10, { x: 0.5, y: 0.5 });
+      engine.continueStroke({ x: 0.6, y: 0.6 });
+      const stroke = engine.endStroke();
+
+      expect(stroke).not.toBeNull();
+      expect(stroke!.sourceIndex).toBe(0);
+      expect(stroke!.version).toBe('A');
+    });
+
+    it('COMP-008b: text annotations get sourceIndex stamped', () => {
+      engine.annotationVersion = 'B';
+      engine.sourceIndex = 1;
+      const text = engine.addText(5, { x: 0.5, y: 0.5 }, 'Note');
+
+      expect(text.sourceIndex).toBe(1);
+      expect(text.version).toBe('B');
+    });
+
+    it('COMP-008c: shape annotations get sourceIndex stamped', () => {
+      engine.annotationVersion = 'A';
+      engine.sourceIndex = 0;
+      const shape = engine.addShape(15, ShapeType.Rectangle, { x: 0.1, y: 0.1 }, { x: 0.5, y: 0.5 });
+
+      expect(shape.sourceIndex).toBe(0);
+    });
+
+    it('COMP-008d: polygon annotations get sourceIndex stamped', () => {
+      engine.annotationVersion = 'B';
+      engine.sourceIndex = 2;
+      const polygon = engine.addPolygon(10, [
+        { x: 0.1, y: 0.1 },
+        { x: 0.5, y: 0.1 },
+        { x: 0.3, y: 0.5 },
+      ]);
+
+      expect(polygon.sourceIndex).toBe(2);
+    });
+
+    it('COMP-008e: annotations follow source when A/B slots are swapped', () => {
+      // Source 0 is assigned to slot A, source 1 to slot B
+      engine.annotationVersion = 'A';
+      engine.sourceIndex = 0;
+      engine.beginStroke(10, { x: 0.1, y: 0.1 });
+      engine.continueStroke({ x: 0.2, y: 0.2 });
+      engine.endStroke();
+
+      engine.annotationVersion = 'B';
+      engine.sourceIndex = 1;
+      engine.beginStroke(10, { x: 0.5, y: 0.5 });
+      engine.continueStroke({ x: 0.6, y: 0.6 });
+      engine.endStroke();
+
+      // Now user swaps: source 1 → slot A, source 0 → slot B
+      // Filtering by sourceIndex=0 should show the annotation originally on source 0
+      const source0Anns = engine.getAnnotationsForFrame(10, 'B', undefined, 0);
+      expect(source0Anns).toHaveLength(1);
+      expect(source0Anns[0]!.sourceIndex).toBe(0);
+
+      // Filtering by sourceIndex=1 should show the annotation originally on source 1
+      const source1Anns = engine.getAnnotationsForFrame(10, 'A', undefined, 1);
+      expect(source1Anns).toHaveLength(1);
+      expect(source1Anns[0]!.sourceIndex).toBe(1);
+    });
+
+    it('COMP-008f: backward compat — old annotations without sourceIndex still filter by version', () => {
+      // Create annotations without sourceIndex (legacy behavior)
+      engine.annotationVersion = 'A';
+      engine.sourceIndex = undefined;
+      engine.beginStroke(10, { x: 0.1, y: 0.1 });
+      engine.continueStroke({ x: 0.2, y: 0.2 });
+      engine.endStroke();
+
+      engine.annotationVersion = 'B';
+      engine.sourceIndex = undefined;
+      engine.beginStroke(10, { x: 0.5, y: 0.5 });
+      engine.continueStroke({ x: 0.6, y: 0.6 });
+      engine.endStroke();
+
+      // Legacy filtering by version only (no sourceIndex filter)
+      const aAnns = engine.getAnnotationsForFrame(10, 'A');
+      expect(aAnns).toHaveLength(1);
+      expect(aAnns[0]!.version).toBe('A');
+
+      const bAnns = engine.getAnnotationsForFrame(10, 'B');
+      expect(bAnns).toHaveLength(1);
+      expect(bAnns[0]!.version).toBe('B');
+    });
+
+    it('COMP-008g: legacy annotations fall back to version filter when sourceIndexFilter is provided', () => {
+      // Create legacy annotation (no sourceIndex)
+      engine.annotationVersion = 'A';
+      engine.sourceIndex = undefined;
+      engine.beginStroke(10, { x: 0.1, y: 0.1 });
+      engine.continueStroke({ x: 0.2, y: 0.2 });
+      engine.endStroke();
+
+      // Filtering with sourceIndexFilter but annotation has no sourceIndex
+      // Should fall back to version filter
+      const aAnns = engine.getAnnotationsForFrame(10, 'A', undefined, 0);
+      expect(aAnns).toHaveLength(1);
+
+      // Version B filter should exclude it
+      const bAnns = engine.getAnnotationsForFrame(10, 'B', undefined, 1);
+      expect(bAnns).toHaveLength(0);
+    });
+
+    it('COMP-008h: all-version annotations always visible regardless of sourceIndex filter', () => {
+      engine.annotationVersion = 'all';
+      engine.sourceIndex = 0;
+      engine.beginStroke(10, { x: 0.5, y: 0.5 });
+      engine.continueStroke({ x: 0.6, y: 0.6 });
+      engine.endStroke();
+
+      // Visible with any sourceIndex filter
+      expect(engine.getAnnotationsForFrame(10, 'A', undefined, 0)).toHaveLength(1);
+      expect(engine.getAnnotationsForFrame(10, 'B', undefined, 1)).toHaveLength(1);
+      expect(engine.getAnnotationsForFrame(10, 'A', undefined, 99)).toHaveLength(1);
+    });
+
+    it('COMP-008i: sourceIndex getter/setter works', () => {
+      expect(engine.sourceIndex).toBeUndefined();
+      engine.sourceIndex = 0;
+      expect(engine.sourceIndex).toBe(0);
+      engine.sourceIndex = 5;
+      expect(engine.sourceIndex).toBe(5);
+      engine.sourceIndex = undefined;
+      expect(engine.sourceIndex).toBeUndefined();
+    });
+
+    it('COMP-008j: hasAnnotationsOnFrame respects sourceIndex filter', () => {
+      engine.annotationVersion = 'A';
+      engine.sourceIndex = 0;
+      engine.beginStroke(5, { x: 0.1, y: 0.1 });
+      engine.continueStroke({ x: 0.2, y: 0.2 });
+      engine.endStroke();
+
+      // Source 0 is present
+      expect(engine.hasAnnotationsOnFrame(5, 'A', undefined, 0)).toBe(true);
+      // Source 1 is not present
+      expect(engine.hasAnnotationsOnFrame(5, 'B', undefined, 1)).toBe(false);
+    });
+
+    it('COMP-008k: ghost mode respects sourceIndex filter', () => {
+      engine.setGhostMode(true, 3, 3);
+
+      engine.annotationVersion = 'A';
+      engine.sourceIndex = 0;
+      engine.beginStroke(10, { x: 0.1, y: 0.1 });
+      engine.continueStroke({ x: 0.2, y: 0.2 });
+      engine.endStroke();
+
+      engine.annotationVersion = 'B';
+      engine.sourceIndex = 1;
+      engine.beginStroke(10, { x: 0.5, y: 0.5 });
+      engine.continueStroke({ x: 0.6, y: 0.6 });
+      engine.endStroke();
+
+      // Ghost on frame 11, filter by source 0
+      const ghostSource0 = engine.getAnnotationsWithGhost(11, 'A', undefined, 0);
+      expect(ghostSource0).toHaveLength(1);
+      expect(ghostSource0[0]!.annotation.sourceIndex).toBe(0);
+
+      // Ghost on frame 11, filter by source 1
+      const ghostSource1 = engine.getAnnotationsWithGhost(11, 'B', undefined, 1);
+      expect(ghostSource1).toHaveLength(1);
+      expect(ghostSource1[0]!.annotation.sourceIndex).toBe(1);
+    });
+
+    it('COMP-008l: serialization roundtrip preserves sourceIndex', () => {
+      engine.annotationVersion = 'A';
+      engine.sourceIndex = 0;
+      engine.beginStroke(1, { x: 0.1, y: 0.1 });
+      engine.continueStroke({ x: 0.2, y: 0.2 });
+      engine.endStroke();
+
+      engine.annotationVersion = 'B';
+      engine.sourceIndex = 1;
+      engine.addText(1, { x: 0.5, y: 0.5 }, 'Note');
+
+      const snapshot = engine.toJSON();
+      const json = JSON.stringify(snapshot);
+      const parsed = JSON.parse(json);
+
+      const engine2 = new PaintEngine();
+      const allAnnotations = Object.values(parsed.frames).flat() as any[];
+      engine2.loadFromAnnotations(allAnnotations, parsed.effects);
+
+      const anns = engine2.getAnnotationsForFrame(1);
+      expect(anns).toHaveLength(2);
+      expect(anns.find((a) => a.sourceIndex === 0)).toBeDefined();
+      expect(anns.find((a) => a.sourceIndex === 1)).toBeDefined();
+    });
+  });
 });

@@ -13,7 +13,7 @@
 
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { type Session } from '../../core/session/Session';
-import { type Note, type NoteStatus } from '../../core/session/NoteManager';
+import { type Note, type NoteStatus, type NotePriority } from '../../core/session/NoteManager';
 import { getIconSvg } from './shared/Icons';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
@@ -562,6 +562,42 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
     statusBadge.textContent = note.status;
     topRow.appendChild(statusBadge);
 
+    // Priority badge
+    const priorityColors: Record<NotePriority, string> = {
+      low: 'var(--text-muted, #888)',
+      medium: 'var(--accent-primary, #3b82f6)',
+      high: 'var(--warning, #fbbf24)',
+      critical: 'var(--error, #ef4444)',
+    };
+    const priorityBadge = document.createElement('span');
+    priorityBadge.dataset.testid = `note-priority-${note.id}`;
+    priorityBadge.style.cssText = `
+      font-size: 10px;
+      padding: 1px 5px;
+      border-radius: 3px;
+      background: ${priorityColors[note.priority]};
+      color: #000;
+      flex-shrink: 0;
+    `;
+    priorityBadge.textContent = note.priority;
+    topRow.appendChild(priorityBadge);
+
+    // Category badge (only if category is set)
+    if (note.category) {
+      const categoryBadge = document.createElement('span');
+      categoryBadge.dataset.testid = `note-category-${note.id}`;
+      categoryBadge.style.cssText = `
+        font-size: 10px;
+        padding: 1px 5px;
+        border-radius: 3px;
+        background: rgba(var(--accent-primary-rgb), 0.2);
+        color: var(--text-primary);
+        flex-shrink: 0;
+      `;
+      categoryBadge.textContent = note.category;
+      topRow.appendChild(categoryBadge);
+    }
+
     // Author
     const author = document.createElement('span');
     author.style.cssText = 'font-size: 11px; color: var(--text-muted); margin-left: auto; flex-shrink: 0;';
@@ -614,10 +650,10 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
       replyBtn.dataset.testid = `note-reply-${note.id}`;
       replyBtn.title = 'Reply';
       replyBtn.setAttribute('aria-label', 'Reply to note');
-      replyBtn.textContent = '\u21a9';
+      replyBtn.innerHTML = getIconSvg('undo', 'sm');
       replyBtn.style.cssText = `
         background: none; border: none; color: var(--text-muted);
-        cursor: pointer; padding: 2px; font-size: 14px; line-height: 1;
+        cursor: pointer; padding: 2px; line-height: 1; display: inline-flex; align-items: center;
       `;
       replyBtn.addEventListener('click', (e) => {
         e.stopPropagation();

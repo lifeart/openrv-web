@@ -35,7 +35,8 @@ import { luminanceRec709 as cpuLuminanceRec709 } from '../../color/PixelMath';
 // Tolerances
 const _TRANSFER_TOL = 1e-5;
 const _COLOR_ADJ_TOL = 1 / 256;
-void _TRANSFER_TOL; void _COLOR_ADJ_TOL;
+void _TRANSFER_TOL;
+void _COLOR_ADJ_TOL;
 
 // =============================================================================
 // sRGB EOTF & inverse
@@ -677,7 +678,9 @@ describe('pipeline integration', () => {
   });
 
   it('XE-081: temperature symmetry: opposite values cancel', () => {
-    const r0 = 0.5, g0 = 0.5, b0 = 0.5;
+    const r0 = 0.5,
+      g0 = 0.5,
+      b0 = 0.5;
     const [r1, g1, b1] = applyTemperature(r0, g0, b0, 50, 30);
     const [r2, g2, b2] = applyTemperature(r1, g1, b1, -50, -30);
     expect(r2).toBeCloseTo(r0, 10);

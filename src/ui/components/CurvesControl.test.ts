@@ -308,3 +308,69 @@ describe('CurvesControl presets', () => {
     });
   });
 });
+
+describe('issue #111 regression: inline error display on invalid import', () => {
+  let control: CurvesControl;
+
+  beforeEach(() => {
+    control = new CurvesControl();
+  });
+
+  afterEach(() => {
+    control.dispose();
+  });
+
+  it('CURVES-U111a: importCurvesJSON returning null triggers inline error', async () => {
+    const el = control.render();
+    const invalidFile = new File(['{"bad":true}'], 'bad-curves.json', { type: 'application/json' });
+    const originalCreateElement = document.createElement.bind(document);
+    const mockInputClick = vi.fn();
+    let capturedChangeHandler: (() => void) | null = null;
+    let mockInput: HTMLInputElement | null = null;
+
+    vi.spyOn(document, 'createElement').mockImplementation(((tagName: string, options?: ElementCreationOptions) => {
+      const node = originalCreateElement(tagName, options);
+      if (tagName === 'input') {
+        mockInput = node as HTMLInputElement;
+        vi.spyOn(mockInput, 'click').mockImplementation(mockInputClick);
+        const originalAddEventListener = mockInput.addEventListener.bind(mockInput);
+        vi.spyOn(mockInput, 'addEventListener').mockImplementation(((
+          type: string,
+          listener: EventListenerOrEventListenerObject,
+          opts?: boolean | AddEventListenerOptions,
+        ) => {
+          if (type === 'change') {
+            capturedChangeHandler = () => {
+              if (typeof listener === 'function') {
+                void listener(new Event('change'));
+              } else {
+                void listener.handleEvent(new Event('change'));
+              }
+            };
+          }
+          return originalAddEventListener(type, listener, opts);
+        }) as HTMLInputElement['addEventListener']);
+      }
+      return node;
+    }) as typeof document.createElement);
+
+    const importBtn = el.querySelector('[data-testid="curves-import"]') as HTMLButtonElement;
+    expect(importBtn).not.toBeNull();
+    expect(el.querySelector('[data-testid="curves-import-error"]')).toBeNull();
+
+    importBtn.click();
+    expect(mockInputClick).toHaveBeenCalled();
+    expect(mockInput).not.toBeNull();
+    Object.defineProperty(mockInput!, 'files', { configurable: true, value: [invalidFile] });
+    expect(capturedChangeHandler).not.toBeNull();
+    capturedChangeHandler!();
+
+    await vi.waitFor(() => {
+      const errorEl = el.querySelector('[data-testid="curves-import-error"]') as HTMLElement;
+      expect(errorEl).not.toBeNull();
+      expect(errorEl.textContent).toContain('Invalid curves JSON file');
+    });
+
+    vi.restoreAllMocks();
+  });
+});

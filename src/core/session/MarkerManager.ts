@@ -250,16 +250,23 @@ export class MarkerManager {
   }
 
   /**
-   * Set markers from an array of frame numbers (old format) with default styling.
+   * Set markers from an array of frame numbers with optional parallel note/color arrays.
+   * Fix #128: Accept markerNotes and markerColors so GTO import preserves them.
    */
-  setFromFrameNumbers(frames: number[]): void {
+  setFromFrameNumbers(frames: number[], notes?: string[], colors?: string[], endFrames?: number[]): void {
     this._marks = new Map();
-    for (const frame of frames) {
-      this._marks.set(frame, {
+    for (let i = 0; i < frames.length; i++) {
+      const frame = frames[i]!;
+      const marker: Marker = {
         frame,
-        note: '',
-        color: this._defaultColor,
-      });
+        note: notes && i < notes.length ? notes[i]! : '',
+        color: colors && i < colors.length ? colors[i]! : this._defaultColor,
+      };
+      const endFrame = endFrames && i < endFrames.length ? endFrames[i]! : -1;
+      if (endFrame > frame) {
+        marker.endFrame = endFrame;
+      }
+      this._marks.set(frame, marker);
     }
     this.notifyChange();
   }

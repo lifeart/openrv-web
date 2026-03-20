@@ -26,6 +26,21 @@ function createMockSession() {
 
   session.currentSource = { name: 'test.mp4', duration: 100, fps: 24 };
   session.loopMode = 'once';
+  session._inPoint = 1;
+  session._outPoint = 100;
+
+  Object.defineProperty(session, 'inPoint', {
+    get: () => session._inPoint,
+    set: (v: number) => {
+      session._inPoint = v;
+    },
+  });
+  Object.defineProperty(session, 'outPoint', {
+    get: () => session._outPoint,
+    set: (v: number) => {
+      session._outPoint = v;
+    },
+  });
 
   session.play = vi.fn(() => {
     session._isPlaying = true;
@@ -236,11 +251,12 @@ describe('PlaybackAPI.step() optimization', () => {
       expect(session.goToFrame).toHaveBeenCalledWith(100);
     });
 
-    it('STEP-054: step clamps when loopMode=pingpong', () => {
+    it('STEP-054: step reflects when loopMode=pingpong', () => {
       session.loopMode = 'pingpong';
       session._currentFrame = 95;
       api.step(10);
-      expect(session.goToFrame).toHaveBeenCalledWith(100);
+      // 95 + 10 = 105, exceeds outPoint 100 by 5, reflects back to 95
+      expect(session.goToFrame).toHaveBeenCalledWith(95);
     });
   });
 
@@ -258,6 +274,99 @@ describe('PlaybackAPI.step() optimization', () => {
       api.step(-100);
       expect(session.stepBackward).not.toHaveBeenCalled();
       expect(session.goToFrame).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // =================================================================
+  // Issue #205: multi-frame step respects in/out range and pingpong
+  // =================================================================
+
+  describe('in/out point range enforcement (Issue #205)', () => {
+    it('STEP-060: multi-frame step forward clamps to outPoint (once mode)', () => {
+      session._inPoint = 20;
+      session._outPoint = 80;
+      session._currentFrame = 75;
+      session.loopMode = 'once';
+      api.step(10);
+      expect(session.goToFrame).toHaveBeenCalledWith(80);
+    });
+
+    it('STEP-061: multi-frame step backward clamps to inPoint (once mode)', () => {
+      session._inPoint = 20;
+      session._outPoint = 80;
+      session._currentFrame = 25;
+      session.loopMode = 'once';
+      api.step(-10);
+      expect(session.goToFrame).toHaveBeenCalledWith(20);
+    });
+
+    it('STEP-062: multi-frame step within in/out range works normally', () => {
+      session._inPoint = 20;
+      session._outPoint = 80;
+      session._currentFrame = 50;
+      session.loopMode = 'once';
+      api.step(5);
+      expect(session.goToFrame).toHaveBeenCalledWith(55);
+    });
+
+    it('STEP-063: multi-frame step wraps within in/out range (loop mode)', () => {
+      session._inPoint = 20;
+      session._outPoint = 80;
+      session._currentFrame = 75;
+      session.loopMode = 'loop';
+      api.step(10);
+      // range is [20..80], length 61. 75+10=85. (85-20)%61=4 => 20+4=24
+      expect(session.goToFrame).toHaveBeenCalledWith(24);
+    });
+
+    it('STEP-064: multi-frame step backward wraps within in/out range (loop mode)', () => {
+      session._inPoint = 20;
+      session._outPoint = 80;
+      session._currentFrame = 25;
+      session.loopMode = 'loop';
+      api.step(-10);
+      // 25-10=15. (15-20)%61 = -5 => (-5+61)%61=56 => 20+56=76
+      expect(session.goToFrame).toHaveBeenCalledWith(76);
+    });
+
+    it('STEP-065: pingpong reflects off outPoint within in/out range', () => {
+      session._inPoint = 20;
+      session._outPoint = 80;
+      session._currentFrame = 75;
+      session.loopMode = 'pingpong';
+      api.step(10);
+      // range [20..80], cycle=60. 75+10=85. offset=85-20=65. 65>60 => 80-(65-60)=75
+      expect(session.goToFrame).toHaveBeenCalledWith(75);
+    });
+
+    it('STEP-066: pingpong reflects off inPoint within in/out range', () => {
+      session._inPoint = 20;
+      session._outPoint = 80;
+      session._currentFrame = 25;
+      session.loopMode = 'pingpong';
+      api.step(-10);
+      // 25-10=15. offset=15-20=-5. cycle=60. (-5 % 120 + 120)%120 = 115. 115>60 => 80-(115-60)=25
+      expect(session.goToFrame).toHaveBeenCalledWith(25);
+    });
+
+    it('STEP-067: large forward step wraps correctly with in/out range (loop)', () => {
+      session._inPoint = 10;
+      session._outPoint = 30;
+      session._currentFrame = 15;
+      session.loopMode = 'loop';
+      api.step(50);
+      // range [10..30], length 21. 15+50=65. (65-10)%21=13 => 10+13=23
+      expect(session.goToFrame).toHaveBeenCalledWith(23);
+    });
+
+    it('STEP-068: pingpong with exact boundary hit lands on boundary', () => {
+      session._inPoint = 1;
+      session._outPoint = 100;
+      session._currentFrame = 95;
+      session.loopMode = 'pingpong';
+      api.step(5);
+      // 95+5=100. offset=99. cycle=99. 99<=99 => 1+99=100
+      expect(session.goToFrame).toHaveBeenCalledWith(100);
     });
   });
 

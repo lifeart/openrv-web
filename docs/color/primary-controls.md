@@ -1,6 +1,6 @@
 # Primary Color Controls
 
-OpenRV Web provides a comprehensive set of primary color controls for real-time grading in the browser. These controls operate on scene-referred linear light values within the GPU fragment shader, ensuring mathematically correct results across the full dynamic range of the source material.
+OpenRV Web provides primary color controls for real-time grading in the browser. These controls operate on scene-referred linear light values within the GPU fragment shader, producing mathematically correct results across the full dynamic range of the source material.
 
 ---
 
@@ -178,7 +178,7 @@ Whites adjusts the white clipping point. Positive values lower the white point (
 
 Blacks adjusts the black clipping point. Positive values raise the black point (lifting crushed shadows into visible range), while negative values lower it (expanding the shadow range). Used in combination with whites, these controls define the effective dynamic range of the displayed image.
 
-**Whites and blacks together:** These two controls act as a remapping of the output range. Setting whites to +20 and blacks to +10 compresses the dynamic range, useful for creating a faded, low-contrast look. Setting whites to -10 and blacks to -10 expands the range, increasing overall contrast. For precise control, use these in combination with the histogram scope (`H` key) to verify that the tonal distribution fills the desired output range without clipping.
+**Whites and blacks together:** These two controls act as a remapping of the output range. Setting whites to +20 and blacks to +10 compresses the dynamic range, useful for creating a faded, low-contrast look. Setting whites to -10 and blacks to -10 expands the range, increasing overall contrast. For precise control, use these in combination with the histogram scope to verify that the tonal distribution fills the desired output range without clipping.
 
 ---
 

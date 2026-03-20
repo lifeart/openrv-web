@@ -13,6 +13,7 @@
  * Plugins run in the same JavaScript context as the host application.
  */
 
+import { ENGINE_VERSION, satisfiesMinVersion } from './version';
 import { Signal } from '../core/graph/Signal';
 import { decoderRegistry } from '../formats/DecoderRegistry';
 import { NodeFactory } from '../nodes/base/NodeFactory';
@@ -61,6 +62,30 @@ export class PluginRegistry {
   /** Emitted when a plugin changes state */
   readonly pluginStateChanged = new Signal<{ id: PluginId; state: PluginState }>();
 
+  /**
+   * Emitted when a plugin registers a UI panel.
+   * Consumers can listen to this signal to discover and mount plugin-contributed panels.
+   */
+  readonly uiPanelRegistered = new Signal<{ pluginId: PluginId; panel: UIPanelContribution }>();
+
+  /**
+   * Emitted when a plugin UI panel is unregistered (e.g., on deactivation).
+   * Consumers should remove the panel from any UI surfaces.
+   */
+  readonly uiPanelUnregistered = new Signal<{ pluginId: PluginId; panelId: string }>();
+
+  /**
+   * Emitted when a plugin registers an exporter.
+   * Consumers can listen to this signal for reactive discovery of plugin-contributed exporters.
+   */
+  readonly exporterRegistered = new Signal<{ pluginId: PluginId; name: string; exporter: ExporterContribution }>();
+
+  /**
+   * Emitted when a plugin exporter is unregistered (e.g., on deactivation).
+   * Consumers should remove the exporter from any UI surfaces.
+   */
+  readonly exporterUnregistered = new Signal<{ pluginId: PluginId; name: string }>();
+
   /** Event bus for plugin event subscriptions */
   readonly eventBus = new PluginEventBus();
 
@@ -93,6 +118,23 @@ export class PluginRegistry {
     this.paintEngineRef = engine;
   }
 
+  /**
+   * Detach the registry from the API layer (called during OpenRVAPI.dispose()).
+   *
+   * - Clears the stored `apiRef` so that `context.api` throws instead of
+   *   returning a stale, disposed API instance.
+   * - Disposes the event bus (clears all subscriptions and the eventsAPI ref).
+   * - Clears the PaintEngine reference.
+   *
+   * Does NOT remove registered plugins — after re-initialization via a new
+   * OpenRVAPI + setAPI()/setEventsAPI(), the registry can be used again.
+   */
+  detach(): void {
+    this.apiRef = null;
+    this.paintEngineRef = null;
+    this.eventBus.dispose();
+  }
+
   // -----------------------------------------------------------------------
   // Registration
   // -----------------------------------------------------------------------
@@ -119,6 +161,15 @@ export class PluginRegistry {
     }
     if (!Array.isArray(manifest.contributes) || manifest.contributes.length === 0) {
       throw new Error(`Plugin "${manifest.id}": manifest.contributes must be a non-empty array`);
+    }
+
+    // Validate engineVersion: reject if host version is older than required minimum
+    if (manifest.engineVersion) {
+      if (!satisfiesMinVersion(ENGINE_VERSION, manifest.engineVersion)) {
+        throw new Error(
+          `Plugin "${manifest.id}" requires engine version >=${manifest.engineVersion}, but host is ${ENGINE_VERSION}`,
+        );
+      }
     }
 
     const id = manifest.id;
@@ -292,7 +343,9 @@ export class PluginRegistry {
   }
 
   getRegisteredIds(): PluginId[] {
-    return Array.from(this.plugins.keys());
+    return Array.from(this.plugins.entries())
+      .filter(([, entry]) => entry.state !== 'disposed')
+      .map(([id]) => id);
   }
 
   getExporter(name: string): ExporterContribution | undefined {
@@ -319,12 +372,16 @@ export class PluginRegistry {
   // Dynamic loading
   // -----------------------------------------------------------------------
 
-  /** Allowed URL origins for plugin loading. Empty set = all origins allowed. */
+  /**
+   * Allowed URL origins for plugin loading.
+   * Empty set = no origins allowed (deny-by-default).
+   * Must be explicitly populated via setAllowedOrigins() before loadFromURL() will accept any URL.
+   */
   private allowedOrigins = new Set<string>();
 
   /**
    * Set allowed origins for loadFromURL. Only URLs matching these origins
-   * will be accepted. Pass an empty array to allow all origins (not recommended).
+   * will be accepted. Must be called during bootstrap to allow any plugin loading.
    */
   setAllowedOrigins(origins: string[]): void {
     this.allowedOrigins = new Set(origins);
@@ -334,23 +391,21 @@ export class PluginRegistry {
    * Load a plugin from a URL (ES module with default export).
    * The module must export a default Plugin object.
    *
-   * If allowed origins are configured via setAllowedOrigins(), only URLs
-   * matching those origins will be accepted.
+   * Only URLs whose origin is in the allowlist (set via setAllowedOrigins())
+   * will be accepted. By default no origins are allowed.
    */
   async loadFromURL(url: string): Promise<PluginId> {
-    // Validate origin if allowlist is configured
-    if (this.allowedOrigins.size > 0) {
-      try {
-        const parsed = new URL(url);
-        if (!this.allowedOrigins.has(parsed.origin)) {
-          throw new Error(`Plugin URL origin "${parsed.origin}" is not in the allowed origins list`);
-        }
-      } catch (e) {
-        if (e instanceof TypeError) {
-          throw new Error(`Invalid plugin URL: ${url}`);
-        }
-        throw e;
+    // Always validate origin — deny-by-default when allowlist is empty
+    try {
+      const parsed = new URL(url);
+      if (!this.allowedOrigins.has(parsed.origin)) {
+        throw new Error(`Plugin URL origin "${parsed.origin}" is not in the allowed origins list`);
       }
+    } catch (e) {
+      if (e instanceof TypeError) {
+        throw new Error(`Invalid plugin URL: ${url}`);
+      }
+      throw e;
     }
 
     const module = await import(/* @vite-ignore */ url);
@@ -395,6 +450,10 @@ export class PluginRegistry {
       registerExporter: (name: string, exporter: ExporterContribution) => {
         ExporterRegistry.register(name, exporter);
         reg.exporters.push(name);
+        registry.exporterRegistered.emit(
+          { pluginId: manifest.id, name, exporter },
+          { pluginId: manifest.id, name, exporter },
+        );
       },
       registerBlendMode: (name: string, contribution: BlendModeContribution) => {
         registry.blendModeRegistry.set(name, contribution);
@@ -403,13 +462,16 @@ export class PluginRegistry {
       registerUIPanel: (panel: UIPanelContribution) => {
         registry.uiPanelRegistry.set(panel.id, panel);
         reg.uiPanels.push(panel.id);
+        registry.uiPanelRegistered.emit({ pluginId: manifest.id, panel }, { pluginId: manifest.id, panel });
       },
       get api() {
         if (!registry.apiRef) throw new Error('OpenRV API not yet initialized');
         return registry.apiRef;
       },
       events: registry.eventBus.createSubscription(manifest.id),
-      settings: registry.settingsStore.createAccessor(manifest.id),
+      settings: manifest.settingsSchema
+        ? registry.settingsStore.createAccessor(manifest.id)
+        : registry.settingsStore.createNoopAccessor(manifest.id),
       log: {
         info: (msg: string, ...args: unknown[]) => console.log(`[plugin:${manifest.id}]`, msg, ...args),
         warn: (msg: string, ...args: unknown[]) => console.warn(`[plugin:${manifest.id}]`, msg, ...args),
@@ -462,6 +524,7 @@ export class PluginRegistry {
       for (const name of reg.exporters) {
         try {
           ExporterRegistry.unregister(name);
+          this.exporterUnregistered.emit({ pluginId, name }, { pluginId, name });
         } catch (e) {
           console.warn(`[plugin:${pluginId}] Failed to unregister exporter "${name}":`, e);
         }
@@ -482,6 +545,7 @@ export class PluginRegistry {
           const panel = this.uiPanelRegistry.get(id);
           panel?.destroy?.();
           this.uiPanelRegistry.delete(id);
+          this.uiPanelUnregistered.emit({ pluginId, panelId: id }, { pluginId, panelId: id });
         } catch (e) {
           console.warn(`[plugin:${pluginId}] Failed to unregister UI panel "${id}":`, e);
         }

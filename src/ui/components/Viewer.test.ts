@@ -15,6 +15,15 @@ import type { StackLayer } from './StackControl';
 import type { MediaSource } from '../../core/session/Session';
 import type { CropRegion, CropState } from './CropControl';
 import type { PixelProbe } from './PixelProbe';
+import { queryHDRHeadroom } from '../../color/DisplayCapabilities';
+
+vi.mock('../../color/DisplayCapabilities', async (importOriginal) => {
+  const orig = await importOriginal<typeof import('../../color/DisplayCapabilities')>();
+  return {
+    ...orig,
+    queryHDRHeadroom: vi.fn().mockResolvedValue(null),
+  };
+});
 
 // Type-safe accessor for private Viewer internals used in tests.
 // This avoids `as any` casts while keeping tests readable.
@@ -117,6 +126,12 @@ interface TestableViewer {
   // Render scheduling internals (FPS regression tests)
   pendingRender: boolean;
 
+  // HDR headroom tracking
+  lastSystemHDRHeadroom: number;
+  capabilities: { displayHDR: boolean } | undefined;
+  syncHDRHeadroomFromSystem(): void;
+  scheduleRender(): void;
+
   // Ghost frame canvas pool
 
   // SDR WebGL rendering (Phase 1A + 1B) - via glRendererManager
@@ -131,6 +146,7 @@ interface TestableViewer {
     _glRenderer: unknown;
     hasGPUShaderEffectsActive(): boolean;
     hasCPUOnlyEffectsActive(): boolean;
+    setHDRHeadroom(headroom: number): void;
   };
   // Convenience aliases (delegated)
   hasGPUShaderEffectsActive(): boolean;
@@ -360,6 +376,7 @@ describe('Viewer', () => {
   describe('LUT handling', () => {
     it('VWR-021: setLUT stores LUT', () => {
       const mockLUT: LUT3D = {
+        type: '3d',
         title: 'Test',
         size: 17,
         data: new Float32Array(17 * 17 * 17 * 3),
@@ -372,6 +389,7 @@ describe('Viewer', () => {
 
     it('VWR-022: setLUT accepts null', () => {
       const mockLUT: LUT3D = {
+        type: '3d',
         title: 'Test',
         size: 17,
         data: new Float32Array(17 * 17 * 17 * 3),
@@ -1672,6 +1690,248 @@ describe('Viewer', () => {
       t.renderPaint();
       expect(t.paintDirty).toBe(false);
       expect(t.paintHasContent).toBe(true);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Issue #145: LUT pipeline falls back to a generated single LUT when no GPU chain exists
+  // -----------------------------------------------------------------------
+  describe('issue #145: LUT pipeline no GPU chain fallback', () => {
+    it('VWR-145: syncLUTPipeline bakes active stages into the single-LUT path when no GPU chain exists', () => {
+      const t = testable(viewer);
+      t.colorPipeline['_gpuLUTChain'] = null;
+      t.colorPipeline['_lutProcessor'] = {
+        setLUT: vi.fn(),
+        applyLUTToCanvas: vi.fn(),
+        dispose: vi.fn(),
+      } as unknown as import('../../color/WebGLLUT').WebGLLUTProcessor;
+      const pipeline = t.colorPipeline.lutPipeline;
+      pipeline.registerSource('test');
+      pipeline.setActiveSource('test');
+      const config = pipeline.getSourceConfig('test');
+      if (config) {
+        const redLUTData = new Float32Array([1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0]);
+        config.fileLUT.lutData = {
+          type: '3d',
+          title: 'File LUT',
+          size: 2,
+          domainMin: [0, 0, 0],
+          domainMax: [1, 1, 1],
+          data: redLUTData,
+        };
+        config.fileLUT.lutName = 'file.cube';
+        config.fileLUT.enabled = true;
+        config.fileLUT.intensity = 1;
+      }
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      viewer.syncLUTPipeline();
+
+      expect(warnSpy).not.toHaveBeenCalled();
+      expect(t.colorPipeline.currentLUT).not.toBeNull();
+      expect(t.colorPipeline.currentLUT?.title).toContain('file.cube');
+      expect(t.colorPipeline.currentLUT?.data[0]).toBe(1);
+      expect(t.colorPipeline.currentLUT?.data[1]).toBe(0);
+      expect(t.colorPipeline.currentLUT?.data[2]).toBe(0);
+      expect(viewer.getLUTIntensity()).toBe(1);
+      warnSpy.mockRestore();
+    });
+  });
+
+  describe('setHDROutputMode', () => {
+    function makeMockRenderer(acceptMode: boolean) {
+      return { setHDROutputMode: vi.fn(() => acceptMode), dispose: vi.fn() };
+    }
+
+    it('VWR-HDR-001: returns true when renderer accepts the mode', () => {
+      const t = testable(viewer);
+      const mockRenderer = makeMockRenderer(true);
+      const mockCapabilities = { webglP3: false };
+      t.glRendererManager._glRenderer = mockRenderer;
+      (t.glRendererManager as unknown as { _capabilities: unknown })._capabilities = mockCapabilities;
+      const result = viewer.setHDROutputMode('hlg');
+      expect(result).toBe(true);
+      expect(mockRenderer.setHDROutputMode).toHaveBeenCalledWith('hlg', mockCapabilities);
+    });
+
+    it('VWR-HDR-002: returns false when renderer rejects the mode', () => {
+      const t = testable(viewer);
+      const mockRenderer = makeMockRenderer(false);
+      const mockCapabilities = { webglP3: false };
+      t.glRendererManager._glRenderer = mockRenderer;
+      (t.glRendererManager as unknown as { _capabilities: unknown })._capabilities = mockCapabilities;
+      const result = viewer.setHDROutputMode('pq');
+      expect(result).toBe(false);
+    });
+
+    it('VWR-HDR-003: returns false when no renderer is available', () => {
+      const t = testable(viewer);
+      t.glRendererManager._glRenderer = null;
+      const result = viewer.setHDROutputMode('hlg');
+      expect(result).toBe(false);
+    });
+
+    it('VWR-HDR-004: schedules render on successful mode change', () => {
+      const t = testable(viewer);
+      const mockRenderer = makeMockRenderer(true);
+      const mockCapabilities = { webglP3: false };
+      t.glRendererManager._glRenderer = mockRenderer;
+      (t.glRendererManager as unknown as { _capabilities: unknown })._capabilities = mockCapabilities;
+      t.pendingRender = false;
+      viewer.setHDROutputMode('hlg');
+      expect(t.pendingRender).toBe(true);
+    });
+
+    it('VWR-HDR-005: does NOT schedule render when renderer rejects mode', () => {
+      const t = testable(viewer);
+      const mockRenderer = makeMockRenderer(false);
+      const mockCapabilities = { webglP3: false };
+      t.glRendererManager._glRenderer = mockRenderer;
+      (t.glRendererManager as unknown as { _capabilities: unknown })._capabilities = mockCapabilities;
+      t.pendingRender = false;
+      viewer.setHDROutputMode('pq');
+      expect(t.pendingRender).toBe(false);
+    });
+  });
+
+  describe('HDR headroom async redraw (issue #226)', () => {
+    const mockedQueryHDRHeadroom = vi.mocked(queryHDRHeadroom);
+
+    beforeEach(() => {
+      mockedQueryHDRHeadroom.mockReset();
+    });
+
+    it('VWR-HDRHROOM-001: scheduleRender is called after async headroom resolves with a new value', async () => {
+      const t = testable(viewer);
+      // Enable HDR capabilities so the guard passes
+      t.capabilities = { displayHDR: true };
+
+      // Mock queryHDRHeadroom to resolve with a non-default value
+      mockedQueryHDRHeadroom.mockResolvedValue(3.5);
+
+      const setHDRHeadroomSpy = vi.fn();
+      t.glRendererManager.setHDRHeadroom = setHDRHeadroomSpy;
+      const scheduleRenderSpy = vi.spyOn(t, 'scheduleRender');
+
+      t.syncHDRHeadroomFromSystem();
+
+      // Wait for the promise to resolve
+      await vi.waitFor(() => {
+        expect(setHDRHeadroomSpy).toHaveBeenCalledWith(3.5);
+      });
+
+      expect(scheduleRenderSpy).toHaveBeenCalled();
+      expect(t.lastSystemHDRHeadroom).toBe(3.5);
+    });
+
+    it('VWR-HDRHROOM-002: does NOT scheduleRender when headroom is the same as last known value', async () => {
+      const t = testable(viewer);
+      t.capabilities = { displayHDR: true };
+      t.lastSystemHDRHeadroom = 2.5;
+
+      mockedQueryHDRHeadroom.mockResolvedValue(2.5);
+
+      const setHDRHeadroomSpy = vi.fn();
+      t.glRendererManager.setHDRHeadroom = setHDRHeadroomSpy;
+      const scheduleRenderSpy = vi.spyOn(t, 'scheduleRender');
+
+      t.syncHDRHeadroomFromSystem();
+
+      // Let promise resolve
+      await new Promise((r) => setTimeout(r, 10));
+
+      expect(setHDRHeadroomSpy).not.toHaveBeenCalled();
+      expect(scheduleRenderSpy).not.toHaveBeenCalled();
+    });
+
+    it('VWR-HDRHROOM-003: does NOT scheduleRender when headroom query returns null', async () => {
+      const t = testable(viewer);
+      t.capabilities = { displayHDR: true };
+
+      mockedQueryHDRHeadroom.mockResolvedValue(null);
+
+      const setHDRHeadroomSpy = vi.fn();
+      t.glRendererManager.setHDRHeadroom = setHDRHeadroomSpy;
+      const scheduleRenderSpy = vi.spyOn(t, 'scheduleRender');
+
+      t.syncHDRHeadroomFromSystem();
+
+      await new Promise((r) => setTimeout(r, 10));
+
+      expect(setHDRHeadroomSpy).not.toHaveBeenCalled();
+      expect(scheduleRenderSpy).not.toHaveBeenCalled();
+    });
+
+    it('VWR-HDRHROOM-004: does NOT scheduleRender when displayHDR capability is missing', async () => {
+      const t = testable(viewer);
+      t.capabilities = undefined;
+
+      mockedQueryHDRHeadroom.mockResolvedValue(3.0);
+      const scheduleRenderSpy = vi.spyOn(t, 'scheduleRender');
+
+      t.syncHDRHeadroomFromSystem();
+
+      await new Promise((r) => setTimeout(r, 10));
+
+      expect(mockedQueryHDRHeadroom).not.toHaveBeenCalled();
+      expect(scheduleRenderSpy).not.toHaveBeenCalled();
+    });
+
+    it('VWR-HDRHROOM-005: does NOT scheduleRender when headroom query rejects', async () => {
+      const t = testable(viewer);
+      t.capabilities = { displayHDR: true };
+
+      mockedQueryHDRHeadroom.mockRejectedValue(new Error('Permission denied'));
+
+      const setHDRHeadroomSpy = vi.fn();
+      t.glRendererManager.setHDRHeadroom = setHDRHeadroomSpy;
+      const scheduleRenderSpy = vi.spyOn(t, 'scheduleRender');
+
+      t.syncHDRHeadroomFromSystem();
+
+      await new Promise((r) => setTimeout(r, 10));
+
+      expect(setHDRHeadroomSpy).not.toHaveBeenCalled();
+      expect(scheduleRenderSpy).not.toHaveBeenCalled();
+    });
+
+    it('VWR-HDRHROOM-006: updates lastSystemHDRHeadroom and schedules render on changed headroom', async () => {
+      const t = testable(viewer);
+      t.capabilities = { displayHDR: true };
+      t.lastSystemHDRHeadroom = 1.0;
+
+      const setHDRHeadroomSpy = vi.fn();
+      t.glRendererManager.setHDRHeadroom = setHDRHeadroomSpy;
+      const scheduleRenderSpy = vi.spyOn(t, 'scheduleRender');
+
+      // First call with 2.0
+      mockedQueryHDRHeadroom.mockResolvedValue(2.0);
+      t.syncHDRHeadroomFromSystem();
+      await vi.waitFor(() => {
+        expect(setHDRHeadroomSpy).toHaveBeenCalledWith(2.0);
+      });
+      expect(t.lastSystemHDRHeadroom).toBe(2.0);
+      expect(scheduleRenderSpy).toHaveBeenCalledTimes(1);
+
+      setHDRHeadroomSpy.mockClear();
+      scheduleRenderSpy.mockClear();
+
+      // Second call with same value - should not trigger
+      mockedQueryHDRHeadroom.mockResolvedValue(2.0);
+      t.syncHDRHeadroomFromSystem();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(setHDRHeadroomSpy).not.toHaveBeenCalled();
+      expect(scheduleRenderSpy).not.toHaveBeenCalled();
+
+      // Third call with new value - should trigger
+      mockedQueryHDRHeadroom.mockResolvedValue(4.0);
+      t.syncHDRHeadroomFromSystem();
+      await vi.waitFor(() => {
+        expect(setHDRHeadroomSpy).toHaveBeenCalledWith(4.0);
+      });
+      expect(scheduleRenderSpy).toHaveBeenCalledTimes(1);
+      expect(t.lastSystemHDRHeadroom).toBe(4.0);
     });
   });
 });

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { PlaylistManager, type PlaylistState } from './PlaylistManager';
+import { TransitionManager } from './TransitionManager';
 
 describe('PlaylistManager', () => {
   let manager: PlaylistManager;
@@ -326,6 +327,113 @@ describe('PlaylistManager', () => {
       expect(manager.getLoopMode()).toBe('single');
       expect(manager.getCurrentFrame()).toBe(50);
     });
+
+    it('should restore currentFrame before enabling so enabledChanged sees saved position (#406)', () => {
+      const savedState: PlaylistState = {
+        clips: [
+          {
+            id: 'clip-1',
+            sourceIndex: 0,
+            sourceName: 'Test',
+            inPoint: 1,
+            outPoint: 100,
+            globalStartFrame: 1,
+            duration: 100,
+          },
+        ],
+        enabled: true,
+        currentFrame: 75,
+        loopMode: 'none',
+      };
+
+      let frameAtEnableTime = -1;
+      manager.on('enabledChanged', () => {
+        frameAtEnableTime = manager.getCurrentFrame();
+      });
+
+      manager.setState(savedState);
+
+      // The enabledChanged handler must see the saved currentFrame, not the default 1
+      expect(frameAtEnableTime).toBe(75);
+      expect(manager.getCurrentFrame()).toBe(75);
+    });
+
+    it('should preserve currentFrame when enabling with pre-set frame via setState (#406)', () => {
+      const savedState: PlaylistState = {
+        clips: [
+          {
+            id: 'clip-1',
+            sourceIndex: 0,
+            sourceName: 'Source A',
+            inPoint: 10,
+            outPoint: 50,
+            globalStartFrame: 1,
+            duration: 41,
+          },
+          {
+            id: 'clip-2',
+            sourceIndex: 1,
+            sourceName: 'Source B',
+            inPoint: 1,
+            outPoint: 30,
+            globalStartFrame: 42,
+            duration: 30,
+          },
+        ],
+        enabled: true,
+        currentFrame: 55,
+        loopMode: 'all',
+      };
+
+      manager.setState(savedState);
+
+      // Frame 55 is in the second clip (globalStartFrame 42, duration 30)
+      expect(manager.getCurrentFrame()).toBe(55);
+      expect(manager.isEnabled()).toBe(true);
+      expect(manager.getClipCount()).toBe(2);
+    });
+
+    it('should emit transitionsReset when restoring state with transitions (#408)', () => {
+      const tm = new TransitionManager();
+      manager.setTransitionManager(tm);
+
+      const callback = vi.fn();
+      tm.on('transitionsReset', callback);
+
+      const savedState: PlaylistState = {
+        clips: [
+          {
+            id: 'clip-1',
+            sourceIndex: 0,
+            sourceName: 'Source A',
+            inPoint: 1,
+            outPoint: 50,
+            globalStartFrame: 1,
+            duration: 50,
+          },
+          {
+            id: 'clip-2',
+            sourceIndex: 1,
+            sourceName: 'Source B',
+            inPoint: 1,
+            outPoint: 30,
+            globalStartFrame: 51,
+            duration: 30,
+          },
+        ],
+        enabled: false,
+        currentFrame: 1,
+        loopMode: 'none',
+        transitions: [{ type: 'crossfade', durationFrames: 10 }],
+      };
+
+      manager.setState(savedState);
+
+      expect(callback).toHaveBeenCalledTimes(1);
+      expect(tm.getTransition(0)).toEqual({ type: 'crossfade', durationFrames: 10 });
+
+      tm.dispose();
+    });
   });
 
   describe('toEDL', () => {
@@ -599,6 +707,101 @@ FCM: NON-DROP FRAME
 
     it('returns null on empty playlist', () => {
       expect(manager.getClipForSource(0)).toBeNull();
+    });
+  });
+
+  describe('fromOTIO with markerImporter', () => {
+    function makeOTIOJson(markers?: unknown[]) {
+      return JSON.stringify({
+        OTIO_SCHEMA: 'Timeline.1',
+        name: 'Test',
+        global_start_time: { OTIO_SCHEMA: 'RationalTime.1', value: 0, rate: 24 },
+        tracks: {
+          OTIO_SCHEMA: 'Stack.1',
+          name: 'Tracks',
+          children: [
+            {
+              OTIO_SCHEMA: 'Track.1',
+              name: 'Video 1',
+              kind: 'Video',
+              children: [
+                {
+                  OTIO_SCHEMA: 'Clip.1',
+                  name: 'shot_01',
+                  source_range: {
+                    OTIO_SCHEMA: 'TimeRange.1',
+                    start_time: { OTIO_SCHEMA: 'RationalTime.1', value: 0, rate: 24 },
+                    duration: { OTIO_SCHEMA: 'RationalTime.1', value: 48, rate: 24 },
+                  },
+                  media_reference: {
+                    OTIO_SCHEMA: 'ExternalReference.1',
+                    target_url: '/media/shot_01.exr',
+                  },
+                },
+              ],
+            },
+          ],
+        },
+        ...(markers ? { markers } : {}),
+      });
+    }
+
+    const resolver = (name: string) => {
+      if (name === 'shot_01') return { index: 0, frameCount: 100 };
+      return null;
+    };
+
+    it('calls markerImporter with parsed markers', () => {
+      const markerImporter = vi.fn();
+      const json = makeOTIOJson([
+        {
+          OTIO_SCHEMA: 'Marker.1',
+          name: 'ReviewNote',
+          color: 'RED',
+          marked_range: {
+            OTIO_SCHEMA: 'TimeRange.1',
+            start_time: { OTIO_SCHEMA: 'RationalTime.1', value: 10, rate: 24 },
+            duration: { OTIO_SCHEMA: 'RationalTime.1', value: 0, rate: 24 },
+          },
+        },
+      ]);
+
+      manager.fromOTIO(json, resolver, { markerImporter });
+
+      expect(markerImporter).toHaveBeenCalledTimes(1);
+      expect(markerImporter).toHaveBeenCalledWith(
+        expect.arrayContaining([expect.objectContaining({ name: 'ReviewNote', color: '#ff4444', timelineFrame: 10 })]),
+      );
+    });
+
+    it('does not call markerImporter when there are no markers', () => {
+      const markerImporter = vi.fn();
+      const json = makeOTIOJson();
+
+      manager.fromOTIO(json, resolver, { markerImporter });
+
+      expect(markerImporter).not.toHaveBeenCalled();
+    });
+
+    it('stores markers in lastOTIOImportResult even without markerImporter', () => {
+      const json = makeOTIOJson([
+        {
+          OTIO_SCHEMA: 'Marker.1',
+          name: 'Note',
+          marked_range: {
+            OTIO_SCHEMA: 'TimeRange.1',
+            start_time: { OTIO_SCHEMA: 'RationalTime.1', value: 5, rate: 24 },
+            duration: { OTIO_SCHEMA: 'RationalTime.1', value: 0, rate: 24 },
+          },
+        },
+      ]);
+
+      manager.fromOTIO(json, resolver);
+
+      const result = manager.lastOTIOImportResult;
+      expect(result).not.toBeNull();
+      expect(result!.markers).toHaveLength(1);
+      expect(result!.markers[0]!.name).toBe('Note');
     });
   });
 });

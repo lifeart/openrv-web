@@ -98,6 +98,48 @@ function unmockLibheif() {
   vi.doUnmock('libheif-js');
 }
 
+function uint16BE(value: number): number[] {
+  return [(value >> 8) & 0xff, value & 0xff];
+}
+
+function uint32BE(value: number): number[] {
+  return [(value >> 24) & 0xff, (value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff];
+}
+
+function strBytes(str: string): number[] {
+  const bytes: number[] = [];
+  for (let i = 0; i < str.length; i++) bytes.push(str.charCodeAt(i));
+  return bytes;
+}
+
+function buildInfe(itemId: number, itemType: string): number[] {
+  return [
+    ...uint32BE(20),
+    ...strBytes('infe'),
+    0x02,
+    0x00,
+    0x00,
+    0x00,
+    ...uint16BE(itemId),
+    ...uint16BE(0),
+    ...strBytes(itemType),
+  ];
+}
+
+function createTestHEICBuffer(primaryItemId: number, itemTypes: string[]): ArrayBuffer {
+  const ftyp = [...uint32BE(16), ...strBytes('ftyp'), ...strBytes('heic'), 0, 0, 0, 0];
+
+  const pitm = [...uint32BE(14), ...strBytes('pitm'), 0, 0, 0, 0, ...uint16BE(primaryItemId)];
+  const infeEntries = itemTypes.flatMap((itemType, index) => buildInfe(index + 1, itemType));
+  const iinfSize = 14 + infeEntries.length;
+  const iinf = [...uint32BE(iinfSize), ...strBytes('iinf'), 0, 0, 0, 0, ...uint16BE(itemTypes.length), ...infeEntries];
+
+  const metaContent = [...pitm, ...iinf];
+  const meta = [...uint32BE(12 + metaContent.length), ...strBytes('meta'), 0, 0, 0, 0, ...metaContent];
+
+  return new Uint8Array([...ftyp, ...meta]).buffer;
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -508,6 +550,30 @@ describe('HEICWasmDecoder', () => {
         expect(img.free).toHaveBeenCalledOnce();
       }
 
+      unmockLibheif();
+    });
+  });
+
+  // =========================================================================
+  // Issue #143: infer primary item from HEIC metadata when is_primary() is unavailable
+  // =========================================================================
+  describe('issue #143: metadata fallback for primary image selection', () => {
+    it('HEIC-143: uses pitm metadata instead of guessing index 0 when is_primary() throws', async () => {
+      const first = createMockImage({ width: 3, height: 3, fillValue: 10, isPrimaryThrows: true });
+      const primary = createMockImage({ width: 5, height: 5, fillValue: 99, isPrimaryThrows: true });
+      mockLibheif([first, primary]);
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const { decodeHEICToImageData } = await import('./HEICWasmDecoder');
+      const result = await decodeHEICToImageData(createTestHEICBuffer(2, ['hvc1', 'hvc1']));
+
+      expect(result.width).toBe(5);
+      expect(result.height).toBe(5);
+      expect(result.data[0]).toBe(99);
+      expect(warnSpy).not.toHaveBeenCalled();
+
+      warnSpy.mockRestore();
       unmockLibheif();
     });
   });

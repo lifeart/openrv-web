@@ -29,6 +29,7 @@ describe('ReferenceManager', () => {
     expect(state.viewMode).toBe('split-h');
     expect(state.opacity).toBe(0.5);
     expect(state.wipePosition).toBe(0.5);
+    expect(state.showingReference).toBe(false);
   });
 
   // ===========================================================================
@@ -450,6 +451,105 @@ describe('ReferenceManager', () => {
     expect(state.viewMode).toBe('split-h');
     expect(state.opacity).toBe(0.5);
     expect(state.wipePosition).toBe(0.5);
+  });
+
+  // ===========================================================================
+  // 16. Toggle view (showingReference) — issue #333
+  // ===========================================================================
+
+  it('REF-030: showingReference starts as false (showing live)', () => {
+    expect(mgr.isShowingReference()).toBe(false);
+    const state = mgr.getState();
+    expect(state.showingReference).toBe(false);
+  });
+
+  it('REF-031: toggleView() flips showingReference in toggle mode', () => {
+    mgr.setViewMode('toggle');
+    mgr.toggleView();
+    expect(mgr.isShowingReference()).toBe(true);
+  });
+
+  it('REF-032: multiple toggleView() calls alternate correctly', () => {
+    mgr.setViewMode('toggle');
+    mgr.toggleView();
+    expect(mgr.isShowingReference()).toBe(true);
+    mgr.toggleView();
+    expect(mgr.isShowingReference()).toBe(false);
+    mgr.toggleView();
+    expect(mgr.isShowingReference()).toBe(true);
+  });
+
+  it('REF-033: setViewMode resets showingReference to false', () => {
+    mgr.setViewMode('toggle');
+    mgr.toggleView();
+    expect(mgr.isShowingReference()).toBe(true);
+
+    mgr.setViewMode('overlay');
+    expect(mgr.isShowingReference()).toBe(false);
+  });
+
+  it('REF-034: toggleView() emits stateChanged with updated showingReference', () => {
+    mgr.setViewMode('toggle');
+    const spy = vi.fn();
+    mgr.on('stateChanged', spy);
+
+    mgr.toggleView();
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    const emitted: ReferenceState = spy.mock.calls[0]![0];
+    expect(emitted.showingReference).toBe(true);
+  });
+
+  it('REF-035: showingReference is exposed in getState()', () => {
+    mgr.setViewMode('toggle');
+    mgr.toggleView();
+    const state = mgr.getState();
+    expect(state.showingReference).toBe(true);
+
+    mgr.toggleView();
+    const state2 = mgr.getState();
+    expect(state2.showingReference).toBe(false);
+  });
+
+  it('REF-036: toggleView() is a no-op after dispose', () => {
+    mgr.setViewMode('toggle');
+    mgr.toggleView();
+    mgr.dispose();
+    expect(mgr.isShowingReference()).toBe(false);
+    // Should not throw
+    mgr.toggleView();
+    expect(mgr.isShowingReference()).toBe(false);
+  });
+
+  it('REF-038: toggleView() is a no-op in non-toggle modes', () => {
+    mgr.setViewMode('overlay');
+    mgr.toggleView();
+    expect(mgr.isShowingReference()).toBe(false);
+
+    mgr.setViewMode('split-h');
+    mgr.toggleView();
+    expect(mgr.isShowingReference()).toBe(false);
+  });
+
+  it('REF-039: disable() resets showingReference', () => {
+    mgr.enable();
+    mgr.setViewMode('toggle');
+    mgr.toggleView();
+    expect(mgr.isShowingReference()).toBe(true);
+    mgr.disable();
+    expect(mgr.isShowingReference()).toBe(false);
+  });
+
+  it('REF-037: switching to toggle mode and back resets showingReference', () => {
+    mgr.setViewMode('toggle');
+    mgr.toggleView();
+    expect(mgr.isShowingReference()).toBe(true);
+
+    mgr.setViewMode('split-h');
+    expect(mgr.isShowingReference()).toBe(false);
+
+    mgr.setViewMode('toggle');
+    expect(mgr.isShowingReference()).toBe(false);
   });
 
   it('REF-009d: disable when already disabled is a no-op', () => {

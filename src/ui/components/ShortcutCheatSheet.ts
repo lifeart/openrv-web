@@ -22,6 +22,7 @@ export class ShortcutCheatSheet {
   private context: string | null = null;
   private filterQuery: string = '';
   private disposed = false;
+  private boundOnClickOutside: ((e: MouseEvent) => void) | null = null;
 
   constructor(container: HTMLElement, manager: ShortcutEditorManager) {
     this.container = container;
@@ -43,11 +44,21 @@ export class ShortcutCheatSheet {
     if (this.disposed) return;
     this.render();
     this.overlay.style.display = '';
+
+    // Register click-outside handler (mousedown for better UX)
+    this.boundOnClickOutside = this.onClickOutside.bind(this);
+    document.addEventListener('mousedown', this.boundOnClickOutside);
   }
 
   hide(): void {
     if (this.disposed) return;
     this.overlay.style.display = 'none';
+
+    // Remove click-outside handler
+    if (this.boundOnClickOutside) {
+      document.removeEventListener('mousedown', this.boundOnClickOutside);
+      this.boundOnClickOutside = null;
+    }
   }
 
   toggle(): void {
@@ -166,6 +177,21 @@ export class ShortcutCheatSheet {
     }
 
     this.overlay.appendChild(columnsWrapper);
+  }
+
+  // -------------------------------------------------------------------------
+  // Outside-click dismiss
+  // -------------------------------------------------------------------------
+
+  private onClickOutside(e: MouseEvent): void {
+    const target = e.target as Node;
+    // Dismiss if the click landed on the overlay backdrop itself
+    // (i.e. not inside the content area)
+    const content = this.overlay.querySelector('.cheatsheet-columns');
+    if (content && content.contains(target)) {
+      return; // Click inside content – do nothing
+    }
+    this.hide();
   }
 
   // -------------------------------------------------------------------------

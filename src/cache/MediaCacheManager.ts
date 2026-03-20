@@ -80,6 +80,7 @@ export class MediaCacheManager extends EventEmitter<CacheManagerEvents> {
   private opfsRoot: FileSystemDirectoryHandle | null = null;
   private mediaDir: FileSystemDirectoryHandle | null = null;
   private initialized = false;
+  private _writableSupported = false;
   private pendingWrites = new Set<string>();
 
   constructor(config?: Partial<CacheConfig>) {
@@ -109,7 +110,13 @@ export class MediaCacheManager extends EventEmitter<CacheManagerEvents> {
       this.opfsRoot = await storageRoot.getDirectoryHandle(this.config.opfsRootDir, { create: true });
       this.mediaDir = await this.opfsRoot.getDirectoryHandle('media', { create: true });
 
-      // 2. Open IndexedDB
+      // 2. Probe createWritable support
+      this._writableSupported = await this.probeCreateWritable();
+      if (!this._writableSupported) {
+        log.warn('createWritable not supported – OPFS write caching disabled');
+      }
+
+      // 3. Open IndexedDB
       this.db = await this.openDB();
 
       this.initialized = true;
@@ -153,6 +160,7 @@ export class MediaCacheManager extends EventEmitter<CacheManagerEvents> {
    */
   async put(cacheKey: string, data: ArrayBuffer, meta: CacheEntryMeta): Promise<boolean> {
     if (!this.initialized || !this.mediaDir || !this.db) return false;
+    if (!this._writableSupported) return false;
 
     this.pendingWrites.add(cacheKey);
 
@@ -320,6 +328,7 @@ export class MediaCacheManager extends EventEmitter<CacheManagerEvents> {
     this.opfsRoot = null;
     this.mediaDir = null;
     this.initialized = false;
+    this._writableSupported = false;
     this.pendingWrites.clear();
     this.removeAllListeners();
   }
@@ -327,6 +336,30 @@ export class MediaCacheManager extends EventEmitter<CacheManagerEvents> {
   // -----------------------------------------------------------------------
   // Internal helpers – OPFS
   // -----------------------------------------------------------------------
+
+  /**
+   * Probe whether the OPFS file handles support `createWritable`.
+   * Creates (and removes) a temporary file to check.
+   */
+  private async probeCreateWritable(): Promise<boolean> {
+    if (!this.mediaDir) return false;
+    const probeName = '__probe_writable__';
+    try {
+      const probeHandle = await this.mediaDir.getFileHandle(probeName, { create: true });
+      const supported =
+        'createWritable' in probeHandle &&
+        typeof (probeHandle as unknown as Record<string, unknown>).createWritable === 'function';
+      return supported;
+    } catch {
+      return false;
+    } finally {
+      try {
+        await this.mediaDir.removeEntry(probeName);
+      } catch {
+        // best effort cleanup
+      }
+    }
+  }
 
   private async writeFile(key: string, data: ArrayBuffer): Promise<void> {
     if (!this.mediaDir) return;

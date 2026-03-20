@@ -1,13 +1,18 @@
 /**
  * ExternalPresentation - Multi-device presentation via secondary browser windows.
  *
- * Opens a secondary window (or multiple windows) showing only the viewer canvas
- * without UI controls. Frame/playback state is synchronized between windows
+ * Opens a secondary window (or multiple windows) that display frame, playback,
+ * and color metadata as text overlays. State is synchronized between windows
  * using the BroadcastChannel API for low-latency, same-origin communication.
+ *
+ * **Limitation:** The presentation window contains a canvas element but does not
+ * render the actual viewer image. Only text status information (frame number,
+ * playback state, color settings) is displayed. Full viewer rendering
+ * synchronization is not yet implemented (see issue #29).
  *
  * Features:
  * - Open/close presentation windows
- * - Sync frame number, playback state, and color settings
+ * - Sync frame number, playback state, and color settings as text overlays
  * - BroadcastChannel-based message passing (no server required)
  * - Window lifecycle management (detect external close)
  */
@@ -130,7 +135,8 @@ const DEFAULT_WINDOW_FEATURES =
 
 /**
  * Generate the HTML content for a presentation window.
- * This creates a minimal page with just a canvas element for rendering.
+ * This creates a minimal page with a canvas placeholder and text-only status
+ * overlays. It does not render the actual viewer image (see issue #29).
  */
 /** Escape a string for safe inclusion in a JS string literal. */
 function escapeJSString(s: string): string {
@@ -180,6 +186,26 @@ export function generatePresentationHTML(windowId: string, channelName: string, 
       timestamp: Date.now(),
     });
 
+    // Presentation state
+    var playbackState = { playing: false, playbackRate: 1.0, frame: 0 };
+    var colorState = {};
+
+    function updateInfoDisplay() {
+      var parts = ['Frame: ' + playbackState.frame];
+      if (playbackState.playing) {
+        parts.push('\\u25B6 ' + playbackState.playbackRate + 'x');
+      } else {
+        parts.push('\\u23F8');
+      }
+      var colorParts = [];
+      if (colorState.exposure !== undefined) colorParts.push('Exp:' + colorState.exposure.toFixed(2));
+      if (colorState.gamma !== undefined) colorParts.push('\\u03B3:' + colorState.gamma.toFixed(2));
+      if (colorState.temperature !== undefined) colorParts.push('Temp:' + colorState.temperature + 'K');
+      if (colorState.tint !== undefined) colorParts.push('Tint:' + colorState.tint.toFixed(2));
+      if (colorParts.length > 0) parts.push(colorParts.join(' '));
+      document.getElementById('info').textContent = parts.join(' | ');
+    }
+
     // Handle messages
     channel.onmessage = function(event) {
       const msg = event.data;
@@ -198,8 +224,31 @@ export function generatePresentationHTML(windowId: string, channelName: string, 
           });
           break;
         case 'syncFrame':
+          playbackState.frame = msg.frame;
           document.getElementById('info').textContent =
             'Frame: ' + msg.frame + ' / ' + msg.totalFrames;
+          break;
+        case 'syncPlayback':
+          playbackState.playing = msg.playing;
+          playbackState.playbackRate = msg.playbackRate;
+          playbackState.frame = msg.frame;
+          updateInfoDisplay();
+          console.info('[OpenRV Presentation] Playback state synced: ' +
+            (msg.playing ? 'playing' : 'paused') + ' at ' + msg.playbackRate + 'x, frame ' + msg.frame);
+          break;
+        case 'syncColor':
+          if (msg.exposure !== undefined) colorState.exposure = msg.exposure;
+          if (msg.gamma !== undefined) colorState.gamma = msg.gamma;
+          if (msg.temperature !== undefined) colorState.temperature = msg.temperature;
+          if (msg.tint !== undefined) colorState.tint = msg.tint;
+          updateInfoDisplay();
+          console.warn('[OpenRV Presentation] Color settings received but cannot be applied without WebGL viewer. ' +
+            'Received: ' + JSON.stringify({exposure: msg.exposure, gamma: msg.gamma, temperature: msg.temperature, tint: msg.tint}));
+          break;
+        default:
+          if (msg.type !== 'windowReady' && msg.type !== 'windowClosed' && msg.type !== 'pong') {
+            console.warn('[OpenRV Presentation] Unhandled message type: ' + msg.type);
+          }
           break;
       }
     };
@@ -365,6 +414,10 @@ export class ExternalPresentation extends EventEmitter<ExternalPresentationEvent
 
     if (!windowRef) {
       // Popup blocker may have prevented the window from opening
+      console.warn(
+        '[ExternalPresentation] window.open() returned null — the browser likely blocked the popup. ' +
+          'Check popup blocker settings.',
+      );
       return null;
     }
 

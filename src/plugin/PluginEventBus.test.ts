@@ -313,6 +313,96 @@ describe('PluginEventBus', () => {
     });
   });
 
+  describe('active bridged events (app:stop, app:error)', () => {
+    it('PEVT-070: app:stop fires when EventsAPI emits stop', () => {
+      const sub = bus.createSubscription('test.plugin');
+      const cb = vi.fn();
+      sub.onApp('app:stop', cb);
+
+      // app:stop maps to EventsAPI 'stop', which is wired to Session.playbackStopped
+      expect(mockAPI.on).toHaveBeenCalledWith('stop', expect.any(Function));
+
+      mockAPI._emit('stop', undefined);
+      expect(cb).toHaveBeenCalledTimes(1);
+    });
+
+    it('PEVT-071: app:error fires when EventsAPI emits error', () => {
+      const sub = bus.createSubscription('test.plugin');
+      const cb = vi.fn();
+      sub.onApp('app:error', cb);
+
+      // app:error maps to EventsAPI 'error', wired from audio/codec/decode/representation errors
+      expect(mockAPI.on).toHaveBeenCalledWith('error', expect.any(Function));
+
+      mockAPI._emit('error', { message: 'Audio error: decode failure', code: 'AUDIO_DECODE' });
+      expect(cb).toHaveBeenCalledWith({ message: 'Audio error: decode failure', code: 'AUDIO_DECODE' });
+    });
+
+    it('PEVT-072: app:stop unsubscribe works correctly', () => {
+      const sub = bus.createSubscription('test.plugin');
+      const cb = vi.fn();
+      const unsub = sub.onApp('app:stop', cb);
+
+      unsub();
+      mockAPI._emit('stop', undefined);
+      expect(cb).not.toHaveBeenCalled();
+    });
+
+    it('PEVT-073: app:error receives multiple error types', () => {
+      const sub = bus.createSubscription('test.plugin');
+      const cb = vi.fn();
+      sub.onApp('app:error', cb);
+
+      mockAPI._emit('error', { message: 'Audio error: autoplay blocked', code: 'AUDIO_AUTOPLAY' });
+      mockAPI._emit('error', { message: 'Unsupported codec "av1" in test.mp4', code: 'UNSUPPORTED_CODEC' });
+      mockAPI._emit('error', { message: 'Frame 42 decode timed out', code: 'FRAME_DECODE_TIMEOUT' });
+
+      expect(cb).toHaveBeenCalledTimes(3);
+      expect(cb).toHaveBeenNthCalledWith(1, { message: 'Audio error: autoplay blocked', code: 'AUDIO_AUTOPLAY' });
+      expect(cb).toHaveBeenNthCalledWith(2, {
+        message: 'Unsupported codec "av1" in test.mp4',
+        code: 'UNSUPPORTED_CODEC',
+      });
+      expect(cb).toHaveBeenNthCalledWith(3, { message: 'Frame 42 decode timed out', code: 'FRAME_DECODE_TIMEOUT' });
+    });
+
+    it('PEVT-074: onceApp works for app:stop', () => {
+      const sub = bus.createSubscription('test.plugin');
+      const cb = vi.fn();
+      sub.onceApp('app:stop', cb);
+
+      mockAPI._emit('stop', undefined);
+      mockAPI._emit('stop', undefined);
+      expect(cb).toHaveBeenCalledTimes(1);
+    });
+
+    it('PEVT-075: onceApp works for app:error', () => {
+      const sub = bus.createSubscription('test.plugin');
+      const cb = vi.fn();
+      sub.onceApp('app:error', cb);
+
+      mockAPI._emit('error', { message: 'first error', code: 'ERR1' });
+      mockAPI._emit('error', { message: 'second error', code: 'ERR2' });
+      expect(cb).toHaveBeenCalledTimes(1);
+      expect(cb).toHaveBeenCalledWith({ message: 'first error', code: 'ERR1' });
+    });
+
+    it('PEVT-076: disposePlugin cleans up app:stop and app:error subscriptions', () => {
+      const sub = bus.createSubscription('test.plugin');
+      const stopCb = vi.fn();
+      const errorCb = vi.fn();
+      sub.onApp('app:stop', stopCb);
+      sub.onApp('app:error', errorCb);
+
+      bus.disposePlugin('test.plugin');
+
+      mockAPI._emit('stop', undefined);
+      mockAPI._emit('error', { message: 'err', code: 'X' });
+      expect(stopCb).not.toHaveBeenCalled();
+      expect(errorCb).not.toHaveBeenCalled();
+    });
+  });
+
   describe('bus dispose', () => {
     it('PEVT-060: dispose clears all subscriptions and emitters', () => {
       const sub = bus.createSubscription('test.plugin');
@@ -323,6 +413,37 @@ describe('PluginEventBus', () => {
 
       bus.emitPluginLifecycle('plugin:activated', { id: 'x' });
       expect(cb).not.toHaveBeenCalled();
+    });
+
+    it('PEVT-061: dispose nulls out eventsAPI so new subscriptions warn', () => {
+      bus.dispose();
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const sub = bus.createSubscription('test.plugin');
+      sub.onApp('app:frameChange', vi.fn());
+
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('EventsAPI not available'));
+      warnSpy.mockRestore();
+    });
+
+    it('PEVT-062: dispose is idempotent', () => {
+      bus.dispose();
+      expect(() => bus.dispose()).not.toThrow();
+    });
+
+    it('PEVT-063: after dispose, setEventsAPI restores bridging', () => {
+      bus.dispose();
+
+      // Re-set the events API
+      const newMockAPI = createMockEventsAPI();
+      bus.setEventsAPI(newMockAPI as any);
+
+      const sub = bus.createSubscription('test.plugin');
+      const cb = vi.fn();
+      sub.onApp('app:frameChange', cb);
+
+      newMockAPI._emit('frameChange', { frame: 99 });
+      expect(cb).toHaveBeenCalledWith({ frame: 99 });
     });
   });
 });

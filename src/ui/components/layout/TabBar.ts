@@ -79,6 +79,35 @@ export class TabBar extends EventEmitter<TabBarEvents> {
     // Update indicator when container is scrolled
     this.container.addEventListener('scroll', () => this.updateActiveState());
 
+    // Arrow-key navigation per WAI-ARIA tabs pattern
+    this.container.addEventListener('keydown', (e: KeyboardEvent) => {
+      const tabIds = TABS.map((t) => t.id);
+      const currentIndex = tabIds.indexOf(this._activeTab);
+      let nextIndex: number | null = null;
+
+      switch (e.key) {
+        case 'ArrowRight':
+          nextIndex = (currentIndex + 1) % tabIds.length;
+          break;
+        case 'ArrowLeft':
+          nextIndex = (currentIndex - 1 + tabIds.length) % tabIds.length;
+          break;
+        case 'Home':
+          nextIndex = 0;
+          break;
+        case 'End':
+          nextIndex = tabIds.length - 1;
+          break;
+        default:
+          return;
+      }
+
+      e.preventDefault();
+      const nextId = tabIds[nextIndex]!;
+      this.setActiveTab(nextId);
+      this.tabButtons.get(nextId)?.focus();
+    });
+
     this.createTabs();
   }
 

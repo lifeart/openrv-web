@@ -67,6 +67,7 @@ function createIdentityLUT3D(size: number): LUT3D {
     }
   }
   return {
+    type: '3d',
     title: 'Identity',
     size,
     domainMin: [0, 0, 0],
@@ -106,10 +107,10 @@ function createIdentityCurvesLUT(width: number): Float32Array {
   const data = new Float32Array(width * 4);
   for (let i = 0; i < width; i++) {
     const v = i / (width - 1);
-    data[i * 4] = v;       // R channel curve
-    data[i * 4 + 1] = v;   // G channel curve
-    data[i * 4 + 2] = v;   // B channel curve
-    data[i * 4 + 3] = v;   // Master curve (alpha)
+    data[i * 4] = v; // R channel curve
+    data[i * 4 + 1] = v; // G channel curve
+    data[i * 4 + 2] = v; // B channel curve
+    data[i * 4 + 3] = v; // Master curve (alpha)
   }
   return data;
 }
@@ -124,10 +125,10 @@ function createGammaCurvesLUT(width: number): Float32Array {
   for (let i = 0; i < width; i++) {
     const v = i / (width - 1);
     const gv = Math.pow(v, 2.2);
-    data[i * 4] = gv;       // R
-    data[i * 4 + 1] = gv;   // G
-    data[i * 4 + 2] = gv;   // B
-    data[i * 4 + 3] = v;    // Master = identity
+    data[i * 4] = gv; // R
+    data[i * 4 + 1] = gv; // G
+    data[i * 4 + 2] = gv; // B
+    data[i * 4 + 3] = v; // Master = identity
   }
   return data;
 }
@@ -152,9 +153,7 @@ describe('3D LUT Trilinear Interpolation', () => {
     ];
 
     for (const [r, g, b] of testColors) {
-      const [outR, outG, outB] = applyLUT3DTrilinear(
-        r, g, b, identityRGBA, size, domainMin, domainMax, 1.0,
-      );
+      const [outR, outG, outB] = applyLUT3DTrilinear(r, g, b, identityRGBA, size, domainMin, domainMax, 1.0);
       expect(outR).toBeCloseTo(r, 4);
       expect(outG).toBeCloseTo(g, 4);
       expect(outB).toBeCloseTo(b, 4);
@@ -166,25 +165,19 @@ describe('3D LUT Trilinear Interpolation', () => {
     const dMax: [number, number, number] = [0.9, 0.9, 0.9];
 
     // Input at domain min should map to (0,0,0) in LUT, which outputs (0,0,0)
-    const [r0, g0, b0] = applyLUT3DTrilinear(
-      0.1, 0.1, 0.1, identityRGBA, size, dMin, dMax, 1.0,
-    );
+    const [r0, g0, b0] = applyLUT3DTrilinear(0.1, 0.1, 0.1, identityRGBA, size, dMin, dMax, 1.0);
     expect(r0).toBeCloseTo(0.0, 4);
     expect(g0).toBeCloseTo(0.0, 4);
     expect(b0).toBeCloseTo(0.0, 4);
 
     // Input at domain max should map to (1,1,1) in LUT, which outputs (1,1,1)
-    const [r1, g1, b1] = applyLUT3DTrilinear(
-      0.9, 0.9, 0.9, identityRGBA, size, dMin, dMax, 1.0,
-    );
+    const [r1, g1, b1] = applyLUT3DTrilinear(0.9, 0.9, 0.9, identityRGBA, size, dMin, dMax, 1.0);
     expect(r1).toBeCloseTo(1.0, 4);
     expect(g1).toBeCloseTo(1.0, 4);
     expect(b1).toBeCloseTo(1.0, 4);
 
     // Input at domain midpoint should map to (0.5, 0.5, 0.5)
-    const [rm, gm, bm] = applyLUT3DTrilinear(
-      0.5, 0.5, 0.5, identityRGBA, size, dMin, dMax, 1.0,
-    );
+    const [rm, gm, bm] = applyLUT3DTrilinear(0.5, 0.5, 0.5, identityRGBA, size, dMin, dMax, 1.0);
     expect(rm).toBeCloseTo(0.5, 4);
     expect(gm).toBeCloseTo(0.5, 4);
     expect(bm).toBeCloseTo(0.5, 4);
@@ -195,25 +188,19 @@ describe('3D LUT Trilinear Interpolation', () => {
     const input: [number, number, number] = [0.5, 0.5, 0.5];
 
     // Intensity 0: should return original
-    const [r0, g0, b0] = applyLUT3DTrilinear(
-      ...input, gammaRGBA, size, domainMin, domainMax, 0.0,
-    );
+    const [r0, g0, b0] = applyLUT3DTrilinear(...input, gammaRGBA, size, domainMin, domainMax, 0.0);
     expect(r0).toBeCloseTo(0.5, 5);
     expect(g0).toBeCloseTo(0.5, 5);
     expect(b0).toBeCloseTo(0.5, 5);
 
     // Intensity 1: should return LUT value (0.5^2 = 0.25)
-    const [r1, g1, b1] = applyLUT3DTrilinear(
-      ...input, gammaRGBA, size, domainMin, domainMax, 1.0,
-    );
+    const [r1, g1, b1] = applyLUT3DTrilinear(...input, gammaRGBA, size, domainMin, domainMax, 1.0);
     expect(r1).toBeCloseTo(0.25, 3);
     expect(g1).toBeCloseTo(0.25, 3);
     expect(b1).toBeCloseTo(0.25, 3);
 
     // Intensity 0.5: should blend halfway
-    const [rh, gh, bh] = applyLUT3DTrilinear(
-      ...input, gammaRGBA, size, domainMin, domainMax, 0.5,
-    );
+    const [rh, gh, bh] = applyLUT3DTrilinear(...input, gammaRGBA, size, domainMin, domainMax, 0.5);
     expect(rh).toBeCloseTo(0.375, 3);
     expect(gh).toBeCloseTo(0.375, 3);
     expect(bh).toBeCloseTo(0.375, 3);
@@ -223,17 +210,13 @@ describe('3D LUT Trilinear Interpolation', () => {
     const gammaRGBA = createGammaLUT_RGBA(size);
 
     // (0,0,0) -> 0^2 = 0
-    const [r0, g0, b0] = applyLUT3DTrilinear(
-      0, 0, 0, gammaRGBA, size, domainMin, domainMax, 1.0,
-    );
+    const [r0, g0, b0] = applyLUT3DTrilinear(0, 0, 0, gammaRGBA, size, domainMin, domainMax, 1.0);
     expect(r0).toBeCloseTo(0.0, 10);
     expect(g0).toBeCloseTo(0.0, 10);
     expect(b0).toBeCloseTo(0.0, 10);
 
     // (1,1,1) -> 1^2 = 1
-    const [r1, g1, b1] = applyLUT3DTrilinear(
-      1, 1, 1, gammaRGBA, size, domainMin, domainMax, 1.0,
-    );
+    const [r1, g1, b1] = applyLUT3DTrilinear(1, 1, 1, gammaRGBA, size, domainMin, domainMax, 1.0);
     expect(r1).toBeCloseTo(1.0, 10);
     expect(g1).toBeCloseTo(1.0, 10);
     expect(b1).toBeCloseTo(1.0, 10);
@@ -247,9 +230,7 @@ describe('3D LUT Trilinear Interpolation', () => {
 
     // At 0.25: midway between grid[0]=0 (output 0^2=0) and grid[1]=0.5 (output 0.5^2=0.25)
     // Trilinear: lerp(0.0, 0.25, 0.5) = 0.125
-    const [r, g, b] = applyLUT3DTrilinear(
-      0.25, 0.25, 0.25, smallLUT, smallSize, domainMin, domainMax, 1.0,
-    );
+    const [r, g, b] = applyLUT3DTrilinear(0.25, 0.25, 0.25, smallLUT, smallSize, domainMin, domainMax, 1.0);
     expect(r).toBeCloseTo(0.125, 4);
     expect(g).toBeCloseTo(0.125, 4);
     expect(b).toBeCloseTo(0.125, 4);
@@ -265,9 +246,7 @@ describe('3D LUT Trilinear Interpolation', () => {
     ];
 
     for (const [r, g, b] of testColors) {
-      const trilinear = applyLUT3DTrilinear(
-        r, g, b, identityRGBA, size, domainMin, domainMax, 1.0,
-      );
+      const trilinear = applyLUT3DTrilinear(r, g, b, identityRGBA, size, domainMin, domainMax, 1.0);
       const tetrahedral = applyLUT3DTetrahedral(cpuLut, r, g, b);
       const cpuTrilinear = applyLUT3D(cpuLut, r, g, b);
 
@@ -402,10 +381,18 @@ describe('HSL Qualifier Matte', () => {
     // satCenter=50, width=100 (range 0-100)
     // lumCenter=50, width=100 (range 0-100)
     const matte = hslQualifierMatte(
-      120, 0.5, 0.5,    // pixel: h=120, s=0.5, l=0.5
-      120, 60, 0,        // hue: center=120, width=60, softness=0
-      50, 100, 0,        // sat: center=50, width=100, softness=0
-      50, 100, 0,        // lum: center=50, width=100, softness=0
+      120,
+      0.5,
+      0.5, // pixel: h=120, s=0.5, l=0.5
+      120,
+      60,
+      0, // hue: center=120, width=60, softness=0
+      50,
+      100,
+      0, // sat: center=50, width=100, softness=0
+      50,
+      100,
+      0, // lum: center=50, width=100, softness=0
     );
     expect(matte).toBeCloseTo(1.0, QUAL_DIGITS);
   });
@@ -414,10 +401,18 @@ describe('HSL Qualifier Matte', () => {
     // Qualifier for hue=120 with width=20 (range 110-130)
     // Pixel at hue=0 is well outside
     const matte = hslQualifierMatte(
-      0, 0.5, 0.5,       // pixel: h=0
-      120, 20, 0,          // hue: center=120, width=20, no softness
-      50, 100, 0,          // sat: wide open
-      50, 100, 0,          // lum: wide open
+      0,
+      0.5,
+      0.5, // pixel: h=0
+      120,
+      20,
+      0, // hue: center=120, width=20, no softness
+      50,
+      100,
+      0, // sat: wide open
+      50,
+      100,
+      0, // lum: wide open
     );
     expect(matte).toBeCloseTo(0.0, QUAL_DIGITS);
   });
@@ -425,31 +420,16 @@ describe('HSL Qualifier Matte', () => {
   it('XE-QUAL-003: Hue softness creates smooth falloff', () => {
     // Qualifier: hue center=120, width=40 (inner=20), softness=50 (outer=20+20=40)
     // Pixel at hue=135: hueDist=15, which is within inner (20) -> matte=1
-    const matteInside = hslQualifierMatte(
-      135, 0.5, 0.5,
-      120, 40, 50,
-      50, 100, 0,
-      50, 100, 0,
-    );
+    const matteInside = hslQualifierMatte(135, 0.5, 0.5, 120, 40, 50, 50, 100, 0, 50, 100, 0);
     expect(matteInside).toBeCloseTo(1.0, QUAL_DIGITS);
 
     // Pixel at hue=150: hueDist=30, which is in softness zone (20..40)
-    const matteSoft = hslQualifierMatte(
-      150, 0.5, 0.5,
-      120, 40, 50,
-      50, 100, 0,
-      50, 100, 0,
-    );
+    const matteSoft = hslQualifierMatte(150, 0.5, 0.5, 120, 40, 50, 50, 100, 0, 50, 100, 0);
     expect(matteSoft).toBeGreaterThan(0.0);
     expect(matteSoft).toBeLessThan(1.0);
 
     // Pixel at hue=170: hueDist=50, which is outside outer (40) -> matte=0
-    const matteOutside = hslQualifierMatte(
-      170, 0.5, 0.5,
-      120, 40, 50,
-      50, 100, 0,
-      50, 100, 0,
-    );
+    const matteOutside = hslQualifierMatte(170, 0.5, 0.5, 120, 40, 50, 50, 100, 0, 50, 100, 0);
     expect(matteOutside).toBeCloseTo(0.0, QUAL_DIGITS);
   });
 
@@ -457,32 +437,17 @@ describe('HSL Qualifier Matte', () => {
     // Qualifier: hueCenter=350, hueWidth=40 (range wraps: 330-10)
     // Pixel at hue=10: circular distance = |10-350| = 340, wrapped = 360-340 = 20
     // hueInner = 20, so hueDist(20) <= hueInner(20) -> match
-    const matte = hslQualifierMatte(
-      10, 0.5, 0.5,
-      350, 40, 0,
-      50, 100, 0,
-      50, 100, 0,
-    );
+    const matte = hslQualifierMatte(10, 0.5, 0.5, 350, 40, 0, 50, 100, 0, 50, 100, 0);
     expect(matte).toBeCloseTo(1.0, QUAL_DIGITS);
 
     // Pixel at hue=340: circular distance = |340-350| = 10
     // hueInner = 20, so 10 <= 20 -> match
-    const matte2 = hslQualifierMatte(
-      340, 0.5, 0.5,
-      350, 40, 0,
-      50, 100, 0,
-      50, 100, 0,
-    );
+    const matte2 = hslQualifierMatte(340, 0.5, 0.5, 350, 40, 0, 50, 100, 0, 50, 100, 0);
     expect(matte2).toBeCloseTo(1.0, QUAL_DIGITS);
 
     // Pixel at hue=180: circular distance = |180-350| = 170, no wrap needed
     // hueInner = 20, so 170 > 20 -> no match
-    const matte3 = hslQualifierMatte(
-      180, 0.5, 0.5,
-      350, 40, 0,
-      50, 100, 0,
-      50, 100, 0,
-    );
+    const matte3 = hslQualifierMatte(180, 0.5, 0.5, 350, 40, 0, 50, 100, 0, 50, 100, 0);
     expect(matte3).toBeCloseTo(0.0, QUAL_DIGITS);
   });
 
@@ -491,30 +456,28 @@ describe('HSL Qualifier Matte', () => {
     // softness=50 -> outer = 20 + 20 = 40
     // Pixel s=0.5 -> qS=50, satDist=0, inside -> match
     const matteInside = hslQualifierMatte(
-      120, 0.5, 0.5,
-      120, 360, 0,         // hue: wide open
-      50, 40, 50,           // sat: center=50, width=40, softness=50
-      50, 100, 0,           // lum: wide open
+      120,
+      0.5,
+      0.5,
+      120,
+      360,
+      0, // hue: wide open
+      50,
+      40,
+      50, // sat: center=50, width=40, softness=50
+      50,
+      100,
+      0, // lum: wide open
     );
     expect(matteInside).toBeCloseTo(1.0, QUAL_DIGITS);
 
     // Pixel s=0.25 -> qS=25, satDist=25, outside inner(20) but within outer(40)
-    const matteSoft = hslQualifierMatte(
-      120, 0.25, 0.5,
-      120, 360, 0,
-      50, 40, 50,
-      50, 100, 0,
-    );
+    const matteSoft = hslQualifierMatte(120, 0.25, 0.5, 120, 360, 0, 50, 40, 50, 50, 100, 0);
     expect(matteSoft).toBeGreaterThan(0.0);
     expect(matteSoft).toBeLessThan(1.0);
 
     // Pixel s=0.0 -> qS=0, satDist=50, outside outer(40) -> no match
-    const matteOutside = hslQualifierMatte(
-      120, 0.0, 0.5,
-      120, 360, 0,
-      50, 40, 50,
-      50, 100, 0,
-    );
+    const matteOutside = hslQualifierMatte(120, 0.0, 0.5, 120, 360, 0, 50, 40, 50, 50, 100, 0);
     expect(matteOutside).toBeCloseTo(0.0, QUAL_DIGITS);
   });
 
@@ -523,30 +486,28 @@ describe('HSL Qualifier Matte', () => {
     // softness=50 -> outer = 20 + 20 = 40
     // Pixel l=0.5 -> qL=50, lumDist=0, inside -> match
     const matteInside = hslQualifierMatte(
-      120, 0.5, 0.5,
-      120, 360, 0,
-      50, 100, 0,
-      50, 40, 50,           // lum: center=50, width=40, softness=50
+      120,
+      0.5,
+      0.5,
+      120,
+      360,
+      0,
+      50,
+      100,
+      0,
+      50,
+      40,
+      50, // lum: center=50, width=40, softness=50
     );
     expect(matteInside).toBeCloseTo(1.0, QUAL_DIGITS);
 
     // Pixel l=0.25 -> qL=25, lumDist=25, in softness zone
-    const matteSoft = hslQualifierMatte(
-      120, 0.5, 0.25,
-      120, 360, 0,
-      50, 100, 0,
-      50, 40, 50,
-    );
+    const matteSoft = hslQualifierMatte(120, 0.5, 0.25, 120, 360, 0, 50, 100, 0, 50, 40, 50);
     expect(matteSoft).toBeGreaterThan(0.0);
     expect(matteSoft).toBeLessThan(1.0);
 
     // Pixel l=0.0 -> qL=0, lumDist=50, outside outer(40) -> no match
-    const matteOutside = hslQualifierMatte(
-      120, 0.5, 0.0,
-      120, 360, 0,
-      50, 100, 0,
-      50, 40, 50,
-    );
+    const matteOutside = hslQualifierMatte(120, 0.5, 0.0, 120, 360, 0, 50, 100, 0, 50, 40, 50);
     expect(matteOutside).toBeCloseTo(0.0, QUAL_DIGITS);
   });
 });

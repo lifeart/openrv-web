@@ -73,6 +73,8 @@ function createMockSetupContext(overrides: Partial<CanvasSetupContext> = {}): Ca
 
   const cropManager = {
     resetOverlayCanvas: vi.fn(),
+    isCropClipActive: vi.fn(() => false),
+    getCropState: vi.fn(() => ({ enabled: false, region: { x: 0, y: 0, width: 1, height: 1 } })),
   };
 
   const overlayManager = {
@@ -342,7 +344,7 @@ describe('ViewerCanvasSetup', () => {
       const ctx = createMockSetupContext();
       updateOverlayDimensions(ctx);
 
-      expect(ctx.getOverlayManager().updateDimensions).toHaveBeenCalledWith(640, 360);
+      expect(ctx.getOverlayManager().updateDimensions).toHaveBeenCalledWith(640, 360, null);
     });
 
     it('should use updated display dimensions', () => {
@@ -351,7 +353,7 @@ describe('ViewerCanvasSetup', () => {
       ctx.setDisplayHeight(1080);
       updateOverlayDimensions(ctx);
 
-      expect(ctx.getOverlayManager().updateDimensions).toHaveBeenCalledWith(1920, 1080);
+      expect(ctx.getOverlayManager().updateDimensions).toHaveBeenCalledWith(1920, 1080, null);
     });
   });
 

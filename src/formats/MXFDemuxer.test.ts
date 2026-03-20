@@ -6,7 +6,7 @@
  * descriptor parsing, full demux, and error handling.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   isMXFFile,
   parseKLV,
@@ -16,6 +16,7 @@ import {
   demuxMXF,
   framesToTimecode,
   framesToTimecodeDF,
+  scanForNextUL,
 } from './MXFDemuxer';
 
 // ---------------------------------------------------------------------------
@@ -765,7 +766,7 @@ describe('MXF Demuxer', () => {
       expect(metadata.essenceDescriptors.length).toBe(0);
     });
 
-    it('MXF-ERR-003: should throw on invalid BER encoding (indefinite length)', () => {
+    it('MXF-ERR-003: should return length=-1 for indefinite BER encoding', () => {
       // 16-byte key + 0x80 (indefinite length marker)
       const bytes: number[] = new Array(17).fill(0);
       writeUL(bytes, 0, HEADER_PARTITION_UL);
@@ -773,7 +774,9 @@ describe('MXF Demuxer', () => {
       const buffer = bytesToBuffer(bytes);
       const view = new DataView(buffer);
 
-      expect(() => parseKLV(view, 0)).toThrow(/Indefinite BER length/);
+      const klv = parseKLV(view, 0);
+      expect(klv.length).toBe(-1);
+      expect(klv.valueOffset).toBe(17);
     });
   });
 
@@ -1056,6 +1059,71 @@ describe('MXF Demuxer', () => {
 
       expect(metadata.startTimecode).toBe('00:00:00:00');
     });
+
+    it('MXF-TC-COMP-004: should not produce startTimecode when editRate is missing', () => {
+      // No Timeline Track KLV, so metadata.editRate is undefined
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const partitionBytes = buildHeaderPartitionKLV(OP1A_UL, 2000);
+
+      const tcValue = buildLocalSetValue([
+        { tag: 0x1501, value: buildUint64(90000) },
+        { tag: 0x1502, value: [0x00] },
+      ]);
+      const tcKLV = buildKLV(TIMECODE_COMPONENT_UL, tcValue);
+
+      const allBytes = [...partitionBytes, ...tcKLV];
+      const buffer = bytesToBuffer(allBytes);
+      const metadata = parseMXFHeader(buffer);
+
+      expect(metadata.startTimecode).toBeUndefined();
+      expect(metadata.startTimecodeFrames).toBe(90000);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Cannot resolve start timecode'));
+      warnSpy.mockRestore();
+    });
+
+    it('MXF-TC-COMP-005: should not produce startTimecode when editRate den is 0', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const partitionBytes = buildHeaderPartitionKLV(OP1A_UL, 2000);
+
+      // Edit rate with denominator 0 (invalid)
+      const trackValue = buildLocalSetValue([{ tag: 0x4801, value: buildRational(25, 0) }]);
+      const trackKLV = buildKLV(TIMELINE_TRACK_UL, trackValue);
+
+      const tcValue = buildLocalSetValue([
+        { tag: 0x1501, value: buildUint64(48000) },
+        { tag: 0x1502, value: [0x00] },
+      ]);
+      const tcKLV = buildKLV(TIMECODE_COMPONENT_UL, tcValue);
+
+      const allBytes = [...partitionBytes, ...trackKLV, ...tcKLV];
+      const buffer = bytesToBuffer(allBytes);
+      const metadata = parseMXFHeader(buffer);
+
+      expect(metadata.startTimecode).toBeUndefined();
+      expect(metadata.startTimecodeFrames).toBe(48000);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Cannot resolve start timecode'));
+      warnSpy.mockRestore();
+    });
+
+    it('MXF-TC-COMP-006: should set startTimecodeFrames alongside startTimecode when editRate is valid', () => {
+      const partitionBytes = buildHeaderPartitionKLV(OP1A_UL, 2000);
+
+      const trackValue = buildLocalSetValue([{ tag: 0x4801, value: buildRational(25, 1) }]);
+      const trackKLV = buildKLV(TIMELINE_TRACK_UL, trackValue);
+
+      const tcValue = buildLocalSetValue([
+        { tag: 0x1501, value: buildUint64(90000) },
+        { tag: 0x1502, value: [0x00] },
+      ]);
+      const tcKLV = buildKLV(TIMECODE_COMPONENT_UL, tcValue);
+
+      const allBytes = [...partitionBytes, ...trackKLV, ...tcKLV];
+      const buffer = bytesToBuffer(allBytes);
+      const metadata = parseMXFHeader(buffer);
+
+      expect(metadata.startTimecode).toBe('01:00:00:00');
+      expect(metadata.startTimecodeFrames).toBe(90000);
+    });
   });
 
   // =========================================================================
@@ -1184,14 +1252,16 @@ describe('MXF Demuxer', () => {
       expect(() => parseKLV(view, 0)).toThrow(/exceeds maximum/);
     });
 
-    it('MXF-BER-003: should handle BER long-form with zero length bytes (0x80 = indefinite)', () => {
+    it('MXF-BER-003: should return length=-1 for BER indefinite form (0x80)', () => {
       const bytes: number[] = new Array(17).fill(0);
       writeUL(bytes, 0, HEADER_PARTITION_UL);
       bytes[16] = 0x80; // indefinite length
       const buffer = bytesToBuffer(bytes);
       const view = new DataView(buffer);
 
-      expect(() => parseKLV(view, 0)).toThrow(/Indefinite BER length/);
+      const klv = parseKLV(view, 0);
+      expect(klv.length).toBe(-1);
+      expect(klv.valueOffset).toBe(17);
     });
 
     it('MXF-BER-004: should handle BER long-form with 8-byte length', () => {
@@ -1208,6 +1278,151 @@ describe('MXF Demuxer', () => {
       const klv = parseKLV(view, 0);
       expect(klv.length).toBe(256);
       expect(klv.valueOffset).toBe(25);
+    });
+  });
+
+  // =========================================================================
+  // Indefinite BER Graceful Degradation Tests
+  // =========================================================================
+  describe('Indefinite BER Handling', () => {
+    it('should skip a KLV with indefinite BER and continue parsing the next KLV', () => {
+      // Build: header partition pack (normal), then a KLV with 0x80 BER,
+      // then a CDCI descriptor KLV. The parser should skip the indefinite
+      // KLV and still find the CDCI descriptor.
+      const partitionBytes = buildHeaderPartitionKLV(OP1A_UL, 2000);
+
+      // Build a filler-like KLV with indefinite BER (some random UL + 0x80)
+      const fillerUL = [0x06, 0x0e, 0x2b, 0x34, 0x01, 0x01, 0x01, 0x01, 0x03, 0x01, 0x02, 0x10, 0x01, 0x00, 0x00, 0x00];
+      const fillerKLV: number[] = [...fillerUL, 0x80]; // 17 bytes: 16 key + 0x80
+
+      // Build a CDCI descriptor KLV with width=1920, height=1080
+      const cdciValue: number[] = new Array(24).fill(0);
+      // Tag: Stored Width (0x3203), length 4, value 1920
+      writeUint16BE(cdciValue, 0, 0x3203);
+      writeUint16BE(cdciValue, 2, 4);
+      writeUint32BE(cdciValue, 4, 1920);
+      // Tag: Stored Height (0x3202), length 4, value 1080
+      writeUint16BE(cdciValue, 8, 0x3202);
+      writeUint16BE(cdciValue, 10, 4);
+      writeUint32BE(cdciValue, 12, 1080);
+      // Tag: Component Depth (0x3301), length 4, value 10
+      writeUint16BE(cdciValue, 16, 0x3301);
+      writeUint16BE(cdciValue, 18, 4);
+      writeUint32BE(cdciValue, 20, 10);
+
+      const cdciKLV: number[] = new Array(16 + 1 + cdciValue.length).fill(0);
+      writeUL(cdciKLV, 0, CDCI_DESCRIPTOR_UL);
+      writeBERShort(cdciKLV, 16, cdciValue.length);
+      for (let i = 0; i < cdciValue.length; i++) {
+        cdciKLV[17 + i] = cdciValue[i]!;
+      }
+
+      const allBytes = [...partitionBytes, ...fillerKLV, ...cdciKLV];
+      const buffer = bytesToBuffer(allBytes);
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const metadata = parseMXFHeader(buffer);
+      warnSpy.mockRestore();
+
+      // Should have found the CDCI descriptor despite the indefinite BER KLV
+      expect(metadata.essenceDescriptors.length).toBe(1);
+      expect(metadata.essenceDescriptors[0]!.width).toBe(1920);
+      expect(metadata.essenceDescriptors[0]!.height).toBe(1080);
+    });
+
+    it('should log a warning when encountering indefinite BER', () => {
+      const partitionBytes = buildHeaderPartitionKLV(OP1A_UL, 2000);
+
+      // Add a KLV with indefinite BER
+      const fillerUL = [0x06, 0x0e, 0x2b, 0x34, 0x01, 0x01, 0x01, 0x01, 0x03, 0x01, 0x02, 0x10, 0x01, 0x00, 0x00, 0x00];
+      const fillerKLV: number[] = [...fillerUL, 0x80];
+
+      const allBytes = [...partitionBytes, ...fillerKLV];
+      const buffer = bytesToBuffer(allBytes);
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      parseMXFHeader(buffer);
+
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Skipping KLV with indefinite BER length'));
+      warnSpy.mockRestore();
+    });
+
+    it('should stop parsing when no next UL is found after indefinite BER', () => {
+      // Buffer with just a partition pack followed by indefinite BER with no more ULs
+      const partitionBytes = buildHeaderPartitionKLV(OP1A_UL, 2000);
+
+      // A KLV with indefinite BER followed by garbage (no SMPTE UL prefix)
+      const fillerUL = [0x06, 0x0e, 0x2b, 0x34, 0x01, 0x01, 0x01, 0x01, 0x03, 0x01, 0x02, 0x10, 0x01, 0x00, 0x00, 0x00];
+      const fillerKLV: number[] = [...fillerUL, 0x80, 0xff, 0xff, 0xff, 0xff];
+
+      const allBytes = [...partitionBytes, ...fillerKLV];
+      const buffer = bytesToBuffer(allBytes);
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const metadata = parseMXFHeader(buffer);
+      warnSpy.mockRestore();
+
+      // Should still have parsed the partition pack successfully
+      expect(metadata.operationalPattern).toBe('OP1a');
+      expect(metadata.essenceDescriptors.length).toBe(0);
+    });
+
+    it('scanForNextUL should find the next SMPTE UL prefix', () => {
+      const bytes: number[] = [0x00, 0x00, 0x00, 0x06, 0x0e, 0x2b, 0x34, 0x00, 0x00];
+      const buffer = bytesToBuffer(bytes);
+      const view = new DataView(buffer);
+
+      expect(scanForNextUL(view, 0)).toBe(3);
+    });
+
+    it('scanForNextUL should return -1 when no UL is found', () => {
+      const bytes: number[] = [0x00, 0x00, 0x00, 0x00, 0x00];
+      const buffer = bytesToBuffer(bytes);
+      const view = new DataView(buffer);
+
+      expect(scanForNextUL(view, 0)).toBe(-1);
+    });
+
+    it('demuxMXF should skip indefinite BER KLVs and find essence after them', () => {
+      const partitionBytes = buildHeaderPartitionKLV(OP1A_UL, 2000);
+
+      // KLV with indefinite BER
+      const fillerUL = [0x06, 0x0e, 0x2b, 0x34, 0x01, 0x01, 0x01, 0x01, 0x03, 0x01, 0x02, 0x10, 0x01, 0x00, 0x00, 0x00];
+      const fillerKLV: number[] = [...fillerUL, 0x80];
+
+      // Essence element after the indefinite BER KLV
+      const essenceData = [0xaa, 0xbb, 0xcc, 0xdd];
+      const essenceKLV: number[] = new Array(16 + 1 + essenceData.length).fill(0);
+      writeUL(essenceKLV, 0, ESSENCE_ELEMENT_UL);
+      writeBERShort(essenceKLV, 16, essenceData.length);
+      for (let i = 0; i < essenceData.length; i++) {
+        essenceKLV[17 + i] = essenceData[i]!;
+      }
+
+      const allBytes = [...partitionBytes, ...fillerKLV, ...essenceKLV];
+      const buffer = bytesToBuffer(allBytes);
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const result = demuxMXF(buffer);
+      warnSpy.mockRestore();
+
+      // Should have found the essence element
+      expect(result.essenceOffsets.length).toBe(1);
+      expect(result.essenceOffsets[0]!.length).toBe(4);
+    });
+
+    it('definite-length BER parsing should not be affected', () => {
+      // Ensure normal short-form and long-form BER still work
+      const bytes: number[] = new Array(19).fill(0);
+      writeUL(bytes, 0, HEADER_PARTITION_UL);
+      bytes[16] = 0x81; // long form, 1 byte
+      bytes[17] = 42; // length = 42
+      const buffer = bytesToBuffer(bytes);
+      const view = new DataView(buffer);
+
+      const klv = parseKLV(view, 0);
+      expect(klv.length).toBe(42);
+      expect(klv.valueOffset).toBe(18);
     });
   });
 

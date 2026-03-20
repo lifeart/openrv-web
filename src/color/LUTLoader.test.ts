@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { isLUT3D, isLUT1D, parseCubeLUT, applyLUT3D, applyLUT1D, applyLUTToImageData } from './LUTLoader';
+import { isLUT3D, isLUT1D, parseCubeLUT, applyLUT3D, applyLUT1D, applyLUTToImageData, type LUT3D } from './LUTLoader';
 import { createSampleCubeLUT, createSample1DLUT } from '../../test/utils';
 
 describe('LUTLoader', () => {
@@ -167,6 +167,7 @@ LUT_3D_SIZE 2
 
     it('returns false for invalid data length', () => {
       const fakeLUT = {
+        type: '3d' as const,
         title: 'Fake',
         size: 2,
         domainMin: [0, 0, 0] as [number, number, number],
@@ -185,7 +186,7 @@ LUT_3D_SIZE 2
       const lut = parseCubeLUT(content);
 
       // Apply to known values
-      const result = applyLUT3D(lut, 0.5, 0.5, 0.5);
+      const result = applyLUT3D(lut as LUT3D, 0.5, 0.5, 0.5);
 
       // Identity LUT should return approximately same values
       expect(result[0]).toBeCloseTo(0.5, 1);
@@ -198,7 +199,7 @@ LUT_3D_SIZE 2
       const lut = parseCubeLUT(content);
 
       // Apply value outside 0-1 range
-      const result = applyLUT3D(lut, 1.5, -0.5, 2.0);
+      const result = applyLUT3D(lut as LUT3D, 1.5, -0.5, 2.0);
 
       // Should be clamped to valid range
       expect(result[0]).toBeGreaterThanOrEqual(0);
@@ -222,7 +223,7 @@ LUT_3D_SIZE 2
       ];
 
       for (const [r, g, b] of testValues) {
-        const result = applyLUT3D(lut, r, g, b);
+        const result = applyLUT3D(lut as LUT3D, r, g, b);
         expect(result[0]).toBeCloseTo(r, 1);
         expect(result[1]).toBeCloseTo(g, 1);
         expect(result[2]).toBeCloseTo(b, 1);
@@ -233,12 +234,12 @@ LUT_3D_SIZE 2
       const content = createSampleCubeLUT(2);
       const lut = parseCubeLUT(content);
 
-      const black = applyLUT3D(lut, 0, 0, 0);
+      const black = applyLUT3D(lut as LUT3D, 0, 0, 0);
       expect(black[0]).toBeCloseTo(0, 1);
       expect(black[1]).toBeCloseTo(0, 1);
       expect(black[2]).toBeCloseTo(0, 1);
 
-      const white = applyLUT3D(lut, 1, 1, 1);
+      const white = applyLUT3D(lut as LUT3D, 1, 1, 1);
       expect(white[0]).toBeCloseTo(1, 1);
       expect(white[1]).toBeCloseTo(1, 1);
       expect(white[2]).toBeCloseTo(1, 1);
@@ -261,7 +262,7 @@ DOMAIN_MAX 0.5 0.5 0.5
       const lut = parseCubeLUT(content);
 
       // Value at 0.25 (middle of 0-0.5 domain) should map to middle of LUT
-      const result = applyLUT3D(lut, 0.25, 0.25, 0.25);
+      const result = applyLUT3D(lut as LUT3D, 0.25, 0.25, 0.25);
 
       // Should be interpolated value, not identity
       expect(typeof result[0]).toBe('number');

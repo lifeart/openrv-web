@@ -459,6 +459,28 @@ describe('AudioCoordinator', () => {
       }
     });
 
+    it('AC-109: disabling audio scrub stops active scrub snippet (fix #142)', async () => {
+      vi.useFakeTimers();
+      try {
+        await loadWebAudio();
+
+        // Trigger a scrub snippet
+        coordinator.onFrameChanged(25, 24, false);
+        vi.advanceTimersByTime(50);
+
+        // Scrub snippet should be active
+        expect(createdSourceNodes.length).toBeGreaterThan(0);
+
+        // Now disable audio scrub — should pause and stop active scrub
+        coordinator.onAudioScrubEnabledChanged(false);
+
+        // Manager should be paused (scrub snippet stopped)
+        expect(coordinator.manager.isPlaying).toBe(false);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('AC-108: scrub gating does not affect playback sync', async () => {
       await loadWebAudio();
 
@@ -917,6 +939,85 @@ describe('AudioCoordinator', () => {
       // callback should see it as active
       expect(activeInCallback).toBe(true);
       expect(coordinator.isWebAudioActive).toBe(true);
+    });
+  });
+
+  // ======================================================================
+  // Error forwarding (fix #189)
+  // ======================================================================
+
+  describe('error forwarding', () => {
+    it('AC-110: AudioPlaybackManager error events are forwarded via onAudioError callback', async () => {
+      const onAudioError = vi.fn();
+      coordinator.setCallbacks({ onAudioPathChanged: vi.fn(), onAudioError });
+
+      // Trigger an error on the underlying manager
+      coordinator.manager.emit('error', {
+        type: 'decode',
+        message: 'Test decode error',
+      });
+
+      expect(onAudioError).toHaveBeenCalledTimes(1);
+      expect(onAudioError).toHaveBeenCalledWith({
+        type: 'decode',
+        message: 'Test decode error',
+      });
+    });
+
+    it('AC-111: error forwarding works without onAudioError callback (no crash)', () => {
+      coordinator.setCallbacks({ onAudioPathChanged: vi.fn() });
+
+      // Should not throw when onAudioError is not provided
+      expect(() => {
+        coordinator.manager.emit('error', {
+          type: 'unknown',
+          message: 'Some error',
+        });
+      }).not.toThrow();
+    });
+
+    it('AC-112: error forwarding is cleaned up after dispose', async () => {
+      const onAudioError = vi.fn();
+      coordinator.setCallbacks({ onAudioPathChanged: vi.fn(), onAudioError });
+
+      coordinator.dispose();
+
+      // After dispose, errors should not reach the callback
+      coordinator.manager.emit('error', {
+        type: 'network',
+        message: 'Post-dispose error',
+      });
+
+      expect(onAudioError).not.toHaveBeenCalled();
+    });
+
+    it('AC-113: normal audio operation does not trigger onAudioError', async () => {
+      const onAudioError = vi.fn();
+      coordinator.setCallbacks({ onAudioPathChanged: vi.fn(), onAudioError });
+
+      await loadWebAudio();
+      coordinator.onPlaybackStarted(1, 24, 1, 1);
+      coordinator.onFrameChanged(10, 24, true);
+      coordinator.onPlaybackStopped();
+
+      expect(onAudioError).not.toHaveBeenCalled();
+    });
+
+    it('AC-114: setCallbacks replaces error listener (no duplicate calls)', () => {
+      const onAudioError1 = vi.fn();
+      const onAudioError2 = vi.fn();
+
+      coordinator.setCallbacks({ onAudioPathChanged: vi.fn(), onAudioError: onAudioError1 });
+      coordinator.setCallbacks({ onAudioPathChanged: vi.fn(), onAudioError: onAudioError2 });
+
+      coordinator.manager.emit('error', {
+        type: 'autoplay',
+        message: 'Autoplay blocked',
+      });
+
+      // Only the second callback should be called (no duplicates)
+      expect(onAudioError1).not.toHaveBeenCalled();
+      expect(onAudioError2).toHaveBeenCalledTimes(1);
     });
   });
 });

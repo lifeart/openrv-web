@@ -293,9 +293,7 @@ describe('WebGPUShaderPipeline', () => {
       pipeline.execute(device, inputView, outputView, state, 800, 600, true);
 
       // Ping-pong textures should use rgba16float
-      expect(device.createTexture).toHaveBeenCalledWith(
-        expect.objectContaining({ format: 'rgba16float' }),
-      );
+      expect(device.createTexture).toHaveBeenCalledWith(expect.objectContaining({ format: 'rgba16float' }));
     });
 
     it('WGPU-SP-034: multi-pass allocates ping-pong with SDR format when isHDR=false', () => {
@@ -311,9 +309,7 @@ describe('WebGPUShaderPipeline', () => {
 
       pipeline.execute(device, inputView, outputView, state, 800, 600, false);
 
-      expect(device.createTexture).toHaveBeenCalledWith(
-        expect.objectContaining({ format: 'rgba8unorm' }),
-      );
+      expect(device.createTexture).toHaveBeenCalledWith(expect.objectContaining({ format: 'rgba8unorm' }));
     });
   });
 

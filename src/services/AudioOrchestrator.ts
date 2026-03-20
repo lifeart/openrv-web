@@ -6,6 +6,14 @@
  * - Binds session playback/source events to drive audio playback and track loading
  * - Handles lazy AudioContext initialization on first user interaction (browser policy)
  * - Provides the mixer reference to other modules (e.g. AppPlaybackWiring)
+ *
+ * @deprecated This is the **legacy** audio pipeline. The primary audio path is now
+ * `SessionPlayback`'s `AudioCoordinator` (see `src/audio/AudioCoordinator.ts`).
+ * When `sessionAudioActive` is true, this orchestrator skips its own audio
+ * decode/fetch to prevent double-decoding and state divergence.
+ *
+ * TODO(audio-cleanup): Remove AudioOrchestrator entirely once AudioCoordinator
+ * covers all use-cases (multi-track mixing, waveform textures, surround downmix).
  */
 
 import { AudioMixer } from '../audio/AudioMixer';
@@ -36,21 +44,35 @@ export interface AudioOrchestratorSource {
 export interface AudioOrchestratorDeps {
   session: AudioOrchestratorSession;
   audioMixer?: AudioMixer;
+  /**
+   * When true, indicates that the session's AudioCoordinator is managing audio.
+   * The orchestrator will skip its own decode/fetch to avoid double-decoding.
+   * Can be a boolean or a function that returns the current state.
+   */
+  sessionAudioActive?: boolean | (() => boolean);
 }
 
 // ---------------------------------------------------------------------------
 // Service
 // ---------------------------------------------------------------------------
 
+/**
+ * @deprecated Use `AudioCoordinator` via `SessionPlayback` instead.
+ * This class is retained for backward compatibility and will be removed
+ * once the new audio pipeline covers all legacy capabilities.
+ */
 export class AudioOrchestrator {
   private readonly session: AudioOrchestratorSession;
   private readonly audioMixer: AudioMixer;
   private audioInitialized = false;
   private readonly unsubscribers: Array<() => void> = [];
+  private _sessionAudioActive: boolean | (() => boolean);
+  private _dualPipelineWarned = false;
 
   constructor(deps: AudioOrchestratorDeps) {
     this.session = deps.session;
     this.audioMixer = deps.audioMixer ?? new AudioMixer();
+    this._sessionAudioActive = deps.sessionAudioActive ?? false;
   }
 
   /** Get the underlying AudioMixer instance. */
@@ -61,6 +83,23 @@ export class AudioOrchestrator {
   /** Whether the AudioContext has been initialized. */
   get isInitialized(): boolean {
     return this.audioInitialized;
+  }
+
+  /**
+   * Returns true if the session's AudioCoordinator is managing audio,
+   * meaning this orchestrator should defer to it.
+   */
+  get isSessionAudioActive(): boolean {
+    const value = this._sessionAudioActive;
+    return typeof value === 'function' ? value() : value;
+  }
+
+  /**
+   * Update the session-audio-active flag at runtime.
+   * When set to true, future sourceLoaded events will skip audio decode.
+   */
+  setSessionAudioActive(active: boolean | (() => boolean)): void {
+    this._sessionAudioActive = active;
   }
 
   /**
@@ -83,6 +122,22 @@ export class AudioOrchestrator {
     const onSourceLoaded = (source: AudioOrchestratorSource): void => {
       if (!this.audioInitialized) return;
       if (source.type !== 'video') return;
+
+      // If the session's AudioCoordinator is active, skip the legacy
+      // decode path to prevent double audio decoding and state divergence.
+      if (this.isSessionAudioActive) {
+        if (!this._dualPipelineWarned) {
+          this._dualPipelineWarned = true;
+          console.warn(
+            '[AudioOrchestrator] Dual audio pipeline detected: ' +
+              "SessionPlayback's AudioCoordinator is active. " +
+              'Skipping legacy audio decode to prevent double-decoding. ' +
+              'AudioOrchestrator is deprecated — see TODO(audio-cleanup).',
+          );
+        }
+        log.debug('Skipping audio decode for "%s" — session audio path is active', source.name);
+        return;
+      }
 
       const videoEl = source.element as { src?: string; currentSrc?: string } | undefined;
       const videoSrc = videoEl?.src || videoEl?.currentSrc || source.url;

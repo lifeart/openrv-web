@@ -13,7 +13,9 @@ import { HistoryManager, type HistoryEntry } from '../../utils/HistoryManager';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 import { DisposableSubscriptionManager } from '../../utils/DisposableSubscriptionManager';
 import { getIconSvg } from './shared/Icons';
+import { showConfirm } from './shared/Modal';
 import { OPACITY } from './shared/theme';
+import type { ExclusivePanelRef } from './NotePanel';
 
 export interface HistoryPanelEvents extends EventMap {
   visibilityChanged: boolean;
@@ -31,6 +33,7 @@ export class HistoryPanel extends EventEmitter<HistoryPanelEvents> {
   private renderedEntryIds: number[] = [];
   /** Tracks the currentIndex that was last rendered. */
   private renderedCurrentIndex = -1;
+  private exclusivePanels: ExclusivePanelRef[] = [];
 
   constructor(historyManager: HistoryManager) {
     super();
@@ -142,10 +145,21 @@ export class HistoryPanel extends EventEmitter<HistoryPanelEvents> {
     return this.container;
   }
 
+  /** Register another panel for mutual exclusion - opening this panel will close the other(s) */
+  setExclusiveWith(panel: ExclusivePanelRef): void {
+    this.exclusivePanels.push(panel);
+  }
+
   /**
    * Show the panel
    */
   show(): void {
+    // Close exclusive panels if they are open
+    for (const ep of this.exclusivePanels) {
+      if (ep.isVisible()) {
+        ep.hide();
+      }
+    }
     this.visible = true;
     this.container.style.display = 'flex';
     this.render();
@@ -180,10 +194,19 @@ export class HistoryPanel extends EventEmitter<HistoryPanelEvents> {
   }
 
   /**
-   * Clear history
+   * Clear history with confirmation
    */
-  clearHistory(): void {
-    this.historyManager.clear();
+  async clearHistory(): Promise<void> {
+    const state = this.historyManager.getState();
+    const entryCount = state.entries.length;
+    if (entryCount === 0) return;
+
+    const confirmed = await showConfirm(
+      `Are you sure you want to clear all ${entryCount} history entr${entryCount > 1 ? 'ies' : 'y'}? This cannot be undone.`,
+    );
+    if (confirmed) {
+      this.historyManager.clear();
+    }
   }
 
   /**

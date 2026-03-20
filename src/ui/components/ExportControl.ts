@@ -2,6 +2,8 @@ import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { type ExportFormat } from '../../utils/export/FrameExporter';
 import { getIconSvg, type IconName } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
+import { type PreferencesManager, type ExportDefaults, getCorePreferencesManager } from '../../core/PreferencesManager';
+import { FrameburnSettingsMenu } from './FrameburnSettingsMenu';
 
 export interface ExportRequest {
   format: ExportFormat;
@@ -21,16 +23,25 @@ export interface VideoExportRequest {
   useInOutRange: boolean;
 }
 
+export interface PluginExportRequest {
+  pluginId: string;
+  name: string;
+}
+
 export interface ExportControlEvents extends EventMap {
   exportRequested: ExportRequest;
   sourceExportRequested: { format: ExportFormat; quality: number };
-  copyRequested: void;
+  copyRequested: { includeAnnotations: boolean };
   sequenceExportRequested: SequenceExportRequest;
   videoExportRequested: VideoExportRequest;
   rvSessionExportRequested: { format: 'rv' | 'gto' };
   annotationsJSONExportRequested: void;
+  annotationsJSONImportRequested: void;
   annotationsPDFExportRequested: void;
   reportExportRequested: { format: 'csv' | 'html' };
+  edlExportRequested: void;
+  otioExportRequested: void;
+  pluginExportRequested: PluginExportRequest;
 }
 
 export class ExportControl extends EventEmitter<ExportControlEvents> {
@@ -41,9 +52,25 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
   private annotationsCheckbox: HTMLInputElement | null = null;
   private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
   private _cleanupA11yFocus: (() => void) | null = null;
+  private readonly preferencesManager: PreferencesManager;
+  private readonly frameburnSettingsMenu: FrameburnSettingsMenu;
 
-  constructor() {
+  /** Plugin exporter menu items keyed by "pluginId:name" */
+  private pluginExporterItems = new Map<string, HTMLElement>();
+  /** Separator element shown before plugin exporter section */
+  private pluginExporterSeparator: HTMLElement | null = null;
+  /** Section header for plugin exporters */
+  private pluginExporterHeader: HTMLElement | null = null;
+
+  /** Elements that belong to the annotations export section (header, items, separator) */
+  private annotationSectionElements: HTMLElement[] = [];
+  /** Current annotation count; controls visibility of the annotation export section */
+  private _annotationCount = 0;
+
+  constructor(preferencesManager?: PreferencesManager) {
     super();
+    this.preferencesManager = preferencesManager ?? getCorePreferencesManager();
+    this.frameburnSettingsMenu = new FrameburnSettingsMenu(this.preferencesManager);
 
     // Create container
     this.container = document.createElement('div');
@@ -58,8 +85,8 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
     // Create export button
     this.exportButton = document.createElement('button');
     this.exportButton.innerHTML = `${getIconSvg('download', 'sm')}<span style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;">Export</span>`;
-    this.exportButton.setAttribute('aria-label', 'Export current frame (Ctrl+S)');
-    this.exportButton.title = 'Export current frame (Ctrl+S)';
+    this.exportButton.setAttribute('aria-label', 'Export options (Ctrl+S)');
+    this.exportButton.title = 'Export options (Ctrl+S)';
     this.exportButton.setAttribute('aria-haspopup', 'menu');
     this.exportButton.setAttribute('aria-expanded', 'false');
     this.exportButton.style.cssText = `
@@ -78,6 +105,7 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
       outline: none;
     `;
 
+    this.exportButton.dataset.testid = 'export-button';
     this.exportButton.addEventListener('click', () => this.toggleDropdown());
     this.exportButton.addEventListener('pointerenter', () => {
       if (!this.isDropdownOpen) {
@@ -183,6 +211,7 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
     this.addSectionHeader('Video Export');
     this.addMenuItem('film', 'Export MP4 In/Out Range', () => this.exportVideo(true));
     this.addMenuItem('film', 'Export MP4 All Frames', () => this.exportVideo(false));
+    this.addMenuItem('film', 'Advanced Frameburn…', () => this.openFrameburnSettings());
 
     this.addSeparator();
 
@@ -193,17 +222,33 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
 
     this.addSeparator();
 
-    // Annotations export section
+    // Annotations export section (conditionally visible based on annotation count)
+    this.annotationSectionElements = [];
     this.addSectionHeader('Annotations');
+    this.annotationSectionElements.push(this.dropdown.lastElementChild as HTMLElement);
     this.addMenuItem('download', 'Export Annotations (JSON)', () => this.exportAnnotationsJSON());
+    this.annotationSectionElements.push(this.dropdown.lastElementChild as HTMLElement);
+    this.addMenuItem('upload', 'Import Annotations (JSON)', () => this.importAnnotationsJSON());
+    this.annotationSectionElements.push(this.dropdown.lastElementChild as HTMLElement);
     this.addMenuItem('download', 'Export Annotations (PDF)', () => this.exportAnnotationsPDF());
-
+    this.annotationSectionElements.push(this.dropdown.lastElementChild as HTMLElement);
     this.addSeparator();
+    this.annotationSectionElements.push(this.dropdown.lastElementChild as HTMLElement);
+
+    // Hide annotation section initially (no annotations)
+    this.updateAnnotationSectionVisibility();
 
     // Report export section
     this.addSectionHeader('Reports');
     this.addMenuItem('note', 'Export Dailies Report (CSV)', () => this.exportReport('csv'));
     this.addMenuItem('note', 'Export Dailies Report (HTML)', () => this.exportReport('html'));
+
+    this.addSeparator();
+
+    // Playlist export section
+    this.addSectionHeader('Playlist');
+    this.addMenuItem('download', 'Export EDL (CMX 3600)', () => this.exportEDL());
+    this.addMenuItem('download', 'Export OTIO', () => this.exportOTIO());
 
     this.addSeparator();
 
@@ -311,7 +356,7 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
     checkbox.id = 'export-annotations';
-    checkbox.checked = true;
+    checkbox.checked = this.getDefaults().includeAnnotations;
     checkbox.style.cssText = `
       width: 14px;
       height: 14px;
@@ -412,42 +457,55 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
   }
 
   private getIncludeAnnotations(): boolean {
-    return this.annotationsCheckbox?.checked ?? true;
+    return this.annotationsCheckbox?.checked ?? this.getDefaults().includeAnnotations;
+  }
+
+  /** Read persisted export defaults from PreferencesManager. */
+  private getDefaults(): ExportDefaults {
+    return this.preferencesManager.getExportDefaults();
   }
 
   private exportAs(format: ExportFormat): void {
+    const defaults = this.getDefaults();
     this.emit('exportRequested', {
       format,
       includeAnnotations: this.getIncludeAnnotations(),
-      quality: 0.92,
+      quality: defaults.defaultQuality,
     });
   }
 
   private copyToClipboard(): void {
-    this.emit('copyRequested', undefined);
+    this.emit('copyRequested', { includeAnnotations: this.getIncludeAnnotations() });
   }
 
   private exportSourceAs(format: ExportFormat): void {
+    const defaults = this.getDefaults();
     this.emit('sourceExportRequested', {
       format,
-      quality: 0.92,
+      quality: defaults.defaultQuality,
     });
   }
 
   private exportSequence(useInOutRange: boolean): void {
+    const defaults = this.getDefaults();
     this.emit('sequenceExportRequested', {
-      format: 'png',
-      includeAnnotations: this.annotationsCheckbox?.checked ?? true,
-      quality: 0.95,
+      format: defaults.defaultFormat,
+      includeAnnotations: this.getIncludeAnnotations(),
+      quality: defaults.defaultQuality,
       useInOutRange,
     });
   }
 
   private exportVideo(useInOutRange: boolean): void {
     this.emit('videoExportRequested', {
-      includeAnnotations: this.annotationsCheckbox?.checked ?? true,
+      includeAnnotations: this.getIncludeAnnotations(),
       useInOutRange,
     });
+  }
+
+  private openFrameburnSettings(): void {
+    const rect = this.exportButton.getBoundingClientRect();
+    this.frameburnSettingsMenu.show(rect.right + 4, rect.bottom + 4);
   }
 
   private exportRvSession(format: 'rv' | 'gto'): void {
@@ -458,12 +516,180 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
     this.emit('annotationsJSONExportRequested', undefined);
   }
 
+  private importAnnotationsJSON(): void {
+    this.emit('annotationsJSONImportRequested', undefined);
+  }
+
   private exportAnnotationsPDF(): void {
     this.emit('annotationsPDFExportRequested', undefined);
   }
 
   private exportReport(format: 'csv' | 'html'): void {
     this.emit('reportExportRequested', { format });
+  }
+
+  private exportEDL(): void {
+    this.emit('edlExportRequested', undefined);
+  }
+
+  private exportOTIO(): void {
+    this.emit('otioExportRequested', undefined);
+  }
+
+  /**
+   * Update the annotation count. When the count transitions between zero and
+   * non-zero the annotation export section is shown or hidden accordingly.
+   */
+  setAnnotationCount(count: number): void {
+    const prev = this._annotationCount;
+    this._annotationCount = count;
+    if ((prev === 0) !== (count === 0)) {
+      this.updateAnnotationSectionVisibility();
+    }
+  }
+
+  /** Current annotation count exposed for tests and external consumers. */
+  get annotationCount(): number {
+    return this._annotationCount;
+  }
+
+  private updateAnnotationSectionVisibility(): void {
+    const visible = this._annotationCount > 0;
+    for (const el of this.annotationSectionElements) {
+      el.style.display = visible ? '' : 'none';
+    }
+  }
+
+  /**
+   * Add a plugin-contributed exporter to the dropdown menu.
+   * The item appears in a "Plugin Exporters" section at the end of the dropdown
+   * (before the annotations toggle).
+   */
+  addPluginExporter(pluginId: string, name: string, label: string): void {
+    const key = `${pluginId}:${name}`;
+    if (this.pluginExporterItems.has(key)) return;
+
+    // Ensure the plugin exporter section exists (separator + header)
+    if (!this.pluginExporterSeparator) {
+      this.pluginExporterSeparator = document.createElement('div');
+      this.pluginExporterSeparator.style.cssText = `
+        height: 1px;
+        background: var(--bg-hover);
+        margin: 4px 0;
+      `;
+      this.pluginExporterSeparator.dataset.testid = 'plugin-exporter-separator';
+      // Insert before the annotations toggle (last child is the toggle row)
+      const annotationsToggle = this.dropdown.lastElementChild as HTMLElement | null;
+      // Go back two: the separator before annotations toggle, then annotations toggle
+      const optionsSeparator = annotationsToggle?.previousElementSibling;
+      if (optionsSeparator) {
+        this.dropdown.insertBefore(this.pluginExporterSeparator, optionsSeparator);
+      } else {
+        this.dropdown.appendChild(this.pluginExporterSeparator);
+      }
+
+      this.pluginExporterHeader = document.createElement('div');
+      this.pluginExporterHeader.style.cssText = `
+        padding: 6px 12px 4px;
+        color: var(--text-muted);
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      `;
+      this.pluginExporterHeader.textContent = 'Plugin Exporters';
+      this.pluginExporterHeader.dataset.testid = 'plugin-exporter-header';
+      this.pluginExporterSeparator.insertAdjacentElement('afterend', this.pluginExporterHeader);
+    }
+
+    // Create the menu item button
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.setAttribute('role', 'menuitem');
+    row.tabIndex = -1;
+    row.dataset.testid = `plugin-exporter-${key}`;
+    row.style.cssText = `
+      display: flex;
+      align-items: center;
+      padding: 6px 12px;
+      cursor: pointer;
+      transition: background 0.12s ease;
+      gap: 8px;
+      color: var(--text-muted);
+      background: transparent;
+      border: none;
+      width: 100%;
+      text-align: left;
+      font-family: inherit;
+      font-size: inherit;
+      outline: none;
+    `;
+
+    row.addEventListener('pointerenter', () => {
+      row.style.background = 'var(--bg-hover)';
+      row.style.color = 'var(--text-primary)';
+    });
+    row.addEventListener('pointerleave', () => {
+      row.style.background = 'transparent';
+      row.style.color = 'var(--text-muted)';
+    });
+    row.addEventListener('focus', () => {
+      row.style.background = 'var(--bg-hover)';
+      row.style.color = 'var(--text-primary)';
+    });
+    row.addEventListener('blur', () => {
+      row.style.background = 'transparent';
+      row.style.color = 'var(--text-muted)';
+    });
+
+    const iconEl = document.createElement('span');
+    iconEl.innerHTML = getIconSvg('download', 'sm');
+    iconEl.style.cssText = 'display: flex; align-items: center;';
+
+    const labelEl = document.createElement('span');
+    labelEl.textContent = label;
+    labelEl.style.cssText = 'flex: 1; font-size: 12px;';
+
+    row.appendChild(iconEl);
+    row.appendChild(labelEl);
+
+    row.addEventListener('click', () => {
+      this.emit('pluginExportRequested', { pluginId, name });
+      this.closeDropdown();
+    });
+
+    // Insert after the header (or after the last plugin exporter item)
+    const insertAfter = this.pluginExporterHeader!;
+    // Find the right insertion point: after header + all existing plugin items
+    let lastPluginItem: HTMLElement = insertAfter;
+    for (const item of this.pluginExporterItems.values()) {
+      if (item.compareDocumentPosition(lastPluginItem) & Node.DOCUMENT_POSITION_FOLLOWING) {
+        continue;
+      }
+      lastPluginItem = item;
+    }
+    lastPluginItem.insertAdjacentElement('afterend', row);
+
+    this.pluginExporterItems.set(key, row);
+  }
+
+  /**
+   * Remove a plugin-contributed exporter from the dropdown menu.
+   */
+  removePluginExporter(pluginId: string, name: string): void {
+    const key = `${pluginId}:${name}`;
+    const item = this.pluginExporterItems.get(key);
+    if (!item) return;
+
+    item.remove();
+    this.pluginExporterItems.delete(key);
+
+    // If no more plugin exporters, remove the section separator and header
+    if (this.pluginExporterItems.size === 0) {
+      this.pluginExporterSeparator?.remove();
+      this.pluginExporterSeparator = null;
+      this.pluginExporterHeader?.remove();
+      this.pluginExporterHeader = null;
+    }
   }
 
   quickExport(format: ExportFormat = 'png'): void {
@@ -479,6 +705,7 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
     document.removeEventListener('click', this.boundHandleDocumentClick);
     this._cleanupA11yFocus?.();
     this._cleanupA11yFocus = null;
+    this.frameburnSettingsMenu.dispose();
     // Remove body-mounted dropdown if present
     if (this.dropdown.parentNode) {
       this.dropdown.parentNode.removeChild(this.dropdown);

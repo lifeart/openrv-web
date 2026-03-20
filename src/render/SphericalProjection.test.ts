@@ -4,7 +4,7 @@
  * Tests for the equirectangular 360 viewer math and projection logic.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   SphericalProjection,
   mat4Identity,
@@ -294,6 +294,84 @@ describe('SphericalProjection', () => {
       expect(sp.yaw).toBe(0);
       expect(sp.pitch).toBe(0);
       expect(sp.fov).toBe(90);
+    });
+
+    it('SP-CLS-027: enable is idempotent (no duplicate notification)', () => {
+      const listener = vi.fn();
+      sp.onEnabledChange(listener);
+
+      sp.enable();
+      sp.enable(); // second call should be a no-op
+      expect(sp.enabled).toBe(true);
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(listener).toHaveBeenCalledWith(true);
+    });
+
+    it('SP-CLS-028: disable is idempotent (no duplicate notification)', () => {
+      const listener = vi.fn();
+      sp.enable();
+
+      sp.onEnabledChange(listener);
+      sp.disable();
+      sp.disable(); // second call should be a no-op
+      expect(sp.enabled).toBe(false);
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(listener).toHaveBeenCalledWith(false);
+    });
+
+    it('SP-CLS-029: disable when already disabled does not reset view state', () => {
+      // Set some state while disabled (unusual but possible via setYawPitch)
+      sp.setYawPitch(45, 30);
+      sp.setFOV(60);
+      sp.disable(); // should be a no-op since already disabled
+      // State should NOT be reset because disable() guards on _enabled
+      expect(sp.yaw).not.toBe(0);
+      expect(sp.fov).toBe(60);
+    });
+  });
+
+  describe('onEnabledChange', () => {
+    it('SP-CLS-030: listener fires on enable', () => {
+      const listener = vi.fn();
+      sp.onEnabledChange(listener);
+
+      sp.enable();
+      expect(listener).toHaveBeenCalledOnce();
+      expect(listener).toHaveBeenCalledWith(true);
+    });
+
+    it('SP-CLS-031: listener fires on disable', () => {
+      const listener = vi.fn();
+      sp.enable();
+
+      sp.onEnabledChange(listener);
+      sp.disable();
+      expect(listener).toHaveBeenCalledOnce();
+      expect(listener).toHaveBeenCalledWith(false);
+    });
+
+    it('SP-CLS-032: unsubscribe stops notifications', () => {
+      const listener = vi.fn();
+      const unsub = sp.onEnabledChange(listener);
+
+      sp.enable();
+      expect(listener).toHaveBeenCalledOnce();
+
+      unsub();
+      sp.disable();
+      // Should not have been called again after unsubscribe
+      expect(listener).toHaveBeenCalledOnce();
+    });
+
+    it('SP-CLS-033: multiple listeners all receive notifications', () => {
+      const listener1 = vi.fn();
+      const listener2 = vi.fn();
+      sp.onEnabledChange(listener1);
+      sp.onEnabledChange(listener2);
+
+      sp.enable();
+      expect(listener1).toHaveBeenCalledWith(true);
+      expect(listener2).toHaveBeenCalledWith(true);
     });
   });
 

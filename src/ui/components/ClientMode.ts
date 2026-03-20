@@ -80,19 +80,25 @@ const DEFAULT_RESTRICTED_CATEGORIES: string[] = [
  * CSS selectors / element identifiers for UI elements that should be
  * hidden or disabled in client mode. External code uses these to apply
  * visibility changes.
+ *
+ * These selectors target `data-panel` and `data-toolbar` attributes that
+ * are applied to production DOM elements by LayoutOrchestrator.tagClientModeElements().
+ * The attributes are added during layout creation, covering:
+ *   - Tab bar buttons for editing tabs (color, effects, transform, annotate)
+ *   - Context toolbar tab panel containers
+ *   - Paint toolbar, notes panel, snapshots/history panel, left panel (color tools)
+ *   - Editing toolbar (context toolbar) and annotation toolbar (tab bar)
+ *
+ * Actions for features without dedicated panel DOM (export, channel, stereo,
+ * network) are gated by isActionAllowed() instead of DOM hiding.
  */
 const DEFAULT_RESTRICTED_ELEMENTS: string[] = [
   '[data-panel="color"]',
   '[data-panel="effects"]',
   '[data-panel="transform"]',
   '[data-panel="annotate"]',
-  '[data-panel="export"]',
-  '[data-panel="paint"]',
-  '[data-panel="channel"]',
-  '[data-panel="stereo"]',
   '[data-panel="notes"]',
   '[data-panel="snapshots"]',
-  '[data-panel="network"]',
   '[data-toolbar="editing"]',
   '[data-toolbar="annotation"]',
   '[data-toolbar="paint"]',

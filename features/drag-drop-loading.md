@@ -110,7 +110,7 @@ The drag-drop functionality is implemented in the Viewer component with the foll
 - **Location**: Header bar, first control in file operations group
 - **Icon**: Folder icon (SVG)
 - **Label**: "Open"
-- **Tooltip**: "Open media file"
+- **Tooltip**: "Open file"
 - **Action**: Triggers hidden file input click
 
 ### Error Handling

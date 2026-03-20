@@ -65,9 +65,7 @@ describe('MuPropertyBridge', () => {
 
     it('throws if property already exists', () => {
       bridge.newProperty('node.comp.gamma', MuPropertyType.Float, 1);
-      expect(() => bridge.newProperty('node.comp.gamma', MuPropertyType.Float, 1)).toThrow(
-        'Property already exists',
-      );
+      expect(() => bridge.newProperty('node.comp.gamma', MuPropertyType.Float, 1)).toThrow('Property already exists');
     });
 
     it('throws for invalid path', () => {
@@ -148,6 +146,130 @@ describe('MuPropertyBridge', () => {
     it('returns empty array for unknown node', () => {
       expect(bridge.properties('unknown')).toEqual([]);
     });
+
+    it('returns properties matching #TypeName hash-path', () => {
+      bridge.newProperty('group000_RVSourceGroup.source.media', MuPropertyType.String, 1);
+      bridge.newProperty('group000_RVSourceGroup.color.gamma', MuPropertyType.Float, 1);
+      bridge.newProperty('otherNode.color.gamma', MuPropertyType.Float, 1);
+
+      const props = bridge.properties('#RVSourceGroup');
+      expect(props).toHaveLength(2);
+      expect(props).toContain('group000_RVSourceGroup.source.media');
+      expect(props).toContain('group000_RVSourceGroup.color.gamma');
+    });
+
+    it('returns properties from multiple nodes matching #TypeName', () => {
+      bridge.newProperty('group000_RVSourceGroup.source.media', MuPropertyType.String, 1);
+      bridge.newProperty('group001_RVSourceGroup.source.media', MuPropertyType.String, 1);
+      bridge.newProperty('otherNode.color.gamma', MuPropertyType.Float, 1);
+
+      const props = bridge.properties('#RVSourceGroup');
+      expect(props).toHaveLength(2);
+      expect(props).toContain('group000_RVSourceGroup.source.media');
+      expect(props).toContain('group001_RVSourceGroup.source.media');
+    });
+
+    it('exact name returns only that node while #TypeName returns all matching', () => {
+      bridge.newProperty('group000_RVSourceGroup.source.media', MuPropertyType.String, 1);
+      bridge.newProperty('group001_RVSourceGroup.source.media', MuPropertyType.String, 1);
+
+      const exact = bridge.properties('group000_RVSourceGroup');
+      expect(exact).toHaveLength(1);
+      expect(exact).toContain('group000_RVSourceGroup.source.media');
+
+      const hash = bridge.properties('#RVSourceGroup');
+      expect(hash).toHaveLength(2);
+    });
+
+    it('returns empty array for non-matching #TypeName', () => {
+      bridge.newProperty('group000_RVSourceGroup.source.media', MuPropertyType.String, 1);
+      expect(bridge.properties('#NonExistent')).toEqual([]);
+    });
+
+    it('returns empty array for bare # (not all properties)', () => {
+      bridge.newProperty('group000_RVSourceGroup.source.media', MuPropertyType.String, 1);
+      bridge.newProperty('otherNode.color.gamma', MuPropertyType.Float, 1);
+      expect(bridge.properties('#')).toEqual([]);
+    });
+
+    it('suffix match takes priority: #RVSource matches _RVSource but not _RVSourceGroup', () => {
+      bridge.newProperty('node1_RVSource.media.url', MuPropertyType.String, 1);
+      bridge.newProperty('node2_RVSourceGroup.source.media', MuPropertyType.String, 1);
+
+      // Suffix match (_RVSource) takes priority over substring match (_RVSourceGroup)
+      const props = bridge.properties('#RVSource');
+      expect(props).toHaveLength(1);
+      expect(props).toContain('node1_RVSource.media.url');
+    });
+
+    it('falls back to substring match when no exact or suffix match exists', () => {
+      bridge.newProperty('node2_RVSourceGroup.source.media', MuPropertyType.String, 1);
+      bridge.newProperty('node3_RVSourceGroup.color.gamma', MuPropertyType.Float, 1);
+
+      // No exact or suffix match for RVSource, so substring matches are used
+      const props = bridge.properties('#RVSource');
+      expect(props).toHaveLength(2);
+      expect(props).toContain('node2_RVSourceGroup.source.media');
+      expect(props).toContain('node3_RVSourceGroup.color.gamma');
+    });
+  });
+
+  // ---- Issue #253: properties() hash-path consistency with _resolveKey() ----
+
+  describe('properties() hash-path resolution consistency (Issue #253)', () => {
+    it('properties(#RVLinearize) uses suffix matching consistent with _resolveKey', () => {
+      bridge.newProperty('myRVLinearize_color.component.prop', MuPropertyType.Float, 1);
+      bridge.newProperty('other_color.component.prop', MuPropertyType.Float, 1);
+      bridge.newProperty('src_RVLinearize.component.prop', MuPropertyType.Float, 1);
+      bridge.newProperty('src_RVLinearize.component.other', MuPropertyType.Float, 1);
+
+      // Suffix match: src_RVLinearize ends with _RVLinearize
+      // myRVLinearize_color is a substring match (contains RVLinearize but not as suffix)
+      // Suffix matches should take priority
+      const props = bridge.properties('#RVLinearize');
+      expect(props).toHaveLength(2);
+      expect(props).toContain('src_RVLinearize.component.prop');
+      expect(props).toContain('src_RVLinearize.component.other');
+      // Substring match should NOT be included when suffix matches exist
+      expect(props).not.toContain('myRVLinearize_color.component.prop');
+    });
+
+    it('properties(#RVLinearize) result is consistent with _resolveKey(#RVLinearize.component.prop)', () => {
+      bridge.newProperty('myRVLinearize_color.component.prop', MuPropertyType.Float, 1);
+      bridge.setFloatProperty('myRVLinearize_color.component.prop', [99]);
+      bridge.newProperty('src_RVLinearize.component.prop', MuPropertyType.Float, 1);
+      bridge.setFloatProperty('src_RVLinearize.component.prop', [42]);
+
+      // _resolveKey should resolve to src_RVLinearize (suffix match wins)
+      expect(bridge.getFloatProperty('#RVLinearize.component.prop')).toEqual([42]);
+
+      // properties should return only the suffix-matched node's properties
+      const props = bridge.properties('#RVLinearize');
+      expect(props).toContain('src_RVLinearize.component.prop');
+      expect(props).not.toContain('myRVLinearize_color.component.prop');
+    });
+
+    it('properties(#TypeName) exact match excludes suffix and substring matches', () => {
+      bridge.newProperty('RVLinearize.comp.a', MuPropertyType.Float, 1);
+      bridge.newProperty('src_RVLinearize.comp.b', MuPropertyType.Float, 1);
+      bridge.newProperty('myRVLinearize_extra.comp.c', MuPropertyType.Float, 1);
+
+      const props = bridge.properties('#RVLinearize');
+      expect(props).toHaveLength(1);
+      expect(props).toContain('RVLinearize.comp.a');
+    });
+
+    it('properties(#TypeName) returns all properties from multiple suffix-matched nodes', () => {
+      bridge.newProperty('group000_RVColor.color.gamma', MuPropertyType.Float, 1);
+      bridge.newProperty('group001_RVColor.color.gamma', MuPropertyType.Float, 1);
+      bridge.newProperty('group000_RVColor.color.exposure', MuPropertyType.Float, 1);
+
+      const props = bridge.properties('#RVColor');
+      expect(props).toHaveLength(3);
+      expect(props).toContain('group000_RVColor.color.gamma');
+      expect(props).toContain('group001_RVColor.color.gamma');
+      expect(props).toContain('group000_RVColor.color.exposure');
+    });
   });
 
   // ---- Float property get/set ----
@@ -217,9 +339,7 @@ describe('MuPropertyBridge', () => {
 
     it('throws when setting string values on a float property', () => {
       bridge.newProperty('node.color.val', MuPropertyType.Float, 1);
-      expect(() => bridge.setStringProperty('node.color.val', ['hello'])).toThrow(
-        'not a string property',
-      );
+      expect(() => bridge.setStringProperty('node.color.val', ['hello'])).toThrow('not a string property');
     });
   });
 
@@ -302,9 +422,7 @@ describe('MuPropertyBridge', () => {
 
     it('throws for non-string property', () => {
       bridge.newProperty('node.color.val', MuPropertyType.Float, 1);
-      expect(() => bridge.insertStringProperty('node.color.val', ['x'], 0)).toThrow(
-        'not a string property',
-      );
+      expect(() => bridge.insertStringProperty('node.color.val', ['x'], 0)).toThrow('not a string property');
     });
   });
 
@@ -352,6 +470,74 @@ describe('MuPropertyBridge', () => {
       const info = bridge.propertyInfo('#RVColor.color.gamma');
       expect(info.name).toBe('RVColor.color.gamma');
       expect(info.type).toBe('float');
+    });
+
+    it('prefers suffix match over substring match', () => {
+      // Insert substring match FIRST to prove it's not just insertion-order luck
+      bridge.newProperty('node_RVSourceGroup.comp.prop', MuPropertyType.Float, 1);
+      bridge.setFloatProperty('node_RVSourceGroup.comp.prop', [2.0]);
+      bridge.newProperty('node_RVSource.comp.prop', MuPropertyType.Float, 1);
+      bridge.setFloatProperty('node_RVSource.comp.prop', [1.0]);
+
+      // #RVSource should resolve to node_RVSource (suffix), not node_RVSourceGroup (substring)
+      expect(bridge.getFloatProperty('#RVSource.comp.prop')).toEqual([1.0]);
+    });
+
+    it('breaks ties alphabetically among equal-quality matches', () => {
+      bridge.newProperty('group002_Type.comp.prop', MuPropertyType.Float, 1);
+      bridge.setFloatProperty('group002_Type.comp.prop', [2.0]);
+      bridge.newProperty('group001_Type.comp.prop', MuPropertyType.Float, 1);
+      bridge.setFloatProperty('group001_Type.comp.prop', [1.0]);
+
+      // Both are suffix matches; alphabetically first (group001) wins
+      expect(bridge.getFloatProperty('#Type.comp.prop')).toEqual([1.0]);
+    });
+
+    it('resolves deterministically regardless of insertion order', () => {
+      // Insert in reverse alphabetical order
+      bridge.newProperty('zzz_Color.color.gamma', MuPropertyType.Float, 1);
+      bridge.setFloatProperty('zzz_Color.color.gamma', [3.0]);
+      bridge.newProperty('aaa_Color.color.gamma', MuPropertyType.Float, 1);
+      bridge.setFloatProperty('aaa_Color.color.gamma', [1.0]);
+      bridge.newProperty('mmm_Color.color.gamma', MuPropertyType.Float, 1);
+      bridge.setFloatProperty('mmm_Color.color.gamma', [2.0]);
+
+      // Should always resolve to alphabetically first
+      expect(bridge.getFloatProperty('#Color.color.gamma')).toEqual([1.0]);
+    });
+
+    it('exact match still wins over suffix and substring matches', () => {
+      bridge.newProperty('node_RVColor.color.gamma', MuPropertyType.Float, 1);
+      bridge.setFloatProperty('node_RVColor.color.gamma', [2.0]);
+      bridge.newProperty('RVColor.color.gamma', MuPropertyType.Float, 1);
+      bridge.setFloatProperty('RVColor.color.gamma', [1.0]);
+
+      // Exact match (RVColor) should win
+      expect(bridge.getFloatProperty('#RVColor.color.gamma')).toEqual([1.0]);
+    });
+
+    // ---- Issue #256: insertion-order independence regression ----
+
+    it('resolves #RVLinearize deterministically when b_ is inserted before a_ (Issue #256)', () => {
+      // Insert b_ first, then a_ — reverse alphabetical insertion order
+      bridge.newProperty('b_RVLinearize.component.prop', MuPropertyType.Float, 1);
+      bridge.setFloatProperty('b_RVLinearize.component.prop', [2.0]);
+      bridge.newProperty('a_RVLinearize.component.prop', MuPropertyType.Float, 1);
+      bridge.setFloatProperty('a_RVLinearize.component.prop', [1.0]);
+
+      // a_RVLinearize is alphabetically first — must always win regardless of insertion order
+      expect(bridge.getFloatProperty('#RVLinearize.component.prop')).toEqual([1.0]);
+    });
+
+    it('resolves #RVLinearize deterministically when a_ is inserted before b_ (Issue #256)', () => {
+      // Insert a_ first, then b_ — alphabetical insertion order
+      bridge.newProperty('a_RVLinearize.component.prop', MuPropertyType.Float, 1);
+      bridge.setFloatProperty('a_RVLinearize.component.prop', [1.0]);
+      bridge.newProperty('b_RVLinearize.component.prop', MuPropertyType.Float, 1);
+      bridge.setFloatProperty('b_RVLinearize.component.prop', [2.0]);
+
+      // a_RVLinearize is alphabetically first — same result as reversed insertion order
+      expect(bridge.getFloatProperty('#RVLinearize.component.prop')).toEqual([1.0]);
     });
   });
 
@@ -435,6 +621,75 @@ describe('MuPropertyBridge', () => {
     });
   });
 
+  // ---- ND property dimension preservation (Issue #249) ----
+
+  describe('ND property dimension preservation', () => {
+    it('preserves [4,4] dimensions after setFloatProperty', () => {
+      bridge.newNDProperty('node.transform.matrix', MuPropertyType.Float, [4, 4]);
+      const values = Array.from({ length: 16 }, (_, i) => i + 1);
+      bridge.setFloatProperty('node.transform.matrix', values);
+      const info = bridge.propertyInfo('node.transform.matrix');
+      expect(info.dimensions).toEqual([4, 4]);
+      expect(info.size).toBe(16);
+    });
+
+    it('preserves [4,4] dimensions after setIntProperty', () => {
+      bridge.newNDProperty('node.transform.intmat', MuPropertyType.Int, [4, 4]);
+      bridge.setIntProperty('node.transform.intmat', Array(16).fill(0));
+      expect(bridge.propertyInfo('node.transform.intmat').dimensions).toEqual([4, 4]);
+    });
+
+    it('preserves ND string dimensions after setStringProperty', () => {
+      bridge.newNDProperty('node.data.grid', MuPropertyType.String, [3, 2]);
+      bridge.setStringProperty('node.data.grid', ['a', 'b', 'c', 'd', 'e', 'f']);
+      expect(bridge.propertyInfo('node.data.grid').dimensions).toEqual([3, 2]);
+    });
+
+    it('updates outermost dimension on insert for ND float property', () => {
+      bridge.newNDProperty('node.transform.matrix', MuPropertyType.Float, [4, 4]);
+      bridge.setFloatProperty('node.transform.matrix', Array(16).fill(1));
+      // Insert one full row (4 elements) at the end
+      bridge.insertFloatProperty('node.transform.matrix', [9, 9, 9, 9], 16);
+      const info = bridge.propertyInfo('node.transform.matrix');
+      expect(info.dimensions).toEqual([5, 4]);
+      expect(info.size).toBe(20);
+    });
+
+    it('updates outermost dimension on insert for ND string property', () => {
+      bridge.newNDProperty('node.data.grid', MuPropertyType.String, [2, 3]);
+      bridge.setStringProperty('node.data.grid', ['a', 'b', 'c', 'd', 'e', 'f']);
+      bridge.insertStringProperty('node.data.grid', ['g', 'h', 'i'], 6);
+      const info = bridge.propertyInfo('node.data.grid');
+      expect(info.dimensions).toEqual([3, 3]);
+      expect(info.size).toBe(9);
+    });
+
+    it('1D property dimensions update to [newLength] after set', () => {
+      bridge.newProperty('node.points.x', MuPropertyType.Float, 3);
+      bridge.setFloatProperty('node.points.x', [1.0, 2.0, 3.0, 4.0, 5.0]);
+      const info = bridge.propertyInfo('node.points.x');
+      expect(info.dimensions).toEqual([5]);
+      expect(info.size).toBe(5);
+    });
+
+    it('1D property dimensions update to [newLength] after insert', () => {
+      bridge.newProperty('node.points.x', MuPropertyType.Float, 3);
+      bridge.setFloatProperty('node.points.x', [1.0, 2.0, 3.0]);
+      bridge.insertFloatProperty('node.points.x', [4.0], 3);
+      const info = bridge.propertyInfo('node.points.x');
+      expect(info.dimensions).toEqual([4]);
+      expect(info.size).toBe(4);
+    });
+
+    it('propertyInfo reflects correct shape after multiple set operations on ND property', () => {
+      bridge.newNDProperty('node.color.lut', MuPropertyType.Float, [2, 3, 4]);
+      bridge.setFloatProperty('node.color.lut', Array(24).fill(0.5));
+      expect(bridge.propertyInfo('node.color.lut').dimensions).toEqual([2, 3, 4]);
+      bridge.setFloatProperty('node.color.lut', Array(24).fill(1.0));
+      expect(bridge.propertyInfo('node.color.lut').dimensions).toEqual([2, 3, 4]);
+    });
+  });
+
   // ---- Cross-type numeric compatibility ----
 
   describe('cross-type numeric compatibility', () => {
@@ -449,6 +704,63 @@ describe('MuPropertyBridge', () => {
       bridge.newProperty('node.val.x', MuPropertyType.Int, 1);
       bridge.setFloatProperty('node.val.x', [42]);
       expect(bridge.getIntProperty('node.val.x')).toEqual([42]);
+    });
+  });
+
+  // ---- ND property validation (Issue #249 regressions) ----
+
+  describe('ND property set/insert validation', () => {
+    it('throws TypeError when setFloatProperty value count mismatches [4,4] ND dimensions', () => {
+      bridge.newNDProperty('node.transform.matrix', MuPropertyType.Float, [4, 4]);
+      expect(() => bridge.setFloatProperty('node.transform.matrix', new Array(10).fill(0))).toThrow(TypeError);
+      expect(() => bridge.setFloatProperty('node.transform.matrix', new Array(10).fill(0))).toThrow(
+        /Property "node\.transform\.matrix": ND property set requires exactly 16 values \(dimensions: \[4,4\]\), got 10/,
+      );
+    });
+
+    it('throws TypeError when insertFloatProperty value count is not a multiple of inner size for [4,4] ND', () => {
+      bridge.newNDProperty('node.transform.matrix', MuPropertyType.Float, [4, 4]);
+      expect(() => bridge.insertFloatProperty('node.transform.matrix', [1, 2, 3], 0)).toThrow(TypeError);
+      expect(() => bridge.insertFloatProperty('node.transform.matrix', [1, 2, 3], 0)).toThrow(
+        /Property "node\.transform\.matrix": ND property insert requires value count to be a multiple of inner size 4 \(dimensions: \[4,4\]\), got 3/,
+      );
+    });
+
+    it('throws TypeError when setStringProperty value count mismatches [2,3] ND dimensions', () => {
+      bridge.newNDProperty('node.data.grid', MuPropertyType.String, [2, 3]);
+      expect(() => bridge.setStringProperty('node.data.grid', ['a', 'b'])).toThrow(TypeError);
+      expect(() => bridge.setStringProperty('node.data.grid', ['a', 'b'])).toThrow(
+        /Property "node\.data\.grid": ND property set requires exactly 6 values \(dimensions: \[2,3\]\), got 2/,
+      );
+    });
+
+    it('throws TypeError when insertStringProperty value count is not a multiple of inner size for [2,3] ND', () => {
+      bridge.newNDProperty('node.data.grid', MuPropertyType.String, [2, 3]);
+      expect(() => bridge.insertStringProperty('node.data.grid', ['a', 'b'], 0)).toThrow(TypeError);
+      expect(() => bridge.insertStringProperty('node.data.grid', ['a', 'b'], 0)).toThrow(
+        /Property "node\.data\.grid": ND property insert requires value count to be a multiple of inner size 3 \(dimensions: \[2,3\]\), got 2/,
+      );
+    });
+
+    it('inserts 12 values into a [2,3,4] 3D property and updates dimensions to [3,3,4]', () => {
+      bridge.newNDProperty('node.color.lut', MuPropertyType.Float, [2, 3, 4]);
+      // Total = 2*3*4 = 24 elements, set them
+      bridge.setFloatProperty('node.color.lut', new Array(24).fill(1));
+      // innerSize = 3*4 = 12; inserting 12 values adds one outermost "slice"
+      bridge.insertFloatProperty('node.color.lut', new Array(12).fill(2), 0);
+      const info = bridge.propertyInfo('node.color.lut');
+      expect(info.dimensions).toEqual([3, 3, 4]);
+      expect(info.size).toBe(36);
+    });
+
+    it('throws TypeError when insertFloatProperty index is not aligned to inner size for [4,4] ND', () => {
+      bridge.newNDProperty('node.transform.matrix', MuPropertyType.Float, [4, 4]);
+      bridge.setFloatProperty('node.transform.matrix', new Array(16).fill(0));
+      // innerSize = 4, index 2 is not aligned
+      expect(() => bridge.insertFloatProperty('node.transform.matrix', [1, 2, 3, 4], 2)).toThrow(TypeError);
+      expect(() => bridge.insertFloatProperty('node.transform.matrix', [1, 2, 3, 4], 2)).toThrow(
+        /Property "node\.transform\.matrix": ND property insert requires index to be aligned to inner size 4.*got index 2/,
+      );
     });
   });
 });

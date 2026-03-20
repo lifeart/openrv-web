@@ -34,12 +34,7 @@ const TOL = 1 / 1024;
 // ---------------------------------------------------------------------------
 // Helper: check monotonicity for a per-channel operator
 // ---------------------------------------------------------------------------
-function checkMonotonicity(
-  fn: (v: number) => number,
-  start: number,
-  end: number,
-  steps: number,
-): boolean {
+function checkMonotonicity(fn: (v: number) => number, start: number, end: number, steps: number): boolean {
   let prev = fn(start);
   const step = (end - start) / steps;
   for (let i = 1; i <= steps; i++) {
@@ -63,8 +58,9 @@ function checkMonotonicityRGB(
   for (let i = 1; i <= steps; i++) {
     const v = start + step * i;
     const curr = fn(v, v, v);
-    if (curr.r < prev.r - 1e-9 || curr.g < prev.g - 1e-9 || curr.b < prev.b - 1e-9)
+    if (curr.r < prev.r - 1e-9 || curr.g < prev.g - 1e-9 || curr.b < prev.b - 1e-9) {
       return false;
+    }
     prev = curr;
   }
   return true;
@@ -459,9 +455,7 @@ describe('XE-TM: Drago tone mapping', () => {
   });
 
   it('XE-TM-076: monotonicity (0 to 10)', () => {
-    expect(
-      checkMonotonicity((v) => tonemapDragoChannel(v, bias, Lwa, Lmax), 0, 10, 200),
-    ).toBe(true);
+    expect(checkMonotonicity((v) => tonemapDragoChannel(v, bias, Lwa, Lmax), 0, 10, 200)).toBe(true);
   });
 });
 

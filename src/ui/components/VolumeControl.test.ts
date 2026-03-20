@@ -153,80 +153,53 @@ describe('VolumeControl', () => {
   });
 
   describe('slider visibility (H-06 mobile/touch/keyboard)', () => {
-    it('VOL-H06a: clicking the mute button toggles the slider expanded state', () => {
+    it('VOL-H06a: clicking the mute button only toggles mute, does not expand slider', () => {
       const element = volumeControl.render();
       document.body.appendChild(element);
 
       const muteButton = element.querySelector('button')!;
       expect(volumeControl.isSliderExpanded()).toBe(false);
 
-      // First click should expand
-      muteButton.click();
-      expect(volumeControl.isSliderExpanded()).toBe(true);
-
-      // Second click should collapse
+      // Click should only mute, not expand slider
       muteButton.click();
       expect(volumeControl.isSliderExpanded()).toBe(false);
     });
 
-    it('VOL-H06b: when expanded via click, slider remains visible on pointerleave', () => {
+    it('VOL-H06b: hover expands slider, pointerleave collapses it', () => {
       const element = volumeControl.render();
       document.body.appendChild(element);
 
-      const muteButton = element.querySelector('button')!;
       const sliderContainer = element.querySelector('div')!;
 
-      // Click to expand
-      muteButton.click();
+      // Hover to expand
+      element.dispatchEvent(new MouseEvent('pointerenter', { bubbles: true }));
+      expect(sliderContainer.style.width).toBe('160px');
       expect(volumeControl.isSliderExpanded()).toBe(true);
-      expect(sliderContainer.style.width).toBe('96px');
 
-      // Simulate pointerleave on the container
+      // Pointer leave collapses
       element.dispatchEvent(new MouseEvent('pointerleave', { bubbles: true }));
-
-      // Should still be expanded because it was pinned via click
-      expect(volumeControl.isSliderExpanded()).toBe(true);
-      expect(sliderContainer.style.width).toBe('96px');
+      expect(sliderContainer.style.width).toMatch(/^0(px)?$/);
+      expect(volumeControl.isSliderExpanded()).toBe(false);
     });
 
-    it('VOL-H06c: the slider is focusable via keyboard when expanded', () => {
+    it('VOL-H06c: the slider is focusable via keyboard when expanded by focus', () => {
       const element = volumeControl.render();
       document.body.appendChild(element);
 
       const muteButton = element.querySelector('button')!;
       const slider = element.querySelector('input[type="range"]') as HTMLInputElement;
 
-      // Click to expand
-      muteButton.click();
+      // Focus mute button to expand
+      muteButton.focus();
       expect(volumeControl.isSliderExpanded()).toBe(true);
 
       // The slider container should have non-zero width, making the slider reachable
       const sliderContainer = slider.parentElement!;
-      expect(sliderContainer.style.width).toBe('96px');
+      expect(sliderContainer.style.width).toBe('160px');
 
       // The slider should be focusable
       slider.focus();
       expect(document.activeElement).toBe(slider);
-    });
-
-    it('VOL-H06d: clicking outside the volume control area collapses the slider', () => {
-      const element = volumeControl.render();
-      document.body.appendChild(element);
-
-      const muteButton = element.querySelector('button')!;
-
-      // Click to expand
-      muteButton.click();
-      expect(volumeControl.isSliderExpanded()).toBe(true);
-
-      // Click outside (on document body, not inside the control)
-      const outsideElement = document.createElement('div');
-      document.body.appendChild(outsideElement);
-      outsideElement.click();
-
-      expect(volumeControl.isSliderExpanded()).toBe(false);
-      const sliderContainer = element.querySelector('div')!;
-      expect(sliderContainer.style.width).toBe('0px');
     });
 
     it('VOL-H06e: the mute button has aria-label attribute', () => {
@@ -236,19 +209,19 @@ describe('VolumeControl', () => {
       expect(muteButton.getAttribute('aria-label')).toBe('Toggle mute');
     });
 
-    it('VOL-H06f: hover-only expand still collapses on pointerleave when not pinned', () => {
+    it('VOL-H06f: hover expand collapses on pointerleave', () => {
       const element = volumeControl.render();
       document.body.appendChild(element);
 
       const sliderContainer = element.querySelector('div')!;
 
-      // Hover to expand (without clicking)
+      // Hover to expand
       element.dispatchEvent(new MouseEvent('pointerenter', { bubbles: true }));
-      expect(sliderContainer.style.width).toBe('96px');
+      expect(sliderContainer.style.width).toBe('160px');
 
-      // Pointer leave should collapse since not pinned
+      // Pointer leave should collapse
       element.dispatchEvent(new MouseEvent('pointerleave', { bubbles: true }));
-      expect(sliderContainer.style.width).toBe('0px');
+      expect(sliderContainer.style.width).toMatch(/^0(px)?$/);
       expect(volumeControl.isSliderExpanded()).toBe(false);
     });
 
@@ -258,8 +231,8 @@ describe('VolumeControl', () => {
 
       const muteButton = element.querySelector('button')!;
 
-      // Click to expand
-      muteButton.click();
+      // Focus to expand
+      muteButton.focus();
       expect(volumeControl.isSliderExpanded()).toBe(true);
 
       // Create an external element to receive focus
@@ -284,8 +257,8 @@ describe('VolumeControl', () => {
       const muteButton = element.querySelector('button')!;
       const slider = element.querySelector('input[type="range"]')!;
 
-      // Click to expand
-      muteButton.click();
+      // Focus to expand
+      muteButton.focus();
       expect(volumeControl.isSliderExpanded()).toBe(true);
 
       // Dispatch focusout with relatedTarget inside the control (e.g., moving from button to slider)
@@ -298,6 +271,91 @@ describe('VolumeControl', () => {
 
       // Should still be expanded
       expect(volumeControl.isSliderExpanded()).toBe(true);
+    });
+  });
+
+  describe('popout width accommodates slider and scrub toggle (issue #43)', () => {
+    it('VOL-043a: expanded popout width fits both the slider and scrub toggle', () => {
+      const element = volumeControl.render();
+      document.body.appendChild(element);
+
+      // Hover to expand
+      element.dispatchEvent(new MouseEvent('pointerenter', { bubbles: true }));
+
+      const sliderContainer = element.querySelector('div')!;
+      const expandedWidth = parseInt(sliderContainer.style.width, 10);
+
+      // The slider is 80px + 16px margin = 96px, plus scrub checkbox (~16px) + label (~30px) + spacing
+      // The expanded width must be at least 140px to fit everything
+      expect(expandedWidth).toBeGreaterThanOrEqual(140);
+    });
+
+    it('VOL-043b: scrub toggle is present and clickable when popout is expanded', () => {
+      const element = volumeControl.render();
+      document.body.appendChild(element);
+
+      // Hover to expand
+      element.dispatchEvent(new MouseEvent('pointerenter', { bubbles: true }));
+
+      const scrubCheckbox = element.querySelector('input[type="checkbox"]') as HTMLInputElement;
+      expect(scrubCheckbox).toBeInstanceOf(HTMLInputElement);
+      expect(scrubCheckbox.disabled).toBe(false);
+
+      // Toggle the checkbox
+      const listener = vi.fn();
+      volumeControl.on('audioScrubChanged', listener);
+      scrubCheckbox.click();
+      expect(listener).toHaveBeenCalledWith(false);
+    });
+
+    it('VOL-043c: scrub label is visible inside the expanded popout', () => {
+      const element = volumeControl.render();
+      document.body.appendChild(element);
+
+      const muteButton = element.querySelector('button')!;
+      muteButton.click();
+
+      const label = element.querySelector('label')!;
+      expect(label).toBeInstanceOf(HTMLLabelElement);
+      expect(label.textContent).toContain('Scrub');
+      // Label should have white-space: nowrap to prevent text wrapping/clipping
+      expect(label.style.whiteSpace).toBe('nowrap');
+    });
+
+    it('VOL-043d: hover expansion also uses the wider width', () => {
+      const element = volumeControl.render();
+      document.body.appendChild(element);
+
+      const sliderContainer = element.querySelector('div')!;
+
+      element.dispatchEvent(new MouseEvent('pointerenter', { bubbles: true }));
+      expect(sliderContainer.style.width).toBe('160px');
+    });
+  });
+
+  describe('test IDs', () => {
+    it('VOL-100: mute button has data-testid="mute-button"', () => {
+      const el = volumeControl.render();
+      const button = el.querySelector('[data-testid="mute-button"]');
+      expect(button).toBeInstanceOf(HTMLButtonElement);
+    });
+
+    it('VOL-101: volume slider has data-testid="volume-slider"', () => {
+      const el = volumeControl.render();
+      const slider = el.querySelector('[data-testid="volume-slider"]');
+      expect(slider).toBeInstanceOf(HTMLInputElement);
+      expect((slider as HTMLInputElement).type).toBe('range');
+    });
+
+    it('VOL-102: container has data-testid="volume-control"', () => {
+      const el = volumeControl.render();
+      expect(el.dataset.testid).toBe('volume-control');
+    });
+
+    it('VOL-103: mute button tooltip references Shift+M shortcut', () => {
+      const el = volumeControl.render();
+      const muteBtn = el.querySelector('[data-testid="mute-button"]') as HTMLButtonElement;
+      expect(muteBtn.title).toBe('Toggle mute (Shift+M in video mode)');
     });
   });
 });

@@ -35,7 +35,7 @@ This page lists all keyboard shortcuts available in OpenRV Web. Shortcuts are or
 | `6` | Switch to QC tab |
 | `F11` | Toggle fullscreen mode |
 | `Ctrl+Shift+P` | Toggle presentation mode (clean display, cursor auto-hide) |
-| `Shift+B` | Cycle background pattern (checkerboard, grey, white, black, etc.) |
+| `N` | Toggle nearest-neighbor / bilinear filtering |
 | `Shift+Alt+B` | Toggle checkerboard background |
 | `Shift+P` | Toggle pixel aspect ratio correction |
 
@@ -54,6 +54,11 @@ This page lists all keyboard shortcuts available in OpenRV Web. Shortcuts are or
 | `Shift+Up` | Shift in/out range to previous mark pair |
 | `Ctrl+Right` | Shift in/out range to next mark pair (alternative) |
 | `Ctrl+Left` | Shift in/out range to previous mark pair (alternative) |
+| `Alt+Right` | Go to next mark or source boundary |
+| `Alt+Left` | Go to previous mark or source boundary |
+| `PageDown` | Go to next shot in playlist |
+| `PageUp` | Go to previous shot in playlist |
+| `F3` | Toggle timeline magnifier |
 
 ## A/B Compare
 
@@ -65,14 +70,21 @@ This page lists all keyboard shortcuts available in OpenRV Web. Shortcuts are or
 | `Shift+Alt+S` | Toggle split screen (off / horizontal / vertical) |
 | `Shift+D` | Toggle difference matte |
 
+## Fit Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `H` | Fit image height to window |
+| `W` | Fit image width to window |
+
 ## Scopes
 
 | Shortcut | Action |
 |----------|--------|
-| `H` | Toggle histogram |
-| `W` | Toggle waveform monitor |
 | `Y` | Toggle vectorscope |
 | `Shift+I` | Toggle pixel probe |
+
+> **Note:** `H` (histogram) and `W` (waveform) are contextual shortcuts -- they trigger scopes on the QC tab but default to fit-to-height and fit-to-width globally. See [Contextual Shortcuts](#contextual-shortcuts) below.
 
 ## Exposure and Analysis
 
@@ -89,6 +101,8 @@ This page lists all keyboard shortcuts available in OpenRV Web. Shortcuts are or
 | Shortcut | Action |
 |----------|--------|
 | `Shift+3` | Cycle stereo modes (off / SBS / over-under / mirror / anaglyph / etc.) |
+| `Shift+E` | Toggle per-eye transform panel |
+| `Shift+4` | Cycle stereo alignment overlay mode |
 
 ## Display Output
 
@@ -106,7 +120,9 @@ This page lists all keyboard shortcuts available in OpenRV Web. Shortcuts are or
 | `Shift+A` | Alpha channel only |
 | `Shift+L` | Luminance / Grayscale |
 | `Shift+Y` | Grayscale (alias for Shift+L) |
-| `Shift+N` | Reset channel view (no isolation) |
+| `Shift+N` | Reset to RGB (no channel isolation) |
+
+> **Note:** `Shift+R`, `Shift+B`, `Shift+N`, and `Shift+L` are global shortcuts for channel isolation. However, they are overridden on specific tabs: `Shift+R` triggers rotate-left on the Transform tab, `Shift+B` cycles the background pattern on the View tab, `Shift+N` opens the network panel on the QC tab, and `Shift+L` opens the LUT panel on the Color tab. See [Contextual Shortcuts](#contextual-shortcuts) below.
 
 ## Color and Effects
 
@@ -119,16 +135,19 @@ This page lists all keyboard shortcuts available in OpenRV Web. Shortcuts are or
 | `Shift+H` | Toggle HSL Qualifier |
 | `Shift+Alt+J` | Toggle tone mapping |
 | `Shift+Alt+E` | Toggle effects/filter panel |
+| `Ctrl+I` | Toggle color inversion |
+| `Shift+Alt+V` | Cycle luminance visualization modes |
 
 ## Transform
 
 | Shortcut | Action |
 |----------|--------|
-| `Shift+R` | Rotate left 90 degrees |
+| `Shift+R` | Rotate left 90 degrees (Transform tab only; red channel globally) |
 | `Alt+R` | Rotate right 90 degrees |
 | `Alt+H` | Flip horizontal |
 | `Shift+V` | Flip vertical |
 | `Shift+K` | Toggle crop mode |
+| `Ctrl+0` | Reset rotation to 0 degrees |
 
 ## Annotations
 
@@ -160,10 +179,80 @@ This page lists all keyboard shortcuts available in OpenRV Web. Shortcuts are or
 | `Shift+T` | Cycle theme (auto / dark / light) |
 | `Shift+Alt+H` | Toggle history panel |
 | `Shift+Alt+M` | Toggle markers panel |
-| `Shift+N` | Toggle network sync panel |
+| `Shift+N` | Toggle network sync panel (QC tab only; reset channel globally) |
+| `Shift+Alt+N` | Toggle notes panel |
 | `Shift+Alt+P` | Toggle playlist panel |
 | `Ctrl+Shift+S` | Create quick snapshot |
 | `Ctrl+Shift+Alt+S` | Toggle snapshots panel |
+| `Ctrl+Shift+N` | Quick disconnect from sync room |
+
+## Layout Presets
+
+| Shortcut | Action |
+|----------|--------|
+| `Alt+1` | Switch to Default layout |
+| `Alt+2` | Switch to Review layout |
+| `Alt+3` | Switch to Color layout |
+| `Alt+4` | Switch to Paint layout |
+
+## Zoom Presets
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+1` | Zoom to 1:1 (100%) pixel ratio |
+| `Ctrl+2` | Zoom to 2:1 (200%) pixel ratio |
+| `Ctrl+3` | Zoom to 3:1 (300%) pixel ratio |
+| `Ctrl+4` | Zoom to 4:1 (400%) pixel ratio |
+| `Ctrl+5` | Zoom to 5:1 (500%) pixel ratio |
+| `Ctrl+6` | Zoom to 6:1 (600%) pixel ratio |
+| `Ctrl+7` | Zoom to 7:1 (700%) pixel ratio |
+| `Ctrl+8` | Zoom to 8:1 (800%) pixel ratio |
+| `Ctrl+Shift+2` | Zoom to 1:2 (50%) pixel ratio |
+| `Ctrl+Shift+3` | Zoom to 1:3 (~33%) pixel ratio |
+| `Ctrl+Shift+4` | Zoom to 1:4 (25%) pixel ratio |
+| `Ctrl+Shift+5` | Zoom to 1:5 (20%) pixel ratio |
+| `Ctrl+Shift+6` | Zoom to 1:6 (~17%) pixel ratio |
+| `Ctrl+Shift+7` | Zoom to 1:7 (~14%) pixel ratio |
+| `Ctrl+Shift+8` | Zoom to 1:8 (12.5%) pixel ratio |
+
+## Focus and Info
+
+| Shortcut | Action |
+|----------|--------|
+| `F6` | Focus next zone |
+| `Shift+F6` | Focus previous zone |
+| `F7` | Toggle info strip overlay |
+| `Shift+F7` | Toggle info strip full path |
+
+## Notes Navigation
+
+| Shortcut | Action |
+|----------|--------|
+| `Shift+Alt+N` | Toggle notes panel |
+| `Alt+Shift+]` | Go to next note |
+| `Alt+Shift+[` | Go to previous note |
+
+## Reference
+
+| Shortcut | Action |
+|----------|--------|
+| `Alt+Shift+R` | Capture current frame as reference |
+| `Ctrl+Shift+R` | Toggle reference comparison overlay |
+
+## Audio and Caching
+
+| Shortcut | Action |
+|----------|--------|
+| `Shift+M` | Toggle audio mute |
+| `Shift+C` | Cycle frame cache mode (None / Nearby / Playback Buffer) |
+| `Ctrl+Shift+A` | Toggle between Realtime and Play All Frames |
+
+## Version Navigation
+
+| Shortcut | Action |
+|----------|--------|
+| `Alt+]` | Go to next version |
+| `Alt+[` | Go to previous version |
 
 ## Export
 
@@ -171,6 +260,22 @@ This page lists all keyboard shortcuts available in OpenRV Web. Shortcuts are or
 |----------|--------|
 | `Ctrl+S` | Export current frame |
 | `Ctrl+C` | Copy current frame to clipboard |
+
+## Contextual Shortcuts
+
+Some shortcuts change behavior depending on the active tab or context. Globally, these keys perform one action, but when a specific tab is active, they are overridden:
+
+| Shortcut | Global Action | Contextual Override |
+|----------|---------------|---------------------|
+| `Shift+R` | Red channel isolation | Rotate left (Transform tab) |
+| `Shift+B` | Blue channel isolation | Cycle background pattern (View tab) |
+| `Shift+N` | Reset channel to RGB | Network panel (QC tab) |
+| `Shift+L` | Luminance channel | LUT panel (Color tab) |
+| `G` | Go to frame | Gamut diagram (QC tab), ghost mode (Annotate tab) |
+| `H` | Fit to height | Histogram (QC tab) |
+| `W` | Fit to width | Waveform (QC tab) |
+
+If a contextual override is not what you need, switch to a different tab or use the [Shortcut Editor](#shortcut-editor) to reassign bindings.
 
 ## Mouse Controls
 

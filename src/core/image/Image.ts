@@ -56,6 +56,12 @@ export class IPImage {
     this.managedVideoFrame = frame ? ManagedVideoFrame.wrap(frame) : null;
   }
 
+  /**
+   * Right-eye image for multi-view EXR stereo ('separate' input format).
+   * When present, the stereo renderer uses this instead of duplicating the left eye.
+   */
+  rightEyeImage: IPImage | null = null;
+
   /** Decoded ImageBitmap for zero-copy GPU upload (image sequences) */
   imageBitmap: ImageBitmap | null;
 
@@ -120,6 +126,19 @@ export class IPImage {
     }
 
     return this.cachedTypedArray;
+  }
+
+  /**
+   * Replace pixel data for fallback scenarios (e.g., HDR-to-SDR degradation).
+   * Mutates readonly fields via type assertion — only intended for internal
+   * renderer fallback paths.
+   * @internal
+   */
+  overrideData(data: ArrayBuffer, dataType: DataType, channels: number): void {
+    (this as { data: ArrayBuffer }).data = data;
+    (this as { dataType: DataType }).dataType = dataType;
+    (this as { channels: number }).channels = channels;
+    this.cachedTypedArray = null;
   }
 
   getPixel(x: number, y: number, out?: number[]): number[] {
@@ -195,6 +214,10 @@ export class IPImage {
         // Already closed
       }
       this.imageBitmap = null;
+    }
+    if (this.rightEyeImage) {
+      this.rightEyeImage.close();
+      this.rightEyeImage = null;
     }
   }
 

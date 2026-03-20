@@ -1145,4 +1145,60 @@ describe('PaintEngine', () => {
       expect(engine.isAdvancedTool('dodge')).toBe(true);
     });
   });
+
+  describe('hitTestTextAnnotations', () => {
+    it('PAINT-055: returns null when no annotations exist', () => {
+      const result = engine.hitTestTextAnnotations(0, { x: 0.5, y: 0.5 });
+      expect(result).toBeNull();
+    });
+
+    it('PAINT-056: returns the text annotation when click is within tolerance', () => {
+      engine.tool = 'text';
+      const ann = engine.addText(0, { x: 0.5, y: 0.5 }, 'Hello');
+      const result = engine.hitTestTextAnnotations(0, { x: 0.52, y: 0.52 });
+      expect(result).not.toBeNull();
+      expect(result!.id).toBe(ann.id);
+    });
+
+    it('PAINT-057: returns null when click is outside tolerance', () => {
+      engine.tool = 'text';
+      engine.addText(0, { x: 0.5, y: 0.5 }, 'Hello');
+      const result = engine.hitTestTextAnnotations(0, { x: 0.9, y: 0.9 });
+      expect(result).toBeNull();
+    });
+
+    it('PAINT-058: returns topmost (last-added) annotation when multiple overlap', () => {
+      engine.tool = 'text';
+      engine.addText(0, { x: 0.5, y: 0.5 }, 'First');
+      const second = engine.addText(0, { x: 0.5, y: 0.5 }, 'Second');
+      const result = engine.hitTestTextAnnotations(0, { x: 0.5, y: 0.5 });
+      expect(result).not.toBeNull();
+      expect(result!.id).toBe(second.id);
+    });
+
+    it('PAINT-059: ignores non-text annotations', () => {
+      engine.tool = 'pen';
+      engine.beginStroke(0, { x: 0.5, y: 0.5, pressure: 0.5 });
+      engine.continueStroke({ x: 0.6, y: 0.6, pressure: 0.5 });
+      engine.endStroke();
+      const result = engine.hitTestTextAnnotations(0, { x: 0.5, y: 0.5 });
+      expect(result).toBeNull();
+    });
+
+    it('PAINT-060: respects custom tolerance', () => {
+      engine.tool = 'text';
+      engine.addText(0, { x: 0.5, y: 0.5 }, 'Hello');
+      // With very small tolerance, a nearby point should miss
+      const result = engine.hitTestTextAnnotations(0, { x: 0.52, y: 0.52 }, 0.01);
+      expect(result).toBeNull();
+    });
+
+    it('PAINT-061: emits annotationSelected event', () => {
+      const listener = vi.fn();
+      engine.on('annotationSelected', listener);
+      const ann = engine.addText(0, { x: 0.5, y: 0.5 }, 'Hello');
+      engine.emit('annotationSelected', { annotation: ann, frame: 0 });
+      expect(listener).toHaveBeenCalledWith({ annotation: ann, frame: 0 });
+    });
+  });
 });

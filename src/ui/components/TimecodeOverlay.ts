@@ -7,6 +7,7 @@
  * - Adjustable font size
  * - Background opacity for readability
  * - Support for drop-frame timecode
+ *
  */
 
 import { type Session } from '../../core/session/Session';
@@ -15,12 +16,27 @@ import { frameToTimecode, formatTimecode } from './TimecodeDisplay';
 
 export type OverlayPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 
+/**
+ * Display format for the timecode overlay.
+ * - 'smpte': Show only SMPTE timecode (HH:MM:SS:FF)
+ * - 'frame': Show only frame number
+ * - 'both': Show both SMPTE timecode and frame number
+ */
+export type TimecodeDisplayFormat = 'smpte' | 'frame' | 'both';
+
 export interface TimecodeOverlayState {
   enabled: boolean;
   position: OverlayPosition;
   fontSize: 'small' | 'medium' | 'large';
+  /** @deprecated Use `displayFormat` instead. Kept for backward compatibility. */
   showFrameCounter: boolean;
   backgroundOpacity: number;
+  /** Controls which timecode information is displayed. Defaults to 'smpte'. */
+  displayFormat: TimecodeDisplayFormat;
+  /** Embedded source timecode string from media metadata (e.g. MXF startTimecode). */
+  sourceTimecode?: string;
+  /** Whether to display the source timecode row when metadata is available. Defaults to true. */
+  showSourceTimecode: boolean;
 }
 
 export interface TimecodeOverlayEvents extends EventMap {
@@ -33,6 +49,9 @@ export const DEFAULT_TIMECODE_OVERLAY_STATE: TimecodeOverlayState = {
   fontSize: 'medium',
   showFrameCounter: true,
   backgroundOpacity: 0.6,
+  displayFormat: 'smpte',
+  sourceTimecode: undefined,
+  showSourceTimecode: true,
 };
 
 const FONT_SIZES: Record<TimecodeOverlayState['fontSize'], string> = {
@@ -45,6 +64,7 @@ export class TimecodeOverlay extends EventEmitter<TimecodeOverlayEvents> {
   private container: HTMLElement;
   private timecodeElement: HTMLElement;
   private frameCounterElement: HTMLElement;
+  private sourceTimecodeElement: HTMLElement;
   private session: Session;
   private state: TimecodeOverlayState = { ...DEFAULT_TIMECODE_OVERLAY_STATE };
   private startFrame = 0;
@@ -100,16 +120,34 @@ export class TimecodeOverlay extends EventEmitter<TimecodeOverlayEvents> {
     `;
     wrapper.appendChild(this.frameCounterElement);
 
+    // Source timecode (embedded metadata)
+    this.sourceTimecodeElement = document.createElement('div');
+    this.sourceTimecodeElement.className = 'timecode-overlay-source';
+    this.sourceTimecodeElement.dataset.testid = 'timecode-overlay-source';
+    this.sourceTimecodeElement.style.cssText = `
+      color: rgba(255,255,200,0.85);
+      font-size: 0.75em;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+    `;
+    wrapper.appendChild(this.sourceTimecodeElement);
+
     this.container.appendChild(wrapper);
 
     // Apply initial state
     this.updateStyles();
 
+    // Pick up source timecode from current source if already loaded
+    const initialSource = this.session.currentSource;
+    if (initialSource?.sourceTimecode) {
+      this.state.sourceTimecode = initialSource.sourceTimecode;
+    }
+
     // Bind events
     this.unsubscribers.push(
       this.session.on('frameChanged', () => this.update()),
-      this.session.on('sourceLoaded', () => this.update()),
+      this.session.on('sourceLoaded', () => this.onSourceLoaded()),
       this.session.on('durationChanged', () => this.update()),
+      this.session.on('currentSourceChanged', () => this.onSourceLoaded()),
     );
 
     // Initial update
@@ -124,17 +162,63 @@ export class TimecodeOverlay extends EventEmitter<TimecodeOverlayEvents> {
     const fps = this.session.fps;
     const totalFrames = this.session.frameCount;
 
-    // Calculate and display timecode
-    const tc = frameToTimecode(frame, fps, this.startFrame);
-    this.timecodeElement.textContent = formatTimecode(tc);
+    const format = this.state.displayFormat;
 
-    // Update frame counter
-    if (this.state.showFrameCounter) {
-      this.frameCounterElement.textContent = `Frame ${frame} / ${totalFrames}`;
-      this.frameCounterElement.style.display = 'block';
-    } else {
-      this.frameCounterElement.style.display = 'none';
+    // Calculate timecode
+    const tc = frameToTimecode(frame, fps, this.startFrame);
+    const timecodeStr = formatTimecode(tc);
+    const frameStr = `Frame ${frame} / ${totalFrames}`;
+
+    // Show/hide elements based on display format
+    switch (format) {
+      case 'smpte':
+        this.timecodeElement.textContent = timecodeStr;
+        this.timecodeElement.style.display = 'block';
+        this.frameCounterElement.style.display = 'none';
+        break;
+      case 'frame':
+        this.timecodeElement.style.display = 'none';
+        this.frameCounterElement.textContent = frameStr;
+        this.frameCounterElement.style.display = 'block';
+        break;
+      case 'both':
+        this.timecodeElement.textContent = timecodeStr;
+        this.timecodeElement.style.display = 'block';
+        this.frameCounterElement.textContent = frameStr;
+        this.frameCounterElement.style.display = 'block';
+        break;
     }
+
+    // Source timecode from embedded metadata
+    this.updateSourceTimecode();
+  }
+
+  /**
+   * Update the source timecode element based on state and current source metadata
+   */
+  private updateSourceTimecode(): void {
+    const sourceTC = this.state.sourceTimecode;
+    const show = this.state.showSourceTimecode && !!sourceTC;
+
+    if (show) {
+      this.sourceTimecodeElement.textContent = `Source: ${sourceTC}`;
+      this.sourceTimecodeElement.style.display = 'block';
+    } else {
+      this.sourceTimecodeElement.style.display = 'none';
+    }
+  }
+
+  /**
+   * Called when a source is loaded to pick up embedded timecode metadata
+   */
+  private onSourceLoaded(): void {
+    const source = this.session.currentSource;
+    if (source?.sourceTimecode) {
+      this.state.sourceTimecode = source.sourceTimecode;
+    } else {
+      this.state.sourceTimecode = undefined;
+    }
+    this.update();
   }
 
   /**
@@ -184,7 +268,11 @@ export class TimecodeOverlay extends EventEmitter<TimecodeOverlayEvents> {
    * Toggle overlay visibility
    */
   toggle(): void {
-    this.setState({ enabled: !this.state.enabled });
+    if (this.state.enabled) {
+      this.disable();
+    } else {
+      this.enable();
+    }
   }
 
   /**
@@ -223,10 +311,41 @@ export class TimecodeOverlay extends EventEmitter<TimecodeOverlayEvents> {
   }
 
   /**
-   * Toggle frame counter visibility
+   * Toggle frame counter visibility.
+   * @deprecated Use `setDisplayFormat()` instead.
+   * Maps to displayFormat: true -> 'both', false -> 'smpte'.
    */
   setShowFrameCounter(show: boolean): void {
-    this.setState({ showFrameCounter: show });
+    this.setState({
+      showFrameCounter: show,
+      displayFormat: show ? 'both' : 'smpte',
+    });
+  }
+
+  /**
+   * Set the display format for the timecode overlay.
+   */
+  setDisplayFormat(format: TimecodeDisplayFormat): void {
+    this.setState({
+      displayFormat: format,
+      showFrameCounter: format === 'both',
+    });
+  }
+
+  /**
+   * Set whether the source timecode row is shown when metadata is available.
+   */
+  setShowSourceTimecode(show: boolean): void {
+    this.setState({ showSourceTimecode: show });
+  }
+
+  /**
+   * Set the source timecode string explicitly (e.g. from external metadata).
+   */
+  setSourceTimecode(tc: string | undefined): void {
+    this.state.sourceTimecode = tc;
+    this.update();
+    this.emit('stateChanged', { ...this.state });
   }
 
   /**
@@ -248,7 +367,15 @@ export class TimecodeOverlay extends EventEmitter<TimecodeOverlayEvents> {
    * Set the complete state
    */
   setState(state: Partial<TimecodeOverlayState>): void {
-    this.state = { ...this.state, ...state };
+    const merged = { ...this.state, ...state };
+
+    // Backward compatibility: if showFrameCounter was explicitly set but
+    // displayFormat was NOT included in this call, derive displayFormat.
+    if ('showFrameCounter' in state && !('displayFormat' in state)) {
+      merged.displayFormat = state.showFrameCounter ? 'both' : 'smpte';
+    }
+
+    this.state = merged;
     this.updateStyles();
     this.update();
     this.emit('stateChanged', { ...this.state });

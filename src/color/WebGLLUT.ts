@@ -1,11 +1,12 @@
 /**
- * WebGL-based 3D LUT Application
+ * WebGL-based LUT Application
  *
  * Uses GPU acceleration for fast LUT processing with trilinear interpolation.
+ * Supports both 1D and 3D LUTs.
  * Supports float texture precision when available (float32 > float16 > uint8 fallback).
  */
 
-import { type LUT3D, createLUTTexture } from './LUTLoader';
+import { type LUT, type LUT3D, type LUT1D, isLUT1D, createLUTTexture, createLUT1DTexture } from './LUTLoader';
 import { IDENTITY_MATRIX_4X4, sanitizeLUTMatrix } from './LUTUtils';
 import { ShaderProgram } from '../render/ShaderProgram';
 
@@ -138,6 +139,61 @@ void main() {
 }
 `;
 
+// Fragment shader - applies 1D LUT with per-channel linear interpolation
+const FRAGMENT_SHADER_1D = `#version 300 es
+precision highp float;
+
+uniform sampler2D u_image;
+uniform sampler2D u_lut1d;
+uniform float u_intensity;
+uniform vec3 u_domainMin;
+uniform vec3 u_domainMax;
+uniform float u_lutSize;
+
+uniform mat4 u_inMatrix;
+uniform mat4 u_outMatrix;
+uniform int u_hasInMatrix;
+uniform int u_hasOutMatrix;
+
+in vec2 v_texCoord;
+out vec4 fragColor;
+
+vec3 applyMatrix(vec3 color, mat4 m) {
+  vec4 result = m * vec4(color, 1.0);
+  return result.rgb;
+}
+
+void main() {
+  vec4 color = texture(u_image, v_texCoord);
+
+  vec3 lutInput = color.rgb;
+  if (u_hasInMatrix == 1) {
+    lutInput = applyMatrix(color.rgb, u_inMatrix);
+  }
+
+  vec3 normalized = (lutInput - u_domainMin) / (u_domainMax - u_domainMin);
+  normalized = clamp(normalized, 0.0, 1.0);
+
+  // Sample each channel from its row in the 2D texture (size x 3)
+  // Row 0 = R, Row 1 = G, Row 2 = B
+  float halfTexel = 0.5 / u_lutSize;
+  float scale = (u_lutSize - 1.0) / u_lutSize;
+
+  float r = texture(u_lut1d, vec2(normalized.r * scale + halfTexel, 0.5 / 3.0)).r;
+  float g = texture(u_lut1d, vec2(normalized.g * scale + halfTexel, 1.5 / 3.0)).r;
+  float b = texture(u_lut1d, vec2(normalized.b * scale + halfTexel, 2.5 / 3.0)).r;
+
+  vec3 lutColor = vec3(r, g, b);
+
+  if (u_hasOutMatrix == 1) {
+    lutColor = applyMatrix(lutColor, u_outMatrix);
+  }
+
+  vec3 finalColor = mix(color.rgb, lutColor, u_intensity);
+  fragColor = vec4(finalColor, color.a);
+}
+`;
+
 /**
  * Float precision capability detection result
  */
@@ -240,6 +296,7 @@ export class WebGLLUTProcessor {
   private canvas: HTMLCanvasElement;
   private gl: WebGL2RenderingContext;
   private shaderProgram: ShaderProgram | null = null;
+  private shaderProgram1D: ShaderProgram | null = null;
   private parallelCompileExt: object | null = null;
   private positionBuffer: WebGLBuffer | null = null;
   private texCoordBuffer: WebGLBuffer | null = null;
@@ -248,7 +305,8 @@ export class WebGLLUTProcessor {
   private framebuffer: WebGLFramebuffer | null = null;
   private outputTexture: WebGLTexture | null = null;
 
-  private currentLUT: LUT3D | null = null;
+  private currentLUT: LUT | null = null;
+  private is1D = false;
   private buffersInitialized = false;
 
   // Float precision state
@@ -285,8 +343,20 @@ export class WebGLLUTProcessor {
   private uHasInMatrix: WebGLUniformLocation | null = null;
   private uHasOutMatrix: WebGLUniformLocation | null = null;
 
+  // 1D shader uniforms
+  private uniforms1DResolved = false;
+  private uImage1D: WebGLUniformLocation | null = null;
+  private uLut1D: WebGLUniformLocation | null = null;
+  private uIntensity1D: WebGLUniformLocation | null = null;
+  private uDomainMin1D: WebGLUniformLocation | null = null;
+  private uDomainMax1D: WebGLUniformLocation | null = null;
+  private uLutSize1D: WebGLUniformLocation | null = null;
+  private uHasInMatrix1D: WebGLUniformLocation | null = null;
+  private uHasOutMatrix1D: WebGLUniformLocation | null = null;
+
   // Lazy attribute setup
   private attributesSetUp = false;
+  private attributes1DSetUp = false;
 
   constructor() {
     this.canvas = document.createElement('canvas');
@@ -391,14 +461,21 @@ export class WebGLLUTProcessor {
    * Whether the shader program is fully compiled, linked, and buffers are initialized.
    */
   isReady(): boolean {
-    return this.shaderProgram !== null && this.shaderProgram.isReady() && this.buffersInitialized;
+    if (!this.buffersInitialized) return false;
+    if (this.is1D) {
+      return this.shaderProgram1D !== null && this.shaderProgram1D.isReady();
+    }
+    return this.shaderProgram !== null && this.shaderProgram.isReady();
   }
 
   private init(): void {
     const gl = this.gl;
 
-    // Create shader program with optional parallel compilation
+    // Create 3D shader program with optional parallel compilation
     this.shaderProgram = new ShaderProgram(gl, VERTEX_SHADER, FRAGMENT_SHADER, this.parallelCompileExt);
+
+    // Create 1D shader program
+    this.shaderProgram1D = new ShaderProgram(gl, VERTEX_SHADER, FRAGMENT_SHADER_1D, this.parallelCompileExt);
 
     // Create position buffer (fullscreen quad)
     this.positionBuffer = gl.createBuffer();
@@ -439,6 +516,24 @@ export class WebGLLUTProcessor {
   }
 
   /**
+   * Resolve all uniform locations from the 1D shader program (lazy, called once).
+   */
+  private resolve1DUniformsIfNeeded(): void {
+    if (this.uniforms1DResolved || !this.shaderProgram1D) return;
+
+    this.uImage1D = this.shaderProgram1D.getUniformLocation('u_image');
+    this.uLut1D = this.shaderProgram1D.getUniformLocation('u_lut1d');
+    this.uIntensity1D = this.shaderProgram1D.getUniformLocation('u_intensity');
+    this.uDomainMin1D = this.shaderProgram1D.getUniformLocation('u_domainMin');
+    this.uDomainMax1D = this.shaderProgram1D.getUniformLocation('u_domainMax');
+    this.uLutSize1D = this.shaderProgram1D.getUniformLocation('u_lutSize');
+    this.uHasInMatrix1D = this.shaderProgram1D.getUniformLocation('u_hasInMatrix');
+    this.uHasOutMatrix1D = this.shaderProgram1D.getUniformLocation('u_hasOutMatrix');
+
+    this.uniforms1DResolved = true;
+  }
+
+  /**
    * Set up vertex attribute pointers (lazy, called once when shader is first ready).
    */
   private setUpAttributesIfNeeded(): void {
@@ -463,9 +558,33 @@ export class WebGLLUTProcessor {
   }
 
   /**
-   * Set the current LUT
+   * Set up vertex attribute pointers for the 1D shader.
    */
-  setLUT(lut: LUT3D | null): void {
+  private setUp1DAttributesIfNeeded(): void {
+    if (this.attributes1DSetUp || !this.shaderProgram1D) return;
+
+    const gl = this.gl;
+
+    const aPosition = this.shaderProgram1D.getAttributeLocation('a_position');
+    const aTexCoord = this.shaderProgram1D.getAttributeLocation('a_texCoord');
+
+    this.shaderProgram1D.use();
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.positionBuffer);
+    gl.enableVertexAttribArray(aPosition);
+    gl.vertexAttribPointer(aPosition, 2, gl.FLOAT, false, 0, 0);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.texCoordBuffer);
+    gl.enableVertexAttribArray(aTexCoord);
+    gl.vertexAttribPointer(aTexCoord, 2, gl.FLOAT, false, 0, 0);
+
+    this.attributes1DSetUp = true;
+  }
+
+  /**
+   * Set the current LUT (1D or 3D)
+   */
+  setLUT(lut: LUT | null): void {
     const gl = this.gl;
 
     // Cleanup old LUT texture
@@ -477,7 +596,14 @@ export class WebGLLUTProcessor {
     this.currentLUT = lut;
 
     if (lut) {
-      this.lutTexture = createLUTTexture(gl, lut);
+      this.is1D = isLUT1D(lut);
+      if (this.is1D) {
+        this.lutTexture = createLUT1DTexture(gl, lut as LUT1D);
+      } else {
+        this.lutTexture = createLUTTexture(gl, lut as LUT3D);
+      }
+    } else {
+      this.is1D = false;
     }
   }
 
@@ -510,24 +636,24 @@ export class WebGLLUTProcessor {
   }
 
   /** Upload matrix uniforms to the GPU */
-  private uploadMatrixUniforms(): void {
+  private uploadMatrixUniforms(
+    program: ShaderProgram,
+    uHasIn: WebGLUniformLocation | null,
+    uHasOut: WebGLUniformLocation | null,
+  ): void {
     const gl = this.gl;
     const hasIn = this._inMatrix !== null;
     const hasOut = this._outMatrix !== null;
 
-    gl.uniform1i(this.uHasInMatrix, hasIn ? 1 : 0);
-    gl.uniform1i(this.uHasOutMatrix, hasOut ? 1 : 0);
+    gl.uniform1i(uHasIn, hasIn ? 1 : 0);
+    gl.uniform1i(uHasOut, hasOut ? 1 : 0);
 
     // Upload with transpose=true: row-major -> column-major for GLSL
     // NOTE: We use gl.uniformMatrix4fv directly (not shaderProgram.setUniformMatrix4)
     // because ShaderProgram hardcodes transpose=false, but we need transpose=true here.
+    gl.uniformMatrix4fv(program.getUniformLocation('u_inMatrix'), true, hasIn ? this._inMatrix! : IDENTITY_MATRIX_4X4);
     gl.uniformMatrix4fv(
-      this.shaderProgram!.getUniformLocation('u_inMatrix'),
-      true,
-      hasIn ? this._inMatrix! : IDENTITY_MATRIX_4X4,
-    );
-    gl.uniformMatrix4fv(
-      this.shaderProgram!.getUniformLocation('u_outMatrix'),
+      program.getUniformLocation('u_outMatrix'),
       true,
       hasOut ? this._outMatrix! : IDENTITY_MATRIX_4X4,
     );
@@ -540,9 +666,6 @@ export class WebGLLUTProcessor {
     if (!this.isReady() || !this.currentLUT || !this.lutTexture) {
       return imageData;
     }
-
-    this.resolveUniformsIfNeeded();
-    this.setUpAttributesIfNeeded();
 
     const gl = this.gl;
     const { width, height } = imageData;
@@ -585,19 +708,35 @@ export class WebGLLUTProcessor {
       this.imageTextureFilter = gl.LINEAR;
     }
 
-    // Bind LUT texture
+    // Bind LUT texture and use appropriate shader
     gl.activeTexture(gl.TEXTURE1);
-    gl.bindTexture(gl.TEXTURE_3D, this.lutTexture);
+    if (this.is1D) {
+      this.resolve1DUniformsIfNeeded();
+      this.setUp1DAttributesIfNeeded();
+      gl.bindTexture(gl.TEXTURE_2D, this.lutTexture);
 
-    // Use program and set uniforms
-    this.shaderProgram!.use();
-    gl.uniform1i(this.uImage, 0);
-    gl.uniform1i(this.uLut, 1);
-    gl.uniform1f(this.uIntensity, intensity);
-    gl.uniform3fv(this.uDomainMin, this.currentLUT.domainMin);
-    gl.uniform3fv(this.uDomainMax, this.currentLUT.domainMax);
-    gl.uniform1f(this.uLutSize, this.currentLUT.size);
-    this.uploadMatrixUniforms();
+      this.shaderProgram1D!.use();
+      gl.uniform1i(this.uImage1D, 0);
+      gl.uniform1i(this.uLut1D, 1);
+      gl.uniform1f(this.uIntensity1D, intensity);
+      gl.uniform3fv(this.uDomainMin1D, this.currentLUT.domainMin);
+      gl.uniform3fv(this.uDomainMax1D, this.currentLUT.domainMax);
+      gl.uniform1f(this.uLutSize1D, this.currentLUT.size);
+      this.uploadMatrixUniforms(this.shaderProgram1D!, this.uHasInMatrix1D, this.uHasOutMatrix1D);
+    } else {
+      this.resolveUniformsIfNeeded();
+      this.setUpAttributesIfNeeded();
+      gl.bindTexture(gl.TEXTURE_3D, this.lutTexture);
+
+      this.shaderProgram!.use();
+      gl.uniform1i(this.uImage, 0);
+      gl.uniform1i(this.uLut, 1);
+      gl.uniform1f(this.uIntensity, intensity);
+      gl.uniform3fv(this.uDomainMin, this.currentLUT.domainMin);
+      gl.uniform3fv(this.uDomainMax, this.currentLUT.domainMax);
+      gl.uniform1f(this.uLutSize, this.currentLUT.size);
+      this.uploadMatrixUniforms(this.shaderProgram!, this.uHasInMatrix, this.uHasOutMatrix);
+    }
 
     // Render to canvas (default framebuffer)
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -682,19 +821,35 @@ export class WebGLLUTProcessor {
       this.imageTextureFilter = gl.NEAREST;
     }
 
-    // Bind LUT texture
+    // Bind LUT texture and use appropriate shader
     gl.activeTexture(gl.TEXTURE1);
-    gl.bindTexture(gl.TEXTURE_3D, this.lutTexture);
+    if (this.is1D) {
+      this.resolve1DUniformsIfNeeded();
+      this.setUp1DAttributesIfNeeded();
+      gl.bindTexture(gl.TEXTURE_2D, this.lutTexture);
 
-    // Use program and set uniforms
-    this.shaderProgram!.use();
-    gl.uniform1i(this.uImage, 0);
-    gl.uniform1i(this.uLut, 1);
-    gl.uniform1f(this.uIntensity, intensity);
-    gl.uniform3fv(this.uDomainMin, this.currentLUT.domainMin);
-    gl.uniform3fv(this.uDomainMax, this.currentLUT.domainMax);
-    gl.uniform1f(this.uLutSize, this.currentLUT.size);
-    this.uploadMatrixUniforms();
+      this.shaderProgram1D!.use();
+      gl.uniform1i(this.uImage1D, 0);
+      gl.uniform1i(this.uLut1D, 1);
+      gl.uniform1f(this.uIntensity1D, intensity);
+      gl.uniform3fv(this.uDomainMin1D, this.currentLUT.domainMin);
+      gl.uniform3fv(this.uDomainMax1D, this.currentLUT.domainMax);
+      gl.uniform1f(this.uLutSize1D, this.currentLUT.size);
+      this.uploadMatrixUniforms(this.shaderProgram1D!, this.uHasInMatrix1D, this.uHasOutMatrix1D);
+    } else {
+      this.resolveUniformsIfNeeded();
+      this.setUpAttributesIfNeeded();
+      gl.bindTexture(gl.TEXTURE_3D, this.lutTexture);
+
+      this.shaderProgram!.use();
+      gl.uniform1i(this.uImage, 0);
+      gl.uniform1i(this.uLut, 1);
+      gl.uniform1f(this.uIntensity, intensity);
+      gl.uniform3fv(this.uDomainMin, this.currentLUT.domainMin);
+      gl.uniform3fv(this.uDomainMax, this.currentLUT.domainMax);
+      gl.uniform1f(this.uLutSize, this.currentLUT.size);
+      this.uploadMatrixUniforms(this.shaderProgram!, this.uHasInMatrix, this.uHasOutMatrix);
+    }
 
     // Render to float FBO
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.floatFBO);
@@ -782,7 +937,7 @@ export class WebGLLUTProcessor {
   /**
    * Get current LUT
    */
-  getLUT(): LUT3D | null {
+  getLUT(): LUT | null {
     return this.currentLUT;
   }
 
@@ -794,6 +949,8 @@ export class WebGLLUTProcessor {
 
     this.shaderProgram?.dispose();
     this.shaderProgram = null;
+    this.shaderProgram1D?.dispose();
+    this.shaderProgram1D = null;
     if (this.positionBuffer) gl.deleteBuffer(this.positionBuffer);
     if (this.texCoordBuffer) gl.deleteBuffer(this.texCoordBuffer);
     if (this.imageTexture) gl.deleteTexture(this.imageTexture);
@@ -805,7 +962,9 @@ export class WebGLLUTProcessor {
 
     this.buffersInitialized = false;
     this.uniformsResolved = false;
+    this.uniforms1DResolved = false;
     this.attributesSetUp = false;
+    this.attributes1DSetUp = false;
   }
 }
 

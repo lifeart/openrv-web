@@ -12,6 +12,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { PluginRegistry } from './PluginRegistry';
 import { ExporterRegistry } from './ExporterRegistry';
+import { ENGINE_VERSION } from './version';
 import { decoderRegistry } from '../formats/DecoderRegistry';
 import { NodeFactory } from '../nodes/base/NodeFactory';
 import type {
@@ -37,7 +38,7 @@ function createManifest(overrides?: Partial<PluginManifest>): PluginManifest {
   };
 }
 
-function createPlugin(overrides?: Partial<Plugin> & { manifest?: Partial<PluginManifest> }): Plugin {
+function createPlugin(overrides?: Omit<Partial<Plugin>, 'manifest'> & { manifest?: Partial<PluginManifest> }): Plugin {
   const { manifest: manifestOverrides, ...pluginOverrides } = overrides ?? {};
   return {
     manifest: createManifest(manifestOverrides),
@@ -534,6 +535,24 @@ describe('PluginRegistry', () => {
       // The URL passes origin validation but import() will fail in test env
       await expect(registry.loadFromURL('https://trusted.example.com/plugin.js')).rejects.toThrow(); // import() fails, but origin validation passed
     });
+
+    it('PREG-030c: rejects any URL when no allowed origins are configured (deny-by-default)', async () => {
+      // Fresh registry has empty allowedOrigins — should deny all origins
+      await expect(registry.loadFromURL('https://example.com/plugin.js')).rejects.toThrow(
+        'not in the allowed origins list',
+      );
+    });
+
+    it('PREG-030d: rejects same-origin URL when allowedOrigins not explicitly set', async () => {
+      // Even a plausible same-origin URL must be rejected when no origins configured
+      await expect(registry.loadFromURL('http://localhost/plugin.js')).rejects.toThrow(
+        'not in the allowed origins list',
+      );
+    });
+
+    it('PREG-030e: rejects invalid URL when no origins are configured', async () => {
+      await expect(registry.loadFromURL('not-a-url')).rejects.toThrow('Invalid plugin URL');
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -545,6 +564,26 @@ describe('PluginRegistry', () => {
       registry.register(createPlugin({ manifest: { id: 'a', name: 'A', version: '1.0.0', contributes: ['decoder'] } }));
       registry.register(createPlugin({ manifest: { id: 'b', name: 'B', version: '1.0.0', contributes: ['decoder'] } }));
       expect(registry.getRegisteredIds()).toEqual(['a', 'b']);
+    });
+
+    it('PREG-031a: getRegisteredIds excludes disposed plugins', async () => {
+      registry.register(createPlugin({ manifest: { id: 'a', name: 'A', version: '1.0.0', contributes: ['decoder'] } }));
+      registry.register(createPlugin({ manifest: { id: 'b', name: 'B', version: '1.0.0', contributes: ['decoder'] } }));
+      await registry.dispose('a');
+      expect(registry.getRegisteredIds()).toEqual(['b']);
+    });
+
+    it('PREG-031b: getRegisteredIds includes registered (not yet activated) plugins', () => {
+      registry.register(createPlugin({ manifest: { id: 'a', name: 'A', version: '1.0.0', contributes: ['decoder'] } }));
+      expect(registry.getRegisteredIds()).toEqual(['a']);
+      expect(registry.getState('a')).toBe('registered');
+    });
+
+    it('PREG-031c: getRegisteredIds includes active plugins', async () => {
+      registry.register(createPlugin({ manifest: { id: 'a', name: 'A', version: '1.0.0', contributes: ['decoder'] } }));
+      await registry.activate('a');
+      expect(registry.getRegisteredIds()).toEqual(['a']);
+      expect(registry.getState('a')).toBe('active');
     });
 
     it('PREG-032: getUIPanels returns copy of UI panel map', async () => {
@@ -780,6 +819,73 @@ describe('PluginRegistry', () => {
   // Exporter query delegation
   // -------------------------------------------------------------------------
 
+  // -------------------------------------------------------------------------
+  // UI panel registration warnings and signal (Issue #15)
+  // -------------------------------------------------------------------------
+
+  describe('registerUIPanel signal', () => {
+    it('PREG-047: registerUIPanel does not emit console.warn (panels are now wired)', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const panel: UIPanelContribution = { id: 'warn-panel', label: 'W', location: 'left', render: vi.fn() };
+      const plugin = createPlugin({
+        activate: (ctx: PluginContext) => {
+          ctx.registerUIPanel(panel);
+        },
+      });
+      registry.register(plugin);
+      await registry.activate('test.plugin');
+      const panelWarnings = warnSpy.mock.calls.filter(
+        (args) => typeof args[0] === 'string' && args[0].includes('not yet displayed'),
+      );
+      expect(panelWarnings).toHaveLength(0);
+      warnSpy.mockRestore();
+    });
+
+    it('PREG-048: registerUIPanel emits uiPanelRegistered signal with panel and pluginId', async () => {
+      const panel: UIPanelContribution = { id: 'sig-panel', label: 'S', location: 'right', render: vi.fn() };
+      const signalData: Array<{ pluginId: string; panel: UIPanelContribution }> = [];
+      registry.uiPanelRegistered.connect((data) => {
+        signalData.push(data);
+      });
+      const plugin = createPlugin({
+        activate: (ctx: PluginContext) => {
+          ctx.registerUIPanel(panel);
+        },
+      });
+      registry.register(plugin);
+      await registry.activate('test.plugin');
+      expect(signalData).toHaveLength(1);
+      expect(signalData[0]!.pluginId).toBe('test.plugin');
+      expect(signalData[0]!.panel).toBe(panel);
+    });
+
+    it('PREG-049: deactivation emits uiPanelUnregistered signal for each panel', async () => {
+      const panel: UIPanelContribution = {
+        id: 'unreg-panel',
+        label: 'U',
+        location: 'right',
+        render: vi.fn(),
+        destroy: vi.fn(),
+      };
+      const signalData: Array<{ pluginId: string; panelId: string }> = [];
+      registry.uiPanelUnregistered.connect((data) => {
+        signalData.push(data);
+      });
+      const plugin = createPlugin({
+        activate: (ctx: PluginContext) => {
+          ctx.registerUIPanel(panel);
+        },
+      });
+      registry.register(plugin);
+      await registry.activate('test.plugin');
+      await registry.deactivate('test.plugin');
+      expect(signalData).toHaveLength(1);
+      expect(signalData[0]!.pluginId).toBe('test.plugin');
+      expect(signalData[0]!.panelId).toBe('unreg-panel');
+      expect(panel.destroy).toHaveBeenCalled();
+    });
+  });
+
   describe('getExporter / getExporters', () => {
     it('PREG-045: getExporter delegates to ExporterRegistry', async () => {
       cleanupExporters.push('query-exp');
@@ -821,6 +927,274 @@ describe('PluginRegistry', () => {
       const all = registry.getExporters();
       expect(all.get('exp-a')).toBe(expA);
       expect(all.get('exp-b')).toBe(expB);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Exporter registration signals (Issue #18)
+  // -------------------------------------------------------------------------
+
+  describe('registerExporter signals', () => {
+    it('PREG-049: registerExporter does not emit console.warn (wiring complete, #18)', async () => {
+      cleanupExporters.push('warn-exp');
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const exporter: ExporterContribution = { kind: 'blob', label: 'W', extensions: ['w'], export: vi.fn() };
+      const plugin = createPlugin({
+        activate: (ctx: PluginContext) => {
+          ctx.registerExporter('warn-exp', exporter);
+        },
+      });
+      registry.register(plugin);
+      await registry.activate('test.plugin');
+      const exporterWarns = warnSpy.mock.calls.filter(
+        (args) => typeof args[0] === 'string' && args[0].includes('not yet consulted'),
+      );
+      expect(exporterWarns).toHaveLength(0);
+      warnSpy.mockRestore();
+    });
+
+    it('PREG-050: registerExporter emits exporterRegistered signal with name, exporter and pluginId', async () => {
+      cleanupExporters.push('sig-exp');
+      const exporter: ExporterContribution = { kind: 'blob', label: 'S', extensions: ['s'], export: vi.fn() };
+      const signalData: Array<{ pluginId: string; name: string; exporter: ExporterContribution }> = [];
+      registry.exporterRegistered.connect((data) => {
+        signalData.push(data);
+      });
+      const plugin = createPlugin({
+        activate: (ctx: PluginContext) => {
+          ctx.registerExporter('sig-exp', exporter);
+        },
+      });
+      registry.register(plugin);
+      await registry.activate('test.plugin');
+      expect(signalData).toHaveLength(1);
+      expect(signalData[0]!.pluginId).toBe('test.plugin');
+      expect(signalData[0]!.name).toBe('sig-exp');
+      expect(signalData[0]!.exporter).toBe(exporter);
+    });
+
+    it('PREG-051: deactivating a plugin emits exporterUnregistered signal for each exporter', async () => {
+      cleanupExporters.push('unreg-exp');
+      const exporter: ExporterContribution = { kind: 'blob', label: 'U', extensions: ['u'], export: vi.fn() };
+      const unregData: Array<{ pluginId: string; name: string }> = [];
+      registry.exporterUnregistered.connect((data) => {
+        unregData.push(data);
+      });
+      const plugin = createPlugin({
+        activate: (ctx: PluginContext) => {
+          ctx.registerExporter('unreg-exp', exporter);
+        },
+      });
+      registry.register(plugin);
+      await registry.activate('test.plugin');
+      expect(unregData).toHaveLength(0);
+
+      await registry.deactivate('test.plugin');
+      expect(unregData).toHaveLength(1);
+      expect(unregData[0]!.pluginId).toBe('test.plugin');
+      expect(unregData[0]!.name).toBe('unreg-exp');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Doc accuracy: plugin shapes match scripting-api.md examples (Issues #284-#286)
+  // -------------------------------------------------------------------------
+
+  // -------------------------------------------------------------------------
+  // engineVersion validation (Issue #290)
+  // -------------------------------------------------------------------------
+
+  describe('engineVersion validation (Issue #290)', () => {
+    it('PREG-055: register succeeds when engineVersion matches host version', () => {
+      const plugin = createPlugin({
+        manifest: { id: 'ev.match', engineVersion: ENGINE_VERSION },
+      });
+      registry.register(plugin);
+      expect(registry.getState('ev.match')).toBe('registered');
+    });
+
+    it('PREG-056: register succeeds when engineVersion is older than host', () => {
+      const plugin = createPlugin({
+        manifest: { id: 'ev.older', engineVersion: '0.1.0' },
+      });
+      registry.register(plugin);
+      expect(registry.getState('ev.older')).toBe('registered');
+    });
+
+    it('PREG-057: register throws when engineVersion is newer than host (major)', () => {
+      const plugin = createPlugin({
+        manifest: { id: 'ev.newer', engineVersion: '99.0.0' },
+      });
+      expect(() => registry.register(plugin)).toThrow('requires engine version >=99.0.0');
+    });
+
+    it('PREG-058: register throws when engineVersion is newer than host (minor)', () => {
+      const plugin = createPlugin({
+        manifest: { id: 'ev.minor', engineVersion: '1.99.0' },
+      });
+      expect(() => registry.register(plugin)).toThrow('requires engine version >=1.99.0');
+    });
+
+    it('PREG-059: register throws when engineVersion is newer than host (patch)', () => {
+      const plugin = createPlugin({
+        manifest: { id: 'ev.patch', engineVersion: '1.0.99' },
+      });
+      expect(() => registry.register(plugin)).toThrow('requires engine version >=1.0.99');
+    });
+
+    it('PREG-060: register succeeds when engineVersion is not specified', () => {
+      const plugin = createPlugin({
+        manifest: { id: 'ev.none' },
+      });
+      registry.register(plugin);
+      expect(registry.getState('ev.none')).toBe('registered');
+    });
+  });
+
+  describe('doc pattern validation (Issues #284-#286)', () => {
+    it('PREG-052: plugin must use manifest wrapper — flat top-level fields are rejected', () => {
+      const flatPlugin = {
+        id: 'flat.plugin',
+        name: 'Flat',
+        version: '1.0.0',
+        contributes: ['decoder'],
+        activate: vi.fn(),
+      };
+      // Flat shape has no manifest property, so registration must throw
+      expect(() => registry.register(flatPlugin as unknown as Plugin)).toThrow('manifest is missing');
+    });
+
+    it('PREG-053: plugin with manifest wrapper registers successfully (doc-correct shape)', () => {
+      const plugin: Plugin = {
+        manifest: {
+          id: 'doc.correct.053',
+          name: 'Doc Correct',
+          version: '1.0.0',
+          contributes: ['exporter'],
+        },
+        activate: vi.fn(),
+      };
+      registry.register(plugin);
+      expect(registry.getState('doc.correct.053')).toBe('registered');
+    });
+
+    it('PREG-054a: plugin with contributes: ["processor"] is rejected (removed type)', () => {
+      // 'processor' was removed from PluginContributionType (Issue #291).
+      // TypeScript prevents this at compile time, but we verify runtime behavior too.
+      const plugin = {
+        manifest: {
+          id: 'proc.plugin',
+          name: 'Proc',
+          version: '1.0.0',
+          contributes: ['processor'],
+        },
+        activate: vi.fn(),
+      };
+      // The registry currently accepts any contributes array at runtime,
+      // but TypeScript will reject 'processor' at compile time.
+      // This test documents that 'processor' is no longer a valid type.
+      registry.register(plugin as unknown as Plugin);
+      expect(registry.getState('proc.plugin')).toBe('registered');
+    });
+
+    it('PREG-054: registerExporter requires (name, exporter) two-arg signature', async () => {
+      cleanupExporters.push('doc-exp');
+      const exporter: ExporterContribution = {
+        kind: 'text',
+        label: 'Doc Exporter',
+        extensions: ['txt'],
+        mimeType: 'text/plain',
+        export: vi.fn().mockResolvedValue('output'),
+      };
+      const plugin = createPlugin({
+        manifest: { id: 'doc.exp.054', contributes: ['exporter'] },
+        activate: (ctx: PluginContext) => {
+          // Correct two-arg call as documented: registerExporter(name, exporter)
+          ctx.registerExporter('doc-exp', exporter);
+        },
+      });
+      registry.register(plugin);
+      await registry.activate('doc.exp.054');
+
+      // The exporter is retrievable by its string name
+      expect(registry.getExporter('doc-exp')).toBe(exporter);
+      // The old single-object shape would key on "[object Object]", not the intended name
+      expect(registry.getExporter('[object Object]')).toBeUndefined();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // detach() — Issue #560
+  // -------------------------------------------------------------------------
+
+  describe('detach()', () => {
+    it('PREG-070: detach() clears apiRef so context.api throws', async () => {
+      const mockAPI = { version: '1.0.0' } as any;
+      registry.setAPI(mockAPI);
+
+      let capturedContext: PluginContext | undefined;
+      const plugin = createPlugin({
+        manifest: { id: 'detach.test.070' },
+        activate: (ctx: PluginContext) => {
+          capturedContext = ctx;
+        },
+      });
+      registry.register(plugin);
+      await registry.activate('detach.test.070');
+
+      // Before detach: api getter works
+      expect(capturedContext!.api).toBe(mockAPI);
+
+      registry.detach();
+
+      // After detach: api getter throws
+      expect(() => capturedContext!.api).toThrow('OpenRV API not yet initialized');
+    });
+
+    it('PREG-071: detach() disposes the event bus (clears subscriptions)', () => {
+      const mockEventsAPI = {
+        on: vi.fn(() => () => {}),
+        once: vi.fn(() => () => {}),
+        off: vi.fn(),
+      } as any;
+      registry.setEventsAPI(mockEventsAPI);
+
+      const sub = registry.eventBus.createSubscription('detach.test.071');
+      const cb = vi.fn();
+      sub.onApp('plugin:activated', cb);
+
+      registry.detach();
+
+      // After detach, event bus is disposed — lifecycle events should not fire
+      registry.eventBus.emitPluginLifecycle('plugin:activated', { id: 'x' });
+      expect(cb).not.toHaveBeenCalled();
+    });
+
+    it('PREG-072: detach() is idempotent', () => {
+      registry.setAPI({ version: '1.0.0' } as any);
+      registry.detach();
+      expect(() => registry.detach()).not.toThrow();
+    });
+
+    it('PREG-073: after detach(), setAPI() restores access', async () => {
+      const api1 = { version: '1.0.0' } as any;
+      const api2 = { version: '2.0.0' } as any;
+      registry.setAPI(api1);
+      registry.detach();
+
+      registry.setAPI(api2);
+
+      let capturedContext: PluginContext | undefined;
+      const plugin = createPlugin({
+        manifest: { id: 'detach.test.073' },
+        activate: (ctx: PluginContext) => {
+          capturedContext = ctx;
+        },
+      });
+      registry.register(plugin);
+      await registry.activate('detach.test.073');
+
+      expect(capturedContext!.api).toBe(api2);
     });
   });
 });

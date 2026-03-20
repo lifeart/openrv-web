@@ -24,15 +24,18 @@ import {
   applyA11yFocus,
 } from '../shared/Button';
 import { Z_INDEX, SHADOWS } from '../shared/theme';
-import { SUPPORTED_MEDIA_ACCEPT } from '../../../utils/media/SupportedMediaFormats';
+import { SUPPORTED_MEDIA_ACCEPT, SUPPORTED_PROJECT_ACCEPT } from '../../../utils/media/SupportedMediaFormats';
 import type { LayoutPreset, LayoutPresetId } from '../../layout/LayoutStore';
+import { ShotStatusBadge } from '../ShotStatusBadge';
+import { RepresentationSelector } from '../RepresentationSelector';
+import type { VersionGroup } from '../../../core/session/VersionManager';
 
 export interface HeaderBarEvents extends EventMap {
   showShortcuts: void;
   showCustomKeyBindings: void;
   fileLoaded: void;
   saveProject: void;
-  openProject: File;
+  openProject: { file: File; availableFiles?: Map<string, File> };
   fullscreenToggle: void;
   presentationToggle: void;
   externalPresentation: void;
@@ -83,11 +86,25 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   private helpButton!: HTMLButtonElement;
   private layoutButton!: HTMLButtonElement;
 
+  // Shot status badge
+  private shotStatusBadge: ShotStatusBadge;
+  // Representation selector
+  private representationSelector: RepresentationSelector;
+  // Version selector
+  private versionSelectorContainer!: HTMLElement;
+  private _activeVersionMenuCleanup: (() => void) | null = null;
+
   // Overflow fade indicators
   private fadeLeft!: HTMLElement;
   private fadeRight!: HTMLElement;
   private _scrollHandler: (() => void) | null = null;
   private _resizeHandler: (() => void) | null = null;
+
+  /**
+   * Optional callback invoked when an `.otio` file is opened via the file picker.
+   * The app wires this to the playlist panel's OTIO import flow.
+   */
+  onOTIOFileOpen: ((file: File) => void) | null = null;
 
   constructor(session: Session) {
     super();
@@ -96,6 +113,8 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this.exportControl = new ExportControl();
     this.timecodeDisplay = new TimecodeDisplay(session);
     this.themeControl = new ThemeControl();
+    this.shotStatusBadge = new ShotStatusBadge(session);
+    this.representationSelector = new RepresentationSelector(session);
 
     // Create wrapper (position: relative to anchor fade overlays)
     this.wrapper = document.createElement('div');
@@ -213,7 +232,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     // Hidden file input for media
     this.fileInput = document.createElement('input');
     this.fileInput.type = 'file';
-    this.fileInput.accept = `${SUPPORTED_MEDIA_ACCEPT},.rv,.gto,.rvedl`;
+    this.fileInput.accept = `${SUPPORTED_MEDIA_ACCEPT},.rv,.gto,.rvedl,.otio`;
     this.fileInput.multiple = true;
     this.fileInput.style.display = 'none';
     this.fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
@@ -222,7 +241,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     // Hidden file input for project files
     this.projectInput = document.createElement('input');
     this.projectInput.type = 'file';
-    this.projectInput.accept = '.orvproject';
+    this.projectInput.accept = SUPPORTED_PROJECT_ACCEPT;
     this.projectInput.style.display = 'none';
     this.projectInput.addEventListener('change', (e) => this.handleProjectOpen(e));
     this.container.appendChild(this.projectInput);
@@ -274,6 +293,16 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     // === SESSION NAME DISPLAY ===
     this.sessionNameDisplay = this.createSessionNameDisplay();
     this.container.appendChild(this.sessionNameDisplay);
+
+    // === SHOT STATUS BADGE ===
+    this.container.appendChild(this.shotStatusBadge.render());
+
+    // === REPRESENTATION SELECTOR ===
+    this.container.appendChild(this.representationSelector.render());
+
+    // === VERSION SELECTOR ===
+    this.versionSelectorContainer = this.createVersionSelector();
+    this.container.appendChild(this.versionSelectorContainer);
 
     // === AUTO-SAVE INDICATOR SLOT ===
     this.autoSaveSlot = document.createElement('div');
@@ -604,6 +633,151 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     }
   }
 
+  // === VERSION SELECTOR ===
+
+  private createVersionSelector(): HTMLElement {
+    const container = document.createElement('div');
+    container.className = 'version-selector';
+    container.dataset.testid = 'version-selector';
+    container.style.cssText = `display: none; align-items: center; gap: 2px; margin-left: 8px; flex-shrink: 0;`;
+
+    const prevBtn = this.createIconButton(
+      'chevron-left',
+      '',
+      () => this.navigateVersion('previous'),
+      'Previous version (Alt+[)',
+    );
+    prevBtn.dataset.testid = 'version-prev-button';
+    prevBtn.style.cssText += '; min-width: 24px; padding: 4px;';
+    container.appendChild(prevBtn);
+
+    const labelBtn = document.createElement('button');
+    labelBtn.dataset.testid = 'version-label-button';
+    labelBtn.setAttribute('aria-haspopup', 'menu');
+    labelBtn.setAttribute('aria-label', 'Select version');
+    labelBtn.style.cssText = `background: rgba(var(--accent-primary-rgb), 0.1); border: 1px solid rgba(var(--accent-primary-rgb), 0.3); color: var(--text-primary); padding: 3px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; font-family: inherit; display: inline-flex; align-items: center; gap: 4px; height: 26px; white-space: nowrap;`;
+    labelBtn.addEventListener('click', () => this.showVersionMenu(labelBtn));
+    container.appendChild(labelBtn);
+
+    const nextBtn = this.createIconButton(
+      'chevron-right',
+      '',
+      () => this.navigateVersion('next'),
+      'Next version (Alt+])',
+    );
+    nextBtn.dataset.testid = 'version-next-button';
+    nextBtn.style.cssText += '; min-width: 24px; padding: 4px;';
+    container.appendChild(nextBtn);
+
+    return container;
+  }
+
+  private getActiveVersionGroup(): VersionGroup | undefined {
+    const currentIndex = this.session.currentSourceIndex;
+    if (currentIndex < 0) return undefined;
+    return this.session.versionManager.getGroupForSource(currentIndex);
+  }
+
+  updateVersionSelector(): void {
+    const group = this.getActiveVersionGroup();
+    const labelBtn = this.versionSelectorContainer.querySelector(
+      '[data-testid="version-label-button"]',
+    ) as HTMLButtonElement | null;
+    if (!group || group.versions.length < 2) {
+      this.versionSelectorContainer.style.display = 'none';
+      return;
+    }
+    this.versionSelectorContainer.style.display = 'flex';
+    if (labelBtn) {
+      const activeVersion = group.versions[group.activeVersionIndex];
+      const versionLabel = activeVersion ? activeVersion.label : '?';
+      labelBtn.textContent = `${group.shotName}: ${versionLabel} (${group.activeVersionIndex + 1}/${group.versions.length})`;
+      labelBtn.title = `Version group: ${group.shotName} - ${versionLabel}\nClick for version list`;
+    }
+  }
+
+  navigateVersion(direction: 'next' | 'previous'): void {
+    const group = this.getActiveVersionGroup();
+    if (!group) return;
+    const entry =
+      direction === 'next'
+        ? this.session.versionManager.nextVersion(group.id)
+        : this.session.versionManager.previousVersion(group.id);
+    if (entry) {
+      this.session.setCurrentSource(entry.sourceIndex);
+    }
+  }
+
+  private showVersionMenu(anchor: HTMLElement): void {
+    const group = this.getActiveVersionGroup();
+    if (!group) return;
+    this.closeAllHeaderMenus();
+
+    const menu = document.createElement('div');
+    menu.id = 'version-menu';
+    menu.dataset.testid = 'version-menu-dropdown';
+    menu.setAttribute('role', 'menu');
+    menu.style.cssText = `position: fixed; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 6px; box-shadow: ${SHADOWS.dropdown}; padding: 4px 0; z-index: ${Z_INDEX.dropdown}; min-width: 160px;`;
+
+    const header = document.createElement('div');
+    header.style.cssText = `padding: 4px 12px 6px; font-size: 10px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border-primary); margin-bottom: 2px;`;
+    header.textContent = group.shotName;
+    menu.appendChild(header);
+
+    let activeItem: HTMLButtonElement | null = null;
+    for (let i = 0; i < group.versions.length; i++) {
+      const version = group.versions[i]!;
+      const isActive = i === group.activeVersionIndex;
+      const item = document.createElement('button');
+      item.setAttribute('role', 'menuitemradio');
+      item.setAttribute('aria-checked', String(isActive));
+      item.dataset.testid = `version-menu-item-${i}`;
+      item.tabIndex = -1;
+      item.textContent = `${isActive ? '\u2713 ' : '  '}${version.label}`;
+      item.style.cssText = `display: block; width: 100%; padding: 6px 12px; background: ${isActive ? 'var(--accent-primary)' : 'transparent'}; color: ${isActive ? 'white' : 'var(--text-primary)'}; border: none; text-align: left; cursor: pointer; font-size: 12px; outline: none;`;
+      if (isActive) activeItem = item;
+      item.addEventListener('click', () => {
+        const entry = this.session.versionManager.setActiveVersion(group.id, i);
+        if (entry) this.session.setCurrentSource(entry.sourceIndex);
+        removeMenu();
+      });
+      menu.appendChild(item);
+    }
+
+    menu.addEventListener('keydown', (e: KeyboardEvent) => {
+      const items: HTMLElement[] = Array.from(menu.querySelectorAll('[role="menuitemradio"]'));
+      const ci = items.indexOf(document.activeElement as HTMLElement);
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        items[(ci + 1) % items.length]?.focus();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        items[ci > 0 ? ci - 1 : items.length - 1]?.focus();
+      } else if (e.key === 'Escape' || e.key === 'Tab') {
+        e.preventDefault();
+        removeMenu();
+        anchor.focus();
+      }
+    });
+
+    const rect = anchor.getBoundingClientRect();
+    menu.style.left = `${rect.left}px`;
+    menu.style.top = `${rect.bottom + 4}px`;
+    document.body.appendChild(menu);
+    (activeItem || (menu.querySelector('[role="menuitemradio"]') as HTMLElement))?.focus();
+
+    const removeMenu = () => {
+      menu.remove();
+      document.removeEventListener('click', closeMenu);
+      this._activeVersionMenuCleanup = null;
+    };
+    const closeMenu = (e: MouseEvent) => {
+      if (!menu.contains(e.target as Node)) removeMenu();
+    };
+    setTimeout(() => document.addEventListener('click', closeMenu), 0);
+    this._activeVersionMenuCleanup = removeMenu;
+  }
+
   private cycleLoopMode(): void {
     const modes: LoopMode[] = ['once', 'loop', 'pingpong'];
     const currentIndex = modes.indexOf(this.session.loopMode);
@@ -759,6 +933,9 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     }
     if (this._activeLayoutMenuCleanup) {
       this._activeLayoutMenuCleanup();
+    }
+    if (this._activeVersionMenuCleanup) {
+      this._activeVersionMenuCleanup();
     }
   }
 
@@ -1318,14 +1495,15 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       pingpong: 'shuffle',
     };
     const labels: Record<LoopMode, string> = {
-      once: 'Once',
+      once: 'Play Once',
       loop: 'Loop',
-      pingpong: 'Ping',
+      pingpong: 'Ping-Pong',
     };
     const iconName = icons[this.session.loopMode];
     const label = labels[this.session.loopMode];
     this.loopButton.innerHTML = getIconSvg(iconName, 'sm');
-    this.loopButton.setAttribute('aria-label', `${label} — Cycle loop mode`);
+    this.loopButton.title = `${label} — Cycle loop mode (L)`;
+    this.loopButton.setAttribute('aria-label', `${label} — Cycle loop mode (L)`);
   }
 
   private updateDirectionButton(): void {
@@ -1384,28 +1562,44 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       return;
     }
 
+    // Check for .otio files in the selection — route to playlist OTIO import
+    const otioFile = fileArray.find((f) => f.name.toLowerCase().endsWith('.otio'));
+    if (otioFile) {
+      if (this.onOTIOFileOpen) {
+        this.onOTIOFileOpen(otioFile);
+      } else {
+        showAlert(
+          `Cannot import ${otioFile.name}: OTIO import is not available in this context. ` +
+            `Open the Playlist panel to import OTIO files.`,
+          { type: 'warning', title: 'OTIO Import Unavailable' },
+        );
+      }
+      input.value = '';
+      return;
+    }
+
     // Check for .rv or .gto files in the selection
     const sessionFile = fileArray.find(
       (f) => f.name.toLowerCase().endsWith('.rv') || f.name.toLowerCase().endsWith('.gto'),
     );
 
     if (sessionFile) {
-      // If we have a session file, treat other files as potential media sources
+      // If we have a session file, treat other non-session files as potential media sources
+      // Extra .rv/.gto files are excluded — the app only loads one session at a time
       const availableFiles = new Map<string, File>();
       for (const file of fileArray) {
-        if (file !== sessionFile) {
+        if (
+          file !== sessionFile &&
+          !file.name.toLowerCase().endsWith('.rv') &&
+          !file.name.toLowerCase().endsWith('.gto')
+        ) {
           availableFiles.set(file.name, file);
         }
       }
-
-      try {
-        const content = await sessionFile.arrayBuffer();
-        await this.session.loadFromGTO(content, availableFiles);
-        this.emit('fileLoaded', undefined);
-      } catch (err) {
-        console.error('Failed to load session file:', err);
-        showAlert(`Failed to load ${sessionFile.name}: ${err}`, { type: 'error', title: 'Load Error' });
-      }
+      this.emit('openProject', {
+        file: sessionFile,
+        availableFiles: availableFiles.size > 0 ? availableFiles : undefined,
+      });
 
       // Clear input
       input.value = '';
@@ -1472,7 +1666,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     const input = e.target as HTMLInputElement;
     const file = input.files?.[0];
     if (file) {
-      this.emit('openProject', file);
+      this.emit('openProject', { file });
     }
     input.value = '';
   }
@@ -1557,10 +1751,20 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this.exportControl.dispose();
     this.timecodeDisplay.dispose();
     this.themeControl.dispose();
+    this.shotStatusBadge.dispose();
+    this.representationSelector.dispose();
   }
 
   getTimecodeDisplay(): TimecodeDisplay {
     return this.timecodeDisplay;
+  }
+
+  getShotStatusBadge(): ShotStatusBadge {
+    return this.shotStatusBadge;
+  }
+
+  getRepresentationSelector(): RepresentationSelector {
+    return this.representationSelector;
   }
 
   /**

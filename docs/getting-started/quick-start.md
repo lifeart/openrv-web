@@ -65,7 +65,7 @@ Press `L` to increase playback speed through presets: 1x, 2x, 4x, 8x. Press `J` 
 
 ### Loop Modes
 
-Press `L` (with `Ctrl` held, or via the loop button) to cycle through loop modes:
+Press `Ctrl+L` (or via the loop button) to cycle through loop modes:
 
 - **Loop** -- play continuously, wrapping from end to start
 - **Ping-pong** -- play forward, then reverse at boundaries

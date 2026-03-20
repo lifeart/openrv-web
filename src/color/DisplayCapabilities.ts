@@ -503,6 +503,124 @@ export async function detectWebGPUHDR(): Promise<boolean> {
 }
 
 // =============================================================================
+// Live Display Change Monitoring
+// =============================================================================
+
+/**
+ * Media queries monitored for display capability changes.
+ * Exported for testing purposes.
+ */
+export const DISPLAY_MEDIA_QUERIES = ['(dynamic-range: high)', '(color-gamut: p3)', '(color-gamut: rec2020)'] as const;
+
+/**
+ * Watch for display capability changes (HDR, color gamut) via matchMedia
+ * change listeners. When the user moves the app window between displays
+ * with different capabilities, re-probes the display-dependent fields
+ * (displayHDR, displayGamut, and derived activeColorSpace/activeHDRMode)
+ * and invokes the onChange callback so consumers can react.
+ *
+ * Hardware-dependent capabilities (WebGL, WebGPU, canvas features) are NOT
+ * re-probed because they don't change when the display changes.
+ *
+ * @param caps - The mutable DisplayCapabilities object to update in place.
+ * @param onChange - Callback invoked after capability fields are updated.
+ * @returns A cleanup function that removes all listeners.
+ */
+export function watchDisplayChanges(
+  caps: DisplayCapabilities,
+  onChange: (caps: DisplayCapabilities) => void,
+): () => void {
+  if (typeof matchMedia === 'undefined') {
+    return () => {};
+  }
+
+  const mediaQueryLists: MediaQueryList[] = [];
+  const listeners: Array<(e: MediaQueryListEvent) => void> = [];
+
+  const handleChange = () => {
+    // Re-probe display gamut
+    let newGamut: DisplayCapabilities['displayGamut'] = 'srgb';
+    try {
+      if (matchMedia('(color-gamut: rec2020)').matches) {
+        newGamut = 'rec2020';
+      } else if (matchMedia('(color-gamut: p3)').matches) {
+        newGamut = 'p3';
+      }
+    } catch {
+      /* stays srgb */
+    }
+
+    // Re-probe display HDR
+    let newHDR = false;
+    try {
+      newHDR = matchMedia('(dynamic-range: high)').matches;
+    } catch {
+      /* stays false */
+    }
+
+    // Check if anything actually changed
+    if (caps.displayGamut === newGamut && caps.displayHDR === newHDR) {
+      return;
+    }
+
+    // Update the mutable caps object
+    caps.displayGamut = newGamut;
+    caps.displayHDR = newHDR;
+
+    // Re-derive activeColorSpace (depends on display gamut + webgl caps)
+    if (caps.webglP3 && (caps.displayGamut === 'p3' || caps.displayGamut === 'rec2020')) {
+      caps.activeColorSpace = 'display-p3';
+    } else {
+      caps.activeColorSpace = 'srgb';
+    }
+
+    // Re-derive activeHDRMode (display-dependent fields may affect extended mode)
+    if (caps.webglHLG) {
+      caps.activeHDRMode = 'hlg';
+    } else if (caps.webglPQ) {
+      caps.activeHDRMode = 'pq';
+    } else if (caps.displayHDR && caps.webglDrawingBufferStorage && caps.canvasExtendedHDR) {
+      caps.activeHDRMode = 'extended';
+    } else {
+      caps.activeHDRMode = 'sdr';
+    }
+
+    console.log('[DisplayCapabilities] Display changed:', {
+      displayGamut: caps.displayGamut,
+      displayHDR: caps.displayHDR,
+      activeColorSpace: caps.activeColorSpace,
+      activeHDRMode: caps.activeHDRMode,
+    });
+
+    onChange(caps);
+  };
+
+  for (const query of DISPLAY_MEDIA_QUERIES) {
+    try {
+      const mql = matchMedia(query);
+      const listener = () => handleChange();
+      mql.addEventListener('change', listener);
+      mediaQueryLists.push(mql);
+      listeners.push(listener);
+    } catch {
+      /* skip if matchMedia fails for this query */
+    }
+  }
+
+  return () => {
+    for (let i = 0; i < mediaQueryLists.length; i++) {
+      try {
+        mediaQueryLists[i]!.removeEventListener('change', listeners[i]!);
+      } catch {
+        /* ignore cleanup errors */
+      }
+    }
+    mediaQueryLists.length = 0;
+    listeners.length = 0;
+  };
+}
+
+// =============================================================================
 // HDR Headroom Query (async)
 // =============================================================================
 

@@ -264,6 +264,7 @@ export class TransitionManager extends EventEmitter<TransitionManagerEvents> imp
    */
   setState(transitions: (TransitionConfig | null)[]): void {
     this.transitions = transitions.map((t) => (t ? { ...t } : null));
+    this.emit('transitionsReset', undefined);
   }
 
   /**

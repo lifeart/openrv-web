@@ -207,6 +207,22 @@ describe('SafeAreasControl', () => {
       const aspectSelect = document.querySelector('[data-testid="safe-areas-aspect-ratio"]');
       expect(aspectSelect).not.toBeNull();
     });
+
+    it('SAFE-U048: dropdown has guide color input', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
+      button.click();
+
+      expect(document.querySelector('[data-testid="safe-areas-guide-color"]')).not.toBeNull();
+    });
+
+    it('SAFE-U049: dropdown has guide opacity slider', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
+      button.click();
+
+      expect(document.querySelector('[data-testid="safe-areas-guide-opacity"]')).not.toBeNull();
+    });
   });
 
   describe('checkbox interactions', () => {
@@ -308,6 +324,17 @@ describe('SafeAreasControl', () => {
       expect(option).not.toBeNull();
     });
 
+    it('SAFE-U062b: aspect ratio select has custom option', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
+      button.click();
+
+      const select = document.querySelector('[data-testid="safe-areas-aspect-ratio"]') as HTMLSelectElement;
+      const option = select.querySelector('option[value="custom"]');
+
+      expect(option).not.toBeNull();
+    });
+
     it('SAFE-U063: changing select updates overlay aspect ratio', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
@@ -334,6 +361,67 @@ describe('SafeAreasControl', () => {
       select.dispatchEvent(new Event('change'));
 
       expect(overlay.getState().aspectRatio).toBeNull();
+    });
+
+    it('SAFE-U065: selecting custom shows custom aspect ratio input', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
+      button.click();
+
+      const select = document.querySelector('[data-testid="safe-areas-aspect-ratio"]') as HTMLSelectElement;
+      const customContainer = document.querySelector(
+        '[data-testid="safe-areas-custom-aspect-container"]',
+      ) as HTMLElement;
+
+      expect(customContainer.style.display).toBe('none');
+      select.value = 'custom';
+      select.dispatchEvent(new Event('change'));
+
+      expect(overlay.getState().aspectRatio).toBe('custom');
+      expect(customContainer.style.display).toBe('flex');
+    });
+
+    it('SAFE-U066: custom aspect ratio input updates overlay value', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
+      button.click();
+
+      const select = document.querySelector('[data-testid="safe-areas-aspect-ratio"]') as HTMLSelectElement;
+      select.value = 'custom';
+      select.dispatchEvent(new Event('change'));
+
+      const input = document.querySelector('[data-testid="safe-areas-custom-aspect"]') as HTMLInputElement;
+      input.value = '2.00';
+      input.dispatchEvent(new Event('input'));
+
+      expect(overlay.getCustomAspectRatio()).toBe(2);
+    });
+  });
+
+  describe('appearance controls', () => {
+    it('SAFE-U067: guide color input updates overlay color', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
+      button.click();
+
+      const input = document.querySelector('[data-testid="safe-areas-guide-color"]') as HTMLInputElement;
+      input.value = '#ff0000';
+      input.dispatchEvent(new Event('input'));
+
+      expect(overlay.getState().guideColor).toBe('#ff0000');
+    });
+
+    it('SAFE-U068: guide opacity slider updates overlay opacity', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
+      button.click();
+
+      const slider = document.querySelector('[data-testid="safe-areas-guide-opacity"]') as HTMLInputElement;
+      slider.value = '80';
+      slider.dispatchEvent(new Event('input'));
+
+      expect(overlay.getState().guideOpacity).toBe(0.8);
+      expect(document.querySelector('[data-testid="safe-areas-guide-opacity-value"]')?.textContent).toBe('80%');
     });
   });
 
@@ -497,6 +585,107 @@ describe('SafeAreasControl', () => {
       control.dispose();
 
       expect(unsubSpy).toHaveBeenCalled();
+    });
+  });
+
+  describe('custom safe area controls (Issue #483)', () => {
+    it('SAFE-U160: dropdown has custom safe area checkbox', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
+      button.click();
+
+      const customItem = document.querySelector('[data-testid="safe-areas-item-customSafeArea"]');
+      expect(customItem).not.toBeNull();
+    });
+
+    it('SAFE-U161: clicking custom safe area item toggles custom safe area', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
+      button.click();
+
+      const customItem = document.querySelector('[data-testid="safe-areas-item-customSafeArea"]') as HTMLElement;
+
+      expect(overlay.getState().customSafeArea).toBe(false);
+      customItem.click();
+      expect(overlay.getState().customSafeArea).toBe(true);
+    });
+
+    it('SAFE-U162: enabling custom safe area shows percentage input', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
+      button.click();
+
+      const container = document.querySelector('[data-testid="safe-areas-custom-percentage-container"]') as HTMLElement;
+      expect(container.style.display).toBe('none');
+
+      const customItem = document.querySelector('[data-testid="safe-areas-item-customSafeArea"]') as HTMLElement;
+      customItem.click();
+
+      expect(container.style.display).toBe('flex');
+    });
+
+    it('SAFE-U163: custom percentage input updates overlay value', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
+      button.click();
+
+      // Enable custom safe area first
+      const customItem = document.querySelector('[data-testid="safe-areas-item-customSafeArea"]') as HTMLElement;
+      customItem.click();
+
+      const input = document.querySelector('[data-testid="safe-areas-custom-percentage"]') as HTMLInputElement;
+      input.value = '75';
+      input.dispatchEvent(new Event('input'));
+
+      expect(overlay.getState().customSafeAreaPercentage).toBe(75);
+    });
+
+    it('SAFE-U164: custom safe area counts in active guide count', () => {
+      const el = control.render();
+      overlay.enable();
+      overlay.toggleCustomSafeArea();
+
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
+      // titleSafe + actionSafe + customSafeArea = 3
+      expect(button.textContent).toMatch(/Guides\s*\(3\)/);
+    });
+  });
+
+  describe('SMPTE RP 2046-2:2018 label accuracy (Issue #482)', () => {
+    it('SAFE-U150: action safe label shows 93%', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
+      button.click();
+
+      const actionItem = document.querySelector('[data-testid="safe-areas-item-actionSafe"]') as HTMLElement;
+      expect(actionItem.textContent).toContain('Action Safe (93%)');
+    });
+
+    it('SAFE-U151: title safe label shows 90%', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
+      button.click();
+
+      const titleItem = document.querySelector('[data-testid="safe-areas-item-titleSafe"]') as HTMLElement;
+      expect(titleItem.textContent).toContain('Title Safe (90%)');
+    });
+
+    it('SAFE-U152: action safe label does NOT show old 90% value', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
+      button.click();
+
+      const actionItem = document.querySelector('[data-testid="safe-areas-item-actionSafe"]') as HTMLElement;
+      expect(actionItem.textContent).not.toContain('Action Safe (90%)');
+    });
+
+    it('SAFE-U153: title safe label does NOT show old 80% value', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
+      button.click();
+
+      const titleItem = document.querySelector('[data-testid="safe-areas-item-titleSafe"]') as HTMLElement;
+      expect(titleItem.textContent).not.toContain('Title Safe (80%)');
     });
   });
 

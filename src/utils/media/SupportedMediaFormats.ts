@@ -1,6 +1,6 @@
 /**
  * Shared media format helpers used by file inputs, placeholder UI copy,
- * and media type detection in Session/MediaManager.
+ * and media type detection in SessionMedia.
  */
 
 /**
@@ -16,6 +16,7 @@ export const SUPPORTED_IMAGE_EXTENSIONS = [
   'gif',
   'bmp',
   'svg',
+  'ico',
   'tif',
   'tiff',
   'exr',
@@ -29,15 +30,18 @@ export const SUPPORTED_IMAGE_EXTENSIONS = [
   'jxl',
   'heic',
   'heif',
-  // RAW formats (preview extraction)
+  // JPEG 2000 / HTJ2K
+  'jp2',
+  'j2k',
+  'j2c',
+  'jph',
+  'jhc',
+  // RAW formats (TIFF-based preview extraction only)
   'cr2',
-  'cr3',
   'nef',
   'arw',
   'dng',
-  'raf',
   'orf',
-  'rw2',
   'pef',
   'srw',
 ] as const;
@@ -64,6 +68,8 @@ export const MEDIABUNNY_VIDEO_EXTENSIONS = [
   'ogv',
   'ogm',
   'ogx',
+  // MXF (Material Exchange Format)
+  'mxf',
 ] as const;
 
 /**
@@ -75,7 +81,59 @@ export const SUPPORTED_VIDEO_EXTENSIONS = [...MEDIABUNNY_VIDEO_EXTENSIONS, ...HT
 
 const IMAGE_EXTENSION_SET = new Set<string>(SUPPORTED_IMAGE_EXTENSIONS);
 const VIDEO_EXTENSION_SET = new Set<string>(SUPPORTED_VIDEO_EXTENSIONS);
+const ALL_KNOWN_EXTENSIONS = new Set<string>([...SUPPORTED_IMAGE_EXTENSIONS, ...SUPPORTED_VIDEO_EXTENSIONS]);
 const VIDEO_MIME_ALIASES = new Set<string>(['application/ogg']);
+
+/**
+ * Image extensions that require the FileSourceNode / decoder pipeline
+ * (not natively supported by HTMLImageElement).
+ * Browser-native formats (png, jpg, jpeg, jpe, webp, gif, bmp, svg, ico, avif)
+ * are excluded — they work fine through the fast HTMLImageElement path.
+ */
+const DECODER_BACKED_EXTENSIONS = new Set<string>([
+  'tif',
+  'tiff',
+  'exr',
+  'sxr',
+  'dpx',
+  'cin',
+  'cineon',
+  'hdr',
+  'pic',
+  'jxl',
+  'heic',
+  'heif',
+  // JPEG 2000 / HTJ2K
+  'jp2',
+  'j2k',
+  'j2c',
+  'jph',
+  'jhc',
+  // RAW formats
+  'cr2',
+  'nef',
+  'arw',
+  'dng',
+  'orf',
+  'pef',
+  'srw',
+]);
+
+/**
+ * Check whether an extension (lowercase, no dot) requires the decoder-backed
+ * pipeline (FileSourceNode) rather than a plain HTMLImageElement.
+ */
+export function isDecoderBackedExtension(ext: string): boolean {
+  return DECODER_BACKED_EXTENSIONS.has(ext);
+}
+
+/**
+ * Check whether an extension (lowercase, no dot) is a recognized video extension.
+ * This is the single source of truth for video-extension classification.
+ */
+export function isVideoExtension(ext: string): boolean {
+  return VIDEO_EXTENSION_SET.has(ext);
+}
 
 function getFileExtension(filename: string): string {
   const dotIdx = filename.lastIndexOf('.');
@@ -85,11 +143,43 @@ function getFileExtension(filename: string): string {
   return filename.slice(dotIdx + 1).toLowerCase();
 }
 
+/** Number of bytes to read for magic-number sniffing when extension/MIME detection fails. */
+const MAGIC_SNIFF_BYTES = 16384;
+
+/**
+ * Attempt to classify a file as an image by reading its first bytes and
+ * checking against the DecoderRegistry's magic-number detectors.
+ *
+ * This is the fallback path for files whose extension/MIME type is
+ * unrecognized (extensionless, misnamed, etc.). Only image formats are
+ * probed because video containers are never loaded through the decoder
+ * registry.
+ *
+ * Returns `'image'` if a registered decoder recognizes the bytes, otherwise
+ * `'unknown'`.
+ */
+export async function detectMediaTypeFromFileBytes(file: File): Promise<'image' | 'unknown'> {
+  try {
+    const slice = file.slice(0, MAGIC_SNIFF_BYTES);
+    const buffer = await slice.arrayBuffer();
+    // Lazy import to avoid pulling the decoder registry into the initial bundle
+    const { decoderRegistry } = await import('../../formats/DecoderRegistry');
+    const format = decoderRegistry.detectFormat(buffer);
+    if (format !== null) {
+      return 'image';
+    }
+  } catch {
+    // Read or import failed — fall through to unknown
+  }
+  return 'unknown';
+}
+
 /**
  * Classify a file as image/video using MIME first, then extension fallback.
- * Unknown types default to image to preserve existing behavior.
+ * Returns `'unknown'` for unrecognized extensions/MIME types so callers can
+ * reject unsupported files with a clear error instead of misclassifying them.
  */
-export function detectMediaTypeFromFile(file: Pick<File, 'name' | 'type'>): 'image' | 'video' {
+export function detectMediaTypeFromFile(file: Pick<File, 'name' | 'type'>): 'image' | 'video' | 'unknown' {
   const mime = (file.type ?? '').trim().toLowerCase();
 
   if (mime.startsWith('video/')) {
@@ -110,6 +200,73 @@ export function detectMediaTypeFromFile(file: Pick<File, 'name' | 'type'>): 'ima
     return 'image';
   }
 
+  return 'unknown';
+}
+
+/**
+ * Extract the file extension from a URL path, ignoring query strings and fragments.
+ * Returns empty string if no extension is found.
+ */
+export function getExtensionFromUrl(url: string): string {
+  try {
+    // Handle both absolute and relative URLs
+    const pathname = new URL(url, 'http://dummy').pathname;
+    const lastSegment = pathname.split('/').pop() ?? '';
+    return getFileExtension(lastSegment);
+  } catch {
+    // Fallback for malformed URLs: just use the raw string
+    const parts = url.split('?')[0]?.split('#')[0]?.split('/');
+    return getFileExtension(parts?.pop() ?? '');
+  }
+}
+
+/** Default timeout for HEAD requests used in content-type sniffing (ms). */
+const HEAD_REQUEST_TIMEOUT_MS = 3000;
+
+/**
+ * Detect whether a URL points to a video or image resource.
+ *
+ * 1. If the URL has a recognized extension, use it directly.
+ * 2. Otherwise, issue a HEAD request to sniff the Content-Type header.
+ * 3. Falls back to 'image' if the HEAD request fails or the type is unrecognized.
+ */
+export async function detectMediaTypeFromUrl(url: string): Promise<'image' | 'video'> {
+  const ext = getExtensionFromUrl(url);
+
+  // Fast path: known extension
+  if (ext && ALL_KNOWN_EXTENSIONS.has(ext)) {
+    if (VIDEO_EXTENSION_SET.has(ext)) {
+      return 'video';
+    }
+    return 'image';
+  }
+
+  // Slow path: HEAD request to sniff Content-Type
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), HEAD_REQUEST_TIMEOUT_MS);
+
+    const response = await fetch(url, {
+      method: 'HEAD',
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    const contentType = (response.headers.get('content-type') ?? '').toLowerCase();
+    if (contentType.startsWith('video/')) {
+      return 'video';
+    }
+    if (contentType.startsWith('image/')) {
+      return 'image';
+    }
+    if (VIDEO_MIME_ALIASES.has((contentType.split(';')[0] ?? '').trim())) {
+      return 'video';
+    }
+  } catch {
+    // Network error, timeout, or abort — fall through to default
+  }
+
   return 'image';
 }
 
@@ -123,9 +280,31 @@ const acceptExtensions = Array.from(
 export const SUPPORTED_MEDIA_ACCEPT = ['image/*', 'video/*', ...acceptExtensions].join(',');
 
 /**
+ * Project/session file extensions.
+ */
+export const PROJECT_EXTENSIONS = ['orvproject', 'rv', 'gto', 'rvedl'] as const;
+
+/**
+ * CDL (Color Decision List) sidecar extension.
+ */
+export const CDL_EXTENSIONS = ['cdl'] as const;
+
+/**
+ * File input accept string for the "Open Project" picker.
+ * Includes project/session formats, media formats, and CDL sidecars
+ * so users can multi-select an .rv/.gto file together with its
+ * companion media/CDL files in a single action.
+ */
+export const SUPPORTED_PROJECT_ACCEPT = [
+  ...PROJECT_EXTENSIONS.map((ext) => `.${ext}`),
+  ...acceptExtensions,
+  ...CDL_EXTENSIONS.map((ext) => `.${ext}`),
+].join(',');
+
+/**
  * Viewer placeholder support lines (rendered as multiline helper text).
  */
 export const VIEWER_PLACEHOLDER_SUPPORT_LINES = [
-  'Images: EXR, DPX/CIN, HDR, AVIF, JXL, HEIC, RAW, PNG/JPEG/WebP/TIFF',
-  'Video: MP4/M4V/3GP, MOV/QT, MKV/WebM, OGG/OGV (AVI fallback)',
+  'Images: EXR, DPX/CIN, HDR, AVIF, JXL, HEIC, JP2/HTJ2K, RAW, PNG/JPEG/WebP/TIFF',
+  'Video: MP4/M4V/3GP, MOV/QT, MKV/WebM, OGG/OGV, MXF (AVI fallback)',
 ] as const;

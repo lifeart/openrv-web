@@ -304,28 +304,28 @@ describe('ViewerIndicators', () => {
 
   describe('loadFilterModePreference', () => {
     it('VI-041: returns linear as default when nothing is stored', () => {
-      localStorage.removeItem('openrv.filterMode');
+      localStorage.removeItem('openrv-prefs-filter-mode');
       expect(loadFilterModePreference()).toBe('linear');
     });
 
     it('VI-042: returns nearest when stored value is nearest', () => {
-      localStorage.setItem('openrv.filterMode', 'nearest');
+      localStorage.setItem('openrv-prefs-filter-mode', 'nearest');
       const result = loadFilterModePreference();
-      localStorage.removeItem('openrv.filterMode');
+      localStorage.removeItem('openrv-prefs-filter-mode');
       expect(result).toBe('nearest');
     });
 
     it('VI-043: returns linear when stored value is linear', () => {
-      localStorage.setItem('openrv.filterMode', 'linear');
+      localStorage.setItem('openrv-prefs-filter-mode', 'linear');
       const result = loadFilterModePreference();
-      localStorage.removeItem('openrv.filterMode');
+      localStorage.removeItem('openrv-prefs-filter-mode');
       expect(result).toBe('linear');
     });
 
     it('VI-044: returns linear for invalid stored values', () => {
-      localStorage.setItem('openrv.filterMode', 'invalid');
+      localStorage.setItem('openrv-prefs-filter-mode', 'invalid');
       const result = loadFilterModePreference();
-      localStorage.removeItem('openrv.filterMode');
+      localStorage.removeItem('openrv-prefs-filter-mode');
       expect(result).toBe('linear');
     });
 
@@ -340,17 +340,17 @@ describe('ViewerIndicators', () => {
 
   describe('persistFilterModePreference', () => {
     afterEach(() => {
-      localStorage.removeItem('openrv.filterMode');
+      localStorage.removeItem('openrv-prefs-filter-mode');
     });
 
     it('VI-046: stores nearest to localStorage', () => {
       persistFilterModePreference('nearest');
-      expect(localStorage.getItem('openrv.filterMode')).toBe('nearest');
+      expect(localStorage.getItem('openrv-prefs-filter-mode')).toBe('nearest');
     });
 
     it('VI-047: stores linear to localStorage', () => {
       persistFilterModePreference('linear');
-      expect(localStorage.getItem('openrv.filterMode')).toBe('linear');
+      expect(localStorage.getItem('openrv-prefs-filter-mode')).toBe('linear');
     });
 
     it('VI-048: does not throw when localStorage is unavailable', () => {

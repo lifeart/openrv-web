@@ -1,6 +1,6 @@
 # Session Management
 
-Session management in OpenRV Web preserves the complete state of a review session -- media references, color corrections, annotations, playback position, view configuration, and more. The system provides manual snapshots, automatic saving with crash recovery, and a portable session file format.
+Session management in OpenRV Web preserves most of a review session's state -- media references, color corrections, annotations, playback position, view configuration, and more. Some viewer states (such as OCIO configuration, tone mapping, stereo mode, and difference matte) are not yet serialized; see [Known Omissions](#known-omissions) for the full list. The system provides manual snapshots, automatic saving with crash recovery, and a portable session file format.
 
 This is the canonical reference for all session persistence features. For a brief overview of the `.orvproject` save/load workflow, see [Session Save and Load](../export/sessions.md).
 
@@ -8,7 +8,7 @@ This is the canonical reference for all session persistence features. For a brie
 
 ## The .orvproject Format
 
-OpenRV Web uses the `.orvproject` file format for session persistence. This is a JSON file containing a versioned schema that captures every aspect of the current viewer state.
+OpenRV Web uses the `.orvproject` file format for session persistence. This is a JSON file containing a versioned schema that captures most of the current viewer state. Some viewer states are not yet serialized; see [Known Omissions](#known-omissions) below.
 
 ### What Is Saved
 
@@ -18,7 +18,7 @@ OpenRV Web uses the `.orvproject` file format for session persistence. This is a
 | Playback state | Current frame, in/out points, FPS, loop mode, volume, muted state |
 | Markers | Frame number, note text, color for each marker |
 | Annotations | All pen strokes, shapes, and text per frame; ghost/hold settings |
-| Color adjustments | Exposure, gamma, contrast, saturation, brightness, temperature, tint, highlights, shadows, whites, blacks |
+| Color adjustments | Exposure, gamma, contrast, saturation, vibrance, brightness, clarity, temperature, tint, highlights, shadows, whites, blacks |
 | CDL values | Slope, offset, power, saturation |
 | View state | Zoom level, pan position |
 | Transform | Rotation, flip, scale, translate |
@@ -27,8 +27,37 @@ OpenRV Web uses the `.orvproject` file format for session persistence. This is a
 | Wipe/Compare | Wipe mode, position, angle |
 | Layer stack | Layer blend modes and opacity |
 | LUT | LUT file path reference and blend intensity |
+| LUT pipeline | Per-source and display LUT stage assignments (names, enabled flags, intensities) |
 | Filters | Blur, sharpen settings |
+| Overlays | Timecode overlay, Safe Areas overlay, Clipping overlay, Info Strip overlay, Spotlight overlay, Bug overlay, EXR Window overlay, FPS Indicator overlay |
+| EDL entries | Edit Decision List entries |
 | Playlist | Clip list with in/out points and loop mode |
+| Node graph | Graph topology, node connections, and properties (when a graph is active) |
+
+### Known Omissions
+
+The following viewer states are **not** saved in `.orvproject` files. They revert to defaults when a project is reloaded. The serializer logs a console warning when any of these are actively non-default at save time.
+
+| Category | Omitted State |
+|----------|---------------|
+| Color pipeline | OCIO configuration (config name, color spaces, view, look) |
+| Color pipeline | Display profile (transfer function, display gamma) |
+| Color pipeline | Gamut mapping (mode, source/target gamut) |
+| Color pipeline | Color inversion |
+| Color pipeline | Curves (per-channel curve adjustments) |
+| View / Compare | Tone mapping (operator and parameters) |
+| View / Compare | Ghost frames (enabled, frame count, opacity, tint) |
+| View / Compare | Stereo mode (mode, eye swap, convergence offset) |
+| View / Compare | Stereo eye transforms (per-eye flip, rotation, scale, translate) |
+| View / Compare | Stereo align mode |
+| View / Compare | Difference matte (enabled, gain, heatmap) |
+| View / Compare | Blend mode (mode, opacity, flicker frame) |
+| View / Compare | Channel isolation mode (R/G/B/A/luminance) |
+| Effects | Deinterlace (enabled, mode) |
+| Effects | Film emulation (enabled, stock, intensity) |
+| Effects | Perspective correction (enabled, corner points, quality) |
+| Effects | Stabilization (enabled, smoothing, crop mode) |
+| Effects | Uncrop (active, dimensions, offset) |
 
 ### Schema Versioning
 
@@ -40,9 +69,10 @@ Each `.orvproject` file includes a `version` number. When the schema evolves in 
 
 Save the current session state using one of these methods:
 
-- Click the **Save** button in the header bar
+- Click the **Save** button (floppy disk icon) in the header bar
 - Use the Export menu and select **Save Project**
-- Press `Ctrl+S`
+
+> **Note:** There is no dedicated keyboard shortcut for project save. `Ctrl+S` is wired to frame export, and `Ctrl+Shift+S` creates a snapshot. Use the header bar Save button to save a `.orvproject` file.
 
 The browser downloads a `.orvproject` file named after the current project name.
 
@@ -80,6 +110,7 @@ The file reload dialog appears for each media reference that cannot be automatic
 - A filename mismatch warning (if the selected file has a different name than expected)
 - **Load** button (disabled until a file is selected)
 - **Skip** button (continues without loading that media, showing a warning)
+- **Cancel** button (aborts the entire reload flow)
 
 Multiple reload prompts appear sequentially if the session contains several locally-loaded files.
 
@@ -97,7 +128,7 @@ Snapshots can also be created automatically. Auto-checkpoints are generated befo
 
 ### Snapshot Panel
 
-Open the Snapshot Panel from the header bar button or with the keyboard shortcut `Shift+Alt+H`.
+Open the Snapshot Panel from the header bar button or with the keyboard shortcut `Ctrl+Shift+Alt+S`.
 
 The panel provides:
 
@@ -165,13 +196,13 @@ On application startup, the auto-save manager checks for a clean shutdown flag:
 1. During normal operation, a "running" flag is set in IndexedDB
 2. On clean shutdown (tab close with beforeunload handler), the flag is cleared
 3. If the application starts and finds the "running" flag still set, a crash or unexpected closure occurred
-4. The system emits a `recoveryAvailable` event, and the UI offers to restore from the most recent auto-save entry
+4. The system detects that recovery data is available, and the UI offers to restore from the most recent auto-save entry
 
 Crash recovery restores the full session state, including media references (which may require file reloading for local files), color corrections, annotations, and playback position.
 
 ### Session Recovery After Browser Restart
 
-After a browser restart, locally-loaded media files are referenced by blob URLs that are no longer valid. The session recovery system detects these invalid blob URLs and displays file re-selection prompts for each affected media source. The user selects the original files from disk, and the session resumes with all color corrections, annotations, and playback state intact. This ensures that no review work is lost even when the browser is closed unexpectedly or the system restarts.
+After a browser restart, locally-loaded media files are referenced by blob URLs that are no longer valid. The session recovery system detects these invalid blob URLs and displays file re-selection prompts for each affected media source. The user selects the original files from disk, and the session resumes with all color corrections, annotations, and playback state intact.
 
 ---
 
@@ -183,20 +214,20 @@ Browser storage quotas vary by browser and device. The auto-save manager can che
 - A warning is emitted when storage usage exceeds 80% of the available quota
 - If storage is critically low, auto-save may fail; the error indicator appears in the header
 
-To free storage, delete old snapshots and auto-save entries from the Snapshot Panel.
+To free storage, delete old snapshots and auto-checkpoints from the Snapshot Panel. Auto-save entries are managed automatically: old versions beyond the configured `maxVersions` limit (default 10) are pruned each time a new auto-save is written. To adjust how many auto-save versions are retained, change the **Max versions** setting in the auto-save configuration.
 
 ---
 
 ## History Panel
 
-Press `Shift+Alt+H` to open the History Panel, which provides a unified view of both manual snapshots and auto-save entries. The panel supports:
+Press `Shift+Alt+H` to open the History Panel, which displays undo/redo action history. The panel supports:
 
-- Chronological listing of all saved states
-- Filtering by type (manual snapshot, auto-checkpoint, auto-save)
-- Quick restore to any previous state
-- Bulk delete operations
+- Chronological listing of all actions with timestamps
+- Click any entry to revert to that state
+- Current state highlighting
+- Clear history option
 
-The History Panel is the primary interface for navigating session history and performing recovery operations.
+For snapshot management, use the Snapshot Panel. For auto-save crash recovery, see the recovery prompt that appears on startup when an unclean shutdown is detected. The History Panel is focused on navigating the undo/redo action stack within the current session.
 
 ---
 

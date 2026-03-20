@@ -90,6 +90,7 @@ function createMockContext(overrides: Partial<ViewerInputContext> = {}): ViewerI
     loadSequence: vi.fn(),
     loadFile: vi.fn(),
     loadFromGTO: vi.fn(),
+    loadEDL: vi.fn(() => []),
   } as unknown as Session;
 
   const mockTransformManager = {
@@ -779,6 +780,228 @@ describe('ViewerInputHandler – Case-insensitive drop extensions', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Drag-and-drop GTO/RV sidecar file resolution (Issue #153)
+// ---------------------------------------------------------------------------
+
+describe('ViewerInputHandler – GTO drop with sidecar files', () => {
+  let ctx: ViewerInputContext;
+  let handler: ViewerInputHandler;
+  let dropOverlay: HTMLElement;
+
+  beforeEach(() => {
+    ctx = createMockContext();
+    dropOverlay = document.createElement('div');
+    handler = new ViewerInputHandler(ctx, dropOverlay);
+    handler.bindEvents();
+  });
+
+  afterEach(() => {
+    handler.unbindEvents();
+    const container = ctx.getContainer();
+    if (container.parentNode) {
+      container.parentNode.removeChild(container);
+    }
+  });
+
+  function dispatchDrop(container: HTMLElement, files: File[]): void {
+    const mockDataTransfer = { files };
+    const dropEvent = new Event('drop', { bubbles: true }) as any;
+    dropEvent.dataTransfer = mockDataTransfer;
+    dropEvent.preventDefault = vi.fn();
+    container.dispatchEvent(dropEvent);
+  }
+
+  it('SIDECAR-001: GTO dropped with companion files builds availableFiles map and passes it to loadFromGTO', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+
+    const gtoFile = new File(['gto-data'], 'scene.gto');
+    const mediaFile1 = new File(['img-data'], 'plate.exr');
+    const mediaFile2 = new File(['cdl-data'], 'grade.cdl');
+
+    dispatchDrop(container, [gtoFile, mediaFile1, mediaFile2]);
+
+    await vi.waitFor(() => {
+      expect(mockSession.loadFromGTO).toHaveBeenCalledTimes(1);
+    });
+
+    const callArgs = (mockSession.loadFromGTO as any).mock.calls[0];
+    // First arg is the ArrayBuffer content
+    expect(callArgs[0]).toBeInstanceOf(ArrayBuffer);
+    // Second arg is the availableFiles map (now Map<string, File[]>)
+    const availableFiles: Map<string, File[]> = callArgs[1];
+    expect(availableFiles).toBeInstanceOf(Map);
+    expect(availableFiles.size).toBe(2);
+    expect(availableFiles.get('plate.exr')).toEqual([mediaFile1]);
+    expect(availableFiles.get('grade.cdl')).toEqual([mediaFile2]);
+  });
+
+  it('SIDECAR-002: GTO dropped alone calls loadFromGTO with empty availableFiles map', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+
+    const gtoFile = new File(['gto-data'], 'scene.gto');
+
+    dispatchDrop(container, [gtoFile]);
+
+    await vi.waitFor(() => {
+      expect(mockSession.loadFromGTO).toHaveBeenCalledTimes(1);
+    });
+
+    const callArgs = (mockSession.loadFromGTO as any).mock.calls[0];
+    const availableFiles: Map<string, File[]> = callArgs[1];
+    expect(availableFiles).toBeInstanceOf(Map);
+    expect(availableFiles.size).toBe(0);
+  });
+
+  it('SIDECAR-003: .rv file dropped with companions also builds availableFiles map', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+
+    const rvFile = new File(['rv-data'], 'session.rv');
+    const mediaFile = new File(['img-data'], 'render.dpx');
+
+    dispatchDrop(container, [rvFile, mediaFile]);
+
+    await vi.waitFor(() => {
+      expect(mockSession.loadFromGTO).toHaveBeenCalledTimes(1);
+    });
+
+    const callArgs = (mockSession.loadFromGTO as any).mock.calls[0];
+    const availableFiles: Map<string, File[]> = callArgs[1];
+    expect(availableFiles).toBeInstanceOf(Map);
+    expect(availableFiles.size).toBe(1);
+    expect(availableFiles.get('render.dpx')).toEqual([mediaFile]);
+  });
+
+  it('SIDECAR-004: multiple non-session files build correct basename keys', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+
+    const gtoFile = new File(['gto-data'], 'project.gto');
+    const file1 = new File(['a'], 'shot01.exr');
+    const file2 = new File(['b'], 'shot02.exr');
+    const file3 = new File(['c'], 'look.cdl');
+    const file4 = new File(['d'], 'lut.cube');
+
+    dispatchDrop(container, [file1, gtoFile, file2, file3, file4]);
+
+    await vi.waitFor(() => {
+      expect(mockSession.loadFromGTO).toHaveBeenCalledTimes(1);
+    });
+
+    const callArgs = (mockSession.loadFromGTO as any).mock.calls[0];
+    const availableFiles: Map<string, File[]> = callArgs[1];
+    expect(availableFiles.size).toBe(4);
+    expect(availableFiles.get('shot01.exr')).toEqual([file1]);
+    expect(availableFiles.get('shot02.exr')).toEqual([file2]);
+    expect(availableFiles.get('look.cdl')).toEqual([file3]);
+    expect(availableFiles.get('lut.cube')).toEqual([file4]);
+  });
+
+  it('SIDECAR-005: non-session files without a GTO are loaded via loadFile individually', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+
+    // Use non-image extensions to avoid triggering sequence detection
+    const file1 = new File(['a'], 'grade.cdl');
+    const file2 = new File(['b'], 'lookup.cube');
+
+    dispatchDrop(container, [file1, file2]);
+
+    await vi.waitFor(() => {
+      expect(mockSession.loadFile).toHaveBeenCalledTimes(2);
+    });
+
+    expect(mockSession.loadFromGTO).not.toHaveBeenCalled();
+  });
+
+  it('SIDECAR-006: session file is not included in the availableFiles map', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+
+    const gtoFile = new File(['gto-data'], 'scene.gto');
+    const mediaFile = new File(['img'], 'plate.exr');
+
+    dispatchDrop(container, [gtoFile, mediaFile]);
+
+    await vi.waitFor(() => {
+      expect(mockSession.loadFromGTO).toHaveBeenCalledTimes(1);
+    });
+
+    const callArgs = (mockSession.loadFromGTO as any).mock.calls[0];
+    const availableFiles: Map<string, File[]> = callArgs[1];
+    expect(availableFiles.has('scene.gto')).toBe(false);
+  });
+
+  it('SIDECAR-007: duplicate basenames are collected into the same array entry', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+
+    const gtoFile = new File(['gto-data'], 'scene.gto');
+    // Two files with the same basename
+    const file1 = new File(['a'], 'plate.exr');
+    const file2 = new File(['b'], 'plate.exr');
+
+    dispatchDrop(container, [gtoFile, file1, file2]);
+
+    await vi.waitFor(() => {
+      expect(mockSession.loadFromGTO).toHaveBeenCalledTimes(1);
+    });
+
+    const callArgs = (mockSession.loadFromGTO as any).mock.calls[0];
+    const availableFiles: Map<string, File[]> = callArgs[1];
+    expect(availableFiles.size).toBe(1);
+    expect(availableFiles.get('plate.exr')).toEqual([file1, file2]);
+  });
+
+  it('SIDECAR-008: extra .rv/.gto files are excluded from availableFiles (#401)', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+
+    const primaryRv = new File(['rv-data'], 'session1.rv');
+    const extraRv = new File(['rv-data'], 'session2.rv');
+    const extraGto = new File(['gto-data'], 'backup.gto');
+    const mediaFile = new File(['img'], 'plate.exr');
+
+    dispatchDrop(container, [primaryRv, extraRv, extraGto, mediaFile]);
+
+    await vi.waitFor(() => {
+      expect(mockSession.loadFromGTO).toHaveBeenCalledTimes(1);
+    });
+
+    const callArgs = (mockSession.loadFromGTO as any).mock.calls[0];
+    const availableFiles: Map<string, File[]> = callArgs[1];
+    // Only the media file should be in availableFiles; extra session files must NOT be demoted
+    expect(availableFiles.size).toBe(1);
+    expect(availableFiles.get('plate.exr')).toEqual([mediaFile]);
+    expect(availableFiles.has('session2.rv')).toBe(false);
+    expect(availableFiles.has('backup.gto')).toBe(false);
+  });
+
+  it('SIDECAR-009: extra uppercase .RV/.GTO files are also excluded from availableFiles (#401)', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+
+    const primaryGto = new File(['gto-data'], 'main.gto');
+    const extraRv = new File(['rv-data'], 'OTHER.RV');
+    const mediaFile = new File(['img'], 'render.dpx');
+
+    dispatchDrop(container, [primaryGto, extraRv, mediaFile]);
+
+    await vi.waitFor(() => {
+      expect(mockSession.loadFromGTO).toHaveBeenCalledTimes(1);
+    });
+
+    const callArgs = (mockSession.loadFromGTO as any).mock.calls[0];
+    const availableFiles: Map<string, File[]> = callArgs[1];
+    expect(availableFiles.size).toBe(1);
+    expect(availableFiles.get('render.dpx')).toEqual([mediaFile]);
+    expect(availableFiles.has('OTHER.RV')).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Rotation Scrub (Ctrl+Shift+Drag) Tests
 // ---------------------------------------------------------------------------
 
@@ -1006,5 +1229,678 @@ describe('ViewerInputHandler – Rotation Scrub (Ctrl+Shift+Drag)', () => {
 
     // releasePointerCapture should have been called on pointerup
     expect(container.releasePointerCapture).toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Single-file sequence inference on drop (Issue #154)
+// ---------------------------------------------------------------------------
+
+// We need to mock inferSequenceFromSingleFile to control its return value.
+// Use dynamic import + vi.mock to intercept the module.
+vi.mock('../../utils/media/SequenceLoader', async (importOriginal) => {
+  const actual = (await importOriginal()) as any;
+  return {
+    ...actual,
+    inferSequenceFromSingleFile: vi.fn(() => Promise.resolve(null)),
+  };
+});
+
+// Re-import the mock so we can control it in tests
+import { inferSequenceFromSingleFile } from '../../utils/media/SequenceLoader';
+const mockedInferSequence = vi.mocked(inferSequenceFromSingleFile);
+
+describe('ViewerInputHandler – Single-file sequence inference on drop (Issue #154)', () => {
+  let ctx: ViewerInputContext;
+  let handler: ViewerInputHandler;
+  let dropOverlay: HTMLElement;
+
+  beforeEach(() => {
+    ctx = createMockContext();
+    dropOverlay = document.createElement('div');
+    handler = new ViewerInputHandler(ctx, dropOverlay);
+    handler.bindEvents();
+    mockedInferSequence.mockReset();
+    mockedInferSequence.mockResolvedValue(null);
+  });
+
+  afterEach(() => {
+    handler.unbindEvents();
+    const container = ctx.getContainer();
+    if (container.parentNode) {
+      container.parentNode.removeChild(container);
+    }
+  });
+
+  function dispatchDrop(container: HTMLElement, files: File[]): void {
+    const mockDataTransfer = { files };
+    const dropEvent = new Event('drop', { bubbles: true }) as any;
+    dropEvent.dataTransfer = mockDataTransfer;
+    dropEvent.preventDefault = vi.fn();
+    container.dispatchEvent(dropEvent);
+  }
+
+  it('SEQ-INFER-001: single numbered image file dropped triggers sequence inference', async () => {
+    const container = ctx.getContainer();
+    const singleFile = new File(['img'], 'render_0001.exr');
+
+    dispatchDrop(container, [singleFile]);
+
+    await vi.waitFor(() => {
+      expect(mockedInferSequence).toHaveBeenCalledTimes(1);
+    });
+
+    expect(mockedInferSequence).toHaveBeenCalledWith(singleFile, [singleFile]);
+  });
+
+  it('SEQ-INFER-002: sequence inference succeeds → loaded as sequence', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+
+    const file1 = new File(['a'], 'frame_0001.exr');
+    const file2 = new File(['b'], 'frame_0002.exr');
+    const file3 = new File(['c'], 'frame_0003.exr');
+
+    mockedInferSequence.mockResolvedValue({
+      name: 'frame_####.exr',
+      pattern: 'frame_####.exr',
+      frames: [
+        { file: file1, frameNumber: 1, index: 0 },
+        { file: file2, frameNumber: 2, index: 1 },
+        { file: file3, frameNumber: 3, index: 2 },
+      ],
+      fps: 24,
+      startFrame: 1,
+      endFrame: 3,
+      width: 1920,
+      height: 1080,
+      missingFrames: [],
+    });
+
+    dispatchDrop(container, [file1]);
+
+    await vi.waitFor(() => {
+      expect(mockSession.loadSequence).toHaveBeenCalledTimes(1);
+    });
+
+    expect(mockSession.loadSequence).toHaveBeenCalledWith([file1, file2, file3]);
+    expect(mockSession.loadFile).not.toHaveBeenCalled();
+  });
+
+  it('SEQ-INFER-003: sequence inference returns null → falls through to single file load', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+
+    const singleFile = new File(['img'], 'photo_0042.png');
+
+    mockedInferSequence.mockResolvedValue(null);
+
+    dispatchDrop(container, [singleFile]);
+
+    await vi.waitFor(() => {
+      expect(mockSession.loadFile).toHaveBeenCalledTimes(1);
+    });
+
+    expect(mockSession.loadFile).toHaveBeenCalledWith(singleFile);
+    expect(mockSession.loadSequence).not.toHaveBeenCalled();
+  });
+
+  it('SEQ-INFER-004: multiple image files dropped still use existing getBestSequence path', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+
+    // Drop multiple image files — should go through getBestSequence, not inferSequenceFromSingleFile
+    const file1 = new File(['a'], 'shot_001.exr');
+    const file2 = new File(['b'], 'shot_002.exr');
+    const file3 = new File(['c'], 'shot_003.exr');
+
+    dispatchDrop(container, [file1, file2, file3]);
+
+    await vi.waitFor(() => {
+      // getBestSequence should handle this, loadSequence or loadFile should be called
+      expect(
+        (mockSession.loadSequence as any).mock.calls.length + (mockSession.loadFile as any).mock.calls.length,
+      ).toBeGreaterThan(0);
+    });
+
+    // inferSequenceFromSingleFile should NOT be called for multi-file drops
+    expect(mockedInferSequence).not.toHaveBeenCalled();
+  });
+
+  it('SEQ-INFER-005: sequence inference throws error → falls through to single file load', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+
+    const singleFile = new File(['img'], 'frame_0001.tiff');
+
+    mockedInferSequence.mockRejectedValue(new Error('inference failed'));
+
+    dispatchDrop(container, [singleFile]);
+
+    await vi.waitFor(() => {
+      expect(mockSession.loadFile).toHaveBeenCalledTimes(1);
+    });
+
+    expect(mockSession.loadFile).toHaveBeenCalledWith(singleFile);
+    expect(mockSession.loadSequence).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Drag-and-drop .rvedl EDL file handling (Issue #155)
+// ---------------------------------------------------------------------------
+
+describe('ViewerInputHandler – RVEDL drop handling (Issue #155)', () => {
+  let ctx: ViewerInputContext;
+  let handler: ViewerInputHandler;
+  let dropOverlay: HTMLElement;
+
+  beforeEach(() => {
+    ctx = createMockContext();
+    dropOverlay = document.createElement('div');
+    handler = new ViewerInputHandler(ctx, dropOverlay);
+    handler.bindEvents();
+  });
+
+  afterEach(() => {
+    handler.unbindEvents();
+    const container = ctx.getContainer();
+    if (container.parentNode) {
+      container.parentNode.removeChild(container);
+    }
+  });
+
+  function dispatchDrop(container: HTMLElement, files: File[]): void {
+    const mockDataTransfer = { files };
+    const dropEvent = new Event('drop', { bubbles: true }) as any;
+    dropEvent.dataTransfer = mockDataTransfer;
+    dropEvent.preventDefault = vi.fn();
+    container.dispatchEvent(dropEvent);
+  }
+
+  it('EDL-DROP-001: .rvedl file dropped calls session.loadEDL with text content', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+    const edlContent = 'sourceA.exr 1 100\nsourceB.exr 101 200';
+    const edlFile = new File([edlContent], 'timeline.rvedl');
+
+    (mockSession.loadEDL as ReturnType<typeof vi.fn>).mockReturnValue([
+      { sourcePath: '/path/to/sourceA.exr', startFrame: 1, endFrame: 100 },
+      { sourcePath: '/path/to/sourceB.exr', startFrame: 101, endFrame: 200 },
+    ]);
+
+    dispatchDrop(container, [edlFile]);
+
+    await vi.waitFor(() => {
+      expect(mockSession.loadEDL).toHaveBeenCalledTimes(1);
+    });
+
+    expect(mockSession.loadEDL).toHaveBeenCalledWith(edlContent);
+  });
+
+  it('EDL-DROP-002: .rvedl file is NOT routed through loadFile', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+    const edlFile = new File(['edl-data'], 'timeline.rvedl');
+
+    (mockSession.loadEDL as ReturnType<typeof vi.fn>).mockReturnValue([]);
+
+    dispatchDrop(container, [edlFile]);
+
+    await vi.waitFor(() => {
+      expect(mockSession.loadEDL).toHaveBeenCalledTimes(1);
+    });
+
+    expect(mockSession.loadFile).not.toHaveBeenCalled();
+    expect(mockSession.loadFromGTO).not.toHaveBeenCalled();
+    expect(mockSession.loadSequence).not.toHaveBeenCalled();
+  });
+
+  it('EDL-DROP-003: error during .rvedl load is handled gracefully', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+    const edlFile = new File(['bad-data'], 'broken.rvedl');
+
+    (mockSession.loadEDL as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      throw new Error('Parse error');
+    });
+
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    dispatchDrop(container, [edlFile]);
+
+    await vi.waitFor(() => {
+      expect(consoleSpy).toHaveBeenCalledWith('Failed to load RVEDL file:', expect.any(Error));
+    });
+
+    expect(mockSession.loadFile).not.toHaveBeenCalled();
+
+    consoleSpy.mockRestore();
+  });
+
+  it('EDL-DROP-004: .rv/.gto handling still works (no regression)', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+    const gtoFile = new File(['gto-data'], 'scene.gto');
+
+    dispatchDrop(container, [gtoFile]);
+
+    await vi.waitFor(() => {
+      expect(mockSession.loadFromGTO).toHaveBeenCalledTimes(1);
+    });
+
+    expect(mockSession.loadEDL).not.toHaveBeenCalled();
+    expect(mockSession.loadFile).not.toHaveBeenCalled();
+  });
+
+  it('EDL-DROP-005: case-insensitive .RVEDL extension is recognized', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+    const edlFile = new File(['edl-data'], 'TIMELINE.RVEDL');
+
+    (mockSession.loadEDL as ReturnType<typeof vi.fn>).mockReturnValue([
+      { sourcePath: 'source.exr', startFrame: 1, endFrame: 50 },
+    ]);
+
+    dispatchDrop(container, [edlFile]);
+
+    await vi.waitFor(() => {
+      expect(mockSession.loadEDL).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('EDL-DROP-006: .rvedl with companion media files loads both EDL and media (#400)', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+    const edlFile = new File(['edl-data'], 'timeline.rvedl');
+    const mediaFile = new File([new Uint8Array(8)], 'clip.exr');
+
+    (mockSession.loadEDL as ReturnType<typeof vi.fn>).mockReturnValue([
+      { sourcePath: '/path/to/clip.exr', startFrame: 1, endFrame: 50 },
+    ]);
+
+    dispatchDrop(container, [edlFile, mediaFile]);
+
+    await vi.waitFor(() => {
+      expect(mockSession.loadEDL).toHaveBeenCalledTimes(1);
+    });
+
+    // The companion media file should also be loaded
+    await vi.waitFor(() => {
+      expect(mockSession.loadFile).toHaveBeenCalledTimes(1);
+    });
+    expect(mockSession.loadFile).toHaveBeenCalledWith(mediaFile);
+  });
+
+  it('EDL-DROP-007: .rvedl alone without companion files does not call loadFile (#400)', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+    const edlFile = new File(['edl-data'], 'timeline.rvedl');
+
+    (mockSession.loadEDL as ReturnType<typeof vi.fn>).mockReturnValue([
+      { sourcePath: 'source.exr', startFrame: 1, endFrame: 50 },
+    ]);
+
+    dispatchDrop(container, [edlFile]);
+
+    await vi.waitFor(() => {
+      expect(mockSession.loadEDL).toHaveBeenCalledTimes(1);
+    });
+
+    expect(mockSession.loadFile).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #106: Text annotation selection via canvas clicks
+// ---------------------------------------------------------------------------
+
+describe('ViewerInputHandler – Text Annotation Selection (#106)', () => {
+  let ctx: ViewerInputContext;
+  let handler: ViewerInputHandler;
+  let dropOverlay: HTMLElement;
+
+  beforeEach(() => {
+    ctx = createMockContext();
+    dropOverlay = document.createElement('div');
+    handler = new ViewerInputHandler(ctx, dropOverlay);
+    handler.bindEvents();
+    ctx.getPaintEngine().tool = 'text';
+  });
+
+  afterEach(() => {
+    handler.unbindEvents();
+    const container = ctx.getContainer();
+    if (container.parentNode) {
+      container.parentNode.removeChild(container);
+    }
+  });
+
+  it('H106-01: clicking on existing text annotation emits annotationSelected instead of creating overlay', () => {
+    const paintEngine = ctx.getPaintEngine();
+    const session = ctx.getSession();
+
+    // Add a text annotation at normalized (0.5, 0.5)
+    // With canvas 800x600 and no transform, point (400, 300) maps to (0.5, 0.5)
+    const ann = paintEngine.addText(session.currentFrame, { x: 0.5, y: 0.5 }, 'Existing');
+
+    const listener = vi.fn();
+    paintEngine.on('annotationSelected', listener);
+
+    // Click near the annotation position
+    const container = ctx.getContainer();
+    const e = createPointerEvent('pointerdown', 400, 300);
+    container.dispatchEvent(e);
+
+    // Should emit annotationSelected
+    expect(listener).toHaveBeenCalledWith({
+      annotation: expect.objectContaining({ id: ann.id, type: 'text' }),
+      frame: session.currentFrame,
+    });
+
+    // Should NOT create text overlay
+    const overlay = container.querySelector('[data-testid="text-input-overlay"]');
+    expect(overlay).toBeNull();
+  });
+
+  it('H106-02: clicking on empty area still creates text overlay', () => {
+    const paintEngine = ctx.getPaintEngine();
+
+    const listener = vi.fn();
+    paintEngine.on('annotationSelected', listener);
+
+    // Click on area with no text annotations
+    const container = ctx.getContainer();
+    const e = createPointerEvent('pointerdown', 400, 300);
+    container.dispatchEvent(e);
+
+    // Should NOT emit annotationSelected
+    expect(listener).not.toHaveBeenCalled();
+
+    // Should create text overlay
+    const overlay = container.querySelector('[data-testid="text-input-overlay"]');
+    expect(overlay).not.toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Drag-and-drop .orvproject file handling (Issue #386)
+// ---------------------------------------------------------------------------
+
+describe('ViewerInputHandler – .orvproject drop handling (Issue #386)', () => {
+  let ctx: ViewerInputContext;
+  let handler: ViewerInputHandler;
+  let dropOverlay: HTMLElement;
+
+  beforeEach(() => {
+    ctx = createMockContext();
+    dropOverlay = document.createElement('div');
+    handler = new ViewerInputHandler(ctx, dropOverlay);
+    handler.bindEvents();
+  });
+
+  afterEach(() => {
+    handler.unbindEvents();
+    const container = ctx.getContainer();
+    if (container.parentNode) {
+      container.parentNode.removeChild(container);
+    }
+  });
+
+  function dispatchDrop(container: HTMLElement, files: File[]): void {
+    const mockDataTransfer = { files };
+    const dropEvent = new Event('drop', { bubbles: true }) as any;
+    dropEvent.dataTransfer = mockDataTransfer;
+    dropEvent.preventDefault = vi.fn();
+    container.dispatchEvent(dropEvent);
+  }
+
+  it('PROJ-DROP-001: .orvproject file dropped invokes onProjectFileDrop callback', async () => {
+    const container = ctx.getContainer();
+    const callback = vi.fn();
+    handler.onProjectFileDrop = callback;
+
+    const projectFile = new File(['project-data'], 'session.orvproject');
+    dispatchDrop(container, [projectFile]);
+
+    await vi.waitFor(() => {
+      expect(callback).toHaveBeenCalledTimes(1);
+    });
+
+    expect(callback).toHaveBeenCalledWith(projectFile, []);
+  });
+
+  it('PROJ-DROP-002: .orvproject with companion files passes them to callback', async () => {
+    const container = ctx.getContainer();
+    const callback = vi.fn();
+    handler.onProjectFileDrop = callback;
+
+    const projectFile = new File(['project-data'], 'session.orvproject');
+    const media1 = new File(['img'], 'plate.exr');
+    const media2 = new File(['img'], 'bg.dpx');
+    dispatchDrop(container, [projectFile, media1, media2]);
+
+    await vi.waitFor(() => {
+      expect(callback).toHaveBeenCalledTimes(1);
+    });
+
+    const companionFiles = callback.mock.calls[0]![1] as File[];
+    expect(companionFiles).toHaveLength(2);
+    expect(companionFiles[0]!.name).toBe('plate.exr');
+    expect(companionFiles[1]!.name).toBe('bg.dpx');
+  });
+
+  it('PROJ-DROP-003: .orvproject is NOT routed through session.loadFile or loadFromGTO', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+    const callback = vi.fn();
+    handler.onProjectFileDrop = callback;
+
+    const projectFile = new File(['project-data'], 'test.orvproject');
+    dispatchDrop(container, [projectFile]);
+
+    await vi.waitFor(() => {
+      expect(callback).toHaveBeenCalledTimes(1);
+    });
+
+    expect(mockSession.loadFile).not.toHaveBeenCalled();
+    expect(mockSession.loadFromGTO).not.toHaveBeenCalled();
+    expect(mockSession.loadEDL).not.toHaveBeenCalled();
+    expect(mockSession.loadSequence).not.toHaveBeenCalled();
+  });
+
+  it('PROJ-DROP-004: case-insensitive .ORVPROJECT extension is recognized', async () => {
+    const container = ctx.getContainer();
+    const callback = vi.fn();
+    handler.onProjectFileDrop = callback;
+
+    const projectFile = new File(['project-data'], 'SESSION.ORVPROJECT');
+    dispatchDrop(container, [projectFile]);
+
+    await vi.waitFor(() => {
+      expect(callback).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('PROJ-DROP-005: .gto drop still works (no regression)', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+    const callback = vi.fn();
+    handler.onProjectFileDrop = callback;
+
+    const gtoFile = new File(['gto-data'], 'scene.gto');
+    dispatchDrop(container, [gtoFile]);
+
+    await vi.waitFor(() => {
+      expect(mockSession.loadFromGTO).toHaveBeenCalledTimes(1);
+    });
+
+    expect(callback).not.toHaveBeenCalled();
+  });
+
+  it('PROJ-DROP-006: .rvedl drop still works (no regression)', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+    const callback = vi.fn();
+    handler.onProjectFileDrop = callback;
+
+    const edlFile = new File(['edl-data'], 'timeline.rvedl');
+    (mockSession.loadEDL as ReturnType<typeof vi.fn>).mockReturnValue([]);
+
+    dispatchDrop(container, [edlFile]);
+
+    await vi.waitFor(() => {
+      expect(mockSession.loadEDL).toHaveBeenCalledTimes(1);
+    });
+
+    expect(callback).not.toHaveBeenCalled();
+  });
+
+  it('PROJ-DROP-007: .orvproject without callback shows warning alert', async () => {
+    const container = ctx.getContainer();
+    // Do NOT set handler.onProjectFileDrop — leave it null
+
+    const projectFile = new File(['project-data'], 'orphan.orvproject');
+    dispatchDrop(container, [projectFile]);
+
+    // Should not crash, and should not route to other handlers
+    const mockSession = ctx.getSession();
+    await vi.waitFor(() => {
+      // Give the async handler time to complete
+      expect(mockSession.loadFile).not.toHaveBeenCalled();
+    });
+
+    expect(mockSession.loadFromGTO).not.toHaveBeenCalled();
+    expect(mockSession.loadEDL).not.toHaveBeenCalled();
+  });
+
+  it('DROP-MIX-001: mixed .rvedl + .rv drop loads EDL and does not load session', async () => {
+    const container = ctx.getContainer();
+    const session = ctx.getSession();
+    (session.loadEDL as any).mockClear();
+    (session.loadFromGTO as any).mockClear();
+
+    const edlFile = new File(
+      ['001 src V C 01:00:00:00 01:00:10:00 01:00:00:00 01:00:10:00\n* FROM CLIP NAME: test.exr'],
+      'test.rvedl',
+    );
+    const rvFile = new File(['rv-data'], 'session.rv');
+
+    // Simulate a drop event with mock dataTransfer (DataTransfer not available in jsdom)
+    const dropEvent = new Event('drop', { bubbles: true }) as any;
+    dropEvent.preventDefault = vi.fn();
+    dropEvent.dataTransfer = { files: [edlFile, rvFile] };
+
+    container.dispatchEvent(dropEvent);
+
+    // Wait for async handling
+    await new Promise((r) => setTimeout(r, 50));
+
+    // EDL should be loaded
+    expect(session.loadEDL).toHaveBeenCalled();
+    // Session file should NOT be loaded
+    expect(session.loadFromGTO).not.toHaveBeenCalled();
+  });
+});
+
+describe('ViewerInputHandler – OTIO drop handling (Issue #465)', () => {
+  let ctx: ViewerInputContext;
+  let handler: ViewerInputHandler;
+  let dropOverlay: HTMLElement;
+
+  beforeEach(() => {
+    ctx = createMockContext();
+    dropOverlay = document.createElement('div');
+    handler = new ViewerInputHandler(ctx, dropOverlay);
+    handler.bindEvents();
+  });
+
+  afterEach(() => {
+    handler.unbindEvents();
+    const container = ctx.getContainer();
+    if (container.parentNode) {
+      container.parentNode.removeChild(container);
+    }
+  });
+
+  function dispatchDrop(container: HTMLElement, files: File[]): void {
+    const mockDataTransfer = { files };
+    const dropEvent = new Event('drop', { bubbles: true }) as any;
+    dropEvent.dataTransfer = mockDataTransfer;
+    dropEvent.preventDefault = vi.fn();
+    container.dispatchEvent(dropEvent);
+  }
+
+  it('OTIO-DROP-001: .otio file dropped invokes onOTIOFileDrop callback', async () => {
+    const container = ctx.getContainer();
+    const otioCallback = vi.fn();
+    handler.onOTIOFileDrop = otioCallback;
+
+    const otioContent = '{"OTIO_SCHEMA": "Timeline.1", "name": "test"}';
+    const otioFile = new File([otioContent], 'timeline.otio');
+
+    dispatchDrop(container, [otioFile]);
+
+    await vi.waitFor(() => {
+      expect(otioCallback).toHaveBeenCalledTimes(1);
+    });
+    expect(otioCallback).toHaveBeenCalledWith(otioFile);
+  });
+
+  it('OTIO-DROP-002: .otio file is NOT routed through loadFile or loadEDL', async () => {
+    const container = ctx.getContainer();
+    const mockSession = ctx.getSession();
+    const otioCallback = vi.fn();
+    handler.onOTIOFileDrop = otioCallback;
+
+    const otioFile = new File(['{}'], 'timeline.otio');
+
+    dispatchDrop(container, [otioFile]);
+
+    await vi.waitFor(() => {
+      expect(otioCallback).toHaveBeenCalledTimes(1);
+    });
+
+    expect(mockSession.loadFile).not.toHaveBeenCalled();
+    expect(mockSession.loadEDL).not.toHaveBeenCalled();
+    expect(mockSession.loadFromGTO).not.toHaveBeenCalled();
+    expect(mockSession.loadSequence).not.toHaveBeenCalled();
+  });
+
+  it('OTIO-DROP-003: .otio drop without onOTIOFileDrop callback shows alert', async () => {
+    const container = ctx.getContainer();
+    handler.onOTIOFileDrop = null;
+
+    const otioFile = new File(['{}'], 'timeline.otio');
+
+    dispatchDrop(container, [otioFile]);
+
+    // Should not throw and should not call any session methods
+    await vi.waitFor(() => {
+      // The drop handler should have completed (no callback, shows alert)
+    });
+
+    const mockSession = ctx.getSession();
+    expect(mockSession.loadFile).not.toHaveBeenCalled();
+  });
+
+  it('OTIO-DROP-004: .OTIO file (uppercase) is also handled', async () => {
+    const container = ctx.getContainer();
+    const otioCallback = vi.fn();
+    handler.onOTIOFileDrop = otioCallback;
+
+    const otioFile = new File(['{}'], 'TIMELINE.OTIO');
+
+    dispatchDrop(container, [otioFile]);
+
+    await vi.waitFor(() => {
+      expect(otioCallback).toHaveBeenCalledTimes(1);
+    });
+    expect(otioCallback).toHaveBeenCalledWith(otioFile);
+  });
+
+  it('OTIO-DROP-005: onOTIOFileDrop property defaults to null', () => {
+    const newHandler = new ViewerInputHandler(ctx, dropOverlay);
+    expect(newHandler.onOTIOFileDrop).toBeNull();
   });
 });

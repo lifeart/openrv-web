@@ -2,7 +2,7 @@
  * ViewerGLRenderer Unit Tests
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ViewerGLRenderer, type GLRendererContext } from './ViewerGLRenderer';
 import type { Renderer } from '../../render/Renderer';
 import type { RenderWorkerProxy } from '../../render/RenderWorkerProxy';
@@ -49,7 +49,9 @@ interface TestableViewerGLRenderer {
   _logicalHeight: number;
   _luminanceAnalyzer: {
     computeLuminanceStats: (texture: WebGLTexture, inputTransfer: number) => { avg: number; linearAvg: number };
+    isAvailable: () => boolean;
   } | null;
+  _luminanceFallbackWarned: boolean;
 }
 
 function createMockContext(): GLRendererContext {
@@ -494,22 +496,22 @@ describe('ViewerGLRenderer', () => {
       expect(capturedStates[0]!.displayColor.transferFunction).toBe(0);
     });
 
-    it('VGLR-031: HDR native path sets displayColor.displayGamma to 1', () => {
+    it('VGLR-031: HDR native path preserves displayColor.displayGamma from profile', () => {
       const { glRenderer, capturedStates } = setupHDRRenderer('hlg');
       const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'uint8' });
       glRenderer.renderHDRWithWebGL(image, 100, 100);
 
       expect(capturedStates.length).toBe(1);
-      expect(capturedStates[0]!.displayColor.displayGamma).toBe(1);
+      expect(capturedStates[0]!.displayColor.displayGamma).toBe(2.4);
     });
 
-    it('VGLR-032: HDR native path sets displayColor.displayBrightness to 1', () => {
+    it('VGLR-032: HDR native path preserves displayColor.displayBrightness from profile', () => {
       const { glRenderer, capturedStates } = setupHDRRenderer('hlg');
       const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'uint8' });
       glRenderer.renderHDRWithWebGL(image, 100, 100);
 
       expect(capturedStates.length).toBe(1);
-      expect(capturedStates[0]!.displayColor.displayBrightness).toBe(1);
+      expect(capturedStates[0]!.displayColor.displayBrightness).toBe(1.5);
     });
 
     it('VGLR-033: SDR output path does NOT override displayColor', () => {
@@ -520,6 +522,28 @@ describe('ViewerGLRenderer', () => {
       expect(capturedStates.length).toBe(1);
       // SDR path should NOT override display settings — they should remain as built
       expect(capturedStates[0]!.displayColor.transferFunction).toBe(3);
+      expect(capturedStates[0]!.displayColor.displayGamma).toBe(2.4);
+      expect(capturedStates[0]!.displayColor.displayBrightness).toBe(1.5);
+    });
+
+    it('VGLR-031b: HDR PQ path preserves displayGamma and displayBrightness from profile', () => {
+      const { glRenderer, capturedStates } = setupHDRRenderer('pq');
+      const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'uint8' });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      expect(capturedStates.length).toBe(1);
+      expect(capturedStates[0]!.displayColor.transferFunction).toBe(0);
+      expect(capturedStates[0]!.displayColor.displayGamma).toBe(2.4);
+      expect(capturedStates[0]!.displayColor.displayBrightness).toBe(1.5);
+    });
+
+    it('VGLR-031c: HDR extended path preserves displayGamma and displayBrightness from profile', () => {
+      const { glRenderer, capturedStates } = setupHDRRenderer('extended');
+      const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'uint8' });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      expect(capturedStates.length).toBe(1);
+      expect(capturedStates[0]!.displayColor.transferFunction).toBe(0);
       expect(capturedStates[0]!.displayColor.displayGamma).toBe(2.4);
       expect(capturedStates[0]!.displayColor.displayBrightness).toBe(1.5);
     });
@@ -646,6 +670,7 @@ describe('ViewerGLRenderer', () => {
       const internal = glRenderer as unknown as TestableViewerGLRenderer;
       internal._luminanceAnalyzer = {
         computeLuminanceStats: vi.fn(() => ({ avg: 0.4, linearAvg: 0.7 })),
+        isAvailable: vi.fn(() => true),
       };
 
       (mockRendererObj as any).getContext = vi.fn(() => ({ TEXTURE_BINDING_2D: 0, getParameter: vi.fn(() => null) }));
@@ -717,8 +742,8 @@ describe('ViewerGLRenderer', () => {
       expect(ok).toBe(true);
       expect(capturedStates.length).toBe(1);
       expect(capturedStates[0]!.displayColor.transferFunction).toBe(0);
-      expect(capturedStates[0]!.displayColor.displayGamma).toBe(1);
-      expect(capturedStates[0]!.displayColor.displayBrightness).toBe(1);
+      expect(capturedStates[0]!.displayColor.displayGamma).toBe(2.4);
+      expect(capturedStates[0]!.displayColor.displayBrightness).toBe(1.5);
       expect(mockRendererObj.setColorPrimaries).toHaveBeenCalledWith('bt2020', 'rec2020');
     });
 
@@ -1043,6 +1068,7 @@ describe('ViewerGLRenderer', () => {
       const internal = glRenderer as unknown as TestableViewerGLRenderer;
       internal._luminanceAnalyzer = {
         computeLuminanceStats: vi.fn(() => ({ avg: 0.5, linearAvg: 0.8 })),
+        isAvailable: vi.fn(() => true),
       };
 
       (mockRendererObj as any).getContext = vi.fn(() => ({ TEXTURE_BINDING_2D: 0, getParameter: vi.fn(() => null) }));
@@ -1067,15 +1093,15 @@ describe('ViewerGLRenderer', () => {
       expect(capturedStates[0]!.toneMappingState.dragoLmax).toBeCloseTo(8.0, 5);
     });
 
-    it('VGLR-073: Canvas2D blit path sets displayColor overrides for linear-light output', () => {
+    it('VGLR-073: Canvas2D blit path neutralizes transferFunction but preserves gamma/brightness', () => {
       const { glRenderer, capturedStates } = setupCanvas2DBlitRenderer();
       const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'float32' });
       glRenderer.renderHDRWithWebGL(image, 100, 100);
 
       expect(capturedStates.length).toBe(1);
       expect(capturedStates[0]!.displayColor.transferFunction).toBe(0);
-      expect(capturedStates[0]!.displayColor.displayGamma).toBe(1);
-      expect(capturedStates[0]!.displayColor.displayBrightness).toBe(1);
+      expect(capturedStates[0]!.displayColor.displayGamma).toBe(2.4);
+      expect(capturedStates[0]!.displayColor.displayBrightness).toBe(1.5);
     });
 
     it('VGLR-074: Canvas2D blit path preserves creative gamma setting', () => {
@@ -1383,6 +1409,7 @@ describe('ViewerGLRenderer', () => {
       const internal = glRenderer as unknown as TestableViewerGLRenderer;
       internal._luminanceAnalyzer = {
         computeLuminanceStats: vi.fn(() => ({ avg: 0.55, linearAvg: 0.9 })),
+        isAvailable: vi.fn(() => true),
       };
 
       (mockRendererObj as any).getContext = vi.fn(() => ({ TEXTURE_BINDING_2D: 0, getParameter: vi.fn(() => null) }));
@@ -1489,6 +1516,72 @@ describe('ViewerGLRenderer', () => {
       renderer.setGamutMapping(input);
       (input as any).mode = 'off';
       expect(renderer.getGamutMapping().mode).toBe('clip');
+    });
+  });
+
+  // =========================================================================
+  // detectGamutMapping — auto-detection from image metadata
+  // =========================================================================
+  describe('detectGamutMapping auto-detection', () => {
+    function callDetectGamutMapping(
+      renderer: ViewerGLRenderer,
+      image: IPImage,
+    ): { mode: string; sourceGamut?: string; targetGamut?: string } {
+      return (renderer as any).detectGamutMapping(image);
+    }
+
+    function makeImage(colorPrimaries?: string): IPImage {
+      return new IPImage({
+        width: 2,
+        height: 2,
+        channels: 4,
+        dataType: 'float32',
+        metadata: colorPrimaries ? { colorPrimaries } : undefined,
+      } as any);
+    }
+
+    it('VGLR-094: returns mode off unchanged when mode is off', () => {
+      const r = new ViewerGLRenderer(createMockContext());
+      r.setGamutMapping({ mode: 'off', sourceGamut: 'srgb', targetGamut: 'srgb' });
+      const result = callDetectGamutMapping(r, makeImage('bt2020'));
+      expect(result.mode).toBe('off');
+    });
+
+    it('VGLR-095: detects rec2020 source from bt2020 primaries', () => {
+      const r = new ViewerGLRenderer(createMockContext());
+      r.setGamutMapping({ mode: 'clip', sourceGamut: 'srgb', targetGamut: 'srgb' });
+      const result = callDetectGamutMapping(r, makeImage('bt2020'));
+      expect(result.sourceGamut).toBe('rec2020');
+    });
+
+    it('VGLR-096: detects display-p3 source from p3 primaries', () => {
+      const r = new ViewerGLRenderer(createMockContext());
+      r.setGamutMapping({ mode: 'clip', sourceGamut: 'srgb', targetGamut: 'srgb' });
+      const result = callDetectGamutMapping(r, makeImage('p3'));
+      expect(result.sourceGamut).toBe('display-p3');
+    });
+
+    it('VGLR-097: srgb source with srgb display turns mode off', () => {
+      const r = new ViewerGLRenderer(createMockContext());
+      r.setGamutMapping({ mode: 'clip', sourceGamut: 'rec2020', targetGamut: 'srgb' });
+      const result = callDetectGamutMapping(r, makeImage());
+      expect(result.mode).toBe('off');
+    });
+
+    it('VGLR-098: bt2020 source with p3 display keeps mode and sets target to display-p3', () => {
+      const r = new ViewerGLRenderer(createMockContext(), { displayGamut: 'p3' } as any);
+      r.setGamutMapping({ mode: 'compress', sourceGamut: 'srgb', targetGamut: 'srgb' });
+      const result = callDetectGamutMapping(r, makeImage('bt2020'));
+      expect(result.mode).toBe('compress');
+      expect(result.sourceGamut).toBe('rec2020');
+      expect(result.targetGamut).toBe('display-p3');
+    });
+
+    it('VGLR-099: p3 source with p3 display turns mode off (source matches target)', () => {
+      const r = new ViewerGLRenderer(createMockContext(), { displayGamut: 'p3' } as any);
+      r.setGamutMapping({ mode: 'clip', sourceGamut: 'srgb', targetGamut: 'srgb' });
+      const result = callDetectGamutMapping(r, makeImage('p3'));
+      expect(result.mode).toBe('off');
     });
   });
 
@@ -1854,6 +1947,142 @@ describe('ViewerGLRenderer', () => {
       const r = new ViewerGLRenderer(ctx);
       const state = r.buildRenderState();
       expect(state.luminanceVis).toBeDefined();
+    });
+  });
+
+  // =========================================================================
+  // Luminance fallback warning (Issue #223)
+  // =========================================================================
+  describe('Luminance fallback warning', () => {
+    let warnSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      warnSpy.mockRestore();
+    });
+
+    function setupLuminanceFallbackTest(opts: { analyzerAvailable: boolean; autoExposure?: boolean; drago?: boolean }) {
+      const { glRenderer } = (() => {
+        const mockRendererObj = {
+          getHDROutputMode: vi.fn(() => 'hlg'),
+          applyRenderState: vi.fn(),
+          resize: vi.fn(),
+          clear: vi.fn(),
+          renderImage: vi.fn(),
+          renderTiledImages: vi.fn(),
+          hasPendingStateChanges: vi.fn(() => true),
+          setColorPrimaries: vi.fn(),
+          isOCIOWasmActive: vi.fn(() => false),
+          dispose: vi.fn(),
+          getContext: vi.fn(() => ({ TEXTURE_BINDING_2D: 0, getParameter: vi.fn(() => null) })),
+          ensureImageTexture: vi.fn(() => ({}) as WebGLTexture),
+        };
+
+        const hdrCtx = createMockContext();
+        (hdrCtx.getTransformManager as ReturnType<typeof vi.fn>).mockReturnValue({
+          transform: { rotation: 0, flipH: false, flipV: false },
+        });
+
+        const glRenderer = new ViewerGLRenderer(hdrCtx);
+        const internal = glRenderer as unknown as TestableViewerGLRenderer;
+        internal._glCanvas = document.createElement('canvas');
+        internal._glRenderer = mockRendererObj as unknown as Renderer;
+
+        return { glRenderer };
+      })();
+
+      const internal = glRenderer as unknown as TestableViewerGLRenderer;
+      internal._luminanceAnalyzer = {
+        computeLuminanceStats: vi.fn(() => ({ avg: 0.18, linearAvg: 1.0 })),
+        isAvailable: vi.fn(() => opts.analyzerAvailable),
+      };
+
+      const state = createDefaultRenderState();
+      if (opts.drago) {
+        state.toneMappingState = { enabled: true, operator: 'drago' };
+      }
+      vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(state);
+
+      if (opts.autoExposure) {
+        glRenderer.setAutoExposure({
+          enabled: true,
+          targetKey: 0.18,
+          adaptationSpeed: 1,
+          minExposure: -6,
+          maxExposure: 6,
+        });
+      }
+
+      return { glRenderer };
+    }
+
+    it('VGLR-223a: warns when auto-exposure uses fallback values (analyzer unavailable)', () => {
+      const { glRenderer } = setupLuminanceFallbackTest({ analyzerAvailable: false, autoExposure: true });
+
+      const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'uint8' });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      const fallbackWarnings = warnSpy.mock.calls.filter(
+        (args: unknown[]) => typeof args[0] === 'string' && args[0].includes('fallback luminance values'),
+      );
+      expect(fallbackWarnings).toHaveLength(1);
+      expect(fallbackWarnings[0]![0]).toContain('auto-exposure');
+    });
+
+    it('VGLR-223b: warns when Drago uses fallback values (analyzer unavailable)', () => {
+      const { glRenderer } = setupLuminanceFallbackTest({ analyzerAvailable: false, drago: true });
+
+      const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'uint8' });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      const fallbackWarnings = warnSpy.mock.calls.filter(
+        (args: unknown[]) => typeof args[0] === 'string' && args[0].includes('fallback luminance values'),
+      );
+      expect(fallbackWarnings).toHaveLength(1);
+      expect(fallbackWarnings[0]![0]).toContain('Drago tone mapping');
+    });
+
+    it('VGLR-223c: warns only once across multiple frames (fallback warning deduplication)', () => {
+      const { glRenderer } = setupLuminanceFallbackTest({ analyzerAvailable: false, autoExposure: true });
+
+      const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'uint8' });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      const fallbackWarnings = warnSpy.mock.calls.filter(
+        (args: unknown[]) => typeof args[0] === 'string' && args[0].includes('fallback luminance values'),
+      );
+      expect(fallbackWarnings).toHaveLength(1);
+    });
+
+    it('VGLR-223d: no warning when analyzer is available (normal path)', () => {
+      const { glRenderer } = setupLuminanceFallbackTest({ analyzerAvailable: true, autoExposure: true });
+
+      const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'uint8' });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      const fallbackWarnings = warnSpy.mock.calls.filter(
+        (args: unknown[]) => typeof args[0] === 'string' && args[0].includes('fallback luminance values'),
+      );
+      expect(fallbackWarnings).toHaveLength(0);
+    });
+
+    it('VGLR-223e: mentions both features when auto-exposure and Drago are both active', () => {
+      const { glRenderer } = setupLuminanceFallbackTest({ analyzerAvailable: false, autoExposure: true, drago: true });
+
+      const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'uint8' });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      const fallbackWarnings = warnSpy.mock.calls.filter(
+        (args: unknown[]) => typeof args[0] === 'string' && args[0].includes('fallback luminance values'),
+      );
+      expect(fallbackWarnings).toHaveLength(1);
+      expect(fallbackWarnings[0]![0]).toContain('auto-exposure');
+      expect(fallbackWarnings[0]![0]).toContain('Drago tone mapping');
     });
   });
 });

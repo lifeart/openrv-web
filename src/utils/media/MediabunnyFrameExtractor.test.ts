@@ -593,6 +593,88 @@ describe('MediabunnyFrameExtractor', () => {
       expect(probeSampleClose).toHaveBeenCalledOnce();
       expect(probeFrameClose).toHaveBeenCalledOnce();
     });
+
+    it('MFE-HDR-002: hdrDowngraded is false for non-HDR videos', async () => {
+      if (!MediabunnyFrameExtractor.isSupported()) {
+        return;
+      }
+
+      const extractor = new MediabunnyFrameExtractor();
+      const mockFile = new File(['test'], 'test.mp4', { type: 'video/mp4' });
+      const metadata = await extractor.load(mockFile, 24);
+
+      expect(metadata.hdrDowngraded).toBe(false);
+    });
+
+    it('MFE-HDR-003: hdrDowngraded is false when HDR detection succeeds and VideoSampleSink works', async () => {
+      if (!MediabunnyFrameExtractor.isSupported()) {
+        return;
+      }
+
+      const mockTrack = {
+        displayWidth: 1920,
+        displayHeight: 1080,
+        codedWidth: 1920,
+        codedHeight: 1080,
+        codec: 'hvc1',
+        canDecode: vi.fn().mockResolvedValue(true),
+        hasHighDynamicRange: vi.fn().mockResolvedValue(true),
+        getColorSpace: vi.fn().mockResolvedValue({ transfer: 'smpte2084', primaries: 'bt2020' }),
+      };
+      const mockInput = {
+        getPrimaryVideoTrack: vi.fn().mockResolvedValue(mockTrack),
+        computeDuration: vi.fn().mockResolvedValue(10),
+        dispose: vi.fn(),
+      };
+      vi.mocked(Input).mockReturnValueOnce(mockInput as never);
+
+      // VideoSampleSink creation succeeds
+      vi.mocked(VideoSampleSink).mockImplementationOnce(
+        () => ({ getSample: vi.fn().mockResolvedValue(null) }) as never,
+      );
+
+      const extractor = new MediabunnyFrameExtractor();
+      const mockFile = new File(['test'], 'test.mp4', { type: 'video/mp4' });
+      const metadata = await extractor.load(mockFile, 24);
+
+      expect(metadata.isHDR).toBe(true);
+      expect(metadata.hdrDowngraded).toBe(false);
+    });
+
+    it('MFE-HDR-004: hdrDowngraded is true when HDR detected but VideoSampleSink creation throws', async () => {
+      if (!MediabunnyFrameExtractor.isSupported()) {
+        return;
+      }
+
+      const mockTrack = {
+        displayWidth: 1920,
+        displayHeight: 1080,
+        codedWidth: 1920,
+        codedHeight: 1080,
+        codec: 'hvc1',
+        canDecode: vi.fn().mockResolvedValue(true),
+        hasHighDynamicRange: vi.fn().mockResolvedValue(true),
+        getColorSpace: vi.fn().mockResolvedValue({ transfer: 'smpte2084', primaries: 'bt2020' }),
+      };
+      const mockInput = {
+        getPrimaryVideoTrack: vi.fn().mockResolvedValue(mockTrack),
+        computeDuration: vi.fn().mockResolvedValue(10),
+        dispose: vi.fn(),
+      };
+      vi.mocked(Input).mockReturnValueOnce(mockInput as never);
+
+      // VideoSampleSink creation throws
+      vi.mocked(VideoSampleSink).mockImplementationOnce(() => {
+        throw new Error('VideoSampleSink not supported on this platform');
+      });
+
+      const extractor = new MediabunnyFrameExtractor();
+      const mockFile = new File(['test'], 'test.mp4', { type: 'video/mp4' });
+      const metadata = await extractor.load(mockFile, 24);
+
+      expect(metadata.isHDR).toBe(false);
+      expect(metadata.hdrDowngraded).toBe(true);
+    });
   });
 
   describe('Metadata codec info', () => {

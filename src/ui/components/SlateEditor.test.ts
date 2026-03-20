@@ -764,4 +764,46 @@ describe('SlateEditor', () => {
       }
     });
   });
+
+  // -------------------------------------------------------------------------
+  // #92: logoError event is emitted for upload failures
+  // -------------------------------------------------------------------------
+  describe('logo error visibility (#92)', () => {
+    it('SLATE-ERR-001: emits logoError when loadLogoFile fails', async () => {
+      const origImage = globalThis.Image;
+      try {
+        globalThis.Image = class {
+          crossOrigin = '';
+          private _onerror: (() => void) | null = null;
+          set onerror(fn: (() => void) | null) {
+            this._onerror = fn;
+          }
+          get onerror() {
+            return this._onerror;
+          }
+          onload: (() => void) | null = null;
+          set src(_val: string) {
+            // Trigger error asynchronously after onerror is set
+            setTimeout(() => this._onerror?.(), 0);
+          }
+          get src() {
+            return '';
+          }
+        } as unknown as typeof Image;
+
+        const editor = new SlateEditor();
+        const errorSpy = vi.fn();
+        editor.on('logoError', errorSpy);
+
+        const file = new File([''], 'bad.png', { type: 'image/png' });
+        const promise = editor.loadLogoFile(file);
+        await expect(promise).rejects.toThrow('Failed to load logo image');
+        expect(errorSpy).toHaveBeenCalledTimes(1);
+        expect(errorSpy.mock.calls[0]![0]).toBeInstanceOf(Error);
+        editor.dispose();
+      } finally {
+        globalThis.Image = origImage;
+      }
+    });
+  });
 });

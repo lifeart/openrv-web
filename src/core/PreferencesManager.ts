@@ -13,10 +13,16 @@ import {
   PREFERENCE_STORAGE_KEYS,
 } from '../utils/preferences/PreferencesManager';
 import { clamp } from '../utils/math';
+import type { TextureFilterMode } from './types/filter';
 import type { ThemeManager } from '../utils/ui/ThemeManager';
 import type { LayoutStore } from '../ui/layout/LayoutStore';
 import type { CustomKeyBindingsManager } from '../utils/input/CustomKeyBindingsManager';
 import type { OCIOStateManager } from '../ui/components/OCIOStateManager';
+import type { DisplayColorState } from '../color/DisplayTransfer';
+import type { TimecodeDisplayMode } from '../utils/media/Timecode';
+import { DCC_STORAGE_KEY, DEFAULT_DCC_PREFS, sanitizeDCCPrefs, type DCCPrefs } from '../integrations/DCCSettings';
+
+export type MissingFrameMode = 'off' | 'show-frame' | 'hold' | 'black';
 
 /**
  * Subsystem references that the PreferencesManager can delegate to.
@@ -30,8 +36,25 @@ export interface PreferencesSubsystems {
   ocio?: OCIOStateManager;
 }
 
+/**
+ * Provider interface for plugin settings backup/restore.
+ * Decouples PreferencesManager (core) from PluginSettingsStore (plugin layer).
+ */
+export interface PluginSettingsProvider {
+  exportAll(): Record<string, Record<string, unknown>>;
+  importAll(data: Record<string, Record<string, unknown>>): void;
+  clearAll(): void;
+}
+
 export type ThemeMode = 'dark' | 'light' | 'auto';
 
+/**
+ * Color defaults applied on source load.
+ * - `defaultInputColorSpace`: fallback when no persisted color space and extension detection returns null.
+ * - `defaultExposure`: applied when current exposure is at identity (0).
+ * - `defaultGamma`: applied when current gamma is at identity (1).
+ * - `defaultCDLPreset`: deferred — no CDL preset system exists yet.
+ */
 export interface ColorDefaults {
   defaultInputColorSpace: string;
   defaultExposure: number;
@@ -39,6 +62,10 @@ export interface ColorDefaults {
   defaultCDLPreset: string | null;
 }
 
+/**
+ * Export defaults for snapshot/export operations.
+ * `frameburnEnabled` and `frameburnConfig` are consumed by ViewerExport.
+ */
 export interface ExportDefaults {
   defaultFormat: 'png' | 'jpeg' | 'webp';
   defaultQuality: number;
@@ -48,9 +75,13 @@ export interface ExportDefaults {
 }
 
 export interface GeneralPrefs {
+  /** Used by NotePanel and NetworkControl. */
   userName: string;
+  /** Default FPS used for new sessions and media without embedded frame rate. Wired in App constructor. */
   defaultFps: number;
+  /** When true, sequences (frameCount > 1) auto-play on source load. Wired in handleSourceLoaded. */
   autoPlayOnLoad: boolean;
+  /** Deferred — no welcome dialog component exists yet. */
   showWelcome: boolean;
 }
 
@@ -67,6 +98,13 @@ export interface PreferencesExportPayload {
   colorDefaults: ColorDefaults;
   exportDefaults: ExportDefaults;
   generalPrefs: GeneralPrefs;
+  fpsIndicatorPrefs: FPSIndicatorPrefs;
+  filterMode: TextureFilterMode | null;
+  displayProfile: DisplayColorState | null;
+  timelineDisplayMode: TimecodeDisplayMode | null;
+  missingFrameMode: MissingFrameMode | null;
+  dccPrefs: DCCPrefs;
+  pluginSettings?: Record<string, Record<string, unknown>>;
 }
 
 export const CORE_PREFERENCE_STORAGE_KEYS = {
@@ -74,6 +112,9 @@ export const CORE_PREFERENCE_STORAGE_KEYS = {
   export: 'openrv-prefs-export',
   general: 'openrv-prefs-general',
   fpsIndicator: 'openrv-prefs-fps-indicator',
+  filterMode: 'openrv-prefs-filter-mode',
+  timelineDisplayMode: 'openrv-prefs-timeline-display-mode',
+  missingFrameMode: 'openrv-prefs-missing-frame-mode',
 } as const;
 
 export const DEFAULT_COLOR_DEFAULTS: ColorDefaults = {
@@ -123,6 +164,7 @@ export interface CorePreferencesEvents extends EventMap {
   exportDefaultsChanged: ExportDefaults;
   generalPrefsChanged: GeneralPrefs;
   fpsIndicatorPrefsChanged: FPSIndicatorPrefs;
+  dccPrefsChanged: DCCPrefs;
   imported: PreferencesExportPayload;
   reset: void;
 }
@@ -237,6 +279,44 @@ function sanitizeFPSIndicatorPrefs(value: unknown): FPSIndicatorPrefs {
   return out;
 }
 
+const VALID_TRANSFER_FUNCTIONS = new Set(['linear', 'srgb', 'rec709', 'gamma2.2', 'gamma2.4', 'custom']);
+const VALID_OUTPUT_GAMUTS = new Set(['auto', 'srgb', 'display-p3']);
+const VALID_TIMECODE_DISPLAY_MODES = new Set<string>(['frames', 'timecode', 'seconds', 'footage']);
+const VALID_MISSING_FRAME_MODES = new Set<string>(['off', 'show-frame', 'hold', 'black']);
+
+function isTimecodeDisplayMode(value: unknown): value is TimecodeDisplayMode {
+  return typeof value === 'string' && VALID_TIMECODE_DISPLAY_MODES.has(value);
+}
+
+function isMissingFrameMode(value: unknown): value is MissingFrameMode {
+  return typeof value === 'string' && VALID_MISSING_FRAME_MODES.has(value);
+}
+
+function sanitizeDisplayProfile(value: unknown): DisplayColorState | null {
+  if (!isRecord(value)) return null;
+  if (
+    !VALID_TRANSFER_FUNCTIONS.has(value.transferFunction as string) ||
+    typeof value.displayGamma !== 'number' ||
+    !Number.isFinite(value.displayGamma) ||
+    typeof value.displayBrightness !== 'number' ||
+    !Number.isFinite(value.displayBrightness) ||
+    typeof value.customGamma !== 'number' ||
+    !Number.isFinite(value.customGamma)
+  ) {
+    return null;
+  }
+  const result: DisplayColorState = {
+    transferFunction: value.transferFunction as DisplayColorState['transferFunction'],
+    displayGamma: clamp(value.displayGamma, 0.1, 4.0),
+    displayBrightness: clamp(value.displayBrightness, 0.0, 2.0),
+    customGamma: clamp(value.customGamma, 0.1, 10.0),
+  };
+  if (VALID_OUTPUT_GAMUTS.has(value.outputGamut as string)) {
+    result.outputGamut = value.outputGamut as DisplayColorState['outputGamut'];
+  }
+  return result;
+}
+
 function isThemeMode(value: unknown): value is ThemeMode {
   return value === 'dark' || value === 'light' || value === 'auto';
 }
@@ -246,7 +326,10 @@ function hasOwnKey(obj: Record<string, unknown>, key: string): boolean {
 }
 
 export class PreferencesManager extends EventEmitter<CorePreferencesEvents> {
+  /** Whether the storage-only warning has been emitted (reset in tests). */
+  static _storageOnlyWarningEmitted = false;
   private _subsystems: PreferencesSubsystems = {};
+  private _pluginSettingsProvider: PluginSettingsProvider | null = null;
 
   constructor(private readonly storage: StoragePreferencesManager = getPreferencesManager()) {
     super();
@@ -258,6 +341,14 @@ export class PreferencesManager extends EventEmitter<CorePreferencesEvents> {
    */
   setSubsystems(subsystems: PreferencesSubsystems): void {
     this._subsystems = { ...subsystems };
+  }
+
+  /**
+   * Wire a plugin settings provider for backup/restore integration.
+   * When set, plugin settings are included in exportAll/importAll/resetAll.
+   */
+  setPluginSettingsProvider(provider: PluginSettingsProvider | null): void {
+    this._pluginSettingsProvider = provider;
   }
 
   /** Facade: ThemeManager (throws if not wired). */
@@ -349,6 +440,76 @@ export class PreferencesManager extends EventEmitter<CorePreferencesEvents> {
     this.emit('generalPrefsChanged', merged);
   }
 
+  getFilterMode(): TextureFilterMode | null {
+    const value = this.storage.getString(CORE_PREFERENCE_STORAGE_KEYS.filterMode);
+    if (value === 'nearest' || value === 'linear') return value;
+    return null;
+  }
+
+  setFilterMode(mode: TextureFilterMode | null): void {
+    if (mode === null) {
+      this.storage.remove(CORE_PREFERENCE_STORAGE_KEYS.filterMode);
+      return;
+    }
+    this.storage.setString(CORE_PREFERENCE_STORAGE_KEYS.filterMode, mode);
+  }
+
+  getDisplayProfile(): DisplayColorState | null {
+    return sanitizeDisplayProfile(this.storage.getJSON<unknown>(PREFERENCE_STORAGE_KEYS.displayProfile));
+  }
+
+  setDisplayProfile(state: DisplayColorState | null): void {
+    if (state === null) {
+      this.storage.remove(PREFERENCE_STORAGE_KEYS.displayProfile);
+      return;
+    }
+    const sanitized = sanitizeDisplayProfile(state);
+    if (sanitized) {
+      this.storage.setJSON(PREFERENCE_STORAGE_KEYS.displayProfile, sanitized);
+    }
+  }
+
+  getTimelineDisplayMode(): TimecodeDisplayMode | null {
+    const value = this.storage.getString(CORE_PREFERENCE_STORAGE_KEYS.timelineDisplayMode);
+    return isTimecodeDisplayMode(value) ? value : null;
+  }
+
+  setTimelineDisplayMode(mode: TimecodeDisplayMode | null): void {
+    if (mode === null) {
+      this.storage.remove(CORE_PREFERENCE_STORAGE_KEYS.timelineDisplayMode);
+      return;
+    }
+    if (isTimecodeDisplayMode(mode)) {
+      this.storage.setString(CORE_PREFERENCE_STORAGE_KEYS.timelineDisplayMode, mode);
+    }
+  }
+
+  getMissingFrameMode(): MissingFrameMode | null {
+    const value = this.storage.getString(CORE_PREFERENCE_STORAGE_KEYS.missingFrameMode);
+    return isMissingFrameMode(value) ? value : null;
+  }
+
+  setMissingFrameMode(mode: MissingFrameMode | null): void {
+    if (mode === null) {
+      this.storage.remove(CORE_PREFERENCE_STORAGE_KEYS.missingFrameMode);
+      return;
+    }
+    if (isMissingFrameMode(mode)) {
+      this.storage.setString(CORE_PREFERENCE_STORAGE_KEYS.missingFrameMode, mode);
+    }
+  }
+
+  getDCCPrefs(): DCCPrefs {
+    return sanitizeDCCPrefs(this.storage.getJSON<unknown>(DCC_STORAGE_KEY));
+  }
+
+  setDCCPrefs(prefs: Partial<DCCPrefs>): void {
+    const current = this.getDCCPrefs();
+    const merged = sanitizeDCCPrefs({ ...current, ...prefs });
+    this.storage.setJSON(DCC_STORAGE_KEY, merged);
+    this.emit('dccPrefsChanged', merged);
+  }
+
   exportAll(): string {
     return JSON.stringify(this.buildExportPayload());
   }
@@ -427,6 +588,75 @@ export class PreferencesManager extends EventEmitter<CorePreferencesEvents> {
       }
     }
 
+    if (hasOwnKey(parsed, 'fpsIndicatorPrefs')) {
+      const value = parsed.fpsIndicatorPrefs;
+      if (value === null) {
+        this.storage.remove(CORE_PREFERENCE_STORAGE_KEYS.fpsIndicator);
+        this.emit('fpsIndicatorPrefsChanged', { ...DEFAULT_FPS_INDICATOR_PREFS });
+      } else if (isRecord(value)) {
+        this.setFPSIndicatorPrefs(value as Partial<FPSIndicatorPrefs>);
+      }
+    }
+
+    if (hasOwnKey(parsed, 'filterMode')) {
+      const value = parsed.filterMode;
+      if (value === 'nearest' || value === 'linear') {
+        this.setFilterMode(value);
+      } else {
+        this.setFilterMode(null);
+      }
+    }
+
+    if (hasOwnKey(parsed, 'displayProfile')) {
+      const value = parsed.displayProfile;
+      if (value === null) {
+        this.setDisplayProfile(null);
+      } else if (isRecord(value)) {
+        const sanitized = sanitizeDisplayProfile(value);
+        if (sanitized) {
+          this.setDisplayProfile(sanitized);
+        }
+      }
+    }
+
+    if (hasOwnKey(parsed, 'timelineDisplayMode')) {
+      const value = parsed.timelineDisplayMode;
+      if (isTimecodeDisplayMode(value)) {
+        this.setTimelineDisplayMode(value);
+      } else {
+        this.setTimelineDisplayMode(null);
+      }
+    }
+
+    if (hasOwnKey(parsed, 'missingFrameMode')) {
+      const value = parsed.missingFrameMode;
+      if (isMissingFrameMode(value)) {
+        this.setMissingFrameMode(value);
+      } else {
+        this.setMissingFrameMode(null);
+      }
+    }
+
+    if (hasOwnKey(parsed, 'dccPrefs')) {
+      const value = parsed.dccPrefs;
+      if (value === null) {
+        this.storage.remove(DCC_STORAGE_KEY);
+        this.emit('dccPrefsChanged', { ...DEFAULT_DCC_PREFS });
+      } else if (isRecord(value)) {
+        this.setDCCPrefs(value as Partial<DCCPrefs>);
+      }
+    }
+
+    if (hasOwnKey(parsed, 'pluginSettings') && this._pluginSettingsProvider) {
+      const value = parsed.pluginSettings;
+      if (isRecord(value)) {
+        this._pluginSettingsProvider.importAll(value as Record<string, Record<string, unknown>>);
+      }
+    }
+
+    // Apply live subsystem changes so the UI updates without a page reload.
+    this.applySubsystemsFromStorage(parsed);
+
     this.emit('imported', this.buildExportPayload());
   }
 
@@ -437,10 +667,45 @@ export class PreferencesManager extends EventEmitter<CorePreferencesEvents> {
     for (const key of Object.values(CORE_PREFERENCE_STORAGE_KEYS)) {
       this.storage.remove(key);
     }
+    this.storage.remove(DCC_STORAGE_KEY);
+    if (this._pluginSettingsProvider) {
+      this._pluginSettingsProvider.clearAll();
+    }
+
+    // Apply live subsystem resets so the UI reverts to defaults without a page reload.
+    this.resetSubsystems();
+
     this.emit('colorDefaultsChanged', { ...DEFAULT_COLOR_DEFAULTS });
     this.emit('exportDefaultsChanged', { ...DEFAULT_EXPORT_DEFAULTS });
     this.emit('generalPrefsChanged', { ...DEFAULT_GENERAL_PREFS });
+    this.emit('fpsIndicatorPrefsChanged', { ...DEFAULT_FPS_INDICATOR_PREFS });
+    this.emit('dccPrefsChanged', { ...DEFAULT_DCC_PREFS });
     this.emit('reset', undefined);
+  }
+
+  /**
+   * Tell live subsystems to pick up freshly-imported storage values.
+   * Null-safe: skips any subsystem that is not yet wired.
+   */
+  private applySubsystemsFromStorage(parsed: Record<string, unknown>): void {
+    if (this._subsystems.theme && hasOwnKey(parsed, 'themeMode')) {
+      const mode = parsed.themeMode;
+      this._subsystems.theme.setMode(isThemeMode(mode) ? mode : 'auto');
+    }
+    this._subsystems.layout?.reloadFromStorage();
+    this._subsystems.keyBindings?.reloadFromStorage();
+    this._subsystems.ocio?.reloadFromStorage();
+  }
+
+  /**
+   * Tell live subsystems to revert to defaults after storage was cleared.
+   * Null-safe: skips any subsystem that is not yet wired.
+   */
+  private resetSubsystems(): void {
+    this._subsystems.theme?.setMode('auto');
+    this._subsystems.layout?.reloadFromStorage();
+    this._subsystems.keyBindings?.reloadFromStorage();
+    this._subsystems.ocio?.reloadFromStorage();
   }
 
   private writeJSON(key: string, value: unknown): void {
@@ -452,7 +717,7 @@ export class PreferencesManager extends EventEmitter<CorePreferencesEvents> {
   }
 
   private buildExportPayload(): PreferencesExportPayload {
-    return {
+    const payload: PreferencesExportPayload = {
       version: 1,
       themeMode: this.getThemeMode(),
       cursorAutoHide: this.storage.getBoolean(PREFERENCE_STORAGE_KEYS.cursorAutoHide),
@@ -465,7 +730,17 @@ export class PreferencesManager extends EventEmitter<CorePreferencesEvents> {
       colorDefaults: this.getColorDefaults(),
       exportDefaults: this.getExportDefaults(),
       generalPrefs: this.getGeneralPrefs(),
+      fpsIndicatorPrefs: this.getFPSIndicatorPrefs(),
+      filterMode: this.getFilterMode(),
+      displayProfile: this.getDisplayProfile(),
+      timelineDisplayMode: this.getTimelineDisplayMode(),
+      missingFrameMode: this.getMissingFrameMode(),
+      dccPrefs: this.getDCCPrefs(),
     };
+    if (this._pluginSettingsProvider) {
+      payload.pluginSettings = this._pluginSettingsProvider.exportAll();
+    }
+    return payload;
   }
 }
 
@@ -486,4 +761,6 @@ export function getCorePreferencesManager(): PreferencesManager {
 /** Test helper: reset the singleton between tests. */
 export function resetCorePreferencesManagerForTests(): void {
   sharedCorePreferencesManager = null;
+  // Also reset the one-time storage-only warning so tests can verify it independently.
+  PreferencesManager._storageOnlyWarningEmitted = false;
 }

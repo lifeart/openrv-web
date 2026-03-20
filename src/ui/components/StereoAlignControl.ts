@@ -52,7 +52,7 @@ export class StereoAlignControl extends EventEmitter<StereoAlignControlEvents> {
     // Align button
     this.alignButton = document.createElement('button');
     this.alignButton.dataset.testid = 'stereo-align-button';
-    this.alignButton.title = 'Stereo alignment tools (Shift+4)';
+    this.alignButton.title = 'Click to configure alignment, Shift+4 to cycle modes';
     this.alignButton.style.cssText = `
       background: transparent;
       border: 1px solid transparent;

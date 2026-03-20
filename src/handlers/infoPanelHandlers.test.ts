@@ -91,7 +91,13 @@ describe('updateInfoPanel', () => {
     overrides: {
       currentFrame?: number;
       fps?: number;
-      currentSource?: { name?: string; width?: number; height?: number; duration?: number } | null;
+      currentSource?: {
+        name?: string;
+        width?: number;
+        height?: number;
+        duration?: number;
+        sequenceInfo?: { pattern: string; startFrame: number; endFrame: number };
+      } | null;
     } = {},
   ): SessionBridgeContext {
     const infoPanel = { update: vi.fn() };
@@ -167,5 +173,46 @@ describe('updateInfoPanel', () => {
     const call = (context.getInfoPanel().update as ReturnType<typeof vi.fn>).mock.calls[0]![0];
     // 2400 frames / 24 fps = 100 seconds = 1:40
     expect(call.duration).toBe('1:40');
+  });
+
+  it('IPH-U034: passes sequencePattern when source has sequenceInfo', () => {
+    const context = createMockContext({
+      currentFrame: 0,
+      fps: 24,
+      currentSource: {
+        name: 'render',
+        width: 1920,
+        height: 1080,
+        duration: 100,
+        sequenceInfo: { pattern: 'render_####.exr', startFrame: 1, endFrame: 100 },
+      },
+    });
+
+    updateInfoPanel(context);
+
+    const call = (context.getInfoPanel().update as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(call.sequencePattern).toBe('render_####.exr');
+  });
+
+  it('IPH-U035: sequencePattern is undefined when source has no sequenceInfo', () => {
+    const context = createMockContext({
+      currentFrame: 0,
+      fps: 24,
+      currentSource: { name: 'photo.jpg', width: 1920, height: 1080, duration: 1 },
+    });
+
+    updateInfoPanel(context);
+
+    const call = (context.getInfoPanel().update as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(call.sequencePattern).toBeUndefined();
+  });
+
+  it('IPH-U036: sequencePattern is undefined when no source', () => {
+    const context = createMockContext({ currentSource: null });
+
+    updateInfoPanel(context);
+
+    const call = (context.getInfoPanel().update as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(call.sequencePattern).toBeUndefined();
   });
 });

@@ -15,7 +15,16 @@ import type { PluginId } from './types';
 // Plugin Event Types
 // ---------------------------------------------------------------------------
 
-/** Application event names available to plugins (prefixed with "app:") */
+/**
+ * Application event names available to plugins (prefixed with "app:").
+ *
+ * All listed events are actively wired and emitted in production:
+ * - `app:stop` — Fires when `Session.stop()` is called (pause + return to start).
+ *   Wired via Session `playbackStopped` → EventsAPI `stop` → PluginEventBus `app:stop`.
+ * - `app:error` — Fires for audio errors, unsupported codecs, representation errors,
+ *   and frame decode timeouts. Wired via Session error events → EventsAPI `emitError()`
+ *   → PluginEventBus `app:error`.
+ */
 export type AppEventName =
   | 'app:frameChange'
   | 'app:play'
@@ -81,6 +90,7 @@ const APP_EVENT_TO_API: Partial<Record<AppEventName, OpenRVEventName>> = {
   'app:play': 'play',
   'app:pause': 'pause',
   'app:stop': 'stop',
+
   'app:speedChange': 'speedChange',
   'app:volumeChange': 'volumeChange',
   'app:muteChange': 'muteChange',

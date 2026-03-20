@@ -15,6 +15,9 @@ import {
   type SampleSize,
   type SourceMode,
 } from './PixelProbe';
+import * as Modal from './shared/Modal';
+
+const showAlertSpy = vi.spyOn(Modal, 'showAlert').mockReturnValue(Promise.resolve());
 
 // Helper to create test ImageData
 function createTestImageData(
@@ -1267,5 +1270,490 @@ describe('PixelProbe theme changes', () => {
     expect(overlay).not.toBeNull();
     expect(overlay.style.cssText).toContain('var(--bg-secondary)');
     expect(overlay.style.cssText).not.toContain('rgba(30, 30, 30');
+  });
+});
+
+describe('PixelProbe rendered fallback indicator (Issue #75)', () => {
+  let pixelProbe: PixelProbe;
+
+  beforeEach(() => {
+    pixelProbe = new PixelProbe();
+  });
+
+  afterEach(() => {
+    pixelProbe.dispose();
+  });
+
+  it('FALLBACK-001: shows "(rendered fallback)" when source mode is active but sourceImageData is missing', () => {
+    pixelProbe.enable();
+    pixelProbe.show();
+    pixelProbe.setSourceMode('source');
+
+    const renderedData = createTestImageData(10, 10, { r: 200, g: 100, b: 50, a: 255 });
+    pixelProbe.setSourceImageData(null);
+    pixelProbe.updateFromCanvas(5, 5, renderedData, 10, 10);
+
+    const coordsEl = document.querySelector('[data-testid="pixel-probe-coords"]') as HTMLElement;
+    expect(coordsEl.textContent).toContain('(rendered fallback)');
+  });
+
+  it('FALLBACK-002: does not show fallback indicator when sourceImageData is available', () => {
+    pixelProbe.enable();
+    pixelProbe.show();
+    pixelProbe.setSourceMode('source');
+
+    const renderedData = createTestImageData(10, 10, { r: 200, g: 100, b: 50, a: 255 });
+    const sourceData = createTestImageData(10, 10, { r: 0, g: 255, b: 0, a: 255 });
+    pixelProbe.setSourceImageData(sourceData);
+    pixelProbe.updateFromCanvas(5, 5, renderedData, 10, 10);
+
+    const coordsEl = document.querySelector('[data-testid="pixel-probe-coords"]') as HTMLElement;
+    expect(coordsEl.textContent).not.toContain('(rendered fallback)');
+  });
+
+  it('FALLBACK-003: does not show fallback indicator in rendered mode', () => {
+    pixelProbe.enable();
+    pixelProbe.show();
+    pixelProbe.setSourceMode('rendered');
+
+    const renderedData = createTestImageData(10, 10, { r: 200, g: 100, b: 50, a: 255 });
+    pixelProbe.setSourceImageData(null);
+    pixelProbe.updateFromCanvas(5, 5, renderedData, 10, 10);
+
+    const coordsEl = document.querySelector('[data-testid="pixel-probe-coords"]') as HTMLElement;
+    expect(coordsEl.textContent).not.toContain('(rendered fallback)');
+  });
+
+  it('FALLBACK-004: logs console.warn on first fallback occurrence', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    pixelProbe.enable();
+    pixelProbe.setSourceMode('source');
+
+    const renderedData = createTestImageData(10, 10, { r: 200, g: 100, b: 50, a: 255 });
+    pixelProbe.setSourceImageData(null);
+    pixelProbe.updateFromCanvas(5, 5, renderedData, 10, 10);
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Source mode active but no source image data available'),
+    );
+
+    warnSpy.mockRestore();
+  });
+
+  it('FALLBACK-005: logs console.warn only once for repeated fallbacks', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    pixelProbe.enable();
+    pixelProbe.setSourceMode('source');
+
+    const renderedData = createTestImageData(10, 10, { r: 200, g: 100, b: 50, a: 255 });
+    pixelProbe.setSourceImageData(null);
+
+    // Call multiple times
+    pixelProbe.updateFromCanvas(5, 5, renderedData, 10, 10);
+    pixelProbe.updateFromCanvas(3, 3, renderedData, 10, 10);
+    pixelProbe.updateFromCanvas(7, 7, renderedData, 10, 10);
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+
+    warnSpy.mockRestore();
+  });
+
+  it('FALLBACK-006: isSourceFallbackActive() returns true when fallback is active', () => {
+    pixelProbe.enable();
+    pixelProbe.setSourceMode('source');
+
+    const renderedData = createTestImageData(10, 10, { r: 200, g: 100, b: 50, a: 255 });
+    pixelProbe.setSourceImageData(null);
+    pixelProbe.updateFromCanvas(5, 5, renderedData, 10, 10);
+
+    expect(pixelProbe.isSourceFallbackActive()).toBe(true);
+  });
+
+  it('FALLBACK-007: isSourceFallbackActive() returns false in rendered mode', () => {
+    pixelProbe.enable();
+    pixelProbe.setSourceMode('rendered');
+
+    const renderedData = createTestImageData(10, 10, { r: 200, g: 100, b: 50, a: 255 });
+    pixelProbe.updateFromCanvas(5, 5, renderedData, 10, 10);
+
+    expect(pixelProbe.isSourceFallbackActive()).toBe(false);
+  });
+
+  it('FALLBACK-008: switching back to rendered mode clears fallback state', () => {
+    pixelProbe.enable();
+    pixelProbe.setSourceMode('source');
+
+    const renderedData = createTestImageData(10, 10, { r: 200, g: 100, b: 50, a: 255 });
+    pixelProbe.setSourceImageData(null);
+    pixelProbe.updateFromCanvas(5, 5, renderedData, 10, 10);
+    expect(pixelProbe.isSourceFallbackActive()).toBe(true);
+
+    pixelProbe.setSourceMode('rendered');
+    expect(pixelProbe.isSourceFallbackActive()).toBe(false);
+  });
+
+  it('FALLBACK-009: HDR path shows fallback indicator when source mode is active', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    pixelProbe.enable();
+    pixelProbe.show();
+    pixelProbe.setSourceMode('source');
+
+    // HDR path uses updateFromHDRValues which never has source data
+    pixelProbe.updateFromHDRValues(5, 5, 0.5, 0.3, 0.1, 1.0, 100, 100);
+
+    expect(pixelProbe.isSourceFallbackActive()).toBe(true);
+
+    const coordsEl = document.querySelector('[data-testid="pixel-probe-coords"]') as HTMLElement;
+    expect(coordsEl.textContent).toContain('(rendered fallback)');
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Source mode active but no source image data available on HDR path'),
+    );
+
+    warnSpy.mockRestore();
+  });
+
+  it('FALLBACK-010: HDR path does not show fallback when rendered mode is selected', () => {
+    pixelProbe.enable();
+    pixelProbe.show();
+    pixelProbe.setSourceMode('rendered');
+
+    pixelProbe.updateFromHDRValues(5, 5, 0.5, 0.3, 0.1, 1.0, 100, 100);
+
+    expect(pixelProbe.isSourceFallbackActive()).toBe(false);
+
+    const coordsEl = document.querySelector('[data-testid="pixel-probe-coords"]') as HTMLElement;
+    expect(coordsEl.textContent).not.toContain('(rendered fallback)');
+  });
+
+  describe('keyboard accessibility (#79)', () => {
+    beforeEach(() => {
+      pixelProbe.enable();
+      pixelProbe.show();
+    });
+
+    it('PROBE-U200: value rows have tabindex, role, and aria-label', () => {
+      const overlay = document.querySelector('[data-testid="pixel-probe-overlay"]') as HTMLElement;
+      const rows = overlay.querySelectorAll('[role="button"]');
+      expect(rows.length).toBeGreaterThanOrEqual(7); // rgb, rgb01, alpha, hsl, hex, ire, colorspace + nits
+
+      for (const row of rows) {
+        expect(row.getAttribute('tabindex')).toBe('0');
+        expect(row.getAttribute('role')).toBe('button');
+        expect(row.getAttribute('aria-label')).toMatch(/^Copy .+ value$/);
+      }
+    });
+
+    it('PROBE-U201: Enter key triggers copy on value row', async () => {
+      const overlay = document.querySelector('[data-testid="pixel-probe-overlay"]') as HTMLElement;
+      const firstRow = overlay.querySelector('[role="button"]') as HTMLElement;
+      expect(firstRow).not.toBeNull();
+
+      const copySpy = vi.fn();
+      pixelProbe.on('valueCopied', copySpy);
+
+      // Mock clipboard
+      const writeTextMock = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { writeText: writeTextMock },
+        writable: true,
+        configurable: true,
+      });
+
+      const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true });
+      firstRow.dispatchEvent(event);
+
+      // Wait for async clipboard operation
+      await vi.waitFor(() => {
+        expect(writeTextMock).toHaveBeenCalled();
+      });
+    });
+
+    it('PROBE-U202: Space key triggers copy on value row', async () => {
+      const overlay = document.querySelector('[data-testid="pixel-probe-overlay"]') as HTMLElement;
+      const firstRow = overlay.querySelector('[role="button"]') as HTMLElement;
+      expect(firstRow).not.toBeNull();
+
+      const writeTextMock = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { writeText: writeTextMock },
+        writable: true,
+        configurable: true,
+      });
+
+      const event = new KeyboardEvent('keydown', { key: ' ', bubbles: true });
+      firstRow.dispatchEvent(event);
+
+      await vi.waitFor(() => {
+        expect(writeTextMock).toHaveBeenCalled();
+      });
+    });
+
+    it('PROBE-U203: shows alert when clipboard write fails (#196)', async () => {
+      showAlertSpy.mockClear();
+      const overlay = document.querySelector('[data-testid="pixel-probe-overlay"]') as HTMLElement;
+      const firstRow = overlay.querySelector('[role="button"]') as HTMLElement;
+      expect(firstRow).not.toBeNull();
+
+      const writeTextMock = vi.fn().mockRejectedValue(new Error('Clipboard denied'));
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { writeText: writeTextMock },
+        writable: true,
+        configurable: true,
+      });
+
+      const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true });
+      firstRow.dispatchEvent(event);
+
+      await vi.waitFor(() => {
+        expect(showAlertSpy).toHaveBeenCalledWith(
+          'Failed to copy value to clipboard. Your browser may have denied clipboard access.',
+          { type: 'warning', title: 'Clipboard Unavailable' },
+        );
+      });
+    });
+
+    it('PROBE-U204: does not show alert when clipboard write succeeds (#196)', async () => {
+      showAlertSpy.mockClear();
+      const overlay = document.querySelector('[data-testid="pixel-probe-overlay"]') as HTMLElement;
+      const firstRow = overlay.querySelector('[role="button"]') as HTMLElement;
+      expect(firstRow).not.toBeNull();
+
+      const writeTextMock = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { writeText: writeTextMock },
+        writable: true,
+        configurable: true,
+      });
+
+      const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true });
+      firstRow.dispatchEvent(event);
+
+      await vi.waitFor(() => {
+        expect(writeTextMock).toHaveBeenCalled();
+      });
+      expect(showAlertSpy).not.toHaveBeenCalled();
+    });
+  });
+});
+
+describe('PixelProbe HDR source mode', () => {
+  let pixelProbe: PixelProbe;
+
+  beforeEach(() => {
+    pixelProbe = new PixelProbe();
+  });
+
+  afterEach(() => {
+    pixelProbe.dispose();
+  });
+
+  it('HDR-SRC-001: updateFromHDRValues with isSource=true stores HDR floats normally', () => {
+    pixelProbe.enable();
+    pixelProbe.updateFromHDRValues(10, 20, 0.5, 0.6, 0.7, 1.0, 100, 100, true);
+
+    const state = pixelProbe.getState();
+    expect(state.x).toBe(10);
+    expect(state.y).toBe(20);
+    expect(state.rgb.r).toBe(Math.round(0.5 * 255));
+    expect(state.rgb.g).toBe(Math.round(0.6 * 255));
+    expect(state.rgb.b).toBe(Math.round(0.7 * 255));
+  });
+
+  it('HDR-SRC-002: updateFromHDRValues with isSource=false (default) works as before', () => {
+    pixelProbe.enable();
+    pixelProbe.updateFromHDRValues(10, 20, 0.5, 0.6, 0.7, 1.0, 100, 100);
+
+    const state = pixelProbe.getState();
+    expect(state.rgb.r).toBe(Math.round(0.5 * 255));
+    expect(state.rgb.g).toBe(Math.round(0.6 * 255));
+    expect(state.rgb.b).toBe(Math.round(0.7 * 255));
+  });
+
+  it('HDR-SRC-003: updateFromHDRValues with isSource=true handles HDR values > 1.0', () => {
+    pixelProbe.enable();
+    pixelProbe.updateFromHDRValues(5, 5, 1.5, 2.0, 0.3, 1.0, 100, 100, true);
+
+    const state = pixelProbe.getState();
+    // Clamped to 255 for legacy display
+    expect(state.rgb.r).toBe(255);
+    expect(state.rgb.g).toBe(255);
+    expect(state.rgb.b).toBe(Math.round(0.3 * 255));
+  });
+
+  it('HDR-SRC-004: isRenderedFallback is false when isSource=true and sourceMode is source', () => {
+    pixelProbe.enable();
+    pixelProbe.setSourceMode('source');
+    pixelProbe.updateFromHDRValues(5, 5, 0.5, 0.5, 0.5, 1.0, 100, 100, true);
+
+    expect(pixelProbe.isSourceFallbackActive()).toBe(false);
+  });
+
+  it('HDR-SRC-005: isRenderedFallback is true when isSource=false and sourceMode is source', () => {
+    pixelProbe.enable();
+    pixelProbe.setSourceMode('source');
+    pixelProbe.updateFromHDRValues(5, 5, 0.5, 0.5, 0.5, 1.0, 100, 100, false);
+
+    expect(pixelProbe.isSourceFallbackActive()).toBe(true);
+  });
+
+  it('HDR-SRC-006: isRenderedFallback is false when sourceMode is rendered (regardless of isSource)', () => {
+    pixelProbe.enable();
+    pixelProbe.setSourceMode('rendered');
+    pixelProbe.updateFromHDRValues(5, 5, 0.5, 0.5, 0.5, 1.0, 100, 100, false);
+
+    expect(pixelProbe.isSourceFallbackActive()).toBe(false);
+  });
+
+  it('HDR-IRE-001: HDR IRE values can exceed 100 for super-white content', () => {
+    pixelProbe.enable();
+    // Pure white at 2.0 linear => luminance = 2.0, IRE = 200
+    pixelProbe.updateFromHDRValues(5, 5, 2.0, 2.0, 2.0, 1.0, 100, 100);
+
+    const state = pixelProbe.getState();
+    expect(state.ire).toBe(200);
+  });
+
+  it('HDR-IRE-002: HDR IRE values reflect actual luminance for bright highlights', () => {
+    pixelProbe.enable();
+    // Rec.709 luminance: 0.2126*3.0 + 0.7152*2.5 + 0.0722*1.0 = 0.6378 + 1.788 + 0.0722 = 2.498
+    pixelProbe.updateFromHDRValues(5, 5, 3.0, 2.5, 1.0, 1.0, 100, 100);
+
+    const state = pixelProbe.getState();
+    // Should be ~250 IRE, well above the old 100 clamp
+    expect(state.ire).toBeGreaterThan(100);
+    expect(state.ire).toBe(Math.round(2.498 * 100));
+  });
+
+  it('HDR-IRE-003: HDR IRE is still 0 for pure black', () => {
+    pixelProbe.enable();
+    pixelProbe.updateFromHDRValues(5, 5, 0, 0, 0, 1.0, 100, 100);
+
+    const state = pixelProbe.getState();
+    expect(state.ire).toBe(0);
+  });
+
+  it('HDR-IRE-004: HDR IRE is 100 for reference white (1.0, 1.0, 1.0)', () => {
+    pixelProbe.enable();
+    pixelProbe.updateFromHDRValues(5, 5, 1.0, 1.0, 1.0, 1.0, 100, 100);
+
+    const state = pixelProbe.getState();
+    expect(state.ire).toBe(100);
+  });
+
+  it('HDR-IRE-005: negative luminance values are clamped to 0 IRE', () => {
+    pixelProbe.enable();
+    pixelProbe.updateFromHDRValues(5, 5, -0.5, -0.5, -0.5, 1.0, 100, 100);
+
+    const state = pixelProbe.getState();
+    expect(state.ire).toBe(0);
+  });
+});
+
+// =============================================================================
+// Issue #496 – Probe reports source-space coordinates, not display-canvas coords
+// =============================================================================
+describe('PixelProbe source-space coordinates (Issue #496)', () => {
+  let pixelProbe: PixelProbe;
+
+  beforeEach(() => {
+    pixelProbe = new PixelProbe();
+    pixelProbe.enable();
+  });
+
+  afterEach(() => {
+    pixelProbe.dispose();
+  });
+
+  it('COORD-001: updateFromCanvas reports source coords when source differs from display', () => {
+    // 1920x1080 source displayed at 800x600
+    const imageData = new ImageData(800, 600);
+    // display coordinate (400, 300) should map to source (960, 540)
+    pixelProbe.updateFromCanvas(400, 300, imageData, 800, 600, 1920, 1080);
+
+    const state = pixelProbe.getState();
+    expect(state.x).toBe(960);
+    expect(state.y).toBe(540);
+  });
+
+  it('COORD-002: updateFromCanvas reports display coords when no source dims provided', () => {
+    const imageData = new ImageData(800, 600);
+    pixelProbe.updateFromCanvas(400, 300, imageData, 800, 600);
+
+    const state = pixelProbe.getState();
+    expect(state.x).toBe(400);
+    expect(state.y).toBe(300);
+  });
+
+  it('COORD-003: updateFromCanvas reports same coords when source equals display', () => {
+    const imageData = new ImageData(800, 600);
+    pixelProbe.updateFromCanvas(100, 200, imageData, 800, 600, 800, 600);
+
+    const state = pixelProbe.getState();
+    expect(state.x).toBe(100);
+    expect(state.y).toBe(200);
+  });
+
+  it('COORD-004: updateFromHDRValues reports source coords when source differs from display', () => {
+    // 1920x1080 source displayed at 800x600
+    pixelProbe.updateFromHDRValues(400, 300, 0.5, 0.5, 0.5, 1.0, 800, 600, false, 1920, 1080);
+
+    const state = pixelProbe.getState();
+    expect(state.x).toBe(960);
+    expect(state.y).toBe(540);
+  });
+
+  it('COORD-005: updateFromHDRValues reports display coords when no source dims provided', () => {
+    pixelProbe.updateFromHDRValues(400, 300, 0.5, 0.5, 0.5, 1.0, 800, 600);
+
+    const state = pixelProbe.getState();
+    expect(state.x).toBe(400);
+    expect(state.y).toBe(300);
+  });
+
+  it('COORD-006: zoomed-in display maps correctly to source space', () => {
+    // Source 100x100 displayed at 1000x1000 (10x zoom)
+    const imageData = new ImageData(1000, 1000);
+    pixelProbe.updateFromCanvas(500, 500, imageData, 1000, 1000, 100, 100);
+
+    const state = pixelProbe.getState();
+    expect(state.x).toBe(50);
+    expect(state.y).toBe(50);
+  });
+
+  it('COORD-007: zoomed-out display maps correctly to source space', () => {
+    // Source 4000x3000 displayed at 400x300 (10x zoom out)
+    const imageData = new ImageData(400, 300);
+    pixelProbe.updateFromCanvas(40, 30, imageData, 400, 300, 4000, 3000);
+
+    const state = pixelProbe.getState();
+    expect(state.x).toBe(400);
+    expect(state.y).toBe(300);
+  });
+
+  it('COORD-008: origin maps to source origin', () => {
+    const imageData = new ImageData(800, 600);
+    pixelProbe.updateFromCanvas(0, 0, imageData, 800, 600, 1920, 1080);
+
+    const state = pixelProbe.getState();
+    expect(state.x).toBe(0);
+    expect(state.y).toBe(0);
+  });
+
+  it('COORD-009: source coords are clamped within source bounds', () => {
+    const imageData = new ImageData(800, 600);
+    // Max display coord 799 should map to < 1920
+    pixelProbe.updateFromCanvas(799, 599, imageData, 800, 600, 1920, 1080);
+
+    const state = pixelProbe.getState();
+    expect(state.x).toBeLessThan(1920);
+    expect(state.y).toBeLessThan(1080);
+    expect(state.x).toBeGreaterThanOrEqual(0);
+    expect(state.y).toBeGreaterThanOrEqual(0);
   });
 });

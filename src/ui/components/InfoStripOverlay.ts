@@ -243,10 +243,22 @@ export class InfoStripOverlay extends EventEmitter<InfoStripOverlayEvents> {
   }
 
   /**
+   * Set background opacity (0-1)
+   */
+  setBackgroundOpacity(opacity: number): void {
+    this.setState({ backgroundOpacity: Math.max(0, Math.min(1, opacity)) });
+  }
+
+  /**
    * Set the complete state (partial update).
    */
   setState(state: Partial<InfoStripOverlayState>): void {
-    this.state = { ...this.state, ...state };
+    const nextState = { ...state };
+    if (typeof nextState.backgroundOpacity === 'number') {
+      nextState.backgroundOpacity = Math.max(0, Math.min(1, nextState.backgroundOpacity));
+    }
+
+    this.state = { ...this.state, ...nextState };
     this.updateStyles();
     this.update();
     this.emit('stateChanged', { ...this.state });

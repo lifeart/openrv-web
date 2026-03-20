@@ -9,6 +9,8 @@ import {
   detectPattern,
   sortByFrameNumber,
   loadFrameImage,
+  isFrameLoaded,
+  float32ToImageBitmap,
   preloadFrames,
   releaseDistantFrames,
   createSequenceInfo,
@@ -31,6 +33,13 @@ import {
   findMatchingFiles,
   discoverSequences,
   getBestSequence,
+  buildFrameNumberMap,
+  getSequenceFrameRange,
+  // URL-based sequence utilities
+  isSequencePattern,
+  expandPatternToURLs,
+  loadFrameImageFromURL,
+  createSequenceInfoFromPattern,
 } from './SequenceLoader';
 import type { SequenceFrame, SequenceInfo, InferredSequencePattern } from './SequenceLoader';
 
@@ -1206,6 +1215,55 @@ describe('SequenceLoader', () => {
     });
   });
 
+  describe('Extended image format support (regression)', () => {
+    it('SLD-R003: filterImageFiles accepts JPEG XL, JPEG 2000, AVIF, and HEIC extensions', () => {
+      const extensions = ['jxl', 'jp2', 'j2k', 'j2c', 'jph', 'jhc', 'avif', 'heic', 'heif'];
+      const files = extensions.map((ext) => new File([''], `frame_0001.${ext}`));
+
+      const result = filterImageFiles(files);
+
+      expect(result).toHaveLength(extensions.length);
+      expect(result.map((f) => f.name)).toEqual(extensions.map((ext) => `frame_0001.${ext}`));
+    });
+
+    it('SLD-R004: filterImageFiles accepts HDR, ICO, SVG, and RAW extensions', () => {
+      const extensions = ['hdr', 'ico', 'svg', 'pic', 'sxr', 'cr2', 'nef', 'arw', 'dng', 'orf', 'pef', 'srw'];
+      const files = extensions.map((ext) => new File([''], `image.${ext}`));
+
+      const result = filterImageFiles(files);
+
+      expect(result).toHaveLength(extensions.length);
+    });
+
+    it('SLD-R005: discoverSequences detects sequences with new format extensions', () => {
+      const newFormats = ['jxl', 'avif', 'heic', 'jp2', 'hdr'];
+      for (const ext of newFormats) {
+        const files = [
+          new File([''], `frame_001.${ext}`),
+          new File([''], `frame_002.${ext}`),
+          new File([''], `frame_003.${ext}`),
+        ];
+
+        const sequences = discoverSequences(files);
+        expect(sequences.size).toBe(1);
+        const seqFiles = Array.from(sequences.values())[0]!;
+        expect(seqFiles).toHaveLength(3);
+      }
+    });
+
+    it('SLD-R006: filterImageFiles still rejects non-image extensions', () => {
+      const files = [
+        new File([''], 'video.mp4'),
+        new File([''], 'document.txt'),
+        new File([''], 'data.json'),
+        new File([''], 'script.js'),
+      ];
+
+      const result = filterImageFiles(files);
+      expect(result).toHaveLength(0);
+    });
+  });
+
   describe('preloadFrames resilience (regression)', () => {
     it('SLD-R001: Promise.allSettled handles partial failure (conceptual)', async () => {
       // This validates that Promise.allSettled (used in the fix) gracefully
@@ -1249,6 +1307,856 @@ describe('SequenceLoader', () => {
       } finally {
         globalThis.createImageBitmap = origCreateImageBitmap;
       }
+    });
+  });
+
+  // ---------------------------------------------------------------
+  // buildFrameNumberMap / getSequenceFrameRange (issue #516)
+  // ---------------------------------------------------------------
+
+  describe('buildFrameNumberMap', () => {
+    it('SLD-MAP-001: builds map keyed by frame number', () => {
+      const frames: SequenceFrame[] = [
+        { index: 0, frameNumber: 1001, file: new File([], 'f.1001.png') },
+        { index: 1, frameNumber: 1002, file: new File([], 'f.1002.png') },
+        { index: 2, frameNumber: 1004, file: new File([], 'f.1004.png') },
+      ];
+
+      const map = buildFrameNumberMap(frames);
+
+      expect(map.size).toBe(3);
+      expect(map.get(1001)).toBe(frames[0]);
+      expect(map.get(1002)).toBe(frames[1]);
+      expect(map.get(1004)).toBe(frames[2]);
+      expect(map.has(1003)).toBe(false);
+    });
+
+    it('SLD-MAP-002: returns empty map for empty frames', () => {
+      const map = buildFrameNumberMap([]);
+      expect(map.size).toBe(0);
+    });
+  });
+
+  describe('getSequenceFrameRange', () => {
+    it('SLD-RANGE-001: returns numeric range for contiguous sequence', () => {
+      const info = {
+        startFrame: 1,
+        endFrame: 10,
+      } as SequenceInfo;
+
+      expect(getSequenceFrameRange(info)).toBe(10);
+    });
+
+    it('SLD-RANGE-002: returns numeric range for gapped sequence', () => {
+      // Frames 1001, 1002, 1004 — range should be 4 (1001-1004)
+      const info = {
+        startFrame: 1001,
+        endFrame: 1004,
+      } as SequenceInfo;
+
+      expect(getSequenceFrameRange(info)).toBe(4);
+    });
+
+    it('SLD-RANGE-003: returns 1 for single-frame sequence', () => {
+      const info = {
+        startFrame: 42,
+        endFrame: 42,
+      } as SequenceInfo;
+
+      expect(getSequenceFrameRange(info)).toBe(1);
+    });
+
+    it('SLD-RANGE-004: gapped sequence range exceeds frames.length', () => {
+      // 3 actual files but the numeric range is 4
+      const frames: SequenceFrame[] = [
+        { index: 0, frameNumber: 1001, file: new File([], 'f.1001.png') },
+        { index: 1, frameNumber: 1002, file: new File([], 'f.1002.png') },
+        { index: 2, frameNumber: 1004, file: new File([], 'f.1004.png') },
+      ];
+      const info: SequenceInfo = {
+        name: 'f.####.png',
+        pattern: 'f.####.png',
+        frames,
+        startFrame: 1001,
+        endFrame: 1004,
+        width: 100,
+        height: 100,
+        fps: 24,
+        missingFrames: [1003],
+      };
+
+      expect(getSequenceFrameRange(info)).toBe(4);
+      expect(info.frames.length).toBe(3);
+      // The timeline duration (4) must be larger than the file count (3)
+      expect(getSequenceFrameRange(info)).toBeGreaterThan(info.frames.length);
+    });
+  });
+
+  describe('decoder-backed format routing', () => {
+    let origCreateImageBitmap: typeof globalThis.createImageBitmap;
+
+    beforeEach(() => {
+      origCreateImageBitmap = globalThis.createImageBitmap;
+    });
+
+    afterEach(() => {
+      globalThis.createImageBitmap = origCreateImageBitmap;
+      vi.restoreAllMocks();
+    });
+
+    it('SLD-DEC-001: EXR files route through decoderRegistry and store decodedData', async () => {
+      const { decoderRegistry } = await import('../../formats/DecoderRegistry');
+      const mockBitmap = { close: vi.fn(), width: 4, height: 4 } as unknown as ImageBitmap;
+
+      // Mock detectAndDecode to return a valid Float32Array result
+      const mockData = new Float32Array(4 * 4 * 4); // 4x4 RGBA
+      for (let i = 0; i < mockData.length; i++) mockData[i] = 0.5;
+      vi.spyOn(decoderRegistry, 'detectAndDecode').mockResolvedValue({
+        width: 4,
+        height: 4,
+        data: mockData,
+        channels: 4,
+        colorSpace: 'linear',
+        metadata: {},
+        formatName: 'exr',
+      });
+
+      // Mock createImageBitmap for the float32ToImageBitmap preview conversion
+      globalThis.createImageBitmap = vi.fn().mockResolvedValue(mockBitmap);
+
+      const exrBuffer = new ArrayBuffer(8);
+      const file = new File([exrBuffer], 'frame_0001.exr');
+      const frame: SequenceFrame = { index: 0, frameNumber: 1, file };
+
+      const result = await loadFrameImage(frame);
+
+      expect(decoderRegistry.detectAndDecode).toHaveBeenCalled();
+      expect(result).toBe(mockBitmap);
+      expect(frame.image).toBe(mockBitmap);
+      // Full-precision data preserved in decodedData
+      expect(frame.decodedData).toBeDefined();
+      expect(frame.decodedData!.data).toBe(mockData);
+      expect(frame.decodedData!.width).toBe(4);
+      expect(frame.decodedData!.height).toBe(4);
+      expect(frame.decodedData!.channels).toBe(4);
+      expect(frame.decodedData!.colorSpace).toBe('linear');
+      expect(frame.decodedData!.formatName).toBe('exr');
+    });
+
+    it('SLD-DEC-002: DPX files route through decoderRegistry and store decodedData', async () => {
+      const { decoderRegistry } = await import('../../formats/DecoderRegistry');
+
+      const mockData = new Float32Array(2 * 2 * 4);
+      vi.spyOn(decoderRegistry, 'detectAndDecode').mockResolvedValue({
+        width: 2,
+        height: 2,
+        data: mockData,
+        channels: 4,
+        colorSpace: 'log',
+        metadata: {},
+        formatName: 'DPX',
+      });
+
+      const mockBitmap = { close: vi.fn(), width: 2, height: 2 } as unknown as ImageBitmap;
+      globalThis.createImageBitmap = vi.fn().mockResolvedValue(mockBitmap);
+
+      const file = new File([new ArrayBuffer(8)], 'shot_0042.dpx');
+      const frame: SequenceFrame = { index: 0, frameNumber: 42, file };
+
+      const result = await loadFrameImage(frame);
+
+      expect(decoderRegistry.detectAndDecode).toHaveBeenCalled();
+      expect(result).toBe(mockBitmap);
+      expect(frame.decodedData).toBeDefined();
+      expect(frame.decodedData!.formatName).toBe('DPX');
+      expect(frame.decodedData!.colorSpace).toBe('log');
+    });
+
+    it('SLD-DEC-003: PNG files use createImageBitmap directly (no decoder registry, no decodedData)', async () => {
+      const { decoderRegistry } = await import('../../formats/DecoderRegistry');
+      const spy = vi.spyOn(decoderRegistry, 'detectAndDecode');
+
+      const mockBitmap = { close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap;
+      globalThis.createImageBitmap = vi.fn().mockResolvedValue(mockBitmap);
+
+      const file = new File(['png data'], 'frame_0001.png', { type: 'image/png' });
+      const frame: SequenceFrame = { index: 0, frameNumber: 1, file };
+
+      const result = await loadFrameImage(frame);
+
+      expect(spy).not.toHaveBeenCalled();
+      expect(globalThis.createImageBitmap).toHaveBeenCalledWith(file, {
+        premultiplyAlpha: 'none',
+        colorSpaceConversion: 'none',
+      });
+      expect(result).toBe(mockBitmap);
+      expect(frame.decodedData).toBeUndefined();
+    });
+
+    it('SLD-DEC-004: JPEG files use createImageBitmap directly', async () => {
+      const { decoderRegistry } = await import('../../formats/DecoderRegistry');
+      const spy = vi.spyOn(decoderRegistry, 'detectAndDecode');
+
+      const mockBitmap = { close: vi.fn(), width: 100, height: 100 } as unknown as ImageBitmap;
+      globalThis.createImageBitmap = vi.fn().mockResolvedValue(mockBitmap);
+
+      const file = new File(['jpeg data'], 'frame_0001.jpg', { type: 'image/jpeg' });
+      const frame: SequenceFrame = { index: 0, frameNumber: 1, file };
+
+      await loadFrameImage(frame);
+
+      expect(spy).not.toHaveBeenCalled();
+      expect(frame.decodedData).toBeUndefined();
+    });
+
+    it('SLD-DEC-005: decoder failure produces descriptive error', async () => {
+      const { decoderRegistry } = await import('../../formats/DecoderRegistry');
+      vi.spyOn(decoderRegistry, 'detectAndDecode').mockRejectedValue(new Error('Corrupt EXR header'));
+
+      const file = new File([new ArrayBuffer(8)], 'broken_0001.exr');
+      const frame: SequenceFrame = { index: 0, frameNumber: 1, file };
+
+      await expect(loadFrameImage(frame)).rejects.toThrow('Failed to load frame: broken_0001.exr - Corrupt EXR header');
+    });
+
+    it('SLD-DEC-006: returns error when no decoder matches a decoder-backed extension', async () => {
+      const { decoderRegistry } = await import('../../formats/DecoderRegistry');
+      vi.spyOn(decoderRegistry, 'detectAndDecode').mockResolvedValue(null);
+
+      const file = new File([new ArrayBuffer(8)], 'frame_0001.exr');
+      const frame: SequenceFrame = { index: 0, frameNumber: 1, file };
+
+      await expect(loadFrameImage(frame)).rejects.toThrow('No decoder found for format: exr');
+    });
+
+    it('SLD-DEC-007: Cineon (.cin) files route through decoder registry and store decodedData', async () => {
+      const { decoderRegistry } = await import('../../formats/DecoderRegistry');
+
+      const mockData = new Float32Array(2 * 2 * 4);
+      vi.spyOn(decoderRegistry, 'detectAndDecode').mockResolvedValue({
+        width: 2,
+        height: 2,
+        data: mockData,
+        channels: 4,
+        colorSpace: 'log',
+        metadata: {},
+        formatName: 'Cineon',
+      });
+
+      const mockBitmap = { close: vi.fn(), width: 2, height: 2 } as unknown as ImageBitmap;
+      globalThis.createImageBitmap = vi.fn().mockResolvedValue(mockBitmap);
+
+      const file = new File([new ArrayBuffer(8)], 'plate_0001.cin');
+      const frame: SequenceFrame = { index: 0, frameNumber: 1, file };
+
+      const result = await loadFrameImage(frame);
+
+      expect(decoderRegistry.detectAndDecode).toHaveBeenCalled();
+      expect(result).toBe(mockBitmap);
+      expect(frame.decodedData).toBeDefined();
+      expect(frame.decodedData!.formatName).toBe('Cineon');
+    });
+
+    it('SLD-DEC-008: HDR (.hdr) files route through decoder registry and store decodedData', async () => {
+      const { decoderRegistry } = await import('../../formats/DecoderRegistry');
+
+      const mockData = new Float32Array(2 * 2 * 3);
+      vi.spyOn(decoderRegistry, 'detectAndDecode').mockResolvedValue({
+        width: 2,
+        height: 2,
+        data: mockData,
+        channels: 3,
+        colorSpace: 'linear',
+        metadata: {},
+        formatName: 'hdr',
+      });
+
+      const mockBitmap = { close: vi.fn(), width: 2, height: 2 } as unknown as ImageBitmap;
+      globalThis.createImageBitmap = vi.fn().mockResolvedValue(mockBitmap);
+
+      const file = new File([new ArrayBuffer(8)], 'env_0001.hdr');
+      const frame: SequenceFrame = { index: 0, frameNumber: 1, file };
+
+      const result = await loadFrameImage(frame);
+
+      expect(decoderRegistry.detectAndDecode).toHaveBeenCalled();
+      expect(result).toBe(mockBitmap);
+      expect(frame.decodedData).toBeDefined();
+      expect(frame.decodedData!.channels).toBe(3);
+    });
+
+    it('SLD-DEC-009: isFrameLoaded returns true for frames with decodedData only', () => {
+      const frame: SequenceFrame = {
+        index: 0,
+        frameNumber: 1,
+        file: new File([''], 'frame_0001.exr'),
+        decodedData: {
+          data: new Float32Array(4),
+          width: 1,
+          height: 1,
+          channels: 4,
+          colorSpace: 'linear',
+          formatName: 'exr',
+        },
+      };
+      expect(isFrameLoaded(frame)).toBe(true);
+    });
+
+    it('SLD-DEC-010: isFrameLoaded returns true for frames with image only', () => {
+      const frame: SequenceFrame = {
+        index: 0,
+        frameNumber: 1,
+        file: new File([''], 'frame_0001.png'),
+        image: { close: vi.fn(), width: 1, height: 1 } as unknown as ImageBitmap,
+      };
+      expect(isFrameLoaded(frame)).toBe(true);
+    });
+
+    it('SLD-DEC-011: isFrameLoaded returns false for unloaded frames', () => {
+      const frame: SequenceFrame = {
+        index: 0,
+        frameNumber: 1,
+        file: new File([''], 'frame_0001.exr'),
+      };
+      expect(isFrameLoaded(frame)).toBe(false);
+    });
+
+    it('SLD-DEC-012: releaseDistantFrames clears decodedData', () => {
+      const frames: SequenceFrame[] = [
+        {
+          index: 0,
+          frameNumber: 1,
+          file: new File([''], 'frame_0001.exr'),
+          image: { close: vi.fn(), width: 1, height: 1 } as unknown as ImageBitmap,
+          decodedData: {
+            data: new Float32Array(4),
+            width: 1,
+            height: 1,
+            channels: 4,
+            colorSpace: 'linear',
+            formatName: 'exr',
+          },
+        },
+      ];
+
+      releaseDistantFrames(frames, 100, 10); // Far from frame 0
+
+      expect(frames[0]!.image).toBeUndefined();
+      expect(frames[0]!.decodedData).toBeUndefined();
+    });
+
+    it('SLD-DEC-013: disposeSequence clears decodedData', () => {
+      const frames: SequenceFrame[] = [
+        {
+          index: 0,
+          frameNumber: 1,
+          file: new File([''], 'frame_0001.exr'),
+          image: { close: vi.fn(), width: 1, height: 1 } as unknown as ImageBitmap,
+          decodedData: {
+            data: new Float32Array(4),
+            width: 1,
+            height: 1,
+            channels: 4,
+            colorSpace: 'linear',
+            formatName: 'exr',
+          },
+        },
+      ];
+
+      disposeSequence(frames);
+
+      expect(frames[0]!.image).toBeUndefined();
+      expect(frames[0]!.decodedData).toBeUndefined();
+    });
+  });
+
+  describe('decoder-backed abort handling', () => {
+    let origCreateImageBitmap: typeof globalThis.createImageBitmap;
+
+    beforeEach(() => {
+      origCreateImageBitmap = globalThis.createImageBitmap;
+    });
+
+    afterEach(() => {
+      globalThis.createImageBitmap = origCreateImageBitmap;
+      vi.restoreAllMocks();
+    });
+
+    it('SLD-ABORT-001: abort before arrayBuffer() completes throws AbortError', async () => {
+      const controller = new AbortController();
+
+      // Make arrayBuffer() hang until we abort
+      const file = new File([new ArrayBuffer(8)], 'frame_0001.exr');
+      const origArrayBuffer = file.arrayBuffer.bind(file);
+      vi.spyOn(file, 'arrayBuffer').mockImplementation(() => {
+        controller.abort();
+        return origArrayBuffer();
+      });
+
+      const frame: SequenceFrame = { index: 0, frameNumber: 1, file };
+
+      await expect(loadFrameImage(frame, controller.signal)).rejects.toThrow(/aborted/i);
+      // decodedData should not be set on abort
+      expect(frame.decodedData).toBeUndefined();
+    });
+
+    it('SLD-ABORT-002: abort between arrayBuffer() and detectAndDecode() throws AbortError', async () => {
+      const { decoderRegistry } = await import('../../formats/DecoderRegistry');
+      const controller = new AbortController();
+
+      const file = new File([new ArrayBuffer(8)], 'frame_0001.exr');
+      // arrayBuffer resolves normally, but we abort right after
+      vi.spyOn(file, 'arrayBuffer').mockImplementation(async () => {
+        controller.abort();
+        return new ArrayBuffer(8);
+      });
+
+      const spy = vi.spyOn(decoderRegistry, 'detectAndDecode');
+
+      const frame: SequenceFrame = { index: 0, frameNumber: 1, file };
+
+      await expect(loadFrameImage(frame, controller.signal)).rejects.toThrow(/aborted/i);
+      // detectAndDecode should not have been called since we check signal after arrayBuffer
+      expect(spy).not.toHaveBeenCalled();
+      expect(frame.decodedData).toBeUndefined();
+    });
+
+    it('SLD-ABORT-003: abort after detectAndDecode() but before bitmap creation throws AbortError', async () => {
+      const { decoderRegistry } = await import('../../formats/DecoderRegistry');
+      const controller = new AbortController();
+
+      const mockData = new Float32Array(2 * 2 * 4);
+      vi.spyOn(decoderRegistry, 'detectAndDecode').mockImplementation(async () => {
+        controller.abort();
+        return {
+          width: 2,
+          height: 2,
+          data: mockData,
+          channels: 4,
+          colorSpace: 'linear',
+          metadata: {},
+          formatName: 'exr',
+        };
+      });
+
+      const file = new File([new ArrayBuffer(8)], 'frame_0001.exr');
+      const frame: SequenceFrame = { index: 0, frameNumber: 1, file };
+
+      await expect(loadFrameImage(frame, controller.signal)).rejects.toThrow(/aborted/i);
+      // image should not be set on abort
+      expect(frame.image).toBeUndefined();
+    });
+
+    it('SLD-ABORT-004: abort after bitmap creation closes bitmap and throws AbortError', async () => {
+      const { decoderRegistry } = await import('../../formats/DecoderRegistry');
+      const controller = new AbortController();
+
+      const mockData = new Float32Array(2 * 2 * 4);
+      vi.spyOn(decoderRegistry, 'detectAndDecode').mockResolvedValue({
+        width: 2,
+        height: 2,
+        data: mockData,
+        channels: 4,
+        colorSpace: 'linear',
+        metadata: {},
+        formatName: 'exr',
+      });
+
+      const mockBitmap = { close: vi.fn(), width: 2, height: 2 } as unknown as ImageBitmap;
+      globalThis.createImageBitmap = vi.fn().mockImplementation(async () => {
+        controller.abort();
+        return mockBitmap;
+      });
+
+      const file = new File([new ArrayBuffer(8)], 'frame_0001.exr');
+      const frame: SequenceFrame = { index: 0, frameNumber: 1, file };
+
+      await expect(loadFrameImage(frame, controller.signal)).rejects.toThrow(/aborted/i);
+      // bitmap should have been closed since we abort after it's created
+      expect(mockBitmap.close).toHaveBeenCalled();
+      expect(frame.image).toBeUndefined();
+    });
+
+    it('SLD-ABORT-005: pre-aborted signal throws immediately without loading', async () => {
+      const controller = new AbortController();
+      controller.abort();
+
+      const file = new File([new ArrayBuffer(8)], 'frame_0001.exr');
+      const frame: SequenceFrame = { index: 0, frameNumber: 1, file };
+
+      await expect(loadFrameImage(frame, controller.signal)).rejects.toThrow(/aborted/i);
+      expect(frame.decodedData).toBeUndefined();
+      expect(frame.image).toBeUndefined();
+    });
+  });
+
+  describe('float32ToImageBitmap', () => {
+    let origCreateImageBitmap: typeof globalThis.createImageBitmap;
+
+    beforeEach(() => {
+      origCreateImageBitmap = globalThis.createImageBitmap;
+    });
+
+    afterEach(() => {
+      globalThis.createImageBitmap = origCreateImageBitmap;
+    });
+
+    it('SLD-F32-001: converts RGBA Float32Array to ImageBitmap via ImageData', async () => {
+      const mockBitmap = { close: vi.fn(), width: 2, height: 2 } as unknown as ImageBitmap;
+      globalThis.createImageBitmap = vi.fn().mockResolvedValue(mockBitmap);
+
+      // 2x2 image, 4 channels, all pixels at 0.5
+      const data = new Float32Array(2 * 2 * 4).fill(0.5);
+
+      const result = await float32ToImageBitmap(data, 2, 2, 4);
+
+      expect(result).toBe(mockBitmap);
+      // Verify createImageBitmap was called with an ImageData
+      expect(globalThis.createImageBitmap).toHaveBeenCalledTimes(1);
+      const arg = (globalThis.createImageBitmap as any).mock.calls[0][0];
+      expect(arg).toBeInstanceOf(ImageData);
+      expect(arg.width).toBe(2);
+      expect(arg.height).toBe(2);
+      // 0.5 * 255 = 127.5 → Math.round = 128
+      expect(arg.data[0]).toBe(128);
+      expect(arg.data[1]).toBe(128);
+      expect(arg.data[2]).toBe(128);
+      expect(arg.data[3]).toBe(128); // alpha from data
+    });
+
+    it('SLD-F32-002: clamps values above 1.0 and below 0.0', async () => {
+      const mockBitmap = { close: vi.fn(), width: 1, height: 1 } as unknown as ImageBitmap;
+      globalThis.createImageBitmap = vi.fn().mockResolvedValue(mockBitmap);
+
+      // HDR values > 1.0 should clamp to 255, negative values clamp to 0
+      const data = new Float32Array([2.0, -0.5, 1.0, 0.0]);
+
+      await float32ToImageBitmap(data, 1, 1, 4);
+
+      const arg = (globalThis.createImageBitmap as any).mock.calls[0][0];
+      expect(arg.data[0]).toBe(255); // clamped from 2.0
+      expect(arg.data[1]).toBe(0); // clamped from -0.5
+      expect(arg.data[2]).toBe(255); // 1.0 → 255
+      expect(arg.data[3]).toBe(0); // 0.0 → 0
+    });
+
+    it('SLD-F32-003: handles 3-channel (RGB) data by setting alpha to 255', async () => {
+      const mockBitmap = { close: vi.fn(), width: 1, height: 1 } as unknown as ImageBitmap;
+      globalThis.createImageBitmap = vi.fn().mockResolvedValue(mockBitmap);
+
+      const data = new Float32Array([0.5, 0.5, 0.5]);
+
+      await float32ToImageBitmap(data, 1, 1, 3);
+
+      const arg = (globalThis.createImageBitmap as any).mock.calls[0][0];
+      expect(arg.data[0]).toBe(128);
+      expect(arg.data[1]).toBe(128);
+      expect(arg.data[2]).toBe(128);
+      expect(arg.data[3]).toBe(255); // alpha defaults to 255 for 3-channel
+    });
+  });
+
+  // =========================================================================
+  // URL-based Sequence Utilities (Issue #519)
+  // =========================================================================
+
+  describe('isSequencePattern', () => {
+    it('SLD-URL-001: detects hash notation', () => {
+      expect(isSequencePattern('/path/to/shot.####.exr')).toBe(true);
+      expect(isSequencePattern('frame_##.png')).toBe(true);
+    });
+
+    it('SLD-URL-002: detects printf notation', () => {
+      expect(isSequencePattern('/path/to/shot.%04d.exr')).toBe(true);
+      expect(isSequencePattern('frame_%d.png')).toBe(true);
+    });
+
+    it('SLD-URL-003: detects at-sign notation', () => {
+      expect(isSequencePattern('/path/to/shot.@@@@.exr')).toBe(true);
+    });
+
+    it('SLD-URL-004: rejects plain filenames', () => {
+      expect(isSequencePattern('/path/to/image.exr')).toBe(false);
+      expect(isSequencePattern('https://example.com/photo.jpg')).toBe(false);
+      expect(isSequencePattern('')).toBe(false);
+    });
+  });
+
+  describe('expandPatternToURLs', () => {
+    it('SLD-URL-005: expands hash pattern to frame URLs', () => {
+      const urls = expandPatternToURLs('/path/shot.####.exr', 1001, 1003);
+      expect(urls).toEqual(['/path/shot.1001.exr', '/path/shot.1002.exr', '/path/shot.1003.exr']);
+    });
+
+    it('SLD-URL-006: expands printf pattern to frame URLs', () => {
+      const urls = expandPatternToURLs('/path/shot.%04d.exr', 1, 3);
+      expect(urls).toEqual(['/path/shot.0001.exr', '/path/shot.0002.exr', '/path/shot.0003.exr']);
+    });
+
+    it('SLD-URL-007: expands at-sign pattern to frame URLs', () => {
+      const urls = expandPatternToURLs('frame.@@.png', 5, 7);
+      expect(urls).toEqual(['frame.05.png', 'frame.06.png', 'frame.07.png']);
+    });
+
+    it('SLD-URL-008: returns empty for non-pattern string', () => {
+      expect(expandPatternToURLs('plain.exr', 1, 10)).toEqual([]);
+    });
+
+    it('SLD-URL-009: single frame range', () => {
+      const urls = expandPatternToURLs('/path/shot.####.exr', 42, 42);
+      expect(urls).toEqual(['/path/shot.0042.exr']);
+    });
+  });
+
+  describe('loadFrameImageFromURL', () => {
+    it('SLD-URL-010: returns existing image if already loaded', async () => {
+      const mockBitmap = { width: 100, height: 100, close: vi.fn() } as unknown as ImageBitmap;
+      const frame: SequenceFrame = {
+        index: 0,
+        frameNumber: 1,
+        file: new File([], 'test.png'),
+        url: 'http://example.com/frame.0001.png',
+        image: mockBitmap,
+      };
+
+      const result = await loadFrameImageFromURL(frame);
+      expect(result).toBe(mockBitmap);
+    });
+
+    it('SLD-URL-011: throws if frame has no URL', async () => {
+      const frame: SequenceFrame = {
+        index: 0,
+        frameNumber: 1,
+        file: new File([], 'test.png'),
+      };
+
+      await expect(loadFrameImageFromURL(frame)).rejects.toThrow('has no URL');
+    });
+  });
+
+  // =========================================================================
+  // Regression tests for Issue #520 — pattern string wiring
+  // =========================================================================
+
+  describe('Issue #520: pattern notation wiring into production paths', () => {
+    describe('hash notation (####) end-to-end', () => {
+      it('SLD-520-001: shot.####.exr is correctly parsed and generates filenames', () => {
+        const parsed = parsePatternNotation('shot.####.exr');
+        expect(parsed).not.toBeNull();
+        expect(parsed!.notation).toBe('hash');
+        expect(parsed!.prefix).toBe('shot.');
+        expect(parsed!.suffix).toBe('.exr');
+        expect(parsed!.padding).toBe(4);
+        expect(parsed!.extension).toBe('exr');
+
+        expect(generateFilename(parsed!, 1)).toBe('shot.0001.exr');
+        expect(generateFilename(parsed!, 1001)).toBe('shot.1001.exr');
+        expect(generateFilename(parsed!, 99999)).toBe('shot.99999.exr');
+      });
+
+      it('SLD-520-002: isSequencePattern detects hash notation', () => {
+        expect(isSequencePattern('shot.####.exr')).toBe(true);
+        expect(isSequencePattern('/path/to/shot.####.exr')).toBe(true);
+        expect(isSequencePattern('render_######.tif')).toBe(true);
+      });
+
+      it('SLD-520-003: expandPatternToURLs produces correct frame URLs for hash', () => {
+        const urls = expandPatternToURLs('shot.####.exr', 1001, 1003);
+        expect(urls).toEqual(['shot.1001.exr', 'shot.1002.exr', 'shot.1003.exr']);
+      });
+    });
+
+    describe('printf notation (%04d) end-to-end', () => {
+      it('SLD-520-004: frame.%04d.exr is correctly parsed and generates filenames', () => {
+        const parsed = parsePatternNotation('frame.%04d.exr');
+        expect(parsed).not.toBeNull();
+        expect(parsed!.notation).toBe('printf');
+        expect(parsed!.prefix).toBe('frame.');
+        expect(parsed!.suffix).toBe('.exr');
+        expect(parsed!.padding).toBe(4);
+        expect(parsed!.extension).toBe('exr');
+
+        expect(generateFilename(parsed!, 1)).toBe('frame.0001.exr');
+        expect(generateFilename(parsed!, 42)).toBe('frame.0042.exr');
+      });
+
+      it('SLD-520-005: isSequencePattern detects printf notation', () => {
+        expect(isSequencePattern('frame.%04d.exr')).toBe(true);
+        expect(isSequencePattern('/renders/shot_%08d.dpx')).toBe(true);
+        expect(isSequencePattern('img_%d.png')).toBe(true);
+      });
+
+      it('SLD-520-006: expandPatternToURLs produces correct frame URLs for printf', () => {
+        const urls = expandPatternToURLs('frame.%04d.exr', 1, 3);
+        expect(urls).toEqual(['frame.0001.exr', 'frame.0002.exr', 'frame.0003.exr']);
+      });
+    });
+
+    describe('at-sign notation (@@@@) end-to-end', () => {
+      it('SLD-520-007: render.@@@@.exr is correctly parsed and generates filenames', () => {
+        const parsed = parsePatternNotation('render.@@@@.exr');
+        expect(parsed).not.toBeNull();
+        expect(parsed!.notation).toBe('at');
+        expect(parsed!.prefix).toBe('render.');
+        expect(parsed!.suffix).toBe('.exr');
+        expect(parsed!.padding).toBe(4);
+        expect(parsed!.extension).toBe('exr');
+
+        expect(generateFilename(parsed!, 1)).toBe('render.0001.exr');
+        expect(generateFilename(parsed!, 50)).toBe('render.0050.exr');
+      });
+
+      it('SLD-520-008: isSequencePattern detects at-sign notation', () => {
+        expect(isSequencePattern('render.@@@@.exr')).toBe(true);
+        expect(isSequencePattern('/path/shot.@@.png')).toBe(true);
+      });
+
+      it('SLD-520-009: expandPatternToURLs produces correct frame URLs for at-sign', () => {
+        const urls = expandPatternToURLs('render.@@@@.exr', 10, 12);
+        expect(urls).toEqual(['render.0010.exr', 'render.0011.exr', 'render.0012.exr']);
+      });
+    });
+
+    describe('invalid pattern strings handled gracefully', () => {
+      it('SLD-520-010: regular filenames are not mistaken for patterns', () => {
+        expect(isSequencePattern('shot.0001.exr')).toBe(false);
+        expect(isSequencePattern('image.png')).toBe(false);
+        expect(isSequencePattern('')).toBe(false);
+        expect(isSequencePattern('no_pattern_here')).toBe(false);
+      });
+
+      it('SLD-520-011: parsePatternNotation returns null for invalid patterns', () => {
+        expect(parsePatternNotation('shot.0001.exr')).toBeNull();
+        expect(parsePatternNotation('image.png')).toBeNull();
+        expect(parsePatternNotation('')).toBeNull();
+        expect(parsePatternNotation('no_extension')).toBeNull();
+      });
+
+      it('SLD-520-012: expandPatternToURLs returns empty for invalid patterns', () => {
+        expect(expandPatternToURLs('not_a_pattern.exr', 1, 10)).toEqual([]);
+        expect(expandPatternToURLs('', 1, 10)).toEqual([]);
+      });
+
+      it('SLD-520-013: createSequenceInfoFromPattern rejects invalid patterns', async () => {
+        await expect(createSequenceInfoFromPattern('not_a_pattern.exr', 1, 10)).rejects.toThrow(
+          'Invalid sequence pattern',
+        );
+      });
+    });
+
+    describe('cross-notation conversion', () => {
+      it('SLD-520-014: hash notation converts to printf and back', () => {
+        const hash = 'shot.####.exr';
+        const printf = toPrintfNotation(hash);
+        expect(printf).toBe('shot.%04d.exr');
+        const backToHash = toHashNotation(printf);
+        expect(backToHash).toBe('shot.####.exr');
+      });
+
+      it('SLD-520-015: at-sign notation converts to hash', () => {
+        const at = 'render.@@@@.exr';
+        const hash = toHashNotation(at);
+        expect(hash).toBe('render.####.exr');
+      });
+
+      it('SLD-520-016: at-sign notation converts to printf', () => {
+        const at = 'render.@@@@.exr';
+        const printf = toPrintfNotation(at);
+        expect(printf).toBe('render.%04d.exr');
+      });
+    });
+
+    describe('integration with existing sequence loading', () => {
+      it('SLD-520-017: pattern-based filenames match files found by discoverSequences', () => {
+        // Simulate files that would result from expanding shot.####.exr
+        const files = [
+          new File([''], 'shot.0001.exr'),
+          new File([''], 'shot.0002.exr'),
+          new File([''], 'shot.0003.exr'),
+        ];
+
+        // discoverSequences should find them
+        const sequences = discoverSequences(files);
+        expect(sequences.size).toBe(1);
+        expect(sequences.has('shot.####.exr')).toBe(true);
+
+        // The pattern key from discoverSequences should be parseable
+        const patternKey = Array.from(sequences.keys())[0]!;
+        const parsed = parsePatternNotation(patternKey);
+        expect(parsed).not.toBeNull();
+        expect(parsed!.notation).toBe('hash');
+      });
+
+      it('SLD-520-018: generateFilename output matches extractFrameNumber input', () => {
+        const parsed = parsePatternNotation('shot.####.exr')!;
+        for (let f = 1; f <= 10; f++) {
+          const filename = generateFilename(parsed, f);
+          const extracted = extractFrameNumber(filename);
+          expect(extracted).toBe(f);
+        }
+      });
+
+      it('SLD-520-019: printf pattern-generated filenames work with extractPatternFromFilename', () => {
+        const parsed = parsePatternNotation('frame.%04d.png')!;
+        const filename = generateFilename(parsed, 42);
+        expect(filename).toBe('frame.0042.png');
+
+        const inferred = extractPatternFromFilename(filename);
+        expect(inferred).not.toBeNull();
+        expect(inferred!.prefix).toBe('frame.');
+        expect(inferred!.frameNumber).toBe(42);
+        expect(inferred!.padding).toBe(4);
+      });
+
+      it('SLD-520-020: at-sign pattern-generated filenames work with extractPatternFromFilename', () => {
+        const parsed = parsePatternNotation('render.@@@@.exr')!;
+        const filename = generateFilename(parsed, 1001);
+        expect(filename).toBe('render.1001.exr');
+
+        const inferred = extractPatternFromFilename(filename);
+        expect(inferred).not.toBeNull();
+        expect(inferred!.prefix).toBe('render.');
+        expect(inferred!.frameNumber).toBe(1001);
+      });
+    });
+  });
+
+  describe('documentation regression — direct session path defaults', () => {
+    // These tests verify that the default parameter values of preloadFrames()
+    // and releaseDistantFrames() match what is documented in
+    // docs/playback/image-sequences.md under the "Direct Session Path" section.
+    // If any of these fail, update the documentation to match the new defaults.
+
+    it('SLD-600-001: preloadFrames default windowSize is 5', () => {
+      // Verify the default parameter value directly by inspecting behavior.
+      // preloadFrames(frames, currentIndex, windowSize=5) should default
+      // to loading 5 frames on each side of currentIndex.
+      expect(preloadFrames.length).toBe(2); // 2 required params before the optional windowSize
+      // The default value is encoded in the function signature as windowSize = 5.
+      // We verify by checking that calling with no explicit windowSize produces
+      // the same result as calling with windowSize=5.
+      // Build a frame set where we can detect the window range via loadFrameImage calls.
+      const frames: import('./SequenceLoader').SequenceFrame[] = [];
+      for (let i = 0; i < 20; i++) {
+        frames.push({
+          index: i,
+          file: new File([], `frame_${String(i).padStart(3, '0')}.png`),
+          frameNumber: i + 1,
+        });
+      }
+      // With default windowSize=5, preloading around index 10 should load
+      // frames 5..15. We rely on the function signature default = 5.
+      // If someone changes the default, this assertion will fail.
+      const src = preloadFrames.toString();
+      expect(src).toMatch(/windowSize\s*(?::\s*number\s*)?=\s*5/);
+    });
+
+    it('SLD-600-002: releaseDistantFrames default keepWindow is 10', () => {
+      // Verify the default keepWindow value is 10 by inspecting the
+      // function signature. If someone changes the default, this assertion
+      // will fail and the docs need updating.
+      const src = releaseDistantFrames.toString();
+      expect(src).toMatch(/keepWindow\s*(?::\s*number\s*)?=\s*10/);
     });
   });
 });

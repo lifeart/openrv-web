@@ -159,6 +159,9 @@ export class SessionPlayback extends EventEmitter<SessionPlaybackEvents> {
   get playDirection(): number {
     return this._playbackEngine.playDirection;
   }
+  set playDirection(value: number) {
+    this._playbackEngine.playDirection = value;
+  }
   get effectiveFps(): number {
     return this._playbackEngine.effectiveFps;
   }
@@ -570,6 +573,7 @@ export class SessionPlayback extends EventEmitter<SessionPlaybackEvents> {
     this._audioCoordinator.setCallbacks({
       onAudioPathChanged: () => this.applyVolumeToVideo(),
       onAudioScrubAvailabilityChanged: (available) => this.emit('audioScrubAvailabilityChanged', available),
+      onAudioError: (error) => this.emit('audioError', error),
     });
   }
 

@@ -529,6 +529,35 @@ describe('AutoSaveIndicator', () => {
       expect(setConfigCalls.length).toBe(0);
     });
 
+    it('AUTOSAVE-U043: versions slider max attribute is 100 (#375)', () => {
+      const manager = createMockManager();
+      indicator.connect(manager as any);
+      const element = indicator.render();
+
+      element.click();
+
+      const slider = document.body.querySelector<HTMLInputElement>('[data-testid="autosave-versions-slider"]')!;
+      expect(slider).not.toBeNull();
+      expect(slider.max).toBe('100');
+    });
+
+    it('AUTOSAVE-U044: setting max versions to 75 works within range (#375)', () => {
+      const manager = createMockManager();
+      indicator.connect(manager as any);
+      const element = indicator.render();
+
+      element.click();
+
+      const slider = document.body.querySelector<HTMLInputElement>('[data-testid="autosave-versions-slider"]')!;
+      slider.value = '75';
+      slider.dispatchEvent(new Event('input'));
+
+      expect(manager.setConfig).toHaveBeenCalledWith({ maxVersions: 75 });
+
+      const label = document.body.querySelector('[data-testid="autosave-versions-label"]');
+      expect(label?.textContent).toBe('Max versions: 75');
+    });
+
     it('AUTOSAVE-U042: Escape key closes popover', () => {
       const manager = createMockManager();
       indicator.connect(manager as any);
@@ -539,6 +568,140 @@ describe('AutoSaveIndicator', () => {
 
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
       expect(document.body.querySelector('[data-testid="autosave-settings-popover"]')).toBeNull();
+    });
+  });
+
+  describe('error state persistence (#392)', () => {
+    function createMockManager(
+      configOverrides: Partial<{ enabled: boolean; interval: number; maxVersions: number }> = {},
+    ) {
+      const handlers: Record<string, ((...args: any[]) => void)[]> = {};
+      const config = { enabled: true, interval: 5, maxVersions: 10, ...configOverrides };
+      return {
+        on: vi.fn((event: string, handler: (...args: any[]) => void) => {
+          if (!handlers[event]) handlers[event] = [];
+          handlers[event].push(handler);
+        }),
+        off: vi.fn(),
+        getConfig: vi.fn().mockReturnValue(config),
+        setConfig: vi.fn(),
+        getLastSaveTime: vi.fn().mockReturnValue(null),
+        hasUnsavedChanges: vi.fn().mockReturnValue(false),
+        emit(event: string, ...args: any[]) {
+          for (const h of handlers[event] ?? []) h(...args);
+        },
+      };
+    }
+
+    it('AUTOSAVE-UI-060: error state does NOT auto-clear after timeout', () => {
+      vi.useFakeTimers();
+      const manager = createMockManager();
+      indicator.connect(manager as any);
+
+      // Trigger error via manager event
+      manager.emit('error');
+      expect(indicator.getStatus()).toBe('error');
+
+      // Advance well past the old 5-second auto-clear
+      vi.advanceTimersByTime(10000);
+
+      // Error state should still be active
+      expect(indicator.getStatus()).toBe('error');
+      const text = indicator.render().querySelector('[data-testid="autosave-text"]');
+      expect(text?.textContent).toBe('Save failed');
+
+      vi.useRealTimers();
+    });
+
+    it('AUTOSAVE-UI-061: error state clears when a subsequent successful save occurs', () => {
+      vi.useFakeTimers();
+      const manager = createMockManager();
+      indicator.connect(manager as any);
+
+      // Trigger error
+      manager.emit('error');
+      expect(indicator.getStatus()).toBe('error');
+
+      // Trigger a successful save
+      manager.emit('saved', { entry: { savedAt: new Date().toISOString() } });
+      expect(indicator.getStatus()).toBe('saved');
+
+      // After the saved-state reset timer, should go to idle
+      vi.advanceTimersByTime(3000);
+      expect(indicator.getStatus()).toBe('idle');
+
+      vi.useRealTimers();
+    });
+
+    it('AUTOSAVE-UI-062: error state clears on successful retry', () => {
+      vi.useFakeTimers();
+      const manager = createMockManager();
+      indicator.connect(manager as any);
+
+      // Set up retry callback that simulates a successful save
+      indicator.setRetryCallback(() => {
+        manager.emit('saving');
+        manager.emit('saved', { entry: { savedAt: new Date().toISOString() } });
+      });
+
+      // Trigger error
+      manager.emit('error');
+      expect(indicator.getStatus()).toBe('error');
+
+      // Click to retry
+      indicator.render().click();
+
+      // Should now be in saved state (retry triggered saving then saved)
+      expect(indicator.getStatus()).toBe('saved');
+
+      vi.useRealTimers();
+    });
+  });
+
+  describe('keyboard accessibility (#70)', () => {
+    it('AUTOSAVE-UI-050: container has tabindex="0" for keyboard focus', () => {
+      const element = indicator.render();
+      expect(element.getAttribute('tabindex')).toBe('0');
+    });
+
+    it('AUTOSAVE-UI-051: container has role="button"', () => {
+      const element = indicator.render();
+      expect(element.getAttribute('role')).toBe('button');
+    });
+
+    it('AUTOSAVE-UI-052: container has aria-label', () => {
+      const element = indicator.render();
+      expect(element.getAttribute('aria-label')).toBe('Auto-save settings');
+    });
+
+    it('AUTOSAVE-UI-053: Enter key triggers handleClick', () => {
+      const callback = vi.fn();
+      indicator.setRetryCallback(callback);
+      indicator.setStatus('error');
+      const element = indicator.render();
+
+      element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      expect(callback).toHaveBeenCalledTimes(1);
+    });
+
+    it('AUTOSAVE-UI-054: Space key triggers handleClick', () => {
+      const callback = vi.fn();
+      indicator.setRetryCallback(callback);
+      indicator.setStatus('error');
+      const element = indicator.render();
+
+      element.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+      expect(callback).toHaveBeenCalledTimes(1);
+    });
+
+    it('AUTOSAVE-UI-055: other keys do not trigger handleClick', () => {
+      const callback = vi.fn();
+      indicator.setRetryCallback(callback);
+      indicator.setStatus('error');
+      const element = indicator.render();
+
+      element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+      expect(callback).not.toHaveBeenCalled();
     });
   });
 });

@@ -12,13 +12,15 @@
  */
 
 import { PLAY_MODE_TO_LOOP, LOOP_TO_PLAY_MODE, FilterNearest, FilterLinear } from './constants';
+import type { BackgroundPatternState } from '../core/types/background';
 
 /**
  * Lazily resolve the openrv API from the global scope.
  * This avoids hard coupling and lets the compat layer be instantiated
  * before or after the main API.
  */
-function getOpenRV(): {
+/** Shape of the openrv API subset used by MuCommands. */
+type OpenRVCompat = {
   playback: {
     play(): void;
     pause(): void;
@@ -30,11 +32,19 @@ function getOpenRV(): {
     setPlaybackMode(mode: 'realtime' | 'playAllFrames'): void;
     getPlaybackMode(): 'realtime' | 'playAllFrames';
     step(n?: number): void;
+    getMeasuredFPS(): number;
+    setPlayDirection(direction: number): void;
+    getPlayDirection(): number;
+    isBuffering(): boolean;
+    getDroppedFrameCount(): number;
   };
   media: {
     getFPS(): number;
+    getPlaybackFPS(): number;
+    setPlaybackFPS(fps: number): void;
     getResolution(): { width: number; height: number };
     hasMedia(): boolean;
+    getStartFrame(): number;
   };
   audio: {
     setAudioScrubEnabled(enabled: boolean): void;
@@ -54,6 +64,11 @@ function getOpenRV(): {
     getZoom(): number;
     setPan(x: number, y: number): void;
     getPan(): { x: number; y: number };
+    setTextureFilterMode(mode: 'nearest' | 'linear'): void;
+    getTextureFilterMode(): 'nearest' | 'linear';
+    setBackgroundPattern(state: BackgroundPatternState): void;
+    getBackgroundPattern(): BackgroundPatternState;
+    getViewportSize(): { width: number; height: number };
   };
   markers: {
     add(frame: number, note?: string, color?: string): void;
@@ -61,12 +76,23 @@ function getOpenRV(): {
     get(frame: number): { frame: number; note: string; color: string } | null;
     getAll(): Array<{ frame: number; note: string; color: string }>;
   };
-} {
+};
+
+function getOpenRV(): OpenRVCompat {
   const api = (globalThis as Record<string, unknown>).openrv;
   if (!api) {
     throw new Error('window.openrv is not available. Initialize OpenRVAPI first.');
   }
-  return api as ReturnType<typeof getOpenRV>;
+  return api as OpenRVCompat;
+}
+
+/**
+ * Try to resolve the openrv API, returning null when unavailable.
+ * Used by health commands that should degrade gracefully.
+ */
+function tryGetOpenRV(): OpenRVCompat | null {
+  const api = (globalThis as Record<string, unknown>).openrv;
+  return (api as OpenRVCompat) ?? null;
 }
 
 /** Supported commands and their support status */
@@ -87,24 +113,24 @@ const SUPPORT_MAP: Record<string, true | false | 'partial'> = {
   outPoint: true,
   setInPoint: true,
   setOutPoint: true,
-  // Playback - ADD (implemented with local state)
+  // Playback - ADD
   frameStart: true,
   setFPS: true,
   realFPS: true,
   setInc: true,
   inc: true,
   skipped: true,
-  isCurrentFrameIncomplete: true,
-  isCurrentFrameError: true,
+  isCurrentFrameIncomplete: false,
+  isCurrentFrameError: false,
   isBuffering: true,
-  mbps: true,
-  resetMbps: true,
+  mbps: false,
+  resetMbps: false,
   // Audio
   scrubAudio: 'partial',
   // View & Display
   redraw: true,
   viewSize: true,
-  setViewSize: true,
+  setViewSize: 'partial',
   resizeFit: true,
   fullScreenMode: true,
   isFullScreen: true,
@@ -113,8 +139,8 @@ const SUPPORT_MAP: Record<string, true | false | 'partial'> = {
   getFiltering: true,
   setBGMethod: true,
   bgMethod: true,
-  setMargins: true,
-  margins: true,
+  setMargins: 'partial',
+  margins: 'partial',
   contentAspect: 'partial',
   devicePixelRatio: true,
   // Frame Marks
@@ -128,31 +154,7 @@ const ASYNC_COMMANDS = new Set<string>(['fullScreenMode']);
 
 export class MuCommands {
   // --- Internal state for ADD commands ---
-  private _frameStart = 1;
-  private _inc = 1;
-  private _overrideFPS: number | null = null;
-  private _skippedFrames = 0;
-  private _mbps = 0;
-  private _filterMode: number = FilterLinear;
-  private _bgMethod = 'black';
   private _margins: number[] = [0, 0, 0, 0];
-  private _canvas: HTMLCanvasElement | null = null;
-
-  /**
-   * Optionally provide a canvas reference for viewSize/setViewSize.
-   * If not provided, the first <canvas> in the document is used.
-   */
-  setCanvas(canvas: HTMLCanvasElement): void {
-    this._canvas = canvas;
-  }
-
-  private getCanvas(): HTMLCanvasElement | null {
-    if (this._canvas) return this._canvas;
-    if (typeof document !== 'undefined') {
-      return document.querySelector('canvas');
-    }
-    return null;
-  }
 
   // =====================================================================
   // Introspection
@@ -207,7 +209,7 @@ export class MuCommands {
 
   /** Get frame range start. (Mu #6) */
   frameStart(): number {
-    return this._frameStart;
+    return getOpenRV().media.getStartFrame();
   }
 
   /** Get frame range end (total frames). (Mu #7) */
@@ -220,18 +222,17 @@ export class MuCommands {
     if (typeof fps !== 'number' || isNaN(fps) || fps <= 0) {
       throw new TypeError('setFPS() requires a positive number');
     }
-    this._overrideFPS = fps;
+    getOpenRV().media.setPlaybackFPS(fps);
   }
 
   /** Get effective FPS. (Mu #9) */
   fps(): number {
-    if (this._overrideFPS !== null) return this._overrideFPS;
-    return getOpenRV().media.getFPS();
+    return getOpenRV().media.getPlaybackFPS();
   }
 
-  /** Get measured (real) FPS. (Mu #10) -- stub returns nominal FPS */
+  /** Get measured (real) playback FPS. (Mu #10) */
   realFPS(): number {
-    return this.fps();
+    return getOpenRV().playback.getMeasuredFPS();
   }
 
   /** Set realtime mode. (Mu #11) */
@@ -249,12 +250,12 @@ export class MuCommands {
     if (typeof inc !== 'number' || isNaN(inc)) {
       throw new TypeError('setInc() requires a valid number');
     }
-    this._inc = inc >= 0 ? 1 : -1;
+    getOpenRV().playback.setPlayDirection(inc);
   }
 
   /** Get playback increment. (Mu #14) */
   inc(): number {
-    return this._inc;
+    return getOpenRV().playback.getPlayDirection();
   }
 
   /** Set play mode using Mu integer constants. (Mu #15) */
@@ -298,34 +299,47 @@ export class MuCommands {
     getOpenRV().loop.setOutPoint(Math.round(frame));
   }
 
-  /** Get count of skipped frames (since last reset). (Mu #21) */
+  /** Get count of skipped (dropped) frames since last play() started. (Mu #21) */
   skipped(): number {
-    return this._skippedFrames;
+    return tryGetOpenRV()?.playback.getDroppedFrameCount() ?? 0;
   }
 
-  /** Check if current frame decode is incomplete. (Mu #22) */
+  /**
+   * Check if current frame decode is incomplete. (Mu #22)
+   * Not supported — no per-frame decode state is tracked by the web engine.
+   */
   isCurrentFrameIncomplete(): boolean {
     return false;
   }
 
-  /** Check if current frame has a decode error. (Mu #23) */
+  /**
+   * Check if current frame has a decode error. (Mu #23)
+   * Not supported — no per-frame decode error state is tracked by the web engine.
+   */
   isCurrentFrameError(): boolean {
     return false;
   }
 
   /** Check if media is buffering. (Mu #24) */
   isBuffering(): boolean {
-    return false;
+    return tryGetOpenRV()?.playback.isBuffering() ?? false;
   }
 
-  /** Get I/O throughput in megabits per second. (Mu #25) */
+  /**
+   * Get I/O throughput in megabits per second. (Mu #25)
+   * Not supported — the web engine does not track I/O throughput.
+   * Always returns 0.
+   */
   mbps(): number {
-    return this._mbps;
+    return 0;
   }
 
-  /** Reset mbps counter. (Mu #26) */
+  /**
+   * Reset mbps counter. (Mu #26)
+   * Not supported — no-op since mbps is not tracked.
+   */
   resetMbps(): void {
-    this._mbps = 0;
+    // no-op: mbps tracking is not supported in the web engine
   }
 
   // =====================================================================
@@ -359,28 +373,24 @@ export class MuCommands {
     }
   }
 
-  /** Get canvas/viewport size as [width, height]. (Mu #31) */
+  /** Get viewer viewport size as [width, height]. (Mu #31) */
   viewSize(): [number, number] {
-    const canvas = this.getCanvas();
-    if (canvas) {
-      return [canvas.width, canvas.height];
-    }
-    if (typeof window !== 'undefined') {
-      return [window.innerWidth, window.innerHeight];
-    }
-    return [0, 0];
+    const { width, height } = getOpenRV().view.getViewportSize();
+    return [width, height];
   }
 
-  /** Set canvas/viewport size. (Mu #32) */
+  /**
+   * Set viewport size. (Mu #32)
+   *
+   * Stub — in the web app the viewport is sized by the layout container,
+   * not by explicit pixel dimensions. Validates arguments but performs no
+   * actual resize.
+   */
   setViewSize(width: number, height: number): void {
     if (typeof width !== 'number' || typeof height !== 'number' || isNaN(width) || isNaN(height)) {
       throw new TypeError('setViewSize() requires valid width and height numbers');
     }
-    const canvas = this.getCanvas();
-    if (canvas) {
-      canvas.width = Math.round(width);
-      canvas.height = Math.round(height);
-    }
+    // Stub: web viewport is managed by the layout, not settable directly.
   }
 
   /** Fit image to viewport. (Mu #33) */
@@ -389,19 +399,33 @@ export class MuCommands {
   }
 
   /** Enter or exit fullscreen mode. (Mu #34) */
-  fullScreenMode(enable: boolean): void {
+  async fullScreenMode(enable: boolean): Promise<void> {
     if (typeof document === 'undefined') return;
-    if (enable) {
-      document.documentElement.requestFullscreen?.();
-    } else {
-      document.exitFullscreen?.();
+    try {
+      if (enable) {
+        const el = document.documentElement;
+        if (el.requestFullscreen) {
+          await el.requestFullscreen();
+        } else if ((el as any).webkitRequestFullscreen) {
+          await (el as any).webkitRequestFullscreen();
+        }
+      } else {
+        if (document.exitFullscreen) {
+          await document.exitFullscreen();
+        } else if ((document as any).webkitExitFullscreen) {
+          await (document as any).webkitExitFullscreen();
+        }
+      }
+    } catch {
+      // Contain rejected fullscreen promises (e.g. user gesture requirement,
+      // already in/out of fullscreen, or browser policy denial).
     }
   }
 
   /** Check if fullscreen is active. (Mu #35) */
   isFullScreen(): boolean {
     if (typeof document === 'undefined') return false;
-    return document.fullscreenElement !== null;
+    return !!(document.fullscreenElement ?? (document as any).webkitFullscreenElement);
   }
 
   // Note: center (#36) and close (#37) are N/A in browser -- Phase 8 stubs.
@@ -421,12 +445,13 @@ export class MuCommands {
     if (mode !== FilterNearest && mode !== FilterLinear) {
       throw new TypeError(`setFiltering() invalid mode: ${mode}. Use FilterNearest(0) or FilterLinear(1)`);
     }
-    this._filterMode = mode;
+    getOpenRV().view.setTextureFilterMode(mode === FilterNearest ? 'nearest' : 'linear');
   }
 
   /** Get current texture filtering mode. (Mu #40) */
   getFiltering(): number {
-    return this._filterMode;
+    const mode = getOpenRV().view.getTextureFilterMode();
+    return mode === 'nearest' ? FilterNearest : FilterLinear;
   }
 
   /** Set background method. (Mu #41) */
@@ -434,12 +459,16 @@ export class MuCommands {
     if (typeof method !== 'string') {
       throw new TypeError('setBGMethod() requires a string');
     }
-    this._bgMethod = method;
+    const current = getOpenRV().view.getBackgroundPattern();
+    getOpenRV().view.setBackgroundPattern({
+      ...current,
+      pattern: method as BackgroundPatternState['pattern'],
+    });
   }
 
   /** Get current background method. (Mu #42) */
   bgMethod(): string {
-    return this._bgMethod;
+    return getOpenRV().view.getBackgroundPattern().pattern;
   }
 
   /** Set viewport margins. (Mu #43) */
@@ -496,6 +525,8 @@ export class MuCommands {
 
   /** Get all marked frames as an integer array. (Mu #51) */
   markedFrames(): number[] {
-    return getOpenRV().markers.getAll().map((m: { frame: number }) => m.frame);
+    return getOpenRV()
+      .markers.getAll()
+      .map((m: { frame: number }) => m.frame);
   }
 }

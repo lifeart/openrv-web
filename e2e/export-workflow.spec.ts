@@ -26,10 +26,7 @@ import {
   loadRvSessionFile,
 } from './fixtures';
 
-async function setRangeValue(
-  slider: import('@playwright/test').Locator,
-  value: number,
-) {
+async function setRangeValue(slider: import('@playwright/test').Locator, value: number) {
   await slider.evaluate((el, val) => {
     const input = el as HTMLInputElement;
     input.value = String(val);
@@ -47,12 +44,12 @@ test.describe('Export Functionality', () => {
 
   test.describe('Export Controls', () => {
     test('EXPORT-001: should have export button in header', async ({ page }) => {
-      const exportButton = page.locator('button[title*="Export"], button:has-text("Export")').first();
+      const exportButton = page.locator('[data-testid="export-button"]');
       await expect(exportButton).toBeVisible();
     });
 
     test('EXPORT-002: should show export options on click', async ({ page }) => {
-      const exportButton = page.locator('button[title*="Export"], button:has-text("Export")').first();
+      const exportButton = page.locator('[data-testid="export-button"]');
       await exportButton.click();
 
       // Should show export format options
@@ -62,7 +59,7 @@ test.describe('Export Functionality', () => {
     });
 
     test('EXPORT-003: should have PNG export option', async ({ page }) => {
-      const exportButton = page.locator('button[title*="Export"], button:has-text("Export")').first();
+      const exportButton = page.locator('[data-testid="export-button"]');
       await exportButton.click();
 
       // PNG option is shown as "Save as PNG" text in export panel
@@ -71,7 +68,7 @@ test.describe('Export Functionality', () => {
     });
 
     test('EXPORT-004: should have JPEG export option', async ({ page }) => {
-      const exportButton = page.locator('button[title*="Export"], button:has-text("Export")').first();
+      const exportButton = page.locator('[data-testid="export-button"]');
       await exportButton.click();
 
       // JPEG option is shown as "Save as JPEG" text in export panel
@@ -80,7 +77,7 @@ test.describe('Export Functionality', () => {
     });
 
     test('EXPORT-005: should have WebP export option', async ({ page }) => {
-      const exportButton = page.locator('button[title*="Export"], button:has-text("Export")').first();
+      const exportButton = page.locator('[data-testid="export-button"]');
       await exportButton.click();
 
       // WebP option is shown as "Save as WebP" text in export panel
@@ -113,18 +110,20 @@ test.describe('Export Functionality', () => {
 
   test.describe('Include Annotations Option', () => {
     test('EXPORT-020: should have option to include annotations', async ({ page }) => {
-      const exportButton = page.locator('button[title*="Export"], button:has-text("Export")').first();
+      const exportButton = page.locator('[data-testid="export-button"]');
       await exportButton.click();
 
       // Look for annotations checkbox/toggle
-      const annotationsOption = page.locator('input[type="checkbox"], button').filter({ hasText: /Annotation|Include/ });
+      const annotationsOption = page
+        .locator('input[type="checkbox"], button')
+        .filter({ hasText: /Annotation|Include/ });
       // Option may exist
     });
   });
 
   test.describe('Sequence Export', () => {
     test('EXPORT-030: should have sequence export option', async ({ page }) => {
-      const exportButton = page.locator('button[title*="Export"], button:has-text("Export")').first();
+      const exportButton = page.locator('[data-testid="export-button"]');
       await exportButton.click();
 
       const sequenceOption = page.locator('button, option').filter({ hasText: /Sequence|All Frames/ });
@@ -150,7 +149,10 @@ test.describe('Export Functionality', () => {
         { x: 120, y: 120 },
         { x: 260, y: 180 },
       ]);
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.annotatedFrames?.length > 0; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.annotatedFrames?.length > 0; })()`,
+      );
 
       await enableGhostMode(page);
 
@@ -166,7 +168,10 @@ test.describe('Export Functionality', () => {
       await waitForTestHelper(page);
 
       await loadRvSessionFile(page, outputPath);
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.ghostMode === true && s?.annotatedFrames?.length > 0; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.ghostMode === true && s?.annotatedFrames?.length > 0; })()`,
+      );
 
       const restoredPaint = await getPaintState(page);
       expect(restoredPaint.ghostMode).toBe(true);
@@ -177,6 +182,13 @@ test.describe('Export Functionality', () => {
       await waitForTestHelper(page);
       await loadRvSession(page);
 
+      // Dismiss RV/GTO Import Warning dialog if present
+      const okButton = page.locator('dialog button:has-text("OK"), [role="dialog"] button:has-text("OK")');
+      if (await okButton.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await okButton.click();
+        await page.waitForTimeout(200);
+      }
+
       await page.click('button[data-tab-id="annotate"]');
       await waitForTabActive(page, 'annotate');
       await page.keyboard.press('p');
@@ -186,7 +198,10 @@ test.describe('Export Functionality', () => {
         { x: 140, y: 140 },
         { x: 220, y: 200 },
       ]);
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.annotatedFrames?.length > 0; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.annotatedFrames?.length > 0; })()`,
+      );
 
       await enableGhostMode(page);
 
@@ -198,7 +213,10 @@ test.describe('Export Functionality', () => {
       await waitForTestHelper(page);
 
       await loadRvSessionFile(page, outputPath);
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.ghostMode === true && s?.annotatedFrames?.length > 0; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.ghostMode === true && s?.annotatedFrames?.length > 0; })()`,
+      );
 
       const restoredPaint = await getPaintState(page);
       expect(restoredPaint.ghostMode).toBe(true);
@@ -225,7 +243,10 @@ test.describe('Full Workflow Tests', () => {
 
     // Navigate to start - Home should go to inPoint (usually frame 0 or 1)
     await page.keyboard.press('Home');
-    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentFrame === s?.inPoint; })()`);
+    await waitForCondition(
+      page,
+      `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentFrame === s?.inPoint; })()`,
+    );
     const homeState = await page.evaluate(() => window.__OPENRV_TEST__?.getSessionState());
     const startFrame = homeState!.currentFrame;
     // Home goes to inPoint, which is at the beginning
@@ -240,14 +261,20 @@ test.describe('Full Workflow Tests', () => {
 
     // Navigate to end - End should go to outPoint
     await page.keyboard.press('End');
-    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentFrame === s?.outPoint; })()`);
+    await waitForCondition(
+      page,
+      `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentFrame === s?.outPoint; })()`,
+    );
     const endState = await page.evaluate(() => window.__OPENRV_TEST__?.getSessionState());
     // End goes to outPoint
     expect(endState?.currentFrame).toBe(endState!.outPoint);
 
     // Go back to start for zoom test
     await page.keyboard.press('Home');
-    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentFrame === s?.inPoint; })()`);
+    await waitForCondition(
+      page,
+      `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentFrame === s?.inPoint; })()`,
+    );
 
     // Zoom using View tab - pick 200% from zoom dropdown
     await page.click('button[data-tab-id="view"]');
@@ -257,14 +284,22 @@ test.describe('Full Workflow Tests', () => {
     const zoomDropdown = page.locator('[data-testid="zoom-dropdown"]');
     await expect(zoomDropdown).toBeVisible();
     await zoomDropdown.locator('button', { hasText: '200%' }).click();
-    await waitForZoomLevel(page, 2, 0.01);
+    await page.waitForTimeout(300);
+    // Wait for zoom state to update (may not be exactly 2.0 due to DPR scaling)
+    await waitForCondition(
+      page,
+      `(() => { const s = window.__OPENRV_TEST__?.getViewerState(); return s != null && s.zoom > 1.5; })()`,
+    );
     const zoomState = await page.evaluate(() => window.__OPENRV_TEST__?.getViewerState());
     expect(zoomState?.zoom).toBeGreaterThan(1);
     await expect(zoomButton).toContainText('200%');
 
     // Fit back - F key fits to window
     await page.keyboard.press('f');
-    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getViewerState(); return s != null && Math.abs(s.zoom - 2) > 0.01; })()`);
+    await waitForCondition(
+      page,
+      `(() => { const s = window.__OPENRV_TEST__?.getViewerState(); return s != null && Math.abs(s.zoom - 2) > 0.01; })()`,
+    );
     const fitState = await page.evaluate(() => window.__OPENRV_TEST__?.getViewerState());
     // Fit to window means zoom will be calculated to fit - verify it changed from 2
     expect(fitState?.zoom).not.toBe(2);
@@ -310,7 +345,10 @@ test.describe('Full Workflow Tests', () => {
 
     // Adjust exposure - find the slider in the panel
     // The slider rows have label elements with text, and input[type="range"] siblings
-    const exposureSlider = colorPanel.locator('label:has-text("Exposure")').locator('..').locator('input[type="range"]');
+    const exposureSlider = colorPanel
+      .locator('label:has-text("Exposure")')
+      .locator('..')
+      .locator('input[type="range"]');
     await setRangeValue(exposureSlider, 1.5);
     await waitForExposure(page, 1.5, 0.01);
 
@@ -354,7 +392,10 @@ test.describe('Full Workflow Tests', () => {
 
     // Go to start frame and draw
     await page.keyboard.press('Home');
-    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentFrame === s?.inPoint; })()`);
+    await waitForCondition(
+      page,
+      `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentFrame === s?.inPoint; })()`,
+    );
 
     const startState = await page.evaluate(() => window.__OPENRV_TEST__?.getSessionState());
     const startFrame = startState!.currentFrame;
@@ -367,7 +408,10 @@ test.describe('Full Workflow Tests', () => {
     await page.mouse.down();
     await page.mouse.move(box!.x + 200, box!.y + 200);
     await page.mouse.up();
-    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.annotatedFrames?.length > 0; })()`);
+    await waitForCondition(
+      page,
+      `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.annotatedFrames?.length > 0; })()`,
+    );
 
     // Verify start frame is annotated
     const afterDraw1 = await page.evaluate(() => window.__OPENRV_TEST__?.getPaintState());
@@ -387,7 +431,10 @@ test.describe('Full Workflow Tests', () => {
     await page.mouse.down();
     await page.mouse.move(box!.x + 150, box!.y + 150);
     await page.mouse.up();
-    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.annotatedFrames?.length === 2; })()`);
+    await waitForCondition(
+      page,
+      `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.annotatedFrames?.length === 2; })()`,
+    );
 
     // Verify second frame is also annotated
     const afterDraw2 = await page.evaluate(() => window.__OPENRV_TEST__?.getPaintState());
@@ -396,9 +443,15 @@ test.describe('Full Workflow Tests', () => {
 
     // Navigate to first annotated frame
     await page.keyboard.press('Home');
-    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentFrame === s?.inPoint; })()`);
-    await page.keyboard.press('.');  // Next annotated frame
-    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return [${startFrame}, ${secondFrame}].includes(s?.currentFrame); })()`);
+    await waitForCondition(
+      page,
+      `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentFrame === s?.inPoint; })()`,
+    );
+    await page.keyboard.press('.'); // Next annotated frame
+    await waitForCondition(
+      page,
+      `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return [${startFrame}, ${secondFrame}].includes(s?.currentFrame); })()`,
+    );
 
     const navState = await page.evaluate(() => window.__OPENRV_TEST__?.getSessionState());
     // Should be at one of the annotated frames
@@ -406,7 +459,10 @@ test.describe('Full Workflow Tests', () => {
 
     // Undo last stroke
     await page.keyboard.press('Control+z');
-    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canRedo === true; })()`);
+    await waitForCondition(
+      page,
+      `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canRedo === true; })()`,
+    );
 
     // Verify undo worked (redo should now be available)
     const afterUndo = await page.evaluate(() => window.__OPENRV_TEST__?.getPaintState());
@@ -439,7 +495,10 @@ test.describe('Full Workflow Tests', () => {
 
     // Flip horizontal using keyboard shortcut
     await page.keyboard.press('Alt+h');
-    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getTransformState(); return s?.flipH === true; })()`);
+    await waitForCondition(
+      page,
+      `(() => { const s = window.__OPENRV_TEST__?.getTransformState(); return s?.flipH === true; })()`,
+    );
 
     // Verify flip H changed
     const afterFlipH = await page.evaluate(() => window.__OPENRV_TEST__?.getTransformState());
@@ -515,8 +574,11 @@ test.describe('Full Workflow Tests', () => {
     await expect(colorPanel).toBeVisible();
 
     // Adjust exposure using a valid value (-5 to +5 range)
-    const exposureSlider = colorPanel.locator('label:has-text("Exposure")').locator('..').locator('input[type="range"]');
-    await setRangeValue(exposureSlider, 2);  // +2 stops exposure
+    const exposureSlider = colorPanel
+      .locator('label:has-text("Exposure")')
+      .locator('..')
+      .locator('input[type="range"]');
+    await setRangeValue(exposureSlider, 2); // +2 stops exposure
     await waitForExposure(page, 2, 0.01);
 
     // Verify exposure changed
@@ -531,7 +593,10 @@ test.describe('Full Workflow Tests', () => {
 
     // Cycle wipe and ensure mode changes from horizontal
     await page.keyboard.press('Shift+w');
-    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getViewerState(); return s?.wipeMode !== 'horizontal'; })()`);
+    await waitForCondition(
+      page,
+      `(() => { const s = window.__OPENRV_TEST__?.getViewerState(); return s?.wipeMode !== 'horizontal'; })()`,
+    );
     let currentMode = (await page.evaluate(() => window.__OPENRV_TEST__?.getViewerState()))?.wipeMode;
     expect(currentMode).not.toBe('horizontal');
 
@@ -539,7 +604,10 @@ test.describe('Full Workflow Tests', () => {
     for (let i = 0; i < 6 && currentMode !== 'off'; i++) {
       const prevMode = currentMode;
       await page.keyboard.press('Shift+w');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getViewerState(); return s?.wipeMode !== '${prevMode}'; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getViewerState(); return s?.wipeMode !== '${prevMode}'; })()`,
+      );
       currentMode = (await page.evaluate(() => window.__OPENRV_TEST__?.getViewerState()))?.wipeMode;
     }
     expect(currentMode).toBe('off');
@@ -558,7 +626,10 @@ test.describe('Full Workflow Tests', () => {
 
     // Navigate to start then move forward 5 frames
     await page.keyboard.press('Home');
-    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentFrame === s?.inPoint; })()`);
+    await waitForCondition(
+      page,
+      `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentFrame === s?.inPoint; })()`,
+    );
     const startState = await page.evaluate(() => window.__OPENRV_TEST__?.getSessionState());
     const startFrame = startState!.currentFrame;
 
@@ -569,7 +640,10 @@ test.describe('Full Workflow Tests', () => {
 
     // Set in point
     await page.keyboard.press('i');
-    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.inPoint === ${startFrame + 5}; })()`);
+    await waitForCondition(
+      page,
+      `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.inPoint === ${startFrame + 5}; })()`,
+    );
 
     // Verify in point set to current frame
     const afterInPoint = await page.evaluate(() => window.__OPENRV_TEST__?.getSessionState());
@@ -584,7 +658,10 @@ test.describe('Full Workflow Tests', () => {
 
     // Set out point
     await page.keyboard.press('o');
-    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.outPoint === ${startFrame + 15}; })()`);
+    await waitForCondition(
+      page,
+      `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.outPoint === ${startFrame + 15}; })()`,
+    );
 
     // Verify out point set
     const afterOutPoint = await page.evaluate(() => window.__OPENRV_TEST__?.getSessionState());
@@ -593,9 +670,9 @@ test.describe('Full Workflow Tests', () => {
 
     // Toggle loop mode - L cycles through: once -> loop -> pingpong -> once
     const expectedNextMode: Record<string, string> = {
-      'once': 'loop',
-      'loop': 'pingpong',
-      'pingpong': 'once'
+      once: 'loop',
+      loop: 'pingpong',
+      pingpong: 'once',
     };
     await page.keyboard.press('Control+l');
     await waitForLoopMode(page, expectedNextMode[initialLoopMode] as 'once' | 'loop' | 'pingpong');
@@ -623,7 +700,10 @@ test.describe('Full Workflow Tests', () => {
 
     // Reset in/out points with 'r' key
     await page.keyboard.press('r');
-    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.inPoint === ${initialInPoint}; })()`);
+    await waitForCondition(
+      page,
+      `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.inPoint === ${initialInPoint}; })()`,
+    );
 
     // Verify reset returns to full-range start
     const resetState = await page.evaluate(() => window.__OPENRV_TEST__?.getSessionState());
@@ -651,6 +731,13 @@ test.describe('RV Session Workflow', () => {
 
     await loadRvSession(page);
 
+    // Dismiss RV/GTO Import Warning dialog if present
+    const okButton = page.locator('dialog button:has-text("OK"), [role="dialog"] button:has-text("OK")');
+    if (await okButton.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await okButton.click();
+      await page.waitForTimeout(200);
+    }
+
     // Check if annotations were loaded
     // Switch to annotate tab
     await page.click('button[data-tab-id="annotate"]');
@@ -669,7 +756,7 @@ test.describe('Project Save/Load', () => {
     await loadVideoFile(page);
 
     // Look for save project button or use keyboard shortcut
-    const saveButton = page.locator('button[title*="Save"], button:has-text("Save")').first();
+    const saveButton = page.locator('[data-testid="save-button"]');
     // May exist in header or menu
   });
 
@@ -700,10 +787,7 @@ test.describe('Error Handling', () => {
     await page.keyboard.press('Space');
 
     // Check for critical errors (some warnings may be acceptable)
-    const criticalErrors = errors.filter(e =>
-      !e.includes('Warning') &&
-      !e.includes('Deprecation')
-    );
+    const criticalErrors = errors.filter((e) => !e.includes('Warning') && !e.includes('Deprecation'));
 
     expect(criticalErrors).toHaveLength(0);
   });

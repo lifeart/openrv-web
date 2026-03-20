@@ -24,7 +24,7 @@ For studios, teams, or individuals who prefer to host their own instance, OpenRV
 
 Before building OpenRV Web, ensure the following tools are installed:
 
-- **Node.js** 18 or later -- download from [nodejs.org](https://nodejs.org)
+- **Node.js** 20.19+ or 22.12+ -- download from [nodejs.org](https://nodejs.org)
 - **pnpm** package manager -- install via `npm install -g pnpm`
 - **Git** -- for cloning the repository
 
@@ -59,7 +59,7 @@ To create an optimized production build:
 pnpm build
 ```
 
-This generates static files in the `dist/` directory. The build process minifies JavaScript, optimizes assets, and bundles WebAssembly modules for EXR, JPEG XL, JPEG 2000, HEIC, and OCIO decoding.
+This generates static files in the `dist/` directory. The build process minifies JavaScript, optimizes assets, and bundles WebAssembly modules for JPEG XL, JPEG 2000, HEIC, and OCIO decoding.
 
 To preview the production build locally:
 
@@ -69,7 +69,7 @@ pnpm preview
 
 ## Deploying to a Web Server
 
-The production build output in `dist/` is a collection of static files (HTML, JavaScript, CSS, WASM) that can be served by any web server. No server-side runtime is required.
+The production build output in `dist/` is a collection of static files (HTML, JavaScript, CSS, WASM) that can be served by any web server. No server-side runtime is required for the core viewer features (file loading, playback, color management, annotations, export). Collaborative review sessions require additional signaling infrastructure -- see [Collaboration and Signaling](#collaboration-and-signaling) below.
 
 ### Static File Hosting
 
@@ -108,9 +108,40 @@ OpenRV Web supports optional configuration through Vite environment variables:
 
 | Variable | Purpose |
 |----------|---------|
-| `VITE_NETWORK_SIGNALING_SERVERS` | Custom WebSocket signaling server URLs for collaborative review sessions |
+| `VITE_NETWORK_SIGNALING_SERVERS` | WebSocket signaling server URL(s) for collaborative review sessions (e.g., `wss://sync.example.com`). Required for collaboration to function. |
+| `VITE_TURN_USERNAME` | TURN server username for WebRTC NAT traversal (optional, improves connectivity behind restrictive firewalls) |
+| `VITE_TURN_CREDENTIAL` | TURN server credential (optional, paired with `VITE_TURN_USERNAME`) |
 
 Set these in a `.env` file at the project root before building.
+
+## Collaboration and Signaling
+
+The core viewer (file loading, playback, color grading, annotations, export) is fully static and works without any server-side infrastructure. **Collaborative review sessions**, however, require a **WebSocket signaling server**.
+
+### What the signaling server does
+
+The signaling server handles:
+
+- **Room management** -- creating and joining review rooms via room codes
+- **Message relay** -- forwarding real-time sync messages (playback state, view transforms, cursor positions, annotations) between participants
+- **WebRTC session negotiation** -- exchanging SDP offers/answers and ICE candidates so that peers can establish direct connections when possible
+
+The signaling server does **not** process, decode, or store media files. It relays small JSON messages between connected clients.
+
+### Configuring signaling for self-hosted deployments
+
+Set `VITE_NETWORK_SIGNALING_SERVERS` to the URL of your signaling server before building:
+
+```bash
+# .env
+VITE_NETWORK_SIGNALING_SERVERS=wss://sync.yourstudio.com
+```
+
+The default configuration points to `wss://sync.openrv.local`, which is a placeholder. Without a reachable signaling server, collaboration features (create room, join room, sync) will not work. The rest of the application functions normally.
+
+### Serverless P2P fallback
+
+When the signaling server is unreachable, OpenRV Web can fall back to a URL-based WebRTC signaling mode for two-person sessions. The host generates a share link containing an embedded WebRTC offer, and the guest responds with a URL-encoded answer. This mode is limited to two participants and requires manual link exchange.
 
 ## Verifying the Installation
 

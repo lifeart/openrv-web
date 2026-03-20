@@ -27,12 +27,22 @@ export interface OTIOMediaReference {
   available_range?: OTIOTimeRange;
 }
 
+/** OTIO marker */
+export interface OTIOMarker {
+  OTIO_SCHEMA: 'Marker.1';
+  name: string;
+  color?: string;
+  marked_range?: OTIOTimeRange;
+  metadata?: Record<string, unknown>;
+}
+
 /** OTIO clip */
 export interface OTIOClip {
   OTIO_SCHEMA: 'Clip.1';
   name: string;
   source_range?: OTIOTimeRange;
   media_reference?: OTIOMediaReference;
+  markers?: OTIOMarker[];
   metadata?: Record<string, unknown>;
 }
 
@@ -62,6 +72,7 @@ export interface OTIOTrack {
   name: string;
   kind: string; // 'Video', 'Audio'
   children: OTIOTrackItem[];
+  markers?: OTIOMarker[];
 }
 
 /** OTIO stack (collection of tracks) */
@@ -77,6 +88,7 @@ export interface OTIOTimeline {
   name: string;
   global_start_time?: OTIORationalTime;
   tracks: OTIOStack;
+  markers?: OTIOMarker[];
   metadata?: Record<string, unknown>;
 }
 
@@ -89,6 +101,55 @@ export interface ParsedOTIOClip {
   timelineInFrame: number;
   timelineOutFrame: number;
   metadata?: Record<string, unknown>;
+}
+
+/**
+ * Mapping from OTIO marker color names to hex values.
+ * Covers the standard colors defined by the OTIO Marker schema.
+ */
+export const OTIO_MARKER_COLOR_MAP: Record<string, string> = {
+  RED: '#ff4444',
+  PINK: '#ff88cc',
+  ORANGE: '#ff8800',
+  YELLOW: '#ffff00',
+  GREEN: '#44ff44',
+  CYAN: '#44ffff',
+  BLUE: '#4444ff',
+  PURPLE: '#9944ff',
+  MAGENTA: '#ff44ff',
+  WHITE: '#ffffff',
+  BLACK: '#000000',
+};
+
+/**
+ * Convert an OTIO marker color name to a hex string.
+ * Returns the hex value if recognized, or the original string if not.
+ */
+export function otioMarkerColorToHex(color: string | undefined): string | undefined {
+  if (!color) return undefined;
+  return OTIO_MARKER_COLOR_MAP[color] ?? color;
+}
+
+/** Parsed marker for playlist integration */
+export interface ParsedOTIOMarker {
+  /** Display name of the marker */
+  name: string;
+  /** Marker color as hex (e.g. '#ff4444') or raw OTIO color name if unmapped */
+  color?: string;
+  /** Frame where the marker starts on the timeline */
+  timelineFrame: number;
+  /** Duration in frames (0 for point markers) */
+  durationFrames: number;
+  /** Optional metadata */
+  metadata?: Record<string, unknown>;
+}
+
+/** Parsed gap for preserving gap timing */
+export interface ParsedOTIOGap {
+  /** Timeline frame where the gap begins */
+  timelineInFrame: number;
+  /** Duration in frames */
+  durationFrames: number;
 }
 
 /** Supported transition types */
@@ -132,6 +193,10 @@ export interface ParsedOTIOTrack {
   clips: ParsedOTIOClip[];
   /** Transitions within this track */
   transitions: ParsedOTIOTransition[];
+  /** Gaps within this track */
+  gaps: ParsedOTIOGap[];
+  /** Markers within this track (track-level + clip-level combined) */
+  markers: ParsedOTIOMarker[];
   /** Total frames for this track */
   totalFrames: number;
 }
@@ -140,6 +205,12 @@ export interface ParsedOTIOTrack {
 export interface OTIOParseResult {
   timeline: OTIOTimeline;
   clips: ParsedOTIOClip[];
+  /** Transitions from the first video track */
+  transitions: ParsedOTIOTransition[];
+  /** Gaps from the first video track */
+  gaps: ParsedOTIOGap[];
+  /** Markers from clips and timeline */
+  markers: ParsedOTIOMarker[];
   fps: number;
   totalFrames: number;
 }
@@ -153,6 +224,10 @@ export interface OTIOMultiTrackParseResult {
   clips: ParsedOTIOClip[];
   /** Flattened transitions from all tracks */
   transitions: ParsedOTIOTransition[];
+  /** Flattened gaps from all tracks */
+  gaps: ParsedOTIOGap[];
+  /** Markers from the timeline and clips */
+  markers: ParsedOTIOMarker[];
   fps: number;
   /** Total frames = max of all track durations */
   totalFrames: number;
@@ -197,6 +272,8 @@ function normalizeTransitionType(raw?: string): TransitionType {
 function parseTrack(track: OTIOTrack, fps: number): ParsedOTIOTrack {
   const clips: ParsedOTIOClip[] = [];
   const transitions: ParsedOTIOTransition[] = [];
+  const gaps: ParsedOTIOGap[] = [];
+  const markers: ParsedOTIOMarker[] = [];
   let timelinePosition = 0;
 
   // First pass: we need to figure out clip indices for transitions.
@@ -242,6 +319,11 @@ function parseTrack(track: OTIOTrack, fps: number): ParsedOTIOTrack {
         metadata: clip.metadata,
       });
 
+      // Collect clip-level markers
+      if (clip.markers) {
+        markers.push(...parseMarkers(clip.markers, fps, timelinePosition));
+      }
+
       // Resolve any pending transition now that we know the incoming clip
       if (pendingTransition && pendingTransitionOutgoingClipIndex >= 0) {
         const transInOffset = pendingTransition.in_offset ? rationalTimeToFrames(pendingTransition.in_offset, fps) : 0;
@@ -275,7 +357,14 @@ function parseTrack(track: OTIOTrack, fps: number): ParsedOTIOTrack {
     } else if (item.OTIO_SCHEMA === 'Gap.1') {
       const gap = item as OTIOGap;
       if (gap.source_range) {
-        timelinePosition += timeRangeDurationFrames(gap.source_range, fps);
+        const gapDuration = timeRangeDurationFrames(gap.source_range, fps);
+        if (gapDuration > 0) {
+          gaps.push({
+            timelineInFrame: timelinePosition,
+            durationFrames: gapDuration,
+          });
+        }
+        timelinePosition += gapDuration;
       }
     } else if (item.OTIO_SCHEMA === 'Transition.1') {
       // Store the transition; it will be resolved when the next clip is encountered.
@@ -287,10 +376,17 @@ function parseTrack(track: OTIOTrack, fps: number): ParsedOTIOTrack {
     }
   }
 
+  // Collect track-level markers
+  if (track.markers) {
+    markers.push(...parseMarkers(track.markers, fps, 0));
+  }
+
   return {
     name: track.name,
     clips,
     transitions,
+    gaps,
+    markers,
     totalFrames: timelinePosition,
   };
 }
@@ -330,17 +426,54 @@ export function parseOTIO(jsonString: string): OTIOParseResult | null {
   // Use first video track for linear playlist
   const primaryTrack = videoTracks[0];
   if (!primaryTrack) {
-    return { timeline, clips: [], fps, totalFrames: 0 };
+    return { timeline, clips: [], transitions: [], gaps: [], markers: [], fps, totalFrames: 0 };
   }
 
   const parsed = parseTrack(primaryTrack, fps);
 
+  // Collect markers: track-level (from parseTrack) + timeline-level
+  const allMarkers = [...parsed.markers];
+  allMarkers.push(...parseMarkers(timeline.markers, fps, 0));
+
   return {
     timeline,
     clips: parsed.clips,
+    transitions: parsed.transitions,
+    gaps: parsed.gaps,
+    markers: allMarkers,
     fps,
     totalFrames: parsed.totalFrames,
   };
+}
+
+/**
+ * Parse an array of OTIO markers into ParsedOTIOMarker objects.
+ * The timelineOffset is added to each marker's position.
+ */
+function parseMarkers(markers: OTIOMarker[] | undefined, fps: number, timelineOffset: number): ParsedOTIOMarker[] {
+  if (!markers || !Array.isArray(markers)) return [];
+
+  const result: ParsedOTIOMarker[] = [];
+  for (const m of markers) {
+    if (m.OTIO_SCHEMA !== 'Marker.1') continue;
+
+    let timelineFrame = timelineOffset;
+    let durationFrames = 0;
+
+    if (m.marked_range) {
+      timelineFrame += rationalTimeToFrames(m.marked_range.start_time, fps);
+      durationFrames = timeRangeDurationFrames(m.marked_range, fps);
+    }
+
+    result.push({
+      name: m.name ?? '',
+      color: otioMarkerColorToHex(m.color),
+      timelineFrame,
+      durationFrames,
+      metadata: m.metadata,
+    });
+  }
+  return result;
 }
 
 /**
@@ -362,6 +495,8 @@ export function parseOTIOMultiTrack(jsonString: string): OTIOMultiTrackParseResu
   const tracks: ParsedOTIOTrack[] = [];
   const allClips: ParsedOTIOClip[] = [];
   const allTransitions: ParsedOTIOTransition[] = [];
+  const allGaps: ParsedOTIOGap[] = [];
+  const allMarkers: ParsedOTIOMarker[] = [];
   let maxTotalFrames = 0;
 
   for (const vt of videoTracks) {
@@ -369,16 +504,23 @@ export function parseOTIOMultiTrack(jsonString: string): OTIOMultiTrackParseResu
     tracks.push(parsed);
     allClips.push(...parsed.clips);
     allTransitions.push(...parsed.transitions);
+    allGaps.push(...parsed.gaps);
+    allMarkers.push(...parsed.markers);
     if (parsed.totalFrames > maxTotalFrames) {
       maxTotalFrames = parsed.totalFrames;
     }
   }
+
+  // Parse timeline-level markers
+  allMarkers.push(...parseMarkers(timeline.markers, fps, 0));
 
   return {
     timeline,
     tracks,
     clips: allClips,
     transitions: allTransitions,
+    gaps: allGaps,
+    markers: allMarkers,
     fps,
     totalFrames: maxTotalFrames,
   };

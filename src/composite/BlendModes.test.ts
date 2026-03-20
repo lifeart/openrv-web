@@ -10,6 +10,7 @@ import {
   compositeMultipleLayers,
   type CompositeLayer,
   stackCompositeToBlendMode,
+  stackCompositeToBlendModeWithInfo,
   COMPOSITE_MODES,
   COMPOSITE_MODE_CODES,
   isGLBlendStateMode,
@@ -873,16 +874,259 @@ describe('BlendModes', () => {
       expect(stackCompositeToBlendMode('minus')).toBe('minus');
     });
 
-    it('maps dissolve to normal (fallback)', () => {
-      expect(stackCompositeToBlendMode('dissolve')).toBe('normal');
+    it('maps dissolve to dissolve', () => {
+      expect(stackCompositeToBlendMode('dissolve')).toBe('dissolve');
     });
 
-    it('maps topmost to normal (fallback)', () => {
-      expect(stackCompositeToBlendMode('topmost')).toBe('normal');
+    it('maps topmost to topmost', () => {
+      expect(stackCompositeToBlendMode('topmost')).toBe('topmost');
     });
 
     it('maps unknown custom types to normal', () => {
       expect(stackCompositeToBlendMode('custom-blend')).toBe('normal');
+    });
+
+    it('maps -difference to minus', () => {
+      expect(stackCompositeToBlendMode('-difference')).toBe('minus');
+    });
+  });
+
+  describe('stackCompositeToBlendModeWithInfo', () => {
+    it('dissolve maps without degradation', () => {
+      const result = stackCompositeToBlendModeWithInfo('dissolve');
+      expect(result.mode).toBe('dissolve');
+      expect(result.degraded).toBe(false);
+    });
+
+    it('topmost maps without degradation', () => {
+      const result = stackCompositeToBlendModeWithInfo('topmost');
+      expect(result.mode).toBe('topmost');
+      expect(result.degraded).toBe(false);
+    });
+
+    it('over maps without degradation', () => {
+      const result = stackCompositeToBlendModeWithInfo('over');
+      expect(result.mode).toBe('normal');
+      expect(result.degraded).toBe(false);
+      expect(result.originalMode).toBeUndefined();
+    });
+
+    it('add maps without degradation', () => {
+      const result = stackCompositeToBlendModeWithInfo('add');
+      expect(result.mode).toBe('add');
+      expect(result.degraded).toBe(false);
+      expect(result.originalMode).toBeUndefined();
+    });
+
+    it('multiply maps without degradation (via default to normal)', () => {
+      // 'multiply' is not a StackCompositeType, falls through to default
+      const result = stackCompositeToBlendModeWithInfo('multiply');
+      expect(result.mode).toBe('normal');
+      expect(result.degraded).toBe(false);
+    });
+
+    it('difference maps without degradation', () => {
+      const result = stackCompositeToBlendModeWithInfo('difference');
+      expect(result.mode).toBe('difference');
+      expect(result.degraded).toBe(false);
+    });
+
+    it('replace maps without degradation', () => {
+      const result = stackCompositeToBlendModeWithInfo('replace');
+      expect(result.mode).toBe('normal');
+      expect(result.degraded).toBe(false);
+    });
+
+    it('-difference maps without degradation', () => {
+      const result = stackCompositeToBlendModeWithInfo('-difference');
+      expect(result.mode).toBe('minus');
+      expect(result.degraded).toBe(false);
+    });
+
+    it('minus maps without degradation', () => {
+      const result = stackCompositeToBlendModeWithInfo('minus');
+      expect(result.mode).toBe('minus');
+      expect(result.degraded).toBe(false);
+    });
+  });
+
+  describe('dissolve blend mode', () => {
+    it('BLD-DISSOLVE-001: BLEND_MODES contains dissolve', () => {
+      expect(BLEND_MODES).toContain('dissolve');
+    });
+
+    it('BLD-DISSOLVE-002: dissolve is deterministic (same input → same output)', () => {
+      const base = new ImageData(10, 10);
+      const top = new ImageData(10, 10);
+      for (let i = 0; i < base.data.length; i += 4) {
+        base.data[i] = 100;
+        base.data[i + 1] = 100;
+        base.data[i + 2] = 100;
+        base.data[i + 3] = 255;
+        top.data[i] = 200;
+        top.data[i + 1] = 200;
+        top.data[i + 2] = 200;
+        top.data[i + 3] = 255;
+      }
+      const result1 = compositeImageData(base, top, 'dissolve', 1.0);
+      const result2 = compositeImageData(base, top, 'dissolve', 1.0);
+      expect(Array.from(result1.data)).toEqual(Array.from(result2.data));
+    });
+
+    it('BLD-DISSOLVE-003: dissolve with opacity=0 keeps all base pixels', () => {
+      const base = new ImageData(10, 10);
+      const top = new ImageData(10, 10);
+      for (let i = 0; i < base.data.length; i += 4) {
+        base.data[i] = 50;
+        base.data[i + 1] = 60;
+        base.data[i + 2] = 70;
+        base.data[i + 3] = 255;
+        top.data[i] = 200;
+        top.data[i + 1] = 200;
+        top.data[i + 2] = 200;
+        top.data[i + 3] = 255;
+      }
+      const result = compositeImageData(base, top, 'dissolve', 0);
+      for (let i = 0; i < result.data.length; i += 4) {
+        expect(result.data[i]).toBe(50);
+        expect(result.data[i + 1]).toBe(60);
+        expect(result.data[i + 2]).toBe(70);
+      }
+    });
+
+    it('BLD-DISSOLVE-004: dissolve with opacity=0.5 produces a mix of base and top pixels', () => {
+      const base = new ImageData(20, 20);
+      const top = new ImageData(20, 20);
+      for (let i = 0; i < base.data.length; i += 4) {
+        base.data[i] = 0;
+        base.data[i + 1] = 0;
+        base.data[i + 2] = 0;
+        base.data[i + 3] = 255;
+        top.data[i] = 255;
+        top.data[i + 1] = 255;
+        top.data[i + 2] = 255;
+        top.data[i + 3] = 255;
+      }
+      const result = compositeImageData(base, top, 'dissolve', 0.5);
+      let baseCount = 0,
+        topCount = 0;
+      for (let i = 0; i < result.data.length; i += 4) {
+        if (result.data[i] === 0) baseCount++;
+        else if (result.data[i] === 255) topCount++;
+      }
+      // Both base and top pixels should appear at ~50% opacity
+      expect(baseCount).toBeGreaterThan(0);
+      expect(topCount).toBeGreaterThan(0);
+    });
+
+    it('BLD-DISSOLVE-005: dissolve with opacity=1 shows all top pixels', () => {
+      const base = new ImageData(4, 4);
+      const top = new ImageData(4, 4);
+      for (let i = 0; i < base.data.length; i += 4) {
+        base.data[i] = 0;
+        base.data[i + 1] = 0;
+        base.data[i + 2] = 0;
+        base.data[i + 3] = 255;
+        top.data[i] = 200;
+        top.data[i + 1] = 200;
+        top.data[i + 2] = 200;
+        top.data[i + 3] = 255;
+      }
+      const result = compositeImageData(base, top, 'dissolve', 1.0);
+      for (let i = 0; i < result.data.length; i += 4) {
+        expect(result.data[i]).toBe(200);
+      }
+    });
+  });
+
+  describe('topmost blend mode', () => {
+    it('BLD-TOPMOST-001: BLEND_MODES contains topmost', () => {
+      expect(BLEND_MODES).toContain('topmost');
+    });
+
+    it('BLD-TOPMOST-002: topmost in compositeImageData replaces base with top', () => {
+      const base = new ImageData(4, 4);
+      const top = new ImageData(4, 4);
+      for (let i = 0; i < base.data.length; i += 4) {
+        base.data[i] = 100;
+        base.data[i + 1] = 100;
+        base.data[i + 2] = 100;
+        base.data[i + 3] = 255;
+        top.data[i] = 200;
+        top.data[i + 1] = 200;
+        top.data[i + 2] = 200;
+        top.data[i + 3] = 255;
+      }
+      const result = compositeImageData(base, top, 'topmost', 1.0);
+      for (let i = 0; i < result.data.length; i += 4) {
+        expect(result.data[i]).toBe(200);
+        expect(result.data[i + 1]).toBe(200);
+        expect(result.data[i + 2]).toBe(200);
+      }
+    });
+
+    it('BLD-TOPMOST-003: topmost in compositeMultipleLayers returns last visible layer', () => {
+      const layer1Data = new ImageData(4, 4);
+      const layer2Data = new ImageData(4, 4);
+      const layer3Data = new ImageData(4, 4);
+      for (let i = 0; i < layer1Data.data.length; i += 4) {
+        layer1Data.data[i] = 10;
+        layer1Data.data[i + 1] = 10;
+        layer1Data.data[i + 2] = 10;
+        layer1Data.data[i + 3] = 255;
+        layer2Data.data[i] = 20;
+        layer2Data.data[i + 1] = 20;
+        layer2Data.data[i + 2] = 20;
+        layer2Data.data[i + 3] = 255;
+        layer3Data.data[i] = 30;
+        layer3Data.data[i + 1] = 30;
+        layer3Data.data[i + 2] = 30;
+        layer3Data.data[i + 3] = 255;
+      }
+      const result = compositeMultipleLayers(
+        [
+          { imageData: layer1Data, blendMode: 'topmost', opacity: 1, visible: true },
+          { imageData: layer2Data, blendMode: 'topmost', opacity: 1, visible: true },
+          { imageData: layer3Data, blendMode: 'topmost', opacity: 1, visible: true },
+        ],
+        4,
+        4,
+      );
+      // Last visible layer (layer3) should be the output
+      expect(result.data[0]).toBe(30);
+      expect(result.data[1]).toBe(30);
+    });
+
+    it('BLD-TOPMOST-004: topmost skips invisible layers to find last visible', () => {
+      const layer1Data = new ImageData(4, 4);
+      const layer2Data = new ImageData(4, 4);
+      const layer3Data = new ImageData(4, 4);
+      for (let i = 0; i < layer1Data.data.length; i += 4) {
+        layer1Data.data[i] = 10;
+        layer1Data.data[i + 1] = 10;
+        layer1Data.data[i + 2] = 10;
+        layer1Data.data[i + 3] = 255;
+        layer2Data.data[i] = 20;
+        layer2Data.data[i + 1] = 20;
+        layer2Data.data[i + 2] = 20;
+        layer2Data.data[i + 3] = 255;
+        layer3Data.data[i] = 30;
+        layer3Data.data[i + 1] = 30;
+        layer3Data.data[i + 2] = 30;
+        layer3Data.data[i + 3] = 255;
+      }
+      const result = compositeMultipleLayers(
+        [
+          { imageData: layer1Data, blendMode: 'topmost', opacity: 1, visible: true },
+          { imageData: layer2Data, blendMode: 'topmost', opacity: 1, visible: true },
+          { imageData: layer3Data, blendMode: 'topmost', opacity: 1, visible: false }, // invisible
+        ],
+        4,
+        4,
+      );
+      // Layer3 is invisible, so layer2 (next from top) should be used
+      expect(result.data[0]).toBe(20);
+      expect(result.data[1]).toBe(20);
     });
   });
 });

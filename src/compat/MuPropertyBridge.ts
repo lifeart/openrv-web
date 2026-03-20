@@ -13,12 +13,7 @@
  * All set* methods accept typed arrays and an optional `quiet` flag.
  */
 
-import {
-  MuPropertyType,
-  MuPropertyTypeNames,
-  type MuPropertyInfo,
-  type MuPropertyTypeValue,
-} from './types';
+import { MuPropertyType, MuPropertyTypeNames, type MuPropertyInfo, type MuPropertyTypeValue } from './types';
 
 // --- Internal property value store ---
 
@@ -159,8 +154,19 @@ export class MuPropertyBridge {
     if (prop.type !== MuPropertyType.String) {
       throw new TypeError(`Property "${path}" is not a string property (type=${MuPropertyTypeNames[prop.type]})`);
     }
+    if (prop.dimensions.length > 1) {
+      // ND property: validate value count matches declared shape
+      const expectedTotal = prop.dimensions.reduce((a, b) => a * b, 1);
+      if (values.length !== expectedTotal) {
+        throw new TypeError(
+          `Property "${path}": ND property set requires exactly ${expectedTotal} values (dimensions: [${prop.dimensions.join(',')}]), got ${values.length}`,
+        );
+      }
+    }
     prop.data = [...values];
-    prop.dimensions = [values.length];
+    if (prop.dimensions.length <= 1) {
+      prop.dimensions = [values.length];
+    }
     if (!quiet) this._notify(path, prop.data);
   }
 
@@ -183,9 +189,27 @@ export class MuPropertyBridge {
       throw new TypeError(`Property "${path}" is not a string property`);
     }
     const data = prop.data as string[];
+    if (prop.dimensions.length > 1) {
+      const innerSize = prop.dimensions.slice(1).reduce((a, b) => a * b, 1);
+      if (values.length % innerSize !== 0) {
+        throw new TypeError(
+          `Property "${path}": ND property insert requires value count to be a multiple of inner size ${innerSize} (dimensions: [${prop.dimensions.join(',')}]), got ${values.length}`,
+        );
+      }
+      if (index % innerSize !== 0) {
+        throw new TypeError(
+          `Property "${path}": ND property insert requires index to be aligned to inner size ${innerSize} (dimensions: [${prop.dimensions.join(',')}]), got index ${index}`,
+        );
+      }
+    }
     const idx = Math.max(0, Math.min(index, data.length));
     data.splice(idx, 0, ...values);
-    prop.dimensions = [data.length];
+    if (prop.dimensions.length > 1) {
+      const innerSize = prop.dimensions.slice(1).reduce((a, b) => a * b, 1);
+      prop.dimensions = [data.length / innerSize, ...prop.dimensions.slice(1)];
+    } else {
+      prop.dimensions = [data.length];
+    }
     this._notify(path, prop.data);
   }
 
@@ -214,9 +238,7 @@ export class MuPropertyBridge {
       throw new Error(`Property already exists: "${path}"`);
     }
     const isString = type === MuPropertyType.String;
-    const data: number[] | string[] = isString
-      ? new Array(size).fill('')
-      : new Array(size).fill(0);
+    const data: number[] | string[] = isString ? new Array(size).fill('') : new Array(size).fill(0);
     this._store.set(key, {
       type,
       dimensions: [size],
@@ -242,9 +264,7 @@ export class MuPropertyBridge {
     }
     const totalSize = dimensions.reduce((a, b) => a * b, 1);
     const isString = type === MuPropertyType.String;
-    const data: number[] | string[] = isString
-      ? new Array(totalSize).fill('')
-      : new Array(totalSize).fill(0);
+    const data: number[] | string[] = isString ? new Array(totalSize).fill('') : new Array(totalSize).fill(0);
     this._store.set(key, {
       type,
       dimensions: [...dimensions],
@@ -274,13 +294,53 @@ export class MuPropertyBridge {
    * @returns Array of full property paths
    */
   properties(nodeName: string): string[] {
-    const prefix = nodeName.startsWith('#') ? nodeName.slice(1) : nodeName;
+    const isHashPath = nodeName.startsWith('#');
     const result: string[] = [];
-    for (const key of this._store.keys()) {
-      if (key.startsWith(prefix + '.')) {
-        result.push(key);
+
+    if (isHashPath) {
+      const typeName = nodeName.slice(1);
+      if (!typeName) return result;
+
+      // Collect matching node names using the same priority as _resolveKey():
+      // 1. Exact name match, 2. Suffix match (_TypeName), 3. Substring match
+      const exactNodes = new Set<string>();
+      const suffixNodes = new Set<string>();
+      const substringNodes = new Set<string>();
+
+      for (const key of this._store.keys()) {
+        const firstDot = key.indexOf('.');
+        if (firstDot === -1) continue;
+        const nodePart = key.slice(0, firstDot);
+        if (nodePart === typeName) {
+          exactNodes.add(nodePart);
+        } else if (nodePart.endsWith(`_${typeName}`)) {
+          suffixNodes.add(nodePart);
+        } else if (nodePart.includes(typeName)) {
+          substringNodes.add(nodePart);
+        }
+      }
+
+      // Use the highest-priority tier that has matches;
+      // if exact matches exist use only those, otherwise suffix, otherwise substring
+      const matchingNodes = exactNodes.size > 0 ? exactNodes : suffixNodes.size > 0 ? suffixNodes : substringNodes;
+
+      for (const key of this._store.keys()) {
+        const firstDot = key.indexOf('.');
+        if (firstDot === -1) continue;
+        const nodePart = key.slice(0, firstDot);
+        if (matchingNodes.has(nodePart)) {
+          result.push(key);
+        }
+      }
+    } else {
+      const prefix = nodeName + '.';
+      for (const key of this._store.keys()) {
+        if (key.startsWith(prefix)) {
+          result.push(key);
+        }
       }
     }
+
     return result;
   }
 
@@ -367,14 +427,33 @@ export class MuPropertyBridge {
     const exact = `${typeName}${suffix}`;
     if (this._store.has(exact)) return exact;
 
-    // Otherwise search for any node containing the type name
+    // Collect all candidate keys whose node part matches the type name
+    const suffixMatches: string[] = [];
+    const substringMatches: string[] = [];
+
     for (const key of this._store.keys()) {
       if (key.endsWith(suffix)) {
         const nodePart = key.slice(0, key.length - suffix.length);
-        if (nodePart === typeName || nodePart.includes(typeName)) {
+        if (nodePart === typeName) {
+          // Exact node-name match (shouldn't reach here due to early return above,
+          // but included for safety)
           return key;
+        } else if (nodePart.endsWith(`_${typeName}`)) {
+          suffixMatches.push(key);
+        } else if (nodePart.includes(typeName)) {
+          substringMatches.push(key);
         }
       }
+    }
+
+    // Prefer suffix matches over substring matches; sort alphabetically for determinism
+    if (suffixMatches.length > 0) {
+      suffixMatches.sort();
+      return suffixMatches[0] ?? null;
+    }
+    if (substringMatches.length > 0) {
+      substringMatches.sort();
+      return substringMatches[0] ?? null;
     }
 
     return null;
@@ -387,9 +466,7 @@ export class MuPropertyBridge {
     if (!prop) throw new Error(`Property not found: "${path}"`);
     // Allow numeric type compatibility: float, int, half, byte are all numeric
     if (prop.type === MuPropertyType.String) {
-      throw new TypeError(
-        `Property "${path}" is a string property, expected ${MuPropertyTypeNames[expectedType]}`
-      );
+      throw new TypeError(`Property "${path}" is a string property, expected ${MuPropertyTypeNames[expectedType]}`);
     }
     return this._slice(prop.data as number[], start, count);
   }
@@ -401,11 +478,22 @@ export class MuPropertyBridge {
     if (!prop) throw new Error(`Property not found: "${path}"`);
     if (prop.type === MuPropertyType.String) {
       throw new TypeError(
-        `Property "${path}" is a string property, cannot set ${MuPropertyTypeNames[expectedType]} values`
+        `Property "${path}" is a string property, cannot set ${MuPropertyTypeNames[expectedType]} values`,
       );
     }
+    if (prop.dimensions.length > 1) {
+      // ND property: validate value count matches declared shape
+      const expectedTotal = prop.dimensions.reduce((a, b) => a * b, 1);
+      if (values.length !== expectedTotal) {
+        throw new TypeError(
+          `Property "${path}": ND property set requires exactly ${expectedTotal} values (dimensions: [${prop.dimensions.join(',')}]), got ${values.length}`,
+        );
+      }
+    }
     prop.data = [...values];
-    prop.dimensions = [values.length];
+    if (prop.dimensions.length <= 1) {
+      prop.dimensions = [values.length];
+    }
     if (!quiet) this._notify(path, prop.data);
   }
 
@@ -421,13 +509,31 @@ export class MuPropertyBridge {
     if (!prop) throw new Error(`Property not found: "${path}"`);
     if (prop.type === MuPropertyType.String) {
       throw new TypeError(
-        `Property "${path}" is a string property, cannot insert ${MuPropertyTypeNames[expectedType]} values`
+        `Property "${path}" is a string property, cannot insert ${MuPropertyTypeNames[expectedType]} values`,
       );
     }
     const data = prop.data as number[];
+    if (prop.dimensions.length > 1) {
+      const innerSize = prop.dimensions.slice(1).reduce((a, b) => a * b, 1);
+      if (values.length % innerSize !== 0) {
+        throw new TypeError(
+          `Property "${path}": ND property insert requires value count to be a multiple of inner size ${innerSize} (dimensions: [${prop.dimensions.join(',')}]), got ${values.length}`,
+        );
+      }
+      if (index % innerSize !== 0) {
+        throw new TypeError(
+          `Property "${path}": ND property insert requires index to be aligned to inner size ${innerSize} (dimensions: [${prop.dimensions.join(',')}]), got index ${index}`,
+        );
+      }
+    }
     const idx = Math.max(0, Math.min(index, data.length));
     data.splice(idx, 0, ...values);
-    prop.dimensions = [data.length];
+    if (prop.dimensions.length > 1) {
+      const innerSize = prop.dimensions.slice(1).reduce((a, b) => a * b, 1);
+      prop.dimensions = [data.length / innerSize, ...prop.dimensions.slice(1)];
+    } else {
+      prop.dimensions = [data.length];
+    }
     this._notify(path, prop.data);
   }
 

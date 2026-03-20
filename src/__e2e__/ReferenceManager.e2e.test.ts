@@ -13,12 +13,7 @@
  * - View mode cycling
  * - Opacity and wipe position controls
  * - Dispose and cleanup
- * - Wiring gap detection (display, keyboard bindings, export integration)
- *
- * KNOWN ISSUES DOCUMENTED IN TESTS:
- * - BUG: Capture wraps imageData.data in new Uint8ClampedArray() which double-copies
- * - INCOMPLETE: No setReferenceImage() or display wiring exists -- capture-only
- * - MISSING: No keyboard bindings for view.captureReference / view.toggleReference
+ * - Wiring regression detection for display, keyboard bindings, and export integration
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';

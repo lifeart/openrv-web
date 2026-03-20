@@ -55,11 +55,10 @@ describe('FullscreenManager', () => {
       expect(container.requestFullscreen).toHaveBeenCalled();
     });
 
-    it('FS-U006: should handle requestFullscreen failure gracefully', async () => {
+    it('FS-U006: should re-throw requestFullscreen failure', async () => {
       container.requestFullscreen = vi.fn().mockRejectedValue(new Error('not allowed'));
       manager = new FullscreenManager(container);
-      // Should not throw
-      await expect(manager.enter()).resolves.toBeUndefined();
+      await expect(manager.enter()).rejects.toThrow('not allowed');
     });
   });
 
@@ -71,11 +70,10 @@ describe('FullscreenManager', () => {
       expect(document.exitFullscreen).toHaveBeenCalled();
     });
 
-    it('FS-U008: should handle exitFullscreen failure gracefully', async () => {
+    it('FS-U008: should re-throw exitFullscreen failure', async () => {
       document.exitFullscreen = vi.fn().mockRejectedValue(new Error('not in fullscreen'));
       manager = new FullscreenManager(container);
-      // Should not throw
-      await expect(manager.exit()).resolves.toBeUndefined();
+      await expect(manager.exit()).rejects.toThrow('not in fullscreen');
     });
   });
 
@@ -202,6 +200,44 @@ describe('FullscreenManager', () => {
       manager = new FullscreenManager(container);
       manager.dispose();
       expect(removeEventListenerSpy).toHaveBeenCalledWith('webkitfullscreenchange', expect.any(Function));
+    });
+  });
+
+  describe('fullscreenError event', () => {
+    it('FS-U022: should emit fullscreenError with action "enter" on enter failure', async () => {
+      container.requestFullscreen = vi.fn().mockRejectedValue(new Error('blocked'));
+      manager = new FullscreenManager(container);
+      const handler = vi.fn();
+      manager.on('fullscreenError', handler);
+      await manager.enter().catch(() => {});
+      expect(handler).toHaveBeenCalledWith({ action: 'enter', error: expect.any(Error) });
+    });
+
+    it('FS-U023: should emit fullscreenError with action "exit" on exit failure', async () => {
+      document.exitFullscreen = vi.fn().mockRejectedValue(new Error('blocked'));
+      manager = new FullscreenManager(container);
+      const handler = vi.fn();
+      manager.on('fullscreenError', handler);
+      await manager.exit().catch(() => {});
+      expect(handler).toHaveBeenCalledWith({ action: 'exit', error: expect.any(Error) });
+    });
+
+    it('FS-U024: should not emit fullscreenError on successful enter', async () => {
+      container.requestFullscreen = vi.fn().mockResolvedValue(undefined);
+      manager = new FullscreenManager(container);
+      const handler = vi.fn();
+      manager.on('fullscreenError', handler);
+      await manager.enter();
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('FS-U025: should not emit fullscreenError on successful exit', async () => {
+      document.exitFullscreen = vi.fn().mockResolvedValue(undefined);
+      manager = new FullscreenManager(container);
+      const handler = vi.fn();
+      manager.on('fullscreenError', handler);
+      await manager.exit();
+      expect(handler).not.toHaveBeenCalled();
     });
   });
 

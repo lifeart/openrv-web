@@ -78,6 +78,7 @@ export function generatePresetLUT(presetId: string): LUT3D | null {
   }
 
   return {
+    type: '3d',
     size,
     data,
     domainMin: [0, 0, 0],

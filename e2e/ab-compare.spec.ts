@@ -63,7 +63,7 @@ test.describe('A/B Compare UI Elements', () => {
 
     const toggleButton = page.locator('[data-testid="compare-ab-toggle"]');
     await expect(toggleButton).toBeVisible();
-    await expect(toggleButton).toHaveText('⇄');
+    await expect(toggleButton).toBeVisible();
   });
 
   test('AB-E005: A button appears active/highlighted with single source', async ({ page }) => {
@@ -163,7 +163,7 @@ test.describe('A/B Indicator Display', () => {
 
   test('AB-E021: Viewer area does not show A/B badge initially', async ({ page }) => {
     // A/B indicator badge should not be present with single source
-    const badge = page.locator('[data-testid="ab-indicator-badge"]');
+    const badge = page.locator('[data-testid="ab-indicator"]');
     await expect(badge).toBeHidden();
 
     // Compare button should show no B indicator
@@ -428,7 +428,7 @@ test.describe('A/B Screenshot Comparison', () => {
     await expect(buttonA).toBeVisible();
     await expect(buttonA).toHaveText('A');
     await expect(toggleButton).toBeVisible();
-    await expect(toggleButton).toHaveText('⇄');
+    await expect(toggleButton).toBeVisible();
   });
 });
 

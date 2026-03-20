@@ -8,12 +8,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import {
-  applyHighlightsShadows,
-  applyVibrance,
-  applyColorWheels,
-  colorWheelZoneWeights,
-} from './shaderMathReference';
+import { applyHighlightsShadows, applyVibrance, applyColorWheels, colorWheelZoneWeights } from './shaderMathReference';
 
 // Tolerance for floating-point comparisons
 const GRADING_TOL = 1e-4;
@@ -172,9 +167,7 @@ describe('Vibrance', () => {
     // Luminance is NOT preserved because HSL's lightness differs from Rec.709 luminance.
     // Verify the result is different from the input (vibrance had an effect).
     const changed =
-      Math.abs(result[0] - 0.5) > 0.01 ||
-      Math.abs(result[1] - 0.5) > 0.01 ||
-      Math.abs(result[2] - 0.5) > 0.01;
+      Math.abs(result[0] - 0.5) > 0.01 || Math.abs(result[1] - 0.5) > 0.01 || Math.abs(result[2] - 0.5) > 0.01;
     expect(changed).toBe(true);
     // HSL lightness should be preserved at 0.5
     const maxC = Math.max(result[0], result[1], result[2]);
@@ -194,12 +187,12 @@ describe('Vibrance', () => {
     const withProtection = applyVibrance(skinR, skinG, skinB, 0.5, true);
 
     // With skin protection, the effect should be reduced (closer to original)
-    const deltaWithout = Math.abs(withoutProtection[0] - skinR) +
+    const deltaWithout =
+      Math.abs(withoutProtection[0] - skinR) +
       Math.abs(withoutProtection[1] - skinG) +
       Math.abs(withoutProtection[2] - skinB);
-    const deltaWith = Math.abs(withProtection[0] - skinR) +
-      Math.abs(withProtection[1] - skinG) +
-      Math.abs(withProtection[2] - skinB);
+    const deltaWith =
+      Math.abs(withProtection[0] - skinR) + Math.abs(withProtection[1] - skinG) + Math.abs(withProtection[2] - skinB);
 
     expect(deltaWith).toBeLessThan(deltaWithout);
   });
@@ -233,12 +226,7 @@ describe('Color Wheels (Lift/Gamma/Gain)', () => {
     ];
 
     for (const pixel of testPixels) {
-      const [r, g, b] = applyColorWheels(
-        ...pixel,
-        IDENTITY_LIFT,
-        IDENTITY_GAMMA,
-        IDENTITY_GAIN,
-      );
+      const [r, g, b] = applyColorWheels(...pixel, IDENTITY_LIFT, IDENTITY_GAMMA, IDENTITY_GAIN);
       expect(r).toBeCloseTo(pixel[0], 4);
       expect(g).toBeCloseTo(pixel[1], 4);
       expect(b).toBeCloseTo(pixel[2], 4);

@@ -10,11 +10,20 @@
 import type { ColorAdjustments, ChannelMode } from '../core/types/color';
 import type { CDLValues } from '../color/CDL';
 import type { ColorCurvesData } from '../color/ColorCurves';
+import type { TextureFilterMode } from '../core/types/filter';
+import type { BackgroundPatternState } from '../core/types/background';
+import type { MatteSettings } from '../core/session/SessionTypes';
+import type { LUT } from '../color/LUTLoader';
+import type { ToneMappingState } from '../core/types/effects';
+import type { DisplayColorState } from '../color/DisplayTransfer';
+import type { DisplayCapabilities } from '../color/DisplayCapabilities';
+import type { OCIOState } from '../color/OCIOConfig';
+import type { PixelProbeState, SampleSize, SourceMode } from '../ui/components/PixelProbe';
 
 /**
  * Minimal viewer interface required by the API layer.
  *
- * Provides zoom, pan, and channel mode control.
+ * Provides zoom, pan, channel mode, texture filter, and background pattern control.
  */
 export interface ViewerProvider {
   setZoom(level: number): void;
@@ -27,6 +36,21 @@ export interface ViewerProvider {
   getPan(): { x: number; y: number };
   setChannelMode(mode: ChannelMode): void;
   getChannelMode(): ChannelMode;
+  setFilterMode(mode: TextureFilterMode): void;
+  getFilterMode(): TextureFilterMode;
+  setBackgroundPatternState(state: BackgroundPatternState): void;
+  getBackgroundPatternState(): BackgroundPatternState;
+  getViewportSize(): { width: number; height: number };
+
+  /** Get the current matte overlay settings. */
+  getMatteSettings(): MatteSettings;
+  /** Update matte overlay settings (partial merge). */
+  setMatteSettings(settings: Partial<MatteSettings>): void;
+
+  /** Subscribe to view changes (pan/zoom). Returns an unsubscribe function. */
+  addViewChangeListener?(callback: (panX: number, panY: number, zoom: number) => void): () => void;
+  /** Get the native source image dimensions. */
+  getSourceDimensions?(): { width: number; height: number; pixelAspect?: number };
 }
 
 /**
@@ -58,4 +82,75 @@ export interface CDLProvider {
 export interface CurvesProvider {
   getCurves(): ColorCurvesData;
   setCurves(curves: ColorCurvesData): void;
+}
+
+/**
+ * Minimal LUT interface required by the API layer.
+ *
+ * Provides get/set/clear for the active LUT and intensity control.
+ */
+export interface LUTProvider {
+  setLUT(lut: LUT | null): void;
+  getLUT(): LUT | null;
+  setLUTIntensity(intensity: number): void;
+  getLUTIntensity(): number;
+}
+
+/**
+ * Minimal tone mapping interface required by the API layer.
+ *
+ * Provides get/set for tone mapping state.
+ */
+export interface ToneMappingProvider {
+  getToneMappingState(): ToneMappingState;
+  setToneMappingState(state: ToneMappingState): void;
+  resetToneMappingState(): void;
+}
+
+/**
+ * Minimal display profile interface required by the API layer.
+ *
+ * Provides get/set for display color management state and capability querying.
+ */
+export interface DisplayProvider {
+  getDisplayColorState(): DisplayColorState;
+  setDisplayColorState(state: DisplayColorState): void;
+  resetDisplayColorState(): void;
+}
+
+/**
+ * Provides read-only access to probed display capabilities.
+ */
+export interface DisplayCapabilitiesProvider {
+  getDisplayCapabilities(): DisplayCapabilities;
+}
+
+/**
+ * Minimal OCIO interface required by the API layer.
+ *
+ * Provides get/set for OCIO pipeline state.
+ */
+export interface OCIOProvider {
+  getOCIOState(): OCIOState;
+  setOCIOState(state: Partial<OCIOState>): void;
+}
+
+/**
+ * Minimal pixel probe interface required by the API layer.
+ *
+ * Provides enable/disable, lock/unlock, state query, and configuration
+ * for the pixel-probe overlay.
+ */
+export interface PixelProbeProvider {
+  enable(): void;
+  disable(): void;
+  isEnabled(): boolean;
+  toggleLock(): void;
+  isLocked(): boolean;
+  getState(): PixelProbeState;
+  setFormat(format: PixelProbeState['format']): void;
+  setSampleSize(size: SampleSize): void;
+  getSampleSize(): SampleSize;
+  setSourceMode(mode: SourceMode): void;
+  getSourceMode(): SourceMode;
 }

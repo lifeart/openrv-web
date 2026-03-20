@@ -56,7 +56,9 @@ function hlgOETFInverseRef(e: number): number {
 }
 
 function hlgToLinearRef(r: number, g: number, b: number): [number, number, number] {
-  const LUMA_R = 0.2126, LUMA_G = 0.7152, LUMA_B = 0.0722;
+  const LUMA_R = 0.2126,
+    LUMA_G = 0.7152,
+    LUMA_B = 0.0722;
   const sr = hlgOETFInverseRef(r);
   const sg = hlgOETFInverseRef(g);
   const sb = hlgOETFInverseRef(b);
@@ -88,7 +90,8 @@ describe('Linearize Stage — EOTF Pixel Accuracy (real GPU)', () => {
   let program: WebGLProgram;
   let quad: ReturnType<typeof createFullscreenQuad>;
   let fbo: ReturnType<typeof createFloatFBO>;
-  const W = 1, H = 1;
+  const W = 1,
+    H = 1;
 
   function setup() {
     ({ gl } = createTestGL(W, H));

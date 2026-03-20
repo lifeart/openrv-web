@@ -113,18 +113,31 @@ Film emulation presets are selected from the LUT presets dropdown and applied as
 ## Scripting API
 
 ```javascript
-// Load a LUT from a File object
-window.openrv.color.loadLUT(fileObject);
+// Load a parsed LUT object (or null to clear)
+window.openrv.color.loadLUT(parsedLut);
 
-// Set LUT intensity
+// Set LUT intensity (0 = bypass, 1 = full effect)
 window.openrv.color.setLUTIntensity(0.75); // 75%
 
 // Clear the active LUT
 window.openrv.color.clearLUT();
 
-// Apply a film emulation preset
+// Apply a built-in film emulation preset
 window.openrv.color.applyLUTPreset('warm-film');
 ```
+
+### Available ColorAPI Methods
+
+The following color methods are currently available via `window.openrv.color`:
+
+- `setAdjustments()` / `getAdjustments()` / `reset()` -- primary color adjustments
+- `setCDL()` / `getCDL()` / `resetCDL()` -- CDL values
+- `setCurves()` / `getCurves()` / `resetCurves()` -- curves editing
+- `exportCurvesJSON()` / `importCurvesJSON()` -- curves serialization
+- `loadLUT()` / `clearLUT()` / `setLUTIntensity()` / `applyLUTPreset()` -- LUT operations
+- `setToneMapping()` / `getToneMapping()` -- tone mapping
+- `setDisplayProfile()` / `getDisplayProfile()` / `getDisplayCapabilities()` -- display management
+- `setOCIOState()` / `getOCIOState()` / `getAvailableConfigs()` -- OCIO pipeline
 
 ---
 

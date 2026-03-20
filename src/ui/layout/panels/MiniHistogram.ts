@@ -22,6 +22,7 @@ export class MiniHistogram {
   private modeButton: HTMLButtonElement;
   private mode: MiniHistogramMode = 'rgb';
   private data: HistogramData | null = null;
+  private pendingRender = false;
   private scopesControl: ScopesControl;
 
   constructor(scopesControl: ScopesControl) {
@@ -48,7 +49,7 @@ export class MiniHistogram {
       cursor: pointer;
       display: block;
     `;
-    this.canvas.title = 'Click to open full Histogram';
+    this.canvas.title = 'Click to toggle Histogram';
     this.ctx = this.canvas.getContext('2d')!;
 
     // Click to open full histogram overlay
@@ -101,11 +102,24 @@ export class MiniHistogram {
 
     // Visibility guard: skip render when hidden via CSS display:none
     // (offsetParent is null in jsdom, so also check style.display)
-    if (this.container.style.display === 'none') return;
+    if (this.container.style.display === 'none') {
+      this.pendingRender = true;
+      return;
+    }
 
     this.placeholder.style.display = 'none';
     this.canvas.style.display = 'block';
     this.draw();
+  }
+
+  /** Apply any pending render after the container becomes visible again. */
+  applyPending(): void {
+    if (this.pendingRender && this.data) {
+      this.pendingRender = false;
+      this.placeholder.style.display = 'none';
+      this.canvas.style.display = 'block';
+      this.draw();
+    }
   }
 
   private cycleMode(): void {

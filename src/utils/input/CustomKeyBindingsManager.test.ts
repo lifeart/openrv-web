@@ -222,4 +222,51 @@ describe('CustomKeyBindingsManager', () => {
       expect(toggleAction?.currentCombo).toEqual(customCombo);
     });
   });
+
+  describe('reloadFromStorage', () => {
+    it('re-reads bindings from storage', () => {
+      // Start with no custom bindings
+      expect(manager.getCustomBindings()).toHaveLength(0);
+
+      // Write bindings directly to storage behind the manager's back
+      const testData = [
+        {
+          action: 'playback.toggle',
+          originalCombo: { code: 'Space' },
+          customCombo: { code: 'KeyP', ctrl: true },
+        },
+      ];
+      localStorage.setItem('openrv-custom-keybindings', JSON.stringify(testData));
+
+      manager.reloadFromStorage();
+
+      expect(manager.getCustomBindings()).toHaveLength(1);
+      expect(manager.hasCustomBinding('playback.toggle')).toBe(true);
+      expect(manager.getEffectiveCombo('playback.toggle')).toEqual({ code: 'KeyP', ctrl: true });
+      expect(onBindingsChanged).toHaveBeenCalled();
+    });
+
+    it('handles empty storage without crashing', () => {
+      // Clear storage so there is nothing to load
+      localStorage.clear();
+      onBindingsChanged.mockClear();
+
+      // Create a fresh manager with empty storage
+      const freshManager = new CustomKeyBindingsManager(onBindingsChanged);
+
+      // Reload from still-empty storage
+      onBindingsChanged.mockClear();
+      freshManager.reloadFromStorage();
+
+      // No custom bindings were loaded
+      expect(freshManager.getCustomBindings()).toHaveLength(0);
+      expect(freshManager.hasCustomBinding('playback.toggle')).toBe(false);
+      // Defaults still apply
+      const defaultBinding = DEFAULT_KEY_BINDINGS['playback.toggle']!;
+      const { description: _, ...expectedCombo } = defaultBinding;
+      expect(freshManager.getEffectiveCombo('playback.toggle')).toEqual(expectedCombo);
+      // Callback still fired (applyCustomBindings always notifies)
+      expect(onBindingsChanged).toHaveBeenCalled();
+    });
+  });
 });

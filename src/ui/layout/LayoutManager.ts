@@ -222,6 +222,35 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
       min-height: 28px;
     `;
 
+    // Arrow-key navigation per WAI-ARIA tabs pattern
+    tabBar.addEventListener('keydown', (e: KeyboardEvent) => {
+      const tabButtons = Array.from(tabBar.querySelectorAll('[role="tab"]')) as HTMLElement[];
+      const currentIndex = tabButtons.indexOf(e.target as HTMLElement);
+      if (currentIndex < 0) return;
+
+      let nextIndex: number | null = null;
+      switch (e.key) {
+        case 'ArrowRight':
+          nextIndex = (currentIndex + 1) % tabButtons.length;
+          break;
+        case 'ArrowLeft':
+          nextIndex = (currentIndex - 1 + tabButtons.length) % tabButtons.length;
+          break;
+        case 'Home':
+          nextIndex = 0;
+          break;
+        case 'End':
+          nextIndex = tabButtons.length - 1;
+          break;
+        default:
+          return;
+      }
+
+      e.preventDefault();
+      this.store.setActiveTab(id, nextIndex);
+      tabButtons[nextIndex]?.focus();
+    });
+
     const tabContent = document.createElement('div');
     tabContent.className = `layout-panel-tab-content`;
     tabContent.style.cssText = `
@@ -465,6 +494,7 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
       btn.textContent = tab.label;
       btn.setAttribute('role', 'tab');
       btn.setAttribute('aria-selected', String(idx === activeIndex));
+      btn.setAttribute('tabindex', idx === activeIndex ? '0' : '-1');
       btn.style.cssText = `
         background: transparent;
         border: none;
@@ -505,6 +535,11 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
   /** Slot for the bottom timeline. */
   getBottomSlot(): HTMLElement {
     return this.bottomSlot;
+  }
+
+  /** Get the wrapper element for a side panel (used for focus zone registration). */
+  getPanelWrapper(panelId: 'left' | 'right'): HTMLElement {
+    return this.panels[panelId].wrapper;
   }
 
   /** Check whether a side panel has any registered tab content. */

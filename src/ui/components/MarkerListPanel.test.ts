@@ -863,6 +863,236 @@ describe('MarkerListPanel', () => {
       await applyImport(panel, null);
       expect(alertMock).toHaveBeenCalledTimes(2);
     });
+
+    it('MARK-U151: import mode choice dialog is shown when existing markers present', async () => {
+      session.setMarker(10, 'Existing', MARKER_COLORS[0]);
+      panel.show();
+
+      const confirmMock = vi.mocked(Modal.showConfirm).mockResolvedValue(true);
+
+      // Call the private method that the Import button triggers
+      await (panel as any).importMarkersWithModeChoice();
+
+      expect(confirmMock).toHaveBeenCalledWith(
+        expect.stringContaining('Replace existing markers?'),
+        expect.objectContaining({
+          title: 'Import Markers',
+          confirmText: 'Replace',
+          cancelText: 'Merge',
+        }),
+      );
+    });
+
+    it('MARK-U152: import mode choice dialog is NOT shown when no existing markers', async () => {
+      panel.show();
+      expect(session.marks.size).toBe(0);
+
+      const confirmMock = vi.mocked(Modal.showConfirm).mockClear();
+
+      // Call the private method - it should skip the dialog
+      await (panel as any).importMarkersWithModeChoice();
+
+      expect(confirmMock).not.toHaveBeenCalled();
+    });
+
+    it('MARK-U153: replace mode clears existing markers before importing', async () => {
+      session.setMarker(10, 'Old A', MARKER_COLORS[0]);
+      session.setMarker(20, 'Old B', MARKER_COLORS[1]);
+      panel.show();
+
+      const importData: MarkerExportData = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        fps: 24,
+        markers: [{ frame: 50, note: 'New', color: '#ff4444' }],
+      };
+
+      await applyImport(panel, importData, 'replace');
+
+      expect(session.hasMarker(10)).toBe(false);
+      expect(session.hasMarker(20)).toBe(false);
+      expect(session.hasMarker(50)).toBe(true);
+      expect(session.marks.size).toBe(1);
+    });
+
+    it('MARK-U154: merge mode preserves existing markers and adds non-colliding ones', async () => {
+      session.setMarker(10, 'Keep me', MARKER_COLORS[0]);
+      session.setMarker(20, 'Keep me too', MARKER_COLORS[1]);
+      panel.show();
+
+      const importData: MarkerExportData = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        fps: 24,
+        markers: [{ frame: 30, note: 'New marker', color: '#4444ff' }],
+      };
+
+      await applyImport(panel, importData, 'merge');
+
+      expect(session.getMarker(10)?.note).toBe('Keep me');
+      expect(session.getMarker(20)?.note).toBe('Keep me too');
+      expect(session.getMarker(30)?.note).toBe('New marker');
+      expect(session.marks.size).toBe(3);
+    });
+
+    it('MARK-U155: merge mode reports collision count via alert', async () => {
+      session.setMarker(10, 'Existing A', MARKER_COLORS[0]);
+      session.setMarker(20, 'Existing B', MARKER_COLORS[1]);
+      panel.show();
+
+      const alertMock = vi.mocked(Modal.showAlert).mockClear();
+
+      const importData: MarkerExportData = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        fps: 24,
+        markers: [
+          { frame: 10, note: 'Collision 1', color: '#ff4444' },
+          { frame: 20, note: 'Collision 2', color: '#44ff44' },
+          { frame: 30, note: 'No collision', color: '#4444ff' },
+        ],
+      };
+
+      await applyImport(panel, importData, 'merge');
+
+      // Should report 2 collisions and 1 imported
+      expect(alertMock).toHaveBeenCalledWith(expect.stringContaining('2 markers skipped due to frame collisions'));
+      expect(alertMock).toHaveBeenCalledWith(expect.stringContaining('1 marker imported'));
+      // Existing markers unchanged
+      expect(session.getMarker(10)?.note).toBe('Existing A');
+      expect(session.getMarker(20)?.note).toBe('Existing B');
+      // Non-colliding marker added
+      expect(session.getMarker(30)?.note).toBe('No collision');
+    });
+
+    it('MARK-U156: merge mode reports single collision with correct grammar', async () => {
+      session.setMarker(10, 'Existing', MARKER_COLORS[0]);
+      panel.show();
+
+      const alertMock = vi.mocked(Modal.showAlert).mockClear();
+
+      const importData: MarkerExportData = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        fps: 24,
+        markers: [
+          { frame: 10, note: 'Collision', color: '#ff4444' },
+          { frame: 30, note: 'New', color: '#4444ff' },
+        ],
+      };
+
+      await applyImport(panel, importData, 'merge');
+
+      expect(alertMock).toHaveBeenCalledWith(expect.stringContaining('1 marker skipped due to frame collisions'));
+    });
+
+    it('MARK-U157: merge mode with no collisions does NOT mention collisions in alert', async () => {
+      session.setMarker(10, 'Existing', MARKER_COLORS[0]);
+      panel.show();
+
+      const alertMock = vi.mocked(Modal.showAlert).mockClear();
+
+      const importData: MarkerExportData = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        fps: 24,
+        markers: [{ frame: 30, note: 'No collision', color: '#4444ff' }],
+      };
+
+      await applyImport(panel, importData, 'merge');
+
+      // Should show import summary but no collision message
+      expect(alertMock).toHaveBeenCalledWith(expect.stringContaining('1 marker imported'));
+      expect(alertMock).not.toHaveBeenCalledWith(expect.stringContaining('collision'));
+    });
+
+    it('MARK-U158: import reports invalid entry count when entries fail validation', async () => {
+      panel.show();
+      const alertMock = vi.mocked(Modal.showAlert).mockClear();
+
+      const importData = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        fps: 24,
+        markers: [
+          { frame: 10, note: 'Valid', color: '#ff4444' },
+          { frame: -5, note: 'Negative', color: '#ff4444' },
+          { frame: 'bad', note: 'Bad frame', color: '#ff4444' },
+          { frame: 20, note: 123, color: '#ff4444' }, // bad note type
+        ],
+      };
+
+      await applyImport(panel, importData);
+
+      expect(alertMock).toHaveBeenCalledWith(expect.stringContaining('1 marker imported'));
+      expect(alertMock).toHaveBeenCalledWith(expect.stringContaining('3 invalid entries skipped'));
+      expect(session.marks.size).toBe(1);
+    });
+
+    it('MARK-U159: import with no invalid entries does NOT mention invalid in alert', async () => {
+      panel.show();
+      const alertMock = vi.mocked(Modal.showAlert).mockClear();
+
+      const importData: MarkerExportData = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        fps: 24,
+        markers: [
+          { frame: 10, note: 'A', color: '#ff4444' },
+          { frame: 20, note: 'B', color: '#44ff44' },
+        ],
+      };
+
+      await applyImport(panel, importData);
+
+      expect(alertMock).toHaveBeenCalledWith(expect.stringContaining('2 markers imported'));
+      expect(alertMock).not.toHaveBeenCalledWith(expect.stringContaining('invalid'));
+    });
+
+    it('MARK-U160A: import with mix of valid, invalid, and collisions shows all counts', async () => {
+      session.setMarker(10, 'Existing', MARKER_COLORS[0]);
+      panel.show();
+      const alertMock = vi.mocked(Modal.showAlert).mockClear();
+
+      const importData = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        fps: 24,
+        markers: [
+          { frame: 10, note: 'Collision', color: '#ff4444' },
+          { frame: 20, note: 'Valid new', color: '#44ff44' },
+          { frame: 30, note: 'Also valid', color: '#4444ff' },
+          { frame: 'bad', note: 'Invalid', color: '#ff4444' },
+          { frame: 40, note: 123, color: '#ff4444' }, // invalid note type
+        ],
+      };
+
+      await applyImport(panel, importData, 'merge');
+
+      const alertArg = alertMock.mock.calls[0]![0] as string;
+      expect(alertArg).toContain('2 markers imported');
+      expect(alertArg).toContain('2 invalid entries skipped');
+      expect(alertArg).toContain('1 marker skipped due to frame collisions');
+    });
+
+    it('MARK-U160B: import reports single invalid entry with correct grammar', async () => {
+      panel.show();
+      const alertMock = vi.mocked(Modal.showAlert).mockClear();
+
+      const importData = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        fps: 24,
+        markers: [
+          { frame: 10, note: 'Valid', color: '#ff4444' },
+          { frame: -1, note: 'Invalid', color: '#ff4444' },
+        ],
+      };
+
+      await applyImport(panel, importData);
+
+      expect(alertMock).toHaveBeenCalledWith(expect.stringContaining('1 invalid entry skipped'));
+    });
   });
 
   describe('actions bar', () => {
@@ -922,6 +1152,113 @@ describe('MarkerListPanel', () => {
       panel.show();
 
       expect(mockExclusive.hide).not.toHaveBeenCalled();
+    });
+
+    it('MARK-U172: show() closes multiple exclusive panels', () => {
+      const mockA = {
+        isVisible: vi.fn().mockReturnValue(true),
+        hide: vi.fn(),
+      };
+      const mockB = {
+        isVisible: vi.fn().mockReturnValue(true),
+        hide: vi.fn(),
+      };
+      panel.setExclusiveWith(mockA);
+      panel.setExclusiveWith(mockB);
+
+      panel.show();
+
+      expect(mockA.hide).toHaveBeenCalledTimes(1);
+      expect(mockB.hide).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('Issue #72: keyboard accessibility for clickable text elements', () => {
+    it('MARK-U180: frame label has tabindex="0" and role="button"', () => {
+      session.setMarker(10, 'Test', MARKER_COLORS[0]);
+      panel.show();
+      const entry = panel.getElement().querySelector('[data-testid="marker-entry-10"]');
+      const frameInfo = entry?.querySelector('span[role="button"]');
+      expect(frameInfo).not.toBeNull();
+      expect(frameInfo?.getAttribute('tabindex')).toBe('0');
+      expect(frameInfo?.getAttribute('role')).toBe('button');
+    });
+
+    it('MARK-U181: frame label has aria-label for go-to-frame', () => {
+      session.setMarker(10, 'Test', MARKER_COLORS[0]);
+      panel.show();
+      const entry = panel.getElement().querySelector('[data-testid="marker-entry-10"]');
+      const frameInfo = entry?.querySelector('span[role="button"]');
+      expect(frameInfo?.getAttribute('aria-label')).toContain('frame 10');
+    });
+
+    it('MARK-U182: Enter key on frame label navigates to marker', () => {
+      session.setMarker(50, 'Test', MARKER_COLORS[0]);
+      panel.show();
+      session.currentFrame = 1;
+
+      const entry = panel.getElement().querySelector('[data-testid="marker-entry-50"]');
+      const frameInfo = entry?.querySelector('span[role="button"]') as HTMLElement;
+
+      frameInfo.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      expect(session.currentFrame).toBe(50);
+    });
+
+    it('MARK-U183: Space key on frame label navigates to marker', () => {
+      session.setMarker(50, 'Test', MARKER_COLORS[0]);
+      panel.show();
+      session.currentFrame = 1;
+
+      const entry = panel.getElement().querySelector('[data-testid="marker-entry-50"]');
+      const frameInfo = entry?.querySelector('span[role="button"]') as HTMLElement;
+
+      frameInfo.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+      expect(session.currentFrame).toBe(50);
+    });
+
+    it('MARK-U184: note text has tabindex="0" and role="button"', () => {
+      session.setMarker(10, 'Some note', MARKER_COLORS[0]);
+      panel.show();
+      const noteText = panel.getElement().querySelector('[data-testid="marker-note-10"]');
+      expect(noteText).not.toBeNull();
+      expect(noteText?.getAttribute('tabindex')).toBe('0');
+      expect(noteText?.getAttribute('role')).toBe('button');
+    });
+
+    it('MARK-U185: Enter key on note text starts editing', () => {
+      session.setMarker(10, 'Some note', MARKER_COLORS[0]);
+      panel.show();
+      const noteText = panel.getElement().querySelector('[data-testid="marker-note-10"]') as HTMLElement;
+
+      noteText.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+      // Should now be in editing mode
+      const textarea = panel.getElement().querySelector('[data-testid="marker-note-input-10"]');
+      expect(textarea).not.toBeNull();
+    });
+
+    it('MARK-U186: empty note hint has tabindex="0" and role="button"', () => {
+      session.setMarker(10, '', MARKER_COLORS[0]);
+      panel.show();
+      const entry = panel.getElement().querySelector('[data-testid="marker-entry-10"]');
+      // Find the hint div (it says "Click edit to add a note")
+      const hint = entry?.querySelector('div[role="button"]');
+      expect(hint).not.toBeNull();
+      expect(hint?.getAttribute('tabindex')).toBe('0');
+      expect(hint?.textContent).toContain('Click edit to add a note');
+    });
+
+    it('MARK-U187: Enter key on empty note hint starts editing', () => {
+      session.setMarker(10, '', MARKER_COLORS[0]);
+      panel.show();
+      const entry = panel.getElement().querySelector('[data-testid="marker-entry-10"]');
+      const hint = entry?.querySelector('div[role="button"]') as HTMLElement;
+
+      hint.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+      // Should now be in editing mode
+      const textarea = panel.getElement().querySelector('[data-testid="marker-note-input-10"]');
+      expect(textarea).not.toBeNull();
     });
   });
 });

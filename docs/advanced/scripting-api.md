@@ -14,10 +14,11 @@ The API is organized into namespaced modules:
 | `window.openrv.media` | Source information, resolution, duration, FPS |
 | `window.openrv.audio` | Volume, mute, pitch correction, audio scrub |
 | `window.openrv.loop` | Loop mode, in/out points |
-| `window.openrv.view` | Zoom, pan, fit modes, channel isolation |
+| `window.openrv.view` | Zoom, pan, fit modes, channel isolation, pixel probe |
 | `window.openrv.color` | Color adjustments, CDL, curves |
 | `window.openrv.markers` | Add, remove, navigate markers |
 | `window.openrv.events` | Subscribe to state change events |
+| `window.openrv.sequence` | Image sequence inspection, missing-frame detection, pattern queries |
 | `window.openrv.plugins` | Register and manage plugins |
 | `window.openrv.version` | API version string (semver) |
 | `window.openrv.isReady()` | Check if API is initialized |
@@ -35,6 +36,25 @@ if (window.openrv && window.openrv.isReady()) {
 ```
 
 The `version` property returns a semantic version string (e.g., `"1.0.0"`). The `isReady()` method returns `true` once the application has fully initialized and `false` after `dispose()` is called.
+
+### `onReady(callback)`
+
+Register a callback to be invoked when the API becomes ready. If the API is already ready, the callback fires synchronously. Multiple callbacks can be registered.
+
+```javascript
+openrv.onReady(() => {
+  console.log('API is ready, starting playback');
+  openrv.playback.play();
+});
+```
+
+### `dispose()`
+
+Tear down the API instance, releasing all internal subscriptions and rendering the API unusable. After calling `dispose()`, any further method calls will throw an error.
+
+```javascript
+openrv.dispose();
+```
 
 ---
 
@@ -67,9 +87,27 @@ openrv.playback.setPlaybackMode('playAllFrames'); // Display every frame, FPS ma
 const frame = openrv.playback.getCurrentFrame();
 const total = openrv.playback.getTotalFrames();
 const playing = openrv.playback.isPlaying();
+
+// Play direction
+openrv.playback.setPlayDirection(-1);  // Reverse playback
+openrv.playback.setPlayDirection(1);   // Forward playback
+const dir = openrv.playback.getPlayDirection(); // 1 or -1
+
+// Playlist-aware queries
+const isPlaylist = openrv.playback.isPlaylistActive();
+const clipFrame = openrv.playback.getClipFrame();     // Clip-local frame
+const clipTotal = openrv.playback.getClipDuration();   // Clip-local duration
+
+// Diagnostics
+const mode = openrv.playback.getPlaybackMode();       // 'realtime' or 'playAllFrames'
+const measured = openrv.playback.getMeasuredFPS();     // Actual FPS (e.g. 23.4)
+const buffering = openrv.playback.isBuffering();       // true while waiting for frames
+const dropped = openrv.playback.getDroppedFrameCount(); // Cumulative skipped frames
 ```
 
 Frame numbers are 1-based and clamped to the valid range by the session. Invalid arguments (non-numeric, NaN) throw a `ValidationError`.
+
+When a playlist is active, `getCurrentFrame()` and `getTotalFrames()` return global playlist positions. Use `getClipFrame()` and `getClipDuration()` for clip-local values.
 
 ---
 
@@ -155,7 +193,7 @@ openrv.loop.clearInOut();
 
 ## View Control
 
-The `view` module controls zoom, pan, fit modes, and channel isolation.
+The `view` module controls zoom, pan, fit modes, channel isolation, and the pixel probe.
 
 ```javascript
 // Zoom (1.0 = 100%)
@@ -181,6 +219,20 @@ const ch = openrv.view.getChannel();
 
 // Shorthand aliases are accepted: 'r', 'g', 'b', 'a', 'luma', 'l'
 openrv.view.setChannel('a');  // Same as 'alpha'
+
+// Pixel probe
+openrv.view.enableProbe();           // Show the pixel probe overlay
+openrv.view.disableProbe();          // Hide the pixel probe overlay
+const active = openrv.view.isProbeEnabled();
+
+openrv.view.toggleProbeLock();       // Lock/unlock probe position
+const locked = openrv.view.isProbeLocked();
+
+const state = openrv.view.getProbeState();  // Full probe state (position, colors, settings)
+
+openrv.view.setProbeFormat('hsl');           // 'rgb', 'rgb01', 'hsl', 'hex', 'ire'
+openrv.view.setProbeSampleSize(3);           // 1, 3, 5, or 9
+openrv.view.setProbeSourceMode('source');    // 'rendered' or 'source'
 ```
 
 ---
@@ -313,8 +365,56 @@ const names = openrv.events.getEventNames();
 | `loopModeChange` | `{ mode }` |
 | `inOutChange` | `{ inPoint, outPoint }` |
 | `markerChange` | `{ markers: [{ frame, note, color }] }` |
+| `sourceLoadingStarted` | `{ name }` |
 | `sourceLoaded` | `{ name, type, width, height, duration, fps }` |
+| `sourceLoadFailed` | `{ name }` |
+| `viewTransformChanged` | `{ viewWidth, viewHeight, scale, translation, imageWidth, imageHeight, pixelAspect }` |
+| `renderedImagesChanged` | `{ images: [{ name, index, imageMin, imageMax, width, height, nodeName, tag? }] }` |
+| `representationChanged` | `{ sourceIndex, previousRepId, newRepId, label, width, height }` |
+| `fallbackActivated` | `{ sourceIndex, failedRepId, fallbackRepId, label, width, height }` |
+| `playlistEnded` | (none) |
 | `error` | `{ message, code? }` |
+
+When A/B compare is active, the `renderedImagesChanged` event's `images` array contains entries for both sources.
+
+---
+
+## Sequence Inspection
+
+The `sequence` module provides read-only information about image sequences loaded as the current source.
+
+```javascript
+// Check if the current source is an image sequence
+if (openrv.sequence.isSequence()) {
+  // Get the naming pattern (e.g., "frame_####.png")
+  const pattern = openrv.sequence.getPattern();
+
+  // Get the frame range
+  const range = openrv.sequence.getFrameRange();
+  // e.g. { start: 1, end: 100 }
+
+  // Detect gaps in the sequence
+  const missing = openrv.sequence.detectMissingFrames();
+  // e.g. [5, 12, 13]
+
+  // Check a specific frame
+  if (openrv.sequence.isFrameMissing(5)) {
+    console.log('Frame 5 is missing from the sequence');
+  }
+}
+```
+
+### Methods
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `isSequence()` | `boolean` | `true` if the active source is an image sequence |
+| `getPattern()` | `string \| null` | Detected naming pattern (e.g., `"frame_####.png"`), or `null` |
+| `getFrameRange()` | `{ start, end } \| null` | Start and end frame numbers, or `null` |
+| `detectMissingFrames()` | `number[]` | Array of missing frame numbers (gaps in the sequence) |
+| `isFrameMissing(frame)` | `boolean` | `true` if the given frame number is absent from the sequence |
+
+All methods return safe defaults (`false`, `null`, or `[]`) when no sequence is loaded.
 
 ---
 
@@ -328,12 +428,16 @@ async function exposureCheck() {
   const issues = [];
 
   for (let frame = 1; frame <= duration; frame += 10) {
-    openrv.playback.seek(frame);
-
-    // Allow the frame to render
-    await new Promise(resolve => {
+    // Subscribe BEFORE seeking — seek() is synchronous, so the frameChange
+    // event fires before a post-seek subscription would be registered.
+    const frameReady = new Promise(resolve => {
       openrv.events.once('frameChange', resolve);
     });
+
+    openrv.playback.seek(frame);
+
+    // Wait for the frame to render
+    await frameReady;
 
     const adj = openrv.color.getAdjustments();
     // Log frames where exposure compensation is applied
@@ -383,19 +487,28 @@ OpenRV Web includes a plugin registry that allows extending the application with
 Plugins follow a lifecycle of register, initialize, activate, deactivate, and dispose. Dependencies between plugins are resolved automatically with cycle detection. All registrations are scoped per-plugin and cleaned up on deactivation.
 
 ```javascript
-// Example: register a plugin
+// Example: register and activate a plugin
 openrv.plugins.register({
-  id: 'my-custom-exporter',
-  name: 'Custom Exporter',
-  version: '1.0.0',
+  manifest: {
+    id: 'my-custom-exporter',
+    name: 'Custom Exporter',
+    version: '1.0.0',
+    contributes: ['exporter'],
+  },
   activate(context) {
-    context.registerExporter({
-      name: 'custom-pdf',
+    // registerExporter(name, exporter) — two separate arguments
+    context.registerExporter('custom-pdf', {
+      kind: 'text',
       label: 'Custom PDF Report',
-      export(state) { /* ... */ }
+      extensions: ['pdf'],
+      mimeType: 'application/pdf',
+      export(config) { /* ... return a string */ }
     });
   }
 });
+
+// Registration alone does not start the plugin — you must activate it:
+openrv.plugins.activate('my-custom-exporter');
 ```
 
 ### Plugin Settings Schema
@@ -404,25 +517,27 @@ Plugins can declare a `settingsSchema` in their manifest to expose configurable 
 
 ```javascript
 openrv.plugins.register({
-  id: 'com.example.overlay',
-  name: 'Overlay Plugin',
-  version: '1.0.0',
-  contributes: ['uiPanel'],
-  settingsSchema: {
-    settings: [
-      { key: 'opacity', label: 'Overlay Opacity', type: 'range', default: 0.8, min: 0, max: 1, step: 0.05 },
-      { key: 'color', label: 'Overlay Color', type: 'color', default: '#ff0000' },
-      { key: 'position', label: 'Position', type: 'select', default: 'top-right',
-        options: [
-          { value: 'top-left', label: 'Top Left' },
-          { value: 'top-right', label: 'Top Right' },
-          { value: 'bottom-left', label: 'Bottom Left' },
-          { value: 'bottom-right', label: 'Bottom Right' }
-        ]
-      },
-      { key: 'label', label: 'Display Label', type: 'string', default: 'Overlay', maxLength: 50 },
-      { key: 'enabled', label: 'Show Overlay', type: 'boolean', default: true }
-    ]
+  manifest: {
+    id: 'com.example.overlay',
+    name: 'Overlay Plugin',
+    version: '1.0.0',
+    contributes: ['uiPanel'],
+    settingsSchema: {
+      settings: [
+        { key: 'opacity', label: 'Overlay Opacity', type: 'range', default: 0.8, min: 0, max: 1, step: 0.05 },
+        { key: 'color', label: 'Overlay Color', type: 'color', default: '#ff0000' },
+        { key: 'position', label: 'Position', type: 'select', default: 'top-right',
+          options: [
+            { value: 'top-left', label: 'Top Left' },
+            { value: 'top-right', label: 'Top Right' },
+            { value: 'bottom-left', label: 'Bottom Left' },
+            { value: 'bottom-right', label: 'Bottom Right' }
+          ]
+        },
+        { key: 'label', label: 'Display Label', type: 'string', default: 'Overlay', maxLength: 50 },
+        { key: 'enabled', label: 'Show Overlay', type: 'boolean', default: true }
+      ]
+    },
   },
   activate(context) {
     // Read settings
@@ -441,6 +556,9 @@ openrv.plugins.register({
     // context.settings.reset();
   }
 });
+
+// Activate the plugin after registration:
+openrv.plugins.activate('com.example.overlay');
 ```
 
 Supported setting types: `string`, `number`, `boolean`, `select`, `color`, `range`. See the [API reference](../api/index.md#plugin-settings-accessor) for full details.
@@ -451,10 +569,12 @@ Plugins can implement `getState()` and `restoreState()` to preserve state across
 
 ```javascript
 openrv.plugins.register({
-  id: 'com.example.annotations',
-  name: 'Annotations',
-  version: '1.0.0',
-  contributes: ['tool'],
+  manifest: {
+    id: 'com.example.annotations',
+    name: 'Annotations',
+    version: '1.0.0',
+    contributes: ['tool'],
+  },
 
   _annotations: [],
 
@@ -473,6 +593,9 @@ openrv.plugins.register({
     // Re-render UI with restored data
   }
 });
+
+// Activate the plugin after registration:
+openrv.plugins.activate('com.example.annotations');
 ```
 
 ### Custom Plugin-to-Plugin Events
@@ -482,10 +605,12 @@ Plugins can communicate with each other via custom events. Events emitted with `
 ```javascript
 // Plugin A: emits events
 openrv.plugins.register({
-  id: 'com.example.analyzer',
-  name: 'Frame Analyzer',
-  version: '1.0.0',
-  contributes: ['processor'],
+  manifest: {
+    id: 'com.example.analyzer',
+    name: 'Frame Analyzer',
+    version: '1.0.0',
+    contributes: ['node'],
+  },
   activate(context) {
     // Emitted as "com.example.analyzer:analysis-complete"
     context.events.emitPlugin('analysis-complete', {
@@ -494,13 +619,16 @@ openrv.plugins.register({
     });
   }
 });
+openrv.plugins.activate('com.example.analyzer');
 
 // Plugin B: listens to Plugin A's events
 openrv.plugins.register({
-  id: 'com.example.dashboard',
-  name: 'Dashboard',
-  version: '1.0.0',
-  contributes: ['uiPanel'],
+  manifest: {
+    id: 'com.example.dashboard',
+    name: 'Dashboard',
+    version: '1.0.0',
+    contributes: ['uiPanel'],
+  },
   activate(context) {
     // Subscribe using the full namespaced event name
     context.events.onPlugin('com.example.analyzer:analysis-complete', (data) => {
@@ -523,6 +651,7 @@ openrv.plugins.register({
     });
   }
 });
+openrv.plugins.activate('com.example.dashboard');
 ```
 
 All subscriptions created via `context.events` are automatically cleaned up when the plugin is deactivated.

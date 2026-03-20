@@ -1,0 +1,51 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { CacheManagementPanel } from './CacheManagementPanel';
+import type { MediaCacheManager } from '../../cache/MediaCacheManager';
+
+function createMockCacheManager(): MediaCacheManager {
+  return {
+    getStats: vi.fn().mockResolvedValue({
+      entryCount: 0,
+      totalSizeBytes: 0,
+      maxSizeBytes: 1024 * 1024 * 100,
+    }),
+    clearAll: vi.fn().mockResolvedValue(undefined),
+  } as unknown as MediaCacheManager;
+}
+
+describe('CacheManagementPanel', () => {
+  let panel: CacheManagementPanel;
+
+  beforeEach(() => {
+    panel = new CacheManagementPanel(createMockCacheManager());
+  });
+
+  afterEach(() => {
+    panel.dispose();
+  });
+
+  describe('basic functionality', () => {
+    it('CACHE-PANEL-004: creates a container element with correct test id', () => {
+      const el = panel.getElement();
+      expect(el.dataset.testid).toBe('cache-management-panel');
+    });
+
+    it('CACHE-PANEL-005: starts hidden', () => {
+      expect(panel.isVisible()).toBe(false);
+    });
+
+    it('CACHE-PANEL-006: show/hide toggles visibility', () => {
+      panel.show();
+      expect(panel.isVisible()).toBe(true);
+      panel.hide();
+      expect(panel.isVisible()).toBe(false);
+    });
+
+    it('CACHE-PANEL-007: toggle flips visibility', () => {
+      panel.toggle();
+      expect(panel.isVisible()).toBe(true);
+      panel.toggle();
+      expect(panel.isVisible()).toBe(false);
+    });
+  });
+});

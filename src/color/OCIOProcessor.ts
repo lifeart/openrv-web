@@ -693,6 +693,7 @@ export class OCIOProcessor extends EventEmitter<OCIOProcessorEvents> {
     }
 
     this.bakedLUT = {
+      type: '3d',
       title: `OCIO: ${this.state.inputColorSpace} -> ${this.state.display}`,
       size,
       domainMin: [0, 0, 0],
@@ -701,7 +702,7 @@ export class OCIOProcessor extends EventEmitter<OCIOProcessorEvents> {
     };
 
     this.lutDirty = false;
-    return this.bakedLUT;
+    return this.bakedLUT!;
   }
 
   /**

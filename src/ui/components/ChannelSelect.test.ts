@@ -751,6 +751,28 @@ describe('EXR Layer Support', () => {
       // Should have accent styling when active
       expect(layerButton.style.color).toBe('var(--accent-primary)');
     });
+
+    it('CH-072: should escape HTML in layer names to prevent XSS', () => {
+      const maliciousName = '<img src=x onerror=alert(1)>';
+      const layers: EXRLayerInfo[] = [
+        { name: 'RGBA', channels: ['R', 'G', 'B', 'A'], fullChannelNames: ['R', 'G', 'B', 'A'] },
+        {
+          name: maliciousName,
+          channels: ['R', 'G', 'B'],
+          fullChannelNames: [`${maliciousName}.R`, `${maliciousName}.G`, `${maliciousName}.B`],
+        },
+      ];
+      control.setEXRLayers(layers);
+      control.setEXRLayer(maliciousName);
+
+      const layerButton = document.querySelector('[data-testid="exr-layer-button"]') as HTMLButtonElement;
+      // The layer name should be rendered as escaped text, not as live HTML
+      expect(layerButton.querySelector('img')).toBeNull();
+      const span = layerButton.querySelector('span');
+      expect(span).not.toBeNull();
+      // Name is truncated to 9 chars + '...' since it exceeds 10 chars
+      expect(span!.textContent).toBe('<img src=...');
+    });
   });
 
   describe('layer state reset on file change', () => {

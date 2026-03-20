@@ -358,9 +358,7 @@ describe('InfoStripOverlay', () => {
   describe('sourceLoaded event', () => {
     it('IS-070: sourceLoaded event triggers update', () => {
       // Get the sourceLoaded callback that was registered
-      const sourceLoadedCall = mockSession.on.mock.calls.find(
-        (call: unknown[]) => call[0] === 'sourceLoaded',
-      );
+      const sourceLoadedCall = mockSession.on.mock.calls.find((call: unknown[]) => call[0] === 'sourceLoaded');
       expect(sourceLoadedCall).toBeDefined();
 
       const callback = sourceLoadedCall![1];
@@ -495,6 +493,19 @@ describe('InfoStripOverlay', () => {
     it('IS-123: setState updates background opacity in styles', () => {
       overlay.setState({ backgroundOpacity: 0.7 });
       expect(overlay.getElement().style.background).toContain('0.7');
+    });
+
+    it('IS-124: setBackgroundOpacity clamps values to the valid range', () => {
+      overlay.setBackgroundOpacity(1.5);
+      expect(overlay.getState().backgroundOpacity).toBe(1);
+
+      overlay.setBackgroundOpacity(-0.2);
+      expect(overlay.getState().backgroundOpacity).toBe(0);
+    });
+
+    it('IS-125: setState clamps background opacity values', () => {
+      overlay.setState({ backgroundOpacity: 1.2 });
+      expect(overlay.getState().backgroundOpacity).toBe(1);
     });
   });
 

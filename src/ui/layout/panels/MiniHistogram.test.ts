@@ -134,6 +134,36 @@ describe('MiniHistogram', () => {
       expect(canvas.style.display).toBe('none');
     });
 
+    it('MH-006f: data received while hidden is rendered on applyPending', () => {
+      histogram.getElement().style.display = 'none';
+      const data = createTestHistogramData();
+      histogram.update(data);
+      // Canvas still hidden
+      const canvas = histogram.getElement().querySelector('canvas') as HTMLCanvasElement;
+      expect(canvas.style.display).toBe('none');
+      // Show container and apply pending
+      histogram.getElement().style.display = '';
+      histogram.applyPending();
+      expect(canvas.style.display).toBe('block');
+      expect(histogram.getData()).toBe(data);
+    });
+
+    it('MH-006g: applyPending is a no-op when no hidden update occurred', () => {
+      const data = createTestHistogramData();
+      histogram.update(data);
+      const canvas = histogram.getElement().querySelector('canvas') as HTMLCanvasElement;
+      expect(canvas.style.display).toBe('block');
+      // Calling applyPending without a hidden update should not break anything
+      histogram.applyPending();
+      expect(canvas.style.display).toBe('block');
+    });
+
+    it('MH-006h: applyPending without any data is a no-op', () => {
+      histogram.applyPending();
+      const canvas = histogram.getElement().querySelector('canvas') as HTMLCanvasElement;
+      expect(canvas.style.display).toBe('none');
+    });
+
     it('MH-006e: multiple updates replace data', () => {
       const data1 = createTestHistogramData(500);
       const data2 = createTestHistogramData(1000);
@@ -174,6 +204,14 @@ describe('MiniHistogram', () => {
     it('MH-009c: mode toggle without data does not throw', () => {
       const btn = histogram.getElement().querySelector('[data-testid="mini-histogram-mode"]') as HTMLButtonElement;
       expect(() => btn.click()).not.toThrow();
+    });
+  });
+
+  describe('canvas title', () => {
+    it('MH-012: canvas title says "toggle" not "open"', () => {
+      const canvas = histogram.getElement().querySelector('canvas') as HTMLCanvasElement;
+      expect(canvas.title).toBe('Click to toggle Histogram');
+      expect(canvas.title).not.toContain('open');
     });
   });
 

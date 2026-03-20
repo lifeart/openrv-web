@@ -28,8 +28,9 @@ export type BuiltinFormatName =
   | 'raw-preview'
   | 'hdr'
   | 'jxl'
-  | 'jp2'
-  | 'mxf';
+  | 'jp2';
+// Note: 'mxf' is intentionally excluded — MXF is a container format, not a
+// still-image format.  Use isMXFFile / parseMXFHeader from MXFDemuxer instead.
 /** Format name type: includes built-in names plus any string for plugin formats */
 export type FormatName = BuiltinFormatName | (string & {}) | null;
 
@@ -48,7 +49,6 @@ export interface DecoderOptionsMap {
   hdr: NoDecoderOptions;
   jxl: NoDecoderOptions;
   jp2: JP2DecodeOptions;
-  mxf: NoDecoderOptions;
 }
 
 /** Result returned by FormatDecoder.decode() and detectAndDecode() */
@@ -454,23 +454,8 @@ function isJP2File(buffer: ArrayBuffer): boolean {
   return false;
 }
 
-// --- MXF detection ---
-
-function isMXFFile(buffer: ArrayBuffer): boolean {
-  if (buffer.byteLength < 8) return false;
-  const bytes = new Uint8Array(buffer, 0, 8);
-  // SMPTE UL prefix for partition pack
-  return (
-    bytes[0] === 0x06 &&
-    bytes[1] === 0x0e &&
-    bytes[2] === 0x2b &&
-    bytes[3] === 0x34 &&
-    bytes[4] === 0x02 &&
-    bytes[5] === 0x05 &&
-    bytes[6] === 0x01 &&
-    bytes[7] === 0x01
-  );
-}
+// MXF detection removed — MXF routes through video/container classification (Issue #147).
+// Use isMXFFile from MXFDemuxer for direct detection.
 
 // =============================================================================
 // Decoder adapters (lazy-load full modules via dynamic import)
@@ -648,8 +633,9 @@ const avifGainmapDecoder: FormatDecoder = {
 
 /**
  * RAW Preview format decoder adapter.
- * Extracts the largest embedded JPEG preview from camera RAW files
- * (CR2, NEF, ARW, DNG, etc.) without decoding RAW sensor data.
+ * Extracts the largest embedded JPEG preview from TIFF-based camera RAW files
+ * (CR2, NEF, ARW, DNG, ORF, PEF, SRW) without decoding RAW sensor data.
+ * Non-TIFF RAW containers (CR3, RAF, RW2) are not supported by this parser.
  * The returned image is the SDR JPEG preview decoded to float32.
  */
 const rawPreviewDecoder: FormatDecoder = {
@@ -766,51 +752,9 @@ const jp2Decoder: FormatDecoder<JP2DecodeOptions> = {
   },
 };
 
-/**
- * MXF container format adapter — METADATA-ONLY.
- *
- * MXF is a professional media container (SMPTE 377M) that wraps encoded video/audio
- * essence. This adapter only parses the MXF header partition to extract structural
- * metadata (codec, resolution, edit rate, duration, etc.). It does NOT decode video
- * frames — the returned pixel data is a dummy 1x1 RGBA image.
- *
- * OpenRV compatibility: OpenRV CAN decode and display MXF frames via its FFmpeg
- * backend (MovieFFMpeg.cpp registers MXF with full video capabilities). Our web
- * implementation is metadata-only because WebCodecs does not directly support MXF
- * containers — the essence must be extracted and re-wrapped or decoded separately.
- *
- * Consumers should inspect `metadata.mxfWidth` / `metadata.mxfHeight` for the actual
- * frame dimensions and use a dedicated MXF essence decoder for pixel access.
- */
-const mxfDecoder: FormatDecoder = {
-  formatName: 'mxf',
-  canDecode: isMXFFile,
-  async decode(buffer: ArrayBuffer) {
-    const { parseMXFHeader } = await import('./MXFDemuxer');
-    const meta = parseMXFHeader(buffer);
-    const videoDesc = meta.essenceDescriptors.find((d) => d.type === 'video');
-    return {
-      // Dummy 1x1 pixel — MXF adapter is metadata-only, no pixel decoding is performed
-      width: 1,
-      height: 1,
-      data: new Float32Array(4),
-      channels: 4,
-      colorSpace: videoDesc?.colorSpace ?? 'unknown',
-      metadata: {
-        format: 'mxf',
-        /** True — this decode result contains only metadata, not real pixel data */
-        metadataOnly: true,
-        mxfWidth: videoDesc?.width,
-        mxfHeight: videoDesc?.height,
-        operationalPattern: meta.operationalPattern,
-        codec: videoDesc?.codec ?? 'unknown',
-        editRate: meta.editRate,
-        duration: meta.duration,
-        essenceDescriptors: meta.essenceDescriptors,
-      },
-    };
-  },
-};
+// MXF is intentionally not registered as a still-image decoder (Issue #147).
+// It routes through video/container classification instead (see SupportedMediaFormats).
+// Direct MXF header parsing is available via MXFDemuxer.parseMXFHeader().
 
 /**
  * Plain AVIF format decoder adapter.
@@ -861,7 +805,8 @@ export class DecoderRegistry {
     this.decoders.push(hdrDecoder);
     this.decoders.push(jxlDecoder);
     this.decoders.push(jp2Decoder);
-    this.decoders.push(mxfDecoder);
+    // MXF is intentionally NOT registered here — it routes through
+    // video/container classification instead of the still-image decode path.
   }
 
   /**

@@ -481,6 +481,52 @@ describe('SessionGTOExporter.buildSessionObject', () => {
     expect(markerColorsProp.data[1]).toBe('#ff4444');
   });
 
+  it('GTO-MRK-U005: exports markerEndFrames for duration markers', () => {
+    // Set up markers: one duration marker and one point marker
+    session.setMarker(10, 'Duration marker', '#ff0000', 30);
+    session.setMarker(20, 'Point marker', '#00ff00');
+
+    const result = SessionGTOExporter.buildSessionObject(session, paintEngine, 'mySession', 'defaultSequence');
+    const components = result.components as Record<string, any>;
+    const sessionComp = components['session'];
+
+    const markerEndFramesProp = sessionComp.properties.markerEndFrames;
+    expect(markerEndFramesProp).toBeDefined();
+
+    // Duration marker at frame 10 has endFrame 30; point marker at frame 20 has -1
+    const endFrames = markerEndFramesProp.data as number[];
+    const marks = sessionComp.properties.marks.data as number[];
+    const idx10 = marks.indexOf(10);
+    const idx20 = marks.indexOf(20);
+    expect(endFrames[idx10]).toBe(30);
+    expect(endFrames[idx20]).toBe(-1);
+  });
+
+  it('GTO-MRK-U006: exports -1 for point markers in markerEndFrames', () => {
+    // Default markers from beforeEach (frames 10 and 20) are point markers
+    const result = SessionGTOExporter.buildSessionObject(session, paintEngine, 'mySession', 'defaultSequence');
+    const components = result.components as Record<string, any>;
+    const sessionComp = components['session'];
+
+    const markerEndFramesProp = sessionComp.properties.markerEndFrames;
+    expect(markerEndFramesProp).toBeDefined();
+    expect(markerEndFramesProp.data).toEqual([-1, -1]);
+  });
+
+  it('GTO-MRK-U007: does not log console.info for duration markers', () => {
+    const infoSpy = vi.spyOn(console, 'info');
+    session.setMarker(10, 'Duration marker', '#ff0000', 30);
+
+    SessionGTOExporter.buildSessionObject(session, paintEngine, 'mySession', 'defaultSequence');
+
+    // The TODO(#135) warning has been removed — duration markers are now fully exported
+    const calls = infoSpy.mock.calls.filter(
+      (args) => typeof args[0] === 'string' && args[0].includes('duration marker'),
+    );
+    expect(calls).toHaveLength(0);
+    infoSpy.mockRestore();
+  });
+
   it('includes root component with name and comment', () => {
     const result = SessionGTOExporter.buildSessionObject(
       session,
@@ -630,6 +676,44 @@ describe('SessionGTOExporter.buildStackGroupObjects', () => {
     const modeComp = components['mode'];
     expect(modeComp.properties.alignStartFrames.data).toEqual([1]);
     expect(modeComp.properties.strictFrameRanges.data).toEqual([1]);
+  });
+
+  it('creates RVStack with per-layer opacities in layerOutput component', () => {
+    const objects = SessionGTOExporter.buildStackGroupObjects('myStack', {
+      layerOpacities: [1.0, 0.5, 0.75],
+    });
+    const stack = objects[1]!;
+    const components = stack.components as Record<string, any>;
+
+    const layerOutputComp = components['layerOutput'];
+    expect(layerOutputComp).toBeDefined();
+    expect(layerOutputComp.properties.opacity.data).toEqual([1.0, 0.5, 0.75]);
+  });
+
+  it('creates RVStack with per-layer visibility in layerOutput component', () => {
+    const objects = SessionGTOExporter.buildStackGroupObjects('myStack', {
+      layerVisible: [true, false, true],
+    });
+    const stack = objects[1]!;
+    const components = stack.components as Record<string, any>;
+
+    const layerOutputComp = components['layerOutput'];
+    expect(layerOutputComp).toBeDefined();
+    expect(layerOutputComp.properties.visible.data).toEqual([1, 0, 1]);
+  });
+
+  it('creates RVStack with both opacities and visibility in same layerOutput component', () => {
+    const objects = SessionGTOExporter.buildStackGroupObjects('myStack', {
+      layerOpacities: [1.0, 0.5],
+      layerVisible: [true, false],
+    });
+    const stack = objects[1]!;
+    const components = stack.components as Record<string, any>;
+
+    const layerOutputComp = components['layerOutput'];
+    expect(layerOutputComp).toBeDefined();
+    expect(layerOutputComp.properties.opacity.data).toEqual([1.0, 0.5]);
+    expect(layerOutputComp.properties.visible.data).toEqual([1, 0]);
   });
 });
 
@@ -3554,6 +3638,83 @@ describe('SessionGTOExporter Round-trip Export Tests', () => {
     });
   });
 
+  describe('markerEndFrames in updateGTOData', () => {
+    it('GTO-MRK-U008: updateGTOData exports markerEndFrames for duration markers', () => {
+      session.setMarker(10, 'Duration', '#ff0000', 50);
+      session.setMarker(20, 'Point', '#00ff00');
+
+      const originalGTO: GTOData = {
+        version: 4,
+        objects: [
+          {
+            name: 'session',
+            protocol: 'RVSession',
+            components: {
+              session: {
+                name: 'session',
+                properties: [
+                  { name: 'frame', value: 1 } as any,
+                  { name: 'marks', value: [] } as any,
+                  { name: 'markerNotes', value: [] } as any,
+                  { name: 'markerColors', value: [] } as any,
+                  { name: 'markerEndFrames', value: [] } as any,
+                ],
+              },
+            },
+          },
+        ],
+      } as any;
+
+      const updatedGTO = SessionGTOExporter.updateGTOData(originalGTO, session, paintEngine);
+      const sessionObj = updatedGTO.objects.find((o) => o.protocol === 'RVSession');
+      const sessionComp = sessionObj?.components?.['session'] as unknown as GTOComponent;
+      const endFramesProp = sessionComp?.properties?.find((p: GTOProperty) => p.name === 'markerEndFrames');
+
+      expect(endFramesProp).toBeDefined();
+      const marksProp = sessionComp?.properties?.find((p: GTOProperty) => p.name === 'marks');
+      const marks = marksProp?.value as number[];
+      const endFrames = endFramesProp?.value as number[];
+
+      const idx10 = marks.indexOf(10);
+      const idx20 = marks.indexOf(20);
+      expect(endFrames[idx10]).toBe(50);
+      expect(endFrames[idx20]).toBe(-1);
+    });
+
+    it('GTO-MRK-U009: updateGTOData clears markerEndFrames when no markers', () => {
+      // session starts with no markers (clear from beforeEach)
+      session.clearMarks();
+
+      const originalGTO: GTOData = {
+        version: 4,
+        objects: [
+          {
+            name: 'session',
+            protocol: 'RVSession',
+            components: {
+              session: {
+                name: 'session',
+                properties: [
+                  { name: 'frame', value: 1 } as any,
+                  { name: 'marks', value: [10] } as any,
+                  { name: 'markerEndFrames', value: [30] } as any,
+                ],
+              },
+            },
+          },
+        ],
+      } as any;
+
+      const updatedGTO = SessionGTOExporter.updateGTOData(originalGTO, session, paintEngine);
+      const sessionObj = updatedGTO.objects.find((o) => o.protocol === 'RVSession');
+      const sessionComp = sessionObj?.components?.['session'] as unknown as GTOComponent;
+      const endFramesProp = sessionComp?.properties?.find((p: GTOProperty) => p.name === 'markerEndFrames');
+
+      expect(endFramesProp).toBeDefined();
+      expect(endFramesProp?.value).toEqual([]);
+    });
+  });
+
   describe('Complete round-trip simulation', () => {
     it('exports all custom values correctly for a complete session', () => {
       // Set up session with all custom values
@@ -4196,6 +4357,36 @@ describe('SessionGTOExporter Round-trip Export Tests', () => {
       // HDR scene-referred values should be preserved without clamping
       // float4 stores data as nested array [[r, g, b, a]]
       expect(sessionComp.properties.bgColor.data).toEqual([[1.5, -0.1, 0.5, 2.0]]);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Issue #135: duration markers are now fully preserved via markerEndFrames
+  // -----------------------------------------------------------------------
+  describe('issue #135: duration marker export', () => {
+    it('GTO-DUR-001: does not log collapse warning — duration markers are fully exported', () => {
+      session.setMetadataForTest({
+        displayName: 'test',
+        comment: '',
+        version: 1,
+        origin: 'openrv-web',
+        creationContext: 0,
+        clipboard: 0,
+        membershipContains: [],
+      });
+      // Add a duration marker (endFrame > frame)
+      session.setMarker(10, 'duration marker', '#ff0000', 20);
+
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+
+      SessionGTOExporter.buildSessionObject(session, paintEngine, 'test', 'defaultSequence');
+
+      // The TODO(#135) warning has been removed — markerEndFrames is now exported
+      const collapseCalls = infoSpy.mock.calls.filter(
+        (args) => typeof args[0] === 'string' && args[0].includes('duration marker'),
+      );
+      expect(collapseCalls).toHaveLength(0);
+      infoSpy.mockRestore();
     });
   });
 });

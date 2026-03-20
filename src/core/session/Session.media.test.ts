@@ -8,6 +8,12 @@ vi.mock('../../utils/media/SequenceLoader', () => ({
   loadFrameImage: vi.fn(),
   releaseDistantFrames: vi.fn(),
   disposeSequence: vi.fn(),
+  buildFrameNumberMap: (frames: any[]) => {
+    const map = new Map();
+    for (const f of frames) map.set(f.frameNumber, f);
+    return map;
+  },
+  getSequenceFrameRange: (info: any) => info.endFrame - info.startFrame + 1,
 }));
 
 const createMockVideo = (durationSec: number = 100, currentTimeSec: number = 0) => {
@@ -166,8 +172,11 @@ describe('Session', () => {
         name: 'seq',
         width: 100,
         height: 100,
-        frames: [{ image: {} }],
+        frames: [{ index: 0, frameNumber: 1, image: {} }],
+        startFrame: 1,
+        endFrame: 1,
         fps: 24,
+        missingFrames: [],
       });
 
       await session.loadSequence([]);
@@ -186,6 +195,7 @@ describe('Session', () => {
       const mockImg = {} as any;
       (loadFrameImage as any).mockResolvedValue(mockImg);
 
+      const frames = [{ index: 0, frameNumber: 1 }] as any;
       const source: MediaSource = {
         type: 'sequence',
         name: 's',
@@ -194,7 +204,19 @@ describe('Session', () => {
         height: 100,
         duration: 10,
         fps: 24,
-        sequenceFrames: [{}] as any,
+        sequenceFrames: frames,
+        sequenceFrameMap: new Map([[1, frames[0]]]),
+        sequenceInfo: {
+          name: 's',
+          pattern: 's',
+          frames,
+          startFrame: 1,
+          endFrame: 10,
+          width: 100,
+          height: 100,
+          fps: 24,
+          missingFrames: [],
+        },
       };
       session.setSources([source]);
 
@@ -206,6 +228,7 @@ describe('Session', () => {
 
     it('getSequenceFrameSync returns cached image', () => {
       const mockImg = {} as any;
+      const frames = [{ index: 0, frameNumber: 1, image: mockImg }] as any;
       const source: MediaSource = {
         type: 'sequence',
         name: 's',
@@ -214,10 +237,69 @@ describe('Session', () => {
         height: 100,
         duration: 10,
         fps: 24,
-        sequenceFrames: [{ image: mockImg }] as any,
+        sequenceFrames: frames,
+        sequenceFrameMap: new Map([[1, frames[0]]]),
+        sequenceInfo: {
+          name: 's',
+          pattern: 's',
+          frames,
+          startFrame: 1,
+          endFrame: 10,
+          width: 100,
+          height: 100,
+          fps: 24,
+          missingFrames: [],
+        },
       };
       session.setSources([source]);
       expect(session.getSequenceFrameSync(1)).toBe(mockImg);
+    });
+
+    it('gapped sequence uses numeric range for duration (issue #516)', () => {
+      const imgA = {} as any;
+      const imgC = {} as any;
+      const frames = [
+        { index: 0, frameNumber: 1001, image: imgA },
+        { index: 1, frameNumber: 1002, image: null },
+        { index: 2, frameNumber: 1004, image: imgC },
+      ] as any;
+      const source: MediaSource = {
+        type: 'sequence',
+        name: 'seq',
+        url: '',
+        width: 100,
+        height: 100,
+        duration: 4, // endFrame - startFrame + 1 = 1004 - 1001 + 1
+        fps: 24,
+        sequenceFrames: frames,
+        sequenceFrameMap: new Map([
+          [1001, frames[0]],
+          [1002, frames[1]],
+          [1004, frames[2]],
+        ]),
+        sequenceInfo: {
+          name: 'seq',
+          pattern: 'seq.####.png',
+          frames,
+          startFrame: 1001,
+          endFrame: 1004,
+          width: 100,
+          height: 100,
+          fps: 24,
+          missingFrames: [1003],
+        },
+      };
+      session.setSources([source]);
+
+      // Duration should be 4 (1001-1004), not 3 (frames.length)
+      expect(source.duration).toBe(4);
+
+      // Timeline frame 1 -> frameNumber 1001 -> imgA
+      expect(session.getSequenceFrameSync(1)).toBe(imgA);
+      // Timeline frame 3 -> frameNumber 1003 -> missing (null)
+      expect(session.getSequenceFrameSync(3)).toBeNull();
+      // Timeline frame 4 -> frameNumber 1004 -> imgC
+      expect(session.getSequenceFrameSync(4)).toBe(imgC);
     });
   });
 

@@ -27,11 +27,11 @@
 
 export { OpenRVAPI } from './OpenRVAPI';
 export type { OpenRVAPIConfig } from './OpenRVAPI';
-export type { ViewerProvider, ColorAdjustmentProvider, CDLProvider, CurvesProvider } from './types';
+export type { ViewerProvider, ColorAdjustmentProvider, CDLProvider, CurvesProvider, PixelProbeProvider } from './types';
 
 export { PlaybackAPI } from './PlaybackAPI';
 export { MediaAPI } from './MediaAPI';
-export type { SourceInfo } from './MediaAPI';
+export type { SourceInfo, RepresentationInfo } from './MediaAPI';
 export { AudioAPI } from './AudioAPI';
 export { LoopAPI } from './LoopAPI';
 export { ViewAPI } from './ViewAPI';
@@ -39,6 +39,7 @@ export { ColorAPI } from './ColorAPI';
 export type { PublicColorAdjustments, PublicColorCurvesData, PublicColorCurvesUpdate } from './ColorAPI';
 export { MarkersAPI } from './MarkersAPI';
 export type { MarkerInfo } from './MarkersAPI';
+export { SequenceAPI } from './SequenceAPI';
 export { EventsAPI } from './EventsAPI';
 export type { OpenRVEventName, OpenRVEventData } from './EventsAPI';
 

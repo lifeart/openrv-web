@@ -13,6 +13,7 @@ import type { FileSourceNode } from '../../nodes/sources/FileSourceNode';
 import type { ProceduralSourceNode } from '../../nodes/sources/ProceduralSourceNode';
 import type { UnsupportedCodecError, CodecFamily } from '../../utils/media/CodecUtils';
 import type { Annotation, PaintEffects } from '../../paint/types';
+import type { VersionEntry } from './VersionManager';
 import type { ColorAdjustments, ChannelMode, LinearizeState, ChannelSwizzle } from '../../core/types/color';
 import type { FilterSettings } from '../../core/types/filter';
 import type { Transform2D, CropState, UncropState } from '../../core/types/transform';
@@ -23,7 +24,8 @@ import type { LensDistortionParams } from '../../transform/LensDistortion';
 import type { StereoState } from '../types/stereo';
 import type { StereoEyeTransformState, StereoAlignMode } from '../../stereo/StereoEyeTransform';
 import type { LoopMode, MediaType, PlaybackMode } from '../types/session';
-import type { GTOParseResult } from './GTOGraphLoader';
+import type { GTOParseResult, SkippedNodeInfo } from './GTOGraphLoader';
+import type { DegradedModeInfo } from '../../composite/BlendModes';
 import type { SubFramePosition } from '../../utils/media/FrameInterpolator';
 import type { FPSMeasurement } from './PlaybackEngine';
 import type { Marker } from './MarkerManager';
@@ -109,9 +111,12 @@ export interface AudioPlaybackError {
 export interface SessionEvents extends EventMap {
   frameChanged: number;
   playbackChanged: boolean;
+  sourceLoadingStarted: { name: string };
   sourceLoaded: MediaSource;
+  sourceLoadFailed: { name: string };
   sessionLoaded: void;
   durationChanged: number;
+  currentSourceChanged: number;
   inOutChanged: { inPoint: number; outPoint: number };
   loopModeChanged: LoopMode;
   playbackModeChanged: PlaybackMode;
@@ -126,6 +131,10 @@ export interface SessionEvents extends EventMap {
   volumeChanged: number;
   mutedChanged: boolean;
   graphLoaded: GTOParseResult;
+  /** Emitted when nodes are skipped during GTO import (lossy import warning) */
+  skippedNodes: SkippedNodeInfo[];
+  /** Emitted when composite modes are degraded during GTO import (lossy import warning) */
+  degradedModes: DegradedModeInfo[];
   fpsChanged: number;
   abSourceChanged: { current: 'A' | 'B'; sourceIndex: number };
   // New events for GTO session integration
@@ -137,6 +146,8 @@ export interface SessionEvents extends EventMap {
   audioError: AudioPlaybackError;
   // Codec events
   unsupportedCodec: UnsupportedCodecInfo;
+  /** Emitted when HDR video is silently downgraded to SDR due to VideoSampleSink failure */
+  hdrDowngraded: { filename: string };
   // Buffering events
   buffering: boolean;
   // Sub-frame interpolation events
@@ -151,8 +162,17 @@ export interface SessionEvents extends EventMap {
   // Note/comment events
   notesChanged: void;
   versionsChanged: void;
+  activeVersionChanged: { groupId: string; entry: VersionEntry };
+  // Playback stopped (pause + return to start)
+  playbackStopped: void;
+  // Playlist reached end without looping
+  playlistEnded: void;
   statusChanged: { sourceIndex: number; status: string; previous: string };
   statusesChanged: void;
+  // SessionManager events (graph structure, view node, view history)
+  viewNodeChanged: { nodeId: string };
+  graphStructureChanged: void;
+  viewHistoryChanged: { canGoBack: boolean; canGoForward: boolean };
   // Range shifting events
   rangeShifted: { inPoint: number; outPoint: number };
   // Representation events
@@ -188,6 +208,8 @@ export interface MediaSource {
   // Sequence-specific data
   sequenceInfo?: SequenceInfo;
   sequenceFrames?: SequenceFrame[];
+  /** Map from frame number → SequenceFrame for O(1) timeline lookups */
+  sequenceFrameMap?: Map<number, SequenceFrame>;
   // Video source node for mediabunny frame extraction
   videoSourceNode?: VideoSourceNode;
   // File source node for EXR files (supports layer selection)
@@ -196,6 +218,20 @@ export interface MediaSource {
   proceduralSourceNode?: ProceduralSourceNode;
   // OPFS cache key (set after successful cache put)
   opfsCacheKey?: string;
+
+  // --- Embedded timecode metadata ---
+  /** Embedded source timecode string from container metadata (e.g. MXF startTimecode) */
+  sourceTimecode?: string;
+
+  // --- Spherical / 360 metadata ---
+  /** True if the source is tagged as spherical (e.g. XMP SphericalVideo) */
+  isSpherical?: boolean;
+  /** Projection type from container metadata (e.g. 'equirectangular') */
+  projectionType?: 'equirectangular' | 'cubemap';
+
+  // --- Stereo input format metadata ---
+  /** How the stereo content is packed in this source (e.g. side-by-side, over-under, separate views) */
+  stereoInputFormat?: import('../../core/types/stereo').StereoInputFormat;
 
   // --- Multiple Media Representations (MMR) ---
   /** All available representations for this source. Undefined or empty array = legacy mode. */

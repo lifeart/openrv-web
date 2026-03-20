@@ -454,4 +454,90 @@ describe('FPSIndicator', () => {
       expect(indicator.isVisible()).toBe(false);
     });
   });
+
+  // =================================================================
+  // External preference changes (import/reset)
+  // =================================================================
+
+  describe('External preference changes', () => {
+    it('FPS-130: fpsIndicatorPrefsChanged updates live state', () => {
+      // Initial state is default
+      expect(indicator.getState().position).toBe('top-right');
+      expect(indicator.getState().backgroundOpacity).toBe(0.6);
+
+      // Simulate an external preference change (e.g. import or reset)
+      preferences.emit('fpsIndicatorPrefsChanged', {
+        enabled: false,
+        position: 'bottom-left',
+        showDroppedFrames: false,
+        showTargetFps: false,
+        backgroundOpacity: 0.8,
+        warningThreshold: 0.95,
+        criticalThreshold: 0.8,
+      });
+
+      const state = indicator.getState();
+      expect(state.enabled).toBe(false);
+      expect(state.position).toBe('bottom-left');
+      expect(state.showDroppedFrames).toBe(false);
+      expect(state.showTargetFps).toBe(false);
+      expect(state.backgroundOpacity).toBe(0.8);
+      expect(state.warningThreshold).toBe(0.95);
+      expect(state.criticalThreshold).toBe(0.8);
+    });
+
+    it('FPS-131: fpsIndicatorPrefsChanged emits stateChanged', () => {
+      const handler = vi.fn();
+      indicator.on('stateChanged', handler);
+
+      preferences.emit('fpsIndicatorPrefsChanged', {
+        enabled: true,
+        position: 'bottom-right',
+        showDroppedFrames: true,
+        showTargetFps: true,
+        backgroundOpacity: 0.5,
+        warningThreshold: 0.97,
+        criticalThreshold: 0.85,
+      });
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ position: 'bottom-right' }));
+    });
+
+    it('FPS-132: fpsIndicatorPrefsChanged updates DOM styles', () => {
+      preferences.emit('fpsIndicatorPrefsChanged', {
+        enabled: true,
+        position: 'bottom-left',
+        showDroppedFrames: true,
+        showTargetFps: true,
+        backgroundOpacity: 0.3,
+        warningThreshold: 0.97,
+        criticalThreshold: 0.85,
+      });
+
+      const el = indicator.getElement();
+      expect(el.style.bottom).toBe('16px');
+      expect(el.style.left).toBe('16px');
+    });
+
+    it('FPS-133: after dispose, fpsIndicatorPrefsChanged does not update state', () => {
+      indicator.dispose();
+
+      // Capture state before the event
+      const stateBefore = indicator.getState();
+
+      preferences.emit('fpsIndicatorPrefsChanged', {
+        enabled: false,
+        position: 'bottom-left',
+        showDroppedFrames: false,
+        showTargetFps: false,
+        backgroundOpacity: 0.2,
+        warningThreshold: 0.5,
+        criticalThreshold: 0.3,
+      });
+
+      // State should remain unchanged
+      expect(indicator.getState()).toEqual(stateBefore);
+    });
+  });
 });

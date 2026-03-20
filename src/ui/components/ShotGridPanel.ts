@@ -16,10 +16,78 @@ import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 
 // ---------------------------------------------------------------------------
+// URL parsing
+// ---------------------------------------------------------------------------
+
+export interface ShotGridInputResult {
+  mode: QueryMode;
+  id: number;
+}
+
+/**
+ * Parse user input that may be a plain numeric ID or a ShotGrid URL.
+ *
+ * Supported URL patterns:
+ *   https://site.shotgrid.autodesk.com/detail/Version/12345
+ *   https://site.shotgunstudio.com/detail/Shot/67890
+ *   https://site.shotgrid.autodesk.com/page/1234#Version_12345
+ *
+ * Returns null if the input cannot be parsed.
+ */
+export function parseShotGridInput(raw: string, currentMode: QueryMode): ShotGridInputResult | null {
+  const trimmed = raw.trim();
+  if (trimmed === '') return null;
+
+  // Try URL parsing first (input contains '/' or starts with http)
+  if (trimmed.includes('/') || trimmed.startsWith('http')) {
+    return parseShotGridUrl(trimmed);
+  }
+
+  // Plain numeric ID
+  const id = parseInt(trimmed, 10);
+  if (!Number.isFinite(id) || id < 1) return null;
+  return { mode: currentMode, id };
+}
+
+const ENTITY_TYPE_TO_MODE: Record<string, QueryMode> = {
+  version: 'version',
+  shot: 'shot',
+  playlist: 'playlist',
+};
+
+function parseShotGridUrl(input: string): ShotGridInputResult | null {
+  // Pattern 1: /detail/EntityType/ID
+  const detailMatch = input.match(/\/detail\/(\w+)\/(\d+)/);
+  if (detailMatch) {
+    const entityType = detailMatch[1]!.toLowerCase();
+    const id = parseInt(detailMatch[2]!, 10);
+    const mode = ENTITY_TYPE_TO_MODE[entityType];
+    if (mode && Number.isFinite(id) && id > 0) {
+      return { mode, id };
+    }
+    return null;
+  }
+
+  // Pattern 2: #EntityType_ID (fragment-based)
+  const fragmentMatch = input.match(/#(\w+)_(\d+)/);
+  if (fragmentMatch) {
+    const entityType = fragmentMatch[1]!.toLowerCase();
+    const id = parseInt(fragmentMatch[2]!, 10);
+    const mode = ENTITY_TYPE_TO_MODE[entityType];
+    if (mode && Number.isFinite(id) && id > 0) {
+      return { mode, id };
+    }
+    return null;
+  }
+
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export type QueryMode = 'playlist' | 'shot';
+export type QueryMode = 'playlist' | 'shot' | 'version';
 
 export interface ShotGridPanelEvents extends EventMap {
   loadVersion: { version: ShotGridVersion; mediaUrl: string | null };
@@ -28,6 +96,7 @@ export interface ShotGridPanelEvents extends EventMap {
   pushStatus: { versionId: number; sourceIndex: number };
   loadPlaylist: { playlistId: number };
   loadShot: { shotId: number };
+  loadVersionById: { versionId: number };
   visibilityChanged: boolean;
 }
 
@@ -142,9 +211,8 @@ export class ShotGridPanel extends EventEmitter<ShotGridPanelEvents> {
     `;
 
     this.queryInput = document.createElement('input');
-    this.queryInput.type = 'number';
-    this.queryInput.min = '1';
-    this.queryInput.placeholder = 'Playlist ID';
+    this.queryInput.type = 'text';
+    this.queryInput.placeholder = 'Playlist ID or ShotGrid URL';
     this.queryInput.dataset.testid = 'shotgrid-query-input';
     this.queryInput.style.cssText = `
       flex: 1;
@@ -165,7 +233,7 @@ export class ShotGridPanel extends EventEmitter<ShotGridPanelEvents> {
     this.modeToggle.type = 'button';
     this.modeToggle.dataset.testid = 'shotgrid-mode-toggle';
     this.modeToggle.textContent = 'Playlist';
-    this.modeToggle.title = 'Toggle between Playlist and Shot mode';
+    this.modeToggle.title = 'Toggle between Playlist, Shot, and Version mode';
     this.modeToggle.style.cssText = `
       padding: 6px 10px;
       border: 1px solid var(--border-primary);
@@ -302,6 +370,11 @@ export class ShotGridPanel extends EventEmitter<ShotGridPanelEvents> {
       return moviePath;
     }
 
+    // Fall back to frame-sequence path when no movie URL is available
+    if (version.sg_path_to_frames) {
+      return version.sg_path_to_frames;
+    }
+
     return null;
   }
 
@@ -323,20 +396,62 @@ export class ShotGridPanel extends EventEmitter<ShotGridPanelEvents> {
     this.toolbarSection.style.display = this.connected ? 'flex' : 'none';
   }
 
+  private static readonly MODE_CYCLE: QueryMode[] = ['playlist', 'shot', 'version'];
+  private static readonly MODE_LABELS: Record<QueryMode, string> = {
+    playlist: 'Playlist',
+    shot: 'Shot',
+    version: 'Version',
+  };
+  private static readonly MODE_PLACEHOLDERS: Record<QueryMode, string> = {
+    playlist: 'Playlist ID or ShotGrid URL',
+    shot: 'Shot ID or ShotGrid URL',
+    version: 'Version ID or ShotGrid URL',
+  };
+
   private toggleMode(): void {
-    this.queryMode = this.queryMode === 'playlist' ? 'shot' : 'playlist';
-    this.modeToggle.textContent = this.queryMode === 'playlist' ? 'Playlist' : 'Shot';
-    this.queryInput.placeholder = this.queryMode === 'playlist' ? 'Playlist ID' : 'Shot ID';
+    const cycle = ShotGridPanel.MODE_CYCLE;
+    const idx = cycle.indexOf(this.queryMode);
+    this.queryMode = cycle[(idx + 1) % cycle.length]!;
+    this.syncModeUI();
+  }
+
+  /** Update UI to reflect the current queryMode. */
+  private syncModeUI(): void {
+    this.modeToggle.textContent = ShotGridPanel.MODE_LABELS[this.queryMode];
+    this.queryInput.placeholder = ShotGridPanel.MODE_PLACEHOLDERS[this.queryMode];
   }
 
   private handleLoad(): void {
-    const id = parseInt(this.queryInput.value.trim(), 10);
-    if (!Number.isFinite(id) || id < 1) return;
+    const raw = this.queryInput.value.trim();
+    const result = parseShotGridInput(raw, this.queryMode);
 
-    if (this.queryMode === 'playlist') {
-      this.emit('loadPlaylist', { playlistId: id });
+    if (!result) {
+      // Show inline validation error
+      this.queryInput.setAttribute('aria-invalid', 'true');
+      this.queryInput.style.borderColor = 'var(--text-danger, #ef4444)';
+
+      const label = ShotGridPanel.MODE_LABELS[this.queryMode];
+      this.showState('error', raw === '' ? `${label} ID is required` : `Invalid input: "${raw}"`);
+      return;
+    }
+
+    // Auto-switch mode when URL detection yields a different entity type
+    if (result.mode !== this.queryMode) {
+      this.queryMode = result.mode;
+      this.syncModeUI();
+    }
+
+    // Clear any previous validation error
+    this.queryInput.removeAttribute('aria-invalid');
+    this.queryInput.style.borderColor = 'var(--border-primary)';
+    this.showState(null);
+
+    if (result.mode === 'playlist') {
+      this.emit('loadPlaylist', { playlistId: result.id });
+    } else if (result.mode === 'shot') {
+      this.emit('loadShot', { shotId: result.id });
     } else {
-      this.emit('loadShot', { shotId: id });
+      this.emit('loadVersionById', { versionId: result.id });
     }
   }
 
@@ -455,10 +570,18 @@ export class ShotGridPanel extends EventEmitter<ShotGridPanelEvents> {
 
     // Media availability indicator
     const mediaUrl = this.resolveMediaUrl(version);
-    if (!mediaUrl && version.sg_path_to_frames) {
+    const isFrameSequence =
+      !version.sg_uploaded_movie?.url &&
+      !(
+        version.sg_path_to_movie &&
+        (version.sg_path_to_movie.startsWith('http://') || version.sg_path_to_movie.startsWith('https://'))
+      ) &&
+      !!version.sg_path_to_frames;
+    if (isFrameSequence) {
       const framesLabel = document.createElement('div');
+      framesLabel.dataset.testid = 'shotgrid-frame-sequence-label';
       framesLabel.style.cssText = 'font-size: 10px; color: var(--text-muted); margin-bottom: 6px;';
-      framesLabel.textContent = 'Frame sequence only';
+      framesLabel.textContent = 'Frame sequence';
       row.appendChild(framesLabel);
     } else if (!mediaUrl) {
       const noMediaLabel = document.createElement('div');

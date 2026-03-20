@@ -76,6 +76,7 @@ export class TimelineContextMenu {
       padding: 4px 0;
       z-index: ${Z_INDEX.dropdown};
       min-width: 240px;
+      max-width: calc(100vw - 16px);
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       visibility: hidden;
     `;
@@ -95,8 +96,8 @@ export class TimelineContextMenu {
     // Separator after info
     menu.appendChild(this.createSeparator());
 
-    // Copy Timecode
-    const copyItem = this.createMenuItem('Copy Timecode', 'Ctrl+C', () => {
+    // Copy Timecode (click-only; Ctrl+C is bound to frame copy, not timecode copy)
+    const copyItem = this.createMenuItem('Copy Timecode', null, () => {
       options.onCopyTimecode(options.timecode);
       this.hide();
     });

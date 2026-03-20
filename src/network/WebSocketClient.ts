@@ -11,7 +11,7 @@
 import { EventEmitter } from '../utils/EventEmitter';
 import type { SyncMessage, WebSocketClientEvents, NetworkSyncConfig } from './types';
 import { DEFAULT_NETWORK_SYNC_CONFIG } from './types';
-import { serializeMessage, deserializeMessage, createPingMessage } from './MessageProtocol';
+import { serializeMessage, deserializeMessage, createPingMessage, createPongMessage } from './MessageProtocol';
 
 export class WebSocketClient extends EventEmitter<WebSocketClientEvents> {
   private ws: WebSocket | null = null;
@@ -29,6 +29,13 @@ export class WebSocketClient extends EventEmitter<WebSocketClientEvents> {
   private _userId = '';
   private _roomId = '';
   private _disposed = false;
+  private _malformedMessageCount = 0;
+  private _malformedMessageWindowStart = 0;
+
+  /** Maximum number of warning events emitted per time window. */
+  private static readonly MALFORMED_WARN_LIMIT = 5;
+  /** Time window in milliseconds for rate-limiting warnings. */
+  private static readonly MALFORMED_WARN_WINDOW_MS = 10_000;
 
   constructor(config?: Partial<NetworkSyncConfig>) {
     super();
@@ -161,6 +168,8 @@ export class WebSocketClient extends EventEmitter<WebSocketClientEvents> {
       this._isReconnecting = false;
       this.reconnectAttempts = 0;
       this._shouldReconnect = true;
+      this._malformedMessageCount = 0;
+      this._malformedMessageWindowStart = 0;
       this.startHeartbeat();
       this.emit('connected', undefined);
 
@@ -198,7 +207,7 @@ export class WebSocketClient extends EventEmitter<WebSocketClientEvents> {
 
     const message = deserializeMessage(data);
     if (!message) {
-      // Reject malformed messages silently
+      this.emitMalformedMessageWarning(data);
       return;
     }
 
@@ -210,6 +219,10 @@ export class WebSocketClient extends EventEmitter<WebSocketClientEvents> {
 
     // Handle ping messages by responding with pong
     if (message.type === 'ping') {
+      const pingPayload = message.payload as { sentAt?: number };
+      const sentAt = typeof pingPayload?.sentAt === 'number' ? pingPayload.sentAt : Date.now();
+      const pongMessage = createPongMessage(this._roomId, this._userId, sentAt);
+      this.send(pongMessage);
       this.resetHeartbeatTimeout();
       return;
     }
@@ -224,6 +237,27 @@ export class WebSocketClient extends EventEmitter<WebSocketClientEvents> {
       this.emit('rttUpdated', this._rtt);
     }
     this.resetHeartbeatTimeout();
+  }
+
+  private emitMalformedMessageWarning(rawData: string): void {
+    const now = Date.now();
+
+    // Reset the window if it has elapsed
+    if (now - this._malformedMessageWindowStart >= WebSocketClient.MALFORMED_WARN_WINDOW_MS) {
+      this._malformedMessageCount = 0;
+      this._malformedMessageWindowStart = now;
+    }
+
+    this._malformedMessageCount++;
+
+    if (this._malformedMessageCount <= WebSocketClient.MALFORMED_WARN_LIMIT) {
+      const preview = rawData.length > 120 ? rawData.slice(0, 120) + '...' : rawData;
+      this.emit('warning', {
+        code: 'MALFORMED_MESSAGE',
+        message: `Received malformed sync message (${this._malformedMessageCount} in current window)`,
+        detail: preview,
+      });
+    }
   }
 
   // ---- Heartbeat ----
@@ -350,5 +384,7 @@ export class WebSocketClient extends EventEmitter<WebSocketClientEvents> {
     this.stopHeartbeat();
     this._isReconnecting = false;
     this.reconnectAttempts = 0;
+    this._malformedMessageCount = 0;
+    this._malformedMessageWindowStart = 0;
   }
 }

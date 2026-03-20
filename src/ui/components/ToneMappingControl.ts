@@ -33,7 +33,7 @@ import { DEFAULT_TONE_MAPPING_STATE, TONE_MAPPING_OPERATORS } from '../../core/t
  */
 export interface ToneMappingControlEvents extends EventMap {
   stateChanged: ToneMappingState;
-  hdrModeChanged: HDROutputMode;
+  hdrModeChanged: { mode: HDROutputMode; previousMode: HDROutputMode };
 }
 
 /**
@@ -576,9 +576,20 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
    */
   setHDROutputMode(mode: HDROutputMode): void {
     if (this.hdrOutputMode === mode) return;
+    const previousMode = this.hdrOutputMode;
     this.hdrOutputMode = mode;
     this.updateHDRModeButtons();
-    this.emit('hdrModeChanged', mode);
+    this.emit('hdrModeChanged', { mode, previousMode });
+  }
+
+  /**
+   * Sync HDR output mode from external source without emitting events.
+   * Use this to revert the UI when the renderer rejects a mode change.
+   */
+  syncHDROutputMode(mode: HDROutputMode): void {
+    if (this.hdrOutputMode === mode) return;
+    this.hdrOutputMode = mode;
+    this.updateHDRModeButtons();
   }
 
   /**
@@ -656,8 +667,30 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
 
   private positionDropdown(): void {
     const rect = this.toggleButton.getBoundingClientRect();
-    this.dropdown.style.top = `${rect.bottom + 4}px`;
-    this.dropdown.style.left = `${rect.left}px`;
+    const dropdownRect = this.dropdown.getBoundingClientRect();
+    const viewportPadding = 8;
+
+    let top = rect.bottom + 4;
+    let left = rect.left;
+
+    // Prefer rendering below, then flip above if needed.
+    if (top + dropdownRect.height > window.innerHeight - viewportPadding) {
+      top = rect.top - dropdownRect.height - 4;
+    }
+
+    // Clamp to viewport edges.
+    if (top < viewportPadding) {
+      top = viewportPadding;
+    }
+    if (left + dropdownRect.width > window.innerWidth - viewportPadding) {
+      left = window.innerWidth - dropdownRect.width - viewportPadding;
+    }
+    if (left < viewportPadding) {
+      left = viewportPadding;
+    }
+
+    this.dropdown.style.top = `${top}px`;
+    this.dropdown.style.left = `${left}px`;
   }
 
   private handleOutsideClick = (e: MouseEvent): void => {
@@ -680,6 +713,16 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
   setEnabled(enabled: boolean): void {
     if (this.state.enabled === enabled) return;
     this.state.enabled = enabled;
+    // When enabling and operator is 'off', auto-select a default operator
+    // so that checking the enable checkbox has a visible effect (fix #114).
+    if (enabled && this.state.operator === 'off') {
+      const fallback = TONE_MAPPING_OPERATORS.find((op) => op.key !== 'off');
+      if (fallback) {
+        this.state.operator = fallback.key;
+        this.updateOperatorButtons();
+        this.updateParameterVisibility();
+      }
+    }
     this.updateButtonState();
     this.updateEnableCheckbox();
     this.emit('stateChanged', { ...this.state });
@@ -708,10 +751,24 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
   }
 
   /**
-   * Toggle tone mapping on/off
+   * Toggle tone mapping on/off.
+   *
+   * When enabling and the operator is 'off', automatically selects a default
+   * operator ('reinhard') so the shortcut has an immediate visible effect.
+   * When disabling, the operator is preserved so re-enabling restores it.
    */
   toggle(): void {
-    this.setEnabled(!this.state.enabled);
+    const willEnable = !this.state.enabled;
+    if (willEnable && this.state.operator === 'off') {
+      // Pick the first non-'off' operator as a sensible default
+      const fallback = TONE_MAPPING_OPERATORS.find((op) => op.key !== 'off');
+      if (fallback) {
+        this.state.operator = fallback.key;
+        this.updateOperatorButtons();
+        this.updateParameterVisibility();
+      }
+    }
+    this.setEnabled(willEnable);
   }
 
   /**

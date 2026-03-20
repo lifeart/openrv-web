@@ -11,7 +11,7 @@ function createInvertLUT1D(): LUT1D {
     data[i * 3 + 1] = v;
     data[i * 3 + 2] = v;
   }
-  return { title: 'Invert 1D', size, domainMin: [0, 0, 0], domainMax: [1, 1, 1], data };
+  return { type: '1d', title: 'Invert 1D', size, domainMin: [0, 0, 0], domainMax: [1, 1, 1], data };
 }
 
 function createTestImageData(width: number, height: number): ImageData {

@@ -58,14 +58,22 @@ export class MuSettingsBridge {
    * Check if a setting exists.
    */
   hasSetting(group: string, key: string): boolean {
-    return localStorage.getItem(this.makeKey(group, key)) !== null;
+    try {
+      return localStorage.getItem(this.makeKey(group, key)) !== null;
+    } catch {
+      return false;
+    }
   }
 
   /**
    * Remove a setting.
    */
   removeSetting(group: string, key: string): void {
-    localStorage.removeItem(this.makeKey(group, key));
+    try {
+      localStorage.removeItem(this.makeKey(group, key));
+    } catch {
+      // no-op in blocked-storage environments
+    }
   }
 
   /**
@@ -75,11 +83,15 @@ export class MuSettingsBridge {
     const prefix = `${SETTINGS_PREFIX}${group}:`;
     const keys: string[] = [];
 
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key?.startsWith(prefix)) {
-        keys.push(key.slice(prefix.length));
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key?.startsWith(prefix)) {
+          keys.push(key.slice(prefix.length));
+        }
       }
+    } catch {
+      return [];
     }
 
     return keys;
@@ -89,18 +101,22 @@ export class MuSettingsBridge {
    * Clear all settings in a group.
    */
   clearGroup(group: string): void {
-    const prefix = `${SETTINGS_PREFIX}${group}:`;
-    const keysToRemove: string[] = [];
+    try {
+      const prefix = `${SETTINGS_PREFIX}${group}:`;
+      const keysToRemove: string[] = [];
 
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key?.startsWith(prefix)) {
-        keysToRemove.push(key);
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key?.startsWith(prefix)) {
+          keysToRemove.push(key);
+        }
       }
-    }
 
-    for (const key of keysToRemove) {
-      localStorage.removeItem(key);
+      for (const key of keysToRemove) {
+        localStorage.removeItem(key);
+      }
+    } catch {
+      // no-op in blocked-storage environments
     }
   }
 
@@ -108,17 +124,21 @@ export class MuSettingsBridge {
    * Clear all openrv settings.
    */
   clearAll(): void {
-    const keysToRemove: string[] = [];
+    try {
+      const keysToRemove: string[] = [];
 
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key?.startsWith(SETTINGS_PREFIX)) {
-        keysToRemove.push(key);
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key?.startsWith(SETTINGS_PREFIX)) {
+          keysToRemove.push(key);
+        }
       }
-    }
 
-    for (const key of keysToRemove) {
-      localStorage.removeItem(key);
+      for (const key of keysToRemove) {
+        localStorage.removeItem(key);
+      }
+    } catch {
+      // no-op in blocked-storage environments
     }
   }
 
@@ -157,11 +177,7 @@ export class MuSettingsBridge {
     }
 
     // If types don't match, accept any valid SettingsValue type
-    if (
-      typeof parsed === 'number' ||
-      typeof parsed === 'string' ||
-      typeof parsed === 'boolean'
-    ) {
+    if (typeof parsed === 'number' || typeof parsed === 'string' || typeof parsed === 'boolean') {
       return parsed;
     }
     if (Array.isArray(parsed)) {

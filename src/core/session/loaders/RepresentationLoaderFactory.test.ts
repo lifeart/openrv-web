@@ -8,6 +8,7 @@ import { SequenceRepresentationLoader } from './SequenceRepresentationLoader';
 vi.mock('../../../nodes/sources/FileSourceNode', () => ({
   FileSourceNode: class MockFileSourceNode {
     loadFile = vi.fn().mockResolvedValue(undefined);
+    load = vi.fn().mockResolvedValue(undefined);
     isHDR = vi.fn().mockReturnValue(false);
     width = 1920;
     height = 1080;
@@ -19,8 +20,11 @@ vi.mock('../../../nodes/sources/FileSourceNode', () => ({
 vi.mock('../../../nodes/sources/VideoSourceNode', () => ({
   VideoSourceNode: class MockVideoSourceNode {
     loadFile = vi.fn().mockResolvedValue({ success: true });
+    load = vi.fn().mockResolvedValue(undefined);
     isHDR = vi.fn().mockReturnValue(false);
     getMetadata = vi.fn().mockReturnValue({ width: 1920, height: 1080, duration: 100, fps: 24 });
+    getDetectedFps = vi.fn().mockResolvedValue(24);
+    getActualFrameCount = vi.fn().mockResolvedValue(100);
     dispose = vi.fn();
   },
 }));
@@ -51,8 +55,12 @@ describe('RepresentationLoaderFactory', () => {
       expect(loader).toBeInstanceOf(VideoRepresentationLoader);
     });
 
-    it('should throw for "streaming" kind (not yet supported)', () => {
-      expect(() => createRepresentationLoader('streaming')).toThrow('Streaming representations are not yet supported');
+    it('should handle all valid RepresentationKind values without throwing', () => {
+      // Regression test for issue #529: ensure every valid kind produces a loader
+      const validKinds = ['frames', 'movie', 'proxy'] as const;
+      for (const kind of validKinds) {
+        expect(() => createRepresentationLoader(kind)).not.toThrow();
+      }
     });
 
     it('should pass hdrResizeTier to VideoRepresentationLoader', () => {
@@ -63,7 +71,7 @@ describe('RepresentationLoaderFactory', () => {
 });
 
 describe('FileRepresentationLoader', () => {
-  it('should throw if no file is provided', async () => {
+  it('should throw if no file, url, or path is provided', async () => {
     const loader = new FileRepresentationLoader();
     const rep = {
       id: 'test',
@@ -79,7 +87,7 @@ describe('FileRepresentationLoader', () => {
       startFrame: 0,
     };
 
-    await expect(loader.load(rep)).rejects.toThrow('no file provided');
+    await expect(loader.load(rep)).rejects.toThrow('no file or url provided');
   });
 
   it('should load a file and return result', async () => {
@@ -104,6 +112,73 @@ describe('FileRepresentationLoader', () => {
     expect(result.sourceNode).toBeDefined();
     expect(result.audioTrackPresent).toBe(false);
     expect(result.par).toBe(1.0);
+  });
+
+  it('should load from url when no file is provided', async () => {
+    const loader = new FileRepresentationLoader();
+
+    const rep = {
+      id: 'test-url',
+      label: 'Test URL',
+      kind: 'frames' as const,
+      priority: 0,
+      status: 'idle' as const,
+      resolution: { width: 0, height: 0 },
+      par: 1.0,
+      sourceNode: null,
+      loaderConfig: { url: 'https://example.com/image.exr' },
+      audioTrackPresent: false,
+      startFrame: 0,
+    };
+
+    const result = await loader.load(rep);
+    expect(result.sourceNode).toBeDefined();
+    expect(result.audioTrackPresent).toBe(false);
+    expect(result.resolution.width).toBe(1920);
+  });
+
+  it('should load from path when no file or url is provided', async () => {
+    const loader = new FileRepresentationLoader();
+
+    const rep = {
+      id: 'test-path',
+      label: 'Test Path',
+      kind: 'frames' as const,
+      priority: 0,
+      status: 'idle' as const,
+      resolution: { width: 0, height: 0 },
+      par: 1.0,
+      sourceNode: null,
+      loaderConfig: { path: '/assets/image.png' },
+      audioTrackPresent: false,
+      startFrame: 0,
+    };
+
+    const result = await loader.load(rep);
+    expect(result.sourceNode).toBeDefined();
+    expect(result.audioTrackPresent).toBe(false);
+  });
+
+  it('should prefer file over url', async () => {
+    const loader = new FileRepresentationLoader();
+    const mockFile = new File(['test'], 'test.exr', { type: 'image/x-exr' });
+
+    const rep = {
+      id: 'test-prefer-file',
+      label: 'Test',
+      kind: 'frames' as const,
+      priority: 0,
+      status: 'idle' as const,
+      resolution: { width: 0, height: 0 },
+      par: 1.0,
+      sourceNode: null,
+      loaderConfig: { file: mockFile, url: 'https://example.com/image.exr' },
+      audioTrackPresent: false,
+      startFrame: 0,
+    };
+
+    const result = await loader.load(rep);
+    expect(result.sourceNode).toBeDefined();
   });
 
   it('should dispose the source node', async () => {
@@ -131,7 +206,7 @@ describe('FileRepresentationLoader', () => {
 });
 
 describe('VideoRepresentationLoader', () => {
-  it('should throw if no file is provided', async () => {
+  it('should throw if no file, url, or path is provided', async () => {
     const loader = new VideoRepresentationLoader();
     const rep = {
       id: 'test',
@@ -147,7 +222,7 @@ describe('VideoRepresentationLoader', () => {
       startFrame: 0,
     };
 
-    await expect(loader.load(rep)).rejects.toThrow('no file provided');
+    await expect(loader.load(rep)).rejects.toThrow('no file or url provided');
   });
 
   it('should load a video file and return result', async () => {
@@ -173,6 +248,73 @@ describe('VideoRepresentationLoader', () => {
     expect(result.audioTrackPresent).toBe(true);
     expect(result.resolution.width).toBe(1920);
   });
+
+  it('should load from url when no file is provided', async () => {
+    const loader = new VideoRepresentationLoader();
+
+    const rep = {
+      id: 'test-url',
+      label: 'Test URL',
+      kind: 'movie' as const,
+      priority: 1,
+      status: 'idle' as const,
+      resolution: { width: 0, height: 0 },
+      par: 1.0,
+      sourceNode: null,
+      loaderConfig: { url: 'https://example.com/video.mp4' },
+      audioTrackPresent: false,
+      startFrame: 0,
+    };
+
+    const result = await loader.load(rep);
+    expect(result.sourceNode).toBeDefined();
+    expect(result.audioTrackPresent).toBe(true);
+    expect(result.resolution.width).toBe(1920);
+  });
+
+  it('should load from path when no file or url is provided', async () => {
+    const loader = new VideoRepresentationLoader();
+
+    const rep = {
+      id: 'test-path',
+      label: 'Test Path',
+      kind: 'movie' as const,
+      priority: 1,
+      status: 'idle' as const,
+      resolution: { width: 0, height: 0 },
+      par: 1.0,
+      sourceNode: null,
+      loaderConfig: { path: '/assets/video.mp4' },
+      audioTrackPresent: false,
+      startFrame: 0,
+    };
+
+    const result = await loader.load(rep);
+    expect(result.sourceNode).toBeDefined();
+    expect(result.audioTrackPresent).toBe(true);
+  });
+
+  it('should prefer file over url', async () => {
+    const loader = new VideoRepresentationLoader();
+    const mockFile = new File(['test'], 'test.mp4', { type: 'video/mp4' });
+
+    const rep = {
+      id: 'test-prefer-file',
+      label: 'Test',
+      kind: 'movie' as const,
+      priority: 1,
+      status: 'idle' as const,
+      resolution: { width: 0, height: 0 },
+      par: 1.0,
+      sourceNode: null,
+      loaderConfig: { file: mockFile, url: 'https://example.com/video.mp4' },
+      audioTrackPresent: false,
+      startFrame: 0,
+    };
+
+    const result = await loader.load(rep);
+    expect(result.sourceNode).toBeDefined();
+  });
 });
 
 describe('SequenceRepresentationLoader', () => {
@@ -192,6 +334,6 @@ describe('SequenceRepresentationLoader', () => {
       startFrame: 0,
     };
 
-    await expect(loader.load(rep)).rejects.toThrow('no files provided');
+    await expect(loader.load(rep)).rejects.toThrow('no files or pattern provided');
   });
 });

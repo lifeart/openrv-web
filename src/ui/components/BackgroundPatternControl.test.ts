@@ -591,4 +591,69 @@ describe('BackgroundPatternControl - edge cases', () => {
   it('BG-U058: clearPatternCache should not throw when called', () => {
     expect(() => clearPatternCache()).not.toThrow();
   });
+
+  describe('keyboard navigation (#80)', () => {
+    it('BG-U060: ArrowDown moves focus between pattern items', () => {
+      const el = control.render();
+      document.body.appendChild(el);
+
+      // Open dropdown
+      const button = el.querySelector('[data-testid="background-pattern-button"]') as HTMLButtonElement;
+      button.click();
+
+      const dropdown = document.querySelector('[data-testid="background-pattern-dropdown"]') as HTMLElement;
+      const focusable = Array.from(
+        dropdown.querySelectorAll<HTMLElement>('[role="radio"], button, input, [tabindex="0"]'),
+      );
+      expect(focusable.length).toBeGreaterThan(1);
+
+      focusable[0]!.focus();
+      expect(document.activeElement).toBe(focusable[0]);
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      expect(document.activeElement).toBe(focusable[1]);
+
+      document.body.removeChild(el);
+    });
+
+    it('BG-U061: ArrowUp moves focus to previous pattern item', () => {
+      const el = control.render();
+      document.body.appendChild(el);
+
+      const button = el.querySelector('[data-testid="background-pattern-button"]') as HTMLButtonElement;
+      button.click();
+
+      const dropdown = document.querySelector('[data-testid="background-pattern-dropdown"]') as HTMLElement;
+      const focusable = Array.from(
+        dropdown.querySelectorAll<HTMLElement>('[role="radio"], button, input, [tabindex="0"]'),
+      );
+
+      focusable[1]!.focus();
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+      expect(document.activeElement).toBe(focusable[0]);
+
+      document.body.removeChild(el);
+    });
+
+    it('BG-U062: Home and End navigate to first and last items', () => {
+      const el = control.render();
+      document.body.appendChild(el);
+
+      const button = el.querySelector('[data-testid="background-pattern-button"]') as HTMLButtonElement;
+      button.click();
+
+      const dropdown = document.querySelector('[data-testid="background-pattern-dropdown"]') as HTMLElement;
+      const focusable = Array.from(
+        dropdown.querySelectorAll<HTMLElement>('[role="radio"], button, input, [tabindex="0"]'),
+      );
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }));
+      expect(document.activeElement).toBe(focusable[focusable.length - 1]);
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
+      expect(document.activeElement).toBe(focusable[0]);
+
+      document.body.removeChild(el);
+    });
+  });
 });

@@ -7,6 +7,21 @@ import type { CacheEntryMeta } from './MediaCacheManager';
 // In-memory OPFS mock
 // ---------------------------------------------------------------------------
 
+/** Minimal in-memory FileSystemFileHandle mock WITHOUT createWritable. */
+class MockFileHandleNoWritable {
+  private data: ArrayBuffer = new ArrayBuffer(0);
+
+  constructor(readonly name: string) {}
+
+  async getFile(): Promise<File> {
+    return new File([this.data], this.name);
+  }
+
+  setData(buf: ArrayBuffer): void {
+    this.data = buf;
+  }
+}
+
 /** Minimal in-memory FileSystemFileHandle mock. */
 class MockFileHandle {
   private data: ArrayBuffer = new ArrayBuffer(0);
@@ -88,6 +103,83 @@ class MockDirectoryHandle {
   }
 
   /** Support for-await-of (keys iterator). */
+  async *[Symbol.asyncIterator](): AsyncIterableIterator<string> {
+    for (const key of this.children.keys()) {
+      yield key;
+    }
+  }
+}
+
+/** Directory handle mock that yields file handles WITHOUT createWritable. */
+class MockDirectoryHandleNoWritable {
+  private children = new Map<string, MockDirectoryHandleNoWritable | MockFileHandleNoWritable>();
+
+  constructor(readonly name: string) {}
+
+  async getDirectoryHandle(name: string, options?: { create?: boolean }): Promise<MockDirectoryHandleNoWritable> {
+    let child = this.children.get(name);
+    if (!child || !(child instanceof MockDirectoryHandleNoWritable)) {
+      if (options?.create) {
+        child = new MockDirectoryHandleNoWritable(name);
+        this.children.set(name, child);
+      } else {
+        throw new DOMException('Not found', 'NotFoundError');
+      }
+    }
+    return child as MockDirectoryHandleNoWritable;
+  }
+
+  async getFileHandle(name: string, options?: { create?: boolean }): Promise<MockFileHandleNoWritable> {
+    let child = this.children.get(name);
+    if (!child || !(child instanceof MockFileHandleNoWritable)) {
+      if (options?.create) {
+        child = new MockFileHandleNoWritable(name);
+        this.children.set(name, child);
+      } else {
+        throw new DOMException('Not found', 'NotFoundError');
+      }
+    }
+    return child as unknown as MockFileHandleNoWritable;
+  }
+
+  async removeEntry(name: string, _options?: { recursive?: boolean }): Promise<void> {
+    this.children.delete(name);
+  }
+
+  async *[Symbol.asyncIterator](): AsyncIterableIterator<string> {
+    for (const key of this.children.keys()) {
+      yield key;
+    }
+  }
+}
+
+/** Directory mock where getFileHandle always throws (simulates probe failure). */
+class MockDirectoryHandleProbeFailure {
+  private children = new Map<string, MockDirectoryHandleProbeFailure>();
+
+  constructor(readonly name: string) {}
+
+  async getDirectoryHandle(name: string, options?: { create?: boolean }): Promise<MockDirectoryHandleProbeFailure> {
+    let child = this.children.get(name);
+    if (!child) {
+      if (options?.create) {
+        child = new MockDirectoryHandleProbeFailure(name);
+        this.children.set(name, child);
+      } else {
+        throw new DOMException('Not found', 'NotFoundError');
+      }
+    }
+    return child;
+  }
+
+  async getFileHandle(_name: string, _options?: { create?: boolean }): Promise<never> {
+    throw new DOMException('Access denied', 'NotAllowedError');
+  }
+
+  async removeEntry(name: string, _options?: { recursive?: boolean }): Promise<void> {
+    this.children.delete(name);
+  }
+
   async *[Symbol.asyncIterator](): AsyncIterableIterator<string> {
     for (const key of this.children.keys()) {
       yield key;
@@ -415,6 +507,37 @@ describe('MediaCacheManager', () => {
       expect(await manager.cleanOrphans()).toBe(0);
     });
 
+    it('re-probes _writableSupported correctly after dispose and re-initialize', async () => {
+      // 1. Initialize with createWritable support (standard mock)
+      await manager.initialize();
+
+      const data = new TextEncoder().encode('test').buffer;
+      const ok = await manager.put('re-init-key', data, makeMeta());
+      expect(ok).toBe(true);
+
+      // 2. Dispose
+      manager.dispose();
+
+      // 3. Switch to no-writable mock
+      const noWritableRoot2 = new MockDirectoryHandleNoWritable('root');
+      Object.defineProperty(navigator, 'storage', {
+        value: {
+          getDirectory: vi.fn(async () => noWritableRoot2),
+          estimate: vi.fn(async () => ({ usage: 0, quota: 10_000_000_000 })),
+        },
+        writable: true,
+        configurable: true,
+      });
+
+      // 4. Re-initialize (same manager instance)
+      const initOk = await manager.initialize();
+      expect(initOk).toBe(true);
+
+      // 5. Verify _writableSupported is now false (put returns false)
+      const putOk = await manager.put('re-init-key-2', new ArrayBuffer(50), makeMeta());
+      expect(putOk).toBe(false);
+    });
+
     it('clearAll no-ops after dispose', async () => {
       await manager.initialize();
       manager.dispose();
@@ -474,6 +597,142 @@ describe('MediaCacheManager', () => {
       expect(retrieved).not.toBeNull();
       const text = new TextDecoder().decode(new Uint8Array(retrieved!));
       expect(text).toBe('second');
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // createWritable not supported – graceful degradation (Issue #278)
+  // -----------------------------------------------------------------------
+
+  describe('graceful degradation without createWritable', () => {
+    let noWritableManager: MediaCacheManager;
+    let noWritableRoot: MockDirectoryHandleNoWritable;
+
+    beforeEach(() => {
+      noWritableRoot = new MockDirectoryHandleNoWritable('root');
+
+      Object.defineProperty(navigator, 'storage', {
+        value: {
+          getDirectory: vi.fn(async () => noWritableRoot),
+          estimate: vi.fn(async () => ({ usage: 0, quota: 10_000_000_000 })),
+        },
+        writable: true,
+        configurable: true,
+      });
+
+      noWritableManager = new MediaCacheManager({
+        dbName: `test-cache-no-writable-${Math.random().toString(36).slice(2)}`,
+        maxSizeBytes: 10_000,
+      });
+    });
+
+    afterEach(() => {
+      noWritableManager.dispose();
+    });
+
+    it('initialize succeeds but put() is a silent no-op', async () => {
+      const initOk = await noWritableManager.initialize();
+      expect(initOk).toBe(true);
+
+      const putOk = await noWritableManager.put('key-1', new ArrayBuffer(100), makeMeta());
+      expect(putOk).toBe(false);
+
+      const stats = await noWritableManager.getStats();
+      expect(stats.entryCount).toBe(0);
+    });
+
+    it('put does not throw when createWritable is missing', async () => {
+      await noWritableManager.initialize();
+
+      // Should not throw, just returns false
+      await expect(noWritableManager.put('key-2', new ArrayBuffer(50), makeMeta())).resolves.toBe(false);
+    });
+
+    it('get returns null (no data was written)', async () => {
+      await noWritableManager.initialize();
+
+      await noWritableManager.put('key-3', new ArrayBuffer(50), makeMeta());
+      const data = await noWritableManager.get('key-3');
+      expect(data).toBeNull();
+    });
+
+    it('get() can still read pre-existing data even without createWritable', async () => {
+      await noWritableManager.initialize();
+
+      // Navigate to the media directory created during initialization
+      const opfsDir = await noWritableRoot.getDirectoryHandle('openrv-cache');
+      const mediaDir = await opfsDir.getDirectoryHandle('media');
+
+      // Seed data directly into the mock file system
+      const fileHandle = await mediaDir.getFileHandle('seeded-key.bin', { create: true });
+      const seededData = new TextEncoder().encode('pre-existing data');
+      fileHandle.setData(seededData.buffer as ArrayBuffer);
+
+      // get() should read the file even though createWritable is not supported
+      const retrieved = await noWritableManager.get('seeded-key');
+      expect(retrieved).not.toBeNull();
+      const text = new TextDecoder().decode(new Uint8Array(retrieved!));
+      expect(text).toBe('pre-existing data');
+    });
+
+    it('does not emit error events on put', async () => {
+      await noWritableManager.initialize();
+      const errorCb = vi.fn();
+      noWritableManager.on('error', errorCb);
+
+      await noWritableManager.put('key-4', new ArrayBuffer(50), makeMeta());
+      expect(errorCb).not.toHaveBeenCalled();
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Probe failure – getFileHandle throws (Issue #278)
+  // -----------------------------------------------------------------------
+
+  describe('probe failure (getFileHandle throws)', () => {
+    it('initialize succeeds and put returns false', async () => {
+      const probeFailRoot = new MockDirectoryHandleProbeFailure('root');
+
+      Object.defineProperty(navigator, 'storage', {
+        value: {
+          getDirectory: vi.fn(async () => probeFailRoot),
+          estimate: vi.fn(async () => ({ usage: 0, quota: 10_000_000_000 })),
+        },
+        writable: true,
+        configurable: true,
+      });
+
+      const probeFailManager = new MediaCacheManager({
+        dbName: `test-cache-probe-fail-${Math.random().toString(36).slice(2)}`,
+        maxSizeBytes: 10_000,
+      });
+
+      const initOk = await probeFailManager.initialize();
+      expect(initOk).toBe(true);
+
+      const putOk = await probeFailManager.put('key-1', new ArrayBuffer(100), makeMeta());
+      expect(putOk).toBe(false);
+
+      probeFailManager.dispose();
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // With createWritable – normal operation still works (Issue #278)
+  // -----------------------------------------------------------------------
+
+  describe('normal operation with createWritable', () => {
+    it('put succeeds when createWritable is available', async () => {
+      await manager.initialize();
+
+      const data = new TextEncoder().encode('works').buffer;
+      const ok = await manager.put('normal-key', data, makeMeta());
+      expect(ok).toBe(true);
+
+      const retrieved = await manager.get('normal-key');
+      expect(retrieved).not.toBeNull();
+      const text = new TextDecoder().decode(new Uint8Array(retrieved!));
+      expect(text).toBe('works');
     });
   });
 });

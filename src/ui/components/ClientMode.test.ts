@@ -365,7 +365,14 @@ describe('ClientMode', () => {
     expect(Array.isArray(elements)).toBe(true);
     expect(elements.length).toBeGreaterThan(0);
     expect(elements).toContain('[data-panel="color"]');
+    expect(elements).toContain('[data-panel="effects"]');
+    expect(elements).toContain('[data-panel="transform"]');
+    expect(elements).toContain('[data-panel="annotate"]');
+    expect(elements).toContain('[data-panel="notes"]');
+    expect(elements).toContain('[data-panel="snapshots"]');
     expect(elements).toContain('[data-toolbar="editing"]');
+    expect(elements).toContain('[data-toolbar="annotation"]');
+    expect(elements).toContain('[data-toolbar="paint"]');
   });
 
   it('CM-029: isActionAllowed allows view actions in client mode', () => {

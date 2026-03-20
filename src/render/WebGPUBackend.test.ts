@@ -492,7 +492,14 @@ describe('WebGPUBackend', () => {
 
     it('renderImage does not throw when uninitialized', () => {
       const backend = new WebGPUBackend();
-      const image = { width: 100, height: 100, data: new ArrayBuffer(100 * 100 * 4), channels: 4, dataType: 'uint8' as const, metadata: {} };
+      const image = {
+        width: 100,
+        height: 100,
+        data: new ArrayBuffer(100 * 100 * 4),
+        channels: 4,
+        dataType: 'uint8' as const,
+        metadata: {},
+      };
       expect(() => backend.renderImage(image as any)).not.toThrow();
     });
 

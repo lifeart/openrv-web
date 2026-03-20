@@ -8,7 +8,14 @@
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
-import type { ConnectionState, SyncUser, SyncSettings, RoomInfo } from '../../network/types';
+import type {
+  ConnectionState,
+  SyncUser,
+  SyncSettings,
+  RoomInfo,
+  ParticipantRole,
+  ParticipantPermission,
+} from '../../network/types';
 import { DEFAULT_SYNC_SETTINGS, USER_COLORS } from '../../network/types';
 
 /**
@@ -28,6 +35,7 @@ export interface NetworkControlEvents extends EventMap {
   createRoom: { userName: string };
   joinRoom: { roomCode: string; userName: string };
   leaveRoom: void;
+  reconnect: void;
   syncSettingsChanged: SyncSettings;
   copyLink: string;
   applyResponseLink: string;
@@ -50,6 +58,15 @@ export interface NetworkControlState {
   linkedRoomAutoJoinArmed: boolean;
   isPanelOpen: boolean;
   rtt: number;
+  localUserId: string | null;
+  participantPermissions: Map<string, ParticipantRole>;
+  reconnectExhausted: boolean;
+}
+
+/** Result of a copy-link operation, used by AppNetworkBridge */
+export interface CopyResultOptions {
+  success: boolean;
+  message?: string;
 }
 
 interface MediaSyncConfirmationOptions {
@@ -80,11 +97,14 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
   private responseTokenInput!: HTMLInputElement;
   private roomCodeInput!: HTMLInputElement;
   private pinCodeInput!: HTMLInputElement;
+  private reconnectPanel!: HTMLElement;
   private errorDisplay!: HTMLElement;
   private infoDisplay!: HTMLElement;
   private mediaSyncPrompt!: HTMLElement;
   private mediaSyncPromptText!: HTMLElement;
   private pendingMediaPromptResolver: ((accepted: boolean) => void) | null = null;
+  private roleIndicator!: HTMLElement;
+  private viewOnlyBanner!: HTMLElement;
 
   private boundHandleOutsideClick: (e: MouseEvent) => void;
   private boundHandleReposition: () => void;
@@ -107,6 +127,9 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
       linkedRoomAutoJoinArmed: false,
       isPanelOpen: false,
       rtt: 0,
+      localUserId: null,
+      participantPermissions: new Map(),
+      reconnectExhausted: false,
     };
 
     this.boundHandleOutsideClick = (e: MouseEvent) => this.handleOutsideClick(e);
@@ -177,14 +200,14 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
 
     // Hover states
     this.button.addEventListener('pointerenter', () => {
-      if (this.state.connectionState !== 'connected') {
+      if (this.state.connectionState !== 'connected' && this.state.connectionState !== 'conflict') {
         this.button.style.background = 'var(--bg-hover)';
         this.button.style.borderColor = 'var(--border-primary)';
         this.button.style.color = 'var(--text-primary)';
       }
     });
     this.button.addEventListener('pointerleave', () => {
-      if (this.state.connectionState !== 'connected') {
+      if (this.state.connectionState !== 'connected' && this.state.connectionState !== 'conflict') {
         this.button.style.background = 'transparent';
         this.button.style.borderColor = 'transparent';
         this.button.style.color = 'var(--text-muted)';
@@ -349,6 +372,10 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     // Disconnected state panel
     this.disconnectedPanel = this.buildDisconnectedPanel();
     this.panel.appendChild(this.disconnectedPanel);
+
+    // Reconnect exhausted panel (shown instead of disconnected panel when retries exhausted)
+    this.reconnectPanel = this.buildReconnectPanel();
+    this.panel.appendChild(this.reconnectPanel);
 
     // Connecting state panel
     this.connectingPanel = this.buildConnectingPanel();
@@ -543,6 +570,53 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     return panel;
   }
 
+  private buildReconnectPanel(): HTMLElement {
+    const panel = document.createElement('div');
+    panel.dataset.testid = 'network-reconnect-panel';
+    panel.style.cssText = `
+      padding: 24px 12px;
+      text-align: center;
+      display: none;
+    `;
+
+    const message = document.createElement('div');
+    message.style.cssText = `
+      color: var(--text-secondary);
+      font-size: 12px;
+      margin-bottom: 12px;
+    `;
+    message.textContent = 'Connection lost. Automatic reconnection attempts have been exhausted.';
+    panel.appendChild(message);
+
+    const reconnectBtn = document.createElement('button');
+    reconnectBtn.dataset.testid = 'network-reconnect-button';
+    reconnectBtn.textContent = 'Reconnect';
+    reconnectBtn.style.cssText = `
+      width: 100%;
+      padding: 8px 12px;
+      background: var(--accent-primary);
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      transition: background 0.12s ease;
+    `;
+    reconnectBtn.addEventListener('pointerenter', () => {
+      reconnectBtn.style.background = 'var(--accent-hover)';
+    });
+    reconnectBtn.addEventListener('pointerleave', () => {
+      reconnectBtn.style.background = 'var(--accent-primary)';
+    });
+    reconnectBtn.addEventListener('click', () => {
+      this.emit('reconnect', undefined);
+    });
+    panel.appendChild(reconnectBtn);
+
+    return panel;
+  }
+
   private buildConnectingPanel(): HTMLElement {
     const panel = document.createElement('div');
     panel.dataset.testid = 'network-connecting-panel';
@@ -576,6 +650,36 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
       border-bottom: 1px solid var(--border-secondary);
     `;
     panel.appendChild(this.roomCodeDisplay);
+
+    // Current user role indicator
+    this.roleIndicator = document.createElement('div');
+    this.roleIndicator.dataset.testid = 'network-role-indicator';
+    this.roleIndicator.style.cssText = `
+      display: none;
+      padding: 4px 12px;
+      font-size: 11px;
+      color: var(--text-secondary);
+      border-bottom: 1px solid var(--border-secondary);
+      align-items: center;
+      gap: 6px;
+    `;
+    panel.appendChild(this.roleIndicator);
+
+    // View-only banner (shown when user has viewer role)
+    this.viewOnlyBanner = document.createElement('div');
+    this.viewOnlyBanner.dataset.testid = 'network-view-only-banner';
+    this.viewOnlyBanner.style.cssText = `
+      display: none;
+      padding: 6px 12px;
+      font-size: 11px;
+      color: var(--warning, #f59e0b);
+      background: rgba(245, 158, 11, 0.08);
+      border-bottom: 1px solid var(--border-secondary);
+      align-items: center;
+      gap: 6px;
+    `;
+    this.viewOnlyBanner.textContent = 'View Only — sync output is disabled for your role.';
+    panel.appendChild(this.viewOnlyBanner);
 
     // Share URL display
     const shareSection = document.createElement('div');
@@ -788,6 +892,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
       { key: 'view', label: 'View (Pan/Zoom)' },
       { key: 'color', label: 'Color Adjustments' },
       { key: 'annotations', label: 'Annotations' },
+      { key: 'cursor', label: 'Cursor' },
     ];
 
     settings.forEach(({ key, label }) => {
@@ -980,7 +1085,12 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
       this.state.isHost = false;
       this.state.responseToken = '';
       this.state.shareLinkKind = 'generic';
+      this.state.participantPermissions.clear();
       this.hideInfo();
+    }
+    // Clear reconnect exhausted when moving to a non-error state
+    if (state === 'connecting' || state === 'connected' || state === 'reconnecting') {
+      this.state.reconnectExhausted = false;
     }
     if ((state === 'disconnected' || state === 'error') && this.state.linkedRoomCode) {
       this.state.linkedRoomAutoJoinArmed = true;
@@ -988,6 +1098,15 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     this.updateButtonStyle();
     this.updatePanelVisibility();
     this.updateShareLinkUI();
+  }
+
+  /**
+   * Signal that automatic reconnection retries have been exhausted.
+   * Shows the reconnect button panel instead of the normal disconnected panel.
+   */
+  setReconnectExhausted(exhausted: boolean): void {
+    this.state.reconnectExhausted = exhausted;
+    this.updatePanelVisibility();
   }
 
   setIsHost(isHost: boolean): void {
@@ -1081,6 +1200,43 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     this.state.rtt = rtt;
   }
 
+  setLocalUserId(userId: string | null): void {
+    this.state.localUserId = userId;
+    this.updateUserList();
+    this.updateRoleIndicator();
+  }
+
+  /**
+   * Update the permission role for a single participant.
+   * Called when `participantPermissionChanged` fires on the sync manager.
+   */
+  setParticipantPermission(permission: ParticipantPermission): void {
+    this.state.participantPermissions.set(permission.userId, permission.role);
+    this.updateUserList();
+    this.updateRoleIndicator();
+  }
+
+  /**
+   * Bulk-set all participant permissions (e.g. on initial room join).
+   */
+  setParticipantPermissions(permissions: ParticipantPermission[]): void {
+    this.state.participantPermissions.clear();
+    for (const p of permissions) {
+      this.state.participantPermissions.set(p.userId, p.role);
+    }
+    this.updateUserList();
+    this.updateRoleIndicator();
+  }
+
+  /**
+   * Clear all participant permissions (e.g. on disconnect).
+   */
+  clearParticipantPermissions(): void {
+    this.state.participantPermissions.clear();
+    this.updateUserList();
+    this.updateRoleIndicator();
+  }
+
   showError(message: string): void {
     this.errorDisplay.textContent = message;
     this.errorDisplay.style.display = 'block';
@@ -1089,6 +1245,24 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
   hideError(): void {
     this.errorDisplay.style.display = 'none';
     this.errorDisplay.textContent = '';
+  }
+
+  /**
+   * Report the result of a copy-link operation.
+   * On success, shows brief visual feedback on the copy button.
+   * On failure, displays the error message.
+   */
+  reportCopyResult(success: boolean, errorMessage?: string): void {
+    if (success) {
+      this.copyLinkButton.textContent = 'Copied!';
+      this.copyLinkButton.style.color = 'var(--success)';
+      setTimeout(() => {
+        this.copyLinkButton.style.color = 'var(--text-primary)';
+        this.updateShareLinkUI();
+      }, 2000);
+    } else {
+      this.showError(errorMessage ?? 'Failed to copy link.');
+    }
   }
 
   showInfo(message: string): void {
@@ -1125,7 +1299,11 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
   private updateButtonStyle(): void {
     const { connectionState } = this.state;
 
-    if (connectionState === 'connected') {
+    if (connectionState === 'conflict') {
+      this.button.style.background = 'rgba(239, 68, 68, 0.15)';
+      this.button.style.borderColor = 'var(--error, #ef4444)';
+      this.button.style.color = 'var(--error, #ef4444)';
+    } else if (connectionState === 'connected') {
       this.button.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
       this.button.style.borderColor = 'var(--accent-primary)';
       this.button.style.color = 'var(--accent-primary)';
@@ -1151,13 +1329,16 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
   }
 
   private updatePanelVisibility(): void {
-    const { connectionState } = this.state;
+    const { connectionState, reconnectExhausted } = this.state;
+    const isDisconnectedOrError = connectionState === 'disconnected' || connectionState === 'error';
 
-    this.disconnectedPanel.style.display =
-      connectionState === 'disconnected' || connectionState === 'error' ? 'block' : 'none';
+    // Show reconnect panel when retries are exhausted, otherwise normal disconnected panel
+    this.reconnectPanel.style.display = isDisconnectedOrError && reconnectExhausted ? 'block' : 'none';
+    this.disconnectedPanel.style.display = isDisconnectedOrError && !reconnectExhausted ? 'block' : 'none';
     this.connectingPanel.style.display =
       connectionState === 'connecting' || connectionState === 'reconnecting' ? 'block' : 'none';
-    this.connectedPanel.style.display = connectionState === 'connected' ? 'flex' : 'none';
+    this.connectedPanel.style.display =
+      connectionState === 'connected' || connectionState === 'conflict' ? 'flex' : 'none';
   }
 
   private updateJoinRoomInputState(): void {
@@ -1297,25 +1478,79 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
       name.style.cssText = 'color: var(--text-primary); flex: 1;';
       name.textContent = user.name;
 
-      // Host badge
-      if (user.isHost) {
-        const hostBadge = document.createElement('span');
-        hostBadge.style.cssText = `
+      // User badge: "You (Host)", "You", "Host", or nothing
+      const isLocalUser = this.state.localUserId != null && user.id === this.state.localUserId;
+      const badgeText = isLocalUser && user.isHost ? 'You (Host)' : isLocalUser ? 'You' : user.isHost ? 'Host' : null;
+
+      if (badgeText) {
+        const badge = document.createElement('span');
+        badge.dataset.testid = 'network-user-badge-label';
+        badge.style.cssText = `
           font-size: 10px;
           color: var(--accent-primary);
           background: rgba(var(--accent-primary-rgb), 0.1);
           padding: 1px 6px;
           border-radius: 3px;
         `;
-        hostBadge.textContent = 'Host';
+        badge.textContent = badgeText;
         name.appendChild(document.createTextNode(' '));
-        name.appendChild(hostBadge);
+        name.appendChild(badge);
+      }
+
+      // Role badge: show participant role when known and not host
+      // (host role is already indicated by the Host badge above)
+      const role = this.state.participantPermissions.get(user.id);
+      if (role && !user.isHost) {
+        const roleBadge = document.createElement('span');
+        roleBadge.dataset.testid = 'network-user-role-badge';
+        const isViewer = role === 'viewer';
+        roleBadge.style.cssText = `
+          font-size: 10px;
+          color: ${isViewer ? 'var(--warning, #f59e0b)' : 'var(--text-secondary)'};
+          background: ${isViewer ? 'rgba(245, 158, 11, 0.1)' : 'rgba(128, 128, 128, 0.1)'};
+          padding: 1px 6px;
+          border-radius: 3px;
+        `;
+        roleBadge.textContent = role.charAt(0).toUpperCase() + role.slice(1);
+        name.appendChild(document.createTextNode(' '));
+        name.appendChild(roleBadge);
       }
 
       row.appendChild(avatar);
       row.appendChild(name);
       this.userListContainer.appendChild(row);
     });
+  }
+
+  private updateRoleIndicator(): void {
+    const localId = this.state.localUserId;
+    if (!localId) {
+      this.roleIndicator.style.display = 'none';
+      this.viewOnlyBanner.style.display = 'none';
+      return;
+    }
+
+    const role = this.state.participantPermissions.get(localId);
+    if (!role) {
+      this.roleIndicator.style.display = 'none';
+      this.viewOnlyBanner.style.display = 'none';
+      return;
+    }
+
+    // Show role indicator
+    this.roleIndicator.style.display = 'flex';
+    this.roleIndicator.textContent = '';
+    const label = document.createElement('span');
+    label.textContent = 'Your role:';
+    const roleLabel = document.createElement('span');
+    roleLabel.dataset.testid = 'network-role-label';
+    roleLabel.style.cssText = 'font-weight: 600;';
+    roleLabel.textContent = role.charAt(0).toUpperCase() + role.slice(1);
+    this.roleIndicator.appendChild(label);
+    this.roleIndicator.appendChild(roleLabel);
+
+    // Show view-only banner if viewer
+    this.viewOnlyBanner.style.display = role === 'viewer' ? 'flex' : 'none';
   }
 
   // ---- Keyboard Handler ----

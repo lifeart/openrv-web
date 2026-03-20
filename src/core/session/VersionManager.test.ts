@@ -10,7 +10,10 @@ describe('VersionManager', () => {
     manager = new VersionManager();
     onVersionsChanged = vi.fn();
     onActiveVersionChanged = vi.fn();
-    manager.setCallbacks({ onVersionsChanged: onVersionsChanged as any, onActiveVersionChanged: onActiveVersionChanged as any });
+    manager.setCallbacks({
+      onVersionsChanged: onVersionsChanged as any,
+      onActiveVersionChanged: onActiveVersionChanged as any,
+    });
   });
 
   afterEach(() => {

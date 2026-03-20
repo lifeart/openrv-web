@@ -11,6 +11,7 @@
   "excludeProtected": true,
   "excludeInternal": true,
   "hideGenerator": true,
+  "sourceLinkTemplate": "../../{path}#L{line}",
   "entryPointStrategy": "resolve",
   "outputFileStrategy": "members",
   "flattenOutputFiles": false,

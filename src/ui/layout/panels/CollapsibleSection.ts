@@ -4,6 +4,8 @@
  * Provides a clickable header with chevron icon and a collapsible content area.
  */
 
+import { getIconSvg } from '../../components/shared/Icons';
+
 export interface CollapsibleSectionOptions {
   expanded?: boolean;
   testId?: string;
@@ -46,14 +48,14 @@ export class CollapsibleSection {
 
     this.chevron = document.createElement('span');
     this.chevron.className = 'collapsible-chevron';
-    this.chevron.textContent = '\u25B6'; // right-pointing triangle
+    this.chevron.innerHTML = getIconSvg('chevron-right', 'sm');
     this.chevron.style.cssText = `
-      font-size: 8px;
       color: var(--text-muted);
       transition: transform 0.15s ease;
-      display: inline-block;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       width: 12px;
-      text-align: center;
     `;
 
     const titleEl = document.createElement('span');
@@ -67,7 +69,16 @@ export class CollapsibleSection {
 
     this.header.appendChild(this.chevron);
     this.header.appendChild(titleEl);
+    this.header.setAttribute('tabindex', '0');
+    this.header.setAttribute('role', 'button');
+    this.header.setAttribute('aria-expanded', String(this._expanded));
     this.header.addEventListener('click', () => this.toggle());
+    this.header.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        this.toggle();
+      }
+    });
 
     // Content wrapper (handles height animation)
     this.contentWrapper = document.createElement('div');
@@ -91,6 +102,7 @@ export class CollapsibleSection {
   }
 
   private applyState(): void {
+    this.header.setAttribute('aria-expanded', String(this._expanded));
     if (this._expanded) {
       this.chevron.style.transform = 'rotate(90deg)';
       this.contentWrapper.style.maxHeight = 'none';

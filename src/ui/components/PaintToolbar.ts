@@ -53,10 +53,10 @@ export class PaintToolbar {
     this.addSeparator();
 
     // Advanced paint tools (pixel-destructive)
-    this.createToolButton('dodge', 'sun', 'Dodge tool (D) \u2013 Lighten pixels under the brush');
-    this.createToolButton('burn', 'moon', 'Burn tool (U) \u2013 Darken pixels under the brush');
-    this.createToolButton('clone', 'copy', 'Clone stamp (C) \u2013 Alt-click to set source, then paint to copy pixels');
-    this.createToolButton('smudge', 'droplet', 'Smudge tool (M) \u2013 Drag to blend and smear pixels');
+    this.createToolButton('dodge', 'sun', 'Dodge tool \u2013 Lighten pixels under the brush');
+    this.createToolButton('burn', 'moon', 'Burn tool \u2013 Darken pixels under the brush');
+    this.createToolButton('clone', 'copy', 'Clone stamp \u2013 Alt-click to set source, then paint to copy pixels');
+    this.createToolButton('smudge', 'droplet', 'Smudge tool \u2013 Drag to blend and smear pixels');
 
     this.addSeparator();
 

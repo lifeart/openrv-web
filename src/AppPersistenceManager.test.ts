@@ -304,10 +304,10 @@ describe('AppPersistenceManager', () => {
   });
 
   // -----------------------------------------------------------------------
-  // createQuickSnapshot
+  // createSnapshot / createQuickSnapshot
   // -----------------------------------------------------------------------
-  describe('createQuickSnapshot', () => {
-    it('APM-040: createQuickSnapshot serializes state and creates snapshot', async () => {
+  describe('createSnapshot', () => {
+    it('APM-040: createQuickSnapshot serializes state and creates snapshot with auto name', async () => {
       await manager.createQuickSnapshot();
 
       expect(SessionSerializer.toJSON).toHaveBeenCalledTimes(1);
@@ -315,6 +315,7 @@ describe('AppPersistenceManager', () => {
       expect(fullCtx._snapshotManager.createSnapshot).toHaveBeenCalledWith(
         expect.stringContaining('Snapshot'),
         expect.anything(),
+        undefined,
       );
     });
 
@@ -344,6 +345,50 @@ describe('AppPersistenceManager', () => {
       await manager.createQuickSnapshot();
 
       expect(SessionSerializer.toJSON).toHaveBeenCalledWith(expect.anything(), 'Untitled');
+    });
+
+    it('APM-044: createSnapshot with user-provided name uses that name', async () => {
+      await manager.createSnapshot('My Named Snapshot');
+
+      expect(fullCtx._snapshotManager.createSnapshot).toHaveBeenCalledWith(
+        'My Named Snapshot',
+        expect.anything(),
+        undefined,
+      );
+      expect(showAlert).toHaveBeenCalledWith(
+        expect.stringContaining('My Named Snapshot'),
+        expect.objectContaining({ type: 'success' }),
+      );
+    });
+
+    it('APM-045: createSnapshot with name and description passes both', async () => {
+      await manager.createSnapshot('Review Checkpoint', 'Before final color pass');
+
+      expect(fullCtx._snapshotManager.createSnapshot).toHaveBeenCalledWith(
+        'Review Checkpoint',
+        expect.anything(),
+        'Before final color pass',
+      );
+    });
+
+    it('APM-046: createSnapshot with empty name falls back to auto-generated timestamp', async () => {
+      await manager.createSnapshot('');
+
+      expect(fullCtx._snapshotManager.createSnapshot).toHaveBeenCalledWith(
+        expect.stringContaining('Snapshot'),
+        expect.anything(),
+        undefined,
+      );
+    });
+
+    it('APM-047: createSnapshot with undefined name falls back to auto-generated timestamp', async () => {
+      await manager.createSnapshot(undefined);
+
+      expect(fullCtx._snapshotManager.createSnapshot).toHaveBeenCalledWith(
+        expect.stringContaining('Snapshot'),
+        expect.anything(),
+        undefined,
+      );
     });
   });
 
@@ -488,7 +533,7 @@ describe('AppPersistenceManager', () => {
 
       await manager.openProject(file);
 
-      expect(fullCtx.session.loadFromGTO).toHaveBeenCalledWith(expect.any(ArrayBuffer));
+      expect(fullCtx.session.loadFromGTO).toHaveBeenCalledWith(expect.any(ArrayBuffer), undefined);
       expect(SessionSerializer.loadFromFile).not.toHaveBeenCalled();
       expect(fullCtx.session.loadFile).not.toHaveBeenCalled();
     });
@@ -498,8 +543,20 @@ describe('AppPersistenceManager', () => {
 
       await manager.openProject(file);
 
-      expect(fullCtx.session.loadFromGTO).toHaveBeenCalledWith(expect.any(ArrayBuffer));
+      expect(fullCtx.session.loadFromGTO).toHaveBeenCalledWith(expect.any(ArrayBuffer), undefined);
       expect(fullCtx.session.loadFile).not.toHaveBeenCalled();
+    });
+
+    it('APM-088b: openProject passes availableFiles to loadFromGTO for .gto files', async () => {
+      const file = new File(['gto-data'], 'session.gto');
+      const clipFile = new File(['exr-data'], 'clip.exr');
+      const availableFiles = new Map<string, File>([['clip.exr', clipFile]]);
+
+      await manager.openProject(file, availableFiles);
+
+      // openProject converts Map<string, File> to Map<string, File[]>
+      const expectedFilesArray = new Map<string, File[]>([['clip.exr', [clipFile]]]);
+      expect(fullCtx.session.loadFromGTO).toHaveBeenCalledWith(expect.any(ArrayBuffer), expectedFilesArray);
     });
 
     it('APM-089: openProject handles uppercase .GTO case-insensitively', async () => {
@@ -507,7 +564,7 @@ describe('AppPersistenceManager', () => {
 
       await manager.openProject(file);
 
-      expect(fullCtx.session.loadFromGTO).toHaveBeenCalledWith(expect.any(ArrayBuffer));
+      expect(fullCtx.session.loadFromGTO).toHaveBeenCalledWith(expect.any(ArrayBuffer), undefined);
     });
 
     it('APM-090a: openProject loads .rvedl file via session.loadEDL', async () => {

@@ -14,11 +14,14 @@ describe('GPU Smoke Test', () => {
     const canvas = document.createElement('canvas');
     const gl = canvas.getContext('webgl2')!;
     const shader = gl.createShader(gl.FRAGMENT_SHADER)!;
-    gl.shaderSource(shader, `#version 300 es
+    gl.shaderSource(
+      shader,
+      `#version 300 es
       precision highp float;
       out vec4 fragColor;
       void main() { fragColor = vec4(1.0, 0.0, 0.0, 1.0); }
-    `);
+    `,
+    );
     gl.compileShader(shader);
     expect(gl.getShaderParameter(shader, gl.COMPILE_STATUS)).toBe(true);
     gl.deleteShader(shader);

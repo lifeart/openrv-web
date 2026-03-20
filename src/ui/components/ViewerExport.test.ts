@@ -4,6 +4,8 @@ import {
   createSourceExportCanvas,
   renderFrameToCanvas,
   renderSourceToImageData,
+  compositeBugOverlay,
+  type BugOverlayExportConfig,
 } from './ViewerExport';
 import { type Session, type MediaSource } from '../../core/session/Session';
 import { PaintEngine } from '../../paint/PaintEngine';
@@ -178,7 +180,9 @@ describe('ViewerExport', () => {
           position: 'top-left',
           fontSize: 'medium',
           showFrameCounter: true,
+          displayFormat: 'both',
           backgroundOpacity: 0.6,
+          showSourceTimecode: true,
           frame: 1,
           totalFrames: 100,
           fps: 24,
@@ -485,7 +489,9 @@ describe('ViewerExport', () => {
           position: 'bottom-right',
           fontSize: 'small',
           showFrameCounter: false,
+          displayFormat: 'smpte',
           backgroundOpacity: 0.5,
+          showSourceTimecode: true,
           frame: 24,
           totalFrames: 100,
           fps: 24,
@@ -997,10 +1003,23 @@ describe('ViewerExport', () => {
       const seqFrame = createMockImage(320, 180);
       const source = createMockMediaSource('sequence', 320, 180);
       source.element = undefined as any;
-      source.sequenceFrames = [
+      const frames = [
         { index: 0, frameNumber: 1, file: new File([''], 'f0001.png') },
         { index: 1, frameNumber: 2, file: new File([''], 'f0002.png'), image: seqFrame as unknown as ImageBitmap },
       ];
+      source.sequenceFrames = frames;
+      source.sequenceFrameMap = new Map(frames.map((f) => [f.frameNumber, f]));
+      source.sequenceInfo = {
+        name: 'f####.png',
+        pattern: 'f####.png',
+        frames: frames as any,
+        startFrame: 1,
+        endFrame: 2,
+        width: 320,
+        height: 180,
+        fps: 24,
+        missingFrames: [],
+      };
       mockSession.currentFrame = 2;
       (mockSession.getSourceByIndex as any).mockReturnValue(source);
 
@@ -1469,7 +1488,9 @@ describe('ViewerExport', () => {
           position: 'top-left',
           fontSize: 'medium',
           showFrameCounter: true,
+          displayFormat: 'both',
           backgroundOpacity: 0.6,
+          showSourceTimecode: true,
           frame: 5,
           totalFrames: 50,
           fps: 24,
@@ -1630,6 +1651,442 @@ describe('ViewerExport', () => {
       expect(result).not.toBeNull();
       expect(result!.width).toBe(1280);
       expect(result!.height).toBe(720);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Bug overlay export compositing
+  // ---------------------------------------------------------------------------
+  describe('compositeBugOverlay', () => {
+    function createBugConfig(overrides?: Partial<BugOverlayExportConfig>): BugOverlayExportConfig {
+      const img = createMockImage(100, 50);
+      return {
+        enabled: true,
+        image: img,
+        imageWidth: 100,
+        imageHeight: 50,
+        position: 'bottom-right',
+        size: 0.1,
+        opacity: 0.8,
+        margin: 12,
+        ...overrides,
+      };
+    }
+
+    function createTestCanvas(
+      width = 800,
+      height = 600,
+    ): {
+      canvas: HTMLCanvasElement;
+      ctx: CanvasRenderingContext2D;
+    } {
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d')!;
+      return { canvas, ctx };
+    }
+
+    it('should not draw when config is null', () => {
+      const { ctx } = createTestCanvas();
+      const drawImageSpy = vi.spyOn(ctx, 'drawImage');
+
+      compositeBugOverlay(ctx, 800, 600, null);
+
+      expect(drawImageSpy).not.toHaveBeenCalled();
+    });
+
+    it('should not draw when config is undefined', () => {
+      const { ctx } = createTestCanvas();
+      const drawImageSpy = vi.spyOn(ctx, 'drawImage');
+
+      compositeBugOverlay(ctx, 800, 600, undefined);
+
+      expect(drawImageSpy).not.toHaveBeenCalled();
+    });
+
+    it('should not draw when disabled', () => {
+      const { ctx } = createTestCanvas();
+      const drawImageSpy = vi.spyOn(ctx, 'drawImage');
+      const config = createBugConfig({ enabled: false });
+
+      compositeBugOverlay(ctx, 800, 600, config);
+
+      expect(drawImageSpy).not.toHaveBeenCalled();
+    });
+
+    it('should not draw when canvas dimensions are zero', () => {
+      const { ctx } = createTestCanvas();
+      const drawImageSpy = vi.spyOn(ctx, 'drawImage');
+      const config = createBugConfig();
+
+      compositeBugOverlay(ctx, 0, 0, config);
+
+      expect(drawImageSpy).not.toHaveBeenCalled();
+    });
+
+    it('should not draw when image dimensions are zero', () => {
+      const { ctx } = createTestCanvas();
+      const drawImageSpy = vi.spyOn(ctx, 'drawImage');
+      const config = createBugConfig({ imageWidth: 0, imageHeight: 0 });
+
+      compositeBugOverlay(ctx, 800, 600, config);
+
+      expect(drawImageSpy).not.toHaveBeenCalled();
+    });
+
+    it('should draw the bug image when enabled', () => {
+      const { ctx } = createTestCanvas();
+      const drawImageSpy = vi.spyOn(ctx, 'drawImage');
+      const config = createBugConfig();
+
+      compositeBugOverlay(ctx, 800, 600, config);
+
+      expect(drawImageSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('should apply opacity via globalAlpha', () => {
+      const { ctx } = createTestCanvas();
+      const saveSpy = vi.spyOn(ctx, 'save');
+      const restoreSpy = vi.spyOn(ctx, 'restore');
+      const config = createBugConfig({ opacity: 0.5 });
+
+      compositeBugOverlay(ctx, 800, 600, config);
+
+      expect(saveSpy).toHaveBeenCalled();
+      expect(restoreSpy).toHaveBeenCalled();
+    });
+
+    it('should position bottom-right with correct coordinates', () => {
+      const { ctx } = createTestCanvas();
+      const drawImageSpy = vi.spyOn(ctx, 'drawImage');
+      // 800 * 0.1 = 80 wide, aspect 100/50 = 2, so 80/2 = 40 tall
+      const config = createBugConfig({ position: 'bottom-right', size: 0.1, margin: 10 });
+
+      compositeBugOverlay(ctx, 800, 600, config);
+
+      const [, x, y, w, h] = drawImageSpy.mock.calls[0]! as unknown as [unknown, number, number, number, number];
+      expect(w).toBe(80); // 800 * 0.1
+      expect(h).toBe(40); // 80 / 2
+      expect(x).toBe(800 - 80 - 10); // right edge minus width minus margin
+      expect(y).toBe(600 - 40 - 10); // bottom edge minus height minus margin
+    });
+
+    it('should position top-left with correct coordinates', () => {
+      const { ctx } = createTestCanvas();
+      const drawImageSpy = vi.spyOn(ctx, 'drawImage');
+      const config = createBugConfig({ position: 'top-left', size: 0.1, margin: 10 });
+
+      compositeBugOverlay(ctx, 800, 600, config);
+
+      const [, x, y] = drawImageSpy.mock.calls[0]! as unknown as [unknown, number, number];
+      expect(x).toBe(10);
+      expect(y).toBe(10);
+    });
+
+    it('should position top-right with correct coordinates', () => {
+      const { ctx } = createTestCanvas();
+      const drawImageSpy = vi.spyOn(ctx, 'drawImage');
+      const config = createBugConfig({ position: 'top-right', size: 0.1, margin: 10 });
+
+      compositeBugOverlay(ctx, 800, 600, config);
+
+      const [, x, y, w] = drawImageSpy.mock.calls[0]! as unknown as [unknown, number, number, number];
+      expect(x).toBe(800 - w - 10);
+      expect(y).toBe(10);
+    });
+
+    it('should position bottom-left with correct coordinates', () => {
+      const { ctx } = createTestCanvas();
+      const drawImageSpy = vi.spyOn(ctx, 'drawImage');
+      const config = createBugConfig({ position: 'bottom-left', size: 0.1, margin: 10 });
+
+      compositeBugOverlay(ctx, 800, 600, config);
+
+      const [, x, y, , h] = drawImageSpy.mock.calls[0]! as unknown as [unknown, number, number, number, number];
+      expect(x).toBe(10);
+      expect(y).toBe(600 - h - 10);
+    });
+
+    it('should clamp margin to half canvas dimension', () => {
+      const { ctx } = createTestCanvas(100, 80);
+      const drawImageSpy = vi.spyOn(ctx, 'drawImage');
+      // margin=200 exceeds half of 80 (40), should be clamped to 40
+      const config = createBugConfig({ position: 'top-left', size: 0.1, margin: 200 });
+
+      compositeBugOverlay(ctx, 100, 80, config);
+
+      const [, x, y] = drawImageSpy.mock.calls[0]! as unknown as [unknown, number, number];
+      expect(x).toBe(40); // clamped to min(200, 50, 40) = 40
+      expect(y).toBe(40);
+    });
+
+    it('should maintain aspect ratio of bug image', () => {
+      const { ctx } = createTestCanvas();
+      const drawImageSpy = vi.spyOn(ctx, 'drawImage');
+      // 200x100 image, aspect = 2
+      const config = createBugConfig({ imageWidth: 200, imageHeight: 100, size: 0.1 });
+
+      compositeBugOverlay(ctx, 800, 600, config);
+
+      const [, , , w, h] = drawImageSpy.mock.calls[0]! as unknown as [unknown, number, number, number, number];
+      expect(w).toBe(80); // 800 * 0.1
+      expect(h).toBe(40); // 80 / (200/100)
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Bug overlay integration with createExportCanvas
+  // ---------------------------------------------------------------------------
+  describe('bug overlay in createExportCanvas', () => {
+    let mockPaintEngine: PaintEngine;
+    let mockPaintRenderer: PaintRenderer;
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      mockPaintEngine = createRealPaintEngine();
+      mockPaintRenderer = createRealPaintRenderer();
+    });
+
+    function createBugConfig(overrides?: Partial<BugOverlayExportConfig>): BugOverlayExportConfig {
+      const img = createMockImage(100, 50);
+      return {
+        enabled: true,
+        image: img,
+        imageWidth: 100,
+        imageHeight: 50,
+        position: 'bottom-right',
+        size: 0.1,
+        opacity: 0.8,
+        margin: 12,
+        ...overrides,
+      };
+    }
+
+    it('should composite bug overlay when config is provided', () => {
+      const source = createMockMediaSource('image', 800, 600);
+      const session = createMockSession(source);
+      const bugConfig = createBugConfig();
+
+      const result = createExportCanvas(
+        session,
+        mockPaintEngine,
+        mockPaintRenderer,
+        'none',
+        false,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        bugConfig,
+      );
+
+      expect(result).not.toBeNull();
+      // Verify drawImage was called (the mock canvas context tracks calls)
+      const getContextMock = HTMLCanvasElement.prototype.getContext as unknown as ReturnType<typeof vi.fn>;
+      const ctx = getContextMock.mock.results.at(-1)?.value as { drawImage: ReturnType<typeof vi.fn> };
+      // drawImage should be called at least twice: once for the source, once for the bug overlay
+      expect(ctx.drawImage.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('should not composite bug overlay when config is null', () => {
+      const source = createMockMediaSource('image', 800, 600);
+      const session = createMockSession(source);
+
+      const result = createExportCanvas(
+        session,
+        mockPaintEngine,
+        mockPaintRenderer,
+        'none',
+        false,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        null,
+      );
+
+      expect(result).not.toBeNull();
+      const getContextMock = HTMLCanvasElement.prototype.getContext as unknown as ReturnType<typeof vi.fn>;
+      const ctx = getContextMock.mock.results.at(-1)?.value as { drawImage: ReturnType<typeof vi.fn> };
+      // Only the source image draw call
+      expect(ctx.drawImage.mock.calls.length).toBe(1);
+    });
+
+    it('should not composite bug overlay when disabled', () => {
+      const source = createMockMediaSource('image', 800, 600);
+      const session = createMockSession(source);
+      const bugConfig = createBugConfig({ enabled: false });
+
+      const result = createExportCanvas(
+        session,
+        mockPaintEngine,
+        mockPaintRenderer,
+        'none',
+        false,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        bugConfig,
+      );
+
+      expect(result).not.toBeNull();
+      const getContextMock = HTMLCanvasElement.prototype.getContext as unknown as ReturnType<typeof vi.fn>;
+      const ctx = getContextMock.mock.results.at(-1)?.value as { drawImage: ReturnType<typeof vi.fn> };
+      // Only the source image draw call
+      expect(ctx.drawImage.mock.calls.length).toBe(1);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Bug overlay integration with renderFrameToCanvas
+  // ---------------------------------------------------------------------------
+  describe('bug overlay in renderFrameToCanvas', () => {
+    let mockPaintEngine: PaintEngine;
+    let mockPaintRenderer: PaintRenderer;
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      mockPaintEngine = createRealPaintEngine();
+      mockPaintRenderer = createRealPaintRenderer();
+    });
+
+    function createBugConfig(overrides?: Partial<BugOverlayExportConfig>): BugOverlayExportConfig {
+      const img = createMockImage(100, 50);
+      return {
+        enabled: true,
+        image: img,
+        imageWidth: 100,
+        imageHeight: 50,
+        position: 'bottom-right',
+        size: 0.1,
+        opacity: 0.8,
+        margin: 12,
+        ...overrides,
+      };
+    }
+
+    it('should composite bug overlay onto rendered frame', async () => {
+      const source = createMockMediaSource('image', 800, 600);
+      const session = createMockSession(source);
+      const bugConfig = createBugConfig();
+
+      const result = await renderFrameToCanvas(
+        session,
+        mockPaintEngine,
+        mockPaintRenderer,
+        1,
+        defaultTransform(),
+        'none',
+        false,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        bugConfig,
+      );
+
+      expect(result).not.toBeNull();
+      const getContextMock = HTMLCanvasElement.prototype.getContext as unknown as ReturnType<typeof vi.fn>;
+      const ctx = getContextMock.mock.results.at(-1)?.value as { drawImage: ReturnType<typeof vi.fn> };
+      // drawImage called at least twice: source + bug overlay
+      expect(ctx.drawImage.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('should composite bug overlay with annotations', async () => {
+      const source = createMockMediaSource('image', 800, 600);
+      const session = createMockSession(source);
+      (mockPaintEngine.getAnnotationsWithGhost as any).mockReturnValue([{ id: '1' }]);
+      const bugConfig = createBugConfig();
+
+      const result = await renderFrameToCanvas(
+        session,
+        mockPaintEngine,
+        mockPaintRenderer,
+        1,
+        defaultTransform(),
+        'none',
+        true,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        bugConfig,
+      );
+
+      expect(result).not.toBeNull();
+      expect(mockPaintRenderer.renderAnnotations).toHaveBeenCalled();
+      const getContextMock = HTMLCanvasElement.prototype.getContext as unknown as ReturnType<typeof vi.fn>;
+      const ctx = getContextMock.mock.results.at(-1)?.value as { drawImage: ReturnType<typeof vi.fn> };
+      // source + annotations + bug overlay = at least 3
+      expect(ctx.drawImage.mock.calls.length).toBeGreaterThanOrEqual(3);
+    });
+
+    it('should not composite bug overlay when disabled', async () => {
+      const source = createMockMediaSource('image', 800, 600);
+      const session = createMockSession(source);
+      const bugConfig = createBugConfig({ enabled: false });
+
+      const result = await renderFrameToCanvas(
+        session,
+        mockPaintEngine,
+        mockPaintRenderer,
+        1,
+        defaultTransform(),
+        'none',
+        false,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        bugConfig,
+      );
+
+      expect(result).not.toBeNull();
+      const getContextMock = HTMLCanvasElement.prototype.getContext as unknown as ReturnType<typeof vi.fn>;
+      const ctx = getContextMock.mock.results.at(-1)?.value as { drawImage: ReturnType<typeof vi.fn> };
+      // Only the source image draw call
+      expect(ctx.drawImage.mock.calls.length).toBe(1);
+    });
+
+    it('should composite bug overlay with crop region', async () => {
+      const source = createMockMediaSource('image', 1920, 1080);
+      const session = createMockSession(source);
+      const bugConfig = createBugConfig();
+      const cropRegion = { x: 0.25, y: 0.25, width: 0.5, height: 0.5 };
+
+      const result = await renderFrameToCanvas(
+        session,
+        mockPaintEngine,
+        mockPaintRenderer,
+        1,
+        defaultTransform(),
+        'none',
+        false,
+        cropRegion,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        bugConfig,
+      );
+
+      expect(result).not.toBeNull();
+      expect(result!.width).toBe(960);
+      expect(result!.height).toBe(540);
+      const getContextMock = HTMLCanvasElement.prototype.getContext as unknown as ReturnType<typeof vi.fn>;
+      const ctx = getContextMock.mock.results.at(-1)?.value as { drawImage: ReturnType<typeof vi.fn> };
+      expect(ctx.drawImage.mock.calls.length).toBeGreaterThanOrEqual(2);
     });
   });
 });

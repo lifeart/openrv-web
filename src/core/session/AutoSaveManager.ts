@@ -89,14 +89,12 @@ export class AutoSaveManager extends EventEmitter<AutoSaveEvents> {
   private db: IDBDatabase | null = null;
   private config: AutoSaveConfig;
   private saveTimer: ReturnType<typeof setInterval> | null = null;
-  private debounceTimer: ReturnType<typeof setTimeout> | null = null;
   private lastSaveTime: Date | null = null;
   private isDirty = false;
   private isInitialized = false;
   private stateGetter: (() => SessionState) | null = null;
   private isSaving = false;
   private isDisposing = false;
-
   constructor(config: Partial<AutoSaveConfig> = {}) {
     super();
     this.config = { ...DEFAULT_AUTO_SAVE_CONFIG, ...config };
@@ -112,27 +110,23 @@ export class AutoSaveManager extends EventEmitter<AutoSaveEvents> {
       this.isInitialized = true;
 
       // Check for crash recovery
+      let hasRecovery = false;
       const wasCleanShutdown = await this.checkCleanShutdown();
       if (!wasCleanShutdown) {
         const entries = await this.listAutoSaves();
         if (entries.length > 0) {
           this.emit('recoveryAvailable', { entries });
-          return true;
+          hasRecovery = true;
         }
       }
 
       // Mark as active session (not clean shutdown until dispose)
       await this.setCleanShutdown(false);
 
-      // Start auto-save timer if enabled
-      if (this.config.enabled) {
-        this.startTimer();
-      }
+      // Arm session: start timer + install beforeunload handler
+      this.armSessionInternal();
 
-      // Listen for beforeunload to mark clean shutdown
-      window.addEventListener('beforeunload', this.handleBeforeUnload);
-
-      return false;
+      return hasRecovery;
     } catch (err) {
       console.error('AutoSaveManager initialization failed:', err);
       return false;
@@ -219,6 +213,28 @@ export class AutoSaveManager extends EventEmitter<AutoSaveEvents> {
   }
 
   /**
+   * Arm the session — starts the auto-save timer and installs the
+   * beforeunload handler.  Idempotent: safe to call multiple times.
+   */
+  async armSession(): Promise<void> {
+    this.armSessionInternal();
+  }
+
+  /**
+   * Internal arming logic (sync, used by both initialize and armSession).
+   */
+  private armSessionInternal(): void {
+    // Start auto-save timer if enabled
+    if (this.config.enabled) {
+      this.startTimer(); // startTimer calls stopTimer first, so no duplicates
+    }
+
+    // Remove then re-add to guarantee no duplicate listeners
+    window.removeEventListener('beforeunload', this.handleBeforeUnload);
+    window.addEventListener('beforeunload', this.handleBeforeUnload);
+  }
+
+  /**
    * Start the auto-save timer
    */
   private startTimer(): void {
@@ -275,24 +291,13 @@ export class AutoSaveManager extends EventEmitter<AutoSaveEvents> {
 
   /**
    * Mark session as dirty (needs save)
-   * Call this whenever session state changes
+   * Call this whenever session state changes.
+   * The dirty flag is picked up by the next interval-based save cycle.
    * @param stateGetter - A function that returns the current state (lazy evaluation)
    */
   markDirty(stateGetter: () => SessionState): void {
     this.isDirty = true;
     this.stateGetter = stateGetter;
-
-    // Debounce: if multiple changes happen rapidly, only save once after 2s of inactivity
-    if (this.debounceTimer) {
-      clearTimeout(this.debounceTimer);
-    }
-
-    this.debounceTimer = setTimeout(() => {
-      if (this.isDirty && this.stateGetter) {
-        this.saveWithGetter();
-      }
-      this.debounceTimer = null;
-    }, 2000);
   }
 
   /**
@@ -594,12 +599,6 @@ export class AutoSaveManager extends EventEmitter<AutoSaveEvents> {
    * Force an immediate save
    */
   async saveNow(state: SessionState): Promise<AutoSaveEntry | null> {
-    // Clear debounce timer
-    if (this.debounceTimer) {
-      clearTimeout(this.debounceTimer);
-      this.debounceTimer = null;
-    }
-
     return this.save(state);
   }
 
@@ -612,10 +611,6 @@ export class AutoSaveManager extends EventEmitter<AutoSaveEvents> {
 
     // Stop timers
     this.stopTimer();
-    if (this.debounceTimer) {
-      clearTimeout(this.debounceTimer);
-      this.debounceTimer = null;
-    }
 
     // Remove event listener
     window.removeEventListener('beforeunload', this.handleBeforeUnload);

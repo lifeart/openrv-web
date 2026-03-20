@@ -10,6 +10,13 @@ import { bindPersistenceHandlers } from './persistenceHandlers';
 import type { SessionBridgeContext } from '../AppSessionBridge';
 import type { Session, SessionEvents } from '../core/session/Session';
 import { createMockSessionBridgeContext } from '../../test/mocks';
+import { showAlert } from '../ui/components/shared/Modal';
+import type { SkippedNodeInfo } from '../core/session/GTOGraphLoader';
+import type { DegradedModeInfo } from '../composite/BlendModes';
+
+vi.mock('../ui/components/shared/Modal', () => ({
+  showAlert: vi.fn(),
+}));
 
 type EventHandlers = Partial<Record<keyof SessionEvents, (data: any) => void>>;
 
@@ -243,6 +250,40 @@ describe('bindPersistenceHandlers', () => {
     expect(context.getCropControl().setUncropState).not.toHaveBeenCalled();
   });
 
+  it('PERH-U041: settingsLoaded restores linearize state', () => {
+    const linearize = { logType: 1, sRGB2linear: false, rec709ToLinear: false, fileGamma: 1.0, alphaType: 0 };
+    handlers.settingsLoaded!({ linearize } as any);
+
+    expect(context.getViewer().setLinearize).toHaveBeenCalledWith(linearize);
+  });
+
+  it('PERH-U042: settingsLoaded restores outOfRange mode', () => {
+    handlers.settingsLoaded!({ outOfRange: 2 } as any);
+
+    expect(context.getViewer().setOutOfRange).toHaveBeenCalledWith(2);
+  });
+
+  it('PERH-U043: settingsLoaded restores outOfRange mode 0 (off)', () => {
+    handlers.settingsLoaded!({ outOfRange: 0 } as any);
+
+    expect(context.getViewer().setOutOfRange).toHaveBeenCalledWith(0);
+  });
+
+  it('PERH-U044: settingsLoaded restores channelSwizzle', () => {
+    const channelSwizzle = [2, 1, 0, 3] as [number, number, number, number];
+    handlers.settingsLoaded!({ channelSwizzle } as any);
+
+    expect(context.getViewer().setChannelSwizzle).toHaveBeenCalledWith(channelSwizzle);
+  });
+
+  it('PERH-U045: settingsLoaded without linearize/outOfRange/channelSwizzle does not call those methods', () => {
+    handlers.settingsLoaded!({} as any);
+
+    expect(context.getViewer().setLinearize).not.toHaveBeenCalled();
+    expect(context.getViewer().setOutOfRange).not.toHaveBeenCalled();
+    expect(context.getViewer().setChannelSwizzle).not.toHaveBeenCalled();
+  });
+
   it('PERH-U022: settingsLoaded restores channel mode', () => {
     handlers.settingsLoaded!({ channelMode: 'red' } as any);
 
@@ -340,6 +381,83 @@ describe('bindPersistenceHandlers', () => {
     expect(context.getGamutDiagram().show).not.toHaveBeenCalled();
     expect(context.getGamutDiagram().hide).toHaveBeenCalled();
     expect(context.getScopesControl().setScopeVisible).toHaveBeenCalledWith('gamutDiagram', undefined);
+  });
+
+  it('PERH-U035: settingsLoaded with all scopes off hides all scopes', () => {
+    handlers.settingsLoaded!({
+      scopes: { histogram: false, waveform: false, vectorscope: false, gamutDiagram: false },
+    } as any);
+
+    expect(context.getHistogram().hide).toHaveBeenCalled();
+    expect(context.getWaveform().hide).toHaveBeenCalled();
+    expect(context.getVectorscope().hide).toHaveBeenCalled();
+    expect(context.getGamutDiagram().hide).toHaveBeenCalled();
+    expect(context.getScopesControl().setScopeVisible).toHaveBeenCalledWith('histogram', false);
+    expect(context.getScopesControl().setScopeVisible).toHaveBeenCalledWith('waveform', false);
+    expect(context.getScopesControl().setScopeVisible).toHaveBeenCalledWith('vectorscope', false);
+    expect(context.getScopesControl().setScopeVisible).toHaveBeenCalledWith('gamutDiagram', false);
+    // Ensure no show() was called
+    expect(context.getHistogram().show).not.toHaveBeenCalled();
+    expect(context.getWaveform().show).not.toHaveBeenCalled();
+    expect(context.getVectorscope().show).not.toHaveBeenCalled();
+    expect(context.getGamutDiagram().show).not.toHaveBeenCalled();
+  });
+
+  it('PERH-U036: settingsLoaded without scopes property does not touch scopes', () => {
+    handlers.settingsLoaded!({} as any);
+
+    expect(context.getHistogram().show).not.toHaveBeenCalled();
+    expect(context.getHistogram().hide).not.toHaveBeenCalled();
+    expect(context.getWaveform().show).not.toHaveBeenCalled();
+    expect(context.getWaveform().hide).not.toHaveBeenCalled();
+    expect(context.getVectorscope().show).not.toHaveBeenCalled();
+    expect(context.getVectorscope().hide).not.toHaveBeenCalled();
+    expect(context.getGamutDiagram().show).not.toHaveBeenCalled();
+    expect(context.getGamutDiagram().hide).not.toHaveBeenCalled();
+  });
+
+  it('PERH-U037: skippedNodes event triggers a user notification with skipped node names', () => {
+    expect(handlers.skippedNodes).toBeDefined();
+    const skipped: SkippedNodeInfo[] = [
+      { name: 'node1', protocol: 'RVColor', mappedType: 'color', reason: 'unregistered_type' },
+      { name: 'node2', protocol: 'RVTransform2D', mappedType: 'transform', reason: 'unregistered_type' },
+    ];
+    handlers.skippedNodes!(skipped);
+
+    expect(showAlert).toHaveBeenCalledWith(
+      expect.stringContaining('2 node(s) were skipped'),
+      expect.objectContaining({ type: 'warning', title: 'RV/GTO Import Warning' }),
+    );
+  });
+
+  it('PERH-U038: degradedModes event triggers a user notification with degraded mode info', () => {
+    expect(handlers.degradedModes).toBeDefined();
+    const degraded: DegradedModeInfo[] = [{ nodeName: 'stack1', originalMode: 'dissolve', fallbackMode: 'over' }];
+    handlers.degradedModes!(degraded);
+
+    expect(showAlert).toHaveBeenCalledWith(
+      expect.stringContaining('1 composite mode(s) were degraded'),
+      expect.objectContaining({ type: 'warning', title: 'RV/GTO Import Warning' }),
+    );
+  });
+
+  it('PERH-U039: skippedNodes with only unmapped_protocol nodes shows no warning', () => {
+    vi.mocked(showAlert).mockClear();
+    const skipped: SkippedNodeInfo[] = [
+      { name: 'node1', protocol: 'RVUnknown', mappedType: null, reason: 'unmapped_protocol' },
+    ];
+    handlers.skippedNodes!(skipped);
+
+    expect(showAlert).not.toHaveBeenCalled();
+  });
+
+  it('PERH-U040: normal import with no diagnostics shows no warning', () => {
+    vi.mocked(showAlert).mockClear();
+    // Neither skippedNodes nor degradedModes handlers are called during normal import
+    // Verify the handlers are registered but showAlert is not called when no events fire
+    expect(handlers.skippedNodes).toBeDefined();
+    expect(handlers.degradedModes).toBeDefined();
+    expect(showAlert).not.toHaveBeenCalled();
   });
 
   it('PERH-U030: settingsLoaded syncs GTO store after applying settings', () => {

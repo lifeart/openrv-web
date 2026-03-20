@@ -6,6 +6,7 @@ import {
   deserializeRepresentation,
   type AddRepresentationConfig,
   type MediaRepresentation,
+  type RepresentationKind,
   type SerializedRepresentation,
 } from './representation';
 import type { BaseSourceNode } from '../../nodes/sources/BaseSourceNode';
@@ -107,16 +108,10 @@ describe('representation types', () => {
         resolution: { width: 100, height: 100 },
         loaderConfig: {},
       });
-      const streamRep = createRepresentation({
-        kind: 'streaming',
-        resolution: { width: 100, height: 100 },
-        loaderConfig: {},
-      });
 
       expect(framesRep.priority).toBe(0);
       expect(movieRep.priority).toBe(1);
       expect(proxyRep.priority).toBe(2);
-      expect(streamRep.priority).toBe(3);
     });
   });
 
@@ -135,7 +130,6 @@ describe('representation types', () => {
           file: new File([], 'test.mp4'),
           path: '/path/to/test.mp4',
           url: 'http://example.com/test.mp4',
-          opfsCacheKey: 'cache-key',
         },
         audioTrackPresent: true,
         startFrame: 0,
@@ -164,7 +158,6 @@ describe('representation types', () => {
       expect(serialized.colorSpace).toEqual({ transferFunction: 'sRGB', colorPrimaries: 'bt709' });
       expect(serialized.loaderConfig.path).toBe('/path/to/test.mp4');
       expect(serialized.loaderConfig.url).toBe('http://example.com/test.mp4');
-      expect(serialized.loaderConfig.opfsCacheKey).toBe('cache-key');
     });
 
     it('should handle representation without colorSpace', () => {
@@ -201,7 +194,6 @@ describe('representation types', () => {
         colorSpace: { transferFunction: 'PQ', colorPrimaries: 'bt2020' },
         loaderConfig: {
           path: '/path/to/test.mp4',
-          opfsCacheKey: 'cache-key',
         },
       };
 
@@ -249,6 +241,91 @@ describe('representation types', () => {
       expect(deserialized.colorSpace).toEqual(rep.colorSpace);
       expect(deserialized.status).toBe('idle'); // Always idle after deserialization
       expect(deserialized.sourceNode).toBeNull(); // Always null after deserialization
+    });
+  });
+
+  describe('no dead OPFS fields on representations (issue #532)', () => {
+    it('should not have opfsCacheKey in RepresentationLoaderConfig', () => {
+      const config: AddRepresentationConfig = {
+        kind: 'movie',
+        resolution: { width: 1920, height: 1080 },
+        loaderConfig: { path: '/video.mp4', url: 'http://example.com/video.mp4' },
+      };
+      const rep = createRepresentation(config);
+      expect(rep.loaderConfig).not.toHaveProperty('opfsCacheKey');
+    });
+
+    it('should not serialize opfsCacheKey in loaderConfig', () => {
+      const rep: MediaRepresentation = {
+        id: 'no-opfs',
+        label: 'No OPFS',
+        kind: 'frames',
+        priority: 0,
+        status: 'ready',
+        resolution: { width: 4096, height: 2160 },
+        par: 1.0,
+        sourceNode: null,
+        loaderConfig: { path: '/path/to/file.exr' },
+        audioTrackPresent: false,
+        startFrame: 0,
+      };
+      const serialized = serializeRepresentation(rep);
+      expect(serialized.loaderConfig).not.toHaveProperty('opfsCacheKey');
+    });
+
+    it('should not carry opfsCacheKey through round-trip serialize/deserialize', () => {
+      const rep: MediaRepresentation = {
+        id: 'round-trip-no-opfs',
+        label: 'Round Trip No OPFS',
+        kind: 'movie',
+        priority: 1,
+        status: 'ready',
+        resolution: { width: 1920, height: 1080 },
+        par: 1.0,
+        sourceNode: null,
+        loaderConfig: { path: '/path/to/video.mp4', fps: 30 },
+        audioTrackPresent: true,
+        startFrame: 0,
+      };
+      const serialized = serializeRepresentation(rep);
+      const deserialized = deserializeRepresentation(serialized);
+      expect(serialized.loaderConfig).not.toHaveProperty('opfsCacheKey');
+      expect(deserialized.loaderConfig).not.toHaveProperty('opfsCacheKey');
+    });
+  });
+
+  describe('RepresentationKind regression (issue #529)', () => {
+    it('should only include implemented, loadable kinds', () => {
+      const validKinds: RepresentationKind[] = ['frames', 'movie', 'proxy'];
+      for (const kind of validKinds) {
+        const rep = createRepresentation({
+          kind,
+          resolution: { width: 100, height: 100 },
+          loaderConfig: {},
+        });
+        expect(rep.kind).toBe(kind);
+        expect(typeof rep.priority).toBe('number');
+      }
+    });
+
+    it('should not accept "streaming" as a RepresentationKind', () => {
+      const validKinds: RepresentationKind[] = ['frames', 'movie', 'proxy'];
+      // @ts-expect-error 'streaming' is not a valid RepresentationKind
+      const invalidKind: RepresentationKind = 'streaming';
+      expect(validKinds).not.toContain(invalidKind);
+    });
+
+    it('should assign distinct default priorities to each valid kind', () => {
+      const kinds: RepresentationKind[] = ['frames', 'movie', 'proxy'];
+      const priorities = kinds.map(
+        (kind) =>
+          createRepresentation({
+            kind,
+            resolution: { width: 100, height: 100 },
+            loaderConfig: {},
+          }).priority,
+      );
+      expect(new Set(priorities).size).toBe(kinds.length);
     });
   });
 });

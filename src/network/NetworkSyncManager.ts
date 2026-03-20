@@ -141,6 +141,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
   private _createRoomFallbackTimer: ReturnType<typeof setTimeout> | null = null;
   private _serverlessPeer: ServerlessPeerState | null = null;
   private _pendingServerlessOffer: WebRTCURLOfferSignal | null = null;
+  private _droppedMessageCount = 0;
   private _recentMessageIds = new Set<string>();
   private _recentMessageIdQueue: string[] = [];
   private _pendingStateRequest: {
@@ -149,6 +150,9 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     retryCount: number;
     timer: ReturnType<typeof setTimeout>;
   } | null = null;
+  private _reconnectExhausted = false;
+  private _lastRoomCode: string | null = null;
+  private _lastRoomAction: 'create' | 'join' | null = null;
 
   // Subscriptions to clean up
   private _unsubscribers: Array<() => void> = [];
@@ -199,12 +203,27 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     return this._connectionState === 'connected';
   }
 
+  /**
+   * Whether reconnect retries have been exhausted and the user
+   * must manually trigger a reconnection attempt.
+   */
+  get isReconnectExhausted(): boolean {
+    return this._reconnectExhausted;
+  }
+
   get syncSettings(): SyncSettings {
     return { ...this._syncSettings };
   }
 
   get rtt(): number {
     return this.wsClient.rtt;
+  }
+
+  /**
+   * Number of outbound sync messages that were dropped because no transport was available.
+   */
+  get droppedMessageCount(): number {
+    return this._droppedMessageCount;
   }
 
   /**
@@ -245,6 +264,21 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
 
   setPinCode(pinCode: string): void {
     this._pinCode = pinCode.trim();
+  }
+
+  /**
+   * Manually trigger a reconnection attempt after automatic retries
+   * have been exhausted. Re-uses the last room code and user name.
+   */
+  manualReconnect(): void {
+    if (!this._reconnectExhausted) return;
+    this._reconnectExhausted = false;
+
+    if (this._lastRoomAction === 'create') {
+      this.createRoom(this._userName, this._pinCode);
+    } else if (this._lastRoomAction === 'join' && this._lastRoomCode) {
+      this.joinRoom(this._lastRoomCode, this._userName, this._pinCode);
+    }
   }
 
   /**
@@ -380,6 +414,9 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     if (userName) this._userName = userName;
     if (typeof pinCode === 'string') this.setPinCode(pinCode);
     this._pendingRoomAction = 'create';
+    this._lastRoomAction = 'create';
+    this._lastRoomCode = null;
+    this._reconnectExhausted = false;
     this.scheduleCreateRoomFallback();
 
     this.setConnectionState('connecting');
@@ -411,6 +448,9 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     if (userName) this._userName = userName;
     if (typeof pinCode === 'string') this.setPinCode(pinCode);
     this._pendingRoomAction = 'join';
+    this._lastRoomAction = 'join';
+    this._lastRoomCode = roomCode.toUpperCase();
+    this._reconnectExhausted = false;
     this.clearCreateRoomFallbackTimer();
 
     this.setConnectionState('connecting');
@@ -786,12 +826,14 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
       if (this.tryFallbackToLocalHostRoom()) {
         return;
       }
+      this._reconnectExhausted = true;
       this.setConnectionState('error');
       this.emit('toastMessage', {
         message: 'Failed to reconnect. Please try again.',
         type: 'error',
       });
       this.emit('error', { code: 'RECONNECT_FAILED', message: 'Maximum reconnection attempts reached.' });
+      this.emit('reconnectExhausted', undefined);
     });
 
     const unsub6 = this.wsClient.on('rttUpdated', (rtt) => {
@@ -806,7 +848,12 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
       this.emit('error', { code: 'WS_ERROR', message: err.message });
     });
 
-    this._unsubscribers.push(unsub0, unsub1, unsub2, unsub3, unsub4, unsub5, unsub6, unsub7);
+    const unsub8 = this.wsClient.on('warning', (warning) => {
+      log.warn(`[${warning.code}] ${warning.message}`, warning.detail);
+      this.emit('toastMessage', { message: warning.message, type: 'warning' });
+    });
+
+    this._unsubscribers.push(unsub0, unsub1, unsub2, unsub3, unsub4, unsub5, unsub6, unsub7, unsub8);
   }
 
   private handleMessage(message: SyncMessage, transport: 'websocket' | 'webrtc' = 'websocket'): void {
@@ -1022,6 +1069,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     if (!validatePlaybackPayload(payload)) return;
 
     this.stateManager.updateRemotePlayback(payload);
+    this.emitConflictStateIfNeeded();
     this.emit('syncPlayback', payload);
   }
 
@@ -1037,6 +1085,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     if (!validateViewPayload(payload)) return;
 
     this.stateManager.updateRemoteView(payload);
+    this.emitConflictStateIfNeeded();
     this.emit('syncView', payload);
   }
 
@@ -1218,9 +1267,17 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     });
   }
 
-  private dispatchRealtimeMessage(message: SyncMessage): void {
-    if (this.wsClient.send(message)) return;
-    this.sendMessageOverServerlessPeer(message);
+  private dispatchRealtimeMessage(message: SyncMessage): boolean {
+    if (this.wsClient.send(message)) return true;
+    if (this.sendMessageOverServerlessPeer(message)) return true;
+
+    this._droppedMessageCount++;
+    log.warn(`Sync message dropped (type=${message.type}, total dropped=${this._droppedMessageCount})`);
+    this.emit('syncMessageDropped', {
+      messageType: message.type,
+      droppedCount: this._droppedMessageCount,
+    });
+    return false;
   }
 
   private hasOpenServerlessChannel(): boolean {
@@ -1770,6 +1827,23 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     if (this._connectionState === state) return;
     this._connectionState = state;
     this.emit('connectionStateChanged', state);
+  }
+
+  /**
+   * If we are connected and the SyncStateManager detects a conflict,
+   * transition to the 'conflict' connection state so the UI can show
+   * a red/warning indicator. When the conflict clears, transition
+   * back to 'connected'.
+   */
+  private emitConflictStateIfNeeded(): void {
+    // Only evaluate conflict when in connected or conflict state
+    if (this._connectionState !== 'connected' && this._connectionState !== 'conflict') return;
+
+    if (this.stateManager.hasConflict()) {
+      this.setConnectionState('conflict');
+    } else if (this._connectionState === 'conflict') {
+      this.setConnectionState('connected');
+    }
   }
 
   private resetRoomState(): void {

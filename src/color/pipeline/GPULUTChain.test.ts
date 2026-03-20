@@ -95,7 +95,7 @@ function createTestLUT3D(title: string = 'Test'): LUT3D {
       }
     }
   }
-  return { title, size, domainMin: [0, 0, 0], domainMax: [1, 1, 1], data };
+  return { type: '3d', title, size, domainMin: [0, 0, 0], domainMax: [1, 1, 1], data };
 }
 
 describe('GPULUTChain', () => {

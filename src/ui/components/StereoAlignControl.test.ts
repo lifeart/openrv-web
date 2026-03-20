@@ -53,6 +53,14 @@ describe('StereoAlignControl', () => {
       expect(modes).toContain('difference');
       expect(modes).toContain('edges');
     });
+
+    it('SALC-U005: button title describes both click configuration and Shift+4 cycle behavior', () => {
+      const el = control.render();
+      const btn = el.querySelector('[data-testid="stereo-align-button"]') as HTMLButtonElement;
+      expect(btn.title).toMatch(/click/i);
+      expect(btn.title).toMatch(/Shift\+4/i);
+      expect(btn.title).toMatch(/cycle/i);
+    });
   });
 
   describe('mode', () => {

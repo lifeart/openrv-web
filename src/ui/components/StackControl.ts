@@ -705,6 +705,27 @@ export class StackControl extends EventEmitter<StackControlEvents> {
     return [...this.availableSources];
   }
 
+  /**
+   * Replace all layers with the given array (used during state restore).
+   * Does NOT emit per-layer events — callers should treat this as a bulk reset.
+   */
+  setLayers(layers: StackLayer[]): void {
+    this.layers = layers.map((l) => ({ ...l }));
+    // Update nextLayerId to avoid collisions with restored IDs
+    for (const l of this.layers) {
+      const match = l.id.match(/^layer_(\d+)$/);
+      if (match) {
+        const num = parseInt(match[1]!, 10);
+        if (num >= this.nextLayerId) {
+          this.nextLayerId = num + 1;
+        }
+      }
+    }
+    this.activeLayerId = this.layers.length > 0 ? this.layers[this.layers.length - 1]!.id : null;
+    this.updateLayerList();
+    this.updateButtonState();
+  }
+
   clearLayers(): void {
     this.layers = [];
     this.activeLayerId = null;

@@ -4,7 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NetworkControl } from './NetworkControl';
-import type { SyncUser } from '../../network/types';
+import type { SyncUser, ParticipantPermission } from '../../network/types';
 
 describe('NetworkControl', () => {
   let control: NetworkControl;
@@ -242,6 +242,78 @@ describe('NetworkControl', () => {
     });
   });
 
+  describe('user badge labels', () => {
+    function setupConnected() {
+      control.setConnectionState('connected');
+      control.setRoomInfo({
+        roomId: 'room-1',
+        roomCode: 'ABCD-1234',
+        hostId: 'u1',
+        users: [],
+        createdAt: Date.now(),
+        maxUsers: 10,
+      });
+      control.openPanel();
+    }
+
+    function getBadgeText(userId: string): string | null {
+      const row = document.querySelector(`[data-testid="network-user-${userId}"]`);
+      const badge = row?.querySelector('[data-testid="network-user-badge-label"]');
+      return badge?.textContent ?? null;
+    }
+
+    it('NCC-023: local host user shows "You (Host)" badge', () => {
+      setupConnected();
+      control.setLocalUserId('u1');
+      control.setUsers([
+        { id: 'u1', name: 'Alice', color: '#4a9eff', isHost: true, joinedAt: Date.now() },
+        { id: 'u2', name: 'Bob', color: '#4ade80', isHost: false, joinedAt: Date.now() },
+      ]);
+
+      expect(getBadgeText('u1')).toBe('You (Host)');
+    });
+
+    it('NCC-024: remote host user shows "Host" badge', () => {
+      setupConnected();
+      control.setLocalUserId('u2');
+      control.setUsers([
+        { id: 'u1', name: 'Alice', color: '#4a9eff', isHost: true, joinedAt: Date.now() },
+        { id: 'u2', name: 'Bob', color: '#4ade80', isHost: false, joinedAt: Date.now() },
+      ]);
+
+      expect(getBadgeText('u1')).toBe('Host');
+    });
+
+    it('NCC-025: local non-host user shows "You" badge', () => {
+      setupConnected();
+      control.setLocalUserId('u2');
+      control.setUsers([
+        { id: 'u1', name: 'Alice', color: '#4a9eff', isHost: true, joinedAt: Date.now() },
+        { id: 'u2', name: 'Bob', color: '#4ade80', isHost: false, joinedAt: Date.now() },
+      ]);
+
+      expect(getBadgeText('u2')).toBe('You');
+    });
+
+    it('NCC-026: remote non-host user shows no badge', () => {
+      setupConnected();
+      control.setLocalUserId('u1');
+      control.setUsers([
+        { id: 'u1', name: 'Alice', color: '#4a9eff', isHost: true, joinedAt: Date.now() },
+        { id: 'u2', name: 'Bob', color: '#4ade80', isHost: false, joinedAt: Date.now() },
+      ]);
+
+      expect(getBadgeText('u2')).toBeNull();
+    });
+
+    it('NCC-027: without localUserId set, host shows plain "Host" badge', () => {
+      setupConnected();
+      control.setUsers([{ id: 'u1', name: 'Alice', color: '#4a9eff', isHost: true, joinedAt: Date.now() }]);
+
+      expect(getBadgeText('u1')).toBe('Host');
+    });
+  });
+
   describe('sync settings', () => {
     it('NCC-030: toggle sync settings emit events', () => {
       const handler = vi.fn();
@@ -271,6 +343,52 @@ describe('NetworkControl', () => {
 
       expect(handler).toHaveBeenCalled();
       expect(handler.mock.calls[0]![0].playback).toBe(false);
+    });
+
+    it('NCC-030b: renders cursor sync checkbox', () => {
+      control.setConnectionState('connected');
+      control.setRoomInfo({
+        roomId: 'room-1',
+        roomCode: 'ABCD-1234',
+        hostId: 'u1',
+        users: [],
+        createdAt: Date.now(),
+        maxUsers: 10,
+      });
+      control.openPanel();
+
+      const cursorToggle = document.querySelector('[data-testid="network-sync-cursor"]') as HTMLLabelElement;
+      expect(cursorToggle).toBeTruthy();
+
+      const checkbox = cursorToggle.querySelector('input[type="checkbox"]') as HTMLInputElement;
+      expect(checkbox).toBeTruthy();
+      // cursor is enabled by default per DEFAULT_SYNC_SETTINGS
+      expect(checkbox.checked).toBe(true);
+    });
+
+    it('NCC-030c: toggling cursor checkbox emits syncSettingsChanged', () => {
+      const handler = vi.fn();
+      control.on('syncSettingsChanged', handler);
+
+      control.setConnectionState('connected');
+      control.setRoomInfo({
+        roomId: 'room-1',
+        roomCode: 'ABCD-1234',
+        hostId: 'u1',
+        users: [],
+        createdAt: Date.now(),
+        maxUsers: 10,
+      });
+      control.openPanel();
+
+      const cursorToggle = document.querySelector('[data-testid="network-sync-cursor"]') as HTMLLabelElement;
+      const checkbox = cursorToggle.querySelector('input[type="checkbox"]') as HTMLInputElement;
+
+      checkbox.checked = false;
+      checkbox.dispatchEvent(new Event('change'));
+
+      expect(handler).toHaveBeenCalled();
+      expect(handler.mock.calls[0]![0].cursor).toBe(false);
     });
   });
 
@@ -570,6 +688,235 @@ describe('NetworkControl', () => {
       const roomCodeDisplay = document.querySelector('[data-testid="network-room-code-display"]') as HTMLElement;
       expect(roomCodeDisplay).toBeTruthy();
       expect(roomCodeDisplay.textContent).toContain('WXYZ-5678');
+    });
+  });
+
+  describe('participant permission roles', () => {
+    function setupConnectedWithUsers() {
+      control.setConnectionState('connected');
+      control.setRoomInfo({
+        roomId: 'room-1',
+        roomCode: 'ABCD-1234',
+        hostId: 'u1',
+        users: [],
+        createdAt: Date.now(),
+        maxUsers: 10,
+      });
+      control.setLocalUserId('u2');
+      control.setUsers([
+        { id: 'u1', name: 'Alice', color: '#4a9eff', isHost: true, joinedAt: Date.now() },
+        { id: 'u2', name: 'Bob', color: '#4ade80', isHost: false, joinedAt: Date.now() },
+        { id: 'u3', name: 'Carol', color: '#f87171', isHost: false, joinedAt: Date.now() },
+      ]);
+      control.openPanel();
+    }
+
+    function getRoleBadgeText(userId: string): string | null {
+      const row = document.querySelector(`[data-testid="network-user-${userId}"]`);
+      const badge = row?.querySelector('[data-testid="network-user-role-badge"]');
+      return badge?.textContent ?? null;
+    }
+
+    it('NCC-100: shows Reviewer role badge for non-host user with reviewer role', () => {
+      setupConnectedWithUsers();
+      control.setParticipantPermission({ userId: 'u2', role: 'reviewer' });
+
+      expect(getRoleBadgeText('u2')).toBe('Reviewer');
+    });
+
+    it('NCC-101: shows Viewer role badge for non-host user with viewer role', () => {
+      setupConnectedWithUsers();
+      control.setParticipantPermission({ userId: 'u3', role: 'viewer' });
+
+      expect(getRoleBadgeText('u3')).toBe('Viewer');
+    });
+
+    it('NCC-102: does not show role badge for host user', () => {
+      setupConnectedWithUsers();
+      control.setParticipantPermission({ userId: 'u1', role: 'host' });
+
+      // Host already shows Host badge, no separate role badge
+      expect(getRoleBadgeText('u1')).toBeNull();
+    });
+
+    it('NCC-103: shows role indicator for current user', () => {
+      setupConnectedWithUsers();
+      control.setParticipantPermission({ userId: 'u2', role: 'reviewer' });
+
+      const indicator = document.querySelector('[data-testid="network-role-indicator"]') as HTMLElement;
+      expect(indicator).toBeTruthy();
+      expect(indicator.style.display).toBe('flex');
+
+      const label = indicator.querySelector('[data-testid="network-role-label"]');
+      expect(label?.textContent).toBe('Reviewer');
+    });
+
+    it('NCC-104: shows view-only banner when current user is viewer', () => {
+      setupConnectedWithUsers();
+      control.setParticipantPermission({ userId: 'u2', role: 'viewer' });
+
+      const banner = document.querySelector('[data-testid="network-view-only-banner"]') as HTMLElement;
+      expect(banner).toBeTruthy();
+      expect(banner.style.display).toBe('flex');
+      expect(banner.textContent).toContain('View Only');
+    });
+
+    it('NCC-105: hides view-only banner when current user is reviewer', () => {
+      setupConnectedWithUsers();
+      control.setParticipantPermission({ userId: 'u2', role: 'reviewer' });
+
+      const banner = document.querySelector('[data-testid="network-view-only-banner"]') as HTMLElement;
+      expect(banner.style.display).toBe('none');
+    });
+
+    it('NCC-106: hides view-only banner when other user is viewer but current user is not', () => {
+      setupConnectedWithUsers();
+      control.setParticipantPermission({ userId: 'u3', role: 'viewer' });
+
+      const banner = document.querySelector('[data-testid="network-view-only-banner"]') as HTMLElement;
+      expect(banner.style.display).toBe('none');
+    });
+
+    it('NCC-107: updates role badge when permission changes', () => {
+      setupConnectedWithUsers();
+      control.setParticipantPermission({ userId: 'u3', role: 'reviewer' });
+      expect(getRoleBadgeText('u3')).toBe('Reviewer');
+
+      control.setParticipantPermission({ userId: 'u3', role: 'viewer' });
+      expect(getRoleBadgeText('u3')).toBe('Viewer');
+    });
+
+    it('NCC-108: bulk-sets participant permissions', () => {
+      setupConnectedWithUsers();
+      const permissions: ParticipantPermission[] = [
+        { userId: 'u2', role: 'reviewer' },
+        { userId: 'u3', role: 'viewer' },
+      ];
+      control.setParticipantPermissions(permissions);
+
+      expect(getRoleBadgeText('u2')).toBe('Reviewer');
+      expect(getRoleBadgeText('u3')).toBe('Viewer');
+    });
+
+    it('NCC-109: clears permissions on disconnect', () => {
+      setupConnectedWithUsers();
+      control.setParticipantPermission({ userId: 'u2', role: 'viewer' });
+
+      const banner = document.querySelector('[data-testid="network-view-only-banner"]') as HTMLElement;
+      expect(banner.style.display).toBe('flex');
+
+      control.setConnectionState('disconnected');
+      expect(control.getState().participantPermissions.size).toBe(0);
+    });
+
+    it('NCC-110: clearParticipantPermissions removes all role badges', () => {
+      setupConnectedWithUsers();
+      control.setParticipantPermission({ userId: 'u2', role: 'reviewer' });
+      control.setParticipantPermission({ userId: 'u3', role: 'viewer' });
+      expect(getRoleBadgeText('u2')).toBe('Reviewer');
+
+      control.clearParticipantPermissions();
+      expect(getRoleBadgeText('u2')).toBeNull();
+      expect(getRoleBadgeText('u3')).toBeNull();
+    });
+
+    it('NCC-111: role indicator hidden when no local user id set', () => {
+      control.setConnectionState('connected');
+      control.setRoomInfo({
+        roomId: 'room-1',
+        roomCode: 'ABCD-1234',
+        hostId: 'u1',
+        users: [],
+        createdAt: Date.now(),
+        maxUsers: 10,
+      });
+      control.setUsers([{ id: 'u1', name: 'Alice', color: '#4a9eff', isHost: true, joinedAt: Date.now() }]);
+      control.openPanel();
+
+      const indicator = document.querySelector('[data-testid="network-role-indicator"]') as HTMLElement;
+      expect(indicator.style.display).toBe('none');
+    });
+
+    it('NCC-112: role indicator hidden when current user has no permission entry', () => {
+      setupConnectedWithUsers();
+      // No permission set for u2
+
+      const indicator = document.querySelector('[data-testid="network-role-indicator"]') as HTMLElement;
+      expect(indicator.style.display).toBe('none');
+    });
+
+    it('NCC-113: view-only banner updates when role changes from viewer to reviewer', () => {
+      setupConnectedWithUsers();
+      control.setParticipantPermission({ userId: 'u2', role: 'viewer' });
+
+      const banner = document.querySelector('[data-testid="network-view-only-banner"]') as HTMLElement;
+      expect(banner.style.display).toBe('flex');
+
+      control.setParticipantPermission({ userId: 'u2', role: 'reviewer' });
+      expect(banner.style.display).toBe('none');
+    });
+  });
+
+  describe('conflict state (Issue #342)', () => {
+    it('NCC-120: conflict state renders distinct red/warning button style', () => {
+      control.setConnectionState('conflict');
+
+      const button = control.render().querySelector('[data-testid="network-sync-button"]') as HTMLButtonElement;
+      expect(button.style.borderColor).toContain('ef4444');
+      expect(button.style.color).toContain('ef4444');
+      expect(button.style.background).toContain('rgba(239, 68, 68');
+    });
+
+    it('NCC-121: conflict state style is distinct from connected state', () => {
+      control.setConnectionState('connected');
+      const button = control.render().querySelector('[data-testid="network-sync-button"]') as HTMLButtonElement;
+      const connectedBorder = button.style.borderColor;
+      const connectedColor = button.style.color;
+      const connectedBg = button.style.background;
+
+      control.setConnectionState('conflict');
+      expect(button.style.borderColor).not.toBe(connectedBorder);
+      expect(button.style.color).not.toBe(connectedColor);
+      expect(button.style.background).not.toBe(connectedBg);
+    });
+
+    it('NCC-122: conflict state style is distinct from error state', () => {
+      control.setConnectionState('error');
+      const button = control.render().querySelector('[data-testid="network-sync-button"]') as HTMLButtonElement;
+      const errorBorder = button.style.borderColor;
+      const errorColor = button.style.color;
+      const errorBg = button.style.background;
+
+      control.setConnectionState('conflict');
+      // Error state uses default (transparent) styling, conflict uses red
+      expect(button.style.borderColor).not.toBe(errorBorder);
+      expect(button.style.color).not.toBe(errorColor);
+      expect(button.style.background).not.toBe(errorBg);
+    });
+
+    it('NCC-123: conflict state style is distinct from connecting state', () => {
+      control.setConnectionState('connecting');
+      const button = control.render().querySelector('[data-testid="network-sync-button"]') as HTMLButtonElement;
+      const connectingBg = button.style.background;
+
+      control.setConnectionState('conflict');
+      expect(button.style.background).not.toBe(connectingBg);
+    });
+
+    it('NCC-124: conflict state shows connected panel (connection is still active)', () => {
+      control.setConnectionState('conflict');
+      control.openPanel();
+
+      const connectedPanel = document.querySelector('[data-testid="network-connected-panel"]');
+      expect(connectedPanel).toBeTruthy();
+      expect((connectedPanel as HTMLElement).style.display).not.toBe('none');
+    });
+
+    it('NCC-125: conflict state exists in ConnectionState type', () => {
+      // Compile-time type check: this line would fail TypeScript compilation
+      // if 'conflict' were not part of ConnectionState
+      const state: import('../../network/types').ConnectionState = 'conflict';
+      expect(state).toBe('conflict');
     });
   });
 });

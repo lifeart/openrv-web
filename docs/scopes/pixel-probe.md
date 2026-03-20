@@ -1,6 +1,6 @@
 # Pixel Probe
 
-The pixel probe provides a real-time readout of exact color values under the cursor. It is essential for precise color evaluation, verifying exposure levels, and confirming that specific pixel values meet requirements.
+The pixel probe provides a real-time readout of exact color values under the cursor, used for color evaluation, exposure verification, and checking pixel values against delivery specifications.
 
 ![Pixel probe overlay showing color values](/assets/screenshots/16-pixel-probe.png)
 
@@ -21,6 +21,18 @@ The probe overlay shows:
 | **HSL** | Hue (degrees), Saturation (%), Lightness (%) |
 | **HEX** | Hexadecimal color code (#RRGGBB) |
 | **IRE** | Luminance in IRE units using Rec.709 coefficients |
+| **Alpha** | Alpha channel value shown as both 0--255 integer and 0.0--1.0 float. When alpha is below 255, the color swatch displays a checkerboard pattern behind the semi-transparent color. |
+| **Nits** | HDR luminance in cd/m² (candelas per square meter). Only visible when HDR float data is available. Values above 1000 cd/m² are displayed in K cd/m² notation (e.g., "1.25 K cd/m²"). Computed as Rec.709 luminance multiplied by 203. |
+| **Color Space** | The active color space label (e.g., "sRGB", "Display P3", "Rec.2020"). Updated via the `setColorSpace()` method when the viewer detects the source color space. |
+
+## Float Precision Toggle
+
+The **P3/P6** button in the format button row toggles the number of decimal places used for floating-point value display:
+
+- **P3** (default): 3 decimal places (e.g., `0.502, 0.310, 0.118`)
+- **P6**: 6 decimal places (e.g., `0.501961, 0.309804, 0.117647`)
+
+The precision setting affects the RGB 0--1 row and clipboard copy output. When P6 is active, the button is highlighted. This is useful when precise float values matter, such as verifying linear-light data in EXR files or checking HDR values that exceed the 0--1 range.
 
 ## Format Selector
 
@@ -79,11 +91,35 @@ The overlay uses a semi-transparent dark background with rounded corners, box sh
 
 ## Scripting API
 
-Pixel probe state is accessible through the view API:
+Pixel probe state is accessible through the view API at `window.openrv.view`:
 
 ```javascript
-// Toggle pixel probe
-// (Primarily controlled via keyboard shortcut Shift+I)
+// Enable / disable the probe overlay
+openrv.view.enableProbe();
+openrv.view.disableProbe();
+
+// Check whether the probe is active
+const active = openrv.view.isProbeEnabled();
+
+// Lock / unlock the probe position
+openrv.view.toggleProbeLock();
+const locked = openrv.view.isProbeLocked();
+
+// Read current probe values (position, RGB, HSL, IRE, etc.)
+const state = openrv.view.getProbeState();
+console.log(`Pixel (${state.x}, ${state.y}): rgb(${state.rgb.r}, ${state.rgb.g}, ${state.rgb.b})`);
+console.log(`IRE: ${state.ire}, Alpha: ${state.alpha}`);
+
+// Change the highlighted display format
+openrv.view.setProbeFormat('hsl');   // 'rgb', 'rgb01', 'hsl', 'hex', 'ire'
+
+// Set sample area size for averaging
+openrv.view.setProbeSampleSize(3);   // 1, 3, 5, or 9 (NxN)
+const size = openrv.view.getProbeSampleSize();
+
+// Switch between rendered (post-grade) and source (pre-grade) values
+openrv.view.setProbeSourceMode('source');
+const mode = openrv.view.getProbeSourceMode(); // 'rendered' or 'source'
 ```
 
 ---

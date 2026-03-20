@@ -66,7 +66,8 @@ vi.mock('./AppPlaybackWiring', () => ({ wirePlaybackControls: vi.fn() }));
 vi.mock('./AppStackWiring', () => ({ wireStackControls: vi.fn() }));
 vi.mock('./AppDCCWiring', () => ({ wireDCCBridge: vi.fn() }));
 
-import { App } from './App';
+import { App, TAB_CONTEXT_MAP } from './App';
+import { getCorePreferencesManager, resetCorePreferencesManagerForTests } from './core/PreferencesManager';
 
 // ---------------------------------------------------------------------------
 // BroadcastChannel polyfill for jsdom (used by ExternalPresentation)
@@ -134,5 +135,67 @@ describe('App', () => {
     app1.dispose();
     const app2 = new App();
     app2.dispose();
+  });
+
+  it('APP-006: session fps is set from defaultFps preference', () => {
+    resetCorePreferencesManagerForTests();
+    const prefs = getCorePreferencesManager();
+    prefs.setGeneralPrefs({ defaultFps: 30 });
+
+    app = new App();
+    const config = app.getAPIConfig();
+    expect(config.session.fps).toBe(30);
+    app.dispose();
+
+    // Clean up: reset singleton and clear stored prefs
+    prefs.resetAll();
+    resetCorePreferencesManagerForTests();
+  });
+
+  it('APP-007: session fps uses default 24 when no preference is stored', () => {
+    resetCorePreferencesManagerForTests();
+
+    app = new App();
+    const config = app.getAPIConfig();
+    expect(config.session.fps).toBe(24);
+    app.dispose();
+  });
+
+  it('APP-008: getPaintEngine returns the paint engine instance', () => {
+    app = new App();
+    const pe = app.getPaintEngine();
+    expect(pe).toBeDefined();
+    expect(typeof pe.undo).toBe('function');
+    app.dispose();
+  });
+});
+
+describe('TAB_CONTEXT_MAP', () => {
+  it('APP-TCM-001: maps annotate tab to paint context', () => {
+    expect(TAB_CONTEXT_MAP['annotate']).toBe('paint');
+  });
+
+  it('APP-TCM-002: maps transform tab to transform context', () => {
+    expect(TAB_CONTEXT_MAP['transform']).toBe('transform');
+  });
+
+  it('APP-TCM-003: maps view tab to viewer context', () => {
+    expect(TAB_CONTEXT_MAP['view']).toBe('viewer');
+  });
+
+  it('APP-TCM-004: maps qc tab to panel context', () => {
+    expect(TAB_CONTEXT_MAP['qc']).toBe('panel');
+  });
+
+  it('APP-TCM-005: maps color tab to color context', () => {
+    expect(TAB_CONTEXT_MAP['color']).toBe('color');
+  });
+
+  it('APP-TCM-006: has exactly 5 entries', () => {
+    expect(Object.keys(TAB_CONTEXT_MAP)).toHaveLength(5);
+  });
+
+  it('APP-TCM-007: unknown tabs fall through to undefined (caller uses global)', () => {
+    expect(TAB_CONTEXT_MAP['effects']).toBeUndefined();
   });
 });

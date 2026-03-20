@@ -25,13 +25,16 @@ export interface MultiSourceLayoutStoreEvents extends EventMap {
 }
 
 const STORAGE_KEY = 'openrv-multi-source-layout';
+const SAVE_DEBOUNCE_MS = 300;
 
 export class MultiSourceLayoutStore extends EventEmitter<MultiSourceLayoutStoreEvents> {
   private state: MultiSourceLayoutState;
+  private _saveTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
     super();
     this.state = createDefaultLayoutState();
+    this.loadFromStorage();
   }
 
   /** Get a snapshot of the current state. */
@@ -240,6 +243,21 @@ export class MultiSourceLayoutStore extends EventEmitter<MultiSourceLayoutStoreE
     return newId;
   }
 
+  /** Update a tile's source index. */
+  setTileSourceIndex(tileId: string, sourceIndex: number, label?: string): void {
+    const tile = this.state.tiles.find((t) => t.id === tileId);
+    if (!tile) return;
+
+    const newLabel = label !== undefined ? label : `Source ${sourceIndex + 1}`;
+    const changed = tile.sourceIndex !== sourceIndex || tile.label !== newLabel;
+    tile.sourceIndex = sourceIndex;
+    tile.label = newLabel;
+
+    if (changed) {
+      this.emitLayoutChanged();
+    }
+  }
+
   /** Update a tile's pan/zoom state. */
   updateTileTransform(tileId: string, update: Partial<Pick<TileState, 'panX' | 'panY' | 'zoom'>>): void {
     const tile = this.state.tiles.find((t) => t.id === tileId);
@@ -347,7 +365,28 @@ export class MultiSourceLayoutStore extends EventEmitter<MultiSourceLayoutStoreE
     }
   }
 
+  /** Schedule a debounced save to localStorage. */
+  private scheduleSave(): void {
+    if (this._saveTimer !== null) {
+      clearTimeout(this._saveTimer);
+    }
+    this._saveTimer = setTimeout(() => {
+      this._saveTimer = null;
+      this.saveToStorage();
+    }, SAVE_DEBOUNCE_MS);
+  }
+
+  /** Immediately flush any pending debounced save (useful for tests or shutdown). */
+  flushSave(): void {
+    if (this._saveTimer !== null) {
+      clearTimeout(this._saveTimer);
+      this._saveTimer = null;
+      this.saveToStorage();
+    }
+  }
+
   private emitLayoutChanged(): void {
     this.emit('layoutChanged', this.getState());
+    this.scheduleSave();
   }
 }

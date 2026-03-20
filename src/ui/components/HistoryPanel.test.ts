@@ -10,11 +10,19 @@ import { HistoryPanel } from './HistoryPanel';
 import { HistoryManager } from '../../utils/HistoryManager';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 
+vi.mock('./shared/Modal', () => ({
+  showConfirm: vi.fn(),
+}));
+
+import { showConfirm } from './shared/Modal';
+const mockShowConfirm = vi.mocked(showConfirm);
+
 describe('HistoryPanel', () => {
   let panel: HistoryPanel;
   let historyManager: HistoryManager;
 
   beforeEach(() => {
+    mockShowConfirm.mockReset();
     historyManager = new HistoryManager();
     panel = new HistoryPanel(historyManager);
     // Attach to the document so container.remove() has an effect
@@ -230,18 +238,52 @@ describe('HistoryPanel', () => {
   // clearHistory
   // ---------------------------------------------------------------------------
   describe('clearHistory', () => {
-    it('HP-035: delegates to historyManager.clear()', () => {
+    it('HP-035: delegates to historyManager.clear() after confirmation', async () => {
+      mockShowConfirm.mockResolvedValue(true);
       historyManager.recordAction('Action 1', 'color', () => {});
       historyManager.recordAction('Action 2', 'paint', () => {});
       expect(panel.getState().entryCount).toBe(2);
 
       const clearSpy = vi.spyOn(historyManager, 'clear');
 
-      panel.clearHistory();
+      await panel.clearHistory();
 
+      expect(mockShowConfirm).toHaveBeenCalledTimes(1);
       expect(clearSpy).toHaveBeenCalledTimes(1);
       expect(panel.getState().entryCount).toBe(0);
       expect(panel.getState().currentIndex).toBe(-1);
+    });
+
+    it('HP-036: shows confirmation dialog before clearing (not immediate)', async () => {
+      mockShowConfirm.mockResolvedValue(true);
+      historyManager.recordAction('Action 1', 'color', () => {});
+
+      await panel.clearHistory();
+
+      expect(mockShowConfirm).toHaveBeenCalledTimes(1);
+      expect(mockShowConfirm).toHaveBeenCalledWith(expect.stringContaining('Are you sure'));
+    });
+
+    it('HP-037: does not clear history when confirmation is cancelled', async () => {
+      mockShowConfirm.mockResolvedValue(false);
+      historyManager.recordAction('Action 1', 'color', () => {});
+      historyManager.recordAction('Action 2', 'paint', () => {});
+
+      const clearSpy = vi.spyOn(historyManager, 'clear');
+
+      await panel.clearHistory();
+
+      expect(mockShowConfirm).toHaveBeenCalledTimes(1);
+      expect(clearSpy).not.toHaveBeenCalled();
+      expect(panel.getState().entryCount).toBe(2);
+    });
+
+    it('HP-038: does not show confirmation when history is already empty', async () => {
+      expect(panel.getState().entryCount).toBe(0);
+
+      await panel.clearHistory();
+
+      expect(mockShowConfirm).not.toHaveBeenCalled();
     });
   });
 
@@ -347,12 +389,13 @@ describe('HistoryPanel', () => {
       expect(entriesEl.children[0]!.textContent).toContain('Action B');
     });
 
-    it('HP-052: empty state renders correctly after entries cleared', () => {
+    it('HP-052: empty state renders correctly after entries cleared', async () => {
+      mockShowConfirm.mockResolvedValue(true);
       panel.show();
       historyManager.recordAction('Action A', 'color', () => {});
       historyManager.recordAction('Action B', 'paint', () => {});
 
-      panel.clearHistory();
+      await panel.clearHistory();
 
       expect(panel.getElement().textContent).toContain('No history yet');
     });
@@ -376,6 +419,68 @@ describe('HistoryPanel', () => {
       // The indicator should now be on Action A (second child, since newest first)
       const actionAEntry = entriesEl.children[1] as HTMLElement;
       expect(actionAEntry.querySelector('[data-role="current-indicator"]')).not.toBeNull();
+    });
+  });
+
+  describe('mutual exclusion', () => {
+    it('show() closes exclusive panel if open', () => {
+      const mockExclusive = {
+        isVisible: vi.fn().mockReturnValue(true),
+        hide: vi.fn(),
+      };
+      panel.setExclusiveWith(mockExclusive);
+
+      panel.show();
+
+      expect(mockExclusive.hide).toHaveBeenCalledTimes(1);
+    });
+
+    it('show() does not close exclusive panel if already closed', () => {
+      const mockExclusive = {
+        isVisible: vi.fn().mockReturnValue(false),
+        hide: vi.fn(),
+      };
+      panel.setExclusiveWith(mockExclusive);
+
+      panel.show();
+
+      expect(mockExclusive.hide).not.toHaveBeenCalled();
+    });
+
+    it('show() closes multiple exclusive panels', () => {
+      const mockA = {
+        isVisible: vi.fn().mockReturnValue(true),
+        hide: vi.fn(),
+      };
+      const mockB = {
+        isVisible: vi.fn().mockReturnValue(true),
+        hide: vi.fn(),
+      };
+      panel.setExclusiveWith(mockA);
+      panel.setExclusiveWith(mockB);
+
+      panel.show();
+
+      expect(mockA.hide).toHaveBeenCalledTimes(1);
+      expect(mockB.hide).toHaveBeenCalledTimes(1);
+    });
+
+    it('show() only closes visible exclusive panels when multiple registered', () => {
+      const mockVisible = {
+        isVisible: vi.fn().mockReturnValue(true),
+        hide: vi.fn(),
+      };
+      const mockHidden = {
+        isVisible: vi.fn().mockReturnValue(false),
+        hide: vi.fn(),
+      };
+      panel.setExclusiveWith(mockVisible);
+      panel.setExclusiveWith(mockHidden);
+
+      panel.show();
+
+      expect(mockVisible.hide).toHaveBeenCalledTimes(1);
+      expect(mockHidden.hide).not.toHaveBeenCalled();
     });
   });
 });

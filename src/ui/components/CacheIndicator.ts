@@ -45,6 +45,7 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
   private inPoint = 1;
   private outPoint = 1;
   private prerenderStatsSpan: HTMLSpanElement | null = null;
+  private errorMessage: string | null = null;
   private subs = new DisposableSubscriptionManager();
 
   // Colors for cache states - resolved from CSS variables at runtime
@@ -322,13 +323,19 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
     // Update stats display
     const statsSpan = this.infoContainer.querySelector('.cache-stats') as HTMLSpanElement;
     if (statsSpan) {
-      // Use accurate memory from stats when available (e.g. HDR resized frames),
-      // otherwise estimate from source dimensions
-      const memorySizeMB = stats?.memorySizeMB ?? this.calculateMemorySizeMB(cachedFrames.size);
-      const memoryStr = this.formatMemorySize(memorySizeMB);
-      statsSpan.textContent = `Cache: ${cachedFrames.size} / ${this.totalFrames} frames (${memoryStr})`;
-      if (stats && pendingFrames.size > 0) {
-        statsSpan.textContent += ` [${pendingFrames.size} loading]`;
+      if (this.errorMessage) {
+        statsSpan.textContent = `Cache error: ${this.errorMessage}`;
+        statsSpan.style.color = 'var(--error, #ef4444)';
+      } else {
+        statsSpan.style.color = '';
+        // Use accurate memory from stats when available (e.g. HDR resized frames),
+        // otherwise estimate from source dimensions
+        const memorySizeMB = stats?.memorySizeMB ?? this.calculateMemorySizeMB(cachedFrames.size);
+        const memoryStr = this.formatMemorySize(memorySizeMB);
+        statsSpan.textContent = `Cache: ${cachedFrames.size} / ${this.totalFrames} frames (${memoryStr})`;
+        if (stats && pendingFrames.size > 0) {
+          statsSpan.textContent += ` [${pendingFrames.size} loading]`;
+        }
       }
     }
 
@@ -379,6 +386,15 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
     this.viewer = viewer;
     // Register for prerender cache updates
     this.viewer.setOnPrerenderCacheUpdate(() => this.scheduleUpdate());
+    this.scheduleUpdate();
+  }
+
+  /**
+   * Display a cache error message in the indicator.
+   * Pass `null` to clear the error state.
+   */
+  showError(message: string | null): void {
+    this.errorMessage = message;
     this.scheduleUpdate();
   }
 

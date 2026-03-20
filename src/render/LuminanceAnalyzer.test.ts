@@ -317,6 +317,20 @@ describe('LuminanceAnalyzer', () => {
   });
 
   // =========================================================================
+  // isAvailable()
+  // =========================================================================
+
+  it('LA-014: isAvailable() returns true when EXT_color_buffer_float is present', () => {
+    expect(analyzer.isAvailable()).toBe(true);
+  });
+
+  it('LA-015: isAvailable() returns false when EXT_color_buffer_float is missing', () => {
+    const noExtGL = createMockGL({ extensionAvailable: false });
+    const noExtAnalyzer = new LuminanceAnalyzer(noExtGL);
+    expect(noExtAnalyzer.isAvailable()).toBe(false);
+  });
+
+  // =========================================================================
   // Dispose safety
   // =========================================================================
 

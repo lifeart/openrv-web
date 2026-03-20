@@ -206,6 +206,7 @@ export interface ActionExternalPresentation {
 
 export interface ActionHeaderBar {
   getExportControl(): { quickExport(format?: string): void };
+  navigateVersion(direction: 'next' | 'previous'): void;
 }
 
 export interface ActionFrameNavigation {
@@ -223,6 +224,10 @@ export interface ActionFrameNavigation {
 
 export interface ActionAriaAnnouncer {
   announce(message: string, priority?: 'polite' | 'assertive'): void;
+}
+
+export interface ActionFrameCacheController {
+  cycleMode(): void;
 }
 
 // ---------------------------------------------------------------------------
@@ -245,6 +250,7 @@ export interface KeyboardActionDeps {
   externalPresentation: ActionExternalPresentation;
   headerBar: ActionHeaderBar;
   frameNavigation: ActionFrameNavigation;
+  frameCacheController?: ActionFrameCacheController | null;
   ariaAnnouncer?: ActionAriaAnnouncer | null;
 }
 
@@ -275,6 +281,7 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
     externalPresentation,
     headerBar,
     frameNavigation,
+    frameCacheController,
     ariaAnnouncer,
   } = deps;
 
@@ -601,13 +608,8 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
     'channel.green': () => controls.channelSelect.handleKeyboard('G', true),
     'channel.blue': () => controls.channelSelect.handleKeyboard('B', true),
     'channel.alpha': () => controls.channelSelect.handleKeyboard('A', true),
-    'channel.luminance': () => {
-      if (tabBar.activeTab === 'color') {
-        controls.lutPipelinePanel.toggle();
-        return;
-      }
-      controls.channelSelect.handleKeyboard('L', true);
-    },
+    'channel.luminance': () => controls.channelSelect.handleKeyboard('L', true),
+    'lut.togglePanel': () => controls.lutPipelinePanel.toggle(),
     'channel.grayscale': () => controls.channelSelect.handleKeyboard('Y', true),
     'channel.none': () => controls.channelSelect.handleKeyboard('N', true),
 
@@ -652,6 +654,19 @@ export function buildActionHandlers(deps: KeyboardActionDeps): Record<string, ()
       if (frame !== session.currentFrame) {
         session.goToFrame(frame);
       }
+    },
+
+    // -- Version navigation ----------------------------------------------
+    'version.next': () => {
+      headerBar.navigateVersion('next');
+    },
+    'version.previous': () => {
+      headerBar.navigateVersion('previous');
+    },
+
+    // -- Cache -----------------------------------------------------------
+    'cache.cycleCacheMode': () => {
+      frameCacheController?.cycleMode();
     },
 
     // -- Network ---------------------------------------------------------

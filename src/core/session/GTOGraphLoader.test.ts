@@ -6,8 +6,15 @@
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { loadGTOGraph, getGraphSummary } from './GTOGraphLoader';
-import type { GTOParseResult } from './GTOGraphLoader';
+import {
+  loadGTOGraph,
+  getGraphSummary,
+  formatSkippedNodesWarning,
+  formatDegradedModesWarning,
+  resolveAvailableFile,
+} from './GTOGraphLoader';
+import type { GTOParseResult, SkippedNodeInfo } from './GTOGraphLoader';
+import type { DegradedModeInfo } from '../../composite/BlendModes';
 import type { GTODTO } from 'gto-js';
 import { NodeFactory } from '../../nodes/base/NodeFactory';
 
@@ -25,6 +32,7 @@ function createMockDTO(config: {
     marks?: number[];
     markerNotes?: string[];
     markerColors?: string[];
+    markerEndFrames?: number[];
     inc?: number;
     version?: number;
     clipboard?: number;
@@ -78,6 +86,7 @@ function createMockDTO(config: {
               if (propName === 'marks') return s.marks;
               if (propName === 'markerNotes') return s.markerNotes;
               if (propName === 'markerColors') return s.markerColors;
+              if (propName === 'markerEndFrames') return s.markerEndFrames;
               if (propName === 'inc') return s.inc;
               if (propName === 'version') return s.version;
               if (propName === 'clipboard') return s.clipboard;
@@ -262,6 +271,45 @@ describe('GTOGraphLoader', () => {
       expect(result.sessionInfo.marks).toEqual([10, 20, 30]);
       expect(result.sessionInfo.markerNotes).toEqual(['First note', 'Second note', 'Third note']);
       expect(result.sessionInfo.markerColors).toEqual(['#ff0000', '#00ff00', '#0000ff']);
+    });
+
+    it('GTO-MRK-U010: extracts markerEndFrames from GTO data', () => {
+      const dto = createMockDTO({
+        sessions: [
+          {
+            name: 'DurationMarkerSession',
+            marks: [10, 20, 30],
+            markerNotes: ['First', 'Second', 'Third'],
+            markerColors: ['#ff0000', '#00ff00', '#0000ff'],
+            markerEndFrames: [25, -1, 50],
+          },
+        ],
+        objects: [],
+      });
+
+      const result = loadGTOGraph(dto as never);
+
+      expect(result.sessionInfo.markerEndFrames).toEqual([25, -1, 50]);
+    });
+
+    it('GTO-MRK-U011: handles missing markerEndFrames gracefully (legacy files)', () => {
+      const dto = createMockDTO({
+        sessions: [
+          {
+            name: 'LegacySession',
+            marks: [5, 15],
+            markerNotes: ['A', 'B'],
+            markerColors: ['#ff0000', '#00ff00'],
+            // No markerEndFrames - legacy format
+          },
+        ],
+        objects: [],
+      });
+
+      const result = loadGTOGraph(dto as never);
+
+      expect(result.sessionInfo.marks).toEqual([5, 15]);
+      expect(result.sessionInfo.markerEndFrames).toBeUndefined();
     });
 
     it('GTO-MRK-U002: handles missing marker notes and colors gracefully', () => {
@@ -558,10 +606,10 @@ describe('GTOGraphLoader', () => {
         ],
       });
 
-      const availableFiles = new Map<string, File>();
+      const availableFiles = new Map<string, File[]>();
       // @ts-ignore
       const mockFile = { name: 'myvideo.mp4' } as File;
-      availableFiles.set('myvideo.mp4', mockFile);
+      availableFiles.set('myvideo.mp4', [mockFile]);
 
       loadGTOGraph(dto as never, availableFiles);
 
@@ -1921,6 +1969,8 @@ describe('GTOGraphLoader', () => {
           ['node2', { name: 'Node 2', type: 'RVSequenceGroup', inputs: [{ name: 'Node 1' }] } as never],
         ]),
         rootNode: { name: 'Node 2' } as never,
+        skippedNodes: [],
+        degradedModes: [],
         sessionInfo: { name: 'TestSession' },
       };
 
@@ -1938,6 +1988,8 @@ describe('GTOGraphLoader', () => {
         graph: {} as never,
         nodes: new Map(),
         rootNode: null,
+        skippedNodes: [],
+        degradedModes: [],
         sessionInfo: { name: 'EmptySession' },
       };
 
@@ -2073,6 +2125,466 @@ describe('GTOGraphLoader', () => {
       const result = loadGTOGraph(dto as never);
 
       expect(result.sessionInfo.bgColor).toBeUndefined();
+    });
+  });
+
+  describe('RVStackGroup per-layer opacity and visibility parsing', () => {
+    function createStackNode() {
+      const setValueCalls: Array<[string, unknown]> = [];
+      const node = {
+        id: 'stack-id',
+        type: 'RVStackGroup',
+        name: 'stack',
+        properties: {
+          has: vi.fn().mockReturnValue(true),
+          setValue: vi.fn((key: string, value: unknown) => {
+            setValueCalls.push([key, value]);
+          }),
+        },
+        inputs: [] as unknown[],
+        outputs: [],
+        connectInput: vi.fn(),
+        disconnectInput: vi.fn(),
+      };
+      return { node, setValueCalls };
+    }
+
+    it('parses per-layer opacities from layerOutput component', () => {
+      const { node, setValueCalls } = createStackNode();
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(node as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'TestSession' }],
+        objects: [
+          {
+            name: 'stack',
+            protocol: 'RVStackGroup',
+            components: {
+              layerOutput: { opacity: [1.0, 0.5, 0.75] },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      const opacityCall = setValueCalls.find(([key]) => key === 'layerOpacities');
+      expect(opacityCall).toBeDefined();
+      expect(opacityCall![1]).toEqual([1.0, 0.5, 0.75]);
+    });
+
+    it('parses per-layer visibility from layerOutput component', () => {
+      const { node, setValueCalls } = createStackNode();
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(node as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'TestSession' }],
+        objects: [
+          {
+            name: 'stack',
+            protocol: 'RVStackGroup',
+            components: {
+              layerOutput: { visible: [1, 0, 1] },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      const visibleCall = setValueCalls.find(([key]) => key === 'layerVisible');
+      expect(visibleCall).toBeDefined();
+      expect(visibleCall![1]).toEqual([true, false, true]);
+    });
+
+    it('does not read opacities from output component (regression)', () => {
+      const { node, setValueCalls } = createStackNode();
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(node as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'TestSession' }],
+        objects: [
+          {
+            name: 'stack',
+            protocol: 'RVStackGroup',
+            components: {
+              output: { opacity: [0.5, 0.3] },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      const opacityCall = setValueCalls.find(([key]) => key === 'layerOpacities');
+      expect(opacityCall).toBeUndefined();
+    });
+
+    it('parses both opacities and visibility together', () => {
+      const { node, setValueCalls } = createStackNode();
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(node as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'TestSession' }],
+        objects: [
+          {
+            name: 'stack',
+            protocol: 'RVStackGroup',
+            components: {
+              layerOutput: { opacity: [1.0, 0.5], visible: [1, 0] },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      const opacityCall = setValueCalls.find(([key]) => key === 'layerOpacities');
+      expect(opacityCall).toBeDefined();
+      expect(opacityCall![1]).toEqual([1.0, 0.5]);
+
+      const visibleCall = setValueCalls.find(([key]) => key === 'layerVisible');
+      expect(visibleCall).toBeDefined();
+      expect(visibleCall![1]).toEqual([true, false]);
+    });
+  });
+
+  describe('skippedNodes tracking (Issue #20)', () => {
+    it('GTO-SKIP-001: reports unregistered node types in skippedNodes', () => {
+      // RVColor is mapped in PROTOCOL_TO_NODE_TYPE but not registered in NodeFactory
+      vi.spyOn(NodeFactory, 'isRegistered').mockImplementation((type: string) => type === 'RVSequenceGroup');
+      vi.spyOn(NodeFactory, 'create').mockReturnValue({
+        type: 'RVSequenceGroup',
+        name: 'seq',
+        properties: { has: vi.fn().mockReturnValue(false), setValue: vi.fn() },
+        inputs: [],
+        outputs: [],
+      } as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'TestSession' }],
+        objects: [
+          { name: 'seq', protocol: 'RVSequenceGroup', components: { mode: { inputs: [] } } },
+          { name: 'color1', protocol: 'RVColor', components: { mode: { inputs: [] } } },
+          { name: 'color2', protocol: 'RVColor', components: { mode: { inputs: [] } } },
+          { name: 'xform1', protocol: 'RVTransform2D', components: { mode: { inputs: [] } } },
+        ],
+      });
+
+      const result = loadGTOGraph(dto as never);
+
+      // Should have 3 skipped nodes (2 RVColor + 1 RVTransform2D)
+      const unregistered = result.skippedNodes.filter((s) => s.reason === 'unregistered_type');
+      expect(unregistered).toHaveLength(3);
+      expect(unregistered.map((s) => s.protocol)).toContain('RVColor');
+      expect(unregistered.map((s) => s.protocol)).toContain('RVTransform2D');
+
+      // Should contain the node names
+      expect(unregistered.map((s) => s.name)).toContain('color1');
+      expect(unregistered.map((s) => s.name)).toContain('color2');
+      expect(unregistered.map((s) => s.name)).toContain('xform1');
+
+      // mappedType should be set
+      for (const s of unregistered) {
+        expect(s.mappedType).toBeTruthy();
+      }
+    });
+
+    it('GTO-SKIP-002: reports unmapped protocols in skippedNodes', () => {
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(false);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'TestSession' }],
+        objects: [{ name: 'custom1', protocol: 'SomeCustomPlugin', components: { mode: { inputs: [] } } }],
+      });
+
+      const result = loadGTOGraph(dto as never);
+
+      const unmapped = result.skippedNodes.filter((s) => s.reason === 'unmapped_protocol');
+      expect(unmapped).toHaveLength(1);
+      expect(unmapped[0]!.protocol).toBe('SomeCustomPlugin');
+      expect(unmapped[0]!.mappedType).toBeNull();
+    });
+
+    it('GTO-SKIP-003: returns empty skippedNodes when all nodes are supported', () => {
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue({
+        type: 'RVSequenceGroup',
+        name: 'seq',
+        properties: { has: vi.fn().mockReturnValue(false), setValue: vi.fn() },
+        inputs: [],
+        outputs: [],
+      } as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'TestSession' }],
+        objects: [{ name: 'seq', protocol: 'RVSequenceGroup', components: { mode: { inputs: [] } } }],
+      });
+
+      const result = loadGTOGraph(dto as never);
+
+      expect(result.skippedNodes).toEqual([]);
+    });
+
+    it('GTO-SKIP-004: console.warn is emitted for unregistered nodes', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      vi.spyOn(NodeFactory, 'isRegistered').mockImplementation((type: string) => type === 'RVSequenceGroup');
+      vi.spyOn(NodeFactory, 'create').mockReturnValue({
+        type: 'RVSequenceGroup',
+        name: 'seq',
+        properties: { has: vi.fn().mockReturnValue(false), setValue: vi.fn() },
+        inputs: [],
+        outputs: [],
+      } as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'TestSession' }],
+        objects: [
+          { name: 'seq', protocol: 'RVSequenceGroup', components: { mode: { inputs: [] } } },
+          { name: 'color1', protocol: 'RVColor', components: { mode: { inputs: [] } } },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Skipped 1 mapped-but-unimplemented node(s)'));
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('RVColor'));
+
+      warnSpy.mockRestore();
+    });
+
+    it('GTO-SKIP-005: no console.warn when all nodes are supported', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue({
+        type: 'RVSequenceGroup',
+        name: 'seq',
+        properties: { has: vi.fn().mockReturnValue(false), setValue: vi.fn() },
+        inputs: [],
+        outputs: [],
+      } as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'TestSession' }],
+        objects: [{ name: 'seq', protocol: 'RVSequenceGroup', components: { mode: { inputs: [] } } }],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('mapped-but-unimplemented'));
+
+      warnSpy.mockRestore();
+    });
+
+    it('GTO-SKIP-006: getGraphSummary includes skipped nodes section', () => {
+      const mockResult: GTOParseResult = {
+        graph: {} as never,
+        nodes: new Map(),
+        rootNode: null,
+        skippedNodes: [
+          { name: 'color1', protocol: 'RVColor', mappedType: 'RVColor', reason: 'unregistered_type' },
+          { name: 'xform1', protocol: 'RVTransform2D', mappedType: 'RVTransform2D', reason: 'unregistered_type' },
+        ],
+        degradedModes: [],
+        sessionInfo: { name: 'TestSession' },
+      };
+
+      const summary = getGraphSummary(mockResult);
+
+      expect(summary).toContain('Skipped: 2');
+      expect(summary).toContain('color1 (RVColor) - unregistered_type');
+      expect(summary).toContain('xform1 (RVTransform2D) - unregistered_type');
+    });
+  });
+
+  describe('formatSkippedNodesWarning', () => {
+    it('GTO-WARN-001: returns null when no meaningful nodes skipped', () => {
+      expect(formatSkippedNodesWarning([])).toBeNull();
+    });
+
+    it('GTO-WARN-002: returns null when only unmapped protocols skipped', () => {
+      const skipped: SkippedNodeInfo[] = [
+        { name: 'x', protocol: 'UnknownPlugin', mappedType: null, reason: 'unmapped_protocol' },
+      ];
+      expect(formatSkippedNodesWarning(skipped)).toBeNull();
+    });
+
+    it('GTO-WARN-003: returns summary for unregistered types', () => {
+      const skipped: SkippedNodeInfo[] = [
+        { name: 'c1', protocol: 'RVColor', mappedType: 'RVColor', reason: 'unregistered_type' },
+        { name: 'c2', protocol: 'RVColor', mappedType: 'RVColor', reason: 'unregistered_type' },
+        { name: 'x1', protocol: 'RVTransform2D', mappedType: 'RVTransform2D', reason: 'unregistered_type' },
+      ];
+      const msg = formatSkippedNodesWarning(skipped);
+      expect(msg).toBe('3 node(s) were skipped during import: 2 RVColor, 1 RVTransform2D');
+    });
+
+    it('GTO-WARN-004: includes creation_failed nodes in warning', () => {
+      const skipped: SkippedNodeInfo[] = [
+        { name: 'f1', protocol: 'RVColor', mappedType: 'RVColor', reason: 'creation_failed' },
+      ];
+      const msg = formatSkippedNodesWarning(skipped);
+      expect(msg).toContain('1 node(s) were skipped');
+      expect(msg).toContain('RVColor');
+    });
+  });
+
+  describe('formatDegradedModesWarning', () => {
+    it('GTO-DEGRADE-001: returns null when no modes degraded', () => {
+      expect(formatDegradedModesWarning([])).toBeNull();
+    });
+
+    it('GTO-DEGRADE-002: reports dissolve degradation', () => {
+      const degraded: DegradedModeInfo[] = [
+        { nodeName: 'stack_000', originalMode: 'dissolve', fallbackMode: 'normal' },
+      ];
+      const msg = formatDegradedModesWarning(degraded);
+      expect(msg).toContain('1 composite mode(s) were degraded');
+      expect(msg).toContain('"dissolve"');
+      expect(msg).toContain('"normal"');
+      expect(msg).toContain('Compositing may differ from OpenRV');
+    });
+
+    it('GTO-DEGRADE-003: reports topmost degradation', () => {
+      const degraded: DegradedModeInfo[] = [{ nodeName: 'stack_001', originalMode: 'topmost', fallbackMode: 'normal' }];
+      const msg = formatDegradedModesWarning(degraded);
+      expect(msg).toContain('1 composite mode(s) were degraded');
+      expect(msg).toContain('"topmost"');
+      expect(msg).toContain('"normal"');
+    });
+
+    it('GTO-DEGRADE-004: deduplicates identical degradation descriptions', () => {
+      const degraded: DegradedModeInfo[] = [
+        { nodeName: 'stack_000', originalMode: 'dissolve', fallbackMode: 'normal' },
+        { nodeName: 'stack_001', originalMode: 'dissolve', fallbackMode: 'normal' },
+      ];
+      const msg = formatDegradedModesWarning(degraded);
+      expect(msg).toContain('2 composite mode(s) were degraded');
+      // Should only list "dissolve" → "normal" once (deduplicated)
+      const matches = msg!.match(/"dissolve"/g);
+      expect(matches).toHaveLength(1);
+    });
+
+    it('GTO-DEGRADE-005: reports multiple different degraded modes', () => {
+      const degraded: DegradedModeInfo[] = [
+        { nodeName: 'stack_000', originalMode: 'dissolve', fallbackMode: 'normal' },
+        { nodeName: 'stack_001', originalMode: 'topmost', fallbackMode: 'normal' },
+      ];
+      const msg = formatDegradedModesWarning(degraded);
+      expect(msg).toContain('2 composite mode(s) were degraded');
+      expect(msg).toContain('"dissolve"');
+      expect(msg).toContain('"topmost"');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // resolveAvailableFile — duplicate basename resolution (#414)
+  // -------------------------------------------------------------------------
+  describe('resolveAvailableFile', () => {
+    it('RESOLVE-001: returns the single file when basename matches', () => {
+      const file = new File(['data'], 'video.mp4');
+      const map = new Map<string, File[]>();
+      map.set('video.mp4', [file]);
+
+      const result = resolveAvailableFile('/projects/shot01/video.mp4', map);
+      expect(result).toBe(file);
+    });
+
+    it('RESOLVE-002: returns undefined when basename is not in the map', () => {
+      const map = new Map<string, File[]>();
+      map.set('other.mp4', [new File(['x'], 'other.mp4')]);
+
+      const result = resolveAvailableFile('/path/to/video.mp4', map);
+      expect(result).toBeUndefined();
+    });
+
+    it('RESOLVE-003: returns undefined for empty map', () => {
+      const map = new Map<string, File[]>();
+      const result = resolveAvailableFile('/path/to/video.mp4', map);
+      expect(result).toBeUndefined();
+    });
+
+    it('RESOLVE-004: two files with different basenames both resolve correctly', () => {
+      const fileA = new File(['a'], 'shot_a.exr');
+      const fileB = new File(['b'], 'shot_b.exr');
+      const map = new Map<string, File[]>();
+      map.set('shot_a.exr', [fileA]);
+      map.set('shot_b.exr', [fileB]);
+
+      expect(resolveAvailableFile('/renders/shot_a.exr', map)).toBe(fileA);
+      expect(resolveAvailableFile('/renders/shot_b.exr', map)).toBe(fileB);
+    });
+
+    it('RESOLVE-005: duplicate basenames — picks file with longest matching path suffix', () => {
+      // Simulate two files with the same basename but different relative paths
+      const fileFromShotA = new File(['a'], 'plate.exr');
+      Object.defineProperty(fileFromShotA, 'webkitRelativePath', {
+        value: 'project/shotA/plate.exr',
+      });
+
+      const fileFromShotB = new File(['b'], 'plate.exr');
+      Object.defineProperty(fileFromShotB, 'webkitRelativePath', {
+        value: 'project/shotB/plate.exr',
+      });
+
+      const map = new Map<string, File[]>();
+      map.set('plate.exr', [fileFromShotA, fileFromShotB]);
+
+      // Original GTO path references shotB
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const result = resolveAvailableFile('/mnt/renders/project/shotB/plate.exr', map);
+      expect(result).toBe(fileFromShotB);
+
+      // Should have warned about duplicate
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Duplicate basename "plate.exr"'));
+      warnSpy.mockRestore();
+    });
+
+    it('RESOLVE-006: duplicate basenames — emits warning with count', () => {
+      const file1 = new File(['a'], 'grade.cdl');
+      const file2 = new File(['b'], 'grade.cdl');
+      const map = new Map<string, File[]>();
+      map.set('grade.cdl', [file1, file2]);
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      resolveAvailableFile('/some/path/grade.cdl', map);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('2 files share this name'));
+      warnSpy.mockRestore();
+    });
+
+    it('RESOLVE-007: single candidate does not emit a warning', () => {
+      const file = new File(['data'], 'video.mp4');
+      const map = new Map<string, File[]>();
+      map.set('video.mp4', [file]);
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      resolveAvailableFile('/path/video.mp4', map);
+      expect(warnSpy).not.toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+
+    it('RESOLVE-008: Windows-style original path resolves correctly against webkitRelativePath', () => {
+      const fileA = new File(['a'], 'plate.exr');
+      Object.defineProperty(fileA, 'webkitRelativePath', {
+        value: 'project/shotA/plate.exr',
+      });
+      const fileB = new File(['b'], 'plate.exr');
+      Object.defineProperty(fileB, 'webkitRelativePath', {
+        value: 'project/shotB/plate.exr',
+      });
+
+      const map = new Map<string, File[]>();
+      map.set('plate.exr', [fileA, fileB]);
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      // Windows-style path in the GTO
+      const result = resolveAvailableFile('C:\\renders\\project\\shotA\\plate.exr', map);
+      expect(result).toBe(fileA);
+      warnSpy.mockRestore();
     });
   });
 });

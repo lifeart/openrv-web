@@ -327,6 +327,34 @@ export class LUTPipeline extends EventEmitter<PipelineEventMap> {
       activeSourceId: this.activeSourceId,
     };
   }
+
+  /** Restore serializable state saved in a project file (LUT names/settings only, no binary data). */
+  loadSerializableState(state: SerializableLUTPipelineState | null | undefined): void {
+    this.sources.clear();
+
+    if (!state) {
+      this.displayLUT = { ...DEFAULT_LUT_STAGE };
+      this.activeSourceId = null;
+      this.emit('reset', undefined);
+      return;
+    }
+
+    for (const [id, config] of Object.entries(state.sources)) {
+      this.sources.set(id, {
+        sourceId: config.sourceId || id,
+        preCacheLUT: deserializePreCacheStage(config.preCacheLUT),
+        fileLUT: deserializeStage(config.fileLUT),
+        lookLUT: deserializeStage(config.lookLUT),
+      });
+    }
+
+    this.displayLUT = deserializeStage(state.displayLUT);
+    this.activeSourceId =
+      state.activeSourceId && this.sources.has(state.activeSourceId)
+        ? state.activeSourceId
+        : (this.sources.keys().next().value ?? null);
+    this.emit('reset', undefined);
+  }
 }
 
 function serializeStage(stage: LUTStageState): SerializableLUTStageState {
@@ -346,4 +374,30 @@ function serializePreCacheStage(stage: PreCacheStageState): SerializablePreCache
     ...serializeStage(stage),
     bitDepth: stage.bitDepth,
   };
+}
+
+function deserializeStage(stage: SerializableLUTStageState | undefined): LUTStageState {
+  return {
+    ...DEFAULT_LUT_STAGE,
+    enabled: stage?.enabled ?? DEFAULT_LUT_STAGE.enabled,
+    lutName: stage?.lutName ?? null,
+    lutData: null,
+    intensity: clampUnit(stage?.intensity),
+    source: stage?.source ?? DEFAULT_LUT_STAGE.source,
+    inMatrix: stage?.inMatrix ? new Float32Array(stage.inMatrix) : null,
+    outMatrix: stage?.outMatrix ? new Float32Array(stage.outMatrix) : null,
+  };
+}
+
+function deserializePreCacheStage(stage: SerializablePreCacheStageState | undefined): PreCacheStageState {
+  return {
+    ...DEFAULT_PRECACHE_STAGE,
+    ...deserializeStage(stage),
+    bitDepth: stage?.bitDepth ?? DEFAULT_PRECACHE_STAGE.bitDepth,
+  };
+}
+
+function clampUnit(value: number | undefined): number {
+  if (typeof value !== 'number' || Number.isNaN(value)) return 1;
+  return Math.max(0, Math.min(1, value));
 }

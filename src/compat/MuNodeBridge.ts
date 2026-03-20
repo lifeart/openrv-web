@@ -144,6 +144,31 @@ export class MuNodeBridge {
       this._viewNode = null;
     }
 
+    // Scrub deleted node from view history and adjust cursor
+    const oldIndex = this._viewHistoryIndex;
+    let removedBeforeOrAt = 0;
+    const filtered: string[] = [];
+    for (let i = 0; i < this._viewHistory.length; i++) {
+      const viewHistoryEntry = this._viewHistory[i];
+      if (viewHistoryEntry === undefined) {
+        continue;
+      }
+      if (viewHistoryEntry === name) {
+        if (i <= oldIndex) removedBeforeOrAt++;
+      } else {
+        filtered.push(viewHistoryEntry);
+      }
+    }
+    this._viewHistory = filtered;
+    this._viewHistoryIndex = Math.min(Math.max(oldIndex - removedBeforeOrAt, 0), this._viewHistory.length - 1);
+    if (this._viewHistory.length === 0) {
+      this._viewHistoryIndex = -1;
+    }
+
+    // Sync _viewNode with the current history cursor to prevent
+    // setViewNode from pushing a duplicate when the guard checks _viewNode.
+    this._viewNode = this._viewHistory[this._viewHistoryIndex] ?? null;
+
     this._graph.removeNode(node.id);
   }
 
@@ -154,15 +179,21 @@ export class MuNodeBridge {
    * Equivalent to Mu's `commands.nodeConnections(name, traverseGroups)`.
    *
    * @param name - Node name
-   * @param _traverseGroups - Whether to traverse into group nodes (currently ignored)
+   * @param traverseGroups - When true, group nodes in the connections are
+   *   recursively replaced by their non-group (leaf) members.
    * @returns Tuple of [inputNames, outputNames]
    */
-  nodeConnections(name: string, _traverseGroups = false): [string[], string[]] {
+  nodeConnections(name: string, traverseGroups = false): [string[], string[]] {
     const node = this._findNode(name);
     if (!node) throw new Error(`Node not found: "${name}"`);
     const inputs = node.inputs.map((n) => n.name);
     const outputs = node.outputs.map((n) => n.name);
-    return [inputs, outputs];
+
+    if (!traverseGroups) {
+      return [inputs, outputs];
+    }
+
+    return [this._resolveGroups(inputs), this._resolveGroups(outputs)];
   }
 
   /**
@@ -175,7 +206,7 @@ export class MuNodeBridge {
     const node = this._findNode(name);
     if (!node) throw new Error(`Node not found: "${name}"`);
 
-    // Resolve all input nodes first
+    // Resolve all input nodes first (before any mutations)
     const inputNodes: IPNode[] = [];
     for (const inputName of inputNames) {
       const inputNode = this._findNode(inputName);
@@ -183,12 +214,25 @@ export class MuNodeBridge {
       inputNodes.push(inputNode);
     }
 
+    // Save original inputs for rollback
+    const originalInputs = [...node.inputs];
+
     // Disconnect existing inputs
     node.disconnectAllInputs();
 
-    // Connect new inputs (Graph.connect checks for cycles)
-    for (const inputNode of inputNodes) {
-      this._graph.connect(inputNode, node);
+    // Connect new inputs atomically: roll back on failure
+    try {
+      for (const inputNode of inputNodes) {
+        this._graph.connect(inputNode, node);
+      }
+    } catch (error) {
+      // Undo partial connections
+      node.disconnectAllInputs();
+      // Restore original inputs
+      for (const original of originalInputs) {
+        this._graph.connect(original, node);
+      }
+      throw error;
     }
   }
 
@@ -293,13 +337,16 @@ export class MuNodeBridge {
       throw new Error(`Node not found: "${name}"`);
     }
 
-    if (this._viewNode !== null && this._viewNode !== name) {
-      // Truncate any forward history beyond the current position
-      this._viewHistory = this._viewHistory.slice(0, this._viewHistoryIndex + 1);
-      // Push current view onto history before switching
-      this._viewHistory.push(this._viewNode);
-      this._viewHistoryIndex = this._viewHistory.length - 1;
+    if (this._viewNode === name) {
+      this._viewableNodes.add(name);
+      return;
     }
+
+    // Truncate any forward history beyond the current position
+    this._viewHistory = this._viewHistory.slice(0, this._viewHistoryIndex + 1);
+    // Push new node onto history
+    this._viewHistory.push(name);
+    this._viewHistoryIndex = this._viewHistory.length - 1;
 
     this._viewNode = name;
 
@@ -314,29 +361,14 @@ export class MuNodeBridge {
    * @returns The previous view node name, or empty string if at start of history.
    */
   previousViewNode(): string {
-    if (this._viewHistory.length === 0 || this._viewHistoryIndex < 0) {
+    if (this._viewHistoryIndex <= 0) {
       return '';
     }
 
-    // If we are past the end of the stored history (i.e. at a fresh setViewNode),
-    // save the current node so we can navigate forward to it later.
-    if (this._viewNode && this._viewHistoryIndex === this._viewHistory.length - 1) {
-      // The current node is NOT in _viewHistory yet (it's the "active" one).
-      // Push it so nextViewNode can return to it.
-      this._viewHistory.push(this._viewNode);
-      // _viewHistoryIndex stays the same — we want to go to the item at _viewHistoryIndex.
-    }
-
-    const prev = this._viewHistory[this._viewHistoryIndex];
-    if (prev !== undefined) {
-      this._viewNode = prev;
-      if (this._viewHistoryIndex > 0) {
-        this._viewHistoryIndex--;
-      }
-      return prev;
-    }
-
-    return '';
+    this._viewHistoryIndex--;
+    const prev = this._viewHistory[this._viewHistoryIndex] ?? '';
+    this._viewNode = prev;
+    return prev;
   }
 
   /**
@@ -351,12 +383,9 @@ export class MuNodeBridge {
     }
 
     this._viewHistoryIndex++;
-    const next = this._viewHistory[this._viewHistoryIndex];
-    if (next !== undefined) {
-      this._viewNode = next;
-      return next;
-    }
-    return '';
+    const next = this._viewHistory[this._viewHistoryIndex] ?? '';
+    this._viewNode = next;
+    return next;
   }
 
   /**
@@ -387,15 +416,46 @@ export class MuNodeBridge {
     if (!node) throw new Error(`Node not found: "${name}"`);
 
     // Try to read width/height from the node's properties
-    const width = (node.properties.getValue<number>('width') ?? 0);
-    const height = (node.properties.getValue<number>('height') ?? 0);
-    const pixelAspect = (node.properties.getValue<number>('pixelAspect') ?? 1.0);
-    const orientation = (node.properties.getValue<string>('orientation') ?? 'normal');
+    const width = node.properties.getValue<number>('width') ?? 0;
+    const height = node.properties.getValue<number>('height') ?? 0;
+    const pixelAspect = node.properties.getValue<number>('pixelAspect') ?? 1.0;
+    const orientation = node.properties.getValue<string>('orientation') ?? 'normal';
 
     return { width, height, pixelAspect, orientation };
   }
 
   // ---- Internal helpers ----
+
+  /**
+   * Replace group nodes in `names` with their non-group leaf members,
+   * recursively. Non-group nodes pass through unchanged.
+   */
+  private _resolveGroups(names: string[]): string[] {
+    const result: string[] = [];
+    for (const name of names) {
+      const visited = new Set<string>();
+      this._collectLeafNodes(name, result, visited);
+    }
+    return result;
+  }
+
+  /**
+   * If `name` is a group node (has members), recurse into its children;
+   * otherwise append it to `result`. Uses `visited` to prevent infinite loops.
+   */
+  private _collectLeafNodes(name: string, result: string[], visited: Set<string>): void {
+    if (visited.has(name)) return;
+    visited.add(name);
+
+    const members = this.nodesInGroup(name);
+    if (members.length === 0) {
+      result.push(name);
+    } else {
+      for (const member of members) {
+        this._collectLeafNodes(member, result, visited);
+      }
+    }
+  }
 
   /**
    * Find a node by name (searches all graph nodes).

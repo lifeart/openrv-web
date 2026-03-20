@@ -29,6 +29,8 @@ export interface AudioCoordinatorCallbacks {
   onAudioPathChanged(): void;
   /** Scrub audio availability changed; host should update UI affordances. */
   onAudioScrubAvailabilityChanged?(available: boolean): void;
+  /** An audio playback error occurred; host should surface it to the user. */
+  onAudioError?(error: import('./AudioPlaybackManager').AudioPlaybackError): void;
 }
 
 export class AudioCoordinator implements ManagerBase {
@@ -73,7 +75,14 @@ export class AudioCoordinator implements ManagerBase {
 
   setCallbacks(callbacks: AudioCoordinatorCallbacks): void {
     this._callbacks = callbacks;
+    // Wire manager error events to the callback so they surface to the host
+    this._errorUnsub?.();
+    this._errorUnsub = this._manager.on('error', (error) => {
+      this._callbacks?.onAudioError?.(error);
+    });
   }
+
+  private _errorUnsub: (() => void) | null = null;
 
   // ---- Loading ----
 
@@ -176,11 +185,13 @@ export class AudioCoordinator implements ManagerBase {
   onAudioScrubEnabledChanged(enabled: boolean): void {
     this._audioScrubEnabled = enabled;
     if (!enabled) {
-      // Stop any active scrub snippet
+      // Stop any active scrub snippet immediately (fix #142).
+      // Switching to 'discrete' mode triggers the manager's internal snippet
+      // stop, and calling dispose()/re-init would be too heavy. Instead we
+      // call pause() which stops all audio output (including scrub snippets)
+      // and then setScrubMode to reset state cleanly.
       this._manager.setScrubMode('discrete');
-      // The manager's stopScrubSnippet is private, but calling scrubToFrame
-      // on a non-existent frame would trigger the debounce. Instead, we rely
-      // on the gating in onFrameChanged to prevent future scrubs.
+      this._manager.pause();
     }
   }
 
@@ -259,6 +270,8 @@ export class AudioCoordinator implements ManagerBase {
   // ---- Cleanup ----
 
   dispose(): void {
+    this._errorUnsub?.();
+    this._errorUnsub = null;
     this._manager.dispose();
     this._callbacks = null;
   }

@@ -148,4 +148,4 @@ window.openrv.color.setToneMapping({ enabled: false });
 - [Log Curve Presets](log-curves.md) -- input linearization for camera log footage
 - [OCIO Integration](ocio.md) -- ACES view transforms as an alternative to standalone tone mapping
 - [Rendering Pipeline](../guides/rendering-pipeline.md) -- tone mapping position in the full pipeline (stage 7)
-- [Histogram](../scopes/histogram.md) -- verify tonal distribution after tone mapping (`H`)
+- [Histogram](../scopes/histogram.md) -- verify tonal distribution after tone mapping

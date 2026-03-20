@@ -191,17 +191,111 @@ describe('WebSocketClient', () => {
       expect(handler.mock.calls[0]![0].type).toBe('sync.playback');
     });
 
-    it('WSC-031: rejects malformed messages', async () => {
+    it('WSC-031: rejects malformed messages and emits warning', async () => {
       const handler = vi.fn();
+      const warningHandler = vi.fn();
       client.on('message', handler);
+      client.on('warning', warningHandler);
       client.connect();
       await vi.advanceTimersByTimeAsync(20);
 
       mockWSInstances[0]!.simulateMessage('not valid json');
       expect(handler).not.toHaveBeenCalled();
+      expect(warningHandler).toHaveBeenCalledTimes(1);
 
       mockWSInstances[0]!.simulateMessage(JSON.stringify({ incomplete: true }));
       expect(handler).not.toHaveBeenCalled();
+      expect(warningHandler).toHaveBeenCalledTimes(2);
+    });
+
+    it('WSC-032: malformed message warning includes diagnostic info', async () => {
+      const warningHandler = vi.fn();
+      client.on('warning', warningHandler);
+      client.connect();
+      await vi.advanceTimersByTimeAsync(20);
+
+      mockWSInstances[0]!.simulateMessage('not valid json');
+
+      expect(warningHandler).toHaveBeenCalledTimes(1);
+      const payload = warningHandler.mock.calls[0]![0];
+      expect(payload.code).toBe('MALFORMED_MESSAGE');
+      expect(payload.message).toContain('malformed');
+      expect(payload.detail).toBe('not valid json');
+    });
+
+    it('WSC-033: malformed message warning truncates long messages', async () => {
+      const warningHandler = vi.fn();
+      client.on('warning', warningHandler);
+      client.connect();
+      await vi.advanceTimersByTimeAsync(20);
+
+      const longData = 'x'.repeat(200);
+      mockWSInstances[0]!.simulateMessage(longData);
+
+      const payload = warningHandler.mock.calls[0]![0];
+      expect(payload.detail!.length).toBeLessThanOrEqual(124); // 120 + '...'
+      expect(payload.detail!.endsWith('...')).toBe(true);
+    });
+
+    it('WSC-034: rate-limits malformed message warnings', async () => {
+      const warningHandler = vi.fn();
+      client.on('warning', warningHandler);
+      client.connect();
+      await vi.advanceTimersByTimeAsync(20);
+
+      // Send more than the rate limit (5) within the same window
+      for (let i = 0; i < 10; i++) {
+        mockWSInstances[0]!.simulateMessage('bad' + i);
+      }
+
+      // Only 5 warnings should have been emitted
+      expect(warningHandler).toHaveBeenCalledTimes(5);
+    });
+
+    it('WSC-035: rate-limit resets after time window elapses', async () => {
+      const warningHandler = vi.fn();
+      client.on('warning', warningHandler);
+      client.connect();
+      await vi.advanceTimersByTimeAsync(20);
+
+      // Exhaust the rate limit
+      for (let i = 0; i < 10; i++) {
+        mockWSInstances[0]!.simulateMessage('bad' + i);
+      }
+      expect(warningHandler).toHaveBeenCalledTimes(5);
+
+      // Advance past the rate-limit window (10 seconds)
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      // Should be able to emit warnings again
+      mockWSInstances[0]!.simulateMessage('bad-again');
+      expect(warningHandler).toHaveBeenCalledTimes(6);
+    });
+
+    it('WSC-036: malformed messages are not processed even when warning is emitted', async () => {
+      const messageHandler = vi.fn();
+      const warningHandler = vi.fn();
+      client.on('message', messageHandler);
+      client.on('warning', warningHandler);
+      client.connect();
+      await vi.advanceTimersByTimeAsync(20);
+
+      // Send invalid then valid messages
+      mockWSInstances[0]!.simulateMessage('garbage');
+      mockWSInstances[0]!.simulateMessage(
+        JSON.stringify({
+          id: 'msg-1',
+          type: 'sync.playback',
+          roomId: 'room-1',
+          userId: 'user-2',
+          timestamp: Date.now(),
+          payload: { isPlaying: true },
+        }),
+      );
+
+      expect(warningHandler).toHaveBeenCalledTimes(1);
+      expect(messageHandler).toHaveBeenCalledTimes(1);
+      expect(messageHandler.mock.calls[0]![0].type).toBe('sync.playback');
     });
   });
 
@@ -418,6 +512,165 @@ describe('WebSocketClient', () => {
       const ws = mockWSInstances[0]!;
       ws.onmessage?.({ data: 12345 as any });
       expect(handler).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('ping response', () => {
+    it('WSC-060: responds with pong when receiving a ping message', async () => {
+      client.setIdentity('user-1', 'room-1');
+      client.connect();
+      await vi.advanceTimersByTimeAsync(20);
+
+      const ws = mockWSInstances[0]!;
+      const initialCount = ws.sentMessages.length;
+
+      const pingMessage = JSON.stringify({
+        id: 'ping-1',
+        type: 'ping',
+        roomId: 'room-1',
+        userId: 'server-1',
+        timestamp: Date.now(),
+        payload: { sentAt: 1000 },
+      });
+
+      ws.simulateMessage(pingMessage);
+
+      const newMessages = ws.sentMessages.slice(initialCount);
+      expect(newMessages.length).toBe(1);
+
+      const pong = JSON.parse(newMessages[0]!);
+      expect(pong.type).toBe('pong');
+      expect(pong.roomId).toBe('room-1');
+      expect(pong.userId).toBe('user-1');
+      expect(pong.payload.sentAt).toBe(1000);
+      expect(typeof pong.payload.serverTime).toBe('number');
+    });
+
+    it('WSC-061: pong response preserves sentAt from the original ping', async () => {
+      client.setIdentity('user-1', 'room-1');
+      client.connect();
+      await vi.advanceTimersByTimeAsync(20);
+
+      const ws = mockWSInstances[0]!;
+      const initialCount = ws.sentMessages.length;
+
+      const sentAt = 1234567890;
+      const pingMessage = JSON.stringify({
+        id: 'ping-2',
+        type: 'ping',
+        roomId: 'room-1',
+        userId: 'server-1',
+        timestamp: Date.now(),
+        payload: { sentAt },
+      });
+
+      ws.simulateMessage(pingMessage);
+
+      const newMessages = ws.sentMessages.slice(initialCount);
+      const pong = JSON.parse(newMessages[0]!);
+      expect(pong.payload.sentAt).toBe(sentAt);
+    });
+
+    it('WSC-062: pong response handles ping with missing sentAt gracefully', async () => {
+      client.setIdentity('user-1', 'room-1');
+      client.connect();
+      await vi.advanceTimersByTimeAsync(20);
+
+      const ws = mockWSInstances[0]!;
+      const initialCount = ws.sentMessages.length;
+
+      const pingMessage = JSON.stringify({
+        id: 'ping-3',
+        type: 'ping',
+        roomId: 'room-1',
+        userId: 'server-1',
+        timestamp: Date.now(),
+        payload: {},
+      });
+
+      ws.simulateMessage(pingMessage);
+
+      const newMessages = ws.sentMessages.slice(initialCount);
+      expect(newMessages.length).toBe(1);
+
+      const pong = JSON.parse(newMessages[0]!);
+      expect(pong.type).toBe('pong');
+      expect(typeof pong.payload.sentAt).toBe('number');
+    });
+
+    it('WSC-063: ping message does not propagate to message listeners', async () => {
+      const handler = vi.fn();
+      client.on('message', handler);
+      client.connect();
+      await vi.advanceTimersByTimeAsync(20);
+
+      const pingMessage = JSON.stringify({
+        id: 'ping-4',
+        type: 'ping',
+        roomId: 'room-1',
+        userId: 'server-1',
+        timestamp: Date.now(),
+        payload: { sentAt: Date.now() },
+      });
+
+      mockWSInstances[0]!.simulateMessage(pingMessage);
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('WSC-064: ping resets heartbeat timeout', async () => {
+      client.connect();
+      await vi.advanceTimersByTimeAsync(20);
+
+      const disconnectHandler = vi.fn();
+      client.on('disconnected', disconnectHandler);
+
+      // Advance close to the heartbeat timeout (10000ms)
+      await vi.advanceTimersByTimeAsync(9000);
+
+      // Receive a ping, which should reset the timeout
+      const pingMessage = JSON.stringify({
+        id: 'ping-5',
+        type: 'ping',
+        roomId: 'room-1',
+        userId: 'server-1',
+        timestamp: Date.now(),
+        payload: { sentAt: Date.now() },
+      });
+      mockWSInstances[0]!.simulateMessage(pingMessage);
+
+      // Advance another 9 seconds - without the reset, we'd be at 18s (past 10s timeout)
+      await vi.advanceTimersByTimeAsync(9000);
+
+      // Should still be connected because the ping reset the timeout
+      expect(client.isConnected).toBe(true);
+    });
+  });
+
+  describe('rate-limit state on reconnect', () => {
+    it('WSC-037: rate-limit counters reset after disconnect and reconnect', async () => {
+      const warningHandler = vi.fn();
+      client.on('warning', warningHandler);
+      client.connect();
+      await vi.advanceTimersByTimeAsync(20);
+
+      // Exhaust the rate limit
+      for (let i = 0; i < 10; i++) {
+        mockWSInstances[0]!.simulateMessage('bad' + i);
+      }
+      expect(warningHandler).toHaveBeenCalledTimes(5);
+
+      // Simulate disconnect and reconnect
+      mockWSInstances[0]!.simulateClose(1006);
+      await vi.advanceTimersByTimeAsync(200); // reconnect delay
+      await vi.advanceTimersByTimeAsync(20); // new connection opens
+
+      // After reconnect, the rate-limit counters should be fresh
+      // so we should get warnings again immediately (no need to wait for window)
+      const latestWs = mockWSInstances[mockWSInstances.length - 1]!;
+      for (let i = 0; i < 3; i++) {
+        latestWs.simulateMessage('bad-after-reconnect' + i);
+      }
+      expect(warningHandler).toHaveBeenCalledTimes(8); // 5 + 3
     });
   });
 

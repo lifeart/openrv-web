@@ -13,7 +13,8 @@ import { EPSILON } from './helpers/tolerance';
 import passthroughVertSrc from '../shaders/passthrough.vert.glsl?raw';
 import compositingFragSrc from '../shaders/compositing.frag.glsl?raw';
 
-const W = 1, H = 1;
+const W = 1,
+  H = 1;
 
 function createFloatFBO(gl: WebGL2RenderingContext, width: number, height: number) {
   const fbo = gl.createFramebuffer()!;
@@ -24,7 +25,13 @@ function createFloatFBO(gl: WebGL2RenderingContext, width: number, height: numbe
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
   gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
-  return { fbo, dispose: () => { gl.deleteFramebuffer(fbo); gl.deleteTexture(tex); } };
+  return {
+    fbo,
+    dispose: () => {
+      gl.deleteFramebuffer(fbo);
+      gl.deleteTexture(tex);
+    },
+  };
 }
 
 function createFloat4Texture(gl: WebGL2RenderingContext, r: number, g: number, b: number, a: number) {
@@ -34,8 +41,7 @@ function createFloat4Texture(gl: WebGL2RenderingContext, r: number, g: number, b
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 1, 1, 0, gl.RGBA, gl.FLOAT,
-    new Float32Array([r, g, b, a]));
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 1, 1, 0, gl.RGBA, gl.FLOAT, new Float32Array([r, g, b, a]));
   return { texture, dispose: () => gl.deleteTexture(texture) };
 }
 
@@ -72,7 +78,7 @@ describe('Compositing Shader — Pixel Accuracy (real GPU)', () => {
     base: [number, number, number, number],
     layer: [number, number, number, number],
     opts: {
-      mode?: number;     // 0=Over, 1=Replace, 2=Add, 3=Difference
+      mode?: number; // 0=Over, 1=Replace, 2=Add, 3=Difference
       opacity?: number;
       premultiplied?: boolean;
       stencilEnabled?: boolean;
@@ -96,8 +102,10 @@ describe('Compositing Shader — Pixel Accuracy (real GPU)', () => {
     gl.uniform1f(gl.getUniformLocation(program, 'u_opacity'), opts.opacity ?? 1.0);
     gl.uniform1i(gl.getUniformLocation(program, 'u_premultiplied'), (opts.premultiplied ?? false) ? 1 : 0);
     gl.uniform1i(gl.getUniformLocation(program, 'u_stencilEnabled'), (opts.stencilEnabled ?? false) ? 1 : 0);
-    gl.uniform4f(gl.getUniformLocation(program, 'u_stencilBox'),
-      ...(opts.stencilBox ?? [0, 1, 0, 1]) as [number, number, number, number]);
+    gl.uniform4f(
+      gl.getUniformLocation(program, 'u_stencilBox'),
+      ...((opts.stencilBox ?? [0, 1, 0, 1]) as [number, number, number, number]),
+    );
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, fbo.fbo);
     gl.viewport(0, 0, W, H);
@@ -114,21 +122,13 @@ describe('Compositing Shader — Pixel Accuracy (real GPU)', () => {
   describe('Replace mode (mode=1)', () => {
     it('replaces base with layer', () => {
       setup();
-      const pixels = renderComposite(
-        [0.2, 0.3, 0.4, 1.0],
-        [0.8, 0.7, 0.6, 1.0],
-        { mode: 1 },
-      );
+      const pixels = renderComposite([0.2, 0.3, 0.4, 1.0], [0.8, 0.7, 0.6, 1.0], { mode: 1 });
       expectPixel(pixels, W, 0, 0, { r: 0.8, g: 0.7, b: 0.6, a: 1.0 }, EPSILON.HDR_HALF);
     });
 
     it('respects layer opacity', () => {
       setup();
-      const pixels = renderComposite(
-        [0.2, 0.3, 0.4, 1.0],
-        [0.8, 0.7, 0.6, 1.0],
-        { mode: 1, opacity: 0.5 },
-      );
+      const pixels = renderComposite([0.2, 0.3, 0.4, 1.0], [0.8, 0.7, 0.6, 1.0], { mode: 1, opacity: 0.5 });
       // Replace: output = (layer.rgb, layer.a * opacity)
       expectPixel(pixels, W, 0, 0, { r: 0.8, g: 0.7, b: 0.6, a: 0.5 }, EPSILON.HDR_HALF);
     });
@@ -139,11 +139,7 @@ describe('Compositing Shader — Pixel Accuracy (real GPU)', () => {
   describe('Over mode — straight alpha (mode=0)', () => {
     it('opaque layer fully covers base', () => {
       setup();
-      const pixels = renderComposite(
-        [0.2, 0.3, 0.4, 1.0],
-        [0.8, 0.7, 0.6, 1.0],
-        { mode: 0, premultiplied: false },
-      );
+      const pixels = renderComposite([0.2, 0.3, 0.4, 1.0], [0.8, 0.7, 0.6, 1.0], { mode: 0, premultiplied: false });
       // layerAlpha = 1.0 * 1.0 = 1.0
       // outA = 1.0 + 1.0*(1-1.0) = 1.0
       // outRGB = (0.8*1.0 + 0.2*1.0*0.0) / 1.0 = 0.8
@@ -153,8 +149,8 @@ describe('Compositing Shader — Pixel Accuracy (real GPU)', () => {
     it('50% transparent layer blends with base', () => {
       setup();
       const pixels = renderComposite(
-        [0.0, 0.0, 0.0, 1.0],   // black base
-        [1.0, 1.0, 1.0, 0.5],   // white semi-transparent layer
+        [0.0, 0.0, 0.0, 1.0], // black base
+        [1.0, 1.0, 1.0, 0.5], // white semi-transparent layer
         { mode: 0, premultiplied: false },
       );
       // layerAlpha = 0.5 * 1.0 = 0.5
@@ -165,11 +161,11 @@ describe('Compositing Shader — Pixel Accuracy (real GPU)', () => {
 
     it('opacity modulates layer alpha', () => {
       setup();
-      const pixels = renderComposite(
-        [0.0, 0.0, 0.0, 1.0],
-        [1.0, 1.0, 1.0, 1.0],
-        { mode: 0, opacity: 0.5, premultiplied: false },
-      );
+      const pixels = renderComposite([0.0, 0.0, 0.0, 1.0], [1.0, 1.0, 1.0, 1.0], {
+        mode: 0,
+        opacity: 0.5,
+        premultiplied: false,
+      });
       // layerAlpha = 1.0 * 0.5 = 0.5
       // outA = 0.5 + 1.0*(0.5) = 1.0
       // outRGB = (1.0*0.5 + 0.0*1.0*0.5) / 1.0 = 0.5
@@ -186,7 +182,7 @@ describe('Compositing Shader — Pixel Accuracy (real GPU)', () => {
       // Layer: white at alpha=0.5, premul: (0.5, 0.5, 0.5, 0.5)
       const pixels = renderComposite(
         [0.0, 0.0, 0.0, 1.0],
-        [0.5, 0.5, 0.5, 0.5],   // premultiplied: color=1.0 * a=0.5
+        [0.5, 0.5, 0.5, 0.5], // premultiplied: color=1.0 * a=0.5
         { mode: 0, premultiplied: true },
       );
       // Unpremul layer: (1.0, 1.0, 1.0)
@@ -205,11 +201,7 @@ describe('Compositing Shader — Pixel Accuracy (real GPU)', () => {
   describe('Add mode (mode=2)', () => {
     it('adds base and layer colors', () => {
       setup();
-      const pixels = renderComposite(
-        [0.3, 0.2, 0.1, 1.0],
-        [0.2, 0.3, 0.4, 1.0],
-        { mode: 2, premultiplied: false },
-      );
+      const pixels = renderComposite([0.3, 0.2, 0.1, 1.0], [0.2, 0.3, 0.4, 1.0], { mode: 2, premultiplied: false });
       // Blend: base + layer = (0.5, 0.5, 0.5)
       // layerAlpha = 1.0
       // outA = 1.0 + 1.0*(0.0) = 1.0
@@ -223,11 +215,7 @@ describe('Compositing Shader — Pixel Accuracy (real GPU)', () => {
   describe('Difference mode (mode=3)', () => {
     it('computes absolute difference', () => {
       setup();
-      const pixels = renderComposite(
-        [0.8, 0.3, 0.5, 1.0],
-        [0.3, 0.7, 0.5, 1.0],
-        { mode: 3, premultiplied: false },
-      );
+      const pixels = renderComposite([0.8, 0.3, 0.5, 1.0], [0.3, 0.7, 0.5, 1.0], { mode: 3, premultiplied: false });
       // Blend: abs(base - layer) = (0.5, 0.4, 0.0)
       // layerAlpha = 1.0
       // outA = 1.0 + 1.0*(0.0) = 1.0
@@ -243,32 +231,24 @@ describe('Compositing Shader — Pixel Accuracy (real GPU)', () => {
       setup();
       // Stencil box covers only a tiny region that does NOT include our pixel
       // Our 1x1 texture is sampled at UV (0.5, 0.5)
-      const pixels = renderComposite(
-        [0.1, 0.2, 0.3, 1.0],
-        [0.9, 0.8, 0.7, 1.0],
-        {
-          mode: 0,
-          stencilEnabled: true,
-          // xMin=0.6, xMax=1.0, yMin=0.6, yMax=1.0: excludes center pixel
-          stencilBox: [0.6, 1.0, 0.6, 1.0],
-        },
-      );
+      const pixels = renderComposite([0.1, 0.2, 0.3, 1.0], [0.9, 0.8, 0.7, 1.0], {
+        mode: 0,
+        stencilEnabled: true,
+        // xMin=0.6, xMax=1.0, yMin=0.6, yMax=1.0: excludes center pixel
+        stencilBox: [0.6, 1.0, 0.6, 1.0],
+      });
       // Outside stencil -> pass through base
       expectPixel(pixels, W, 0, 0, { r: 0.1, g: 0.2, b: 0.3, a: 1.0 }, EPSILON.HDR_HALF);
     });
 
     it('inside stencil: composites normally', () => {
       setup();
-      const pixels = renderComposite(
-        [0.1, 0.2, 0.3, 1.0],
-        [0.9, 0.8, 0.7, 1.0],
-        {
-          mode: 1, // Replace
-          stencilEnabled: true,
-          // xMin=0.0, xMax=1.0, yMin=0.0, yMax=1.0: includes all pixels
-          stencilBox: [0.0, 1.0, 0.0, 1.0],
-        },
-      );
+      const pixels = renderComposite([0.1, 0.2, 0.3, 1.0], [0.9, 0.8, 0.7, 1.0], {
+        mode: 1, // Replace
+        stencilEnabled: true,
+        // xMin=0.0, xMax=1.0, yMin=0.0, yMax=1.0: includes all pixels
+        stencilBox: [0.0, 1.0, 0.0, 1.0],
+      });
       // Inside stencil + Replace -> layer
       expectPixel(pixels, W, 0, 0, { r: 0.9, g: 0.8, b: 0.7, a: 1.0 }, EPSILON.HDR_HALF);
     });

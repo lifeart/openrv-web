@@ -36,9 +36,7 @@ export default defineConfig({
       use: {
         ...devices['Desktop Chrome'],
         launchOptions: {
-          args: isCI
-            ? ['--use-gl=angle', '--use-angle=metal', '--enable-gpu-rasterization']
-            : [],
+          args: isCI ? ['--use-gl=angle', '--use-angle=metal', '--enable-gpu-rasterization'] : [],
         },
       },
     },

@@ -58,6 +58,14 @@ describe('OCIOControl', () => {
       expect(element).toBeInstanceOf(HTMLElement);
       expect(element.className).toBe('ocio-control-container');
     });
+
+    it('OCIO-C003a: toggle button tooltip references the O shortcut', () => {
+      control = new OCIOControl();
+      const element = control.render();
+      const button = element.querySelector('[data-testid="ocio-panel-button"]');
+      expect(button).toBeInstanceOf(HTMLButtonElement);
+      expect((button as HTMLButtonElement).title).toBe('Toggle OCIO color management panel (O)');
+    });
   });
 
   describe('localStorage persistence', () => {

@@ -2,8 +2,8 @@
  * SafeAreasOverlay - Overlay for broadcast safe areas, aspect ratio guides, and composition helpers
  *
  * Features:
- * - Title safe area (80% of frame)
- * - Action safe area (90% of frame)
+ * - Title safe area (90% of frame, per SMPTE RP 2046-2:2018)
+ * - Action safe area (93% of frame, per SMPTE RP 2046-2:2018)
  * - Custom aspect ratio overlays (16:9, 2.39:1, 4:3, 1:1, etc.)
  * - Center crosshair
  * - Rule of thirds grid
@@ -11,6 +11,7 @@
  */
 
 import type { EventMap } from '../../utils/EventEmitter';
+import type { CropRegion } from './CropControl';
 import { CanvasOverlay } from './CanvasOverlay';
 
 export interface SafeAreasEvents extends EventMap {
@@ -21,12 +22,24 @@ export interface SafeAreasState {
   enabled: boolean;
   titleSafe: boolean;
   actionSafe: boolean;
+  customSafeArea: boolean;
+  customSafeAreaPercentage: number;
   centerCrosshair: boolean;
   ruleOfThirds: boolean;
   aspectRatio: AspectRatioGuide | null;
   guideColor: string;
   guideOpacity: number;
 }
+
+/**
+ * Default distinct colors for each safe zone type.
+ * Used when multiple safe zones are active simultaneously for visual clarity.
+ */
+export const SAFE_ZONE_COLORS: Record<'title' | 'action' | 'custom', string> = {
+  title: '#00ff00', // green
+  action: '#ffffff', // white
+  custom: '#ff9900', // orange
+};
 
 export type AspectRatioGuide = '16:9' | '4:3' | '1:1' | '2.39:1' | '2.35:1' | '1.85:1' | '9:16' | 'custom';
 
@@ -50,6 +63,8 @@ export const DEFAULT_SAFE_AREAS_STATE: SafeAreasState = {
   enabled: false,
   titleSafe: true,
   actionSafe: true,
+  customSafeArea: false,
+  customSafeAreaPercentage: 85,
   centerCrosshair: false,
   ruleOfThirds: false,
   aspectRatio: null,
@@ -60,6 +75,7 @@ export const DEFAULT_SAFE_AREAS_STATE: SafeAreasState = {
 export class SafeAreasOverlay extends CanvasOverlay<SafeAreasEvents> {
   private state: SafeAreasState = { ...DEFAULT_SAFE_AREAS_STATE };
   private customAspectRatio = 1;
+  private cropRegion: CropRegion | null = null;
 
   constructor() {
     super('safe-areas-overlay', 'safe-areas-overlay', 45);
@@ -118,6 +134,21 @@ export class SafeAreasOverlay extends CanvasOverlay<SafeAreasEvents> {
   }
 
   /**
+   * Toggle custom safe area
+   */
+  toggleCustomSafeArea(): void {
+    this.setState({ customSafeArea: !this.state.customSafeArea });
+  }
+
+  /**
+   * Set custom safe area percentage (1-99)
+   */
+  setCustomSafeAreaPercentage(percentage: number): void {
+    const clamped = Math.max(1, Math.min(99, Math.round(percentage)));
+    this.setState({ customSafeAreaPercentage: clamped });
+  }
+
+  /**
    * Toggle center crosshair
    */
   toggleCenterCrosshair(): void {
@@ -148,6 +179,10 @@ export class SafeAreasOverlay extends CanvasOverlay<SafeAreasEvents> {
     }
   }
 
+  getCustomAspectRatio(): number {
+    return this.customAspectRatio;
+  }
+
   /**
    * Set guide color
    */
@@ -160,6 +195,63 @@ export class SafeAreasOverlay extends CanvasOverlay<SafeAreasEvents> {
    */
   setGuideOpacity(opacity: number): void {
     this.setState({ guideOpacity: Math.max(0, Math.min(1, opacity)) });
+  }
+
+  /**
+   * Set the active crop region. When non-null, safe areas and all other
+   * guides are calculated relative to the cropped sub-region instead of
+   * the full display area. Pass `null` to revert to full-display mode.
+   *
+   * The crop region uses normalized coordinates (0-1) relative to the
+   * display area, matching the CropRegion type used by CropManager.
+   */
+  setCropRegion(region: CropRegion | null): void {
+    this.cropRegion = region;
+    if (this.isVisible()) {
+      this.render();
+    }
+  }
+
+  /**
+   * Get the current crop region, or null if not set.
+   */
+  getCropRegion(): CropRegion | null {
+    return this.cropRegion ? { ...this.cropRegion } : null;
+  }
+
+  /**
+   * Compute the effective drawing bounds, accounting for the crop region
+   * when active. Returns the offset and dimensions that all drawing
+   * methods should use instead of raw offsetX/offsetY/displayWidth/displayHeight.
+   */
+  private getEffectiveBounds(): { eOffsetX: number; eOffsetY: number; eWidth: number; eHeight: number } {
+    if (this.cropRegion) {
+      const eOffsetX = this.offsetX + this.displayWidth * this.cropRegion.x;
+      const eOffsetY = this.offsetY + this.displayHeight * this.cropRegion.y;
+      const eWidth = this.displayWidth * this.cropRegion.width;
+      const eHeight = this.displayHeight * this.cropRegion.height;
+      return { eOffsetX, eOffsetY, eWidth, eHeight };
+    }
+    return {
+      eOffsetX: this.offsetX,
+      eOffsetY: this.offsetY,
+      eWidth: this.displayWidth,
+      eHeight: this.displayHeight,
+    };
+  }
+
+  /**
+   * Determine the effective color for a safe zone type.
+   * When multiple safe zones are active simultaneously, each uses its
+   * distinct color from SAFE_ZONE_COLORS for visual clarity.
+   * When only one safe zone is active, the user-configured guideColor is used.
+   */
+  private getSafeZoneColor(type: 'title' | 'action' | 'custom'): string {
+    const activeCount = [this.state.titleSafe, this.state.actionSafe, this.state.customSafeArea].filter(Boolean).length;
+    if (activeCount > 1) {
+      return SAFE_ZONE_COLORS[type];
+    }
+    return this.state.guideColor;
   }
 
   /**
@@ -185,11 +277,21 @@ export class SafeAreasOverlay extends CanvasOverlay<SafeAreasEvents> {
     }
 
     if (this.state.actionSafe) {
-      this.drawSafeArea(0.9, color, alpha, 'action');
+      this.drawSafeArea(0.93, this.getSafeZoneColor('action'), alpha, 'action', 4);
     }
 
     if (this.state.titleSafe) {
-      this.drawSafeArea(0.8, color, alpha, 'title');
+      this.drawSafeArea(0.9, this.getSafeZoneColor('title'), alpha, 'title', 18);
+    }
+
+    if (this.state.customSafeArea) {
+      this.drawSafeArea(
+        this.state.customSafeAreaPercentage / 100,
+        this.getSafeZoneColor('custom'),
+        alpha,
+        'custom',
+        32,
+      );
     }
 
     if (this.state.ruleOfThirds) {
@@ -204,21 +306,29 @@ export class SafeAreasOverlay extends CanvasOverlay<SafeAreasEvents> {
   /**
    * Draw a safe area rectangle
    */
-  private drawSafeArea(percentage: number, color: string, alpha: number, type: 'title' | 'action'): void {
+  private drawSafeArea(
+    percentage: number,
+    color: string,
+    alpha: number,
+    type: 'title' | 'action' | 'custom',
+    labelOffset: number = 4,
+  ): void {
     const { ctx } = this;
-    const { offsetX, offsetY, displayWidth, displayHeight } = this;
+    const { eOffsetX, eOffsetY, eWidth, eHeight } = this.getEffectiveBounds();
 
     const margin = (1 - percentage) / 2;
-    const x = offsetX + displayWidth * margin;
-    const y = offsetY + displayHeight * margin;
-    const w = displayWidth * percentage;
-    const h = displayHeight * percentage;
+    const x = eOffsetX + eWidth * margin;
+    const y = eOffsetY + eHeight * margin;
+    const w = eWidth * percentage;
+    const h = eHeight * percentage;
 
     ctx.strokeStyle = this.hexToRgba(color, alpha);
-    ctx.lineWidth = type === 'title' ? 1 : 1.5;
+    ctx.lineWidth = type === 'title' ? 1 : type === 'custom' ? 1 : 1.5;
 
     if (type === 'title') {
       ctx.setLineDash([4, 4]);
+    } else if (type === 'custom') {
+      ctx.setLineDash([6, 3]);
     } else {
       ctx.setLineDash([]);
     }
@@ -231,62 +341,70 @@ export class SafeAreasOverlay extends CanvasOverlay<SafeAreasEvents> {
     ctx.font = '10px sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
-    const label = type === 'title' ? 'Title Safe' : 'Action Safe';
-    ctx.fillText(label, x + 4, y + 4);
+    let label: string;
+    if (type === 'title') {
+      label = 'Title Safe';
+    } else if (type === 'action') {
+      label = 'Action Safe';
+    } else {
+      label = `Custom (${Math.round(percentage * 100)}%)`;
+    }
+    ctx.fillText(label, x + 4, y + labelOffset);
   }
 
   /**
    * Draw aspect ratio letterbox/pillarbox guides
    */
   private drawAspectRatioGuide(color: string, alpha: number): void {
-    const { ctx, offsetX, offsetY, displayWidth, displayHeight } = this;
+    const { ctx } = this;
+    const { eOffsetX, eOffsetY, eWidth, eHeight } = this.getEffectiveBounds();
 
     const targetRatio =
       this.state.aspectRatio === 'custom' ? this.customAspectRatio : ASPECT_RATIOS[this.state.aspectRatio!].ratio;
 
-    const currentRatio = displayWidth / displayHeight;
+    const currentRatio = eWidth / eHeight;
 
     ctx.fillStyle = this.hexToRgba('#000000', 0.6);
 
     if (targetRatio > currentRatio) {
       // Letterbox (bars top and bottom)
-      const newHeight = displayWidth / targetRatio;
-      const barHeight = (displayHeight - newHeight) / 2;
+      const newHeight = eWidth / targetRatio;
+      const barHeight = (eHeight - newHeight) / 2;
 
       // Top bar
-      ctx.fillRect(offsetX, offsetY, displayWidth, barHeight);
+      ctx.fillRect(eOffsetX, eOffsetY, eWidth, barHeight);
       // Bottom bar
-      ctx.fillRect(offsetX, offsetY + displayHeight - barHeight, displayWidth, barHeight);
+      ctx.fillRect(eOffsetX, eOffsetY + eHeight - barHeight, eWidth, barHeight);
 
       // Draw border lines
       ctx.strokeStyle = this.hexToRgba(color, alpha);
       ctx.lineWidth = 1;
       ctx.setLineDash([]);
       ctx.beginPath();
-      ctx.moveTo(offsetX, offsetY + barHeight);
-      ctx.lineTo(offsetX + displayWidth, offsetY + barHeight);
-      ctx.moveTo(offsetX, offsetY + displayHeight - barHeight);
-      ctx.lineTo(offsetX + displayWidth, offsetY + displayHeight - barHeight);
+      ctx.moveTo(eOffsetX, eOffsetY + barHeight);
+      ctx.lineTo(eOffsetX + eWidth, eOffsetY + barHeight);
+      ctx.moveTo(eOffsetX, eOffsetY + eHeight - barHeight);
+      ctx.lineTo(eOffsetX + eWidth, eOffsetY + eHeight - barHeight);
       ctx.stroke();
     } else if (targetRatio < currentRatio) {
       // Pillarbox (bars left and right)
-      const newWidth = displayHeight * targetRatio;
-      const barWidth = (displayWidth - newWidth) / 2;
+      const newWidth = eHeight * targetRatio;
+      const barWidth = (eWidth - newWidth) / 2;
 
       // Left bar
-      ctx.fillRect(offsetX, offsetY, barWidth, displayHeight);
+      ctx.fillRect(eOffsetX, eOffsetY, barWidth, eHeight);
       // Right bar
-      ctx.fillRect(offsetX + displayWidth - barWidth, offsetY, barWidth, displayHeight);
+      ctx.fillRect(eOffsetX + eWidth - barWidth, eOffsetY, barWidth, eHeight);
 
       // Draw border lines
       ctx.strokeStyle = this.hexToRgba(color, alpha);
       ctx.lineWidth = 1;
       ctx.setLineDash([]);
       ctx.beginPath();
-      ctx.moveTo(offsetX + barWidth, offsetY);
-      ctx.lineTo(offsetX + barWidth, offsetY + displayHeight);
-      ctx.moveTo(offsetX + displayWidth - barWidth, offsetY);
-      ctx.lineTo(offsetX + displayWidth - barWidth, offsetY + displayHeight);
+      ctx.moveTo(eOffsetX + barWidth, eOffsetY);
+      ctx.lineTo(eOffsetX + barWidth, eOffsetY + eHeight);
+      ctx.moveTo(eOffsetX + eWidth - barWidth, eOffsetY);
+      ctx.lineTo(eOffsetX + eWidth - barWidth, eOffsetY + eHeight);
       ctx.stroke();
     }
 
@@ -300,14 +418,15 @@ export class SafeAreasOverlay extends CanvasOverlay<SafeAreasEvents> {
     ctx.font = '11px sans-serif';
     ctx.textAlign = 'right';
     ctx.textBaseline = 'bottom';
-    ctx.fillText(label, offsetX + displayWidth - 8, offsetY + displayHeight - 8);
+    ctx.fillText(label, eOffsetX + eWidth - 8, eOffsetY + eHeight - 8);
   }
 
   /**
    * Draw rule of thirds grid
    */
   private drawRuleOfThirds(color: string, alpha: number): void {
-    const { ctx, offsetX, offsetY, displayWidth, displayHeight } = this;
+    const { ctx } = this;
+    const { eOffsetX, eOffsetY, eWidth, eHeight } = this.getEffectiveBounds();
 
     ctx.strokeStyle = this.hexToRgba(color, alpha * 0.6);
     ctx.lineWidth = 1;
@@ -315,19 +434,19 @@ export class SafeAreasOverlay extends CanvasOverlay<SafeAreasEvents> {
 
     // Vertical lines
     for (let i = 1; i <= 2; i++) {
-      const x = offsetX + (displayWidth * i) / 3;
+      const x = eOffsetX + (eWidth * i) / 3;
       ctx.beginPath();
-      ctx.moveTo(x, offsetY);
-      ctx.lineTo(x, offsetY + displayHeight);
+      ctx.moveTo(x, eOffsetY);
+      ctx.lineTo(x, eOffsetY + eHeight);
       ctx.stroke();
     }
 
     // Horizontal lines
     for (let i = 1; i <= 2; i++) {
-      const y = offsetY + (displayHeight * i) / 3;
+      const y = eOffsetY + (eHeight * i) / 3;
       ctx.beginPath();
-      ctx.moveTo(offsetX, y);
-      ctx.lineTo(offsetX + displayWidth, y);
+      ctx.moveTo(eOffsetX, y);
+      ctx.lineTo(eOffsetX + eWidth, y);
       ctx.stroke();
     }
 
@@ -336,8 +455,8 @@ export class SafeAreasOverlay extends CanvasOverlay<SafeAreasEvents> {
     const pointRadius = 3;
     for (let i = 1; i <= 2; i++) {
       for (let j = 1; j <= 2; j++) {
-        const x = offsetX + (displayWidth * i) / 3;
-        const y = offsetY + (displayHeight * j) / 3;
+        const x = eOffsetX + (eWidth * i) / 3;
+        const y = eOffsetY + (eHeight * j) / 3;
         ctx.beginPath();
         ctx.arc(x, y, pointRadius, 0, Math.PI * 2);
         ctx.fill();
@@ -349,11 +468,12 @@ export class SafeAreasOverlay extends CanvasOverlay<SafeAreasEvents> {
    * Draw center crosshair
    */
   private drawCenterCrosshair(color: string, alpha: number): void {
-    const { ctx, offsetX, offsetY, displayWidth, displayHeight } = this;
+    const { ctx } = this;
+    const { eOffsetX, eOffsetY, eWidth, eHeight } = this.getEffectiveBounds();
 
-    const centerX = offsetX + displayWidth / 2;
-    const centerY = offsetY + displayHeight / 2;
-    const size = Math.min(displayWidth, displayHeight) * 0.05;
+    const centerX = eOffsetX + eWidth / 2;
+    const centerY = eOffsetY + eHeight / 2;
+    const size = Math.min(eWidth, eHeight) * 0.05;
     const gap = size * 0.3;
 
     ctx.strokeStyle = this.hexToRgba(color, alpha);

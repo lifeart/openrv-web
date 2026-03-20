@@ -55,6 +55,9 @@ import { wireTransformControls } from './AppTransformWiring';
 import { wireStackControls } from './AppStackWiring';
 import { NoteOverlay } from './ui/components/NoteOverlay';
 import { GotoFrameOverlay } from './ui/components/GotoFrameOverlay';
+import { RemoteCursorsOverlay } from './ui/components/RemoteCursorsOverlay';
+import { FrameCacheController } from './cache/FrameCacheController';
+import { detectDefaultBudget } from './config/CacheConfig';
 import { ShotGridIntegrationBridge } from './integrations/ShotGridIntegrationBridge';
 import { ClientMode } from './ui/components/ClientMode';
 import { ExternalPresentation } from './ui/components/ExternalPresentation';
@@ -62,7 +65,9 @@ import { ActiveContextManager, type BindingContext } from './utils/input/ActiveC
 import { ContextualKeyboardManager } from './utils/input/ContextualKeyboardManager';
 import { AudioOrchestrator } from './services/AudioOrchestrator';
 import { DCCBridge } from './integrations/DCCBridge';
+import { resolveDCCEndpoint } from './integrations/DCCSettings';
 import { MediaCacheManager } from './cache/MediaCacheManager';
+import { showAlert } from './ui/components/shared/Modal';
 import { DisposableSubscriptionManager } from './utils/DisposableSubscriptionManager';
 import { VirtualSliderController } from './ui/components/VirtualSliderController';
 import { getCurrentSourceStartFrame } from './utils/media/SourceUIState';
@@ -73,6 +78,19 @@ const log = new Logger('App');
 import { LayoutStore } from './ui/layout/LayoutStore';
 import { LayoutManager } from './ui/layout/LayoutManager';
 import { SequenceGroupNode } from './nodes/groups/SequenceGroupNode';
+
+/**
+ * Maps tab IDs to their binding contexts for keyboard shortcut resolution.
+ * Exported for testability — regression tests verify this mapping to prevent
+ * scope shortcut bugs (e.g., G opening goto-frame instead of gamut diagram on QC tab).
+ */
+export const TAB_CONTEXT_MAP: Record<string, BindingContext> = {
+  annotate: 'paint',
+  transform: 'transform',
+  view: 'viewer',
+  qc: 'panel',
+  color: 'color',
+};
 
 export class App {
   private container: HTMLElement | null = null;
@@ -106,6 +124,8 @@ export class App {
   private activeContextManager: ActiveContextManager;
   private cacheManager: MediaCacheManager;
   private audioOrchestrator: AudioOrchestrator;
+  private remoteCursorsOverlay: RemoteCursorsOverlay;
+  private frameCacheController: FrameCacheController;
   private dccBridge: DCCBridge | null = null;
   private virtualSliderController: VirtualSliderController | null = null;
   private contextualKeyboardManager: ContextualKeyboardManager;
@@ -127,7 +147,11 @@ export class App {
     this.displayCapabilities = detectDisplayCapabilities();
 
     // Bind event handlers for proper cleanup
-    this.boundHandleResize = () => this.viewer.resize();
+    this.boundHandleResize = () => {
+      this.viewer.resize();
+      const container = this.viewer.getContainer();
+      this.remoteCursorsOverlay.setViewerDimensions(container.clientWidth, container.clientHeight);
+    };
     this.boundHandleVisibilityChange = this.handleVisibilityChange.bind(this);
 
     // Initialize client mode (restricted UI for review presentations)
@@ -140,6 +164,7 @@ export class App {
 
     // Create core components
     this.session = new Session();
+    this.session.fps = getCorePreferencesManager().getGeneralPrefs().defaultFps;
     this.session.setHDRResizeTier(this.displayCapabilities.canvasHDRResizeTier);
     this.paintEngine = new PaintEngine();
     this.viewer = new Viewer({
@@ -159,6 +184,44 @@ export class App {
     // Create OPFS media cache manager
     this.cacheManager = new MediaCacheManager();
 
+    // Create frame cache controller (adaptive caching with memory budget)
+    this.frameCacheController = new FrameCacheController({
+      memoryBudgetBytes: detectDefaultBudget(),
+    });
+
+    // Wire session playback events to the frame cache controller
+    this.wiringSubscriptions.add(
+      this.session.on('frameChanged', () => {
+        this.frameCacheController.onPlaybackStateChange({
+          currentFrame: this.session.currentFrame,
+          inPoint: this.session.inPoint,
+          outPoint: this.session.outPoint,
+        });
+      }),
+    );
+    this.wiringSubscriptions.add(
+      this.session.on('playbackChanged', (playing: boolean) => {
+        if (playing) {
+          this.frameCacheController.onPlaybackStart(
+            this.session.playDirection as 1 | -1,
+            this.session.playbackSpeed,
+            this.session.currentFrame,
+          );
+        } else {
+          this.frameCacheController.onPlaybackStop();
+        }
+      }),
+    );
+    this.wiringSubscriptions.add(
+      this.session.on('sourceLoaded', () => {
+        this.frameCacheController.onPlaybackStateChange({
+          currentFrame: this.session.currentFrame,
+          inPoint: this.session.inPoint,
+          outPoint: this.session.outPoint,
+        });
+      }),
+    );
+
     // Create all UI controls via the registry
     this.controls = new AppControlRegistry({
       session: this.session,
@@ -172,6 +235,9 @@ export class App {
 
     // Create goto-frame overlay (inline text entry for frame navigation)
     this.gotoFrameOverlay = new GotoFrameOverlay(this.session);
+
+    // Create remote cursors overlay for collaboration cursor rendering
+    this.remoteCursorsOverlay = new RemoteCursorsOverlay();
     this.timeline.setNoteOverlay(this.noteOverlay);
     this.timeline.setPlaylistManagers(this.controls.playlistManager, this.controls.transitionManager);
 
@@ -199,13 +265,7 @@ export class App {
       this.tabBar.on('tabChanged', (tabId: TabId) => {
         this.contextToolbar.setActiveTab(tabId);
         // Update active context for key binding scoping
-        const contextMap: Record<string, BindingContext> = {
-          annotate: 'paint',
-          transform: 'transform',
-          view: 'viewer',
-          qc: 'viewer',
-        };
-        this.activeContextManager.setContext(contextMap[tabId] ?? 'global');
+        this.activeContextManager.setContext(TAB_CONTEXT_MAP[tabId] ?? 'global');
       }),
     );
 
@@ -302,52 +362,105 @@ export class App {
       'Toggle CIE gamut diagram',
     );
 
-    // Shift+R: transform.rotateLeft (global) vs channel.red (channel)
+    // KeyH: view.fitToHeight (global) vs panel.histogram (panel)
     this.contextualKeyboardManager.register(
-      'transform.rotateLeft',
-      { code: 'KeyR', shift: true },
-      () => this.controls.transformControl.rotateLeft(),
+      'view.fitToHeight',
+      { code: 'KeyH' },
+      () => this.viewer.smoothFitToHeight(),
       'global',
-      'Rotate left 90 degrees',
+      'Fit image height to window',
     );
+    this.contextualKeyboardManager.register(
+      'panel.histogram',
+      { code: 'KeyH' },
+      () => this.controls.scopesControl.toggleScope('histogram'),
+      'panel',
+      'Toggle histogram',
+    );
+
+    // KeyW: view.fitToWidth (global) vs panel.waveform (panel)
+    this.contextualKeyboardManager.register(
+      'view.fitToWidth',
+      { code: 'KeyW' },
+      () => this.viewer.smoothFitToWidth(),
+      'global',
+      'Fit image width to window',
+    );
+    this.contextualKeyboardManager.register(
+      'panel.waveform',
+      { code: 'KeyW' },
+      () => this.controls.scopesControl.toggleScope('waveform'),
+      'panel',
+      'Toggle waveform scope',
+    );
+
+    // Shift+R: channel.red (global) vs transform.rotateLeft (transform context)
+    // Channel shortcuts are global so they work from any tab (like Shift+G and Shift+A).
+    // transform.rotateLeft only activates when the Transform tab is selected.
     this.contextualKeyboardManager.register(
       'channel.red',
       { code: 'KeyR', shift: true },
       () => this.controls.channelSelect.handleKeyboard('R', true),
-      'channel',
+      'global',
       'Select red channel',
     );
-
-    // Shift+B: view.cycleBackgroundPattern (global) vs channel.blue (channel)
     this.contextualKeyboardManager.register(
-      'view.cycleBackgroundPattern',
-      { code: 'KeyB', shift: true },
-      () => this.controls.backgroundPatternControl.cyclePattern(),
-      'global',
-      'Cycle background pattern',
+      'transform.rotateLeft',
+      { code: 'KeyR', shift: true },
+      () => this.controls.transformControl.rotateLeft(),
+      'transform',
+      'Rotate left 90 degrees',
     );
+
+    // Shift+B: channel.blue (global) vs view.cycleBackgroundPattern (viewer context)
+    // Channel shortcuts are global; background pattern cycling is viewer-context only.
     this.contextualKeyboardManager.register(
       'channel.blue',
       { code: 'KeyB', shift: true },
       () => this.controls.channelSelect.handleKeyboard('B', true),
-      'channel',
+      'global',
       'Select blue channel',
     );
-
-    // Shift+N: network.togglePanel (global) vs channel.none (channel)
     this.contextualKeyboardManager.register(
-      'network.togglePanel',
-      { code: 'KeyN', shift: true },
-      () => this.controls.networkControl.togglePanel(),
-      'global',
-      'Toggle network sync panel',
+      'view.cycleBackgroundPattern',
+      { code: 'KeyB', shift: true },
+      () => this.controls.backgroundPatternControl.cyclePattern(),
+      'viewer',
+      'Cycle background pattern',
     );
+
+    // Shift+N: channel.none (global) vs network.togglePanel (panel context)
+    // Channel shortcuts are global; network panel toggle is panel-context only.
     this.contextualKeyboardManager.register(
       'channel.none',
       { code: 'KeyN', shift: true },
       () => this.controls.channelSelect.handleKeyboard('N', true),
-      'channel',
+      'global',
       'Select no channel',
+    );
+    this.contextualKeyboardManager.register(
+      'network.togglePanel',
+      { code: 'KeyN', shift: true },
+      () => this.controls.networkControl.togglePanel(),
+      'panel',
+      'Toggle network sync panel',
+    );
+
+    // Shift+L: channel.luminance (global) vs lut.togglePanel (color context)
+    // Channel shortcuts are global; LUT pipeline panel toggle is color-tab-context only.
+    this.contextualKeyboardManager.register(
+      'channel.luminance',
+      { code: 'KeyL', shift: true },
+      () => this.controls.channelSelect.handleKeyboard('L', true),
+      'global',
+      'Select luminance channel',
+    );
+    this.contextualKeyboardManager.register(
+      'lut.togglePanel',
+      { code: 'KeyL', shift: true },
+      () => this.controls.lutPipelinePanel.toggle(),
+      'color',
+      'Toggle LUT pipeline panel',
     );
 
     // Wire unified preferences facade with live subsystem references
@@ -431,6 +544,7 @@ export class App {
       networkSyncManager: this.controls.networkSyncManager,
       networkControl: this.controls.networkControl,
       headerBar: this.headerBar,
+      remoteCursorsOverlay: this.remoteCursorsOverlay,
       getSessionURLState: () => this.sessionURLService.captureSessionURLState(),
       applySessionURLState: (state) => this.sessionURLService.applySessionURLState(state),
     });
@@ -441,6 +555,7 @@ export class App {
       session: this.session,
       configUI: this.controls.shotGridConfig,
       panel: this.controls.shotGridPanel,
+      playlistManager: this.controls.playlistManager,
     });
     this.shotGridBridge.setup();
 
@@ -507,7 +622,8 @@ export class App {
     });
 
     // DCC Bridge (optional WebSocket integration with DCC tools)
-    const dccUrl = new URLSearchParams(window.location.search).get('dcc');
+    // Priority: ?dcc= query param > persisted DCC endpoint preference
+    const dccUrl = resolveDCCEndpoint();
     if (dccUrl) {
       this.dccBridge = new DCCBridge({ url: dccUrl });
 
@@ -595,6 +711,9 @@ export class App {
     // Mount goto-frame overlay into the viewer slot (position: relative parent)
     this.layoutManager.getViewerSlot().appendChild(this.gotoFrameOverlay.getElement());
 
+    // Mount remote cursors overlay into the viewer container
+    this.viewer.getContainer().appendChild(this.remoteCursorsOverlay.getElement());
+
     // Re-register keyboard shortcuts now that focusManager and other
     // layout-dependent objects (fullscreenManager, shortcutCheatSheet) are
     // available.  The initial registration happened during the constructor
@@ -624,6 +743,24 @@ export class App {
 
     // Initialize display profile from persisted state
     this.viewer.setDisplayColorState(this.controls.displayProfileControl.getState());
+
+    // Subscribe to cache error events so failures are visible to the user
+    this.wiringSubscriptions.add(
+      this.cacheManager.on('error', (event) => {
+        console.warn('[OpenRV] Media cache error:', event.message);
+
+        // Surface error in the CacheIndicator UI
+        this.controls.cacheIndicator.showError(event.message);
+
+        const isInitFailure = event.message.startsWith('Initialization failed');
+        if (isInitFailure) {
+          showAlert('Media caching is unavailable. Playback may be slower without frame caching.', {
+            title: 'Cache Unavailable',
+            type: 'warning',
+          });
+        }
+      }),
+    );
 
     // Initialize OPFS media cache (fire-and-forget; no-op if unavailable)
     this.cacheManager.initialize().catch((err) => {
@@ -745,6 +882,7 @@ export class App {
       externalPresentation: this.externalPresentation,
       headerBar: this.headerBar,
       frameNavigation: this.frameNavigation,
+      frameCacheController: this.frameCacheController,
     });
   }
 
@@ -764,6 +902,8 @@ export class App {
       colorControls: this.controls.colorControls,
       cdlControl: this.controls.cdlControl,
       curvesControl: this.controls.curvesControl,
+      persistenceManager: this.persistenceManager,
+      pixelProbeProvider: this.viewer.getPixelProbe(),
     };
   }
 
@@ -792,6 +932,7 @@ export class App {
     this.noteOverlay.dispose();
     this.timelineMagnifier.dispose();
     this.gotoFrameOverlay.dispose();
+    this.remoteCursorsOverlay.dispose();
     this.timeline.dispose();
     this.headerBar.dispose();
     this.tabBar.dispose();

@@ -8,10 +8,14 @@
  * that do NOT contain a gainmap auxiliary image.
  */
 
+import { isGainmapAVIF } from './AVIFGainmapDecoder';
+
 /**
- * Check if a buffer contains a plain AVIF file (ftyp box with AVIF brand).
- * Returns true for any AVIF file, including gainmap AVIFs.
- * The DecoderRegistry ordering ensures gainmap AVIFs are matched first.
+ * Check if a buffer contains a plain AVIF file (ftyp box with AVIF brand,
+ * without gain map auxiliary items).
+ *
+ * Returns false for gainmap AVIFs — those are handled by AVIFGainmapDecoder.
+ * This makes detection self-contained and independent of registry ordering.
  */
 export function isAvifFile(buffer: ArrayBuffer): boolean {
   if (buffer.byteLength < 12) return false;
@@ -21,7 +25,10 @@ export function isAvifFile(buffer: ArrayBuffer): boolean {
   if (type !== 'ftyp') return false;
   // Major brand at offset 8..11
   const brand = String.fromCharCode(view.getUint8(8), view.getUint8(9), view.getUint8(10), view.getUint8(11));
-  return brand === 'avif' || brand === 'avis' || brand === 'mif1';
+  if (brand !== 'avif' && brand !== 'avis' && brand !== 'mif1') return false;
+  // Exclude gainmap AVIFs — they have an auxC box with the HDR gainmap URN
+  if (isGainmapAVIF(buffer)) return false;
+  return true;
 }
 
 /**

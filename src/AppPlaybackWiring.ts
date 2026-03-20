@@ -27,10 +27,14 @@ import {
 } from './export/VideoExporter';
 import { muxToMP4Blob } from './export/MP4Muxer';
 import { ExportProgressDialog } from './ui/components/ExportProgress';
-import { showAlert } from './ui/components/shared/Modal';
+import { showAlert, showAnnotationImportDialog } from './ui/components/shared/Modal';
 import { generateSlateFrame } from './export/SlateRenderer';
 import { generateReport } from './export/ReportExporter';
-import { downloadAnnotationsJSON } from './utils/export/AnnotationJSONExporter';
+import {
+  downloadAnnotationsJSON,
+  parseAnnotationsJSON,
+  applyAnnotationsJSON,
+} from './utils/export/AnnotationJSONExporter';
 import { exportAnnotationsPDF } from './utils/export/AnnotationPDFExporter';
 import { DisposableSubscriptionManager } from './utils/DisposableSubscriptionManager';
 import { isAudioScrubAvailable } from './utils/media/SourceUIState';
@@ -54,10 +58,15 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
   let videoExportInProgress = false;
 
   // HeaderBar events
-  subs.add(headerBar.on('showShortcuts', () => deps.getKeyboardHandler().showShortcutsDialog()));
+  subs.add(headerBar.on('showShortcuts', () => deps.getKeyboardHandler().showCustomBindingsDialog()));
   subs.add(headerBar.on('showCustomKeyBindings', () => deps.getKeyboardHandler().showCustomBindingsDialog()));
   subs.add(headerBar.on('saveProject', () => persistenceManager.saveProject()));
-  subs.add(headerBar.on('openProject', (file) => persistenceManager.openProject(file)));
+  subs.add(
+    headerBar.on('openProject', ({ file, availableFiles }) => persistenceManager.openProject(file, availableFiles)),
+  );
+
+  // Wire auto-checkpoint before media file drops (only fires when sources already exist)
+  viewer.setOnBeforeMediaLoad(() => persistenceManager.checkpointBeforeMediaLoad());
 
   // AutoSave Indicator
   controls.autoSaveIndicator.connect(controls.autoSaveManager);
@@ -124,6 +133,24 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
   subs.add(session.on('representationChanged', syncAudioScrubAvailability));
   subs.add(session.on('audioScrubAvailabilityChanged', syncAudioScrubAvailability));
 
+  // Surface representation errors and fallback activations to the user
+  subs.add(
+    session.on('representationError', ({ error, userInitiated }) => {
+      showAlert(`Representation failed: ${error}`, {
+        type: userInitiated ? 'error' : 'warning',
+        title: 'Representation Error',
+      });
+    }),
+  );
+  subs.add(
+    session.on('fallbackActivated', ({ fallbackRepresentation }) => {
+      showAlert(`Switched to fallback representation: ${fallbackRepresentation.label}`, {
+        type: 'info',
+        title: 'Fallback Activated',
+      });
+    }),
+  );
+
   // Export control (from HeaderBar) -> viewer
   const exportControl = headerBar.getExportControl();
   subs.add(
@@ -170,6 +197,11 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
     }),
   );
   subs.add(
+    exportControl.on('annotationsJSONImportRequested', () => {
+      void handleAnnotationImport(ctx.paintEngine, persistenceManager);
+    }),
+  );
+  subs.add(
     exportControl.on('annotationsPDFExportRequested', () => {
       void exportAnnotationsPDF(
         ctx.paintEngine,
@@ -187,18 +219,44 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
   );
   subs.add(
     exportControl.on('reportExportRequested', ({ format }) => {
-      generateReport(session, session.noteManager, session.statusManager, session.versionManager, {
-        format,
-        includeNotes: true,
-        includeTimecodes: true,
-        includeVersions: true,
-        title: session.metadata.displayName || 'Dailies Report',
-      });
+      // When a playlist is active with clips, scope the report to the playlist
+      const playlistManager = controls.playlistManager;
+      const playlist =
+        playlistManager.isEnabled() && playlistManager.getClipCount() > 0
+          ? { clips: playlistManager.getClips().map((c) => ({ sourceIndex: c.sourceIndex, sourceName: c.sourceName })) }
+          : undefined;
+
+      generateReport(
+        session,
+        session.noteManager,
+        session.statusManager,
+        session.versionManager,
+        {
+          format,
+          includeNotes: true,
+          includeTimecodes: true,
+          includeVersions: true,
+          title: session.metadata.displayName || 'Dailies Report',
+          sessionDate: new Date().toISOString(),
+          projectId: session.metadata?.displayName || undefined,
+        },
+        playlist,
+      );
     }),
   );
 
-  // Snapshot panel restore
+  // Snapshot panel create + restore
+  subs.add(
+    controls.snapshotPanel.on('createRequested', ({ name, description }) => {
+      void persistenceManager.createSnapshot(name, description);
+    }),
+  );
   subs.add(controls.snapshotPanel.on('restoreRequested', ({ id }) => persistenceManager.restoreSnapshot(id)));
+  subs.add(
+    controls.snapshotPanel.on('descriptionUpdated', ({ snapshotId, description }) =>
+      controls.snapshotManager.updateDescription(snapshotId, description),
+    ),
+  );
 
   // Note panel events
   subs.add(
@@ -223,6 +281,77 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
   wirePlaylistRuntime(session, controls, subs);
 
   return { subscriptions: subs };
+}
+
+/**
+ * Handle annotation JSON import with options dialog (mode and frame offset).
+ */
+async function handleAnnotationImport(
+  paintEngine: import('./paint/PaintEngine').PaintEngine,
+  persistenceManager?: import('./AppPersistenceManager').AppPersistenceManager,
+): Promise<void> {
+  // Show import options dialog first
+  const importOptions = await showAnnotationImportDialog({ title: 'Import Annotations' });
+  if (!importOptions) return; // User cancelled
+
+  // Create file input and trigger file selection
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.accept = '.json,application/json';
+
+  const file = await new Promise<File | null>((resolve) => {
+    fileInput.addEventListener('change', () => {
+      resolve(fileInput.files?.[0] ?? null);
+    });
+    // Handle cancel (focus returns to window without a change event)
+    window.addEventListener(
+      'focus',
+      () => {
+        // Delay to let the change event fire first if a file was selected
+        setTimeout(() => {
+          if (!fileInput.files?.length) resolve(null);
+        }, 300);
+      },
+      { once: true },
+    );
+    fileInput.click();
+  });
+
+  if (!file) return; // User cancelled file selection
+
+  try {
+    const jsonString = await file.text();
+    const data = parseAnnotationsJSON(jsonString);
+    if (!data) {
+      showAlert('Invalid annotation file. The file must be a valid OpenRV annotation JSON export.', {
+        type: 'error',
+        title: 'Import Error',
+      });
+      return;
+    }
+
+    // Create auto-checkpoint before replacing annotations (destructive)
+    if (importOptions.mode === 'replace' && persistenceManager) {
+      await persistenceManager.checkpointBeforeClearAnnotations();
+    }
+
+    const count = applyAnnotationsJSON(paintEngine, data, {
+      mode: importOptions.mode,
+      frameOffset: importOptions.frameOffset,
+    });
+
+    const modeVerb = importOptions.mode === 'merge' ? 'merged' : 'replaced';
+    const offsetNote = importOptions.frameOffset !== 0 ? ` (frame offset: ${importOptions.frameOffset})` : '';
+    showAlert(`Successfully ${modeVerb} annotations. ${count} annotation(s) imported${offsetNote}.`, {
+      type: 'success',
+      title: 'Import Complete',
+    });
+  } catch {
+    showAlert('Failed to read the annotation file.', {
+      type: 'error',
+      title: 'Import Error',
+    });
+  }
 }
 
 /**

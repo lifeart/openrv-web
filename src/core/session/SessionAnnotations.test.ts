@@ -161,6 +161,36 @@ describe('SessionAnnotations', () => {
       expect(handler).toHaveBeenCalledOnce();
     });
 
+    it('SA-034: setActiveVersion emits activeVersionChanged with correct entry', () => {
+      const handler = vi.fn();
+      annotations.on('activeVersionChanged', handler);
+      const group = annotations.versionManager.createGroup('shot', [0, 1, 2]);
+      const entry = annotations.versionManager.setActiveVersion(group.id, 0);
+      expect(handler).toHaveBeenCalledOnce();
+      expect(handler.mock.calls[0]![0].groupId).toBe(group.id);
+      expect(handler.mock.calls[0]![0].entry.sourceIndex).toBe(entry!.sourceIndex);
+    });
+
+    it('SA-035: nextVersion emits activeVersionChanged', () => {
+      const handler = vi.fn();
+      annotations.on('activeVersionChanged', handler);
+      const group = annotations.versionManager.createGroup('shot', [0, 1, 2]);
+      annotations.versionManager.nextVersion(group.id);
+      expect(handler).toHaveBeenCalledOnce();
+      expect(handler.mock.calls[0]![0].entry.sourceIndex).toBe(0); // wraps from 2 to 0
+    });
+
+    it('SA-036: previousVersion emits activeVersionChanged', () => {
+      const handler = vi.fn();
+      annotations.on('activeVersionChanged', handler);
+      const group = annotations.versionManager.createGroup('shot', [0, 1, 2]);
+      annotations.versionManager.setActiveVersion(group.id, 1);
+      handler.mockClear();
+      annotations.versionManager.previousVersion(group.id);
+      expect(handler).toHaveBeenCalledOnce();
+      expect(handler.mock.calls[0]![0].entry.sourceIndex).toBe(0);
+    });
+
     it('SA-024: statusManager changes emit statusChanged and statusesChanged', () => {
       const statusChangedHandler = vi.fn();
       const statusesChangedHandler = vi.fn();

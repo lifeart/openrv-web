@@ -1,7 +1,8 @@
 /**
  * WatermarkControl - UI panel for watermark/logo overlay settings
  *
- * Provides controls for loading image, position presets, scale, opacity, and margin.
+ * Provides controls for loading image, position presets, custom positioning,
+ * scale, opacity, and margin.
  */
 
 import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
@@ -35,6 +36,10 @@ export class WatermarkControl extends EventEmitter<WatermarkControlEvents> {
   private loadButton!: HTMLButtonElement;
   private removeButton!: HTMLButtonElement;
   private positionGrid!: HTMLElement;
+  private customPositionButton!: HTMLButtonElement;
+  private customPositionContainer!: HTMLElement;
+  private customXInput!: HTMLInputElement;
+  private customYInput!: HTMLInputElement;
   private scaleSlider!: HTMLInputElement;
   private scaleValue!: HTMLSpanElement;
   private opacitySlider!: HTMLInputElement;
@@ -228,6 +233,37 @@ export class WatermarkControl extends EventEmitter<WatermarkControlEvents> {
     }
 
     positionSection.appendChild(this.positionGrid);
+
+    this.customPositionButton = document.createElement('button');
+    this.customPositionButton.dataset.position = 'custom';
+    this.customPositionButton.dataset.testid = 'watermark-position-custom';
+    this.customPositionButton.textContent = POSITION_LABELS.custom;
+    this.customPositionButton.style.cssText = `
+      background: transparent;
+      border: 1px solid var(--border-secondary);
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 6px 8px;
+      border-radius: 2px;
+      font-size: 10px;
+      transition: all 0.12s ease;
+      margin: 6px 4px 0;
+      width: calc(100% - 8px);
+    `;
+    this.customPositionButton.addEventListener('click', () => this.setPosition('custom'));
+    this.customPositionButton.addEventListener('pointerenter', () => {
+      if (this.overlay.getPosition() !== 'custom') {
+        this.customPositionButton.style.background = 'var(--bg-hover)';
+      }
+    });
+    this.customPositionButton.addEventListener('pointerleave', () => {
+      this.updatePositionButton(this.customPositionButton, 'custom');
+    });
+    positionSection.appendChild(this.customPositionButton);
+
+    this.customPositionContainer = this.createCustomPositionInputs();
+    positionSection.appendChild(this.customPositionContainer);
+
     this.controlsContainer.appendChild(positionSection);
 
     // Scale slider
@@ -327,6 +363,59 @@ export class WatermarkControl extends EventEmitter<WatermarkControlEvents> {
     return { row, slider, value };
   }
 
+  private createCustomPositionInputs(): HTMLElement {
+    const container = document.createElement('div');
+    container.dataset.testid = 'watermark-custom-position-container';
+    container.style.cssText = `
+      display: none;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      padding: 6px 4px 0;
+    `;
+
+    const createCoordinateField = (axis: 'x' | 'y'): HTMLInputElement => {
+      const field = document.createElement('label');
+      field.style.cssText = `
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      `;
+
+      const label = document.createElement('span');
+      label.textContent = axis.toUpperCase();
+      label.style.cssText = 'font-size: 10px; color: var(--text-secondary);';
+
+      const input = document.createElement('input');
+      input.type = 'number';
+      input.min = '0';
+      input.max = '100';
+      input.step = '1';
+      input.dataset.testid = `watermark-custom-${axis}-input`;
+      input.style.cssText = `
+        width: 100%;
+        min-width: 0;
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border-secondary);
+        color: var(--text-primary);
+        border-radius: 4px;
+        padding: 6px 8px;
+        font-size: 11px;
+      `;
+      input.addEventListener('input', () => this.handleCustomCoordinateInput(axis, input.value));
+
+      field.appendChild(label);
+      field.appendChild(input);
+      container.appendChild(field);
+
+      return input;
+    };
+
+    this.customXInput = createCoordinateField('x');
+    this.customYInput = createCoordinateField('y');
+
+    return container;
+  }
+
   private setupOverlayListeners(): void {
     this.overlay.on('stateChanged', (state) => {
       this.updateUI();
@@ -354,9 +443,18 @@ export class WatermarkControl extends EventEmitter<WatermarkControlEvents> {
 
     try {
       await this.overlay.loadImage(file);
-    } catch (_err) {
-      // Error is already emitted by the overlay via 'error' event
-      // which we forward in setupOverlayListeners
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(`[WatermarkControl] Failed to load watermark image: ${message}`);
+
+      // Show error feedback in the preview area
+      this.previewContainer.style.display = 'flex';
+      this.previewContainer.innerHTML = '';
+      const errorSpan = document.createElement('span');
+      errorSpan.dataset.testid = 'watermark-load-error';
+      errorSpan.style.cssText = 'font-size: 10px; color: var(--text-danger, #ef4444);';
+      errorSpan.textContent = `Failed to load image: ${message}`;
+      this.previewContainer.appendChild(errorSpan);
     }
 
     // Clear input for future selections
@@ -369,6 +467,24 @@ export class WatermarkControl extends EventEmitter<WatermarkControlEvents> {
 
   private setPosition(position: WatermarkPosition): void {
     this.overlay.setPosition(position);
+  }
+
+  private handleCustomCoordinateInput(axis: 'x' | 'y', rawValue: string): void {
+    const parsed = Number.parseFloat(rawValue);
+    if (!Number.isFinite(parsed)) {
+      return;
+    }
+
+    const clampedPercent = Math.min(100, Math.max(0, parsed));
+    const normalizedValue = clampedPercent / 100;
+    const targetInput = axis === 'x' ? this.customXInput : this.customYInput;
+    targetInput.value = String(Math.round(clampedPercent));
+
+    const state = this.overlay.getState();
+    this.overlay.setCustomPosition(
+      axis === 'x' ? normalizedValue : state.customX,
+      axis === 'y' ? normalizedValue : state.customY,
+    );
   }
 
   private updateUI(): void {
@@ -400,6 +516,11 @@ export class WatermarkControl extends EventEmitter<WatermarkControlEvents> {
       const pos = (btn as HTMLElement).dataset.position as WatermarkPosition;
       this.updatePositionButton(btn as HTMLButtonElement, pos);
     });
+    this.updatePositionButton(this.customPositionButton, 'custom');
+
+    this.customPositionContainer.style.display = state.position === 'custom' ? 'grid' : 'none';
+    this.customXInput.value = String(Math.round(state.customX * 100));
+    this.customYInput.value = String(Math.round(state.customY * 100));
 
     // Update sliders
     this.scaleSlider.value = String(state.scale * 100);

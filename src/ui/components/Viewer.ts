@@ -1,9 +1,9 @@
-import { type Session } from '../../core/session/Session';
+import { type Session, type MatteSettings } from '../../core/session/Session';
 import { type PaintEngine } from '../../paint/PaintEngine';
 import { PaintRenderer } from '../../paint/PaintRenderer';
 import { PerfTrace } from '../../utils/PerfTrace';
 import { type ColorAdjustments } from './ColorControls';
-import { type WipeState, type WipeMode } from './WipeControl';
+import { type WipeState, type WipeMode } from '../../core/types/wipe';
 import { type Transform2D } from './TransformControl';
 import { type FilterSettings, DEFAULT_FILTER_SETTINGS } from './FilterControl';
 import type { TextureFilterMode } from '../../core/types/filter';
@@ -21,6 +21,7 @@ import { DEFAULT_STABILIZATION_PARAMS } from '../../filters/StabilizeMotion';
 import { type CropState, type CropRegion, type UncropState } from './CropControl';
 import { CropManager } from './CropManager';
 import {
+  type LUT,
   type LUT3D,
   type LUTPipeline,
   type GPULUTChain,
@@ -98,7 +99,7 @@ import {
   drawBackgroundPattern,
 } from './BackgroundPatternControl';
 import { FrameInterpolator } from '../../utils/media/FrameInterpolator';
-import { isViewerContentElement as isViewerContentElementUtil } from './ViewerInteraction';
+import { isViewerContentElement as isViewerContentElementUtil, getPixelCoordinates } from './ViewerInteraction';
 import {
   drawWithTransform as drawWithTransformUtil,
   type FilterStringCache,
@@ -113,6 +114,7 @@ import {
   createExportCanvas as createExportCanvasUtil,
   createSourceExportCanvas as createSourceExportCanvasUtil,
   renderFrameToCanvas as renderFrameToCanvasUtil,
+  type BugOverlayExportConfig,
 } from './ViewerExport';
 import type { FrameburnTimecodeOptions } from './FrameburnCompositor';
 import {
@@ -181,7 +183,9 @@ export interface ViewerConfig {
 }
 
 const log = new Logger('Viewer');
-const MISSING_FRAME_MODE_STORAGE_KEY = 'openrv.missingFrameMode';
+/** @deprecated Use the unified key below. Kept only for backward-compat migration. */
+const LEGACY_MISSING_FRAME_MODE_STORAGE_KEY = 'openrv.missingFrameMode';
+const MISSING_FRAME_MODE_STORAGE_KEY = 'openrv-prefs-missing-frame-mode';
 
 export type MissingFrameMode = 'off' | 'show-frame' | 'hold' | 'black';
 
@@ -225,6 +229,10 @@ export class Viewer {
   private physicalWidth = 0;
   private physicalHeight = 0;
 
+  // Multi-listener support for view changes (pan/zoom)
+  private _viewChangeListeners = new Set<(panX: number, panY: number, zoom: number) => void>();
+  private _externalViewChangedCallback: ((panX: number, panY: number, zoom: number) => void) | null = null;
+
   // Paint overlay dimensions/offsets in logical pixels.
   private paintLogicalWidth = 0;
   private paintLogicalHeight = 0;
@@ -264,7 +272,7 @@ export class Viewer {
 
   // LUT indicator badge (UI element, remains in Viewer)
   private lutIndicator: HTMLElement | null = null;
-  private pipelinePrecacheLUTActive = false;
+  private pipelineSingleLUTActive = false;
 
   // A/B Compare indicator
   private abIndicator: HTMLElement | null = null;
@@ -386,6 +394,7 @@ export class Viewer {
   // Display capabilities for wide color gamut / HDR support
   private capabilities: DisplayCapabilities | undefined;
   private canvasColorSpace: 'display-p3' | undefined;
+  private lastSystemHDRHeadroom = 1.0;
 
   // WebGL/HDR rendering manager (owns GL canvas, Renderer, worker proxy)
   private glRendererManager!: ViewerGLRenderer;
@@ -660,6 +669,11 @@ export class Viewer {
       }
     });
 
+    // Wire up multiplexed view change dispatch for external + multi-listener
+    this.transformManager.setOnViewChanged(() => {
+      this.notifyViewChangeListeners();
+    });
+
     // Create container
     this.container = document.createElement('div');
     this.container.className = 'viewer-container';
@@ -814,6 +828,7 @@ export class Viewer {
       getImageCtx: () => this.imageCtx,
       getSession: () => this.session,
       getDisplayDimensions: () => ({ width: this.displayWidth, height: this.displayHeight }),
+      getSourceDimensions: () => ({ width: this.sourceWidth, height: this.sourceHeight }),
       getCanvasColorSpace: () => this.canvasColorSpace,
       getImageCanvasRect: () => this.getImageCanvasRect(),
       isViewerContentElement: (element: HTMLElement) => this.isViewerContentElement(element),
@@ -912,6 +927,7 @@ export class Viewer {
     // Setup resize observer
     this.resizeObserver = new ResizeObserver(() => {
       this.invalidateLayoutCache();
+      this.notifyViewChangeListeners();
       this.scheduleRender();
     });
     this.resizeObserver.observe(this.container);
@@ -1003,8 +1019,11 @@ export class Viewer {
         if (typeof headroom !== 'number' || !Number.isFinite(headroom) || headroom <= 0) {
           return;
         }
+        if (headroom === this.lastSystemHDRHeadroom) return;
+        this.lastSystemHDRHeadroom = headroom;
         this.glRendererManager.setHDRHeadroom(headroom);
         log.info(`System HDR headroom detected: ${headroom.toFixed(2)}x`);
+        this.scheduleRender();
       })
       .catch((err) => {
         log.debug('HDR headroom query unavailable:', err);
@@ -1128,6 +1147,22 @@ export class Viewer {
     return this.container;
   }
 
+  /**
+   * Set a callback invoked when an `.orvproject` file is dropped onto the viewer.
+   * Wired by AppPlaybackWiring to route to the persistence manager.
+   */
+  setOnProjectFileDrop(cb: ((file: File, companionFiles: File[]) => void) | null): void {
+    this.inputHandler.onProjectFileDrop = cb;
+  }
+
+  /**
+   * Set a callback invoked before media files are loaded via drag-and-drop.
+   * Used to create auto-checkpoints before destructive media load operations.
+   */
+  setOnBeforeMediaLoad(cb: (() => Promise<void>) | null): void {
+    this.inputHandler.onBeforeMediaLoad = cb;
+  }
+
   private scheduleRender(): void {
     // During video playback, the tick loop handles all rendering via renderDirect().
     // Skip scheduling to prevent render storm that starves the video decoder.
@@ -1154,9 +1189,18 @@ export class Viewer {
 
   private loadMissingFrameModePreference(): MissingFrameMode {
     try {
+      // Try unified key first
       const stored = localStorage.getItem(MISSING_FRAME_MODE_STORAGE_KEY);
       if (stored === 'off' || stored === 'show-frame' || stored === 'hold' || stored === 'black') {
         return stored;
+      }
+      // Backward compat: migrate from legacy key
+      const legacy = localStorage.getItem(LEGACY_MISSING_FRAME_MODE_STORAGE_KEY);
+      if (legacy === 'off' || legacy === 'show-frame' || legacy === 'hold' || legacy === 'black') {
+        // Migrate: write to unified key and remove legacy key
+        localStorage.setItem(MISSING_FRAME_MODE_STORAGE_KEY, legacy);
+        localStorage.removeItem(LEGACY_MISSING_FRAME_MODE_STORAGE_KEY);
+        return legacy;
       }
     } catch {
       // Ignore storage errors (private mode, disabled storage, etc.)
@@ -1182,33 +1226,25 @@ export class Viewer {
 
   private getMissingSequenceFrameNumber(frameIndex: number): number | null {
     const source = this.session.currentSource;
-    if (source?.type !== 'sequence' || !source.sequenceFrames || source.sequenceFrames.length < 2) {
+    if (source?.type !== 'sequence' || !source.sequenceFrameMap || !source.sequenceInfo) {
       return null;
     }
 
-    const idx = frameIndex - 1;
-    if (idx <= 0 || idx >= source.sequenceFrames.length) {
+    const startFrame = source.sequenceInfo.startFrame;
+    const frameNumber = startFrame + frameIndex - 1;
+
+    // If the frame number is outside the sequence range, not a missing frame
+    if (frameNumber < source.sequenceInfo.startFrame || frameNumber > source.sequenceInfo.endFrame) {
       return null;
     }
 
-    const previousFrameNumber = source.sequenceFrames[idx - 1]?.frameNumber;
-    const currentFrameNumber = source.sequenceFrames[idx]?.frameNumber;
-    if (previousFrameNumber === undefined || currentFrameNumber === undefined) {
+    // If the frame exists in the map, it's not missing
+    if (source.sequenceFrameMap.has(frameNumber)) {
       return null;
     }
 
-    if (currentFrameNumber - previousFrameNumber <= 1) {
-      return null;
-    }
-
-    const candidate = previousFrameNumber + 1;
-    const missingFrames = source.sequenceInfo?.missingFrames ?? [];
-    if (missingFrames.length === 0 || missingFrames.includes(candidate)) {
-      return candidate;
-    }
-
-    const between = missingFrames.find((frame) => frame > previousFrameNumber && frame < currentFrameNumber);
-    return between ?? candidate;
+    // Frame is missing — return its frame number
+    return frameNumber;
   }
 
   /**
@@ -1436,6 +1472,15 @@ export class Viewer {
     } catch (err) {
       console.error('Crop overlay render failed:', err);
     }
+
+    // Update safe-areas overlay crop region so guides track the cropped area.
+    // This runs every frame to pick up crop state changes that don't trigger
+    // a canvas resize (which is the only path that calls updateOverlayDimensions).
+    {
+      const activeCrop = this.cropManager.isCropClipActive() ? this.cropManager.getCropState().region : null;
+      this.overlayManager.updateSafeAreasCropRegion(activeCrop);
+    }
+
     PerfTrace.end('paint+crop');
   }
 
@@ -1475,6 +1520,22 @@ export class Viewer {
 
   private renderImage(): void {
     const source = this.session.currentSource;
+
+    // Sync stereo input format from source metadata or file source node
+    const detectedStereoFormat = source?.stereoInputFormat ?? source?.fileSourceNode?.stereoInputFormat ?? null;
+    if (detectedStereoFormat) {
+      this.stereoManager.setStereoInputFormat(detectedStereoFormat);
+      // Pass right-eye image data for 'separate' stereo (multi-view EXR)
+      const rightEyeIPImage = source?.fileSourceNode?.getIPImage()?.rightEyeImage;
+      if (detectedStereoFormat === 'separate' && rightEyeIPImage) {
+        this.stereoManager.setRightEyeImageData(rightEyeIPImage.toImageData());
+      } else {
+        this.stereoManager.setRightEyeImageData(null);
+      }
+    } else {
+      this.stereoManager.resetStereoInputFormat();
+      this.stereoManager.setRightEyeImageData(null);
+    }
 
     // Deactivate HDR mode if current source isn't HDR, or if OCIO is active
     // (unless WebGPU blit bypasses OCIO for HDR output)
@@ -2273,10 +2334,17 @@ export class Viewer {
   private renderPaint(): void {
     if (this.displayWidth === 0 || this.displayHeight === 0) return;
 
-    // Get annotations with ghost effect, filtering by current A/B version
+    // Get annotations with ghost effect, filtering by current A/B version and source index.
+    // sourceIndex-based filtering ensures annotations follow the media source, not the A/B slot.
     const version = this.paintEngine.annotationVersion;
     const versionFilter = version === 'all' ? undefined : version;
-    const annotations = this.paintEngine.getAnnotationsWithGhost(this.session.currentFrame, versionFilter);
+    const sourceIndexFilter = this.paintEngine.sourceIndex;
+    const annotations = this.paintEngine.getAnnotationsWithGhost(
+      this.session.currentFrame,
+      versionFilter,
+      undefined,
+      sourceIndexFilter,
+    );
 
     if (annotations.length === 0) {
       // Only clear if we previously had content
@@ -2364,6 +2432,46 @@ export class Viewer {
     this.scheduleRender();
   }
 
+  /**
+   * Set a callback that fires when the view (pan/zoom) changes.
+   * Used by network sync to broadcast local view changes.
+   */
+  setOnViewChanged(callback: ((panX: number, panY: number, zoom: number) => void) | null): void {
+    this._externalViewChangedCallback = callback;
+  }
+
+  /**
+   * Subscribe to view changes (pan/zoom). Supports multiple concurrent listeners.
+   * Returns an unsubscribe function.
+   */
+  addViewChangeListener(callback: (panX: number, panY: number, zoom: number) => void): () => void {
+    this._viewChangeListeners.add(callback);
+    return () => {
+      this._viewChangeListeners.delete(callback);
+    };
+  }
+
+  /**
+   * Dispatch current pan/zoom state to all view change listeners.
+   * Called by TransformManager's onViewChanged callback and by the ResizeObserver.
+   */
+  private notifyViewChangeListeners(): void {
+    const panX = this.transformManager.panX;
+    const panY = this.transformManager.panY;
+    const zoom = this.transformManager.zoom;
+    this._externalViewChangedCallback?.(panX, panY, zoom);
+    for (const listener of this._viewChangeListeners) {
+      listener(panX, panY, zoom);
+    }
+  }
+
+  /**
+   * Get the native source image dimensions.
+   */
+  getSourceDimensions(): { width: number; height: number; pixelAspect?: number } {
+    return { width: this.sourceWidth, height: this.sourceHeight, pixelAspect: this.parState.par };
+  }
+
   setColorAdjustments(adjustments: ColorAdjustments): void {
     this.colorPipeline.setColorAdjustments(adjustments);
     this.glRendererManager.setColorAdjustments(adjustments);
@@ -2424,8 +2532,9 @@ export class Viewer {
   }
 
   // Texture filter mode methods (nearest-neighbor vs bilinear)
-  toggleFilterMode(): void {
-    this._textureFilterMode = this._textureFilterMode === 'linear' ? 'nearest' : 'linear';
+  setFilterMode(mode: TextureFilterMode): void {
+    if (mode === this._textureFilterMode) return;
+    this._textureFilterMode = mode;
 
     // Persist preference
     persistFilterModePreference(this._textureFilterMode);
@@ -2445,6 +2554,10 @@ export class Viewer {
     this.scheduleRender();
   }
 
+  toggleFilterMode(): void {
+    this.setFilterMode(this._textureFilterMode === 'linear' ? 'nearest' : 'linear');
+  }
+
   getFilterMode(): TextureFilterMode {
     return this._textureFilterMode;
   }
@@ -2461,7 +2574,7 @@ export class Viewer {
   }
 
   // LUT methods
-  setLUT(lut: LUT3D | null): void {
+  setLUT(lut: LUT | null): void {
     this.colorPipeline.setLUT(lut);
 
     if (this.lutIndicator) {
@@ -2471,7 +2584,7 @@ export class Viewer {
     this.scheduleRender();
   }
 
-  getLUT(): LUT3D | null {
+  getLUT(): LUT | null {
     return this.colorPipeline.getLUT();
   }
 
@@ -2506,8 +2619,44 @@ export class Viewer {
     const sourceId = pipeline.getActiveSourceId() ?? 'default';
     const sourceConfig = pipeline.getSourceConfig(sourceId);
     const state = pipeline.getState();
+    const preCache = sourceConfig?.preCacheLUT;
+    const hasPreCache3D = !!preCache?.lutData && isLUT3D(preCache.lutData) && preCache.enabled;
 
     const gpuChain = this.colorPipeline.gpuLUTChain;
+    if (!gpuChain) {
+      const fallbackLUT = this.colorPipeline.compose3DLUTStages([
+        ...(preCache ? [{ label: 'Pre-Cache', stage: preCache }] : []),
+        ...(sourceConfig?.fileLUT ? [{ label: 'File', stage: sourceConfig.fileLUT }] : []),
+        ...(sourceConfig?.lookLUT ? [{ label: 'Look', stage: sourceConfig.lookLUT }] : []),
+        { label: 'Display', stage: state.displayLUT },
+      ]);
+
+      if (fallbackLUT) {
+        this.pipelineSingleLUTActive = true;
+        this.colorPipeline.setLUT(fallbackLUT);
+        this.colorPipeline.setLUTIntensity(1);
+        if (this.lutIndicator) {
+          this.lutIndicator.style.display = 'block';
+          this.lutIndicator.textContent = fallbackLUT.title ? `LUT: ${fallbackLUT.title}` : 'LUT';
+        }
+      } else if (this.pipelineSingleLUTActive) {
+        this.pipelineSingleLUTActive = false;
+        this.colorPipeline.setLUT(null);
+        this.colorPipeline.setLUTIntensity(1);
+        if (this.lutIndicator) {
+          this.lutIndicator.style.display = 'none';
+        }
+      }
+    } else {
+      if (this.pipelineSingleLUTActive && !hasPreCache3D) {
+        this.pipelineSingleLUTActive = false;
+        this.colorPipeline.setLUT(null);
+        this.colorPipeline.setLUTIntensity(1);
+        if (this.lutIndicator) {
+          this.lutIndicator.style.display = 'none';
+        }
+      }
+    }
     if (gpuChain) {
       const fileLUT = sourceConfig?.fileLUT.lutData;
       const lookLUT = sourceConfig?.lookLUT.lutData;
@@ -2526,20 +2675,16 @@ export class Viewer {
       gpuChain.setDisplayLUTIntensity(state.displayLUT.intensity);
     }
 
-    const preCache = sourceConfig?.preCacheLUT;
-    const hasPreCache3D =
-      !!preCache?.lutData && isLUT3D(preCache.lutData) && preCache.enabled && preCache.intensity > 0;
-
-    if (hasPreCache3D) {
-      this.pipelinePrecacheLUTActive = true;
+    if (gpuChain && hasPreCache3D && preCache!.intensity > 0) {
+      this.pipelineSingleLUTActive = true;
       this.colorPipeline.setLUT(preCache!.lutData);
       this.colorPipeline.setLUTIntensity(preCache!.intensity);
       if (this.lutIndicator) {
         this.lutIndicator.style.display = 'block';
         this.lutIndicator.textContent = preCache?.lutName ? `LUT: ${preCache.lutName}` : 'LUT';
       }
-    } else if (this.pipelinePrecacheLUTActive) {
-      this.pipelinePrecacheLUTActive = false;
+    } else if (gpuChain && this.pipelineSingleLUTActive) {
+      this.pipelineSingleLUTActive = false;
       this.colorPipeline.setLUT(null);
       this.colorPipeline.setLUTIntensity(1);
       if (this.lutIndicator) {
@@ -2677,6 +2822,21 @@ export class Viewer {
   resetNoiseReductionParams(): void {
     this.noiseReductionParams = { ...DEFAULT_NOISE_REDUCTION_PARAMS };
     this.notifyEffectsChanged();
+    this.scheduleRender();
+  }
+
+  setLinearize(state: import('../../core/types/color').LinearizeState): void {
+    this.glRendererManager.setLinearize(state);
+    this.scheduleRender();
+  }
+
+  setOutOfRange(mode: number): void {
+    this.glRendererManager.setOutOfRange(mode);
+    this.scheduleRender();
+  }
+
+  setChannelSwizzle(swizzle: import('../../core/types/color').ChannelSwizzle): void {
+    this.glRendererManager.setChannelSwizzle(swizzle);
     this.scheduleRender();
   }
 
@@ -3020,7 +3180,9 @@ export class Viewer {
     const imageData = this.getImageData();
     if (!imageData) return null;
 
-    return extractStereoEyes(imageData, 'side-by-side', stereoState.eyeSwap);
+    const inputFormat = this.stereoManager.getStereoInputFormat();
+    const rightEyeData = this.stereoManager.getRightEyeImageData() ?? undefined;
+    return extractStereoEyes(imageData, inputFormat, stereoState.eyeSwap, rightEyeData);
   }
 
   // Difference matte methods
@@ -3103,10 +3265,15 @@ export class Viewer {
   }
 
   // HDR output mode (delegates to renderer when available)
-  setHDROutputMode(mode: 'sdr' | 'hlg' | 'pq' | 'extended'): void {
+  setHDROutputMode(mode: 'sdr' | 'hlg' | 'pq' | 'extended'): boolean {
     if (this.glRendererManager.glRenderer && this.glRendererManager.capabilities) {
-      this.glRendererManager.glRenderer.setHDROutputMode(mode, this.glRendererManager.capabilities);
+      const accepted = this.glRendererManager.glRenderer.setHDROutputMode(mode, this.glRendererManager.capabilities);
+      if (accepted) {
+        this.scheduleRender();
+      }
+      return accepted;
     }
+    return false;
   }
 
   // Pixel Aspect Ratio methods
@@ -3135,6 +3302,10 @@ export class Viewer {
     return { ...this.backgroundPatternState };
   }
 
+  getViewportSize(): { width: number; height: number } {
+    return { width: this.displayWidth, height: this.displayHeight };
+  }
+
   resetBackgroundPatternState(): void {
     this.backgroundPatternState = { ...DEFAULT_BACKGROUND_PATTERN_STATE };
     this.updateCSSBackground();
@@ -3150,6 +3321,8 @@ export class Viewer {
       displayBrightness: state.displayBrightness,
       customGamma: state.customGamma,
     });
+    // Update the display profile indicator overlay (flash on transfer function change)
+    this.overlayManager.getDisplayProfileIndicator().setDisplayState(state, true);
     this.notifyEffectsChanged();
     this.scheduleRender();
   }
@@ -3166,6 +3339,8 @@ export class Viewer {
       displayBrightness: DEFAULT_DISPLAY_COLOR_STATE.displayBrightness,
       customGamma: DEFAULT_DISPLAY_COLOR_STATE.customGamma,
     });
+    // Update the display profile indicator overlay
+    this.overlayManager.getDisplayProfileIndicator().setDisplayState(DEFAULT_DISPLAY_COLOR_STATE, true);
     this.notifyEffectsChanged();
     this.scheduleRender();
   }
@@ -3356,9 +3531,34 @@ export class Viewer {
     this.watermarkOverlay.render(ctx, canvas.width, canvas.height);
   }
 
+  /**
+   * Build an export config for the bug overlay if it is enabled and has an image.
+   * Returns null when the bug overlay should not be burned into exports.
+   */
+  private getExportBugOverlayConfig(): BugOverlayExportConfig | null {
+    const bug = this.overlayManager.getBugOverlay();
+    if (!bug.isEnabled() || !bug.hasImage()) return null;
+    const state = bug.getState();
+    const image = bug.getImage();
+    if (!image) return null;
+    const dims = bug.getImageDimensions();
+    if (dims.width <= 0 || dims.height <= 0) return null;
+    return {
+      enabled: true,
+      image,
+      imageWidth: dims.width,
+      imageHeight: dims.height,
+      position: state.position,
+      size: state.size,
+      opacity: state.opacity,
+      margin: state.margin,
+    };
+  }
+
   createExportCanvas(includeAnnotations: boolean, colorSpace?: 'srgb' | 'display-p3'): HTMLCanvasElement | null {
     const cropRegion = this.cropManager.getExportCropRegion();
     const frameburnOptions = this.getExportFrameburnOptions(this.session.currentFrame);
+    const bugOverlayConfig = this.getExportBugOverlayConfig();
     const canvas = createExportCanvasUtil(
       this.session,
       this.paintEngine,
@@ -3369,6 +3569,9 @@ export class Viewer {
       cropRegion,
       colorSpace,
       frameburnOptions,
+      undefined,
+      undefined,
+      bugOverlayConfig,
     );
     if (canvas) {
       this.applyWatermarkToCanvas(canvas);
@@ -3380,9 +3583,15 @@ export class Viewer {
    * Render a specific frame to a canvas (for sequence export)
    * Seeks to the frame, renders, and returns the canvas
    */
-  async renderFrameToCanvas(frame: number, includeAnnotations: boolean): Promise<HTMLCanvasElement | null> {
+  async renderFrameToCanvas(
+    frame: number,
+    includeAnnotations: boolean,
+    advancedFrameburnConfig?: import('./FrameburnCompositor').FrameburnConfig | null,
+    advancedFrameburnContext?: import('./FrameburnCompositor').FrameburnContext | null,
+  ): Promise<HTMLCanvasElement | null> {
     const cropRegion = this.cropManager.getExportCropRegion();
     const frameburnOptions = this.getExportFrameburnOptions(frame);
+    const bugOverlayConfig = this.getExportBugOverlayConfig();
     const canvas = await renderFrameToCanvasUtil(
       this.session,
       this.paintEngine,
@@ -3394,6 +3603,9 @@ export class Viewer {
       cropRegion,
       undefined,
       frameburnOptions,
+      advancedFrameburnConfig,
+      advancedFrameburnContext,
+      bugOverlayConfig,
     );
     if (canvas) {
       this.applyWatermarkToCanvas(canvas);
@@ -3661,6 +3873,18 @@ export class Viewer {
   }
 
   /**
+   * Update the display capabilities reference after a display change
+   * (e.g., window moved from SDR to HDR monitor). The capabilities object
+   * is already mutated in-place by watchDisplayChanges(); this method
+   * triggers a re-evaluation of HDR headroom and a render update.
+   */
+  updateDisplayCapabilities(caps: DisplayCapabilities): void {
+    this.capabilities = caps;
+    this.syncHDRHeadroomFromSystem();
+    this.scheduleRender();
+  }
+
+  /**
    * Get source ImageData before color pipeline (for pixel probe "source" mode)
    * Returns ImageData of the original source scaled to display dimensions
    * Uses a cached canvas to avoid creating new canvases on every mouse move
@@ -3707,6 +3931,17 @@ export class Viewer {
   }
 
   /**
+   * Convert client (mouse event) coordinates to image pixel coordinates.
+   * Uses the image canvas bounding rect and display dimensions for correct
+   * mapping regardless of zoom, pan, letterboxing, or canvas stacking.
+   * Returns null if the coordinates are outside the image canvas bounds.
+   */
+  getPixelCoordinatesFromClient(clientX: number, clientY: number): { x: number; y: number } | null {
+    const canvasRect = this.getImageCanvasRect();
+    return getPixelCoordinates(clientX, clientY, canvasRect, this.displayWidth, this.displayHeight);
+  }
+
+  /**
    * Get the safe areas overlay instance
    */
   getSafeAreasOverlay(): SafeAreasOverlay {
@@ -3718,6 +3953,20 @@ export class Viewer {
    */
   getMatteOverlay(): MatteOverlay {
     return this.overlayManager.getMatteOverlay();
+  }
+
+  /**
+   * Get current matte overlay settings.
+   */
+  getMatteSettings(): MatteSettings {
+    return this.overlayManager.getMatteOverlay().getSettings();
+  }
+
+  /**
+   * Update matte overlay settings (partial merge).
+   */
+  setMatteSettings(settings: Partial<MatteSettings>): void {
+    this.overlayManager.getMatteOverlay().setSettings(settings);
   }
 
   /**
@@ -3803,13 +4052,26 @@ export class Viewer {
   }
 
   /**
+   * Get the presence overlay instance for showing connected participant avatars
+   */
+  getPresenceOverlay(): import('./PresenceOverlay').PresenceOverlay {
+    return this.overlayManager.getPresenceOverlay();
+  }
+
+  /**
    * Set (or clear) a reference image for overlay comparison.
    *
    * When imageData is non-null the reference is composited on top of the
    * live image canvas using the given viewMode and opacity.
    * Pass `null` to disable the reference overlay.
    */
-  setReferenceImage(imageData: ImageData | null, viewMode: string, opacity: number): void {
+  setReferenceImage(
+    imageData: ImageData | null,
+    viewMode: string,
+    opacity: number,
+    wipePosition = 0.5,
+    showingReference = true,
+  ): void {
     if (!imageData || viewMode === 'off') {
       // Hide the overlay canvas if present
       if (this._referenceCanvas) {
@@ -3855,8 +4117,7 @@ export class Viewer {
       ctx.drawImage(tmp, 0, 0, cw, ch);
       ctx.globalAlpha = 1;
     } else if (viewMode === 'split-h') {
-      // Left half shows reference
-      const splitX = Math.round(cw * 0.5);
+      const splitX = Math.round(cw * Math.max(0, Math.min(1, wipePosition)));
       ctx.save();
       ctx.beginPath();
       ctx.rect(0, 0, splitX, ch);
@@ -3864,8 +4125,7 @@ export class Viewer {
       ctx.drawImage(tmp, 0, 0, cw, ch);
       ctx.restore();
     } else if (viewMode === 'split-v') {
-      // Top half shows reference
-      const splitY = Math.round(ch * 0.5);
+      const splitY = Math.round(ch * Math.max(0, Math.min(1, wipePosition)));
       ctx.save();
       ctx.beginPath();
       ctx.rect(0, 0, cw, splitY);
@@ -3876,8 +4136,10 @@ export class Viewer {
       // Draw reference in left half, live in right half (just draw ref)
       ctx.drawImage(tmp, 0, 0, Math.round(cw / 2), ch);
     } else if (viewMode === 'toggle') {
-      // Full replacement
-      ctx.drawImage(tmp, 0, 0, cw, ch);
+      // Draw reference only when showingReference is true; otherwise live frame shows through
+      if (showingReference) {
+        ctx.drawImage(tmp, 0, 0, cw, ch);
+      }
     }
 
     this.scheduleRender();
@@ -3902,6 +4164,15 @@ export class Viewer {
       source?.width ?? 0,
       source?.height ?? 0,
     );
+  }
+
+  /**
+   * Clear the prerender (effects) cache
+   */
+  clearPrerenderCache(): void {
+    if (this.prerenderBuffer) {
+      this.prerenderBuffer.clear();
+    }
   }
 
   /**

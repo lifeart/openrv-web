@@ -15,7 +15,7 @@ function createTestLUT3D(): LUT3D {
       }
     }
   }
-  return { title: 'Test', size, domainMin: [0, 0, 0], domainMax: [1, 1, 1], data };
+  return { type: '3d', title: 'Test', size, domainMin: [0, 0, 0], domainMax: [1, 1, 1], data };
 }
 
 function createTestLUT1D(): LUT1D {
@@ -27,7 +27,7 @@ function createTestLUT1D(): LUT1D {
     data[i * 3 + 1] = v;
     data[i * 3 + 2] = v;
   }
-  return { title: 'Test 1D', size, domainMin: [0, 0, 0], domainMax: [1, 1, 1], data };
+  return { type: '1d', title: 'Test 1D', size, domainMin: [0, 0, 0], domainMax: [1, 1, 1], data };
 }
 
 describe('LUTStage', () => {

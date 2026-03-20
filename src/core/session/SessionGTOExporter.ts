@@ -172,6 +172,8 @@ export interface StackGroupSettings {
   layerBlendModes?: string[];
   /** Per-layer opacities (indexed by input, 0-1) */
   layerOpacities?: number[];
+  /** Per-layer visibility (indexed by input) */
+  layerVisible?: boolean[];
 }
 
 /**
@@ -358,6 +360,28 @@ export interface DisplayStereoSettings {
   relativeOffset?: number;
   /** Right eye offset */
   rightOffset?: [number, number];
+  /** Stereo alignment overlay mode */
+  alignMode?: string;
+  /** Per-eye geometric transforms */
+  eyeTransform?: {
+    linked?: boolean;
+    left?: {
+      flipH?: boolean;
+      flipV?: boolean;
+      rotation?: number;
+      scale?: number;
+      translateX?: number;
+      translateY?: number;
+    };
+    right?: {
+      flipH?: boolean;
+      flipV?: boolean;
+      rotation?: number;
+      scale?: number;
+      translateX?: number;
+      translateY?: number;
+    };
+  };
 }
 
 /**
@@ -737,9 +761,20 @@ export class SessionGTOExporter {
       stackObject.component('composite').string('type', settings.layerBlendModes).end();
     }
 
-    if (settings?.layerOpacities && settings.layerOpacities.length > 0) {
-      const outputComp = stackObject.component('layerOutput');
-      outputComp.float('opacity', settings.layerOpacities).end();
+    const hasOpacities = settings?.layerOpacities && settings.layerOpacities.length > 0;
+    const hasVisible = settings?.layerVisible && settings.layerVisible.length > 0;
+    if (hasOpacities || hasVisible) {
+      const layerOutputComp = stackObject.component('layerOutput');
+      if (hasOpacities) {
+        layerOutputComp.float('opacity', settings!.layerOpacities!);
+      }
+      if (hasVisible) {
+        layerOutputComp.int(
+          'visible',
+          settings!.layerVisible!.map((v) => (v ? 1 : 0)),
+        );
+      }
+      layerOutputComp.end();
     }
 
     stackObject.end();
@@ -1233,13 +1268,53 @@ export class SessionGTOExporter {
     const displayStereoObject = builder.object(name, 'RVDisplayStereo', 1);
 
     // Stereo component
-    displayStereoObject
+    const stereoComponent = displayStereoObject
       .component('stereo')
       .string('type', settings.type ?? 'off')
       .int('swap', settings.swap ? 1 : 0)
       .float('relativeOffset', settings.relativeOffset ?? 0.0)
-      .float2('rightOffset', [settings.rightOffset ?? [0, 0]])
-      .end();
+      .float2('rightOffset', [settings.rightOffset ?? [0, 0]]);
+
+    if (settings.alignMode) {
+      stereoComponent.string('alignMode', settings.alignMode);
+    }
+
+    stereoComponent.end();
+
+    // Per-eye transforms
+    if (settings.eyeTransform) {
+      const et = settings.eyeTransform;
+
+      // Linked flag
+      displayStereoObject
+        .component('eyeTransform')
+        .int('linked', et.linked ? 1 : 0)
+        .end();
+
+      if (et.left) {
+        displayStereoObject
+          .component('leftEyeTransform')
+          .int('flipH', et.left.flipH ? 1 : 0)
+          .int('flipV', et.left.flipV ? 1 : 0)
+          .float('rotation', et.left.rotation ?? 0)
+          .float('scale', et.left.scale ?? 1)
+          .float('translateX', et.left.translateX ?? 0)
+          .float('translateY', et.left.translateY ?? 0)
+          .end();
+      }
+
+      if (et.right) {
+        displayStereoObject
+          .component('rightEyeTransform')
+          .int('flipH', et.right.flipH ? 1 : 0)
+          .int('flipV', et.right.flipV ? 1 : 0)
+          .float('rotation', et.right.rotation ?? 0)
+          .float('scale', et.right.scale ?? 1)
+          .float('translateX', et.right.translateX ?? 0)
+          .float('translateY', et.right.translateY ?? 0)
+          .end();
+      }
+    }
 
     displayStereoObject.end();
     return builder.build().objects[0]!;
@@ -1476,6 +1551,10 @@ export class SessionGTOExporter {
         'markerColors',
         playback.marks.map((m) => m.color || '#ff4444'),
       )
+      .int(
+        'markerEndFrames',
+        playback.marks.map((m) => m.endFrame ?? -1),
+      )
       .int('version', metadata.version)
       .int('clipboard', metadata.clipboard)
       .float4('bgColor', [metadata.bgColor ?? [0.18, 0.18, 0.18, 1.0]])
@@ -1652,11 +1731,17 @@ export class SessionGTOExporter {
             'markerColors',
             playback.marks.map((m) => m.color || '#ff4444'),
           );
+          this.updateProperty(
+            sessionComp,
+            'markerEndFrames',
+            playback.marks.map((m) => m.endFrame ?? -1),
+          );
         } else {
           // Remove marks property if empty? Or set to empty array?
           this.updateProperty(sessionComp, 'marks', []);
           this.updateProperty(sessionComp, 'markerNotes', []);
           this.updateProperty(sessionComp, 'markerColors', []);
+          this.updateProperty(sessionComp, 'markerEndFrames', []);
         }
 
         // Update notes component — rebuild from scratch to avoid stale slots

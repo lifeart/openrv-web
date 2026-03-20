@@ -1,6 +1,6 @@
 # EXR Multi-Layer and AOV Workflow
 
-OpenRV EXR support extends beyond simple image display to include multi-layer files with AOV (Arbitrary Output Variable) selection and channel remapping. This workflow is essential for VFX compositing review where artists need to inspect individual render passes.
+OpenRV Web supports multi-layer EXR files with AOV (Arbitrary Output Variable) selection and channel remapping, allowing artists to inspect individual render passes without opening a compositing application.
 
 ![EXR file loaded in OpenRV Web](/assets/screenshots/22-exr-loaded.png)
 
@@ -8,7 +8,7 @@ OpenRV EXR support extends beyond simple image display to include multi-layer fi
 
 ## Multi-Layer EXR Overview
 
-OpenRV Web decodes EXR files using a WebAssembly decoder with Float32 HDR precision. Multi-layer EXR files contain multiple named layers, each representing a different render pass or data channel. Common layers include:
+OpenRV Web decodes EXR files using a TypeScript decoder with Float32 HDR precision. Multi-layer EXR files contain multiple named layers, each representing a different render pass or data channel. Common layers include:
 
 | Layer | Purpose |
 |-------|---------|
@@ -64,10 +64,11 @@ The EXR decoder extracts layer information during decoding:
 OpenRV Web supports multiple EXR compression methods:
 
 - **PIZ** -- wavelet compression using Huffman, Haar transform, and LUT encoding. Best for grainy or noisy images.
-- **DWA** -- lossy DCT-based compression. Good for preview-quality images at smaller file sizes.
+- **DWA** (DWAA/DWAB) -- lossy DCT-based compression. Good for preview-quality images at smaller file sizes.
 - **ZIP** and **ZIPS** -- standard deflate compression.
 - **RLE** -- run-length encoding for images with large flat areas.
-- **Uncompressed** -- no compression, fastest decode.
+- **PXR24** -- lossy compression for float channels (lossless for half-float). Truncates 32-bit floats to 24 bits.
+- **Uncompressed** (NONE) -- no compression, fastest decode.
 
 ## Multi-View EXR
 
@@ -99,7 +100,7 @@ A typical AOV inspection workflow:
 1. Load a multi-layer EXR file
 2. Start with the beauty pass (usually the default layer)
 3. Select different layers from the dropdown to inspect render passes
-4. Use channel isolation (`Shift+R`, `Shift+G`, `Shift+B`) to examine individual channels within a layer
+4. Use channel isolation (e.g., `Shift+G` for green, or the Channel Select dropdown for red/blue) to examine individual channels within a layer
 5. Use the pixel probe (`Shift+I`) to read exact Float32 values
 6. Compare layers with the A/B switching or wipe tools
 

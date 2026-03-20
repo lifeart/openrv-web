@@ -448,4 +448,262 @@ describe('KeyBindings', () => {
       expect(desc).toBe('Ctrl+←');
     });
   });
+
+  describe('dead context regression (Issue #10)', () => {
+    /**
+     * Production only activates these contexts via tab switching (see App.ts):
+     *   'global', 'paint', 'viewer', 'panel', 'transform'
+     *
+     * No binding should reference a context that is never activated in production.
+     */
+    const PRODUCTION_CONTEXTS = new Set(['global', 'paint', 'viewer', 'panel', 'transform', 'color']);
+
+    it('KB-U090: no binding references a dead context', () => {
+      for (const [action, binding] of Object.entries(DEFAULT_KEY_BINDINGS)) {
+        if (binding.context) {
+          expect(
+            PRODUCTION_CONTEXTS.has(binding.context),
+            `Binding "${action}" references dead context "${binding.context}". ` +
+              `Only these contexts are activated in production: ${[...PRODUCTION_CONTEXTS].join(', ')}`,
+          ).toBe(true);
+        }
+      }
+    });
+
+    it('KB-U091: context-restricted bindings only use contexts activated by production tab switching', () => {
+      // Map of tab -> context from App.ts
+      const TAB_CONTEXT_MAP: Record<string, string> = {
+        annotate: 'paint',
+        transform: 'transform',
+        view: 'viewer',
+        qc: 'panel',
+        color: 'color',
+        // effects -> 'global' (default)
+      };
+      const activatedContexts = new Set([...Object.values(TAB_CONTEXT_MAP), 'global']);
+
+      for (const [action, binding] of Object.entries(DEFAULT_KEY_BINDINGS)) {
+        const ctx = binding.context ?? 'global';
+        expect(activatedContexts.has(ctx), `Binding "${action}" uses context "${ctx}" which no tab activates`).toBe(
+          true,
+        );
+      }
+    });
+
+    it('KB-U092: timeline.setOutPoint has no context restriction (works globally)', () => {
+      const binding = DEFAULT_KEY_BINDINGS['timeline.setOutPoint'];
+      expect(binding).toBeDefined();
+      expect(binding!.context).toBeUndefined();
+    });
+
+    it('KB-U093: timeline.resetInOut has no context restriction (works globally)', () => {
+      const binding = DEFAULT_KEY_BINDINGS['timeline.resetInOut'];
+      expect(binding).toBeDefined();
+      expect(binding!.context).toBeUndefined();
+    });
+
+    it('KB-U094: notes.addNote uses paint context (not dead annotate context)', () => {
+      const binding = DEFAULT_KEY_BINDINGS['notes.addNote'];
+      expect(binding).toBeDefined();
+      expect(binding!.context).toBe('paint');
+    });
+  });
+
+  describe('save/export shortcut accuracy (Issue #300)', () => {
+    it('KB-U100: Ctrl+S is wired to frame export, not project save', () => {
+      const binding = DEFAULT_KEY_BINDINGS['export.quickExport'];
+      expect(binding).toBeDefined();
+      expect(binding!.code).toBe('KeyS');
+      expect(binding!.ctrl).toBe(true);
+      expect(binding!.shift).toBeUndefined();
+      expect(binding!.alt).toBeUndefined();
+    });
+
+    it('KB-U101: Ctrl+Shift+S is wired to snapshot creation, not project save', () => {
+      const binding = DEFAULT_KEY_BINDINGS['snapshot.create'];
+      expect(binding).toBeDefined();
+      expect(binding!.code).toBe('KeyS');
+      expect(binding!.ctrl).toBe(true);
+      expect(binding!.shift).toBe(true);
+      expect(binding!.alt).toBeUndefined();
+    });
+
+    it('KB-U102: no binding exists for project save', () => {
+      const saveBindings = Object.entries(DEFAULT_KEY_BINDINGS).filter(
+        ([action]) => action === 'project.save' || action === 'file.save' || action === 'session.save',
+      );
+      expect(saveBindings).toHaveLength(0);
+    });
+
+    it('KB-U103: Ctrl+S and Ctrl+Shift+S do not conflict (different modifier sets)', () => {
+      const ctrlS = DEFAULT_KEY_BINDINGS['export.quickExport']!;
+      const ctrlShiftS = DEFAULT_KEY_BINDINGS['snapshot.create']!;
+
+      // Same base key but different modifiers
+      expect(ctrlS.code).toBe(ctrlShiftS.code);
+      expect(ctrlS.shift).toBeUndefined();
+      expect(ctrlShiftS.shift).toBe(true);
+    });
+  });
+
+  describe('shortcut reference doc has no duplicate key assignments (Issue #349)', () => {
+    it('KB-U107: keyboard-shortcuts.md does not list the same shortcut for two different actions in the same section', async () => {
+      // @ts-ignore -- Node modules available in test environment
+      const fs = await import('fs');
+      // @ts-ignore -- Node modules available in test environment
+      const path = await import('path');
+      // @ts-ignore -- __dirname available in test environment
+      const docPath = path.resolve(__dirname, '../../../docs/reference/keyboard-shortcuts.md');
+      const content = fs.readFileSync(docPath, 'utf-8');
+
+      // Split into sections by ## headings
+      const sections = content.split(/^## /m).slice(1); // skip preamble before first ##
+      const duplicates: string[] = [];
+
+      // Annotations section uses bare keys that overlap with global shortcuts on purpose
+      // (context-dependent). We check for duplicates within each section.
+      for (const section of sections) {
+        const sectionName = section.split('\n')[0].trim();
+        const shortcutRowRegex = /^\|\s*`([^`]+)`\s*\|(.+)\|$/gm;
+        const seen = new Map<string, string>();
+
+        let match;
+        while ((match = shortcutRowRegex.exec(section)) !== null) {
+          const shortcut = match[1]!.trim();
+          const action = match[2]!.trim();
+
+          // Skip header rows
+          if (shortcut === 'Shortcut' || shortcut === 'Action') continue;
+
+          if (seen.has(shortcut)) {
+            duplicates.push(
+              `[${sectionName}] "${shortcut}" is assigned to both "${seen.get(shortcut)}" and "${action}"`,
+            );
+          } else {
+            seen.set(shortcut, action);
+          }
+        }
+      }
+
+      expect(
+        duplicates,
+        `Duplicate shortcut assignments found in keyboard-shortcuts.md:\n${duplicates.join('\n')}`,
+      ).toHaveLength(0);
+    });
+
+    it('KB-U109: keyboard-shortcuts.md cross-section duplicates are only contextual shortcuts', async () => {
+      // @ts-ignore -- Node modules available in test environment
+      const fs = await import('fs');
+      // @ts-ignore -- Node modules available in test environment
+      const path = await import('path');
+      // @ts-ignore -- __dirname available in test environment
+      const docPath = path.resolve(__dirname, '../../../docs/reference/keyboard-shortcuts.md');
+      const content = fs.readFileSync(docPath, 'utf-8');
+
+      // Modifier shortcuts may appear in multiple sections when they are contextual
+      // (same key does different things on different tabs). The Contextual Shortcuts
+      // section intentionally duplicates these. Non-contextual modifier shortcuts
+      // should not appear in multiple sections.
+      const sections = content.split(/^## /m).slice(1);
+      const modifierShortcuts = new Map<string, string>(); // shortcut -> "section: action"
+      const duplicates: string[] = [];
+
+      // Known contextual shortcuts that intentionally appear in multiple sections
+      const contextualShortcuts = new Set([
+        'Shift+R',
+        'Shift+B',
+        'Shift+N',
+        'Shift+L',
+        'Shift+Alt+N', // notes panel appears in both Panels and Notes Navigation
+      ]);
+
+      for (const section of sections) {
+        const sectionName = section.split('\n')[0].trim();
+        // Skip Mouse Controls section (different table format)
+        if (sectionName === 'Mouse Controls') continue;
+
+        const shortcutRowRegex = /^\|\s*`([^`]+)`\s*\|(.+)\|$/gm;
+        let match;
+        while ((match = shortcutRowRegex.exec(section)) !== null) {
+          const shortcut = match[1]!.trim();
+          const action = match[2]!.trim();
+          if (shortcut === 'Shortcut' || shortcut === 'Action') continue;
+
+          // Only check shortcuts with modifiers (Shift+, Ctrl+, Alt+)
+          if (!shortcut.includes('+')) continue;
+
+          // Skip known contextual shortcuts
+          if (contextualShortcuts.has(shortcut)) continue;
+
+          const key = shortcut;
+          if (modifierShortcuts.has(key)) {
+            duplicates.push(`"${key}" appears in [${modifierShortcuts.get(key)}] and [${sectionName}: ${action}]`);
+          } else {
+            modifierShortcuts.set(key, `${sectionName}: ${action}`);
+          }
+        }
+      }
+
+      expect(
+        duplicates,
+        `Cross-section duplicate modifier shortcuts in keyboard-shortcuts.md:\n${duplicates.join('\n')}`,
+      ).toHaveLength(0);
+    });
+
+    it('KB-U108: contextual channel shortcuts are documented with tab-specific notes', async () => {
+      // @ts-ignore -- Node modules available in test environment
+      const fs = await import('fs');
+      // @ts-ignore -- Node modules available in test environment
+      const path = await import('path');
+      // @ts-ignore -- __dirname available in test environment
+      const docPath = path.resolve(__dirname, '../../../docs/reference/keyboard-shortcuts.md');
+      const content = fs.readFileSync(docPath, 'utf-8');
+
+      // Channel shortcuts (Shift+R/B/N) are global but overridden on specific tabs.
+      // The docs should list them in the Channel View section AND document
+      // the contextual behavior (which tab overrides them).
+      const contextualShortcuts = [
+        { combo: 'Shift+R', label: 'Red channel' },
+        { combo: 'Shift+B', label: 'Blue channel' },
+        { combo: 'Shift+N', label: 'channel reset' },
+      ];
+
+      // Verify they appear in the Channel View section
+      const channelSectionMatch = content.match(/## Channel View\s*\n([\s\S]*?)(?=\n## |\n>|$)/);
+      expect(channelSectionMatch).not.toBeNull();
+      const channelSection = channelSectionMatch![1];
+
+      for (const { combo, label } of contextualShortcuts) {
+        const rowPattern = new RegExp(`^\\|\\s*\`${combo.replace('+', '\\+')}\`\\s*\\|`, 'm');
+        expect(
+          rowPattern.test(channelSection),
+          `"${combo}" (${label}) should appear in the Channel View table as a global shortcut`,
+        ).toBe(true);
+      }
+
+      // Verify contextual overrides are documented
+      const contextualSectionMatch = content.match(/## Contextual Shortcuts/);
+      expect(contextualSectionMatch, 'Contextual Shortcuts section should exist').not.toBeNull();
+    });
+  });
+
+  describe('snapshot vs history panel shortcut distinction (Issue #339)', () => {
+    it('KB-U104: panel.snapshots shortcut is Ctrl+Shift+Alt+S', () => {
+      const binding = DEFAULT_KEY_BINDINGS['panel.snapshots'];
+      expect(binding).toBeDefined();
+      expect(describeKeyCombo(binding!)).toBe('Ctrl+Shift+Alt+S');
+    });
+
+    it('KB-U105: panel.history shortcut is Shift+Alt+H', () => {
+      const binding = DEFAULT_KEY_BINDINGS['panel.history'];
+      expect(binding).toBeDefined();
+      expect(describeKeyCombo(binding!)).toBe('Shift+Alt+H');
+    });
+
+    it('KB-U106: snapshot and history panels have different shortcuts', () => {
+      const snapshotBinding = DEFAULT_KEY_BINDINGS['panel.snapshots']!;
+      const historyBinding = DEFAULT_KEY_BINDINGS['panel.history']!;
+      expect(describeKeyCombo(snapshotBinding)).not.toBe(describeKeyCombo(historyBinding));
+    });
+  });
 });

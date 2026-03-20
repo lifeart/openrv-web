@@ -32,6 +32,7 @@ export class BackgroundPatternControl extends EventEmitter<BackgroundPatternCont
   private isOpen = false;
   private boundHandleOutsideClick: (e: MouseEvent) => void;
   private boundHandleReposition: () => void;
+  private boundHandleKeydown: (e: KeyboardEvent) => void;
   /** Tracks previous pattern before toggling to checker, for toggle-back */
   private previousPattern: BackgroundPatternType = 'black';
 
@@ -40,6 +41,7 @@ export class BackgroundPatternControl extends EventEmitter<BackgroundPatternCont
 
     this.boundHandleOutsideClick = (e: MouseEvent) => this.handleOutsideClick(e);
     this.boundHandleReposition = () => this.positionDropdown();
+    this.boundHandleKeydown = (e: KeyboardEvent) => this.handleDropdownKeydown(e);
 
     this.container = document.createElement('div');
     this.container.className = 'background-pattern-control';
@@ -450,6 +452,7 @@ export class BackgroundPatternControl extends EventEmitter<BackgroundPatternCont
     this.buildDropdown();
 
     document.addEventListener('click', this.boundHandleOutsideClick);
+    document.addEventListener('keydown', this.boundHandleKeydown);
     window.addEventListener('scroll', this.boundHandleReposition, true);
     window.addEventListener('resize', this.boundHandleReposition);
   }
@@ -461,6 +464,7 @@ export class BackgroundPatternControl extends EventEmitter<BackgroundPatternCont
     this.updateButtonStyle();
 
     document.removeEventListener('click', this.boundHandleOutsideClick);
+    document.removeEventListener('keydown', this.boundHandleKeydown);
     window.removeEventListener('scroll', this.boundHandleReposition, true);
     window.removeEventListener('resize', this.boundHandleReposition);
   }
@@ -475,6 +479,36 @@ export class BackgroundPatternControl extends EventEmitter<BackgroundPatternCont
     const target = e.target as HTMLElement;
     if (!this.dropdown.contains(target) && !this.button.contains(target)) {
       this.closeDropdown();
+    }
+  }
+
+  private handleDropdownKeydown(e: KeyboardEvent): void {
+    if (e.key === 'Escape') {
+      this.closeDropdown();
+      return;
+    }
+
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Home' || e.key === 'End') {
+      e.preventDefault();
+      const focusable = Array.from(
+        this.dropdown.querySelectorAll<HTMLElement>('[role="radio"], button, input, [tabindex="0"]'),
+      ).filter((el) => !el.hidden && (el as HTMLButtonElement).disabled !== true);
+      if (focusable.length === 0) return;
+
+      const currentIndex = focusable.indexOf(document.activeElement as HTMLElement);
+      let nextIndex: number;
+
+      if (e.key === 'Home') {
+        nextIndex = 0;
+      } else if (e.key === 'End') {
+        nextIndex = focusable.length - 1;
+      } else if (e.key === 'ArrowDown') {
+        nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % focusable.length;
+      } else {
+        nextIndex = currentIndex <= 0 ? focusable.length - 1 : currentIndex - 1;
+      }
+
+      focusable[nextIndex]?.focus();
     }
   }
 

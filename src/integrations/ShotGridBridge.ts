@@ -61,6 +61,28 @@ export interface ShotGridNote {
   note_links: Array<{ type: string; id: number }>;
   created_at: string;
   user: { type: 'HumanUser'; id: number; name: string };
+  /** First frame number (may be null if not set in ShotGrid) */
+  sg_first_frame: number | null;
+  /** Last frame number (may be null if not set in ShotGrid) */
+  sg_last_frame: number | null;
+  /** Frame range string, e.g. '1045-1052' (may be null) */
+  frame_range: string | null;
+  /** ShotGrid note status (e.g. 'opn', 'clsd', 'res') */
+  sg_status_list: string | null;
+  /** Reply-to entity reference for threaded notes */
+  reply_to_entity: { type: 'Note'; id: number } | null;
+}
+
+/** Serialized annotation summary for a single frame */
+export interface AnnotationSummary {
+  /** Frame number this annotation is on */
+  frame: number;
+  /** Annotation type: 'pen', 'text', or 'shape' */
+  type: string;
+  /** User who created the annotation */
+  user: string;
+  /** Brief description (e.g. stroke point count, text content preview) */
+  description: string;
 }
 
 /** Options for pushNote */
@@ -69,6 +91,14 @@ export interface PushNoteOptions {
   text: string;
   /** Frame range string, e.g. '1045-1052' */
   frameRange?: string;
+  /** Annotation summaries for this note's frame range */
+  annotations?: AnnotationSummary[];
+  /** Thumbnail image blob (PNG/JPEG) to upload as an attachment after note creation */
+  thumbnailBlob?: Blob;
+  /** ShotGrid note ID to reply to (for threading) */
+  replyToNoteId?: number;
+  /** ShotGrid note status code (e.g. 'opn', 'clsd') */
+  noteStatus?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -76,23 +106,30 @@ export interface PushNoteOptions {
 // ---------------------------------------------------------------------------
 
 const LOCAL_TO_SG: Record<ShotStatus, string> = {
+  pending: 'pnd',
+  // ShotGrid's "In Progress" (ip) is the closest match for "in-review".
+  // Studios with custom statuses may need to override this mapping.
+  'in-review': 'ip',
   approved: 'apr',
   'needs-work': 'rev',
   cbb: 'cbb',
-  pending: 'pnd',
+  final: 'fin',
+  'on-hold': 'hld',
   omit: 'omt',
 };
 
 const SG_TO_LOCAL: Record<string, ShotStatus> = {
+  pnd: 'pending',
+  // ShotGrid's "In Progress" is the closest match for local "in-review";
+  // studios may need to customize this if they use a dedicated review status.
+  ip: 'in-review',
   apr: 'approved',
   rev: 'needs-work',
   cbb: 'cbb',
-  pnd: 'pending',
-  omt: 'omit',
-  fin: 'approved', // 'final' maps to approved
-  ip: 'pending', // 'in progress' maps to pending
-  hld: 'pending', // 'on hold' maps to pending
+  fin: 'final', // 'final' maps to final
+  hld: 'on-hold', // 'on hold' maps to on-hold
   wtg: 'pending', // 'waiting to start' maps to pending
+  omt: 'omit',
   na: 'omit', // 'not applicable' maps to omit
   vwd: 'approved', // 'viewed' maps to approved
 };
@@ -109,6 +146,42 @@ export function mapStatusToShotGrid(status: ShotStatus): string {
  */
 export function mapStatusFromShotGrid(sgStatus: string): ShotStatus {
   return SG_TO_LOCAL[sgStatus] ?? 'pending';
+}
+
+// ---------------------------------------------------------------------------
+// Note status mapping (NoteStatus <-> ShotGrid sg_status_list for Note entities)
+// ---------------------------------------------------------------------------
+
+import type { NoteStatus } from '../core/session/NoteManager';
+
+const NOTE_LOCAL_TO_SG: Record<NoteStatus, string> = {
+  open: 'opn',
+  resolved: 'clsd',
+  wontfix: 'clsd', // ShotGrid has no distinct "wontfix" status; map to Closed (terminal state)
+};
+
+const NOTE_SG_TO_LOCAL: Record<string, NoteStatus> = {
+  opn: 'open',
+  // Both 'resolved' and 'wontfix' map to 'clsd' on push, so on pull we default
+  // to the more common case ('resolved'). This means 'wontfix' loses fidelity
+  // on round-trip through ShotGrid since SG has no distinct wontfix status.
+  clsd: 'resolved',
+  ip: 'open', // "In Progress" -> open
+};
+
+/**
+ * Map a local NoteStatus to a ShotGrid note status code.
+ */
+export function mapNoteStatusToShotGrid(status: NoteStatus): string {
+  return NOTE_LOCAL_TO_SG[status] ?? 'opn';
+}
+
+/**
+ * Map a ShotGrid note status code to a local NoteStatus.
+ */
+export function mapNoteStatusFromShotGrid(sgStatus: string | null): NoteStatus {
+  if (!sgStatus) return 'open';
+  return NOTE_SG_TO_LOCAL[sgStatus] ?? 'open';
 }
 
 // ---------------------------------------------------------------------------
@@ -229,6 +302,17 @@ export class ShotGridBridge {
   }
 
   /**
+   * Get a single Version by its ID.
+   */
+  async getVersionById(versionId: number): Promise<ShotGridVersion | null> {
+    const url = `${this.serverUrl}/api/v1/entity/versions/${versionId}` + `?fields=${VERSION_FIELDS}`;
+
+    const response = await this.request(url);
+    const data = await response.json();
+    return (data.data as ShotGridVersion) ?? null;
+  }
+
+  /**
    * Get versions linked to a specific Shot, scoped by project.
    */
   async getVersionsForShot(shotId: number): Promise<ShotGridVersion[]> {
@@ -249,38 +333,60 @@ export class ShotGridBridge {
       `${this.serverUrl}/api/v1/entity/notes` +
       `?filter[note_links]=[{"type":"Version","id":${versionId}}]` +
       `&filter[project]=${this.projectId}` +
-      `&fields=subject,content,note_links,created_at,user`;
+      `&fields=subject,content,note_links,created_at,user,sg_first_frame,sg_last_frame,frame_range,sg_status_list,reply_to_entity`;
 
     return this.fetchAllPages<ShotGridNote>(url);
   }
 
   /**
    * Push a note to ShotGrid linked to a Version.
+   * When annotations are provided, they are appended to the note content.
+   * When a thumbnailBlob is provided, it is uploaded as an attachment to the created note.
    */
   async pushNote(versionId: number, note: PushNoteOptions): Promise<ShotGridNote> {
     const url = `${this.serverUrl}/api/v1/entity/notes`;
     const subject = truncateSubject(note.text);
 
+    // Build content: original text + annotation summary block
+    let content = note.text;
+    if (note.annotations && note.annotations.length > 0) {
+      content += '\n\n--- Annotations ---\n';
+      for (const ann of note.annotations) {
+        content += `[Frame ${ann.frame}] ${ann.type}: ${ann.description} (by ${ann.user})\n`;
+      }
+    }
+
     const attributes: Record<string, string> = {
       subject,
-      content: note.text,
+      content,
     };
     if (note.frameRange) {
       attributes.frame_range = note.frameRange;
+    }
+    if (note.noteStatus) {
+      attributes.sg_status_list = note.noteStatus;
+    }
+
+    const relationships: Record<string, { data: unknown }> = {
+      note_links: {
+        data: [{ type: 'Version', id: versionId }],
+      },
+      project: {
+        data: { type: 'Project', id: this.projectId },
+      },
+    };
+
+    if (note.replyToNoteId != null) {
+      relationships.reply_to_entity = {
+        data: { type: 'Note', id: note.replyToNoteId },
+      };
     }
 
     const body = {
       data: {
         type: 'Note',
         attributes,
-        relationships: {
-          note_links: {
-            data: [{ type: 'Version', id: versionId }],
-          },
-          project: {
-            data: { type: 'Project', id: this.projectId },
-          },
-        },
+        relationships,
       },
     };
 
@@ -290,7 +396,51 @@ export class ShotGridBridge {
     });
 
     const result = await response.json();
-    return result.data as ShotGridNote;
+    const sgNote = result.data as ShotGridNote;
+
+    // Upload thumbnail as attachment if provided
+    if (note.thumbnailBlob) {
+      try {
+        await this.uploadAttachment(sgNote.id, note.thumbnailBlob);
+      } catch (err) {
+        // Attachment upload failure is non-fatal; the note was already created
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        console.warn(`[ShotGrid] Thumbnail upload failed for note ${sgNote.id}: ${message}`);
+      }
+    }
+
+    return sgNote;
+  }
+
+  /**
+   * Upload a thumbnail image as an attachment to a ShotGrid Note entity.
+   * Uses the ShotGrid REST API's file upload endpoint.
+   */
+  async uploadAttachment(noteId: number, blob: Blob, filename = 'annotation_thumbnail.png'): Promise<void> {
+    if (this.disposed) throw new Error('ShotGridBridge is disposed');
+    await this.ensureAuthenticated();
+
+    const url = `${this.serverUrl}/api/v1/entity/notes/${noteId}/_upload`;
+
+    const formData = new FormData();
+    formData.append('image', blob, filename);
+
+    const response = await this.fetchFn(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.accessToken}`,
+        Accept: 'application/json',
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      throw new ShotGridAPIError(response.status, text || response.statusText);
+    }
+
+    // Read response to ensure the upload was accepted
+    await response.json();
   }
 
   /**

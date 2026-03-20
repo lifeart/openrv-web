@@ -23,9 +23,7 @@ import {
 
 async function loadSequenceWithGap(page: Page): Promise<void> {
   const sequenceDir = path.resolve(process.cwd(), 'sample/sequence');
-  const files = ['0001', '0002', '0004', '0005'].map((frameNum) =>
-    path.join(sequenceDir, `frame_${frameNum}.png`)
-  );
+  const files = ['0001', '0002', '0004', '0005'].map((frameNum) => path.join(sequenceDir, `frame_${frameNum}.png`));
 
   const fileInput = page.locator('input[type="file"]').first();
   await fileInput.setInputFiles(files);
@@ -145,7 +143,8 @@ test.describe('Image Sequence Detection', () => {
 
       const loadedState = await getSessionState(page);
       expect(loadedState.mediaType).toBe('sequence');
-      expect(loadedState.frameCount).toBe(4);
+      // 4 files loaded (0001,0002,0004,0005) but the sequence spans frames 1-5 (with a gap at 3)
+      expect(loadedState.frameCount).toBe(5);
 
       // Frame index 3 corresponds to file frame_0004.png with a gap at frame 3.
       await page.keyboard.press('ArrowRight');

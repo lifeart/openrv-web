@@ -7,6 +7,8 @@
 import { getIconSvg } from './Icons';
 import { SHADOWS } from './theme';
 
+export type PanelVisibilityListener = (visible: boolean) => void;
+
 export interface PanelOptions {
   width?: string;
   maxHeight?: string;
@@ -19,6 +21,7 @@ export interface Panel {
   hide: () => void;
   toggle: (anchorElement: HTMLElement) => void;
   isVisible: () => boolean;
+  onVisibilityChange: (listener: PanelVisibilityListener) => () => void;
   dispose: () => void;
 }
 
@@ -45,6 +48,13 @@ export function createPanel(options: PanelOptions = {}): Panel {
   let isVisible = false;
   let currentAnchor: HTMLElement | null = null;
   let previouslyFocusedElement: HTMLElement | null = null;
+  const visibilityListeners = new Set<PanelVisibilityListener>();
+
+  function notifyVisibilityChange(visible: boolean): void {
+    for (const listener of visibilityListeners) {
+      listener(visible);
+    }
+  }
 
   // Close on outside click
   const handleOutsideClick = (e: MouseEvent) => {
@@ -94,6 +104,7 @@ export function createPanel(options: PanelOptions = {}): Panel {
     positionPanel(anchor);
     panel.style.display = 'block';
     isVisible = true;
+    notifyVisibilityChange(true);
 
     // Add listeners
     document.addEventListener('click', handleOutsideClick);
@@ -112,6 +123,7 @@ export function createPanel(options: PanelOptions = {}): Panel {
     panel.style.display = 'none';
     isVisible = false;
     currentAnchor = null;
+    notifyVisibilityChange(false);
 
     // Remove listeners
     document.removeEventListener('click', handleOutsideClick);
@@ -141,12 +153,20 @@ export function createPanel(options: PanelOptions = {}): Panel {
     }
   }
 
+  function onVisibilityChange(listener: PanelVisibilityListener): () => void {
+    visibilityListeners.add(listener);
+    return () => {
+      visibilityListeners.delete(listener);
+    };
+  }
+
   return {
     element: panel,
     show,
     hide,
     toggle,
     isVisible: () => isVisible,
+    onVisibilityChange,
     dispose,
   };
 }

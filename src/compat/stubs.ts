@@ -356,9 +356,7 @@ function registerAllStubs(): void {
   }
 
   // Register partial commands
-  const partialCommands: string[] = [
-    'getRendererType',
-  ];
+  const partialCommands: string[] = ['getRendererType'];
 
   for (const name of partialCommands) {
     registerCommandSupport(name, 'partial');

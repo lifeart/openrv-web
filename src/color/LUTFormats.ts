@@ -108,6 +108,7 @@ export function parse3DLLUT(content: string): LUT {
   if (triplets.length === size && !is3D) {
     // 1D LUT
     return {
+      type: '1d',
       title: 'Untitled 3DL LUT',
       size,
       domainMin: [0, 0, 0],
@@ -120,6 +121,7 @@ export function parse3DLLUT(content: string): LUT {
   const reordered = reorderRFastestToBFastest(normalizedData, size);
 
   return {
+    type: '3d',
     title: 'Untitled 3DL LUT',
     size,
     domainMin: [0, 0, 0],
@@ -222,6 +224,7 @@ export function parseCSPLUT(content: string): LUT {
     }
 
     return {
+      type: '1d',
       title,
       size: maxSize,
       domainMin: [0, 0, 0],
@@ -272,6 +275,7 @@ export function parseCSPLUT(content: string): LUT {
   const reordered = reorderRFastestToBFastest(data, size);
 
   return {
+    type: '3d',
     title,
     size,
     domainMin: [0, 0, 0],
@@ -340,6 +344,7 @@ export function parseITXLUT(content: string): LUT {
   const reordered = reorderRFastestToBFastest(data, size);
 
   return {
+    type: '3d',
     title: 'Untitled ITX LUT',
     size,
     domainMin,
@@ -419,6 +424,7 @@ export function parseLookLUT(content: string): LUT {
   const reordered = reorderRFastestToBFastest(data, size);
 
   return {
+    type: '3d',
     title,
     size,
     domainMin,
@@ -500,6 +506,7 @@ export function parseHoudiniLUT(content: string): LUT {
     }
 
     return {
+      type: '1d',
       title: 'Untitled Houdini LUT',
       size,
       domainMin,
@@ -536,6 +543,7 @@ export function parseHoudiniLUT(content: string): LUT {
     const reordered = reorderRFastestToBFastest(data, size);
 
     return {
+      type: '3d',
       title: 'Untitled Houdini LUT',
       size,
       domainMin,
@@ -597,6 +605,7 @@ function parseNukeVectorfieldNode(content: string): LUT3D {
   const reordered = reorderRFastestToBFastest(data, size);
 
   return {
+    type: '3d',
     title: 'Untitled Nuke LUT',
     size,
     domainMin: [0, 0, 0],
@@ -670,6 +679,7 @@ function parseNukeExportedFormat(content: string): LUT3D {
   const reordered = reorderRFastestToBFastest(data, size);
 
   return {
+    type: '3d',
     title: 'Untitled Nuke LUT',
     size,
     domainMin,
@@ -787,6 +797,7 @@ export function parseMGALUT(content: string): LUT {
   const reordered = reorderRFastestToBFastest(normalizedData, size);
 
   return {
+    type: '3d',
     title: 'Untitled MGA LUT',
     size,
     domainMin: [0, 0, 0],
@@ -881,6 +892,7 @@ export function parseRV3DLUT(content: string): LUT3D {
 
   // No reordering needed - RV3DLUT already uses B-fastest order
   return {
+    type: '3d',
     title: 'Untitled RV3D LUT',
     size,
     domainMin,
@@ -1017,6 +1029,7 @@ export function parseRVChannelLUT(content: string): LUT1D {
   }
 
   return {
+    type: '1d',
     title: 'Untitled RV Channel LUT',
     size,
     domainMin,

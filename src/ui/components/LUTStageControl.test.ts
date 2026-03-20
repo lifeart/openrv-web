@@ -34,7 +34,7 @@ function createTestLUT3D(title: string = 'Test'): LUT3D {
       }
     }
   }
-  return { title, size, domainMin: [0, 0, 0], domainMax: [1, 1, 1], data };
+  return { type: '3d', title, size, domainMin: [0, 0, 0], domainMax: [1, 1, 1], data };
 }
 
 function createTestLUT1D(title: string = 'Test1D'): LUT1D {
@@ -45,7 +45,7 @@ function createTestLUT1D(title: string = 'Test1D'): LUT1D {
     data[i * 3 + 1] = i / (size - 1);
     data[i * 3 + 2] = i / (size - 1);
   }
-  return { title, size, domainMin: [0, 0, 0], domainMax: [1, 1, 1], data };
+  return { type: '1d', title, size, domainMin: [0, 0, 0], domainMax: [1, 1, 1], data };
 }
 
 function createDefaultConfig(overrides: Partial<LUTStageControlConfig> = {}): LUTStageControlConfig {

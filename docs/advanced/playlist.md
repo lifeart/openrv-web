@@ -8,7 +8,7 @@ OpenRV Web supports multi-clip playlists for reviewing sequences of shots in a d
 
 ## Creating a Playlist
 
-Open the Playlist panel by pressing `Shift+Alt+P` or selecting it from the View menu. The panel provides controls for building and managing the clip list.
+Open the Playlist panel by pressing `Shift+Alt+P`. The panel provides controls for building and managing the clip list.
 
 To start a new playlist:
 
@@ -101,6 +101,16 @@ OpenRV Web supports GPU-accelerated transitions between playlist clips. Transiti
 | Wipe | Directional reveal of the incoming frame |
 
 Transition duration and type are configurable per cut point in the Timeline Editor. Both outgoing and incoming frames pass through the full viewer color pipeline before blending.
+
+---
+
+## ShotGrid Playlist Import
+
+When the ShotGrid integration is connected (see [DCC Integration -- ShotGrid](dcc-integration.md#shotgrid-integration)), playlists can be loaded directly from ShotGrid. Selecting a ShotGrid playlist in the ShotGrid panel fetches all versions in the playlist, loads each version's media into the session, and automatically builds a review playlist preserving the clip order from ShotGrid.
+
+Each imported clip records ShotGrid metadata (version ID and shot name), and the version's ShotGrid status is applied to the session's status manager. If a version's media cannot be loaded (e.g., the URL is unreachable), it is skipped with a warning and the remaining versions continue loading.
+
+ShotGrid playlist import requires a `PlaylistManager` to be wired into the integration bridge. Without it, versions are loaded into the session but no playlist is created.
 
 ---
 

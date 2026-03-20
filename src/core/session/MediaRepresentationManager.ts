@@ -30,12 +30,15 @@ export interface RepresentationSourceAccessor {
   getActiveRepresentationIndex(sourceIndex: number): number;
   /** Set the active representation index for a source */
   setActiveRepresentationIndex(sourceIndex: number, repIndex: number): void;
-  /** Apply the active representation's source node to the MediaSource shim fields */
-  applyRepresentationShim(sourceIndex: number, representation: MediaRepresentation): void;
+  /** Apply the active representation's source node to the MediaSource shim fields.
+   *  Pass null to clear all source-level node fields (e.g. when no representation is active). */
+  applyRepresentationShim(sourceIndex: number, representation: MediaRepresentation | null): void;
   /** Get the HDR resize tier */
   getHDRResizeTier(): HDRResizeTier;
   /** Get the current frame for frame mapping */
   getCurrentFrame(): number;
+  /** Check whether the source at the given index is a sequence */
+  isSequenceSource(sourceIndex: number): boolean;
 }
 
 export class MediaRepresentationManager extends EventEmitter<RepresentationManagerEvents> {
@@ -62,14 +65,25 @@ export class MediaRepresentationManager extends EventEmitter<RepresentationManag
     if (!representations) return null;
 
     const representation = createRepresentation(config);
+
+    // Capture the currently active representation object before sort
+    const activeIndex = this._accessor.getActiveRepresentationIndex(sourceIndex);
+    const previouslyActive =
+      activeIndex >= 0 && activeIndex < representations.length ? representations[activeIndex] : null;
+
     representations.push(representation);
 
     // Sort by priority (lower = preferred)
     representations.sort((a, b) => a.priority - b.priority);
 
-    // If no representation is currently active and this one is ready, activate it
-    const activeIndex = this._accessor.getActiveRepresentationIndex(sourceIndex);
-    if (activeIndex === -1 && representation.status === 'ready') {
+    // If there was an active representation, remap its index after sort
+    if (previouslyActive) {
+      const remappedIndex = representations.indexOf(previouslyActive);
+      if (remappedIndex !== activeIndex) {
+        this._accessor.setActiveRepresentationIndex(sourceIndex, remappedIndex);
+      }
+    } else if (activeIndex === -1 && representation.status === 'ready') {
+      // If no representation was previously active and this one is ready, activate it
       const newIndex = representations.indexOf(representation);
       this._accessor.setActiveRepresentationIndex(sourceIndex, newIndex);
       this._accessor.applyRepresentationShim(sourceIndex, representation);
@@ -111,8 +125,18 @@ export class MediaRepresentationManager extends EventEmitter<RepresentationManag
       if (nextReady !== -1 && nextRep) {
         this._accessor.setActiveRepresentationIndex(sourceIndex, nextReady);
         this._accessor.applyRepresentationShim(sourceIndex, nextRep);
+
+        this.emit('representationChanged', {
+          sourceIndex,
+          previousRepId: repId,
+          newRepId: nextRep.id,
+          representation: nextRep,
+        });
       } else {
         this._accessor.setActiveRepresentationIndex(sourceIndex, -1);
+        // Clear stale source-level node fields so the source does not
+        // hold references to nodes that have been disposed by the loader.
+        this._accessor.applyRepresentationShim(sourceIndex, null);
       }
     } else if (activeIndex > index) {
       // Adjust active index since we removed an element before it
@@ -159,16 +183,25 @@ export class MediaRepresentationManager extends EventEmitter<RepresentationManag
       return true;
     }
 
+    // Resolve the previous representation for frame mapping
+    const prevRep =
+      prevActiveIndex >= 0 && prevActiveIndex < representations.length
+        ? (representations[prevActiveIndex] ?? null)
+        : null;
+
     // If the representation is already ready, just switch
     if (representation.status === 'ready') {
       this._accessor.setActiveRepresentationIndex(sourceIndex, repIndex);
       this._accessor.applyRepresentationShim(sourceIndex, representation);
+
+      const mappedFrame = this._computeMappedFrame(prevRep, representation);
 
       this.emit('representationChanged', {
         sourceIndex,
         previousRepId: prevRepId,
         newRepId: repId,
         representation,
+        ...(mappedFrame !== undefined && { mappedFrame }),
       });
 
       return true;
@@ -179,7 +212,8 @@ export class MediaRepresentationManager extends EventEmitter<RepresentationManag
 
     try {
       const hdrResizeTier = this._accessor.getHDRResizeTier();
-      const loader = createRepresentationLoader(representation.kind, hdrResizeTier);
+      const isSequence = this._accessor.isSequenceSource(sourceIndex);
+      const loader = createRepresentationLoader(representation.kind, hdrResizeTier, isSequence);
       this._activeLoaders.set(repId, loader);
 
       const result = await loader.load(representation);
@@ -194,16 +228,25 @@ export class MediaRepresentationManager extends EventEmitter<RepresentationManag
       if (result.colorSpace) {
         representation.colorSpace = result.colorSpace;
       }
+      if (result.duration !== undefined) {
+        representation.duration = result.duration;
+      }
+      if (result.fps !== undefined) {
+        representation.fps = result.fps;
+      }
 
       // Activate this representation
       this._accessor.setActiveRepresentationIndex(sourceIndex, repIndex);
       this._accessor.applyRepresentationShim(sourceIndex, representation);
+
+      const mappedFrame = this._computeMappedFrame(prevRep, representation);
 
       this.emit('representationChanged', {
         sourceIndex,
         previousRepId: prevRepId,
         newRepId: repId,
         representation,
+        ...(mappedFrame !== undefined && { mappedFrame }),
       });
 
       return true;
@@ -238,7 +281,7 @@ export class MediaRepresentationManager extends EventEmitter<RepresentationManag
    * @param failedRepId - ID of the representation that failed
    * @returns true if fallback succeeded, false if all representations failed
    */
-  handleRepresentationError(sourceIndex: number, failedRepId: string): boolean {
+  async handleRepresentationError(sourceIndex: number, failedRepId: string): Promise<boolean> {
     if (!this._accessor) return false;
     const representations = this._accessor.getRepresentations(sourceIndex);
     if (!representations) return false;
@@ -262,15 +305,20 @@ export class MediaRepresentationManager extends EventEmitter<RepresentationManag
         fallbackRepresentation: readyFallback,
       });
 
+      this.emit('representationChanged', {
+        sourceIndex,
+        previousRepId: failedRepId,
+        newRepId: readyFallback.id,
+        representation: readyFallback,
+      });
+
       return true;
     }
 
     // Try loading an idle fallback
     const idleFallback = fallbackCandidates.find((r) => r.status === 'idle');
     if (idleFallback) {
-      // Attempt to load the fallback asynchronously
-      void this.switchRepresentation(sourceIndex, idleFallback.id, { userInitiated: false });
-      return true; // Optimistically return true; the async load will handle errors
+      return this.switchRepresentation(sourceIndex, idleFallback.id, { userInitiated: false });
     }
 
     // All representations are in error state
@@ -292,6 +340,18 @@ export class MediaRepresentationManager extends EventEmitter<RepresentationManag
     if (activeIndex < 0 || activeIndex >= representations.length) return null;
 
     return representations[activeIndex] ?? null;
+  }
+
+  /**
+   * Compute the mapped frame when switching from one representation to another.
+   * Returns undefined if no remapping is needed (same startFrame or no previous rep).
+   */
+  private _computeMappedFrame(fromRep: MediaRepresentation | null, toRep: MediaRepresentation): number | undefined {
+    if (!this._accessor || !fromRep) return undefined;
+    if (fromRep.startFrame === toRep.startFrame) return undefined;
+
+    const currentFrame = this._accessor.getCurrentFrame();
+    return this.mapFrame(currentFrame, fromRep, toRep);
   }
 
   /**

@@ -8,6 +8,10 @@
  *   - Source modification (setSourceMedia, addToSource, relocateSource)
  *   - Source attributes (sourceAttributes, sourceDataAttributes, sourcePixelValue)
  *   - Source display channels (sourceDisplayChannelNames)
+ *
+ * When an optional Graph is provided, media-representation helper nodes
+ * (source + switch) are created as real graph nodes so that downstream
+ * queries (e.g. MuNodeBridge.nodeExists) can resolve them.
  *   - Image sources (newImageSource, newImageSourcePixels, getCurrentImageSize)
  *   - Session clearing (clearSession)
  *   - Media representations (addSourceMediaRep, setActiveSourceMediaRep, etc.)
@@ -17,31 +21,93 @@
  */
 
 import type { SourceMediaInfo } from './types';
+import { Graph } from '../core/graph/Graph';
+import { IPNode } from '../nodes/base/IPNode';
+import type { IPImage } from '../core/image/Image';
+import type { EvalContext } from '../core/graph/Graph';
+
+/**
+ * Lightweight placeholder node used to materialise media-representation
+ * node names inside the graph so they are queryable via `nodeExists()` etc.
+ */
+class MediaRepNode extends IPNode {
+  activeInputIndex = 0;
+
+  constructor(type: string, name: string) {
+    super(type, name);
+  }
+
+  /** Set which input index is currently active (used by switch nodes). */
+  setActiveInput(index: number): void {
+    this.activeInputIndex = index;
+  }
+
+  process(_context: EvalContext, inputs: (IPImage | null)[]): IPImage | null {
+    return inputs[this.activeInputIndex] ?? null;
+  }
+}
+
+/**
+ * Provider interface for reading pixel data from GPU-backed sources.
+ *
+ * Implementations should read the rendered pixel at the given source-space
+ * coordinates and return [R, G, B, A] as float values, or `null` when
+ * readback is unavailable (e.g. no active GL context).
+ */
+export interface PixelReadbackProvider {
+  /**
+   * Read a single pixel from the named source at (x, y).
+   * Returns [R, G, B, A] floats, or null if readback is not possible.
+   */
+  readSourcePixel(sourceName: string, x: number, y: number): [number, number, number, number] | null;
+}
+
+/** Shape of the openrv public API that this bridge may consume. */
+interface OpenRVMediaAPI {
+  getCurrentSource(): {
+    name: string;
+    url: string;
+    type: string;
+    width: number;
+    height: number;
+    duration: number;
+    fps: number;
+  } | null;
+  getResolution(): { width: number; height: number };
+  hasMedia(): boolean;
+  getFPS(): number;
+  getSourceCount(): number;
+  /** Load a media source from a URL (async, may not exist on older builds). */
+  addSourceFromURL?(url: string): Promise<void>;
+  /** Load a procedural source from a .movieproc URL string. */
+  loadMovieProc?(url: string): void;
+  /** Clear all loaded media sources. */
+  clearSources?(): void;
+}
+
+interface OpenRVAPI {
+  media: OpenRVMediaAPI;
+}
 
 /**
  * Lazily resolve the openrv API from the global scope.
+ * Throws when the API is not yet initialised.
  */
-function getOpenRV(): {
-  media: {
-    getCurrentSource(): {
-      name: string;
-      type: string;
-      width: number;
-      height: number;
-      duration: number;
-      fps: number;
-    } | null;
-    getResolution(): { width: number; height: number };
-    hasMedia(): boolean;
-    getFPS(): number;
-    getSourceCount(): number;
-  };
-} {
+function getOpenRV(): OpenRVAPI {
   const api = (globalThis as Record<string, unknown>).openrv;
   if (!api) {
     throw new Error('window.openrv is not available. Initialize OpenRVAPI first.');
   }
-  return api as ReturnType<typeof getOpenRV>;
+  return api as OpenRVAPI;
+}
+
+/**
+ * Try to resolve the openrv API, returning null when unavailable.
+ * Used by mutation methods that should degrade gracefully.
+ */
+function tryGetOpenRV(): OpenRVAPI | null {
+  const api = (globalThis as Record<string, unknown>).openrv;
+  return (api as OpenRVAPI) ?? null;
 }
 
 /** Internal source record tracked by the bridge */
@@ -106,10 +172,30 @@ export class MuSourceBridge {
   private _batchMode = false;
 
   /** Queued additions during batch mode */
-  private _batchQueue: Array<{ paths: string[]; tag: string }> = [];
+  private _batchQueue: Array<{ paths: string[]; tag: string; name?: string }> = [];
 
   /** In-memory image source pixel data */
   private _imageSources = new Map<string, ImageSourcePixels>();
+
+  /** Optional graph for materialising media-rep nodes */
+  private _graph: Graph | null = null;
+
+  constructor(graph?: Graph) {
+    this._graph = graph ?? null;
+  }
+
+  /** Get the underlying graph (if any). */
+  get graph(): Graph | null {
+    return this._graph;
+  }
+
+  /** Assign or replace the graph used for media-rep node creation. */
+  setGraph(graph: Graph): void {
+    this._graph = graph;
+  }
+
+  /** Optional GPU pixel readback provider for non-in-memory sources */
+  private _pixelReadbackProvider: PixelReadbackProvider | null = null;
 
   // =====================================================================
   // Source Listing & Queries (commands 52, 67-68)
@@ -126,23 +212,19 @@ export class MuSourceBridge {
     for (const [, src] of this._sources) {
       result.push({
         name: src.name,
-        media: src.mediaPaths[0] ?? '',
+        media: this._getActiveMediaPaths(src)[0] ?? '',
         tag: src.tag,
       });
     }
     // Also include the current openrv source if we have no local sources
     if (result.length === 0) {
-      try {
-        const current = getOpenRV().media.getCurrentSource();
-        if (current) {
-          result.push({
-            name: current.name,
-            media: current.name,
-            tag: 'default',
-          });
-        }
-      } catch {
-        // openrv not available — return empty
+      const current = this._ensureFallbackSourceRegistered();
+      if (current) {
+        result.push({
+          name: current.name,
+          media: current.url || '',
+          tag: 'default',
+        });
       }
     }
     return result;
@@ -167,13 +249,13 @@ export class MuSourceBridge {
     }
     // Fall back to openrv API
     if (active.length === 0) {
-      try {
-        const current = getOpenRV().media.getCurrentSource();
-        if (current) {
+      const current = this._ensureFallbackSourceRegistered();
+      if (current) {
+        // Only include if the requested frame falls within the source's range
+        const record = this._sources.get(current.name)!;
+        if (frame >= record.startFrame && frame <= record.endFrame) {
           active.push(current.name);
         }
-      } catch {
-        // openrv not available
       }
     }
     return active;
@@ -211,17 +293,14 @@ export class MuSourceBridge {
       return;
     }
     this._createSourceRecord(paths, tag);
+    await this._loadIntoSession(paths);
   }
 
   /**
    * Add multiple sources at once.
    * Equivalent to Mu's `commands.addSources(paths, tag, mergeIntoOne)`. (Mu #54)
    */
-  async addSources(
-    pathGroups: string[][],
-    tag: string = 'default',
-    _mergeIntoOne: boolean = false,
-  ): Promise<void> {
+  async addSources(pathGroups: string[][], tag: string = 'default', _mergeIntoOne: boolean = false): Promise<void> {
     if (!Array.isArray(pathGroups)) {
       throw new TypeError('addSources() requires an array of path arrays');
     }
@@ -239,10 +318,12 @@ export class MuSourceBridge {
       throw new TypeError('addSourceVerbose() requires a non-empty paths array');
     }
     if (this._batchMode) {
-      this._batchQueue.push({ paths, tag });
-      return this._generateSourceName();
+      const name = this._generateSourceName();
+      this._batchQueue.push({ paths, tag, name });
+      return name;
     }
     const record = this._createSourceRecord(paths, tag);
+    await this._loadIntoSession(paths);
     return record.name;
   }
 
@@ -250,10 +331,7 @@ export class MuSourceBridge {
    * Add multiple sources and return the created node names.
    * Equivalent to Mu's `commands.addSourcesVerbose(pathGroups, ...)`. (Mu #56)
    */
-  async addSourcesVerbose(
-    pathGroups: string[][],
-    tag: string = 'default',
-  ): Promise<string[]> {
+  async addSourcesVerbose(pathGroups: string[][], tag: string = 'default'): Promise<string[]> {
     const names: string[] = [];
     for (const paths of pathGroups) {
       const name = await this.addSourceVerbose(paths, tag);
@@ -282,8 +360,9 @@ export class MuSourceBridge {
     this._batchMode = false;
     const queue = [...this._batchQueue];
     this._batchQueue = [];
-    for (const { paths, tag } of queue) {
-      this._createSourceRecord(paths, tag);
+    for (const { paths, tag, name } of queue) {
+      this._createSourceRecord(paths, tag, name);
+      await this._loadIntoSession(paths);
     }
   }
 
@@ -298,6 +377,10 @@ export class MuSourceBridge {
   addToSource(sourceName: string, mediaPath: string): void {
     const source = this._getSource(sourceName);
     source.mediaPaths.push(mediaPath);
+    this._loadIntoSession([mediaPath]).catch((err) => {
+      // eslint-disable-next-line no-console
+      console.warn('[MuSourceBridge] addToSource session propagation failed:', err);
+    });
   }
 
   /**
@@ -310,6 +393,10 @@ export class MuSourceBridge {
     }
     const source = this._getSource(sourceName);
     source.mediaPaths = [...paths];
+    this._loadIntoSession(paths).catch((err) => {
+      // eslint-disable-next-line no-console
+      console.warn('[MuSourceBridge] setSourceMedia session propagation failed:', err);
+    });
   }
 
   /**
@@ -326,6 +413,10 @@ export class MuSourceBridge {
     } else {
       source.mediaPaths.push(newPath);
     }
+    this._loadIntoSession([newPath]).catch((err) => {
+      // eslint-disable-next-line no-console
+      console.warn('[MuSourceBridge] relocateSource session propagation failed:', err);
+    });
   }
 
   // =====================================================================
@@ -340,7 +431,7 @@ export class MuSourceBridge {
    */
   sourceMedia(sourceName: string): { media: string[] } {
     const source = this._getSource(sourceName);
-    return { media: [...source.mediaPaths] };
+    return { media: [...this._getActiveMediaPaths(source)] };
   }
 
   /**
@@ -368,9 +459,11 @@ export class MuSourceBridge {
       // openrv not available — use local state
     }
 
+    const activePaths = this._getActiveMediaPaths(source);
+
     return {
       name: sourceName,
-      file: source.mediaPaths[0] ?? '',
+      file: activePaths[0] ?? '',
       width,
       height,
       fps,
@@ -388,9 +481,8 @@ export class MuSourceBridge {
    * Not a direct Mu command but useful for batch queries.
    */
   sourceMediaInfoList(): SourceMediaInfo[] {
-    return Array.from(this._sources.values()).map((src) =>
-      this.sourceMediaInfo(src.name),
-    );
+    this._ensureFallbackSourceRegistered();
+    return Array.from(this._sources.values()).map((src) => this.sourceMediaInfo(src.name));
   }
 
   // =====================================================================
@@ -423,17 +515,21 @@ export class MuSourceBridge {
    * Read a pixel value from a source.
    * Equivalent to Mu's `commands.sourcePixelValue(sourceName, x, y)`. (Mu #65)
    *
-   * Returns [R, G, B, A] as float values. Currently returns [0,0,0,0]
-   * since pixel sampling from GPU textures is not yet implemented.
+   * Returns [R, G, B, A] as float values.
+   *
+   * Resolution order:
+   * 1. In-memory image source data (created via newImageSource)
+   * 2. GPU readback via the injected PixelReadbackProvider
+   * 3. Returns `null` when no pixel data is available
    */
-  sourcePixelValue(sourceName: string, x: number, y: number): [number, number, number, number] {
+  sourcePixelValue(sourceName: string, x: number, y: number): [number, number, number, number] | null {
     // Validate source exists
     this._getSource(sourceName);
     if (typeof x !== 'number' || typeof y !== 'number') {
       throw new TypeError('sourcePixelValue() requires valid x, y coordinates');
     }
 
-    // Check if there's in-memory pixel data
+    // 1. Check if there's in-memory pixel data
     const imageData = this._imageSources.get(sourceName);
     if (imageData) {
       const ix = Math.floor(x);
@@ -448,9 +544,17 @@ export class MuSourceBridge {
           channels > 3 ? (imageData.data[idx + 3] ?? 0) : 1,
         ];
       }
+      // Out-of-bounds on an in-memory source
+      return null;
     }
 
-    return [0, 0, 0, 0];
+    // 2. Try GPU readback provider
+    if (this._pixelReadbackProvider) {
+      return this._pixelReadbackProvider.readSourcePixel(sourceName, x, y);
+    }
+
+    // 3. No pixel data available
+    return null;
   }
 
   /**
@@ -476,17 +580,16 @@ export class MuSourceBridge {
    *
    * @returns The created source name
    */
-  newImageSource(
-    name: string,
-    width: number,
-    height: number,
-    channels: number = 4,
-  ): string {
+  newImageSource(name: string, width: number, height: number, channels: number = 4): string {
     if (typeof name !== 'string' || !name) {
       throw new TypeError('newImageSource() requires a non-empty name');
     }
     if (width <= 0 || height <= 0) {
       throw new TypeError('newImageSource() requires positive width and height');
+    }
+    const pendingInBatch = this._batchQueue.some((entry) => entry.name === name);
+    if (this._sources.has(name) || this._imageSources.has(name) || pendingInBatch) {
+      throw new TypeError(`Source '${name}' already exists. Use a unique name or delete the existing source first.`);
     }
 
     const record = this._createSourceRecord([name], 'image');
@@ -495,13 +598,7 @@ export class MuSourceBridge {
     record.width = width;
     record.height = height;
     record.channelNames =
-      channels >= 4
-        ? ['R', 'G', 'B', 'A']
-        : channels === 3
-          ? ['R', 'G', 'B']
-          : channels === 2
-            ? ['R', 'G']
-            : ['R'];
+      channels >= 4 ? ['R', 'G', 'B', 'A'] : channels === 3 ? ['R', 'G', 'B'] : channels === 2 ? ['R', 'G'] : ['R'];
 
     // Replace the auto-generated name entry with the custom name
     this._sources.delete(autoName);
@@ -522,23 +619,16 @@ export class MuSourceBridge {
    * Set pixel data for an in-memory image source.
    * Equivalent to Mu's `commands.newImageSourcePixels(name, frame, pixels, ...)`. (Mu #70)
    */
-  newImageSourcePixels(
-    name: string,
-    _frame: number,
-    pixels: Float32Array | number[],
-  ): void {
+  newImageSourcePixels(name: string, _frame: number, pixels: Float32Array | number[]): void {
     const imageData = this._imageSources.get(name);
     if (!imageData) {
       throw new Error(`Image source not found: "${name}"`);
     }
 
-    const floatPixels =
-      pixels instanceof Float32Array ? pixels : new Float32Array(pixels);
+    const floatPixels = pixels instanceof Float32Array ? pixels : new Float32Array(pixels);
 
     if (floatPixels.length !== imageData.data.length) {
-      throw new Error(
-        `Pixel data length mismatch: expected ${imageData.data.length}, got ${floatPixels.length}`,
-      );
+      throw new Error(`Pixel data length mismatch: expected ${imageData.data.length}, got ${floatPixels.length}`);
     }
 
     imageData.data.set(floatPixels);
@@ -553,6 +643,36 @@ export class MuSourceBridge {
    * Equivalent to Mu's `commands.clearSession()`. (Mu #71)
    */
   clearSession(): void {
+    // Clear the real session first
+    try {
+      const api = tryGetOpenRV();
+      if (api?.media.clearSources) {
+        api.media.clearSources();
+      }
+    } catch {
+      // eslint-disable-next-line no-console
+      console.warn('[MuSourceBridge] clearSession: real session unavailable, clearing local state only');
+    }
+
+    // Remove media-rep nodes from the graph before clearing source records
+    if (this._graph) {
+      const removedNames = new Set<string>();
+      for (const source of this._sources.values()) {
+        for (const rep of source.representations) {
+          if (!removedNames.has(rep.nodeName)) {
+            const node = this._graph.getAllNodes().find((n) => n.name === rep.nodeName);
+            if (node) this._graph.removeNode(node.id);
+            removedNames.add(rep.nodeName);
+          }
+          if (!removedNames.has(rep.switchNodeName)) {
+            const node = this._graph.getAllNodes().find((n) => n.name === rep.switchNodeName);
+            if (node) this._graph.removeNode(node.id);
+            removedNames.add(rep.switchNodeName);
+          }
+        }
+      }
+    }
+
     this._sources.clear();
     this._imageSources.clear();
     this._sourceCounter = 0;
@@ -568,16 +688,16 @@ export class MuSourceBridge {
    * Add a media representation to a source.
    * Equivalent to Mu's `commands.addSourceMediaRep(sourceName, repName, paths)`. (Mu #72)
    *
-   * @returns The created representation node name
+   * @returns The representation node name (empty string when no graph is attached)
    */
-  addSourceMediaRep(
-    sourceName: string,
-    repName: string,
-    paths: string[],
-  ): string {
+  addSourceMediaRep(sourceName: string, repName: string, paths: string[]): string {
     const source = this._getSource(sourceName);
-    const nodeName = `${sourceName}_${repName}_source`;
-    const switchNodeName = `${sourceName}_switch`;
+
+    // Only fabricate node names when a real graph is attached so that the
+    // returned names always correspond to actual graph nodes.  Without a
+    // graph the names would be meaningless placeholders (Issue #258).
+    const nodeName = this._graph ? `${sourceName}_${repName}_source` : '';
+    const switchNodeName = this._graph ? `${sourceName}_switch` : '';
 
     source.representations.push({
       name: repName,
@@ -592,6 +712,18 @@ export class MuSourceBridge {
       source.activeRep = repName;
     }
 
+    // Materialise nodes in the graph so they are discoverable
+    this._ensureRepNodes(source, nodeName, switchNodeName);
+
+    // Propagate to live session when available
+    const api = tryGetOpenRV();
+    if (api && paths.length > 0) {
+      this._loadIntoSession(paths).catch((err) => {
+        // eslint-disable-next-line no-console
+        console.warn('[MuSourceBridge] addSourceMediaRep session propagation failed:', err);
+      });
+    }
+
     return nodeName;
   }
 
@@ -603,11 +735,28 @@ export class MuSourceBridge {
     const source = this._getSource(sourceName);
     const rep = source.representations.find((r) => r.name === repName);
     if (!rep) {
-      throw new Error(
-        `Media representation "${repName}" not found on source "${sourceName}"`,
-      );
+      throw new Error(`Media representation "${repName}" not found on source "${sourceName}"`);
     }
     source.activeRep = repName;
+
+    // Update the graph switch node's active input
+    if (this._graph) {
+      const activeIdx = source.representations.findIndex((r) => r.name === repName);
+      if (activeIdx >= 0) {
+        const switchNode = this._graph.getAllNodes().find((n) => n.name === rep.switchNodeName);
+        if (switchNode && switchNode instanceof MediaRepNode) {
+          switchNode.setActiveInput(activeIdx);
+        }
+      }
+    }
+
+    // Propagate to real session — attempt to load the rep's media
+    if (rep.mediaPaths.length > 0) {
+      this._loadIntoSession(rep.mediaPaths).catch((err) => {
+        // eslint-disable-next-line no-console
+        console.warn('[MuSourceBridge] setActiveSourceMediaRep session propagation failed:', err);
+      });
+    }
   }
 
   /**
@@ -632,9 +781,7 @@ export class MuSourceBridge {
    * List media representation name-node pairs for a source.
    * Equivalent to Mu's `commands.sourceMediaRepsAndNodes(sourceName)`. (Mu #76)
    */
-  sourceMediaRepsAndNodes(
-    sourceName: string,
-  ): Array<[string, string]> {
+  sourceMediaRepsAndNodes(sourceName: string): Array<[string, string]> {
     const source = this._getSource(sourceName);
     return source.representations.map((r) => [r.name, r.nodeName]);
   }
@@ -668,9 +815,7 @@ export class MuSourceBridge {
    * Get the image geometry of a source.
    * Returns { width, height, pixelAspect } for the named source.
    */
-  sourceGeometry(
-    sourceName: string,
-  ): { width: number; height: number; pixelAspect: number } {
+  sourceGeometry(sourceName: string): { width: number; height: number; pixelAspect: number } {
     const source = this._getSource(sourceName);
     return {
       width: source.width,
@@ -694,11 +839,7 @@ export class MuSourceBridge {
   /**
    * Set a binary data attribute on a source (bridge helper).
    */
-  setSourceDataAttribute(
-    sourceName: string,
-    key: string,
-    data: Uint8Array,
-  ): void {
+  setSourceDataAttribute(sourceName: string, key: string, data: Uint8Array): void {
     const source = this._getSource(sourceName);
     source.dataAttributes.set(key, data);
   }
@@ -714,12 +855,7 @@ export class MuSourceBridge {
   /**
    * Set source dimensions (bridge helper).
    */
-  setSourceDimensions(
-    sourceName: string,
-    width: number,
-    height: number,
-    pixelAspect?: number,
-  ): void {
+  setSourceDimensions(sourceName: string, width: number, height: number, pixelAspect?: number): void {
     const source = this._getSource(sourceName);
     source.width = width;
     source.height = height;
@@ -731,14 +867,20 @@ export class MuSourceBridge {
   /**
    * Set source frame range (bridge helper).
    */
-  setSourceFrameRange(
-    sourceName: string,
-    startFrame: number,
-    endFrame: number,
-  ): void {
+  setSourceFrameRange(sourceName: string, startFrame: number, endFrame: number): void {
     const source = this._getSource(sourceName);
     source.startFrame = startFrame;
     source.endFrame = endFrame;
+  }
+
+  /**
+   * Set the pixel readback provider for GPU-backed source pixel reads.
+   *
+   * When set, `sourcePixelValue()` will delegate to this provider for
+   * sources that do not have in-memory pixel data (i.e. GPU-rendered sources).
+   */
+  setPixelReadbackProvider(provider: PixelReadbackProvider | null): void {
+    this._pixelReadbackProvider = provider;
   }
 
   /**
@@ -768,13 +910,33 @@ export class MuSourceBridge {
   }
 
   /**
+   * If no sources have been registered yet, attempt to discover and register the
+   * current openrv media source as a fallback. Returns the current source info
+   * from the openrv API if one was found, or undefined otherwise.
+   */
+  private _ensureFallbackSourceRegistered(): ReturnType<OpenRVMediaAPI['getCurrentSource']> | undefined {
+    if (this._sources.size !== 0) return undefined;
+    try {
+      const current = getOpenRV().media.getCurrentSource();
+      if (current && !this._sources.has(current.name)) {
+        const mediaPath = current.url || '';
+        const record = this._createSourceRecord([mediaPath], 'default', current.name);
+        if (current.duration > 0) {
+          record.endFrame = current.duration;
+        }
+      }
+      return current;
+    } catch {
+      // openrv not available
+      return undefined;
+    }
+  }
+
+  /**
    * Create a new source record and register it.
    */
-  private _createSourceRecord(
-    paths: string[],
-    tag: string,
-  ): SourceRecord {
-    const name = this._generateSourceName();
+  private _createSourceRecord(paths: string[], tag: string, preGeneratedName?: string): SourceRecord {
+    const name = preGeneratedName ?? this._generateSourceName();
     const record: SourceRecord = {
       name,
       tag,
@@ -803,5 +965,90 @@ export class MuSourceBridge {
       throw new Error(`Source not found: "${name}"`);
     }
     return source;
+  }
+
+  /**
+   * Return the media paths for the currently active representation,
+   * falling back to the base source paths when no rep is active or the
+   * active rep has no media paths of its own.
+   */
+  private _getActiveMediaPaths(source: SourceRecord): string[] {
+    if (source.activeRep) {
+      const rep = source.representations.find((r) => r.name === source.activeRep);
+      if (rep && rep.mediaPaths.length > 0) {
+        return rep.mediaPaths;
+      }
+    }
+    return source.mediaPaths;
+  }
+
+  /**
+   * Attempt to load media paths into the real OpenRV session.
+   *
+   * For each path:
+   * - `.movieproc` suffixes are loaded as procedural sources.
+   * - `http://` / `https://` URLs are loaded via the session URL loader.
+   * - Other paths (local file paths) are tracked in the shadow registry only
+   *   because browser security prevents direct filesystem access.
+   *
+   * Errors are caught and logged so that the shadow state remains intact
+   * even when the real session is unavailable.
+   */
+  private async _loadIntoSession(paths: string[]): Promise<void> {
+    const api = tryGetOpenRV();
+    if (!api) return;
+
+    for (const path of paths) {
+      try {
+        if (path.endsWith('.movieproc') && api.media.loadMovieProc) {
+          api.media.loadMovieProc(path);
+        } else if (/^https?:\/\//i.test(path) && api.media.addSourceFromURL) {
+          await api.media.addSourceFromURL(path);
+        }
+        // Local file paths cannot be loaded in the browser; shadow-only.
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn(`[MuSourceBridge] Failed to load "${path}" into session:`, err);
+      }
+    }
+  }
+
+  /**
+   * Create real graph nodes for a media representation so that the
+   * names stored in the rep record are resolvable by MuNodeBridge.nodeExists() etc.
+   * Only called with non-empty names when a graph is attached (Issue #258).
+   *
+   * - One source node per representation (type `RVMediaRepSource`)
+   * - One switch node per source, shared across all reps (type `RVMediaRepSwitch`)
+   * - Source nodes are wired as inputs to the switch node.
+   */
+  private _ensureRepNodes(source: SourceRecord, sourceNodeName: string, switchNodeName: string): void {
+    if (!this._graph) return;
+
+    // Create the source node for this rep
+    const sourceNode = new MediaRepNode('RVMediaRepSource', sourceNodeName);
+    this._graph.addNode(sourceNode);
+
+    // Create or find the switch node (one per source)
+    let switchNode: IPNode | undefined;
+    for (const n of this._graph.getAllNodes()) {
+      if (n.name === switchNodeName) {
+        switchNode = n;
+        break;
+      }
+    }
+    if (!switchNode) {
+      switchNode = new MediaRepNode('RVMediaRepSwitch', switchNodeName);
+      this._graph.addNode(switchNode);
+    }
+
+    // Wire source -> switch
+    this._graph.connect(sourceNode, switchNode);
+
+    // Set the switch's active input to the currently active rep index
+    const activeIdx = source.representations.findIndex((r) => r.name === source.activeRep);
+    if (activeIdx >= 0 && switchNode instanceof MediaRepNode) {
+      switchNode.setActiveInput(activeIdx);
+    }
   }
 }

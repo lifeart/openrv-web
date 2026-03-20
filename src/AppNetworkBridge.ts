@@ -20,7 +20,9 @@ import type {
   AnnotationSyncPayload,
   NoteSyncPayload,
   ColorSyncPayload,
+  CursorSyncPayload,
 } from './network/types';
+import type { RemoteCursorsOverlay } from './ui/components/RemoteCursorsOverlay';
 import {
   buildShareURL,
   decodeSessionState,
@@ -72,6 +74,7 @@ export interface NetworkBridgeContext {
   networkSyncManager: NetworkSyncManager;
   networkControl: NetworkControl;
   headerBar: HeaderBar;
+  remoteCursorsOverlay?: RemoteCursorsOverlay;
   getSessionURLState?: () => SessionURLState;
   applySessionURLState?: (state: SessionURLState) => void;
 }
@@ -97,6 +100,7 @@ export class AppNetworkBridge {
    */
   setup(): void {
     const { session, viewer, networkSyncManager, networkControl, headerBar } = this.ctx;
+    const presenceOverlay = viewer.getPresenceOverlay();
 
     // Add NetworkControl to header bar
     headerBar.setNetworkControl(networkControl.render());
@@ -124,7 +128,15 @@ export class AppNetworkBridge {
         networkControl.setRoomInfo(null);
         networkControl.setUsers([]);
         networkControl.hideInfo();
+        presenceOverlay.setUsers([]);
+        presenceOverlay.hide();
         this.ctx.paintEngine?.setIdPrefix('');
+      }),
+    );
+
+    this.unsubscribers.push(
+      networkControl.on('reconnect', () => {
+        networkSyncManager.manualReconnect();
       }),
     );
 
@@ -163,12 +175,17 @@ export class AppNetworkBridge {
             controlWithShare.setShareLink?.(shareLink);
           }
           await navigator.clipboard.writeText(shareLink);
+          networkControl.reportCopyResult(true);
         } catch (error) {
           if (error instanceof Error && /clipboard/i.test(error.message)) {
-            networkControl.showError('Clipboard unavailable. Copy Share URL from the Network Sync panel.');
+            networkControl.reportCopyResult(
+              false,
+              'Clipboard unavailable. Copy Share URL from the Network Sync panel.',
+            );
             return;
           }
-          networkControl.showError(
+          networkControl.reportCopyResult(
+            false,
             `Failed to generate share URL: ${error instanceof Error ? error.message : 'unknown error'}`,
           );
         }
@@ -401,22 +418,27 @@ export class AppNetworkBridge {
     this.unsubscribers.push(
       networkSyncManager.on('connectionStateChanged', (state) => {
         networkControl.setConnectionState(state);
-        if (state !== 'connected') {
+        if (state !== 'connected' && state !== 'conflict') {
           networkControl.setIsHost(false);
+          presenceOverlay.hide();
         } else {
           networkControl.setIsHost(networkSyncManager.isHost);
+          presenceOverlay.show();
         }
       }),
     );
 
     this.unsubscribers.push(
       networkSyncManager.on('roomCreated', (info) => {
+        networkControl.setLocalUserId(networkSyncManager.userId);
         networkControl.setIsHost(true);
         networkControl.setShareLinkKind('invite');
         networkControl.setResponseToken('');
         networkControl.hideInfo();
         networkControl.setRoomInfo(info);
         networkControl.setUsers(info.users);
+        presenceOverlay.setUsers(info.users);
+        presenceOverlay.show();
         this.ctx.paintEngine?.setIdPrefix(networkSyncManager.userId);
         void this.refreshShareLinkPreview();
       }),
@@ -424,10 +446,13 @@ export class AppNetworkBridge {
 
     this.unsubscribers.push(
       networkSyncManager.on('roomJoined', (info) => {
+        networkControl.setLocalUserId(networkSyncManager.userId);
         networkControl.setIsHost(networkSyncManager.isHost);
         networkControl.setShareLinkKind(networkSyncManager.isHost ? 'invite' : 'generic');
         networkControl.setRoomInfo(info);
         networkControl.setUsers(info.users);
+        presenceOverlay.setUsers(info.users);
+        presenceOverlay.show();
         this.ctx.paintEngine?.setIdPrefix(networkSyncManager.userId);
         void this.refreshShareLinkPreview();
       }),
@@ -436,6 +461,7 @@ export class AppNetworkBridge {
     this.unsubscribers.push(
       networkSyncManager.on('usersChanged', (users) => {
         networkControl.setUsers(users);
+        presenceOverlay.setUsers(users);
         void this.refreshShareLinkPreview();
       }),
     );
@@ -446,9 +472,47 @@ export class AppNetworkBridge {
       }),
     );
 
+    // Wire participant permission changes to NetworkControl UI
+    this.unsubscribers.push(
+      networkSyncManager.on('participantPermissionChanged', (permission) => {
+        networkControl.setParticipantPermission(permission);
+      }),
+    );
+
     this.unsubscribers.push(
       networkSyncManager.on('rttUpdated', (rtt) => {
         networkControl.setRTT(rtt);
+      }),
+    );
+
+    // Wire toast messages to NetworkControl UI
+    this.unsubscribers.push(
+      networkSyncManager.on('toastMessage', ({ message, type }) => {
+        if (type === 'error') {
+          networkControl.showError(message);
+        } else {
+          networkControl.showInfo(message);
+        }
+      }),
+    );
+
+    this.unsubscribers.push(
+      networkSyncManager.on('reconnectExhausted', () => {
+        networkControl.setReconnectExhausted(true);
+      }),
+    );
+
+    this.unsubscribers.push(
+      networkSyncManager.on('roomLeft', () => {
+        networkControl.setLocalUserId(null);
+        networkControl.setConnectionState('disconnected');
+        networkControl.setIsHost(false);
+        networkControl.setShareLinkKind('generic');
+        networkControl.setResponseToken('');
+        networkControl.setRoomInfo(null);
+        networkControl.setUsers([]);
+        networkControl.hideInfo();
+        this.ctx.paintEngine?.setIdPrefix('');
       }),
     );
 
@@ -681,6 +745,60 @@ export class AppNetworkBridge {
         }
       }),
     );
+
+    // Wire remote cursors overlay
+    const remoteCursorsOverlay = this.ctx.remoteCursorsOverlay;
+    if (remoteCursorsOverlay) {
+      // Activate/deactivate overlay on connection state changes
+      this.unsubscribers.push(
+        networkSyncManager.on('connectionStateChanged', (state) => {
+          remoteCursorsOverlay.setActive(state === 'connected');
+        }),
+      );
+
+      // Forward user list to overlay for name/color lookup
+      this.unsubscribers.push(
+        networkSyncManager.on('usersChanged', (users) => {
+          remoteCursorsOverlay.setUsers(users);
+        }),
+      );
+
+      // Forward room created/joined user lists
+      this.unsubscribers.push(
+        networkSyncManager.on('roomCreated', (info) => {
+          remoteCursorsOverlay.setUsers(info.users);
+          remoteCursorsOverlay.setActive(true);
+        }),
+      );
+
+      this.unsubscribers.push(
+        networkSyncManager.on('roomJoined', (info) => {
+          remoteCursorsOverlay.setUsers(info.users);
+          remoteCursorsOverlay.setActive(true);
+        }),
+      );
+
+      // Clear overlay on room leave
+      this.unsubscribers.push(
+        networkSyncManager.on('roomLeft', () => {
+          remoteCursorsOverlay.setActive(false);
+        }),
+      );
+
+      // Remove individual cursor on user leave
+      this.unsubscribers.push(
+        networkSyncManager.on('userLeft', (user) => {
+          remoteCursorsOverlay.removeCursor(user.id);
+        }),
+      );
+
+      // Forward incoming cursor sync to the overlay
+      this.unsubscribers.push(
+        networkSyncManager.on('syncCursor', (payload: CursorSyncPayload) => {
+          remoteCursorsOverlay.updateCursor(payload);
+        }),
+      );
+    }
 
     // Send outgoing sync when local state changes
     this.unsubscribers.push(

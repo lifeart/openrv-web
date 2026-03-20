@@ -5,14 +5,26 @@
  */
 
 import type { Session } from '../core/session/Session';
+import type { PlaylistManager } from '../core/session/PlaylistManager';
 import type { PlaybackMode } from '../core/types/session';
 import { ValidationError } from '../core/errors';
+import { DisposableAPI } from './Disposable';
 
-export class PlaybackAPI {
+export class PlaybackAPI extends DisposableAPI {
   private session: Session;
+  private playlistManager: PlaylistManager | null = null;
 
   constructor(session: Session) {
+    super();
     this.session = session;
+  }
+
+  /**
+   * Set the playlist manager for playlist-aware frame/duration reporting.
+   * @internal Called by the bootstrap wiring, not intended for external use.
+   */
+  setPlaylistManager(pm: PlaylistManager): void {
+    this.playlistManager = pm;
   }
 
   /**
@@ -24,6 +36,7 @@ export class PlaybackAPI {
    * ```
    */
   play(): void {
+    this.assertNotDisposed();
     this.session.play();
   }
 
@@ -36,6 +49,7 @@ export class PlaybackAPI {
    * ```
    */
   pause(): void {
+    this.assertNotDisposed();
     this.session.pause();
   }
 
@@ -48,6 +62,7 @@ export class PlaybackAPI {
    * ```
    */
   toggle(): void {
+    this.assertNotDisposed();
     this.session.togglePlayback();
   }
 
@@ -60,8 +75,8 @@ export class PlaybackAPI {
    * ```
    */
   stop(): void {
-    this.session.pause();
-    this.session.goToStart();
+    this.assertNotDisposed();
+    this.session.stop();
   }
 
   /**
@@ -76,7 +91,8 @@ export class PlaybackAPI {
    * ```
    */
   seek(frame: number): void {
-    if (typeof frame !== 'number' || isNaN(frame)) {
+    this.assertNotDisposed();
+    if (typeof frame !== 'number' || !Number.isFinite(frame)) {
       throw new ValidationError('seek() requires a valid frame number');
     }
     this.session.goToFrame(frame);
@@ -97,7 +113,8 @@ export class PlaybackAPI {
    * ```
    */
   step(direction: number = 1): void {
-    if (typeof direction !== 'number' || isNaN(direction)) {
+    this.assertNotDisposed();
+    if (typeof direction !== 'number' || !Number.isFinite(direction)) {
       throw new ValidationError('step() requires a valid number');
     }
     const steps = Math.round(direction);
@@ -113,14 +130,32 @@ export class PlaybackAPI {
       const totalFrames = this.session.currentSource?.duration ?? 0;
       if (totalFrames <= 0) return;
 
+      // Use in/out points as the effective range, matching PlaybackEngine behavior
+      const rangeStart = this.session.inPoint;
+      const rangeEnd = this.session.outPoint;
+      const rangeLength = rangeEnd - rangeStart + 1;
+
+      if (rangeLength <= 0) return;
+
       let targetFrame = currentFrame + steps;
 
       if (this.session.loopMode === 'loop') {
-        // Wrap around using modular arithmetic
-        targetFrame = ((((targetFrame - 1) % totalFrames) + totalFrames) % totalFrames) + 1;
+        // Wrap around within in/out range using modular arithmetic
+        targetFrame = ((((targetFrame - rangeStart) % rangeLength) + rangeLength) % rangeLength) + rangeStart;
+      } else if (this.session.loopMode === 'pingpong') {
+        // Reflect off boundaries like a bouncing ball
+        let offset = targetFrame - rangeStart;
+        const cycle = rangeLength > 1 ? rangeLength - 1 : 1;
+        // Normalize offset to positive range for reflection
+        offset = ((offset % (2 * cycle)) + 2 * cycle) % (2 * cycle);
+        if (offset <= cycle) {
+          targetFrame = rangeStart + offset;
+        } else {
+          targetFrame = rangeEnd - (offset - cycle);
+        }
       } else {
-        // Clamp to valid range [1, totalFrames]
-        targetFrame = Math.max(1, Math.min(totalFrames, targetFrame));
+        // 'once': Clamp to in/out range
+        targetFrame = Math.max(rangeStart, Math.min(rangeEnd, targetFrame));
       }
 
       this.session.goToFrame(targetFrame);
@@ -140,6 +175,7 @@ export class PlaybackAPI {
    * ```
    */
   setSpeed(speed: number): void {
+    this.assertNotDisposed();
     if (typeof speed !== 'number' || isNaN(speed)) {
       throw new ValidationError('setSpeed() requires a valid number');
     }
@@ -159,7 +195,43 @@ export class PlaybackAPI {
    * ```
    */
   getSpeed(): number {
+    this.assertNotDisposed();
     return this.session.playbackSpeed;
+  }
+
+  /**
+   * Set the playback direction.
+   *
+   * @param direction - Positive values (including 0) set forward playback,
+   *   negative values set reverse playback. The value is normalized to +1 or -1.
+   *
+   * @example
+   * ```ts
+   * openrv.playback.setPlayDirection(-1); // reverse
+   * openrv.playback.setPlayDirection(1);  // forward
+   * ```
+   */
+  setPlayDirection(direction: number): void {
+    this.assertNotDisposed();
+    if (typeof direction !== 'number' || isNaN(direction)) {
+      throw new ValidationError('setPlayDirection() requires a valid number');
+    }
+    this.session.playDirection = direction;
+  }
+
+  /**
+   * Get the current playback direction.
+   *
+   * @returns `1` for forward, `-1` for reverse.
+   *
+   * @example
+   * ```ts
+   * const dir = openrv.playback.getPlayDirection(); // 1 or -1
+   * ```
+   */
+  getPlayDirection(): number {
+    this.assertNotDisposed();
+    return this.session.playDirection;
   }
 
   /**
@@ -173,11 +245,15 @@ export class PlaybackAPI {
    * ```
    */
   isPlaying(): boolean {
+    this.assertNotDisposed();
     return this.session.isPlaying;
   }
 
   /**
    * Get current frame number (1-based).
+   *
+   * When a playlist is active, returns the global playlist frame.
+   * When no playlist is active, returns the clip-local frame.
    *
    * @returns The current frame number, starting from 1.
    *
@@ -187,11 +263,18 @@ export class PlaybackAPI {
    * ```
    */
   getCurrentFrame(): number {
+    this.assertNotDisposed();
+    if (this.playlistManager?.isEnabled()) {
+      return this.playlistManager.getCurrentFrame();
+    }
     return this.session.currentFrame;
   }
 
   /**
-   * Get total number of frames in the current source.
+   * Get total number of frames.
+   *
+   * When a playlist is active, returns the total playlist duration.
+   * When no playlist is active, returns the current source duration.
    *
    * @returns The total frame count, or 0 if no source is loaded.
    *
@@ -201,6 +284,64 @@ export class PlaybackAPI {
    * ```
    */
   getTotalFrames(): number {
+    this.assertNotDisposed();
+    if (this.playlistManager?.isEnabled()) {
+      return this.playlistManager.getTotalDuration();
+    }
+    return this.session.currentSource?.duration ?? 0;
+  }
+
+  /**
+   * Check whether playlist mode is currently active.
+   *
+   * @returns `true` if a playlist is loaded and enabled, `false` otherwise.
+   *
+   * @example
+   * ```ts
+   * if (openrv.playback.isPlaylistActive()) {
+   *   console.log('Global frame:', openrv.playback.getCurrentFrame());
+   * }
+   * ```
+   */
+  isPlaylistActive(): boolean {
+    this.assertNotDisposed();
+    return this.playlistManager?.isEnabled() ?? false;
+  }
+
+  /**
+   * Get the clip-local frame number, regardless of playlist mode.
+   *
+   * Always returns the session's current frame (the frame within the
+   * currently loaded clip/source). Useful when consumers need the
+   * clip-local position even during playlist playback.
+   *
+   * @returns The clip-local frame number (1-based).
+   *
+   * @example
+   * ```ts
+   * const clipFrame = openrv.playback.getClipFrame();
+   * ```
+   */
+  getClipFrame(): number {
+    this.assertNotDisposed();
+    return this.session.currentFrame;
+  }
+
+  /**
+   * Get the clip-local total frame count, regardless of playlist mode.
+   *
+   * Always returns the current source's duration. Useful when consumers
+   * need the clip duration even during playlist playback.
+   *
+   * @returns The clip-local total frame count, or 0 if no source is loaded.
+   *
+   * @example
+   * ```ts
+   * const clipTotal = openrv.playback.getClipDuration();
+   * ```
+   */
+  getClipDuration(): number {
+    this.assertNotDisposed();
     return this.session.currentSource?.duration ?? 0;
   }
 
@@ -217,6 +358,7 @@ export class PlaybackAPI {
    * ```
    */
   setPlaybackMode(mode: PlaybackMode): void {
+    this.assertNotDisposed();
     if (mode !== 'realtime' && mode !== 'playAllFrames') {
       throw new ValidationError("setPlaybackMode() requires 'realtime' or 'playAllFrames'");
     }
@@ -234,6 +376,62 @@ export class PlaybackAPI {
    * ```
    */
   getPlaybackMode(): PlaybackMode {
+    this.assertNotDisposed();
     return this.session.playbackMode;
+  }
+
+  /**
+   * Get the measured (actual) playback FPS.
+   *
+   * During active playback, this returns the real throughput measured by the
+   * playback engine (rolling average updated every ~500 ms). When playback is
+   * stopped, returns `0`.
+   *
+   * @returns The measured FPS as a number (0 when not playing).
+   *
+   * @example
+   * ```ts
+   * const real = openrv.playback.getMeasuredFPS(); // e.g. 23.4
+   * ```
+   */
+  getMeasuredFPS(): number {
+    this.assertNotDisposed();
+    return this.session.effectiveFps;
+  }
+
+  /**
+   * Check whether the playback engine is currently buffering.
+   *
+   * Returns `true` when the engine is waiting for frames (e.g. play-all-frames
+   * starvation or HDR initial buffering delay).
+   *
+   * @returns `true` if buffering, `false` otherwise.
+   *
+   * @example
+   * ```ts
+   * if (openrv.playback.isBuffering()) { showSpinner(); }
+   * ```
+   */
+  isBuffering(): boolean {
+    this.assertNotDisposed();
+    return this.session.isBuffering;
+  }
+
+  /**
+   * Get the cumulative count of dropped (skipped) frames since playback started.
+   *
+   * In realtime mode the engine may skip frames to maintain the target FPS.
+   * This counter reflects the total number of such skips.
+   *
+   * @returns The number of dropped frames.
+   *
+   * @example
+   * ```ts
+   * const dropped = openrv.playback.getDroppedFrameCount(); // e.g. 12
+   * ```
+   */
+  getDroppedFrameCount(): number {
+    this.assertNotDisposed();
+    return this.session.droppedFrameCount;
   }
 }

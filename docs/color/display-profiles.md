@@ -21,7 +21,7 @@ The display transfer function converts linear light values to the non-linear enc
 
 ### Cycling Profiles
 
-Press `Shift+Alt+D` to cycle through the available display profiles: Linear, sRGB, Rec. 709, Gamma 2.2, Gamma 2.4. The active profile name appears in the viewer status area.
+Press `Shift+Alt+D` to cycle through the available display profiles: Linear, sRGB, Rec. 709, Gamma 2.2, Gamma 2.4. The active profile name appears in the viewer status area via the **Display Profile Indicator**, a semi-transparent overlay positioned in the bottom-left corner of the viewer. When cycling profiles, the indicator flashes briefly (becomes fully opaque for 1.5 seconds) to confirm the change, then fades back to its normal opacity. The indicator can be toggled on or off programmatically and is non-interactive (pointer events pass through to the viewer).
 
 ---
 
@@ -140,6 +140,9 @@ window.openrv.color.setDisplayProfile({
   displayGamma: 1.0,
   displayBrightness: 1.0
 });
+
+// Get current display profile
+const profile = window.openrv.color.getDisplayProfile();
 
 // Query display capabilities
 const caps = window.openrv.color.getDisplayCapabilities();

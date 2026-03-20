@@ -341,4 +341,57 @@ describe('SessionURLManager', () => {
       expect(decoded!.sourceUrl).toBe('file:///shots/日本語ショット.exr');
     });
   });
+
+  describe('sourceUrls (multi-source)', () => {
+    it('round-trips sourceUrls array through encode/decode', () => {
+      const state: SessionURLState = {
+        ...createMinimalState(),
+        sourceUrls: ['https://example.com/shot_a.exr', 'https://example.com/shot_b.exr'],
+      };
+      const hash = encodeSessionState(state);
+      const decoded = decodeSessionState(hash);
+      expect(decoded).not.toBeNull();
+      expect(decoded!.sourceUrls).toEqual(['https://example.com/shot_a.exr', 'https://example.com/shot_b.exr']);
+    });
+
+    it('omits sourceUrls when empty', () => {
+      const state: SessionURLState = {
+        ...createMinimalState(),
+        sourceUrls: [],
+      };
+      const hash = encodeSessionState(state);
+      const decoded = decodeSessionState(hash);
+      expect(decoded).not.toBeNull();
+      expect(decoded!.sourceUrls).toBeUndefined();
+    });
+
+    it('omits sourceUrls when not provided', () => {
+      const state = createMinimalState();
+      const hash = encodeSessionState(state);
+      const decoded = decodeSessionState(hash);
+      expect(decoded).not.toBeNull();
+      expect(decoded!.sourceUrls).toBeUndefined();
+    });
+
+    it('preserves both sourceUrl and sourceUrls', () => {
+      const state: SessionURLState = {
+        ...createMinimalState(),
+        sourceUrl: 'https://example.com/shot_a.exr',
+        sourceUrls: ['https://example.com/shot_a.exr', 'https://example.com/shot_b.exr'],
+      };
+      const hash = encodeSessionState(state);
+      const decoded = decodeSessionState(hash);
+      expect(decoded).not.toBeNull();
+      expect(decoded!.sourceUrl).toBe('https://example.com/shot_a.exr');
+      expect(decoded!.sourceUrls).toEqual(['https://example.com/shot_a.exr', 'https://example.com/shot_b.exr']);
+    });
+
+    it('rejects sourceUrls with non-string elements', () => {
+      const json = JSON.stringify({ f: 1, fps: 24, si: 0, sus: [123, null] });
+      const encoded = btoa(json).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      const decoded = decodeSessionState(encoded);
+      expect(decoded).not.toBeNull();
+      expect(decoded!.sourceUrls).toBeUndefined();
+    });
+  });
 });

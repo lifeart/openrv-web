@@ -401,6 +401,26 @@ describe('NetworkSyncManager', () => {
     });
   });
 
+  describe('warning forwarding', () => {
+    it('NSM-092: forwards WebSocketClient warning as toastMessage', () => {
+      const toastHandler = vi.fn();
+      manager.on('toastMessage', toastHandler);
+
+      const wsClient = (manager as any).wsClient;
+      wsClient.emit('warning', {
+        code: 'MALFORMED_MESSAGE',
+        message: 'Received malformed sync message (1 in current window)',
+        detail: 'not valid json',
+      });
+
+      expect(toastHandler).toHaveBeenCalledTimes(1);
+      expect(toastHandler).toHaveBeenCalledWith({
+        message: 'Received malformed sync message (1 in current window)',
+        type: 'warning',
+      });
+    });
+  });
+
   describe('dispose', () => {
     it('NSM-050: cleans up subscriptions', () => {
       manager._applyLocalRoomCreation();
@@ -809,6 +829,240 @@ describe('NetworkSyncManager', () => {
       // No retry should fire
       vi.advanceTimersByTime(10000);
       // No warning toast
+    });
+  });
+
+  describe('dropped message tracking (issue #436)', () => {
+    it('NSM-130: dispatchRealtimeMessage returns false and increments counter when both transports fail', () => {
+      manager._applyLocalRoomCreation();
+
+      // wsClient.send returns false (not connected to WS), no serverless peer
+      const result = (manager as any).dispatchRealtimeMessage({
+        id: 'msg-1',
+        type: 'sync.playback',
+        roomId: manager.roomInfo!.roomId,
+        userId: manager.userId,
+        timestamp: Date.now(),
+        payload: {},
+      });
+
+      expect(result).toBe(false);
+      expect(manager.droppedMessageCount).toBe(1);
+    });
+
+    it('NSM-131: emits syncMessageDropped event when message is dropped', () => {
+      manager._applyLocalRoomCreation();
+
+      const handler = vi.fn();
+      manager.on('syncMessageDropped', handler);
+
+      (manager as any).dispatchRealtimeMessage({
+        id: 'msg-2',
+        type: 'sync.frame',
+        roomId: manager.roomInfo!.roomId,
+        userId: manager.userId,
+        timestamp: Date.now(),
+        payload: {},
+      });
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(handler).toHaveBeenCalledWith({
+        messageType: 'sync.frame',
+        droppedCount: 1,
+      });
+    });
+
+    it('NSM-132: droppedMessageCount accumulates across multiple failures', () => {
+      manager._applyLocalRoomCreation();
+
+      const handler = vi.fn();
+      manager.on('syncMessageDropped', handler);
+
+      for (let i = 0; i < 3; i++) {
+        (manager as any).dispatchRealtimeMessage({
+          id: `msg-${i}`,
+          type: 'sync.playback',
+          roomId: manager.roomInfo!.roomId,
+          userId: manager.userId,
+          timestamp: Date.now(),
+          payload: {},
+        });
+      }
+
+      expect(manager.droppedMessageCount).toBe(3);
+      expect(handler).toHaveBeenCalledTimes(3);
+      expect(handler.mock.calls[2]![0]).toEqual({
+        messageType: 'sync.playback',
+        droppedCount: 3,
+      });
+    });
+
+    it('NSM-133: dispatchRealtimeMessage returns true when wsClient.send succeeds', () => {
+      manager._applyLocalRoomCreation();
+
+      // Simulate WS being connected and send succeeding
+      vi.spyOn((manager as any).wsClient, 'send').mockReturnValue(true);
+
+      const handler = vi.fn();
+      manager.on('syncMessageDropped', handler);
+
+      const result = (manager as any).dispatchRealtimeMessage({
+        id: 'msg-ok',
+        type: 'sync.view',
+        roomId: manager.roomInfo!.roomId,
+        userId: manager.userId,
+        timestamp: Date.now(),
+        payload: {},
+      });
+
+      expect(result).toBe(true);
+      expect(manager.droppedMessageCount).toBe(0);
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('NSM-134: dispatchRealtimeMessage returns true when serverless peer delivers', () => {
+      manager._applyLocalRoomCreation();
+
+      // WS send fails
+      vi.spyOn((manager as any).wsClient, 'send').mockReturnValue(false);
+      // Serverless peer succeeds
+      vi.spyOn(manager as any, 'sendMessageOverServerlessPeer').mockReturnValue(true);
+
+      const handler = vi.fn();
+      manager.on('syncMessageDropped', handler);
+
+      const result = (manager as any).dispatchRealtimeMessage({
+        id: 'msg-peer',
+        type: 'sync.color',
+        roomId: manager.roomInfo!.roomId,
+        userId: manager.userId,
+        timestamp: Date.now(),
+        payload: {},
+      });
+
+      expect(result).toBe(true);
+      expect(manager.droppedMessageCount).toBe(0);
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('NSM-135: droppedMessageCount starts at zero', () => {
+      expect(manager.droppedMessageCount).toBe(0);
+    });
+  });
+
+  describe('conflict state emission (Issue #342)', () => {
+    it('NSM-140: emits conflict state when playback conflict detected after sync', () => {
+      const states: ConnectionState[] = [];
+      manager.on('connectionStateChanged', (s) => states.push(s));
+
+      // Set manager to connected state
+      (manager as any)._connectionState = 'connected';
+
+      // Set up local playback state that will conflict
+      const stateManager = manager.getSyncStateManager();
+      stateManager.updateLocalPlayback({ isPlaying: true, currentFrame: 10 });
+
+      // Simulate receiving a conflicting remote playback sync message
+      const message = {
+        id: 'msg-conflict-1',
+        type: 'sync.playback',
+        roomId: 'room-1',
+        userId: 'other-user',
+        timestamp: Date.now(),
+        payload: {
+          isPlaying: false,
+          currentFrame: 10,
+          playbackSpeed: 1,
+          playDirection: 1,
+          loopMode: 'loop',
+          timestamp: Date.now(),
+        },
+      };
+      (manager as any).handleMessage(message, 'websocket');
+
+      expect(states).toContain('conflict');
+    });
+
+    it('NSM-141: emits conflict state when view conflict detected after sync', () => {
+      const states: ConnectionState[] = [];
+      manager.on('connectionStateChanged', (s) => states.push(s));
+
+      // Set manager to connected state
+      (manager as any)._connectionState = 'connected';
+
+      // Set up local view state that will conflict
+      const stateManager = manager.getSyncStateManager();
+      stateManager.updateLocalView({ panX: 0, panY: 0, zoom: 1, channelMode: 'rgb' });
+
+      // Simulate receiving a conflicting remote view sync message
+      const message = {
+        id: 'msg-conflict-2',
+        type: 'sync.view',
+        roomId: 'room-1',
+        userId: 'other-user',
+        timestamp: Date.now(),
+        payload: {
+          panX: 100,
+          panY: 0,
+          zoom: 1,
+          channelMode: 'rgb',
+        },
+      };
+      (manager as any).handleMessage(message, 'websocket');
+
+      expect(states).toContain('conflict');
+    });
+
+    it('NSM-142: transitions back to connected when conflict clears', () => {
+      const states: ConnectionState[] = [];
+      manager.on('connectionStateChanged', (s) => states.push(s));
+
+      // Start in conflict state
+      (manager as any)._connectionState = 'conflict';
+
+      // Set up matching local and remote states (no conflict)
+      const stateManager = manager.getSyncStateManager();
+      stateManager.updateLocalPlayback({ isPlaying: false, currentFrame: 10 });
+      // Both view states must match to clear all conflicts
+      stateManager.updateLocalView({ panX: 0, panY: 0, zoom: 1, channelMode: 'rgb' });
+      stateManager.updateRemoteView({ panX: 0, panY: 0, zoom: 1, channelMode: 'rgb' });
+
+      // Simulate receiving a matching remote playback sync
+      const message = {
+        id: 'msg-resolve-1',
+        type: 'sync.playback',
+        roomId: 'room-1',
+        userId: 'other-user',
+        timestamp: Date.now(),
+        payload: {
+          isPlaying: false,
+          currentFrame: 10,
+          playbackSpeed: 1,
+          playDirection: 1,
+          loopMode: 'loop',
+          timestamp: Date.now(),
+        },
+      };
+      (manager as any).handleMessage(message, 'websocket');
+
+      expect(states).toContain('connected');
+    });
+
+    it('NSM-143: does not emit conflict state when disconnected', () => {
+      const states: ConnectionState[] = [];
+      manager.on('connectionStateChanged', (s) => states.push(s));
+
+      // Manager is disconnected by default
+      expect(manager.connectionState).toBe('disconnected');
+
+      // Even with conflicting state, no conflict emission
+      const stateManager = manager.getSyncStateManager();
+      stateManager.updateLocalPlayback({ isPlaying: true, currentFrame: 10 });
+
+      // Directly call the private method to verify guard
+      (manager as any).emitConflictStateIfNeeded();
+
+      expect(states).not.toContain('conflict');
     });
   });
 });

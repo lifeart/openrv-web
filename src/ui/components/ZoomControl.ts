@@ -10,7 +10,7 @@ import { EventEmitter, type EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { DropdownMenu } from './shared/DropdownMenu';
-import { formatRatio, findPresetForRatio } from './ScalePresets';
+import { findPresetForRatio } from './ScalePresets';
 
 export type ZoomLevel = 'fit' | 'fit-width' | 'fit-height' | 0.25 | 0.5 | 1 | 2 | 4;
 
@@ -136,10 +136,10 @@ export class ZoomControl extends EventEmitter<ZoomControlEvents> {
     } else if (this.currentZoom === 'fit-height') {
       label = 'Fit Height';
     } else {
-      // For dropdown-selected presets, show pixel ratio notation
+      // For dropdown-selected presets, show percentage notation matching the dropdown
       const preset = findPresetForRatio(this.currentZoom);
       if (preset) {
-        label = preset.label;
+        label = preset.percentage;
       } else {
         label = `${Math.round(this.currentZoom * 100)}%`;
       }
@@ -195,9 +195,9 @@ export class ZoomControl extends EventEmitter<ZoomControlEvents> {
       const preset = findPresetForRatio(ratio);
       let label: string;
       if (preset) {
-        label = preset.label;
+        label = preset.percentage;
       } else {
-        label = formatRatio(ratio);
+        label = `${Math.round(ratio * 100)}%`;
       }
       this.button.innerHTML = `${getIconSvg('zoom-in', 'sm')}<span>${label}</span><span style="font-size: 8px;">&#9660;</span>`;
       this.dropdown.setSelectedValue(''); // Deselect all
