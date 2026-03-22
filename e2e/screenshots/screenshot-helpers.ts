@@ -8,26 +8,17 @@
 
 import { Page } from '@playwright/test';
 import path from 'path';
-import {
-  waitForTestHelper,
-  loadVideoFile,
-} from '../fixtures';
+import { waitForTestHelper, loadVideoFile } from '../fixtures';
 
 /** Default output directory for documentation screenshots. */
-const SCREENSHOT_OUTPUT_DIR = path.resolve(
-  process.cwd(),
-  'docs/assets/screenshots',
-);
+const SCREENSHOT_OUTPUT_DIR = path.resolve(process.cwd(), 'docs/assets/screenshots');
 
 /**
  * Wait for the WebGL/2D canvas to stop changing.
  * Compares consecutive page screenshots of the viewer area and resolves
  * once two frames in a row are identical (within tolerance).
  */
-export async function waitForCanvasStable(
-  page: Page,
-  timeout = 5000,
-): Promise<void> {
+export async function waitForCanvasStable(page: Page, timeout = 5000): Promise<void> {
   const deadline = Date.now() + timeout;
   let previous: Buffer | null = null;
 
@@ -45,11 +36,7 @@ export async function waitForCanvasStable(
 /**
  * Set the page viewport to a fixed size for consistent screenshots.
  */
-export async function setDocViewport(
-  page: Page,
-  width = 1440,
-  height = 900,
-): Promise<void> {
+export async function setDocViewport(page: Page, width = 1440, height = 900): Promise<void> {
   await page.setViewportSize({ width, height });
 }
 
@@ -101,11 +88,7 @@ export async function takeDocScreenshot(
 /**
  * Take a screenshot of a specific element and save it to the output dir.
  */
-export async function takeElementScreenshot(
-  page: Page,
-  name: string,
-  selector: string,
-): Promise<Buffer> {
+export async function takeElementScreenshot(page: Page, name: string, selector: string): Promise<Buffer> {
   const filePath = path.join(SCREENSHOT_OUTPUT_DIR, `${name}.png`);
   const element = page.locator(selector).first();
   const screenshot = await element.screenshot({ path: filePath, type: 'png' });
@@ -115,10 +98,7 @@ export async function takeElementScreenshot(
 /**
  * Switch to a tab by clicking the tab button with the given data-tab-id.
  */
-export async function switchTab(
-  page: Page,
-  tabId: string,
-): Promise<void> {
+export async function switchTab(page: Page, tabId: string): Promise<void> {
   const tab = page.locator(`button[data-tab-id="${tabId}"]`);
   await tab.click();
   // Allow the tab content to render

@@ -1,11 +1,5 @@
 import { test, expect } from '@playwright/test';
-import {
-  waitForTestHelper,
-  loadVideoFile,
-  loadExrFile,
-  getViewerState,
-  getPixelProbeState,
-} from './fixtures';
+import { waitForTestHelper, loadVideoFile, loadExrFile, getViewerState, getPixelProbeState } from './fixtures';
 
 /**
  * Phase 3: Comprehensive Pipeline Updates - E2E Integration Tests

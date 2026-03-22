@@ -1,4 +1,12 @@
-import { test, expect, loadVideoFile, captureViewerScreenshot, imagesAreDifferent, exportFrame, getSessionState } from './fixtures';
+import {
+  test,
+  expect,
+  loadVideoFile,
+  captureViewerScreenshot,
+  imagesAreDifferent,
+  exportFrame,
+  getSessionState,
+} from './fixtures';
 
 /**
  * State Verification Tests

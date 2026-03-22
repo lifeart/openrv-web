@@ -20,12 +20,14 @@ async function getLUTPipelineState(page: import('@playwright/test').Page): Promi
 }> {
   return page.evaluate(() => {
     const panel = (window as any).__OPENRV_TEST__?.mutations?.getLUTPipelinePanel();
-    return panel?.getPipelineState?.() ?? {
-      precache: { enabled: true, hasLUT: false, intensity: 1, lutName: null },
-      file: { enabled: true, hasLUT: false, intensity: 1, lutName: null },
-      look: { enabled: true, hasLUT: false, intensity: 1, lutName: null },
-      display: { enabled: true, hasLUT: false, intensity: 1, lutName: null },
-    };
+    return (
+      panel?.getPipelineState?.() ?? {
+        precache: { enabled: true, hasLUT: false, intensity: 1, lutName: null },
+        file: { enabled: true, hasLUT: false, intensity: 1, lutName: null },
+        look: { enabled: true, hasLUT: false, intensity: 1, lutName: null },
+        display: { enabled: true, hasLUT: false, intensity: 1, lutName: null },
+      }
+    );
   });
 }
 
@@ -37,11 +39,7 @@ async function hasLUTPipelinePanel(page: import('@playwright/test').Page): Promi
 }
 
 /** Wait for a specific stage to have a LUT loaded */
-async function waitForStageLUT(
-  page: import('@playwright/test').Page,
-  stage: string,
-  hasLUT: boolean,
-) {
+async function waitForStageLUT(page: import('@playwright/test').Page, stage: string, hasLUT: boolean) {
   await page.waitForFunction(
     ({ s, expected }) => {
       const panel = (window as any).__OPENRV_TEST__?.mutations?.getLUTPipelinePanel();
@@ -54,11 +52,7 @@ async function waitForStageLUT(
 }
 
 /** Wait for a specific stage enabled state */
-async function waitForStageEnabled(
-  page: import('@playwright/test').Page,
-  stage: string,
-  enabled: boolean,
-) {
+async function waitForStageEnabled(page: import('@playwright/test').Page, stage: string, enabled: boolean) {
   await page.waitForFunction(
     ({ s, expected }) => {
       const panel = (window as any).__OPENRV_TEST__?.mutations?.getLUTPipelinePanel();
@@ -97,10 +91,7 @@ test.describe('Multi-Point LUT Pipeline', () => {
     await page.goto('/');
     await page.waitForSelector('#app');
     await waitForTestHelper(page);
-    test.skip(
-      !(await hasLUTPipelinePanel(page)),
-      'LUT pipeline panel control is not wired in this app build.',
-    );
+    test.skip(!(await hasLUTPipelinePanel(page)), 'LUT pipeline panel control is not wired in this app build.');
     await loadVideoFile(page);
   });
 

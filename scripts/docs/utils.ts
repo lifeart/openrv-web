@@ -32,16 +32,15 @@ export function writeGeneratedFile(filename: string, content: string): void {
  * Returns the comment body (without delimiters) or empty string if none found.
  */
 export function extractJSDoc(source: string, beforePattern: string | RegExp): string {
-  const patternStr = typeof beforePattern === 'string'
-    ? beforePattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    : beforePattern.source;
+  const patternStr =
+    typeof beforePattern === 'string' ? beforePattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') : beforePattern.source;
   const re = new RegExp(`/\\*\\*([\\s\\S]*?)\\*/\\s*(?:export\\s+)?${patternStr}`);
   const match = source.match(re);
   if (!match || !match[1]) return '';
   return match[1]
     .split('\n')
-    .map(line => line.replace(/^\s*\*\s?/, '').trim())
-    .filter(line => line.length > 0)
+    .map((line) => line.replace(/^\s*\*\s?/, '').trim())
+    .filter((line) => line.length > 0)
     .join(' ')
     .trim();
 }
@@ -50,9 +49,7 @@ export function extractJSDoc(source: string, beforePattern: string | RegExp): st
  * Convert a kebab-case or dot-separated slug to Title Case.
  */
 export function toTitleCase(slug: string): string {
-  return slug
-    .replace(/[-_.]/g, ' ')
-    .replace(/\b\w/g, c => c.toUpperCase());
+  return slug.replace(/[-_.]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 /**

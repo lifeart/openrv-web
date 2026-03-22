@@ -63,10 +63,7 @@ async function drawStrokeOnPage(page: Page): Promise<void> {
   await page.mouse.down();
   for (let i = 1; i <= 10; i++) {
     const t = i / 10;
-    await page.mouse.move(
-      startX + (endX - startX) * t,
-      startY + (endY - startY) * t,
-    );
+    await page.mouse.move(startX + (endX - startX) * t, startY + (endY - startY) * t);
   }
   await page.mouse.up();
   await page.waitForTimeout(300);
@@ -78,7 +75,9 @@ async function getPaintCanvasInfo(page: Page) {
     const dpr = window.devicePixelRatio || 1;
     const paintCanvas = document.querySelector('canvas[data-testid="viewer-paint-canvas"]') as HTMLCanvasElement | null;
     const glCanvas = document.querySelector('canvas[data-testid="viewer-gl-canvas"]') as HTMLCanvasElement | null;
-    const blitCanvas = document.querySelector('canvas[data-testid="viewer-webgpu-blit-canvas"]') as HTMLCanvasElement | null;
+    const blitCanvas = document.querySelector(
+      'canvas[data-testid="viewer-webgpu-blit-canvas"]',
+    ) as HTMLCanvasElement | null;
     const imageCanvas = document.querySelector('canvas[data-testid="viewer-image-canvas"]') as HTMLCanvasElement | null;
 
     if (!paintCanvas) return null;
@@ -94,9 +93,8 @@ async function getPaintCanvasInfo(page: Page) {
     const logicalHeight = isHidden ? cssH : paintRect.height;
 
     // Pick the active render canvas by data-testid: prefer WebGPU blit > GL > image
-    const renderCanvas = [blitCanvas, glCanvas, imageCanvas].find(
-      c => c && c.style.display !== 'none' && c.width > 0,
-    ) ?? null;
+    const renderCanvas =
+      [blitCanvas, glCanvas, imageCanvas].find((c) => c && c.style.display !== 'none' && c.width > 0) ?? null;
     const renderRect = renderCanvas?.getBoundingClientRect();
 
     return {
@@ -112,12 +110,14 @@ async function getPaintCanvasInfo(page: Page) {
         rectWidth: paintRect.width,
         rectHeight: paintRect.height,
       },
-      render: renderRect ? {
-        bufferWidth: renderCanvas!.width,
-        bufferHeight: renderCanvas!.height,
-        rectWidth: renderRect.width,
-        rectHeight: renderRect.height,
-      } : null,
+      render: renderRect
+        ? {
+            bufferWidth: renderCanvas!.width,
+            bufferHeight: renderCanvas!.height,
+            rectWidth: renderRect.width,
+            rectHeight: renderRect.height,
+          }
+        : null,
     };
   });
 }
@@ -271,10 +271,7 @@ baseTest.describe('Paint Canvas Retina Support (DPR=2)', () => {
       // Move in steps for a visible stroke
       for (let i = 1; i <= 10; i++) {
         const t = i / 10;
-        await retinaPage.mouse.move(
-          startX + (endX - startX) * t,
-          startY + (endY - startY) * t,
-        );
+        await retinaPage.mouse.move(startX + (endX - startX) * t, startY + (endY - startY) * t);
       }
       await retinaPage.mouse.up();
       await retinaPage.waitForTimeout(200);
@@ -324,7 +321,7 @@ baseTest.describe('Annotation Visibility on HDR Content', () => {
 
       const children = Array.from(container.children) as HTMLElement[];
       const indexOf = (testid: string) =>
-        children.findIndex(el => (el as HTMLCanvasElement).dataset?.testid === testid);
+        children.findIndex((el) => (el as HTMLCanvasElement).dataset?.testid === testid);
 
       const paintIdx = indexOf('viewer-paint-canvas');
       const glIdx = indexOf('viewer-gl-canvas');
@@ -332,7 +329,7 @@ baseTest.describe('Annotation Visibility on HDR Content', () => {
       const blitIdx = indexOf('viewer-webgpu-blit-canvas');
 
       // Paint canvas must come after ALL render canvases in DOM order
-      const renderIndices = [glIdx, imageIdx, blitIdx].filter(i => i >= 0);
+      const renderIndices = [glIdx, imageIdx, blitIdx].filter((i) => i >= 0);
       const lastRenderIdx = renderIndices.length > 0 ? Math.max(...renderIndices) : -1;
 
       return {

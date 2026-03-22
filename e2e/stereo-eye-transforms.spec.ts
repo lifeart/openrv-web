@@ -27,10 +27,7 @@ async function activateStereoMode(page: import('@playwright/test').Page, mode = 
     return dd && (dd as HTMLElement).style.display !== 'none';
   });
   await page.click(`[data-stereo-mode="${mode}"]`);
-  await page.waitForFunction(
-    (m) => window.__OPENRV_TEST__?.getViewerState()?.stereoMode === m,
-    mode
-  );
+  await page.waitForFunction((m) => window.__OPENRV_TEST__?.getViewerState()?.stereoMode === m, mode);
 }
 
 test.describe('Stereo Per-Eye Transforms', () => {
@@ -48,7 +45,9 @@ test.describe('Stereo Per-Eye Transforms', () => {
     await page.waitForFunction(() => {
       const btn = document.querySelector('[data-testid="stereo-eye-transform-button"]');
       if (!btn) return true; // Not rendered yet is ok
-      return (btn as HTMLElement).style.display === 'none' || (btn.parentElement as HTMLElement)?.style.display === 'none';
+      return (
+        (btn as HTMLElement).style.display === 'none' || (btn.parentElement as HTMLElement)?.style.display === 'none'
+      );
     });
   });
 
@@ -322,9 +321,11 @@ test.describe('Stereo Per-Eye Transforms', () => {
     await page.click('[data-testid="stereo-eye-transform-reset"]');
     await page.waitForFunction(() => {
       const state = window.__OPENRV_TEST__?.getViewerState();
-      return state?.stereoEyeTransformLeft?.flipH === false &&
+      return (
+        state?.stereoEyeTransformLeft?.flipH === false &&
         state?.stereoEyeTransformLeft?.rotation === 0 &&
-        state?.stereoEyeTransformLeft?.scale === 1.0;
+        state?.stereoEyeTransformLeft?.scale === 1.0
+      );
     });
   });
 

@@ -105,7 +105,10 @@ test.describe('Session State Management', () => {
     await page.keyboard.press('ArrowRight');
     await waitForFrame(page, 3);
     await page.keyboard.press('i');
-    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.inPoint === 3; })()`);
+    await waitForCondition(
+      page,
+      `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.inPoint === 3; })()`,
+    );
 
     let state = await getSessionState(page);
     expect(state.inPoint).toBe(3);
@@ -116,7 +119,10 @@ test.describe('Session State Management', () => {
     await page.keyboard.press('ArrowRight');
     await waitForFrame(page, 5);
     await page.keyboard.press('o');
-    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.outPoint === 5; })()`);
+    await waitForCondition(
+      page,
+      `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.outPoint === 5; })()`,
+    );
 
     state = await getSessionState(page);
     expect(state.inPoint).toBe(3);
@@ -124,7 +130,10 @@ test.describe('Session State Management', () => {
 
     // Reset in/out points
     await page.keyboard.press('r');
-    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.inPoint === 1 && s?.outPoint === ${initialState.frameCount}; })()`);
+    await waitForCondition(
+      page,
+      `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.inPoint === 1 && s?.outPoint === ${initialState.frameCount}; })()`,
+    );
 
     state = await getSessionState(page);
     expect(state.inPoint).toBe(1);
@@ -171,7 +180,10 @@ test.describe('Session State Management', () => {
     await page.keyboard.press('Home');
     await waitForFrame(page, 1);
     await page.keyboard.press('m');
-    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.marks?.length === 1; })()`);
+    await waitForCondition(
+      page,
+      `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.marks?.length === 1; })()`,
+    );
 
     state = await getSessionState(page);
     expect(state.marks).toContain(1);
@@ -183,7 +195,10 @@ test.describe('Session State Management', () => {
     await page.keyboard.press('ArrowRight');
     await waitForFrame(page, 5);
     await page.keyboard.press('m');
-    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.marks?.length === 2; })()`);
+    await waitForCondition(
+      page,
+      `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.marks?.length === 2; })()`,
+    );
 
     state = await getSessionState(page);
     expect(state.marks).toHaveLength(2);
@@ -192,7 +207,10 @@ test.describe('Session State Management', () => {
 
     // Toggle off the mark at frame 5
     await page.keyboard.press('m');
-    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.marks?.length === 1; })()`);
+    await waitForCondition(
+      page,
+      `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.marks?.length === 1; })()`,
+    );
 
     state = await getSessionState(page);
     expect(state.marks).toHaveLength(1);
@@ -265,7 +283,7 @@ test.describe('Color Adjustments State', () => {
         return state != null && Math.abs(state.exposure - v) <= t;
       },
       { v: 3, t: 0.01 },
-      { timeout: 15000 }
+      { timeout: 15000 },
     );
 
     // Verify state updated
@@ -292,7 +310,7 @@ test.describe('Color Adjustments State', () => {
         return state != null && Math.abs(state.exposure - v) <= t;
       },
       { v: 3, t: 0.01 },
-      { timeout: 15000 }
+      { timeout: 15000 },
     );
 
     let state = await getColorState(page);
@@ -308,7 +326,7 @@ test.describe('Color Adjustments State', () => {
         return state != null && Math.abs(state.exposure - v) <= t;
       },
       { v: 0, t: 0.01 },
-      { timeout: 15000 }
+      { timeout: 15000 },
     );
 
     state = await getColorState(page);
@@ -378,7 +396,10 @@ test.describe('Transform State', () => {
 
     // Flip horizontal
     await page.locator('button[title*="Flip horizontal"]').click();
-    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getTransformState(); return s?.flipH === true; })()`);
+    await waitForCondition(
+      page,
+      `(() => { const s = window.__OPENRV_TEST__?.getTransformState(); return s?.flipH === true; })()`,
+    );
 
     state = await getTransformState(page);
     expect(state.flipH).toBe(true);
@@ -386,7 +407,10 @@ test.describe('Transform State', () => {
 
     // Flip horizontal again - should toggle off
     await page.locator('button[title*="Flip horizontal"]').click();
-    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getTransformState(); return s?.flipH === false; })()`);
+    await waitForCondition(
+      page,
+      `(() => { const s = window.__OPENRV_TEST__?.getTransformState(); return s?.flipH === false; })()`,
+    );
 
     state = await getTransformState(page);
     expect(state.flipH).toBe(false);
@@ -401,7 +425,10 @@ test.describe('Transform State', () => {
 
     // Flip vertical
     await page.locator('button[title*="Flip vertical"]').click();
-    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getTransformState(); return s?.flipV === true; })()`);
+    await waitForCondition(
+      page,
+      `(() => { const s = window.__OPENRV_TEST__?.getTransformState(); return s?.flipV === true; })()`,
+    );
 
     state = await getTransformState(page);
     expect(state.flipV).toBe(true);
@@ -409,7 +436,10 @@ test.describe('Transform State', () => {
 
     // Flip vertical again - should toggle off
     await page.locator('button[title*="Flip vertical"]').click();
-    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getTransformState(); return s?.flipV === false; })()`);
+    await waitForCondition(
+      page,
+      `(() => { const s = window.__OPENRV_TEST__?.getTransformState(); return s?.flipV === false; })()`,
+    );
 
     state = await getTransformState(page);
     expect(state.flipV).toBe(false);
@@ -422,7 +452,10 @@ test.describe('Transform State', () => {
     // Apply various transforms
     await page.locator('button[title*="Rotate right"]').click();
     await page.locator('button[title*="Flip horizontal"]').click();
-    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getTransformState(); return s?.rotation === 90 && s?.flipH === true; })()`);
+    await waitForCondition(
+      page,
+      `(() => { const s = window.__OPENRV_TEST__?.getTransformState(); return s?.rotation === 90 && s?.flipH === true; })()`,
+    );
 
     let state = await getTransformState(page);
     expect(state.rotation).toBe(90);
@@ -430,7 +463,10 @@ test.describe('Transform State', () => {
 
     // Reset transforms
     await page.locator('button[title="Reset transforms"]').click();
-    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getTransformState(); return s?.rotation === 0 && s?.flipH === false && s?.flipV === false; })()`);
+    await waitForCondition(
+      page,
+      `(() => { const s = window.__OPENRV_TEST__?.getTransformState(); return s?.rotation === 0 && s?.flipH === false && s?.flipV === false; })()`,
+    );
 
     state = await getTransformState(page);
     expect(state.rotation).toBe(0);
@@ -532,7 +568,10 @@ test.describe('Paint/Annotation State', () => {
 
     // Undo
     await page.keyboard.press('Control+z');
-    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === false && s?.canRedo === true; })()`);
+    await waitForCondition(
+      page,
+      `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === false && s?.canRedo === true; })()`,
+    );
 
     state = await getPaintState(page);
     expect(state.canUndo).toBe(false);
@@ -555,14 +594,20 @@ test.describe('Paint/Annotation State', () => {
 
     // Undo
     await page.keyboard.press('Control+z');
-    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canRedo === true; })()`);
+    await waitForCondition(
+      page,
+      `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canRedo === true; })()`,
+    );
 
     let state = await getPaintState(page);
     expect(state.canRedo).toBe(true);
 
     // Redo
     await page.keyboard.press('Control+y');
-    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === true && s?.canRedo === false; })()`);
+    await waitForCondition(
+      page,
+      `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === true && s?.canRedo === false; })()`,
+    );
 
     state = await getPaintState(page);
     expect(state.canUndo).toBe(true);
@@ -579,14 +624,20 @@ test.describe('Paint/Annotation State', () => {
 
     // Toggle brush
     await page.keyboard.press('b');
-    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.brushType === '${expectedBrush}'; })()`);
+    await waitForCondition(
+      page,
+      `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.brushType === '${expectedBrush}'; })()`,
+    );
 
     state = await getPaintState(page);
     expect(state.brushType).not.toBe(initialBrush);
 
     // Toggle back
     await page.keyboard.press('b');
-    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.brushType === '${initialBrush}'; })()`);
+    await waitForCondition(
+      page,
+      `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.brushType === '${initialBrush}'; })()`,
+    );
 
     state = await getPaintState(page);
     expect(state.brushType).toBe(initialBrush);
@@ -692,7 +743,7 @@ test.describe('End-to-End Workflows', () => {
         return state != null && Math.abs(state.exposure - v) <= t;
       },
       { v: 1.5, t: 0.01 },
-      { timeout: 15000 }
+      { timeout: 15000 },
     );
 
     const colorState = await getColorState(page);
@@ -791,7 +842,10 @@ test.describe('End-to-End Workflows', () => {
 
     await page.locator('button[title*="Rotate right"]').click();
     await page.locator('button[title*="Flip horizontal"]').click();
-    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getTransformState(); return s?.rotation === 90 && s?.flipH === true; })()`);
+    await waitForCondition(
+      page,
+      `(() => { const s = window.__OPENRV_TEST__?.getTransformState(); return s?.rotation === 90 && s?.flipH === true; })()`,
+    );
 
     let transform = await getTransformState(page);
     expect(transform.rotation).toBe(90);
@@ -802,7 +856,10 @@ test.describe('End-to-End Workflows', () => {
     await page.keyboard.press('ArrowRight');
     await page.keyboard.press('ArrowRight');
     await page.keyboard.press('i');
-    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.inPoint === 3; })()`);
+    await waitForCondition(
+      page,
+      `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.inPoint === 3; })()`,
+    );
 
     session = await getSessionState(page);
     expect(session.inPoint).toBe(3);
@@ -810,7 +867,10 @@ test.describe('End-to-End Workflows', () => {
     await page.keyboard.press('End');
     await page.keyboard.press('ArrowLeft');
     await page.keyboard.press('o');
-    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.outPoint === ${totalFrames - 1}; })()`);
+    await waitForCondition(
+      page,
+      `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.outPoint === ${totalFrames - 1}; })()`,
+    );
 
     session = await getSessionState(page);
     expect(session.outPoint).toBe(totalFrames - 1);

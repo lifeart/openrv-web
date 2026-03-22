@@ -1,9 +1,5 @@
 import { test, expect } from '@playwright/test';
-import {
-  loadVideoFile,
-  getSessionState,
-  waitForTestHelper,
-} from './fixtures';
+import { loadVideoFile, getSessionState, waitForTestHelper } from './fixtures';
 
 /**
  * Marker List Panel Feature Tests
@@ -175,7 +171,7 @@ test.describe('Marker Navigation', () => {
     const markerEntry = page.locator(`[data-testid="marker-entry-${state.currentFrame}"]`);
 
     // Should have highlight background
-    const bgColor = await markerEntry.evaluate(el => getComputedStyle(el).backgroundColor);
+    const bgColor = await markerEntry.evaluate((el) => getComputedStyle(el).backgroundColor);
     expect(bgColor).not.toBe('transparent');
     expect(bgColor).not.toBe('rgba(0, 0, 0, 0)');
   });

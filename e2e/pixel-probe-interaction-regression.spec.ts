@@ -1,10 +1,5 @@
 import { test, expect } from '@playwright/test';
-import {
-  loadVideoFile,
-  waitForTestHelper,
-  getCanvas,
-  getPixelProbeState,
-} from './fixtures';
+import { loadVideoFile, waitForTestHelper, getCanvas, getPixelProbeState } from './fixtures';
 
 test.describe('Pixel Probe Interaction Regression', () => {
   test('PPR-E001: format buttons are clickable with real mouse movement', async ({ page }) => {
@@ -64,8 +59,10 @@ test.describe('Pixel Probe Interaction Regression', () => {
     await expect(rgb01El).toBeVisible();
 
     const initialText = (await rgb01El.textContent()) ?? '';
-    const initialDecimals = Array.from(initialText.matchAll(/\d+\.(\d+)/g))
-      .reduce((max, m) => Math.max(max, (m[1] ?? '').length), 0);
+    const initialDecimals = Array.from(initialText.matchAll(/\d+\.(\d+)/g)).reduce(
+      (max, m) => Math.max(max, (m[1] ?? '').length),
+      0,
+    );
 
     const btnBox = await precisionBtn.boundingBox();
     expect(btnBox).not.toBeNull();
@@ -75,8 +72,10 @@ test.describe('Pixel Probe Interaction Regression', () => {
     await page.waitForTimeout(120);
 
     const updatedText = (await rgb01El.textContent()) ?? '';
-    const updatedDecimals = Array.from(updatedText.matchAll(/\d+\.(\d+)/g))
-      .reduce((max, m) => Math.max(max, (m[1] ?? '').length), 0);
+    const updatedDecimals = Array.from(updatedText.matchAll(/\d+\.(\d+)/g)).reduce(
+      (max, m) => Math.max(max, (m[1] ?? '').length),
+      0,
+    );
     expect(updatedDecimals).toBeGreaterThan(initialDecimals);
   });
 

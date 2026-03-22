@@ -23,23 +23,40 @@ interface KeyBinding {
  */
 function codeToKey(code: string): string {
   switch (code) {
-    case 'Space': return 'Space';
-    case 'ArrowUp': return '\u2191';
-    case 'ArrowDown': return '\u2193';
-    case 'ArrowLeft': return '\u2190';
-    case 'ArrowRight': return '\u2192';
-    case 'Home': return 'Home';
-    case 'End': return 'End';
-    case 'Escape': return 'Esc';
-    case 'BracketLeft': return '[';
-    case 'BracketRight': return ']';
-    case 'Comma': return ',';
-    case 'Period': return '.';
-    case 'Backquote': return '`';
-    case 'Semicolon': return ';';
-    case 'Slash': return '/';
-    case 'PageUp': return 'PageUp';
-    case 'PageDown': return 'PageDown';
+    case 'Space':
+      return 'Space';
+    case 'ArrowUp':
+      return '\u2191';
+    case 'ArrowDown':
+      return '\u2193';
+    case 'ArrowLeft':
+      return '\u2190';
+    case 'ArrowRight':
+      return '\u2192';
+    case 'Home':
+      return 'Home';
+    case 'End':
+      return 'End';
+    case 'Escape':
+      return 'Esc';
+    case 'BracketLeft':
+      return '[';
+    case 'BracketRight':
+      return ']';
+    case 'Comma':
+      return ',';
+    case 'Period':
+      return '.';
+    case 'Backquote':
+      return '`';
+    case 'Semicolon':
+      return ';';
+    case 'Slash':
+      return '/';
+    case 'PageUp':
+      return 'PageUp';
+    case 'PageDown':
+      return 'PageDown';
     default:
       if (code.startsWith('Key')) return code.slice(3);
       if (code.startsWith('Digit')) return code.slice(5);
@@ -143,7 +160,7 @@ export function generateShortcuts(): { count: number; categories: number } {
   const md = renderShortcuts(bindings);
   writeGeneratedFile('keyboard-shortcuts.md', md);
 
-  const categories = new Set(bindings.map(b => b.category)).size;
+  const categories = new Set(bindings.map((b) => b.category)).size;
   console.log(`Generated keyboard-shortcuts.md with ${bindings.length} shortcuts in ${categories} categories`);
   return { count: bindings.length, categories };
 }

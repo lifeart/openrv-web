@@ -82,7 +82,7 @@ async function main() {
     console.log(`${status} ${padFile} ${countStr}`);
   }
 
-  const failed = results.filter(r => !r.ok);
+  const failed = results.filter((r) => !r.ok);
   if (failed.length > 0) {
     console.log(`\n${failed.length} generator(s) failed.`);
     process.exit(1);

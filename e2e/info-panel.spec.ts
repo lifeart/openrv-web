@@ -1,27 +1,24 @@
 import { test, expect } from '@playwright/test';
-import {
-  loadVideoFile,
-  getInfoPanelState,
-  getSessionState,
-  waitForTestHelper,
-} from './fixtures';
+import { loadVideoFile, getInfoPanelState, getSessionState, waitForTestHelper } from './fixtures';
 
 type InfoPanelPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 
-async function setInfoPanelPosition(
-  page: import('@playwright/test').Page,
-  position: InfoPanelPosition,
-): Promise<void> {
+async function setInfoPanelPosition(page: import('@playwright/test').Page, position: InfoPanelPosition): Promise<void> {
   await page.evaluate((nextPosition) => {
-    const testApi = (window as unknown as { __OPENRV_TEST__?: { app?: { controls?: { infoPanel?: { setPosition?: (p: string) => void } } } } }).__OPENRV_TEST__;
+    const testApi = (
+      window as unknown as {
+        __OPENRV_TEST__?: { app?: { controls?: { infoPanel?: { setPosition?: (p: string) => void } } } };
+      }
+    ).__OPENRV_TEST__;
     const infoPanel = testApi?.app?.controls?.infoPanel;
     infoPanel?.setPosition?.(nextPosition);
   }, position);
 
   await page.waitForFunction(
     (expected) =>
-      ((window as unknown as { __OPENRV_TEST__?: { getInfoPanelState?: () => { position?: string } } })
-        .__OPENRV_TEST__?.getInfoPanelState?.()?.position) === expected,
+      (
+        window as unknown as { __OPENRV_TEST__?: { getInfoPanelState?: () => { position?: string } } }
+      ).__OPENRV_TEST__?.getInfoPanelState?.()?.position === expected,
     position,
     { timeout: 5000 },
   );

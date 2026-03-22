@@ -7,16 +7,8 @@
  */
 
 import { test } from '@playwright/test';
-import {
-  initApp,
-  initWithVideo,
-  takeDocScreenshot,
-  switchTab,
-  waitForCanvasStable,
-} from './screenshot-helpers';
-import {
-  loadTwoVideoFiles,
-} from '../fixtures';
+import { initApp, initWithVideo, takeDocScreenshot, switchTab, waitForCanvasStable } from './screenshot-helpers';
+import { loadTwoVideoFiles } from '../fixtures';
 
 test.describe('Comparison & Gamut Screenshots', () => {
   // ── 34: A/B switching UI ──────────────────────────────────────────
@@ -76,9 +68,9 @@ test.describe('Comparison & Gamut Screenshots', () => {
     await page.waitForTimeout(500);
 
     // Also try clicking the onion skin button in the compare dropdown
-    const onionButton = page.locator(
-      '[data-testid="onion-skin-button"], button:has-text("Onion"), [title*="Onion"]',
-    ).first();
+    const onionButton = page
+      .locator('[data-testid="onion-skin-button"], button:has-text("Onion"), [title*="Onion"]')
+      .first();
     if (await onionButton.isVisible({ timeout: 2000 }).catch(() => false)) {
       await onionButton.click();
       await page.waitForTimeout(300);
@@ -99,9 +91,9 @@ test.describe('Comparison & Gamut Screenshots', () => {
     await switchTab(page, 'qc');
     await page.waitForTimeout(300);
 
-    const gamutButton = page.locator(
-      '[data-testid="gamut-diagram-button"], button:has-text("Gamut"), [title*="Gamut"], [title*="CIE"]',
-    ).first();
+    const gamutButton = page
+      .locator('[data-testid="gamut-diagram-button"], button:has-text("Gamut"), [title*="Gamut"], [title*="CIE"]')
+      .first();
     if (await gamutButton.isVisible({ timeout: 2000 }).catch(() => false)) {
       await gamutButton.click();
       await page.waitForTimeout(500);

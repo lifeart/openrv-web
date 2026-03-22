@@ -268,18 +268,28 @@ describe('AppPersistenceManager', () => {
       expect(fullCtx._autoSaveManager.on).toHaveBeenCalledWith('storageWarning', expect.any(Function));
     });
 
-    it('APM-033: init() shows recovery prompt when auto-save data exists', async () => {
-      fullCtx._autoSaveManager.initialize.mockResolvedValue(true);
-      fullCtx._autoSaveManager.listAutoSaves.mockResolvedValue([
-        {
-          id: 'save-1',
-          name: 'Test Session',
-          savedAt: new Date().toISOString(),
-          cleanShutdown: false,
-          version: 1,
-          size: 1024,
-        } as any,
-      ]);
+    it('APM-033: init() shows recovery prompt via recoveryAvailable event', async () => {
+      // Simulate autoSaveManager emitting 'recoveryAvailable' during initialize()
+      fullCtx._autoSaveManager.initialize.mockImplementation(async () => {
+        // Find the 'recoveryAvailable' handler that was registered via .on()
+        const onCalls = fullCtx._autoSaveManager.on.mock.calls as unknown as [string, (...args: any[]) => void][];
+        const recoveryHandler = onCalls.find((c) => c[0] === 'recoveryAvailable')?.[1];
+        if (recoveryHandler) {
+          recoveryHandler({
+            entries: [
+              {
+                id: 'save-1',
+                name: 'Test Session',
+                savedAt: new Date().toISOString(),
+                cleanShutdown: false,
+                version: 1,
+                size: 1024,
+              },
+            ],
+          });
+        }
+        return true;
+      });
       vi.mocked(showConfirm).mockResolvedValue(false);
 
       await manager.init();

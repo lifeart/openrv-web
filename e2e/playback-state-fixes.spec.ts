@@ -350,7 +350,7 @@ test.describe('Playback State Fixes', () => {
       for (let i = 0; i < 3; i++) {
         await page.keyboard.press('Space'); // Play
         await waitForPlaybackState(page, true);
-        await waitForFrameChange(page, await getSessionState(page).then(s => s.currentFrame));
+        await waitForFrameChange(page, await getSessionState(page).then((s) => s.currentFrame));
         await page.keyboard.press('Space'); // Pause
         await waitForPlaybackState(page, false);
       }
@@ -549,7 +549,7 @@ test.describe('Playback State Fixes', () => {
           return state?.playbackSpeed > 1;
         },
         undefined,
-        { timeout: 2000 }
+        { timeout: 2000 },
       );
 
       state = await getSessionState(page);
@@ -564,7 +564,7 @@ test.describe('Playback State Fixes', () => {
           return state?.playbackSpeed < 1;
         },
         undefined,
-        { timeout: 2000 }
+        { timeout: 2000 },
       );
 
       state = await getSessionState(page);
@@ -580,7 +580,7 @@ test.describe('Playback State Fixes', () => {
           return state?.playbackSpeed > 1;
         },
         undefined,
-        { timeout: 2000 }
+        { timeout: 2000 },
       );
 
       // Go to start

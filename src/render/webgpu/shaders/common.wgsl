@@ -161,7 +161,10 @@ fn applyTemperature(color: vec3f, temp: f32, tint: f32) -> vec3f {
   result.r = result.r - g * 0.05;
   result.b = result.b - g * 0.05;
 
-  return result;
+  // Clamp negative values: negative color is physically meaningless and
+  // corrupts downstream stages (HSL conversion, contrast amplification).
+  // Values > 1.0 are preserved for HDR headroom.
+  return max(result, vec3f(0.0));
 }
 
 // ---------------------------------------------------------------------------

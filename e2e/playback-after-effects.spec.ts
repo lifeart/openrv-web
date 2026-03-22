@@ -36,7 +36,7 @@ import {
  */
 async function applyColorAdjustments(
   page: import('@playwright/test').Page,
-  adjustments: Record<string, number | boolean>
+  adjustments: Record<string, number | boolean>,
 ): Promise<void> {
   await page.evaluate((adj) => {
     (window as any).__OPENRV_TEST__?.mutations?.setColorAdjustments(adj);
@@ -266,7 +266,7 @@ test.describe('Playback After Effects', () => {
   });
 
   test.describe('Multiple Effect Changes During Playback', () => {
-    test('EFFECT-PLAY-020: multiple sequential effect changes don\'t prevent playback restart', async ({ page }) => {
+    test("EFFECT-PLAY-020: multiple sequential effect changes don't prevent playback restart", async ({ page }) => {
       // Start playback
       await page.keyboard.press('Space');
       await waitForPlaybackState(page, true);
@@ -305,7 +305,7 @@ test.describe('Playback After Effects', () => {
       expect(finalState.currentFrame).toBeGreaterThan(pausedFrame);
     });
 
-    test('EFFECT-PLAY-021: rapid effect changes during playback don\'t stall frames', async ({ page }) => {
+    test("EFFECT-PLAY-021: rapid effect changes during playback don't stall frames", async ({ page }) => {
       // Go to start
       await page.keyboard.press('Home');
 

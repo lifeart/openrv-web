@@ -206,9 +206,7 @@ export default defineConfig({
       '/api/': [
         {
           text: 'API Reference',
-          items: [
-            { text: 'Overview', link: '/api/' },
-          ],
+          items: [{ text: 'Overview', link: '/api/' }],
         },
         ...apiSidebar,
       ],
@@ -228,9 +226,7 @@ export default defineConfig({
       ],
     },
 
-    socialLinks: [
-      { icon: 'github', link: 'https://github.com/lifeart/openrv-web' },
-    ],
+    socialLinks: [{ icon: 'github', link: 'https://github.com/lifeart/openrv-web' }],
 
     search: {
       provider: 'local',

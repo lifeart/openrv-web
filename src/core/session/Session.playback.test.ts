@@ -3238,4 +3238,183 @@ describe('Session', () => {
       expect(session.playbackMode).toBe('playAllFrames');
     });
   });
+
+  describe('starvation pause forwarding', () => {
+    it('SES-STARV-001: Session emits playbackStarved event from PlaybackEngine', () => {
+      const mockVideoSourceNode = {
+        isUsingMediabunny: () => true,
+        hasFrameCached: () => false,
+        getFrameAsync: () => new Promise<void>(() => {}),
+        updatePlaybackBuffer: vi.fn(),
+        startPlaybackPreload: vi.fn(),
+        stopPlaybackPreload: vi.fn(),
+        setPlaybackDirection: vi.fn(),
+        preloadFrames: () => Promise.resolve(),
+        isHDR: () => false,
+      };
+      const mockSource: MediaSource = {
+        type: 'video',
+        name: 'test.mp4',
+        url: 'file:///test.mp4',
+        width: 1920,
+        height: 1080,
+        duration: 100,
+        fps: 24,
+        element: null as unknown as HTMLVideoElement | undefined,
+        videoSourceNode: mockVideoSourceNode as any,
+      };
+      session.setSources([mockSource]);
+
+      const starvedListener = vi.fn();
+      session.on('playbackStarved', starvedListener);
+
+      // Mock performance.now BEFORE play() so resetTiming uses a known baseline
+      const perfNowSpy = vi.spyOn(performance, 'now');
+      perfNowSpy.mockReturnValue(1000);
+
+      session.play();
+
+      // Force starvation through the engine's timing state
+      const engine = (session as any)._playback._playbackEngine;
+      const ts = engine._ts;
+      const { MAX_CONSECUTIVE_STARVATION_SKIPS } = Session;
+      // Set to MAX - 1 because checkStarvation() increments before checking the threshold
+      ts.consecutiveStarvationSkips = MAX_CONSECUTIVE_STARVATION_SKIPS - 1;
+      ts.starvationStartTime = 1000;
+
+      // Advance time so accumulator produces a frame and starvation times out
+      perfNowSpy.mockReturnValue(11000);
+
+      session.update();
+
+      expect(starvedListener).toHaveBeenCalledTimes(1);
+      const payload = starvedListener.mock.calls[0]![0];
+      expect(payload.reason).toBe('starvation');
+      expect(typeof payload.frame).toBe('number');
+      expect(payload.consecutiveStarvations).toBe(MAX_CONSECUTIVE_STARVATION_SKIPS);
+
+      perfNowSpy.mockRestore();
+    });
+
+    it('SES-STARV-002: session.isStarved is true after starvation pause', () => {
+      const mockVideoSourceNode = {
+        isUsingMediabunny: () => true,
+        hasFrameCached: () => false,
+        getFrameAsync: () => new Promise<void>(() => {}),
+        updatePlaybackBuffer: vi.fn(),
+        startPlaybackPreload: vi.fn(),
+        stopPlaybackPreload: vi.fn(),
+        setPlaybackDirection: vi.fn(),
+        preloadFrames: () => Promise.resolve(),
+        isHDR: () => false,
+      };
+      const mockSource: MediaSource = {
+        type: 'video',
+        name: 'test.mp4',
+        url: 'file:///test.mp4',
+        width: 1920,
+        height: 1080,
+        duration: 100,
+        fps: 24,
+        element: null as unknown as HTMLVideoElement | undefined,
+        videoSourceNode: mockVideoSourceNode as any,
+      };
+      session.setSources([mockSource]);
+
+      // Mock performance.now BEFORE play() so resetTiming uses a known baseline
+      const perfNowSpy = vi.spyOn(performance, 'now');
+      perfNowSpy.mockReturnValue(1000);
+
+      session.play();
+
+      // Force starvation
+      const engine = (session as any)._playback._playbackEngine;
+      const ts = engine._ts;
+      // Set to MAX - 1 because checkStarvation() increments before checking the threshold
+      ts.consecutiveStarvationSkips = Session.MAX_CONSECUTIVE_STARVATION_SKIPS - 1;
+      ts.starvationStartTime = 1000;
+      perfNowSpy.mockReturnValue(11000);
+
+      session.update();
+
+      expect(session.isStarved).toBe(true);
+      expect(session.pauseReason).toBe('starvation');
+      expect(session.isPlaying).toBe(false);
+
+      perfNowSpy.mockRestore();
+    });
+
+    it('SES-STARV-003: session.isStarved clears on manual play', () => {
+      // Manually set starvation state via the engine
+      const engine = (session as any)._playback._playbackEngine;
+      engine._isStarved = true;
+
+      expect(session.isStarved).toBe(true);
+      expect(session.pauseReason).toBe('starvation');
+
+      session.play();
+
+      expect(session.isStarved).toBe(false);
+      expect(session.pauseReason).toBe('user');
+
+      session.dispose();
+    });
+
+    it('SES-STARV-004: session.pauseReason defaults to user', () => {
+      expect(session.isStarved).toBe(false);
+      expect(session.pauseReason).toBe('user');
+    });
+
+    it('SES-STARV-005: playbackStarved event captures consecutiveStarvations before reset', () => {
+      const mockVideoSourceNode = {
+        isUsingMediabunny: () => true,
+        hasFrameCached: () => false,
+        getFrameAsync: () => new Promise<void>(() => {}),
+        updatePlaybackBuffer: vi.fn(),
+        startPlaybackPreload: vi.fn(),
+        stopPlaybackPreload: vi.fn(),
+        setPlaybackDirection: vi.fn(),
+        preloadFrames: () => Promise.resolve(),
+        isHDR: () => false,
+      };
+      const mockSource: MediaSource = {
+        type: 'video',
+        name: 'test.mp4',
+        url: 'file:///test.mp4',
+        width: 1920,
+        height: 1080,
+        duration: 100,
+        fps: 24,
+        element: null as unknown as HTMLVideoElement | undefined,
+        videoSourceNode: mockVideoSourceNode as any,
+      };
+      session.setSources([mockSource]);
+
+      const starvedListener = vi.fn();
+      session.on('playbackStarved', starvedListener);
+
+      // Mock performance.now BEFORE play() so resetTiming uses a known baseline
+      const perfNowSpy = vi.spyOn(performance, 'now');
+      perfNowSpy.mockReturnValue(1000);
+
+      session.play();
+
+      const engine = (session as any)._playback._playbackEngine;
+      const ts = engine._ts;
+      // Set to MAX - 1; checkStarvation() will increment to MAX, triggering shouldPause
+      ts.consecutiveStarvationSkips = Session.MAX_CONSECUTIVE_STARVATION_SKIPS - 1;
+      ts.starvationStartTime = 1000;
+      perfNowSpy.mockReturnValue(11000);
+
+      session.update();
+
+      // The event payload should contain the count AFTER checkStarvation increment
+      // but BEFORE resetStarvation zeros it out
+      expect(starvedListener).toHaveBeenCalledTimes(1);
+      const payload = starvedListener.mock.calls[0]![0];
+      expect(payload.consecutiveStarvations).toBe(Session.MAX_CONSECUTIVE_STARVATION_SKIPS);
+
+      perfNowSpy.mockRestore();
+    });
+  });
 });

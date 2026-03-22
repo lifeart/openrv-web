@@ -247,7 +247,10 @@
         color.r -= g * 0.05;
         color.b -= g * 0.05;
 
-        return color;
+        // Clamp negative values: negative color is physically meaningless and
+        // corrupts downstream stages (HSL conversion in vibrance, contrast
+        // amplification, etc.). Values > 1.0 are preserved for HDR headroom.
+        return max(color, 0.0);
       }
 
       // Reinhard tone mapping operator

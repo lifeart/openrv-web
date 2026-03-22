@@ -107,6 +107,17 @@ function createMockComponents(): SessionComponents {
       getPan: vi.fn().mockReturnValue({ x: 0, y: 0 }),
       getZoom: vi.fn().mockReturnValue(1.0),
       getColorAdjustments: vi.fn().mockReturnValue({}),
+      getColorWheels: vi.fn(() => ({
+        getState: vi.fn(() => ({
+          lift: { r: 0, g: 0, b: 0, y: 0 },
+          gamma: { r: 0, g: 0, b: 0, y: 0 },
+          gain: { r: 0, g: 0, b: 0, y: 0 },
+          master: { r: 0, g: 0, b: 0, y: 0 },
+          linked: false,
+        })),
+        setState: vi.fn(),
+        on: vi.fn(),
+      })),
       getCDL: vi.fn().mockReturnValue({}),
       getFilterSettings: vi.fn().mockReturnValue({}),
       getTransform: vi.fn().mockReturnValue({}),

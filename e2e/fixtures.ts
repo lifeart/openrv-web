@@ -55,19 +55,41 @@ export interface ViewerState {
   wipePosition: number;
   cropEnabled: boolean;
   cropRegion: {
-    x: number;      // 0-1 normalized left position
-    y: number;      // 0-1 normalized top position
-    width: number;  // 0-1 normalized width
+    x: number; // 0-1 normalized left position
+    y: number; // 0-1 normalized top position
+    width: number; // 0-1 normalized width
     height: number; // 0-1 normalized height
   };
-  cropAspectRatio: string | null;  // null = free, "16:9", "4:3", "1:1", etc.
+  cropAspectRatio: string | null; // null = free, "16:9", "4:3", "1:1", etc.
   channelMode: 'rgb' | 'red' | 'green' | 'blue' | 'alpha' | 'luminance';
-  stereoMode: 'off' | 'side-by-side' | 'over-under' | 'mirror' | 'anaglyph' | 'anaglyph-luminance' | 'checkerboard' | 'scanline';
+  stereoMode:
+    | 'off'
+    | 'side-by-side'
+    | 'over-under'
+    | 'mirror'
+    | 'anaglyph'
+    | 'anaglyph-luminance'
+    | 'checkerboard'
+    | 'scanline';
   stereoEyeSwap: boolean;
   stereoOffset: number;
   // Per-eye transform state
-  stereoEyeTransformLeft: { flipH: boolean; flipV: boolean; rotation: number; scale: number; translateX: number; translateY: number };
-  stereoEyeTransformRight: { flipH: boolean; flipV: boolean; rotation: number; scale: number; translateX: number; translateY: number };
+  stereoEyeTransformLeft: {
+    flipH: boolean;
+    flipV: boolean;
+    rotation: number;
+    scale: number;
+    translateX: number;
+    translateY: number;
+  };
+  stereoEyeTransformRight: {
+    flipH: boolean;
+    flipV: boolean;
+    rotation: number;
+    scale: number;
+    translateX: number;
+    translateY: number;
+  };
   stereoEyeTransformLinked: boolean;
   stereoAlignMode: 'off' | 'grid' | 'crosshair' | 'difference' | 'edges';
   histogramVisible: boolean;
@@ -369,31 +391,33 @@ export interface CacheManagerState {
  */
 export async function getSessionState(page: Page): Promise<SessionState> {
   return page.evaluate(() => {
-    return window.__OPENRV_TEST__?.getSessionState() ?? {
-      currentFrame: 0,
-      frameCount: 0,
-      inPoint: 0,
-      outPoint: 0,
-      isPlaying: false,
-      isBuffering: false,
-      loopMode: 'loop',
-      playDirection: 1,
-      playbackSpeed: 1,
-      preservesPitch: true,
-      volume: 0.7,
-      muted: false,
-      fps: 24,
-      hasMedia: false,
-      mediaType: null,
-      mediaName: null,
-      marks: [],
-      markers: [],
-      currentAB: 'A',
-      sourceAIndex: 0,
-      sourceBIndex: -1,
-      abCompareAvailable: false,
-      syncPlayhead: true,
-    };
+    return (
+      window.__OPENRV_TEST__?.getSessionState() ?? {
+        currentFrame: 0,
+        frameCount: 0,
+        inPoint: 0,
+        outPoint: 0,
+        isPlaying: false,
+        isBuffering: false,
+        loopMode: 'loop',
+        playDirection: 1,
+        playbackSpeed: 1,
+        preservesPitch: true,
+        volume: 0.7,
+        muted: false,
+        fps: 24,
+        hasMedia: false,
+        mediaType: null,
+        mediaName: null,
+        marks: [],
+        markers: [],
+        currentAB: 'A',
+        sourceAIndex: 0,
+        sourceBIndex: -1,
+        abCompareAvailable: false,
+        syncPlayhead: true,
+      }
+    );
   });
 }
 
@@ -402,60 +426,62 @@ export async function getSessionState(page: Page): Promise<SessionState> {
  */
 export async function getViewerState(page: Page): Promise<ViewerState> {
   return page.evaluate(() => {
-    return window.__OPENRV_TEST__?.getViewerState() ?? {
-      zoom: 1,
-      panX: 0,
-      panY: 0,
-      wipeMode: 'off',
-      wipePosition: 0.5,
-      cropEnabled: false,
-      cropRegion: { x: 0, y: 0, width: 1, height: 1 },
-      cropAspectRatio: null,
-      channelMode: 'rgb',
-      stereoMode: 'off',
-      stereoEyeSwap: false,
-      stereoOffset: 0,
-      stereoEyeTransformLeft: { flipH: false, flipV: false, rotation: 0, scale: 1.0, translateX: 0, translateY: 0 },
-      stereoEyeTransformRight: { flipH: false, flipV: false, rotation: 0, scale: 1.0, translateX: 0, translateY: 0 },
-      stereoEyeTransformLinked: false,
-      stereoAlignMode: 'off',
-      histogramVisible: false,
-      histogramMode: 'rgb',
-      histogramLogScale: false,
-      histogramHDRActive: false,
-      histogramMaxValue: 1.0,
-      histogramPixelCount: 0,
-      waveformVisible: false,
-      waveformMode: 'luma',
-      vectorscopeVisible: false,
-      vectorscopeZoom: 1,
-      differenceMatteEnabled: false,
-      differenceMatteGain: 1,
-      differenceMatteHeatmap: false,
-      clippingOverlayEnabled: false,
-      histogramClipping: null,
-      exrLayerCount: 0,
-      exrSelectedLayer: null,
-      exrAvailableLayers: [],
-      uncropEnabled: false,
-      uncropPaddingMode: 'uniform',
-      uncropPadding: 0,
-      uncropPaddingTop: 0,
-      uncropPaddingRight: 0,
-      uncropPaddingBottom: 0,
-      uncropPaddingLeft: 0,
-      parEnabled: false,
-      parValue: 1.0,
-      parPreset: 'square',
-      backgroundPattern: 'black',
-      backgroundCheckerSize: 'medium',
-      backgroundCustomColor: '#1a1a1a',
-      colorInversionEnabled: false,
-      formatName: null,
-      bitDepth: null,
-      dataType: null,
-      colorSpace: null,
-    };
+    return (
+      window.__OPENRV_TEST__?.getViewerState() ?? {
+        zoom: 1,
+        panX: 0,
+        panY: 0,
+        wipeMode: 'off',
+        wipePosition: 0.5,
+        cropEnabled: false,
+        cropRegion: { x: 0, y: 0, width: 1, height: 1 },
+        cropAspectRatio: null,
+        channelMode: 'rgb',
+        stereoMode: 'off',
+        stereoEyeSwap: false,
+        stereoOffset: 0,
+        stereoEyeTransformLeft: { flipH: false, flipV: false, rotation: 0, scale: 1.0, translateX: 0, translateY: 0 },
+        stereoEyeTransformRight: { flipH: false, flipV: false, rotation: 0, scale: 1.0, translateX: 0, translateY: 0 },
+        stereoEyeTransformLinked: false,
+        stereoAlignMode: 'off',
+        histogramVisible: false,
+        histogramMode: 'rgb',
+        histogramLogScale: false,
+        histogramHDRActive: false,
+        histogramMaxValue: 1.0,
+        histogramPixelCount: 0,
+        waveformVisible: false,
+        waveformMode: 'luma',
+        vectorscopeVisible: false,
+        vectorscopeZoom: 1,
+        differenceMatteEnabled: false,
+        differenceMatteGain: 1,
+        differenceMatteHeatmap: false,
+        clippingOverlayEnabled: false,
+        histogramClipping: null,
+        exrLayerCount: 0,
+        exrSelectedLayer: null,
+        exrAvailableLayers: [],
+        uncropEnabled: false,
+        uncropPaddingMode: 'uniform',
+        uncropPadding: 0,
+        uncropPaddingTop: 0,
+        uncropPaddingRight: 0,
+        uncropPaddingBottom: 0,
+        uncropPaddingLeft: 0,
+        parEnabled: false,
+        parValue: 1.0,
+        parPreset: 'square',
+        backgroundPattern: 'black',
+        backgroundCheckerSize: 'medium',
+        backgroundCustomColor: '#1a1a1a',
+        colorInversionEnabled: false,
+        formatName: null,
+        bitDepth: null,
+        dataType: null,
+        colorSpace: null,
+      }
+    );
   });
 }
 
@@ -470,7 +496,7 @@ export async function waitForCropEnabled(page: Page, enabled: boolean, timeout =
       return state?.cropEnabled === expected;
     },
     enabled,
-    { timeout }
+    { timeout },
   );
 }
 
@@ -484,7 +510,7 @@ export async function waitForCropAspectRatio(page: Page, ratio: string | null, t
       return state?.cropAspectRatio === expected;
     },
     ratio,
-    { timeout }
+    { timeout },
   );
 }
 
@@ -493,23 +519,25 @@ export async function waitForCropAspectRatio(page: Page, ratio: string | null, t
  */
 export async function getColorState(page: Page): Promise<ColorState> {
   return page.evaluate(() => {
-    return window.__OPENRV_TEST__?.getColorState() ?? {
-      exposure: 0,
-      gamma: 1,
-      saturation: 1,
-      vibrance: 0,
-      vibranceSkinProtection: true,
-      contrast: 1,
-      temperature: 0,
-      tint: 0,
-      brightness: 0,
-      highlights: 0,
-      shadows: 0,
-      whites: 0,
-      blacks: 0,
-      hasLUT: false,
-      lutIntensity: 1,
-    };
+    return (
+      window.__OPENRV_TEST__?.getColorState() ?? {
+        exposure: 0,
+        gamma: 1,
+        saturation: 1,
+        vibrance: 0,
+        vibranceSkinProtection: true,
+        contrast: 1,
+        temperature: 0,
+        tint: 0,
+        brightness: 0,
+        highlights: 0,
+        shadows: 0,
+        whites: 0,
+        blacks: 0,
+        hasLUT: false,
+        lutIntensity: 1,
+      }
+    );
   });
 }
 
@@ -518,19 +546,21 @@ export async function getColorState(page: Page): Promise<ColorState> {
  */
 export async function getPixelProbeState(page: Page): Promise<PixelProbeState> {
   return page.evaluate(() => {
-    return window.__OPENRV_TEST__?.getPixelProbeState() ?? {
-      enabled: false,
-      locked: false,
-      x: 0,
-      y: 0,
-      rgb: { r: 0, g: 0, b: 0 },
-      alpha: 255,
-      hsl: { h: 0, s: 0, l: 0 },
-      ire: 0,
-      format: 'rgb',
-      sampleSize: 1,
-      sourceMode: 'rendered',
-    };
+    return (
+      window.__OPENRV_TEST__?.getPixelProbeState() ?? {
+        enabled: false,
+        locked: false,
+        x: 0,
+        y: 0,
+        rgb: { r: 0, g: 0, b: 0 },
+        alpha: 255,
+        hsl: { h: 0, s: 0, l: 0 },
+        ire: 0,
+        format: 'rgb',
+        sampleSize: 1,
+        sourceMode: 'rendered',
+      }
+    );
   });
 }
 
@@ -539,10 +569,12 @@ export async function getPixelProbeState(page: Page): Promise<PixelProbeState> {
  */
 export async function getFalseColorState(page: Page): Promise<FalseColorState> {
   return page.evaluate(() => {
-    return window.__OPENRV_TEST__?.getFalseColorState() ?? {
-      enabled: false,
-      preset: 'standard',
-    };
+    return (
+      window.__OPENRV_TEST__?.getFalseColorState() ?? {
+        enabled: false,
+        preset: 'standard',
+      }
+    );
   });
 }
 
@@ -551,10 +583,12 @@ export async function getFalseColorState(page: Page): Promise<FalseColorState> {
  */
 export async function getToneMappingState(page: Page): Promise<ToneMappingState> {
   return page.evaluate(() => {
-    return window.__OPENRV_TEST__?.getToneMappingState() ?? {
-      enabled: false,
-      operator: 'off',
-    };
+    return (
+      window.__OPENRV_TEST__?.getToneMappingState() ?? {
+        enabled: false,
+        operator: 'off',
+      }
+    );
   });
 }
 
@@ -563,14 +597,16 @@ export async function getToneMappingState(page: Page): Promise<ToneMappingState>
  */
 export async function getSafeAreasState(page: Page): Promise<SafeAreasState> {
   return page.evaluate(() => {
-    return window.__OPENRV_TEST__?.getSafeAreasState() ?? {
-      enabled: false,
-      titleSafe: true,
-      actionSafe: true,
-      centerCrosshair: false,
-      ruleOfThirds: false,
-      aspectRatio: null,
-    };
+    return (
+      window.__OPENRV_TEST__?.getSafeAreasState() ?? {
+        enabled: false,
+        titleSafe: true,
+        actionSafe: true,
+        centerCrosshair: false,
+        ruleOfThirds: false,
+        aspectRatio: null,
+      }
+    );
   });
 }
 
@@ -579,13 +615,15 @@ export async function getSafeAreasState(page: Page): Promise<SafeAreasState> {
  */
 export async function getZebraStripesState(page: Page): Promise<ZebraStripesState> {
   return page.evaluate(() => {
-    return window.__OPENRV_TEST__?.getZebraStripesState() ?? {
-      enabled: false,
-      highEnabled: true,
-      lowEnabled: false,
-      highThreshold: 95,
-      lowThreshold: 5,
-    };
+    return (
+      window.__OPENRV_TEST__?.getZebraStripesState() ?? {
+        enabled: false,
+        highEnabled: true,
+        lowEnabled: false,
+        highThreshold: 95,
+        lowThreshold: 5,
+      }
+    );
   });
 }
 
@@ -594,16 +632,18 @@ export async function getZebraStripesState(page: Page): Promise<ZebraStripesStat
  */
 export async function getColorWheelsState(page: Page): Promise<ColorWheelsState> {
   return page.evaluate(() => {
-    return window.__OPENRV_TEST__?.getColorWheelsState() ?? {
-      lift: { r: 0, g: 0, b: 0, y: 0 },
-      gamma: { r: 0, g: 0, b: 0, y: 0 },
-      gain: { r: 0, g: 0, b: 0, y: 0 },
-      master: { r: 0, g: 0, b: 0, y: 0 },
-      linked: false,
-      visible: false,
-      canUndo: false,
-      canRedo: false,
-    };
+    return (
+      window.__OPENRV_TEST__?.getColorWheelsState() ?? {
+        lift: { r: 0, g: 0, b: 0, y: 0 },
+        gamma: { r: 0, g: 0, b: 0, y: 0 },
+        gain: { r: 0, g: 0, b: 0, y: 0 },
+        master: { r: 0, g: 0, b: 0, y: 0 },
+        linked: false,
+        visible: false,
+        canUndo: false,
+        canRedo: false,
+      }
+    );
   });
 }
 
@@ -612,16 +652,18 @@ export async function getColorWheelsState(page: Page): Promise<ColorWheelsState>
  */
 export async function getSpotlightState(page: Page): Promise<SpotlightState> {
   return page.evaluate(() => {
-    return window.__OPENRV_TEST__?.getSpotlightState() ?? {
-      enabled: false,
-      shape: 'circle',
-      x: 0.5,
-      y: 0.5,
-      width: 0.2,
-      height: 0.2,
-      dimAmount: 0.7,
-      feather: 0.05,
-    };
+    return (
+      window.__OPENRV_TEST__?.getSpotlightState() ?? {
+        enabled: false,
+        shape: 'circle',
+        x: 0.5,
+        y: 0.5,
+        width: 0.2,
+        height: 0.2,
+        dimAmount: 0.7,
+        feather: 0.05,
+      }
+    );
   });
 }
 
@@ -630,15 +672,17 @@ export async function getSpotlightState(page: Page): Promise<SpotlightState> {
  */
 export async function getHSLQualifierState(page: Page): Promise<HSLQualifierState> {
   return page.evaluate(() => {
-    return window.__OPENRV_TEST__?.getHSLQualifierState() ?? {
-      enabled: false,
-      hue: { center: 0, width: 30, softness: 20 },
-      saturation: { center: 50, width: 100, softness: 10 },
-      luminance: { center: 50, width: 100, softness: 10 },
-      correction: { hueShift: 0, saturationScale: 1, luminanceScale: 1 },
-      invert: false,
-      mattePreview: false,
-    };
+    return (
+      window.__OPENRV_TEST__?.getHSLQualifierState() ?? {
+        enabled: false,
+        hue: { center: 0, width: 30, softness: 20 },
+        saturation: { center: 50, width: 100, softness: 10 },
+        luminance: { center: 50, width: 100, softness: 10 },
+        correction: { hueShift: 0, saturationScale: 1, luminanceScale: 1 },
+        invert: false,
+        mattePreview: false,
+      }
+    );
   });
 }
 
@@ -647,13 +691,15 @@ export async function getHSLQualifierState(page: Page): Promise<HSLQualifierStat
  */
 export async function getHistoryPanelState(page: Page): Promise<HistoryPanelState> {
   return page.evaluate(() => {
-    return window.__OPENRV_TEST__?.getHistoryPanelState() ?? {
-      visible: false,
-      entryCount: 0,
-      currentIndex: -1,
-      canUndo: false,
-      canRedo: false,
-    };
+    return (
+      window.__OPENRV_TEST__?.getHistoryPanelState() ?? {
+        visible: false,
+        entryCount: 0,
+        currentIndex: -1,
+        canUndo: false,
+        canRedo: false,
+      }
+    );
   });
 }
 
@@ -662,16 +708,18 @@ export async function getHistoryPanelState(page: Page): Promise<HistoryPanelStat
  */
 export async function getInfoPanelState(page: Page): Promise<InfoPanelState> {
   return page.evaluate(() => {
-    return window.__OPENRV_TEST__?.getInfoPanelState() ?? {
-      enabled: false,
-      position: 'top-left',
-      filename: null,
-      resolution: null,
-      currentFrame: 0,
-      totalFrames: 0,
-      fps: 0,
-      colorAtCursor: null,
-    };
+    return (
+      window.__OPENRV_TEST__?.getInfoPanelState() ?? {
+        enabled: false,
+        position: 'top-left',
+        filename: null,
+        resolution: null,
+        currentFrame: 0,
+        totalFrames: 0,
+        fps: 0,
+        colorAtCursor: null,
+      }
+    );
   });
 }
 
@@ -680,13 +728,15 @@ export async function getInfoPanelState(page: Page): Promise<InfoPanelState> {
  */
 export async function getCacheIndicatorState(page: Page): Promise<CacheIndicatorState> {
   return page.evaluate(() => {
-    return window.__OPENRV_TEST__?.getCacheIndicatorState() ?? {
-      visible: false,
-      cachedCount: 0,
-      pendingCount: 0,
-      totalFrames: 0,
-      isUsingMediabunny: false,
-    };
+    return (
+      window.__OPENRV_TEST__?.getCacheIndicatorState() ?? {
+        visible: false,
+        cachedCount: 0,
+        pendingCount: 0,
+        totalFrames: 0,
+        isUsingMediabunny: false,
+      }
+    );
   });
 }
 
@@ -695,10 +745,12 @@ export async function getCacheIndicatorState(page: Page): Promise<CacheIndicator
  */
 export async function getThemeState(page: Page): Promise<ThemeState> {
   return page.evaluate(() => {
-    return window.__OPENRV_TEST__?.getThemeState() ?? {
-      mode: 'auto',
-      resolvedTheme: 'dark',
-    };
+    return (
+      window.__OPENRV_TEST__?.getThemeState() ?? {
+        mode: 'auto',
+        resolvedTheme: 'dark',
+      }
+    );
   });
 }
 
@@ -707,13 +759,15 @@ export async function getThemeState(page: Page): Promise<ThemeState> {
  */
 export async function getMatteState(page: Page): Promise<MatteState> {
   return page.evaluate(() => {
-    return window.__OPENRV_TEST__?.getMatteState() ?? {
-      show: false,
-      aspect: 1.78,
-      opacity: 0.66,
-      heightVisible: -1,
-      centerPoint: [0, 0],
-    };
+    return (
+      window.__OPENRV_TEST__?.getMatteState() ?? {
+        show: false,
+        aspect: 1.78,
+        opacity: 0.66,
+        heightVisible: -1,
+        centerPoint: [0, 0],
+      }
+    );
   });
 }
 
@@ -722,13 +776,15 @@ export async function getMatteState(page: Page): Promise<MatteState> {
  */
 export async function getSessionMetadataState(page: Page): Promise<SessionMetadataState> {
   return page.evaluate(() => {
-    return window.__OPENRV_TEST__?.getSessionMetadataState() ?? {
-      displayName: '',
-      comment: '',
-      version: 2,
-      origin: 'openrv-web',
-      frameIncrement: 1,
-    };
+    return (
+      window.__OPENRV_TEST__?.getSessionMetadataState() ?? {
+        displayName: '',
+        comment: '',
+        version: 2,
+        origin: 'openrv-web',
+        frameIncrement: 1,
+      }
+    );
   });
 }
 
@@ -737,12 +793,14 @@ export async function getSessionMetadataState(page: Page): Promise<SessionMetada
  */
 export async function getStackState(page: Page): Promise<StackState> {
   return page.evaluate(() => {
-    return window.__OPENRV_TEST__?.getStackState() ?? {
-      layers: [],
-      activeLayerId: null,
-      layerCount: 0,
-      isPanelOpen: false,
-    };
+    return (
+      window.__OPENRV_TEST__?.getStackState() ?? {
+        layers: [],
+        activeLayerId: null,
+        layerCount: 0,
+        isPanelOpen: false,
+      }
+    );
   });
 }
 
@@ -751,18 +809,20 @@ export async function getStackState(page: Page): Promise<StackState> {
  */
 export async function getOCIOState(page: Page): Promise<OCIOState> {
   return page.evaluate(() => {
-    return (window as any).__OPENRV_TEST__?.getOCIOState() ?? {
-      enabled: false,
-      configName: 'aces_1.2',
-      inputColorSpace: 'Auto',
-      detectedColorSpace: null,
-      workingColorSpace: 'ACEScg',
-      display: 'sRGB',
-      view: 'ACES 1.0 SDR-video',
-      look: 'None',
-      lookDirection: 'forward',
-      panelVisible: false,
-    };
+    return (
+      (window as any).__OPENRV_TEST__?.getOCIOState() ?? {
+        enabled: false,
+        configName: 'aces_1.2',
+        inputColorSpace: 'Auto',
+        detectedColorSpace: null,
+        workingColorSpace: 'ACEScg',
+        display: 'sRGB',
+        view: 'ACES 1.0 SDR-video',
+        look: 'None',
+        lookDirection: 'forward',
+        panelVisible: false,
+      }
+    );
   });
 }
 
@@ -771,10 +831,12 @@ export async function getOCIOState(page: Page): Promise<OCIOState> {
  */
 export async function getFullscreenState(page: Page): Promise<FullscreenState> {
   return page.evaluate(() => {
-    return (window as any).__OPENRV_TEST__?.getFullscreenState() ?? {
-      isFullscreen: false,
-      isSupported: true,
-    };
+    return (
+      (window as any).__OPENRV_TEST__?.getFullscreenState() ?? {
+        isFullscreen: false,
+        isSupported: true,
+      }
+    );
   });
 }
 
@@ -801,11 +863,13 @@ export async function simulateFullscreenExit(page: Page): Promise<void> {
  */
 export async function getPresentationState(page: Page): Promise<PresentationState> {
   return page.evaluate(() => {
-    return (window as any).__OPENRV_TEST__?.getPresentationState() ?? {
-      enabled: false,
-      cursorAutoHide: true,
-      cursorHideDelay: 3000,
-    };
+    return (
+      (window as any).__OPENRV_TEST__?.getPresentationState() ?? {
+        enabled: false,
+        cursorAutoHide: true,
+        cursorHideDelay: 3000,
+      }
+    );
   });
 }
 
@@ -814,15 +878,17 @@ export async function getPresentationState(page: Page): Promise<PresentationStat
  */
 export async function getLuminanceVisState(page: Page): Promise<LuminanceVisState> {
   return page.evaluate(() => {
-    return (window as any).__OPENRV_TEST__?.getLuminanceVisState() ?? {
-      mode: 'off',
-      falseColorPreset: 'standard',
-      randomBandCount: 16,
-      randomSeed: 42,
-      contourLevels: 10,
-      contourDesaturate: true,
-      contourLineColor: [255, 255, 255],
-    };
+    return (
+      (window as any).__OPENRV_TEST__?.getLuminanceVisState() ?? {
+        mode: 'off',
+        falseColorPreset: 'standard',
+        randomBandCount: 16,
+        randomSeed: 42,
+        contourLevels: 10,
+        contourDesaturate: true,
+        contourLineColor: [255, 255, 255],
+      }
+    );
   });
 }
 
@@ -831,11 +897,13 @@ export async function getLuminanceVisState(page: Page): Promise<LuminanceVisStat
  */
 export async function getTransformState(page: Page): Promise<TransformState> {
   return page.evaluate(() => {
-    return window.__OPENRV_TEST__?.getTransformState() ?? {
-      rotation: 0,
-      flipH: false,
-      flipV: false,
-    };
+    return (
+      window.__OPENRV_TEST__?.getTransformState() ?? {
+        rotation: 0,
+        flipH: false,
+        flipV: false,
+      }
+    );
   });
 }
 
@@ -844,14 +912,16 @@ export async function getTransformState(page: Page): Promise<TransformState> {
  */
 export async function getPlaylistState(page: Page): Promise<PlaylistState> {
   return page.evaluate(() => {
-    return window.__OPENRV_TEST__?.getPlaylistState() ?? {
-      enabled: false,
-      clipCount: 0,
-      loopMode: 'none',
-      totalDuration: 0,
-      clips: [],
-      panelVisible: false,
-    };
+    return (
+      window.__OPENRV_TEST__?.getPlaylistState() ?? {
+        enabled: false,
+        clipCount: 0,
+        loopMode: 'none',
+        totalDuration: 0,
+        clips: [],
+        panelVisible: false,
+      }
+    );
   });
 }
 
@@ -860,10 +930,12 @@ export async function getPlaylistState(page: Page): Promise<PlaylistState> {
  */
 export async function getTransitionState(page: Page): Promise<TransitionState> {
   return page.evaluate(() => {
-    return window.__OPENRV_TEST__?.getTransitionState() ?? {
-      transitions: [],
-      totalOverlap: 0,
-    };
+    return (
+      window.__OPENRV_TEST__?.getTransitionState() ?? {
+        transitions: [],
+        totalOverlap: 0,
+      }
+    );
   });
 }
 
@@ -872,12 +944,14 @@ export async function getTransitionState(page: Page): Promise<TransitionState> {
  */
 export async function getCacheManagerState(page: Page): Promise<CacheManagerState> {
   return page.evaluate(async () => {
-    return await window.__OPENRV_TEST__?.getCacheManagerState() ?? {
-      initialized: false,
-      entryCount: 0,
-      totalSizeBytes: 0,
-      maxSizeBytes: 0,
-    };
+    return (
+      (await window.__OPENRV_TEST__?.getCacheManagerState()) ?? {
+        initialized: false,
+        entryCount: 0,
+        totalSizeBytes: 0,
+        maxSizeBytes: 0,
+      }
+    );
   });
 }
 
@@ -886,19 +960,21 @@ export async function getCacheManagerState(page: Page): Promise<CacheManagerStat
  */
 export async function getPaintState(page: Page): Promise<PaintState> {
   return page.evaluate(() => {
-    return window.__OPENRV_TEST__?.getPaintState() ?? {
-      currentTool: 'pan',
-      strokeColor: '#ff0000',
-      strokeWidth: 4,
-      brushType: 'circle',
-      ghostMode: false,
-      holdMode: false,
-      ghostBefore: 3,
-      ghostAfter: 3,
-      annotatedFrames: [],
-      canUndo: false,
-      canRedo: false,
-    };
+    return (
+      window.__OPENRV_TEST__?.getPaintState() ?? {
+        currentTool: 'pan',
+        strokeColor: '#ff0000',
+        strokeWidth: 4,
+        brushType: 'circle',
+        ghostMode: false,
+        holdMode: false,
+        ghostBefore: 3,
+        ghostAfter: 3,
+        annotatedFrames: [],
+        canUndo: false,
+        canRedo: false,
+      }
+    );
   });
 }
 
@@ -948,9 +1024,9 @@ export async function loadVideoFile(page: Page): Promise<void> {
     // We can't easily call our async helper inside waitForFunction,
     // so we'll just wait for a short bit or implement a simplified check.
     // Actually, we'll just use a retry loop for canvasHasContent in Playwright.
-    return true; 
+    return true;
   });
-  
+
   // Better: use a retry loop in the helper itself
   for (let i = 0; i < 10; i++) {
     if (await canvasHasContent(page)) break;
@@ -1018,7 +1094,7 @@ export async function loadRvSession(page: Page): Promise<void> {
       return state?.outPoint > 0;
     },
     undefined,
-    { timeout: TIMEOUT_LONG }
+    { timeout: TIMEOUT_LONG },
   );
 }
 
@@ -1044,7 +1120,7 @@ export async function loadExrFile(page: Page): Promise<void> {
       return state?.hasMedia === true && state?.currentFrame >= 1;
     },
     undefined,
-    { timeout: 20_000 }
+    { timeout: 20_000 },
   );
 
   // Ensure something is actually rendered on the canvas
@@ -1097,17 +1173,20 @@ export async function loadSingleSequenceFrame(page: Page, frameNumber: number = 
  * Some controls swap render canvases (GL/2D) and there can be a brief hidden gap.
  */
 async function waitForRenderableViewerCanvas(page: Page, timeout = 5000): Promise<void> {
-  await page.waitForFunction(() => {
-    const canvases = Array.from(document.querySelectorAll('.viewer-container canvas'));
-    return canvases.some((canvas) => {
-      const style = window.getComputedStyle(canvas as HTMLElement);
-      if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
-        return false;
-      }
-      const rect = (canvas as HTMLCanvasElement).getBoundingClientRect();
-      return rect.width > 0 && rect.height > 0;
-    });
-  }, { timeout });
+  await page.waitForFunction(
+    () => {
+      const canvases = Array.from(document.querySelectorAll('.viewer-container canvas'));
+      return canvases.some((canvas) => {
+        const style = window.getComputedStyle(canvas as HTMLElement);
+        if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+          return false;
+        }
+        const rect = (canvas as HTMLCanvasElement).getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      });
+    },
+    { timeout },
+  );
 }
 
 /**
@@ -1133,7 +1212,7 @@ async function getViewerRenderCanvas(page: Page): Promise<ReturnType<Page['locat
 async function getViewerImageCanvas(page: Page): Promise<ReturnType<Page['locator']>> {
   const glCanvas = page.locator('canvas[data-testid="viewer-gl-canvas"]').first();
   const imageCanvas = page.locator('canvas[data-testid="viewer-image-canvas"]').first();
-  
+
   // Use GL canvas if it exists and is visible (where rendering happens when effects are active)
   if (await glCanvas.isVisible()) {
     return glCanvas;
@@ -1235,7 +1314,9 @@ export function verifyCanvasChanged(before: string, after: string): boolean {
 /**
  * Get the computed transform style of the canvas or viewer element
  */
-export async function getCanvasTransform(page: Page): Promise<{ scale: number; translateX: number; translateY: number }> {
+export async function getCanvasTransform(
+  page: Page,
+): Promise<{ scale: number; translateX: number; translateY: number }> {
   const canvas = await getViewerRenderCanvas(page);
   const transform = await canvas.evaluate((el) => {
     const style = getComputedStyle(el);
@@ -1244,7 +1325,10 @@ export async function getCanvasTransform(page: Page): Promise<{ scale: number; t
       return { scale: 1, translateX: 0, translateY: 0 };
     }
     // Parse matrix(a, b, c, d, tx, ty)
-    const values = matrix.match(/matrix\(([^)]+)\)/)?.[1]?.split(',').map(v => parseFloat(v.trim()));
+    const values = matrix
+      .match(/matrix\(([^)]+)\)/)?.[1]
+      ?.split(',')
+      .map((v) => parseFloat(v.trim()));
     if (values && values.length >= 6) {
       return {
         scale: values[0] || 1,
@@ -1278,7 +1362,10 @@ export async function getCurrentFrame(page: Page): Promise<number> {
 /**
  * Sample canvas pixel colors at specific points
  */
-export async function sampleCanvasPixels(page: Page, points: Array<{ x: number; y: number }>): Promise<Array<{ r: number; g: number; b: number; a: number }>> {
+export async function sampleCanvasPixels(
+  page: Page,
+  points: Array<{ x: number; y: number }>,
+): Promise<Array<{ r: number; g: number; b: number; a: number }>> {
   const canvas = await getViewerImageCanvas(page);
   const pixels = await canvas.evaluate((el: HTMLCanvasElement, pts: Array<{ x: number; y: number }>) => {
     const gl = el.getContext('webgl2') || el.getContext('webgl');
@@ -1288,10 +1375,10 @@ export async function sampleCanvasPixels(page: Page, points: Array<{ x: number; 
     if (gl) {
       const g = gl as WebGL2RenderingContext;
       const data = new Uint8Array(4);
-      return pts.map(p => {
+      return pts.map((p) => {
         // Scale coordinates from CSS to backing store
         const glX = Math.floor(p.x * scaleX);
-        const glY = Math.floor(el.height - 1 - (p.y * scaleY));
+        const glY = Math.floor(el.height - 1 - p.y * scaleY);
         g.readPixels(glX, glY, 1, 1, g.RGBA, g.UNSIGNED_BYTE, data);
         return { r: data[0]!, g: data[1]!, b: data[2]!, a: data[3]! };
       });
@@ -1300,7 +1387,7 @@ export async function sampleCanvasPixels(page: Page, points: Array<{ x: number; 
     const ctx = el.getContext('2d');
     if (!ctx) return pts.map(() => ({ r: 0, g: 0, b: 0, a: 0 }));
 
-    return pts.map(pt => {
+    return pts.map((pt) => {
       const px = Math.floor(pt.x * scaleX);
       const py = Math.floor(pt.y * scaleY);
       const data = ctx.getImageData(px, py, 1, 1).data;
@@ -1325,7 +1412,7 @@ export async function canvasHasContent(page: Page): Promise<boolean> {
       const samplePoints = [
         { x: Math.floor(width / 4), y: Math.floor(height / 4) },
         { x: Math.floor(width / 2), y: Math.floor(height / 2) },
-        { x: Math.floor(3 * width / 4), y: Math.floor(3 * height / 4) },
+        { x: Math.floor((3 * width) / 4), y: Math.floor((3 * height) / 4) },
       ];
       for (const pt of samplePoints) {
         g.readPixels(pt.x, pt.y, 1, 1, g.RGBA, g.UNSIGNED_BYTE, data);
@@ -1343,7 +1430,7 @@ export async function canvasHasContent(page: Page): Promise<boolean> {
     const samplePoints = [
       { x: Math.floor(width / 4), y: Math.floor(height / 4) },
       { x: Math.floor(width / 2), y: Math.floor(height / 2) },
-      { x: Math.floor(3 * width / 4), y: Math.floor(3 * height / 4) },
+      { x: Math.floor((3 * width) / 4), y: Math.floor((3 * height) / 4) },
     ];
 
     for (const pt of samplePoints) {
@@ -1375,12 +1462,12 @@ export async function getCanvasBrightness(page: Page): Promise<number> {
       const gridSize = 10;
       let totalBrightness = 0;
       let sampleCount = 0;
-      
+
       const pixels = new Uint8Array(4);
       for (let x = 0; x < gridSize; x++) {
         for (let y = 0; y < gridSize; y++) {
-          const px = Math.floor((x + 0.5) * width / gridSize);
-          const py = Math.floor((y + 0.5) * height / gridSize);
+          const px = Math.floor(((x + 0.5) * width) / gridSize);
+          const py = Math.floor(((y + 0.5) * height) / gridSize);
           // WebGL coordinates are y-up
           g.readPixels(px, py, 1, 1, g.RGBA, g.UNSIGNED_BYTE, pixels);
           const brightness = 0.299 * pixels[0] + 0.587 * pixels[1] + 0.114 * pixels[2];
@@ -1404,8 +1491,8 @@ export async function getCanvasBrightness(page: Page): Promise<number> {
 
     for (let x = 0; x < gridSize; x++) {
       for (let y = 0; y < gridSize; y++) {
-        const px = Math.floor((x + 0.5) * width / gridSize);
-        const py = Math.floor((y + 0.5) * height / gridSize);
+        const px = Math.floor(((x + 0.5) * width) / gridSize);
+        const py = Math.floor(((y + 0.5) * height) / gridSize);
         const data = ctx.getImageData(px, py, 1, 1).data;
         // Calculate perceived brightness
         const brightness = 0.299 * (data[0] || 0) + 0.587 * (data[1] || 0) + 0.114 * (data[2] || 0);
@@ -1435,7 +1522,10 @@ export async function getCanvasDimensions(page: Page): Promise<{ width: number; 
  * Trigger export and capture the exported image data
  * Returns the download data as base64
  */
-export async function exportFrame(page: Page, format: 'png' | 'jpeg' | 'webp' = 'png'): Promise<{ data: Buffer; filename: string }> {
+export async function exportFrame(
+  page: Page,
+  format: 'png' | 'jpeg' | 'webp' = 'png',
+): Promise<{ data: Buffer; filename: string }> {
   // Set up download handler before triggering export
   const downloadPromise = page.waitForEvent('download', { timeout: 10000 });
 
@@ -1459,7 +1549,11 @@ export async function exportFrame(page: Page, format: 'png' | 'jpeg' | 'webp' = 
 /**
  * Export with specific format using the export dropdown
  */
-export async function exportFrameWithFormat(page: Page, format: 'png' | 'jpeg' | 'webp', includeAnnotations: boolean = true): Promise<Buffer> {
+export async function exportFrameWithFormat(
+  page: Page,
+  format: 'png' | 'jpeg' | 'webp',
+  includeAnnotations: boolean = true,
+): Promise<Buffer> {
   // Set up download handler
   const downloadPromise = page.waitForEvent('download', { timeout: 10000 });
 
@@ -1615,7 +1709,21 @@ export async function getAppState(page: Page): Promise<{
 }> {
   const state = await page.evaluate(() => {
     // Access the app instance through the window (if exposed)
-    const app = (window as unknown as { __openrv_app__?: { session: { currentFrame: number; isPlaying: boolean; inPoint: number; outPoint: number; loopMode: string; volume: number; muted: boolean } } }).__openrv_app__;
+    const app = (
+      window as unknown as {
+        __openrv_app__?: {
+          session: {
+            currentFrame: number;
+            isPlaying: boolean;
+            inPoint: number;
+            outPoint: number;
+            loopMode: string;
+            volume: number;
+            muted: boolean;
+          };
+        };
+      }
+    ).__openrv_app__;
     if (app?.session) {
       return {
         currentFrame: app.session.currentFrame,
@@ -1846,7 +1954,7 @@ export async function dragOnCanvas(
   startX: number,
   startY: number,
   endX: number,
-  endY: number
+  endY: number,
 ): Promise<void> {
   const canvas = await getCanvas(page);
   const box = await canvas.boundingBox();
@@ -1864,10 +1972,7 @@ export async function dragOnCanvas(
 }
 
 // Helper to draw a stroke on canvas
-export async function drawStroke(
-  page: Page,
-  points: Array<{ x: number; y: number }>
-): Promise<void> {
+export async function drawStroke(page: Page, points: Array<{ x: number; y: number }>): Promise<void> {
   const canvas = await getCanvas(page);
   const box = await canvas.boundingBox();
   if (!box) throw new Error('Canvas not found');
@@ -1888,7 +1993,7 @@ export async function drawStroke(
 // Helper to get current frame display value
 export async function getCurrentFrameDisplay(page: Page): Promise<string> {
   const frameDisplay = page.locator('.frame-display, [class*="frame"]').first();
-  return await frameDisplay.textContent() || '';
+  return (await frameDisplay.textContent()) || '';
 }
 
 /**
@@ -1917,7 +2022,7 @@ export async function setSliderValue(page: Page, selector: string, value: number
 // Helper to verify button state
 export async function isButtonActive(page: Page, buttonText: string): Promise<boolean> {
   const button = page.locator(`button:has-text("${buttonText}")`);
-  const className = await button.getAttribute('class') || '';
+  const className = (await button.getAttribute('class')) || '';
   return className.includes('active') || className.includes('selected');
 }
 
@@ -1972,9 +2077,9 @@ export async function getExtendedSessionState(page: Page): Promise<SessionState 
 
 // Timeout constants for deterministic E2E tests
 // Use these instead of magic numbers to maintain consistency
-const TIMEOUT_SHORT = 5000;   // For quick state changes (play/pause, direction)
+const TIMEOUT_SHORT = 5000; // For quick state changes (play/pause, direction)
 const TIMEOUT_MEDIUM = 10000; // For frame operations that may require loading
-const TIMEOUT_LONG = 20000;   // For heavy operations like initial media load
+const TIMEOUT_LONG = 20000; // For heavy operations like initial media load
 
 /**
  * Wait for playback state to change to the expected value.
@@ -1987,7 +2092,7 @@ export async function waitForPlaybackState(page: Page, isPlaying: boolean, timeo
       return state?.isPlaying === expected;
     },
     isPlaying,
-    { timeout }
+    { timeout },
   );
 }
 
@@ -2001,7 +2106,7 @@ export async function waitForFrameAtLeast(page: Page, minFrame: number, timeout 
       return state?.currentFrame >= min;
     },
     minFrame,
-    { timeout }
+    { timeout },
   );
 }
 
@@ -2015,7 +2120,7 @@ export async function waitForFrameChange(page: Page, fromFrame: number, timeout 
       return state?.currentFrame !== from;
     },
     fromFrame,
-    { timeout }
+    { timeout },
   );
 }
 
@@ -2029,21 +2134,25 @@ export async function waitForCachedFrames(page: Page, minCached: number, timeout
       return state?.cachedCount >= min;
     },
     minCached,
-    { timeout }
+    { timeout },
   );
 }
 
 /**
  * Wait for pending frame count to drop to or below a threshold.
  */
-export async function waitForPendingFramesBelow(page: Page, maxPending: number, timeout = TIMEOUT_MEDIUM): Promise<void> {
+export async function waitForPendingFramesBelow(
+  page: Page,
+  maxPending: number,
+  timeout = TIMEOUT_MEDIUM,
+): Promise<void> {
   await page.waitForFunction(
     (max) => {
       const state = (window as any).__OPENRV_TEST__?.getCacheIndicatorState();
       return state?.pendingCount <= max;
     },
     maxPending,
-    { timeout }
+    { timeout },
   );
 }
 
@@ -2057,7 +2166,7 @@ export async function waitForPlayDirection(page: Page, direction: number, timeou
       return state?.playDirection === expected;
     },
     direction,
-    { timeout }
+    { timeout },
   );
 }
 
@@ -2071,7 +2180,7 @@ export async function waitForFrame(page: Page, frame: number, timeout = TIMEOUT_
       return state?.currentFrame === expected;
     },
     frame,
-    { timeout }
+    { timeout },
   );
 }
 
@@ -2085,7 +2194,7 @@ export async function waitForMediaLoaded(page: Page, timeout = TIMEOUT_LONG): Pr
       return state?.hasMedia === true;
     },
     undefined,
-    { timeout }
+    { timeout },
   );
 }
 
@@ -2100,7 +2209,7 @@ export async function waitForFrameAtMost(page: Page, maxFrame: number, timeout =
       return state?.currentFrame <= max;
     },
     maxFrame,
-    { timeout }
+    { timeout },
   );
 }
 
@@ -2114,7 +2223,7 @@ export async function waitForFrameAtEnd(page: Page, timeout = TIMEOUT_MEDIUM): P
       return state?.currentFrame === state?.frameCount;
     },
     undefined,
-    { timeout }
+    { timeout },
   );
 }
 
@@ -2122,14 +2231,18 @@ export async function waitForFrameAtEnd(page: Page, timeout = TIMEOUT_MEDIUM): P
  * Wait for loop mode to change to the expected value.
  * Prefer this over waitForTimeout for deterministic E2E tests.
  */
-export async function waitForLoopMode(page: Page, loopMode: 'once' | 'loop' | 'pingpong', timeout = TIMEOUT_SHORT): Promise<void> {
+export async function waitForLoopMode(
+  page: Page,
+  loopMode: 'once' | 'loop' | 'pingpong',
+  timeout = TIMEOUT_SHORT,
+): Promise<void> {
   await page.waitForFunction(
     (expected) => {
       const state = (window as any).__OPENRV_TEST__?.getSessionState();
       return state?.loopMode === expected;
     },
     loopMode,
-    { timeout }
+    { timeout },
   );
 }
 
@@ -2143,7 +2256,7 @@ export async function waitForBufferingState(page: Page, isBuffering: boolean, ti
       return state?.isBuffering === expected;
     },
     isBuffering,
-    { timeout }
+    { timeout },
   );
 }
 
@@ -2161,7 +2274,7 @@ export async function waitForTabActive(page: Page, tabName: string, timeout = TI
       return cl.includes('active') || cl.includes('selected') || btn.getAttribute('aria-selected') === 'true';
     },
     tabName,
-    { timeout }
+    { timeout },
   );
 }
 
@@ -2170,56 +2283,73 @@ export async function waitForTabActive(page: Page, tabName: string, timeout = TI
 /**
  * Wait for wipe mode to reach the expected value.
  */
-export async function waitForWipeMode(page: Page, mode: ViewerState['wipeMode'], timeout = TIMEOUT_SHORT): Promise<void> {
+export async function waitForWipeMode(
+  page: Page,
+  mode: ViewerState['wipeMode'],
+  timeout = TIMEOUT_SHORT,
+): Promise<void> {
   await page.waitForFunction(
     (expected) => {
       const state = (window as any).__OPENRV_TEST__?.getViewerState();
       return state?.wipeMode === expected;
     },
     mode,
-    { timeout }
+    { timeout },
   );
 }
 
 /**
  * Wait for channel mode to reach the expected value.
  */
-export async function waitForChannelMode(page: Page, mode: ViewerState['channelMode'], timeout = TIMEOUT_SHORT): Promise<void> {
+export async function waitForChannelMode(
+  page: Page,
+  mode: ViewerState['channelMode'],
+  timeout = TIMEOUT_SHORT,
+): Promise<void> {
   await page.waitForFunction(
     (expected) => {
       const state = (window as any).__OPENRV_TEST__?.getViewerState();
       return state?.channelMode === expected;
     },
     mode,
-    { timeout }
+    { timeout },
   );
 }
 
 /**
  * Wait for zoom level to reach the expected value (within tolerance).
  */
-export async function waitForZoomLevel(page: Page, level: number, tolerance = 0.01, timeout = TIMEOUT_SHORT): Promise<void> {
+export async function waitForZoomLevel(
+  page: Page,
+  level: number,
+  tolerance = 0.01,
+  timeout = TIMEOUT_SHORT,
+): Promise<void> {
   await page.waitForFunction(
     ({ level: l, tolerance: t }) => {
       const state = (window as any).__OPENRV_TEST__?.getViewerState();
       return state != null && Math.abs(state.zoom - l) <= t;
     },
     { level, tolerance },
-    { timeout }
+    { timeout },
   );
 }
 
 /**
  * Wait for stereo mode to reach the expected value.
  */
-export async function waitForStereoMode(page: Page, mode: ViewerState['stereoMode'], timeout = TIMEOUT_SHORT): Promise<void> {
+export async function waitForStereoMode(
+  page: Page,
+  mode: ViewerState['stereoMode'],
+  timeout = TIMEOUT_SHORT,
+): Promise<void> {
   await page.waitForFunction(
     (expected) => {
       const state = (window as any).__OPENRV_TEST__?.getViewerState();
       return state?.stereoMode === expected;
     },
     mode,
-    { timeout }
+    { timeout },
   );
 }
 
@@ -2233,21 +2363,25 @@ export async function waitForHistogramVisible(page: Page, visible: boolean, time
       return state?.histogramVisible === expected;
     },
     visible,
-    { timeout }
+    { timeout },
   );
 }
 
 /**
  * Wait for difference matte enabled state.
  */
-export async function waitForDifferenceMatteEnabled(page: Page, enabled: boolean, timeout = TIMEOUT_SHORT): Promise<void> {
+export async function waitForDifferenceMatteEnabled(
+  page: Page,
+  enabled: boolean,
+  timeout = TIMEOUT_SHORT,
+): Promise<void> {
   await page.waitForFunction(
     (expected) => {
       const state = (window as any).__OPENRV_TEST__?.getViewerState();
       return state?.differenceMatteEnabled === expected;
     },
     enabled,
-    { timeout }
+    { timeout },
   );
 }
 
@@ -2256,14 +2390,19 @@ export async function waitForDifferenceMatteEnabled(page: Page, enabled: boolean
 /**
  * Wait for exposure to reach the expected value (within tolerance).
  */
-export async function waitForExposure(page: Page, value: number, tolerance = 0.01, timeout = TIMEOUT_SHORT): Promise<void> {
+export async function waitForExposure(
+  page: Page,
+  value: number,
+  tolerance = 0.01,
+  timeout = TIMEOUT_SHORT,
+): Promise<void> {
   await page.waitForFunction(
     ({ value: v, tolerance: t }) => {
       const state = (window as any).__OPENRV_TEST__?.getColorState();
       return state != null && Math.abs(state.exposure - v) <= t;
     },
     { value, tolerance },
-    { timeout }
+    { timeout },
   );
 }
 
@@ -2275,12 +2414,18 @@ export async function waitForColorReset(page: Page, timeout = TIMEOUT_SHORT): Pr
     () => {
       const state = (window as any).__OPENRV_TEST__?.getColorState();
       if (!state) return false;
-      return state.exposure === 0 && state.gamma === 1 && state.saturation === 1 &&
-             state.contrast === 1 && state.temperature === 0 && state.tint === 0 &&
-             state.brightness === 0;
+      return (
+        state.exposure === 0 &&
+        state.gamma === 1 &&
+        state.saturation === 1 &&
+        state.contrast === 1 &&
+        state.temperature === 0 &&
+        state.tint === 0 &&
+        state.brightness === 0
+      );
     },
     undefined,
-    { timeout }
+    { timeout },
   );
 }
 
@@ -2296,7 +2441,7 @@ export async function waitForTool(page: Page, tool: PaintState['currentTool'], t
       return state?.currentTool === expected;
     },
     tool,
-    { timeout }
+    { timeout },
   );
 }
 
@@ -2310,7 +2455,7 @@ export async function waitForAnnotationCount(page: Page, count: number, timeout 
       return state?.visibleAnnotationCount === expected;
     },
     count,
-    { timeout }
+    { timeout },
   );
 }
 
@@ -2319,14 +2464,18 @@ export async function waitForAnnotationCount(page: Page, count: number, timeout 
 /**
  * Wait for rotation to reach the expected value.
  */
-export async function waitForRotation(page: Page, degrees: TransformState['rotation'], timeout = TIMEOUT_SHORT): Promise<void> {
+export async function waitForRotation(
+  page: Page,
+  degrees: TransformState['rotation'],
+  timeout = TIMEOUT_SHORT,
+): Promise<void> {
   await page.waitForFunction(
     (expected) => {
       const state = (window as any).__OPENRV_TEST__?.getTransformState();
       return state?.rotation === expected;
     },
     degrees,
-    { timeout }
+    { timeout },
   );
 }
 
@@ -2342,7 +2491,7 @@ export async function waitForStackLayerCount(page: Page, count: number, timeout 
       return state?.layerCount === expected;
     },
     count,
-    { timeout }
+    { timeout },
   );
 }
 
@@ -2358,7 +2507,7 @@ export async function waitForSpotlightEnabled(page: Page, enabled: boolean, time
       return state?.enabled === expected;
     },
     enabled,
-    { timeout }
+    { timeout },
   );
 }
 
@@ -2374,7 +2523,7 @@ export async function waitForHistoryEntryCount(page: Page, count: number, timeou
       return state?.entryCount === expected;
     },
     count,
-    { timeout }
+    { timeout },
   );
 }
 
@@ -2383,14 +2532,18 @@ export async function waitForHistoryEntryCount(page: Page, count: number, timeou
 /**
  * Wait for A/B compare to become available.
  */
-export async function waitForABCompareAvailable(page: Page, available: boolean, timeout = TIMEOUT_SHORT): Promise<void> {
+export async function waitForABCompareAvailable(
+  page: Page,
+  available: boolean,
+  timeout = TIMEOUT_SHORT,
+): Promise<void> {
   await page.waitForFunction(
     (expected) => {
       const state = (window as any).__OPENRV_TEST__?.getSessionState();
       return state?.abCompareAvailable === expected;
     },
     available,
-    { timeout }
+    { timeout },
   );
 }
 
@@ -2404,7 +2557,7 @@ export async function waitForPlaybackSpeed(page: Page, speed: number, timeout = 
       return state?.playbackSpeed === expected;
     },
     speed,
-    { timeout }
+    { timeout },
   );
 }
 
@@ -2414,11 +2567,7 @@ export async function waitForPlaybackSpeed(page: Page, speed: number, timeout = 
  * Wait for an arbitrary JS expression to evaluate to true.
  * Use for one-off conditions that don't justify a dedicated waiter.
  */
-export async function waitForCondition(
-  page: Page,
-  evalFn: string,
-  timeout = TIMEOUT_MEDIUM,
-): Promise<void> {
+export async function waitForCondition(page: Page, evalFn: string, timeout = TIMEOUT_MEDIUM): Promise<void> {
   await page.waitForFunction(evalFn, undefined, { timeout });
 }
 
@@ -2475,7 +2624,7 @@ export async function waitForInPoint(page: Page, frame: number, timeout = TIMEOU
       return state?.inPoint === expected;
     },
     frame,
-    { timeout }
+    { timeout },
   );
 }
 
@@ -2489,7 +2638,7 @@ export async function waitForOutPoint(page: Page, frame: number, timeout = TIMEO
       return state?.outPoint === expected;
     },
     frame,
-    { timeout }
+    { timeout },
   );
 }
 
@@ -2533,7 +2682,7 @@ export async function resetInOutPoints(page: Page): Promise<void> {
       return state?.inPoint === 1;
     },
     undefined,
-    { timeout: TIMEOUT_MEDIUM }
+    { timeout: TIMEOUT_MEDIUM },
   );
 }
 
@@ -2573,7 +2722,7 @@ export async function waitForGhostMode(page: Page, enabled: boolean, timeout = T
       return state?.ghostMode === expected;
     },
     enabled,
-    { timeout }
+    { timeout },
   );
 }
 
@@ -2654,6 +2803,6 @@ export async function loadRvSessionFile(page: Page, filePath: string): Promise<v
       return state?.outPoint > 0;
     },
     undefined,
-    { timeout: TIMEOUT_LONG }
+    { timeout: TIMEOUT_LONG },
   );
 }

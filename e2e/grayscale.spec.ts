@@ -56,10 +56,9 @@ test.describe('Grayscale Toggle', () => {
 
     // Enable grayscale
     await page.keyboard.press('Shift+Y');
-    await page.waitForFunction(
-      () => window.__OPENRV_TEST__?.getViewerState()?.channelMode === 'luminance',
-      { timeout: 5000 }
-    );
+    await page.waitForFunction(() => window.__OPENRV_TEST__?.getViewerState()?.channelMode === 'luminance', {
+      timeout: 5000,
+    });
 
     // Disable grayscale (back to RGB) via channel dropdown.
     const channelButton = page.locator('[data-testid="channel-select-button"]');
@@ -67,10 +66,9 @@ test.describe('Grayscale Toggle', () => {
     const channelDropdown = page.locator('[data-testid="channel-dropdown"]');
     await expect(channelDropdown).toBeVisible();
     await channelDropdown.locator('button', { hasText: 'RGB' }).click();
-    await page.waitForFunction(
-      () => window.__OPENRV_TEST__?.getViewerState()?.channelMode === 'rgb',
-      { timeout: 5000 }
-    );
+    await page.waitForFunction(() => window.__OPENRV_TEST__?.getViewerState()?.channelMode === 'rgb', {
+      timeout: 5000,
+    });
 
     const restored = await captureViewerScreenshot(page);
 
@@ -115,13 +113,13 @@ test.describe('Grayscale Toggle', () => {
     const button = page.locator('[data-testid="channel-select-button"]');
 
     // Initially should not have accent styling
-    const initialStyle = await button.evaluate(el => el.style.borderColor);
+    const initialStyle = await button.evaluate((el) => el.style.borderColor);
 
     // Enable grayscale
     await page.keyboard.press('Shift+Y');
 
     // Button should have accent styling when active
-    const activeStyle = await button.evaluate(el => el.style.borderColor);
+    const activeStyle = await button.evaluate((el) => el.style.borderColor);
     expect(activeStyle).toContain('accent');
   });
 

@@ -46,6 +46,23 @@ export interface PlaybackEngineHost {
 }
 
 /**
+ * Reason why playback was paused.
+ * - 'user': manual pause (default)
+ * - 'starvation': frame buffer underrun caused the pause
+ */
+export type PauseReason = 'user' | 'starvation';
+
+/**
+ * Payload emitted with the `playbackStarved` event when playback
+ * pauses due to frame starvation (buffer underrun).
+ */
+export interface PlaybackStarvedEvent {
+  reason: 'starvation';
+  frame: number;
+  consecutiveStarvations: number;
+}
+
+/**
  * Events emitted by PlaybackEngine
  */
 export interface PlaybackEngineEvents extends EventMap {
@@ -63,6 +80,7 @@ export interface PlaybackEngineEvents extends EventMap {
   buffering: boolean;
   fpsUpdated: FPSMeasurement;
   frameDecodeTimeout: number;
+  playbackStarved: PlaybackStarvedEvent;
 }
 
 /**
@@ -93,6 +111,9 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
   // Play-all-frames starvation tracking
   private _playAllFramesWaitStart: number | null = null;
   private _playAllFramesBuffering = false;
+
+  // Starvation pause tracking: true when the most recent pause was caused by frame starvation
+  private _isStarved = false;
 
   // Playback guard to prevent concurrent play() calls
   private _pendingPlayPromise: Promise<void> | null = null;
@@ -374,6 +395,23 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
     return this._ts.isBuffering;
   }
 
+  /**
+   * Whether the current pause state was caused by frame starvation.
+   * Returns `true` only when paused due to starvation; clears on manual play/pause.
+   */
+  get isStarved(): boolean {
+    return this._isStarved;
+  }
+
+  /**
+   * The reason for the most recent pause.
+   * - `'starvation'` if paused due to frame buffer underrun
+   * - `'user'` for all other pauses (manual, end-of-range, etc.)
+   */
+  get pauseReason(): PauseReason {
+    return this._isStarved ? 'starvation' : 'user';
+  }
+
   get loopMode(): LoopMode {
     return this._loopMode;
   }
@@ -509,6 +547,7 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
     }
 
     this._isPlaying = true;
+    this._isStarved = false;
     this._timingController.resetTiming(this._ts);
     this._timingController.resetFpsTracking(this._ts);
 
@@ -574,6 +613,7 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
   pause(): void {
     if (this._isPlaying) {
       this._isPlaying = false;
+      this._isStarved = false;
       this._hdrBuffering = false;
 
       // Clear play-all-frames state
@@ -848,9 +888,19 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
               source.element.pause();
             }
             this.triggerStarvationRecoveryPreload(videoSourceNode, nextFrame, this._playDirection);
+            // Capture consecutive starvation count BEFORE resetting, so the event payload is accurate
+            const consecutiveStarvations = this._ts.consecutiveStarvationSkips;
             tc.resetStarvation(this._ts);
             this._pendingFetchFrame = null;
             this.pause();
+            // Set starvation state AFTER pause() so consumers can check isStarved/pauseReason.
+            // pause() clears _isStarved for user-initiated pauses, but starvation overrides it.
+            this._isStarved = true;
+            this.emit('playbackStarved', {
+              reason: 'starvation',
+              frame: nextFrame,
+              consecutiveStarvations,
+            });
             return;
           }
 
@@ -1223,6 +1273,7 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
 
   dispose(): void {
     this.pause();
+    this._isStarved = false;
     this._host = null;
     this.removeAllListeners();
   }

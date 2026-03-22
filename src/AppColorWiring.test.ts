@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { wireColorControls, resolveOCIOBakeSize, ACES_OCIO_BAKE_SIZE, DEFAULT_OCIO_BAKE_SIZE } from './AppColorWiring';
 import { EventEmitter } from './utils/EventEmitter';
+import { getGlobalHistoryManager } from './utils/HistoryManager';
+import { DEFAULT_COLOR_WHEELS_STATE } from './core/types/color';
+import type { ColorWheelsState } from './core/types/color';
 
 // ---------------------------------------------------------------------------
 // Lightweight test doubles
@@ -35,8 +38,22 @@ class StubDisplayProfileControl extends EventEmitter {}
 class StubGamutMappingControl extends EventEmitter {}
 class StubLUTPipelinePanel extends EventEmitter {}
 class StubPremultControl extends EventEmitter {}
+class StubColorWheels extends EventEmitter {
+  private state: ColorWheelsState = JSON.parse(JSON.stringify(DEFAULT_COLOR_WHEELS_STATE));
+  getState(): ColorWheelsState {
+    return JSON.parse(JSON.stringify(this.state));
+  }
+  setState(state: Partial<ColorWheelsState>) {
+    if (state.lift) this.state.lift = { ...state.lift };
+    if (state.gamma) this.state.gamma = { ...state.gamma };
+    if (state.gain) this.state.gain = { ...state.gain };
+    if (state.master) this.state.master = { ...state.master };
+    if (state.linked !== undefined) this.state.linked = state.linked;
+  }
+}
 
 function createMockViewer() {
+  const colorWheels = new StubColorWheels();
   return {
     setColorInversion: vi.fn(),
     setColorAdjustments: vi.fn(),
@@ -49,6 +66,9 @@ function createMockViewer() {
     setGamutMappingState: vi.fn(),
     setPremultMode: vi.fn(),
     syncLUTPipeline: vi.fn(),
+    onColorWheelsChanged: vi.fn(),
+    getColorWheels: () => colorWheels,
+    _colorWheels: colorWheels,
   };
 }
 
@@ -395,6 +415,206 @@ describe('wireColorControls', () => {
       vi.advanceTimersByTime(500);
 
       expect(state.state.colorHistoryTimer).toBeNull();
+    });
+  });
+
+  describe('color wheels wiring', () => {
+    it('CW-CW-001: stateChanged calls viewer.onColorWheelsChanged()', () => {
+      wireColorControls(ctx as any);
+
+      const wheelState: ColorWheelsState = {
+        ...DEFAULT_COLOR_WHEELS_STATE,
+        lift: { r: 0.1, g: 0, b: 0, y: 0 },
+      };
+      ctx._viewer._colorWheels.emit('stateChanged', wheelState);
+
+      expect(ctx._viewer.onColorWheelsChanged).toHaveBeenCalledTimes(1);
+    });
+
+    it('CW-CW-002: stateChanged calls scheduleUpdateScopes and syncGTOStore', () => {
+      wireColorControls(ctx as any);
+
+      const wheelState: ColorWheelsState = {
+        ...DEFAULT_COLOR_WHEELS_STATE,
+        lift: { r: 0.1, g: 0, b: 0, y: 0 },
+      };
+      ctx._viewer._colorWheels.emit('stateChanged', wheelState);
+
+      expect(ctx._sessionBridge.scheduleUpdateScopes).toHaveBeenCalled();
+      expect(ctx._persistenceManager.syncGTOStore).toHaveBeenCalled();
+    });
+
+    it('CW-CW-003: returns state with null colorWheelsHistoryTimer initially', () => {
+      const result = wireColorControls(ctx as any);
+
+      expect(result.state.colorWheelsHistoryTimer).toBeNull();
+      expect(result.state.colorWheelsHistoryPrevious).toEqual(DEFAULT_COLOR_WHEELS_STATE);
+    });
+  });
+
+  describe('color wheels debounce & history', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('CW-CW-004: stateChanged sets a debounce timer that fires after 500ms', () => {
+      const result = wireColorControls(ctx as any);
+
+      const wheelState: ColorWheelsState = {
+        ...DEFAULT_COLOR_WHEELS_STATE,
+        lift: { r: 0.2, g: 0, b: 0, y: 0 },
+      };
+      // Update the stub state so getState() returns the new value
+      ctx._viewer._colorWheels.setState(wheelState);
+      ctx._viewer._colorWheels.emit('stateChanged', wheelState);
+
+      expect(result.state.colorWheelsHistoryTimer).not.toBeNull();
+
+      vi.advanceTimersByTime(500);
+
+      expect(result.state.colorWheelsHistoryTimer).toBeNull();
+    });
+
+    it('CW-CW-005: debounce timer records a history action after 500ms', () => {
+      const historyManager = getGlobalHistoryManager();
+      const recordSpy = vi.spyOn(historyManager, 'recordAction');
+
+      wireColorControls(ctx as any);
+
+      const wheelState: ColorWheelsState = {
+        ...DEFAULT_COLOR_WHEELS_STATE,
+        gain: { r: 0.3, g: 0.1, b: -0.2, y: 0 },
+      };
+      ctx._viewer._colorWheels.setState(wheelState);
+      ctx._viewer._colorWheels.emit('stateChanged', wheelState);
+
+      vi.advanceTimersByTime(500);
+
+      expect(recordSpy).toHaveBeenCalledWith(
+        'Adjust color wheels',
+        'color',
+        expect.any(Function),
+        expect.any(Function),
+      );
+
+      recordSpy.mockRestore();
+    });
+
+    it('CW-CW-006: history undo restores previous color wheels state', () => {
+      const historyManager = getGlobalHistoryManager();
+      const recordSpy = vi.spyOn(historyManager, 'recordAction');
+
+      wireColorControls(ctx as any);
+
+      const wheelState: ColorWheelsState = {
+        ...DEFAULT_COLOR_WHEELS_STATE,
+        lift: { r: 0.5, g: 0, b: 0, y: 0 },
+      };
+      ctx._viewer._colorWheels.setState(wheelState);
+      ctx._viewer._colorWheels.emit('stateChanged', wheelState);
+
+      vi.advanceTimersByTime(500);
+
+      // Call the undo function (3rd argument)
+      const undoFn = recordSpy.mock.calls[0]![2] as () => void;
+      undoFn();
+
+      // After undo, the color wheels should have been set to the previous (default) state
+      const restoredState = ctx._viewer._colorWheels.getState();
+      expect(restoredState).toEqual(DEFAULT_COLOR_WHEELS_STATE);
+      expect(ctx._viewer.onColorWheelsChanged).toHaveBeenCalled();
+
+      recordSpy.mockRestore();
+    });
+
+    it('CW-CW-007: history redo restores current color wheels state', () => {
+      const historyManager = getGlobalHistoryManager();
+      const recordSpy = vi.spyOn(historyManager, 'recordAction');
+
+      wireColorControls(ctx as any);
+
+      const wheelState: ColorWheelsState = {
+        ...DEFAULT_COLOR_WHEELS_STATE,
+        gamma: { r: 0, g: 0.4, b: 0, y: 0.2 },
+      };
+      ctx._viewer._colorWheels.setState(wheelState);
+      ctx._viewer._colorWheels.emit('stateChanged', wheelState);
+
+      vi.advanceTimersByTime(500);
+
+      // Call undo then redo
+      const undoFn = recordSpy.mock.calls[0]![2] as () => void;
+      const redoFn = recordSpy.mock.calls[0]![3] as () => void;
+      undoFn();
+      redoFn();
+
+      const restoredState = ctx._viewer._colorWheels.getState();
+      expect(restoredState.gamma).toEqual({ r: 0, g: 0.4, b: 0, y: 0.2 });
+      expect(ctx._viewer.onColorWheelsChanged).toHaveBeenCalled();
+
+      recordSpy.mockRestore();
+    });
+
+    it('CW-CW-008: no history recorded when state does not actually change', () => {
+      const historyManager = getGlobalHistoryManager();
+      const recordSpy = vi.spyOn(historyManager, 'recordAction');
+
+      wireColorControls(ctx as any);
+
+      // Emit the same default state (no change)
+      ctx._viewer._colorWheels.emit('stateChanged', DEFAULT_COLOR_WHEELS_STATE);
+
+      vi.advanceTimersByTime(500);
+
+      expect(recordSpy).not.toHaveBeenCalled();
+
+      recordSpy.mockRestore();
+    });
+
+    it('CW-CW-009: callbacks do not fire after dispose', () => {
+      const result = wireColorControls(ctx as any);
+      result.subscriptions.dispose();
+
+      ctx._viewer.onColorWheelsChanged.mockClear();
+      ctx._viewer._colorWheels.emit('stateChanged', DEFAULT_COLOR_WHEELS_STATE);
+
+      expect(ctx._viewer.onColorWheelsChanged).not.toHaveBeenCalled();
+    });
+
+    it('CW-CW-010: colorWheelsHistoryTimer cleared on dispose prevents late history recording', () => {
+      const historyManager = getGlobalHistoryManager();
+      const recordSpy = vi.spyOn(historyManager, 'recordAction');
+
+      const result = wireColorControls(ctx as any);
+
+      const wheelState: ColorWheelsState = {
+        ...DEFAULT_COLOR_WHEELS_STATE,
+        lift: { r: 0.3, g: 0, b: 0, y: 0 },
+      };
+      ctx._viewer._colorWheels.setState(wheelState);
+      ctx._viewer._colorWheels.emit('stateChanged', wheelState);
+
+      // Timer is pending
+      expect(result.state.colorWheelsHistoryTimer).not.toBeNull();
+
+      // Simulate App.dispose clearing the timer (same pattern as App.ts)
+      result.subscriptions.dispose();
+      if (result.state.colorWheelsHistoryTimer) {
+        clearTimeout(result.state.colorWheelsHistoryTimer);
+        result.state.colorWheelsHistoryTimer = null;
+      }
+
+      // Advance past the debounce window — timer should not fire
+      vi.advanceTimersByTime(500);
+
+      expect(result.state.colorWheelsHistoryTimer).toBeNull();
+      expect(recordSpy).not.toHaveBeenCalled();
+
+      recordSpy.mockRestore();
     });
   });
 });

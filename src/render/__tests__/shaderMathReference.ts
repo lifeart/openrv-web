@@ -204,7 +204,9 @@ export function applyTemperature(
   outR -= gv * 0.05;
   outB -= gv * 0.05;
 
-  return [outR, outG, outB];
+  // Clamp negative values (matches GLSL: max(color, 0.0))
+  // Negative color is physically meaningless; HDR values > 1.0 are preserved.
+  return [Math.max(outR, 0), Math.max(outG, 0), Math.max(outB, 0)];
 }
 
 /**

@@ -95,10 +95,16 @@ function applyTemperatureTint(
   b = b - tempScale;
 
   // Tint: positive = more green, negative = more magenta
+  // Cross-channel effects match GLSL applyTemperature():
+  //   color.g += g * 0.1;  color.r -= g * 0.05;  color.b -= g * 0.05;
   const tintScale = tint * 0.1;
   g = g + tintScale;
+  r = r - tint * 0.05;
+  b = b - tint * 0.05;
 
-  return [r, g, b];
+  // Clamp negative values (matches GLSL: max(color, 0.0))
+  // Negative color is physically meaningless; HDR values > 1.0 are preserved.
+  return [Math.max(r, 0), Math.max(g, 0), Math.max(b, 0)];
 }
 
 /**

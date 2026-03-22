@@ -44,17 +44,14 @@ function floatToHalf(value) {
  * Create a multi-layer EXR file buffer
  */
 function createMultiLayerEXR(options = {}) {
-  const {
-    width = 4,
-    height = 4,
-  } = options;
+  const { width = 4, height = 4 } = options;
 
   // Channels: RGBA (default) + diffuse.RGB + specular.RGB
   const channels = [
-    'A',           // Default alpha
-    'B',           // Default blue
-    'G',           // Default green
-    'R',           // Default red
+    'A', // Default alpha
+    'B', // Default blue
+    'G', // Default green
+    'R', // Default red
     'diffuse.B',
     'diffuse.G',
     'diffuse.R',
@@ -208,14 +205,17 @@ function createMultiLayerEXR(options = {}) {
         let value = 0;
         const t = (x + y * width) / (width * height);
 
-        if (ch === 'R') value = 0.8; // Default RGBA - reddish
+        if (ch === 'R')
+          value = 0.8; // Default RGBA - reddish
         else if (ch === 'G') value = 0.2;
         else if (ch === 'B') value = 0.2;
         else if (ch === 'A') value = 1.0;
-        else if (ch === 'diffuse.R') value = 0.2; // Diffuse - greenish
+        else if (ch === 'diffuse.R')
+          value = 0.2; // Diffuse - greenish
         else if (ch === 'diffuse.G') value = 0.8;
         else if (ch === 'diffuse.B') value = 0.2;
-        else if (ch === 'specular.R') value = 0.2; // Specular - bluish
+        else if (ch === 'specular.R')
+          value = 0.2; // Specular - bluish
         else if (ch === 'specular.G') value = 0.2;
         else if (ch === 'specular.B') value = 0.8;
 

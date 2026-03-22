@@ -54,10 +54,7 @@ async function openDisplayDropdown(page: import('@playwright/test').Page) {
   await expect(dropdown).toBeVisible();
 }
 
-async function setRangeValue(
-  slider: import('@playwright/test').Locator,
-  value: number,
-) {
+async function setRangeValue(slider: import('@playwright/test').Locator, value: number) {
   await slider.evaluate((el, val) => {
     const input = el as HTMLInputElement;
     input.value = String(val);
@@ -76,27 +73,21 @@ async function waitForColorPanel(page: import('@playwright/test').Page) {
 
 /** Wait for LUT to be reported as loaded */
 async function waitForLUTLoaded(page: import('@playwright/test').Page) {
-  await page.waitForFunction(
-    () =>
-      (window as any).__OPENRV_TEST__?.getColorState()?.hasLUT === true,
-    { timeout: 5000 },
-  );
+  await page.waitForFunction(() => (window as any).__OPENRV_TEST__?.getColorState()?.hasLUT === true, {
+    timeout: 5000,
+  });
 }
 
 /** Wait for LUT to be reported as cleared */
 async function waitForLUTCleared(page: import('@playwright/test').Page) {
-  await page.waitForFunction(
-    () =>
-      (window as any).__OPENRV_TEST__?.getColorState()?.hasLUT === false,
-    { timeout: 5000 },
-  );
+  await page.waitForFunction(() => (window as any).__OPENRV_TEST__?.getColorState()?.hasLUT === false, {
+    timeout: 5000,
+  });
 }
 
 /** Load the sample .cube LUT file via the color panel file input */
 async function loadSampleLUT(page: import('@playwright/test').Page) {
-  const fileInput = page
-    .locator('.color-controls-panel input[type="file"]')
-    .first();
+  const fileInput = page.locator('.color-controls-panel input[type="file"]').first();
   await expect(fileInput).toBeAttached({ timeout: 5000 });
   const lutPath = path.resolve(process.cwd(), SAMPLE_LUT);
   await fileInput.setInputFiles(lutPath);
@@ -115,9 +106,7 @@ test.describe('Display Color Management GPU Integration', () => {
     await goToColorTab(page);
   });
 
-  test('INT-E001: display profile change affects rendered output', async ({
-    page,
-  }) => {
+  test('INT-E001: display profile change affects rendered output', async ({ page }) => {
     // Capture baseline screenshot with default sRGB profile
     const beforeScreenshot = await captureViewerScreenshot(page);
 
@@ -135,9 +124,7 @@ test.describe('Display Color Management GPU Integration', () => {
     expect(imagesAreDifferent(beforeScreenshot, afterScreenshot)).toBe(true);
   });
 
-  test('INT-E002: switching between multiple profiles produces distinct outputs', async ({
-    page,
-  }) => {
+  test('INT-E002: switching between multiple profiles produces distinct outputs', async ({ page }) => {
     // Capture sRGB (default)
     const srgbScreenshot = await captureViewerScreenshot(page);
 
@@ -158,15 +145,11 @@ test.describe('Display Color Management GPU Integration', () => {
     expect(imagesAreDifferent(rec709Screenshot, gamma24Screenshot)).toBe(true);
   });
 
-  test('INT-E003: display gamma slider changes rendered output', async ({
-    page,
-  }) => {
+  test('INT-E003: display gamma slider changes rendered output', async ({ page }) => {
     const beforeScreenshot = await captureViewerScreenshot(page);
 
     await openDisplayDropdown(page);
-    const gammaSlider = page.locator(
-      '[data-testid="display-gamma-slider"]',
-    );
+    const gammaSlider = page.locator('[data-testid="display-gamma-slider"]');
     await setRangeValue(gammaSlider, 2.0);
     // Give the renderer time to apply the new gamma value
     await page.waitForTimeout(300);
@@ -175,15 +158,11 @@ test.describe('Display Color Management GPU Integration', () => {
     expect(imagesAreDifferent(beforeScreenshot, afterScreenshot)).toBe(true);
   });
 
-  test('INT-E004: display brightness slider changes rendered output', async ({
-    page,
-  }) => {
+  test('INT-E004: display brightness slider changes rendered output', async ({ page }) => {
     const beforeScreenshot = await captureViewerScreenshot(page);
 
     await openDisplayDropdown(page);
-    const brightnessSlider = page.locator(
-      '[data-testid="display-brightness-slider"]',
-    );
+    const brightnessSlider = page.locator('[data-testid="display-brightness-slider"]');
     await setRangeValue(brightnessSlider, 0.5);
     await page.waitForTimeout(300);
 
@@ -191,15 +170,11 @@ test.describe('Display Color Management GPU Integration', () => {
     expect(imagesAreDifferent(beforeScreenshot, afterScreenshot)).toBe(true);
   });
 
-  test('INT-E005: extreme gamma values produce visible change', async ({
-    page,
-  }) => {
+  test('INT-E005: extreme gamma values produce visible change', async ({ page }) => {
     await openDisplayDropdown(page);
 
     // Set gamma to minimum (0.1)
-    const gammaSlider = page.locator(
-      '[data-testid="display-gamma-slider"]',
-    );
+    const gammaSlider = page.locator('[data-testid="display-gamma-slider"]');
     await setRangeValue(gammaSlider, 0.1);
     await page.waitForTimeout(300);
     const lowGammaScreenshot = await captureViewerScreenshot(page);
@@ -209,19 +184,13 @@ test.describe('Display Color Management GPU Integration', () => {
     await page.waitForTimeout(300);
     const highGammaScreenshot = await captureViewerScreenshot(page);
 
-    expect(
-      imagesAreDifferent(lowGammaScreenshot, highGammaScreenshot),
-    ).toBe(true);
+    expect(imagesAreDifferent(lowGammaScreenshot, highGammaScreenshot)).toBe(true);
   });
 
-  test('INT-E006: extreme brightness values produce visible change', async ({
-    page,
-  }) => {
+  test('INT-E006: extreme brightness values produce visible change', async ({ page }) => {
     await openDisplayDropdown(page);
 
-    const brightnessSlider = page.locator(
-      '[data-testid="display-brightness-slider"]',
-    );
+    const brightnessSlider = page.locator('[data-testid="display-brightness-slider"]');
 
     // Set brightness to 0 (black)
     await setRangeValue(brightnessSlider, 0);
@@ -233,34 +202,24 @@ test.describe('Display Color Management GPU Integration', () => {
     await page.waitForTimeout(300);
     const brightScreenshot = await captureViewerScreenshot(page);
 
-    expect(
-      imagesAreDifferent(darkScreenshot, brightScreenshot),
-    ).toBe(true);
+    expect(imagesAreDifferent(darkScreenshot, brightScreenshot)).toBe(true);
   });
 
-  test('INT-E007: resetting display state returns to default output', async ({
-    page,
-  }) => {
+  test('INT-E007: resetting display state returns to default output', async ({ page }) => {
     // Capture the default output
     const defaultScreenshot = await captureViewerScreenshot(page);
 
     // Change profile, gamma, and brightness
     await openDisplayDropdown(page);
     await page.click('[data-testid="display-profile-gamma2.4"]');
-    const gammaSlider = page.locator(
-      '[data-testid="display-gamma-slider"]',
-    );
+    const gammaSlider = page.locator('[data-testid="display-gamma-slider"]');
     await setRangeValue(gammaSlider, 2.5);
-    const brightnessSlider = page.locator(
-      '[data-testid="display-brightness-slider"]',
-    );
+    const brightnessSlider = page.locator('[data-testid="display-brightness-slider"]');
     await setRangeValue(brightnessSlider, 0.3);
     await page.waitForTimeout(300);
 
     const modifiedScreenshot = await captureViewerScreenshot(page);
-    expect(imagesAreDifferent(defaultScreenshot, modifiedScreenshot)).toBe(
-      true,
-    );
+    expect(imagesAreDifferent(defaultScreenshot, modifiedScreenshot)).toBe(true);
 
     // Reset
     await page.click('[data-testid="display-profile-reset"]');
@@ -272,14 +231,10 @@ test.describe('Display Color Management GPU Integration', () => {
     // be active again, producing the same output as the initial default.
     // We verify that the reset output differs from the modified output,
     // confirming the reset actually took effect on the GPU path.
-    expect(imagesAreDifferent(modifiedScreenshot, resetScreenshot)).toBe(
-      true,
-    );
+    expect(imagesAreDifferent(modifiedScreenshot, resetScreenshot)).toBe(true);
   });
 
-  test('INT-E008: display profile combined with gamma produces compound effect', async ({
-    page,
-  }) => {
+  test('INT-E008: display profile combined with gamma produces compound effect', async ({ page }) => {
     // Linear profile at default gamma
     await openDisplayDropdown(page);
     await page.click('[data-testid="display-profile-linear"]');
@@ -287,21 +242,15 @@ test.describe('Display Color Management GPU Integration', () => {
     const linearDefaultScreenshot = await captureViewerScreenshot(page);
 
     // Linear profile with elevated gamma
-    const gammaSlider = page.locator(
-      '[data-testid="display-gamma-slider"]',
-    );
+    const gammaSlider = page.locator('[data-testid="display-gamma-slider"]');
     await setRangeValue(gammaSlider, 3.0);
     await page.waitForTimeout(300);
     const linearHighGammaScreenshot = await captureViewerScreenshot(page);
 
-    expect(
-      imagesAreDifferent(linearDefaultScreenshot, linearHighGammaScreenshot),
-    ).toBe(true);
+    expect(imagesAreDifferent(linearDefaultScreenshot, linearHighGammaScreenshot)).toBe(true);
   });
 
-  test('INT-E009: custom profile selection reflects on GPU output', async ({
-    page,
-  }) => {
+  test('INT-E009: custom profile selection reflects on GPU output', async ({ page }) => {
     const beforeScreenshot = await captureViewerScreenshot(page);
 
     // Select the custom profile option
@@ -312,9 +261,7 @@ test.describe('Display Color Management GPU Integration', () => {
     // The custom profile applies a user-defined gamma curve. With default
     // custom gamma this may or may not differ, but the profile change must
     // not crash and the UI must reflect the selection.
-    const customOption = page.locator(
-      '[data-testid="display-profile-custom"]',
-    );
+    const customOption = page.locator('[data-testid="display-profile-custom"]');
     await expect(customOption).toHaveAttribute('aria-checked', 'true');
   });
 });
@@ -332,9 +279,7 @@ test.describe('Float LUT Single-Pass Pipeline GPU Integration', () => {
     await waitForColorPanel(page);
   });
 
-  test('INT-L001: loading a LUT activates the GPU single-pass path', async ({
-    page,
-  }) => {
+  test('INT-L001: loading a LUT activates the GPU single-pass path', async ({ page }) => {
     // Verify initial state: no LUT
     let state = await getColorState(page);
     expect(state.hasLUT).toBe(false);
@@ -349,9 +294,7 @@ test.describe('Float LUT Single-Pass Pipeline GPU Integration', () => {
     expect(state.lutIntensity).toBe(1);
   });
 
-  test('INT-L002: LUT application produces visible rendered output change', async ({
-    page,
-  }) => {
+  test('INT-L002: LUT application produces visible rendered output change', async ({ page }) => {
     const beforeScreenshot = await captureViewerScreenshot(page);
 
     await loadSampleLUT(page);
@@ -363,9 +306,7 @@ test.describe('Float LUT Single-Pass Pipeline GPU Integration', () => {
     expect(imagesAreDifferent(beforeScreenshot, afterScreenshot)).toBe(true);
   });
 
-  test('INT-L003: LUT intensity 0 produces no visual LUT effect', async ({
-    page,
-  }) => {
+  test('INT-L003: LUT intensity 0 produces no visual LUT effect', async ({ page }) => {
     // Capture the original (no-LUT) screenshot
     const originalScreenshot = await captureViewerScreenshot(page);
 
@@ -376,9 +317,7 @@ test.describe('Float LUT Single-Pass Pipeline GPU Integration', () => {
     const fullLUTScreenshot = await captureViewerScreenshot(page);
 
     // Confirm the LUT changed the image
-    expect(imagesAreDifferent(originalScreenshot, fullLUTScreenshot)).toBe(
-      true,
-    );
+    expect(imagesAreDifferent(originalScreenshot, fullLUTScreenshot)).toBe(true);
 
     // Set intensity to 0 (no LUT effect)
     const intensitySlider = page
@@ -390,22 +329,16 @@ test.describe('Float LUT Single-Pass Pipeline GPU Integration', () => {
 
     if (await intensitySlider.isVisible()) {
       await setRangeValue(intensitySlider, 0);
-      await page.waitForFunction(
-        () =>
-          (window as any).__OPENRV_TEST__?.getColorState()?.lutIntensity ===
-          0,
-        { timeout: 5000 },
-      );
+      await page.waitForFunction(() => (window as any).__OPENRV_TEST__?.getColorState()?.lutIntensity === 0, {
+        timeout: 5000,
+      });
       await page.waitForTimeout(300);
 
-      const zeroIntensityScreenshot =
-        await captureViewerScreenshot(page);
+      const zeroIntensityScreenshot = await captureViewerScreenshot(page);
 
       // At intensity 0, the LUT has no effect: output should match
       // the original (pre-LUT) image, and differ from the full-LUT image.
-      expect(
-        imagesAreDifferent(fullLUTScreenshot, zeroIntensityScreenshot),
-      ).toBe(true);
+      expect(imagesAreDifferent(fullLUTScreenshot, zeroIntensityScreenshot)).toBe(true);
 
       const state = await getColorState(page);
       expect(state.hasLUT).toBe(true);
@@ -413,9 +346,7 @@ test.describe('Float LUT Single-Pass Pipeline GPU Integration', () => {
     }
   });
 
-  test('INT-L004: LUT intensity 1 produces full LUT effect', async ({
-    page,
-  }) => {
+  test('INT-L004: LUT intensity 1 produces full LUT effect', async ({ page }) => {
     await loadSampleLUT(page);
 
     // Ensure intensity is at 1 (default)
@@ -428,9 +359,7 @@ test.describe('Float LUT Single-Pass Pipeline GPU Integration', () => {
     // in INT-L002).
   });
 
-  test('INT-L005: LUT intensity 0.5 blends between original and LUT', async ({
-    page,
-  }) => {
+  test('INT-L005: LUT intensity 0.5 blends between original and LUT', async ({ page }) => {
     await loadSampleLUT(page);
 
     // Capture full intensity screenshot
@@ -459,15 +388,11 @@ test.describe('Float LUT Single-Pass Pipeline GPU Integration', () => {
       const halfScreenshot = await captureViewerScreenshot(page);
 
       // The 50% blend should differ from the 100% blend
-      expect(
-        imagesAreDifferent(fullScreenshot, halfScreenshot),
-      ).toBe(true);
+      expect(imagesAreDifferent(fullScreenshot, halfScreenshot)).toBe(true);
     }
   });
 
-  test('INT-L006: clearing LUT disables the GPU LUT path', async ({
-    page,
-  }) => {
+  test('INT-L006: clearing LUT disables the GPU LUT path', async ({ page }) => {
     await loadSampleLUT(page);
 
     await page.waitForTimeout(300);
@@ -475,9 +400,7 @@ test.describe('Float LUT Single-Pass Pipeline GPU Integration', () => {
 
     // Find and click the clear/remove LUT button
     const clearButton = page
-      .locator(
-        '.color-controls-panel button:has-text("\u2715"), .color-controls-panel button[title*="Remove LUT"]',
-      )
+      .locator('.color-controls-panel button:has-text("\u2715"), .color-controls-panel button[title*="Remove LUT"]')
       .first();
     if (await clearButton.isVisible()) {
       await clearButton.click();
@@ -490,15 +413,11 @@ test.describe('Float LUT Single-Pass Pipeline GPU Integration', () => {
       const clearedScreenshot = await captureViewerScreenshot(page);
 
       // After clearing, the output should differ from the LUT-applied output
-      expect(
-        imagesAreDifferent(lutScreenshot, clearedScreenshot),
-      ).toBe(true);
+      expect(imagesAreDifferent(lutScreenshot, clearedScreenshot)).toBe(true);
     }
   });
 
-  test('INT-L007: re-loading LUT after clear re-activates GPU path', async ({
-    page,
-  }) => {
+  test('INT-L007: re-loading LUT after clear re-activates GPU path', async ({ page }) => {
     // Load, then clear, then re-load
     await loadSampleLUT(page);
 
@@ -507,9 +426,7 @@ test.describe('Float LUT Single-Pass Pipeline GPU Integration', () => {
 
     // Clear
     const clearButton = page
-      .locator(
-        '.color-controls-panel button:has-text("\u2715"), .color-controls-panel button[title*="Remove LUT"]',
-      )
+      .locator('.color-controls-panel button:has-text("\u2715"), .color-controls-panel button[title*="Remove LUT"]')
       .first();
     await expect(clearButton).toBeVisible({ timeout: 5000 });
     await clearButton.click();
@@ -525,21 +442,15 @@ test.describe('Float LUT Single-Pass Pipeline GPU Integration', () => {
     const reloadedScreenshot = await captureViewerScreenshot(page);
 
     // The re-loaded LUT output should differ from the cleared output
-    expect(
-      imagesAreDifferent(clearedScreenshot, reloadedScreenshot),
-    ).toBe(true);
+    expect(imagesAreDifferent(clearedScreenshot, reloadedScreenshot)).toBe(true);
 
     // And should look similar to the first LUT application (same LUT file)
     // We can not guarantee pixel-exact match due to timing, but we confirm
     // both differ from the cleared state.
-    expect(
-      imagesAreDifferent(clearedScreenshot, firstLUTScreenshot),
-    ).toBe(true);
+    expect(imagesAreDifferent(clearedScreenshot, firstLUTScreenshot)).toBe(true);
   });
 
-  test('INT-L008: 3D LUT uses float internal format on GPU', async ({
-    page,
-  }) => {
+  test('INT-L008: 3D LUT uses float internal format on GPU', async ({ page }) => {
     // Verify that WebGL2 supports 3D float textures needed by the LUT
     const result = await page.evaluate(() => {
       const canvas = document.createElement('canvas');
@@ -564,18 +475,7 @@ test.describe('Float LUT Single-Pass Pipeline GPU Integration', () => {
       }
 
       try {
-        gl.texImage3D(
-          gl.TEXTURE_3D,
-          0,
-          gl.RGB32F,
-          size,
-          size,
-          size,
-          0,
-          gl.RGB,
-          gl.FLOAT,
-          data,
-        );
+        gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGB32F, size, size, size, 0, gl.RGB, gl.FLOAT, data);
         const err = gl.getError();
         gl.deleteTexture(tex);
         return {
@@ -608,9 +508,7 @@ test.describe('Display + LUT Combined GPU Integration', () => {
     await loadVideoFile(page);
   });
 
-  test('INT-C001: LUT and display profile changes compound on GPU output', async ({
-    page,
-  }) => {
+  test('INT-C001: LUT and display profile changes compound on GPU output', async ({ page }) => {
     // Open color panel and load LUT
     await waitForColorPanel(page);
 
@@ -629,14 +527,10 @@ test.describe('Display + LUT Combined GPU Integration', () => {
 
     // The combination of LUT + linear display profile should differ from
     // LUT alone (which uses sRGB by default).
-    expect(
-      imagesAreDifferent(lutOnlyScreenshot, lutPlusLinearScreenshot),
-    ).toBe(true);
+    expect(imagesAreDifferent(lutOnlyScreenshot, lutPlusLinearScreenshot)).toBe(true);
   });
 
-  test('INT-C002: display gamma adjustment compounds with LUT effect', async ({
-    page,
-  }) => {
+  test('INT-C002: display gamma adjustment compounds with LUT effect', async ({ page }) => {
     await waitForColorPanel(page);
 
     await loadSampleLUT(page);
@@ -647,25 +541,16 @@ test.describe('Display + LUT Combined GPU Integration', () => {
     // Adjust display gamma
     await goToColorTab(page);
     await openDisplayDropdown(page);
-    const gammaSlider = page.locator(
-      '[data-testid="display-gamma-slider"]',
-    );
+    const gammaSlider = page.locator('[data-testid="display-gamma-slider"]');
     await setRangeValue(gammaSlider, 2.5);
     await page.waitForTimeout(300);
 
     const lutHighGammaScreenshot = await captureViewerScreenshot(page);
 
-    expect(
-      imagesAreDifferent(
-        lutDefaultGammaScreenshot,
-        lutHighGammaScreenshot,
-      ),
-    ).toBe(true);
+    expect(imagesAreDifferent(lutDefaultGammaScreenshot, lutHighGammaScreenshot)).toBe(true);
   });
 
-  test('INT-C003: clearing LUT while display profile is non-default', async ({
-    page,
-  }) => {
+  test('INT-C003: clearing LUT while display profile is non-default', async ({ page }) => {
     // Set a non-default display profile first
     await goToColorTab(page);
     await openDisplayDropdown(page);
@@ -679,38 +564,26 @@ test.describe('Display + LUT Combined GPU Integration', () => {
 
     await page.waitForTimeout(300);
     const gamma22WithLUTScreenshot = await captureViewerScreenshot(page);
-    expect(
-      imagesAreDifferent(gamma22NoLUTScreenshot, gamma22WithLUTScreenshot),
-    ).toBe(true);
+    expect(imagesAreDifferent(gamma22NoLUTScreenshot, gamma22WithLUTScreenshot)).toBe(true);
 
     // Clear the LUT - display profile should remain at gamma 2.2
     const clearButton = page
-      .locator(
-        '.color-controls-panel button:has-text("\u2715"), .color-controls-panel button[title*="Remove LUT"]',
-      )
+      .locator('.color-controls-panel button:has-text("\u2715"), .color-controls-panel button[title*="Remove LUT"]')
       .first();
     if (await clearButton.isVisible()) {
       await clearButton.click();
       await waitForLUTCleared(page);
       await page.waitForTimeout(300);
 
-      const gamma22AfterClearScreenshot =
-        await captureViewerScreenshot(page);
+      const gamma22AfterClearScreenshot = await captureViewerScreenshot(page);
 
       // After clearing LUT, output should differ from the LUT-applied
       // version but resemble the gamma 2.2 no-LUT baseline.
-      expect(
-        imagesAreDifferent(
-          gamma22WithLUTScreenshot,
-          gamma22AfterClearScreenshot,
-        ),
-      ).toBe(true);
+      expect(imagesAreDifferent(gamma22WithLUTScreenshot, gamma22AfterClearScreenshot)).toBe(true);
     }
   });
 
-  test('INT-C004: resetting display after LUT does not clear LUT', async ({
-    page,
-  }) => {
+  test('INT-C004: resetting display after LUT does not clear LUT', async ({ page }) => {
     // Load LUT
     await waitForColorPanel(page);
     await loadSampleLUT(page);
@@ -731,13 +604,9 @@ test.describe('Display + LUT Combined GPU Integration', () => {
     expect(state.lutIntensity).toBe(1);
 
     // Verify display settings returned to defaults
-    const gammaValue = page.locator(
-      '[data-testid="display-gamma-value"]',
-    );
+    const gammaValue = page.locator('[data-testid="display-gamma-value"]');
     await expect(gammaValue).toContainText('1.0');
-    const brightnessValue = page.locator(
-      '[data-testid="display-brightness-value"]',
-    );
+    const brightnessValue = page.locator('[data-testid="display-brightness-value"]');
     await expect(brightnessValue).toContainText('1.0');
     const srgb = page.locator('[data-testid="display-profile-srgb"]');
     await expect(srgb).toHaveAttribute('aria-checked', 'true');

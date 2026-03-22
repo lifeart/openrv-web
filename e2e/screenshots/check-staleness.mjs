@@ -28,10 +28,7 @@ const SCREENSHOT_DIR = path.join(ROOT, 'docs/assets/screenshots');
 function getLastSourceCommitTime(paths) {
   try {
     const pathArgs = paths.map((p) => `-- ${p}`).join(' ');
-    const output = execSync(
-      `git log -1 --format=%ct ${pathArgs}`,
-      { cwd: ROOT, encoding: 'utf-8' },
-    ).trim();
+    const output = execSync(`git log -1 --format=%ct ${pathArgs}`, { cwd: ROOT, encoding: 'utf-8' }).trim();
     return output ? parseInt(output, 10) : 0;
   } catch {
     return 0;
@@ -40,10 +37,7 @@ function getLastSourceCommitTime(paths) {
 
 function main() {
   // Determine last commit time for relevant source files
-  const lastSourceTime = getLastSourceCommitTime([
-    'src/ui/',
-    'e2e/screenshots/',
-  ]);
+  const lastSourceTime = getLastSourceCommitTime(['src/ui/', 'e2e/screenshots/']);
 
   if (lastSourceTime === 0) {
     console.log('No git history found for source paths. Skipping staleness check.');
@@ -88,9 +82,7 @@ function main() {
     process.exit(0);
   }
 
-  console.error(
-    `${stale.length} screenshot(s) are stale (source last changed: ${lastSourceDate.toISOString()}):`,
-  );
+  console.error(`${stale.length} screenshot(s) are stale (source last changed: ${lastSourceDate.toISOString()}):`);
   for (const s of stale) {
     console.error(`  - ${s.file}  (last updated: ${s.screenshotDate})`);
   }

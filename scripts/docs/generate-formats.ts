@@ -29,33 +29,33 @@ export function parseFormats(): FormatDescriptor[] {
 
   const formatNames = unionMatch[1]!
     .split('|')
-    .map(s => s.trim().replace(/^'|'$/g, ''))
-    .filter(s => s.length > 0);
+    .map((s) => s.trim().replace(/^'|'$/g, ''))
+    .filter((s) => s.length > 0);
 
   // Static metadata map (derived from source analysis)
   const metadata: Record<string, Omit<FormatDescriptor, 'formatName'>> = {
-    'exr': {
+    exr: {
       extensions: ['.exr', '.sxr'],
       hdr: true,
       colorSpace: 'linear',
       type: 'image',
       notes: 'OpenEXR format, most common in VFX',
     },
-    'DPX': {
+    DPX: {
       extensions: ['.dpx'],
       hdr: false,
       colorSpace: 'log/linear',
       type: 'image',
       notes: 'Digital Picture Exchange format',
     },
-    'Cineon': {
+    Cineon: {
       extensions: ['.cin', '.cineon'],
       hdr: false,
       colorSpace: 'log/linear',
       type: 'image',
       notes: 'Kodak Cineon format',
     },
-    'TIFF': {
+    TIFF: {
       extensions: ['.tif', '.tiff'],
       hdr: true,
       colorSpace: 'linear',
@@ -83,7 +83,7 @@ export function parseFormats(): FormatDescriptor[] {
       type: 'image',
       notes: 'AVIF with gainmap for HDR reconstruction',
     },
-    'avif': {
+    avif: {
       extensions: ['.avif'],
       hdr: false,
       colorSpace: 'sRGB',
@@ -97,28 +97,28 @@ export function parseFormats(): FormatDescriptor[] {
       type: 'image',
       notes: 'Embedded JPEG preview from camera RAW files',
     },
-    'hdr': {
+    hdr: {
       extensions: ['.hdr', '.pic'],
       hdr: true,
       colorSpace: 'linear',
       type: 'image',
       notes: 'Radiance HDR (RGBE) format',
     },
-    'jxl': {
+    jxl: {
       extensions: ['.jxl'],
       hdr: true,
       colorSpace: 'varies',
       type: 'image',
       notes: 'JPEG XL format',
     },
-    'jp2': {
+    jp2: {
       extensions: ['.jp2', '.j2k', '.j2c'],
       hdr: true,
       colorSpace: 'varies',
       type: 'image',
       notes: 'JPEG 2000 / HTJ2K format',
     },
-    'mxf': {
+    mxf: {
       extensions: ['.mxf'],
       hdr: 'varies',
       colorSpace: 'varies',
@@ -161,9 +161,9 @@ export function renderFormats(formats: FormatDescriptor[]): string {
   md += '# Format Support Matrix\n\n';
   md += `OpenRV Web supports ${formats.length} image and video formats through its decoder registry.\n\n`;
 
-  const imageFormats = formats.filter(f => f.type === 'image');
-  const videoFormats = formats.filter(f => f.type === 'video');
-  const sessionFormats = formats.filter(f => f.type === 'session');
+  const imageFormats = formats.filter((f) => f.type === 'image');
+  const videoFormats = formats.filter((f) => f.type === 'video');
+  const sessionFormats = formats.filter((f) => f.type === 'session');
 
   if (imageFormats.length > 0) {
     md += '## Image Formats\n\n';
@@ -197,7 +197,7 @@ export function renderFormats(formats: FormatDescriptor[]): string {
 
   md += '## Detection\n\n';
   md += 'Format detection uses magic bytes (file signatures) rather than file extensions. ';
-  md += 'The `DecoderRegistry` iterates registered decoders in priority order, calling each decoder\'s ';
+  md += "The `DecoderRegistry` iterates registered decoders in priority order, calling each decoder's ";
   md += '`canDecode()` check until a match is found. This ensures correct identification even when ';
   md += 'file extensions are missing or incorrect.\n';
 

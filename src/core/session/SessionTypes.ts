@@ -27,7 +27,7 @@ import type { LoopMode, MediaType, PlaybackMode } from '../types/session';
 import type { GTOParseResult, SkippedNodeInfo } from './GTOGraphLoader';
 import type { DegradedModeInfo } from '../../composite/BlendModes';
 import type { SubFramePosition } from '../../utils/media/FrameInterpolator';
-import type { FPSMeasurement } from './PlaybackEngine';
+import type { FPSMeasurement, PlaybackStarvedEvent } from './PlaybackEngine';
 import type { Marker } from './MarkerManager';
 import type { MediaRepresentation } from '../types/representation';
 
@@ -157,6 +157,8 @@ export interface SessionEvents extends EventMap {
   fpsUpdated: FPSMeasurement;
   // Frame decode timeout in play-all-frames mode
   frameDecodeTimeout: number;
+  // Playback starvation pause event
+  playbackStarved: PlaybackStarvedEvent;
   // EDL events
   edlLoaded: RVEDLEntry[];
   // Note/comment events

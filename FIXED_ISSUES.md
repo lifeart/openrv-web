@@ -4373,3 +4373,190 @@ Wired into `AppNetworkBridge` (subscribes to syncCursor, usersChanged, userLeft,
 - `src/utils/media/FramePreloadManager.test.ts`
 - `src/utils/media/SequenceLoader.test.ts`
 - `src/core/session/SessionMedia.test.ts`
+
+## Issue: HIGH-01 — No WebGL context loss recovery in Renderer
+
+**Root cause**: The main-thread `Renderer` had no `webglcontextlost`/`webglcontextrestored` event listeners. When the browser reclaimed GPU resources, the WebGL context was lost silently with no recovery path, leaving the viewer in a permanently broken state.
+
+**Fix**:
+- Added `webglcontextlost` and `webglcontextrestored` event listeners in `initialize()`, removed in `dispose()`
+- `webglcontextlost` handler calls `event.preventDefault()` (required by spec), sets `_contextLost` flag
+- `webglcontextrestored` handler calls `reinitializeAfterContextRestore()` which nullifies all 21+ stale GL resources (textures, FBOs, PBOs, VAO, VBO, shader, fences, extensions), then re-creates shaders and geometry
+- Added `_contextLost` guard to all 12 GL-calling methods (renderImage, renderTiledImages, renderSDRFrame, renderForScopes, renderImageToFloat, renderImageToFloatAsync, renderImageToFloatAsyncForScopes, readPixelFloat, ensureImageTexture, clear, resize, setViewport)
+- Added `gl.isTexture()` checks to detect stale `IPImage.texture` handles after restore, forcing re-upload
+- Exposed `isContextLost()` public method
+
+**Tests added**: 19 regression tests in `src/render/Renderer.contextLoss.test.ts` covering flag management, preventDefault, all render no-ops during loss, GPU state reinit on restore, extension re-check, multiple loss/restore cycles, dispose cleanup, post-dispose immunity, stale texture re-upload.
+
+**Files changed**:
+- `src/render/Renderer.ts`
+- `src/render/Renderer.contextLoss.test.ts` (new)
+- `test/mocks.ts`
+
+## Issue: MED-15 — LensDistortion edge pixels opaque black instead of transparent
+
+**Root cause**: Out-of-bounds pixels from lens distortion were written as `[0,0,0,255]` (opaque black) instead of `[0,0,0,0]` (transparent). Additionally, boundary pixels (where bilinear neighbors straddle the image edge) were treated as fully OOB, creating a 1-pixel hard transparent border.
+
+**Fix**:
+- Changed OOB pixel alpha from 255 to 0 (line 300 → `[0,0,0,0]`)
+- Added boundary interpolation path: when source coordinates are partially in-bounds, each bilinear neighbor is bounds-checked individually (OOB neighbors contribute 0 for all channels including alpha), producing a smooth alpha fade at edges
+- Three-tier sampling: fast path (all 4 neighbors in-bounds) → boundary path (partial overlap) → fully OOB (`[0,0,0,0]`)
+- Consistent with PerspectiveCorrection.ts pattern
+
+**Tests added**: 7 tests (LENS-007 updated, LENS-013 through LENS-018 new) covering: OOB corners transparent, source alpha preservation, scale-only OOB, no old bug pattern under extreme distortion, boundary intermediate alpha, smooth alpha transition from center to edge.
+
+**Files changed**:
+- `src/transform/LensDistortion.ts`
+- `src/transform/LensDistortion.test.ts`
+
+## Issue: MED-53 — ColorWheels not wired through AppColorWiring
+
+**Root cause**: ColorWheels `stateChanged` was wired directly in `Viewer.ts`, bypassing `AppColorWiring`'s persistence/history mechanisms. ColorWheels state was not serialized to session, not tracked in undo/redo history, and not restored on session load/auto-save recovery.
+
+**Fix**:
+- Wired ColorWheels through `AppColorWiring` following the same pattern as color adjustments (temperature, tint, saturation, etc.)
+- Removed direct wiring in `Viewer.ts`, added `onColorWheelsChanged()` public method for rendering updates
+- Added `colorWheels` field to `SessionState`, serialized/deserialized in `SessionSerializer`
+- Added ColorWheels restore in `AppPersistenceManager.syncControlsFromState()`
+- Implemented debounced history recording (500ms) with undo/redo support
+- Timer cleared in `App.dispose()` to prevent memory leaks
+
+**Tests added**: 10 new tests (CW-CW-001 through CW-CW-010) covering: event forwarding, side effects, initial state, debounce lifecycle, history recording, undo, redo, no-op skip, post-dispose silence, timer cleanup on dispose. Also updated SessionSerializer mock.
+
+**Files changed**:
+- `src/AppColorWiring.ts`
+- `src/AppColorWiring.test.ts`
+- `src/ui/components/Viewer.ts`
+- `src/core/session/SessionState.ts`
+- `src/core/session/SessionSerializer.ts`
+- `src/core/session/SessionSerializer.test.ts`
+- `src/AppPersistenceManager.ts`
+- `src/App.ts`
+
+## Issue: MED-17 — AppNetworkBridge media transfer timeout missing
+
+**Root cause**: `incomingMediaTransfers` entries were created on offer and removed on completion, but had no timeout. If a sender disconnected mid-transfer, accumulated chunk data leaked indefinitely until `dispose()`.
+
+**Fix**:
+- Added `MEDIA_TRANSFER_TIMEOUT_MS` (30s) idle timeout for incoming media transfers
+- Timeout starts on offer acceptance, resets on each chunk received, clears on completion
+- Timeout callback cleans up transfer entry, pending state, and logs a warning
+- `dispose()` clears all pending timeouts
+- Race conditions verified safe: single-threaded JS + idempotent cleanup in `finally` blocks
+
+**Tests added**: 6 regression tests (ANB-200 through ANB-205) covering: timeout fire and cleanup, reset on chunk, clear on completion, dispose cleanup, map emptiness after timeout, warning logging.
+
+**Files changed**:
+- `src/AppNetworkBridge.ts`
+- `src/AppNetworkBridge.test.ts`
+
+## Issue: MED-47 — Starvation pause indistinguishable from user pause
+
+**Root cause**: When frame starvation caused playback to pause, only `playbackChanged: false` was emitted — indistinguishable from a user-initiated pause. No starvation-specific event or state existed.
+
+**Fix**:
+- Added `PauseReason` type (`'user' | 'starvation'`) and `PlaybackStarvedEvent` interface with `reason`, `frame`, `consecutiveStarvations` payload
+- Added `_isStarved` flag, `isStarved` getter, and `pauseReason` getter to PlaybackEngine
+- Emits new `playbackStarved` event on starvation pause (after `pause()`, preserving backward compat)
+- Captured `consecutiveStarvations` before `resetStarvation()` call to avoid zero-count in event payload
+- Forwarded event through SessionPlayback → Session for consumer access
+- Exposed `isStarved` and `pauseReason` proxy getters on SessionPlayback and Session
+- State cleared on play(), manual pause(), and dispose()
+
+**Tests added**: 16 new tests — 11 in PlaybackEngine (PE-170 through PE-180) + 5 in Session (SES-STARV-001 through SES-STARV-005) covering: defaults, manual vs starvation pause, event payload, state lifecycle, forwarding, proxy getters.
+
+**Files changed**:
+- `src/core/session/PlaybackEngine.ts`
+- `src/core/session/PlaybackEngine.test.ts`
+- `src/core/session/SessionPlayback.ts`
+- `src/core/session/Session.ts`
+- `src/core/session/SessionTypes.ts`
+- `src/core/session/Session.playback.test.ts`
+
+## Issue: MED-01 — Scissor test state not fully restored in renderTiledImages
+
+**Root cause**: `renderTiledImages()` enabled `gl.SCISSOR_TEST` unconditionally and always disabled it afterward, without checking or restoring the prior state. If scissor test was already enabled by the caller, it was incorrectly disabled. The scissor rect was also modified without save/restore.
+
+**Fix**:
+- Save `gl.isEnabled(gl.SCISSOR_TEST)` and `gl.getParameter(gl.SCISSOR_BOX)` before mutations
+- Restore both in a `finally` block: only disable scissor test if it was previously disabled; always restore scissor rect and viewport
+- Follows the same save/restore pattern already used for viewport
+
+**Tests added**: 4 regression tests (MED-01-A through MED-01-D) covering: scissor disabled restore, scissor enabled preserve, scissor rect restore, viewport restore.
+
+**Files changed**:
+- `src/render/Renderer.ts`
+- `src/render/Renderer.test.ts`
+- `test/mocks.ts`
+
+## Issue: MED-08 — StackGroupNode opacity clamping bypassed via direct property set
+
+**Root cause**: `setLayerSettings()` clamped opacity to [0,1], but `properties.setValue('layerOpacities', ...)` bypassed the clamping. Direct property writes (e.g., via deserialization, undo/redo) could introduce unclamped values.
+
+**Fix**:
+- Added optional `transform` callback to the `Property` system (`PropertyInfo<T>`) — applied in the setter before equality check and min/max clamping
+- Added `transform` to `layerOpacities` property definition that clamps each element to [0,1] and handles non-finite values (NaN, Infinity → 0)
+- Preserved existing clamping in `setLayerSettings()` and `setLayerOpacities()` as defense-in-depth
+
+**Tests added**: 9 regression tests covering: values > 1, values < 0, normal pass-through, NaN, Infinity/-Infinity, defense-in-depth via setLayerSettings/setLayerOpacities, mixed values, empty array.
+
+**Files changed**:
+- `src/core/graph/Property.ts`
+- `src/nodes/groups/StackGroupNode.ts`
+- `src/nodes/groups/StackGroupNode.test.ts`
+
+## Issue: MED-43 — renderWorker protocol version mismatch only warns
+
+**Root cause**: When the main thread sent a message with an incompatible protocol version, the worker only logged a `console.warn` and continued processing. Incompatible message formats could cause confusing runtime errors.
+
+**Fix**:
+- Changed protocol mismatch from `warn + continue` to `error + send error response + early return`
+- Added `ProtocolMismatchResult` type to `RenderWorkerResult` union with `expectedVersion`, `actualVersion`, and `error` fields
+- Backward compatibility preserved: missing `protocolVersion` (older main threads) still allows processing
+- Refactored `onmessage` to named `handleMessage` function for testability
+
+**Tests added**: 5 regression tests (RW-032 through RW-036) covering: matching version allows processing, mismatch rejects, missing version backward compat, error payload contents, version stamping on response.
+
+**Files changed**:
+- `src/workers/renderWorker.worker.ts`
+- `src/render/renderWorker.messages.ts`
+- `src/workers/renderWorker.worker.test.ts`
+
+## Issue: MED-48 — Temperature/tint adjustments produce unclamped intermediates
+
+**Root cause**: `applyTemperature()` added/subtracted from color channels without clamping. Negative values (physically meaningless) propagated to downstream stages (contrast, saturation, vibrance), producing incorrect colors. Values > 1.0 are valid for HDR and must be preserved.
+
+**Fix**:
+- Added `max(color, 0.0)` clamp at the return of `applyTemperature()` across all 5 backends:
+  - WebGL2 GLSL (`viewer.frag.glsl`)
+  - WebGPU WGSL (`primary_grade.wgsl`, `common.wgsl`)
+  - CPU reference (`shaderMathReference.ts`)
+  - LUT bake (`CacheLUTNode.ts`)
+- Also fixed pre-existing CacheLUTNode coefficient mismatch: tint cross-channel effects on R and B channels were missing
+
+**Tests added**: 6 cross-ecosystem unit tests (XE-073b through XE-073f) + 3 CacheLUTNode tests (ACT-010 through ACT-012) + 4 GPU tests covering: negative clamping, HDR preservation, cross-channel tint effects, combined temperature+tint.
+
+**Files changed**:
+- `src/render/shaders/viewer.frag.glsl`
+- `src/render/webgpu/shaders/primary_grade.wgsl`
+- `src/render/webgpu/shaders/common.wgsl`
+- `src/render/__tests__/shaderMathReference.ts`
+- `src/render/__tests__/shaderMathCrossEcosystem.test.ts`
+- `src/render/__gpu__/primary-grade.gpu-test.ts`
+- `src/nodes/CacheLUTNode.ts`
+- `src/nodes/CacheLUTNode.test.ts`
+
+## Issue: LOW-13 — Missing PAR/background default values in SessionSerializer.fromJSON
+
+**Root cause**: `fromJSON()` used conditional `if` guards for PAR and background pattern fields. When loading older sessions that predate these features, the fields were missing, and the viewer inherited stale state from the previously-loaded session instead of clean defaults.
+
+**Fix**:
+- Changed conditional `if` to `??` with `DEFAULT_PAR_STATE` and `DEFAULT_BACKGROUND_PATTERN_STATE` defaults
+- Matches the pattern used by all other optional state fields (noise reduction, watermark, overlays, etc.)
+- `migrate()` and `fromJSON()` work complementarily: migrate fills in sub-field defaults, fromJSON handles entirely missing fields
+
+**Tests added**: 5 regression tests (SER-011d through SER-011h) covering: missing PAR → default, missing background → default, explicit PAR preserved, explicit background preserved, old v1 session → both defaults.
+
+**Files changed**:
+- `src/core/session/SessionSerializer.ts`
+- `src/core/session/SessionSerializer.test.ts`

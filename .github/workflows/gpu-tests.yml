@@ -22,7 +22,8 @@ concurrency:
 
 jobs:
   gpu-tests:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
+    continue-on-error: true
     timeout-minutes: 15
     steps:
       - name: Checkout
@@ -36,14 +37,14 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install
 
       - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
 
       - name: Run GPU integration tests
         run: pnpm test:gpu

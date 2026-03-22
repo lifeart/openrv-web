@@ -67,10 +67,7 @@ async function getCDLSaturationSlider(
 }
 
 /** Set a CDL slider value and dispatch the input event */
-async function setCDLSliderValue(
-  slider: import('@playwright/test').Locator,
-  value: number,
-): Promise<void> {
+async function setCDLSliderValue(slider: import('@playwright/test').Locator, value: number): Promise<void> {
   await slider.evaluate((el, val) => {
     const input = el as HTMLInputElement;
     input.value = String(val);

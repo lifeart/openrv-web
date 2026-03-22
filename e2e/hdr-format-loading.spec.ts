@@ -36,7 +36,7 @@ const SAMPLE_TIFF_FLOAT = 'sample/test_float.tif';
 async function waitForFormatInfo(
   page: import('@playwright/test').Page,
   expectedFormat: { formatName?: string; bitDepth?: number; dataType?: string },
-  timeout = 10000
+  timeout = 10000,
 ) {
   await page.waitForFunction(
     (expected) => {
@@ -48,7 +48,7 @@ async function waitForFormatInfo(
       return true;
     },
     expectedFormat,
-    { timeout }
+    { timeout },
   );
 }
 
@@ -75,7 +75,7 @@ async function loadFile(page: import('@playwright/test').Page, filePath: string)
       return state?.hasMedia === true;
     },
     undefined,
-    { timeout: 10000 }
+    { timeout: 10000 },
   );
 }
 
@@ -190,7 +190,7 @@ test.describe('DPX Format Support', () => {
         return Math.abs((state?.exposure ?? 0) - 1.5) < 0.1;
       },
       undefined,
-      { timeout: 10000 }
+      { timeout: 10000 },
     );
 
     // Capture after adjustment
@@ -231,7 +231,7 @@ test.describe('DPX Format Support', () => {
         return state?.channelMode === 'red';
       },
       undefined,
-      { timeout: 10000 }
+      { timeout: 10000 },
     );
 
     const redView = await captureViewerScreenshot(page);
@@ -256,7 +256,7 @@ test.describe('DPX Format Support', () => {
         return (state?.zoom ?? 1) > 1;
       },
       undefined,
-      { timeout: 10000 }
+      { timeout: 10000 },
     );
 
     const viewerState = await getViewerState(page);
@@ -342,7 +342,7 @@ test.describe('Cineon Format Support', () => {
         return Math.abs((state?.exposure ?? 0) + 0.5) < 0.1;
       },
       undefined,
-      { timeout: 10000 }
+      { timeout: 10000 },
     );
 
     const afterScreenshot = await captureViewerScreenshot(page);
@@ -365,7 +365,7 @@ test.describe('Cineon Format Support', () => {
         return state?.histogramVisible === true;
       },
       undefined,
-      { timeout: 10000 }
+      { timeout: 10000 },
     );
 
     const viewerState = await getViewerState(page);
@@ -387,7 +387,7 @@ test.describe('Cineon Format Support', () => {
         return state?.waveformVisible === true;
       },
       undefined,
-      { timeout: 10000 }
+      { timeout: 10000 },
     );
 
     const viewerState = await getViewerState(page);
@@ -461,7 +461,7 @@ test.describe('Float TIFF Format Support', () => {
         return Math.abs((state?.exposure ?? 0) + 1) < 0.1;
       },
       undefined,
-      { timeout: 10000 }
+      { timeout: 10000 },
     );
 
     const lowExposure = await captureViewerScreenshot(page);
@@ -496,7 +496,7 @@ test.describe('Float TIFF Format Support', () => {
         return state?.enabled === true && state?.operator !== 'off';
       },
       undefined,
-      { timeout: 10000 }
+      { timeout: 10000 },
     );
 
     const afterToneMapping = await captureViewerScreenshot(page);
@@ -524,7 +524,7 @@ test.describe('Float TIFF Format Support', () => {
         return Math.abs((state?.exposure ?? 0) - 2) < 0.1;
       },
       undefined,
-      { timeout: 10000 }
+      { timeout: 10000 },
     );
 
     const increased = await captureViewerScreenshot(page);
@@ -549,7 +549,7 @@ test.describe('Float TIFF Format Support', () => {
         return state?.channelMode === 'blue';
       },
       undefined,
-      { timeout: 10000 }
+      { timeout: 10000 },
     );
 
     const blueView = await captureViewerScreenshot(page);
@@ -572,7 +572,7 @@ test.describe('Float TIFF Format Support', () => {
         return state?.vectorscopeVisible === true;
       },
       undefined,
-      { timeout: 10000 }
+      { timeout: 10000 },
     );
 
     const viewerState = await getViewerState(page);
@@ -608,7 +608,7 @@ test.describe('HDR Format Integration', () => {
         return state?.currentFrame > 0;
       },
       undefined,
-      { timeout: 10000 }
+      { timeout: 10000 },
     );
 
     viewerState = await getViewerState(page);
@@ -618,8 +618,10 @@ test.describe('HDR Format Integration', () => {
 
   test('HDR-F-031: format badge should update when loading different format', async ({ page }) => {
     // @hdr - requires hardware HDR support, skipped in CI
-    test.skip(!fixtureExists(SAMPLE_DPX) || !fixtureExists(SAMPLE_TIFF_FLOAT),
-      'DPX or Float TIFF test fixture not found');
+    test.skip(
+      !fixtureExists(SAMPLE_DPX) || !fixtureExists(SAMPLE_TIFF_FLOAT),
+      'DPX or Float TIFF test fixture not found',
+    );
 
     // Load DPX first
     await loadFile(page, SAMPLE_DPX);
@@ -640,7 +642,7 @@ test.describe('HDR Format Integration', () => {
         return (app?.session?.sources?.length ?? 0) >= 2;
       },
       undefined,
-      { timeout: 10000 }
+      { timeout: 10000 },
     );
 
     // Switch to the new source (the app keeps source A active for A/B compare)
@@ -687,7 +689,7 @@ test.describe('HDR Format Integration', () => {
         return Math.abs((state?.exposure ?? 0) - 0.5) < 0.1;
       },
       undefined,
-      { timeout: 10000 }
+      { timeout: 10000 },
     );
 
     const adjusted = await captureViewerScreenshot(page);
@@ -712,7 +714,7 @@ test.describe('HDR Format Integration', () => {
         return state?.rotation === 90;
       },
       undefined,
-      { timeout: 10000 }
+      { timeout: 10000 },
     );
 
     const after = await captureViewerScreenshot(page);
@@ -737,7 +739,7 @@ test.describe('HDR Format Integration', () => {
         return state?.flipH === true;
       },
       undefined,
-      { timeout: 10000 }
+      { timeout: 10000 },
     );
 
     const after = await captureViewerScreenshot(page);
@@ -786,7 +788,7 @@ test.describe('HDR Format Integration', () => {
         return state?.histogramVisible === true;
       },
       undefined,
-      { timeout: 10000 }
+      { timeout: 10000 },
     );
   });
 });
@@ -813,7 +815,7 @@ test.describe('HDR Format Metadata and Info Panel', () => {
         return state?.enabled === true;
       },
       undefined,
-      { timeout: 10000 }
+      { timeout: 10000 },
     );
 
     const viewerState = await getViewerState(page);
@@ -840,7 +842,7 @@ test.describe('HDR Format Metadata and Info Panel', () => {
         return state?.enabled === true;
       },
       undefined,
-      { timeout: 10000 }
+      { timeout: 10000 },
     );
 
     const viewerState = await getViewerState(page);
@@ -862,7 +864,7 @@ test.describe('HDR Format Metadata and Info Panel', () => {
         return state?.enabled === true;
       },
       undefined,
-      { timeout: 10000 }
+      { timeout: 10000 },
     );
 
     const viewerState = await getViewerState(page);

@@ -101,10 +101,14 @@ test.describe('Page Visibility Handling', () => {
     await canvas.click({ force: true });
     await page.keyboard.press('Space');
     // Wait for playback to actually start and advance at least one frame (generous timeout for parallel load)
-    await page.waitForFunction(() => {
-      const s = (window as any).__OPENRV_TEST__?.getSessionState();
-      return s?.isPlaying === true && s?.currentFrame > 1;
-    }, undefined, { timeout: 15000 });
+    await page.waitForFunction(
+      () => {
+        const s = (window as any).__OPENRV_TEST__?.getSessionState();
+        return s?.isPlaying === true && s?.currentFrame > 1;
+      },
+      undefined,
+      { timeout: 15000 },
+    );
 
     // Let playback stabilize before recording frame
     await page.waitForTimeout(200);

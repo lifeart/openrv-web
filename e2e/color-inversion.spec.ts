@@ -19,7 +19,7 @@ async function waitForInversion(page: import('@playwright/test').Page, expected:
   await page.waitForFunction(
     (exp) => window.__OPENRV_TEST__?.getViewerState()?.colorInversionEnabled === exp,
     expected,
-    { timeout: 5000 }
+    { timeout: 5000 },
   );
 }
 
@@ -97,9 +97,12 @@ test.describe('Color Inversion', () => {
       await page.keyboard.press('Control+i');
       await waitForInversion(page, true);
       // Wait for canvas to render the inversion effect
-      await page.waitForFunction(() => {
-        return window.__OPENRV_TEST__?.getViewerState()?.colorInversionEnabled === true;
-      }, { timeout: 2000 });
+      await page.waitForFunction(
+        () => {
+          return window.__OPENRV_TEST__?.getViewerState()?.colorInversionEnabled === true;
+        },
+        { timeout: 2000 },
+      );
 
       const after = await captureViewerScreenshot(page);
       expect(imagesAreDifferent(before, after)).toBe(true);
@@ -112,17 +115,23 @@ test.describe('Color Inversion', () => {
       await page.keyboard.press('Control+i');
       await waitForInversion(page, true);
       // Wait for canvas to render the inversion effect
-      await page.waitForFunction(() => {
-        return window.__OPENRV_TEST__?.getViewerState()?.colorInversionEnabled === true;
-      }, { timeout: 2000 });
+      await page.waitForFunction(
+        () => {
+          return window.__OPENRV_TEST__?.getViewerState()?.colorInversionEnabled === true;
+        },
+        { timeout: 2000 },
+      );
 
       // Toggle off
       await page.keyboard.press('Control+i');
       await waitForInversion(page, false);
       // Wait for canvas to render without inversion
-      await page.waitForFunction(() => {
-        return window.__OPENRV_TEST__?.getViewerState()?.colorInversionEnabled === false;
-      }, { timeout: 2000 });
+      await page.waitForFunction(
+        () => {
+          return window.__OPENRV_TEST__?.getViewerState()?.colorInversionEnabled === false;
+        },
+        { timeout: 2000 },
+      );
 
       const restored = await captureViewerScreenshot(page);
       expect(imagesAreDifferent(original, restored)).toBe(false);
@@ -163,9 +172,12 @@ test.describe('Color Inversion', () => {
       const exposureSlider = page.locator('.color-controls-panel input[data-testid="slider-exposure"]');
       await exposureSlider.fill('2');
       // Wait for exposure state to update
-      await page.waitForFunction(() => {
-        return window.__OPENRV_TEST__?.getColorState()?.exposure === 2;
-      }, { timeout: 2000 });
+      await page.waitForFunction(
+        () => {
+          return window.__OPENRV_TEST__?.getColorState()?.exposure === 2;
+        },
+        { timeout: 2000 },
+      );
 
       // Enable inversion
       await page.keyboard.press('Control+i');
@@ -214,9 +226,12 @@ test.describe('Color Inversion', () => {
       if (await resetButton.isVisible()) {
         await resetButton.click();
         // Wait for color state to reset (exposure should be 0)
-        await page.waitForFunction(() => {
-          return window.__OPENRV_TEST__?.getColorState()?.exposure === 0;
-        }, { timeout: 2000 });
+        await page.waitForFunction(
+          () => {
+            return window.__OPENRV_TEST__?.getColorState()?.exposure === 0;
+          },
+          { timeout: 2000 },
+        );
       }
 
       // Inversion should still be active
@@ -230,16 +245,22 @@ test.describe('Color Inversion', () => {
       await page.keyboard.press('Control+i');
       await waitForInversion(page, true);
       // Wait for canvas to render the inversion effect
-      await page.waitForFunction(() => {
-        return window.__OPENRV_TEST__?.getViewerState()?.colorInversionEnabled === true;
-      }, { timeout: 2000 });
+      await page.waitForFunction(
+        () => {
+          return window.__OPENRV_TEST__?.getViewerState()?.colorInversionEnabled === true;
+        },
+        { timeout: 2000 },
+      );
 
       await page.keyboard.press('Control+i');
       await waitForInversion(page, false);
       // Wait for canvas to render without inversion
-      await page.waitForFunction(() => {
-        return window.__OPENRV_TEST__?.getViewerState()?.colorInversionEnabled === false;
-      }, { timeout: 2000 });
+      await page.waitForFunction(
+        () => {
+          return window.__OPENRV_TEST__?.getViewerState()?.colorInversionEnabled === false;
+        },
+        { timeout: 2000 },
+      );
 
       const restored = await captureViewerScreenshot(page);
       expect(imagesAreDifferent(original, restored)).toBe(false);

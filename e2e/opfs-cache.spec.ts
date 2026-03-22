@@ -1,10 +1,5 @@
 import { test, expect } from '@playwright/test';
-import {
-  loadImageFile,
-  loadVideoFile,
-  waitForTestHelper,
-  getCacheManagerState,
-} from './fixtures';
+import { loadImageFile, loadVideoFile, waitForTestHelper, getCacheManagerState } from './fixtures';
 
 /**
  * OPFS Media Caching Tests
@@ -213,7 +208,9 @@ test.describe('OPFS Media Caching', () => {
         const cm = (window as any).__OPENRV_TEST__?.mutations?.getCacheManager();
         const data = new Uint8Array([1, 2, 3]).buffer;
         await cm.put('gone-after-clear', data, {
-          fileName: 'test.bin', fileSize: 3, lastModified: Date.now(),
+          fileName: 'test.bin',
+          fileSize: 3,
+          lastModified: Date.now(),
         });
         await cm.clearAll();
         const retrieved = await cm.get('gone-after-clear');
@@ -242,9 +239,7 @@ test.describe('OPFS Media Caching', () => {
       const state = await getCacheManagerState(page);
       expect(state.initialized).toBe(true);
 
-      const cacheErrors = errors.filter(e =>
-        e.toLowerCase().includes('cache') || e.toLowerCase().includes('opfs')
-      );
+      const cacheErrors = errors.filter((e) => e.toLowerCase().includes('cache') || e.toLowerCase().includes('opfs'));
       expect(cacheErrors).toHaveLength(0);
     });
 
@@ -264,9 +259,7 @@ test.describe('OPFS Media Caching', () => {
       const state = await getCacheManagerState(page);
       expect(state.initialized).toBe(true);
 
-      const cacheErrors = errors.filter(e =>
-        e.toLowerCase().includes('cache') || e.toLowerCase().includes('opfs')
-      );
+      const cacheErrors = errors.filter((e) => e.toLowerCase().includes('cache') || e.toLowerCase().includes('opfs'));
       expect(cacheErrors).toHaveLength(0);
     });
 
@@ -294,9 +287,7 @@ test.describe('OPFS Media Caching', () => {
         await cm.getStats();
       });
 
-      const cacheErrors = errors.filter(e =>
-        e.toLowerCase().includes('cache') || e.toLowerCase().includes('opfs')
-      );
+      const cacheErrors = errors.filter((e) => e.toLowerCase().includes('cache') || e.toLowerCase().includes('opfs'));
       expect(cacheErrors).toHaveLength(0);
 
       const state = await getCacheManagerState(page);

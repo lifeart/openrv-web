@@ -1,5 +1,8 @@
 import { defineConfig } from 'vitest/config';
 import { resolve } from 'path';
+import { playwright } from '@vitest/browser-playwright';
+
+const isCI = !!process.env.CI;
 
 export default defineConfig({
   test: {
@@ -7,7 +10,7 @@ export default defineConfig({
     include: ['src/**/*.gpu-test.ts'],
     browser: {
       enabled: true,
-      provider: 'playwright',
+      provider: playwright(),
       instances: [
         {
           browser: 'chromium',
@@ -16,10 +19,9 @@ export default defineConfig({
               '--enable-gpu',
               '--enable-webgl',
               '--enable-webgpu',
-              '--use-angle=swiftshader',
-              '--enable-unsafe-swiftshader',
               '--disable-gpu-vsync',
               '--disable-frame-rate-limit',
+              ...(isCI ? ['--headless=new', '--use-gl=angle', '--use-angle=metal', '--enable-gpu-rasterization'] : []),
             ],
           },
         },

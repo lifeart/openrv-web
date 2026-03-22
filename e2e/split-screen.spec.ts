@@ -677,7 +677,9 @@ test.describe('Split Screen A/B Comparison', () => {
       expect(hasDifference).toBe(true);
     });
 
-    test('SPLIT-E028: B side frames change during playback when second video is dropped sequentially', async ({ page }) => {
+    test('SPLIT-E028: B side frames change during playback when second video is dropped sequentially', async ({
+      page,
+    }) => {
       // This test replicates the user flow of loading videos one at a time
       // Then entering split screen and playing back
       // The B side (right half) should show changing frames, not a frozen image
@@ -735,7 +737,9 @@ test.describe('Split Screen A/B Comparison', () => {
       expect(imagesAreDifferent(bSideFrame1, bSideLater)).toBe(true);
     });
 
-    test('SPLIT-E029: B side frames visually change during frame navigation with sequential video load', async ({ page }) => {
+    test('SPLIT-E029: B side frames visually change during frame navigation with sequential video load', async ({
+      page,
+    }) => {
       // Similar to SPLIT-E028 but uses frame navigation instead of playback
       // This helps isolate whether the issue is with playback or rendering
 
@@ -891,7 +895,9 @@ test.describe('Split Screen A/B Comparison', () => {
       await expect(abIndicator).toBeVisible();
     });
 
-    test('SPLIT-E034: only split screen labels (A and B) visible in split screen, not redundant indicators', async ({ page }) => {
+    test('SPLIT-E034: only split screen labels (A and B) visible in split screen, not redundant indicators', async ({
+      page,
+    }) => {
       // Enable split screen
       await page.keyboard.press('Shift+Alt+s');
 

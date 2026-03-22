@@ -148,9 +148,7 @@ test.describe('Tab Navigation', () => {
       await selectZoomPreset(page, '2');
 
       // Poll until zoom animation completes (zoom > 1)
-      await expect
-        .poll(async () => (await getViewerState(page)).zoom)
-        .toBeGreaterThan(1);
+      await expect.poll(async () => (await getViewerState(page)).zoom).toBeGreaterThan(1);
 
       const state = await getViewerState(page);
       const zoomedInValue = state.zoom;
@@ -159,9 +157,7 @@ test.describe('Tab Navigation', () => {
       await selectZoomPreset(page, 'fit');
 
       // Poll until zoom decreases after fit animation
-      await expect
-        .poll(async () => (await getViewerState(page)).zoom)
-        .toBeLessThan(zoomedInValue);
+      await expect.poll(async () => (await getViewerState(page)).zoom).toBeLessThan(zoomedInValue);
     });
 
     test('TAB-021: Color tab controls should update color state', async ({ page }) => {
@@ -256,9 +252,7 @@ test.describe('Tab Navigation', () => {
       // Go to View tab and set zoom
       await page.click('button[data-tab-id="view"]');
       await selectZoomPreset(page, '2');
-      await expect
-        .poll(async () => (await getViewerState(page)).zoom, { timeout: 10000 })
-        .toBeGreaterThan(1.9);
+      await expect.poll(async () => (await getViewerState(page)).zoom, { timeout: 10000 }).toBeGreaterThan(1.9);
 
       // Wait for zoom animation to settle
       await page.waitForTimeout(300);
@@ -267,7 +261,9 @@ test.describe('Tab Navigation', () => {
 
       // Switch to Color tab and wait for tab to be active
       await page.click('button[data-tab-id="color"]');
-      await expect(page.locator('button[data-tab-id="color"][data-active="true"], button[data-tab-id="color"].active')).toBeVisible({ timeout: 5000 }).catch(() => {});
+      await expect(page.locator('button[data-tab-id="color"][data-active="true"], button[data-tab-id="color"].active'))
+        .toBeVisible({ timeout: 5000 })
+        .catch(() => {});
       await page.waitForTimeout(300);
 
       // Switch back to View tab
@@ -275,9 +271,7 @@ test.describe('Tab Navigation', () => {
       await page.waitForTimeout(300);
 
       // Poll until zoom stabilizes back to the persisted value (generous timeout for parallel load)
-      await expect
-        .poll(async () => (await getViewerState(page)).zoom, { timeout: 10000 })
-        .toBeCloseTo(selectedZoom, 1);
+      await expect.poll(async () => (await getViewerState(page)).zoom, { timeout: 10000 }).toBeCloseTo(selectedZoom, 1);
     });
 
     test('TAB-031: transform state should persist when switching tabs', async ({ page }) => {

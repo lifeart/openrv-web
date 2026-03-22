@@ -135,16 +135,19 @@ function applySyncState(msg: RenderWorkerMessage): void {
 /**
  * Handle incoming messages from the main thread.
  */
-workerSelf.onmessage = function (event: MessageEvent<RenderWorkerMessage>) {
-  const msg = event.data;
-
-  // Protocol version check: warn on mismatch but continue processing
-  // for backward compatibility. Missing version (undefined) is acceptable
-  // from older senders that predate versioning.
+function handleMessage(msg: RenderWorkerMessage): void {
+  // Protocol version check: reject incompatible messages with an error response.
+  // Missing version (undefined) is acceptable from older senders that predate versioning.
   if (msg.protocolVersion !== undefined && msg.protocolVersion !== RENDER_WORKER_PROTOCOL_VERSION) {
-    log.warn(
-      `Protocol version mismatch: received v${msg.protocolVersion}, expected v${RENDER_WORKER_PROTOCOL_VERSION}. Message type: ${msg.type}`,
-    );
+    const errorMessage = `Protocol version mismatch: received v${msg.protocolVersion}, expected v${RENDER_WORKER_PROTOCOL_VERSION}. Message type: ${msg.type}`;
+    log.error(errorMessage);
+    post({
+      type: 'protocolMismatch',
+      expectedVersion: RENDER_WORKER_PROTOCOL_VERSION,
+      actualVersion: msg.protocolVersion,
+      error: errorMessage,
+    });
+    return;
   }
 
   switch (msg.type) {
@@ -348,7 +351,15 @@ workerSelf.onmessage = function (event: MessageEvent<RenderWorkerMessage>) {
       isContextLost = false;
       break;
     }
+
+    default:
+      log.warn(`Unknown message type: ${(msg as any).type}`);
+      break;
   }
+}
+
+workerSelf.onmessage = function (event: MessageEvent<RenderWorkerMessage>) {
+  handleMessage(event.data);
 };
 
 // Signal ready (guard against non-worker environments like jsdom in tests)
@@ -366,4 +377,6 @@ export const __test__ = {
   isContextLost: () => isContextLost,
   reconstructIPImage,
   applySyncState,
+  handleMessage,
+  post,
 };

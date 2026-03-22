@@ -1,5 +1,12 @@
 import { test, expect } from '@playwright/test';
-import { loadImageFile, loadVideoFile, getViewerState, waitForTestHelper, captureViewerScreenshot, imagesAreDifferent } from './fixtures';
+import {
+  loadImageFile,
+  loadVideoFile,
+  getViewerState,
+  waitForTestHelper,
+  captureViewerScreenshot,
+  imagesAreDifferent,
+} from './fixtures';
 
 test.describe('Background Pattern Display', () => {
   test.beforeEach(async ({ page }) => {
@@ -35,7 +42,7 @@ test.describe('Background Pattern Display', () => {
     await loadImageFile(page);
     const viewer = page.locator('.viewer-container');
 
-    const bgBefore = await viewer.evaluate(el => getComputedStyle(el).backgroundColor);
+    const bgBefore = await viewer.evaluate((el) => getComputedStyle(el).backgroundColor);
 
     await page.click('button[data-tab-id="view"]');
     await page.click('[data-testid="background-pattern-button"]');
@@ -46,7 +53,7 @@ test.describe('Background Pattern Display', () => {
     expect(state.backgroundPattern).toBe('grey18');
 
     // Viewer container CSS background should have changed
-    const bgAfter = await viewer.evaluate(el => getComputedStyle(el).backgroundColor);
+    const bgAfter = await viewer.evaluate((el) => getComputedStyle(el).backgroundColor);
     expect(bgAfter).not.toBe(bgBefore);
   });
 
@@ -64,7 +71,7 @@ test.describe('Background Pattern Display', () => {
     expect(state.backgroundPattern).toBe('grey50');
 
     // rgb(128, 128, 128) = #808080 = grey 50%
-    const bg = await viewer.evaluate(el => getComputedStyle(el).backgroundColor);
+    const bg = await viewer.evaluate((el) => getComputedStyle(el).backgroundColor);
     expect(bg).toBe('rgb(128, 128, 128)');
   });
 
@@ -81,7 +88,7 @@ test.describe('Background Pattern Display', () => {
     const state = await getViewerState(page);
     expect(state.backgroundPattern).toBe('white');
 
-    const bg = await viewer.evaluate(el => getComputedStyle(el).backgroundColor);
+    const bg = await viewer.evaluate((el) => getComputedStyle(el).backgroundColor);
     expect(bg).toBe('rgb(255, 255, 255)');
   });
 
@@ -194,7 +201,7 @@ test.describe('Background Pattern Display', () => {
     const button = page.locator('[data-testid="background-pattern-button"]');
 
     // Default state (black) — button should not have accent border
-    const borderBefore = await button.evaluate(el => getComputedStyle(el).borderColor);
+    const borderBefore = await button.evaluate((el) => getComputedStyle(el).borderColor);
 
     // Select checkerboard
     await page.click('[data-testid="background-pattern-button"]');
@@ -202,7 +209,7 @@ test.describe('Background Pattern Display', () => {
     await page.waitForTimeout(100);
 
     // Button should now have active styling (border changed)
-    const borderAfter = await button.evaluate(el => getComputedStyle(el).borderColor);
+    const borderAfter = await button.evaluate((el) => getComputedStyle(el).borderColor);
     expect(borderAfter).not.toBe(borderBefore);
   });
 
@@ -279,7 +286,7 @@ test.describe('Background Pattern Display', () => {
     const canvas = page.locator('.viewer-container canvas').first();
 
     // Default should be black
-    const bgBefore = await canvas.evaluate(el => getComputedStyle(el).backgroundColor);
+    const bgBefore = await canvas.evaluate((el) => getComputedStyle(el).backgroundColor);
     expect(bgBefore).toBe('rgb(0, 0, 0)');
 
     // Change to white
@@ -288,7 +295,7 @@ test.describe('Background Pattern Display', () => {
     await page.click('[data-bg-pattern="white"]');
     await page.waitForTimeout(200);
 
-    const bgAfter = await canvas.evaluate(el => getComputedStyle(el).backgroundColor);
+    const bgAfter = await canvas.evaluate((el) => getComputedStyle(el).backgroundColor);
     expect(bgAfter).toBe('rgb(255, 255, 255)');
   });
 
@@ -298,14 +305,14 @@ test.describe('Background Pattern Display', () => {
     const viewer = page.locator('.viewer-container');
 
     // Record the default (theme) background
-    const bgDefault = await viewer.evaluate(el => getComputedStyle(el).backgroundColor);
+    const bgDefault = await viewer.evaluate((el) => getComputedStyle(el).backgroundColor);
 
     // Change to grey50
     await page.keyboard.press('Shift+b'); // grey18
     await page.keyboard.press('Shift+b'); // grey50
     await page.waitForTimeout(100);
 
-    const bgGrey = await viewer.evaluate(el => getComputedStyle(el).backgroundColor);
+    const bgGrey = await viewer.evaluate((el) => getComputedStyle(el).backgroundColor);
     expect(bgGrey).toBe('rgb(128, 128, 128)');
 
     // Change back to black
@@ -317,7 +324,7 @@ test.describe('Background Pattern Display', () => {
     expect(state.backgroundPattern).toBe('black');
 
     // Should restore to the original theme background, not hardcoded black
-    const bgRestored = await viewer.evaluate(el => getComputedStyle(el).backgroundColor);
+    const bgRestored = await viewer.evaluate((el) => getComputedStyle(el).backgroundColor);
     expect(bgRestored).toBe(bgDefault);
   });
 });

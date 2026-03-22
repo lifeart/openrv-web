@@ -61,6 +61,18 @@ function createMockViewer() {
     setGamutMappingState: vi.fn(),
     setPremultMode: vi.fn(),
     syncLUTPipeline: vi.fn(),
+    getColorAdjustments: vi.fn(() => ({})),
+    getColorWheels: vi.fn(() => ({
+      getState: vi.fn(() => ({
+        lift: { r: 0, g: 0, b: 0, y: 0 },
+        gamma: { r: 0, g: 0, b: 0, y: 0 },
+        gain: { r: 0, g: 0, b: 0, y: 0 },
+        master: { r: 0, g: 0, b: 0, y: 0 },
+        linked: false,
+      })),
+      setState: vi.fn(),
+      on: vi.fn(),
+    })),
   };
 }
 

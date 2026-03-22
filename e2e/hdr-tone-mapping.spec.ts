@@ -1,11 +1,5 @@
 import { test, expect } from '@playwright/test';
-import {
-  loadVideoFile,
-  loadExrFile,
-  getToneMappingState,
-  waitForTestHelper,
-  captureCanvasState,
-} from './fixtures';
+import { loadVideoFile, loadExrFile, getToneMappingState, waitForTestHelper, captureCanvasState } from './fixtures';
 
 /**
  * HDR Tone Mapping Operators - E2E Integration Tests
@@ -172,11 +166,9 @@ test.describe('HDR Tone Mapping Integration', () => {
       input.dispatchEvent(new Event('input', { bubbles: true }));
       input.dispatchEvent(new Event('change', { bubbles: true }));
     }, 1);
-    await page.waitForFunction(
-      () => window.__OPENRV_TEST__?.getColorState?.()?.exposure === 1,
-      undefined,
-      { timeout: 5000 },
-    );
+    await page.waitForFunction(() => window.__OPENRV_TEST__?.getColorState?.()?.exposure === 1, undefined, {
+      timeout: 5000,
+    });
     const exposureOnly = await captureCanvasState(page);
 
     // Enable reinhard tone mapping

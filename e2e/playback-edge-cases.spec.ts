@@ -168,18 +168,24 @@ test.describe('Playback Edge Cases', () => {
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('i'); // Set in-point at frame 4
-      await waitForCondition(page, `(() => {
+      await waitForCondition(
+        page,
+        `(() => {
         const s = window.__OPENRV_TEST__?.getSessionState();
         return s?.inPoint === s?.currentFrame;
-      })()`);
+      })()`,
+      );
 
       // Set out-point
       await page.keyboard.press('End');
       await page.keyboard.press('o');
-      await waitForCondition(page, `(() => {
+      await waitForCondition(
+        page,
+        `(() => {
         const s = window.__OPENRV_TEST__?.getSessionState();
         return s?.outPoint === s?.currentFrame;
-      })()`);
+      })()`,
+      );
 
       // Set once mode (Ctrl+L cycles loop mode: loop -> pingpong -> once)
       await page.keyboard.press('Control+l'); // cycle to pingpong
@@ -225,10 +231,13 @@ test.describe('Playback Edge Cases', () => {
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('o');
-      await waitForCondition(page, `(() => {
+      await waitForCondition(
+        page,
+        `(() => {
         const s = window.__OPENRV_TEST__?.getSessionState();
         return s?.outPoint === s?.currentFrame;
-      })()`);
+      })()`,
+      );
 
       let state = await getSessionState(page);
       expect(state.loopMode).toBe('loop');
@@ -271,10 +280,13 @@ test.describe('Playback Edge Cases', () => {
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('o');
-      await waitForCondition(page, `(() => {
+      await waitForCondition(
+        page,
+        `(() => {
         const s = window.__OPENRV_TEST__?.getSessionState();
         return s?.outPoint === s?.currentFrame;
-      })()`);
+      })()`,
+      );
 
       // Set pingpong mode (Ctrl+L cycles: loop -> pingpong)
       await page.keyboard.press('Control+l');
@@ -408,10 +420,13 @@ test.describe('Playback Edge Cases', () => {
         speeds.push(state.playbackSpeed);
         await speedButton.click();
         // Wait for speed to change from the value we just recorded
-        await waitForCondition(page, `(() => {
+        await waitForCondition(
+          page,
+          `(() => {
           const s = window.__OPENRV_TEST__?.getSessionState();
           return s?.playbackSpeed !== ${state.playbackSpeed};
-        })()`);
+        })()`,
+        );
       }
 
       // Should have cycled through various speeds
@@ -428,20 +443,26 @@ test.describe('Playback Edge Cases', () => {
       await speedButton.click();
       await speedButton.click();
       // Wait for speed to have changed from default (1)
-      await waitForCondition(page, `(() => {
+      await waitForCondition(
+        page,
+        `(() => {
         const s = window.__OPENRV_TEST__?.getSessionState();
         return s?.playbackSpeed !== 1;
-      })()`);
+      })()`,
+      );
 
       const stateAfterIncrease = await getSessionState(page);
       const speedAfterIncrease = stateAfterIncrease.playbackSpeed;
 
       // Shift+click to decrease
       await speedButton.click({ modifiers: ['Shift'] });
-      await waitForCondition(page, `(() => {
+      await waitForCondition(
+        page,
+        `(() => {
         const s = window.__OPENRV_TEST__?.getSessionState();
         return s?.playbackSpeed !== ${speedAfterIncrease};
-      })()`);
+      })()`,
+      );
 
       const stateAfterDecrease = await getSessionState(page);
       expect(stateAfterDecrease.playbackSpeed).toBeLessThanOrEqual(speedAfterIncrease);
@@ -560,10 +581,13 @@ test.describe('Playback Edge Cases', () => {
         await page.keyboard.press('ArrowRight');
       }
       await page.keyboard.press('i');
-      await waitForCondition(page, `(() => {
+      await waitForCondition(
+        page,
+        `(() => {
         const s = window.__OPENRV_TEST__?.getSessionState();
         return s?.inPoint === s?.currentFrame;
-      })()`);
+      })()`,
+      );
 
       let state = await getSessionState(page);
       const inPoint = state.inPoint;
@@ -574,10 +598,13 @@ test.describe('Playback Edge Cases', () => {
         await page.keyboard.press('ArrowRight');
       }
       await page.keyboard.press('o');
-      await waitForCondition(page, `(() => {
+      await waitForCondition(
+        page,
+        `(() => {
         const s = window.__OPENRV_TEST__?.getSessionState();
         return s?.outPoint >= ${inPoint};
-      })()`);
+      })()`,
+      );
 
       state = await getSessionState(page);
       // Out-point should be clamped to at least in-point
@@ -671,7 +698,7 @@ test.describe('Playback Edge Cases', () => {
       state = await getSessionState(page);
       // Should have moved in reverse direction; use wrap-aware distance because
       // reverse playback in loop mode may wrap to a numerically larger frame.
-      const reverseDistance = ((startFrame - state.currentFrame) + totalFrames) % totalFrames;
+      const reverseDistance = (startFrame - state.currentFrame + totalFrames) % totalFrames;
       expect(reverseDistance).toBeGreaterThan(0);
       expect(state.playDirection).toBe(-1);
       // Speed setting should still show 8x (only effective speed is limited)
@@ -867,9 +894,7 @@ test.describe('Playback Edge Cases', () => {
 
       // 2x preset should be highlighted (has accent color background)
       const preset2x = page.locator('[data-testid="speed-preset-2"]');
-      const bgColor = await preset2x.evaluate(el =>
-        window.getComputedStyle(el).backgroundColor
-      );
+      const bgColor = await preset2x.evaluate((el) => window.getComputedStyle(el).backgroundColor);
 
       // Should have non-transparent background (highlighted)
       expect(bgColor).not.toBe('transparent');

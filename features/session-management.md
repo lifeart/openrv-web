@@ -60,7 +60,7 @@ The session management feature is **fully implemented** with comprehensive funct
 |-------------|--------|----------------|
 | Save/load session files | Implemented | `SessionSerializer.saveToFile()`, `loadFromFile()` with `.orvproject` format |
 | Preserve source references and relative paths | Implemented | `MediaReference` with path, name, type, dimensions, duration, fps |
-| Store color correction settings | Implemented | `SessionState.color`, `SessionState.cdl`, `SessionState.lutPath`, `SessionState.lutIntensity` |
+| Store color correction settings | Implemented | `SessionState.color`, `SessionState.colorWheels`, `SessionState.cdl`, `SessionState.lutPath`, `SessionState.lutIntensity` |
 | Store view configurations | Implemented | `SessionState.view` (zoom, panX, panY), `SessionState.wipe`, `SessionState.transform` |
 | Store playback position and in/out points | Implemented | `SessionState.playback` (currentFrame, inPoint, outPoint, fps, loopMode, volume, muted) |
 | Store markers and annotations | Implemented | `SessionState.playback.marks`, `SessionState.paint` (frames with annotations, effects) |
@@ -132,6 +132,7 @@ interface SessionState {
   paint: SerializedPaintState; // Annotations per frame + effects
   view: ViewState;           // Zoom, pan
   color: ColorAdjustments;   // Brightness, contrast, saturation, exposure, gamma
+  colorWheels?: ColorWheelsState; // Lift/gamma/gain/master wheel offsets (r,g,b,y per zone)
   cdl: CDLValues;            // Slope, offset, power, saturation
   filters: FilterSettings;   // Blur, sharpen
   transform: Transform2D;    // Rotation, flip, scale, translate

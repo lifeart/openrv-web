@@ -1,10 +1,5 @@
 import { test, expect } from '@playwright/test';
-import {
-  loadVideoFile,
-  getPixelProbeState,
-  waitForTestHelper,
-  getCanvas,
-} from './fixtures';
+import { loadVideoFile, getPixelProbeState, waitForTestHelper, getCanvas } from './fixtures';
 
 /**
  * Pixel Probe Feature Tests
@@ -25,7 +20,10 @@ async function clickPixelProbeSampleSize(page: import('@playwright/test').Page, 
   }, size);
 }
 
-async function clickPixelProbeSourceMode(page: import('@playwright/test').Page, mode: 'rendered' | 'source'): Promise<void> {
+async function clickPixelProbeSourceMode(
+  page: import('@playwright/test').Page,
+  mode: 'rendered' | 'source',
+): Promise<void> {
   await page.evaluate((sourceMode) => {
     const selector = `[data-testid="pixel-probe-source-mode"] button[data-source-mode="${sourceMode}"]`;
     const button = document.querySelector(selector) as HTMLButtonElement | null;

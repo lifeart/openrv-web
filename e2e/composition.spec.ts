@@ -124,14 +124,20 @@ test.describe('Composition', () => {
 
       // Press backtick to switch to B
       await page.keyboard.press('Backquote');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentAB === 'B'; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentAB === 'B'; })()`,
+      );
 
       state = await getSessionState(page);
       expect(state.currentAB).toBe('B');
 
       // Press backtick again to switch back to A
       await page.keyboard.press('Backquote');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentAB === 'A'; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentAB === 'A'; })()`,
+      );
 
       state = await getSessionState(page);
       expect(state.currentAB).toBe('A');
@@ -143,7 +149,10 @@ test.describe('Composition', () => {
 
       // Press tilde (Shift+Backquote) to switch to B
       await page.keyboard.press('Shift+Backquote');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentAB === 'B'; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentAB === 'B'; })()`,
+      );
 
       state = await getSessionState(page);
       expect(state.currentAB).toBe('B');
@@ -154,7 +163,10 @@ test.describe('Composition', () => {
 
       // Switch to B
       await page.keyboard.press('Backquote');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentAB === 'B'; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentAB === 'B'; })()`,
+      );
       await page.waitForTimeout(300);
 
       const screenshotB = await captureViewerScreenshot(page);
@@ -174,7 +186,10 @@ test.describe('Composition', () => {
 
       const bButton = page.locator('[data-testid="compare-ab-b"]');
       await bButton.click();
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentAB === 'B'; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentAB === 'B'; })()`,
+      );
 
       state = await getSessionState(page);
       expect(state.currentAB).toBe('B');
@@ -191,7 +206,10 @@ test.describe('Composition', () => {
 
       const toggleButton = page.locator('[data-testid="compare-ab-toggle"]');
       await toggleButton.click();
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentAB === 'B'; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentAB === 'B'; })()`,
+      );
 
       state = await getSessionState(page);
       expect(state.currentAB).toBe('B');
@@ -203,7 +221,10 @@ test.describe('Composition', () => {
         await page.keyboard.press('Backquote');
         await page.waitForTimeout(50);
       }
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentAB === 'B'; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentAB === 'B'; })()`,
+      );
 
       // After 5 toggles (odd number), should be on B
       const state = await getSessionState(page);
@@ -334,7 +355,10 @@ test.describe('Composition', () => {
       const opacitySlider = page.locator(`[data-testid="stack-layer-opacity-${secondLayerId}"]`);
       await opacitySlider.fill('50');
       await opacitySlider.dispatchEvent('input');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.opacity !== undefined && Math.abs(s.layers[1].opacity - 0.5) < 0.1; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.opacity !== undefined && Math.abs(s.layers[1].opacity - 0.5) < 0.1; })()`,
+      );
 
       const layeredScreenshot = await captureViewerScreenshot(page);
 
@@ -368,7 +392,10 @@ test.describe('Composition', () => {
       const secondLayerId = state.layers[1]!.id;
       const visibilityButton = page.locator(`[data-testid="stack-layer-visibility-${secondLayerId}"]`);
       await visibilityButton.click();
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.visible === false; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.visible === false; })()`,
+      );
 
       state = await getStackState(page);
       expect(state.layers[1]!.visible).toBe(false);
@@ -392,7 +419,10 @@ test.describe('Composition', () => {
       const opacitySlider = page.locator(`[data-testid="stack-layer-opacity-${secondLayerId}"]`);
       await opacitySlider.fill('50');
       await opacitySlider.dispatchEvent('input');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.opacity !== undefined && Math.abs(s.layers[1].opacity - 0.5) < 0.1; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.opacity !== undefined && Math.abs(s.layers[1].opacity - 0.5) < 0.1; })()`,
+      );
 
       // Capture with normal blend mode
       const normalScreenshot = await captureViewerScreenshot(page);
@@ -400,7 +430,10 @@ test.describe('Composition', () => {
       // Change to multiply blend mode
       const blendSelect = page.locator(`[data-testid="stack-layer-blend-${secondLayerId}"]`);
       await blendSelect.selectOption('multiply');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.blendMode === 'multiply'; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.blendMode === 'multiply'; })()`,
+      );
       await page.waitForTimeout(200);
 
       const multiplyScreenshot = await captureViewerScreenshot(page);
@@ -429,7 +462,10 @@ test.describe('Composition', () => {
       const opacitySlider = page.locator(`[data-testid="stack-layer-opacity-${secondLayerId}"]`);
       await opacitySlider.fill('50');
       await opacitySlider.dispatchEvent('input');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.opacity !== undefined && Math.abs(s.layers[1].opacity - 0.5) < 0.1; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.opacity !== undefined && Math.abs(s.layers[1].opacity - 0.5) < 0.1; })()`,
+      );
 
       // Capture with normal blend mode
       const normalScreenshot = await captureViewerScreenshot(page);
@@ -437,7 +473,10 @@ test.describe('Composition', () => {
       // Change to add blend mode
       const blendSelect = page.locator(`[data-testid="stack-layer-blend-${secondLayerId}"]`);
       await blendSelect.selectOption('add');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.blendMode === 'add'; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.blendMode === 'add'; })()`,
+      );
       await page.waitForTimeout(200);
 
       const addScreenshot = await captureViewerScreenshot(page);
@@ -466,19 +505,28 @@ test.describe('Composition', () => {
       const opacitySlider = page.locator(`[data-testid="stack-layer-opacity-${secondLayerId}"]`);
       await opacitySlider.fill('50');
       await opacitySlider.dispatchEvent('input');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.opacity !== undefined && Math.abs(s.layers[1].opacity - 0.5) < 0.1; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.opacity !== undefined && Math.abs(s.layers[1].opacity - 0.5) < 0.1; })()`,
+      );
 
       const blendSelect = page.locator(`[data-testid="stack-layer-blend-${secondLayerId}"]`);
 
       // Set to multiply
       await blendSelect.selectOption('multiply');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.blendMode === 'multiply'; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.blendMode === 'multiply'; })()`,
+      );
       await page.waitForTimeout(200);
       const multiplyScreenshot = await captureViewerScreenshot(page);
 
       // Set to screen
       await blendSelect.selectOption('screen');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.blendMode === 'screen'; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.blendMode === 'screen'; })()`,
+      );
       await page.waitForTimeout(200);
       const screenScreenshot = await captureViewerScreenshot(page);
 
@@ -502,13 +550,19 @@ test.describe('Composition', () => {
       const opacitySlider = page.locator(`[data-testid="stack-layer-opacity-${secondLayerId}"]`);
       await opacitySlider.fill('50');
       await opacitySlider.dispatchEvent('input');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.opacity !== undefined && Math.abs(s.layers[1].opacity - 0.5) < 0.1; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.opacity !== undefined && Math.abs(s.layers[1].opacity - 0.5) < 0.1; })()`,
+      );
 
       const normalScreenshot = await captureViewerScreenshot(page);
 
       const blendSelect = page.locator(`[data-testid="stack-layer-blend-${secondLayerId}"]`);
       await blendSelect.selectOption('overlay');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.blendMode === 'overlay'; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.blendMode === 'overlay'; })()`,
+      );
       await page.waitForTimeout(200);
 
       const overlayScreenshot = await captureViewerScreenshot(page);
@@ -534,13 +588,19 @@ test.describe('Composition', () => {
       const opacitySlider = page.locator(`[data-testid="stack-layer-opacity-${secondLayerId}"]`);
       await opacitySlider.fill('50');
       await opacitySlider.dispatchEvent('input');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.opacity !== undefined && Math.abs(s.layers[1].opacity - 0.5) < 0.1; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.opacity !== undefined && Math.abs(s.layers[1].opacity - 0.5) < 0.1; })()`,
+      );
 
       const normalScreenshot = await captureViewerScreenshot(page);
 
       const blendSelect = page.locator(`[data-testid="stack-layer-blend-${secondLayerId}"]`);
       await blendSelect.selectOption('difference');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.blendMode === 'difference'; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.blendMode === 'difference'; })()`,
+      );
       await page.waitForTimeout(200);
 
       const differenceScreenshot = await captureViewerScreenshot(page);
@@ -566,13 +626,19 @@ test.describe('Composition', () => {
       const opacitySlider = page.locator(`[data-testid="stack-layer-opacity-${secondLayerId}"]`);
       await opacitySlider.fill('50');
       await opacitySlider.dispatchEvent('input');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.opacity !== undefined && Math.abs(s.layers[1].opacity - 0.5) < 0.1; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.opacity !== undefined && Math.abs(s.layers[1].opacity - 0.5) < 0.1; })()`,
+      );
 
       const normalScreenshot = await captureViewerScreenshot(page);
 
       const blendSelect = page.locator(`[data-testid="stack-layer-blend-${secondLayerId}"]`);
       await blendSelect.selectOption('exclusion');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.blendMode === 'exclusion'; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.blendMode === 'exclusion'; })()`,
+      );
       await page.waitForTimeout(200);
 
       const exclusionScreenshot = await captureViewerScreenshot(page);
@@ -598,7 +664,10 @@ test.describe('Composition', () => {
       const opacitySlider = page.locator(`[data-testid="stack-layer-opacity-${secondLayerId}"]`);
       await opacitySlider.fill('50');
       await opacitySlider.dispatchEvent('input');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.opacity !== undefined && Math.abs(s.layers[1].opacity - 0.5) < 0.1; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.opacity !== undefined && Math.abs(s.layers[1].opacity - 0.5) < 0.1; })()`,
+      );
 
       const blendSelect = page.locator(`[data-testid="stack-layer-blend-${secondLayerId}"]`);
       const blendModes = ['normal', 'add', 'multiply', 'screen', 'overlay', 'difference', 'exclusion'];
@@ -606,7 +675,10 @@ test.describe('Composition', () => {
 
       for (const mode of blendModes) {
         await blendSelect.selectOption(mode);
-        await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.blendMode === '${mode}'; })()`);
+        await waitForCondition(
+          page,
+          `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[1]?.blendMode === '${mode}'; })()`,
+        );
         await page.waitForTimeout(150);
         screenshots[mode] = await captureViewerScreenshot(page);
       }
@@ -638,7 +710,10 @@ test.describe('Composition', () => {
       // Set different blend modes to make order matter
       const blendSelect1 = page.locator(`[data-testid="stack-layer-blend-${firstLayerId}"]`);
       await blendSelect1.selectOption('multiply');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.blendMode === 'multiply'; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.blendMode === 'multiply'; })()`,
+      );
 
       const beforeReorderScreenshot = await captureViewerScreenshot(page);
 
@@ -700,7 +775,10 @@ test.describe('Composition', () => {
       const gainSlider = page.locator('[data-testid="diff-matte-gain"]');
       await gainSlider.fill('10');
       await gainSlider.dispatchEvent('input');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getViewerState(); return s?.differenceMatteGain >= 9; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getViewerState(); return s?.differenceMatteGain >= 9; })()`,
+      );
       await page.waitForTimeout(200);
 
       const highGainScreenshot = await captureViewerScreenshot(page);
@@ -725,7 +803,10 @@ test.describe('Composition', () => {
 
       const heatmapToggle = page.locator('[data-testid="diff-matte-heatmap"]');
       await heatmapToggle.click();
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getViewerState(); return s?.differenceMatteHeatmap === true; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getViewerState(); return s?.differenceMatteHeatmap === true; })()`,
+      );
 
       const state = await getViewerState(page);
       expect(state.differenceMatteHeatmap).toBe(true);
@@ -779,7 +860,10 @@ test.describe('Composition', () => {
     test('COMP-051: A/B state persists when switching tabs', async ({ page }) => {
       // Switch to B
       await page.keyboard.press('Backquote');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentAB === 'B'; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentAB === 'B'; })()`,
+      );
 
       let state = await getSessionState(page);
       expect(state.currentAB).toBe('B');
@@ -826,7 +910,10 @@ test.describe('Composition', () => {
       const layerId = state.layers[0]!.id;
       const blendSelect = page.locator(`[data-testid="stack-layer-blend-${layerId}"]`);
       await blendSelect.selectOption('screen');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.blendMode === 'screen'; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.blendMode === 'screen'; })()`,
+      );
 
       // Close panel
       await stackButton.click();
@@ -893,7 +980,10 @@ test.describe('Composition', () => {
 
       const aButton = page.locator('[data-testid="compare-ab-a"]');
       await aButton.click();
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentAB === 'A'; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentAB === 'A'; })()`,
+      );
 
       // Still on A
       state = await getSessionState(page);
@@ -965,17 +1055,26 @@ test.describe('Composition', () => {
 
       // Click toggle 3 times
       await toggleButton.click();
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentAB === 'B'; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentAB === 'B'; })()`,
+      );
       let state = await getSessionState(page);
       expect(state.currentAB).toBe('B');
 
       await toggleButton.click();
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentAB === 'A'; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentAB === 'A'; })()`,
+      );
       state = await getSessionState(page);
       expect(state.currentAB).toBe('A');
 
       await toggleButton.click();
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentAB === 'B'; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentAB === 'B'; })()`,
+      );
       state = await getSessionState(page);
       expect(state.currentAB).toBe('B');
     });

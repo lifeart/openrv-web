@@ -64,9 +64,7 @@ test.describe('Playback Screenshots', () => {
     await initWithVideo(page);
 
     // Cycle loop mode to ping-pong using the loop button (title="Cycle loop mode (L)")
-    const loopButton = page.locator(
-      'button[title*="loop mode"], button[title*="Loop"]',
-    ).first();
+    const loopButton = page.locator('button[title*="loop mode"], button[title*="Loop"]').first();
     if (await loopButton.isVisible({ timeout: 2000 }).catch(() => false)) {
       // Click to cycle: once -> loop, twice -> pingpong
       await loopButton.click();
@@ -117,7 +115,7 @@ test.describe('Playback Screenshots', () => {
     if (!hasMedia) {
       // Try loading a single sequence frame which may trigger sequence detection
       const fileInput = page.locator('input[type="file"]').first();
-      if (await fileInput.count() > 0) {
+      if ((await fileInput.count()) > 0) {
         await fileInput.setInputFiles('sample/sequence/frame_0001.png');
         await page.waitForTimeout(2000);
       }

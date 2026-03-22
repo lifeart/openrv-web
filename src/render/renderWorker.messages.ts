@@ -368,6 +368,15 @@ export interface ContextRestoredResult extends BaseWorkerMessage {
   type: 'contextRestored';
 }
 
+/** Protocol version mismatch error. Sent when the main thread's protocol version
+ *  does not match the worker's expected version. */
+export interface ProtocolMismatchResult extends BaseWorkerMessage {
+  type: 'protocolMismatch';
+  expectedVersion: number;
+  actualVersion: number;
+  error: string;
+}
+
 /** Union of all worker → main thread messages. */
 export type RenderWorkerResult =
   | ReadyResult
@@ -376,7 +385,8 @@ export type RenderWorkerResult =
   | RenderErrorResult
   | PixelDataResult
   | ContextLostResult
-  | ContextRestoredResult;
+  | ContextRestoredResult
+  | ProtocolMismatchResult;
 
 // =============================================================================
 // Data type conversion helpers

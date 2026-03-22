@@ -32,8 +32,8 @@ export function parseEvents(): EventDescriptor[] {
 
   const eventNames = nameMatch[1]!
     .split('|')
-    .map(s => s.trim().replace(/^'|'$/g, ''))
-    .filter(s => s.length > 0);
+    .map((s) => s.trim().replace(/^'|'$/g, ''))
+    .filter((s) => s.length > 0);
 
   // 2. Extract OpenRVEventData interface members
   const dataMatch = source.match(/interface\s+OpenRVEventData\s*\{([\s\S]*?)\n\}/);
@@ -94,7 +94,9 @@ export function parseEvents(): EventDescriptor[] {
 
   // Match patterns like: this.session.on('eventName', ...)
   // followed by this.emit('publicName', ...)
-  const wireMatch = source.match(/wireInternalEvents\(\)[\s\S]*?(?=\n  (?:\/\*\*|emitError|dispose|private\s|public\s|\}))/);
+  const wireMatch = source.match(
+    /wireInternalEvents\(\)[\s\S]*?(?=\n  (?:\/\*\*|emitError|dispose|private\s|public\s|\}))/,
+  );
   if (wireMatch) {
     const wireBody = wireMatch[0];
     // Match session.on('internalEvent', ...) blocks and find emit('publicEvent', ...)
@@ -132,11 +134,7 @@ export function parseEvents(): EventDescriptor[] {
   return events;
 }
 
-function processEntry(
-  key: string,
-  type: string,
-  map: Map<string, { type: string; fields: EventField[] }>
-): void {
+function processEntry(key: string, type: string, map: Map<string, { type: string; fields: EventField[] }>): void {
   const fields: EventField[] = [];
 
   if (type === 'void') {
@@ -211,14 +209,14 @@ export function renderEvents(events: EventDescriptor[]): string {
   md += 'Events follow the standard `on/off/once` subscription pattern:\n\n';
   md += '```typescript\n';
   md += '// Subscribe to an event\n';
-  md += 'const unsub = openrv.events.on(\'frameChange\', (data) => {\n';
-  md += '  console.log(\'Frame:\', data.frame);\n';
+  md += "const unsub = openrv.events.on('frameChange', (data) => {\n";
+  md += "  console.log('Frame:', data.frame);\n";
   md += '});\n\n';
   md += '// Unsubscribe\n';
   md += 'unsub();\n\n';
   md += '// One-time listener\n';
-  md += 'openrv.events.once(\'sourceLoaded\', (data) => {\n';
-  md += '  console.log(\'Loaded:\', data.name);\n';
+  md += "openrv.events.once('sourceLoaded', (data) => {\n";
+  md += "  console.log('Loaded:', data.name);\n";
   md += '});\n';
   md += '```\n\n';
 

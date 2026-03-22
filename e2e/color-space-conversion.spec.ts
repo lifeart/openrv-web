@@ -18,19 +18,27 @@ import {
  */
 
 /** Helper: Wait for OCIO enabled state to change */
-async function waitForOCIOEnabled(page: import('@playwright/test').Page, enabled: boolean, timeout = 5000): Promise<void> {
+async function waitForOCIOEnabled(
+  page: import('@playwright/test').Page,
+  enabled: boolean,
+  timeout = 5000,
+): Promise<void> {
   await page.waitForFunction(
     (expected) => {
       const state = (window as any).__OPENRV_TEST__?.getOCIOState();
       return state?.enabled === expected;
     },
     enabled,
-    { timeout }
+    { timeout },
   );
 }
 
 /** Helper: Wait for OCIO panel visibility */
-async function waitForOCIOPanel(page: import('@playwright/test').Page, visible: boolean, timeout = 5000): Promise<void> {
+async function waitForOCIOPanel(
+  page: import('@playwright/test').Page,
+  visible: boolean,
+  timeout = 5000,
+): Promise<void> {
   const panel = page.locator('[data-testid="ocio-panel"]');
   if (visible) {
     await expect(panel).toBeVisible({ timeout });
@@ -51,7 +59,7 @@ async function enableOCIO(page: import('@playwright/test').Page): Promise<void> 
 async function selectDropdownOption(
   page: import('@playwright/test').Page,
   triggerTestId: string,
-  optionText: string
+  optionText: string,
 ): Promise<void> {
   await page.locator(`[data-testid="${triggerTestId}"]`).click();
   const dropdown = page.locator('.dropdown-menu').last();
@@ -132,16 +140,12 @@ test.describe('Color Space Conversion E2E', () => {
     // Set input to sRGB and display to sRGB (baseline)
     await selectDropdownOption(page, 'ocio-input-colorspace', 'sRGB');
     await page.waitForTimeout(300);
-    const pixelsBaseline = await sampleCanvasPixels(page, [
-      { x: 80, y: 80 },
-    ]);
+    const pixelsBaseline = await sampleCanvasPixels(page, [{ x: 80, y: 80 }]);
 
     // Change display to Rec.709 (same primaries as sRGB, only OETF differs)
     await selectDropdownOption(page, 'ocio-display-select', 'Rec.709');
     await page.waitForTimeout(300);
-    const pixelsRec709 = await sampleCanvasPixels(page, [
-      { x: 80, y: 80 },
-    ]);
+    const pixelsRec709 = await sampleCanvasPixels(page, [{ x: 80, y: 80 }]);
 
     // Change should be small (shared primaries) — within ~30 levels on 8-bit
     const dr = Math.abs(pixelsBaseline[0]!.r - pixelsRec709[0]!.r);

@@ -42,10 +42,7 @@ async function openColorControlsPanel(page: import('@playwright/test').Page): Pr
 }
 
 /** Load a LUT file through the Color Controls panel file input */
-async function loadLUTFile(
-  page: import('@playwright/test').Page,
-  relativePath = SAMPLE_LUT,
-): Promise<void> {
+async function loadLUTFile(page: import('@playwright/test').Page, relativePath = SAMPLE_LUT): Promise<void> {
   await openColorControlsPanel(page);
   const lutInput = page.locator('.color-controls-panel input[type="file"]').first();
   await lutInput.setInputFiles(path.resolve(process.cwd(), relativePath));
@@ -54,25 +51,20 @@ async function loadLUTFile(
 
 /** Wait for LUT loaded state (hasLUT === true) */
 async function waitForLUTLoaded(page: import('@playwright/test').Page): Promise<void> {
-  await page.waitForFunction(
-    () => (window as any).__OPENRV_TEST__?.getColorState()?.hasLUT === true,
-    { timeout: 5000 },
-  );
+  await page.waitForFunction(() => (window as any).__OPENRV_TEST__?.getColorState()?.hasLUT === true, {
+    timeout: 5000,
+  });
 }
 
 /** Wait for LUT cleared state (hasLUT === false) */
 async function waitForLUTCleared(page: import('@playwright/test').Page): Promise<void> {
-  await page.waitForFunction(
-    () => (window as any).__OPENRV_TEST__?.getColorState()?.hasLUT === false,
-    { timeout: 5000 },
-  );
+  await page.waitForFunction(() => (window as any).__OPENRV_TEST__?.getColorState()?.hasLUT === false, {
+    timeout: 5000,
+  });
 }
 
 /** Wait for LUT intensity to reach expected value */
-async function waitForLUTIntensity(
-  page: import('@playwright/test').Page,
-  expected: number,
-): Promise<void> {
+async function waitForLUTIntensity(page: import('@playwright/test').Page, expected: number): Promise<void> {
   await page.waitForFunction(
     ({ exp }) => {
       const state = (window as any).__OPENRV_TEST__?.getColorState();
@@ -94,10 +86,7 @@ function getIntensitySlider(page: import('@playwright/test').Page) {
 }
 
 /** Programmatically set the intensity slider to a given value */
-async function setIntensitySlider(
-  page: import('@playwright/test').Page,
-  value: number,
-): Promise<void> {
+async function setIntensitySlider(page: import('@playwright/test').Page, value: number): Promise<void> {
   const slider = getIntensitySlider(page);
   await slider.evaluate((el, val) => {
     const input = el as HTMLInputElement;

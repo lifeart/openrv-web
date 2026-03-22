@@ -4,14 +4,7 @@
  * Tests the visual timeline editor functionality for sequence editing.
  */
 
-import {
-  test,
-  expect,
-  loadVideoFile,
-  loadTwoVideoFiles,
-  getSessionState,
-  waitForTestHelper,
-} from './fixtures';
+import { test, expect, loadVideoFile, loadTwoVideoFiles, getSessionState, waitForTestHelper } from './fixtures';
 
 async function openTimelineEditorPanel(page: import('@playwright/test').Page) {
   const toggle = page.locator('[data-testid="timeline-editor-toggle-button"]');
@@ -132,8 +125,9 @@ test.describe('Timeline Editor', () => {
       const target = edl[1];
 
       const clicked = await page.evaluate(() => {
-        const panel = Array.from(document.querySelectorAll('.dropdown-panel'))
-          .find((el) => el.textContent?.includes('Timeline Editor'));
+        const panel = Array.from(document.querySelectorAll('.dropdown-panel')).find((el) =>
+          el.textContent?.includes('Timeline Editor'),
+        );
         const secondCut = panel?.querySelectorAll('.timeline-cut')?.[1] as HTMLElement | undefined;
         if (!secondCut) return false;
         secondCut.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));

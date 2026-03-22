@@ -1,11 +1,5 @@
 import { test, expect } from '@playwright/test';
-import {
-  loadVideoFile,
-  getMatteState,
-  getSessionMetadataState,
-  getPaintState,
-  waitForTestHelper,
-} from './fixtures';
+import { loadVideoFile, getMatteState, getSessionMetadataState, getPaintState, waitForTestHelper } from './fixtures';
 
 /**
  * Session Integration Tests

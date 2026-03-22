@@ -38,8 +38,8 @@ function parseEffectFile(relPath: string): EffectDescriptor | null {
     // Extract the "Adapter: wraps ..." description line
     const lines = fileDocMatch[1]
       .split('\n')
-      .map(line => line.replace(/^\s*\*\s?/, '').trim())
-      .filter(line => line.length > 0 && !line.startsWith('Expected params'));
+      .map((line) => line.replace(/^\s*\*\s?/, '').trim())
+      .filter((line) => line.length > 0 && !line.startsWith('Expected params'));
     description = lines.join(' ').trim();
   }
 
@@ -49,8 +49,8 @@ function parseEffectFile(relPath: string): EffectDescriptor | null {
   if (paramsMatch && paramsMatch[1]) {
     parameters = paramsMatch[1]
       .split('\n')
-      .map(line => line.replace(/^\s*\*\s?/, '').trim())
-      .filter(line => line.length > 0)
+      .map((line) => line.replace(/^\s*\*\s?/, '').trim())
+      .filter((line) => line.length > 0)
       .join(', ');
   }
 
@@ -66,8 +66,9 @@ function parseEffectFile(relPath: string): EffectDescriptor | null {
 
 export function parseEffects(): EffectDescriptor[] {
   const adaptersDir = path.join(projectRoot, 'src', 'effects', 'adapters');
-  const files = fs.readdirSync(adaptersDir)
-    .filter(f => f.endsWith('.ts') && !f.endsWith('.test.ts'))
+  const files = fs
+    .readdirSync(adaptersDir)
+    .filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'))
     .sort();
 
   const effects: EffectDescriptor[] = [];

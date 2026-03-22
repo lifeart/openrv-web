@@ -839,13 +839,9 @@ export class Viewer {
     });
 
     // Create color wheels
+    // Note: stateChanged is wired through AppColorWiring for persistence/history tracking.
+    // AppColorWiring calls viewer.onColorWheelsChanged() to trigger rendering updates.
     this.colorWheels = new ColorWheels(this.container);
-    this.subs.add(
-      this.colorWheels.on('stateChanged', () => {
-        this.notifyEffectsChanged();
-        this.refresh();
-      }),
-    );
 
     // Create HSL Qualifier (secondary color correction)
     this.hslQualifier = new HSLQualifier();
@@ -4020,6 +4016,16 @@ export class Viewer {
    */
   getColorWheels(): ColorWheels {
     return this.colorWheels;
+  }
+
+  /**
+   * Notify the viewer that color wheels state has changed.
+   * Called by AppColorWiring when the color wheels emit stateChanged.
+   * Invalidates the prerender cache and schedules a re-render.
+   */
+  onColorWheelsChanged(): void {
+    this.notifyEffectsChanged();
+    this.scheduleRender();
   }
 
   /**

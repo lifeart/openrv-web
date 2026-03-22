@@ -268,6 +268,7 @@ export class AppPersistenceManager {
     } = this.ctx;
 
     if (state.color) colorControls.setAdjustments(state.color);
+    if (state.colorWheels) this.ctx.viewer.getColorWheels().setState(state.colorWheels);
     if (state.cdl) cdlControl.setCDL(state.cdl);
     if (state.filters) filterControl.setSettings(state.filters);
     if (state.transform) transformControl.setTransform(state.transform);
@@ -531,33 +532,8 @@ export class AppPersistenceManager {
         }
       });
 
-      const hasRecovery = await autoSaveManager.initialize();
-
-      if (hasRecovery) {
-        // Show recovery prompt via the legacy path (for AutoSaveManagers
-        // that don't use the recoveryAvailable event)
-        const entries = await autoSaveManager.listAutoSaves();
-        const mostRecent = entries[0];
-        if (mostRecent) {
-          const savedTime = new Date(mostRecent.savedAt).toLocaleString();
-
-          const recover = await showConfirm(
-            `A previous session "${mostRecent.name}" was found from ${savedTime}. Would you like to recover it?`,
-            {
-              title: 'Recover Session',
-              confirmText: 'Recover',
-              cancelText: 'Discard',
-            },
-          );
-
-          if (recover) {
-            await this.recoverAutoSave(mostRecent.id);
-          } else {
-            // Clear old auto-saves if user discards
-            await autoSaveManager.clearAll();
-          }
-        }
-      }
+      await autoSaveManager.initialize();
+      // Recovery is handled by the 'recoveryAvailable' event listener above
     } catch (err) {
       console.error('Auto-save initialization failed:', err);
       const errorMessage = err instanceof Error ? err.message : String(err);
@@ -575,20 +551,7 @@ export class AppPersistenceManager {
    * Recover session from auto-save
    */
   private async recoverAutoSave(id: string): Promise<void> {
-    const {
-      autoSaveManager,
-      session,
-      paintEngine,
-      viewer,
-      colorControls,
-      cdlControl,
-      filterControl,
-      transformControl,
-      cropControl,
-      lensControl,
-      noiseReductionControl,
-      watermarkControl,
-    } = this.ctx;
+    const { autoSaveManager, session, paintEngine, viewer } = this.ctx;
     try {
       const state = await autoSaveManager.getAutoSave(id);
       if (state) {
@@ -600,15 +563,8 @@ export class AppPersistenceManager {
           cacheManager: this.ctx.cacheManager,
         });
 
-        // Update UI controls with restored state
-        colorControls.setAdjustments(state.color);
-        cdlControl.setCDL(state.cdl);
-        filterControl.setSettings(state.filters);
-        transformControl.setTransform(state.transform);
-        cropControl.setState(state.crop);
-        lensControl.setParams(state.lens);
-        if (state.noiseReduction && noiseReductionControl) noiseReductionControl.setParams(state.noiseReduction);
-        if (state.watermark && watermarkControl) watermarkControl.setState(state.watermark);
+        // Update UI controls with restored state (use shared helper for full coverage)
+        this.syncControlsFromState(state);
         // Note: wipe state is restored via viewer.setWipeState in SessionSerializer.fromJSON
 
         if (warnings.length > 0) {

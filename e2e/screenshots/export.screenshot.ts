@@ -7,16 +7,8 @@
  */
 
 import { test, expect } from '@playwright/test';
-import {
-  initApp,
-  initWithVideo,
-  takeDocScreenshot,
-  switchTab,
-  waitForCanvasStable,
-} from './screenshot-helpers';
-import {
-  loadTwoVideoFiles,
-} from '../fixtures';
+import { initApp, initWithVideo, takeDocScreenshot, switchTab, waitForCanvasStable } from './screenshot-helpers';
+import { loadTwoVideoFiles } from '../fixtures';
 
 test.describe('Export Screenshots', () => {
   // ── 48: Frame export menu ───────────────────────────────────────────
@@ -25,9 +17,9 @@ test.describe('Export Screenshots', () => {
     await initWithVideo(page);
 
     // Open the export dropdown via the export button (title="Export current frame (Ctrl+S)")
-    const exportButton = page.locator(
-      '[title*="Export"], [aria-label*="Export"], .export-control-container button',
-    ).first();
+    const exportButton = page
+      .locator('[title*="Export"], [aria-label*="Export"], .export-control-container button')
+      .first();
     await exportButton.click();
     await page.waitForTimeout(500);
 
@@ -43,25 +35,25 @@ test.describe('Export Screenshots', () => {
     await initWithVideo(page);
 
     // Open export dropdown
-    const exportButton = page.locator(
-      '[title*="Export"], [aria-label*="Export"], .export-control-container button',
-    ).first();
+    const exportButton = page
+      .locator('[title*="Export"], [aria-label*="Export"], .export-control-container button')
+      .first();
     await exportButton.click();
     await page.waitForTimeout(300);
 
     // Click video export option
-    const videoExportOption = page.locator(
-      '.export-dropdown >> text=Export MP4',
-    ).first();
+    const videoExportOption = page.locator('.export-dropdown >> text=Export MP4').first();
     if (await videoExportOption.isVisible({ timeout: 2000 }).catch(() => false)) {
       await videoExportOption.click();
       await page.waitForTimeout(1000);
     }
 
     // Wait for the export progress dialog
-    await page.locator(
-      '[data-testid="export-progress-status"]',
-    ).first().waitFor({ timeout: 5000 }).catch(() => {});
+    await page
+      .locator('[data-testid="export-progress-status"]')
+      .first()
+      .waitFor({ timeout: 5000 })
+      .catch(() => {});
 
     await waitForCanvasStable(page, 2000);
     await takeDocScreenshot(page, '49-video-export-dialog');
@@ -91,9 +83,9 @@ test.describe('Export Screenshots', () => {
     await page.waitForTimeout(300);
 
     // Open the export dropdown
-    const exportButton = page.locator(
-      '[title*="Export"], [aria-label*="Export"], .export-control-container button',
-    ).first();
+    const exportButton = page
+      .locator('[title*="Export"], [aria-label*="Export"], .export-control-container button')
+      .first();
     await exportButton.click();
     await page.waitForTimeout(500);
 
@@ -113,9 +105,9 @@ test.describe('Export Screenshots', () => {
     await page.waitForTimeout(200);
 
     // Open export dropdown and show session section
-    const exportButton = page.locator(
-      '[title*="Export"], [aria-label*="Export"], .export-control-container button',
-    ).first();
+    const exportButton = page
+      .locator('[title*="Export"], [aria-label*="Export"], .export-control-container button')
+      .first();
     await exportButton.click();
     await page.waitForTimeout(500);
 
@@ -132,9 +124,9 @@ test.describe('Export Screenshots', () => {
     await waitForCanvasStable(page);
 
     // Open playlist panel which contains EDL export
-    const playlistButton = page.locator(
-      '[data-testid="playlist-panel"], button:has-text("Playlist"), [title*="Playlist"]',
-    ).first();
+    const playlistButton = page
+      .locator('[data-testid="playlist-panel"], button:has-text("Playlist"), [title*="Playlist"]')
+      .first();
     if (await playlistButton.isVisible({ timeout: 2000 }).catch(() => false)) {
       await playlistButton.click();
       await page.waitForTimeout(500);

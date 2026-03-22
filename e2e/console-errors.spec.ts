@@ -33,9 +33,7 @@ test.describe('Console Errors', () => {
     await page.waitForTimeout(500);
 
     // Filter out known benign errors (if any)
-    const criticalErrors = consoleErrors.filter(
-      (err) => !err.includes('ResizeObserver loop')
-    );
+    const criticalErrors = consoleErrors.filter((err) => !err.includes('ResizeObserver loop'));
 
     expect(criticalErrors).toHaveLength(0);
     expect(pageErrors).toHaveLength(0);
@@ -71,9 +69,7 @@ test.describe('Console Errors', () => {
     expect(state.hasMedia).toBe(true);
 
     // Filter out known benign errors
-    const criticalErrors = consoleErrors.filter(
-      (err) => !err.includes('ResizeObserver loop')
-    );
+    const criticalErrors = consoleErrors.filter((err) => !err.includes('ResizeObserver loop'));
 
     expect(criticalErrors).toHaveLength(0);
     expect(pageErrors).toHaveLength(0);
@@ -85,11 +81,7 @@ test.describe('Console Errors', () => {
     // Set up listener for MIME type specific errors
     page.on('console', (msg) => {
       const text = msg.text();
-      if (
-        text.includes('MIME type') ||
-        text.includes('module script') ||
-        text.includes('video/mp2t')
-      ) {
+      if (text.includes('MIME type') || text.includes('module script') || text.includes('video/mp2t')) {
         mimeErrors.push(text);
       }
     });
@@ -111,10 +103,7 @@ test.describe('Console Errors', () => {
 
     page.on('console', (msg) => {
       const text = msg.text();
-      if (
-        msg.type() === 'error' &&
-        (text.includes('worker') || text.includes('Worker'))
-      ) {
+      if (msg.type() === 'error' && (text.includes('worker') || text.includes('Worker'))) {
         workerErrors.push(text);
       }
     });
@@ -160,9 +149,7 @@ test.describe('Console Errors', () => {
     await page.waitForTimeout(200);
 
     // Filter out known benign errors
-    const criticalErrors = consoleErrors.filter(
-      (err) => !err.includes('ResizeObserver loop')
-    );
+    const criticalErrors = consoleErrors.filter((err) => !err.includes('ResizeObserver loop'));
 
     expect(criticalErrors).toHaveLength(0);
   });
@@ -196,9 +183,7 @@ test.describe('Console Errors', () => {
     await page.waitForTimeout(100);
 
     // Filter out known benign errors
-    const criticalErrors = consoleErrors.filter(
-      (err) => !err.includes('ResizeObserver loop')
-    );
+    const criticalErrors = consoleErrors.filter((err) => !err.includes('ResizeObserver loop'));
 
     expect(criticalErrors).toHaveLength(0);
   });
@@ -235,18 +220,12 @@ test.describe('Console Errors', () => {
       const contentType = response.headers()['content-type'] || '';
 
       // Check for worker files being served with wrong MIME type (video/mp2t)
-      if (
-        url.includes('worker') &&
-        contentType.includes('video/mp2t')
-      ) {
+      if (url.includes('worker') && contentType.includes('video/mp2t')) {
         mimeTypeIssues.push(`Worker served with video MIME type: ${url}`);
       }
 
       // Check for .js files being served with video MIME type
-      if (
-        url.endsWith('.js') &&
-        contentType.includes('video/')
-      ) {
+      if (url.endsWith('.js') && contentType.includes('video/')) {
         mimeTypeIssues.push(`JS file served with video MIME type: ${url}`);
       }
     });

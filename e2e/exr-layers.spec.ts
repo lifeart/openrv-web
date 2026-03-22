@@ -19,7 +19,7 @@ import path from 'path';
 
 async function selectChannelMode(
   page: import('@playwright/test').Page,
-  channel: 'rgb' | 'red' | 'green' | 'blue' | 'alpha' | 'luminance'
+  channel: 'rgb' | 'red' | 'green' | 'blue' | 'alpha' | 'luminance',
 ): Promise<void> {
   await page.click('[data-testid="channel-select-button"]');
   const dropdown = page.locator('[data-testid="channel-dropdown"]');
@@ -48,7 +48,7 @@ test.describe('EXR Layer Selection', () => {
           const state = window.__OPENRV_TEST__?.getViewerState();
           return state?.exrLayerCount > 1;
         },
-        { timeout: 5000 }
+        { timeout: 5000 },
       );
 
       // Check viewer state for layer info
@@ -73,7 +73,7 @@ test.describe('EXR Layer Selection', () => {
           const state = window.__OPENRV_TEST__?.getViewerState();
           return state?.exrLayerCount > 1;
         },
-        { timeout: 5000 }
+        { timeout: 5000 },
       );
 
       const viewerState = await getViewerState(page);
@@ -96,7 +96,7 @@ test.describe('EXR Layer Selection', () => {
           const state = window.__OPENRV_TEST__?.getViewerState();
           return state?.exrLayerCount > 1;
         },
-        { timeout: 5000 }
+        { timeout: 5000 },
       );
 
       // Layer selector should be visible
@@ -116,7 +116,7 @@ test.describe('EXR Layer Selection', () => {
           const state = window.__OPENRV_TEST__?.getSessionState();
           return state?.hasMedia === true;
         },
-        { timeout: 5000 }
+        { timeout: 5000 },
       );
 
       // Layer selector should not be visible
@@ -136,7 +136,7 @@ test.describe('EXR Layer Selection', () => {
           const state = window.__OPENRV_TEST__?.getViewerState();
           return state?.exrLayerCount > 1;
         },
-        { timeout: 5000 }
+        { timeout: 5000 },
       );
 
       // Click the layer button
@@ -160,7 +160,7 @@ test.describe('EXR Layer Selection', () => {
           const state = window.__OPENRV_TEST__?.getViewerState();
           return state?.exrLayerCount > 1;
         },
-        { timeout: 5000 }
+        { timeout: 5000 },
       );
 
       // Click the layer button to open dropdown
@@ -198,7 +198,7 @@ test.describe('EXR Layer Selection', () => {
           const state = window.__OPENRV_TEST__?.getViewerState();
           return state?.exrLayerCount > 1;
         },
-        { timeout: 5000 }
+        { timeout: 5000 },
       );
 
       // Open dropdown and select diffuse
@@ -215,7 +215,7 @@ test.describe('EXR Layer Selection', () => {
           const state = window.__OPENRV_TEST__?.getViewerState();
           return state?.exrSelectedLayer === 'diffuse';
         },
-        { timeout: 5000 }
+        { timeout: 5000 },
       );
 
       // Check state
@@ -235,7 +235,7 @@ test.describe('EXR Layer Selection', () => {
           const state = window.__OPENRV_TEST__?.getViewerState();
           return state?.exrLayerCount > 1;
         },
-        { timeout: 5000 }
+        { timeout: 5000 },
       );
 
       // Capture RGBA view
@@ -255,7 +255,7 @@ test.describe('EXR Layer Selection', () => {
           const state = window.__OPENRV_TEST__?.getViewerState();
           return state?.exrSelectedLayer === 'diffuse';
         },
-        { timeout: 5000 }
+        { timeout: 5000 },
       );
 
       // Capture diffuse view
@@ -277,7 +277,7 @@ test.describe('EXR Layer Selection', () => {
           const state = window.__OPENRV_TEST__?.getViewerState();
           return state?.exrLayerCount > 1;
         },
-        { timeout: 5000 }
+        { timeout: 5000 },
       );
 
       // Select diffuse layer
@@ -294,7 +294,7 @@ test.describe('EXR Layer Selection', () => {
           const state = window.__OPENRV_TEST__?.getViewerState();
           return state?.exrSelectedLayer === 'diffuse';
         },
-        { timeout: 5000 }
+        { timeout: 5000 },
       );
 
       let viewerState = await getViewerState(page);
@@ -313,7 +313,7 @@ test.describe('EXR Layer Selection', () => {
           const state = window.__OPENRV_TEST__?.getViewerState();
           return state?.exrSelectedLayer === null;
         },
-        { timeout: 5000 }
+        { timeout: 5000 },
       );
 
       viewerState = await getViewerState(page);
@@ -332,13 +332,13 @@ test.describe('EXR Layer Selection', () => {
           const state = window.__OPENRV_TEST__?.getViewerState();
           return state?.exrLayerCount > 1;
         },
-        { timeout: 5000 }
+        { timeout: 5000 },
       );
 
       const layerButton = page.locator('[data-testid="exr-layer-button"]');
 
       // Initially should not have accent color
-      const initialColor = await layerButton.evaluate(el => el.style.color);
+      const initialColor = await layerButton.evaluate((el) => el.style.color);
       expect(initialColor).not.toBe('var(--accent-primary)');
 
       // Select diffuse layer
@@ -354,11 +354,11 @@ test.describe('EXR Layer Selection', () => {
           const state = window.__OPENRV_TEST__?.getViewerState();
           return state?.exrSelectedLayer === 'diffuse';
         },
-        { timeout: 5000 }
+        { timeout: 5000 },
       );
 
       // Should now have accent color
-      const activeColor = await layerButton.evaluate(el => el.style.color);
+      const activeColor = await layerButton.evaluate((el) => el.style.color);
       expect(activeColor).toBe('var(--accent-primary)');
     });
   });
@@ -376,7 +376,7 @@ test.describe('EXR Layer Selection', () => {
           const state = window.__OPENRV_TEST__?.getViewerState();
           return state?.exrLayerCount > 1;
         },
-        { timeout: 5000 }
+        { timeout: 5000 },
       );
 
       // Select diffuse layer
@@ -393,7 +393,7 @@ test.describe('EXR Layer Selection', () => {
           const state = window.__OPENRV_TEST__?.getViewerState();
           return state?.exrSelectedLayer === 'diffuse';
         },
-        { timeout: 5000 }
+        { timeout: 5000 },
       );
 
       // Apply red channel isolation
@@ -425,7 +425,7 @@ test.describe('EXR Layer Selection', () => {
           const state = window.__OPENRV_TEST__?.getViewerState();
           return state?.exrLayerCount > 1;
         },
-        { timeout: 5000 }
+        { timeout: 5000 },
       );
 
       // Select specular layer
@@ -442,7 +442,7 @@ test.describe('EXR Layer Selection', () => {
           const state = window.__OPENRV_TEST__?.getViewerState();
           return state?.exrSelectedLayer === 'specular';
         },
-        { timeout: 5000 }
+        { timeout: 5000 },
       );
 
       // Apply channel isolation
@@ -476,7 +476,7 @@ test.describe('EXR Layer Selection', () => {
           const state = window.__OPENRV_TEST__?.getViewerState();
           return state?.exrLayerCount > 1;
         },
-        { timeout: 5000 }
+        { timeout: 5000 },
       );
 
       // Verify layers are detected
@@ -499,7 +499,7 @@ test.describe('EXR Layer Selection', () => {
           const state = window.__OPENRV_TEST__?.getSessionState();
           return state?.hasMedia === true;
         },
-        { timeout: 5000 }
+        { timeout: 5000 },
       );
 
       // Layers should be cleared since PNG has no layer support

@@ -38,7 +38,10 @@ import {
  * user journey rather than testing isolated functionality.
  */
 
-async function selectViewChannel(page: import('@playwright/test').Page, channel: 'rgb' | 'red' | 'green' | 'blue' | 'alpha' | 'luminance'): Promise<void> {
+async function selectViewChannel(
+  page: import('@playwright/test').Page,
+  channel: 'rgb' | 'red' | 'green' | 'blue' | 'alpha' | 'luminance',
+): Promise<void> {
   await clickTab(page, 'view');
   await page.click('[data-testid="channel-select-button"]');
   await page.waitForTimeout(100);
@@ -79,10 +82,13 @@ test.describe('Dailies Review Workflow', () => {
 
     // Step 3: Mark frame with issue
     await page.keyboard.press('m');
-    await waitForCondition(page, `(() => {
+    await waitForCondition(
+      page,
+      `(() => {
       const state = window.__OPENRV_TEST__?.getSessionState();
       return state?.marks?.includes(${reviewFrame});
-    })()`);
+    })()`,
+    );
 
     state = await getSessionState(page);
     expect(state.marks).toContain(reviewFrame);
@@ -107,10 +113,13 @@ test.describe('Dailies Review Workflow', () => {
         { x: box.width * 0.5, y: box.height * 0.5 },
       ]);
     }
-    await waitForCondition(page, `(() => {
+    await waitForCondition(
+      page,
+      `(() => {
       const state = window.__OPENRV_TEST__?.getPaintState();
       return state?.annotatedFrames?.includes(${reviewFrame});
-    })()`);
+    })()`,
+    );
 
     paintState = await getPaintState(page);
     expect(paintState.annotatedFrames).toContain(reviewFrame);
@@ -147,10 +156,13 @@ test.describe('Dailies Review Workflow', () => {
 
     // Toggle to B source using backtick
     await page.keyboard.press('`');
-    await waitForCondition(page, `(() => {
+    await waitForCondition(
+      page,
+      `(() => {
       const state = window.__OPENRV_TEST__?.getSessionState();
       return state?.currentAB === 'B';
-    })()`);
+    })()`,
+    );
 
     state = await getSessionState(page);
     expect(state.currentAB).toBe('B');
@@ -163,10 +175,13 @@ test.describe('Dailies Review Workflow', () => {
 
     // Enable wipe mode for side-by-side comparison
     await page.keyboard.press('Shift+w');
-    await waitForCondition(page, `(() => {
+    await waitForCondition(
+      page,
+      `(() => {
       const state = window.__OPENRV_TEST__?.getViewerState();
       return state?.wipeMode !== 'off';
-    })()`);
+    })()`,
+    );
 
     const viewerState = await getViewerState(page);
     expect(viewerState.wipeMode).not.toBe('off');
@@ -199,10 +214,13 @@ test.describe('Color Grading Workflow', () => {
 
     // Enable waveform
     await page.keyboard.press('w');
-    await waitForCondition(page, `(() => {
+    await waitForCondition(
+      page,
+      `(() => {
       const state = window.__OPENRV_TEST__?.getViewerState();
       return state?.waveformVisible === true;
-    })()`);
+    })()`,
+    );
 
     viewerState = await getViewerState(page);
     expect(viewerState.waveformVisible).toBe(true);
@@ -367,10 +385,13 @@ test.describe('Transform and Export Workflow', () => {
     const flipHButton = page.locator('[data-testid="transform-flip-horizontal"]');
     if (await flipHButton.isVisible()) {
       await flipHButton.click();
-      await waitForCondition(page, `(() => {
+      await waitForCondition(
+        page,
+        `(() => {
         const state = window.__OPENRV_TEST__?.getTransformState();
         return state?.flipH === true;
-      })()`);
+      })()`,
+      );
 
       transformState = await getTransformState(page);
       expect(transformState.flipH).toBe(true);
@@ -429,10 +450,13 @@ test.describe('Playback and Timeline Workflow', () => {
       await page.keyboard.press('ArrowRight');
     }
     await page.keyboard.press('i');
-    await waitForCondition(page, `(() => {
+    await waitForCondition(
+      page,
+      `(() => {
       const state = window.__OPENRV_TEST__?.getSessionState();
       return state?.inPoint > 1;
-    })()`);
+    })()`,
+    );
 
     state = await getSessionState(page);
     const inPoint = state.inPoint;
@@ -443,10 +467,13 @@ test.describe('Playback and Timeline Workflow', () => {
       await page.keyboard.press('ArrowRight');
     }
     await page.keyboard.press('o');
-    await waitForCondition(page, `(() => {
+    await waitForCondition(
+      page,
+      `(() => {
       const state = window.__OPENRV_TEST__?.getSessionState();
       return state?.outPoint > ${inPoint};
-    })()`);
+    })()`,
+    );
 
     state = await getSessionState(page);
     // Out point should be at or before the total frame count
@@ -568,10 +595,13 @@ test.describe('Annotation Workflow', () => {
         { x: 200, y: 100 },
       ]);
     }
-    await waitForCondition(page, `(() => {
+    await waitForCondition(
+      page,
+      `(() => {
       const state = window.__OPENRV_TEST__?.getPaintState();
       return state?.annotatedFrames?.includes(1);
-    })()`);
+    })()`,
+    );
 
     let paintState = await getPaintState(page);
     expect(paintState.annotatedFrames).toContain(1);
@@ -586,20 +616,26 @@ test.describe('Annotation Workflow', () => {
         { x: 200, y: 150 },
       ]);
     }
-    await waitForCondition(page, `(() => {
+    await waitForCondition(
+      page,
+      `(() => {
       const state = window.__OPENRV_TEST__?.getPaintState();
       return state?.annotatedFrames?.includes(2);
-    })()`);
+    })()`,
+    );
 
     paintState = await getPaintState(page);
     expect(paintState.annotatedFrames).toContain(2);
 
     // Enable ghost mode
     await page.keyboard.press('g');
-    await waitForCondition(page, `(() => {
+    await waitForCondition(
+      page,
+      `(() => {
       const state = window.__OPENRV_TEST__?.getPaintState();
       return state?.ghostMode === true;
-    })()`);
+    })()`,
+    );
 
     paintState = await getPaintState(page);
     expect(paintState.ghostMode).toBe(true);
@@ -607,10 +643,13 @@ test.describe('Annotation Workflow', () => {
     // Now on frame 2, we should see frame 1's annotation as ghost
     // Enable ghost frames (onion skin)
     await page.keyboard.press('Shift+g');
-    await waitForCondition(page, `(() => {
+    await waitForCondition(
+      page,
+      `(() => {
       const state = window.__OPENRV_TEST__?.getPaintState();
       return state?.ghostBefore >= 0;
-    })()`);
+    })()`,
+    );
 
     // Verify ghost frames setting changed
     paintState = await getPaintState(page);
@@ -630,10 +669,13 @@ test.describe('Annotation Workflow', () => {
 
     // Enable hold mode
     await page.keyboard.press('x');
-    await waitForCondition(page, `(() => {
+    await waitForCondition(
+      page,
+      `(() => {
       const state = window.__OPENRV_TEST__?.getPaintState();
       return state?.holdMode === true;
-    })()`);
+    })()`,
+    );
 
     let paintState = await getPaintState(page);
     expect(paintState.holdMode).toBe(true);
@@ -650,10 +692,13 @@ test.describe('Annotation Workflow', () => {
         { x: 250, y: 250 },
       ]);
     }
-    await waitForCondition(page, `(() => {
+    await waitForCondition(
+      page,
+      `(() => {
       const state = window.__OPENRV_TEST__?.getPaintState();
       return state?.annotatedFrames?.length > 0;
-    })()`);
+    })()`,
+    );
 
     paintState = await getPaintState(page);
     const currentFrame = (await getSessionState(page)).currentFrame;
@@ -662,10 +707,13 @@ test.describe('Annotation Workflow', () => {
     // Navigate to different frame
     await page.keyboard.press('ArrowRight');
     await page.keyboard.press('ArrowRight');
-    await waitForCondition(page, `(() => {
+    await waitForCondition(
+      page,
+      `(() => {
       const state = window.__OPENRV_TEST__?.getPaintState();
       return state?.visibleAnnotationCount >= 1;
-    })()`);
+    })()`,
+    );
 
     // With hold mode, annotation should still be visible
     paintState = await getPaintState(page);
@@ -694,17 +742,23 @@ test.describe('Scope Analysis Workflow', () => {
 
     // Enable waveform
     await page.keyboard.press('w');
-    await waitForCondition(page, `(() => {
+    await waitForCondition(
+      page,
+      `(() => {
       const state = window.__OPENRV_TEST__?.getViewerState();
       return state?.waveformVisible === true;
-    })()`);
+    })()`,
+    );
 
     // Enable vectorscope
     await page.keyboard.press('y');
-    await waitForCondition(page, `(() => {
+    await waitForCondition(
+      page,
+      `(() => {
       const state = window.__OPENRV_TEST__?.getViewerState();
       return state?.vectorscopeVisible === true;
-    })()`);
+    })()`,
+    );
 
     const viewerState = await getViewerState(page);
     expect(viewerState.histogramVisible).toBe(true);
@@ -724,10 +778,13 @@ test.describe('Scope Analysis Workflow', () => {
     await page.waitForTimeout(200);
 
     // Verify the info panel is enabled via waitForCondition
-    await waitForCondition(page, `(() => {
+    await waitForCondition(
+      page,
+      `(() => {
       const state = window.__OPENRV_TEST__?.getInfoPanelState();
       return state?.enabled === true;
-    })()`);
+    })()`,
+    );
 
     // Click on canvas to probe a pixel
     const canvas = await getCanvas(page);
@@ -914,10 +971,13 @@ test.describe('Keyboard-Driven Workflow', () => {
     expect(state.currentFrame).toBe(1);
 
     await page.keyboard.press('End'); // Last frame
-    await waitForCondition(page, `(() => {
+    await waitForCondition(
+      page,
+      `(() => {
       const state = window.__OPENRV_TEST__?.getSessionState();
       return state?.currentFrame === state?.frameCount;
-    })()`);
+    })()`,
+    );
 
     state = await getSessionState(page);
     expect(state.currentFrame).toBe(state.frameCount);
@@ -951,10 +1011,13 @@ test.describe('Keyboard-Driven Workflow', () => {
 
     // Mark frame
     await page.keyboard.press('m');
-    await waitForCondition(page, `(() => {
+    await waitForCondition(
+      page,
+      `(() => {
       const state = window.__OPENRV_TEST__?.getSessionState();
       return state?.marks?.length > 0;
-    })()`);
+    })()`,
+    );
 
     state = await getSessionState(page);
     expect(state.marks.length).toBeGreaterThan(0);

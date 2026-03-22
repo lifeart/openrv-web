@@ -64,7 +64,10 @@ fn applyTemperature(color: vec3f, temp: f32, tintVal: f32) -> vec3f {
   c.r -= g * 0.05;
   c.b -= g * 0.05;
 
-  return c;
+  // Clamp negative values: negative color is physically meaningless and
+  // corrupts downstream stages (HSL conversion, contrast amplification).
+  // Values > 1.0 are preserved for HDR headroom.
+  return max(c, vec3f(0.0));
 }
 
 // Apply inline 1D LUT (from RVColor luminanceLUT)

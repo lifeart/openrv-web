@@ -12,11 +12,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import {
-  loadVideoFile,
-  waitForTestHelper,
-  captureCanvasState,
-} from './fixtures';
+import { loadVideoFile, waitForTestHelper, captureCanvasState } from './fixtures';
 
 // Helper to get luminance visualization state
 async function getLuminanceVisState(page: import('@playwright/test').Page) {
@@ -358,11 +354,9 @@ test.describe('Luminance Visualization - Integration', () => {
     await exposureSlider.fill('2');
     await exposureSlider.dispatchEvent('input');
     await exposureSlider.dispatchEvent('change');
-    await page.waitForFunction(
-      () => (window as any).__OPENRV_TEST__?.getColorState?.()?.exposure === 2,
-      undefined,
-      { timeout: 5000 },
-    );
+    await page.waitForFunction(() => (window as any).__OPENRV_TEST__?.getColorState?.()?.exposure === 2, undefined, {
+      timeout: 5000,
+    });
 
     const afterExposure = await captureCanvasState(page);
     const state = await getLuminanceVisState(page);

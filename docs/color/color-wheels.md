@@ -80,6 +80,74 @@ Lift/gamma/gain is the digital equivalent of the film lab's printer lights syste
 During shot matching in dailies, use the **gain** wheel to match highlight color temperature between shots (warm vs. cool highlights), and the **lift** wheel to match shadow density and color. This is the fastest way to evaluate whether shots in a sequence will cut together before sending to the DI colorist for final grading.
 :::
 
+## Persistence and History (AppColorWiring)
+
+Color wheel adjustments are wired through `AppColorWiring`, the centralized module that connects all color controls to the application's persistence and history systems. This means color wheel state is fully integrated with undo/redo, session save/load, and auto-save recovery.
+
+### Data Flow
+
+```
+ ColorWheels UI           AppColorWiring              Subsystems
+ ──────────────          ────────────────            ────────────
+      │                        │                          │
+      │  stateChanged event    │                          │
+      ├───────────────────────>│                          │
+      │                        │── viewer.onColorWheelsChanged()
+      │                        │── sessionBridge.scheduleUpdateScopes()
+      │                        │── persistenceManager.syncGTOStore()
+      │                        │                          │
+      │                        │   (500ms debounce)       │
+      │                        │── historyManager.recordAction()
+      │                        │     ├─ undo: setState(prev) + onColorWheelsChanged()
+      │                        │     └─ redo: setState(curr) + onColorWheelsChanged()
+      │                        │                          │
+```
+
+### How It Works
+
+1. **Event source:** The `ColorWheels` component emits a `stateChanged` event whenever the user drags a wheel or adjusts a value.
+2. **Immediate effects:** `AppColorWiring` listens for `stateChanged` and immediately calls `viewer.onColorWheelsChanged()` to update the GPU shader, then triggers scope updates and GTO store sync for persistence.
+3. **Debounced history:** A 500ms debounce timer batches rapid adjustments (e.g., dragging a wheel) into a single undo/redo entry. The timer captures the previous state snapshot before it fires, so undo restores the state from before the drag began.
+4. **Session serialization:** The `persistenceManager.syncGTOStore()` call ensures the current `ColorWheelsState` is written into the session state, which is then available for auto-save, manual save (`.orvproject`), and snapshot creation.
+
+### Serialized State Shape
+
+Color wheel state is stored in `SessionState.colorWheels` as a `ColorWheelsState` object:
+
+```typescript
+interface WheelValues {
+  r: number;  // Red channel offset
+  g: number;  // Green channel offset
+  b: number;  // Blue channel offset
+  y: number;  // Luminance (master brightness) offset
+}
+
+interface ColorWheelsState {
+  lift: WheelValues;    // Shadow zone
+  gamma: WheelValues;   // Midtone zone
+  gain: WheelValues;    // Highlight zone
+  master: WheelValues;  // Full-range zone
+  linked: boolean;      // Whether wheels are linked together
+}
+```
+
+Default values are all zeros with `linked: false`, meaning no color correction is applied.
+
+### Undo/Redo Behavior
+
+Each undo/redo entry stores a deep copy of the full `ColorWheelsState`. On undo or redo, the wiring calls `viewer.getColorWheels().setState(snapshot)` followed by `viewer.onColorWheelsChanged()` and a scope update. This restores the exact wheel positions and re-renders the image in a single step.
+
+### Source Files
+
+| File | Role |
+|------|------|
+| `src/AppColorWiring.ts` | Wiring logic: event subscriptions, debounced history, persistence triggers |
+| `src/ui/components/ColorWheels.ts` | UI component: wheel rendering, drag interaction, `stateChanged` event emitter |
+| `src/core/types/color.ts` | Type definitions: `ColorWheelsState`, `WheelValues`, defaults |
+| `src/core/session/SessionState.ts` | Session schema: `colorWheels?: ColorWheelsState` field |
+
+---
+
 ## Typical Workflows
 
 - **Warm highlights, cool shadows:** Push the gain wheel toward orange/yellow and the lift wheel toward blue for a classic cinematic look.

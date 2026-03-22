@@ -26,18 +26,16 @@ const INVALID_LUT = 'sample/invalid_lut.cube';
 
 // Helper to wait for LUT loaded state
 async function waitForLUTLoaded(page: import('@playwright/test').Page) {
-  await page.waitForFunction(
-    () => (window as any).__OPENRV_TEST__?.getColorState()?.hasLUT === true,
-    { timeout: 5000 },
-  );
+  await page.waitForFunction(() => (window as any).__OPENRV_TEST__?.getColorState()?.hasLUT === true, {
+    timeout: 5000,
+  });
 }
 
 // Helper to wait for LUT cleared state
 async function waitForLUTCleared(page: import('@playwright/test').Page) {
-  await page.waitForFunction(
-    () => (window as any).__OPENRV_TEST__?.getColorState()?.hasLUT === false,
-    { timeout: 5000 },
-  );
+  await page.waitForFunction(() => (window as any).__OPENRV_TEST__?.getColorState()?.hasLUT === false, {
+    timeout: 5000,
+  });
 }
 
 // Helper to wait for color panel to be ready
@@ -49,11 +47,7 @@ async function waitForColorPanel(page: import('@playwright/test').Page) {
 }
 
 // Helper to wait for color state property to match expected value
-async function waitForColorStateValue(
-  page: import('@playwright/test').Page,
-  property: string,
-  expectedValue: any,
-) {
+async function waitForColorStateValue(page: import('@playwright/test').Page, property: string, expectedValue: any) {
   await page.waitForFunction(
     ({ prop, expected }) => {
       const state = (window as any).__OPENRV_TEST__?.getColorState();
@@ -66,10 +60,9 @@ async function waitForColorStateValue(
 
 // Helper to wait for histogram to be visible
 async function waitForHistogramVisible(page: import('@playwright/test').Page) {
-  await page.waitForFunction(
-    () => (window as any).__OPENRV_TEST__?.getViewerState()?.histogramVisible === true,
-    { timeout: 5000 },
-  );
+  await page.waitForFunction(() => (window as any).__OPENRV_TEST__?.getViewerState()?.histogramVisible === true, {
+    timeout: 5000,
+  });
 }
 
 test.describe('3D LUT Support', () => {
@@ -143,12 +136,20 @@ test.describe('3D LUT Support', () => {
       const screenshotFull = await captureViewerScreenshot(page);
 
       // Find intensity slider
-      const intensitySlider = page.locator('.color-controls-panel input[type="range"]').filter({
-        has: page.locator('xpath=../preceding-sibling::label[contains(text(), "Intensity")]'),
-      }).first();
+      const intensitySlider = page
+        .locator('.color-controls-panel input[type="range"]')
+        .filter({
+          has: page.locator('xpath=../preceding-sibling::label[contains(text(), "Intensity")]'),
+        })
+        .first();
 
       // Try alternative: find by looking for slider after "Intensity" label
-      const intensityRow = page.locator('.color-controls-panel').locator('label:has-text("Intensity")').locator('..').locator('input[type="range"]').first();
+      const intensityRow = page
+        .locator('.color-controls-panel')
+        .locator('label:has-text("Intensity")')
+        .locator('..')
+        .locator('input[type="range"]')
+        .first();
 
       if (await intensityRow.isVisible()) {
         // Set to 50%
@@ -225,7 +226,9 @@ test.describe('3D LUT Support', () => {
       expect(imagesAreDifferent(screenshotOriginal, screenshotWithLUT)).toBe(true);
 
       // Find and click clear button (X or "Remove LUT")
-      const clearButton = page.locator('.color-controls-panel button:has-text("✕"), .color-controls-panel button[title*="Remove LUT"]').first();
+      const clearButton = page
+        .locator('.color-controls-panel button:has-text("✕"), .color-controls-panel button[title*="Remove LUT"]')
+        .first();
       if (await clearButton.isVisible()) {
         await clearButton.click();
         await waitForLUTCleared(page);
@@ -280,7 +283,12 @@ test.describe('3D LUT Support', () => {
       expect(state.lutIntensity).toBe(1); // Default 100%
 
       // Set intensity to 0
-      const intensityRow = page.locator('.color-controls-panel').locator('label:has-text("Intensity")').locator('..').locator('input[type="range"]').first();
+      const intensityRow = page
+        .locator('.color-controls-panel')
+        .locator('label:has-text("Intensity")')
+        .locator('..')
+        .locator('input[type="range"]')
+        .first();
 
       if (await intensityRow.isVisible()) {
         await intensityRow.fill('0');
@@ -375,10 +383,9 @@ test.describe('3D LUT Support', () => {
 
       // Navigate to different frame
       await page.keyboard.press('ArrowRight');
-      await page.waitForFunction(
-        () => (window as any).__OPENRV_TEST__?.getColorState()?.hasLUT === true,
-        { timeout: 5000 },
-      );
+      await page.waitForFunction(() => (window as any).__OPENRV_TEST__?.getColorState()?.hasLUT === true, {
+        timeout: 5000,
+      });
 
       // LUT should still be active
       state = await getColorState(page);
@@ -386,10 +393,9 @@ test.describe('3D LUT Support', () => {
 
       // Navigate back
       await page.keyboard.press('ArrowLeft');
-      await page.waitForFunction(
-        () => (window as any).__OPENRV_TEST__?.getColorState()?.hasLUT === true,
-        { timeout: 5000 },
-      );
+      await page.waitForFunction(() => (window as any).__OPENRV_TEST__?.getColorState()?.hasLUT === true, {
+        timeout: 5000,
+      });
 
       state = await getColorState(page);
       expect(state.hasLUT).toBe(true);
@@ -405,7 +411,12 @@ test.describe('3D LUT Support', () => {
       await waitForLUTLoaded(page);
 
       // Set intensity to 50%
-      const intensityRow = page.locator('.color-controls-panel').locator('label:has-text("Intensity")').locator('..').locator('input[type="range"]').first();
+      const intensityRow = page
+        .locator('.color-controls-panel')
+        .locator('label:has-text("Intensity")')
+        .locator('..')
+        .locator('input[type="range"]')
+        .first();
 
       if (await intensityRow.isVisible()) {
         await intensityRow.fill('0.5');
@@ -417,17 +428,11 @@ test.describe('3D LUT Support', () => {
 
         // Close panel
         await page.keyboard.press('c');
-        await page.waitForFunction(
-          () => document.querySelector('.color-controls-panel') === null,
-          { timeout: 2000 },
-        );
+        await page.waitForFunction(() => document.querySelector('.color-controls-panel') === null, { timeout: 2000 });
 
         // Reopen panel
         await page.keyboard.press('c');
-        await page.waitForFunction(
-          () => document.querySelector('.color-controls-panel') !== null,
-          { timeout: 2000 },
-        );
+        await page.waitForFunction(() => document.querySelector('.color-controls-panel') !== null, { timeout: 2000 });
 
         // Intensity should be preserved
         state = await getColorState(page);

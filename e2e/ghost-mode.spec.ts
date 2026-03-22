@@ -250,10 +250,12 @@ test.describe('Ghost Mode (Onion Skin)', () => {
       expect(state.ghostMode).toBe(false);
 
       // Check if ghost mode button exists and shows inactive state
-      const ghostButton = page.locator('button[title*="Ghost"], button[title*="ghost"], button:has-text("Ghost")').first();
+      const ghostButton = page
+        .locator('button[title*="Ghost"], button[title*="ghost"], button:has-text("Ghost")')
+        .first();
       if (await ghostButton.isVisible()) {
         // Get initial styling
-        const initialClass = await ghostButton.getAttribute('class') || '';
+        const initialClass = (await ghostButton.getAttribute('class')) || '';
 
         // Enable ghost mode
         await page.keyboard.press('g');
@@ -263,7 +265,7 @@ test.describe('Ghost Mode (Onion Skin)', () => {
         expect(state.ghostMode).toBe(true);
 
         // Button should now have active styling
-        const activeClass = await ghostButton.getAttribute('class') || '';
+        const activeClass = (await ghostButton.getAttribute('class')) || '';
         // At minimum, state should be updated - UI reflection is implementation dependent
       }
     });

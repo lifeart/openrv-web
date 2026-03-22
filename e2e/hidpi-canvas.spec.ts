@@ -164,12 +164,7 @@ test.describe('Hi-DPI Canvas Support', () => {
 
       let hasTextPixels = false;
       try {
-        const imageData = ctx.getImageData(
-          Math.floor(centerX - size / 2),
-          Math.floor(centerY - size / 2),
-          size,
-          size
-        );
+        const imageData = ctx.getImageData(Math.floor(centerX - size / 2), Math.floor(centerY - size / 2), size, size);
 
         // Check if there are any non-background pixels (text)
         for (let i = 0; i < imageData.data.length; i += 4) {
@@ -196,8 +191,7 @@ test.describe('Hi-DPI Canvas Support', () => {
         cssHeight,
         hasTextPixels,
         // Verify physical dimensions are scaled by DPR
-        isProperlyScaled: Math.abs(el.width - cssWidth * dpr) <= 1 &&
-                          Math.abs(el.height - cssHeight * dpr) <= 1,
+        isProperlyScaled: Math.abs(el.width - cssWidth * dpr) <= 1 && Math.abs(el.height - cssHeight * dpr) <= 1,
       };
     });
 

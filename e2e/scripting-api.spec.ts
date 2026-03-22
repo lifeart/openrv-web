@@ -5,12 +5,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import {
-  loadVideoFile,
-  waitForTestHelper,
-  getSessionState,
-  getViewerState,
-} from './fixtures';
+import { loadVideoFile, waitForTestHelper, getSessionState, getViewerState } from './fixtures';
 
 test.describe('Scripting API', () => {
   test.beforeEach(async ({ page }) => {
@@ -333,7 +328,9 @@ test.describe('Scripting API', () => {
     test('SCRIPT-092: openrv.events.off() removes callback', async ({ page }) => {
       const callCount = await page.evaluate(() => {
         let count = 0;
-        const handler = () => { count++; };
+        const handler = () => {
+          count++;
+        };
         window.openrv?.events.on('frameChange', handler);
         window.openrv?.playback.seek(5);
         // Remove listener
@@ -347,7 +344,9 @@ test.describe('Scripting API', () => {
     test('SCRIPT-093: openrv.events.once() fires only once', async ({ page }) => {
       const callCount = await page.evaluate(() => {
         let count = 0;
-        window.openrv?.events.once('frameChange', () => { count++; });
+        window.openrv?.events.once('frameChange', () => {
+          count++;
+        });
         window.openrv?.playback.seek(5);
         window.openrv?.playback.seek(10);
         window.openrv?.playback.seek(15);
@@ -359,7 +358,9 @@ test.describe('Scripting API', () => {
     test('SCRIPT-094: on() returns unsubscribe function', async ({ page }) => {
       const callCount = await page.evaluate(() => {
         let count = 0;
-        const unsub = window.openrv?.events.on('frameChange', () => { count++; });
+        const unsub = window.openrv?.events.on('frameChange', () => {
+          count++;
+        });
         window.openrv?.playback.seek(5);
         // Unsubscribe using returned function
         unsub?.();

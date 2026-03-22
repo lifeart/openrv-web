@@ -103,6 +103,13 @@ export class Renderer implements RendererBackend {
   // Whether a half-float (RGBA16F) drawing buffer is active via drawingBufferStorage
   private usingHalfFloatBackbuffer = false;
 
+  // Context loss tracking — when true, all GL calls are skipped until restored
+  private _contextLost = false;
+
+  // Bound event handlers for context loss/restore (stored for removeEventListener in dispose)
+  private _onContextLost: ((e: Event) => void) | null = null;
+  private _onContextRestored: (() => void) | null = null;
+
   // HDR headroom: ratio of display peak luminance to SDR white (1.0 = SDR)
   private hdrHeadroom = 1.0;
 
@@ -360,6 +367,21 @@ export class Renderer implements RendererBackend {
 
     this.initShaders();
     this.initQuad();
+
+    // Register context loss/restore handlers on the canvas
+    this._contextLost = false;
+    this._onContextLost = (e: Event) => {
+      e.preventDefault(); // Required to allow context restoration
+      this._contextLost = true;
+      log.warn('WebGL context lost');
+    };
+    this._onContextRestored = () => {
+      log.info('WebGL context restored — re-initializing GPU state');
+      this._contextLost = false;
+      this.reinitializeAfterContextRestore();
+    };
+    canvas.addEventListener('webglcontextlost', this._onContextLost);
+    canvas.addEventListener('webglcontextrestored', this._onContextRestored);
   }
 
   /**
@@ -429,8 +451,90 @@ export class Renderer implements RendererBackend {
     gl.bindVertexArray(null);
   }
 
+  /**
+   * Whether the WebGL context is currently lost.
+   * When true, all GL calls are skipped until the context is restored.
+   */
+  isContextLost(): boolean {
+    return this._contextLost;
+  }
+
+  /**
+   * Re-initialize GPU state after a WebGL context restore event.
+   *
+   * When the browser restores the context, all GL objects (shaders, textures,
+   * buffers, framebuffers) are invalidated. This method recreates them from
+   * scratch so rendering can resume.
+   */
+  private reinitializeAfterContextRestore(): void {
+    if (!this.gl) return;
+
+    // Null out all GPU resource handles — they are invalid after context loss.
+    // The re-init methods below will recreate them.
+    this.displayShader = null;
+    this.quadVAO = null;
+    this.quadVBO = null;
+    this.currentTexture = null;
+    this.curvesLUTTexture = null;
+    this.falseColorLUTTexture = null;
+    this.lut3DTexture = null;
+    this.fileLUT3DTexture = null;
+    this.displayLUT3DTexture = null;
+    this.filmLUTTexture = null;
+    this.inlineLUTTexture = null;
+    this.sdrTexture = null;
+    this._sdrTextureMipmapped = false;
+    this._videoFrameTexture = null;
+    this._currentUnpackColorSpace = 'srgb';
+    this._mipmappedTextures.clear();
+    this.cachedTextureCallbacks = null;
+
+    // HDR FBO/PBO resources are also invalid
+    this.hdrFBO = null;
+    this.hdrFBOTexture = null;
+    this.hdrFBOWidth = 0;
+    this.hdrFBOHeight = 0;
+    this.hasColorBufferFloat = null;
+
+    // PBO resources
+    this.hdrPBOs = [null, null];
+    this.hdrPBOFences = [null, null];
+    this.hdrPBOWidth = 0;
+    this.hdrPBOHeight = 0;
+    this.hdrPBOCachedPixels = null;
+    this.hdrPBOReady = false;
+
+    // Scope FBO/PBO resources
+    this.scopeFBO = null;
+    this.scopeFBOTexture = null;
+    this.scopeFBOWidth = 0;
+    this.scopeFBOHeight = 0;
+    this.scopePBOs = [null, null];
+    this.scopePBOFences = [null, null];
+    this.scopePBOWidth = 0;
+    this.scopePBOHeight = 0;
+    this.scopePBOCachedPixels = null;
+    this.scopePBOCachedPixelsUint8 = null;
+    this.scopePBOReady = false;
+    this.scopeFBOFormat = 'rgba16f';
+    this.scopePBOFormat = 'rgba16f';
+
+    // Re-check extensions (context restore may change availability)
+    const gl = this.gl;
+    const floatLinear = gl.getExtension('OES_texture_float_linear');
+    const colorBufferFloat = gl.getExtension('EXT_color_buffer_float');
+    this._mipmapSupported = !!(floatLinear && colorBufferFloat && typeof gl.generateMipmap === 'function');
+    this.parallelCompileExt = gl.getExtension('KHR_parallel_shader_compile');
+
+    // Re-create shaders and quad geometry
+    this.initShaders();
+    this.initQuad();
+
+    log.info('GPU state re-initialized after context restore');
+  }
+
   resize(width: number, height: number): void {
-    if (!this.canvas || !this.gl) return;
+    if (!this.canvas || !this.gl || this._contextLost) return;
 
     this.canvas.width = width;
     this.canvas.height = height;
@@ -452,13 +556,13 @@ export class Renderer implements RendererBackend {
    * resolution while the viewport is reduced during active interactions.
    */
   setViewport(width: number, height: number): void {
-    if (this.gl) {
+    if (this.gl && !this._contextLost) {
       this.gl.viewport(0, 0, width, height);
     }
   }
 
   clear(r = 0.1, g = 0.1, b = 0.1, a = 1): void {
-    if (!this.gl) return;
+    if (!this.gl || this._contextLost) return;
 
     this.gl.clearColor(r, g, b, a);
     this.gl.clear(this.gl.COLOR_BUFFER_BIT);
@@ -470,15 +574,15 @@ export class Renderer implements RendererBackend {
    * before the main draw call.
    */
   ensureImageTexture(image: IPImage): WebGLTexture | null {
-    if (!this.gl || !this.displayShader) return null;
-    if (image.textureNeedsUpdate || !image.texture) {
+    if (!this.gl || !this.displayShader || this._contextLost) return null;
+    if (image.textureNeedsUpdate || !image.texture || !this.gl.isTexture(image.texture)) {
       this.updateTexture(image);
     }
     return image.texture ?? null;
   }
 
   renderImage(image: IPImage, offsetX = 0, offsetY = 0, scaleX = 1, scaleY = 1): void {
-    if (!this.gl || !this.displayShader) return;
+    if (!this.gl || !this.displayShader || this._contextLost) return;
 
     // Skip rendering if the shader is still compiling (parallel compile path).
     // The caller should poll isShaderReady() or await initAsync() first.
@@ -486,8 +590,8 @@ export class Renderer implements RendererBackend {
 
     const gl = this.gl;
 
-    // Update texture if needed
-    if (image.textureNeedsUpdate || !image.texture) {
+    // Update texture if needed (gl.isTexture detects stale handles after context restore)
+    if (image.textureNeedsUpdate || !image.texture || !gl.isTexture(image.texture)) {
       PerfTrace.begin('updateTexture');
       this.updateTexture(image);
       PerfTrace.end('updateTexture');
@@ -592,13 +696,15 @@ export class Renderer implements RendererBackend {
    * @param tiles - Array of { image, viewport } entries to render
    */
   renderTiledImages(tiles: { image: IPImage; viewport: TileViewport }[]): void {
-    if (!this.gl || !this.displayShader || tiles.length === 0) return;
+    if (!this.gl || !this.displayShader || tiles.length === 0 || this._contextLost) return;
     if (!this.displayShader.isReady()) return;
 
     const gl = this.gl;
 
-    // Save current viewport
+    // Save current viewport and scissor state
     const prevViewport = gl.getParameter(gl.VIEWPORT) as Int32Array;
+    const prevScissorTest = gl.isEnabled(gl.SCISSOR_TEST);
+    const prevScissorBox = gl.getParameter(gl.SCISSOR_BOX) as Int32Array;
 
     // Enable scissor test to clip each tile to its viewport region
     gl.enable(gl.SCISSOR_TEST);
@@ -617,7 +723,10 @@ export class Renderer implements RendererBackend {
       }
     } finally {
       // Restore previous state
-      gl.disable(gl.SCISSOR_TEST);
+      if (!prevScissorTest) {
+        gl.disable(gl.SCISSOR_TEST);
+      }
+      gl.scissor(prevScissorBox[0]!, prevScissorBox[1]!, prevScissorBox[2]!, prevScissorBox[3]!);
       gl.viewport(prevViewport[0]!, prevViewport[1]!, prevViewport[2]!, prevViewport[3]!);
     }
   }
@@ -1366,7 +1475,7 @@ export class Renderer implements RendererBackend {
     targetHeight: number,
   ): { data: Float32Array; width: number; height: number } | null {
     const gl = this.gl;
-    if (!gl || !this.displayShader) return null;
+    if (!gl || !this.displayShader || this._contextLost) return null;
 
     // Use dedicated scope FBO/PBO pool (separate from display blit path)
     const rawPixels = this.renderImageToFloatAsyncForScopes(image, targetWidth, targetHeight);
@@ -1413,7 +1522,7 @@ export class Renderer implements RendererBackend {
     height: number,
   ): Float32Array | Uint8Array | null {
     const gl = this.gl;
-    if (!gl || !this.displayShader) return null;
+    if (!gl || !this.displayShader || this._contextLost) return null;
 
     const neededFormat = isHDRContent(image) ? 'rgba16f' : 'rgba8';
     const isSDR = neededFormat === 'rgba8';
@@ -1719,7 +1828,7 @@ export class Renderer implements RendererBackend {
 
   readPixelFloat(x: number, y: number, width: number, height: number): Float32Array | null {
     const gl = this.gl;
-    if (!gl || !this.canvas) return null;
+    if (!gl || !this.canvas || this._contextLost) return null;
     const glY = this.canvas.height - y - height; // WebGL Y is flipped
     const count = width * height * 4;
 
@@ -1760,7 +1869,7 @@ export class Renderer implements RendererBackend {
    */
   renderImageToFloat(image: IPImage, width: number, height: number): Float32Array | null {
     const gl = this.gl;
-    if (!gl || !this.displayShader) return null;
+    if (!gl || !this.displayShader || this._contextLost) return null;
 
     // Check EXT_color_buffer_float once (required for RGBA16F render target)
     if (this.hasColorBufferFloat === null) {
@@ -1844,7 +1953,7 @@ export class Renderer implements RendererBackend {
    */
   renderImageToFloatAsync(image: IPImage, width: number, height: number): Float32Array | null {
     const gl = this.gl;
-    if (!gl || !this.displayShader) return null;
+    if (!gl || !this.displayShader || this._contextLost) return null;
 
     // Check EXT_color_buffer_float once
     if (this.hasColorBufferFloat === null) {
@@ -2413,7 +2522,7 @@ export class Renderer implements RendererBackend {
   renderSDRFrame(
     source: HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | HTMLImageElement | ImageBitmap,
   ): HTMLCanvasElement | null {
-    if (!this.gl || !this.displayShader || !this.canvas) return null;
+    if (!this.gl || !this.displayShader || !this.canvas || this._contextLost) return null;
 
     // Skip rendering if the shader is still compiling (parallel compile path).
     if (!this.displayShader.isReady()) return null;
@@ -2554,6 +2663,19 @@ export class Renderer implements RendererBackend {
   }
 
   dispose(): void {
+    // Remove context loss/restore listeners before releasing GL
+    if (this.canvas) {
+      if (this._onContextLost) {
+        this.canvas.removeEventListener('webglcontextlost', this._onContextLost);
+      }
+      if (this._onContextRestored) {
+        this.canvas.removeEventListener('webglcontextrestored', this._onContextRestored);
+      }
+    }
+    this._onContextLost = null;
+    this._onContextRestored = null;
+    this._contextLost = false;
+
     if (!this.gl) return;
 
     const gl = this.gl;

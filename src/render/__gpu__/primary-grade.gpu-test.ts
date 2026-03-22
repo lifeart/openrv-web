@@ -289,5 +289,52 @@ describe('Primary Grade — Pixel Accuracy (real GPU)', () => {
         EPSILON.HDR_HALF,
       );
     });
+
+    // --- MED-48 regression: negative value clamping ---
+
+    it('MED-48: extreme negative temp on dark pixel clamps to zero', () => {
+      setup();
+      // Input: (0.02, 0.02, 0.02), temp = -100
+      // Without clamp: R = 0.02 - 0.1 = -0.08 (negative!)
+      // With clamp: R = 0 (clamped), B = 0.02 + 0.1 = 0.12
+      const pixels = renderWith(0.02, 0.02, 0.02, (gl, prog) => {
+        gl.uniform1f(gl.getUniformLocation(prog, 'u_temperature'), -100);
+      });
+      expectPixel(pixels, W, 0, 0, { r: 0.0, g: 0.02, b: 0.12, a: 1.0 }, EPSILON.HDR_HALF);
+    });
+
+    it('MED-48: extreme positive temp on dark pixel clamps blue to zero', () => {
+      setup();
+      // Input: (0.02, 0.02, 0.02), temp = +100
+      // B = 0.02 - 0.1 = -0.08 -> clamped to 0
+      const pixels = renderWith(0.02, 0.02, 0.02, (gl, prog) => {
+        gl.uniform1f(gl.getUniformLocation(prog, 'u_temperature'), 100);
+      });
+      expectPixel(pixels, W, 0, 0, { r: 0.12, g: 0.02, b: 0.0, a: 1.0 }, EPSILON.HDR_HALF);
+    });
+
+    it('MED-48: extreme tint clamps negative R and B to zero', () => {
+      setup();
+      // Input: (0.01, 0.5, 0.01), tint = +100
+      // R = 0.01 - 0.05 = -0.04 -> clamped to 0
+      // G = 0.5 + 0.1 = 0.6
+      // B = 0.01 - 0.05 = -0.04 -> clamped to 0
+      const pixels = renderWith(0.01, 0.5, 0.01, (gl, prog) => {
+        gl.uniform1f(gl.getUniformLocation(prog, 'u_tint'), 100);
+      });
+      expectPixel(pixels, W, 0, 0, { r: 0.0, g: 0.6, b: 0.0, a: 1.0 }, EPSILON.HDR_HALF);
+    });
+
+    it('MED-48: HDR values > 1.0 are preserved (not clamped to 1.0)', () => {
+      setup();
+      // Input: (2.0, 2.0, 2.0), temp = +50
+      // R = 2.0 + 0.05 = 2.05
+      // B = 2.0 - 0.05 = 1.95
+      // All positive, no clamping needed, HDR headroom preserved
+      const pixels = renderWith(2.0, 2.0, 2.0, (gl, prog) => {
+        gl.uniform1f(gl.getUniformLocation(prog, 'u_temperature'), 50);
+      });
+      expectPixel(pixels, W, 0, 0, { r: 2.05, g: 2.0, b: 1.95, a: 1.0 }, EPSILON.HDR_HALF);
+    });
   });
 });

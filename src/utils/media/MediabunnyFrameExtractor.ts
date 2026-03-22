@@ -579,6 +579,9 @@ export class MediabunnyFrameExtractor {
 
     // Clamp frame to valid range
     const maxFrame = this.metadata.frameCount;
+    if (maxFrame <= 0) {
+      return null;
+    }
     const clampedFrame = Math.max(1, Math.min(frame, maxFrame));
 
     // Get the expected timestamp for this frame.
@@ -746,6 +749,9 @@ export class MediabunnyFrameExtractor {
 
     // Clamp frame to valid range
     const maxFrame = this.metadata.frameCount;
+    if (maxFrame <= 0) {
+      return null;
+    }
     const clampedFrame = Math.max(1, Math.min(frame, maxFrame));
 
     // Get the expected timestamp for this frame (indexed if available, else CFR math)

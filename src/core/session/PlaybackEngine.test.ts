@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { PlaybackEngine, type PlaybackEngineHost } from './PlaybackEngine';
+import { PlaybackEngine, type PlaybackEngineHost, type PlaybackStarvedEvent } from './PlaybackEngine';
 import { PLAYBACK_SPEED_PRESETS } from '../../config/PlaybackConfig';
 import { createMockPlaybackEngineHost } from '../../../test/mocks';
 
@@ -977,6 +977,35 @@ describe('PlaybackEngine', () => {
       perfNowSpy.mockRestore();
     });
 
+    it('PE-165b: fpsUpdated event includes correct payload fields', () => {
+      const perfNowSpy = vi.spyOn(performance, 'now');
+      perfNowSpy.mockReturnValue(0);
+      engine.play();
+      engine.setInOutRange(1, 200);
+      engine.currentFrame = 1;
+
+      const fpsListener = vi.fn();
+      engine.on('fpsUpdated', fpsListener);
+
+      for (let i = 1; i <= 12; i++) {
+        perfNowSpy.mockReturnValue(i * (500 / 12));
+        engine.advanceFrame(1);
+      }
+      perfNowSpy.mockReturnValue(510);
+      engine.advanceFrame(1);
+
+      expect(fpsListener.mock.calls.length).toBeGreaterThan(0);
+      const payload = fpsListener.mock.calls[0]![0];
+      expect(payload).toHaveProperty('targetFps');
+      expect(payload).toHaveProperty('effectiveTargetFps');
+      expect(payload).toHaveProperty('actualFps');
+      expect(payload).toHaveProperty('droppedFrames');
+      expect(payload).toHaveProperty('ratio');
+      expect(payload).toHaveProperty('playbackSpeed');
+
+      perfNowSpy.mockRestore();
+    });
+
     it('PE-167: normal playback FPS measurement unchanged (no skips)', () => {
       const perfNowSpy = vi.spyOn(performance, 'now');
       perfNowSpy.mockReturnValue(0);
@@ -1000,6 +1029,237 @@ describe('PlaybackEngine', () => {
       expect(engine.effectiveFps).toBeLessThan(30);
 
       perfNowSpy.mockRestore();
+    });
+  });
+
+  // ---------------------------------------------------------------
+  // Starvation pause event (MED-47)
+  // ---------------------------------------------------------------
+  describe('Starvation pause event', () => {
+    it('PE-170: isStarved defaults to false', () => {
+      expect(engine.isStarved).toBe(false);
+    });
+
+    it('PE-171: pauseReason defaults to user', () => {
+      expect(engine.pauseReason).toBe('user');
+    });
+
+    it('PE-172: manual pause does NOT emit playbackStarved', () => {
+      const starvedListener = vi.fn();
+      engine.on('playbackStarved', starvedListener);
+      engine.play();
+      engine.pause();
+      expect(starvedListener).not.toHaveBeenCalled();
+    });
+
+    it('PE-173: manual pause keeps isStarved false and pauseReason as user', () => {
+      engine.play();
+      engine.pause();
+      expect(engine.isStarved).toBe(false);
+      expect(engine.pauseReason).toBe('user');
+    });
+
+    it('PE-174: starvation pause sets isStarved to true', () => {
+      // Simulate starvation by setting _isStarved directly (as the starvation
+      // code path does after calling pause())
+      engine.play();
+      engine.pause();
+      // Simulate what the starvation code path does after pause()
+      (engine as unknown as { _isStarved: boolean })._isStarved = true;
+      expect(engine.isStarved).toBe(true);
+      expect(engine.pauseReason).toBe('starvation');
+    });
+
+    it('PE-175: play() after starvation clears isStarved', () => {
+      engine.play();
+      engine.pause();
+      (engine as unknown as { _isStarved: boolean })._isStarved = true;
+      expect(engine.isStarved).toBe(true);
+
+      engine.play();
+      expect(engine.isStarved).toBe(false);
+      expect(engine.pauseReason).toBe('user');
+    });
+
+    it('PE-176: manual pause after starvation clears isStarved', () => {
+      // Start playing, simulate starvation state
+      engine.play();
+      (engine as unknown as { _isStarved: boolean })._isStarved = true;
+
+      // Manual pause should clear starvation
+      engine.pause();
+      expect(engine.isStarved).toBe(false);
+      expect(engine.pauseReason).toBe('user');
+    });
+
+    it('PE-177: starvation pause emits both playbackChanged and playbackStarved', () => {
+      // Set up a mediabunny-style source to trigger starvation path
+      const mockVideoSourceNode = {
+        isUsingMediabunny: () => true,
+        hasFrameCached: () => false,
+        getFrameAsync: () => new Promise<void>(() => {}), // never resolves
+        updatePlaybackBuffer: vi.fn(),
+        startPlaybackPreload: vi.fn(),
+        stopPlaybackPreload: vi.fn(),
+        setPlaybackDirection: vi.fn(),
+        preloadFrames: () => Promise.resolve(),
+        isHDR: () => false,
+      };
+      const mockSource = {
+        type: 'video' as const,
+        name: 'test.mp4',
+        url: 'file:///test.mp4',
+        width: 1920,
+        height: 1080,
+        duration: 100,
+        fps: 24,
+        element: null as unknown as HTMLVideoElement | undefined,
+        videoSourceNode: mockVideoSourceNode,
+      };
+      const customHost = {
+        ...createMockPlaybackEngineHost(100),
+        getCurrentSource: () => mockSource as never,
+      };
+      engine.setHost(customHost as PlaybackEngineHost);
+      engine.setOutPointInternal(100);
+
+      const playbackChangedListener = vi.fn();
+      const starvedListener = vi.fn();
+      engine.on('playbackChanged', playbackChangedListener);
+      engine.on('playbackStarved', starvedListener);
+
+      // Mock performance.now BEFORE play() so that resetTiming() captures the
+      // mocked value as lastFrameTime.  Previously the spy was installed after
+      // play(), which meant lastFrameTime held the *real* performance.now()
+      // value.  In the full test-suite the real clock is much larger than the
+      // mocked return value, making the delta in accumulateDelta() negative and
+      // preventing the while-loop from ever entering the starvation path.
+      const perfNowSpy = vi.spyOn(performance, 'now');
+      const startTime = 1000;
+      perfNowSpy.mockReturnValue(startTime);
+
+      engine.play();
+      playbackChangedListener.mockClear();
+
+      // Force starvation: manipulate timing state to trigger shouldPause
+      const ts = (engine as unknown as { _ts: { starvationStartTime: number; consecutiveStarvationSkips: number } })
+        ._ts;
+      ts.consecutiveStarvationSkips = PlaybackEngine.MAX_CONSECUTIVE_STARVATION_SKIPS;
+
+      // Advance mocked clock well past starvation timeout
+      ts.starvationStartTime = startTime;
+      perfNowSpy.mockReturnValue(startTime + 10000);
+
+      // Trigger update which should detect starvation and pause
+      engine.update();
+
+      // Should have emitted playbackChanged: false
+      expect(playbackChangedListener).toHaveBeenCalledWith(false);
+
+      // Should have emitted playbackStarved
+      expect(starvedListener).toHaveBeenCalledTimes(1);
+      const payload: PlaybackStarvedEvent = starvedListener.mock.calls[0]![0] as PlaybackStarvedEvent;
+      expect(payload.reason).toBe('starvation');
+      expect(typeof payload.frame).toBe('number');
+      expect(typeof payload.consecutiveStarvations).toBe('number');
+
+      // isStarved should be true
+      expect(engine.isStarved).toBe(true);
+      expect(engine.pauseReason).toBe('starvation');
+
+      perfNowSpy.mockRestore();
+    });
+
+    it('PE-178: playbackStarved event includes correct frame number', () => {
+      const mockVideoSourceNode = {
+        isUsingMediabunny: () => true,
+        hasFrameCached: () => false,
+        getFrameAsync: () => new Promise<void>(() => {}),
+        updatePlaybackBuffer: vi.fn(),
+        startPlaybackPreload: vi.fn(),
+        stopPlaybackPreload: vi.fn(),
+        setPlaybackDirection: vi.fn(),
+        preloadFrames: () => Promise.resolve(),
+        isHDR: () => false,
+      };
+      const mockSource = {
+        type: 'video' as const,
+        name: 'test.mp4',
+        url: 'file:///test.mp4',
+        width: 1920,
+        height: 1080,
+        duration: 100,
+        fps: 24,
+        element: null as unknown as HTMLVideoElement | undefined,
+        videoSourceNode: mockVideoSourceNode,
+      };
+      const customHost = {
+        ...createMockPlaybackEngineHost(100),
+        getCurrentSource: () => mockSource as never,
+      };
+      engine.setHost(customHost as PlaybackEngineHost);
+      engine.setOutPointInternal(100);
+      engine.currentFrame = 42;
+
+      const starvedListener = vi.fn();
+      engine.on('playbackStarved', starvedListener);
+
+      // Mock performance.now BEFORE play() so resetTiming() sets lastFrameTime
+      // to the mocked value (see PE-177 comment for full explanation).
+      const perfNowSpy = vi.spyOn(performance, 'now');
+      perfNowSpy.mockReturnValue(1000);
+
+      engine.play();
+
+      // Force starvation
+      const ts = (engine as unknown as { _ts: { starvationStartTime: number; consecutiveStarvationSkips: number } })
+        ._ts;
+      ts.consecutiveStarvationSkips = PlaybackEngine.MAX_CONSECUTIVE_STARVATION_SKIPS;
+
+      ts.starvationStartTime = 1000;
+      perfNowSpy.mockReturnValue(11000);
+
+      engine.update();
+
+      expect(starvedListener).toHaveBeenCalledTimes(1);
+      const payload: PlaybackStarvedEvent = starvedListener.mock.calls[0]![0] as PlaybackStarvedEvent;
+      // The next frame from 42 going forward should be 43
+      expect(payload.frame).toBe(43);
+
+      perfNowSpy.mockRestore();
+    });
+
+    it('PE-179: resume after starvation pause clears starvation and allows normal pause', () => {
+      // Simulate a starvation pause occurred
+      engine.play();
+      engine.pause();
+      (engine as unknown as { _isStarved: boolean })._isStarved = true;
+      expect(engine.isStarved).toBe(true);
+
+      // User resumes playback
+      engine.play();
+      expect(engine.isStarved).toBe(false);
+
+      // User manually pauses again
+      const starvedListener = vi.fn();
+      engine.on('playbackStarved', starvedListener);
+      engine.pause();
+
+      expect(engine.isStarved).toBe(false);
+      expect(engine.pauseReason).toBe('user');
+      expect(starvedListener).not.toHaveBeenCalled();
+    });
+
+    it('PE-180: dispose clears starvation state', () => {
+      engine.play();
+      engine.pause();
+      (engine as unknown as { _isStarved: boolean })._isStarved = true;
+      expect(engine.isStarved).toBe(true);
+
+      engine.dispose();
+      // After dispose, pause() is called which clears _isStarved
+      // but since we set it after pause, check the internal state
+      expect(engine.isStarved).toBe(false);
     });
   });
 });

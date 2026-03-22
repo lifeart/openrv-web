@@ -6,12 +6,17 @@
  * without actually running in a Worker context.
  */
 
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { __test__ } from './renderWorker.worker';
-import { DATA_TYPE_CODES, TRANSFER_FUNCTION_CODES, COLOR_PRIMARIES_CODES } from '../render/renderWorker.messages';
-import type { RenderHDRMessage } from '../render/renderWorker.messages';
+import {
+  DATA_TYPE_CODES,
+  TRANSFER_FUNCTION_CODES,
+  COLOR_PRIMARIES_CODES,
+  RENDER_WORKER_PROTOCOL_VERSION,
+} from '../render/renderWorker.messages';
+import type { RenderHDRMessage, RenderWorkerMessage } from '../render/renderWorker.messages';
 
-const { reconstructIPImage, applySyncState } = __test__;
+const { reconstructIPImage, applySyncState, handleMessage } = __test__;
 
 describe('renderWorker', () => {
   afterEach(() => {
@@ -439,6 +444,104 @@ describe('renderWorker', () => {
       const image = reconstructIPImage(msg);
       // The IPImage should reference the same ArrayBuffer (zero-copy)
       expect(image.data).toBe(originalBuffer);
+    });
+  });
+
+  // ==========================================================================
+  // Protocol version mismatch handling
+  // ==========================================================================
+
+  describe('Protocol version checking', () => {
+    let postMessageSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      postMessageSpy = vi.spyOn(self, 'postMessage').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      postMessageSpy.mockRestore();
+    });
+
+    it('RW-032: matching protocol version allows message processing', () => {
+      const setColorInversion = vi.fn();
+      __test__.setRenderer({ setColorInversion } as any);
+
+      handleMessage({
+        type: 'setColorInversion',
+        enabled: true,
+        protocolVersion: RENDER_WORKER_PROTOCOL_VERSION,
+      });
+
+      expect(setColorInversion).toHaveBeenCalledWith(true);
+      // Should not send a protocolMismatch error
+      const mismatchCalls = postMessageSpy.mock.calls.filter(
+        (call: unknown[]) => (call[0] as Record<string, unknown>)?.type === 'protocolMismatch',
+      );
+      expect(mismatchCalls).toHaveLength(0);
+    });
+
+    it('RW-033: mismatched protocol version sends error response and does not process', () => {
+      const setColorInversion = vi.fn();
+      __test__.setRenderer({ setColorInversion } as any);
+
+      handleMessage({
+        type: 'setColorInversion',
+        enabled: true,
+        protocolVersion: RENDER_WORKER_PROTOCOL_VERSION + 1,
+      } as RenderWorkerMessage);
+
+      // Should NOT have processed the message
+      expect(setColorInversion).not.toHaveBeenCalled();
+
+      // Should have sent a protocolMismatch error
+      expect(postMessageSpy).toHaveBeenCalled();
+      const sentMsg = postMessageSpy.mock.calls[0][0] as any;
+      expect(sentMsg.type).toBe('protocolMismatch');
+    });
+
+    it('RW-034: missing protocol version (backward compat) allows message processing', () => {
+      const setColorInversion = vi.fn();
+      __test__.setRenderer({ setColorInversion } as any);
+
+      // Simulate an older main thread that does not send protocolVersion
+      handleMessage({
+        type: 'setColorInversion',
+        enabled: false,
+      } as RenderWorkerMessage);
+
+      expect(setColorInversion).toHaveBeenCalledWith(false);
+      // Should not send a protocolMismatch error
+      const mismatchCalls = postMessageSpy.mock.calls.filter(
+        (call: unknown[]) => (call[0] as Record<string, unknown>)?.type === 'protocolMismatch',
+      );
+      expect(mismatchCalls).toHaveLength(0);
+    });
+
+    it('RW-035: error response includes expected and actual versions', () => {
+      const wrongVersion = RENDER_WORKER_PROTOCOL_VERSION + 5;
+
+      handleMessage({
+        type: 'dispose',
+        protocolVersion: wrongVersion,
+      } as RenderWorkerMessage);
+
+      expect(postMessageSpy).toHaveBeenCalled();
+      const sentMsg = postMessageSpy.mock.calls[0][0] as any;
+      expect(sentMsg.type).toBe('protocolMismatch');
+      expect(sentMsg.expectedVersion).toBe(RENDER_WORKER_PROTOCOL_VERSION);
+      expect(sentMsg.actualVersion).toBe(wrongVersion);
+      expect(sentMsg.error).toContain(`v${wrongVersion}`);
+      expect(sentMsg.error).toContain(`v${RENDER_WORKER_PROTOCOL_VERSION}`);
+    });
+
+    it('RW-036: protocol mismatch response itself carries the current protocol version', () => {
+      handleMessage({
+        type: 'dispose',
+        protocolVersion: 999,
+      } as RenderWorkerMessage);
+
+      const sentMsg = postMessageSpy.mock.calls[0][0] as any;
+      expect(sentMsg.protocolVersion).toBe(RENDER_WORKER_PROTOCOL_VERSION);
     });
   });
 });

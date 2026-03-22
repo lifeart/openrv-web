@@ -4,14 +4,7 @@
  * Tests the JSON and PDF annotation export functionality.
  */
 
-import {
-  test,
-  expect,
-  loadVideoFile,
-  drawStroke,
-  getPaintState,
-  clickTab,
-} from './fixtures';
+import { test, expect, loadVideoFile, drawStroke, getPaintState, clickTab } from './fixtures';
 
 test.describe('Annotation Export', () => {
   test.beforeEach(async ({ page }) => {
@@ -147,7 +140,9 @@ test.describe('Annotation Export', () => {
 
       // PDF export triggers browser print dialog
       // We can verify the option is present
-      const pdfOption = page.locator('text=Export Annotations (PDF), text=Annotations (PDF), text=Annotations PDF').first();
+      const pdfOption = page
+        .locator('text=Export Annotations (PDF), text=Annotations (PDF), text=Annotations PDF')
+        .first();
       const pdfVisible = await pdfOption.isVisible().catch(() => false);
 
       // PDF option should be available when there are annotations

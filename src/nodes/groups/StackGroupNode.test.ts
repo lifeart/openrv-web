@@ -328,6 +328,59 @@ describe('StackGroupNode', () => {
     });
   });
 
+  describe('MED-08: layerOpacities property-level clamping', () => {
+    it('clamps values > 1 to 1 when set via properties.setValue', () => {
+      stackNode.properties.setValue('layerOpacities', [1.5, 2.0, 100]);
+      expect(stackNode.properties.getValue('layerOpacities')).toEqual([1, 1, 1]);
+    });
+
+    it('clamps values < 0 to 0 when set via properties.setValue', () => {
+      stackNode.properties.setValue('layerOpacities', [-0.5, -1.0, -100]);
+      expect(stackNode.properties.getValue('layerOpacities')).toEqual([0, 0, 0]);
+    });
+
+    it('passes through normal [0,1] values unchanged via properties.setValue', () => {
+      stackNode.properties.setValue('layerOpacities', [0, 0.25, 0.5, 0.75, 1]);
+      expect(stackNode.properties.getValue('layerOpacities')).toEqual([0, 0.25, 0.5, 0.75, 1]);
+    });
+
+    it('clamps NaN to 0 when set via properties.setValue', () => {
+      stackNode.properties.setValue('layerOpacities', [NaN]);
+      expect(stackNode.properties.getValue('layerOpacities')).toEqual([0]);
+    });
+
+    it('clamps Infinity to 1 and -Infinity to 0 when set via properties.setValue', () => {
+      stackNode.properties.setValue('layerOpacities', [Infinity, -Infinity]);
+      expect(stackNode.properties.getValue('layerOpacities')).toEqual([0, 0]);
+    });
+
+    it('setLayerSettings still clamps correctly (defense-in-depth)', () => {
+      const input = new MockInputNode('Input');
+      stackNode.connectInput(input);
+
+      stackNode.setLayerSettings(0, { opacity: 2.5 });
+      expect(stackNode.getLayerSettings(0).opacity).toBe(1);
+
+      stackNode.setLayerSettings(0, { opacity: -3 });
+      expect(stackNode.getLayerSettings(0).opacity).toBe(0);
+    });
+
+    it('setLayerOpacities still clamps correctly (defense-in-depth)', () => {
+      stackNode.setLayerOpacities([-1, 2, 0.5]);
+      expect(stackNode.properties.getValue('layerOpacities')).toEqual([0, 1, 0.5]);
+    });
+
+    it('handles mixed valid and invalid values via properties.setValue', () => {
+      stackNode.properties.setValue('layerOpacities', [-0.1, 0.5, 1.1]);
+      expect(stackNode.properties.getValue('layerOpacities')).toEqual([0, 0.5, 1]);
+    });
+
+    it('handles empty array via properties.setValue', () => {
+      stackNode.properties.setValue('layerOpacities', []);
+      expect(stackNode.properties.getValue('layerOpacities')).toEqual([]);
+    });
+  });
+
   describe('composite type', () => {
     it('getCompositeType returns default', () => {
       expect(stackNode.getCompositeType()).toBe('replace');

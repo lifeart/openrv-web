@@ -82,8 +82,12 @@ export class StackGroupNode extends BaseGroupNode {
 
     // Per-layer blend modes (array indexed by input)
     this.properties.add({ name: 'layerBlendModes', defaultValue: [] });
-    // Per-layer opacities (array indexed by input)
-    this.properties.add({ name: 'layerOpacities', defaultValue: [] });
+    // Per-layer opacities (array indexed by input), clamped to [0,1]
+    this.properties.add({
+      name: 'layerOpacities',
+      defaultValue: [] as number[],
+      transform: (values: number[]) => values.map((v) => Math.max(0, Math.min(1, Number.isFinite(v) ? v : 0))),
+    });
     // Per-layer visibility (array indexed by input)
     this.properties.add({ name: 'layerVisible', defaultValue: [] });
     // Per-layer stencil boxes (array of StencilBox indexed by input)

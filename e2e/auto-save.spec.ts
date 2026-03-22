@@ -61,9 +61,7 @@ test.describe('Auto-Save Feature', () => {
   });
 
   test.describe('Auto-Save Status Changes', () => {
-    test('AUTOSAVE-E005: indicator responds to media load', async ({
-      page,
-    }) => {
+    test('AUTOSAVE-E005: indicator responds to media load', async ({ page }) => {
       await page.goto('/');
       await page.waitForSelector('#app');
 
@@ -112,7 +110,7 @@ test.describe('Auto-Save Feature', () => {
 
       // Get initial icon color
       const icon = page.locator('[data-testid="autosave-icon"]');
-      const initialColor = await icon.evaluate(el => getComputedStyle(el).color);
+      const initialColor = await icon.evaluate((el) => getComputedStyle(el).color);
 
       // Color should be defined (gray for idle)
       expect(initialColor).toBeTruthy();
@@ -154,7 +152,7 @@ test.describe('Auto-Save Feature', () => {
       await expect(indicator).toBeVisible();
 
       // Check that indicator has a color defined (from CSS variable or fallback)
-      const color = await indicator.evaluate(el => getComputedStyle(el).color);
+      const color = await indicator.evaluate((el) => getComputedStyle(el).color);
       expect(color).toBeTruthy();
       // Color should be in rgb format (browser computed style)
       expect(color).toMatch(/^rgb/);
@@ -168,7 +166,7 @@ test.describe('Auto-Save Feature', () => {
       await expect(indicator).toBeVisible();
 
       // In idle state, cursor should be default
-      const cursor = await indicator.evaluate(el => getComputedStyle(el).cursor);
+      const cursor = await indicator.evaluate((el) => getComputedStyle(el).cursor);
       expect(cursor).toBe('default');
     });
 
