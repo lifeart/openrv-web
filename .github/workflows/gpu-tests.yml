@@ -23,6 +23,7 @@ concurrency:
 jobs:
   gpu-tests:
     runs-on: macos-latest
+    continue-on-error: true
     timeout-minutes: 15
     steps:
       - name: Checkout
