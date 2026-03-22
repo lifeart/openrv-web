@@ -45,12 +45,15 @@ test.describe('Multi-Source Comparison', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.setCurrentAB?.('B');
     });
-    await waitForCondition(page, `
+    await waitForCondition(
+      page,
+      `
       (() => {
         const state = window.__OPENRV_TEST__?.getSessionState();
         return state?.currentAB === 'B';
       })()
-    `);
+    `,
+    );
     await page.waitForTimeout(200);
 
     // Capture B source screenshot
@@ -97,12 +100,15 @@ test.describe('Multi-Source Comparison', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.setWipePosition?.(0.25);
     });
-    await waitForCondition(page, `
+    await waitForCondition(
+      page,
+      `
       (() => {
         const state = window.__OPENRV_TEST__?.getViewerState();
         return state != null && Math.abs(state.wipePosition - 0.25) < 0.05;
       })()
-    `);
+    `,
+    );
     await page.waitForTimeout(200);
 
     const movedScreenshot = await captureViewerScreenshot(page);

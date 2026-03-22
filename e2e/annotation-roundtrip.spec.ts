@@ -73,12 +73,15 @@ test.describe('Annotation Roundtrip', () => {
 
     // Navigate to a different frame
     await page.keyboard.press('ArrowRight');
-    await waitForCondition(page, `
+    await waitForCondition(
+      page,
+      `
       (() => {
         const s = window.__OPENRV_TEST__?.getSessionState();
         return s?.currentFrame !== ${startFrame};
       })()
-    `);
+    `,
+    );
 
     // The new frame should not have annotations (unless hold mode)
     const paintState = await getPaintState(page);

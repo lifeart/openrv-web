@@ -1,5 +1,11 @@
 import { test, expect } from '@playwright/test';
-import { loadVideoFile, waitForTestHelper, getSessionState, openKeyboardShortcutsDialog, openCustomKeyBindingsDialog } from './fixtures';
+import {
+  loadVideoFile,
+  waitForTestHelper,
+  getSessionState,
+  openKeyboardShortcutsDialog,
+  openCustomKeyBindingsDialog,
+} from './fixtures';
 
 /**
  * Custom Keybindings Tests
@@ -37,7 +43,9 @@ test.describe('Custom Keybindings', () => {
 
     // Click the first binding row's rebind button
     const firstRow = dialog.locator('[data-testid="binding-row"]').first();
-    const rebindButton = firstRow.locator('[data-testid="rebind-button"], button:has-text("Rebind"), button:has-text("Edit")').first();
+    const rebindButton = firstRow
+      .locator('[data-testid="rebind-button"], button:has-text("Rebind"), button:has-text("Edit")')
+      .first();
     await rebindButton.click();
     await page.waitForTimeout(200);
 
@@ -62,8 +70,13 @@ test.describe('Custom Keybindings', () => {
     await expect(dialog).toBeVisible({ timeout: 3000 });
 
     // Find the "Play/Pause" action row and rebind it
-    const playRow = dialog.locator('[data-testid="binding-row"]').filter({ hasText: /Play|play/ }).first();
-    const rebindButton = playRow.locator('[data-testid="rebind-button"], button:has-text("Rebind"), button:has-text("Edit")').first();
+    const playRow = dialog
+      .locator('[data-testid="binding-row"]')
+      .filter({ hasText: /Play|play/ })
+      .first();
+    const rebindButton = playRow
+      .locator('[data-testid="rebind-button"], button:has-text("Rebind"), button:has-text("Edit")')
+      .first();
     await rebindButton.click();
     await page.waitForTimeout(200);
 
@@ -72,7 +85,9 @@ test.describe('Custom Keybindings', () => {
     await page.waitForTimeout(300);
 
     // Save / close dialog
-    const saveButton = dialog.locator('button:has-text("Save"), button:has-text("Apply"), button:has-text("Done")').first();
+    const saveButton = dialog
+      .locator('button:has-text("Save"), button:has-text("Apply"), button:has-text("Done")')
+      .first();
     if (await saveButton.isVisible().catch(() => false)) {
       await saveButton.click();
       await page.waitForTimeout(200);
@@ -116,7 +131,10 @@ test.describe('Custom Keybindings', () => {
     const secondRowKey = await rows.nth(1).locator('[data-testid="binding-key"], .binding-key').first().textContent();
 
     // Try to rebind the first action to the same key as the second action
-    const firstRebind = rows.first().locator('[data-testid="rebind-button"], button:has-text("Rebind"), button:has-text("Edit")').first();
+    const firstRebind = rows
+      .first()
+      .locator('[data-testid="rebind-button"], button:has-text("Rebind"), button:has-text("Edit")')
+      .first();
     await firstRebind.click();
     await page.waitForTimeout(200);
 
@@ -127,9 +145,11 @@ test.describe('Custom Keybindings', () => {
     await page.waitForTimeout(300);
 
     // A conflict warning should appear
-    const conflictWarning = page.locator(
-      '[data-testid="binding-conflict-warning"], .conflict-warning, .binding-conflict, [role="alert"]:has-text("conflict"), [role="alert"]:has-text("already")'
-    ).first();
+    const conflictWarning = page
+      .locator(
+        '[data-testid="binding-conflict-warning"], .conflict-warning, .binding-conflict, [role="alert"]:has-text("conflict"), [role="alert"]:has-text("already")',
+      )
+      .first();
     const hasConflict = await conflictWarning.isVisible({ timeout: 2000 }).catch(() => false);
     expect(hasConflict).toBe(true);
   });
@@ -145,7 +165,9 @@ test.describe('Custom Keybindings', () => {
     const originalKey = await firstRow.locator('[data-testid="binding-key"], .binding-key').first().textContent();
 
     // Rebind it to something else
-    const rebindButton = firstRow.locator('[data-testid="rebind-button"], button:has-text("Rebind"), button:has-text("Edit")').first();
+    const rebindButton = firstRow
+      .locator('[data-testid="rebind-button"], button:has-text("Rebind"), button:has-text("Edit")')
+      .first();
     await rebindButton.click();
     await page.waitForTimeout(200);
     await page.keyboard.press('Shift+F12');
@@ -156,7 +178,9 @@ test.describe('Custom Keybindings', () => {
     expect(modifiedKey).not.toBe(originalKey);
 
     // Click the reset button for this specific binding
-    const resetButton = firstRow.locator('[data-testid="reset-binding-button"], button:has-text("Reset"), button[title*="Reset"]').first();
+    const resetButton = firstRow
+      .locator('[data-testid="reset-binding-button"], button:has-text("Reset"), button[title*="Reset"]')
+      .first();
     await resetButton.click();
     await page.waitForTimeout(200);
 
@@ -174,7 +198,9 @@ test.describe('Custom Keybindings', () => {
     // Modify the first two bindings
     for (let i = 0; i < 2; i++) {
       const row = dialog.locator('[data-testid="binding-row"]').nth(i);
-      const rebindButton = row.locator('[data-testid="rebind-button"], button:has-text("Rebind"), button:has-text("Edit")').first();
+      const rebindButton = row
+        .locator('[data-testid="rebind-button"], button:has-text("Rebind"), button:has-text("Edit")')
+        .first();
       await rebindButton.click();
       await page.waitForTimeout(200);
       // Assign a unique unlikely key
@@ -183,12 +209,18 @@ test.describe('Custom Keybindings', () => {
     }
 
     // Click "Reset All" button
-    const resetAllButton = dialog.locator('[data-testid="reset-all-bindings-button"], button:has-text("Reset All"), button:has-text("Restore Defaults")').first();
+    const resetAllButton = dialog
+      .locator(
+        '[data-testid="reset-all-bindings-button"], button:has-text("Reset All"), button:has-text("Restore Defaults")',
+      )
+      .first();
     await resetAllButton.click();
     await page.waitForTimeout(300);
 
     // If there is a confirmation dialog, accept it
-    const confirmButton = page.locator('button:has-text("Confirm"), button:has-text("Yes"), button:has-text("OK")').first();
+    const confirmButton = page
+      .locator('button:has-text("Confirm"), button:has-text("Yes"), button:has-text("OK")')
+      .first();
     if (await confirmButton.isVisible({ timeout: 1000 }).catch(() => false)) {
       await confirmButton.click();
       await page.waitForTimeout(200);
@@ -211,14 +243,18 @@ test.describe('Custom Keybindings', () => {
 
     // Rebind the first action to Shift+F9
     const firstRow = dialog.locator('[data-testid="binding-row"]').first();
-    const rebindButton = firstRow.locator('[data-testid="rebind-button"], button:has-text("Rebind"), button:has-text("Edit")').first();
+    const rebindButton = firstRow
+      .locator('[data-testid="rebind-button"], button:has-text("Rebind"), button:has-text("Edit")')
+      .first();
     await rebindButton.click();
     await page.waitForTimeout(200);
     await page.keyboard.press('Shift+F9');
     await page.waitForTimeout(300);
 
     // Save and close
-    const saveButton = dialog.locator('button:has-text("Save"), button:has-text("Apply"), button:has-text("Done")').first();
+    const saveButton = dialog
+      .locator('button:has-text("Save"), button:has-text("Apply"), button:has-text("Done")')
+      .first();
     if (await saveButton.isVisible().catch(() => false)) {
       await saveButton.click();
       await page.waitForTimeout(200);
@@ -256,7 +292,9 @@ test.describe('Custom Keybindings', () => {
     const originalKey = await firstRow.locator('[data-testid="binding-key"], .binding-key').first().textContent();
 
     // Start rebinding
-    const rebindButton = firstRow.locator('[data-testid="rebind-button"], button:has-text("Rebind"), button:has-text("Edit")').first();
+    const rebindButton = firstRow
+      .locator('[data-testid="rebind-button"], button:has-text("Rebind"), button:has-text("Edit")')
+      .first();
     await rebindButton.click();
     await page.waitForTimeout(200);
 

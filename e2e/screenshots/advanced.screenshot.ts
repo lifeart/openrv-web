@@ -7,17 +7,8 @@
  */
 
 import { test, expect } from '@playwright/test';
-import {
-  initApp,
-  initWithVideo,
-  takeDocScreenshot,
-  switchTab,
-  waitForCanvasStable,
-} from './screenshot-helpers';
-import {
-  loadTwoVideoFiles,
-  loadExrFile,
-} from '../fixtures';
+import { initApp, initWithVideo, takeDocScreenshot, switchTab, waitForCanvasStable } from './screenshot-helpers';
+import { loadTwoVideoFiles, loadExrFile } from '../fixtures';
 
 test.describe('Advanced Feature Screenshots', () => {
   // ── 53: Filters panel ───────────────────────────────────────────────
@@ -28,9 +19,9 @@ test.describe('Advanced Feature Screenshots', () => {
     await page.waitForTimeout(300);
 
     // Open filters panel via Shift+Alt+E or click button
-    const filterButton = page.locator(
-      '[data-testid="filter-control-button"], button:has-text("Filter"), [title*="Filter"]',
-    ).first();
+    const filterButton = page
+      .locator('[data-testid="filter-control-button"], button:has-text("Filter"), [title*="Filter"]')
+      .first();
     if (await filterButton.isVisible({ timeout: 2000 }).catch(() => false)) {
       await filterButton.click();
       await page.waitForTimeout(500);
@@ -51,9 +42,9 @@ test.describe('Advanced Feature Screenshots', () => {
     await page.waitForTimeout(300);
 
     // Enable crop mode via toolbar button (data-testid="crop-control-button")
-    const cropButton = page.locator(
-      '[data-testid="crop-control-button"], button:has-text("Crop"), [title*="Crop"]',
-    ).first();
+    const cropButton = page
+      .locator('[data-testid="crop-control-button"], button:has-text("Crop"), [title*="Crop"]')
+      .first();
     if (await cropButton.isVisible({ timeout: 2000 }).catch(() => false)) {
       await cropButton.click();
       await page.waitForTimeout(500);
@@ -77,9 +68,9 @@ test.describe('Advanced Feature Screenshots', () => {
     await waitForCanvasStable(page);
 
     // Open playlist panel
-    const playlistButton = page.locator(
-      '[data-testid="playlist-panel"], button:has-text("Playlist"), [title*="Playlist"]',
-    ).first();
+    const playlistButton = page
+      .locator('[data-testid="playlist-panel"], button:has-text("Playlist"), [title*="Playlist"]')
+      .first();
     if (await playlistButton.isVisible({ timeout: 2000 }).catch(() => false)) {
       await playlistButton.click();
       await page.waitForTimeout(500);
@@ -103,9 +94,7 @@ test.describe('Advanced Feature Screenshots', () => {
     await waitForCanvasStable(page);
 
     // First open the compare control dropdown
-    const compareButton = page.locator(
-      '[data-testid="compare-control-button"]',
-    ).first();
+    const compareButton = page.locator('[data-testid="compare-control-button"]').first();
     if (await compareButton.isVisible({ timeout: 2000 }).catch(() => false)) {
       await compareButton.click();
       await page.waitForTimeout(500);
@@ -136,9 +125,9 @@ test.describe('Advanced Feature Screenshots', () => {
     await page.waitForTimeout(300);
 
     // Open OCIO panel via Shift+O or click button
-    const ocioButton = page.locator(
-      '[data-testid="ocio-panel-button"], button:has-text("OCIO"), [title*="OCIO"], [title*="OpenColorIO"]',
-    ).first();
+    const ocioButton = page
+      .locator('[data-testid="ocio-panel-button"], button:has-text("OCIO"), [title*="OCIO"], [title*="OpenColorIO"]')
+      .first();
     if (await ocioButton.isVisible({ timeout: 2000 }).catch(() => false)) {
       await ocioButton.click();
       await page.waitForTimeout(500);

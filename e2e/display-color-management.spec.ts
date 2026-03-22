@@ -28,11 +28,7 @@ async function openDisplayDropdown(page: import('@playwright/test').Page) {
   await expect(dropdown).toBeVisible();
 }
 
-async function setRangeValue(
-  page: import('@playwright/test').Page,
-  selector: string,
-  value: number,
-) {
+async function setRangeValue(page: import('@playwright/test').Page, selector: string, value: number) {
   await page.locator(selector).evaluate((el, val) => {
     const input = el as HTMLInputElement;
     input.value = String(val);

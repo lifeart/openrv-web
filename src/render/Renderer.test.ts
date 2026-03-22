@@ -3447,9 +3447,7 @@ describe('Renderer renderTiledImages GL state restore', () => {
 
     // Create a minimal tile with a mock image
     const image = new IPImage({ width: 2, height: 2, channels: 4, dataType: 'uint8' });
-    const tiles = [
-      { image, viewport: { x: 0, y: 0, width: 100, height: 100 } },
-    ];
+    const tiles = [{ image, viewport: { x: 0, y: 0, width: 100, height: 100 } }];
 
     return { renderer, mockGL, tiles };
   }
@@ -3476,9 +3474,7 @@ describe('Renderer renderTiledImages GL state restore', () => {
 
     // Should NOT have called disable(SCISSOR_TEST) since it was already enabled
     const disableCalls = (mockGL.disable as ReturnType<typeof vi.fn>).mock.calls;
-    const scissorDisableCalls = disableCalls.filter(
-      (call: unknown[]) => call[0] === mockGL.SCISSOR_TEST,
-    );
+    const scissorDisableCalls = disableCalls.filter((call: unknown[]) => call[0] === mockGL.SCISSOR_TEST);
     expect(scissorDisableCalls.length).toBe(0);
   });
 

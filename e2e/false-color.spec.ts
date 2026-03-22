@@ -1,9 +1,5 @@
 import { test, expect } from '@playwright/test';
-import {
-  loadVideoFile,
-  getFalseColorState,
-  waitForTestHelper,
-} from './fixtures';
+import { loadVideoFile, getFalseColorState, waitForTestHelper } from './fixtures';
 
 /**
  * False Color Feature Tests
@@ -30,7 +26,10 @@ async function waitForFalseColorPreset(page: import('@playwright/test').Page, pr
   );
 }
 
-async function setFalseColorPreset(page: import('@playwright/test').Page, preset: 'standard' | 'arri' | 'red' | 'custom') {
+async function setFalseColorPreset(
+  page: import('@playwright/test').Page,
+  preset: 'standard' | 'arri' | 'red' | 'custom',
+) {
   await page.evaluate((nextPreset) => {
     (window as any).__OPENRV_TEST__?.mutations?.setFalseColorPreset(nextPreset);
   }, preset);

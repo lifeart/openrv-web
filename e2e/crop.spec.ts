@@ -326,7 +326,8 @@ test.describe('Crop Controls', () => {
         const source = (window as any).__OPENRV_TEST__?.mutations?.getSession()?.currentSource;
         return { width: source?.width ?? 1, height: source?.height ?? 1 };
       });
-      const actualPixelRatio = (state.cropRegion.width * sourceDims.width) / (state.cropRegion.height * sourceDims.height);
+      const actualPixelRatio =
+        (state.cropRegion.width * sourceDims.width) / (state.cropRegion.height * sourceDims.height);
       expect(actualPixelRatio).toBeCloseTo(16 / 9, 1);
     });
 
@@ -378,7 +379,8 @@ test.describe('Crop Controls', () => {
         const source = (window as any).__OPENRV_TEST__?.mutations?.getSession()?.currentSource;
         return { width: source?.width ?? 1, height: source?.height ?? 1 };
       });
-      const actualPixelRatio = (state.cropRegion.width * sourceDims.width) / (state.cropRegion.height * sourceDims.height);
+      const actualPixelRatio =
+        (state.cropRegion.width * sourceDims.width) / (state.cropRegion.height * sourceDims.height);
       expect(actualPixelRatio).toBeCloseTo(4 / 3, 1);
     });
 
@@ -403,7 +405,8 @@ test.describe('Crop Controls', () => {
         const source = (window as any).__OPENRV_TEST__?.mutations?.getSession()?.currentSource;
         return { width: source?.width ?? 1, height: source?.height ?? 1 };
       });
-      const actualPixelRatio = (state.cropRegion.width * sourceDims.width) / (state.cropRegion.height * sourceDims.height);
+      const actualPixelRatio =
+        (state.cropRegion.width * sourceDims.width) / (state.cropRegion.height * sourceDims.height);
       expect(actualPixelRatio).toBeCloseTo(9 / 16, 1);
     });
 
@@ -755,7 +758,10 @@ test.describe('Crop Controls', () => {
     }
 
     // Helper to compute actual pixel aspect ratio from crop region
-    function computePixelRatio(cropRegion: { width: number; height: number }, source: { width: number; height: number }) {
+    function computePixelRatio(
+      cropRegion: { width: number; height: number },
+      source: { width: number; height: number },
+    ) {
       return (cropRegion.width * source.width) / (cropRegion.height * source.height);
     }
 

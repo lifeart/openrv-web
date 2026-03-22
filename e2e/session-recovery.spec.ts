@@ -25,34 +25,33 @@ const tempFiles: string[] = [];
  * Creates a test project state with sensible defaults.
  * Override specific properties as needed for each test.
  */
-function createTestProjectState(overrides: {
-  name?: string;
-  mediaName?: string;
-  mediaType?: 'image' | 'video';
-  requiresReload?: boolean;
-} = {}) {
-  const {
-    name = 'Test Project',
-    mediaName = 'test_image.png',
-    mediaType = 'image',
-    requiresReload = true,
-  } = overrides;
+function createTestProjectState(
+  overrides: {
+    name?: string;
+    mediaName?: string;
+    mediaType?: 'image' | 'video';
+    requiresReload?: boolean;
+  } = {},
+) {
+  const { name = 'Test Project', mediaName = 'test_image.png', mediaType = 'image', requiresReload = true } = overrides;
 
   return {
     version: 1,
     name,
     createdAt: new Date().toISOString(),
     modifiedAt: new Date().toISOString(),
-    media: [{
-      path: '',
-      name: mediaName,
-      type: mediaType,
-      width: mediaType === 'video' ? 1920 : 100,
-      height: mediaType === 'video' ? 1080 : 100,
-      duration: mediaType === 'video' ? 100 : 1,
-      fps: mediaType === 'video' ? 24 : 1,
-      requiresReload,
-    }],
+    media: [
+      {
+        path: '',
+        name: mediaName,
+        type: mediaType,
+        width: mediaType === 'video' ? 1920 : 100,
+        height: mediaType === 'video' ? 1080 : 100,
+        duration: mediaType === 'video' ? 100 : 1,
+        fps: mediaType === 'video' ? 24 : 1,
+        requiresReload,
+      },
+    ],
     playback: {
       currentFrame: 1,
       inPoint: 1,
@@ -89,7 +88,6 @@ function saveTempProject(projectState: ReturnType<typeof createTestProjectState>
 }
 
 test.describe('Session Recovery - Blob URL Handling', () => {
-
   // Clean up any temp files after each test (even on failure)
   test.afterEach(() => {
     for (const file of tempFiles) {

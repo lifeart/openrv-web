@@ -272,8 +272,8 @@ describe('AppPersistenceManager', () => {
       // Simulate autoSaveManager emitting 'recoveryAvailable' during initialize()
       fullCtx._autoSaveManager.initialize.mockImplementation(async () => {
         // Find the 'recoveryAvailable' handler that was registered via .on()
-        const onCalls = fullCtx._autoSaveManager.on.mock.calls;
-        const recoveryHandler = onCalls.find((c: any) => c[0] === 'recoveryAvailable')?.[1];
+        const onCalls = fullCtx._autoSaveManager.on.mock.calls as unknown as [string, (...args: any[]) => void][];
+        const recoveryHandler = onCalls.find((c) => c[0] === 'recoveryAvailable')?.[1];
         if (recoveryHandler) {
           recoveryHandler({
             entries: [

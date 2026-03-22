@@ -119,9 +119,12 @@ test.describe('Difference Matte', () => {
 
       // Find gain control in UI
       const gainSlider = page.locator('[data-testid="diff-matte-gain"]').first();
-      const altGainSlider = page.locator('input[type="range"]').filter({
-        has: page.locator('xpath=..//*[contains(text(), "Gain")]'),
-      }).first();
+      const altGainSlider = page
+        .locator('input[type="range"]')
+        .filter({
+          has: page.locator('xpath=..//*[contains(text(), "Gain")]'),
+        })
+        .first();
 
       // Try to find gain control via difference matte panel or toolbar
       const diffControls = page.locator('[class*="difference"], [class*="diff-matte"]');

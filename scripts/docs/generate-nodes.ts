@@ -32,12 +32,7 @@ interface NodeDescriptor {
 
 // ---- Skip list for abstract base classes ----
 
-const SKIP_CLASSES = new Set([
-  'IPNode',
-  'BaseSourceNode',
-  'BaseGroupNode',
-  'EffectNode',
-]);
+const SKIP_CLASSES = new Set(['IPNode', 'BaseSourceNode', 'BaseGroupNode', 'EffectNode']);
 
 // ---- Parser ----
 
@@ -170,21 +165,21 @@ export function renderNodes(nodes: NodeDescriptor[]): string {
   md += '```\n';
   md += 'IPNode (abstract base)\n';
   md += '  +-- BaseSourceNode (abstract)\n';
-  const sourceNodes = nodes.filter(n => n.category === 'Source');
+  const sourceNodes = nodes.filter((n) => n.category === 'Source');
   for (const n of sourceNodes) {
     md += `  |     +-- ${n.className}\n`;
   }
   md += '  +-- BaseGroupNode (abstract)\n';
-  const groupNodes = nodes.filter(n => n.category === 'Group');
+  const groupNodes = nodes.filter((n) => n.category === 'Group');
   for (const n of groupNodes) {
     md += `  |     +-- ${n.className}\n`;
   }
   md += '  +-- EffectNode (abstract)\n';
-  const effectNodes = nodes.filter(n => n.category === 'Effect' && n.parentClass === 'EffectNode');
+  const effectNodes = nodes.filter((n) => n.category === 'Effect' && n.parentClass === 'EffectNode');
   for (const n of effectNodes) {
     md += `  |     +-- ${n.className}\n`;
   }
-  const utilityNodes = nodes.filter(n => n.category === 'Utility');
+  const utilityNodes = nodes.filter((n) => n.category === 'Utility');
   for (const n of utilityNodes) {
     md += `  +-- ${n.className}\n`;
   }
@@ -192,10 +187,10 @@ export function renderNodes(nodes: NodeDescriptor[]): string {
 
   // Group by category
   const categories: Array<{ name: string; nodes: NodeDescriptor[] }> = [
-    { name: 'Source Nodes', nodes: nodes.filter(n => n.category === 'Source') },
-    { name: 'Group Nodes', nodes: nodes.filter(n => n.category === 'Group') },
-    { name: 'Effect Nodes', nodes: nodes.filter(n => n.category === 'Effect') },
-    { name: 'Utility Nodes', nodes: nodes.filter(n => n.category === 'Utility') },
+    { name: 'Source Nodes', nodes: nodes.filter((n) => n.category === 'Source') },
+    { name: 'Group Nodes', nodes: nodes.filter((n) => n.category === 'Group') },
+    { name: 'Effect Nodes', nodes: nodes.filter((n) => n.category === 'Effect') },
+    { name: 'Utility Nodes', nodes: nodes.filter((n) => n.category === 'Utility') },
   ];
 
   for (const cat of categories) {

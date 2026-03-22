@@ -136,7 +136,6 @@ function applySyncState(msg: RenderWorkerMessage): void {
  * Handle incoming messages from the main thread.
  */
 function handleMessage(msg: RenderWorkerMessage): void {
-
   // Protocol version check: reject incompatible messages with an error response.
   // Missing version (undefined) is acceptable from older senders that predate versioning.
   if (msg.protocolVersion !== undefined && msg.protocolVersion !== RENDER_WORKER_PROTOCOL_VERSION) {

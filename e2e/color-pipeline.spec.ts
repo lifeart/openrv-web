@@ -34,13 +34,13 @@ async function sampleGridPixels(page: import('@playwright/test').Page) {
 
   const points = [
     { x: Math.floor(box!.width * 0.25), y: Math.floor(box!.height * 0.25) },
-    { x: Math.floor(box!.width * 0.50), y: Math.floor(box!.height * 0.25) },
+    { x: Math.floor(box!.width * 0.5), y: Math.floor(box!.height * 0.25) },
     { x: Math.floor(box!.width * 0.75), y: Math.floor(box!.height * 0.25) },
-    { x: Math.floor(box!.width * 0.25), y: Math.floor(box!.height * 0.50) },
-    { x: Math.floor(box!.width * 0.50), y: Math.floor(box!.height * 0.50) },
-    { x: Math.floor(box!.width * 0.75), y: Math.floor(box!.height * 0.50) },
+    { x: Math.floor(box!.width * 0.25), y: Math.floor(box!.height * 0.5) },
+    { x: Math.floor(box!.width * 0.5), y: Math.floor(box!.height * 0.5) },
+    { x: Math.floor(box!.width * 0.75), y: Math.floor(box!.height * 0.5) },
     { x: Math.floor(box!.width * 0.25), y: Math.floor(box!.height * 0.75) },
-    { x: Math.floor(box!.width * 0.50), y: Math.floor(box!.height * 0.75) },
+    { x: Math.floor(box!.width * 0.5), y: Math.floor(box!.height * 0.75) },
     { x: Math.floor(box!.width * 0.75), y: Math.floor(box!.height * 0.75) },
   ];
 
@@ -75,7 +75,11 @@ async function waitForRender(page: import('@playwright/test').Page, ms = 250): P
 }
 
 /** Helper: Wait for OCIO enabled state to change */
-async function waitForOCIOEnabled(page: import('@playwright/test').Page, enabled: boolean, timeout = 5000): Promise<void> {
+async function waitForOCIOEnabled(
+  page: import('@playwright/test').Page,
+  enabled: boolean,
+  timeout = 5000,
+): Promise<void> {
   await page.waitForFunction(
     (expected) => {
       const state = (window as any).__OPENRV_TEST__?.getOCIOState();
@@ -106,7 +110,6 @@ async function disableOCIO(page: import('@playwright/test').Page): Promise<void>
 // ---------------------------------------------------------------------------
 
 test.describe('Color Pipeline End-to-End', () => {
-
   // =========================================================================
   // Basic Pipeline (SDR video)
   // =========================================================================
@@ -122,9 +125,7 @@ test.describe('Color Pipeline End-to-End', () => {
       const { pixels } = await sampleGridPixels(page);
 
       // At least some sample points should contain visible content
-      const nonBlackCount = pixels.filter(
-        (px) => px.r > 10 || px.g > 10 || px.b > 10,
-      ).length;
+      const nonBlackCount = pixels.filter((px) => px.r > 10 || px.g > 10 || px.b > 10).length;
       expect(nonBlackCount).toBeGreaterThan(0);
     });
 
@@ -194,7 +195,9 @@ test.describe('Color Pipeline End-to-End', () => {
       }
     });
 
-    test('CPIPE-004: saturation + exposure combined should produce distinct result from either alone', async ({ page }) => {
+    test('CPIPE-004: saturation + exposure combined should produce distinct result from either alone', async ({
+      page,
+    }) => {
       // Capture baseline
       const screenshotBaseline = await captureViewerScreenshot(page);
 
@@ -283,9 +286,7 @@ test.describe('Color Pipeline End-to-End', () => {
     test('CPIPE-010: EXR file should load with non-zero pixel values', async ({ page }) => {
       const { pixels } = await sampleGridPixels(page);
 
-      const nonBlackCount = pixels.filter(
-        (px) => px.r > 5 || px.g > 5 || px.b > 5,
-      ).length;
+      const nonBlackCount = pixels.filter((px) => px.r > 5 || px.g > 5 || px.b > 5).length;
       expect(nonBlackCount).toBeGreaterThan(0);
     });
 
@@ -398,7 +399,9 @@ test.describe('Color Pipeline End-to-End', () => {
       expect(imagesAreDifferent(screenshotBaseline, screenshotAfterContrast)).toBe(true);
     });
 
-    test('CPIPE-021: order independence - exposure+saturation vs saturation+exposure should be similar', async ({ page }) => {
+    test('CPIPE-021: order independence - exposure+saturation vs saturation+exposure should be similar', async ({
+      page,
+    }) => {
       // Apply exposure first, then saturation
       await setColorAdjustment(page, { exposure: 1.0 });
       await waitForExposure(page, 1.0);
@@ -425,7 +428,9 @@ test.describe('Color Pipeline End-to-End', () => {
       expect(Math.abs(brightnessA - brightnessB)).toBeLessThanOrEqual(3);
     });
 
-    test('CPIPE-022: extreme settings should not produce NaN or corruption (pixels stay in valid range)', async ({ page }) => {
+    test('CPIPE-022: extreme settings should not produce NaN or corruption (pixels stay in valid range)', async ({
+      page,
+    }) => {
       // Apply extreme settings
       await setColorAdjustment(page, {
         exposure: 5.0,

@@ -16,7 +16,11 @@ import {
 
 // Helper to get slider by label name
 async function getSliderByLabel(page: import('@playwright/test').Page, label: string) {
-  return page.locator('.color-controls-panel label').filter({ hasText: label }).locator('..').locator('input[type="range"]');
+  return page
+    .locator('.color-controls-panel label')
+    .filter({ hasText: label })
+    .locator('..')
+    .locator('input[type="range"]');
 }
 
 test.describe('Color Controls', () => {
@@ -303,7 +307,7 @@ test.describe('Color Controls', () => {
       const lutSlider = await getSliderByLabel(page, 'Intensity');
 
       let state = await getColorState(page);
-      expect(state.lutIntensity).toBeCloseTo(1, 1);  // Default is 1.0
+      expect(state.lutIntensity).toBeCloseTo(1, 1); // Default is 1.0
 
       await lutSlider.fill('0.5');
       await lutSlider.dispatchEvent('input');

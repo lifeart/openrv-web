@@ -1142,7 +1142,8 @@ describe('PlaybackEngine', () => {
       playbackChangedListener.mockClear();
 
       // Force starvation: manipulate timing state to trigger shouldPause
-      const ts = (engine as unknown as { _ts: { starvationStartTime: number; consecutiveStarvationSkips: number } })._ts;
+      const ts = (engine as unknown as { _ts: { starvationStartTime: number; consecutiveStarvationSkips: number } })
+        ._ts;
       ts.consecutiveStarvationSkips = PlaybackEngine.MAX_CONSECUTIVE_STARVATION_SKIPS;
 
       // Advance mocked clock well past starvation timeout
@@ -1211,7 +1212,8 @@ describe('PlaybackEngine', () => {
       engine.play();
 
       // Force starvation
-      const ts = (engine as unknown as { _ts: { starvationStartTime: number; consecutiveStarvationSkips: number } })._ts;
+      const ts = (engine as unknown as { _ts: { starvationStartTime: number; consecutiveStarvationSkips: number } })
+        ._ts;
       ts.consecutiveStarvationSkips = PlaybackEngine.MAX_CONSECUTIVE_STARVATION_SKIPS;
 
       ts.starvationStartTime = 1000;

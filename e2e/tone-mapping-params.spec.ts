@@ -127,10 +127,7 @@ function getParamValueByLabel(page: import('@playwright/test').Page, label: stri
  * Helper: Set a range slider value and emit native input/change events.
  * Playwright `fill()` is not reliable for input[type="range"] controls.
  */
-async function setSliderValue(
-  slider: import('@playwright/test').Locator,
-  value: string
-) {
+async function setSliderValue(slider: import('@playwright/test').Locator, value: string) {
   await slider.evaluate((el, nextValue) => {
     const input = el as HTMLInputElement;
     input.value = nextValue;

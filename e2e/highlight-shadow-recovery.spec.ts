@@ -25,7 +25,11 @@ import {
 
 // Helper to get slider by label name
 async function getSliderByLabel(page: import('@playwright/test').Page, label: string) {
-  return page.locator('.color-controls-panel label').filter({ hasText: label }).locator('..').locator('input[type="range"]');
+  return page
+    .locator('.color-controls-panel label')
+    .filter({ hasText: label })
+    .locator('..')
+    .locator('input[type="range"]');
 }
 
 test.describe('Highlight/Shadow Recovery', () => {

@@ -308,8 +308,12 @@ export function applyLensDistortion(sourceData: ImageData, params: LensDistortio
         for (let c = 0; c < 4; c++) {
           const v00 = x0 >= 0 && x0 < width && y0 >= 0 && y0 < height ? src[(y0 * width + x0) * 4 + c]! : 0;
           const v10 = x0 + 1 >= 0 && x0 + 1 < width && y0 >= 0 && y0 < height ? src[(y0 * width + x0 + 1) * 4 + c]! : 0;
-          const v01 = x0 >= 0 && x0 < width && y0 + 1 >= 0 && y0 + 1 < height ? src[((y0 + 1) * width + x0) * 4 + c]! : 0;
-          const v11 = x0 + 1 >= 0 && x0 + 1 < width && y0 + 1 >= 0 && y0 + 1 < height ? src[((y0 + 1) * width + x0 + 1) * 4 + c]! : 0;
+          const v01 =
+            x0 >= 0 && x0 < width && y0 + 1 >= 0 && y0 + 1 < height ? src[((y0 + 1) * width + x0) * 4 + c]! : 0;
+          const v11 =
+            x0 + 1 >= 0 && x0 + 1 < width && y0 + 1 >= 0 && y0 + 1 < height
+              ? src[((y0 + 1) * width + x0 + 1) * 4 + c]!
+              : 0;
           dst[dstIdx + c] = Math.round(v00 * w00 + v10 * w10 + v01 * w01 + v11 * w11);
         }
       } else {

@@ -1,10 +1,5 @@
 import { test, expect } from '@playwright/test';
-import {
-  loadVideoFile,
-  waitForTestHelper,
-  getViewerState,
-  captureViewerScreenshot,
-} from './fixtures';
+import { loadVideoFile, waitForTestHelper, getViewerState, captureViewerScreenshot } from './fixtures';
 
 /**
  * Histogram Clipping Indicators Tests
@@ -21,7 +16,11 @@ import {
 
 // Helper to get slider by label name
 async function getSliderByLabel(page: import('@playwright/test').Page, label: string) {
-  return page.locator('.color-controls-panel label').filter({ hasText: label }).locator('..').locator('input[type="range"]');
+  return page
+    .locator('.color-controls-panel label')
+    .filter({ hasText: label })
+    .locator('..')
+    .locator('input[type="range"]');
 }
 
 test.describe('Histogram Clipping Indicators', () => {
@@ -147,14 +146,14 @@ test.describe('Histogram Clipping Indicators', () => {
       const clippingIndicators = page.locator('[data-testid="histogram-clipping-indicators"]');
 
       // Check initial background (should be transparent/no special style)
-      const initialBg = await clippingIndicators.evaluate(el => getComputedStyle(el).background);
+      const initialBg = await clippingIndicators.evaluate((el) => getComputedStyle(el).background);
 
       // Enable overlay
       await clippingIndicators.click();
       await page.waitForTimeout(200);
 
       // Background should change to indicate active state
-      const activeBg = await clippingIndicators.evaluate(el => getComputedStyle(el).background);
+      const activeBg = await clippingIndicators.evaluate((el) => getComputedStyle(el).background);
 
       // The backgrounds should be different (active state has highlight)
       expect(activeBg).not.toBe(initialBg);
@@ -186,8 +185,10 @@ test.describe('Histogram Clipping Indicators', () => {
       await exposureSlider.fill('4');
       await exposureSlider.dispatchEvent('input');
       await page.waitForFunction(
-        () => (window as unknown as { __OPENRV_TEST__?: { getColorState?: () => { exposure?: number } } })
-          .__OPENRV_TEST__?.getColorState?.()?.exposure === 4,
+        () =>
+          (
+            window as unknown as { __OPENRV_TEST__?: { getColorState?: () => { exposure?: number } } }
+          ).__OPENRV_TEST__?.getColorState?.()?.exposure === 4,
         undefined,
         { timeout: 5000 },
       );
@@ -203,8 +204,10 @@ test.describe('Histogram Clipping Indicators', () => {
       await whitesSlider.fill('50');
       await whitesSlider.dispatchEvent('input');
       await page.waitForFunction(
-        () => (window as unknown as { __OPENRV_TEST__?: { getColorState?: () => { whites?: number } } })
-          .__OPENRV_TEST__?.getColorState?.()?.whites === 50,
+        () =>
+          (
+            window as unknown as { __OPENRV_TEST__?: { getColorState?: () => { whites?: number } } }
+          ).__OPENRV_TEST__?.getColorState?.()?.whites === 50,
         undefined,
         { timeout: 5000 },
       );
@@ -239,8 +242,10 @@ test.describe('Histogram Clipping Indicators', () => {
       await exposureSlider.fill('5');
       await exposureSlider.dispatchEvent('input');
       await page.waitForFunction(
-        () => (window as unknown as { __OPENRV_TEST__?: { getColorState?: () => { exposure?: number } } })
-          .__OPENRV_TEST__?.getColorState?.()?.exposure === 5,
+        () =>
+          (
+            window as unknown as { __OPENRV_TEST__?: { getColorState?: () => { exposure?: number } } }
+          ).__OPENRV_TEST__?.getColorState?.()?.exposure === 5,
         undefined,
         { timeout: 5000 },
       );
@@ -254,8 +259,10 @@ test.describe('Histogram Clipping Indicators', () => {
       await exposureSlider.fill('-5');
       await exposureSlider.dispatchEvent('input');
       await page.waitForFunction(
-        () => (window as unknown as { __OPENRV_TEST__?: { getColorState?: () => { exposure?: number } } })
-          .__OPENRV_TEST__?.getColorState?.()?.exposure === -5,
+        () =>
+          (
+            window as unknown as { __OPENRV_TEST__?: { getColorState?: () => { exposure?: number } } }
+          ).__OPENRV_TEST__?.getColorState?.()?.exposure === -5,
         undefined,
         { timeout: 5000 },
       );

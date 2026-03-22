@@ -27,17 +27,17 @@ if (cssTextDesc && cssTextDesc.set) {
         (_match, side: string | undefined, width: string, style: string, color: string) => {
           borderDecls.push({ side: side || '', width, style, color });
           return '';
-        }
+        },
       );
 
       // Fix 2: move `background` shorthand to end of cssText.
       // `background: <value>` followed by any other property breaks in jsdom 28.
       // Moving it to the end avoids the parsing bug while preserving style.background readability.
       const bgMatches: string[] = [];
-      fixed = fixed.replace(
-        /\bbackground\s*:\s*[^;]+;/g,
-        (match) => { bgMatches.push(match); return ''; }
-      );
+      fixed = fixed.replace(/\bbackground\s*:\s*[^;]+;/g, (match) => {
+        bgMatches.push(match);
+        return '';
+      });
       if (bgMatches.length > 0) {
         fixed = fixed + ' ' + bgMatches.join(' ');
       }
@@ -66,7 +66,7 @@ if (typeof globalThis.ImageData === 'undefined') {
     constructor(
       widthOrData: number | Uint8ClampedArray | number[],
       heightOrWidth?: number,
-      widthOrSettings?: number | ImageDataSettings
+      widthOrSettings?: number | ImageDataSettings,
     ) {
       if (typeof widthOrData === 'number') {
         // new ImageData(width, height)
@@ -75,13 +75,9 @@ if (typeof globalThis.ImageData === 'undefined') {
         this.data = new Uint8ClampedArray(this.width * this.height * 4);
       } else if (widthOrData instanceof Uint8ClampedArray || Array.isArray(widthOrData)) {
         // new ImageData(data, width, height?)
-        const data = widthOrData instanceof Uint8ClampedArray
-          ? widthOrData
-          : new Uint8ClampedArray(widthOrData);
+        const data = widthOrData instanceof Uint8ClampedArray ? widthOrData : new Uint8ClampedArray(widthOrData);
         this.width = heightOrWidth!;
-        this.height = typeof widthOrSettings === 'number'
-          ? widthOrSettings
-          : data.length / (4 * heightOrWidth!);
+        this.height = typeof widthOrSettings === 'number' ? widthOrSettings : data.length / (4 * heightOrWidth!);
         this.data = data;
       } else {
         throw new Error('Invalid ImageData constructor arguments');
@@ -169,10 +165,7 @@ class MockCanvasRenderingContext2D {
 // This function creates a fresh vi.fn mock. We apply it on setup and also
 // re-apply in beforeEach so it survives vi.restoreAllMocks() in other tests.
 function createGetContextMock() {
-  return vi.fn(function (
-    this: HTMLCanvasElement,
-    contextId: string
-  ) {
+  return vi.fn(function (this: HTMLCanvasElement, contextId: string) {
     if (contextId === '2d') {
       return new MockCanvasRenderingContext2D() as unknown as CanvasRenderingContext2D;
     }
@@ -188,11 +181,7 @@ beforeEach(() => {
 });
 
 // Mock HTMLCanvasElement.toDataURL since jsdom doesn't support it without canvas npm package
-HTMLCanvasElement.prototype.toDataURL = vi.fn(function (
-  this: HTMLCanvasElement,
-  type?: string,
-  _quality?: unknown
-) {
+HTMLCanvasElement.prototype.toDataURL = vi.fn(function (this: HTMLCanvasElement, type?: string, _quality?: unknown) {
   // Return a valid data URL for testing
   const mimeType = type || 'image/png';
   return `data:${mimeType};base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==`;
@@ -203,7 +192,7 @@ HTMLCanvasElement.prototype.toBlob = vi.fn(function (
   this: HTMLCanvasElement,
   callback: BlobCallback,
   type?: string,
-  _quality?: unknown
+  _quality?: unknown,
 ) {
   const mimeType = type || 'image/png';
   const blob = new Blob(['mock-image-data'], { type: mimeType });
@@ -316,7 +305,9 @@ if (typeof globalThis.PointerEvent === 'undefined') {
 
 // Polyfill pointer capture methods if not available in jsdom
 if (typeof HTMLElement.prototype.hasPointerCapture !== 'function') {
-  HTMLElement.prototype.hasPointerCapture = function () { return false; };
+  HTMLElement.prototype.hasPointerCapture = function () {
+    return false;
+  };
   HTMLElement.prototype.setPointerCapture = function () {};
   HTMLElement.prototype.releasePointerCapture = function () {};
 }

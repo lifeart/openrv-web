@@ -1631,9 +1631,7 @@ describe('AppNetworkBridge', () => {
         transferId,
         senderUserId,
         totalBytes: 1024,
-        files: [
-          { id: 'file-0', name: 'test.png', type: 'image/png', size: 1024, lastModified: Date.now() },
-        ],
+        files: [{ id: 'file-0', name: 'test.png', type: 'image/png', size: 1024, lastModified: Date.now() }],
         sources: [{ kind: 'image', fileIds: ['file-0'], fps: 24 }],
       });
     }
@@ -1755,12 +1753,8 @@ describe('AppNetworkBridge', () => {
 
       vi.advanceTimersByTime(TIMEOUT_MS);
 
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('tx-7'),
-      );
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('timed out'),
-      );
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('tx-7'));
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('timed out'));
 
       warnSpy.mockRestore();
     });

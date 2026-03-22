@@ -6,12 +6,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import {
-  initWithVideo,
-  takeDocScreenshot,
-  switchTab,
-  waitForCanvasStable,
-} from './screenshot-helpers';
+import { initWithVideo, takeDocScreenshot, switchTab, waitForCanvasStable } from './screenshot-helpers';
 
 test.describe('Annotation Screenshots', () => {
   // ── 39: Shape annotation tools ──────────────────────────────────────
@@ -193,9 +188,9 @@ test.describe('Annotation Screenshots', () => {
     await page.waitForTimeout(300);
 
     // Open the Export dropdown menu in header bar
-    const exportButton = page.locator(
-      '[title*="Export"], [aria-label*="Export"], .export-control-container button',
-    ).first();
+    const exportButton = page
+      .locator('[title*="Export"], [aria-label*="Export"], .export-control-container button')
+      .first();
     await exportButton.click();
     await page.waitForTimeout(500);
 

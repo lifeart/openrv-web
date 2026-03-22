@@ -1,5 +1,11 @@
 import { test, expect } from '@playwright/test';
-import { loadImageFile, loadVideoFile, waitForTestHelper, captureViewerScreenshot, imagesAreDifferent } from './fixtures';
+import {
+  loadImageFile,
+  loadVideoFile,
+  waitForTestHelper,
+  captureViewerScreenshot,
+  imagesAreDifferent,
+} from './fixtures';
 
 /**
  * Hue Rotation Control Tests
@@ -57,11 +63,13 @@ async function setHueRotationViaSlider(page: import('@playwright/test').Page, de
   // Wait for the slider value to actually update
   await page.waitForFunction(
     (expectedDegrees) => {
-      const sliderEl = document.querySelector('.color-controls-panel [data-testid="slider-hueRotation"]') as HTMLInputElement;
+      const sliderEl = document.querySelector(
+        '.color-controls-panel [data-testid="slider-hueRotation"]',
+      ) as HTMLInputElement;
       return sliderEl && parseFloat(sliderEl.value) === expectedDegrees;
     },
     degrees,
-    { timeout: 5000 }
+    { timeout: 5000 },
   );
 }
 
@@ -184,7 +192,7 @@ test.describe('Hue Rotation Control', () => {
         return state?.currentFrame !== prevFrame;
       },
       currentFrame,
-      { timeout: 5000 }
+      { timeout: 5000 },
     );
 
     // Hue rotation should persist - verify via slider value
@@ -212,11 +220,13 @@ test.describe('Hue Rotation Control', () => {
     // Wait for the slider value to be reset to 0
     await page.waitForFunction(
       () => {
-        const sliderEl = document.querySelector('.color-controls-panel [data-testid="slider-hueRotation"]') as HTMLInputElement;
+        const sliderEl = document.querySelector(
+          '.color-controls-panel [data-testid="slider-hueRotation"]',
+        ) as HTMLInputElement;
         return sliderEl && parseFloat(sliderEl.value) === 0;
       },
       undefined,
-      { timeout: 5000 }
+      { timeout: 5000 },
     );
 
     // Verify hue rotation was reset to 0 via slider value

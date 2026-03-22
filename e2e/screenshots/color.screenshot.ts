@@ -7,12 +7,7 @@
  */
 
 import { test } from '@playwright/test';
-import {
-  initWithVideo,
-  takeDocScreenshot,
-  switchTab,
-  waitForCanvasStable,
-} from './screenshot-helpers';
+import { initWithVideo, takeDocScreenshot, switchTab, waitForCanvasStable } from './screenshot-helpers';
 
 test.describe('Color Management Screenshots', () => {
   // ── 26: Color wheels panel ─────────────────────────────────────────
@@ -51,9 +46,7 @@ test.describe('Color Management Screenshots', () => {
     await page.waitForTimeout(300);
 
     // Click the CDL button in the color tab toolbar
-    const cdlButton = page.locator(
-      '[data-testid="cdl-button"], button:has-text("CDL"), [title*="CDL"]',
-    ).first();
+    const cdlButton = page.locator('[data-testid="cdl-button"], button:has-text("CDL"), [title*="CDL"]').first();
     if (await cdlButton.isVisible({ timeout: 2000 }).catch(() => false)) {
       await cdlButton.click();
       await page.waitForTimeout(300);
@@ -71,9 +64,7 @@ test.describe('Color Management Screenshots', () => {
     await page.waitForTimeout(300);
 
     // Click the LUT button in the color tab toolbar
-    const lutButton = page.locator(
-      '[data-testid="lut-button"], button:has-text("LUT"), [title*="LUT"]',
-    ).first();
+    const lutButton = page.locator('[data-testid="lut-button"], button:has-text("LUT"), [title*="LUT"]').first();
     if (await lutButton.isVisible({ timeout: 2000 }).catch(() => false)) {
       await lutButton.click();
       await page.waitForTimeout(300);
@@ -91,9 +82,7 @@ test.describe('Color Management Screenshots', () => {
     await page.waitForTimeout(300);
 
     // Click the Log button in the color tab toolbar
-    const logButton = page.locator(
-      '[data-testid="log-button"], button:has-text("Log"), [title*="Log"]',
-    ).first();
+    const logButton = page.locator('[data-testid="log-button"], button:has-text("Log"), [title*="Log"]').first();
     if (await logButton.isVisible({ timeout: 2000 }).catch(() => false)) {
       await logButton.click();
       await page.waitForTimeout(300);
@@ -143,9 +132,9 @@ test.describe('Color Management Screenshots', () => {
     await page.waitForTimeout(300);
 
     // Look for hue rotation slider and set it to a visible value
-    const hueSlider = page.locator(
-      '[data-testid="hue-rotation"], input[aria-label*="Hue"], .hue-rotation-slider input',
-    ).first();
+    const hueSlider = page
+      .locator('[data-testid="hue-rotation"], input[aria-label*="Hue"], .hue-rotation-slider input')
+      .first();
     if (await hueSlider.isVisible({ timeout: 2000 }).catch(() => false)) {
       await hueSlider.fill('120');
       await page.waitForTimeout(300);

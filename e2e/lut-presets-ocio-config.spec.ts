@@ -53,25 +53,20 @@ async function loadLUTFile(
 
 /** Wait for LUT loaded state */
 async function waitForLUTLoaded(page: import('@playwright/test').Page): Promise<void> {
-  await page.waitForFunction(
-    () => (window as any).__OPENRV_TEST__?.getColorState()?.hasLUT === true,
-    { timeout: 5000 },
-  );
+  await page.waitForFunction(() => (window as any).__OPENRV_TEST__?.getColorState()?.hasLUT === true, {
+    timeout: 5000,
+  });
 }
 
 /** Wait for LUT cleared state */
 async function waitForLUTCleared(page: import('@playwright/test').Page): Promise<void> {
-  await page.waitForFunction(
-    () => (window as any).__OPENRV_TEST__?.getColorState()?.hasLUT === false,
-    { timeout: 5000 },
-  );
+  await page.waitForFunction(() => (window as any).__OPENRV_TEST__?.getColorState()?.hasLUT === false, {
+    timeout: 5000,
+  });
 }
 
 /** Wait for LUT intensity to reach expected value */
-async function waitForLUTIntensity(
-  page: import('@playwright/test').Page,
-  expected: number,
-): Promise<void> {
+async function waitForLUTIntensity(page: import('@playwright/test').Page, expected: number): Promise<void> {
   await page.waitForFunction(
     ({ exp }) => {
       const state = (window as any).__OPENRV_TEST__?.getColorState();
@@ -376,8 +371,8 @@ test.describe('OCIO Custom Config Loading', () => {
     // The validation should report an error (invalid config, missing required fields, etc.)
     expect(
       feedbackText?.toLowerCase().includes('invalid') ||
-      feedbackText?.toLowerCase().includes('error') ||
-      feedbackText?.toLowerCase().includes('failed'),
+        feedbackText?.toLowerCase().includes('error') ||
+        feedbackText?.toLowerCase().includes('failed'),
     ).toBe(true);
   });
 

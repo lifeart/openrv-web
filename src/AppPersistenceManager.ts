@@ -551,12 +551,7 @@ export class AppPersistenceManager {
    * Recover session from auto-save
    */
   private async recoverAutoSave(id: string): Promise<void> {
-    const {
-      autoSaveManager,
-      session,
-      paintEngine,
-      viewer,
-    } = this.ctx;
+    const { autoSaveManager, session, paintEngine, viewer } = this.ctx;
     try {
       const state = await autoSaveManager.getAutoSave(id);
       if (state) {

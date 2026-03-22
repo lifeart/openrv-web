@@ -14,7 +14,7 @@ async function openMarkerPanel(page: import('@playwright/test').Page): Promise<v
 
   const panel = page.locator('[data-testid="marker-list-panel"]');
   // Only open if not already visible
-  const isVisible = await panel.evaluate(el => el.style.display !== 'none');
+  const isVisible = await panel.evaluate((el) => el.style.display !== 'none');
   if (!isVisible) {
     const markersToggle = page.locator('[data-testid="markers-toggle-button"]');
     await markersToggle.click();
@@ -353,17 +353,17 @@ test.describe('Duration Markers', () => {
     expect(state.markers.length).toBe(3);
 
     // Verify endFrames via read-only evaluate
-	    const endFrames = await page.evaluate(() => {
-	      const m = (window as any).__OPENRV_TEST__?.mutations;
-	      return {
-	        ef5: m?.getMarkerEndFrame(5),
-	        ef15: m?.getMarkerEndFrame(15),
-	        ef20: m?.getMarkerEndFrame(20),
-	      };
-	    });
-	    expect(endFrames.ef5).toBe(10);
-	    expect(endFrames.ef15).toBe(25);
-	    expect(endFrames.ef20).toBeUndefined();
+    const endFrames = await page.evaluate(() => {
+      const m = (window as any).__OPENRV_TEST__?.mutations;
+      return {
+        ef5: m?.getMarkerEndFrame(5),
+        ef15: m?.getMarkerEndFrame(15),
+        ef20: m?.getMarkerEndFrame(20),
+      };
+    });
+    expect(endFrames.ef5).toBe(10);
+    expect(endFrames.ef15).toBe(25);
+    expect(endFrames.ef20).toBeUndefined();
   });
 
   // DM-009: Marker panel shows end frame editing

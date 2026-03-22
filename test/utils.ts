@@ -8,7 +8,7 @@
 export function createTestImageData(
   width: number,
   height: number,
-  fill?: { r: number; g: number; b: number; a?: number }
+  fill?: { r: number; g: number; b: number; a?: number },
 ): ImageData {
   const imageData = new ImageData(width, height);
   if (fill) {
@@ -43,11 +43,7 @@ export function createGradientImageData(width: number, height: number): ImageDat
 /**
  * Compare two ImageData objects within a tolerance
  */
-export function compareImageData(
-  a: ImageData,
-  b: ImageData,
-  tolerance: number = 1
-): boolean {
+export function compareImageData(a: ImageData, b: ImageData, tolerance: number = 1): boolean {
   if (a.width !== b.width || a.height !== b.height) {
     return false;
   }
@@ -63,7 +59,9 @@ export function compareImageData(
  * Get average color of an ImageData
  */
 export function getAverageColor(imageData: ImageData): { r: number; g: number; b: number } {
-  let r = 0, g = 0, b = 0;
+  let r = 0,
+    g = 0,
+    b = 0;
   const pixelCount = imageData.width * imageData.height;
 
   for (let i = 0; i < imageData.data.length; i += 4) {
@@ -111,11 +109,7 @@ export function nextFrame(): Promise<void> {
 /**
  * Create a mock File object
  */
-export function createMockFile(
-  name: string,
-  content: string = '',
-  type: string = 'image/png'
-): File {
+export function createMockFile(name: string, content: string = '', type: string = 'image/png'): File {
   const blob = new Blob([content], { type });
   return new File([blob], name, { type });
 }
@@ -124,12 +118,7 @@ export function createMockFile(
  * Create sample .cube LUT content
  */
 export function createSampleCubeLUT(size: number = 2): string {
-  const lines = [
-    `TITLE "Test LUT"`,
-    `LUT_3D_SIZE ${size}`,
-    `DOMAIN_MIN 0.0 0.0 0.0`,
-    `DOMAIN_MAX 1.0 1.0 1.0`,
-  ];
+  const lines = [`TITLE "Test LUT"`, `LUT_3D_SIZE ${size}`, `DOMAIN_MIN 0.0 0.0 0.0`, `DOMAIN_MAX 1.0 1.0 1.0`];
 
   // Generate identity LUT data
   for (let r = 0; r < size; r++) {
@@ -150,12 +139,7 @@ export function createSampleCubeLUT(size: number = 2): string {
  * Create sample 1D .cube LUT content
  */
 export function createSample1DLUT(size: number = 16): string {
-  const lines = [
-    `TITLE "Test 1D LUT"`,
-    `LUT_1D_SIZE ${size}`,
-    `DOMAIN_MIN 0.0 0.0 0.0`,
-    `DOMAIN_MAX 1.0 1.0 1.0`,
-  ];
+  const lines = [`TITLE "Test 1D LUT"`, `LUT_1D_SIZE ${size}`, `DOMAIN_MIN 0.0 0.0 0.0`, `DOMAIN_MAX 1.0 1.0 1.0`];
 
   // Generate identity 1D LUT data (each channel maps input to same output)
   for (let i = 0; i < size; i++) {
@@ -173,7 +157,7 @@ export function createSampleCDL(
   slope = { r: 1, g: 1, b: 1 },
   offset = { r: 0, g: 0, b: 0 },
   power = { r: 1, g: 1, b: 1 },
-  saturation = 1
+  saturation = 1,
 ): string {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <ColorDecisionList xmlns="urn:ASC:CDL:v1.2">
@@ -195,31 +179,17 @@ export function createSampleCDL(
 /**
  * Assert that a value is within a range
  */
-export function assertInRange(
-  value: number,
-  min: number,
-  max: number,
-  message?: string
-): void {
+export function assertInRange(value: number, min: number, max: number, message?: string): void {
   if (value < min || value > max) {
-    throw new Error(
-      message || `Expected ${value} to be between ${min} and ${max}`
-    );
+    throw new Error(message || `Expected ${value} to be between ${min} and ${max}`);
   }
 }
 
 /**
  * Assert that two numbers are approximately equal
  */
-export function assertApproxEqual(
-  actual: number,
-  expected: number,
-  tolerance: number = 0.001,
-  message?: string
-): void {
+export function assertApproxEqual(actual: number, expected: number, tolerance: number = 0.001, message?: string): void {
   if (Math.abs(actual - expected) > tolerance) {
-    throw new Error(
-      message || `Expected ${actual} to be approximately ${expected} (tolerance: ${tolerance})`
-    );
+    throw new Error(message || `Expected ${actual} to be approximately ${expected} (tolerance: ${tolerance})`);
   }
 }

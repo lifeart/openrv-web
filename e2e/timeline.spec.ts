@@ -383,7 +383,9 @@ test.describe('Timeline', () => {
       await expect(timeline).toBeVisible();
 
       // Look for annotation marker elements
-      const annotationMarker = page.locator('.annotation-marker, [class*="annotation-indicator"], [class*="paint-mark"]').first();
+      const annotationMarker = page
+        .locator('.annotation-marker, [class*="annotation-indicator"], [class*="paint-mark"]')
+        .first();
       // Note: Marker visibility depends on implementation
     });
   });

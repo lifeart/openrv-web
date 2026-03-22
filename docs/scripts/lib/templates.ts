@@ -347,9 +347,9 @@ ${formatSourceFiles(sourceCode)}`,
 const TEMPLATES: Record<TemplateType, TemplateFn> = {
   'api-reference': apiReference,
   'user-guide': userGuide,
-  'tutorial': tutorial,
-  'faq': faq,
-  'architecture': architecture,
+  tutorial: tutorial,
+  faq: faq,
+  architecture: architecture,
 };
 
 /**
@@ -358,7 +358,7 @@ const TEMPLATES: Record<TemplateType, TemplateFn> = {
 export function buildPrompt(
   templateType: TemplateType,
   sourceCode: Record<string, string>,
-  meta: ModuleMeta
+  meta: ModuleMeta,
 ): PromptPair {
   const fn = TEMPLATES[templateType];
   if (!fn) {

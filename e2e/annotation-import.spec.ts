@@ -5,14 +5,7 @@
  * frame offset, invalid input handling, and empty annotation handling.
  */
 
-import {
-  test,
-  expect,
-  loadVideoFile,
-  drawStroke,
-  getPaintState,
-  clickTab,
-} from './fixtures';
+import { test, expect, loadVideoFile, drawStroke, getPaintState, clickTab } from './fixtures';
 
 /**
  * Build a valid AnnotationExportData JSON string for import testing.
@@ -58,7 +51,9 @@ function buildAnnotationJSON(options?: {
     }
   }
 
-  const frameNumbers = Object.keys(frames).map(Number).sort((a, b) => a - b);
+  const frameNumbers = Object.keys(frames)
+    .map(Number)
+    .sort((a, b) => a - b);
   const data = {
     version: 1,
     exportedAt: new Date().toISOString(),
@@ -681,10 +676,13 @@ test.describe('Annotation Import', () => {
           try {
             const data = JSON.parse(jsonStr);
             const isValid =
-              data && typeof data === 'object' && !Array.isArray(data) &&
+              data &&
+              typeof data === 'object' &&
+              !Array.isArray(data) &&
               data.version === 1 &&
               data.source === 'openrv-web' &&
-              data.frames && typeof data.frames === 'object';
+              data.frames &&
+              typeof data.frames === 'object';
             results.push({ input: jsonStr, valid: !!isValid });
           } catch {
             results.push({ input: jsonStr, valid: false });

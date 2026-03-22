@@ -62,7 +62,9 @@ test.describe('Network Sync', () => {
     await pinInput.fill('1234');
 
     await page.waitForFunction(() => {
-      const state = (window as { __OPENRV_TEST__?: { getNetworkSyncState?: () => { connectionState: string } } }).__OPENRV_TEST__?.getNetworkSyncState?.();
+      const state = (
+        window as { __OPENRV_TEST__?: { getNetworkSyncState?: () => { connectionState: string } } }
+      ).__OPENRV_TEST__?.getNetworkSyncState?.();
       return Boolean(state && state.connectionState !== 'disconnected');
     });
   });
@@ -81,15 +83,27 @@ test.describe('Network Sync', () => {
     const createButton = disconnectedPanel.locator('[data-testid="network-create-room-button"]');
     await createButton.click();
 
-    await page.waitForFunction(() => {
-      const state = (window as { __OPENRV_TEST__?: { getNetworkSyncState?: () => { connectionState: string; roomCode: string | null; isHost: boolean } } })
-        .__OPENRV_TEST__?.getNetworkSyncState?.();
-      return Boolean(state && state.connectionState === 'connected' && state.roomCode && state.isHost);
-    }, null, { timeout: 5000 });
+    await page.waitForFunction(
+      () => {
+        const state = (
+          window as {
+            __OPENRV_TEST__?: {
+              getNetworkSyncState?: () => { connectionState: string; roomCode: string | null; isHost: boolean };
+            };
+          }
+        ).__OPENRV_TEST__?.getNetworkSyncState?.();
+        return Boolean(state && state.connectionState === 'connected' && state.roomCode && state.isHost);
+      },
+      null,
+      { timeout: 5000 },
+    );
 
     const networkState = await page.evaluate(() => {
-      return (window as { __OPENRV_TEST__?: { getNetworkSyncState?: () => { roomCode: string | null; isHost: boolean } } })
-        .__OPENRV_TEST__?.getNetworkSyncState?.() ?? null;
+      return (
+        (
+          window as { __OPENRV_TEST__?: { getNetworkSyncState?: () => { roomCode: string | null; isHost: boolean } } }
+        ).__OPENRV_TEST__?.getNetworkSyncState?.() ?? null
+      );
     });
 
     expect(networkState).toBeTruthy();
@@ -123,7 +137,10 @@ test.describe('Network Sync', () => {
     expect(sharedURL.searchParams.get('rtc')).toBeTruthy();
   });
 
-  test('NET-006: serverless WebRTC URL flow connects host and guest via UI response link apply', async ({ page, context }) => {
+  test('NET-006: serverless WebRTC URL flow connects host and guest via UI response link apply', async ({
+    page,
+    context,
+  }) => {
     const networkButton = page.locator('[data-testid="network-sync-button"]').first();
     await networkButton.click();
 
@@ -133,11 +150,16 @@ test.describe('Network Sync', () => {
     await disconnectedPanel.locator('[data-testid="network-pin-code-input"]').fill('1357');
     await disconnectedPanel.locator('[data-testid="network-create-room-button"]').click();
 
-    await page.waitForFunction(() => {
-      const state = (window as { __OPENRV_TEST__?: { getNetworkSyncState?: () => { connectionState: string; isHost: boolean } } })
-        .__OPENRV_TEST__?.getNetworkSyncState?.();
-      return Boolean(state && state.connectionState === 'connected' && state.isHost);
-    }, null, { timeout: 5000 });
+    await page.waitForFunction(
+      () => {
+        const state = (
+          window as { __OPENRV_TEST__?: { getNetworkSyncState?: () => { connectionState: string; isHost: boolean } } }
+        ).__OPENRV_TEST__?.getNetworkSyncState?.();
+        return Boolean(state && state.connectionState === 'connected' && state.isHost);
+      },
+      null,
+      { timeout: 5000 },
+    );
 
     const connectedPanel = page.locator('[data-testid="network-connected-panel"]');
     await expect(connectedPanel).toBeVisible({ timeout: 3000 });
@@ -166,17 +188,27 @@ test.describe('Network Sync', () => {
     await connectedPanel.locator('[data-testid="network-response-link-input"]').fill(responseURL.toString());
     await connectedPanel.locator('[data-testid="network-apply-response-button"]').click();
 
-    await page.waitForFunction(() => {
-      const state = (window as { __OPENRV_TEST__?: { getNetworkSyncState?: () => { userCount: number } } })
-        .__OPENRV_TEST__?.getNetworkSyncState?.();
-      return Boolean(state && state.userCount >= 2);
-    }, null, { timeout: 10000 });
+    await page.waitForFunction(
+      () => {
+        const state = (
+          window as { __OPENRV_TEST__?: { getNetworkSyncState?: () => { userCount: number } } }
+        ).__OPENRV_TEST__?.getNetworkSyncState?.();
+        return Boolean(state && state.userCount >= 2);
+      },
+      null,
+      { timeout: 10000 },
+    );
 
-    await guestPage.waitForFunction(() => {
-      const state = (window as { __OPENRV_TEST__?: { getNetworkSyncState?: () => { userCount: number } } })
-        .__OPENRV_TEST__?.getNetworkSyncState?.();
-      return Boolean(state && state.userCount >= 2);
-    }, null, { timeout: 10000 });
+    await guestPage.waitForFunction(
+      () => {
+        const state = (
+          window as { __OPENRV_TEST__?: { getNetworkSyncState?: () => { userCount: number } } }
+        ).__OPENRV_TEST__?.getNetworkSyncState?.();
+        return Boolean(state && state.userCount >= 2);
+      },
+      null,
+      { timeout: 10000 },
+    );
 
     await guestPage.close();
   });

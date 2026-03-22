@@ -1,10 +1,5 @@
 import { test, expect } from '@playwright/test';
-import {
-  loadVideoFile,
-  waitForTestHelper,
-  captureViewerScreenshot,
-  imagesAreDifferent,
-} from './fixtures';
+import { loadVideoFile, waitForTestHelper, captureViewerScreenshot, imagesAreDifferent } from './fixtures';
 
 /**
  * Color Curves Tests
@@ -85,9 +80,7 @@ test.describe('Color Curves', () => {
       await page.waitForTimeout(200);
 
       // Button should have active styling (border color no longer transparent)
-      const borderColor = await curvesButton.evaluate((el) =>
-        getComputedStyle(el).borderColor
-      );
+      const borderColor = await curvesButton.evaluate((el) => getComputedStyle(el).borderColor);
       expect(borderColor).not.toBe('transparent');
       expect(borderColor).not.toBe('rgba(0, 0, 0, 0)');
     });
@@ -124,9 +117,7 @@ test.describe('Color Curves', () => {
       await page.waitForTimeout(200);
 
       const masterBtn = page.locator('[data-testid="curve-channel-master"]');
-      const bgColor = await masterBtn.evaluate((el) =>
-        getComputedStyle(el).backgroundColor
-      );
+      const bgColor = await masterBtn.evaluate((el) => getComputedStyle(el).backgroundColor);
       // Master channel should have background color when active
       expect(bgColor).not.toBe('transparent');
       expect(bgColor).not.toBe('rgba(0, 0, 0, 0)');
@@ -141,9 +132,7 @@ test.describe('Color Curves', () => {
       await page.waitForTimeout(100);
 
       // Red button should now have active background
-      const bgColor = await redBtn.evaluate((el) =>
-        getComputedStyle(el).backgroundColor
-      );
+      const bgColor = await redBtn.evaluate((el) => getComputedStyle(el).backgroundColor);
       expect(bgColor).not.toBe('transparent');
       expect(bgColor).not.toBe('rgba(0, 0, 0, 0)');
     });
@@ -355,7 +344,11 @@ test.describe('Color Curves', () => {
       await page.keyboard.press('c');
       await page.waitForTimeout(200);
 
-      const exposureSlider = page.locator('.color-controls-panel label').filter({ hasText: 'Exposure' }).locator('..').locator('input[type="range"]');
+      const exposureSlider = page
+        .locator('.color-controls-panel label')
+        .filter({ hasText: 'Exposure' })
+        .locator('..')
+        .locator('input[type="range"]');
       await exposureSlider.fill('1');
       await exposureSlider.dispatchEvent('input');
       await page.waitForTimeout(200);

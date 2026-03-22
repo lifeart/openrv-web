@@ -523,11 +523,7 @@ export class Renderer implements RendererBackend {
     const gl = this.gl;
     const floatLinear = gl.getExtension('OES_texture_float_linear');
     const colorBufferFloat = gl.getExtension('EXT_color_buffer_float');
-    this._mipmapSupported = !!(
-      floatLinear &&
-      colorBufferFloat &&
-      typeof gl.generateMipmap === 'function'
-    );
+    this._mipmapSupported = !!(floatLinear && colorBufferFloat && typeof gl.generateMipmap === 'function');
     this.parallelCompileExt = gl.getExtension('KHR_parallel_shader_compile');
 
     // Re-create shaders and quad geometry

@@ -1,9 +1,5 @@
 import { test, expect } from '@playwright/test';
-import {
-  loadVideoFile,
-  loadTwoVideoFiles,
-  waitForTestHelper,
-} from './fixtures';
+import { loadVideoFile, loadTwoVideoFiles, waitForTestHelper } from './fixtures';
 
 /**
  * OTIO (OpenTimelineIO) Import Tests
@@ -21,12 +17,15 @@ import {
  */
 
 /** Helper to build a minimal valid OTIO timeline JSON string */
-function buildOTIOJson(clips: Array<{
-  name: string;
-  startFrame: number;
-  duration: number;
-  targetUrl?: string;
-}>, options?: { fps?: number; gaps?: Array<{ afterClipIndex: number; duration: number }> }): string {
+function buildOTIOJson(
+  clips: Array<{
+    name: string;
+    startFrame: number;
+    duration: number;
+    targetUrl?: string;
+  }>,
+  options?: { fps?: number; gaps?: Array<{ afterClipIndex: number; duration: number }> },
+): string {
   const fps = options?.fps ?? 24;
   const gapMap = new Map<number, number>();
   if (options?.gaps) {
@@ -54,12 +53,14 @@ function buildOTIOJson(clips: Array<{
           rate: fps,
         },
       },
-      ...(clip.targetUrl ? {
-        media_reference: {
-          OTIO_SCHEMA: 'ExternalReference.1',
-          target_url: clip.targetUrl,
-        },
-      } : {}),
+      ...(clip.targetUrl
+        ? {
+            media_reference: {
+              OTIO_SCHEMA: 'ExternalReference.1',
+              target_url: clip.targetUrl,
+            },
+          }
+        : {}),
     });
 
     // Insert gap after this clip if specified
@@ -118,9 +119,7 @@ test.describe('OTIO Import', () => {
 
   test.describe('parseOTIO via page.evaluate', () => {
     test('OTIO-E001: parseOTIO returns parsed result for valid OTIO JSON', async ({ page }) => {
-      const otioJson = buildOTIOJson([
-        { name: 'shot_01', startFrame: 0, duration: 48 },
-      ]);
+      const otioJson = buildOTIOJson([{ name: 'shot_01', startFrame: 0, duration: 48 }]);
 
       const result = await page.evaluate((json) => {
         const pm = (window as any).__OPENRV_TEST__?.mutations?.getPlaylistManager();
@@ -202,9 +201,7 @@ test.describe('OTIO Import', () => {
     });
 
     test('OTIO-E005: fromOTIO preserves in/out points from OTIO source_range', async ({ page }) => {
-      const otioJson = buildOTIOJson([
-        { name: 'shot_01', startFrame: 10, duration: 48 },
-      ]);
+      const otioJson = buildOTIOJson([{ name: 'shot_01', startFrame: 10, duration: 48 }]);
 
       const result = await page.evaluate((json) => {
         const pm = (window as any).__OPENRV_TEST__?.mutations?.getPlaylistManager();
@@ -213,11 +210,13 @@ test.describe('OTIO Import', () => {
         pm.fromOTIO(json, () => ({ index: 0, frameCount: 200 }));
         const clips = pm.getClips();
         const clip = clips[0];
-        return clip ? {
-          inPoint: clip.inPoint,
-          outPoint: clip.outPoint,
-          duration: clip.duration,
-        } : null;
+        return clip
+          ? {
+              inPoint: clip.inPoint,
+              outPoint: clip.outPoint,
+              duration: clip.duration,
+            }
+          : null;
       }, otioJson);
 
       expect(result).not.toBeNull();
@@ -261,7 +260,7 @@ test.describe('OTIO Import', () => {
           { name: 'shot_01', startFrame: 0, duration: 24 },
           { name: 'shot_02', startFrame: 0, duration: 24 },
         ],
-        { gaps: [{ afterClipIndex: 0, duration: 12 }] }
+        { gaps: [{ afterClipIndex: 0, duration: 12 }] },
       );
 
       const result = await page.evaluate((json) => {
@@ -357,9 +356,7 @@ test.describe('OTIO Import', () => {
     });
 
     test('OTIO-E011: imported OTIO clips show correct names in playlist panel', async ({ page }) => {
-      const otioJson = buildOTIOJson([
-        { name: 'hero_shot', startFrame: 0, duration: 48 },
-      ]);
+      const otioJson = buildOTIOJson([{ name: 'hero_shot', startFrame: 0, duration: 48 }]);
 
       await page.evaluate((json) => {
         const pm = (window as any).__OPENRV_TEST__?.mutations?.getPlaylistManager();
@@ -379,9 +376,7 @@ test.describe('OTIO Import', () => {
     });
 
     test('OTIO-E012: imported OTIO clips show in/out point info in panel', async ({ page }) => {
-      const otioJson = buildOTIOJson([
-        { name: 'shot_with_range', startFrame: 10, duration: 48 },
-      ]);
+      const otioJson = buildOTIOJson([{ name: 'shot_with_range', startFrame: 10, duration: 48 }]);
 
       await page.evaluate((json) => {
         const pm = (window as any).__OPENRV_TEST__?.mutations?.getPlaylistManager();
@@ -422,7 +417,10 @@ test.describe('OTIO Import', () => {
       // Footer should show clip count; scope to panel footer text pattern to avoid
       // matching numbered clip rows ("1", "2", etc.) in strict mode.
       const panel = page.locator('[data-testid="playlist-panel"]');
-      const footerInfo = panel.locator('div').filter({ hasText: /clip[s]?\s*•/ }).first();
+      const footerInfo = panel
+        .locator('div')
+        .filter({ hasText: /clip[s]?\s*•/ })
+        .first();
       await expect(footerInfo).toBeVisible();
       await expect(footerInfo).toContainText(/2\s*clips?/);
     });
@@ -471,9 +469,7 @@ test.describe('OTIO Import', () => {
 
   test.describe('OTIO import clears and appends behavior', () => {
     test('OTIO-E015: fromOTIO appends to existing playlist clips', async ({ page }) => {
-      const otioJson = buildOTIOJson([
-        { name: 'otio_clip', startFrame: 0, duration: 48 },
-      ]);
+      const otioJson = buildOTIOJson([{ name: 'otio_clip', startFrame: 0, duration: 48 }]);
 
       const result = await page.evaluate((json) => {
         const pm = (window as any).__OPENRV_TEST__?.mutations?.getPlaylistManager();
@@ -498,9 +494,7 @@ test.describe('OTIO Import', () => {
     });
 
     test('OTIO-E016: clear then fromOTIO gives clean import', async ({ page }) => {
-      const otioJson = buildOTIOJson([
-        { name: 'fresh_clip', startFrame: 0, duration: 24 },
-      ]);
+      const otioJson = buildOTIOJson([{ name: 'fresh_clip', startFrame: 0, duration: 24 }]);
 
       const result = await page.evaluate((json) => {
         const pm = (window as any).__OPENRV_TEST__?.mutations?.getPlaylistManager();
@@ -526,9 +520,7 @@ test.describe('OTIO Import', () => {
 
   test.describe('OTIO import edge cases', () => {
     test('OTIO-E017: fromOTIO handles single-frame clips', async ({ page }) => {
-      const otioJson = buildOTIOJson([
-        { name: 'single_frame', startFrame: 5, duration: 1 },
-      ]);
+      const otioJson = buildOTIOJson([{ name: 'single_frame', startFrame: 5, duration: 1 }]);
 
       const result = await page.evaluate((json) => {
         const pm = (window as any).__OPENRV_TEST__?.mutations?.getPlaylistManager();
@@ -537,11 +529,13 @@ test.describe('OTIO Import', () => {
         pm.fromOTIO(json, () => ({ index: 0, frameCount: 200 }));
         const clips = pm.getClips();
         const clip = clips[0];
-        return clip ? {
-          inPoint: clip.inPoint,
-          outPoint: clip.outPoint,
-          duration: clip.duration,
-        } : null;
+        return clip
+          ? {
+              inPoint: clip.inPoint,
+              outPoint: clip.outPoint,
+              duration: clip.duration,
+            }
+          : null;
       }, otioJson);
 
       expect(result).not.toBeNull();

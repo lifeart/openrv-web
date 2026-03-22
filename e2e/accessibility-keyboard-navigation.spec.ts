@@ -710,10 +710,12 @@ test.describe('Full Keyboard Workflow', () => {
 
     const inHeader = await page.evaluate(() => {
       const el = document.activeElement;
-      return el?.closest('.header-bar') !== null ||
+      return (
+        el?.closest('.header-bar') !== null ||
         el?.closest('.tab-bar') !== null ||
         el?.closest('.context-toolbar') !== null ||
-        el?.closest('#main-content') !== null;
+        el?.closest('#main-content') !== null
+      );
     });
     expect(inHeader).toBe(true); // Should be in some zone
   });

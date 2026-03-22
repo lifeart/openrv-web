@@ -24,19 +24,27 @@ import {
  */
 
 /** Helper: Wait for OCIO enabled state to change */
-async function waitForOCIOEnabled(page: import('@playwright/test').Page, enabled: boolean, timeout = 5000): Promise<void> {
+async function waitForOCIOEnabled(
+  page: import('@playwright/test').Page,
+  enabled: boolean,
+  timeout = 5000,
+): Promise<void> {
   await page.waitForFunction(
     (expected) => {
       const state = (window as any).__OPENRV_TEST__?.getOCIOState();
       return state?.enabled === expected;
     },
     enabled,
-    { timeout }
+    { timeout },
   );
 }
 
 /** Helper: Wait for OCIO panel visibility */
-async function waitForOCIOPanel(page: import('@playwright/test').Page, visible: boolean, timeout = 5000): Promise<void> {
+async function waitForOCIOPanel(
+  page: import('@playwright/test').Page,
+  visible: boolean,
+  timeout = 5000,
+): Promise<void> {
   const panel = page.locator('[data-testid="ocio-panel"]');
   if (visible) {
     await expect(panel).toBeVisible({ timeout });
@@ -50,7 +58,7 @@ async function waitForOCIOState(
   page: import('@playwright/test').Page,
   property: string,
   expectedValue: any,
-  timeout = 5000
+  timeout = 5000,
 ): Promise<void> {
   await page.waitForFunction(
     ({ prop, expected }) => {
@@ -58,7 +66,7 @@ async function waitForOCIOState(
       return state?.[prop] === expected;
     },
     { prop: property, expected: expectedValue },
-    { timeout }
+    { timeout },
   );
 }
 
@@ -74,7 +82,7 @@ async function enableOCIO(page: import('@playwright/test').Page): Promise<void> 
 async function selectDropdownOption(
   page: import('@playwright/test').Page,
   triggerTestId: string,
-  optionText: string
+  optionText: string,
 ): Promise<void> {
   await page.locator(`[data-testid="${triggerTestId}"]`).click();
   const dropdown = page.locator('.dropdown-menu').last();
@@ -213,9 +221,7 @@ test.describe('OCIO Color Management', () => {
       await waitForOCIOEnabled(page, true);
 
       // Button should have active style (highlighted border)
-      const borderColor = await ocioButton.evaluate((el) =>
-        getComputedStyle(el).borderColor
-      );
+      const borderColor = await ocioButton.evaluate((el) => getComputedStyle(el).borderColor);
       expect(borderColor).not.toBe('transparent');
     });
   });
@@ -414,7 +420,7 @@ test.describe('OCIO Color Management', () => {
       const samplePoints = [
         { x: centerX, y: centerY },
         { x: Math.round(box!.width / 4), y: Math.round(box!.height / 4) },
-        { x: Math.round(box!.width * 3 / 4), y: Math.round(box!.height * 3 / 4) },
+        { x: Math.round((box!.width * 3) / 4), y: Math.round((box!.height * 3) / 4) },
       ];
 
       const pixelsBefore = await sampleCanvasPixels(page, samplePoints);
@@ -546,7 +552,7 @@ test.describe('OCIO Color Management', () => {
           return state?.currentFrame !== initialFrame;
         },
         state.enabled ? 1 : 0,
-        { timeout: 5000 }
+        { timeout: 5000 },
       );
 
       // OCIO state should persist
@@ -574,7 +580,7 @@ test.describe('OCIO Color Management', () => {
           return state?.currentFrame !== initialFrame;
         },
         initialState.enabled ? 1 : 0,
-        { timeout: 5000 }
+        { timeout: 5000 },
       );
 
       // Disable OCIO on the new frame to compare
@@ -664,7 +670,8 @@ test.describe('OCIO Color Management', () => {
       const colorPanel = page.locator('.color-controls-panel');
       await expect(colorPanel).toBeVisible({ timeout: 5000 });
 
-      const exposureSlider = page.locator('.color-controls-panel label')
+      const exposureSlider = page
+        .locator('.color-controls-panel label')
         .filter({ hasText: 'Exposure' })
         .locator('..')
         .locator('input[type="range"]');
@@ -679,7 +686,7 @@ test.describe('OCIO Color Management', () => {
             return state?.exposure === 2;
           },
           undefined,
-          { timeout: 5000 }
+          { timeout: 5000 },
         );
       }
 

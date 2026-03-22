@@ -49,11 +49,7 @@ export function estimateTokens(text: string): number {
 }
 
 /** Estimate cost for a single API call. */
-export function estimateCost(
-  inputText: string,
-  estimatedOutputTokens: number,
-  model: string
-): CostEstimate {
+export function estimateCost(inputText: string, estimatedOutputTokens: number, model: string): CostEstimate {
   const inputTokens = estimateTokens(inputText);
   const pricing = getPricing(model);
   const inputCost = (inputTokens / 1_000_000) * pricing.input;

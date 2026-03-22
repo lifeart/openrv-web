@@ -204,14 +204,20 @@ test.describe('Stereo Eye Swap Control', () => {
 
     // Click eye swap
     await page.click('[data-testid="stereo-eye-swap"]');
-    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getViewerState(); return s?.stereoEyeSwap === true; })()');
+    await waitForCondition(
+      page,
+      '(() => { const s = window.__OPENRV_TEST__?.getViewerState(); return s?.stereoEyeSwap === true; })()',
+    );
 
     state = await getViewerState(page);
     expect(state.stereoEyeSwap).toBe(true);
 
     // Click again to toggle off
     await page.click('[data-testid="stereo-eye-swap"]');
-    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getViewerState(); return s?.stereoEyeSwap === false; })()');
+    await waitForCondition(
+      page,
+      '(() => { const s = window.__OPENRV_TEST__?.getViewerState(); return s?.stereoEyeSwap === false; })()',
+    );
 
     state = await getViewerState(page);
     expect(state.stereoEyeSwap).toBe(false);
@@ -260,7 +266,10 @@ test.describe('Stereo Offset Control', () => {
     const slider = page.locator('[data-testid="stereo-offset-slider"]');
     await slider.fill('5');
     await slider.dispatchEvent('input');
-    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getViewerState(); return s?.stereoOffset === 5; })()');
+    await waitForCondition(
+      page,
+      '(() => { const s = window.__OPENRV_TEST__?.getViewerState(); return s?.stereoOffset === 5; })()',
+    );
 
     state = await getViewerState(page);
     expect(state.stereoOffset).toBe(5);

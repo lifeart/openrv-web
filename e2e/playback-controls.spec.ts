@@ -273,7 +273,9 @@ test.describe('Playback Controls', () => {
       expect(state.playDirection).toBe(1);
 
       // Find and click the direction button (title contains "Playing forward" or "Playing backward")
-      const directionButton = page.locator('button[title*="Playing forward"], button[title*="Playing backward"]').first();
+      const directionButton = page
+        .locator('button[title*="Playing forward"], button[title*="Playing backward"]')
+        .first();
       await expect(directionButton).toBeVisible();
       await directionButton.click();
       await waitForPlayDirection(page, -1);
@@ -320,7 +322,9 @@ test.describe('Playback Controls', () => {
 
     test('PLAY-026: direction button icon should update when direction changes', async ({ page }) => {
       // The direction button has "Playing forward" or "Playing backward" in its title
-      const directionButton = page.locator('button[title*="Playing forward"], button[title*="Playing backward"]').first();
+      const directionButton = page
+        .locator('button[title*="Playing forward"], button[title*="Playing backward"]')
+        .first();
       await expect(directionButton).toBeVisible();
 
       // Check initial state (forward)
@@ -376,10 +380,13 @@ test.describe('Playback Controls', () => {
       const frameAtReversal = state.currentFrame;
 
       // Wait for reverse playback to actually decrement frames
-      await waitForCondition(page, `(() => {
+      await waitForCondition(
+        page,
+        `(() => {
         const s = window.__OPENRV_TEST__?.getSessionState();
         return s?.currentFrame < ${frameAtReversal};
-      })()`);
+      })()`,
+      );
 
       // Stop playback
       await page.keyboard.press('Space');
@@ -493,10 +500,13 @@ test.describe('Playback Controls', () => {
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('o'); // out at frame 4 (3 frame range)
-      await waitForCondition(page, `(() => {
+      await waitForCondition(
+        page,
+        `(() => {
         const s = window.__OPENRV_TEST__?.getSessionState();
         return s?.inPoint === 2 && s?.outPoint === 4;
-      })()`);
+      })()`,
+      );
 
       // Set pingpong mode (Ctrl+L cycles: loop -> pingpong)
       await page.keyboard.press('Control+l');
@@ -507,17 +517,22 @@ test.describe('Playback Controls', () => {
       expect(state.playDirection).toBe(1); // Initially forward
 
       // Check direction button shows forward
-      const directionButton = page.locator('button[title*="Playing forward"], button[title*="Playing backward"]').first();
+      const directionButton = page
+        .locator('button[title*="Playing forward"], button[title*="Playing backward"]')
+        .first();
       let title = await directionButton.getAttribute('title');
       expect(title).toMatch(/Playing forward/i);
 
       // Go to near the end of range
       await page.keyboard.press('End'); // Go to out point
       await page.keyboard.press('ArrowLeft'); // One frame before end
-      await waitForCondition(page, `(() => {
+      await waitForCondition(
+        page,
+        `(() => {
         const s = window.__OPENRV_TEST__?.getSessionState();
         return s?.currentFrame < s?.outPoint;
-      })()`);
+      })()`,
+      );
 
       // Start playback - should hit boundary and reverse
       await page.keyboard.press('Space');
@@ -553,10 +568,13 @@ test.describe('Playback Controls', () => {
 
       // Set in point
       await page.keyboard.press('i');
-      await waitForCondition(page, `(() => {
+      await waitForCondition(
+        page,
+        `(() => {
         const s = window.__OPENRV_TEST__?.getSessionState();
         return s?.inPoint === ${targetFrame};
-      })()`);
+      })()`,
+      );
 
       state = await getSessionState(page);
       expect(state.inPoint).toBe(targetFrame);
@@ -569,24 +587,35 @@ test.describe('Playback Controls', () => {
 
       // Go near end — wait for End to complete before stepping back
       await page.keyboard.press('End');
-      await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s != null && s.currentFrame === s.frameCount; })()', 10000);
+      await waitForCondition(
+        page,
+        '(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s != null && s.currentFrame === s.frameCount; })()',
+        10000,
+      );
       await page.keyboard.press('ArrowLeft');
       await page.waitForTimeout(100);
       await page.keyboard.press('ArrowLeft');
-      await waitForCondition(page, `(() => {
+      await waitForCondition(
+        page,
+        `(() => {
         const s = window.__OPENRV_TEST__?.getSessionState();
         return s?.currentFrame < s?.frameCount;
-      })()`, 10000);
+      })()`,
+        10000,
+      );
 
       state = await getSessionState(page);
       const targetFrame = state.currentFrame;
 
       // Set out point
       await page.keyboard.press('o');
-      await waitForCondition(page, `(() => {
+      await waitForCondition(
+        page,
+        `(() => {
         const s = window.__OPENRV_TEST__?.getSessionState();
         return s?.outPoint === ${targetFrame};
-      })()`);
+      })()`,
+      );
 
       state = await getSessionState(page);
       expect(state.outPoint).toBe(targetFrame);
@@ -604,31 +633,46 @@ test.describe('Playback Controls', () => {
       const inFrame = state.currentFrame;
 
       await page.keyboard.press('[');
-      await waitForCondition(page, `(() => {
+      await waitForCondition(
+        page,
+        `(() => {
         const s = window.__OPENRV_TEST__?.getSessionState();
         return s?.inPoint === ${inFrame};
-      })()`, 10000);
+      })()`,
+        10000,
+      );
 
       state = await getSessionState(page);
       expect(state.inPoint).toBe(inFrame);
 
       // Set out point with ]
       await page.keyboard.press('End');
-      await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s != null && s.currentFrame === s.frameCount; })()', 10000);
+      await waitForCondition(
+        page,
+        '(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s != null && s.currentFrame === s.frameCount; })()',
+        10000,
+      );
       await page.keyboard.press('ArrowLeft');
-      await waitForCondition(page, `(() => {
+      await waitForCondition(
+        page,
+        `(() => {
         const s = window.__OPENRV_TEST__?.getSessionState();
         return s?.currentFrame < s?.frameCount;
-      })()`, 10000);
+      })()`,
+        10000,
+      );
 
       state = await getSessionState(page);
       const outFrame = state.currentFrame;
 
       await page.keyboard.press(']');
-      await waitForCondition(page, `(() => {
+      await waitForCondition(
+        page,
+        `(() => {
         const s = window.__OPENRV_TEST__?.getSessionState();
         return s?.outPoint === ${outFrame};
-      })()`);
+      })()`,
+      );
 
       state = await getSessionState(page);
       expect(state.outPoint).toBe(outFrame);
@@ -676,10 +720,14 @@ test.describe('Playback Controls', () => {
       await page.keyboard.press('ArrowLeft');
       await page.waitForTimeout(100);
       await page.keyboard.press('o');
-      await waitForCondition(page, `(() => {
+      await waitForCondition(
+        page,
+        `(() => {
         const s = window.__OPENRV_TEST__?.getSessionState();
         return s?.inPoint > 1 && s?.outPoint < s?.frameCount;
-      })()`, 10000);
+      })()`,
+        10000,
+      );
 
       let state = await getSessionState(page);
       expect(state.inPoint).toBeGreaterThan(1);
@@ -687,10 +735,14 @@ test.describe('Playback Controls', () => {
 
       // Reset
       await page.keyboard.press('r');
-      await waitForCondition(page, `(() => {
+      await waitForCondition(
+        page,
+        `(() => {
         const s = window.__OPENRV_TEST__?.getSessionState();
         return s?.inPoint === 1 && s?.outPoint === s?.frameCount;
-      })()`, 10000);
+      })()`,
+        10000,
+      );
 
       state = await getSessionState(page);
       expect(state.inPoint).toBe(1);
@@ -705,10 +757,13 @@ test.describe('Playback Controls', () => {
       const currentFrame = state.currentFrame;
 
       await page.keyboard.press('m');
-      await waitForCondition(page, `(() => {
+      await waitForCondition(
+        page,
+        `(() => {
         const s = window.__OPENRV_TEST__?.getSessionState();
         return s?.marks?.includes(${currentFrame}) && s?.marks?.length === ${initialMarks + 1};
-      })()`);
+      })()`,
+      );
 
       state = await getSessionState(page);
       expect(state.marks).toContain(currentFrame);
@@ -716,10 +771,13 @@ test.describe('Playback Controls', () => {
 
       // Toggle off
       await page.keyboard.press('m');
-      await waitForCondition(page, `(() => {
+      await waitForCondition(
+        page,
+        `(() => {
         const s = window.__OPENRV_TEST__?.getSessionState();
         return !s?.marks?.includes(${currentFrame});
-      })()`);
+      })()`,
+      );
 
       state = await getSessionState(page);
       expect(state.marks).not.toContain(currentFrame);
@@ -730,19 +788,25 @@ test.describe('Playback Controls', () => {
       await page.keyboard.press('Home');
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('m'); // Mark at frame 2
-      await waitForCondition(page, `(() => {
+      await waitForCondition(
+        page,
+        `(() => {
         const s = window.__OPENRV_TEST__?.getSessionState();
         return s?.marks?.includes(2);
-      })()`);
+      })()`,
+      );
 
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('m'); // Mark at frame 5
-      await waitForCondition(page, `(() => {
+      await waitForCondition(
+        page,
+        `(() => {
         const s = window.__OPENRV_TEST__?.getSessionState();
         return s?.marks?.includes(5) && s?.marks?.length === 2;
-      })()`);
+      })()`,
+      );
 
       let state = await getSessionState(page);
       expect(state.marks.length).toBe(2);
@@ -759,20 +823,26 @@ test.describe('Playback Controls', () => {
       const muteButton = page.locator('button[title*="Mute"], button[title*="mute"]').first();
       if (await muteButton.isVisible()) {
         await muteButton.click();
-        await waitForCondition(page, `(() => {
+        await waitForCondition(
+          page,
+          `(() => {
           const s = window.__OPENRV_TEST__?.getSessionState();
           return s?.muted === true;
-        })()`);
+        })()`,
+        );
 
         state = await getSessionState(page);
         expect(state.muted).toBe(true);
 
         // Click again to unmute
         await muteButton.click();
-        await waitForCondition(page, `(() => {
+        await waitForCondition(
+          page,
+          `(() => {
           const s = window.__OPENRV_TEST__?.getSessionState();
           return s?.muted === false;
-        })()`);
+        })()`,
+        );
 
         state = await getSessionState(page);
         expect(state.muted).toBe(false);
@@ -785,16 +855,22 @@ test.describe('Playback Controls', () => {
         await volumeArea.hover();
         await page.waitForTimeout(200); // Bucket C: UI hover animation delay
 
-        const volumeSlider = page.locator('input[type="range"]').filter({ hasText: /volume/i }).first();
+        const volumeSlider = page
+          .locator('input[type="range"]')
+          .filter({ hasText: /volume/i })
+          .first();
         if (await volumeSlider.isVisible()) {
           await volumeSlider.evaluate((el: HTMLInputElement) => {
             el.value = '0.5';
             el.dispatchEvent(new Event('input', { bubbles: true }));
           });
-          await waitForCondition(page, `(() => {
+          await waitForCondition(
+            page,
+            `(() => {
             const s = window.__OPENRV_TEST__?.getSessionState();
             return s != null && Math.abs(s.volume - 0.5) < 0.1;
-          })()`);
+          })()`,
+          );
 
           const state = await getSessionState(page);
           expect(state.volume).toBeCloseTo(0.5, 1);

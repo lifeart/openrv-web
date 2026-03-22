@@ -1,10 +1,5 @@
 import { test, expect } from '@playwright/test';
-import {
-  loadVideoFile,
-  waitForTestHelper,
-  captureViewerScreenshot,
-  imagesAreDifferent,
-} from './fixtures';
+import { loadVideoFile, waitForTestHelper, captureViewerScreenshot, imagesAreDifferent } from './fixtures';
 
 /**
  * Film Emulation Effect E2E Tests
@@ -37,7 +32,7 @@ async function applyFilmInBrowser(
     inputR: number;
     inputG: number;
     inputB: number;
-  }
+  },
 ): Promise<{
   outputR: number;
   outputG: number;
@@ -59,9 +54,14 @@ async function applyFilmInBrowser(
     const imageData = new ImageData(data, width, height);
 
     // Simplified film emulation matching the filter logic
-    const LUMA_R = 0.2126, LUMA_G = 0.7152, LUMA_B = 0.0722;
+    const LUMA_R = 0.2126,
+      LUMA_G = 0.7152,
+      LUMA_B = 0.0722;
     const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
-    const softSCurve = (x: number) => { const t = clamp(x, 0, 1); return t * t * (3 - 2 * t); };
+    const softSCurve = (x: number) => {
+      const t = clamp(x, 0, 1);
+      return t * t * (3 - 2 * t);
+    };
     const strongSCurve = (x: number) => softSCurve(softSCurve(x));
     const liftGamma = (x: number, lift: number, gamma: number) =>
       clamp(lift + (1 - lift) * Math.pow(clamp(x, 0, 1), gamma), 0, 1);
@@ -70,28 +70,58 @@ async function applyFilmInBrowser(
     type StockDef = { tone: (r: number, g: number, b: number) => [number, number, number]; sat: number; grain: number };
     const stocks: Record<string, StockDef> = {
       'kodak-portra-400': {
-        tone: (r, g, b) => [softSCurve(liftGamma(r * 1.03 + 0.01, 0.03, 0.95)), softSCurve(liftGamma(g, 0.02, 0.97)), softSCurve(liftGamma(b * 0.95, 0.01, 1.02))],
-        sat: 0.85, grain: 0.35,
+        tone: (r, g, b) => [
+          softSCurve(liftGamma(r * 1.03 + 0.01, 0.03, 0.95)),
+          softSCurve(liftGamma(g, 0.02, 0.97)),
+          softSCurve(liftGamma(b * 0.95, 0.01, 1.02)),
+        ],
+        sat: 0.85,
+        grain: 0.35,
       },
       'kodak-ektar-100': {
-        tone: (r, g, b) => [clamp(strongSCurve(r * 1.05), 0, 1), clamp(strongSCurve(g * 1.02), 0, 1), clamp(strongSCurve(b * 1.06), 0, 1)],
-        sat: 1.3, grain: 0.15,
+        tone: (r, g, b) => [
+          clamp(strongSCurve(r * 1.05), 0, 1),
+          clamp(strongSCurve(g * 1.02), 0, 1),
+          clamp(strongSCurve(b * 1.06), 0, 1),
+        ],
+        sat: 1.3,
+        grain: 0.15,
       },
       'fuji-pro-400h': {
-        tone: (r, g, b) => [softSCurve(liftGamma(r * 0.97, 0.02, 0.98)), softSCurve(liftGamma(g * 1.01 + 0.01, 0.02, 0.96)), softSCurve(liftGamma(b * 1.04 + 0.02, 0.03, 0.95))],
-        sat: 0.88, grain: 0.3,
+        tone: (r, g, b) => [
+          softSCurve(liftGamma(r * 0.97, 0.02, 0.98)),
+          softSCurve(liftGamma(g * 1.01 + 0.01, 0.02, 0.96)),
+          softSCurve(liftGamma(b * 1.04 + 0.02, 0.03, 0.95)),
+        ],
+        sat: 0.88,
+        grain: 0.3,
       },
       'fuji-velvia-50': {
-        tone: (r, g, b) => [clamp(strongSCurve(r * 1.08), 0, 1), clamp(strongSCurve(g * 1.06), 0, 1), clamp(strongSCurve(b * 1.1), 0, 1)],
-        sat: 1.5, grain: 0.1,
+        tone: (r, g, b) => [
+          clamp(strongSCurve(r * 1.08), 0, 1),
+          clamp(strongSCurve(g * 1.06), 0, 1),
+          clamp(strongSCurve(b * 1.1), 0, 1),
+        ],
+        sat: 1.5,
+        grain: 0.1,
       },
       'kodak-tri-x-400': {
-        tone: (r, g, b) => { const l = luminance(r, g, b); const v = softSCurve(liftGamma(l, 0.02, 0.9)); return [v, v, v]; },
-        sat: 0, grain: 0.55,
+        tone: (r, g, b) => {
+          const l = luminance(r, g, b);
+          const v = softSCurve(liftGamma(l, 0.02, 0.9));
+          return [v, v, v];
+        },
+        sat: 0,
+        grain: 0.55,
       },
       'ilford-hp5': {
-        tone: (r, g, b) => { const l = luminance(r, g, b); const v = softSCurve(liftGamma(l, 0.03, 0.95)); return [v, v, v]; },
-        sat: 0, grain: 0.3,
+        tone: (r, g, b) => {
+          const l = luminance(r, g, b);
+          const v = softSCurve(liftGamma(l, 0.03, 0.95));
+          return [v, v, v];
+        },
+        sat: 0,
+        grain: 0.3,
       },
     };
 
@@ -101,19 +131,23 @@ async function applyFilmInBrowser(
     const intensity = clamp(p.intensity, 0, 100) / 100;
     const grainStrength = (clamp(p.grainIntensity, 0, 100) / 100) * stock.grain;
 
-    let rngState = (p.grainSeed | 0) || 1;
+    let rngState = p.grainSeed | 0 || 1;
     const nextRng = () => {
       rngState ^= rngState << 13;
       rngState ^= rngState >> 17;
       rngState ^= rngState << 5;
-      return ((rngState & 0xffff) / 0x8000) - 1;
+      return (rngState & 0xffff) / 0x8000 - 1;
     };
 
     const d = imageData.data;
     for (let px = 0; px < width * height; px++) {
       const i = px * 4;
-      const origR = d[i]!, origG = d[i + 1]!, origB = d[i + 2]!;
-      let r = origR / 255, g = origG / 255, b = origB / 255;
+      const origR = d[i]!,
+        origG = d[i + 1]!,
+        origB = d[i + 2]!;
+      let r = origR / 255,
+        g = origG / 255,
+        b = origB / 255;
       const [cr, cg, cb] = stock.tone(r, g, b);
       const luma = luminance(cr, cg, cb);
       r = luma + (cr - luma) * stock.sat;
@@ -122,11 +156,13 @@ async function applyFilmInBrowser(
       if (grainStrength > 0) {
         const envelope = 4 * luma * (1 - luma);
         const noise = nextRng() * grainStrength * envelope;
-        r += noise; g += noise; b += noise;
+        r += noise;
+        g += noise;
+        b += noise;
       }
-      r = origR / 255 * (1 - intensity) + clamp(r, 0, 1) * intensity;
-      g = origG / 255 * (1 - intensity) + clamp(g, 0, 1) * intensity;
-      b = origB / 255 * (1 - intensity) + clamp(b, 0, 1) * intensity;
+      r = (origR / 255) * (1 - intensity) + clamp(r, 0, 1) * intensity;
+      g = (origG / 255) * (1 - intensity) + clamp(g, 0, 1) * intensity;
+      b = (origB / 255) * (1 - intensity) + clamp(b, 0, 1) * intensity;
       d[i] = Math.round(clamp(r, 0, 1) * 255);
       d[i + 1] = Math.round(clamp(g, 0, 1) * 255);
       d[i + 2] = Math.round(clamp(b, 0, 1) * 255);
@@ -134,12 +170,18 @@ async function applyFilmInBrowser(
 
     let alphaPreserved = true;
     for (let i = 3; i < d.length; i += 4) {
-      if (d[i] !== 200) { alphaPreserved = false; break; }
+      if (d[i] !== 200) {
+        alphaPreserved = false;
+        break;
+      }
     }
 
     let pixelChanged = false;
     for (let i = 0; i < d.length; i++) {
-      if (d[i] !== originalData[i]) { pixelChanged = true; break; }
+      if (d[i] !== originalData[i]) {
+        pixelChanged = true;
+        break;
+      }
     }
 
     return { outputR: d[0]!, outputG: d[1]!, outputB: d[2]!, alphaPreserved, pixelChanged };
@@ -205,7 +247,7 @@ test.describe('Film Emulation Effect E2E', () => {
       const maxChannelDiff = Math.max(
         Math.abs(result.outputR - result.outputG),
         Math.abs(result.outputG - result.outputB),
-        Math.abs(result.outputR - result.outputB)
+        Math.abs(result.outputR - result.outputB),
       );
       expect(maxChannelDiff).toBeGreaterThan(5);
     });
@@ -231,12 +273,14 @@ test.describe('Film Emulation Effect E2E', () => {
         ...original,
       });
 
-      const diffLow = Math.abs(low.outputR - original.inputR) +
-                       Math.abs(low.outputG - original.inputG) +
-                       Math.abs(low.outputB - original.inputB);
-      const diffHigh = Math.abs(high.outputR - original.inputR) +
-                        Math.abs(high.outputG - original.inputG) +
-                        Math.abs(high.outputB - original.inputB);
+      const diffLow =
+        Math.abs(low.outputR - original.inputR) +
+        Math.abs(low.outputG - original.inputG) +
+        Math.abs(low.outputB - original.inputB);
+      const diffHigh =
+        Math.abs(high.outputR - original.inputR) +
+        Math.abs(high.outputG - original.inputG) +
+        Math.abs(high.outputB - original.inputB);
 
       expect(diffLow).toBeLessThan(diffHigh);
     });
@@ -279,9 +323,10 @@ test.describe('Film Emulation Effect E2E', () => {
       });
 
       // Different seeds should produce at least slightly different output
-      const diff = Math.abs(result1.outputR - result2.outputR) +
-                   Math.abs(result1.outputG - result2.outputG) +
-                   Math.abs(result1.outputB - result2.outputB);
+      const diff =
+        Math.abs(result1.outputR - result2.outputR) +
+        Math.abs(result1.outputG - result2.outputG) +
+        Math.abs(result1.outputB - result2.outputB);
       expect(diff).toBeGreaterThan(0);
     });
 
@@ -332,9 +377,10 @@ test.describe('Film Emulation Effect E2E', () => {
       // Every pair should be different
       for (let a = 0; a < results.length; a++) {
         for (let b = a + 1; b < results.length; b++) {
-          const diff = Math.abs(results[a]!.r - results[b]!.r) +
-                       Math.abs(results[a]!.g - results[b]!.g) +
-                       Math.abs(results[a]!.b - results[b]!.b);
+          const diff =
+            Math.abs(results[a]!.r - results[b]!.r) +
+            Math.abs(results[a]!.g - results[b]!.g) +
+            Math.abs(results[a]!.b - results[b]!.b);
           expect(diff).toBeGreaterThan(0);
         }
       }
@@ -354,9 +400,14 @@ test.describe('Film Emulation Effect E2E', () => {
         const canvas = document.querySelector('canvas[data-testid="viewer-image-canvas"]') as HTMLCanvasElement;
         if (!canvas) return;
 
-        const LUMA_R = 0.2126, LUMA_G = 0.7152, LUMA_B = 0.0722;
+        const LUMA_R = 0.2126,
+          LUMA_G = 0.7152,
+          LUMA_B = 0.0722;
         const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
-        const softS = (x: number) => { const t = clamp01(x); return t * t * (3 - 2 * t); };
+        const softS = (x: number) => {
+          const t = clamp01(x);
+          return t * t * (3 - 2 * t);
+        };
         const liftG = (x: number, lift: number, gamma: number) =>
           clamp01(lift + (1 - lift) * Math.pow(clamp01(x), gamma));
 
@@ -368,7 +419,8 @@ test.describe('Film Emulation Effect E2E', () => {
           img.src = dataUrl;
         });
 
-        const w = canvas.width, h = canvas.height;
+        const w = canvas.width,
+          h = canvas.height;
         const overlay = document.createElement('canvas');
         overlay.width = w;
         overlay.height = h;
@@ -378,7 +430,9 @@ test.describe('Film Emulation Effect E2E', () => {
         const imageData = overlayCtx.getImageData(0, 0, w, h);
         const d = imageData.data;
         for (let i = 0; i < d.length; i += 4) {
-          let r = d[i]! / 255, g = d[i + 1]! / 255, b = d[i + 2]! / 255;
+          let r = d[i]! / 255,
+            g = d[i + 1]! / 255,
+            b = d[i + 2]! / 255;
           // Portra tone curve
           const cr = softS(liftG(r * 1.03 + 0.01, 0.03, 0.95));
           const cg = softS(liftG(g, 0.02, 0.97));
@@ -437,17 +491,26 @@ test.describe('Film Emulation Effect E2E', () => {
         satBefore /= count;
 
         // Apply Tri-X B&W
-        const LUMA_R = 0.2126, LUMA_G = 0.7152, LUMA_B = 0.0722;
+        const LUMA_R = 0.2126,
+          LUMA_G = 0.7152,
+          LUMA_B = 0.0722;
         const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
-        const softS = (x: number) => { const t = clamp01(x); return t * t * (3 - 2 * t); };
+        const softS = (x: number) => {
+          const t = clamp01(x);
+          return t * t * (3 - 2 * t);
+        };
         const liftG = (x: number, lift: number, gamma: number) =>
           clamp01(lift + (1 - lift) * Math.pow(clamp01(x), gamma));
 
         for (let i = 0; i < d.length; i += 4) {
-          const r = d[i]! / 255, g = d[i + 1]! / 255, b = d[i + 2]! / 255;
+          const r = d[i]! / 255,
+            g = d[i + 1]! / 255,
+            b = d[i + 2]! / 255;
           const luma = LUMA_R * r + LUMA_G * g + LUMA_B * b;
           const v = Math.round(softS(liftG(luma, 0.02, 0.9)) * 255);
-          d[i] = v; d[i + 1] = v; d[i + 2] = v;
+          d[i] = v;
+          d[i + 1] = v;
+          d[i + 2] = v;
         }
         ctx.putImageData(imageData, 0, 0);
 

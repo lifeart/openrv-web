@@ -1,8 +1,5 @@
 import { test, expect } from '@playwright/test';
-import {
-  loadVideoFile,
-  waitForTestHelper,
-} from './fixtures';
+import { loadVideoFile, waitForTestHelper } from './fixtures';
 
 /**
  * Draggable Scopes Feature Tests

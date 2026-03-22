@@ -21,20 +21,34 @@ function codeToPlaywrightKey(code: string): string {
     return code.slice(5);
   }
   switch (code) {
-    case 'Space': return 'Space';
-    case 'ArrowUp': return 'ArrowUp';
-    case 'ArrowDown': return 'ArrowDown';
-    case 'ArrowLeft': return 'ArrowLeft';
-    case 'ArrowRight': return 'ArrowRight';
-    case 'Home': return 'Home';
-    case 'End': return 'End';
-    case 'Escape': return 'Escape';
-    case 'BracketLeft': return '[';
-    case 'BracketRight': return ']';
-    case 'Comma': return ',';
-    case 'Period': return '.';
-    case 'Backquote': return '`';
-    default: return code;
+    case 'Space':
+      return 'Space';
+    case 'ArrowUp':
+      return 'ArrowUp';
+    case 'ArrowDown':
+      return 'ArrowDown';
+    case 'ArrowLeft':
+      return 'ArrowLeft';
+    case 'ArrowRight':
+      return 'ArrowRight';
+    case 'Home':
+      return 'Home';
+    case 'End':
+      return 'End';
+    case 'Escape':
+      return 'Escape';
+    case 'BracketLeft':
+      return '[';
+    case 'BracketRight':
+      return ']';
+    case 'Comma':
+      return ',';
+    case 'Period':
+      return '.';
+    case 'Backquote':
+      return '`';
+    default:
+      return code;
   }
 }
 

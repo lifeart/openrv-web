@@ -27,10 +27,7 @@ async function activateStereoMode(page: import('@playwright/test').Page, mode = 
     return dd && (dd as HTMLElement).style.display !== 'none';
   });
   await page.click(`[data-stereo-mode="${mode}"]`);
-  await page.waitForFunction(
-    (m) => window.__OPENRV_TEST__?.getViewerState()?.stereoMode === m,
-    mode
-  );
+  await page.waitForFunction((m) => window.__OPENRV_TEST__?.getViewerState()?.stereoMode === m, mode);
 }
 
 // Helper to select alignment mode from dropdown
@@ -41,10 +38,7 @@ async function selectAlignMode(page: import('@playwright/test').Page, mode: stri
     return dd && (dd as HTMLElement).style.display !== 'none';
   });
   await page.click(`[data-stereo-align="${mode}"]`);
-  await page.waitForFunction(
-    (m) => window.__OPENRV_TEST__?.getViewerState()?.stereoAlignMode === m,
-    mode
-  );
+  await page.waitForFunction((m) => window.__OPENRV_TEST__?.getViewerState()?.stereoAlignMode === m, mode);
 }
 
 test.describe('Stereo Alignment Overlays', () => {
@@ -62,7 +56,9 @@ test.describe('Stereo Alignment Overlays', () => {
     await page.waitForFunction(() => {
       const btn = document.querySelector('[data-testid="stereo-align-button"]');
       if (!btn) return true;
-      return (btn as HTMLElement).style.display === 'none' || (btn.parentElement as HTMLElement)?.style.display === 'none';
+      return (
+        (btn as HTMLElement).style.display === 'none' || (btn.parentElement as HTMLElement)?.style.display === 'none'
+      );
     });
   });
 

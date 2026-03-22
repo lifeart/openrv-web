@@ -1,10 +1,5 @@
 import { test, expect } from '@playwright/test';
-import {
-  loadVideoFile,
-  waitForTestHelper,
-  getPixelProbeState,
-  getCanvas,
-} from './fixtures';
+import { loadVideoFile, waitForTestHelper, getPixelProbeState, getCanvas } from './fixtures';
 import path from 'path';
 
 /**
@@ -32,10 +27,7 @@ async function loadExrAndWait(page: import('@playwright/test').Page) {
   await fileInput.setInputFiles(filePath);
 
   // Wait for media to actually load
-  await page.waitForFunction(
-    () => window.__OPENRV_TEST__?.getSessionState()?.hasMedia === true,
-    { timeout: 10000 }
-  );
+  await page.waitForFunction(() => window.__OPENRV_TEST__?.getSessionState()?.hasMedia === true, { timeout: 10000 });
 }
 
 /**
@@ -191,11 +183,14 @@ test.describe('HDR Pixel Probe - Precision Toggle', () => {
 
     // Wait for sampled RGB01 values (not placeholder) before precision assertions.
     const rgb01El = page.locator('[data-testid="pixel-probe-rgb01"]');
-    await page.waitForFunction(() => {
-      const el = document.querySelector('[data-testid="pixel-probe-rgb01"]');
-      const text = el?.textContent?.trim() ?? '';
-      return text.length > 0 && text !== '(0.00, 0.00, 0.00)' && /\d+\.\d+/.test(text);
-    }, { timeout: 5000 });
+    await page.waitForFunction(
+      () => {
+        const el = document.querySelector('[data-testid="pixel-probe-rgb01"]');
+        const text = el?.textContent?.trim() ?? '';
+        return text.length > 0 && text !== '(0.00, 0.00, 0.00)' && /\d+\.\d+/.test(text);
+      },
+      { timeout: 5000 },
+    );
 
     const initialText = await rgb01El.textContent();
     expect(initialText).toBeTruthy();
@@ -495,10 +490,9 @@ test.describe('HDR Pixel Probe - UI Integration', () => {
     const button3x3 = sampleSizeContainer.locator('button[data-sample-size="3"]');
     await button3x3.scrollIntoViewIfNeeded();
     await button3x3.click();
-    await page.waitForFunction(
-      () => window.__OPENRV_TEST__?.getPixelProbeState?.()?.sampleSize === 3,
-      { timeout: 3000 }
-    );
+    await page.waitForFunction(() => window.__OPENRV_TEST__?.getPixelProbeState?.()?.sampleSize === 3, {
+      timeout: 3000,
+    });
 
     const state = await getPixelProbeState(page);
     expect(state.sampleSize).toBe(3);
@@ -514,10 +508,9 @@ test.describe('HDR Pixel Probe - UI Integration', () => {
     const sourceButton = sourceModeContainer.locator('button[data-source-mode="source"]');
     await sourceButton.scrollIntoViewIfNeeded();
     await sourceButton.click();
-    await page.waitForFunction(
-      () => window.__OPENRV_TEST__?.getPixelProbeState?.()?.sourceMode === 'source',
-      { timeout: 3000 }
-    );
+    await page.waitForFunction(() => window.__OPENRV_TEST__?.getPixelProbeState?.()?.sourceMode === 'source', {
+      timeout: 3000,
+    });
 
     const state = await getPixelProbeState(page);
     expect(state.sourceMode).toBe('source');
@@ -538,7 +531,7 @@ test.describe('HDR Pixel Probe - UI Integration', () => {
     const state1 = await getPixelProbeState(page);
 
     // Move to a different position
-    await page.mouse.move(box.x + 3 * box.width / 4, box.y + 3 * box.height / 4);
+    await page.mouse.move(box.x + (3 * box.width) / 4, box.y + (3 * box.height) / 4);
     await page.waitForTimeout(200);
 
     const state2 = await getPixelProbeState(page);

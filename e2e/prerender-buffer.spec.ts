@@ -39,11 +39,17 @@ async function applyHighlightsAdjustment(page: import('@playwright/test').Page, 
   await colorButton.click();
 
   // Find highlights slider
-  const highlightsSlider = page.locator('input[type="range"]').filter({ has: page.locator('..', { hasText: /Highlights/i }) }).first();
+  const highlightsSlider = page
+    .locator('input[type="range"]')
+    .filter({ has: page.locator('..', { hasText: /Highlights/i }) })
+    .first();
   if (await highlightsSlider.isVisible()) {
     await highlightsSlider.fill(String(value));
     await highlightsSlider.dispatchEvent('input');
-    await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getColorState(); return s && s.highlights !== 0; })()`);
+    await waitForCondition(
+      page,
+      `(() => { const s = window.__OPENRV_TEST__?.getColorState(); return s && s.highlights !== 0; })()`,
+    );
   }
 }
 
@@ -71,7 +77,10 @@ test.describe('Prerender Buffer', () => {
       if (await saturationSlider.isVisible()) {
         await saturationSlider.fill('150');
         await saturationSlider.dispatchEvent('input');
-        await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getColorState(); return s && s.saturation !== 1; })()`);
+        await waitForCondition(
+          page,
+          `(() => { const s = window.__OPENRV_TEST__?.getColorState(); return s && s.saturation !== 1; })()`,
+        );
       }
 
       // Capture initial screenshot
@@ -206,7 +215,10 @@ test.describe('Prerender Buffer', () => {
       if (await saturationSlider.isVisible()) {
         await saturationSlider.fill('150');
         await saturationSlider.dispatchEvent('input');
-        await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getColorState(); return s && s.saturation !== 1; })()`);
+        await waitForCondition(
+          page,
+          `(() => { const s = window.__OPENRV_TEST__?.getColorState(); return s && s.saturation !== 1; })()`,
+        );
       }
 
       const withBothScreenshot = await captureViewerScreenshot(page);
@@ -307,7 +319,7 @@ test.describe('Prerender Buffer', () => {
       const saturationSlider = page.locator('.color-panel input[type="range"]').first();
       if (await saturationSlider.isVisible()) {
         for (let i = 0; i < 10; i++) {
-          const value = 100 + (i * 10);
+          const value = 100 + i * 10;
           await saturationSlider.fill(String(value));
           await saturationSlider.dispatchEvent('input');
           await page.waitForTimeout(20);
@@ -432,7 +444,10 @@ test.describe('Prerender Buffer', () => {
     test('PRB-051: effects should work at last frame', async ({ page }) => {
       // Go to last frame
       await page.keyboard.press('End');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s && s.currentFrame === s.frameCount; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s && s.currentFrame === s.frameCount; })()`,
+      );
 
       const initialScreenshot = await captureViewerScreenshot(page);
 
@@ -511,7 +526,10 @@ test.describe('Prerender Buffer', () => {
         const beforeState = await getColorState(page);
         await saturationSlider.fill('150');
         await saturationSlider.dispatchEvent('input');
-        await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getColorState(); return s && s.saturation !== 1; })()`);
+        await waitForCondition(
+          page,
+          `(() => { const s = window.__OPENRV_TEST__?.getColorState(); return s && s.saturation !== 1; })()`,
+        );
         const afterState = await getColorState(page);
         expect(afterState).not.toEqual(beforeState);
       }
@@ -576,7 +594,10 @@ test.describe('Prerender Buffer', () => {
       if (await saturationSlider.isVisible()) {
         await saturationSlider.fill('180');
         await saturationSlider.dispatchEvent('input');
-        await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getColorState(); return s && s.saturation !== 1; })()`);
+        await waitForCondition(
+          page,
+          `(() => { const s = window.__OPENRV_TEST__?.getColorState(); return s && s.saturation !== 1; })()`,
+        );
       }
 
       const initialWithEffect = await captureViewerScreenshot(page);

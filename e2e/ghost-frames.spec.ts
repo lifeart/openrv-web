@@ -1,10 +1,5 @@
 import { test, expect } from '@playwright/test';
-import {
-  loadVideoFile,
-  waitForTestHelper,
-  captureViewerScreenshot,
-  imagesAreDifferent,
-} from './fixtures';
+import { loadVideoFile, waitForTestHelper, captureViewerScreenshot, imagesAreDifferent } from './fixtures';
 
 /**
  * Ghost Frames / Onion Skin Tests

@@ -7,17 +7,8 @@
  */
 
 import { test, expect } from '@playwright/test';
-import {
-  initApp,
-  initWithVideo,
-  takeDocScreenshot,
-  switchTab,
-  waitForCanvasStable,
-} from './screenshot-helpers';
-import {
-  loadExrFile,
-  loadTwoVideoFiles,
-} from '../fixtures';
+import { initApp, initWithVideo, takeDocScreenshot, switchTab, waitForCanvasStable } from './screenshot-helpers';
+import { loadExrFile, loadTwoVideoFiles } from '../fixtures';
 
 test.describe('Feature Screenshots', () => {
   // ── 18: Channel isolation (R/G/B/Luma) ───────────────────────────────
@@ -157,9 +148,11 @@ test.describe('Feature Screenshots', () => {
     await page.waitForTimeout(300);
 
     // Look for tone mapping control button and click it
-    const tmButton = page.locator(
-      '[data-testid="tone-mapping-control-button"], [data-testid="tone-mapping-button"], .tone-mapping-control button',
-    ).first();
+    const tmButton = page
+      .locator(
+        '[data-testid="tone-mapping-control-button"], [data-testid="tone-mapping-button"], .tone-mapping-control button',
+      )
+      .first();
     if (await tmButton.isVisible({ timeout: 2000 }).catch(() => false)) {
       await tmButton.click();
       await page.waitForTimeout(300);
@@ -200,15 +193,22 @@ test.describe('Feature Screenshots', () => {
     await initWithVideo(page);
 
     // Enable safe areas via QC tab button
-    await page.locator('[data-tab-id="qc"]').click().catch(() => {});
+    await page
+      .locator('[data-tab-id="qc"]')
+      .click()
+      .catch(() => {});
     await page.waitForTimeout(300);
     // Click safe areas toggle if available
-    await page.locator('button:has-text("Safe"), [title*="Safe Area"], [aria-label*="Safe"]').first().click().catch(() => {
-      // Fallback: try via test helper
-      return page.evaluate(() => {
-        (window as any).__OPENRV_TEST__?.toggleSafeAreasTitleSafe?.();
+    await page
+      .locator('button:has-text("Safe"), [title*="Safe Area"], [aria-label*="Safe"]')
+      .first()
+      .click()
+      .catch(() => {
+        // Fallback: try via test helper
+        return page.evaluate(() => {
+          (window as any).__OPENRV_TEST__?.toggleSafeAreasTitleSafe?.();
+        });
       });
-    });
     await page.waitForTimeout(500);
     await waitForCanvasStable(page, 2000);
 

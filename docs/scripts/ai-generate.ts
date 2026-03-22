@@ -97,10 +97,14 @@ Options:
   --help, -h         Show this help
 
 Available modules:
-${listModuleKeys().map((k) => `  ${k}`).join('\n')}
+${listModuleKeys()
+  .map((k) => `  ${k}`)
+  .join('\n')}
 
 Available templates:
-${getTemplateTypes().map((t) => `  ${t}`).join('\n')}
+${getTemplateTypes()
+  .map((t) => `  ${t}`)
+  .join('\n')}
 `);
 }
 
@@ -217,7 +221,11 @@ async function main(): Promise<void> {
     const mod = getModuleConfig(opts.module);
     if (!mod) {
       console.error(`Error: unknown module "${opts.module}".`);
-      console.error(`Available modules:\n${listModuleKeys().map((k) => `  ${k}`).join('\n')}`);
+      console.error(
+        `Available modules:\n${listModuleKeys()
+          .map((k) => `  ${k}`)
+          .join('\n')}`,
+      );
       process.exit(1);
     }
     modules = [mod];

@@ -431,7 +431,7 @@ test.describe('Audio Playback', () => {
       const muteButton = page.locator(SELECTORS.MUTE_BUTTON).first();
       const volumeArea = page.locator(SELECTORS.VOLUME_CONTROL).first();
 
-      if (await muteButton.isVisible() && await volumeArea.isVisible()) {
+      if ((await muteButton.isVisible()) && (await volumeArea.isVisible())) {
         // Mute
         await muteButton.click();
         await page.waitForTimeout(TIMING.UI_UPDATE);

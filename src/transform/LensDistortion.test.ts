@@ -198,7 +198,7 @@ describe('LensDistortion', () => {
       const corners = [
         0, // top-left
         (size - 1) * 4, // top-right
-        ((size - 1) * size) * 4, // bottom-left
+        (size - 1) * size * 4, // bottom-left
         ((size - 1) * size + (size - 1)) * 4, // bottom-right
       ];
 

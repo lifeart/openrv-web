@@ -7,7 +7,7 @@ test.describe('GTO Export Preservation', () => {
     // 1. Prepare test files
     const testFileName = 'preservation_test_media.png';
     const originalPath = '/absolute/path/to/preservation_test_media.png';
-    
+
     // Create a minimal valid GTO/RV session file
     const rvContent = `GTOa (4)
 
@@ -56,7 +56,10 @@ customNode : RVUnknownNode (1)
     fs.writeFileSync(rvFilePath, rvContent);
 
     // Create a dummy image file (1x1 transparent png)
-    const imageBuffer = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64');
+    const imageBuffer = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+      'base64',
+    );
     fs.writeFileSync(mediaFilePath, imageBuffer);
 
     // 2. Load the app and upload files
@@ -74,21 +77,21 @@ customNode : RVUnknownNode (1)
 
     // 3. Trigger Export
     const downloadPromise = page.waitForEvent('download', { timeout: 10000 });
-    
+
     // Click Export -> Save RV Session
     const exportButton = page.locator('button[title*="Export"]').first();
     await exportButton.click();
     await page.waitForTimeout(200);
-    
+
     const saveButton = page.locator('text=Save RV Session (.rv)');
     if (await saveButton.isVisible()) {
-        await saveButton.click();
+      await saveButton.click();
     } else {
-        // Fallback or if direct button
-        await page.keyboard.press('Control+s'); // ctrl+s might be frame export default?
-        // Let's rely on the button menu if possible
-        // If "Save RV Session" isn't visible, maybe check ExportControl implementation
-        // But assumed from export-workflow.spec.ts it exists
+      // Fallback or if direct button
+      await page.keyboard.press('Control+s'); // ctrl+s might be frame export default?
+      // Let's rely on the button menu if possible
+      // If "Save RV Session" isn't visible, maybe check ExportControl implementation
+      // But assumed from export-workflow.spec.ts it exists
     }
 
     const download = await downloadPromise;
@@ -105,7 +108,7 @@ customNode : RVUnknownNode (1)
     // B. Verify unsupported node is preserved
     expect(exportedContent).toContain('customNode : RVUnknownNode');
     expect(exportedContent).toContain('string someProperty = "should be preserved"');
-    
+
     // C. Verify RVSession info
     expect(exportedContent).toContain('string viewNode = "defaultSequence"');
   });

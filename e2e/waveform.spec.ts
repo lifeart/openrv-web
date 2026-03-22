@@ -1,9 +1,5 @@
 import { test, expect } from '@playwright/test';
-import {
-  loadVideoFile,
-  getViewerState,
-  waitForTestHelper,
-} from './fixtures';
+import { loadVideoFile, getViewerState, waitForTestHelper } from './fixtures';
 
 /**
  * Waveform Monitor Feature Tests
@@ -443,7 +439,7 @@ test.describe('RGB Overlay Waveform Controls', () => {
     const rButton = page.locator('[data-testid="waveform-channel-r"]');
 
     // Initially full opacity
-    let opacity = await rButton.evaluate(el => getComputedStyle(el).opacity);
+    let opacity = await rButton.evaluate((el) => getComputedStyle(el).opacity);
     expect(parseFloat(opacity)).toBe(1);
 
     // Click to disable
@@ -451,14 +447,14 @@ test.describe('RGB Overlay Waveform Controls', () => {
     await page.waitForTimeout(100);
 
     // Should be dimmed
-    opacity = await rButton.evaluate(el => getComputedStyle(el).opacity);
+    opacity = await rButton.evaluate((el) => getComputedStyle(el).opacity);
     expect(parseFloat(opacity)).toBeLessThan(1);
 
     // Click to re-enable
     await rButton.click();
     await page.waitForTimeout(100);
 
-    opacity = await rButton.evaluate(el => getComputedStyle(el).opacity);
+    opacity = await rButton.evaluate((el) => getComputedStyle(el).opacity);
     expect(parseFloat(opacity)).toBe(1);
   });
 

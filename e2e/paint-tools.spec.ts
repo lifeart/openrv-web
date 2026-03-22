@@ -117,14 +117,20 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       const initialBrush = state.brushType;
 
       await page.keyboard.press('b');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.brushType !== '${initialBrush}'; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.brushType !== '${initialBrush}'; })()`,
+      );
 
       state = await getPaintState(page);
       expect(state.brushType).not.toBe(initialBrush);
 
       // Toggle back
       await page.keyboard.press('b');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.brushType === '${initialBrush}'; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.brushType === '${initialBrush}'; })()`,
+      );
 
       state = await getPaintState(page);
       expect(state.brushType).toBe(initialBrush);
@@ -155,7 +161,10 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       await page.mouse.move(box!.x + 200, box!.y + 200);
       await page.mouse.move(box!.x + 300, box!.y + 150);
       await page.mouse.up();
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === true; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === true; })()`,
+      );
 
       // Verify state changes
       const newState = await getPaintState(page);
@@ -180,7 +189,10 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       await page.mouse.down();
       await page.mouse.move(box!.x + 150, box!.y + 50);
       await page.mouse.up();
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === true; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === true; })()`,
+      );
 
       let state = await getPaintState(page);
       expect(state.canUndo).toBe(true);
@@ -227,7 +239,10 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       await page.mouse.down();
       await page.mouse.move(box!.x + 200, box!.y + 200);
       await page.mouse.up();
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === true; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === true; })()`,
+      );
 
       // Verify eraser action was recorded
       state = await getPaintState(page);
@@ -240,7 +255,10 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       const colorPicker = page.locator('input[type="color"]').first();
       if (await colorPicker.isVisible()) {
         await colorPicker.fill('#00ff00');
-        await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.strokeColor?.toLowerCase() === '#00ff00'; })()`);
+        await waitForCondition(
+          page,
+          `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.strokeColor?.toLowerCase() === '#00ff00'; })()`,
+        );
 
         const state = await getPaintState(page);
         expect(state.strokeColor.toLowerCase()).toBe('#00ff00');
@@ -249,10 +267,15 @@ test.describe('Paint Tools (Annotate Tab)', () => {
 
     test('PAINT-031: clicking preset color should update strokeColor state', async ({ page }) => {
       // Find a preset color button (blue)
-      const bluePreset = page.locator('button[style*="background: rgb(68, 68, 255)"], button[style*="#4444ff"]').first();
+      const bluePreset = page
+        .locator('button[style*="background: rgb(68, 68, 255)"], button[style*="#4444ff"]')
+        .first();
       if (await bluePreset.isVisible()) {
         await bluePreset.click();
-        await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.strokeColor?.toLowerCase() === '#4444ff'; })()`);
+        await waitForCondition(
+          page,
+          `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.strokeColor?.toLowerCase() === '#4444ff'; })()`,
+        );
 
         const state = await getPaintState(page);
         expect(state.strokeColor.toLowerCase()).toBe('#4444ff');
@@ -266,7 +289,10 @@ test.describe('Paint Tools (Annotate Tab)', () => {
           el.value = '20';
           el.dispatchEvent(new Event('input', { bubbles: true }));
         });
-        await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.strokeWidth === 20; })()`);
+        await waitForCondition(
+          page,
+          `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.strokeWidth === 20; })()`,
+        );
 
         const state = await getPaintState(page);
         expect(state.strokeWidth).toBe(20);
@@ -280,14 +306,20 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       const initialGhost = state.ghostMode;
 
       await page.keyboard.press('g');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.ghostMode === true; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.ghostMode === true; })()`,
+      );
 
       state = await getPaintState(page);
       expect(state.ghostMode).toBe(!initialGhost);
 
       // Toggle off
       await page.keyboard.press('g');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.ghostMode === false; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.ghostMode === false; })()`,
+      );
 
       state = await getPaintState(page);
       expect(state.ghostMode).toBe(initialGhost);
@@ -305,7 +337,10 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       await page.mouse.down();
       await page.mouse.move(box!.x + 200, box!.y + 200);
       await page.mouse.up();
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === true; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === true; })()`,
+      );
 
       let state = await getPaintState(page);
       expect(state.canUndo).toBe(true);
@@ -315,7 +350,10 @@ test.describe('Paint Tools (Annotate Tab)', () => {
 
       // Undo
       await page.keyboard.press('Control+z');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canRedo === true; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canRedo === true; })()`,
+      );
 
       state = await getPaintState(page);
       expect(state.canUndo).toBe(false);
@@ -336,19 +374,28 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       await page.mouse.down();
       await page.mouse.move(box!.x + 200, box!.y + 200);
       await page.mouse.up();
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === true; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === true; })()`,
+      );
 
       const screenshotWithStroke = await captureViewerScreenshot(page);
 
       await page.keyboard.press('Control+z');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canRedo === true; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canRedo === true; })()`,
+      );
 
       let state = await getPaintState(page);
       expect(state.canRedo).toBe(true);
 
       // Redo
       await page.keyboard.press('Control+y');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === true && s?.canRedo === false; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === true && s?.canRedo === false; })()`,
+      );
 
       state = await getPaintState(page);
       expect(state.canUndo).toBe(true);
@@ -375,7 +422,10 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       await page.mouse.down();
       await page.mouse.move(box!.x + 200, box!.y + 200);
       await page.mouse.up();
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.annotatedFrames?.includes(1); })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.annotatedFrames?.includes(1); })()`,
+      );
 
       let state = await getPaintState(page);
       expect(state.annotatedFrames).toContain(1);
@@ -398,7 +448,10 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       await page.mouse.down();
       await page.mouse.move(box!.x + 100, box!.y + 100);
       await page.mouse.up();
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.annotatedFrames?.includes(${frame2}); })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.annotatedFrames?.includes(${frame2}); })()`,
+      );
 
       state = await getPaintState(page);
       expect(state.annotatedFrames).toContain(1);
@@ -428,7 +481,10 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       await page.mouse.down();
       await page.mouse.move(box!.x + 150, box!.y + 150);
       await page.mouse.up();
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.annotatedFrames?.includes(1); })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.annotatedFrames?.includes(1); })()`,
+      );
 
       // Go to frame 3 and draw
       await page.keyboard.press('ArrowRight');
@@ -439,7 +495,10 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       await page.mouse.down();
       await page.mouse.move(box!.x + 150, box!.y + 150);
       await page.mouse.up();
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.annotatedFrames?.includes(3); })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.annotatedFrames?.includes(3); })()`,
+      );
 
       // Go back to start
       await page.keyboard.press('Home');
@@ -535,7 +594,10 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       await page.mouse.down();
       await page.mouse.move(box!.x + 250, box!.y + 200);
       await page.mouse.up();
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === true; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === true; })()`,
+      );
 
       // Verify state changes
       const newState = await getPaintState(page);
@@ -573,7 +635,10 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       await page.mouse.down();
       await page.mouse.move(box!.x + 250, box!.y + 200);
       await page.mouse.up();
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === true; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === true; })()`,
+      );
 
       // Verify state changes
       const newState = await getPaintState(page);
@@ -611,7 +676,10 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       await page.mouse.down();
       await page.mouse.move(box!.x + 300, box!.y + 200);
       await page.mouse.up();
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === true; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === true; })()`,
+      );
 
       // Verify state changes
       const newState = await getPaintState(page);
@@ -649,7 +717,10 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       await page.mouse.down();
       await page.mouse.move(box!.x + 300, box!.y + 200);
       await page.mouse.up();
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === true; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === true; })()`,
+      );
 
       // Verify state changes
       const newState = await getPaintState(page);
@@ -679,7 +750,10 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       await page.mouse.down();
       await page.mouse.move(box!.x + 250, box!.y + 200);
       await page.mouse.up();
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === true; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === true; })()`,
+      );
 
       let state = await getPaintState(page);
       expect(state.canUndo).toBe(true);
@@ -689,7 +763,10 @@ test.describe('Paint Tools (Annotate Tab)', () => {
 
       // Undo
       await page.keyboard.press('Control+z');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canRedo === true; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canRedo === true; })()`,
+      );
 
       state = await getPaintState(page);
       expect(state.canUndo).toBe(false);
@@ -713,7 +790,10 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       await page.mouse.down();
       await page.mouse.move(box!.x + 200, box!.y + 200);
       await page.mouse.up();
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === true; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.canUndo === true; })()`,
+      );
 
       let state = await getPaintState(page);
       const sessionState = await getSessionState(page);
@@ -752,14 +832,20 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       const holdButton = page.locator('button[title*="Hold"], button:has-text("Hold")').first();
       if (await holdButton.isVisible()) {
         await holdButton.click();
-        await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.holdMode === true; })()`);
+        await waitForCondition(
+          page,
+          `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.holdMode === true; })()`,
+        );
 
         state = await getPaintState(page);
         expect(state.holdMode).toBe(true);
 
         // Toggle off
         await holdButton.click();
-        await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.holdMode === false; })()`);
+        await waitForCondition(
+          page,
+          `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.holdMode === false; })()`,
+        );
 
         state = await getPaintState(page);
         expect(state.holdMode).toBe(false);
@@ -771,14 +857,20 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       const holdButton = page.locator('button[title*="Hold"], button:has-text("Hold")').first();
       if (await holdButton.isVisible()) {
         await holdButton.click();
-        await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.holdMode === true; })()`);
+        await waitForCondition(
+          page,
+          `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.holdMode === true; })()`,
+        );
 
         let state = await getPaintState(page);
         expect(state.holdMode).toBe(true);
       } else {
         // Use keyboard shortcut
         await page.keyboard.press('x');
-        await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.holdMode === true; })()`);
+        await waitForCondition(
+          page,
+          `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.holdMode === true; })()`,
+        );
 
         let state = await getPaintState(page);
         expect(state.holdMode).toBe(true);
@@ -839,7 +931,10 @@ test.describe('Paint Tools (Annotate Tab)', () => {
 
       // Enable hold mode
       await holdButton.click();
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.holdMode === true; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.holdMode === true; })()`,
+      );
 
       let state = await getPaintState(page);
       expect(state.holdMode).toBe(true);
@@ -852,7 +947,10 @@ test.describe('Paint Tools (Annotate Tab)', () => {
 
       // Disable hold mode
       await holdButton.click();
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.holdMode === false; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.holdMode === false; })()`,
+      );
 
       state = await getPaintState(page);
       expect(state.holdMode).toBe(false);
@@ -910,7 +1008,10 @@ test.describe('Paint Tools (Annotate Tab)', () => {
     test('HOLD-E005: hold mode state persists during navigation', async ({ page }) => {
       // Enable hold mode via keyboard
       await page.keyboard.press('x');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.holdMode === true; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.holdMode === true; })()`,
+      );
 
       let state = await getPaintState(page);
       expect(state.holdMode).toBe(true);
@@ -933,7 +1034,10 @@ test.describe('Paint Tools (Annotate Tab)', () => {
 
       // Go to end
       await page.keyboard.press('End');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentFrame === s?.frameCount; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getSessionState(); return s?.currentFrame === s?.frameCount; })()`,
+      );
 
       state = await getPaintState(page);
       expect(state.holdMode).toBe(true);
@@ -945,14 +1049,20 @@ test.describe('Paint Tools (Annotate Tab)', () => {
 
       // Enable hold mode with X key
       await page.keyboard.press('x');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.holdMode === true; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.holdMode === true; })()`,
+      );
 
       state = await getPaintState(page);
       expect(state.holdMode).toBe(true);
 
       // Disable hold mode with X key
       await page.keyboard.press('x');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.holdMode === false; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.holdMode === false; })()`,
+      );
 
       state = await getPaintState(page);
       expect(state.holdMode).toBe(false);
@@ -961,7 +1071,10 @@ test.describe('Paint Tools (Annotate Tab)', () => {
     test('HOLD-E007: annotations drawn with hold ON persist after hold is turned OFF', async ({ page }) => {
       // Enable hold mode
       await page.keyboard.press('x');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.holdMode === true; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.holdMode === true; })()`,
+      );
 
       let state = await getPaintState(page);
       expect(state.holdMode).toBe(true);
@@ -984,7 +1097,10 @@ test.describe('Paint Tools (Annotate Tab)', () => {
 
       // Disable hold mode AFTER drawing
       await page.keyboard.press('x');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.holdMode === false; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.holdMode === false; })()`,
+      );
 
       state = await getPaintState(page);
       expect(state.holdMode).toBe(false);
@@ -1021,7 +1137,10 @@ test.describe('Paint Tools (Annotate Tab)', () => {
     test('HOLD-E008: hold mode works with shapes', async ({ page }) => {
       // Enable hold mode
       await page.keyboard.press('x');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.holdMode === true; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getPaintState(); return s?.holdMode === true; })()`,
+      );
 
       let state = await getPaintState(page);
       expect(state.holdMode).toBe(true);

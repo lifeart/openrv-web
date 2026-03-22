@@ -108,7 +108,10 @@ test.describe('Spotlight Properties', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightPosition(0.3, 0.7);
     });
-    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && Math.abs(s.x - 0.3) < 0.05; })()');
+    await waitForCondition(
+      page,
+      '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && Math.abs(s.x - 0.3) < 0.05; })()',
+    );
 
     const state = await getSpotlightState(page);
     expect(state.x).toBeCloseTo(0.3, 1);
@@ -119,7 +122,10 @@ test.describe('Spotlight Properties', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightSize(0.4, 0.4);
     });
-    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && Math.abs(s.width - 0.4) < 0.05; })()');
+    await waitForCondition(
+      page,
+      '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && Math.abs(s.width - 0.4) < 0.05; })()',
+    );
 
     const state = await getSpotlightState(page);
     expect(state.width).toBeCloseTo(0.4, 1);
@@ -130,7 +136,10 @@ test.describe('Spotlight Properties', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightDimAmount(0.5);
     });
-    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && Math.abs(s.dimAmount - 0.5) < 0.05; })()');
+    await waitForCondition(
+      page,
+      '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && Math.abs(s.dimAmount - 0.5) < 0.05; })()',
+    );
 
     const state = await getSpotlightState(page);
     expect(state.dimAmount).toBeCloseTo(0.5, 1);
@@ -140,7 +149,10 @@ test.describe('Spotlight Properties', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightFeather(0.1);
     });
-    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && Math.abs(s.feather - 0.1) < 0.05; })()');
+    await waitForCondition(
+      page,
+      '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && Math.abs(s.feather - 0.1) < 0.05; })()',
+    );
 
     const state = await getSpotlightState(page);
     expect(state.feather).toBeCloseTo(0.1, 1);
@@ -161,7 +173,10 @@ test.describe('Spotlight Shape', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightShape('rectangle');
     });
-    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s?.shape === "rectangle"; })()');
+    await waitForCondition(
+      page,
+      '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s?.shape === "rectangle"; })()',
+    );
 
     const state = await getSpotlightState(page);
     expect(state.shape).toBe('rectangle');
@@ -307,7 +322,10 @@ test.describe('Spotlight Interaction', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightPosition(0.25, 0.75);
     });
-    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && Math.abs(s.x - 0.25) < 0.05; })()');
+    await waitForCondition(
+      page,
+      '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && Math.abs(s.x - 0.25) < 0.05; })()',
+    );
 
     state = await getSpotlightState(page);
     expect(state.x).toBeCloseTo(0.25, 1);
@@ -323,7 +341,10 @@ test.describe('Spotlight Interaction', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightPosition(0.75, 0.25);
     });
-    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && Math.abs(s.x - 0.75) < 0.05; })()');
+    await waitForCondition(
+      page,
+      '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && Math.abs(s.x - 0.75) < 0.05; })()',
+    );
 
     const afterData = await page.evaluate(() => {
       const overlay = document.querySelector('[data-testid="spotlight-overlay"]') as HTMLCanvasElement;
@@ -514,8 +535,7 @@ test.describe('Spotlight Regression Tests', () => {
 
       // Spotlight position should have changed
       state = await getSpotlightState(page);
-      const spotMoved = Math.abs(state.x - initialSpotX) > 0.03 ||
-                        Math.abs(state.y - initialSpotY) > 0.03;
+      const spotMoved = Math.abs(state.x - initialSpotX) > 0.03 || Math.abs(state.y - initialSpotY) > 0.03;
       expect(spotMoved).toBe(true);
     }
   });
@@ -525,7 +545,10 @@ test.describe('Spotlight Regression Tests', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightSize(0.3, 0.3);
     });
-    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && Math.abs(s.width - 0.3) < 0.05; })()');
+    await waitForCondition(
+      page,
+      '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && Math.abs(s.width - 0.3) < 0.05; })()',
+    );
 
     let state = await getSpotlightState(page);
     const initialWidth = state.width;
@@ -539,7 +562,7 @@ test.describe('Spotlight Regression Tests', () => {
       // Handle is at spotlight center + width in normalized coords
       const spotCenterX = box.x + box.width * state.x;
       const spotCenterY = box.y + box.height * state.y;
-      const handleX = spotCenterX + (state.width * box.width);
+      const handleX = spotCenterX + state.width * box.width;
       const handleY = spotCenterY;
 
       // Drag the east handle to resize
@@ -633,7 +656,10 @@ test.describe('Spotlight State Persistence', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightPosition(0.3, 0.7);
     });
-    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && Math.abs(s.x - 0.3) < 0.05; })()');
+    await waitForCondition(
+      page,
+      '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && Math.abs(s.x - 0.3) < 0.05; })()',
+    );
 
     let state = await getSpotlightState(page);
     expect(state.x).toBeCloseTo(0.3, 1);
@@ -720,7 +746,7 @@ test.describe('Spotlight UI Button Toggle', () => {
     const spotlightButton = page.locator('[data-testid="spotlight-toggle-btn"]');
 
     // Check initial styling (should not have active color)
-    let bgColor = await spotlightButton.evaluate(el => el.style.background);
+    let bgColor = await spotlightButton.evaluate((el) => el.style.background);
     expect(bgColor).not.toContain('accent-primary-rgb');
 
     // Enable spotlight
@@ -728,7 +754,7 @@ test.describe('Spotlight UI Button Toggle', () => {
     await waitForSpotlightEnabled(page, true);
 
     // Check active styling
-    bgColor = await spotlightButton.evaluate(el => el.style.background);
+    bgColor = await spotlightButton.evaluate((el) => el.style.background);
     expect(bgColor).toContain('accent-primary-rgb');
   });
 
@@ -743,7 +769,7 @@ test.describe('Spotlight UI Button Toggle', () => {
     await waitForSpotlightEnabled(page, true);
 
     // Button should show active styling
-    const bgColor = await spotlightButton.evaluate(el => el.style.background);
+    const bgColor = await spotlightButton.evaluate((el) => el.style.background);
     expect(bgColor).toContain('accent-primary-rgb');
   });
 });
@@ -771,7 +797,10 @@ test.describe('Spotlight Shape Switching', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightShape('rectangle');
     });
-    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s?.shape === "rectangle"; })()');
+    await waitForCondition(
+      page,
+      '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s?.shape === "rectangle"; })()',
+    );
 
     state = await getSpotlightState(page);
     expect(state.shape).toBe('rectangle');
@@ -782,7 +811,10 @@ test.describe('Spotlight Shape Switching', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightShape('rectangle');
     });
-    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s?.shape === "rectangle"; })()');
+    await waitForCondition(
+      page,
+      '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s?.shape === "rectangle"; })()',
+    );
 
     let state = await getSpotlightState(page);
     expect(state.shape).toBe('rectangle');
@@ -791,7 +823,10 @@ test.describe('Spotlight Shape Switching', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightShape('circle');
     });
-    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s?.shape === "circle"; })()');
+    await waitForCondition(
+      page,
+      '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s?.shape === "circle"; })()',
+    );
 
     state = await getSpotlightState(page);
     expect(state.shape).toBe('circle');
@@ -827,7 +862,10 @@ test.describe('Spotlight Shape Switching', () => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightShape('rectangle');
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightSize(0.3, 0.3);
     });
-    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s?.shape === "rectangle" && Math.abs(s.width - 0.3) < 0.05; })()');
+    await waitForCondition(
+      page,
+      '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s?.shape === "rectangle" && Math.abs(s.width - 0.3) < 0.05; })()',
+    );
 
     // Verify rectangle mode is active
     const state = await getSpotlightState(page);
@@ -844,7 +882,7 @@ test.describe('Spotlight Shape Switching', () => {
 
       // Try resizing from the east (right) edge
       const spotCenterX = box.x + box.width * state.x;
-      const handleX = spotCenterX + (state.width * box.width);
+      const handleX = spotCenterX + state.width * box.width;
       const handleY = box.y + box.height * state.y;
 
       await page.mouse.move(handleX, handleY);
@@ -904,7 +942,10 @@ test.describe('Spotlight Feather and Dim Amount', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightFeather(0);
     });
-    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && s.feather === 0; })()');
+    await waitForCondition(
+      page,
+      '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && s.feather === 0; })()',
+    );
 
     const state = await getSpotlightState(page);
     expect(state.feather).toBe(0);
@@ -940,7 +981,10 @@ test.describe('Spotlight Feather and Dim Amount', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightDimAmount(0);
     });
-    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && s.dimAmount === 0; })()');
+    await waitForCondition(
+      page,
+      '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && s.dimAmount === 0; })()',
+    );
 
     const state = await getSpotlightState(page);
     expect(state.dimAmount).toBe(0);
@@ -951,7 +995,10 @@ test.describe('Spotlight Feather and Dim Amount', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightFeather(1.5);
     });
-    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && s.feather <= 0.5; })()');
+    await waitForCondition(
+      page,
+      '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && s.feather <= 0.5; })()',
+    );
 
     let state = await getSpotlightState(page);
     expect(state.feather).toBeLessThanOrEqual(0.5);
@@ -960,7 +1007,10 @@ test.describe('Spotlight Feather and Dim Amount', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightFeather(-0.5);
     });
-    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && s.feather >= 0; })()');
+    await waitForCondition(
+      page,
+      '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && s.feather >= 0; })()',
+    );
 
     state = await getSpotlightState(page);
     expect(state.feather).toBeGreaterThanOrEqual(0);
@@ -986,7 +1036,10 @@ test.describe('Spotlight Edge Cases', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightPosition(0, 0);
     });
-    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && s.x === 0 && s.y === 0; })()');
+    await waitForCondition(
+      page,
+      '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && s.x === 0 && s.y === 0; })()',
+    );
 
     const state = await getSpotlightState(page);
     expect(state.x).toBe(0);
@@ -997,7 +1050,10 @@ test.describe('Spotlight Edge Cases', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightPosition(1, 1);
     });
-    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && s.x === 1 && s.y === 1; })()');
+    await waitForCondition(
+      page,
+      '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && s.x === 1 && s.y === 1; })()',
+    );
 
     const state = await getSpotlightState(page);
     expect(state.x).toBe(1);
@@ -1008,7 +1064,10 @@ test.describe('Spotlight Edge Cases', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightPosition(-0.5, 1.5);
     });
-    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && s.x <= 0 && s.y >= 1; })()');
+    await waitForCondition(
+      page,
+      '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && s.x <= 0 && s.y >= 1; })()',
+    );
 
     const state = await getSpotlightState(page);
     expect(state.x).toBeGreaterThanOrEqual(0);
@@ -1021,7 +1080,10 @@ test.describe('Spotlight Edge Cases', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightSize(0.001, 0.001);
     });
-    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && s.width < 0.2; })()');
+    await waitForCondition(
+      page,
+      '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && s.width < 0.2; })()',
+    );
 
     const state = await getSpotlightState(page);
     // Minimum size is 0.01
@@ -1033,7 +1095,10 @@ test.describe('Spotlight Edge Cases', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightSize(1, 1);
     });
-    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && s.width === 1 && s.height === 1; })()');
+    await waitForCondition(
+      page,
+      '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && s.width === 1 && s.height === 1; })()',
+    );
 
     const state = await getSpotlightState(page);
     expect(state.width).toBe(1);
@@ -1044,7 +1109,10 @@ test.describe('Spotlight Edge Cases', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightSize(2, 2);
     });
-    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && s.width !== 0.2; })()');
+    await waitForCondition(
+      page,
+      '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && s.width !== 0.2; })()',
+    );
 
     const state = await getSpotlightState(page);
     expect(state.width).toBeLessThanOrEqual(1);
@@ -1056,7 +1124,10 @@ test.describe('Spotlight Edge Cases', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setSpotlightSize(0.3, 0.3);
     });
-    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && Math.abs(s.width - 0.3) < 0.05; })()');
+    await waitForCondition(
+      page,
+      '(() => { const s = window.__OPENRV_TEST__?.getSpotlightState(); return s && Math.abs(s.width - 0.3) < 0.05; })()',
+    );
 
     const overlay = page.locator('[data-testid="spotlight-overlay"]');
     const box = await overlay.boundingBox();
@@ -1067,7 +1138,7 @@ test.describe('Spotlight Edge Cases', () => {
 
       // Try to resize to very small
       const spotCenterX = box.x + box.width * state.x;
-      const handleX = spotCenterX + (state.width * box.width);
+      const handleX = spotCenterX + state.width * box.width;
       const handleY = box.y + box.height * state.y;
 
       await page.mouse.move(handleX, handleY);
@@ -1108,7 +1179,10 @@ test.describe('Spotlight Feature Interactions', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setViewerZoom(2);
     });
-    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getViewerState(); return s && Math.abs(s.zoom - 2) < 0.1; })()');
+    await waitForCondition(
+      page,
+      '(() => { const s = window.__OPENRV_TEST__?.getViewerState(); return s && Math.abs(s.zoom - 2) < 0.1; })()',
+    );
 
     // Spotlight should still be enabled
     state = await getSpotlightState(page);
@@ -1127,7 +1201,10 @@ test.describe('Spotlight Feature Interactions', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.mutations?.setViewerPan(50, 50);
     });
-    await waitForCondition(page, '(() => { const s = window.__OPENRV_TEST__?.getViewerState(); return s && s.panX === 50 && s.panY === 50; })()');
+    await waitForCondition(
+      page,
+      '(() => { const s = window.__OPENRV_TEST__?.getViewerState(); return s && s.panX === 50 && s.panY === 50; })()',
+    );
 
     const state = await getSpotlightState(page);
     expect(state.enabled).toBe(true);

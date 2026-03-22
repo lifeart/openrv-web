@@ -225,9 +225,7 @@ test.describe('Dropdown Menu Z-Index Stacking', () => {
     await expect(channelDropdown).toBeVisible();
   });
 
-  test('DM-E011: opening new dropdown closes previous dropdown and has proper z-index', async ({
-    page,
-  }) => {
+  test('DM-E011: opening new dropdown closes previous dropdown and has proper z-index', async ({ page }) => {
     // This test verifies that when a new dropdown opens, it closes any existing one
     // (closeOthers: true behavior) and the new dropdown has a proper z-index
 
@@ -659,7 +657,10 @@ test.describe('Dropdown Focus Management', () => {
     // Select an item with Enter
     await page.keyboard.press('ArrowDown');
     await page.keyboard.press('Enter');
-    await waitForCondition(page, '(() => document.activeElement?.getAttribute("data-testid") === "zoom-control-button")()');
+    await waitForCondition(
+      page,
+      '(() => document.activeElement?.getAttribute("data-testid") === "zoom-control-button")()',
+    );
 
     // Verify focus is back on the button
     const focusedElement = await page.evaluate(() => {
@@ -679,7 +680,10 @@ test.describe('Dropdown Focus Management', () => {
 
     // Press Escape to close
     await page.keyboard.press('Escape');
-    await waitForCondition(page, '(() => document.activeElement?.getAttribute("data-testid") === "zoom-control-button")()');
+    await waitForCondition(
+      page,
+      '(() => document.activeElement?.getAttribute("data-testid") === "zoom-control-button")()',
+    );
 
     // Verify focus is back on the button
     const focusedElement = await page.evaluate(() => {
@@ -728,8 +732,8 @@ test.describe('Dropdown Selection/Deselection', () => {
 
     // Navigate through items and verify only one is selected
     for (let i = 0; i < 5; i++) {
-      const selectedItems = await items.evaluateAll((buttons) =>
-        buttons.filter((b) => b.getAttribute('aria-selected') === 'true').length
+      const selectedItems = await items.evaluateAll(
+        (buttons) => buttons.filter((b) => b.getAttribute('aria-selected') === 'true').length,
       );
       expect(selectedItems).toBe(1);
 
@@ -810,8 +814,8 @@ test.describe('Dropdown Selection/Deselection', () => {
       await items.nth(i).hover();
       await page.waitForTimeout(50);
 
-      const selectedItems = await items.evaluateAll((buttons) =>
-        buttons.filter((b) => b.getAttribute('aria-selected') === 'true').length
+      const selectedItems = await items.evaluateAll(
+        (buttons) => buttons.filter((b) => b.getAttribute('aria-selected') === 'true').length,
       );
       expect(selectedItems).toBe(1);
 
@@ -924,8 +928,8 @@ test.describe('Dropdown Selection/Deselection', () => {
     await expect(items.nth(1)).toHaveAttribute('aria-selected', 'true');
 
     // Verify only one selected
-    const selectedItems = await items.evaluateAll((buttons) =>
-      buttons.filter((b) => b.getAttribute('aria-selected') === 'true').length
+    const selectedItems = await items.evaluateAll(
+      (buttons) => buttons.filter((b) => b.getAttribute('aria-selected') === 'true').length,
     );
     expect(selectedItems).toBe(1);
   });

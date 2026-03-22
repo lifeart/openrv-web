@@ -32,8 +32,7 @@ function getClient(): Anthropic {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
       throw new Error(
-        'ANTHROPIC_API_KEY environment variable is required. ' +
-        'Set it before running without --dry-run.'
+        'ANTHROPIC_API_KEY environment variable is required. ' + 'Set it before running without --dry-run.',
       );
     }
     client = new Anthropic({ apiKey });
@@ -48,16 +47,8 @@ function getClient(): Anthropic {
  * @param options - Model, temperature, maxTokens, systemPrompt.
  * @returns The generated markdown string.
  */
-export async function generateDoc(
-  userPrompt: string,
-  options: GenerateDocOptions = {}
-): Promise<string> {
-  const {
-    model = DEFAULT_MODEL,
-    maxTokens = 4096,
-    temperature = 0.0,
-    systemPrompt,
-  } = options;
+export async function generateDoc(userPrompt: string, options: GenerateDocOptions = {}): Promise<string> {
+  const { model = DEFAULT_MODEL, maxTokens = 4096, temperature = 0.0, systemPrompt } = options;
 
   // Rate limiting
   await rateLimiter.waitForSlot();
@@ -68,7 +59,7 @@ export async function generateDoc(
   costTracker.record(estimate);
   console.log(
     `  API call: ~${estimate.inputTokens} in, ~${estimate.outputTokens} out, ` +
-    `~$${estimate.totalCost.toFixed(4)} (${model})`
+      `~$${estimate.totalCost.toFixed(4)} (${model})`,
   );
 
   const anthropic = getClient();
@@ -93,15 +84,8 @@ export async function generateDoc(
 /**
  * Estimate the cost of an API call without making it (for --dry-run).
  */
-export function dryRunEstimate(
-  userPrompt: string,
-  options: GenerateDocOptions = {}
-): CostEstimate {
-  const {
-    model = DEFAULT_MODEL,
-    maxTokens = 4096,
-    systemPrompt,
-  } = options;
+export function dryRunEstimate(userPrompt: string, options: GenerateDocOptions = {}): CostEstimate {
+  const { model = DEFAULT_MODEL, maxTokens = 4096, systemPrompt } = options;
 
   const fullInput = (systemPrompt || '') + userPrompt;
   return estimateCost(fullInput, maxTokens, model);

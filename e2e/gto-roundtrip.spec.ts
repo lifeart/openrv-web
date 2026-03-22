@@ -17,7 +17,7 @@ test.describe('GTO Round-Trip Verification', () => {
     appPage: any,
     testInfo: any,
     sessionContent: string,
-    verifyFn: (exportedContent: string) => void
+    verifyFn: (exportedContent: string) => void,
   ) {
     const rvFileName = 'roundtrip_test.rv';
     const rvFilePath = path.join(testInfo.outputDir, rvFileName);
@@ -33,7 +33,7 @@ test.describe('GTO Round-Trip Verification', () => {
     // Create a dummy image file (1x1 transparent png)
     const imageBuffer = Buffer.from(
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
-      'base64'
+      'base64',
     );
     const mediaFilePath = path.join(testInfo.outputDir, 'test_media.png');
     fs.writeFileSync(mediaFilePath, imageBuffer);
@@ -92,21 +92,15 @@ source : RVFileSource (1)
 }
 `;
 
-    await createAndVerifyRoundTrip(
-      page,
-      appPage,
-      test.info(),
-      sessionContent,
-      (exportedContent) => {
-        // Verify markers are preserved
-        expect(exportedContent).toContain('marks');
-        // Note: exact format may vary, but marker values should be present
-        expect(exportedContent).toMatch(/10/);
-        expect(exportedContent).toMatch(/25/);
-        expect(exportedContent).toMatch(/50/);
-        expect(exportedContent).toMatch(/75/);
-      }
-    );
+    await createAndVerifyRoundTrip(page, appPage, test.info(), sessionContent, (exportedContent) => {
+      // Verify markers are preserved
+      expect(exportedContent).toContain('marks');
+      // Note: exact format may vary, but marker values should be present
+      expect(exportedContent).toMatch(/10/);
+      expect(exportedContent).toMatch(/25/);
+      expect(exportedContent).toMatch(/50/);
+      expect(exportedContent).toMatch(/75/);
+    });
   });
 
   test('GTO-RT-002: frame range (in/out points) preserved', async ({ page, appPage }) => {
@@ -133,19 +127,13 @@ source : RVFileSource (1)
 }
 `;
 
-    await createAndVerifyRoundTrip(
-      page,
-      appPage,
-      test.info(),
-      sessionContent,
-      (exportedContent) => {
-        // Verify frame range is preserved
-        expect(exportedContent).toContain('range');
-        expect(exportedContent).toContain('region');
-        expect(exportedContent).toMatch(/15/);
-        expect(exportedContent).toMatch(/85/);
-      }
-    );
+    await createAndVerifyRoundTrip(page, appPage, test.info(), sessionContent, (exportedContent) => {
+      // Verify frame range is preserved
+      expect(exportedContent).toContain('range');
+      expect(exportedContent).toContain('region');
+      expect(exportedContent).toMatch(/15/);
+      expect(exportedContent).toMatch(/85/);
+    });
   });
 
   test('GTO-RT-003: matte settings preserved', async ({ page, appPage }) => {
@@ -179,20 +167,14 @@ source : RVFileSource (1)
 }
 `;
 
-    await createAndVerifyRoundTrip(
-      page,
-      appPage,
-      test.info(),
-      sessionContent,
-      (exportedContent) => {
-        // Verify matte settings are preserved
-        expect(exportedContent).toContain('matte');
-        expect(exportedContent).toContain('aspect');
-        expect(exportedContent).toMatch(/2\.39/);
-        expect(exportedContent).toContain('opacity');
-        expect(exportedContent).toMatch(/0\.75/);
-      }
-    );
+    await createAndVerifyRoundTrip(page, appPage, test.info(), sessionContent, (exportedContent) => {
+      // Verify matte settings are preserved
+      expect(exportedContent).toContain('matte');
+      expect(exportedContent).toContain('aspect');
+      expect(exportedContent).toMatch(/2\.39/);
+      expect(exportedContent).toContain('opacity');
+      expect(exportedContent).toMatch(/0\.75/);
+    });
   });
 
   test('GTO-RT-004: paint effects settings preserved', async ({ page, appPage }) => {
@@ -225,18 +207,12 @@ source : RVFileSource (1)
 }
 `;
 
-    await createAndVerifyRoundTrip(
-      page,
-      appPage,
-      test.info(),
-      sessionContent,
-      (exportedContent) => {
-        // Verify paint effects are preserved
-        expect(exportedContent).toContain('paintEffects');
-        expect(exportedContent).toContain('ghostBefore');
-        expect(exportedContent).toContain('ghostAfter');
-      }
-    );
+    await createAndVerifyRoundTrip(page, appPage, test.info(), sessionContent, (exportedContent) => {
+      // Verify paint effects are preserved
+      expect(exportedContent).toContain('paintEffects');
+      expect(exportedContent).toContain('ghostBefore');
+      expect(exportedContent).toContain('ghostAfter');
+    });
   });
 
   test('GTO-RT-005: session metadata preserved', async ({ page, appPage }) => {
@@ -272,18 +248,12 @@ source : RVFileSource (1)
 }
 `;
 
-    await createAndVerifyRoundTrip(
-      page,
-      appPage,
-      test.info(),
-      sessionContent,
-      (exportedContent) => {
-        // Verify metadata is preserved
-        expect(exportedContent).toContain('root');
-        expect(exportedContent).toContain('name');
-        expect(exportedContent).toContain('comment');
-      }
-    );
+    await createAndVerifyRoundTrip(page, appPage, test.info(), sessionContent, (exportedContent) => {
+      // Verify metadata is preserved
+      expect(exportedContent).toContain('root');
+      expect(exportedContent).toContain('name');
+      expect(exportedContent).toContain('comment');
+    });
   });
 
   test('GTO-RT-006: source file paths preserved (not converted to blob)', async ({ page, appPage }) => {
@@ -314,17 +284,11 @@ source : RVFileSource (1)
 }
 `;
 
-    await createAndVerifyRoundTrip(
-      page,
-      appPage,
-      test.info(),
-      sessionContent,
-      (exportedContent) => {
-        // Verify original path is preserved, not blob URL
-        expect(exportedContent).toContain(originalPath);
-        expect(exportedContent).not.toContain('blob:');
-      }
-    );
+    await createAndVerifyRoundTrip(page, appPage, test.info(), sessionContent, (exportedContent) => {
+      // Verify original path is preserved, not blob URL
+      expect(exportedContent).toContain(originalPath);
+      expect(exportedContent).not.toContain('blob:');
+    });
   });
 
   test('GTO-RT-007: unknown/custom nodes preserved', async ({ page, appPage }) => {
@@ -360,19 +324,13 @@ customPlugin : RVCustomPlugin (1)
 }
 `;
 
-    await createAndVerifyRoundTrip(
-      page,
-      appPage,
-      test.info(),
-      sessionContent,
-      (exportedContent) => {
-        // Verify custom/unknown nodes are preserved
-        expect(exportedContent).toContain('RVCustomPlugin');
-        expect(exportedContent).toContain('customSettings');
-        expect(exportedContent).toContain('pluginName');
-        expect(exportedContent).toContain('MyCustomPlugin');
-      }
-    );
+    await createAndVerifyRoundTrip(page, appPage, test.info(), sessionContent, (exportedContent) => {
+      // Verify custom/unknown nodes are preserved
+      expect(exportedContent).toContain('RVCustomPlugin');
+      expect(exportedContent).toContain('customSettings');
+      expect(exportedContent).toContain('pluginName');
+      expect(exportedContent).toContain('MyCustomPlugin');
+    });
   });
 
   test('GTO-RT-008: FPS and playback settings preserved', async ({ page, appPage }) => {
@@ -401,17 +359,11 @@ source : RVFileSource (1)
 }
 `;
 
-    await createAndVerifyRoundTrip(
-      page,
-      appPage,
-      test.info(),
-      sessionContent,
-      (exportedContent) => {
-        // Verify playback settings are preserved
-        expect(exportedContent).toContain('fps');
-        expect(exportedContent).toContain('inc');
-        expect(exportedContent).toContain('frame');
-      }
-    );
+    await createAndVerifyRoundTrip(page, appPage, test.info(), sessionContent, (exportedContent) => {
+      // Verify playback settings are preserved
+      expect(exportedContent).toContain('fps');
+      expect(exportedContent).toContain('inc');
+      expect(exportedContent).toContain('frame');
+    });
   });
 });

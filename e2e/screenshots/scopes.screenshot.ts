@@ -7,11 +7,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import {
-  initWithVideo,
-  takeDocScreenshot,
-  waitForCanvasStable,
-} from './screenshot-helpers';
+import { initWithVideo, takeDocScreenshot, waitForCanvasStable } from './screenshot-helpers';
 
 test.describe('Scope/Analysis Screenshots', () => {
   // ── 11: Histogram RGB ────────────────────────────────────────────────
@@ -111,10 +107,7 @@ test.describe('Scope/Analysis Screenshots', () => {
     const canvas = page.locator('.viewer-container').first();
     const box = await canvas.boundingBox();
     if (box) {
-      await page.mouse.move(
-        box.x + box.width / 2,
-        box.y + box.height / 2,
-      );
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     }
     await page.waitForTimeout(300);
     await waitForCanvasStable(page, 2000);

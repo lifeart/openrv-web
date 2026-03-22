@@ -170,7 +170,7 @@ test.describe('Stack Control', () => {
       const state = await getStackState(page);
       expect(state.layerCount).toBe(3);
 
-      const ids = state.layers.map(l => l.id);
+      const ids = state.layers.map((l) => l.id);
       const uniqueIds = new Set(ids);
       expect(uniqueIds.size).toBe(3);
     });
@@ -205,7 +205,7 @@ test.describe('Stack Control', () => {
       expect(state.layerCount).toBe(3);
 
       // Verify layer names are unique
-      const names = state.layers.map(l => l.name);
+      const names = state.layers.map((l) => l.name);
       const uniqueNames = new Set(names);
       expect(uniqueNames.size).toBe(3);
 
@@ -257,7 +257,7 @@ test.describe('Stack Control', () => {
       state = await getStackState(page);
       expect(state.layerCount).toBe(2);
       // The new layer should be Layer 3 (counter continues, doesn't reset)
-      const layerNames = state.layers.map(l => l.name);
+      const layerNames = state.layers.map((l) => l.name);
       expect(layerNames).toContain('Layer 2');
       expect(layerNames).toContain('Layer 3');
     });
@@ -292,7 +292,10 @@ test.describe('Stack Control', () => {
 
       const visibilityButton = page.locator(`[data-testid="stack-layer-visibility-${layerId}"]`);
       await visibilityButton.click();
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.visible === false; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.visible === false; })()`,
+      );
 
       state = await getStackState(page);
       expect(state.layers[0]!.visible).toBe(false);
@@ -313,7 +316,10 @@ test.describe('Stack Control', () => {
 
       // Hide the layer
       await visibilityButton.click();
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.visible === false; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.visible === false; })()`,
+      );
 
       // Verify layer is hidden
       let updatedState = await getStackState(page);
@@ -321,7 +327,10 @@ test.describe('Stack Control', () => {
 
       // Show the layer again (panel should remain open)
       await visibilityButton.click();
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.visible === true; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.visible === true; })()`,
+      );
 
       updatedState = await getStackState(page);
       expect(updatedState.layers[0]!.visible).toBe(true);
@@ -358,7 +367,10 @@ test.describe('Stack Control', () => {
       const opacitySlider = page.locator(`[data-testid="stack-layer-opacity-${layerId}"]`);
       await opacitySlider.fill('50');
       await opacitySlider.dispatchEvent('input');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.opacity !== undefined && Math.abs(s.layers[0].opacity - 0.5) < 0.1; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.opacity !== undefined && Math.abs(s.layers[0].opacity - 0.5) < 0.1; })()`,
+      );
 
       state = await getStackState(page);
       expect(state.layers[0]!.opacity).toBeCloseTo(0.5, 1);
@@ -378,7 +390,10 @@ test.describe('Stack Control', () => {
       const opacitySlider = page.locator(`[data-testid="stack-layer-opacity-${layerId}"]`);
       await opacitySlider.fill('0');
       await opacitySlider.dispatchEvent('input');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.opacity === 0; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.opacity === 0; })()`,
+      );
 
       const updatedState = await getStackState(page);
       expect(updatedState.layers[0]!.opacity).toBe(0);
@@ -425,7 +440,10 @@ test.describe('Stack Control', () => {
 
       const blendSelect = page.locator(`[data-testid="stack-layer-blend-${layerId}"]`);
       await blendSelect.selectOption('multiply');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.blendMode === 'multiply'; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.blendMode === 'multiply'; })()`,
+      );
 
       const updatedState = await getStackState(page);
       expect(updatedState.layers[0]!.blendMode).toBe('multiply');
@@ -475,7 +493,10 @@ test.describe('Stack Control', () => {
       // Click on first layer name to select it
       const firstLayerName = page.locator(`[data-testid="stack-layer-name-${firstLayerId}"]`);
       await firstLayerName.click();
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.activeLayerId === '${firstLayerId}'; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.activeLayerId === '${firstLayerId}'; })()`,
+      );
 
       const updatedState = await getStackState(page);
       expect(updatedState.activeLayerId).toBe(firstLayerId);
@@ -528,7 +549,10 @@ test.describe('Stack Control', () => {
       // Move first layer up (to position 1)
       const moveUpButton = page.locator(`[data-testid="stack-layer-move-up-${firstLayerId}"]`);
       await moveUpButton.click();
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.id === '${secondLayerId}'; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.id === '${secondLayerId}'; })()`,
+      );
 
       state = await getStackState(page);
       // First layer should now be at index 1
@@ -553,7 +577,10 @@ test.describe('Stack Control', () => {
       // Move second layer down (to position 0)
       const moveDownButton = page.locator(`[data-testid="stack-layer-move-down-${secondLayerId}"]`);
       await moveDownButton.click();
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.id === '${secondLayerId}'; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.id === '${secondLayerId}'; })()`,
+      );
 
       state = await getStackState(page);
       // Second layer should now be at index 0
@@ -711,7 +738,10 @@ test.describe('Stack Control', () => {
       const sourceSelect = page.locator(`[data-testid="stack-layer-source-${layerId}"]`);
       const newSourceIndex = initialSourceIndex === 0 ? '1' : '0';
       await sourceSelect.selectOption(newSourceIndex);
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.sourceIndex === ${parseInt(newSourceIndex)}; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.sourceIndex === ${parseInt(newSourceIndex)}; })()`,
+      );
 
       state = await getStackState(page);
       expect(state.layers[0]!.sourceIndex).toBe(parseInt(newSourceIndex));
@@ -734,7 +764,10 @@ test.describe('Stack Control', () => {
       // Change source to the other video
       const sourceSelect = page.locator(`[data-testid="stack-layer-source-${layerId}"]`);
       await sourceSelect.selectOption('1');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.sourceIndex === 1; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.sourceIndex === 1; })()`,
+      );
 
       state = await getStackState(page);
       // Name should remain the same (Layer N format)
@@ -747,7 +780,7 @@ test.describe('Stack Control', () => {
       const stackButton = page.locator('[data-testid="stack-button"]');
 
       // Get initial button style
-      const initialColor = await stackButton.evaluate(el => getComputedStyle(el).color);
+      const initialColor = await stackButton.evaluate((el) => getComputedStyle(el).color);
 
       // Open panel and add layers
       await stackButton.click();
@@ -763,7 +796,7 @@ test.describe('Stack Control', () => {
       await page.waitForTimeout(100);
 
       // Button should now have active styling (multiple layers)
-      const activeColor = await stackButton.evaluate(el => getComputedStyle(el).color);
+      const activeColor = await stackButton.evaluate((el) => getComputedStyle(el).color);
       expect(activeColor).not.toBe(initialColor);
     });
   });
@@ -930,19 +963,31 @@ test.describe('Stack Control', () => {
       // Perform multiple rapid interactions
       const visibilityButton = page.locator(`[data-testid="stack-layer-visibility-${firstLayerId}"]`);
       await visibilityButton.click();
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.visible === false; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.visible === false; })()`,
+      );
 
       const blendSelect = page.locator(`[data-testid="stack-layer-blend-${firstLayerId}"]`);
       await blendSelect.selectOption('screen');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.blendMode === 'screen'; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.blendMode === 'screen'; })()`,
+      );
 
       await visibilityButton.click();
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.visible === true; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.visible === true; })()`,
+      );
 
       const opacitySlider = page.locator(`[data-testid="stack-layer-opacity-${firstLayerId}"]`);
       await opacitySlider.fill('75');
       await opacitySlider.dispatchEvent('input');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.opacity !== undefined && Math.abs(s.layers[0].opacity - 0.75) < 0.1; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.opacity !== undefined && Math.abs(s.layers[0].opacity - 0.75) < 0.1; })()`,
+      );
 
       // Panel should remain open after all interactions
       const stackPanel = page.locator('[data-testid="stack-panel"]');
@@ -972,13 +1017,19 @@ test.describe('Stack Control', () => {
       // Change blend mode
       const blendSelect = page.locator(`[data-testid="stack-layer-blend-${layerId}"]`);
       await blendSelect.selectOption('multiply');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.blendMode === 'multiply'; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.blendMode === 'multiply'; })()`,
+      );
 
       // Change opacity
       const opacitySlider = page.locator(`[data-testid="stack-layer-opacity-${layerId}"]`);
       await opacitySlider.fill('75');
       await opacitySlider.dispatchEvent('input');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.opacity !== undefined && Math.abs(s.layers[0].opacity - 0.75) < 0.1; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.opacity !== undefined && Math.abs(s.layers[0].opacity - 0.75) < 0.1; })()`,
+      );
 
       // Close panel
       await stackButton.click();
@@ -1007,7 +1058,10 @@ test.describe('Stack Control', () => {
       // Modify layer
       const blendSelect = page.locator(`[data-testid="stack-layer-blend-${layerId}"]`);
       await blendSelect.selectOption('screen');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.blendMode === 'screen'; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.blendMode === 'screen'; })()`,
+      );
 
       // Step to next frame
       await page.keyboard.press('ArrowRight');
@@ -1042,27 +1096,39 @@ test.describe('Stack Control', () => {
       const sourceSelect = page.locator(`[data-testid="stack-layer-source-${layerId}"]`);
       if (await sourceSelect.isVisible()) {
         await sourceSelect.selectOption('1');
-        await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.sourceIndex === 1; })()`);
+        await waitForCondition(
+          page,
+          `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.sourceIndex === 1; })()`,
+        );
       }
 
       // Change blend mode to difference
       const blendSelect = page.locator(`[data-testid="stack-layer-blend-${layerId}"]`);
       await blendSelect.selectOption('difference');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.blendMode === 'difference'; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.blendMode === 'difference'; })()`,
+      );
 
       state = await getStackState(page);
       expect(state.layers[0]!.blendMode).toBe('difference');
 
       // Change to multiply
       await blendSelect.selectOption('multiply');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.blendMode === 'multiply'; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.blendMode === 'multiply'; })()`,
+      );
 
       state = await getStackState(page);
       expect(state.layers[0]!.blendMode).toBe('multiply');
 
       // Change to screen
       await blendSelect.selectOption('screen');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.blendMode === 'screen'; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.blendMode === 'screen'; })()`,
+      );
 
       state = await getStackState(page);
       expect(state.layers[0]!.blendMode).toBe('screen');
@@ -1085,13 +1151,19 @@ test.describe('Stack Control', () => {
       const sourceSelect = page.locator(`[data-testid="stack-layer-source-${layerId}"]`);
       if (await sourceSelect.isVisible()) {
         await sourceSelect.selectOption('1');
-        await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.sourceIndex === 1; })()`);
+        await waitForCondition(
+          page,
+          `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.sourceIndex === 1; })()`,
+        );
       }
 
       // Set blend mode to multiply
       const blendSelect = page.locator(`[data-testid="stack-layer-blend-${layerId}"]`);
       await blendSelect.selectOption('multiply');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.blendMode === 'multiply'; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.blendMode === 'multiply'; })()`,
+      );
 
       const updatedState = await getStackState(page);
       expect(updatedState.layers[0]!.blendMode).toBe('multiply');
@@ -1124,13 +1196,19 @@ test.describe('Stack Control', () => {
       const sourceSelect = page.locator(`[data-testid="stack-layer-source-${layerId}"]`);
       if (await sourceSelect.isVisible()) {
         await sourceSelect.selectOption('1');
-        await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.sourceIndex === 1; })()`);
+        await waitForCondition(
+          page,
+          `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.sourceIndex === 1; })()`,
+        );
       }
 
       // Set to screen blend mode
       const blendSelect = page.locator(`[data-testid="stack-layer-blend-${layerId}"]`);
       await blendSelect.selectOption('screen');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.blendMode === 'screen'; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.blendMode === 'screen'; })()`,
+      );
 
       const updatedState = await getStackState(page);
       expect(updatedState.layers[0]!.blendMode).toBe('screen');
@@ -1161,7 +1239,10 @@ test.describe('Stack Control', () => {
       const sourceSelect = page.locator(`[data-testid="stack-layer-source-${layerId}"]`);
       if (await sourceSelect.isVisible()) {
         await sourceSelect.selectOption('1');
-        await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.sourceIndex === 1; })()`);
+        await waitForCondition(
+          page,
+          `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.sourceIndex === 1; })()`,
+        );
       }
 
       // Check available blend modes
@@ -1196,14 +1277,20 @@ test.describe('Stack Control', () => {
       const sourceSelect = page.locator(`[data-testid="stack-layer-source-${layerId}"]`);
       if (await sourceSelect.isVisible()) {
         await sourceSelect.selectOption('1');
-        await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.sourceIndex === 1; })()`);
+        await waitForCondition(
+          page,
+          `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.sourceIndex === 1; })()`,
+        );
       }
 
       // Set to 50% opacity
       const opacitySlider = page.locator(`[data-testid="stack-layer-opacity-${layerId}"]`);
       await opacitySlider.fill('50');
       await opacitySlider.dispatchEvent('input');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.opacity !== undefined && Math.abs(s.layers[0].opacity - 0.5) < 0.1; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.opacity !== undefined && Math.abs(s.layers[0].opacity - 0.5) < 0.1; })()`,
+      );
 
       state = await getStackState(page);
       expect(state.layers[0]!.opacity).toBeCloseTo(0.5, 1);
@@ -1211,7 +1298,10 @@ test.describe('Stack Control', () => {
       // Set to 0% opacity
       await opacitySlider.fill('0');
       await opacitySlider.dispatchEvent('input');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.opacity === 0; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.opacity === 0; })()`,
+      );
 
       state = await getStackState(page);
       expect(state.layers[0]!.opacity).toBe(0);
@@ -1219,7 +1309,10 @@ test.describe('Stack Control', () => {
       // Set back to 100% opacity
       await opacitySlider.fill('100');
       await opacitySlider.dispatchEvent('input');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.opacity === 1; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.opacity === 1; })()`,
+      );
 
       state = await getStackState(page);
       expect(state.layers[0]!.opacity).toBe(1);
@@ -1242,16 +1335,22 @@ test.describe('Stack Control', () => {
       const sourceSelect = page.locator(`[data-testid="stack-layer-source-${layerId}"]`);
       if (await sourceSelect.isVisible()) {
         await sourceSelect.selectOption('1');
-        await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.sourceIndex === 1; })()`);
+        await waitForCondition(
+          page,
+          `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.sourceIndex === 1; })()`,
+        );
       }
 
       // Set to add blend mode
       const blendSelect = page.locator(`[data-testid="stack-layer-blend-${layerId}"]`);
       const options = await blendSelect.locator('option').allTextContents();
 
-      if (options.some(opt => opt.toLowerCase() === 'add')) {
+      if (options.some((opt) => opt.toLowerCase() === 'add')) {
         await blendSelect.selectOption('add');
-        await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.blendMode === 'add'; })()`);
+        await waitForCondition(
+          page,
+          `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.blendMode === 'add'; })()`,
+        );
 
         const updatedState = await getStackState(page);
         expect(updatedState.layers[0]!.blendMode).toBe('add');
@@ -1278,13 +1377,19 @@ test.describe('Stack Control', () => {
       const sourceSelect = page.locator(`[data-testid="stack-layer-source-${layerId}"]`);
       if (await sourceSelect.isVisible()) {
         await sourceSelect.selectOption('1');
-        await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.sourceIndex === 1; })()`);
+        await waitForCondition(
+          page,
+          `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.sourceIndex === 1; })()`,
+        );
       }
 
       // Set to difference blend mode
       const blendSelect = page.locator(`[data-testid="stack-layer-blend-${layerId}"]`);
       await blendSelect.selectOption('difference');
-      await waitForCondition(page, `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.blendMode === 'difference'; })()`);
+      await waitForCondition(
+        page,
+        `(() => { const s = window.__OPENRV_TEST__?.getStackState(); return s?.layers?.[0]?.blendMode === 'difference'; })()`,
+      );
 
       const updatedState = await getStackState(page);
       expect(updatedState.layers[0]!.blendMode).toBe('difference');

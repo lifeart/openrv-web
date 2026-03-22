@@ -55,13 +55,23 @@ function validateFrontMatter(content: string, filePath: string): ValidationIssue
   const relPath = relative(ROOT, filePath);
 
   if (!content.startsWith('---\n')) {
-    issues.push({ file: relPath, line: 1, severity: 'error', message: 'Missing YAML front-matter (must start with ---)' });
+    issues.push({
+      file: relPath,
+      line: 1,
+      severity: 'error',
+      message: 'Missing YAML front-matter (must start with ---)',
+    });
     return issues;
   }
 
   const endIndex = content.indexOf('\n---\n', 4);
   if (endIndex === -1) {
-    issues.push({ file: relPath, line: 1, severity: 'error', message: 'Unterminated YAML front-matter (missing closing ---)' });
+    issues.push({
+      file: relPath,
+      line: 1,
+      severity: 'error',
+      message: 'Unterminated YAML front-matter (missing closing ---)',
+    });
     return issues;
   }
 
@@ -84,7 +94,12 @@ function validateFrontMatter(content: string, filePath: string): ValidationIssue
   // Check reviewed is boolean
   const reviewedMatch = fmContent.match(/reviewed:\s*(.+)/);
   if (reviewedMatch && !['true', 'false'].includes(reviewedMatch[1].trim())) {
-    issues.push({ file: relPath, line: 2, severity: 'error', message: 'Front-matter "reviewed" must be true or false' });
+    issues.push({
+      file: relPath,
+      line: 2,
+      severity: 'error',
+      message: 'Front-matter "reviewed" must be true or false',
+    });
   }
 
   return issues;
@@ -117,11 +132,21 @@ function validateHeadings(content: string, filePath: string): ValidationIssue[] 
       const lineNum = i + 1;
 
       if (level > 4) {
-        issues.push({ file: relPath, line: lineNum, severity: 'warning', message: `Heading level h${level} exceeds max depth h4` });
+        issues.push({
+          file: relPath,
+          line: lineNum,
+          severity: 'warning',
+          message: `Heading level h${level} exceeds max depth h4`,
+        });
       }
 
       if (lastLevel > 0 && level > lastLevel + 1) {
-        issues.push({ file: relPath, line: lineNum, severity: 'warning', message: `Skipped heading level: h${lastLevel} -> h${level}` });
+        issues.push({
+          file: relPath,
+          line: lineNum,
+          severity: 'warning',
+          message: `Skipped heading level: h${lastLevel} -> h${level}`,
+        });
       }
 
       lastLevel = level;
@@ -162,14 +187,31 @@ function validateMermaid(content: string, filePath: string): ValidationIssue[] {
         issues.push({ file: relPath, line: mermaidStart, severity: 'error', message: 'Empty Mermaid diagram block' });
       } else {
         // Check for valid diagram type
-        const validTypes = ['graph', 'flowchart', 'sequenceDiagram', 'classDiagram',
-                           'stateDiagram', 'erDiagram', 'gantt', 'pie', 'gitgraph',
-                           'journey', 'mindmap', 'timeline', 'block-beta',
-                           'stateDiagram-v2'];
+        const validTypes = [
+          'graph',
+          'flowchart',
+          'sequenceDiagram',
+          'classDiagram',
+          'stateDiagram',
+          'erDiagram',
+          'gantt',
+          'pie',
+          'gitgraph',
+          'journey',
+          'mindmap',
+          'timeline',
+          'block-beta',
+          'stateDiagram-v2',
+        ];
         const firstLine = trimmed.split('\n')[0].trim();
         const hasValidType = validTypes.some((t) => firstLine.startsWith(t));
         if (!hasValidType) {
-          issues.push({ file: relPath, line: mermaidStart, severity: 'warning', message: `Mermaid block may have invalid diagram type: "${firstLine.slice(0, 30)}"` });
+          issues.push({
+            file: relPath,
+            line: mermaidStart,
+            severity: 'warning',
+            message: `Mermaid block may have invalid diagram type: "${firstLine.slice(0, 30)}"`,
+          });
         }
       }
       continue;
@@ -215,8 +257,12 @@ function validateLinks(content: string, filePath: string): ValidationIssue[] {
       const linkTarget = match[2];
 
       // Skip external links, anchors, and mailto
-      if (linkTarget.startsWith('http://') || linkTarget.startsWith('https://') ||
-          linkTarget.startsWith('#') || linkTarget.startsWith('mailto:')) {
+      if (
+        linkTarget.startsWith('http://') ||
+        linkTarget.startsWith('https://') ||
+        linkTarget.startsWith('#') ||
+        linkTarget.startsWith('mailto:')
+      ) {
         continue;
       }
 

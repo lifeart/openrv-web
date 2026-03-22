@@ -1,9 +1,5 @@
 import { test, expect } from '@playwright/test';
-import {
-  loadVideoFile,
-  waitForTestHelper,
-  getColorState,
-} from './fixtures';
+import { loadVideoFile, waitForTestHelper, getColorState } from './fixtures';
 
 /**
  * Session Snapshots Tests

@@ -791,7 +791,11 @@ describe('SessionSerializer', () => {
       state.backgroundPattern = { pattern: 'checker', checkerSize: 'large', customColor: '#ff0000' };
 
       await SessionSerializer.fromJSON(state, components);
-      expect(components.viewer.setBackgroundPatternState).toHaveBeenCalledWith({ pattern: 'checker', checkerSize: 'large', customColor: '#ff0000' });
+      expect(components.viewer.setBackgroundPatternState).toHaveBeenCalledWith({
+        pattern: 'checker',
+        checkerSize: 'large',
+        customColor: '#ff0000',
+      });
     });
 
     it('SER-011h: old session without PAR/background gets same defaults as fresh session', async () => {
@@ -1886,7 +1890,13 @@ function createMockComponents(): SessionComponents {
       getBlendModeState: vi.fn().mockReturnValue({ ...DEFAULT_BLEND_MODE_STATE, flickerFrame: 0 }),
       getColorInversion: vi.fn().mockReturnValue(false),
       getColorWheels: vi.fn().mockReturnValue({
-        getState: vi.fn().mockReturnValue({ lift: { r: 0, g: 0, b: 0, y: 0 }, gamma: { r: 0, g: 0, b: 0, y: 0 }, gain: { r: 0, g: 0, b: 0, y: 0 }, master: { r: 0, g: 0, b: 0, y: 0 }, linked: false }),
+        getState: vi.fn().mockReturnValue({
+          lift: { r: 0, g: 0, b: 0, y: 0 },
+          gamma: { r: 0, g: 0, b: 0, y: 0 },
+          gain: { r: 0, g: 0, b: 0, y: 0 },
+          master: { r: 0, g: 0, b: 0, y: 0 },
+          linked: false,
+        }),
         setState: vi.fn(),
       }),
       getCurves: vi.fn().mockReturnValue(createDefaultCurvesData()),

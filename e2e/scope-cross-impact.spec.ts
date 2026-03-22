@@ -1,10 +1,5 @@
 import { test, expect } from '@playwright/test';
-import {
-  loadVideoFile,
-  waitForTestHelper,
-  captureViewerScreenshot,
-  imagesAreDifferent,
-} from './fixtures';
+import { loadVideoFile, waitForTestHelper, captureViewerScreenshot, imagesAreDifferent } from './fixtures';
 
 /**
  * Scope Cross-Impact Tests
@@ -123,7 +118,11 @@ test.describe('Scope Cross-Impact: Color Adjustments', () => {
     await page.keyboard.press('c');
     await page.waitForTimeout(200);
 
-    const exposureSlider = page.locator('.color-controls-panel label').filter({ hasText: 'Exposure' }).locator('..').locator('input[type="range"]');
+    const exposureSlider = page
+      .locator('.color-controls-panel label')
+      .filter({ hasText: 'Exposure' })
+      .locator('..')
+      .locator('input[type="range"]');
     await exposureSlider.fill('1.5');
     await exposureSlider.dispatchEvent('input');
     await page.waitForTimeout(500);
@@ -146,7 +145,11 @@ test.describe('Scope Cross-Impact: Color Adjustments', () => {
     await page.keyboard.press('c');
     await page.waitForTimeout(200);
 
-    const contrastSlider = page.locator('.color-controls-panel label').filter({ hasText: 'Contrast' }).locator('..').locator('input[type="range"]');
+    const contrastSlider = page
+      .locator('.color-controls-panel label')
+      .filter({ hasText: 'Contrast' })
+      .locator('..')
+      .locator('input[type="range"]');
     await contrastSlider.fill('1.5');
     await contrastSlider.dispatchEvent('input');
     await page.waitForTimeout(500);
@@ -169,7 +172,11 @@ test.describe('Scope Cross-Impact: Color Adjustments', () => {
     await page.keyboard.press('c');
     await page.waitForTimeout(200);
 
-    const temperatureSlider = page.locator('.color-controls-panel label').filter({ hasText: 'Temperature' }).locator('..').locator('input[type="range"]');
+    const temperatureSlider = page
+      .locator('.color-controls-panel label')
+      .filter({ hasText: 'Temperature' })
+      .locator('..')
+      .locator('input[type="range"]');
     await temperatureSlider.fill('100'); // Max warm temperature
     await temperatureSlider.dispatchEvent('input');
     await page.waitForTimeout(600);

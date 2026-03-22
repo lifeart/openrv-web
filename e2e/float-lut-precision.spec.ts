@@ -36,29 +36,21 @@ async function waitForColorPanel(page: import('@playwright/test').Page) {
 
 // Helper to wait for LUT loaded state
 async function waitForLUTLoaded(page: import('@playwright/test').Page) {
-  await page.waitForFunction(
-    () => (window as any).__OPENRV_TEST__?.getColorState()?.hasLUT === true,
-    { timeout: 5000 },
-  );
+  await page.waitForFunction(() => (window as any).__OPENRV_TEST__?.getColorState()?.hasLUT === true, {
+    timeout: 5000,
+  });
 }
 
 // Helper to wait for LUT cleared state
 async function waitForLUTCleared(page: import('@playwright/test').Page) {
-  await page.waitForFunction(
-    () => (window as any).__OPENRV_TEST__?.getColorState()?.hasLUT === false,
-    { timeout: 5000 },
-  );
+  await page.waitForFunction(() => (window as any).__OPENRV_TEST__?.getColorState()?.hasLUT === false, {
+    timeout: 5000,
+  });
 }
 
 // Helper to wait for a color state property to match
-async function waitForColorState(
-  page: import('@playwright/test').Page,
-  predicate: string,
-) {
-  await page.waitForFunction(
-    new Function('return ' + predicate) as () => boolean,
-    { timeout: 5000 },
-  );
+async function waitForColorState(page: import('@playwright/test').Page, predicate: string) {
+  await page.waitForFunction(new Function('return ' + predicate) as () => boolean, { timeout: 5000 });
 }
 
 test.describe('Float LUT Precision', () => {
@@ -174,10 +166,8 @@ test.describe('Float LUT Precision', () => {
 
         // Create a float texture with precise values
         const testData = new Float32Array([
-          0.123456, 0.654321, 0.999999, 1.0,
-          0.111111, 0.222222, 0.333333, 1.0,
-          0.444444, 0.555555, 0.666666, 1.0,
-          0.777777, 0.888888, 0.999000, 1.0,
+          0.123456, 0.654321, 0.999999, 1.0, 0.111111, 0.222222, 0.333333, 1.0, 0.444444, 0.555555, 0.666666, 1.0,
+          0.777777, 0.888888, 0.999, 1.0,
         ]);
 
         const tex = gl.createTexture();
@@ -235,15 +225,19 @@ test.describe('Float LUT Precision', () => {
       await waitForLUTLoaded(page);
 
       // Find and set intensity to 0
-      const intensityRow = page.locator('.color-controls-panel').locator('label:has-text("Intensity")').locator('..').locator('input[type="range"]').first();
+      const intensityRow = page
+        .locator('.color-controls-panel')
+        .locator('label:has-text("Intensity")')
+        .locator('..')
+        .locator('input[type="range"]')
+        .first();
 
       if (await intensityRow.isVisible()) {
         await intensityRow.fill('0');
         await intensityRow.dispatchEvent('input');
-        await page.waitForFunction(
-          () => (window as any).__OPENRV_TEST__?.getColorState()?.lutIntensity === 0,
-          { timeout: 5000 },
-        );
+        await page.waitForFunction(() => (window as any).__OPENRV_TEST__?.getColorState()?.lutIntensity === 0, {
+          timeout: 5000,
+        });
 
         const state = await getColorState(page);
         expect(state.lutIntensity).toBe(0);
@@ -261,7 +255,12 @@ test.describe('Float LUT Precision', () => {
 
       const screenshot100 = await captureViewerScreenshot(page);
 
-      const intensityRow = page.locator('.color-controls-panel').locator('label:has-text("Intensity")').locator('..').locator('input[type="range"]').first();
+      const intensityRow = page
+        .locator('.color-controls-panel')
+        .locator('label:has-text("Intensity")')
+        .locator('..')
+        .locator('input[type="range"]')
+        .first();
 
       if (await intensityRow.isVisible()) {
         await intensityRow.fill('0.5');
@@ -296,10 +295,9 @@ test.describe('Float LUT Precision', () => {
       if (await exposureSlider.isVisible()) {
         await exposureSlider.fill('2');
         await exposureSlider.dispatchEvent('input');
-        await page.waitForFunction(
-          () => (window as any).__OPENRV_TEST__?.getColorState()?.exposure === 2,
-          { timeout: 5000 },
-        );
+        await page.waitForFunction(() => (window as any).__OPENRV_TEST__?.getColorState()?.exposure === 2, {
+          timeout: 5000,
+        });
 
         const state = await getColorState(page);
         expect(state.hasLUT).toBe(true);
@@ -323,20 +321,18 @@ test.describe('Float LUT Precision', () => {
 
       // Navigate forward
       await page.keyboard.press('ArrowRight');
-      await page.waitForFunction(
-        () => (window as any).__OPENRV_TEST__?.getColorState()?.hasLUT === true,
-        { timeout: 5000 },
-      );
+      await page.waitForFunction(() => (window as any).__OPENRV_TEST__?.getColorState()?.hasLUT === true, {
+        timeout: 5000,
+      });
 
       state = await getColorState(page);
       expect(state.hasLUT).toBe(true);
 
       // Navigate back
       await page.keyboard.press('ArrowLeft');
-      await page.waitForFunction(
-        () => (window as any).__OPENRV_TEST__?.getColorState()?.hasLUT === true,
-        { timeout: 5000 },
-      );
+      await page.waitForFunction(() => (window as any).__OPENRV_TEST__?.getColorState()?.hasLUT === true, {
+        timeout: 5000,
+      });
 
       state = await getColorState(page);
       expect(state.hasLUT).toBe(true);
@@ -359,7 +355,9 @@ test.describe('Float LUT Precision', () => {
       expect(imagesAreDifferent(screenshotOriginal, screenshotWithLUT)).toBe(true);
 
       // Find and click clear button
-      const clearButton = page.locator('.color-controls-panel button:has-text("\u2715"), .color-controls-panel button[title*="Remove LUT"]').first();
+      const clearButton = page
+        .locator('.color-controls-panel button:has-text("\u2715"), .color-controls-panel button[title*="Remove LUT"]')
+        .first();
       if (await clearButton.isVisible()) {
         await clearButton.click();
         await waitForLUTCleared(page);

@@ -1,9 +1,5 @@
 import { test, expect } from '@playwright/test';
-import {
-  loadVideoFile,
-  getViewerState,
-  waitForTestHelper,
-} from './fixtures';
+import { loadVideoFile, getViewerState, waitForTestHelper } from './fixtures';
 
 /**
  * Vectorscope Feature Tests

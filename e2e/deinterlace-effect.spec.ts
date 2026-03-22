@@ -1,10 +1,5 @@
 import { test, expect } from '@playwright/test';
-import {
-  loadVideoFile,
-  waitForTestHelper,
-  captureViewerScreenshot,
-  imagesAreDifferent,
-} from './fixtures';
+import { loadVideoFile, waitForTestHelper, captureViewerScreenshot, imagesAreDifferent } from './fixtures';
 
 /**
  * Deinterlace Effect E2E Tests
@@ -26,7 +21,7 @@ async function applyDeinterlaceInBrowser(
     fieldOrder: string;
     width: number;
     height: number;
-  }
+  },
 ): Promise<{
   interLineVarianceBefore: number;
   interLineVarianceAfter: number;
@@ -108,16 +103,27 @@ async function applyDeinterlaceInBrowser(
     // Check alpha preservation
     let alphaPreserved = true;
     for (let i = 3; i < imageData.data.length; i += 4) {
-      if (imageData.data[i] !== 200) { alphaPreserved = false; break; }
+      if (imageData.data[i] !== 200) {
+        alphaPreserved = false;
+        break;
+      }
     }
 
     // Check if pixels changed
     let pixelChanged = false;
     for (let i = 0; i < imageData.data.length; i++) {
-      if (imageData.data[i] !== originalData[i]) { pixelChanged = true; break; }
+      if (imageData.data[i] !== originalData[i]) {
+        pixelChanged = true;
+        break;
+      }
     }
 
-    return { interLineVarianceBefore: varianceBefore, interLineVarianceAfter: varianceAfter, alphaPreserved, pixelChanged };
+    return {
+      interLineVarianceBefore: varianceBefore,
+      interLineVarianceAfter: varianceAfter,
+      alphaPreserved,
+      pixelChanged,
+    };
   }, params);
 }
 
@@ -178,7 +184,10 @@ test.describe('Deinterlace Effect E2E', () => {
           const val = y % 2 === 0 ? 255 : 0;
           for (let x = 0; x < width; x++) {
             const i = (y * width + x) * 4;
-            data[i] = val; data[i + 1] = val; data[i + 2] = val; data[i + 3] = 255;
+            data[i] = val;
+            data[i + 1] = val;
+            data[i + 2] = val;
+            data[i + 3] = 255;
           }
         }
         const imageData = new ImageData(new Uint8ClampedArray(data), width, height);

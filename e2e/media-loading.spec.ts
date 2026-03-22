@@ -282,9 +282,7 @@ test.describe('Media Loading', () => {
       await expect(canvas).toBeVisible();
 
       // Filter out warnings
-      const criticalErrors = errors.filter(e =>
-        !e.includes('Warning') && !e.includes('Deprecation')
-      );
+      const criticalErrors = errors.filter((e) => !e.includes('Warning') && !e.includes('Deprecation'));
       expect(criticalErrors).toHaveLength(0);
     });
   });
@@ -351,9 +349,7 @@ test.describe('Media Loading', () => {
       await page.waitForTimeout(1000);
 
       // No critical errors
-      const criticalErrors = errors.filter(e =>
-        !e.includes('Warning') && !e.includes('Deprecation')
-      );
+      const criticalErrors = errors.filter((e) => !e.includes('Warning') && !e.includes('Deprecation'));
       expect(criticalErrors).toHaveLength(0);
 
       // App should be functional

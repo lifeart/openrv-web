@@ -1,9 +1,5 @@
 import { test, expect } from '@playwright/test';
-import {
-  loadVideoFile,
-  getSafeAreasState,
-  waitForTestHelper,
-} from './fixtures';
+import { loadVideoFile, getSafeAreasState, waitForTestHelper } from './fixtures';
 
 /**
  * Safe Areas Feature Tests
@@ -190,7 +186,9 @@ test.describe('Safe Areas UI Controls', () => {
     await page.waitForTimeout(100);
 
     // Look for safe areas control
-    const control = page.locator('[data-testid="safe-areas-control"], button:has-text("Safe"), button:has-text("Guides")');
+    const control = page.locator(
+      '[data-testid="safe-areas-control"], button:has-text("Safe"), button:has-text("Guides")',
+    );
     await expect(control.first()).toBeVisible();
   });
 });

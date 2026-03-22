@@ -70,9 +70,28 @@ function extractIdentifiers(markdown: string): string[] {
   while ((match = headingPattern.exec(markdown)) !== null) {
     const id = match[1];
     // Skip generic words
-    if (!['Quick', 'Start', 'Best', 'Practices', 'Methods', 'Properties', 'Overview',
-          'Parameters', 'Returns', 'Examples', 'Usage', 'Description', 'Notes',
-          'Troubleshooting', 'Prerequisites', 'Summary', 'FAQ', 'Steps'].includes(id)) {
+    if (
+      ![
+        'Quick',
+        'Start',
+        'Best',
+        'Practices',
+        'Methods',
+        'Properties',
+        'Overview',
+        'Parameters',
+        'Returns',
+        'Examples',
+        'Usage',
+        'Description',
+        'Notes',
+        'Troubleshooting',
+        'Prerequisites',
+        'Summary',
+        'FAQ',
+        'Steps',
+      ].includes(id)
+    ) {
       identifiers.add(id);
     }
   }

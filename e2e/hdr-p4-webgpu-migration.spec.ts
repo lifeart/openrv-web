@@ -88,9 +88,11 @@ async function installDeterministicWebGPUMock(page: import('@playwright/test').P
 
     const hasInvertedV = (shaderCode: string): boolean => {
       const code = shaderCode.replace(/\s+/g, ' ');
-      return /1\.0\s*-\s*\(?\s*\(y\s*\+\s*1\.0\)\s*\/\s*2\.0\s*\)?/.test(code)
-        || /1\.0\s*-\s*in\.uv\.y/.test(code)
-        || /1\.0\s*-\s*\(in\.uv\.y\)/.test(code);
+      return (
+        /1\.0\s*-\s*\(?\s*\(y\s*\+\s*1\.0\)\s*\/\s*2\.0\s*\)?/.test(code) ||
+        /1\.0\s*-\s*in\.uv\.y/.test(code) ||
+        /1\.0\s*-\s*\(in\.uv\.y\)/.test(code)
+      );
     };
 
     const renderTextureToCanvas = (sourceTexture: any, targetCanvas: HTMLCanvasElement, shaderCode: string): void => {
@@ -108,7 +110,7 @@ async function installDeterministicWebGPUMock(page: import('@playwright/test').P
       const invertV = hasInvertedV(shaderCode);
 
       for (let y = 0; y < height; y++) {
-        const srcY = invertV ? y : (height - 1 - y);
+        const srcY = invertV ? y : height - 1 - y;
         for (let x = 0; x < width; x++) {
           const srcIndex = (srcY * width + x) * 4;
           const dstIndex = (y * width + x) * 4;
@@ -188,8 +190,12 @@ async function installDeterministicWebGPUMock(page: import('@playwright/test').P
                 __drawn: false,
                 __targetCanvas: desc?.colorAttachments?.[0]?.view?.__canvas ?? null,
                 setPipeline: () => {},
-                setBindGroup: (_index: number, group: any) => { pass.__bindGroup = group; },
-                draw: () => { pass.__drawn = true; },
+                setBindGroup: (_index: number, group: any) => {
+                  pass.__bindGroup = group;
+                },
+                draw: () => {
+                  pass.__drawn = true;
+                },
                 end: () => {},
               };
               passes.push(pass);
@@ -216,7 +222,7 @@ async function installDeterministicWebGPUMock(page: import('@playwright/test').P
       };
     };
 
-    HTMLCanvasElement.prototype.getContext = function(this: HTMLCanvasElement, contextId: string, options?: any): any {
+    HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, contextId: string, options?: any): any {
       if (contextId === 'webgpu') {
         let context = webgpuContexts.get(this);
         if (!context) {
@@ -523,19 +529,32 @@ test.describe('Phase 4: WebGPU Blit Orientation Regression', () => {
 
     await loadExrFile(page);
 
-    await page.waitForFunction(() => {
-      const manager = (window as any).__OPENRV_TEST__?.app?.viewer?.glRendererManager;
-      const blitCanvas = document.querySelector('canvas[data-testid="viewer-webgpu-blit-canvas"]') as HTMLCanvasElement | null;
-      if (!manager || !blitCanvas) return false;
-      const frame = manager.lastHDRBlitFrame;
-      const visible = getComputedStyle(blitCanvas).display !== 'none';
-      return manager.isWebGPUBlitReady === true && visible && !!frame?.data?.length && blitCanvas.width > 0 && blitCanvas.height > 0;
-    }, { timeout: 10000 });
+    await page.waitForFunction(
+      () => {
+        const manager = (window as any).__OPENRV_TEST__?.app?.viewer?.glRendererManager;
+        const blitCanvas = document.querySelector(
+          'canvas[data-testid="viewer-webgpu-blit-canvas"]',
+        ) as HTMLCanvasElement | null;
+        if (!manager || !blitCanvas) return false;
+        const frame = manager.lastHDRBlitFrame;
+        const visible = getComputedStyle(blitCanvas).display !== 'none';
+        return (
+          manager.isWebGPUBlitReady === true &&
+          visible &&
+          !!frame?.data?.length &&
+          blitCanvas.width > 0 &&
+          blitCanvas.height > 0
+        );
+      },
+      { timeout: 10000 },
+    );
 
     const orientation = await page.evaluate(() => {
       const manager = (window as any).__OPENRV_TEST__?.app?.viewer?.glRendererManager;
       const frame = manager?.lastHDRBlitFrame as { data: Float32Array; width: number; height: number } | null;
-      const canvas = document.querySelector('canvas[data-testid="viewer-webgpu-blit-canvas"]') as HTMLCanvasElement | null;
+      const canvas = document.querySelector(
+        'canvas[data-testid="viewer-webgpu-blit-canvas"]',
+      ) as HTMLCanvasElement | null;
 
       if (!frame || !canvas) {
         return { ok: false, reason: 'missing-frame-or-canvas' };
@@ -552,11 +571,7 @@ test.describe('Phase 4: WebGPU Blit Orientation Regression', () => {
 
       const getFrameRGB = (x: number, y: number): number[] => {
         const index = (y * frame.width + x) * 4;
-        return [
-          toByte(frame.data[index] ?? 0),
-          toByte(frame.data[index + 1] ?? 0),
-          toByte(frame.data[index + 2] ?? 0),
-        ];
+        return [toByte(frame.data[index] ?? 0), toByte(frame.data[index + 1] ?? 0), toByte(frame.data[index + 2] ?? 0)];
       };
 
       const yStep = Math.max(1, Math.floor(frame.height / 24));
@@ -592,8 +607,20 @@ test.describe('Phase 4: WebGPU Blit Orientation Regression', () => {
       }
       sampleCtx.drawImage(canvas, 0, 0);
 
-      const canvasX = Math.max(0, Math.min(sampleCanvas.width - 1, Math.round((bestX / Math.max(1, frame.width - 1)) * Math.max(1, sampleCanvas.width - 1))));
-      const topY = Math.max(0, Math.min(sampleCanvas.height - 1, Math.round((bestY / Math.max(1, frame.height - 1)) * Math.max(1, sampleCanvas.height - 1))));
+      const canvasX = Math.max(
+        0,
+        Math.min(
+          sampleCanvas.width - 1,
+          Math.round((bestX / Math.max(1, frame.width - 1)) * Math.max(1, sampleCanvas.width - 1)),
+        ),
+      );
+      const topY = Math.max(
+        0,
+        Math.min(
+          sampleCanvas.height - 1,
+          Math.round((bestY / Math.max(1, frame.height - 1)) * Math.max(1, sampleCanvas.height - 1)),
+        ),
+      );
       const bottomY = Math.max(0, Math.min(sampleCanvas.height - 1, sampleCanvas.height - 1 - topY));
 
       const topPixelData = sampleCtx.getImageData(canvasX, topY, 1, 1).data;

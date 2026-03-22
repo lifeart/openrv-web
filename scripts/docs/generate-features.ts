@@ -44,9 +44,7 @@ function countRequirements(content: string): { total: number; done: number } {
   // Find the next ## heading that is NOT Requirements
   const afterReq = content.substring(reqIdx);
   const nextHeadingMatch = afterReq.match(/\n## (?!Requirements)/);
-  const reqSection = nextHeadingMatch
-    ? afterReq.substring(0, nextHeadingMatch.index!)
-    : afterReq;
+  const reqSection = nextHeadingMatch ? afterReq.substring(0, nextHeadingMatch.index!) : afterReq;
 
   let total = 0;
   let done = 0;
@@ -70,12 +68,12 @@ function countRequirements(content: string): { total: number; done: number } {
 
   // Format 2: Tables with Status column
   // Look for table rows and check status values
-  const tableLines = reqSection.split('\n').filter(line => line.startsWith('|') && !line.match(/^\|[\s-|]+$/));
+  const tableLines = reqSection.split('\n').filter((line) => line.startsWith('|') && !line.match(/^\|[\s-|]+$/));
   if (tableLines.length > 1) {
     // Find header row to locate Status column
     const headerLine = tableLines[0]!;
-    const headers = headerLine.split('|').map(h => h.trim().toLowerCase());
-    const statusCol = headers.findIndex(h => h === 'status' || h === 'implementation');
+    const headers = headerLine.split('|').map((h) => h.trim().toLowerCase());
+    const statusCol = headers.findIndex((h) => h === 'status' || h === 'implementation');
 
     if (statusCol >= 0) {
       // Skip header row
@@ -97,8 +95,9 @@ function countRequirements(content: string): { total: number; done: number } {
 
 export function parseFeatures(): FeatureInfo[] {
   const featuresDir = path.join(projectRoot, 'features');
-  const files = fs.readdirSync(featuresDir)
-    .filter(f => f.endsWith('.md'))
+  const files = fs
+    .readdirSync(featuresDir)
+    .filter((f) => f.endsWith('.md'))
     .sort();
 
   const features: FeatureInfo[] = [];
@@ -130,17 +129,23 @@ export function parseFeatures(): FeatureInfo[] {
 
 function statusIcon(status: 'fully' | 'partially' | 'not'): string {
   switch (status) {
-    case 'fully': return 'Implemented';
-    case 'partially': return 'Partial';
-    case 'not': return 'Not Implemented';
+    case 'fully':
+      return 'Implemented';
+    case 'partially':
+      return 'Partial';
+    case 'not':
+      return 'Not Implemented';
   }
 }
 
 function webIcon(status: 'fully' | 'partially' | 'not'): string {
   switch (status) {
-    case 'fully': return 'Yes';
-    case 'partially': return 'Partial';
-    case 'not': return 'No';
+    case 'fully':
+      return 'Yes';
+    case 'partially':
+      return 'Partial';
+    case 'not':
+      return 'No';
   }
 }
 
@@ -155,18 +160,16 @@ export function renderFeatures(features: FeatureInfo[]): string {
   md += '|---------|-----------------|------------|--------|----------|\n';
 
   for (const f of sorted) {
-    const progress = f.requirementsTotal > 0
-      ? `${f.requirementsDone}/${f.requirementsTotal}`
-      : 'N/A';
+    const progress = f.requirementsTotal > 0 ? `${f.requirementsDone}/${f.requirementsTotal}` : 'N/A';
     md += `| ${f.name} | Yes | ${webIcon(f.status)} | ${statusIcon(f.status)} | ${progress} |\n`;
   }
 
   md += '\n';
 
   // Summary stats
-  const fullyCount = sorted.filter(f => f.status === 'fully').length;
-  const partialCount = sorted.filter(f => f.status === 'partially').length;
-  const notCount = sorted.filter(f => f.status === 'not').length;
+  const fullyCount = sorted.filter((f) => f.status === 'fully').length;
+  const partialCount = sorted.filter((f) => f.status === 'partially').length;
+  const notCount = sorted.filter((f) => f.status === 'not').length;
 
   md += '## Summary\n\n';
   md += `- **Total features:** ${sorted.length}\n`;

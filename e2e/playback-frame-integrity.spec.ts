@@ -102,9 +102,7 @@ test.describe('Playback Frame Integrity', () => {
 
     // Each consecutive pair should be different (no stuck frames)
     for (let i = 1; i < screenshots.length; i++) {
-      expect(
-        screenshots[i]!.equals(screenshots[i - 1]!),
-      ).toBe(false);
+      expect(screenshots[i]!.equals(screenshots[i - 1]!)).toBe(false);
     }
   });
 

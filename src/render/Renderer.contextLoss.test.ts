@@ -65,7 +65,7 @@ describe('Renderer WebGL Context Loss Recovery', () => {
       height: 2,
       channels: 4,
       dataType: 'uint8',
-      data: new Uint8Array(16),
+      data: new Uint8Array(16).buffer,
     });
 
     // Clear call counts from initialization
@@ -117,7 +117,7 @@ describe('Renderer WebGL Context Loss Recovery', () => {
       height: 2,
       channels: 4,
       dataType: 'uint8',
-      data: new Uint8Array(16),
+      data: new Uint8Array(16).buffer,
     });
 
     const result = renderer.ensureImageTexture(image);
@@ -148,7 +148,7 @@ describe('Renderer WebGL Context Loss Recovery', () => {
       height: 2,
       channels: 4,
       dataType: 'uint8',
-      data: new Uint8Array(16),
+      data: new Uint8Array(16).buffer,
     });
 
     // Lose and restore
@@ -170,9 +170,7 @@ describe('Renderer WebGL Context Loss Recovery', () => {
 
     // getExtension should have been called for OES_texture_float_linear,
     // EXT_color_buffer_float, and KHR_parallel_shader_compile
-    const extCalls = (mockGL.getExtension as ReturnType<typeof vi.fn>).mock.calls.map(
-      (c: unknown[]) => c[0],
-    );
+    const extCalls = (mockGL.getExtension as ReturnType<typeof vi.fn>).mock.calls.map((c: unknown[]) => c[0]);
     expect(extCalls).toContain('OES_texture_float_linear');
     expect(extCalls).toContain('EXT_color_buffer_float');
     expect(extCalls).toContain('KHR_parallel_shader_compile');
@@ -188,7 +186,7 @@ describe('Renderer WebGL Context Loss Recovery', () => {
       height: 2,
       channels: 4,
       dataType: 'uint8',
-      data: new Uint8Array(16),
+      data: new Uint8Array(16).buffer,
     });
 
     // First cycle
@@ -263,15 +261,13 @@ describe('Renderer WebGL Context Loss Recovery', () => {
       height: 2,
       channels: 4,
       dataType: 'uint8',
-      data: new Uint8Array(16),
+      data: new Uint8Array(16).buffer,
     });
 
     (mockGL.getParameter as ReturnType<typeof vi.fn>).mockClear();
     (mockGL.drawArrays as ReturnType<typeof vi.fn>).mockClear();
 
-    renderer.renderTiledImages([
-      { image, viewport: { x: 0, y: 0, width: 100, height: 100 } },
-    ]);
+    renderer.renderTiledImages([{ image, viewport: { x: 0, y: 0, width: 100, height: 100 } }]);
 
     // gl.getParameter(VIEWPORT) should NOT be called — early return before it
     expect(mockGL.getParameter).not.toHaveBeenCalled();
@@ -288,7 +284,7 @@ describe('Renderer WebGL Context Loss Recovery', () => {
       height: 2,
       channels: 4,
       dataType: 'uint8',
-      data: new Uint8Array(16),
+      data: new Uint8Array(16).buffer,
     });
 
     // First render — uploads texture normally

@@ -34,9 +34,7 @@ export interface MockRendererGLOptions {
  *
  * Used by: Renderer.test.ts, RendererBackend.test.ts, hdr-acceptance-criteria.test.ts
  */
-export function createMockRendererGL(
-  opts: MockRendererGLOptions = {},
-): WebGL2RenderingContext {
+export function createMockRendererGL(opts: MockRendererGLOptions = {}): WebGL2RenderingContext {
   let currentColorSpace = 'srgb';
 
   const supportedSpaces = new Set<string>(['srgb']);
@@ -151,7 +149,7 @@ export function createMockRendererGL(
     TEXTURE_3D: 0x806f,
     TEXTURE_WRAP_R: 0x8072,
     TEXTURE3: 0x84c3,
-    COMPLETION_STATUS_KHR: 0x91B1,
+    COMPLETION_STATUS_KHR: 0x91b1,
   } as unknown as WebGL2RenderingContext;
 
   return gl;
@@ -206,10 +204,7 @@ export function initRendererWithMockGL(
  *
  * Returns `undefined` if the uniform was never set.
  */
-export function getLastUniform1i(
-  mockGL: WebGL2RenderingContext,
-  uniformName: string,
-): number | undefined {
+export function getLastUniform1i(mockGL: WebGL2RenderingContext, uniformName: string): number | undefined {
   const mock = mockGL.uniform1i as unknown as ReturnType<typeof vi.fn>;
   const calls = mock.mock.calls as Array<[{ __uniformName?: string }, number]>;
   for (let i = calls.length - 1; i >= 0; i--) {
@@ -226,10 +221,7 @@ export function getLastUniform1i(
  *
  * Same approach as `getLastUniform1i` but for float uniforms.
  */
-export function getLastUniform1f(
-  mockGL: WebGL2RenderingContext,
-  uniformName: string,
-): number | undefined {
+export function getLastUniform1f(mockGL: WebGL2RenderingContext, uniformName: string): number | undefined {
   const mock = mockGL.uniform1f as unknown as ReturnType<typeof vi.fn>;
   const calls = mock.mock.calls as Array<[{ __uniformName?: string }, number]>;
   for (let i = calls.length - 1; i >= 0; i--) {
@@ -297,7 +289,7 @@ export function createMockWebGL2Context() {
     RGB32F: 0x8815,
     R32F: 0x822e,
     RED: 0x1903,
-    COMPLETION_STATUS_KHR: 0x91B1,
+    COMPLETION_STATUS_KHR: 0x91b1,
 
     getExtension: vi.fn((name: string) => {
       if (name === 'EXT_color_buffer_float') return {};
@@ -379,15 +371,7 @@ export function createMockWebGL2Context() {
     viewport: vi.fn(),
     drawArrays: vi.fn(),
     readPixels: vi.fn(
-      (
-        _x: number,
-        _y: number,
-        _width: number,
-        _height: number,
-        _format: number,
-        _type: number,
-        pixels: Uint8Array,
-      ) => {
+      (_x: number, _y: number, _width: number, _height: number, _format: number, _type: number, pixels: Uint8Array) => {
         // Fill with a pattern to verify processing happened
         for (let i = 0; i < pixels.length; i += 4) {
           pixels[i] = 128; // R
@@ -413,10 +397,7 @@ export function createMockWebGL2Context() {
  * Used by: ViewerExport.test.ts, ViewerRenderingUtils.test.ts,
  *          ViewerPrerender.test.ts, ViewerIntegration.test.ts
  */
-export function createMockImage(
-  width: number,
-  height: number,
-): HTMLImageElement {
+export function createMockImage(width: number, height: number): HTMLImageElement {
   const img = document.createElement('img');
   Object.defineProperty(img, 'naturalWidth', {
     value: width,
@@ -448,10 +429,7 @@ export function createMockImage(
  * Used by: ViewerExport.test.ts, ViewerRenderingUtils.test.ts,
  *          ViewerIntegration.test.ts
  */
-export function createMockVideo(
-  width: number,
-  height: number,
-): HTMLVideoElement {
+export function createMockVideo(width: number, height: number): HTMLVideoElement {
   const video = document.createElement('video');
   Object.defineProperty(video, 'videoWidth', {
     value: width,
@@ -463,13 +441,11 @@ export function createMockVideo(
   });
   // Simulate currentTime setter dispatching a 'seeked' event
   // so that tests waiting for video.addEventListener('seeked', ...) resolve.
-   
+
   (video as any)._currentTime = 0;
   Object.defineProperty(video, 'currentTime', {
-     
     get: () => (video as any)._currentTime,
     set: (v: number) => {
-       
       (video as any)._currentTime = v;
       setTimeout(() => video.dispatchEvent(new Event('seeked')), 0);
     },
@@ -681,8 +657,12 @@ export function createMockViewer(overrides?: Record<string, unknown>) {
     getStereoState: vi.fn(() => ({ mode: 'off' })),
     getStereoPair: vi.fn(() => null),
     getTransform: vi.fn().mockReturnValue({
-      x: 0, y: 0, zoom: 1, rotation: 0,
-      flipH: false, flipV: false,
+      x: 0,
+      y: 0,
+      zoom: 1,
+      rotation: 0,
+      flipH: false,
+      flipV: false,
     }),
     getGLRenderer: vi.fn(() => null),
     isDisplayHDRCapable: vi.fn(() => false),

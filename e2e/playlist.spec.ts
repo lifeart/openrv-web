@@ -1,9 +1,5 @@
 import { test, expect } from '@playwright/test';
-import {
-  loadTwoVideoFiles,
-  waitForTestHelper,
-  getSessionState,
-} from './fixtures';
+import { loadTwoVideoFiles, waitForTestHelper, getSessionState } from './fixtures';
 
 /**
  * Multi-Clip Playlist Tests
@@ -86,7 +82,9 @@ test.describe('Multi-Clip Playlist', () => {
       await page.waitForTimeout(200);
 
       // Look for enable/disable button
-      const enableButton = page.locator('button[title*="Playlist Mode"], button[title*="Enable"], button[title*="Disable"]').first();
+      const enableButton = page
+        .locator('button[title*="Playlist Mode"], button[title*="Enable"], button[title*="Disable"]')
+        .first();
       await expect(enableButton).toBeVisible();
     });
 

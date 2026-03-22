@@ -237,7 +237,7 @@ test.describe('Video Frame Extraction', () => {
       // Frame 2 should be the same whether we got there directly or by stepping
       expect(
         imagesAreDifferent(frame2, frame2Again),
-        'Frame 2 should be consistent regardless of navigation path'
+        'Frame 2 should be consistent regardless of navigation path',
       ).toBe(false);
 
       const state = await getSessionState(page);
@@ -380,10 +380,7 @@ test.describe('Video Frame Extraction', () => {
       const frame1Again = await captureViewerScreenshot(page);
 
       // Frame 1 should be consistent
-      expect(
-        imagesAreDifferent(frame1, frame1Again),
-        'Frame 1 should be consistent after jumping'
-      ).toBe(false);
+      expect(imagesAreDifferent(frame1, frame1Again), 'Frame 1 should be consistent after jumping').toBe(false);
     });
   });
 

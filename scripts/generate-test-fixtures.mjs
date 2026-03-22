@@ -112,11 +112,7 @@ function createTestDPX(options = {}) {
 const CINEON_MAGIC = 0x802a5fd7;
 
 function createTestCineon(options = {}) {
-  const {
-    width = 4,
-    height = 4,
-    dataOffset = 1024,
-  } = options;
+  const { width = 4, height = 4, dataOffset = 1024 } = options;
 
   const channels = 3;
   const totalComponents = width * height * channels;
@@ -219,16 +215,16 @@ function createTestFloatTIFF(options = {}) {
   }
 
   // Tags in ascending order
-  writeTag(256, 4, 1, width);          // ImageWidth
-  writeTag(257, 4, 1, height);         // ImageLength
+  writeTag(256, 4, 1, width); // ImageWidth
+  writeTag(257, 4, 1, height); // ImageLength
   writeTag(258, 3, needsBPSArray ? channels : 1, needsBPSArray ? bpsArrayOffset : bitsPerSample); // BitsPerSample
-  writeTag(259, 3, 1, compression);    // Compression
-  writeTag(262, 3, 1, 2);             // PhotometricInterpretation = RGB
+  writeTag(259, 3, 1, compression); // Compression
+  writeTag(262, 3, 1, 2); // PhotometricInterpretation = RGB
   writeTag(273, 4, 1, pixelDataOffset); // StripOffsets
-  writeTag(277, 3, 1, channels);       // SamplesPerPixel
-  writeTag(278, 4, 1, height);         // RowsPerStrip
-  writeTag(279, 4, 1, pixelDataSize);  // StripByteCounts
-  writeTag(339, 3, 1, sampleFormat);   // SampleFormat
+  writeTag(277, 3, 1, channels); // SamplesPerPixel
+  writeTag(278, 4, 1, height); // RowsPerStrip
+  writeTag(279, 4, 1, pixelDataSize); // StripByteCounts
+  writeTag(339, 3, 1, sampleFormat); // SampleFormat
 
   // Next IFD offset (0 = no more)
   view.setUint32(pos, 0, le);
@@ -246,7 +242,7 @@ function createTestFloatTIFF(options = {}) {
       const pixelIdx = (y * width + x) * channels;
       for (let c = 0; c < channels; c++) {
         // Create values that span HDR range (0.0 to ~2.0)
-        const value = (x + y * width + c) / (width * height * channels) * 2.0;
+        const value = ((x + y * width + c) / (width * height * channels)) * 2.0;
         view.setFloat32(pixelDataOffset + (pixelIdx + c) * 4, value, le);
       }
     }
