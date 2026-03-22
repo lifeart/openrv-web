@@ -21,9 +21,7 @@ export default defineConfig({
               '--enable-webgpu',
               '--disable-gpu-vsync',
               '--disable-frame-rate-limit',
-              ...(isCI
-                ? ['--use-gl=angle', '--use-angle=metal', '--enable-gpu-rasterization']
-                : []),
+              ...(isCI ? ['--headless=new', '--use-gl=angle', '--use-angle=metal', '--enable-gpu-rasterization'] : []),
             ],
           },
         },
