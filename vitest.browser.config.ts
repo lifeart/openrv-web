@@ -17,8 +17,6 @@ export default defineConfig({
               '--enable-gpu',
               '--enable-webgl',
               '--enable-webgpu',
-              '--use-angle=swiftshader',
-              '--enable-unsafe-swiftshader',
               '--disable-gpu-vsync',
               '--disable-frame-rate-limit',
             ],
