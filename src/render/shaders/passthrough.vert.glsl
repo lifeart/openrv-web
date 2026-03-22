@@ -1,6 +1,6 @@
+#version 300 es
 // Identity vertex shader for intermediate FBO stages.
 // Attribute names (a_position, a_texCoord) must match the Renderer's quad VAO layout.
-#version 300 es
       in vec2 a_position;
       in vec2 a_texCoord;
       out vec2 v_texCoord;

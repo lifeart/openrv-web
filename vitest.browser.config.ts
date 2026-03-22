@@ -2,6 +2,8 @@ import { defineConfig } from 'vitest/config';
 import { resolve } from 'path';
 import { playwright } from '@vitest/browser-playwright';
 
+const isCI = !!process.env.CI;
+
 export default defineConfig({
   test: {
     name: 'gpu',
@@ -19,6 +21,9 @@ export default defineConfig({
               '--enable-webgpu',
               '--disable-gpu-vsync',
               '--disable-frame-rate-limit',
+              ...(isCI
+                ? ['--use-gl=angle', '--use-angle=metal', '--enable-gpu-rasterization']
+                : []),
             ],
           },
         },
