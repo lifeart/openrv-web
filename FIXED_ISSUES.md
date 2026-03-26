@@ -4560,3 +4560,155 @@ Wired into `AppNetworkBridge` (subscribes to syncCursor, usersChanged, userLeft,
 **Files changed**:
 - `src/core/session/SessionSerializer.ts`
 - `src/core/session/SessionSerializer.test.ts`
+
+## Issue: MED-09 — StackGroupNode wipe properties lack min/max
+
+**Root cause**: The `wipeX` and `wipeY` property definitions in `StackGroupNode.ts` had no `min`/`max` constraints and no sanitization. Out-of-range values (negative, >1, NaN, Infinity) could propagate unchecked into the wipe shader, producing undefined rendering behavior.
+
+**Fix**:
+- Added `min: 0, max: 1` to both `wipeX` and `wipeY` property definitions so values are clamped to the valid [0, 1] range
+- Added a `sanitizeWipe` transform that converts NaN to the default value of 0.5
+- Infinity and -Infinity are handled by the min/max clamping
+
+**Tests added**: 15 new tests covering property metadata validation, boundary values (0 and 1), over/under clamping, NaN handling, and Infinity handling for both wipeX and wipeY.
+
+**Files changed**:
+- `src/nodes/groups/StackGroupNode.ts`
+- `src/nodes/groups/StackGroupNode.test.ts`
+
+## Issue: MED-24 — Async file upload continues after component disposal
+
+**Root cause**: The logo upload handler in `AppControlRegistry.ts` (~lines 895-925) performed async work (file reading, image decoding) without checking whether the component had been disposed mid-flight. If the user navigated away or the registry was torn down while an upload was in progress, the continuation would run against stale/destroyed state.
+
+**Fix**:
+- Added a `_disposed` flag to `AppControlRegistry`
+- Inserted two guard checks in the async logo upload handler: one before the first `await` (pre-flight) and one after (post-await), both returning early if `_disposed` is true
+- The `_disposed` flag is set at the top of `dispose()` so it takes effect before any other teardown
+
+**Tests added**: 6 regression tests (ACR-030 through ACR-035) covering: normal upload succeeds, mid-flight disposal aborts upload, error during disposal is handled, empty file is rejected, pre-disposed registry rejects upload, and `_disposed` flag verification.
+
+**Files changed**:
+- `src/AppControlRegistry.ts`
+- `src/AppControlRegistry.test.ts`
+
+## Issue: MED-26 — EXR tile count overflow potential
+
+**Root cause**: In `EXRDecoder.ts` (~lines 1348-1350), tile counts computed from image dimensions and tile sizes were not validated before use. Extremely large, zero, or negative tile counts could cause memory allocation failures, infinite loops, or integer overflow when multiplied to compute total tile offsets.
+
+**Fix**:
+- Added a `MAX_TILES_PER_LEVEL = 16_777_216` (2^24) constant as an upper bound
+- Added a `validateTileCount()` helper that rejects zero, negative, and excessive tile counts with descriptive error messages
+- Applied the validation at 5 call sites: `computeTotalTileOffsets` (3 code paths), `decodeTiledImage`, and `decodeMultiPartTiledImage`
+
+**Tests added**: 8 regression tests (EXR-T030 through EXR-T037) covering normal tile counts, boundary values at the limit, overflow rejection for excessive counts, asymmetric dimensions, and error message verification.
+
+**Files changed**:
+- `src/formats/EXRDecoder.ts`
+- `src/formats/EXRDecoder.test.ts`
+
+## Issue: MED-27 — DPX negative dimension interpretation
+
+**Root cause**: In `DPXDecoder.ts` (~lines 92-94), `getDPXInfo()` read image width and height as unsigned 32-bit integers but performed no validation on the values. Zero dimensions, extremely large dimensions, or values that could cause pixel-count overflow would propagate downstream, leading to allocation failures or out-of-bounds access.
+
+**Fix**:
+- Added dimension validation in `getDPXInfo()` that rejects zero dimensions, dimensions exceeding a maximum of 65536, and total pixel counts exceeding 268 million
+- Uses shared `IMAGE_LIMITS` constants for consistent bounds across decoders
+- Dimensions were already read as unsigned via `getUint32`, so negative interpretation via sign bit is not possible
+
+**Tests added**: 13 regression tests covering zero width/height, oversized dimensions, uint32-max values, signed-bit values, normal dimensions, and boundary cases.
+
+**Files changed**:
+- `src/formats/DPXDecoder.ts`
+- `src/formats/DPXDecoder.test.ts`
+
+## Issue: MED-31 — TIFF IFD entry count unbounded
+
+**Root cause**: In `TIFFFloatDecoder.ts` (~lines 138, 141), `parseIFD()` read the IFD entry count from the file as a 16-bit unsigned integer but performed no validation on the value. A malformed or malicious TIFF file could specify up to 65,535 entries, causing excessive memory allocation and processing time as the decoder attempted to parse that many IFD entries.
+
+**Fix**:
+- Added a `MAX_IFD_ENTRIES = 1024` constant as an upper bound for IFD entry counts
+- Added validation in `parseIFD()` that throws a `DecoderError` when the entry count exceeds the limit
+- `getTIFFInfo()` catches the error and returns `null`; `isFloatTIFF()` returns `false` for files with excessive IFD entries
+
+**Tests added**: 7 regression tests covering normal entry counts, boundary values (1024 accepted, 1025 rejected), max uint16 value, big-endian files, and `getTIFFInfo`/`isFloatTIFF` behavior for excessive counts.
+
+**Files changed**:
+- `src/formats/TIFFFloatDecoder.ts`
+- `src/formats/TIFFFloatDecoder.test.ts`
+
+## Issue: MED-32 — DPX scanline width overflow
+
+**Root cause**: In `DPXDecoder.ts` (~lines 169-170), `decodeDPX()` computed pixel data size from declared image dimensions and bit depth without validating the result against the actual file buffer size. A malformed or malicious DPX file could declare dimensions that imply more pixel data than the file contains, leading to out-of-bounds reads.
+
+**Fix**:
+- Added pixel data size vs file size validation in `decodeDPX()` that computes the expected data size for the declared dimensions and bit depth, rejecting the file if it exceeds the available buffer data
+- Moved bit depth validation before size computation so invalid bit depths are caught early
+- Handles all DPX bit depths: 8, 10 (packed), 12, and 16
+
+**Tests added**: 8 regression tests covering normal decoding, tampered dimensions for each bit depth, large width edge case, exact-fit files, and little-endian files.
+
+**Files changed**:
+- `src/formats/DPXDecoder.ts`
+- `src/formats/DPXDecoder.test.ts`
+
+## Issue: MED-44 — Worker Transferable validation missing
+
+**Root cause**: In `renderWorker.worker.ts` (~lines 42-49), the render worker accepted HDR image data and SDR bitmaps without validating them before processing. Detached ArrayBuffers, closed ImageBitmaps, wrong types, or invalid dimensions could cause silent failures or crashes during rendering.
+
+**Fix**:
+- Added `isArrayBufferDetached()` helper with `.detached` property check and `byteLength` fallback for broader browser support
+- Added `validateHDRImageData()` that checks type, detachment state, dimensions, and channel count
+- Added `validateSDRBitmap()` that checks type, closed state, and dimensions
+- Both render handlers (`renderHDR` and `renderSDR`) validate inputs before processing and return `renderError` on failure
+
+**Tests added**: 21 regression tests covering detached buffers, wrong types, closed bitmaps, invalid dimensions, channel validation, and integration through handleMessage.
+
+**Files changed**:
+- `src/workers/renderWorker.worker.ts`
+- `src/workers/renderWorker.worker.test.ts`
+
+## Issue: MED-45 — LUT cache key incomplete in effect processor
+
+**Root cause**: In `effectProcessor.worker.ts` (~lines 144-226), the vibrance 3D LUT cache key only included `vibrance` and `skinProtection`, but the LUT output also depends on `lutSize`, `skinHueCenter`, `skinHueRange`, and `skinProtectionMin`. Changing any of those four parameters returned a stale cached LUT instead of rebuilding it. The same issue existed in the main-thread implementation in `EffectProcessor.ts`.
+
+**Fix**:
+- Extended the vibrance 3D LUT cache key to include all six parameters that affect the output: `lutSize`, `skinHueCenter`, `skinHueRange`, `skinProtectionMin`, `vibrance`, and `skinProtection`
+- Applied the fix to both the worker (`effectProcessor.worker.ts`) and main-thread (`EffectProcessor.ts`) implementations
+
+**Tests added**: 5 new tests across two files verifying cache hit, cache miss on parameter change, and all 6 fields stored in the cache key.
+
+**Files changed**:
+- `src/workers/effectProcessor.worker.ts`
+- `src/utils/effects/EffectProcessor.ts`
+- `src/workers/effectProcessor.worker.test.ts`
+- `src/utils/effects/EffectProcessor.test.ts`
+
+## Issue: LOW-08 — EXR layer property not synced after setEXRLayer
+
+**Root cause**: In `FileSourceNode.ts` (~lines 1855-1885), calling `setEXRLayer()` updated the internal `currentExrLayer` field but did not sync the value back to the `exrLayer` node property. Conversely, setting the `exrLayer` property externally did not trigger `setEXRLayer()`, so the internal field and the property could diverge.
+
+**Fix**:
+- Added bidirectional sync between the `exrLayer` property and the internal `currentExrLayer` field
+- Added a `propertyChanged` listener that triggers `setEXRLayer()` when the property is set externally
+- Added a `_syncingExrLayer` re-entrancy guard to prevent infinite loops when `loadEXRFromBuffer` sets the property
+
+**Tests added**: 3 regression tests covering method-to-property sync, property-to-field sync, and serialization round-trip.
+
+**Files changed**:
+- `src/nodes/sources/FileSourceNode.ts`
+- `src/nodes/sources/FileSourceNode.test.ts`
+
+## Issue: LOW-16 — Transform history spurious entries from float precision
+
+**Root cause**: In `AppTransformWiring.ts` (~lines 53-66), transform property changes were compared using strict equality (`!==`). Floating-point arithmetic produces tiny rounding errors (e.g. `0.1 + 0.2 !== 0.3`), so even no-op transforms could register as changed and push spurious entries into the undo history.
+
+**Fix**:
+- Added `TRANSFORM_EPSILON = 1e-6` constant and a `hasSignificantChange()` helper that returns `true` only when the absolute difference exceeds the epsilon
+- Replaced strict equality with epsilon comparison for all numeric transform properties (rotation, scale.x/y, translate.x/y)
+- Boolean comparisons (flipH, flipV) remain unchanged since they are not affected by float precision
+
+**Tests added**: 11 new tests — 6 integration tests (sub-epsilon rejection, above-epsilon acceptance) and 5 unit tests for `hasSignificantChange` (boundary values, negative values, epsilon reasonableness).
+
+**Files changed**:
+- `src/AppTransformWiring.ts`
+- `src/AppTransformWiring.test.ts`

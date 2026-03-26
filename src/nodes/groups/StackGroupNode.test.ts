@@ -1204,4 +1204,131 @@ describe('StackGroupNode', () => {
       expect(stackNode.supportsGPUCompositing()).toBe(false);
     });
   });
+
+  describe('wipe property min/max clamping', () => {
+    it('wipeX property has min=0 and max=1', () => {
+      const prop = stackNode.properties.get<number>('wipeX')!;
+      expect(prop.min).toBe(0);
+      expect(prop.max).toBe(1);
+    });
+
+    it('wipeY property has min=0 and max=1', () => {
+      const prop = stackNode.properties.get<number>('wipeY')!;
+      expect(prop.min).toBe(0);
+      expect(prop.max).toBe(1);
+    });
+
+    it('accepts wipeX values within 0-1 range', () => {
+      stackNode.properties.setValue('wipeX', 0.25);
+      expect(stackNode.properties.getValue('wipeX')).toBe(0.25);
+
+      stackNode.properties.setValue('wipeX', 0.75);
+      expect(stackNode.properties.getValue('wipeX')).toBe(0.75);
+    });
+
+    it('accepts wipeY values within 0-1 range', () => {
+      stackNode.properties.setValue('wipeY', 0.25);
+      expect(stackNode.properties.getValue('wipeY')).toBe(0.25);
+
+      stackNode.properties.setValue('wipeY', 0.75);
+      expect(stackNode.properties.getValue('wipeY')).toBe(0.75);
+    });
+
+    it('clamps wipeX at exactly 0 (min boundary)', () => {
+      stackNode.properties.setValue('wipeX', 0);
+      expect(stackNode.properties.getValue('wipeX')).toBe(0);
+    });
+
+    it('clamps wipeX at exactly 1 (max boundary)', () => {
+      stackNode.properties.setValue('wipeX', 1);
+      expect(stackNode.properties.getValue('wipeX')).toBe(1);
+    });
+
+    it('clamps wipeY at exactly 0 (min boundary)', () => {
+      stackNode.properties.setValue('wipeY', 0);
+      expect(stackNode.properties.getValue('wipeY')).toBe(0);
+    });
+
+    it('clamps wipeY at exactly 1 (max boundary)', () => {
+      stackNode.properties.setValue('wipeY', 1);
+      expect(stackNode.properties.getValue('wipeY')).toBe(1);
+    });
+
+    it('clamps wipeX above max to 1 via direct property access', () => {
+      stackNode.properties.setValue('wipeX', 1.5);
+      expect(stackNode.properties.getValue('wipeX')).toBe(1);
+
+      stackNode.properties.setValue('wipeX', 100);
+      expect(stackNode.properties.getValue('wipeX')).toBe(1);
+    });
+
+    it('clamps wipeX below min to 0 via direct property access', () => {
+      stackNode.properties.setValue('wipeX', -0.5);
+      expect(stackNode.properties.getValue('wipeX')).toBe(0);
+
+      stackNode.properties.setValue('wipeX', -100);
+      expect(stackNode.properties.getValue('wipeX')).toBe(0);
+    });
+
+    it('clamps wipeY above max to 1 via direct property access', () => {
+      stackNode.properties.setValue('wipeY', 1.5);
+      expect(stackNode.properties.getValue('wipeY')).toBe(1);
+
+      stackNode.properties.setValue('wipeY', 100);
+      expect(stackNode.properties.getValue('wipeY')).toBe(1);
+    });
+
+    it('clamps wipeY below min to 0 via direct property access', () => {
+      stackNode.properties.setValue('wipeY', -0.5);
+      expect(stackNode.properties.getValue('wipeY')).toBe(0);
+
+      stackNode.properties.setValue('wipeY', -100);
+      expect(stackNode.properties.getValue('wipeY')).toBe(0);
+    });
+
+    it('setWipePosition also clamps out-of-range values', () => {
+      stackNode.setWipePosition(-1, 2);
+      expect(stackNode.properties.getValue('wipeX')).toBe(0);
+      expect(stackNode.properties.getValue('wipeY')).toBe(1);
+
+      stackNode.setWipePosition(5);
+      expect(stackNode.properties.getValue('wipeX')).toBe(1);
+    });
+
+    it('getWipePosition returns clamped values after out-of-range set', () => {
+      stackNode.properties.setValue('wipeX', 999);
+      stackNode.properties.setValue('wipeY', -999);
+      const pos = stackNode.getWipePosition();
+      expect(pos.x).toBe(1);
+      expect(pos.y).toBe(0);
+    });
+
+    it('converts NaN to default (0.5) for wipeX', () => {
+      stackNode.properties.setValue('wipeX', 0.3);
+      stackNode.properties.setValue('wipeX', NaN);
+      expect(stackNode.properties.getValue('wipeX')).toBe(0.5);
+    });
+
+    it('converts NaN to default (0.5) for wipeY', () => {
+      stackNode.properties.setValue('wipeY', 0.8);
+      stackNode.properties.setValue('wipeY', NaN);
+      expect(stackNode.properties.getValue('wipeY')).toBe(0.5);
+    });
+
+    it('clamps Infinity to 1 for wipeX and wipeY', () => {
+      stackNode.properties.setValue('wipeX', Infinity);
+      expect(stackNode.properties.getValue('wipeX')).toBe(1);
+
+      stackNode.properties.setValue('wipeY', Infinity);
+      expect(stackNode.properties.getValue('wipeY')).toBe(1);
+    });
+
+    it('clamps -Infinity to 0 for wipeX and wipeY', () => {
+      stackNode.properties.setValue('wipeX', -Infinity);
+      expect(stackNode.properties.getValue('wipeX')).toBe(0);
+
+      stackNode.properties.setValue('wipeY', -Infinity);
+      expect(stackNode.properties.getValue('wipeY')).toBe(0);
+    });
+  });
 });

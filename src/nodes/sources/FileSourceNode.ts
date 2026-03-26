@@ -577,6 +577,9 @@ export class FileSourceNode extends BaseSourceNode {
   private cachedCanvas: HTMLCanvasElement | null = null;
   private canvasDirty: boolean = true;
 
+  // Guard to prevent re-entrant EXR layer sync
+  private _syncingExrLayer: boolean = false;
+
   constructor(name?: string) {
     super('RVFileSource', name ?? 'File Source');
 
@@ -587,6 +590,22 @@ export class FileSourceNode extends BaseSourceNode {
     this.properties.add({ name: 'originalUrl', defaultValue: '' });
     this.properties.add({ name: 'isHDR', defaultValue: false });
     this.properties.add({ name: 'exrLayer', defaultValue: null });
+
+    // Sync currentExrLayer when the exrLayer property is set externally
+    // (e.g., during deserialization or from UI)
+    this.propertyChanged.connect((data) => {
+      if (data.name === 'exrLayer' && !this._syncingExrLayer) {
+        const newLayer = data.value as string | null;
+        // If an EXR is loaded, re-decode with the new layer via setEXRLayer
+        // (which handles the full reload and updates currentExrLayer internally).
+        // If no EXR is loaded yet, just sync the field so it's ready when one is loaded.
+        if (this.isEXR && this.exrBuffer) {
+          void this.setEXRLayer(newLayer);
+        } else {
+          this.currentExrLayer = newLayer;
+        }
+      }
+    });
   }
 
   /**
@@ -1042,7 +1061,9 @@ export class FileSourceNode extends BaseSourceNode {
     this.properties.setValue('width', result.width);
     this.properties.setValue('height', result.height);
     this.properties.setValue('isHDR', true);
+    this._syncingExrLayer = true;
     this.properties.setValue('exrLayer', options?.layer ?? null);
+    this._syncingExrLayer = false;
 
     // Mark canvas as dirty so it gets re-rendered on next getCanvas() call
     this.canvasDirty = true;

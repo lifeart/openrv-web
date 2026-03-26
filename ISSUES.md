@@ -91,9 +91,7 @@ These findings were not yet verified against actual source code:
 - **MED-55**: WebGPU extended tone mapping not verified at runtime — `hdr-acceptance-criteria.test.ts`
 
 #### Node System
-- **MED-09**: StackGroupNode wipe properties lack min/max — `StackGroupNode.ts` ~lines 80-81
 - **MED-10**: FileSourceNode properties inconsistent with defineNodeProperty — `FileSourceNode.ts` ~lines 584-590
-- **LOW-08**: EXR layer property not synced after setEXRLayer — `FileSourceNode.ts` ~lines 1855-1885
 - **LOW-09**: Stereo input format not serializable — `FileSourceNode.ts` ~lines 574, 2104
 - **LOW-10**: BaseSourceNode.connectInput warns instead of throwing — `BaseSourceNode.ts` ~lines 38-40
 - **LOW-11**: StackGroupNode chosenAudioInput not range-validated — `StackGroupNode.ts` ~lines 93-94
@@ -101,22 +99,15 @@ These findings were not yet verified against actual source code:
 
 #### UI Controls
 - **MED-23**: DisplayProfileControl slider range not validated on load — `DisplayProfileControl.ts`
-- **MED-24**: Async file upload continues after component disposal — `AppControlRegistry.ts` ~lines 895-925
 - **MED-25**: Multiple global document click listeners without delegation — Multiple UI components
 
 #### Workers
-- **MED-44**: Worker Transferable validation missing — `renderWorker.worker.ts` ~lines 42-49
-- **MED-45**: LUT cache key incomplete in effect processor — `effectProcessor.worker.ts` ~lines 144-226
 - **LOW-22**: ImageBitmap close error handling incomplete — `renderWorker.worker.ts` ~lines 211-226
 - **LOW-23**: Effect processor error stack unavailable in production — `effectProcessor.worker.ts` ~lines 1088-1099
 - **LOW-24**: Midtone mask integer rounding precision — `effectProcessor.worker.ts` ~lines 124-134
 
 #### Format Decoders
-- **MED-26**: EXR tile count overflow potential — `EXRDecoder.ts` ~lines 1348-1350
-- **MED-27**: DPX negative dimension interpretation — `DPXDecoder.ts` ~lines 92-94
 - **MED-29**: HDR RLE scanline validation — `HDRDecoder.ts` ~lines 414-446 (verified: throws on mismatch — likely FP)
-- **MED-31**: TIFF IFD entry count unbounded — `TIFFFloatDecoder.ts` ~lines 138, 141
-- **MED-32**: DPX scanline width overflow — `DPXDecoder.ts` ~lines 169-170
 - **MED-33**: TIFF LZW chain corruption — `TIFFFloatDecoder.ts` ~lines 323-324
 - **MED-34**: JPEG Gainmap MPF offset+size overflow — `JPEGGainmapDecoder.ts` ~lines 82, 101
 - **LOW-17**: TIFF LZW string length overflow in Uint16Array — `TIFFFloatDecoder.ts` ~lines 316, 371
@@ -128,7 +119,6 @@ These findings were not yet verified against actual source code:
 - **LOW-07**: Clarity/sharpen sample raw texture (known trade-off) — `viewer.frag.glsl`
 - **LOW-14**: Stereo eye offset not bounds-validated — `StereoRenderer.ts` ~lines 278-300
 - **LOW-15**: Stereo side-by-side odd width asymmetry — `StereoRenderer.ts` ~lines 310-311
-- **LOW-16**: Transform history spurious entries from float precision — `AppTransformWiring.ts` ~lines 53-66
 - **LOW-20**: Frame accumulator overflow on speed changes — `PlaybackEngine.ts` ~lines 312-329
 - **LOW-21**: Dropped frame counter never reset — `PlaybackEngine.ts` ~lines 814-879
 

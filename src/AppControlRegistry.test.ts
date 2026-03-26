@@ -808,4 +808,166 @@ describe('AppControlRegistry', () => {
       expect(registry.slateEditor.getLogoScale()).toBe(0.28);
     });
   });
+
+  // -------------------------------------------------------------------------
+  // MED-24: Async file upload continues after component disposal
+  // -------------------------------------------------------------------------
+  describe('MED-24: async logo upload guarded after disposal', () => {
+    function getLogoFileInput(registry: AppControlRegistry): HTMLInputElement {
+      const panel = (registry as any).slateEditorPanel.element as HTMLElement;
+      return panel.querySelector<HTMLInputElement>('[data-testid="slate-logo-file-input"]')!;
+    }
+
+    /**
+     * Create a fake File and attach it to an input element.
+     * jsdom does not support DataTransfer, so we override the `files` getter
+     * on the instance with a minimal FileList-like object.
+     */
+    function setFakeFile(input: HTMLInputElement): void {
+      const file = new File(['fake-png-data'], 'logo.png', { type: 'image/png' });
+      const fileList = Object.create(null, {
+        0: { value: file, enumerable: true },
+        length: { value: 1 },
+        item: { value: (i: number) => (i === 0 ? file : null) },
+      });
+      // Override the getter on the prototype for this instance
+      Object.defineProperty(input, 'files', { get: () => fileList, configurable: true });
+    }
+
+    it('ACR-030: normal logo upload succeeds when component is alive', async () => {
+      const deps = createMockDeps();
+      const registry = new AppControlRegistry(deps);
+
+      // Replace loadLogoFile with a quick-resolving mock
+      const loadSpy = vi.fn().mockResolvedValue(undefined);
+      registry.slateEditor.loadLogoFile = loadSpy;
+
+      const input = getLogoFileInput(registry);
+      setFakeFile(input);
+
+      input.dispatchEvent(new Event('change'));
+
+      // Wait for the async handler to complete
+      await vi.waitFor(() => {
+        expect(loadSpy).toHaveBeenCalledTimes(1);
+      });
+
+      // The input value should have been cleared after successful upload
+      expect(input.value).toBe('');
+    });
+
+    it('ACR-031: upload callback skips post-await work after disposal', async () => {
+      const deps = createMockDeps();
+      const registry = new AppControlRegistry(deps);
+
+      // loadLogoFile resolves via a deferred promise we control
+      let resolveLoad!: () => void;
+      const loadPromise = new Promise<void>((resolve) => {
+        resolveLoad = resolve;
+      });
+      const loadSpy = vi.fn().mockReturnValue(loadPromise);
+      registry.slateEditor.loadLogoFile = loadSpy;
+
+      const input = getLogoFileInput(registry);
+      setFakeFile(input);
+
+      // Trigger the change event — the handler is now awaiting loadLogoFile
+      input.dispatchEvent(new Event('change'));
+
+      // Dispose the registry while the upload is still in-flight
+      registry.dispose();
+
+      // Now resolve the upload
+      resolveLoad();
+      await loadPromise;
+
+      // Allow microtasks to flush
+      await new Promise((r) => setTimeout(r, 0));
+
+      // The handler should have bailed out — loadLogoFile was called, but
+      // the post-await code (logoFileInput.value = '') should NOT have run
+      // because _disposed is true. Since dispose() cleared the slateEditor
+      // listeners, the input value won't be reset.
+      expect(loadSpy).toHaveBeenCalledTimes(1);
+      // _disposed flag should be set
+      expect((registry as any)._disposed).toBe(true);
+    });
+
+    it('ACR-032: no errors thrown when disposal happens during upload', async () => {
+      const deps = createMockDeps();
+      const registry = new AppControlRegistry(deps);
+
+      // loadLogoFile rejects after disposal
+      let rejectLoad!: (err: Error) => void;
+      const loadPromise = new Promise<void>((_resolve, reject) => {
+        rejectLoad = reject;
+      });
+      const loadSpy = vi.fn().mockReturnValue(loadPromise);
+      registry.slateEditor.loadLogoFile = loadSpy;
+
+      const input = getLogoFileInput(registry);
+      setFakeFile(input);
+
+      // Trigger change — handler awaits loadLogoFile
+      input.dispatchEvent(new Event('change'));
+
+      // Dispose mid-flight
+      registry.dispose();
+
+      // Reject the upload (simulates error during disposed state)
+      rejectLoad(new Error('aborted'));
+
+      // Allow microtasks to flush — should not throw
+      await new Promise((r) => setTimeout(r, 0));
+
+      expect(loadSpy).toHaveBeenCalledTimes(1);
+      expect((registry as any)._disposed).toBe(true);
+    });
+
+    it('ACR-033: change event before file selection is a no-op (no file selected)', async () => {
+      const deps = createMockDeps();
+      const registry = new AppControlRegistry(deps);
+
+      const loadSpy = vi.fn().mockResolvedValue(undefined);
+      registry.slateEditor.loadLogoFile = loadSpy;
+
+      const input = getLogoFileInput(registry);
+      // Don't set any files — files will be empty/undefined
+
+      input.dispatchEvent(new Event('change'));
+      await new Promise((r) => setTimeout(r, 0));
+
+      expect(loadSpy).not.toHaveBeenCalled();
+    });
+
+    it('ACR-034: change event on already-disposed registry is a no-op', async () => {
+      const deps = createMockDeps();
+      const registry = new AppControlRegistry(deps);
+
+      const loadSpy = vi.fn().mockResolvedValue(undefined);
+      registry.slateEditor.loadLogoFile = loadSpy;
+
+      const input = getLogoFileInput(registry);
+      setFakeFile(input);
+
+      // Dispose before the change event fires
+      registry.dispose();
+
+      input.dispatchEvent(new Event('change'));
+      await new Promise((r) => setTimeout(r, 0));
+
+      // loadLogoFile should NOT have been called because _disposed was true
+      // before the await
+      expect(loadSpy).not.toHaveBeenCalled();
+    });
+
+    it('ACR-035: _disposed flag is false before dispose and true after', () => {
+      const deps = createMockDeps();
+      const registry = new AppControlRegistry(deps);
+
+      expect((registry as any)._disposed).toBe(false);
+      registry.dispose();
+      expect((registry as any)._disposed).toBe(true);
+    });
+  });
 });

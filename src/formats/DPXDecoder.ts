@@ -14,6 +14,7 @@
 import { dpxLogToLinear as _dpxLogToLinear, type LogLinearOptions } from './LogLinear';
 import { validateImageDimensions, toRGBA, applyLogToLinearRGBA as sharedApplyLogToLinearRGBA } from './shared';
 import { DecoderError } from '../core/errors';
+import { IMAGE_LIMITS } from '../config/ImageLimits';
 
 // Re-export for backwards compatibility
 export { dpxLogToLinear } from './LogLinear';
@@ -90,8 +91,28 @@ export function getDPXInfo(buffer: ArrayBuffer): DPXInfo | null {
     const le = !bigEndian;
 
     const dataOffset = view.getUint32(4, le);
+    // DPX stores width/height as uint32 — getUint32 ensures unsigned interpretation
     const width = view.getUint32(772, le);
     const height = view.getUint32(776, le);
+
+    // Validate dimensions early: reject zero or unreasonably large values
+    if (width === 0 || height === 0) {
+      throw new DecoderError('DPX', `Invalid DPX dimensions: ${width}x${height}`);
+    }
+    if (width > IMAGE_LIMITS.MAX_DIMENSION || height > IMAGE_LIMITS.MAX_DIMENSION) {
+      throw new DecoderError(
+        'DPX',
+        `DPX dimensions ${width}x${height} exceed maximum of ${IMAGE_LIMITS.MAX_DIMENSION}x${IMAGE_LIMITS.MAX_DIMENSION}`,
+      );
+    }
+    const totalPixels = width * height;
+    if (totalPixels > IMAGE_LIMITS.MAX_PIXELS) {
+      throw new DecoderError(
+        'DPX',
+        `DPX image has ${totalPixels} pixels, exceeding maximum of ${IMAGE_LIMITS.MAX_PIXELS}`,
+      );
+    }
+
     const transferByte = view.getUint8(801);
     const bitDepth = view.getUint8(803);
 
@@ -296,9 +317,37 @@ export async function decodeDPX(buffer: ArrayBuffer, options?: DPXDecodeOptions)
   // Validate dimensions
   validateImageDimensions(width, height, 'DPX');
 
+  // Validate bit depth early so unsupported values are rejected before size calculations
+  if (bitDepth !== 8 && bitDepth !== 10 && bitDepth !== 12 && bitDepth !== 16) {
+    throw new DecoderError('DPX', `Unsupported DPX bit depth: ${bitDepth}`);
+  }
+
   // Validate data offset
   if (dataOffset >= buffer.byteLength) {
     throw new DecoderError('DPX', `Invalid DPX file: data offset ${dataOffset} exceeds file size ${buffer.byteLength}`);
+  }
+
+  // Validate expected pixel data size against available file data (MED-32)
+  // This catches malformed files where dimensions are within limits but the
+  // scanline byte width computation (width * channels * bytesPerComponent)
+  // would produce a size far exceeding the actual file data.
+  const availableData = buffer.byteLength - dataOffset;
+  let expectedPixelDataSize: number;
+  if (bitDepth === 10) {
+    const componentsPerRow = width * inputChannels;
+    const wordsPerRow = Math.ceil(componentsPerRow / 3);
+    expectedPixelDataSize = wordsPerRow * height * 4;
+  } else if (bitDepth === 8) {
+    expectedPixelDataSize = width * height * inputChannels;
+  } else {
+    // 12-bit and 16-bit both use 2 bytes per component
+    expectedPixelDataSize = width * height * inputChannels * 2;
+  }
+  if (expectedPixelDataSize > availableData) {
+    throw new DecoderError(
+      'DPX',
+      `DPX pixel data size (${expectedPixelDataSize} bytes) exceeds available file data (${availableData} bytes)`,
+    );
   }
 
   // Create DataView for pixel data

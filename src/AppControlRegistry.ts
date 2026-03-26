@@ -148,6 +148,9 @@ export class AppControlRegistry {
 
   /** Unsubscribe callbacks for registry-level .on() listeners created in setupTabContents */
   private registryUnsubscribers: (() => void)[] = [];
+
+  /** Whether this registry has been disposed. Checked after async operations to prevent use-after-dispose. */
+  private _disposed = false;
   private readonly noiseReductionPanel: Panel;
   private readonly watermarkPanel: Panel;
   private readonly timelineEditorPanel: Panel;
@@ -895,11 +898,14 @@ export class AppControlRegistry {
     logoFileInput.addEventListener('change', async () => {
       const file = logoFileInput.files?.[0];
       if (!file) return;
+      if (this._disposed) return;
       try {
         await this.slateEditor.loadLogoFile(file);
       } catch {
         // Error emitted via logoError event
       }
+      // Guard: component may have been disposed while the async load was in flight
+      if (this._disposed) return;
       logoFileInput.value = '';
     });
 
@@ -1028,6 +1034,8 @@ export class AppControlRegistry {
    * Dispose all controls and managers.
    */
   dispose(): void {
+    this._disposed = true;
+
     // Unsubscribe all registry-level listeners before disposing child controls
     for (const unsub of this.registryUnsubscribers) {
       unsub();

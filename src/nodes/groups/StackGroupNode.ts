@@ -76,9 +76,10 @@ export class StackGroupNode extends BaseGroupNode {
     this.properties.add({ name: 'composite', defaultValue: 'replace' });
     this.properties.add({ name: 'mode', defaultValue: 'wipe' });
 
-    // Wipe control properties
-    this.properties.add({ name: 'wipeX', defaultValue: 0.5 });
-    this.properties.add({ name: 'wipeY', defaultValue: 0.5 });
+    // Wipe control properties (normalized 0-1 range)
+    const sanitizeWipe = (v: number) => (Number.isNaN(v) ? 0.5 : v);
+    this.properties.add({ name: 'wipeX', defaultValue: 0.5, min: 0, max: 1, transform: sanitizeWipe });
+    this.properties.add({ name: 'wipeY', defaultValue: 0.5, min: 0, max: 1, transform: sanitizeWipe });
 
     // Per-layer blend modes (array indexed by input)
     this.properties.add({ name: 'layerBlendModes', defaultValue: [] });

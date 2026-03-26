@@ -654,6 +654,64 @@ describe('FileSourceNode', () => {
       await node.setEXRLayer(null);
       expect(node.getCurrentEXRLayer()).toBeNull();
     });
+
+    it('FSN-057: setEXRLayer syncs exrLayer property', async () => {
+      const exrBuffer = createTestEXR({
+        width: 2,
+        height: 2,
+        channels: ['R', 'G', 'B', 'A', 'diffuse.R', 'diffuse.G', 'diffuse.B'],
+      });
+      const file = new File([exrBuffer], 'multilayer.exr', { type: 'image/x-exr' });
+
+      await node.loadFile(file);
+
+      // Initially the property should be null (default RGBA layer)
+      expect(node.properties.getValue('exrLayer')).toBeNull();
+
+      // After setting EXR layer via method, property should be synced
+      await node.setEXRLayer('diffuse');
+      expect(node.properties.getValue('exrLayer')).toBe('diffuse');
+
+      // After resetting to null, property should reflect that
+      await node.setEXRLayer(null);
+      expect(node.properties.getValue('exrLayer')).toBeNull();
+    });
+
+    it('FSN-058: setting exrLayer property syncs currentExrLayer', async () => {
+      const exrBuffer = createTestEXR({
+        width: 2,
+        height: 2,
+        channels: ['R', 'G', 'B', 'A', 'diffuse.R', 'diffuse.G', 'diffuse.B'],
+      });
+      const file = new File([exrBuffer], 'multilayer.exr', { type: 'image/x-exr' });
+
+      await node.loadFile(file);
+
+      // Setting the property directly should trigger re-decode and sync internal state
+      node.properties.setValue('exrLayer', 'diffuse');
+
+      // Allow the async setEXRLayer triggered by the property listener to complete
+      await vi.waitFor(() => {
+        expect(node.getCurrentEXRLayer()).toBe('diffuse');
+      });
+    });
+
+    it('FSN-059: toJSON preserves exrLayer after setEXRLayer', async () => {
+      const exrBuffer = createTestEXR({
+        width: 2,
+        height: 2,
+        channels: ['R', 'G', 'B', 'A', 'diffuse.R', 'diffuse.G', 'diffuse.B'],
+      });
+      const file = new File([exrBuffer], 'multilayer.exr', { type: 'image/x-exr' });
+
+      await node.loadFile(file);
+
+      await node.setEXRLayer('diffuse');
+
+      // Serialization should include the layer
+      const json = node.toJSON() as { properties: Record<string, unknown> };
+      expect(json.properties.exrLayer).toBe('diffuse');
+    });
   });
 
   describe('AVIF support', () => {

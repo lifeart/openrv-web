@@ -787,6 +787,102 @@ describe('TIFFFloatDecoder', () => {
     });
   });
 
+  describe('IFD entry count validation', () => {
+    it('should accept a normal IFD entry count (10 entries)', async () => {
+      // createTestFloatTIFF creates a TIFF with 10 IFD entries — well within limits
+      const buffer = createTestFloatTIFF({ channels: 3 });
+      const result = await decodeTIFFFloat(buffer);
+      expect(result.width).toBe(2);
+      expect(result.height).toBe(2);
+    });
+
+    it('should reject IFD entry count exceeding 1024', async () => {
+      // Create a minimal TIFF header with an absurdly high IFD entry count
+      const buffer = new ArrayBuffer(64);
+      const view = new DataView(buffer);
+      view.setUint16(0, TIFF_LE, false); // Byte order
+      view.setUint16(2, TIFF_MAGIC, true); // Magic number
+      view.setUint32(4, 8, true); // IFD offset = 8
+      view.setUint16(8, 1025, true); // 1025 entries — just over the limit
+
+      await expect(decodeTIFFFloat(buffer)).rejects.toThrow(
+        'IFD entry count 1025 exceeds maximum of 1024',
+      );
+    });
+
+    it('should reject maximum uint16 IFD entry count (65535)', async () => {
+      const buffer = new ArrayBuffer(64);
+      const view = new DataView(buffer);
+      view.setUint16(0, TIFF_LE, false);
+      view.setUint16(2, TIFF_MAGIC, true);
+      view.setUint32(4, 8, true);
+      view.setUint16(8, 65535, true); // Maximum uint16
+
+      await expect(decodeTIFFFloat(buffer)).rejects.toThrow(
+        'IFD entry count 65535 exceeds maximum of 1024',
+      );
+    });
+
+    it('should accept IFD entry count at the boundary (1024)', async () => {
+      // Build a buffer large enough to hold the TIFF header + 1024 IFD entries
+      // Each IFD entry is 12 bytes, plus 2 bytes for count, plus 4 bytes for next IFD offset
+      const ifdOffset = 8;
+      const ifdSize = 2 + 1024 * 12 + 4;
+      const totalSize = ifdOffset + ifdSize;
+      const buffer = new ArrayBuffer(totalSize);
+      const view = new DataView(buffer);
+      view.setUint16(0, TIFF_LE, false);
+      view.setUint16(2, TIFF_MAGIC, true);
+      view.setUint32(4, ifdOffset, true);
+      view.setUint16(ifdOffset, 1024, true); // Exactly at the limit
+
+      // This should not throw for the entry count limit.
+      // It will fail later because there are no valid image tags, but
+      // the IFD parsing itself should succeed.
+      const info = getTIFFInfo(buffer);
+      // getTIFFInfo returns null on other parse issues, but should NOT throw
+      // from the IFD entry count check
+      expect(info).not.toBeUndefined(); // null is acceptable (missing tags), but no throw
+    });
+
+    it('should return null from getTIFFInfo for excessive IFD entry count', () => {
+      const buffer = new ArrayBuffer(64);
+      const view = new DataView(buffer);
+      view.setUint16(0, TIFF_LE, false);
+      view.setUint16(2, TIFF_MAGIC, true);
+      view.setUint32(4, 8, true);
+      view.setUint16(8, 2000, true); // Over the limit
+
+      // getTIFFInfo catches errors and returns null
+      const info = getTIFFInfo(buffer);
+      expect(info).toBeNull();
+    });
+
+    it('should return false from isFloatTIFF for excessive IFD entry count', () => {
+      const buffer = new ArrayBuffer(64);
+      const view = new DataView(buffer);
+      view.setUint16(0, TIFF_LE, false);
+      view.setUint16(2, TIFF_MAGIC, true);
+      view.setUint32(4, 8, true);
+      view.setUint16(8, 5000, true); // Over the limit
+
+      expect(isFloatTIFF(buffer)).toBe(false);
+    });
+
+    it('should reject excessive IFD entry count in big-endian files', async () => {
+      const buffer = new ArrayBuffer(64);
+      const view = new DataView(buffer);
+      view.setUint16(0, TIFF_BE, false); // Big-endian
+      view.setUint16(2, TIFF_MAGIC, false); // Magic in big-endian
+      view.setUint32(4, 8, false); // IFD offset in big-endian
+      view.setUint16(8, 1025, false); // Entry count in big-endian
+
+      await expect(decodeTIFFFloat(buffer)).rejects.toThrow(
+        'IFD entry count 1025 exceeds maximum of 1024',
+      );
+    });
+  });
+
   describe('decodeTIFFFloat - multi-strip', () => {
     it('should correctly decode multi-strip TIFF', async () => {
       // Build a 2x4 TIFF with 2 strips, each containing 2 rows

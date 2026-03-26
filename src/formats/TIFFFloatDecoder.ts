@@ -72,6 +72,17 @@ const PREDICTOR_NONE = 1;
 const PREDICTOR_HORIZONTAL = 2;
 const PREDICTOR_FLOATING_POINT = 3;
 
+/**
+ * Maximum number of IFD entries allowed per directory.
+ *
+ * The TIFF spec stores the entry count as a uint16 (max 65535), but real TIFF
+ * files rarely exceed ~50 entries. A count near the uint16 maximum in a
+ * malformed or malicious file would waste CPU iterating over bogus entries.
+ * We cap at 1024, which is far above any legitimate TIFF while still
+ * rejecting clearly unreasonable values.
+ */
+const MAX_IFD_ENTRIES = 1024;
+
 export interface TIFFInfo {
   width: number;
   height: number;
@@ -136,6 +147,14 @@ function parseIFD(view: DataView, ifdOffset: number, le: boolean): Map<number, T
   if (ifdOffset + 2 > view.byteLength) return tags;
 
   const numEntries = view.getUint16(ifdOffset, le);
+
+  if (numEntries > MAX_IFD_ENTRIES) {
+    throw new DecoderError(
+      'TIFF',
+      `IFD entry count ${numEntries} exceeds maximum of ${MAX_IFD_ENTRIES}. File may be malformed.`,
+    );
+  }
+
   let pos = ifdOffset + 2;
 
   for (let i = 0; i < numEntries; i++) {
