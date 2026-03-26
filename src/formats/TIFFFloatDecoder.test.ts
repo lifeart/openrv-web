@@ -805,9 +805,7 @@ describe('TIFFFloatDecoder', () => {
       view.setUint32(4, 8, true); // IFD offset = 8
       view.setUint16(8, 1025, true); // 1025 entries — just over the limit
 
-      await expect(decodeTIFFFloat(buffer)).rejects.toThrow(
-        'IFD entry count 1025 exceeds maximum of 1024',
-      );
+      await expect(decodeTIFFFloat(buffer)).rejects.toThrow('IFD entry count 1025 exceeds maximum of 1024');
     });
 
     it('should reject maximum uint16 IFD entry count (65535)', async () => {
@@ -818,9 +816,7 @@ describe('TIFFFloatDecoder', () => {
       view.setUint32(4, 8, true);
       view.setUint16(8, 65535, true); // Maximum uint16
 
-      await expect(decodeTIFFFloat(buffer)).rejects.toThrow(
-        'IFD entry count 65535 exceeds maximum of 1024',
-      );
+      await expect(decodeTIFFFloat(buffer)).rejects.toThrow('IFD entry count 65535 exceeds maximum of 1024');
     });
 
     it('should accept IFD entry count at the boundary (1024)', async () => {
@@ -877,9 +873,7 @@ describe('TIFFFloatDecoder', () => {
       view.setUint32(4, 8, false); // IFD offset in big-endian
       view.setUint16(8, 1025, false); // Entry count in big-endian
 
-      await expect(decodeTIFFFloat(buffer)).rejects.toThrow(
-        'IFD entry count 1025 exceeds maximum of 1024',
-      );
+      await expect(decodeTIFFFloat(buffer)).rejects.toThrow('IFD entry count 1025 exceeds maximum of 1024');
     });
   });
 

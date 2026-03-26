@@ -1264,10 +1264,7 @@ function numMipLevels(size: number, roundingMode: EXRRoundingMode): number {
  */
 function validateTileCount(numXTiles: number, numYTiles: number, context: string): void {
   if (numXTiles <= 0 || numYTiles <= 0) {
-    throw new DecoderError(
-      'EXR',
-      `Invalid tile grid dimensions: ${numXTiles}x${numYTiles} tiles (${context})`,
-    );
+    throw new DecoderError('EXR', `Invalid tile grid dimensions: ${numXTiles}x${numYTiles} tiles (${context})`);
   }
   const totalTiles = numXTiles * numYTiles;
   if (totalTiles > MAX_TILES_PER_LEVEL) {
@@ -1294,11 +1291,7 @@ function computeTotalTileOffsets(width: number, height: number, tileDesc: EXRTil
 
   if (levelMode === EXRLevelMode.MIPMAP_LEVELS) {
     // Validate level 0 (largest level) — smaller levels will always have fewer tiles
-    validateTileCount(
-      Math.ceil(width / xSize),
-      Math.ceil(height / ySize),
-      'MIPMAP_LEVELS level 0 offset table',
-    );
+    validateTileCount(Math.ceil(width / xSize), Math.ceil(height / ySize), 'MIPMAP_LEVELS level 0 offset table');
     const nLevels = numMipLevels(Math.max(width, height), roundingMode);
     let total = 0;
     for (let l = 0; l < nLevels; l++) {
@@ -1311,11 +1304,7 @@ function computeTotalTileOffsets(width: number, height: number, tileDesc: EXRTil
 
   // RIPMAP_LEVELS
   // Validate level 0 (largest level) — smaller levels will always have fewer tiles
-  validateTileCount(
-    Math.ceil(width / xSize),
-    Math.ceil(height / ySize),
-    'RIPMAP_LEVELS level 0 offset table',
-  );
+  validateTileCount(Math.ceil(width / xSize), Math.ceil(height / ySize), 'RIPMAP_LEVELS level 0 offset table');
   const nXLevels = numMipLevels(width, roundingMode);
   const nYLevels = numMipLevels(height, roundingMode);
   let total = 0;
