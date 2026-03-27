@@ -996,7 +996,14 @@ describe('EffectProcessor', () => {
         // Access static vibrance LUT cache
         const EP = EffectProcessor as unknown as {
           vibrance3DLUT: Float32Array | null;
-          vibrance3DLUTParams: { vibrance: number; skinProtection: boolean } | null;
+          vibrance3DLUTParams: {
+            vibrance: number;
+            skinProtection: boolean;
+            lutSize: number;
+            skinHueCenter: number;
+            skinHueRange: number;
+            skinProtectionMin: number;
+          } | null;
         };
 
         // Clear cache
@@ -1034,6 +1041,40 @@ describe('EffectProcessor', () => {
         const img4 = createTestImageData(5, 5, { r: 150, g: 100, b: 80 });
         processor.applyEffects(img4, 5, 5, state3);
         expect(EP.vibrance3DLUT).not.toBe(lut3);
+      });
+
+      it('EP-082b: vibrance 3D LUT cache key includes all computation parameters', () => {
+        const EP = EffectProcessor as unknown as {
+          vibrance3DLUT: Float32Array | null;
+          vibrance3DLUTParams: {
+            vibrance: number;
+            skinProtection: boolean;
+            lutSize: number;
+            skinHueCenter: number;
+            skinHueRange: number;
+            skinProtectionMin: number;
+          } | null;
+        };
+
+        // Clear cache
+        EP.vibrance3DLUT = null;
+        EP.vibrance3DLUTParams = null;
+
+        // Build LUT
+        const state = createDefaultEffectsState();
+        state.colorAdjustments.vibrance = 50;
+        state.colorAdjustments.vibranceSkinProtection = true;
+        const img = createTestImageData(5, 5, { r: 150, g: 100, b: 80 });
+        processor.applyEffects(img, 5, 5, state);
+
+        // Verify all cache key fields are stored
+        expect(EP.vibrance3DLUTParams).not.toBeNull();
+        expect(EP.vibrance3DLUTParams!.vibrance).toBe(50);
+        expect(EP.vibrance3DLUTParams!.skinProtection).toBe(true);
+        expect(EP.vibrance3DLUTParams!.lutSize).toBe(32);
+        expect(EP.vibrance3DLUTParams!.skinHueCenter).toBe(35);
+        expect(EP.vibrance3DLUTParams!.skinHueRange).toBe(15);
+        expect(EP.vibrance3DLUTParams!.skinProtectionMin).toBe(0.3);
       });
 
       it('EP-083: merged loop handles all effects active simultaneously', () => {

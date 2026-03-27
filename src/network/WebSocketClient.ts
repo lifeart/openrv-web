@@ -31,6 +31,8 @@ export class WebSocketClient extends EventEmitter<WebSocketClientEvents> {
   private _disposed = false;
   private _malformedMessageCount = 0;
   private _malformedMessageWindowStart = 0;
+  private _malformedSuppressedCount = 0;
+  private _rateLimitNotified = false;
 
   /** Maximum number of warning events emitted per time window. */
   private static readonly MALFORMED_WARN_LIMIT = 5;
@@ -170,6 +172,8 @@ export class WebSocketClient extends EventEmitter<WebSocketClientEvents> {
       this._shouldReconnect = true;
       this._malformedMessageCount = 0;
       this._malformedMessageWindowStart = 0;
+      this._malformedSuppressedCount = 0;
+      this._rateLimitNotified = false;
       this.startHeartbeat();
       this.emit('connected', undefined);
 
@@ -244,7 +248,16 @@ export class WebSocketClient extends EventEmitter<WebSocketClientEvents> {
 
     // Reset the window if it has elapsed
     if (now - this._malformedMessageWindowStart >= WebSocketClient.MALFORMED_WARN_WINDOW_MS) {
+      // Report suppressed messages from previous window before resetting
+      if (this._malformedSuppressedCount > 0) {
+        this.emit('warning', {
+          code: 'MALFORMED_RATE_LIMITED',
+          message: `Rate limit ended: ${this._malformedSuppressedCount} malformed message(s) were suppressed in the previous window`,
+        });
+      }
       this._malformedMessageCount = 0;
+      this._malformedSuppressedCount = 0;
+      this._rateLimitNotified = false;
       this._malformedMessageWindowStart = now;
     }
 
@@ -257,6 +270,17 @@ export class WebSocketClient extends EventEmitter<WebSocketClientEvents> {
         message: `Received malformed sync message (${this._malformedMessageCount} in current window)`,
         detail: preview,
       });
+    } else {
+      this._malformedSuppressedCount++;
+
+      // Emit a single notification when rate limiting first kicks in
+      if (!this._rateLimitNotified) {
+        this._rateLimitNotified = true;
+        this.emit('warning', {
+          code: 'MALFORMED_RATE_LIMITED',
+          message: `Rate limiting malformed messages: further warnings suppressed until window resets (${WebSocketClient.MALFORMED_WARN_WINDOW_MS}ms)`,
+        });
+      }
     }
   }
 
@@ -386,5 +410,7 @@ export class WebSocketClient extends EventEmitter<WebSocketClientEvents> {
     this.reconnectAttempts = 0;
     this._malformedMessageCount = 0;
     this._malformedMessageWindowStart = 0;
+    this._malformedSuppressedCount = 0;
+    this._rateLimitNotified = false;
   }
 }

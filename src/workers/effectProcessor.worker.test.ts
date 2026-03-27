@@ -19,7 +19,7 @@ vi.hoisted(() => {
 
 // Import the worker's __test__ exports for processEffects and internal helpers
 const { __test__ } = await import('./effectProcessor.worker');
-const { processEffects, getMidtoneMask, resetBuffers } = __test__;
+const { processEffects, getMidtoneMask, resetBuffers, getVibrance3DLUT, getVibranceLUTState } = __test__;
 
 /**
  * Helper to create a default WorkerEffectsState with all effects at identity/zero.
@@ -962,6 +962,65 @@ describe('Effect Processor Worker', () => {
       const range = Math.max(data[0]!, data[1]!, data[2]!) - Math.min(data[0]!, data[1]!, data[2]!);
       // Original range was 200-50=150, should be reduced
       expect(range).toBeLessThan(150);
+    });
+  });
+
+  describe('vibrance LUT cache key completeness', () => {
+    beforeEach(() => {
+      resetBuffers();
+    });
+
+    it('EPW-090: same parameters produce same cache key (cache hit)', () => {
+      const lut1 = getVibrance3DLUT(50, true);
+      const lut2 = getVibrance3DLUT(50, true);
+      // Should return the exact same object reference (cache hit)
+      expect(lut2).toBe(lut1);
+    });
+
+    it('EPW-091: changing vibrance produces different cache key (cache miss)', () => {
+      const lut1 = getVibrance3DLUT(50, true);
+      const lut2 = getVibrance3DLUT(60, true);
+      expect(lut2).not.toBe(lut1);
+    });
+
+    it('EPW-092: changing skinProtection produces different cache key (cache miss)', () => {
+      const lut1 = getVibrance3DLUT(50, true);
+      const lut2 = getVibrance3DLUT(50, false);
+      expect(lut2).not.toBe(lut1);
+    });
+
+    it('EPW-093: cache key stores all computation parameters', () => {
+      getVibrance3DLUT(75, true);
+      const { vibrance3DLUTParams } = getVibranceLUTState();
+
+      expect(vibrance3DLUTParams).not.toBeNull();
+      expect(vibrance3DLUTParams!.vibrance).toBe(75);
+      expect(vibrance3DLUTParams!.skinProtection).toBe(true);
+      // Verify all config constants are included in the cache key
+      expect(vibrance3DLUTParams!.lutSize).toBe(32);
+      expect(vibrance3DLUTParams!.skinHueCenter).toBe(35);
+      expect(vibrance3DLUTParams!.skinHueRange).toBe(15);
+      expect(vibrance3DLUTParams!.skinProtectionMin).toBe(0.3);
+    });
+
+    it('EPW-094: processEffects builds LUT with complete cache key via pipeline', () => {
+      const width = 2;
+      const height = 1;
+      const data = new Uint8ClampedArray([150, 100, 80, 255, 200, 50, 50, 255]);
+
+      const state = createDefaultWorkerEffectsState();
+      state.colorAdjustments.vibrance = 40;
+      state.colorAdjustments.vibranceSkinProtection = false;
+      processEffects(data, width, height, state);
+
+      const { vibrance3DLUTParams } = getVibranceLUTState();
+      expect(vibrance3DLUTParams).not.toBeNull();
+      expect(vibrance3DLUTParams!.vibrance).toBe(40);
+      expect(vibrance3DLUTParams!.skinProtection).toBe(false);
+      expect(vibrance3DLUTParams!.lutSize).toBe(32);
+      expect(vibrance3DLUTParams!.skinHueCenter).toBe(35);
+      expect(vibrance3DLUTParams!.skinHueRange).toBe(15);
+      expect(vibrance3DLUTParams!.skinProtectionMin).toBe(0.3);
     });
   });
 

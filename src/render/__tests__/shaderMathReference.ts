@@ -65,14 +65,22 @@ export function hlgOETFInverse(e: number): number {
  * HLG signal → linear with OOTF (gamma 1.2 for 1000 cd/m²)
  * Port of GLSL `hlgToLinear(vec3 signal)` (line ~550)
  */
+// HLG OOTF near-black threshold and linear-ramp slope.
+// Below OOTF_THRESH, the power curve ys^0.2 is replaced by a linear ramp
+// (ys * OOTF_SLOPE) to avoid extreme gain amplification of shadow noise.
+// The ramp is C0-continuous at the threshold: OOTF_THRESH * OOTF_SLOPE === OOTF_THRESH^0.2.
+const OOTF_THRESH = 0.01;
+const OOTF_SLOPE = 39.810717; // OOTF_THRESH^(-0.8) = 10^1.6
+
 export function hlgToLinear(r: number, g: number, b: number): [number, number, number] {
   // Apply inverse OETF per channel
   const sr = hlgOETFInverse(r);
   const sg = hlgOETFInverse(g);
   const sb = hlgOETFInverse(b);
   // HLG OOTF: Lw = Ys^(gamma-1) * scene, where gamma ≈ 1.2
+  // Linear ramp below threshold to bound near-black gain.
   const ys = sr * LUMA_R + sg * LUMA_G + sb * LUMA_B;
-  const ootfGain = Math.pow(Math.max(ys, 1e-6), 0.2); // gamma - 1 = 0.2
+  const ootfGain = ys < OOTF_THRESH ? ys * OOTF_SLOPE : Math.pow(ys, 0.2);
   return [sr * ootfGain, sg * ootfGain, sb * ootfGain];
 }
 

@@ -139,14 +139,25 @@ function getMidtoneMask(): Float32Array {
 
 const VIBRANCE_LUT_SIZE = 32;
 let vibrance3DLUT: Float32Array | null = null;
-let vibrance3DLUTParams: { vibrance: number; skinProtection: boolean } | null = null;
+let vibrance3DLUTParams: {
+  vibrance: number;
+  skinProtection: boolean;
+  lutSize: number;
+  skinHueCenter: number;
+  skinHueRange: number;
+  skinProtectionMin: number;
+} | null = null;
 
 function getVibrance3DLUT(vibrance: number, skinProtection: boolean): Float32Array {
   if (
     vibrance3DLUT &&
     vibrance3DLUTParams &&
     vibrance3DLUTParams.vibrance === vibrance &&
-    vibrance3DLUTParams.skinProtection === skinProtection
+    vibrance3DLUTParams.skinProtection === skinProtection &&
+    vibrance3DLUTParams.lutSize === VIBRANCE_LUT_SIZE &&
+    vibrance3DLUTParams.skinHueCenter === SKIN_TONE_HUE_CENTER &&
+    vibrance3DLUTParams.skinHueRange === SKIN_TONE_HUE_RANGE &&
+    vibrance3DLUTParams.skinProtectionMin === SKIN_PROTECTION_MIN
   ) {
     return vibrance3DLUT;
   }
@@ -221,7 +232,14 @@ function getVibrance3DLUT(vibrance: number, skinProtection: boolean): Float32Arr
   }
 
   vibrance3DLUT = lut;
-  vibrance3DLUTParams = { vibrance, skinProtection };
+  vibrance3DLUTParams = {
+    vibrance,
+    skinProtection,
+    lutSize: VIBRANCE_LUT_SIZE,
+    skinHueCenter: SKIN_TONE_HUE_CENTER,
+    skinHueRange: SKIN_TONE_HUE_RANGE,
+    skinProtectionMin: SKIN_PROTECTION_MIN,
+  };
   return lut;
 }
 
@@ -1109,6 +1127,7 @@ export const __test__ = {
   ensureClarityBuffers,
   ensureSharpenBuffer,
   getMidtoneMask,
+  getVibrance3DLUT,
   applyClarity,
   applySharpen,
   applyClarityHalfRes,
@@ -1127,6 +1146,10 @@ export const __test__ = {
     sharpenDeltaBuffer,
     sharpenHalfBufferLen,
     midtoneMask,
+  }),
+  getVibranceLUTState: () => ({
+    vibrance3DLUT,
+    vibrance3DLUTParams,
   }),
   resetBuffers: () => {
     clarityOriginalBuffer = null;

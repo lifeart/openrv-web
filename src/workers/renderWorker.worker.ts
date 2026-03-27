@@ -48,6 +48,90 @@ function post(msg: RenderWorkerResult, transfer?: Transferable[]): void {
   }
 }
 
+// ==========================================================================
+// Transferable validation helpers
+// ==========================================================================
+
+/**
+ * Check whether an ArrayBuffer has been detached (neutered).
+ * A detached buffer has byteLength === 0 and its `.detached` property
+ * (where available) is `true`.  We check both for cross-browser safety.
+ */
+function isArrayBufferDetached(buffer: ArrayBuffer): boolean {
+  // The `detached` property is available in modern browsers (Chrome 114+, FF, Safari 16.4+)
+  if ('detached' in buffer && (buffer as any).detached === true) {
+    return true;
+  }
+  // Fallback: a transferred ArrayBuffer has byteLength 0.
+  // Note: a *legitimately* empty buffer also has byteLength 0, but in
+  // the render-worker context an empty image buffer is always invalid,
+  // so treating it as detached is the safest default.
+  return buffer.byteLength === 0;
+}
+
+/**
+ * Validate the imageData ArrayBuffer in a renderHDR message.
+ * Returns an error string if invalid, or null if valid.
+ */
+function validateHDRImageData(msg: RenderHDRMessage): string | null {
+  // Type check: must be an ArrayBuffer
+  if (!(msg.imageData instanceof ArrayBuffer)) {
+    return `renderHDR: imageData is not an ArrayBuffer (got ${typeof msg.imageData})`;
+  }
+  // Detachment check
+  if (isArrayBufferDetached(msg.imageData)) {
+    return 'renderHDR: imageData ArrayBuffer is detached (neutered) — it may have already been transferred';
+  }
+  // Dimension sanity
+  if (!Number.isFinite(msg.width) || msg.width <= 0 || !Number.isFinite(msg.height) || msg.height <= 0) {
+    return `renderHDR: invalid dimensions ${msg.width}x${msg.height}`;
+  }
+  // Channel count sanity
+  if (msg.channels !== 3 && msg.channels !== 4) {
+    return `renderHDR: unsupported channel count ${msg.channels} (expected 3 or 4)`;
+  }
+  return null;
+}
+
+/**
+ * Safely close an ImageBitmap, handling cases where it may already be
+ * closed or transferred.  Logs at debug level rather than throwing,
+ * because double-close / post-transfer close is expected in some flows.
+ */
+function safeCloseBitmap(bitmap: ImageBitmap): void {
+  try {
+    // A closed or transferred ImageBitmap has width and height of 0.
+    // Attempting close() on it may throw in some browsers.
+    if (bitmap.width === 0 && bitmap.height === 0) {
+      log.debug('Skipping close on already-closed/transferred ImageBitmap');
+      return;
+    }
+    bitmap.close();
+  } catch (e) {
+    log.debug('ImageBitmap.close() failed (bitmap may have been closed or transferred):', e);
+  }
+}
+
+/**
+ * Validate the bitmap in a renderSDR message.
+ * Returns an error string if invalid, or null if valid.
+ */
+function validateSDRBitmap(msg: { bitmap: ImageBitmap; width: number; height: number }): string | null {
+  // Type check: must be an ImageBitmap
+  if (typeof ImageBitmap !== 'undefined' && !(msg.bitmap instanceof ImageBitmap)) {
+    return `renderSDR: bitmap is not an ImageBitmap (got ${typeof msg.bitmap})`;
+  }
+  // A closed ImageBitmap has width and height of 0
+  if (msg.bitmap.width === 0 && msg.bitmap.height === 0) {
+    return 'renderSDR: bitmap appears to be closed (width and height are 0)';
+  }
+  // Dimension sanity
+  if (!Number.isFinite(msg.width) || msg.width <= 0 || !Number.isFinite(msg.height) || msg.height <= 0) {
+    return `renderSDR: invalid dimensions ${msg.width}x${msg.height}`;
+  }
+  return null;
+}
+
 /**
  * Reconstruct an IPImage from transferred HDR data.
  */
@@ -208,19 +292,22 @@ function handleMessage(msg: RenderWorkerMessage): void {
         post({ type: 'renderError', id: msg.id, error: 'Renderer not available' });
         return;
       }
+      // Validate the transferred bitmap before use
+      const sdrError = validateSDRBitmap(msg);
+      if (sdrError) {
+        log.error(sdrError);
+        post({ type: 'renderError', id: msg.id, error: sdrError });
+        return;
+      }
       try {
         // Use the ImageBitmap directly as texture source
         renderer.renderSDRFrame(msg.bitmap as unknown as HTMLCanvasElement);
         // Close the bitmap after use to prevent memory leaks
-        msg.bitmap.close();
+        safeCloseBitmap(msg.bitmap);
         post({ type: 'renderDone', id: msg.id });
       } catch (error) {
         // Attempt to close bitmap even on error
-        try {
-          msg.bitmap.close();
-        } catch (e) {
-          log.warn('Failed to close bitmap after render error:', e);
-        }
+        safeCloseBitmap(msg.bitmap);
         post({
           type: 'renderError',
           id: msg.id,
@@ -233,6 +320,13 @@ function handleMessage(msg: RenderWorkerMessage): void {
     case 'renderHDR': {
       if (!renderer || isContextLost) {
         post({ type: 'renderError', id: msg.id, error: 'Renderer not available' });
+        return;
+      }
+      // Validate the transferred ArrayBuffer before use
+      const hdrError = validateHDRImageData(msg);
+      if (hdrError) {
+        log.error(hdrError);
+        post({ type: 'renderError', id: msg.id, error: hdrError });
         return;
       }
       try {
@@ -379,4 +473,8 @@ export const __test__ = {
   applySyncState,
   handleMessage,
   post,
+  isArrayBufferDetached,
+  validateHDRImageData,
+  validateSDRBitmap,
+  safeCloseBitmap,
 };

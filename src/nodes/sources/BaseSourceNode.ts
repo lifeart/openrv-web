@@ -36,7 +36,9 @@ export abstract class BaseSourceNode extends IPNode {
    * Source nodes cannot have inputs - override to prevent connections
    */
   override connectInput(_node: IPNode): void {
-    console.warn('Source nodes cannot have inputs');
+    throw new Error(
+      `Source node "${this.name}" (type: ${this.type}) cannot accept inputs — source nodes have no inputs by definition`,
+    );
   }
 
   /**

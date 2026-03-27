@@ -63,8 +63,18 @@ fn hlgToLinear(signal: vec3f) -> vec3f {
     hlgOETFInverse(signal.b)
   );
   // HLG OOTF: Lw = Ys^(gamma-1) * scene, where gamma ~ 1.2
+  // Below OOTF_THRESH, use a linear ramp to avoid extreme gain for
+  // near-black values. Linear extension from origin to threshold
+  // keeps the curve C0-continuous.
+  let OOTF_THRESH: f32 = 0.01;
+  let OOTF_SLOPE: f32 = 39.810717; // OOTF_THRESH^(-0.8) = 10^1.6
   let ys = dot(scene, LUMA);
-  let ootfGain = pow(max(ys, 1e-6), 0.2); // gamma - 1 = 0.2
+  var ootfGain: f32;
+  if (ys < OOTF_THRESH) {
+    ootfGain = ys * OOTF_SLOPE; // linear ramp: ys * T^(0.2-1)
+  } else {
+    ootfGain = pow(ys, 0.2);    // normal power curve
+  }
   return scene * ootfGain;
 }
 

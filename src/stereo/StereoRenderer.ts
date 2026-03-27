@@ -23,6 +23,42 @@ import {
 import { applyAlignmentOverlay } from './StereoAlignOverlay';
 import { luminanceRec709 } from '../color/PixelMath';
 
+/** Minimum allowed stereo eye offset percentage */
+const MIN_STEREO_OFFSET = -50;
+/** Maximum allowed stereo eye offset percentage */
+const MAX_STEREO_OFFSET = 50;
+
+/**
+ * Validate and clamp the stereo eye offset value.
+ *
+ * The offset is a percentage of image width representing the horizontal
+ * separation between left and right eye views (convergence control).
+ * Valid range is -50 to 50. NaN, Infinity, and out-of-range values
+ * are clamped and a warning is logged.
+ *
+ * @param offset - The raw offset value to validate
+ * @returns A valid offset value clamped to [-50, 50], or 0 for NaN
+ */
+export function validateStereoOffset(offset: number): number {
+  if (typeof offset !== 'number' || Number.isNaN(offset)) {
+    console.warn(`StereoRenderer: invalid eye offset value (NaN or non-number), defaulting to 0`);
+    return 0;
+  }
+  if (!Number.isFinite(offset)) {
+    const clamped = offset > 0 ? MAX_STEREO_OFFSET : MIN_STEREO_OFFSET;
+    console.warn(`StereoRenderer: eye offset is Infinity, clamping to ${clamped}`);
+    return clamped;
+  }
+  if (offset < MIN_STEREO_OFFSET || offset > MAX_STEREO_OFFSET) {
+    const clamped = Math.max(MIN_STEREO_OFFSET, Math.min(MAX_STEREO_OFFSET, offset));
+    console.warn(
+      `StereoRenderer: eye offset ${offset} out of range [${MIN_STEREO_OFFSET}, ${MAX_STEREO_OFFSET}], clamping to ${clamped}`,
+    );
+    return clamped;
+  }
+  return offset;
+}
+
 // Re-export types from StereoEyeTransform for convenience
 export type { EyeTransform, StereoEyeTransformState, StereoAlignMode } from './StereoEyeTransform';
 export {
@@ -66,8 +102,9 @@ export function applyStereoMode(
   // Extract left and right eye images based on input format
   const { left, right } = extractStereoEyes(sourceData, inputFormat, state.eyeSwap, rightEyeImageData);
 
-  // Apply offset to the right eye
-  const offsetRight = state.offset !== 0 ? applyHorizontalOffset(right, state.offset) : right;
+  // Validate and apply offset to the right eye
+  const validatedOffset = validateStereoOffset(state.offset);
+  const offsetRight = validatedOffset !== 0 ? applyHorizontalOffset(right, validatedOffset) : right;
 
   // Apply the selected stereo mode
   switch (state.mode) {
@@ -121,8 +158,9 @@ export function applyStereoModeWithEyeTransforms(
   // Extract left and right eye images based on input format
   const { left, right } = extractStereoEyes(sourceData, inputFormat, state.eyeSwap, rightEyeImageData);
 
-  // Apply offset to the right eye
-  const offsetRight = state.offset !== 0 ? applyHorizontalOffset(right, state.offset) : right;
+  // Validate and apply offset to the right eye
+  const validatedOffset = validateStereoOffset(state.offset);
+  const offsetRight = validatedOffset !== 0 ? applyHorizontalOffset(right, validatedOffset) : right;
 
   // Apply per-eye transforms (NEW step)
   let transformedLeft = left;
@@ -198,21 +236,26 @@ export function extractStereoEyes(
 
   if (inputFormat === 'side-by-side') {
     // Left eye is left half, right eye is right half
-    const halfWidth = Math.floor(width / 2);
-    leftData = new ImageData(halfWidth, height);
-    rightData = new ImageData(halfWidth, height);
+    // For odd widths, left gets floor(width/2) and right gets ceil(width/2)
+    const leftWidth = Math.floor(width / 2);
+    const rightWidth = width - leftWidth;
+    leftData = new ImageData(leftWidth, height);
+    rightData = new ImageData(rightWidth, height);
 
     for (let y = 0; y < height; y++) {
-      for (let x = 0; x < halfWidth; x++) {
+      for (let x = 0; x < leftWidth; x++) {
         const srcIdxLeft = (y * width + x) * 4;
-        const srcIdxRight = (y * width + x + halfWidth) * 4;
-        const dstIdx = (y * halfWidth + x) * 4;
+        const dstIdx = (y * leftWidth + x) * 4;
 
         // Copy left half
         leftData.data[dstIdx] = data[srcIdxLeft]!;
         leftData.data[dstIdx + 1] = data[srcIdxLeft + 1]!;
         leftData.data[dstIdx + 2] = data[srcIdxLeft + 2]!;
         leftData.data[dstIdx + 3] = data[srcIdxLeft + 3]!;
+      }
+      for (let x = 0; x < rightWidth; x++) {
+        const srcIdxRight = (y * width + x + leftWidth) * 4;
+        const dstIdx = (y * rightWidth + x) * 4;
 
         // Copy right half
         rightData.data[dstIdx] = data[srcIdxRight]!;
@@ -223,14 +266,15 @@ export function extractStereoEyes(
     }
   } else if (inputFormat === 'over-under') {
     // Left eye is top half, right eye is bottom half
-    const halfHeight = Math.floor(height / 2);
-    leftData = new ImageData(width, halfHeight);
-    rightData = new ImageData(width, halfHeight);
+    // For odd heights, top gets floor(height/2) and bottom gets ceil(height/2)
+    const topHeight = Math.floor(height / 2);
+    const bottomHeight = height - topHeight;
+    leftData = new ImageData(width, topHeight);
+    rightData = new ImageData(width, bottomHeight);
 
-    for (let y = 0; y < halfHeight; y++) {
+    for (let y = 0; y < topHeight; y++) {
       for (let x = 0; x < width; x++) {
         const srcIdxTop = (y * width + x) * 4;
-        const srcIdxBottom = ((y + halfHeight) * width + x) * 4;
         const dstIdx = (y * width + x) * 4;
 
         // Copy top half
@@ -238,6 +282,12 @@ export function extractStereoEyes(
         leftData.data[dstIdx + 1] = data[srcIdxTop + 1]!;
         leftData.data[dstIdx + 2] = data[srcIdxTop + 2]!;
         leftData.data[dstIdx + 3] = data[srcIdxTop + 3]!;
+      }
+    }
+    for (let y = 0; y < bottomHeight; y++) {
+      for (let x = 0; x < width; x++) {
+        const srcIdxBottom = ((y + topHeight) * width + x) * 4;
+        const dstIdx = (y * width + x) * 4;
 
         // Copy bottom half
         rightData.data[dstIdx] = data[srcIdxBottom]!;

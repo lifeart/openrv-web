@@ -133,6 +133,10 @@ fn applyInlineLUT(color: vec3f) -> vec3f {
   // 3. Brightness (simple offset)
   color = vec4f(color.rgb + u.brightness, color.a);
 
+  // 3a. Clamp after brightness: negative values are physically meaningless
+  // and would be amplified by contrast multiplication, producing artifacts.
+  color = vec4f(max(color.rgb, vec3f(0.0)), color.a);
+
   // 4. Contrast (pivot at 0.5, per-channel)
   color = vec4f((color.rgb - 0.5) * u.contrastRGB.xyz + 0.5, color.a);
 

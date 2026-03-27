@@ -505,6 +505,14 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
     return this._ts.droppedFrameCount;
   }
 
+  /**
+   * Reset the dropped frame counter to zero.
+   * Useful for clearing stale metrics after seeking, stopping, or loading new content.
+   */
+  resetDroppedFrames(): void {
+    this._ts.droppedFrameCount = 0;
+  }
+
   get interpolationEnabled(): boolean {
     return this._interpolationEnabled;
   }

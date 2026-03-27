@@ -327,7 +327,14 @@ export class EffectProcessor {
 
   // Vibrance 3D LUT cache (static - shared across instances for same parameters)
   private static vibrance3DLUT: Float32Array | null = null;
-  private static vibrance3DLUTParams: { vibrance: number; skinProtection: boolean } | null = null;
+  private static vibrance3DLUTParams: {
+    vibrance: number;
+    skinProtection: boolean;
+    lutSize: number;
+    skinHueCenter: number;
+    skinHueRange: number;
+    skinProtectionMin: number;
+  } | null = null;
   static readonly VIBRANCE_LUT_SIZE = 32; // 32x32x32 = 32K entries
 
   // Reusable buffers for clarity blur to avoid repeated allocations
@@ -372,7 +379,11 @@ export class EffectProcessor {
       EffectProcessor.vibrance3DLUT &&
       EffectProcessor.vibrance3DLUTParams &&
       EffectProcessor.vibrance3DLUTParams.vibrance === vibrance &&
-      EffectProcessor.vibrance3DLUTParams.skinProtection === skinProtection
+      EffectProcessor.vibrance3DLUTParams.skinProtection === skinProtection &&
+      EffectProcessor.vibrance3DLUTParams.lutSize === EffectProcessor.VIBRANCE_LUT_SIZE &&
+      EffectProcessor.vibrance3DLUTParams.skinHueCenter === SKIN_TONE_HUE_CENTER &&
+      EffectProcessor.vibrance3DLUTParams.skinHueRange === SKIN_TONE_HUE_RANGE &&
+      EffectProcessor.vibrance3DLUTParams.skinProtectionMin === SKIN_PROTECTION_MIN
     ) {
       return EffectProcessor.vibrance3DLUT;
     }
@@ -447,7 +458,14 @@ export class EffectProcessor {
     }
 
     EffectProcessor.vibrance3DLUT = lut;
-    EffectProcessor.vibrance3DLUTParams = { vibrance, skinProtection };
+    EffectProcessor.vibrance3DLUTParams = {
+      vibrance,
+      skinProtection,
+      lutSize: EffectProcessor.VIBRANCE_LUT_SIZE,
+      skinHueCenter: SKIN_TONE_HUE_CENTER,
+      skinHueRange: SKIN_TONE_HUE_RANGE,
+      skinProtectionMin: SKIN_PROTECTION_MIN,
+    };
     return lut;
   }
 

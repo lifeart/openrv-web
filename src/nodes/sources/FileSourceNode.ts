@@ -9,6 +9,7 @@ import { BaseSourceNode } from './BaseSourceNode';
 import { IPImage, type ImageMetadata, type TransferFunction, type ColorPrimaries } from '../../core/image/Image';
 import type { EvalContext } from '../../core/graph/Graph';
 import { RegisterNode } from '../base/NodeFactory';
+import { defineNodeProperty } from '../base/defineNodeProperty';
 import type { EXRLayerInfo, EXRDecodeOptions, EXRChannelRemapping } from '../../formats/EXRDecoder';
 import { decoderRegistry } from '../../formats/DecoderRegistry';
 import type { StereoInputFormat } from '../../core/types/stereo';
@@ -555,7 +556,9 @@ function parseJXLColorInfo(buffer: ArrayBuffer): AVIFColorInfo | null {
 @RegisterNode('RVFileSource')
 export class FileSourceNode extends BaseSourceNode {
   private image: HTMLImageElement | null = null;
-  private url: string = '';
+  declare url: string;
+  declare originalUrl: string;
+  declare exrLayer: string | null;
   private cachedIPImage: IPImage | null = null;
   private isEXR: boolean = false;
   private _isHDRFormat: boolean = false;
@@ -577,16 +580,38 @@ export class FileSourceNode extends BaseSourceNode {
   private cachedCanvas: HTMLCanvasElement | null = null;
   private canvasDirty: boolean = true;
 
+  // Guard to prevent re-entrant EXR layer sync
+  private _syncingExrLayer: boolean = false;
+
   constructor(name?: string) {
     super('RVFileSource', name ?? 'File Source');
 
-    // Define properties
-    this.properties.add({ name: 'url', defaultValue: '' });
+    // Define properties using defineNodeProperty for consistent
+    // getter/setter wiring, persistence, and change notifications
+    defineNodeProperty(this, 'url', { defaultValue: '' });
+    // width and height kept as properties.add() to avoid collision with existing getters
     this.properties.add({ name: 'width', defaultValue: 0 });
     this.properties.add({ name: 'height', defaultValue: 0 });
-    this.properties.add({ name: 'originalUrl', defaultValue: '' });
+    defineNodeProperty(this, 'originalUrl', { defaultValue: '' });
+    // isHDR kept as properties.add() to avoid collision with the isHDR() method
     this.properties.add({ name: 'isHDR', defaultValue: false });
-    this.properties.add({ name: 'exrLayer', defaultValue: null });
+    defineNodeProperty(this, 'exrLayer', { defaultValue: null as string | null });
+
+    // Sync currentExrLayer when the exrLayer property is set externally
+    // (e.g., during deserialization or from UI)
+    this.propertyChanged.connect((data) => {
+      if (data.name === 'exrLayer' && !this._syncingExrLayer) {
+        const newLayer = data.value as string | null;
+        // If an EXR is loaded, re-decode with the new layer via setEXRLayer
+        // (which handles the full reload and updates currentExrLayer internally).
+        // If no EXR is loaded yet, just sync the field so it's ready when one is loaded.
+        if (this.isEXR && this.exrBuffer) {
+          void this.setEXRLayer(newLayer);
+        } else {
+          this.currentExrLayer = newLayer;
+        }
+      }
+    });
   }
 
   /**
@@ -607,6 +632,9 @@ export class FileSourceNode extends BaseSourceNode {
    * Load image from URL
    */
   async load(url: string, name?: string, originalUrl?: string): Promise<void> {
+    // Mark canvas dirty immediately so that even if the load fails,
+    // the stale cached canvas from a previous image won't be returned.
+    this.canvasDirty = true;
     const filename = name ?? (basename(url) || 'image');
 
     // Check if this is an EXR file
@@ -672,9 +700,8 @@ export class FileSourceNode extends BaseSourceNode {
                 duration: 1,
                 fps: 24,
               };
-              this.properties.setValue('url', url);
               if (originalUrl) {
-                this.properties.setValue('originalUrl', originalUrl);
+                this.originalUrl = originalUrl;
               }
               this.properties.setValue('width', img.naturalWidth);
               this.properties.setValue('height', img.naturalHeight);
@@ -742,9 +769,8 @@ export class FileSourceNode extends BaseSourceNode {
                 duration: 1,
                 fps: 24,
               };
-              this.properties.setValue('url', url);
               if (originalUrl) {
-                this.properties.setValue('originalUrl', originalUrl);
+                this.originalUrl = originalUrl;
               }
               this.properties.setValue('width', img.naturalWidth);
               this.properties.setValue('height', img.naturalHeight);
@@ -889,10 +915,9 @@ export class FileSourceNode extends BaseSourceNode {
           fps: 24,
         };
 
-        this.properties.setValue('url', url);
         // store original url if provided (for file system path preservation)
         if (originalUrl) {
-          this.properties.setValue('originalUrl', originalUrl);
+          this.originalUrl = originalUrl;
         }
         this.properties.setValue('width', img.naturalWidth);
         this.properties.setValue('height', img.naturalHeight);
@@ -958,6 +983,9 @@ export class FileSourceNode extends BaseSourceNode {
     originalUrl?: string,
     options?: EXRDecodeOptions,
   ): Promise<void> {
+    // Mark canvas dirty immediately so that even if the load fails,
+    // the stale cached canvas from a previous image won't be returned.
+    this.canvasDirty = true;
     return this.loadEXRFromBuffer(buffer, name, url, originalUrl, options);
   }
 
@@ -1035,14 +1063,18 @@ export class FileSourceNode extends BaseSourceNode {
       fps: 24,
     };
 
-    this.properties.setValue('url', url);
     if (originalUrl) {
-      this.properties.setValue('originalUrl', originalUrl);
+      this.originalUrl = originalUrl;
     }
     this.properties.setValue('width', result.width);
     this.properties.setValue('height', result.height);
     this.properties.setValue('isHDR', true);
-    this.properties.setValue('exrLayer', options?.layer ?? null);
+    this._syncingExrLayer = true;
+    try {
+      this.exrLayer = options?.layer ?? null;
+    } finally {
+      this._syncingExrLayer = false;
+    }
 
     // Mark canvas as dirty so it gets re-rendered on next getCanvas() call
     this.canvasDirty = true;
@@ -1094,9 +1126,8 @@ export class FileSourceNode extends BaseSourceNode {
       fps: 24,
     };
 
-    this.properties.setValue('url', url);
     if (originalUrl) {
-      this.properties.setValue('originalUrl', originalUrl);
+      this.originalUrl = originalUrl;
     }
     this.properties.setValue('width', decodeResult.width);
     this.properties.setValue('height', decodeResult.height);
@@ -1161,9 +1192,8 @@ export class FileSourceNode extends BaseSourceNode {
       fps: 24,
     };
 
-    this.properties.setValue('url', url);
     if (originalUrl) {
-      this.properties.setValue('originalUrl', originalUrl);
+      this.originalUrl = originalUrl;
     }
     this.properties.setValue('width', result.width);
     this.properties.setValue('height', result.height);
@@ -1228,9 +1258,8 @@ export class FileSourceNode extends BaseSourceNode {
       fps: 24,
     };
 
-    this.properties.setValue('url', url);
     if (originalUrl) {
-      this.properties.setValue('originalUrl', originalUrl);
+      this.originalUrl = originalUrl;
     }
     this.properties.setValue('width', result.width);
     this.properties.setValue('height', result.height);
@@ -1321,9 +1350,8 @@ export class FileSourceNode extends BaseSourceNode {
       fps: 24,
     };
 
-    this.properties.setValue('url', url);
     if (originalUrl) {
-      this.properties.setValue('originalUrl', originalUrl);
+      this.originalUrl = originalUrl;
     }
     this.properties.setValue('width', frameWidth);
     this.properties.setValue('height', frameHeight);
@@ -1415,9 +1443,8 @@ export class FileSourceNode extends BaseSourceNode {
       fps: 24,
     };
 
-    this.properties.setValue('url', url);
     if (originalUrl) {
-      this.properties.setValue('originalUrl', originalUrl);
+      this.originalUrl = originalUrl;
     }
     this.properties.setValue('width', frameWidth);
     this.properties.setValue('height', frameHeight);
@@ -1482,9 +1509,8 @@ export class FileSourceNode extends BaseSourceNode {
       fps: 24,
     };
 
-    this.properties.setValue('url', url);
     if (originalUrl) {
-      this.properties.setValue('originalUrl', originalUrl);
+      this.originalUrl = originalUrl;
     }
     this.properties.setValue('width', result.width);
     this.properties.setValue('height', result.height);
@@ -1576,9 +1602,8 @@ export class FileSourceNode extends BaseSourceNode {
       fps: 24,
     };
 
-    this.properties.setValue('url', url);
     if (originalUrl) {
-      this.properties.setValue('originalUrl', originalUrl);
+      this.originalUrl = originalUrl;
     }
     this.properties.setValue('width', frameWidth);
     this.properties.setValue('height', frameHeight);
@@ -1624,9 +1649,8 @@ export class FileSourceNode extends BaseSourceNode {
       fps: 24,
     };
 
-    this.properties.setValue('url', url);
     if (originalUrl) {
-      this.properties.setValue('originalUrl', originalUrl);
+      this.originalUrl = originalUrl;
     }
     this.properties.setValue('width', result.width);
     this.properties.setValue('height', result.height);
@@ -1661,9 +1685,8 @@ export class FileSourceNode extends BaseSourceNode {
           duration: 1,
           fps: 24,
         };
-        this.properties.setValue('url', url);
         if (originalUrl) {
-          this.properties.setValue('originalUrl', originalUrl);
+          this.originalUrl = originalUrl;
         }
         this.properties.setValue('width', img.naturalWidth);
         this.properties.setValue('height', img.naturalHeight);
@@ -1705,9 +1728,8 @@ export class FileSourceNode extends BaseSourceNode {
           duration: 1,
           fps: 24,
         };
-        this.properties.setValue('url', url);
         if (originalUrl) {
-          this.properties.setValue('originalUrl', originalUrl);
+          this.originalUrl = originalUrl;
         }
         this.properties.setValue('width', img.naturalWidth);
         this.properties.setValue('height', img.naturalHeight);
@@ -1758,9 +1780,8 @@ export class FileSourceNode extends BaseSourceNode {
           duration: 1,
           fps: 24,
         };
-        this.properties.setValue('url', url);
         if (originalUrl) {
-          this.properties.setValue('originalUrl', originalUrl);
+          this.originalUrl = originalUrl;
         }
         this.properties.setValue('width', img.naturalWidth);
         this.properties.setValue('height', img.naturalHeight);
@@ -1822,9 +1843,8 @@ export class FileSourceNode extends BaseSourceNode {
       fps: 24,
     };
 
-    this.properties.setValue('url', url);
     if (originalUrl) {
-      this.properties.setValue('originalUrl', originalUrl);
+      this.originalUrl = originalUrl;
     }
     this.properties.setValue('width', result.width);
     this.properties.setValue('height', result.height);
@@ -1864,6 +1884,10 @@ export class FileSourceNode extends BaseSourceNode {
       return false;
     }
 
+    // Mark canvas dirty immediately so that even if the re-decode fails,
+    // the stale cached canvas from the previous layer won't be returned.
+    this.canvasDirty = true;
+
     // Re-decode with the new layer/remapping
     const options: EXRDecodeOptions = {};
     if (layerName && layerName !== 'RGBA') {
@@ -1877,7 +1901,7 @@ export class FileSourceNode extends BaseSourceNode {
       this.exrBuffer,
       this.metadata.name,
       this.url,
-      this.properties.getValue<string>('originalUrl') || undefined,
+      this.originalUrl || undefined,
       Object.keys(options).length > 0 ? options : undefined,
     );
 
@@ -1888,6 +1912,9 @@ export class FileSourceNode extends BaseSourceNode {
    * Load from File object
    */
   async loadFile(file: File): Promise<void> {
+    // Mark canvas dirty immediately so that even if the load fails,
+    // the stale cached canvas from a previous image won't be returned.
+    this.canvasDirty = true;
     // Check if this is an EXR file
     if (isEXRExtension(file.name)) {
       const buffer = await file.arrayBuffer();
@@ -2105,6 +2132,21 @@ export class FileSourceNode extends BaseSourceNode {
     return this._stereoInputFormat;
   }
 
+  /**
+   * Set the stereo input format explicitly (e.g. when restoring from serialized state).
+   * Only accepts valid StereoInputFormat values; invalid values are ignored.
+   */
+  set stereoInputFormat(value: StereoInputFormat | null) {
+    if (value === null) {
+      this._stereoInputFormat = null;
+      return;
+    }
+    const validFormats: StereoInputFormat[] = ['side-by-side', 'over-under', 'separate'];
+    if (validFormats.includes(value)) {
+      this._stereoInputFormat = value;
+    }
+  }
+
   getElement(_frame: number): HTMLImageElement | null {
     return this.image;
   }
@@ -2262,10 +2304,12 @@ export class FileSourceNode extends BaseSourceNode {
       id: this.id,
       name: this.name,
       // Prefer originalUrl for export if available (preserves file system path)
-      url: this.properties.getValue<string>('originalUrl') || this.url,
+      url: this.originalUrl || this.url,
       metadata: this.metadata,
       properties: this.properties.toJSON(),
       isHDR: this._isHDRFormat || this.isEXR,
+      // Include stereo input format when detected (e.g. multi-view EXR)
+      ...(this._stereoInputFormat && { stereoInputFormat: this._stereoInputFormat }),
     };
   }
 }

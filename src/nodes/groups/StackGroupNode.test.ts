@@ -399,8 +399,138 @@ describe('StackGroupNode', () => {
   });
 
   describe('output and mode properties', () => {
-    it('has chosenAudioInput property', () => {
+    it('has chosenAudioInput property with default 0', () => {
       expect(stackNode.properties.getValue('chosenAudioInput')).toBe(0);
+    });
+
+    it('chosenAudioInput accepts valid values within input range', () => {
+      // Add two inputs so valid range is 0..1
+      const input1 = new MockInputNode('a1');
+      const input2 = new MockInputNode('a2');
+      stackNode.connectInput(input1);
+      stackNode.connectInput(input2);
+
+      stackNode.properties.setValue('chosenAudioInput', 0);
+      expect(stackNode.properties.getValue('chosenAudioInput')).toBe(0);
+
+      stackNode.properties.setValue('chosenAudioInput', 1);
+      expect(stackNode.properties.getValue('chosenAudioInput')).toBe(1);
+    });
+
+    it('chosenAudioInput stores raw value but getter clamps to max input index', () => {
+      const input1 = new MockInputNode('a1');
+      stackNode.connectInput(input1);
+
+      // Only 1 input (index 0), so stored value is 5 but getter clamps to 0
+      stackNode.properties.setValue('chosenAudioInput', 5);
+      expect(stackNode.properties.getValue('chosenAudioInput')).toBe(5);
+      expect(stackNode.getChosenAudioInput()).toBe(0);
+    });
+
+    it('chosenAudioInput clamps negative values to 0', () => {
+      stackNode.properties.setValue('chosenAudioInput', -1);
+      expect(stackNode.properties.getValue('chosenAudioInput')).toBe(0);
+
+      stackNode.properties.setValue('chosenAudioInput', -100);
+      expect(stackNode.properties.getValue('chosenAudioInput')).toBe(0);
+    });
+
+    it('chosenAudioInput treats NaN as 0', () => {
+      stackNode.properties.setValue('chosenAudioInput', NaN);
+      expect(stackNode.properties.getValue('chosenAudioInput')).toBe(0);
+    });
+
+    it('chosenAudioInput treats Infinity as 0', () => {
+      stackNode.properties.setValue('chosenAudioInput', Infinity);
+      expect(stackNode.properties.getValue('chosenAudioInput')).toBe(0);
+
+      stackNode.properties.setValue('chosenAudioInput', -Infinity);
+      expect(stackNode.properties.getValue('chosenAudioInput')).toBe(0);
+    });
+
+    it('chosenAudioInput truncates fractional values', () => {
+      const input1 = new MockInputNode('a1');
+      const input2 = new MockInputNode('a2');
+      stackNode.connectInput(input1);
+      stackNode.connectInput(input2);
+
+      stackNode.properties.setValue('chosenAudioInput', 1.7);
+      expect(stackNode.properties.getValue('chosenAudioInput')).toBe(1);
+
+      stackNode.properties.setValue('chosenAudioInput', 0.9);
+      expect(stackNode.properties.getValue('chosenAudioInput')).toBe(0);
+    });
+
+    it('chosenAudioInput getter adjusts when inputs are removed (no re-set needed)', () => {
+      const input1 = new MockInputNode('a1');
+      const input2 = new MockInputNode('a2');
+      const input3 = new MockInputNode('a3');
+      stackNode.connectInput(input1);
+      stackNode.connectInput(input2);
+      stackNode.connectInput(input3);
+
+      stackNode.properties.setValue('chosenAudioInput', 2);
+      expect(stackNode.getChosenAudioInput()).toBe(2);
+
+      // Remove last input — now only 2 inputs (indices 0,1)
+      stackNode.disconnectInput(input3);
+      // Getter automatically clamps without needing to re-set
+      expect(stackNode.properties.getValue('chosenAudioInput')).toBe(2); // stored value unchanged
+      expect(stackNode.getChosenAudioInput()).toBe(1); // effective value clamped
+    });
+
+    it('chosenAudioInput getter clamps to 0 when no inputs connected', () => {
+      stackNode.properties.setValue('chosenAudioInput', 3);
+      expect(stackNode.properties.getValue('chosenAudioInput')).toBe(3); // stored value preserved
+      expect(stackNode.getChosenAudioInput()).toBe(0); // effective value clamped
+    });
+
+    it('chosenAudioInput getter returns clamped value after input disconnection without re-setting', () => {
+      const input1 = new MockInputNode('a1');
+      const input2 = new MockInputNode('a2');
+      const input3 = new MockInputNode('a3');
+      stackNode.connectInput(input1);
+      stackNode.connectInput(input2);
+      stackNode.connectInput(input3);
+
+      stackNode.properties.setValue('chosenAudioInput', 2);
+      expect(stackNode.getChosenAudioInput()).toBe(2);
+
+      // Disconnect two inputs, leaving only one
+      stackNode.disconnectInput(input3);
+      stackNode.disconnectInput(input2);
+
+      // Stored value is still 2, but getter clamps to 0 (only 1 input left)
+      expect(stackNode.properties.getValue('chosenAudioInput')).toBe(2);
+      expect(stackNode.getChosenAudioInput()).toBe(0);
+    });
+
+    it('chosenAudioInput serialization round-trip preserves value before inputs reconnect', () => {
+      const input1 = new MockInputNode('a1');
+      const input2 = new MockInputNode('a2');
+      const input3 = new MockInputNode('a3');
+      stackNode.connectInput(input1);
+      stackNode.connectInput(input2);
+      stackNode.connectInput(input3);
+
+      stackNode.properties.setValue('chosenAudioInput', 2);
+      expect(stackNode.getChosenAudioInput()).toBe(2);
+
+      // Simulate serialization round-trip: create new node, set value before inputs
+      const newNode = new StackGroupNode('Restored');
+      // Deserialize: set the value before any inputs are connected
+      newNode.properties.setValue('chosenAudioInput', 2);
+      // Stored value is preserved even though no inputs exist yet
+      expect(newNode.properties.getValue('chosenAudioInput')).toBe(2);
+      // Getter clamps to 0 since no inputs
+      expect(newNode.getChosenAudioInput()).toBe(0);
+
+      // Now reconnect inputs
+      newNode.connectInput(input1);
+      newNode.connectInput(input2);
+      newNode.connectInput(input3);
+      // Getter now returns the correct value
+      expect(newNode.getChosenAudioInput()).toBe(2);
     });
 
     it('has outOfRangePolicy property', () => {
@@ -1202,6 +1332,133 @@ describe('StackGroupNode', () => {
     it('returns false for custom types', () => {
       stackNode.setCompositeType('custom-blend');
       expect(stackNode.supportsGPUCompositing()).toBe(false);
+    });
+  });
+
+  describe('wipe property min/max clamping', () => {
+    it('wipeX property has min=0 and max=1', () => {
+      const prop = stackNode.properties.get<number>('wipeX')!;
+      expect(prop.min).toBe(0);
+      expect(prop.max).toBe(1);
+    });
+
+    it('wipeY property has min=0 and max=1', () => {
+      const prop = stackNode.properties.get<number>('wipeY')!;
+      expect(prop.min).toBe(0);
+      expect(prop.max).toBe(1);
+    });
+
+    it('accepts wipeX values within 0-1 range', () => {
+      stackNode.properties.setValue('wipeX', 0.25);
+      expect(stackNode.properties.getValue('wipeX')).toBe(0.25);
+
+      stackNode.properties.setValue('wipeX', 0.75);
+      expect(stackNode.properties.getValue('wipeX')).toBe(0.75);
+    });
+
+    it('accepts wipeY values within 0-1 range', () => {
+      stackNode.properties.setValue('wipeY', 0.25);
+      expect(stackNode.properties.getValue('wipeY')).toBe(0.25);
+
+      stackNode.properties.setValue('wipeY', 0.75);
+      expect(stackNode.properties.getValue('wipeY')).toBe(0.75);
+    });
+
+    it('clamps wipeX at exactly 0 (min boundary)', () => {
+      stackNode.properties.setValue('wipeX', 0);
+      expect(stackNode.properties.getValue('wipeX')).toBe(0);
+    });
+
+    it('clamps wipeX at exactly 1 (max boundary)', () => {
+      stackNode.properties.setValue('wipeX', 1);
+      expect(stackNode.properties.getValue('wipeX')).toBe(1);
+    });
+
+    it('clamps wipeY at exactly 0 (min boundary)', () => {
+      stackNode.properties.setValue('wipeY', 0);
+      expect(stackNode.properties.getValue('wipeY')).toBe(0);
+    });
+
+    it('clamps wipeY at exactly 1 (max boundary)', () => {
+      stackNode.properties.setValue('wipeY', 1);
+      expect(stackNode.properties.getValue('wipeY')).toBe(1);
+    });
+
+    it('clamps wipeX above max to 1 via direct property access', () => {
+      stackNode.properties.setValue('wipeX', 1.5);
+      expect(stackNode.properties.getValue('wipeX')).toBe(1);
+
+      stackNode.properties.setValue('wipeX', 100);
+      expect(stackNode.properties.getValue('wipeX')).toBe(1);
+    });
+
+    it('clamps wipeX below min to 0 via direct property access', () => {
+      stackNode.properties.setValue('wipeX', -0.5);
+      expect(stackNode.properties.getValue('wipeX')).toBe(0);
+
+      stackNode.properties.setValue('wipeX', -100);
+      expect(stackNode.properties.getValue('wipeX')).toBe(0);
+    });
+
+    it('clamps wipeY above max to 1 via direct property access', () => {
+      stackNode.properties.setValue('wipeY', 1.5);
+      expect(stackNode.properties.getValue('wipeY')).toBe(1);
+
+      stackNode.properties.setValue('wipeY', 100);
+      expect(stackNode.properties.getValue('wipeY')).toBe(1);
+    });
+
+    it('clamps wipeY below min to 0 via direct property access', () => {
+      stackNode.properties.setValue('wipeY', -0.5);
+      expect(stackNode.properties.getValue('wipeY')).toBe(0);
+
+      stackNode.properties.setValue('wipeY', -100);
+      expect(stackNode.properties.getValue('wipeY')).toBe(0);
+    });
+
+    it('setWipePosition also clamps out-of-range values', () => {
+      stackNode.setWipePosition(-1, 2);
+      expect(stackNode.properties.getValue('wipeX')).toBe(0);
+      expect(stackNode.properties.getValue('wipeY')).toBe(1);
+
+      stackNode.setWipePosition(5);
+      expect(stackNode.properties.getValue('wipeX')).toBe(1);
+    });
+
+    it('getWipePosition returns clamped values after out-of-range set', () => {
+      stackNode.properties.setValue('wipeX', 999);
+      stackNode.properties.setValue('wipeY', -999);
+      const pos = stackNode.getWipePosition();
+      expect(pos.x).toBe(1);
+      expect(pos.y).toBe(0);
+    });
+
+    it('converts NaN to default (0.5) for wipeX', () => {
+      stackNode.properties.setValue('wipeX', 0.3);
+      stackNode.properties.setValue('wipeX', NaN);
+      expect(stackNode.properties.getValue('wipeX')).toBe(0.5);
+    });
+
+    it('converts NaN to default (0.5) for wipeY', () => {
+      stackNode.properties.setValue('wipeY', 0.8);
+      stackNode.properties.setValue('wipeY', NaN);
+      expect(stackNode.properties.getValue('wipeY')).toBe(0.5);
+    });
+
+    it('clamps Infinity to 1 for wipeX and wipeY', () => {
+      stackNode.properties.setValue('wipeX', Infinity);
+      expect(stackNode.properties.getValue('wipeX')).toBe(1);
+
+      stackNode.properties.setValue('wipeY', Infinity);
+      expect(stackNode.properties.getValue('wipeY')).toBe(1);
+    });
+
+    it('clamps -Infinity to 0 for wipeX and wipeY', () => {
+      stackNode.properties.setValue('wipeX', -Infinity);
+      expect(stackNode.properties.getValue('wipeX')).toBe(0);
+
+      stackNode.properties.setValue('wipeY', -Infinity);
+      expect(stackNode.properties.getValue('wipeY')).toBe(0);
     });
   });
 });

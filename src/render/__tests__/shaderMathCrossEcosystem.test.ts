@@ -240,12 +240,16 @@ describe('HLG transfer functions', () => {
   });
 
   describe('hlgToLinear (with OOTF)', () => {
-    it('XE-029: black signal produces black', () => {
+    it('XE-029: black signal produces exactly black (not NaN or Inf)', () => {
       const [r, g, b] = hlgToLinear(0, 0, 0);
-      // With OOTF, pow(max(0, 1e-6), 0.2) is tiny but nonzero
-      expect(r).toBeCloseTo(0.0, 4);
-      expect(g).toBeCloseTo(0.0, 4);
-      expect(b).toBeCloseTo(0.0, 4);
+      // With linear-ramp OOTF, gain at ys=0 is 0 → output is exactly 0
+      expect(r).toBe(0.0);
+      expect(g).toBe(0.0);
+      expect(b).toBe(0.0);
+      // Ensure no NaN or Inf
+      expect(Number.isFinite(r)).toBe(true);
+      expect(Number.isFinite(g)).toBe(true);
+      expect(Number.isFinite(b)).toBe(true);
     });
 
     it('XE-030: neutral gray is self-consistent', () => {
@@ -253,6 +257,82 @@ describe('HLG transfer functions', () => {
       // All channels equal → luminance = scene value → gain = scene^0.2
       expect(r).toBeCloseTo(g, 10);
       expect(g).toBeCloseTo(b, 10);
+    });
+
+    it('XE-082: near-black input 0.001 does not produce extreme OOTF gain (MED-50)', () => {
+      // HLG signal of 0.001 → very small scene value via inverse OETF
+      const [r, g, b] = hlgToLinear(0.001, 0.001, 0.001);
+      // The OOTF gain should be bounded and reasonable.
+      // Scene value for 0.001: (0.001^2)/3 ≈ 3.33e-7
+      // With linear ramp (ys < 0.01): gain = ys * 39.81 ≈ 1.33e-5
+      // Output ≈ 3.33e-7 * 1.33e-5 ≈ 4.4e-12 (very small, as expected)
+      expect(r).toBeGreaterThanOrEqual(0.0);
+      expect(r).toBeLessThan(1e-6); // must not be amplified to visible levels
+      expect(Number.isFinite(r)).toBe(true);
+      // All channels equal
+      expect(r).toBeCloseTo(g, 15);
+      expect(g).toBeCloseTo(b, 15);
+    });
+
+    it('XE-083: near-black input 0.0001 does not produce extreme OOTF gain (MED-50)', () => {
+      const [r] = hlgToLinear(0.0001, 0.0001, 0.0001);
+      // Must stay very small and finite
+      expect(r).toBeGreaterThanOrEqual(0.0);
+      expect(r).toBeLessThan(1e-8);
+      expect(Number.isFinite(r)).toBe(true);
+    });
+
+    it('XE-084: OOTF gain is bounded for small luminance values (MED-50)', () => {
+      // Test that the effective gain (output/input_scene) doesn't explode.
+      // For a small HLG signal, compute the ratio of output to scene luminance.
+      const signal = 0.05; // small but above HLG OETF threshold
+      const [r] = hlgToLinear(signal, signal, signal);
+      // Scene value: (0.05^2)/3 ≈ 8.33e-4
+      const scene = (signal * signal) / 3.0;
+      // With linear ramp (ys ≈ scene < 0.01): gain = ys * 39.81
+      // Output = scene * gain ≈ scene^2 * 39.81
+      // The effective multiplier (output/scene) should be < 1 for small values
+      const effectiveGain = r / scene;
+      expect(effectiveGain).toBeLessThan(1.0);
+      expect(effectiveGain).toBeGreaterThan(0.0);
+    });
+
+    it('XE-085: OOTF is C0-continuous at threshold boundary (MED-50)', () => {
+      // At ys = 0.01, linear ramp and power curve should agree
+      // ys * OOTF_SLOPE = 0.01 * 39.810717 ≈ 0.39811 = 0.01^0.2
+      const linearGain = 0.01 * 39.810717;
+      const powerGain = Math.pow(0.01, 0.2);
+      expect(linearGain).toBeCloseTo(powerGain, 4);
+    });
+
+    it('XE-086: normal HLG values still processed correctly (MED-50)', () => {
+      // Full-range HLG signal should use the power curve, not the linear ramp
+      const [r1, g1, b1] = hlgToLinear(0.75, 0.75, 0.75);
+      // Scene for 0.75 (above OETF threshold 0.5): uses exponential segment
+      // The output should be reasonable (positive, not extreme)
+      expect(r1).toBeGreaterThan(0.01);
+      expect(r1).toBeLessThan(10.0);
+      expect(Number.isFinite(r1)).toBe(true);
+      expect(r1).toBeCloseTo(g1, 10);
+      expect(g1).toBeCloseTo(b1, 10);
+
+      // Full white
+      const [rw, gw, bw] = hlgToLinear(1.0, 1.0, 1.0);
+      expect(rw).toBeGreaterThan(0.1);
+      expect(Number.isFinite(rw)).toBe(true);
+      expect(rw).toBeCloseTo(gw, 10);
+      expect(gw).toBeCloseTo(bw, 10);
+    });
+
+    it('XE-087: monotonically increasing output for increasing input (MED-50)', () => {
+      // Ensure no gain inversion: brighter input → brighter output
+      const signals = [0.0, 0.001, 0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 1.0];
+      let prevR = -1;
+      for (const s of signals) {
+        const [r] = hlgToLinear(s, s, s);
+        expect(r).toBeGreaterThanOrEqual(prevR);
+        prevR = r;
+      }
     });
   });
 

@@ -16,7 +16,15 @@ import {
 } from '../render/renderWorker.messages';
 import type { RenderHDRMessage, RenderWorkerMessage } from '../render/renderWorker.messages';
 
-const { reconstructIPImage, applySyncState, handleMessage } = __test__;
+const {
+  reconstructIPImage,
+  applySyncState,
+  handleMessage,
+  isArrayBufferDetached,
+  validateHDRImageData,
+  validateSDRBitmap,
+  safeCloseBitmap,
+} = __test__;
 
 describe('renderWorker', () => {
   afterEach(() => {
@@ -542,6 +550,459 @@ describe('renderWorker', () => {
 
       const sentMsg = postMessageSpy.mock.calls[0][0] as any;
       expect(sentMsg.protocolVersion).toBe(RENDER_WORKER_PROTOCOL_VERSION);
+    });
+  });
+
+  // ==========================================================================
+  // Transferable validation (MED-44)
+  // ==========================================================================
+
+  describe('Transferable validation', () => {
+    // --- isArrayBufferDetached ---
+
+    describe('isArrayBufferDetached', () => {
+      it('RW-037: returns false for a normal ArrayBuffer', () => {
+        const buf = new ArrayBuffer(16);
+        expect(isArrayBufferDetached(buf)).toBe(false);
+      });
+
+      it('RW-038: returns true for a zero-length ArrayBuffer (treated as detached)', () => {
+        const buf = new ArrayBuffer(0);
+        expect(isArrayBufferDetached(buf)).toBe(true);
+      });
+
+      it('RW-039: returns true for a structurally detached buffer', () => {
+        const buf = new ArrayBuffer(16);
+        // Simulate transfer by structuredClone with transfer
+        // After transfer, the original buffer becomes detached
+        try {
+          structuredClone(buf, { transfer: [buf] });
+        } catch {
+          // structuredClone may not be available in all test environments
+        }
+        // After transfer, buf.byteLength should be 0 and/or .detached should be true
+        expect(isArrayBufferDetached(buf)).toBe(true);
+      });
+    });
+
+    // --- validateHDRImageData ---
+
+    describe('validateHDRImageData', () => {
+      it('RW-040: returns null for valid HDR message', () => {
+        const msg: RenderHDRMessage = {
+          type: 'renderHDR',
+          id: 40,
+          imageData: new Float32Array(4).buffer,
+          width: 1,
+          height: 1,
+          dataType: DATA_TYPE_CODES.float32,
+          channels: 4,
+        };
+        expect(validateHDRImageData(msg)).toBeNull();
+      });
+
+      it('RW-041: returns error for non-ArrayBuffer imageData', () => {
+        const msg = {
+          type: 'renderHDR',
+          id: 41,
+          imageData: 'not a buffer' as any,
+          width: 1,
+          height: 1,
+          dataType: DATA_TYPE_CODES.float32,
+          channels: 4,
+        } as RenderHDRMessage;
+        const err = validateHDRImageData(msg);
+        expect(err).not.toBeNull();
+        expect(err).toContain('not an ArrayBuffer');
+      });
+
+      it('RW-042: returns error for detached ArrayBuffer', () => {
+        const buf = new ArrayBuffer(16);
+        try {
+          structuredClone(buf, { transfer: [buf] });
+        } catch {
+          // fallback: can't transfer in this environment
+        }
+        // If transfer worked, buf is detached. If not, use a zero-length buffer.
+        const testBuf = buf.byteLength === 0 ? buf : new ArrayBuffer(0);
+        const msg: RenderHDRMessage = {
+          type: 'renderHDR',
+          id: 42,
+          imageData: testBuf,
+          width: 1,
+          height: 1,
+          dataType: DATA_TYPE_CODES.float32,
+          channels: 4,
+        };
+        const err = validateHDRImageData(msg);
+        expect(err).not.toBeNull();
+        expect(err).toContain('detached');
+      });
+
+      it('RW-043: returns error for zero or negative width', () => {
+        const msg: RenderHDRMessage = {
+          type: 'renderHDR',
+          id: 43,
+          imageData: new Float32Array(4).buffer,
+          width: 0,
+          height: 1,
+          dataType: DATA_TYPE_CODES.float32,
+          channels: 4,
+        };
+        const err = validateHDRImageData(msg);
+        expect(err).not.toBeNull();
+        expect(err).toContain('invalid dimensions');
+      });
+
+      it('RW-044: returns error for negative height', () => {
+        const msg: RenderHDRMessage = {
+          type: 'renderHDR',
+          id: 44,
+          imageData: new Float32Array(4).buffer,
+          width: 1,
+          height: -5,
+          dataType: DATA_TYPE_CODES.float32,
+          channels: 4,
+        };
+        const err = validateHDRImageData(msg);
+        expect(err).not.toBeNull();
+        expect(err).toContain('invalid dimensions');
+      });
+
+      it('RW-045: returns error for unsupported channel count', () => {
+        const msg: RenderHDRMessage = {
+          type: 'renderHDR',
+          id: 45,
+          imageData: new Float32Array(4).buffer,
+          width: 1,
+          height: 1,
+          dataType: DATA_TYPE_CODES.float32,
+          channels: 2,
+        };
+        const err = validateHDRImageData(msg);
+        expect(err).not.toBeNull();
+        expect(err).toContain('unsupported channel count');
+      });
+
+      it('RW-046: accepts 3-channel images', () => {
+        const msg: RenderHDRMessage = {
+          type: 'renderHDR',
+          id: 46,
+          imageData: new Float32Array(3).buffer,
+          width: 1,
+          height: 1,
+          dataType: DATA_TYPE_CODES.float32,
+          channels: 3,
+        };
+        expect(validateHDRImageData(msg)).toBeNull();
+      });
+
+      it('RW-047: returns error for NaN dimensions', () => {
+        const msg: RenderHDRMessage = {
+          type: 'renderHDR',
+          id: 47,
+          imageData: new Float32Array(4).buffer,
+          width: NaN,
+          height: 100,
+          dataType: DATA_TYPE_CODES.float32,
+          channels: 4,
+        };
+        const err = validateHDRImageData(msg);
+        expect(err).not.toBeNull();
+        expect(err).toContain('invalid dimensions');
+      });
+    });
+
+    // --- validateSDRBitmap ---
+
+    describe('validateSDRBitmap', () => {
+      it('RW-048: returns error for closed/zero-size bitmap', () => {
+        const fakeBitmap = { width: 0, height: 0, close: vi.fn() };
+        // Make it look like an ImageBitmap to pass type check in test env
+        const err = validateSDRBitmap({
+          bitmap: fakeBitmap as unknown as ImageBitmap,
+          width: 100,
+          height: 100,
+        });
+        expect(err).not.toBeNull();
+        expect(err).toContain('closed');
+      });
+
+      it('RW-049: returns error for invalid dimensions', () => {
+        const fakeBitmap = { width: 100, height: 100, close: vi.fn() };
+        const err = validateSDRBitmap({
+          bitmap: fakeBitmap as unknown as ImageBitmap,
+          width: 0,
+          height: 100,
+        });
+        expect(err).not.toBeNull();
+        expect(err).toContain('invalid dimensions');
+      });
+
+      it('RW-050: returns null for valid bitmap-like object', () => {
+        const fakeBitmap = { width: 100, height: 100, close: vi.fn() };
+        const err = validateSDRBitmap({
+          bitmap: fakeBitmap as unknown as ImageBitmap,
+          width: 100,
+          height: 100,
+        });
+        expect(err).toBeNull();
+      });
+    });
+
+    // --- Integration: handleMessage with invalid transferables ---
+
+    describe('handleMessage with invalid transferables', () => {
+      let postMessageSpy: ReturnType<typeof vi.spyOn>;
+
+      beforeEach(() => {
+        postMessageSpy = vi.spyOn(self, 'postMessage').mockImplementation(() => {});
+        // Set up a mock renderer so the "renderer not available" check passes
+        __test__.setRenderer({
+          renderImage: vi.fn(),
+          renderSDRFrame: vi.fn(),
+        } as any);
+      });
+
+      afterEach(() => {
+        postMessageSpy.mockRestore();
+        __test__.setRenderer(null);
+      });
+
+      it('RW-051: renderHDR with detached buffer sends renderError', () => {
+        const detachedBuf = new ArrayBuffer(0); // zero-length = treated as detached
+        handleMessage({
+          type: 'renderHDR',
+          id: 51,
+          imageData: detachedBuf,
+          width: 1,
+          height: 1,
+          dataType: DATA_TYPE_CODES.float32,
+          channels: 4,
+        });
+
+        expect(postMessageSpy).toHaveBeenCalled();
+        const sentMsg = postMessageSpy.mock.calls[0][0] as any;
+        expect(sentMsg.type).toBe('renderError');
+        expect(sentMsg.id).toBe(51);
+        expect(sentMsg.error).toContain('detached');
+      });
+
+      it('RW-052: renderHDR with non-ArrayBuffer sends renderError', () => {
+        handleMessage({
+          type: 'renderHDR',
+          id: 52,
+          imageData: 'this is not a buffer' as any,
+          width: 1,
+          height: 1,
+          dataType: DATA_TYPE_CODES.float32,
+          channels: 4,
+        } as any);
+
+        expect(postMessageSpy).toHaveBeenCalled();
+        const sentMsg = postMessageSpy.mock.calls[0][0] as any;
+        expect(sentMsg.type).toBe('renderError');
+        expect(sentMsg.id).toBe(52);
+        expect(sentMsg.error).toContain('not an ArrayBuffer');
+      });
+
+      it('RW-053: renderHDR with invalid dimensions sends renderError', () => {
+        handleMessage({
+          type: 'renderHDR',
+          id: 53,
+          imageData: new Float32Array(4).buffer,
+          width: -1,
+          height: 100,
+          dataType: DATA_TYPE_CODES.float32,
+          channels: 4,
+        });
+
+        expect(postMessageSpy).toHaveBeenCalled();
+        const sentMsg = postMessageSpy.mock.calls[0][0] as any;
+        expect(sentMsg.type).toBe('renderError');
+        expect(sentMsg.id).toBe(53);
+        expect(sentMsg.error).toContain('invalid dimensions');
+      });
+
+      it('RW-054: renderSDR with closed bitmap sends renderError', () => {
+        const closedBitmap = { width: 0, height: 0, close: vi.fn() };
+        handleMessage({
+          type: 'renderSDR',
+          id: 54,
+          bitmap: closedBitmap as unknown as ImageBitmap,
+          width: 100,
+          height: 100,
+        });
+
+        expect(postMessageSpy).toHaveBeenCalled();
+        const sentMsg = postMessageSpy.mock.calls[0][0] as any;
+        expect(sentMsg.type).toBe('renderError');
+        expect(sentMsg.id).toBe(54);
+        expect(sentMsg.error).toContain('closed');
+      });
+
+      it('RW-055: renderHDR with valid data does not produce renderError', () => {
+        handleMessage({
+          type: 'renderHDR',
+          id: 55,
+          imageData: new Float32Array(4).buffer,
+          width: 1,
+          height: 1,
+          dataType: DATA_TYPE_CODES.float32,
+          channels: 4,
+        });
+
+        expect(postMessageSpy).toHaveBeenCalled();
+        const sentMsg = postMessageSpy.mock.calls[0][0] as any;
+        // Should be renderDone, not renderError
+        expect(sentMsg.type).toBe('renderDone');
+        expect(sentMsg.id).toBe(55);
+      });
+
+      it('RW-056: renderSDR with valid bitmap does not produce renderError', () => {
+        const validBitmap = { width: 100, height: 100, close: vi.fn() };
+        handleMessage({
+          type: 'renderSDR',
+          id: 56,
+          bitmap: validBitmap as unknown as ImageBitmap,
+          width: 100,
+          height: 100,
+        });
+
+        expect(postMessageSpy).toHaveBeenCalled();
+        const sentMsg = postMessageSpy.mock.calls[0][0] as any;
+        expect(sentMsg.type).toBe('renderDone');
+        expect(sentMsg.id).toBe(56);
+      });
+
+      it('RW-057: renderHDR with unsupported channel count sends renderError', () => {
+        handleMessage({
+          type: 'renderHDR',
+          id: 57,
+          imageData: new Float32Array(4).buffer,
+          width: 1,
+          height: 1,
+          dataType: DATA_TYPE_CODES.float32,
+          channels: 1,
+        });
+
+        expect(postMessageSpy).toHaveBeenCalled();
+        const sentMsg = postMessageSpy.mock.calls[0][0] as any;
+        expect(sentMsg.type).toBe('renderError');
+        expect(sentMsg.id).toBe(57);
+        expect(sentMsg.error).toContain('unsupported channel count');
+      });
+    });
+  });
+
+  // ==========================================================================
+  // safeCloseBitmap (LOW-22)
+  // ==========================================================================
+
+  describe('safeCloseBitmap', () => {
+    function makeMockBitmap(opts?: { width?: number; height?: number; closeThrows?: boolean }): ImageBitmap {
+      const w = opts?.width ?? 100;
+      const h = opts?.height ?? 100;
+      let closed = false;
+      return {
+        get width() {
+          return closed ? 0 : w;
+        },
+        get height() {
+          return closed ? 0 : h;
+        },
+        close() {
+          if (opts?.closeThrows) {
+            throw new DOMException('ImageBitmap is detached', 'InvalidStateError');
+          }
+          closed = true;
+        },
+      } as unknown as ImageBitmap;
+    }
+
+    it('RW-SCB-001: closes a normal bitmap without error', () => {
+      const bitmap = makeMockBitmap();
+      expect(() => safeCloseBitmap(bitmap)).not.toThrow();
+      // After close, width/height should be 0
+      expect(bitmap.width).toBe(0);
+      expect(bitmap.height).toBe(0);
+    });
+
+    it('RW-SCB-002: does not throw on already-closed bitmap (width/height 0)', () => {
+      const bitmap = makeMockBitmap();
+      // Close it first
+      bitmap.close();
+      expect(bitmap.width).toBe(0);
+      expect(bitmap.height).toBe(0);
+      // Second close via safeCloseBitmap should not throw
+      expect(() => safeCloseBitmap(bitmap)).not.toThrow();
+    });
+
+    it('RW-SCB-003: does not throw when close() itself throws (transferred bitmap)', () => {
+      const bitmap = makeMockBitmap({ closeThrows: true });
+      // close() will throw, but safeCloseBitmap catches it
+      expect(() => safeCloseBitmap(bitmap)).not.toThrow();
+    });
+
+    it('RW-SCB-004: multiple sequential close calls do not throw', () => {
+      const bitmap = makeMockBitmap();
+      expect(() => {
+        safeCloseBitmap(bitmap);
+        safeCloseBitmap(bitmap);
+        safeCloseBitmap(bitmap);
+      }).not.toThrow();
+    });
+
+    it('RW-SCB-005: skips close on zero-dimension bitmap and logs debug', () => {
+      // Bitmap that already has 0x0 dimensions (simulates transferred/closed state)
+      const bitmap = makeMockBitmap({ width: 0, height: 0 });
+      const closeSpy = vi.spyOn(bitmap, 'close');
+      expect(() => safeCloseBitmap(bitmap)).not.toThrow();
+      // Should not call close() since dimensions are 0
+      expect(closeSpy).not.toHaveBeenCalled();
+    });
+
+    it('RW-SCB-006: partial zero dimension (width=0, height=100) still calls close()', () => {
+      // Only one dimension is zero — does NOT match the `width === 0 && height === 0` guard,
+      // so close() should still be called.
+      const bitmap = makeMockBitmap({ width: 0, height: 100 });
+      const closeSpy = vi.spyOn(bitmap, 'close');
+      expect(() => safeCloseBitmap(bitmap)).not.toThrow();
+      expect(closeSpy).toHaveBeenCalledOnce();
+    });
+
+    it('RW-SCB-007: error path integration — renderSDR exception triggers safeCloseBitmap and renderError', () => {
+      const postMessageSpy = vi.spyOn(self, 'postMessage').mockImplementation(() => {});
+      const renderError = new Error('GL context lost');
+      __test__.setRenderer({
+        renderSDRFrame: vi.fn().mockImplementation(() => {
+          throw renderError;
+        }),
+      } as any);
+
+      const bitmap = makeMockBitmap();
+      const closeSpy = vi.spyOn(bitmap, 'close');
+
+      handleMessage({
+        type: 'renderSDR',
+        id: 700,
+        bitmap: bitmap as unknown as ImageBitmap,
+        width: 100,
+        height: 100,
+      });
+
+      // Bitmap should have been closed in the catch path (not leaked)
+      expect(closeSpy).toHaveBeenCalled();
+      expect(bitmap.width).toBe(0);
+
+      // A renderError message should have been sent back
+      expect(postMessageSpy).toHaveBeenCalled();
+      const sentMsg = postMessageSpy.mock.calls[0]![0] as any;
+      expect(sentMsg.type).toBe('renderError');
+      expect(sentMsg.id).toBe(700);
+      expect(sentMsg.error).toBe('GL context lost');
+
+      postMessageSpy.mockRestore();
     });
   });
 });

@@ -4560,3 +4560,473 @@ Wired into `AppNetworkBridge` (subscribes to syncCursor, usersChanged, userLeft,
 **Files changed**:
 - `src/core/session/SessionSerializer.ts`
 - `src/core/session/SessionSerializer.test.ts`
+
+## Issue: MED-09 — StackGroupNode wipe properties lack min/max
+
+**Root cause**: The `wipeX` and `wipeY` property definitions in `StackGroupNode.ts` had no `min`/`max` constraints and no sanitization. Out-of-range values (negative, >1, NaN, Infinity) could propagate unchecked into the wipe shader, producing undefined rendering behavior.
+
+**Fix**:
+- Added `min: 0, max: 1` to both `wipeX` and `wipeY` property definitions so values are clamped to the valid [0, 1] range
+- Added a `sanitizeWipe` transform that converts NaN to the default value of 0.5
+- Infinity and -Infinity are handled by the min/max clamping
+
+**Tests added**: 15 new tests covering property metadata validation, boundary values (0 and 1), over/under clamping, NaN handling, and Infinity handling for both wipeX and wipeY.
+
+**Files changed**:
+- `src/nodes/groups/StackGroupNode.ts`
+- `src/nodes/groups/StackGroupNode.test.ts`
+
+## Issue: MED-24 — Async file upload continues after component disposal
+
+**Root cause**: The logo upload handler in `AppControlRegistry.ts` (~lines 895-925) performed async work (file reading, image decoding) without checking whether the component had been disposed mid-flight. If the user navigated away or the registry was torn down while an upload was in progress, the continuation would run against stale/destroyed state.
+
+**Fix**:
+- Added a `_disposed` flag to `AppControlRegistry`
+- Inserted two guard checks in the async logo upload handler: one before the first `await` (pre-flight) and one after (post-await), both returning early if `_disposed` is true
+- The `_disposed` flag is set at the top of `dispose()` so it takes effect before any other teardown
+
+**Tests added**: 6 regression tests (ACR-030 through ACR-035) covering: normal upload succeeds, mid-flight disposal aborts upload, error during disposal is handled, empty file is rejected, pre-disposed registry rejects upload, and `_disposed` flag verification.
+
+**Files changed**:
+- `src/AppControlRegistry.ts`
+- `src/AppControlRegistry.test.ts`
+
+## Issue: MED-26 — EXR tile count overflow potential
+
+**Root cause**: In `EXRDecoder.ts` (~lines 1348-1350), tile counts computed from image dimensions and tile sizes were not validated before use. Extremely large, zero, or negative tile counts could cause memory allocation failures, infinite loops, or integer overflow when multiplied to compute total tile offsets.
+
+**Fix**:
+- Added a `MAX_TILES_PER_LEVEL = 16_777_216` (2^24) constant as an upper bound
+- Added a `validateTileCount()` helper that rejects zero, negative, and excessive tile counts with descriptive error messages
+- Applied the validation at 5 call sites: `computeTotalTileOffsets` (3 code paths), `decodeTiledImage`, and `decodeMultiPartTiledImage`
+
+**Tests added**: 8 regression tests (EXR-T030 through EXR-T037) covering normal tile counts, boundary values at the limit, overflow rejection for excessive counts, asymmetric dimensions, and error message verification.
+
+**Files changed**:
+- `src/formats/EXRDecoder.ts`
+- `src/formats/EXRDecoder.test.ts`
+
+## Issue: MED-27 — DPX negative dimension interpretation
+
+**Root cause**: In `DPXDecoder.ts` (~lines 92-94), `getDPXInfo()` read image width and height as unsigned 32-bit integers but performed no validation on the values. Zero dimensions, extremely large dimensions, or values that could cause pixel-count overflow would propagate downstream, leading to allocation failures or out-of-bounds access.
+
+**Fix**:
+- Added dimension validation in `getDPXInfo()` that rejects zero dimensions, dimensions exceeding a maximum of 65536, and total pixel counts exceeding 268 million
+- Uses shared `IMAGE_LIMITS` constants for consistent bounds across decoders
+- Dimensions were already read as unsigned via `getUint32`, so negative interpretation via sign bit is not possible
+
+**Tests added**: 13 regression tests covering zero width/height, oversized dimensions, uint32-max values, signed-bit values, normal dimensions, and boundary cases.
+
+**Files changed**:
+- `src/formats/DPXDecoder.ts`
+- `src/formats/DPXDecoder.test.ts`
+
+## Issue: MED-31 — TIFF IFD entry count unbounded
+
+**Root cause**: In `TIFFFloatDecoder.ts` (~lines 138, 141), `parseIFD()` read the IFD entry count from the file as a 16-bit unsigned integer but performed no validation on the value. A malformed or malicious TIFF file could specify up to 65,535 entries, causing excessive memory allocation and processing time as the decoder attempted to parse that many IFD entries.
+
+**Fix**:
+- Added a `MAX_IFD_ENTRIES = 1024` constant as an upper bound for IFD entry counts
+- Added validation in `parseIFD()` that throws a `DecoderError` when the entry count exceeds the limit
+- `getTIFFInfo()` catches the error and returns `null`; `isFloatTIFF()` returns `false` for files with excessive IFD entries
+
+**Tests added**: 7 regression tests covering normal entry counts, boundary values (1024 accepted, 1025 rejected), max uint16 value, big-endian files, and `getTIFFInfo`/`isFloatTIFF` behavior for excessive counts.
+
+**Files changed**:
+- `src/formats/TIFFFloatDecoder.ts`
+- `src/formats/TIFFFloatDecoder.test.ts`
+
+## Issue: MED-32 — DPX scanline width overflow
+
+**Root cause**: In `DPXDecoder.ts` (~lines 169-170), `decodeDPX()` computed pixel data size from declared image dimensions and bit depth without validating the result against the actual file buffer size. A malformed or malicious DPX file could declare dimensions that imply more pixel data than the file contains, leading to out-of-bounds reads.
+
+**Fix**:
+- Added pixel data size vs file size validation in `decodeDPX()` that computes the expected data size for the declared dimensions and bit depth, rejecting the file if it exceeds the available buffer data
+- Moved bit depth validation before size computation so invalid bit depths are caught early
+- Handles all DPX bit depths: 8, 10 (packed), 12, and 16
+
+**Tests added**: 8 regression tests covering normal decoding, tampered dimensions for each bit depth, large width edge case, exact-fit files, and little-endian files.
+
+**Files changed**:
+- `src/formats/DPXDecoder.ts`
+- `src/formats/DPXDecoder.test.ts`
+
+## Issue: MED-44 — Worker Transferable validation missing
+
+**Root cause**: In `renderWorker.worker.ts` (~lines 42-49), the render worker accepted HDR image data and SDR bitmaps without validating them before processing. Detached ArrayBuffers, closed ImageBitmaps, wrong types, or invalid dimensions could cause silent failures or crashes during rendering.
+
+**Fix**:
+- Added `isArrayBufferDetached()` helper with `.detached` property check and `byteLength` fallback for broader browser support
+- Added `validateHDRImageData()` that checks type, detachment state, dimensions, and channel count
+- Added `validateSDRBitmap()` that checks type, closed state, and dimensions
+- Both render handlers (`renderHDR` and `renderSDR`) validate inputs before processing and return `renderError` on failure
+
+**Tests added**: 21 regression tests covering detached buffers, wrong types, closed bitmaps, invalid dimensions, channel validation, and integration through handleMessage.
+
+**Files changed**:
+- `src/workers/renderWorker.worker.ts`
+- `src/workers/renderWorker.worker.test.ts`
+
+## Issue: MED-45 — LUT cache key incomplete in effect processor
+
+**Root cause**: In `effectProcessor.worker.ts` (~lines 144-226), the vibrance 3D LUT cache key only included `vibrance` and `skinProtection`, but the LUT output also depends on `lutSize`, `skinHueCenter`, `skinHueRange`, and `skinProtectionMin`. Changing any of those four parameters returned a stale cached LUT instead of rebuilding it. The same issue existed in the main-thread implementation in `EffectProcessor.ts`.
+
+**Fix**:
+- Extended the vibrance 3D LUT cache key to include all six parameters that affect the output: `lutSize`, `skinHueCenter`, `skinHueRange`, `skinProtectionMin`, `vibrance`, and `skinProtection`
+- Applied the fix to both the worker (`effectProcessor.worker.ts`) and main-thread (`EffectProcessor.ts`) implementations
+
+**Tests added**: 5 new tests across two files verifying cache hit, cache miss on parameter change, and all 6 fields stored in the cache key.
+
+**Files changed**:
+- `src/workers/effectProcessor.worker.ts`
+- `src/utils/effects/EffectProcessor.ts`
+- `src/workers/effectProcessor.worker.test.ts`
+- `src/utils/effects/EffectProcessor.test.ts`
+
+## Issue: LOW-08 — EXR layer property not synced after setEXRLayer
+
+**Root cause**: In `FileSourceNode.ts` (~lines 1855-1885), calling `setEXRLayer()` updated the internal `currentExrLayer` field but did not sync the value back to the `exrLayer` node property. Conversely, setting the `exrLayer` property externally did not trigger `setEXRLayer()`, so the internal field and the property could diverge.
+
+**Fix**:
+- Added bidirectional sync between the `exrLayer` property and the internal `currentExrLayer` field
+- Added a `propertyChanged` listener that triggers `setEXRLayer()` when the property is set externally
+- Added a `_syncingExrLayer` re-entrancy guard to prevent infinite loops when `loadEXRFromBuffer` sets the property
+
+**Tests added**: 3 regression tests covering method-to-property sync, property-to-field sync, and serialization round-trip.
+
+**Files changed**:
+- `src/nodes/sources/FileSourceNode.ts`
+- `src/nodes/sources/FileSourceNode.test.ts`
+
+## Issue: LOW-16 — Transform history spurious entries from float precision
+
+**Root cause**: In `AppTransformWiring.ts` (~lines 53-66), transform property changes were compared using strict equality (`!==`). Floating-point arithmetic produces tiny rounding errors (e.g. `0.1 + 0.2 !== 0.3`), so even no-op transforms could register as changed and push spurious entries into the undo history.
+
+**Fix**:
+- Added `TRANSFORM_EPSILON = 1e-6` constant and a `hasSignificantChange()` helper that returns `true` only when the absolute difference exceeds the epsilon
+- Replaced strict equality with epsilon comparison for all numeric transform properties (rotation, scale.x/y, translate.x/y)
+- Boolean comparisons (flipH, flipV) remain unchanged since they are not affected by float precision
+
+**Tests added**: 11 new tests — 6 integration tests (sub-epsilon rejection, above-epsilon acceptance) and 5 unit tests for `hasSignificantChange` (boundary values, negative values, epsilon reasonableness).
+
+**Files changed**:
+- `src/AppTransformWiring.ts`
+- `src/AppTransformWiring.test.ts`
+
+## Issue #350: MED-33 — TIFF LZW chain corruption
+
+**Root cause**: Three issues in `decompressLZW()`:
+1. **bitBuffer integer overflow**: Signed right shift (`>>`) corrupted extracted codes when `bitBuffer` exceeded 31 bits. Fixed by using unsigned right shift (`>>>`) and trimming `bitBuffer` after each read.
+2. **No validation of out-of-range codes**: `code > nextCode` was handled identically to `code === nextCode` (the valid KwKwK special case), silently producing garbage from uninitialized table entries. Fixed by splitting into explicit `code === nextCode` and `code > nextCode` (throws `DecoderError`).
+3. **No chain cycle detection**: Circular prefix chains in corrupted data could infinite-loop `outputString()` and `firstChar()`. Fixed with `MAX_CHAIN_DEPTH` (4096) guard. Also added validation that the first code after CLEAR must be a literal (0-255).
+
+**Tests added**: 8 regression tests in `TIFFFloatDecoder.test.ts` — valid round-trips, corruption detection (`code > nextCode`, non-literal after CLEAR), KwKwK special case, code size transitions, large data, table-full boundary (4096 entries).
+
+**Files changed**:
+- `src/formats/TIFFFloatDecoder.ts`
+- `src/formats/TIFFFloatDecoder.test.ts`
+
+## Issue #351: MED-34 — JPEG Gainmap MPF offset+size overflow
+
+**Root cause**: MPF offset and size values read from binary data were not validated against buffer bounds before use. In `parseGainmapJPEG()`, `offset + size` could exceed `buffer.byteLength`, leading to truncated/incorrect XMP extraction. In `decodeGainmapToFloat32()`, out-of-bounds `buffer.slice()` produced empty or truncated blobs with unhelpful errors.
+
+**Fix**: Added bounds validation in both `parseGainmapJPEG()` (gainmap entry) and `decodeGainmapToFloat32()` (both gainmap and base image slices). Throws descriptive `DecoderError` with offset, size, sum, and buffer length. Added JS integer safety comment documenting that `Uint32 + Uint32 < Number.MAX_SAFE_INTEGER`.
+
+**Tests added**: 10 new tests — 7 for `parseGainmapJPEG` (overflow, boundary, exact-fit, large offset/size, zero-size, valid parse, MPF fix-up overflow) and 3 for `decodeGainmapToFloat32` (gainmap slice overflow, base image slice overflow).
+
+**Files changed**:
+- `src/formats/JPEGGainmapDecoder.ts`
+- `src/formats/JPEGGainmapDecoder.test.ts`
+
+## Issue #352: LOW-17 — TIFF LZW string length overflow in Uint16Array
+
+**Root cause**: `tableLength` in `decompressLZW()` used `Uint16Array` (max 65535). Analysis showed max string length under valid LZW with 12-bit codes is ~3838, so overflow was theoretically impossible. However, corrupted data could potentially exploit this.
+
+**Fix**: Upgraded `tableLength` from `Uint16Array` to `Uint32Array` as defense-in-depth (16KB vs 8KB, negligible cost). Added detailed comment documenting the safety analysis.
+
+**Tests added**: 2 regression tests — CHAIN009 (deep chains via KwKwK special case, 200 entries, pixel-exact verification) and CHAIN010 (CLEAR resets with three table rebuilds, verifies no length accumulation across boundaries, pixel-exact verification).
+
+**Files changed**:
+- `src/formats/TIFFFloatDecoder.ts`
+- `src/formats/TIFFFloatDecoder.test.ts`
+
+## Issue #353: LOW-18 — TIFF unknown tag type returns 1 silently
+
+**Root cause**: `getTypeSize()` only handled TIFF types 1-5 and returned 1 for all others. This caused incorrect IFD entry size calculations for types 6-12 (silently misparsed) and would misinterpret any unknown/extended types.
+
+**Fix**: 
+- Added all TIFF 6.0 standard types 6-12 (SBYTE, UNDEFINED, SSHORT, SLONG, SRATIONAL, FLOAT, DOUBLE) with correct byte sizes
+- Unknown types now return 0 (per TIFF 6.0 Section 7: "skip over fields containing an unexpected field type")
+- `parseIFD()` skips IFD entries with typeSize=0 instead of misinterpreting them
+- Real-world TIFFs with extended types (13/IFD, 16/LONG8) now parse correctly instead of being rejected
+
+**Tests added**: 9 tests — type 0/13/16/42/99 skip gracefully, unknown tag among valid tags still decodes with pixel verification, all types 1-12 size verification, LE/BE regression tests, required-tag-with-unknown-type handling.
+
+**Files changed**:
+- `src/formats/TIFFFloatDecoder.ts`
+- `src/formats/TIFFFloatDecoder.test.ts`
+
+## Issue #354: LOW-19 — TIFF bits-per-sample not validated for float format
+
+**Root cause**: `readFloatSample()` had a catch-all `else` branch that silently treated ANY `bytesPerSample` value (including invalid ones like 1, 3, etc.) as 16-bit half-float. While `decodeTIFFFloat` had BPS validation, the internal function lacked defense-in-depth.
+
+**Fix**:
+- Made `readFloatSample` explicit: `if (===4)` → `else if (===8)` → `else if (===2)` → `else throw DecoderError`
+- Removed redundant `console.warn` before throws in both BPS and compression rejection paths
+- Added `isFloatTIFF` guard for invalid BPS values (returns false for non-16/32/64)
+
+**Tests added**: 7 tests — BPS=24/8/1/4/12 rejection, valid 32/64/16-bit round-trips with pixel verification, `isFloatTIFF` returns false for float-with-invalid-BPS.
+
+**Files changed**:
+- `src/formats/TIFFFloatDecoder.ts`
+- `src/formats/TIFFFloatDecoder.test.ts`
+
+## Issue #355: MED-10 — FileSourceNode properties inconsistent with defineNodeProperty
+
+**Root cause**: `url`, `originalUrl`, and `exrLayer` properties were defined via raw `properties.add()` with manual field management, requiring duplicate writes (`this.url = x; this.properties.setValue('url', x)`) at every call site. This was error-prone and could lead to state divergence (field vs property container out of sync).
+
+**Fix**:
+- Converted `url`, `originalUrl`, `exrLayer` to `defineNodeProperty` — eliminates dual state, getters/setters auto-sync with property container
+- Removed all 16+ duplicate `properties.setValue()` calls
+- Added `propertyChanged` listener for `exrLayer` to sync `currentExrLayer` and trigger re-decode when set externally (e.g., deserialization)
+- Made `_syncingExrLayer` guard exception-safe with try/finally
+- Kept `width`, `height`, `isHDR` as `properties.add()` (getter/method conflicts)
+
+**Tests added**: 16 tests (FSN-200–FSN-215) — property registration, getter/setter wiring, change notifications, default values, serialization round-trip, fromJSON listener trigger, cold-sync path, no duplicate state/notifications.
+
+**Files changed**:
+- `src/nodes/sources/FileSourceNode.ts`
+- `src/nodes/sources/FileSourceNode.test.ts`
+
+## Issue #356: LOW-12 — Canvas dirty flag not reset after load failures
+
+**Root cause**: `canvasDirty` was only set to `true` at the end of successful loads. When a load failed (threw), the flag stayed `false`, causing `getCanvas()` to return a stale cached canvas from a previous successful load.
+
+**Fix**: Added `this.canvasDirty = true` at the START of all 4 public load entry points (`load()`, `loadFromEXR()`, `setEXRLayer()`, `loadFile()`), before any async work. This ensures that even on failure, the stale canvas cache is invalidated.
+
+**Tests added**: 6 tests (FSN-044 through FSN-049) — dirty flag cleared after success, dirty flag set on `loadFile` failure, `load()` failure, `loadFromEXR()` failure, `setEXRLayer()` failure, and correct behavior across sequential loads.
+
+**Files changed**:
+- `src/nodes/sources/FileSourceNode.ts`
+- `src/nodes/sources/FileSourceNode.test.ts`
+
+## Issue #357: LOW-20 — Frame accumulator overflow on speed changes
+
+**Root cause**: `accumulateFrames` and `accumulateDelta` in `PlaybackTimingController` had no upper bounds on delta time or frames-per-tick. Large timing gaps (tab backgrounding, GC pauses) produced unbounded frame bursts and visual glitches.
+
+**Fix**:
+- Added `MAX_FRAME_DELTA_MS = 500` — clamps raw delta to prevent multi-second bursts
+- Added `MAX_FRAMES_PER_TICK = 4` — caps frame advances in realtime mode
+- Negative deltas (clock regression) clamped to 0
+- Accumulator reset after overflow cap to prevent continued overflow
+- Same clamping applied to `accumulateDelta` (mediabunny path)
+
+**Tests added**: 13 tests (PTC-LOW20-001 through PTC-LOW20-013) — large delta clamping, pre-loaded accumulator cap, accumulator reset, negative deltas, rapid speed changes, normal playback unaffected, playAllFrames mode overflow, boundary at MAX_FRAMES_PER_TICK, high-speed 60fps/8x natural cap.
+
+**Files changed**:
+- `src/core/session/PlaybackTimingController.ts`
+- `src/core/session/PlaybackTimingController.test.ts`
+
+## Issue #358: LOW-21 — Dropped frame counter never reset
+
+**Root cause**: `droppedFrameCount` only reset when `play()` was called. It accumulated indefinitely across pause/seek/range-change cycles with no way to reset.
+
+**Fix**: 
+- Added `resetDroppedFrames()` public method through `PlaybackEngine` → `SessionPlayback` → `Session`
+- Counter auto-resets ONLY on `play()` (via existing `resetFpsTracking()`) — matching `HTMLVideoElement.getVideoPlaybackQuality()` pattern
+- Counter is PRESERVED on `pause()`, `goToFrame()`, `setInOutRange()` so consumers can read post-playback metrics
+- Manual `resetDroppedFrames()` available for explicit reset
+
+**Design rationale**: Domain expert review identified that resetting on `pause()` destroys the metric at the exact moment consumers need it. Standard video engines keep counters across pause/resume; only new playback segments start fresh.
+
+**Tests added**: 8 tests (PE-168 through PE-169g) — counter preserved after pause, seek, range change; manual reset; post-reset increment; play-pause-play cycle; play() as sole auto-reset; readability between pause and play.
+
+**Files changed**:
+- `src/core/session/PlaybackEngine.ts`
+- `src/core/session/SessionPlayback.ts`
+- `src/core/session/Session.ts`
+- `src/core/session/PlaybackEngine.test.ts`
+
+## Issue #359: MED-39 — AudioCoordinator dispose doesn't stop playback first
+
+**Root cause**: `AudioCoordinator.dispose()` called `_manager.dispose()` without first stopping playback at the coordinator level. The `_isPlaying` flag was never reset, and the host was never notified via `onAudioPathChanged()`. This left `isWebAudioActive` returning true after dispose and could leave HTMLVideoElement permanently muted.
+
+**Fix**: `dispose()` now checks `_isPlaying` and, if true, stops playback (`_isPlaying = false`, `_manager.pause()`) and notifies the host via `onAudioPathChanged()` BEFORE tearing down resources. When nothing is playing, dispose proceeds as before.
+
+**Tests added**: 7 tests (AC-073 through AC-079) — active playback dispose with ordering verification (callback fires before manager.dispose()), no-op dispose, double dispose, resource release verification, isWebAudioActive state verification, dispose during in-flight loadFromVideo, video-fallback mode dispose.
+
+**Files changed**:
+- `src/audio/AudioCoordinator.ts`
+- `src/audio/AudioCoordinator.test.ts`
+- `src/core/session/SessionPlayback.ts`
+- `src/core/session/Session.ts`
+
+## Issue #360: MED-18 — WebSocketClient malformed message flood not rate-limited
+
+**Root cause**: `WebSocketClient.emitMalformedMessageWarning()` had a basic rate limit that silently stopped emitting warnings after 5 per window, with no indication to the caller that messages were being suppressed. A flood of malformed messages could exhaust the warning budget silently.
+
+**Fix**: Enhanced the rate limiter with proper notification:
+- When threshold (5 per 10s window) is exceeded, a single `MALFORMED_RATE_LIMITED` warning event is emitted once per window
+- When a new window starts after suppression, a summary warning reports the exact suppressed count from the previous window
+- All counters (`_malformedSuppressedCount`, `_rateLimitNotified`) properly reset on connection open, cleanup, and window reset
+- Valid messages are never affected by the rate limiter
+
+**Tests added**: 8 tests (WSC-031 through WSC-037 plus WSC-034a, WSC-034b, WSC-035a-d) — malformed message detection, diagnostic info, preview truncation, rate limiting at threshold, boundary behavior at exactly threshold, rate-limit notification uniqueness, window reset with suppressed count summary, multi-window accumulation verification, no false summaries, valid messages unaffected during flood, reconnect counter reset.
+
+**Files changed**:
+- `src/network/WebSocketClient.ts`
+- `src/network/WebSocketClient.test.ts`
+
+## Issue #361: MED-49 — Brightness unclamped in SDR path before contrast
+
+**Root cause**: In the color grading pipeline, brightness is applied as an additive offset. When brightness pushes values negative (e.g., brightness=-0.8 on a dark pixel at 0.1), the subsequent contrast multiplication around pivot 0.5 amplifies these negative values, producing visual artifacts.
+
+**Fix**: Added `max(color, 0.0)` clamp after brightness and before contrast in all three backends:
+- GLSL: `viewer.frag.glsl` line 1094 — `color.rgb = max(color.rgb, vec3(0.0))`
+- WGSL: `primary_grade.wgsl` line 138 — `color = vec4f(max(color.rgb, vec3f(0.0)), color.a)`
+- CPU/LUT: `CacheLUTNode.ts` lines 146-148 — `Math.max(r/g/b, 0)`
+The lower-only clamp is safe for both SDR and HDR (negative light is physically meaningless; values > 1.0 are preserved for HDR headroom).
+
+**Tests added**: 5 CPU regression tests (ACT-013 through ACT-017) + 1 GPU integration test in `primary-grade.gpu-test.ts` — negative brightness with contrast, maximum darkness, positive brightness unaffected, contrast amplification prevention, brightness=0 identity, and GPU shader clamp verification.
+
+**Files changed**:
+- `src/render/shaders/viewer.frag.glsl`
+- `src/render/webgpu/shaders/primary_grade.wgsl`
+- `src/nodes/CacheLUTNode.ts`
+- `src/nodes/CacheLUTNode.test.ts`
+- `src/render/__gpu__/primary-grade.gpu-test.ts`
+
+## Issue #362: MED-50 — HLG OOTF gain extremely high for near-black
+
+**Root cause**: The HLG OOTF (BT.2100) used `pow(max(ys, 1e-6), 0.2)` for computing scene luminance gain. For near-black pixels (`ys` → 0), the power function produces disproportionately high gain (e.g., `ys=0.001` → gain 0.251, a 251× amplification of shadow noise). The `max(ys, 1e-6)` guard also created a plateau where sub-epsilon pixels all got identical non-zero gain, brightening pure black.
+
+**Fix**: Replaced the bare power function with a **linear ramp below threshold** (`OOTF_THRESH = 0.01`):
+- Below threshold: `ootfGain = ys * OOTF_SLOPE` (where `OOTF_SLOPE = 39.810717 = THRESH^(-0.8)`)
+- Above threshold: `ootfGain = pow(ys, 0.2)` (standard BT.2100)
+- C0-continuous at boundary: both expressions evaluate to `THRESH^0.2` at `ys = THRESH`
+- Black (`ys=0`) produces exactly zero gain (not epsilon)
+- Applied consistently across all 4 backends: GLSL, WGSL, TS reference, GPU test reference
+
+**Tests added**: 6 CPU regression tests (XE-082 through XE-087) + 2 GPU integration tests — near-black gain bounds, extreme near-black, gain bounded for small luminance, C0-continuity at threshold, normal values unaffected, monotonicity, GPU near-black shader verification.
+
+**Files changed**:
+- `src/render/shaders/viewer.frag.glsl`
+- `src/render/webgpu/shaders/common.wgsl`
+- `src/render/__tests__/shaderMathReference.ts`
+- `src/render/__tests__/shaderMathCrossEcosystem.test.ts`
+- `src/render/__gpu__/linearize.gpu-test.ts`
+
+## Issue #363: MED-23 — DisplayProfileControl slider range not validated on load
+
+**Root cause**: `DisplayProfileControl` did not validate slider values when loading from localStorage or when receiving external state via `setState()`. Out-of-range, NaN, or non-finite values could be stored and used, causing undefined behavior in the display gamma/brightness pipeline.
+
+**Fix**: Added a `SLIDER_RANGES` constant defining min/max/default for each slider property (`displayGamma: [0.1, 4.0]`, `displayBrightness: [0.0, 2.0]`, `customGamma: [0.1, 10.0]`) and a `clampSliderValue()` helper that:
+- Returns the default for NaN, undefined, or non-finite inputs (with console.warn)
+- Clamps out-of-range values to [min, max] (with console.warn)
+- Passes through valid in-range values silently
+Applied in both the constructor (localStorage load path) and `setState()` (external state path).
+
+**Tests added**: 20 tests (DPC-120 through DPC-139) — valid pass-through, above-max/below-min clamping for all 3 sliders, NaN/Infinity/-Infinity fallback to defaults, UI slider sync after clamp, constructor localStorage validation, event emission with clamped values, boundary min/max acceptance, duplicate setState deduplication, non-number fallback.
+
+**Files changed**:
+- `src/ui/components/DisplayProfileControl.ts`
+- `src/ui/components/DisplayProfileControl.test.ts`
+
+## Issue #364: LOW-09 — Stereo input format not serializable
+
+**Root cause**: `FileSourceNode.stereoInputFormat` property was not included in session serialization. When a user set a stereo input format (side-by-side, over-under, separate) and saved/loaded a session, the stereo format was lost.
+
+**Fix**:
+- Added `stereoInputFormat?: StereoInputFormat` to the `MediaReference` interface in `SessionState.ts`
+- Added serialization in `SessionSerializer.serializeMedia()` — reads from source or fileSourceNode
+- Added deserialization in `SessionSerializer.fromJSON()` — validates against valid format values before applying to both source and fileSourceNode
+- Added a validated setter on `FileSourceNode` that rejects invalid format values
+- Updated `FileSourceNode.toJSON()` to include stereoInputFormat when set
+- Backwards compatible: old sessions without the field load normally
+
+**Tests added**: 11 serializer tests (LOW09-001 through LOW09-011) + 7 node tests (FSN-221 through FSN-227) — serialization from source/fileSourceNode, omission when absent, deserialization with validation, invalid value rejection, backwards compatibility, null source safety, round-trip for all 3 valid formats.
+
+**Files changed**:
+- `src/core/session/SessionState.ts`
+- `src/core/session/SessionSerializer.ts`
+- `src/core/session/SessionSerializer.stereoFormat.test.ts` (new)
+- `src/nodes/sources/FileSourceNode.ts`
+- `src/nodes/sources/FileSourceNode.test.ts`
+
+## Issue #365: LOW-10 — BaseSourceNode.connectInput warns instead of throwing
+
+**Root cause**: `BaseSourceNode.connectInput()` logged a `console.warn` when called, but source nodes by definition cannot accept inputs. A warning allowed callers to silently build incorrect graph topologies without detecting the programming error.
+
+**Fix**: Changed `console.warn('Source nodes cannot have inputs')` to `throw new Error(...)` with a descriptive message including the node name and type (e.g., `Source node "my-source" (type: FileSource) cannot accept inputs`). No production code calls `connectInput` on source nodes, so this is a safe invariant enforcement.
+
+**Tests added**: 10 tests in `BaseSourceNode.test.ts` — throws Error, message contains "cannot accept inputs"/node name/type, no side effects after throw, getMetadata defaults and defensive copy, constructor correctness.
+
+**Files changed**:
+- `src/nodes/sources/BaseSourceNode.ts`
+- `src/nodes/sources/BaseSourceNode.test.ts` (new)
+
+## Issue #366: LOW-11 — StackGroupNode chosenAudioInput not range-validated
+
+**Root cause**: `StackGroupNode.chosenAudioInput` property accepted any value without validation. Out-of-range values (negative, NaN, beyond inputs count) were stored and could cause undefined behavior when used to select audio sources.
+
+**Fix**: Two-layer validation approach:
+- **Write-time transform**: Sanitizes input (NaN/Infinity → 0, negative → 0, fractional → truncated integer) but stores the raw sanitized value without clamping to `inputs.length`
+- **Read-time getter** `getChosenAudioInput()`: Returns `Math.min(stored, Math.max(0, inputs.length - 1))`, ensuring consumers always get a valid index even after inputs are disconnected
+
+This design solves both the validation problem AND two subtle issues found in review:
+1. Stale values after input disconnection (read-time clamping handles it automatically)
+2. Serialization order dependency (stored value preserved even when deserialized before inputs reconnected)
+
+**Tests added**: 10 tests — valid values, above-max clamping (stored vs effective), negative, NaN, Infinity, fractional truncation, getter auto-clamps after disconnect, multi-disconnect, serialization round-trip with late input reconnection.
+
+**Files changed**:
+- `src/nodes/groups/StackGroupNode.ts`
+- `src/nodes/groups/StackGroupNode.test.ts`
+
+## Issue #367: LOW-14 — Stereo eye offset not bounds-validated
+
+**Root cause**: `StereoRenderer` passed raw `state.offset` to `applyHorizontalOffset()` without validation. NaN, Infinity, or extreme values would cause incorrect pixel shifts or unexpected rendering behavior.
+
+**Fix**: Added exported `validateStereoOffset()` function that:
+- Returns 0 for NaN or non-number values (with warning)
+- Clamps to [-50, 50] range (matching the documented percentage-of-width range)
+- Clamps Infinity/-Infinity to 50/-50 (with warning)
+- Passes valid values unchanged
+Applied at both entry points: `applyStereoMode()` and `applyStereoModeWithEyeTransforms()`.
+
+**Tests added**: 16 tests — valid values, boundary values, above/below range clamping, NaN, Infinity/-Infinity, -0 behavior, non-number input, default state validity, and 3 integration tests exercising full rendering path with invalid offsets.
+
+**Files changed**:
+- `src/stereo/StereoRenderer.ts`
+- `src/stereo/StereoRenderer.test.ts`
+
+## Issue #368: LOW-15 — Stereo side-by-side odd width asymmetry
+
+**Root cause**: In `extractStereoEyes()`, both left and right eye images were allocated with `Math.floor(width/2)` for side-by-side mode (and `Math.floor(height/2)` for over-under). For odd dimensions, this dropped the middle pixel/row — e.g., a 1921px wide image extracted two 960px eyes, losing 1 column of source data.
+
+**Fix**:
+- Side-by-side: left eye gets `Math.floor(width/2)`, right eye gets `width - Math.floor(width/2)` (extra pixel to right)
+- Over-under: top eye gets `Math.floor(height/2)`, bottom eye gets `height - Math.floor(height/2)` (extra row to bottom)
+- Invariant: `leftWidth + rightWidth === width` and `topHeight + bottomHeight === height` always hold
+- Same fix applied consistently in extraction, rendering (renderSideBySide, renderOverUnder, renderMirror)
+
+**Tests added**: 15 tests — even/odd width extraction, even/odd height extraction, edge cases (width=2,3,1921; height=2,3), pixel-level data verification, dimension sum assertions, integration rendering tests with odd dimensions verifying no uninitialized pixels.
+
+**Files changed**:
+- `src/stereo/StereoRenderer.ts`
+- `src/stereo/StereoRenderer.test.ts`
+
+## Issue #369: LOW-22 — ImageBitmap close error handling incomplete
+
+**Root cause**: In `renderWorker.worker.ts`, `ImageBitmap.close()` calls were partially unprotected. On the success path, `msg.bitmap.close()` was called without a try-catch. If the bitmap had already been transferred or closed (e.g., due to a race condition), this would throw an unhandled DOMException in the worker.
+
+**Fix**: Added `safeCloseBitmap()` helper that:
+- Pre-checks `width === 0 && height === 0` to detect already-closed/transferred bitmaps (skips close, logs debug)
+- Wraps `bitmap.close()` in try-catch, logging failures at debug level (not warn/error — double-close is expected in some race conditions)
+- Replaces all raw `bitmap.close()` calls in the renderSDR handler (both success and error paths)
+
+**Tests added**: 7 tests (RW-SCB-001 through RW-SCB-007) — normal close, already-closed bitmap, close throws (transferred), multiple sequential closes, zero-dimension skip, partial-zero-dimension boundary, and integration test for error-path bitmap cleanup.
+
+**Files changed**:
+- `src/workers/renderWorker.worker.ts`
+- `src/workers/renderWorker.worker.test.ts`

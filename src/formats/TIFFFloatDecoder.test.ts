@@ -277,6 +277,34 @@ describe('TIFFFloatDecoder', () => {
       const buffer = new ArrayBuffer(8);
       expect(isFloatTIFF(buffer)).toBe(false);
     });
+
+    it('should return false for float TIFF with invalid BPS (24-bit)', () => {
+      // SampleFormat=3 (float) but BPS=24 is not a supported float width (16/32/64).
+      // We create a valid 32-bit float TIFF and then patch the BPS tag value to 24.
+      const buffer = createTestFloatTIFF({ sampleFormat: 3, bitsPerSample: 32, channels: 1 });
+      const view = new DataView(buffer);
+      const le = true;
+      const ifdOffset = 8;
+      const numTags = view.getUint16(ifdOffset, le);
+
+      // Find BitsPerSample tag (258) and patch its value to 24
+      for (let i = 0; i < numTags; i++) {
+        const tagPos = ifdOffset + 2 + i * 12;
+        const tagId = view.getUint16(tagPos, le);
+        if (tagId === 258) {
+          view.setUint16(tagPos + 8, 24, le);
+          break;
+        }
+      }
+
+      expect(isFloatTIFF(buffer)).toBe(false);
+    });
+
+    // NOTE: The else-throw branch in readFloatSample (for unsupported bytesPerSample)
+    // is not directly testable through the public API because isFloatTIFF and
+    // decodeTIFFFloat both validate BPS before readFloatSample is ever called.
+    // The guard exists as defense-in-depth against internal state corruption,
+    // similar to the MAX_CHAIN_DEPTH guard in LZW decoding.
   });
 
   describe('getTIFFInfo', () => {
@@ -595,6 +623,90 @@ describe('TIFFFloatDecoder', () => {
       await expect(decodeTIFFFloat(buffer)).rejects.toThrow('16-bit half-float, 32-bit float, 64-bit double');
     });
 
+    it('should throw for 8-bit float TIFF (integer data masquerading as float)', async () => {
+      const buffer = createTestFloatTIFF({ bitsPerSample: 32, sampleFormat: 3 });
+      const view = new DataView(buffer);
+      const le = true;
+      const ifdOffset = 8;
+      const numTags = view.getUint16(ifdOffset, le);
+      for (let i = 0; i < numTags; i++) {
+        const tagPos = ifdOffset + 2 + i * 12;
+        const tagId = view.getUint16(tagPos, le);
+        if (tagId === 258) {
+          const count = view.getUint32(tagPos + 4, le);
+          if (count === 1) {
+            view.setUint16(tagPos + 8, 8, le);
+          } else {
+            const extOffset = view.getUint32(tagPos + 8, le);
+            view.setUint16(extOffset, 8, le);
+          }
+          break;
+        }
+      }
+      await expect(decodeTIFFFloat(buffer)).rejects.toThrow('Unsupported float bits per sample: 8');
+    });
+
+    it('should throw for unsupported bits per sample values (1, 4, 12)', async () => {
+      for (const bps of [1, 4, 12]) {
+        const buffer = createTestFloatTIFF({ bitsPerSample: 32, sampleFormat: 3 });
+        const view = new DataView(buffer);
+        const le = true;
+        const ifdOffset = 8;
+        const numTags = view.getUint16(ifdOffset, le);
+        for (let i = 0; i < numTags; i++) {
+          const tagPos = ifdOffset + 2 + i * 12;
+          const tagId = view.getUint16(tagPos, le);
+          if (tagId === 258) {
+            const count = view.getUint32(tagPos + 4, le);
+            if (count === 1) {
+              view.setUint16(tagPos + 8, bps, le);
+            } else {
+              const extOffset = view.getUint32(tagPos + 8, le);
+              view.setUint16(extOffset, bps, le);
+            }
+            break;
+          }
+        }
+        await expect(decodeTIFFFloat(buffer)).rejects.toThrow(`Unsupported float bits per sample: ${bps}`);
+      }
+    });
+
+    it('should still decode valid 32-bit float TIFF after BPS validation is added', async () => {
+      const buffer = createTestFloatTIFF({
+        width: 2,
+        height: 2,
+        channels: 3,
+        bitsPerSample: 32,
+        sampleFormat: 3,
+        pixelValues: [1.0, 0.5, 0.25, 0.75, 0.0, 1.0, 0.3, 0.6, 0.9, 0.1, 0.2, 0.4],
+      });
+      const result = await decodeTIFFFloat(buffer);
+      expect(result.width).toBe(2);
+      expect(result.height).toBe(2);
+      expect(result.channels).toBe(4);
+      expect(result.data[0]).toBeCloseTo(1.0, 5);
+      expect(result.data[1]).toBeCloseTo(0.5, 5);
+      expect(result.data[2]).toBeCloseTo(0.25, 5);
+      expect(result.data[3]).toBeCloseTo(1.0, 5); // Alpha filled to 1.0
+    });
+
+    it('should still decode valid 64-bit double TIFF after BPS validation is added', async () => {
+      const buffer = createTestFloatTIFF({
+        width: 1,
+        height: 1,
+        channels: 3,
+        bitsPerSample: 64,
+        sampleFormat: 3,
+        pixelValues: [0.5, 0.25, 0.75],
+      });
+      const result = await decodeTIFFFloat(buffer);
+      expect(result.width).toBe(1);
+      expect(result.height).toBe(1);
+      expect(result.data[0]).toBeCloseTo(0.5, 5);
+      expect(result.data[1]).toBeCloseTo(0.25, 5);
+      expect(result.data[2]).toBeCloseTo(0.75, 5);
+    });
+
     it('should decode 16-bit half-float TIFF', async () => {
       const buffer = createTestFloatTIFF({
         width: 2,
@@ -784,6 +896,96 @@ describe('TIFFFloatDecoder', () => {
 
       expect(result.metadata.bigEndian).toBe(true);
       expect(result.metadata.originalChannels).toBe(4);
+    });
+  });
+
+  describe('IFD entry count validation', () => {
+    it('should accept a normal IFD entry count (10 entries)', async () => {
+      // createTestFloatTIFF creates a TIFF with 10 IFD entries — well within limits
+      const buffer = createTestFloatTIFF({ channels: 3 });
+      const result = await decodeTIFFFloat(buffer);
+      expect(result.width).toBe(2);
+      expect(result.height).toBe(2);
+    });
+
+    it('should reject IFD entry count exceeding 1024', async () => {
+      // Create a minimal TIFF header with an absurdly high IFD entry count
+      const buffer = new ArrayBuffer(64);
+      const view = new DataView(buffer);
+      view.setUint16(0, TIFF_LE, false); // Byte order
+      view.setUint16(2, TIFF_MAGIC, true); // Magic number
+      view.setUint32(4, 8, true); // IFD offset = 8
+      view.setUint16(8, 1025, true); // 1025 entries — just over the limit
+
+      await expect(decodeTIFFFloat(buffer)).rejects.toThrow('IFD entry count 1025 exceeds maximum of 1024');
+    });
+
+    it('should reject maximum uint16 IFD entry count (65535)', async () => {
+      const buffer = new ArrayBuffer(64);
+      const view = new DataView(buffer);
+      view.setUint16(0, TIFF_LE, false);
+      view.setUint16(2, TIFF_MAGIC, true);
+      view.setUint32(4, 8, true);
+      view.setUint16(8, 65535, true); // Maximum uint16
+
+      await expect(decodeTIFFFloat(buffer)).rejects.toThrow('IFD entry count 65535 exceeds maximum of 1024');
+    });
+
+    it('should accept IFD entry count at the boundary (1024)', async () => {
+      // Build a buffer large enough to hold the TIFF header + 1024 IFD entries
+      // Each IFD entry is 12 bytes, plus 2 bytes for count, plus 4 bytes for next IFD offset
+      const ifdOffset = 8;
+      const ifdSize = 2 + 1024 * 12 + 4;
+      const totalSize = ifdOffset + ifdSize;
+      const buffer = new ArrayBuffer(totalSize);
+      const view = new DataView(buffer);
+      view.setUint16(0, TIFF_LE, false);
+      view.setUint16(2, TIFF_MAGIC, true);
+      view.setUint32(4, ifdOffset, true);
+      view.setUint16(ifdOffset, 1024, true); // Exactly at the limit
+
+      // This should not throw for the entry count limit.
+      // It will fail later because there are no valid image tags, but
+      // the IFD parsing itself should succeed.
+      const info = getTIFFInfo(buffer);
+      // getTIFFInfo returns null on other parse issues, but should NOT throw
+      // from the IFD entry count check
+      expect(info).not.toBeUndefined(); // null is acceptable (missing tags), but no throw
+    });
+
+    it('should return null from getTIFFInfo for excessive IFD entry count', () => {
+      const buffer = new ArrayBuffer(64);
+      const view = new DataView(buffer);
+      view.setUint16(0, TIFF_LE, false);
+      view.setUint16(2, TIFF_MAGIC, true);
+      view.setUint32(4, 8, true);
+      view.setUint16(8, 2000, true); // Over the limit
+
+      // getTIFFInfo catches errors and returns null
+      const info = getTIFFInfo(buffer);
+      expect(info).toBeNull();
+    });
+
+    it('should return false from isFloatTIFF for excessive IFD entry count', () => {
+      const buffer = new ArrayBuffer(64);
+      const view = new DataView(buffer);
+      view.setUint16(0, TIFF_LE, false);
+      view.setUint16(2, TIFF_MAGIC, true);
+      view.setUint32(4, 8, true);
+      view.setUint16(8, 5000, true); // Over the limit
+
+      expect(isFloatTIFF(buffer)).toBe(false);
+    });
+
+    it('should reject excessive IFD entry count in big-endian files', async () => {
+      const buffer = new ArrayBuffer(64);
+      const view = new DataView(buffer);
+      view.setUint16(0, TIFF_BE, false); // Big-endian
+      view.setUint16(2, TIFF_MAGIC, false); // Magic in big-endian
+      view.setUint32(4, 8, false); // IFD offset in big-endian
+      view.setUint16(8, 1025, false); // Entry count in big-endian
+
+      await expect(decodeTIFFFloat(buffer)).rejects.toThrow('IFD entry count 1025 exceeds maximum of 1024');
     });
   });
 
@@ -1618,6 +1820,428 @@ describe('TIFFFloatDecoder', () => {
       for (let i = 0; i < result.data.length; i++) {
         expect(result.data[i]).toBe(deflateResult.data[i]);
       }
+    });
+  });
+
+  // ==================== LZW Chain Corruption Regression Tests ====================
+
+  describe('LZW chain corruption detection (MED-33)', () => {
+    // NOTE: Chain cycle detection (MAX_CHAIN_DEPTH) is not directly testable
+    // through the public API since prefix chains are built internally.
+    // The guard exists as defense-in-depth against corrupted table state.
+
+    /**
+     * Helper: build a raw LZW bitstream (MSB-first) from an array of (code, codeSize) pairs.
+     * This lets us craft arbitrary (including corrupted) LZW streams for testing.
+     */
+    function buildRawLZWStream(codes: Array<[number, number]>): Uint8Array {
+      const output: number[] = [];
+      let bitBuffer = 0;
+      let bitsInBuffer = 0;
+
+      for (const [code, codeSize] of codes) {
+        bitBuffer = (bitBuffer << codeSize) | code;
+        bitsInBuffer += codeSize;
+        while (bitsInBuffer >= 8) {
+          bitsInBuffer -= 8;
+          output.push((bitBuffer >> bitsInBuffer) & 0xff);
+        }
+      }
+
+      // Flush remaining bits
+      if (bitsInBuffer > 0) {
+        output.push((bitBuffer << (8 - bitsInBuffer)) & 0xff);
+      }
+
+      return new Uint8Array(output);
+    }
+
+    it('TIFF-LZW-CHAIN001: valid LZW data still decodes correctly after fix', async () => {
+      // Standard round-trip test: compress then decompress via the TIFF pipeline
+      const width = 4,
+        height = 4,
+        channels = 3;
+      const rawBytes = createFloatPixelBytes(width, height, channels, true);
+      const compressed = lzwCompress(rawBytes);
+      const tiffBuffer = createCompressedTIFF(compressed, {
+        width,
+        height,
+        channels,
+        compression: 5,
+        uncompressedSize: rawBytes.length,
+      });
+
+      const result = await decodeTIFFFloat(tiffBuffer);
+
+      expect(result.width).toBe(width);
+      expect(result.height).toBe(height);
+      expect(result.channels).toBe(4);
+
+      const expectedView = new DataView(rawBytes.buffer);
+      for (let i = 0; i < width * height; i++) {
+        for (let c = 0; c < channels; c++) {
+          expect(result.data[i * 4 + c]).toBeCloseTo(expectedView.getFloat32((i * channels + c) * 4, true), 4);
+        }
+      }
+    });
+
+    it('TIFF-LZW-CHAIN002: detects code > nextCode as corruption', async () => {
+      // Craft a stream where a code exceeds the next expected table entry.
+      // After CLEAR (256) at 9-bit, nextCode is 258.
+      // Emit literal 0x41, then code 300 which is way above nextCode (258).
+      const stream = buildRawLZWStream([
+        [256, 9], // CLEAR
+        [0x41, 9], // literal 'A' → oldCode=0x41, nextCode still 258
+        [300, 9], // code 300 > nextCode 258 → corruption
+        [257, 9], // EOI (should not be reached)
+      ]);
+
+      const tiffBuffer = createCompressedTIFF(stream, {
+        width: 1,
+        height: 1,
+        channels: 3,
+        compression: 5,
+        uncompressedSize: 12,
+      });
+
+      await expect(decodeTIFFFloat(tiffBuffer)).rejects.toThrow(/LZW corruption.*code 300/);
+    });
+
+    it('TIFF-LZW-CHAIN003: detects non-literal first code after clear', async () => {
+      // After CLEAR, the first code must be a literal (0-255).
+      // Emit code 258 (a table code) as first code after clear.
+      const stream = buildRawLZWStream([
+        [256, 9], // CLEAR
+        [258, 9], // code 258 is not a literal → corruption
+        [257, 9], // EOI
+      ]);
+
+      const tiffBuffer = createCompressedTIFF(stream, {
+        width: 1,
+        height: 1,
+        channels: 3,
+        compression: 5,
+        uncompressedSize: 12,
+      });
+
+      await expect(decodeTIFFFloat(tiffBuffer)).rejects.toThrow(/first code after clear/);
+    });
+
+    it('TIFF-LZW-CHAIN004: handles special case code === nextCode correctly', async () => {
+      // Tests the valid KwKwK special case where the emitted code equals nextCode.
+      // Sequence: CLEAR, A(0x41), B(0x42) → adds 258=[A,B], nextCode=259, oldCode=B.
+      // Then emit 259 → code === nextCode, so: fc = firstChar(B) = B,
+      // add 259=[B,B], output "BB".
+      const stream = buildRawLZWStream([
+        [256, 9], // CLEAR
+        [0x41, 9], // literal A → oldCode=A, nextCode=258
+        [0x42, 9], // literal B → add 258=[A,B], nextCode=259, oldCode=B
+        [259, 9], // code===nextCode → fc=firstChar(B)=B, add 259=[B,B], output "BB"
+        [257, 9], // EOI
+      ]);
+
+      // Wrap in a TIFF and decode -- should NOT throw
+      const tiffBuffer = createCompressedTIFF(stream, {
+        width: 1,
+        height: 1,
+        channels: 3,
+        compression: 5,
+        uncompressedSize: 12,
+      });
+
+      // Should not reject -- the special case is valid LZW
+      const result = await decodeTIFFFloat(tiffBuffer);
+      expect(result).toBeDefined();
+    });
+
+    it('TIFF-LZW-CHAIN005: handles large valid LZW data with code size transitions', async () => {
+      // Generate enough data to push through code size 9→10→11→12 transitions
+      const width = 16,
+        height = 16,
+        channels = 3;
+      const rawBytes = createFloatPixelBytes(width, height, channels, true);
+      const compressed = lzwCompress(rawBytes);
+      const tiffBuffer = createCompressedTIFF(compressed, {
+        width,
+        height,
+        channels,
+        compression: 5,
+        uncompressedSize: rawBytes.length,
+      });
+
+      const result = await decodeTIFFFloat(tiffBuffer);
+      expect(result.width).toBe(width);
+      expect(result.height).toBe(height);
+
+      // Verify all pixel values match
+      const expectedView = new DataView(rawBytes.buffer);
+      for (let i = 0; i < width * height; i++) {
+        for (let c = 0; c < channels; c++) {
+          expect(result.data[i * 4 + c]).toBeCloseTo(expectedView.getFloat32((i * channels + c) * 4, true), 4);
+        }
+      }
+    });
+
+    it('TIFF-LZW-CHAIN006: rejects code above nextCode with multiple prior literals', async () => {
+      // Similar to CHAIN002 but with two prior literals so nextCode=259.
+      // Emit code 400 at 9-bit code size — well above nextCode (259) but
+      // within the 9-bit range (0-511), so the decoder actually reads 400.
+      const stream = buildRawLZWStream([
+        [256, 9], // CLEAR
+        [0x10, 9], // literal → oldCode=0x10, nextCode=258
+        [0x20, 9], // literal → add 258=[0x10,0x20], nextCode=259, oldCode=0x20
+        [400, 9], // code 400 > nextCode 259 → corruption
+        [257, 9], // EOI (should not be reached)
+      ]);
+
+      const tiffBuffer = createCompressedTIFF(stream, {
+        width: 1,
+        height: 1,
+        channels: 3,
+        compression: 5,
+        uncompressedSize: 12,
+      });
+
+      await expect(decodeTIFFFloat(tiffBuffer)).rejects.toThrow(/LZW corruption.*code 400/);
+    });
+
+    it('TIFF-LZW-CHAIN007: bitBuffer overflow prevention with long streams', async () => {
+      // This tests that the bitBuffer trimming fix prevents corruption
+      // on longer streams where bits would accumulate beyond 32 bits.
+      // Use a 32x32 image which produces enough codes to stress the bit reader.
+      const width = 32,
+        height = 32,
+        channels = 3;
+      const rawBytes = createFloatPixelBytes(width, height, channels, true);
+      const compressed = lzwCompress(rawBytes);
+      const tiffBuffer = createCompressedTIFF(compressed, {
+        width,
+        height,
+        channels,
+        compression: 5,
+        uncompressedSize: rawBytes.length,
+      });
+
+      const result = await decodeTIFFFloat(tiffBuffer);
+      expect(result.width).toBe(width);
+      expect(result.height).toBe(height);
+
+      // Exact pixel match -- if bitBuffer overflowed, codes would be wrong
+      // and pixel values would differ
+      const expectedView = new DataView(rawBytes.buffer);
+      for (let i = 0; i < width * height; i++) {
+        for (let c = 0; c < channels; c++) {
+          expect(result.data[i * 4 + c]).toBeCloseTo(expectedView.getFloat32((i * channels + c) * 4, true), 4);
+        }
+      }
+    });
+
+    it('TIFF-LZW-CHAIN008: handles table-full boundary at exactly 4096 entries', async () => {
+      // Fill the LZW table to exactly 4096 entries (codes 258..4095 = 3838 entries)
+      // by emitting enough unique two-byte pairs. Each new pair that isn't in
+      // the table adds one entry. After the table is full (nextCode > 4095),
+      // the decoder must continue outputting codes without adding new entries.
+      // We use 256 distinct byte values in a pattern that maximizes new table entries.
+      const bytes: number[] = [];
+      // Produce a long sequence of bytes where consecutive pairs are mostly unique.
+      // Using a simple pattern: cycle through 0..255 repeatedly. Each time byte[i]
+      // is followed by a new byte[i+1] combination, a table entry is created.
+      // We need at least 3838 unique consecutive pairs to fill the table.
+      // 256 * 16 = 4096 bytes with cycling gives us enough unique pairs.
+      for (let round = 0; round < 16; round++) {
+        for (let b = 0; b < 256; b++) {
+          bytes.push((b + round * 7) & 0xff); // vary pattern each round
+        }
+      }
+      const input = new Uint8Array(bytes);
+
+      const uncompressedSize = input.length;
+      // Use width/height/channels that accommodate the data size for TIFF framing.
+      // The decoder reads raw bytes and reinterprets as float, so we just need
+      // valid TIFF structure. Use 1-channel with matching pixel count.
+      const channels = 1;
+      const width = 1;
+      const height = Math.ceil(uncompressedSize / (channels * 4));
+      const paddedSize = width * height * channels * 4;
+
+      // Pad input to match expected TIFF uncompressed size
+      const paddedInput = new Uint8Array(paddedSize);
+      paddedInput.set(input);
+      const paddedCompressed = lzwCompress(paddedInput);
+
+      const tiffBuffer = createCompressedTIFF(paddedCompressed, {
+        width,
+        height,
+        channels,
+        compression: 5,
+        uncompressedSize: paddedSize,
+      });
+
+      // Should decode without error -- the table-full condition is handled gracefully
+      const result = await decodeTIFFFloat(tiffBuffer);
+      expect(result.width).toBe(width);
+      expect(result.height).toBe(height);
+      expect(result.data.length).toBe(width * height * 4); // always returns 4-channel
+    });
+
+    it('TIFF-LZW-CHAIN009: string length tracking is correct for deep chains', async () => {
+      // Build an LZW stream that creates deep chains by using code === nextCode
+      // (the "KwKwK" special case), which creates entries whose prefix is themselves
+      // shifted by one. This tests that tableLength (now Uint32Array) tracks correctly.
+      //
+      // Strategy: emit CLEAR, then byte A, then repeatedly emit nextCode (special case).
+      // Each special case entry has length = previous entry length + 1, creating
+      // a deep chain. We use a moderate depth (200 entries) to keep output size
+      // within TIFF dimension limits while still exercising the length tracking.
+      const codes: Array<[number, number]> = [];
+      codes.push([256, 9]); // CLEAR
+      codes.push([65, 9]); // literal 'A' (byte 65), nextCode becomes 258
+
+      // Now repeatedly emit nextCode === current nextCode to trigger special case.
+      // Each iteration adds one table entry with length = previous + 1.
+      let nextCode = 258;
+      let codeSize = 9;
+      const targetEntries = 200; // enough to test deep chains without huge output
+
+      for (let i = 0; i < targetEntries; i++) {
+        codes.push([nextCode, codeSize]);
+        nextCode++;
+        if (nextCode > (1 << codeSize) - 1 && codeSize < 12) {
+          codeSize++;
+        }
+      }
+
+      codes.push([257, codeSize]); // EOI
+
+      const stream = buildRawLZWStream(codes);
+
+      // The special case pattern "A, AA, AAA, AAAA, ..." produces
+      // 1 + 2 + 3 + ... + (n+1) bytes total where n = targetEntries.
+      // Sum = 1 + sum(2..201) = 1 + (201*202/2 - 1) = 20301 bytes
+      const totalBytes = 1 + ((targetEntries + 1) * (targetEntries + 2)) / 2 - 1;
+      const channels = 1;
+      const pixelCount = Math.ceil(totalBytes / 4);
+      const width = 1;
+      const height = pixelCount;
+
+      const tiffBuffer = createCompressedTIFF(stream, {
+        width,
+        height,
+        channels,
+        compression: 5,
+        uncompressedSize: totalBytes,
+      });
+
+      // Should decode without overflow errors -- tableLength as Uint32Array handles this
+      const result = await decodeTIFFFloat(tiffBuffer);
+      expect(result.width).toBe(width);
+      expect(result.height).toBe(height);
+
+      // Verify actual pixel data: all output bytes are 0x41 ('A'), so every
+      // group of 4 bytes forms the same little-endian float32 value.
+      const expectedFloat = (() => {
+        const buf = new ArrayBuffer(4);
+        new Uint8Array(buf).fill(0x41);
+        return new DataView(buf).getFloat32(0, true);
+      })();
+
+      // maxPixelsInStrip = floor(totalBytes / 4) = 5075 decoded pixels;
+      // the last pixel (index 5075) has only 1 byte and is not decoded,
+      // so it stays at the initialised value of R=G=B=0, A=1.0.
+      const decodedPixels = Math.floor(totalBytes / 4);
+      for (let p = 0; p < decodedPixels; p++) {
+        const idx = p * 4;
+        expect(result.data[idx]).toBe(expectedFloat); // R
+        expect(result.data[idx + 1]).toBe(expectedFloat); // G
+        expect(result.data[idx + 2]).toBe(expectedFloat); // B
+        expect(result.data[idx + 3]).toBe(1.0); // A
+      }
+      // Last pixel was not fully decodable (only 1 trailing byte)
+      const lastIdx = decodedPixels * 4;
+      expect(result.data[lastIdx]).toBe(0); // R
+      expect(result.data[lastIdx + 1]).toBe(0); // G
+      expect(result.data[lastIdx + 2]).toBe(0); // B
+      expect(result.data[lastIdx + 3]).toBe(1.0); // A
+    });
+
+    it('TIFF-LZW-CHAIN010: string lengths stay correct across CLEAR code resets', async () => {
+      // Verify that after a CLEAR code, new entries overwrite stale lengths,
+      // so no accumulation occurs across CLEAR boundaries. This tests the
+      // scenario described in LOW-17 where multiple CLEAR codes might
+      // theoretically allow length accumulation.
+      const codes: Array<[number, number]> = [];
+
+      // First table build: emit some codes to build entries
+      codes.push([256, 9]); // CLEAR
+      codes.push([0, 9]); // literal 0
+      codes.push([1, 9]); // literal 1 -> adds entry 258 (prefix=0, suffix=1, length=2)
+      codes.push([2, 9]); // literal 2 -> adds entry 259 (prefix=1, suffix=2, length=2)
+      codes.push([258, 9]); // code 258 -> adds entry 260 (prefix=2, suffix=0, length=2)
+
+      // CLEAR and rebuild -- lengths should reset
+      codes.push([256, 9]); // CLEAR (resets table)
+      codes.push([10, 9]); // literal 10
+      codes.push([11, 9]); // literal 11 -> adds entry 258 (prefix=10, suffix=11, length=2)
+      codes.push([258, 9]); // code 258 -> outputs [10, 11], adds entry 259
+
+      // Another CLEAR and rebuild
+      codes.push([256, 9]); // CLEAR
+      codes.push([20, 9]); // literal 20
+      codes.push([21, 9]); // literal 21 -> adds entry 258 (prefix=20, suffix=21, length=2)
+
+      codes.push([257, 9]); // EOI
+
+      const stream = buildRawLZWStream(codes);
+
+      // The output should be: [0, 1, 2, 0, 1, 10, 11, 10, 11, 20, 21]
+      // = 11 bytes. We need a TIFF frame that accepts this.
+      const totalBytes = 11;
+      const channels = 1;
+      const width = 1;
+      const height = Math.ceil(totalBytes / 4);
+
+      const tiffBuffer = createCompressedTIFF(stream, {
+        width,
+        height,
+        channels,
+        compression: 5,
+        uncompressedSize: totalBytes,
+      });
+
+      // Should decode without error -- CLEAR resets don't cause length overflow
+      const result = await decodeTIFFFloat(tiffBuffer);
+      expect(result.width).toBe(width);
+      expect(result.height).toBe(height);
+
+      // Verify actual decoded pixel data.
+      // Expected decompressed bytes: [0, 1, 2, 0, 1, 10, 11, 10, 11, 20, 21] = 11 bytes.
+      // With bytesPerPixel=4 (1 channel, 32-bit float), only floor(11/4)=2 pixels are decoded.
+      const expectedBytes = [0, 1, 2, 0, 1, 10, 11, 10, 11, 20, 21];
+      const expectedFloats = (() => {
+        const buf = new ArrayBuffer(8); // 2 full float32 values
+        const u8 = new Uint8Array(buf);
+        for (let i = 0; i < 8; i++) u8[i] = expectedBytes[i]!;
+        const dv = new DataView(buf);
+        return [dv.getFloat32(0, true), dv.getFloat32(4, true)];
+      })();
+
+      // Pixel 0: R=G=B = float32 from bytes [0,1,2,0], A=1.0
+      expect(result.data[0]).toBe(expectedFloats[0]);
+      expect(result.data[1]).toBe(expectedFloats[0]);
+      expect(result.data[2]).toBe(expectedFloats[0]);
+      expect(result.data[3]).toBe(1.0);
+
+      // Pixel 1: R=G=B = float32 from bytes [1,10,11,10], A=1.0
+      expect(result.data[4]).toBe(expectedFloats[1]);
+      expect(result.data[5]).toBe(expectedFloats[1]);
+      expect(result.data[6]).toBe(expectedFloats[1]);
+      expect(result.data[7]).toBe(1.0);
+
+      // Pixel 2: not decoded (only 3 trailing bytes), stays at R=G=B=0, A=1.0
+      expect(result.data[8]).toBe(0);
+      expect(result.data[9]).toBe(0);
+      expect(result.data[10]).toBe(0);
+      expect(result.data[11]).toBe(1.0);
     });
   });
 
@@ -2857,6 +3481,277 @@ describe('TIFFFloatDecoder', () => {
       }
 
       await expect(decodeTIFFFloat(buffer)).rejects.toThrow('Unsupported samples per pixel: 0');
+    });
+  });
+
+  describe('unknown TIFF tag type handling (LOW-18)', () => {
+    it('should skip type 0 (invalid) gracefully and still decode', async () => {
+      // Create a valid TIFF with an extra non-essential tag whose type we set to 0
+      const buffer = createTestFloatTIFF({ width: 2, height: 2, channels: 3 });
+      const view = new DataView(buffer);
+      const le = true;
+      const ifdOffset = 8;
+      const numTags = view.getUint16(ifdOffset, le);
+
+      // Find the PhotometricInterpretation tag (262) and set its type to 0 (invalid).
+      // This tag is not required by the decoder so skipping it should still allow decode.
+      let found = false;
+      for (let i = 0; i < numTags; i++) {
+        const tagPos = ifdOffset + 2 + i * 12;
+        const tagId = view.getUint16(tagPos, le);
+        if (tagId === 262) {
+          view.setUint16(tagPos + 2, 0, le); // set type to 0
+          found = true;
+          break;
+        }
+      }
+      expect(found).toBe(true);
+
+      const result = await decodeTIFFFloat(buffer);
+      expect(result.width).toBe(2);
+      expect(result.height).toBe(2);
+      expect(result.channels).toBe(4); // expanded to RGBA
+    });
+
+    it('should skip type 13 (IFD pointer, common in EXIF) gracefully and still decode', async () => {
+      // Create a valid TIFF then change a non-essential tag's type to 13 (IFD/EXIF pointer)
+      const buffer = createTestFloatTIFF({ width: 2, height: 2, channels: 3 });
+      const view = new DataView(buffer);
+      const le = true;
+      const ifdOffset = 8;
+      const numTags = view.getUint16(ifdOffset, le);
+
+      // Change PhotometricInterpretation (262) type to 13 (IFD pointer)
+      let found = false;
+      for (let i = 0; i < numTags; i++) {
+        const tagPos = ifdOffset + 2 + i * 12;
+        const tagId = view.getUint16(tagPos, le);
+        if (tagId === 262) {
+          view.setUint16(tagPos + 2, 13, le); // set type to 13
+          found = true;
+          break;
+        }
+      }
+      expect(found).toBe(true);
+
+      const result = await decodeTIFFFloat(buffer);
+      expect(result.width).toBe(2);
+      expect(result.height).toBe(2);
+      expect(result.channels).toBe(4);
+    });
+
+    it('should decode correctly when one unknown-type tag exists among valid tags', async () => {
+      // This verifies that a TIFF with a mixture of valid and unknown-type tags
+      // still decodes correctly -- the unknown tag is simply ignored.
+      const buffer = createTestFloatTIFF({
+        width: 2,
+        height: 2,
+        channels: 3,
+        sampleFormat: 3,
+        bitsPerSample: 32,
+        pixelValues: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.0, 0.5],
+      });
+      const view = new DataView(buffer);
+      const le = true;
+      const ifdOffset = 8;
+      const numTags = view.getUint16(ifdOffset, le);
+
+      // Change PhotometricInterpretation (tag 262) to unknown type 99
+      for (let i = 0; i < numTags; i++) {
+        const tagPos = ifdOffset + 2 + i * 12;
+        const tagId = view.getUint16(tagPos, le);
+        if (tagId === 262) {
+          view.setUint16(tagPos + 2, 99, le);
+          break;
+        }
+      }
+
+      const result = await decodeTIFFFloat(buffer);
+      expect(result.width).toBe(2);
+      expect(result.height).toBe(2);
+      expect(result.channels).toBe(4);
+      expect(result.data.length).toBe(2 * 2 * 4);
+      // Verify pixel values are correct (first pixel R channel)
+      expect(result.data[0]).toBeCloseTo(0.1, 4);
+    });
+
+    it('should skip extended type 16 (LONG8/BigTIFF) gracefully', async () => {
+      const buffer = createTestFloatTIFF({ width: 1, height: 1, channels: 3 });
+      const view = new DataView(buffer);
+      const le = true;
+      const ifdOffset = 8;
+      const numTags = view.getUint16(ifdOffset, le);
+
+      // Change PhotometricInterpretation (262) to type 16
+      for (let i = 0; i < numTags; i++) {
+        const tagPos = ifdOffset + 2 + i * 12;
+        const tagId = view.getUint16(tagPos, le);
+        if (tagId === 262) {
+          view.setUint16(tagPos + 2, 16, le);
+          break;
+        }
+      }
+
+      const result = await decodeTIFFFloat(buffer);
+      expect(result.width).toBe(1);
+      expect(result.height).toBe(1);
+    });
+
+    it('should correctly parse tags using all standard TIFF 6.0 types (1-12)', async () => {
+      // A valid float TIFF uses types 3 (SHORT) and 4 (LONG) in its IFD entries.
+      // We verify that a standard float TIFF still decodes correctly,
+      // confirming that the known-type paths are not broken by the fix.
+      const buffer = createTestFloatTIFF({
+        width: 2,
+        height: 2,
+        channels: 3,
+        sampleFormat: 3,
+        bitsPerSample: 32,
+        pixelValues: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.0, 0.5],
+      });
+
+      const result = await decodeTIFFFloat(buffer);
+      expect(result.width).toBe(2);
+      expect(result.height).toBe(2);
+      expect(result.channels).toBe(4); // expanded to RGBA
+      expect(result.data.length).toBe(2 * 2 * 4);
+    });
+
+    it('should verify byte sizes for all standard TIFF 6.0 types (1-12)', () => {
+      // Build a minimal TIFF with IFD entries using types 1-12 and verify
+      // that parsing does not throw and the tags with known types are retained.
+      // Types 6-12 are: SBYTE(1), UNDEFINED(1), SSHORT(2), SLONG(4),
+      //                  SRATIONAL(8), FLOAT(4), DOUBLE(8)
+      const le = true;
+
+      // We need: header(8) + IFD count(2) + 12 entries * 12 bytes + next IFD(4)
+      // + pixel data. We also need valid essential tags for the decoder.
+      // Instead of a full decode test, we verify that getTIFFInfo works
+      // when non-essential tags use various types.
+
+      // Start with a valid TIFF
+      const buffer = createTestFloatTIFF({ width: 2, height: 2, channels: 3 });
+      const view = new DataView(buffer);
+      const ifdOffset = 8;
+      const numTags = view.getUint16(ifdOffset, le);
+
+      // Find PhotometricInterpretation (262) and test changing its type
+      // to each of types 1-12. The decoder doesn't read this tag's value
+      // via type-specific logic, so it should not affect parsing of other tags.
+      const typeSizes: Record<number, number> = {
+        1: 1, // BYTE
+        2: 1, // ASCII
+        3: 2, // SHORT
+        4: 4, // LONG
+        5: 8, // RATIONAL
+        6: 1, // SBYTE
+        7: 1, // UNDEFINED
+        8: 2, // SSHORT
+        9: 4, // SLONG
+        10: 8, // SRATIONAL
+        11: 4, // FLOAT
+        12: 8, // DOUBLE
+      };
+
+      let photoTagPos = -1;
+      for (let i = 0; i < numTags; i++) {
+        const tagPos = ifdOffset + 2 + i * 12;
+        const tagId = view.getUint16(tagPos, le);
+        if (tagId === 262) {
+          photoTagPos = tagPos;
+          break;
+        }
+      }
+      expect(photoTagPos).not.toBe(-1);
+
+      for (const [typeStr, expectedSize] of Object.entries(typeSizes)) {
+        const type = Number(typeStr);
+        // Reset the tag type and count so it fits inline (count=1)
+        view.setUint16(photoTagPos + 2, type, le);
+        view.setUint32(photoTagPos + 4, 1, le); // count = 1
+
+        // For types with size > 4 (RATIONAL, SRATIONAL, DOUBLE = 8 bytes),
+        // count=1 means totalSize=8 > 4, so valueOffset field is treated as
+        // a pointer. Set it to 0 so it points to the header area (harmless for
+        // a tag we don't actually read).
+        if (expectedSize > 4) {
+          view.setUint32(photoTagPos + 8, 0, le);
+        }
+
+        // getTIFFInfo should succeed for all standard types (tag 262 is not
+        // required for format detection)
+        const info = getTIFFInfo(buffer);
+        expect(info).not.toBeNull();
+        expect(info!.width).toBe(2);
+        expect(info!.height).toBe(2);
+      }
+    });
+
+    it('should still decode valid big-endian float TIFF after the fix', async () => {
+      const buffer = createTestFloatTIFF({
+        width: 1,
+        height: 1,
+        channels: 3,
+        bigEndian: true,
+        sampleFormat: 3,
+        bitsPerSample: 32,
+        pixelValues: [0.25, 0.5, 0.75],
+      });
+
+      const result = await decodeTIFFFloat(buffer);
+      expect(result.width).toBe(1);
+      expect(result.height).toBe(1);
+      expect(result.data[0]).toBeCloseTo(0.25, 4);
+      expect(result.data[1]).toBeCloseTo(0.5, 4);
+      expect(result.data[2]).toBeCloseTo(0.75, 4);
+    });
+
+    it('should skip unknown-type tags instead of misinterpreting offset calculations', async () => {
+      // This is the core regression test for LOW-18.
+      // Previously, unknown type would return size=1, causing totalSize to be small,
+      // which would make the parser treat data as inline when it's actually at an offset.
+      // Now unknown types are skipped entirely per TIFF 6.0 Section 7.
+      const buffer = createTestFloatTIFF({ width: 2, height: 2, channels: 3 });
+      const view = new DataView(buffer);
+      const le = true;
+      const ifdOffset = 8;
+      const numTags = view.getUint16(ifdOffset, le);
+
+      // Find a non-essential tag (PhotometricInterpretation=262) and change to unknown type
+      for (let i = 0; i < numTags; i++) {
+        const tagPos = ifdOffset + 2 + i * 12;
+        const tagId = view.getUint16(tagPos, le);
+        if (tagId === 262) {
+          view.setUint16(tagPos + 2, 42, le); // unknown type 42
+          break;
+        }
+      }
+
+      // Should decode successfully, not throw
+      const result = await decodeTIFFFloat(buffer);
+      expect(result.width).toBe(2);
+      expect(result.height).toBe(2);
+    });
+
+    it('should default to width 0 when ImageWidth tag is skipped due to unknown type', () => {
+      // If a required tag (like ImageWidth) has an unknown type, it gets skipped,
+      // so getTIFFInfo falls back to the default value (0) for that tag.
+      const buffer = createTestFloatTIFF({ width: 2, height: 2, channels: 3 });
+      const view = new DataView(buffer);
+      const le = true;
+      const ifdOffset = 8;
+
+      // Change ImageWidth (tag 256) type to unknown 200
+      const firstTagPos = ifdOffset + 2;
+      const tagId = view.getUint16(firstTagPos, le);
+      expect(tagId).toBe(256); // ImageWidth is first tag
+      view.setUint16(firstTagPos + 2, 200, le);
+
+      // getTIFFInfo returns info with width defaulting to 0 since the tag was skipped
+      const info = getTIFFInfo(buffer);
+      expect(info).not.toBeNull();
+      expect(info!.width).toBe(0);
+      expect(info!.height).toBe(2); // other tags still parsed correctly
     });
   });
 });

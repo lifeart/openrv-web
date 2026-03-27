@@ -445,6 +445,113 @@ describe('DPXDecoder', () => {
     });
   });
 
+  describe('getDPXInfo - dimension validation (MED-27)', () => {
+    it('should throw for zero width in getDPXInfo', () => {
+      const buffer = createTestDPX({ width: 2, height: 2, bigEndian: true });
+      const view = new DataView(buffer);
+      view.setUint32(772, 0, false); // zero width
+      expect(() => getDPXInfo(buffer)).toThrow(/Invalid DPX dimensions: 0x2/);
+    });
+
+    it('should throw for zero height in getDPXInfo', () => {
+      const buffer = createTestDPX({ width: 2, height: 2, bigEndian: true });
+      const view = new DataView(buffer);
+      view.setUint32(776, 0, false); // zero height
+      expect(() => getDPXInfo(buffer)).toThrow(/Invalid DPX dimensions: 2x0/);
+    });
+
+    it('should throw for both zero dimensions in getDPXInfo', () => {
+      const buffer = createTestDPX({ width: 2, height: 2, bigEndian: true });
+      const view = new DataView(buffer);
+      view.setUint32(772, 0, false);
+      view.setUint32(776, 0, false);
+      expect(() => getDPXInfo(buffer)).toThrow(/Invalid DPX dimensions: 0x0/);
+    });
+
+    it('should throw for width exceeding MAX_DIMENSION in getDPXInfo', () => {
+      const buffer = createTestDPX({ width: 2, height: 2, bigEndian: true });
+      const view = new DataView(buffer);
+      view.setUint32(772, 100000, false);
+      expect(() => getDPXInfo(buffer)).toThrow(/exceed maximum/);
+    });
+
+    it('should throw for height exceeding MAX_DIMENSION in getDPXInfo', () => {
+      const buffer = createTestDPX({ width: 2, height: 2, bigEndian: true });
+      const view = new DataView(buffer);
+      view.setUint32(776, 100000, false);
+      expect(() => getDPXInfo(buffer)).toThrow(/exceed maximum/);
+    });
+
+    it('should throw for uint32 max value (0xFFFFFFFF) as width in getDPXInfo', () => {
+      const buffer = createTestDPX({ width: 2, height: 2, bigEndian: true });
+      const view = new DataView(buffer);
+      // 0xFFFFFFFF = 4294967295, which is the max uint32 value
+      // A malformed file could store this — it must be rejected
+      view.setUint32(772, 0xffffffff, false);
+      expect(() => getDPXInfo(buffer)).toThrow(/exceed maximum/);
+    });
+
+    it('should throw for uint32 max value (0xFFFFFFFF) as height in getDPXInfo', () => {
+      const buffer = createTestDPX({ width: 2, height: 2, bigEndian: true });
+      const view = new DataView(buffer);
+      view.setUint32(776, 0xffffffff, false);
+      expect(() => getDPXInfo(buffer)).toThrow(/exceed maximum/);
+    });
+
+    it('should throw for total pixels exceeding MAX_PIXELS in getDPXInfo', () => {
+      const buffer = createTestDPX({ width: 2, height: 2, bigEndian: true });
+      const view = new DataView(buffer);
+      // 20000 x 20000 = 400M pixels > 268M limit, both under 65536
+      view.setUint32(772, 20000, false);
+      view.setUint32(776, 20000, false);
+      expect(() => getDPXInfo(buffer)).toThrow(/exceeding maximum/);
+    });
+
+    it('should accept valid normal dimensions in getDPXInfo', () => {
+      const buffer = createTestDPX({ width: 1920, height: 1080, bigEndian: true });
+      const info = getDPXInfo(buffer);
+      expect(info).not.toBeNull();
+      expect(info!.width).toBe(1920);
+      expect(info!.height).toBe(1080);
+    });
+
+    it('should accept 1x1 dimensions in getDPXInfo', () => {
+      const buffer = createTestDPX({ width: 1, height: 1, bigEndian: true });
+      const info = getDPXInfo(buffer);
+      expect(info).not.toBeNull();
+      expect(info!.width).toBe(1);
+      expect(info!.height).toBe(1);
+    });
+
+    it('should accept maximum valid single dimension in getDPXInfo', () => {
+      // 65536 x 1 is within limits (65536 total pixels < 268M)
+      const buffer = createTestDPX({ width: 2, height: 2, bigEndian: true });
+      const view = new DataView(buffer);
+      view.setUint32(772, 65536, false);
+      view.setUint32(776, 1, false);
+      const info = getDPXInfo(buffer);
+      expect(info).not.toBeNull();
+      expect(info!.width).toBe(65536);
+      expect(info!.height).toBe(1);
+    });
+
+    it('should validate dimensions in little-endian mode in getDPXInfo', () => {
+      const buffer = createTestDPX({ width: 2, height: 2, bigEndian: false });
+      const view = new DataView(buffer);
+      view.setUint32(772, 0, true); // zero width, little-endian
+      expect(() => getDPXInfo(buffer)).toThrow(/Invalid DPX dimensions/);
+    });
+
+    it('should read dimensions as unsigned (getUint32) not signed', () => {
+      // Verify that a value like 0x80000000 (which would be negative as int32)
+      // is correctly interpreted as a large positive uint32 and rejected
+      const buffer = createTestDPX({ width: 2, height: 2, bigEndian: true });
+      const view = new DataView(buffer);
+      view.setUint32(772, 0x80000000, false); // 2147483648 as uint32
+      expect(() => getDPXInfo(buffer)).toThrow(/exceed maximum/);
+    });
+  });
+
   describe('decodeDPX - pixel value verification', () => {
     it('should correctly decode 8-bit pixel values', async () => {
       // Create a 1x1 8-bit DPX with known pixel data
@@ -805,6 +912,84 @@ describe('DPXDecoder', () => {
       const buffer = createTestDPX({ channels: 1, bitDepth: 8 });
       const result = await decodeDPX(buffer);
       expect(result.metadata.descriptor).toBe(6);
+    });
+  });
+
+  describe('decodeDPX - scanline width overflow validation (MED-32)', () => {
+    it('should accept normal scanline widths that fit within file data', async () => {
+      const buffer = createTestDPX({ width: 4, height: 4, bitDepth: 10, channels: 3 });
+      const result = await decodeDPX(buffer);
+      expect(result.width).toBe(4);
+      expect(result.height).toBe(4);
+      expect(result.data.length).toBe(4 * 4 * 4);
+    });
+
+    it('should reject when pixel data size exceeds available file data (8-bit)', async () => {
+      // Create a small valid DPX then tamper with dimensions to claim more pixels than the file holds
+      const buffer = createTestDPX({ width: 2, height: 2, bitDepth: 8, channels: 3, bigEndian: true });
+      const view = new DataView(buffer);
+      // Set width to a large but under-limit value that will overflow available data
+      // Max dimension is 65536 and file is tiny; 1000x1000x3 = 3MB but file is ~2060 bytes
+      view.setUint32(772, 1000, false); // width=1000
+      view.setUint32(776, 1000, false); // height=1000
+
+      await expect(decodeDPX(buffer)).rejects.toThrow(/pixel data size.*exceeds available file data/);
+    });
+
+    it('should reject when pixel data size exceeds available file data (10-bit)', async () => {
+      const buffer = createTestDPX({ width: 2, height: 2, bitDepth: 10, channels: 3, bigEndian: true });
+      const view = new DataView(buffer);
+      view.setUint32(772, 2000, false);
+      view.setUint32(776, 2000, false);
+
+      await expect(decodeDPX(buffer)).rejects.toThrow(/pixel data size.*exceeds available file data/);
+    });
+
+    it('should reject when pixel data size exceeds available file data (16-bit)', async () => {
+      const buffer = createTestDPX({ width: 2, height: 2, bitDepth: 16, channels: 3, bigEndian: true });
+      const view = new DataView(buffer);
+      view.setUint32(772, 500, false);
+      view.setUint32(776, 500, false);
+
+      await expect(decodeDPX(buffer)).rejects.toThrow(/pixel data size.*exceeds available file data/);
+    });
+
+    it('should reject when pixel data size exceeds available file data (12-bit)', async () => {
+      const buffer = createTestDPX({ width: 2, height: 2, bitDepth: 12, channels: 3, bigEndian: true });
+      const view = new DataView(buffer);
+      view.setUint32(772, 500, false);
+      view.setUint32(776, 500, false);
+
+      await expect(decodeDPX(buffer)).rejects.toThrow(/pixel data size.*exceeds available file data/);
+    });
+
+    it('should reject large width with small bit depth that exceeds file data', async () => {
+      // Edge case: large width (under MAX_DIMENSION) with 1 channel 8-bit — still overflows file
+      const buffer = createTestDPX({ width: 2, height: 2, bitDepth: 8, channels: 1, bigEndian: true });
+      const view = new DataView(buffer);
+      // 60000 x 1 x 1 channel x 1 byte = 60000 bytes, file is ~2052 bytes
+      view.setUint32(772, 60000, false); // width
+      view.setUint32(776, 1, false); // height
+      view.setUint8(800, 6); // Luma descriptor = 1 channel
+
+      await expect(decodeDPX(buffer)).rejects.toThrow(/pixel data size.*exceeds available file data/);
+    });
+
+    it('should accept pixel data that exactly fits within available file data', async () => {
+      // Create a properly-sized DPX where pixel data exactly matches file contents
+      const buffer = createTestDPX({ width: 4, height: 2, bitDepth: 8, channels: 3 });
+      const result = await decodeDPX(buffer);
+      expect(result.width).toBe(4);
+      expect(result.height).toBe(2);
+    });
+
+    it('should validate scanline size in little-endian mode', async () => {
+      const buffer = createTestDPX({ width: 2, height: 2, bitDepth: 10, channels: 3, bigEndian: false });
+      const view = new DataView(buffer);
+      view.setUint32(772, 3000, true); // little-endian
+      view.setUint32(776, 3000, true);
+
+      await expect(decodeDPX(buffer)).rejects.toThrow(/pixel data size.*exceeds available file data/);
     });
   });
 

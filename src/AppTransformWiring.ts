@@ -12,6 +12,21 @@ import { getGlobalHistoryManager } from './utils/HistoryManager';
 import { DisposableSubscriptionManager } from './utils/DisposableSubscriptionManager';
 
 /**
+ * Epsilon for floating-point comparison of transform values.
+ * Differences smaller than this are considered insignificant
+ * and won't create spurious history entries.
+ *
+ * 1e-6 is small enough to be invisible in pixel coordinates and scale factors,
+ * but large enough to absorb floating-point rounding noise.
+ */
+export const TRANSFORM_EPSILON = 1e-6;
+
+/** Returns true if two numbers differ by more than TRANSFORM_EPSILON. */
+export function hasSignificantChange(a: number, b: number): boolean {
+  return Math.abs(a - b) > TRANSFORM_EPSILON;
+}
+
+/**
  * Mutable state for transform history tracking.
  */
 export interface TransformWiringState {
@@ -41,7 +56,7 @@ export function wireTransformControls(ctx: AppWiringContext): StatefulWiringResu
 
       // Record history for transform changes (discrete actions, no debounce needed)
       const changes: string[] = [];
-      if (previousTransform.rotation !== currentTransform.rotation) {
+      if (hasSignificantChange(previousTransform.rotation, currentTransform.rotation)) {
         changes.push(`rotation to ${currentTransform.rotation}\u00B0`);
       }
       if (previousTransform.flipH !== currentTransform.flipH) {
@@ -51,14 +66,14 @@ export function wireTransformControls(ctx: AppWiringContext): StatefulWiringResu
         changes.push(currentTransform.flipV ? 'flip vertical' : 'unflip vertical');
       }
       if (
-        previousTransform.scale.x !== currentTransform.scale.x ||
-        previousTransform.scale.y !== currentTransform.scale.y
+        hasSignificantChange(previousTransform.scale.x, currentTransform.scale.x) ||
+        hasSignificantChange(previousTransform.scale.y, currentTransform.scale.y)
       ) {
         changes.push(`scale to ${currentTransform.scale.x.toFixed(2)}x${currentTransform.scale.y.toFixed(2)}`);
       }
       if (
-        previousTransform.translate.x !== currentTransform.translate.x ||
-        previousTransform.translate.y !== currentTransform.translate.y
+        hasSignificantChange(previousTransform.translate.x, currentTransform.translate.x) ||
+        hasSignificantChange(previousTransform.translate.y, currentTransform.translate.y)
       ) {
         changes.push(
           `translate to (${currentTransform.translate.x.toFixed(1)}, ${currentTransform.translate.y.toFixed(1)})`,

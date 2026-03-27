@@ -21,6 +21,38 @@ export interface DisplayProfileControlEvents extends EventMap {
   stateChanged: DisplayColorState;
 }
 
+// Slider range definitions (min, max, default) for each numeric property
+const SLIDER_RANGES = {
+  displayGamma: { min: 0.1, max: 4.0, default: 1.0 },
+  displayBrightness: { min: 0.0, max: 2.0, default: 1.0 },
+  customGamma: { min: 0.1, max: 10.0, default: 2.2 },
+} as const;
+
+type SliderProperty = keyof typeof SLIDER_RANGES;
+
+/**
+ * Validate and clamp a slider value to its defined range.
+ * Returns the default if value is NaN/undefined/non-finite.
+ * Logs a warning if the value was out of range or invalid.
+ */
+function clampSliderValue(property: SliderProperty, value: number | undefined): number {
+  const range = SLIDER_RANGES[property];
+  if (value === undefined || typeof value !== 'number' || !Number.isFinite(value)) {
+    console.warn(
+      `DisplayProfileControl: Invalid value for ${property} (${value}), falling back to default ${range.default}`,
+    );
+    return range.default;
+  }
+  if (value < range.min || value > range.max) {
+    const clamped = Math.max(range.min, Math.min(range.max, value));
+    console.warn(
+      `DisplayProfileControl: ${property} value ${value} out of range [${range.min}, ${range.max}], clamped to ${clamped}`,
+    );
+    return clamped;
+  }
+  return value;
+}
+
 export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEvents> {
   private container: HTMLElement;
   private dropdown: HTMLElement;
@@ -43,8 +75,16 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
     super();
     this.boundHandleReposition = () => this.positionDropdown();
 
-    // Load persisted state or use defaults
-    this.state = loadDisplayProfile() ?? { ...DEFAULT_DISPLAY_COLOR_STATE };
+    // Load persisted state or use defaults, then validate slider ranges
+    const loaded = loadDisplayProfile();
+    if (loaded) {
+      loaded.displayGamma = clampSliderValue('displayGamma', loaded.displayGamma);
+      loaded.displayBrightness = clampSliderValue('displayBrightness', loaded.displayBrightness);
+      loaded.customGamma = clampSliderValue('customGamma', loaded.customGamma);
+      this.state = loaded;
+    } else {
+      this.state = { ...DEFAULT_DISPLAY_COLOR_STATE };
+    }
 
     // Create container
     this.container = document.createElement('div');
@@ -304,17 +344,26 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
       this.state.transferFunction = state.transferFunction;
       changed = true;
     }
-    if (state.displayGamma !== undefined && state.displayGamma !== this.state.displayGamma) {
-      this.state.displayGamma = state.displayGamma;
-      changed = true;
+    if (state.displayGamma !== undefined) {
+      const clamped = clampSliderValue('displayGamma', state.displayGamma);
+      if (clamped !== this.state.displayGamma) {
+        this.state.displayGamma = clamped;
+        changed = true;
+      }
     }
-    if (state.displayBrightness !== undefined && state.displayBrightness !== this.state.displayBrightness) {
-      this.state.displayBrightness = state.displayBrightness;
-      changed = true;
+    if (state.displayBrightness !== undefined) {
+      const clamped = clampSliderValue('displayBrightness', state.displayBrightness);
+      if (clamped !== this.state.displayBrightness) {
+        this.state.displayBrightness = clamped;
+        changed = true;
+      }
     }
-    if (state.customGamma !== undefined && state.customGamma !== this.state.customGamma) {
-      this.state.customGamma = state.customGamma;
-      changed = true;
+    if (state.customGamma !== undefined) {
+      const clamped = clampSliderValue('customGamma', state.customGamma);
+      if (clamped !== this.state.customGamma) {
+        this.state.customGamma = clamped;
+        changed = true;
+      }
     }
     if (changed) {
       this.updateProfileButtons();
